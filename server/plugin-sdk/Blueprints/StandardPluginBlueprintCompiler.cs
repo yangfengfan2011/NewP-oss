@@ -254,10 +254,6 @@ public sealed partial class StandardPluginBlueprintCompiler
             .OrderBy(static field => field.Name, StringComparer.Ordinal)
             .Select(field => $"UX_{resource.PluralName}_{field.Name}")
             .ToArray();
-        var permissions = new[] { "View", "Create", "Update", "Delete" }
-            .Select(action => $"{moduleId}.{resource.Key}.{action}")
-            .OrderBy(static code => code, StringComparer.Ordinal)
-            .ToArray();
         return new StandardDataResourceProjection(
             resource.Key,
             $"/api/plugins/{moduleSlug}/{routeSegment}",
@@ -265,7 +261,7 @@ public sealed partial class StandardPluginBlueprintCompiler
             schemaName,
             resource.PluralName,
             indexes,
-            permissions,
+            [],
             resource.DetailViewKey);
     }
 

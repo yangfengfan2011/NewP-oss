@@ -124,7 +124,7 @@ public static class StandardFeatureMetadataCompiler
                     continue;
                 }
                 var operation = Optional(action, "standardAction") ?? Optional(action, "handlerKey");
-                if (operation is null or "view") continue;
+                if (operation is null or "view" or "refresh") continue;
                 Action(owner, scope, Text(action, "key"), Title(Optional(action, "labelKey") ?? Text(action, "key"), Optional(view, "dicKey")),
                     resource + "." + (operation == "edit" ? "update" : operation), Text(view, "mode") + "." + property,
                     (operation is "create" or "edit" ? LookupBehaviors(view, true).Append(resource + ".read") : [resource + ".read"])

@@ -60,8 +60,12 @@ public sealed class StandardCrudEndpoint
         _service.UpdateAsync(descriptor, id, values, cancellationToken);
 
     /// <summary>
-    /// 将停用请求转交给标准 CRUD 服务，避免 Host 或 Controller 下沉状态切换规则。
+    /// 将启用请求转交给标准 CRUD 服务，避免 Host 或 Controller 下沉状态切换规则。
     /// </summary>
+    public Task<StandardCrudMutationResult> EnableAsync(StandardCrudDescriptor descriptor, string id, CancellationToken cancellationToken = default) =>
+        _service.EnableAsync(descriptor, id, cancellationToken);
+
+    /// <summary>将固定停用请求交给标准服务。</summary>
     public Task<StandardCrudMutationResult> DisableAsync(
         StandardCrudDescriptor descriptor,
         string id,

@@ -67,8 +67,11 @@ public interface IStandardCrudService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// 停用标准 CRUD 资源；当前阶段先返回稳定未启用错误，避免隐式写入状态字段。
+    /// 按固定启用方向更新声明的状态字段，复用既有更新校验。
     /// </summary>
+    Task<StandardCrudMutationResult> EnableAsync(StandardCrudDescriptor descriptor, string id, CancellationToken cancellationToken = default);
+
+    /// <summary>按固定停用方向更新声明的状态字段。</summary>
     Task<StandardCrudMutationResult> DisableAsync(
         StandardCrudDescriptor descriptor,
         string id,

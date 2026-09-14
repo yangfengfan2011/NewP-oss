@@ -362,6 +362,7 @@ export interface StandardCrudClient {
   create: (values: StandardCrudMutationValues, context?: StandardCrudFeatureRequestContext) => Promise<StandardCrudDetail>;
   update: (id: string, values: StandardCrudMutationValues, context?: StandardCrudFeatureRequestContext) => Promise<StandardCrudDetail>;
   delete: (id: string, context?: StandardCrudFeatureRequestContext) => Promise<void>;
+  enable: (id: string, context?: StandardCrudFeatureRequestContext) => Promise<StandardCrudDetail>;
   disable: (id: string, context?: StandardCrudFeatureRequestContext) => Promise<StandardCrudDetail>;
 }
 

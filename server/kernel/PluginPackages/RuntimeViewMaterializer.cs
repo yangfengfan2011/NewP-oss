@@ -592,102 +592,17 @@ public class RuntimeViewMaterializer
         WriteStandardDataMetadata(targetMetadataRoot, module, blueprint, projection);
     }
 
-    // 生成列表与导航投影；详情展示结构始终由包内显式 Detail View 拥有。
-    private void WriteStandardDataMetadata(
-        string metadataRoot,
-        CanonicalModulePlanModule module,
-        JsonObject blueprint,
-        JsonObject projection)
+    // 页面由候选与运行时共用投影产生；Model 保持原来的存储和表单投影 owner。
+    private void WriteStandardDataMetadata(string metadataRoot, CanonicalModulePlanModule module, JsonObject blueprint, JsonObject projection)
     {
-        var standardData = blueprint["standardData"]?.AsObject()
-            ?? throw new JsonException($"Standard data Blueprint for '{module.ModuleId}' is missing standardData.");
-        var resources = standardData["resources"]?.AsArray()
-            ?? throw new JsonException($"Standard data Blueprint for '{module.ModuleId}' is missing resources.");
-        var projectedResources = projection["resources"]?.AsArray()
-            ?? throw new JsonException($"Standard data projection for '{module.ModuleId}' is missing resources.");
-        var navigation = blueprint["navigation"]?.AsObject()
-            ?? throw new JsonException($"Standard data Blueprint for '{module.ModuleId}' is missing navigation.");
-        var moduleSlug = RequiredString(projection, "moduleSlug", module.ModuleId);
-        var navigationItems = new List<object>
+        var documents = StandardDataMetadataProjection.Project(module.ModuleId, blueprint, projection, StandardDataMetadataProjection.ReadDocuments(metadataRoot));
+        foreach (var document in documents.Where(item => item.Value["view"] is not null || item.Value["navigation"] is not null))
+            WriteJson(Path.Combine(metadataRoot, document.Key), document.Value);
+        foreach (var resourceNode in blueprint["standardData"]!["resources"]!.AsArray())
         {
-            new
-            {
-                key = moduleSlug,
-                titleKey = RequiredString(navigation, "group", module.ModuleId),
-                icon = "database",
-                order = navigation["order"]?.GetValue<int>() ?? 0
-            }
-        };
-
-        foreach (var resourceNode in resources)
-        {
-            var resource = resourceNode?.AsObject()
-                ?? throw new JsonException($"Standard data Blueprint for '{module.ModuleId}' contains an invalid resource.");
+            var resource = resourceNode!.AsObject();
             var resourceKey = RequiredString(resource, "key", module.ModuleId);
-            var resourceSlug = ToRouteToken(resourceKey);
-            var resourceProjection = projectedResources
-                .Select(static item => item?.AsObject())
-                .SingleOrDefault(item => item is not null
-                    && string.Equals(item["resourceKey"]?.GetValue<string>(), resourceKey, StringComparison.Ordinal))
-                ?? throw new JsonException($"Standard data resource '{module.ModuleId}.{resourceKey}' has no projection.");
-            var pageRoute = RequiredString(resourceProjection, "pageRoute", module.ModuleId);
-            var declaredDetailViewKey = OptionalString(resource, "detailViewKey", module.ModuleId);
-            var projectedDetailViewKey = OptionalString(resourceProjection, "detailViewKey", module.ModuleId);
-            if (!string.Equals(declaredDetailViewKey, projectedDetailViewKey, StringComparison.Ordinal))
-            {
-                throw new JsonException(
-                    $"Standard data resource '{module.ModuleId}.{resourceKey}' has inconsistent detailViewKey projection.");
-            }
-
-            if (declaredDetailViewKey is not null)
-            {
-                ValidateDeclaredDetailView(metadataRoot, module.ModuleId, resourceKey, declaredDetailViewKey);
-            }
-
-            var permissionCodes = resourceProjection["permissionCodes"]?.AsArray()
-                .Select(static item => item?.GetValue<string>() ?? string.Empty)
-                .Where(static code => code.Length > 0)
-                .ToArray() ?? [];
-            var viewPermission = permissionCodes.Single(code => code.EndsWith(".View", StringComparison.Ordinal));
-            var createPermission = permissionCodes.Single(code => code.EndsWith(".Create", StringComparison.Ordinal));
-            var updatePermission = permissionCodes.Single(code => code.EndsWith(".Update", StringComparison.Ordinal));
-            var listViewKey = $"{moduleSlug}.{resourceSlug}.list";
-            var fields = resource["fields"]?.AsArray()
-                ?? throw new JsonException($"Standard data resource '{module.ModuleId}.{resourceKey}' is missing fields.");
-            var hasEnabledField = fields
-                .Select(static fieldNode => fieldNode?.AsObject())
-                .Any(static field => string.Equals(
-                    field?["name"]?.GetValue<string>(),
-                    "IsEnabled",
-                    StringComparison.Ordinal));
-
-            navigationItems.Add(new
-            {
-                key = $"{moduleSlug}.{resourceSlug}",
-                titleKey = RequiredString(resource, "displayName", module.ModuleId),
-                icon = "table",
-                parentKey = moduleSlug,
-                path = pageRoute,
-                order = navigation["order"]?.GetValue<int>() ?? 0,
-                entryType = "standard-list",
-                targetKey = listViewKey,
-                permissions = new[] { viewPermission }
-            });
-
-            var columns = fields.Select(fieldNode =>
-            {
-                var field = fieldNode?.AsObject()
-                    ?? throw new JsonException($"Standard data resource '{module.ModuleId}.{resourceKey}' contains an invalid field.");
-                var fieldName = RequiredString(field, "name", module.ModuleId);
-                return new
-                {
-                    key = ToRouteToken(fieldName),
-                    labelKey = fieldName,
-                    source = "model",
-                    field = fieldName,
-                    sortable = true
-                };
-            }).ToArray();
+            var fields = resource["fields"]!.AsArray();
             var modelFields = fields.Select(fieldNode =>
             {
                 var field = fieldNode?.AsObject()
@@ -713,66 +628,6 @@ public class RuntimeViewMaterializer
                     }
                 };
             }).ToArray();
-            var rowActions = new List<object>();
-            if (declaredDetailViewKey is not null)
-            {
-                rowActions.Add(new { key = "view", labelKey = "Action_View", standardAction = "view", variant = (string?)null, permissions = Array.Empty<string>() });
-            }
-
-            rowActions.Add(new { key = "edit", labelKey = "Action_Edit", standardAction = "edit", variant = (string?)null, permissions = new[] { updatePermission } });
-            if (hasEnabledField)
-            {
-                // standard-data.v1 没有删除策略声明；这里只投影描述符已支持的停启能力，
-                // 避免页面暴露一个必然被 DeletePolicy.None 拒绝的删除动作。
-                rowActions.Add(new
-                {
-                    key = "disable",
-                    labelKey = "Action_Disable",
-                    standardAction = "disable",
-                    variant = "danger",
-                    permissions = new[] { updatePermission },
-                    visibleWhen = new { field = "IsEnabled", @operator = "equals", value = true }
-                });
-                rowActions.Add(new
-                {
-                    key = "enable",
-                    labelKey = "Action_Enable",
-                    standardAction = "enable",
-                    variant = (string?)null,
-                    permissions = new[] { updatePermission },
-                    visibleWhen = new { field = "IsEnabled", @operator = "equals", value = false }
-                });
-            }
-
-            var listView = new JsonObject
-            {
-                ["key"] = listViewKey,
-                ["dicKey"] = $"{resourceKey}ListView",
-                ["titleKey"] = RequiredString(resource, "displayName", module.ModuleId),
-                ["mode"] = "list",
-                ["model"] = resourceKey,
-                ["editorMode"] = "drawer",
-                ["columns"] = JsonSerializer.SerializeToNode(columns),
-                ["pageActions"] = JsonSerializer.SerializeToNode(new object[]
-                {
-                    new { key = "create", labelKey = "Action_Create", standardAction = "create", variant = "primary", permissions = new[] { createPermission } },
-                    new { key = "refresh", labelKey = "Action_Refresh", standardAction = "refresh", variant = (string?)null, permissions = Array.Empty<string>() }
-                }),
-                ["rowActions"] = JsonSerializer.SerializeToNode(rowActions)
-            };
-            if (declaredDetailViewKey is not null)
-            {
-                listView["detailViewKey"] = declaredDetailViewKey;
-            }
-
-            WriteJson(
-                Path.Combine(metadataRoot, "views", $"{resourceKey}List.view.json"),
-                new JsonObject
-                {
-                    ["schemaVersion"] = "1.0",
-                    ["type"] = "view",
-                    ["view"] = listView
-                });
             var modelPath = Path.Combine(metadataRoot, "models", $"{resourceKey}.model.json");
             var modelDocument = new JsonObject
             {
@@ -795,18 +650,8 @@ public class RuntimeViewMaterializer
             };
             WriteProjectedModelJson(modelPath, modelDocument);
         }
-
-        WriteJson(
-            Path.Combine(metadataRoot, "navigation", "standard-data.nav.json"),
-            new
-            {
-                schemaVersion = "1.0",
-                type = "nav",
-                navigation = new { items = navigationItems }
-            });
     }
 
-    // standard-data 的生成模型先在内存中走与普通 Model 相同的投影，再以单个文件写入未发布 staging。
     private void WriteProjectedModelJson(string path, JsonObject modelDocument)
     {
         var generatedBytes = Encoding.UTF8.GetBytes(
@@ -837,43 +682,6 @@ public class RuntimeViewMaterializer
         "string" => "text",
         _ => throw new JsonException($"Standard data field type '{fieldType}' is unsupported.")
     };
-
-    // 显式引用必须在包内唯一解析到同资源的 Detail View，避免激活后再回退或局部失败。
-    private static void ValidateDeclaredDetailView(
-        string metadataRoot,
-        string moduleId,
-        string resourceKey,
-        string detailViewKey)
-    {
-        var viewsRoot = Path.Combine(metadataRoot, "views");
-        var matches = Directory.Exists(viewsRoot)
-            ? Directory.EnumerateFiles(viewsRoot, "*.json", SearchOption.AllDirectories)
-                .OrderBy(static path => path, StringComparer.Ordinal)
-                .Select(path => JsonNode.Parse(File.ReadAllText(path))?.AsObject()
-                    ?? throw new JsonException($"Standard data View '{path}' deserialized to null."))
-                .Select(document => document["view"]?.AsObject())
-                .Where(static view => view is not null)
-                .Where(view => string.Equals(
-                    OptionalString(view!, "key", moduleId),
-                    detailViewKey,
-                    StringComparison.Ordinal))
-                .Cast<JsonObject>()
-                .ToArray()
-            : [];
-        if (matches.Length != 1)
-        {
-            throw new JsonException(
-                $"Standard data resource '{moduleId}.{resourceKey}' detailViewKey '{detailViewKey}' must resolve to exactly one package View.");
-        }
-
-        var detailView = matches[0];
-        if (!string.Equals(OptionalString(detailView, "mode", moduleId), "detail", StringComparison.Ordinal)
-            || !string.Equals(OptionalString(detailView, "model", moduleId), resourceKey, StringComparison.Ordinal))
-        {
-            throw new JsonException(
-                $"Standard data resource '{moduleId}.{resourceKey}' detailViewKey '{detailViewKey}' references the wrong View mode or model.");
-        }
-    }
 
     private static JsonObject ReadPackageObject(string packageRoot, string relativePath)
     {

@@ -21,14 +21,12 @@
       "template-module.page"
     ]
   },
-  "security": {
-    "permissions": [
-      {
-        "code": "TemplateModule.View",
-        "displayName": "查看模板模块",
-        "description": "允许访问模板模块页面",
-        "group": "模板模块"
-      }
-    ]
-  }
+  "features": [
+    {
+      "key": "template-module",
+      "kind": "navigation",
+      "title": "模板模块",
+      "behaviorKey": "template-module.read"
+    }
+  ]
 }

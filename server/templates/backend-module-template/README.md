@@ -4,10 +4,10 @@
 
 ## 模板内容
 
-- `capsule/newp.plugin.json`：模板身份、版本、权限和前后端 behavior key 的唯一 owner；
+- `capsule/newp.plugin.json`：模板身份、版本、功能目录和前后端 behavior key 的唯一 owner；
 - `capsule/metadata/**`：最小导航与本地化 authoring；
 - `TemplateModule.cs`：继承 `ModuleCapsuleBindingBase`，只绑定 backend behavior key 与服务注册；
-- `Controllers/TemplateController.cs`：带显式权限要求的轻量接口；
+- `Controllers/TemplateController.cs`：带 `EndpointModule` 与 `RequireFeature` 的轻量接口；
 - `DTOs/TemplateResponse.cs`：稳定响应 DTO；
 - `Services/*`：模块内部服务。
 
@@ -33,3 +33,5 @@ dotnet build .\server\templates\backend-module-template\TemplateModule.csproj
 ```
 
 生成模块后至少验证模块项目、HostApi 接线和 Canonical Module Plan 编译。
+
+模板保留现有 `routeCapabilities` 静态页面及恢复 loader；导航 `featureKey` 指向 Capsule 的 `features` 导航声明，状态端点绑定同一读取行为。脚手架同步替换这些 key，不生成另一份业务 Permission 声明，也不为静态页面增加网络请求。

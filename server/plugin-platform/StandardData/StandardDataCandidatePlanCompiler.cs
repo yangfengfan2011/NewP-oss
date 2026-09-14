@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Kernel.PluginDiscovery;
 using ICP.Platform.Kernel.PluginPackages;
@@ -152,17 +153,19 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
         return candidate;
     }
 
+    // 候选先复用正式页面投影展开目录，后续 runtime 写入相同输入的结果。
     private static ModuleCapsuleCandidate BuildCandidate(
         string packageRoot,
         StandardDataPackageInspectionResult inspection)
     {
         var manifest = inspection.Manifest!;
         var projection = inspection.Projection!;
-        var permissions = projection.Resources
-            .SelectMany(static resource => resource.PermissionCodes)
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(static code => code, StringComparer.Ordinal)
-            .ToArray();
+        var documents = StandardDataMetadataProjection.Project(manifest.ModuleId,
+            JsonNode.Parse(File.ReadAllText(Path.Combine(packageRoot, manifest.Artifacts.Blueprint)))!.AsObject(),
+            JsonNode.Parse(File.ReadAllText(Path.Combine(packageRoot, manifest.Artifacts.StandardProjection)))!.AsObject(),
+            StandardDataMetadataProjection.ReadDocuments(Path.Combine(packageRoot, "metadata")));
+        var features = StandardFeatureMetadataCompiler.Read(manifest.ModuleId,
+            documents.Values.Select(document => JsonSerializer.SerializeToElement(document)));
         var frontendBindings = projection.Resources
             .Select(resource => $"{manifest.ModuleId}.{resource.ResourceKey}")
             .OrderBy(static key => key, StringComparer.Ordinal)
@@ -194,8 +197,8 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
                 .ToArray(),
             FrontendBindings: frontendBindings,
             FrontendBindingReferences: frontendBindings,
-            PermissionCodes: permissions,
-            PermissionReferences: permissions,
+            PermissionCodes: [],
+            PermissionReferences: [],
             ModelKeys: projection.Resources
                 .Select(static resource => resource.ResourceKey)
                 .OrderBy(static key => key, StringComparer.Ordinal)
@@ -206,7 +209,7 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
                 "/"),
             Persistence: new ModulePersistenceContribution(
                 manifest.Persistence.Models,
-                migrationBundles));
+                migrationBundles)) { Features = features };
     }
 
     private static string NormalizeProvider(string provider) =>

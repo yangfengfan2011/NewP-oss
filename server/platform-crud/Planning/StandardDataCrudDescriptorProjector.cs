@@ -72,7 +72,9 @@ public sealed class StandardDataCrudDescriptorProjector
                     detailFields,
                     fields,
                     fields),
-                Authorization = StandardCrudAuthorization.ByConvention(resourceKey),
+                Authorization = StandardCrudAuthorization.ByFeature(resourceKey,
+                    [StandardCrudOperation.List, StandardCrudOperation.Detail, StandardCrudOperation.Create, StandardCrudOperation.Update,
+                     .. (fields.Contains("IsEnabled", StringComparer.Ordinal) ? new[] { StandardCrudOperation.Enable, StandardCrudOperation.Disable } : [])]),
                 OptionLabelFields = [resource.DisplayField],
                 FieldPolicies = requiredFields
                     .Select(static field => new StandardCrudFieldPolicy

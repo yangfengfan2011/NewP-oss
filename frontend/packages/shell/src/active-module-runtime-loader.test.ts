@@ -502,23 +502,13 @@ describe('active-module-runtime-loader', () => {
             apiRoute: '/api/standard/partner-asset-catalog/assets',
             pageRoute: '/assets',
             detailViewKey: 'partner.asset.detail',
-            permissionCodes: [
-              'Partner.AssetCatalog.Asset.View',
-              'Partner.AssetCatalog.Asset.Create',
-              'Partner.AssetCatalog.Asset.Update',
-              'Partner.AssetCatalog.Asset.Delete',
-            ],
+            permissionCodes: [],
           },
           {
             resourceKey: 'Audit',
             apiRoute: '/api/standard/partner-asset-catalog/audits',
             pageRoute: '/audits',
-            permissionCodes: [
-              'Partner.AssetCatalog.Audit.View',
-              'Partner.AssetCatalog.Audit.Create',
-              'Partner.AssetCatalog.Audit.Update',
-              'Partner.AssetCatalog.Audit.Delete',
-            ],
+            permissionCodes: [],
           },
         ],
       };
@@ -543,7 +533,6 @@ describe('active-module-runtime-loader', () => {
       listRoutePath: '/assets',
       detailViewKey: 'partner.asset.detail',
       detailRoutePath: '/assets/:id',
-      permissions: ['Partner.AssetCatalog.Asset.View'],
     });
     expect(resource?.fields).toEqual([
       expect.objectContaining({ key: 'Name', modelField: 'Name', kind: 'text', required: true }),
@@ -568,31 +557,18 @@ describe('active-module-runtime-loader', () => {
       detailViewKey: undefined,
       detailRoutePath: undefined,
     });
-    await resource?.actionHandlers?.disable({ id: 'asset-1', row: {} });
+    await resource?.actionHandlers?.disable({ id: 'asset-1', row: {}, featurePosition: 'disable-position' });
     expect(fetchStandardCrud).toHaveBeenNthCalledWith(
       1,
       '/api/standard/partner-asset-catalog/assets/asset-1/disable',
-      { method: 'POST' },
+      { method: 'POST', headers: { 'X-NewP-Feature': 'disable-position' } },
     );
-    await resource?.actionHandlers?.enable({ id: 'asset-1', row: {} });
+    await resource?.actionHandlers?.enable({ id: 'asset-1', row: {}, featurePosition: 'enable-position' });
     expect(fetchStandardCrud).toHaveBeenNthCalledWith(
       2,
-      '/api/standard/partner-asset-catalog/assets/asset-1',
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ IsEnabled: true }),
-      },
+      '/api/standard/partner-asset-catalog/assets/asset-1/enable',
+      { method: 'POST', headers: { 'X-NewP-Feature': 'enable-position' } },
     );
-    expect(module.permissions?.map((permission) => permission.code)).toEqual([
-      'Partner.AssetCatalog.Asset.View',
-      'Partner.AssetCatalog.Asset.Create',
-      'Partner.AssetCatalog.Asset.Update',
-      'Partner.AssetCatalog.Asset.Delete',
-      'Partner.AssetCatalog.Audit.View',
-      'Partner.AssetCatalog.Audit.Create',
-      'Partner.AssetCatalog.Audit.Update',
-      'Partner.AssetCatalog.Audit.Delete',
-    ]);
+    expect(module.permissions).toBeUndefined();
   });
 });

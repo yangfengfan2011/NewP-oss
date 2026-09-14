@@ -213,6 +213,15 @@ export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch
         { method: 'DELETE', ...(context?.featurePosition ? { headers: featureHeaders(context) } : {}) },
         '删除标准资源失败',
       ),
+    enable: async (id, context) =>
+      normalizeStandardCrudDetail(
+        await requestJson<unknown>(
+          fetcher,
+          `${apiRoute}/${encodeURIComponent(id)}/enable`,
+          { method: 'POST', ...(context?.featurePosition ? { headers: featureHeaders(context) } : {}) },
+          '启用标准资源失败',
+        ),
+      ),
     disable: async (id, context) =>
       normalizeStandardCrudDetail(
         await requestJson<unknown>(

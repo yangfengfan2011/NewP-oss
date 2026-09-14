@@ -68,6 +68,12 @@ Shell 会导入并校验整份目录，全部成功后通过 `ModuleRegistry.rep
 
 详情摘要 renderer 通过 `featureActions` 接收本 View 声明的专用动作映射，形状为 `Record<key, { position, allowed }>`。模块以 `allowed` 控制呈现、以 `position` 发起该动作请求，例如 Organization 的账号绑定；不要导入 Shell 的内部位置 Context，也不要把其他动作或入口资格用作写入授权。输入、确认、pending、错误及刷新仍沿用既有动作生命周期。摘要的内容读取使用所属详情的读取上下文；例如 Identity 安全事件由模块自己的 summary data 传递 `readContext.featurePosition`，查询缓存同时区分位置，不能借用写动作或其他页面的读取资格。
 
+## 声明式标准插件的动作
+
+`standard-data.v1` 生成页面消费同一候选目录和运行时 metadata，权限位置沿标准 CRUD client 传递，不读取插件投影中过渡保留的空 `permissionCodes`。刷新跟随所属读取入口，不登记独立业务动作。
+
+生成的启用 handler 调用 `client.enable(id, context)`，停用调用对应 `disable`，均沿发起动作传递位置。不能把启用改写为通用 `update` 来借用其他执行绑定；编辑表单仍使用原已声明的字段范围，独立状态动作不引入字段级授权。
+
 ## 验证
 
 - 模块构建证明 TypeScript binding 与依赖完整。

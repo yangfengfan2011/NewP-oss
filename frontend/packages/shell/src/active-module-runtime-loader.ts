@@ -245,11 +245,11 @@ function createStandardDataStateActionHandlers(apiRoute: string): Record<string,
   };
 
   return {
-    disable: async ({ id }) => {
-      await client.disable(requireId(id, '停用'));
+    disable: async ({ id, featurePosition }) => {
+      await client.disable(requireId(id, '停用'), { featurePosition });
     },
-    enable: async ({ id }) => {
-      await client.update(requireId(id, '启用'), { IsEnabled: true });
+    enable: async ({ id, featurePosition }) => {
+      await client.enable(requireId(id, '启用'), { featurePosition });
     },
   };
 }
@@ -293,10 +293,6 @@ async function projectStandardDataModule(
     }
 
     const resourceSlug = toRouteToken(resource.key);
-    const viewPermission = projected.permissionCodes.find((code) => code.endsWith('.View'));
-    if (!viewPermission) {
-      throw new Error(`standard-data resource '${bindingKey}' has no View permission`);
-    }
 
     return {
       resourceKey: bindingKey,
@@ -316,7 +312,6 @@ async function projectStandardDataModule(
         ? `${projected.pageRoute.replace(/\/$/, '')}/:id`
         : undefined,
       listPanelTitle: resource.displayName,
-      permissions: [viewPermission],
       fields: resource.fields.map((field) => ({
         key: field.name,
         labelKey: field.name,
@@ -331,9 +326,6 @@ async function projectStandardDataModule(
         : undefined,
     };
   });
-  const permissionCodes = projection.resources
-    .flatMap((resource) => resource.permissionCodes)
-    .filter((code, index, all) => all.indexOf(code) === index);
 
   return {
     metadata: {
@@ -343,7 +335,6 @@ async function projectStandardDataModule(
       description: entry.description,
     },
     standardCrudResources,
-    permissions: permissionCodes.map((code) => ({ code, name: code })),
   } satisfies FrontendModule;
 }
 

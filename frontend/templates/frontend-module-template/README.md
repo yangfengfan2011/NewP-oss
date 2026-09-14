@@ -36,3 +36,5 @@ cd frontend
 pnpm --filter @icp-templates/frontend-module-template build
 pnpm --filter @icp-modules/<module-name> build
 ```
+
+模板保留现有 `routeCapabilities` 静态页面及恢复 loader；导航 `featureKey` 指向 Capsule 的 `features` 导航声明，状态端点绑定同一读取行为。脚手架同步替换这些 key，不生成另一份业务 Permission 声明，也不为静态页面增加网络请求。

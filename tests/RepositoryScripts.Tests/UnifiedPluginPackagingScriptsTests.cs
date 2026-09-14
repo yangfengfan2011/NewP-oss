@@ -90,11 +90,10 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
             Assert.Equal(
                 "canonical-sample.page",
                 Assert.Single(manifest.GetProperty("frontend").GetProperty("bindings").EnumerateArray()).GetString());
-            Assert.Equal(
-                "CanonicalSample.View",
-                Assert.Single(manifest.GetProperty("security").GetProperty("permissions").EnumerateArray())
-                    .GetProperty("code")
-                    .GetString());
+            Assert.False(manifest.TryGetProperty("security", out _));
+            var feature = Assert.Single(manifest.GetProperty("features").EnumerateArray());
+            Assert.Equal("canonical-sample", feature.GetProperty("key").GetString());
+            Assert.Equal("canonical-sample.read", feature.GetProperty("behaviorKey").GetString());
         }
 
         using (var navigationDocument = JsonDocument.Parse(File.ReadAllText(navigationPath)))
@@ -105,9 +104,8 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
                     .GetProperty("items")
                     .EnumerateArray());
             Assert.Equal("canonical-sample.page", item.GetProperty("targetKey").GetString());
-            Assert.Equal(
-                "CanonicalSample.View",
-                Assert.Single(item.GetProperty("permissions").EnumerateArray()).GetString());
+            Assert.Equal("canonical-sample", item.GetProperty("featureKey").GetString());
+            Assert.False(item.TryGetProperty("permissions", out _));
         }
 
         var runtimeModulesRoot = Path.Combine(fixtureRoot, "runtime", "modules");
@@ -121,6 +119,11 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
         Assert.True(
             compilation.IsSuccess,
             string.Join(Environment.NewLine, compilation.Diagnostics.Select(static item => item.Message)));
+
+        var point = Assert.Single(compilation.Plan!.FeatureCatalog);
+        Assert.Equal("CanonicalSample", point.ModuleId);
+        Assert.Equal("canonical-sample.read", point.BehaviorKey);
+        Assert.Empty(Assert.Single(compilation.Plan.Modules).PermissionCodes);
 
         var backendProject = File.ReadAllText(
             Path.Combine(fixtureRoot, "server", "modules", "CanonicalSample", "CanonicalSample.csproj"));
@@ -136,7 +139,8 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
 
         var controller = File.ReadAllText(
             Path.Combine(fixtureRoot, "server", "modules", "CanonicalSample", "Controllers", "CanonicalSampleController.cs"));
-        Assert.Contains("[RequirePermission(\"CanonicalSample.View\")]", controller, StringComparison.Ordinal);
+        Assert.Contains("[RequireFeature(\"canonical-sample.read\")]", controller, StringComparison.Ordinal);
+        Assert.Contains("[EndpointModule(\"CanonicalSample\")]", controller, StringComparison.Ordinal);
         Assert.DoesNotContain("ModuleId =", controller, StringComparison.Ordinal);
 
         var frontendBinding = File.ReadAllText(

@@ -37,8 +37,8 @@ public sealed class StandardDataCrudDescriptorProjectorTests : IDisposable
         Assert.Equal(["EID", "Name", "SerialNo"], descriptor.FieldSet.ListFields);
         Assert.Equal(["Name", "SerialNo"], descriptor.FieldSet.CreateFields);
         Assert.Equal(
-            "Partner.AssetCatalog.Asset.View",
-            descriptor.Authorization!.GetPermissionCode(ICP.Platform.Crud.Descriptors.StandardCrudOperation.List));
+            "Partner.AssetCatalog.Asset.read",
+            descriptor.Authorization!.GetFeatureBehavior(ICP.Platform.Crud.Descriptors.StandardCrudOperation.List));
         var requiredPolicy = Assert.Single(descriptor.FieldPolicies);
         Assert.Equal("Name", requiredPolicy.Field);
         Assert.True(requiredPolicy.StorageRequired);

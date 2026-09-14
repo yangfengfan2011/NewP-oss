@@ -170,6 +170,16 @@ public static class StandardCrudEndpointRouteBuilderExtensions
         }).WithMetadata(new EndpointModuleAttribute(descriptor.ModuleId))
             .RequireCrudOperation(authorization, StandardCrudOperation.Update);
 
+        endpoints.MapPost(route + "/{id}/enable", async (
+            string id,
+            StandardCrudEndpoint endpoint,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await endpoint.EnableAsync(descriptor, id, cancellationToken);
+            return ToMutationResult(result, Results.Ok);
+        }).WithMetadata(new EndpointModuleAttribute(descriptor.ModuleId))
+            .RequireCrudOperation(authorization, StandardCrudOperation.Enable);
+
         endpoints.MapPost(route + "/{id}/disable", async (
             string id,
             StandardCrudEndpoint endpoint,

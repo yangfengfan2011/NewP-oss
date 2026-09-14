@@ -560,6 +560,12 @@ public sealed class StandardCrudEndpointRouteBuilderTests
             return Task.FromResult(MutationResult);
         }
 
+        public Task<StandardCrudMutationResult> EnableAsync(StandardCrudDescriptor descriptor, string id, CancellationToken cancellationToken = default)
+        {
+            LastMutation = nameof(EnableAsync);
+            return Task.FromResult(MutationResult);
+        }
+
         public Task<StandardCrudMutationResult> DisableAsync(StandardCrudDescriptor descriptor, string id, CancellationToken cancellationToken = default)
         {
             LastMutation = nameof(DisableAsync);

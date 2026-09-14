@@ -59,12 +59,7 @@ describe('@icp-platform/plugin-sdk', () => {
       resourceKey: 'Asset',
       pageRoute: '/plugins/partner-asset-catalog/assets',
       detailViewKey: 'partner.asset.detail',
-      permissionCodes: [
-        'Partner.AssetCatalog.Asset.Create',
-        'Partner.AssetCatalog.Asset.Delete',
-        'Partner.AssetCatalog.Asset.Update',
-        'Partner.AssetCatalog.Asset.View',
-      ],
+      permissionCodes: [],
     });
   });
 

@@ -28,9 +28,7 @@ export const projectStandardPluginBlueprint = (
         .filter((field) => field.unique)
         .map((field) => `UX_${resource.pluralName}_${field.name}`)
         .sort(),
-      permissionCodes: ['View', 'Create', 'Update', 'Delete']
-        .map((action) => `${blueprint.moduleId}.${resource.key}.${action}`)
-        .sort(),
+      permissionCodes: [],
       detailViewKey: resource.detailViewKey,
     }))
     .sort((left, right) => left.resourceKey.localeCompare(right.resourceKey));

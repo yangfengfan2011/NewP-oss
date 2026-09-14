@@ -11,9 +11,7 @@
         "order": 999,
         "entryType": "custom",
         "targetKey": "template-module.page",
-        "permissions": [
-          "TemplateModule.View"
-        ]
+        "featureKey": "template-module"
       }
     ]
   }

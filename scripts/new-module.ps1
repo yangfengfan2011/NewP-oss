@@ -339,7 +339,8 @@ Update-FileContent -Path $backendControllerPath -Transform {
         $content = $content.Replace('ITemplateService', "I$($ModuleName)Service")
         $content = $content.Replace('TemplateController', "$($ModuleName)Controller")
         $content = $content.Replace('api/template-module', "api/$moduleSlug")
-        $content = $content.Replace('TemplateModule.View', ($ModuleName + '.View'))
+        $content = $content.Replace('template-module.read', ($moduleSlug + '.read'))
+        $content = $content.Replace('[EndpointModule("TemplateModule")]', ('[EndpointModule("' + $ModuleName + '")]'))
     }
 
     $content

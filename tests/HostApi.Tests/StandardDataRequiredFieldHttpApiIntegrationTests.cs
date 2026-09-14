@@ -5,6 +5,11 @@ using System.Text.Json;
 using ICP.Platform.Authorization;
 using ICP.Platform.Authorization.Abstractions;
 using ICP.Platform.Authorization.Extensions;
+using ICP.Platform.Authorization.Http;
+using ICP.Platform.HostApi.Authorization;
+using ICP.Platform.Kernel.PluginPackages;
+using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Routing;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Extensions;
@@ -25,6 +30,11 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposable
 {
+    private IReadOnlyList<FeaturePoint> _points = [];
+    private FeaturePoint Point(string? action = null) => _points.Single(point => action is null
+        ? point.BehaviorKey == "Partner.AssetCatalog.Asset.read"
+        : point.Key == action && point.Kind == "action");
+
     [Fact]
     public async Task StandardDataDetail_AutomaticallyProjectsAuditTimeAndRejectsUnselectedCompanionWrites()
     {
@@ -34,12 +44,12 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         await using var app = BuildApplication(repository, auditProjection: true);
         await app.StartAsync();
         using var client = app.GetTestClient();
-        var result = await client.GetFromJsonAsync<JsonElement>("/api/standard/partner-asset-catalog/assets/Asset_1");
+        var result = await FeatureHttpTestRequests.ReadAsync(client, Point(), "/api/standard/partner-asset-catalog/assets/Asset_1");
         var fields = result.GetProperty("fields");
         Assert.Equal(instant, fields.GetProperty("CreatedAt").GetDateTime());
         Assert.Equal("2026/9/4 15:24:26", fields.GetProperty("CreatedAt_DisplayValue").GetString());
         Assert.False(fields.TryGetProperty("CreatedBy_DisplayValue", out _));
-        var rejected = await client.PostAsJsonAsync("/api/standard/partner-asset-catalog/assets", new { Name = "Other", CreatedBy_DisplayValue = "forged" });
+        var rejected = await FeatureHttpTestRequests.SendAsync(client, Point("create"), HttpMethod.Post, "/api/standard/partner-asset-catalog/assets", new { Name = "Other", CreatedBy_DisplayValue = "forged" });
         Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
         Assert.Equal(0, repository.CreateCallCount);
     }
@@ -61,13 +71,13 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         await app.StartAsync();
         var client = app.GetTestClient();
 
-        var missingResponse = await client.PostAsJsonAsync(
+        var missingResponse = await FeatureHttpTestRequests.SendAsync(client, Point("create"), HttpMethod.Post,
             "/api/standard/partner-asset-catalog/assets",
             new Dictionary<string, object?> { ["SerialNo"] = "S-001" });
-        var nullResponse = await client.PostAsJsonAsync(
+        var nullResponse = await FeatureHttpTestRequests.SendAsync(client, Point("create"), HttpMethod.Post,
             "/api/standard/partner-asset-catalog/assets",
             new Dictionary<string, object?> { ["Name"] = null, ["SerialNo"] = "S-002" });
-        var blankResponse = await client.PostAsJsonAsync(
+        var blankResponse = await FeatureHttpTestRequests.SendAsync(client, Point("create"), HttpMethod.Post,
             "/api/standard/partner-asset-catalog/assets",
             new Dictionary<string, object?> { ["Name"] = "   ", ["SerialNo"] = "S-003" });
 
@@ -85,14 +95,14 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         await using var app = BuildApplication(repository);
         await app.StartAsync();
         var client = app.GetTestClient();
-        var createdResponse = await client.PostAsJsonAsync(
+        var createdResponse = await FeatureHttpTestRequests.SendAsync(client, Point("create"), HttpMethod.Post,
             "/api/standard/partner-asset-catalog/assets",
             new Dictionary<string, object?> { ["Name"] = "正式资产", ["SerialNo"] = "S-004" });
         Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
         var row = Assert.Single(repository.Rows);
         var id = Assert.IsType<string>(row["EID"]);
 
-        var omittedResponse = await client.PutAsJsonAsync(
+        var omittedResponse = await FeatureHttpTestRequests.SendAsync(client, Point("edit"), HttpMethod.Put,
             $"/api/standard/partner-asset-catalog/assets/{id}",
             new Dictionary<string, object?> { ["SerialNo"] = "S-005" });
 
@@ -100,10 +110,10 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         Assert.Equal("正式资产", row["Name"]);
         Assert.Equal("S-005", row["SerialNo"]);
 
-        var nullResponse = await client.PutAsJsonAsync(
+        var nullResponse = await FeatureHttpTestRequests.SendAsync(client, Point("edit"), HttpMethod.Put,
             $"/api/standard/partner-asset-catalog/assets/{id}",
             new Dictionary<string, object?> { ["Name"] = null });
-        var blankResponse = await client.PutAsJsonAsync(
+        var blankResponse = await FeatureHttpTestRequests.SendAsync(client, Point("edit"), HttpMethod.Put,
             $"/api/standard/partner-asset-catalog/assets/{id}",
             new Dictionary<string, object?> { ["Name"] = "  " });
 
@@ -112,6 +122,31 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         Assert.Equal("正式资产", row["Name"]);
         Assert.Equal("S-005", row["SerialNo"]);
         Assert.Equal(1, repository.UpdateCallCount);
+    }
+
+    [Fact]
+    public async Task StandardData_UsesIndependentEnablePositionAndPreservesDeclaredEditFields()
+    {
+        var repository = new RecordingRepository();
+        await using var app = BuildApplication(repository);
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+        var body = new { Name = "原名称", SerialNo = "STATE", IsEnabled = false };
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/standard/partner-asset-catalog/assets", body)).StatusCode);
+        using var created = await FeatureHttpTestRequests.SendAsync(client, Point("create"), HttpMethod.Post, "/api/standard/partner-asset-catalog/assets", body);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var row = Assert.Single(repository.Rows);
+        var path = "/api/standard/partner-asset-catalog/assets/" + row["EID"];
+        Assert.Equal(HttpStatusCode.Forbidden, (await FeatureHttpTestRequests.SendAsync(client, Point("disable"), HttpMethod.Post, path + "/enable")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await FeatureHttpTestRequests.SendAsync(client, Point("enable"), HttpMethod.Post, path + "/enable", new { Name = "不得写入", IsEnabled = false })).StatusCode);
+        Assert.Equal("原名称", row["Name"]);
+        Assert.Equal(true, row["IsEnabled"]);
+        Assert.Equal(HttpStatusCode.Forbidden, (await FeatureHttpTestRequests.SendAsync(client, Point("enable"), HttpMethod.Put, path, new { Name = "越权" })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await FeatureHttpTestRequests.SendAsync(client, Point("edit"), HttpMethod.Put, path, new { Name = "合法编辑", IsEnabled = false })).StatusCode);
+        Assert.Equal("合法编辑", row["Name"]);
+        Assert.Equal(false, row["IsEnabled"]);
+        Assert.Equal(HttpStatusCode.OK, (await FeatureHttpTestRequests.SendAsync(client, Point("disable"), HttpMethod.Post, path + "/disable")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await FeatureHttpTestRequests.SendAsync(client, Point(), HttpMethod.Delete, path)).StatusCode);
     }
 
     public void Dispose()
@@ -127,8 +162,11 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         var descriptor = BuildDescriptor();
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
+        builder.Services.AddAuthentication("StandardDataApiTests").AddCookie("StandardDataApiTests", options =>
+            options.Events.OnRedirectToAccessDenied = context => { context.Response.StatusCode = 403; return Task.CompletedTask; });
         builder.Services.AddPlatformAuthorization();
-        builder.Services.AddSingleton<IPermissionDecisionSource, GrantAllPermissionDecisionSource>();
+        builder.Services.AddAuthorization(options => options.AddPolicy(DenyAllAttribute.PolicyName, policy => policy.RequireAssertion(_ => false)));
+        builder.Services.AddSingleton<IFeatureDecisionSource>(new DeclaredFeatures(_points));
         builder.Services.AddStandardCrudKernel();
         builder.Services.AddSingleton<IStandardCrudRepository>(repository);
         builder.Services.AddSingleton<IPlatformQueryExecutor, UnusedQueryExecutor>();
@@ -154,12 +192,19 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         });
         app.UseAuthorization();
         app.MapStandardCrudResources();
+        FeatureEndpointBindings.Validate(((IEndpointRouteBuilder)app).DataSources, _points);
         return app;
     }
 
     private StandardCrudDescriptor BuildDescriptor()
     {
         WritePackageContracts();
+        var documents = StandardDataMetadataProjection.Project("Partner.AssetCatalog",
+            JsonNode.Parse(File.ReadAllText(Path.Combine(_packageRoot, "authoring/newp.plugin.json")))!.AsObject(),
+            JsonNode.Parse(File.ReadAllText(Path.Combine(_packageRoot, "projections/standard-data.json")))!.AsObject(),
+            new Dictionary<string, JsonObject>());
+        _points = FeatureCatalogCompiler.Compile(StandardFeatureMetadataCompiler.Read("Partner.AssetCatalog",
+            documents.Values.Select(document => JsonSerializer.SerializeToElement(document))));
         var plan = new CanonicalModulePlan(
             "candidate",
             "1.0",
@@ -185,12 +230,7 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         ["/api/standard/partner-asset-catalog/assets", "/assets"],
         ["Partner.AssetCatalog.Asset"],
         ["Partner.AssetCatalog.Asset"],
-        [
-            "Partner.AssetCatalog.Asset.View",
-            "Partner.AssetCatalog.Asset.Create",
-            "Partner.AssetCatalog.Asset.Update",
-            "Partner.AssetCatalog.Asset.Delete"
-        ],
+        [],
         [],
         ["Asset"],
         new ModulePlanProvenance("installed-package", Path.Combine(_packageRoot, "plugin.json"), "/"));
@@ -218,7 +258,8 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
                     "Name",
                     [
                         new StandardDataFieldBlueprint("Name", "string", Required: true),
-                        new StandardDataFieldBlueprint("SerialNo", "string", Required: false, Unique: true)
+                        new StandardDataFieldBlueprint("SerialNo", "string", Required: false, Unique: true),
+                        new StandardDataFieldBlueprint("IsEnabled", "boolean", Required: false)
                     ])
             ]),
             new StandardNavigationBlueprint("business", "Assets", "Assets", 200),
@@ -233,12 +274,7 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
                     "np_partner_asset_catalog",
                     "assets",
                     ["UX_assets_SerialNo"],
-                    [
-                        "Partner.AssetCatalog.Asset.View",
-                        "Partner.AssetCatalog.Asset.Create",
-                        "Partner.AssetCatalog.Asset.Update",
-                        "Partner.AssetCatalog.Asset.Delete"
-                    ])
+                    [])
             ]);
         var manifest = new StandardPluginPackageManifest(
             1,
@@ -261,7 +297,7 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
                 "provenance/explain.json"),
             blueprint.Persistence,
             new StandardPluginPackageChecksums("checksums/sha256sums.json"));
-        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web) { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
 
         File.WriteAllText(Path.Combine(_packageRoot, "plugin.json"), JsonSerializer.Serialize(manifest, options));
         File.WriteAllText(
@@ -280,13 +316,11 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         Assert.Equal("Partner.AssetCatalog.Asset.Name.required", error.GetProperty("reasonKey").GetString());
     }
 
-    private sealed class GrantAllPermissionDecisionSource : IPermissionDecisionSource
+    private sealed class DeclaredFeatures(IReadOnlyList<FeaturePoint> points) : IFeatureDecisionSource
     {
-        public ValueTask<PermissionDecision> EvaluateAsync(
-            string subjectId,
-            string permissionCode,
-            CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult(PermissionDecision.Granted);
+        public ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string position, string behaviorKey, CancellationToken cancellationToken) =>
+            ValueTask.FromResult(points.Any(point => point.Position == position && point.BehaviorKey == behaviorKey)
+                ? PermissionDecision.Granted : PermissionDecision.Denied);
     }
 
     private sealed class UnusedQueryExecutor : IPlatformQueryExecutor

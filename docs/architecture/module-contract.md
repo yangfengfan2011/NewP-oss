@@ -40,6 +40,14 @@ Audit 列表和详情使用 `audit.change.read`，并继续由 `ILocalAdministra
 
 其他未切换消费者暂保留原 Permission 路径。已切换端点不以新旧任一授权通过作为放行条件。其余消费者切换与旧目录一次性退出由 [Issue #200](https://github.com/yangfengfan2011/NewP/issues/200) 的后续 child 完成。
 
+## 声明式标准插件
+
+`standard-data.v1` 由 `StandardDataMetadataProjection` 根据同一包内 blueprint、标准投影和 metadata 生成导航、列表与详情声明。候选编译使用该输出登记完整功能目录，运行时物化复用同一输出；Model 仍由原持久化/模型投影拥有。刷新是纯交互，不生成授权点；显式详情保留原结构并绑定所属入口。
+
+C# 与 TypeScript 插件 SDK 生成的 `PermissionCodes` / `permissionCodes` 暂保留既有公开形状，值为空；正式候选及生成页面不再使用它们判权，也不因此跳过目录与执行绑定校验。旧字段和其他过渡引用的最终退出仍归 Issue #200 的退出片。
+
+标准启用和停用绑定独立行为。`POST /{id}/enable` 与 `/disable` 固定写入对应状态，不从请求 body 接收其他更新字段；编辑动作保留其正式字段白名单。未切换的 `ByConvention` 消费者保留原权限映射，已切换的 `ByFeature` 消费者按声明操作绑定功能位置。
+
 ## Guardrails
 
 - Host 只组合、装载和提供宿主级横切能力，不吸收模块私有业务规则。

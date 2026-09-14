@@ -16,6 +16,7 @@ public static class StandardCrudAuthorizationValidator
         StandardCrudOperation.Create,
         StandardCrudOperation.Update,
         StandardCrudOperation.Disable,
+        StandardCrudOperation.Enable,
         StandardCrudOperation.Delete
     ];
 

@@ -32,7 +32,7 @@ frontend/modules/<module-id>/
 └── README.md
 ```
 
-根 Capsule 是模块身份、版本、依赖、权限与 behavior key 的唯一 owner。后端和前端只实现对应 behavior binding。
+根 Capsule 是模块身份、版本、依赖、功能目录与 behavior key 的唯一 owner。后端和前端只实现对应 behavior binding。
 
 ## 推荐生成方式
 
@@ -58,8 +58,8 @@ pwsh -NoProfile -File .\scripts\new-module.ps1 -ModuleName ExampleModule -Displa
 ## 必改项
 
 - Capsule 中的模块身份、显示名、程序集名和 behavior key；
-- navigation 的 route、`targetKey` 与权限引用；
-- 后端命名空间、类名、路由和权限编码；
+- navigation 的 route、`targetKey` 与 `featureKey` 引用；
+- 后端命名空间、类名、路由和读取 behavior key；
 - 前端包名、behavior key、page key 与页面实现。
 
 脚手架会完成最小替换；业务模型、服务和页面仍需按已确认设计补齐。
@@ -85,3 +85,5 @@ pnpm --filter @icp-modules/example-module build
 ```
 
 接入 HostApi 后还应构建 Host，并确认生成的 Capsule 可以被 `ModuleCapsuleCandidateReader` 读取且通过 `CanonicalModulePlanCompiler`。
+
+模板保留现有 `routeCapabilities` 静态页面及恢复 loader；导航 `featureKey` 指向 Capsule 的 `features` 导航声明，状态端点绑定同一读取行为。脚手架同步替换这些 key，不生成另一份业务 Permission 声明，也不为静态页面增加网络请求。

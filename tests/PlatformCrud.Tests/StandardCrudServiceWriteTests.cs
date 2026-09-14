@@ -1046,6 +1046,20 @@ public sealed class StandardCrudServiceWriteTests
         Assert.Equal("StandardCrud.ConcurrencyRevisionRequired", result.Error.Code);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task EnableAsync_ChangesOnlyDeclaredStateField(bool initial)
+    {
+        var repository = new InMemoryStandardCrudRepository([
+            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "原名称", ["IsEnabled"] = initial }
+        ]);
+        var result = await Service(repository).EnableAsync(Descriptor(), "person-1");
+        Assert.True(result.Succeeded);
+        Assert.True((bool)result.Detail!.Fields["IsEnabled"]!);
+        Assert.Equal("原名称", result.Detail.Fields["ENAME"]);
+    }
+
     [Fact]
     public async Task DisableAsync_SetsEnabledFieldFalse()
     {

@@ -14,7 +14,8 @@ public sealed class StandardDataPackageTests : IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
-        WriteIndented = true
+        WriteIndented = true,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
     };
 
     private readonly string _root = Path.Combine(
@@ -124,7 +125,10 @@ public sealed class StandardDataPackageTests : IDisposable
         Assert.Equal("standard-data", module.FrontendBindingMode);
         Assert.Contains("/api/standard/partner-asset-catalog/assets", module.Routes);
         Assert.Contains("/assets", module.Routes);
-        Assert.Contains("Partner.AssetCatalog.Asset.View", module.PermissionCodes);
+        Assert.Empty(module.PermissionCodes);
+        Assert.Equal(["", "Partner.AssetCatalog.Asset.create", "Partner.AssetCatalog.Asset.read", "Partner.AssetCatalog.Asset.update"],
+            plan.FeatureCatalog.Select(point => point.BehaviorKey).Order(StringComparer.Ordinal));
+        Assert.DoesNotContain(plan.FeatureCatalog, point => point.Key == "refresh");
         Assert.Equal("Asset", Assert.Single(module.ModelKeys));
         Assert.Equal("installed-package", module.Provenance.SourceKind);
     }

@@ -459,10 +459,16 @@ public sealed class StandardCrudService : IStandardCrudService
             : StandardCrudMutationResult.Success(await BuildDetailFromRowAsync(descriptor, updated, cancellationToken));
     }
 
-    public async Task<StandardCrudMutationResult> DisableAsync(
-        StandardCrudDescriptor descriptor,
-        string id,
-        CancellationToken cancellationToken = default)
+    /// <summary>停用仅生成固定状态写入，复用标准更新的校验和事务。</summary>
+    public Task<StandardCrudMutationResult> DisableAsync(StandardCrudDescriptor descriptor, string id, CancellationToken cancellationToken = default) =>
+        SetEnabledAsync(descriptor, id, false, cancellationToken);
+
+    /// <summary>启用仅生成固定状态写入，不接收调用方的其他更新字段。</summary>
+    public Task<StandardCrudMutationResult> EnableAsync(StandardCrudDescriptor descriptor, string id, CancellationToken cancellationToken = default) =>
+        SetEnabledAsync(descriptor, id, true, cancellationToken);
+
+    // 两个正式行为共用字段与领域校验，方向由执行端固定，不能从请求 body 替换。
+    private async Task<StandardCrudMutationResult> SetEnabledAsync(StandardCrudDescriptor descriptor, string id, bool enabled, CancellationToken cancellationToken)
     {
         StandardCrudDescriptorValidator.Validate(descriptor);
         if (string.IsNullOrWhiteSpace(descriptor.EnabledField))
@@ -487,7 +493,7 @@ public sealed class StandardCrudService : IStandardCrudService
             });
         }
 
-        return await UpdateAsync(descriptor, id, new Dictionary<string, object?> { [descriptor.EnabledField] = false }, cancellationToken);
+        return await UpdateAsync(descriptor, id, new Dictionary<string, object?> { [descriptor.EnabledField] = enabled }, cancellationToken);
     }
 
     public async Task<StandardCrudMutationResult> DeleteAsync(

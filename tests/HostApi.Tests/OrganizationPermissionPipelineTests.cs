@@ -786,6 +786,15 @@ public sealed class OrganizationPermissionPipelineTests
             return Task.FromResult(StandardCrudMutationResult.Success(Detail(id)));
         }
 
+        public Task<StandardCrudMutationResult> EnableAsync(
+            StandardCrudDescriptor descriptor,
+            string id,
+            CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _callCount);
+            return Task.FromResult(StandardCrudMutationResult.Success(Detail(id)));
+        }
+
         public Task<StandardCrudMutationResult> DisableAsync(
             StandardCrudDescriptor descriptor,
             string id,

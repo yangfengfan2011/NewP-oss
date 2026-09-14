@@ -64,7 +64,8 @@ public sealed class RuntimeViewStagingTests : IDisposable
             builtInModuleSource: null,
             projector.Project);
 
-        using (var stage = materializer.Stage(_installRoot, CreateStandardDataPlan(packageRoot)))
+        var candidate = CreateStandardDataPlan(packageRoot);
+        using (var stage = materializer.Stage(_installRoot, candidate))
         using (var commit = stage.BeginCommit())
         {
             commit.Complete();
@@ -75,6 +76,14 @@ public sealed class RuntimeViewStagingTests : IDisposable
         Assert.True(File.Exists(Path.Combine(moduleRuntimeRoot, "projections", "standard-data.json")));
         Assert.True(File.Exists(Path.Combine(moduleRuntimeRoot, "metadata", "navigation", "standard-data.nav.json")));
         Assert.True(File.Exists(Path.Combine(moduleRuntimeRoot, "metadata", "views", "AssetList.view.json")));
+        var runtimeFeatures = FeatureCatalogCompiler.Compile(StandardFeatureMetadataCompiler.Read("Partner.AssetCatalog",
+            StandardDataMetadataProjection.ReadDocuments(Path.Combine(moduleRuntimeRoot, "metadata")).Values
+                .Select(document => JsonSerializer.SerializeToElement(document))));
+        Assert.Equal(candidate.FeatureCatalog.Select(point => (point.Position, point.BehaviorKey)),
+            runtimeFeatures.Select(point => (point.Position, point.BehaviorKey)));
+        Assert.Equal(["", "Partner.AssetCatalog.Asset.create", "Partner.AssetCatalog.Asset.disable", "Partner.AssetCatalog.Asset.enable", "Partner.AssetCatalog.Asset.read", "Partner.AssetCatalog.Asset.update"],
+            runtimeFeatures.Select(point => point.BehaviorKey).Order(StringComparer.Ordinal));
+        Assert.DoesNotContain(runtimeFeatures, point => point.Key == "refresh");
         var modelPath = Path.Combine(moduleRuntimeRoot, "metadata", "models", "Asset.model.json");
         Assert.True(File.Exists(modelPath));
         var detailViewPath = Path.Combine(moduleRuntimeRoot, "metadata", "views", "AssetDetail.view.json");
@@ -230,7 +239,7 @@ public sealed class RuntimeViewStagingTests : IDisposable
     {
         var action = Assert.Single(rowActions, item => item.GetProperty("key").GetString() == key);
         Assert.Equal(key, action.GetProperty("standardAction").GetString());
-        Assert.Equal("Partner.AssetCatalog.Asset.Update", action.GetProperty("permissions")[0].GetString());
+        Assert.False(action.TryGetProperty("permissions", out _));
         var visibility = action.GetProperty("visibleWhen");
         Assert.Equal("IsEnabled", visibility.GetProperty("field").GetString());
         Assert.Equal("equals", visibility.GetProperty("operator").GetString());
@@ -311,19 +320,23 @@ public sealed class RuntimeViewStagingTests : IDisposable
                     ["/api/standard/partner-asset-catalog/assets", "/assets"],
                     ["Partner.AssetCatalog.Asset"],
                     ["Partner.AssetCatalog.Asset"],
-                    [
-                        "Partner.AssetCatalog.Asset.View",
-                        "Partner.AssetCatalog.Asset.Create",
-                        "Partner.AssetCatalog.Asset.Update",
-                        "Partner.AssetCatalog.Asset.Delete"
-                    ],
+                    [],
                     [],
                     ["Asset"],
                     new ModulePlanProvenance(
                         "installed-package",
                         Path.Combine(packageRoot, "plugin.json"),
-                        "/"))
+                        "/")) { Features = ReadStandardDataFeatures(packageRoot) }
             ]);
+
+    private static IReadOnlyList<FeatureDeclaration> ReadStandardDataFeatures(string packageRoot)
+    {
+        var documents = StandardDataMetadataProjection.Project("Partner.AssetCatalog",
+            JsonNode.Parse(File.ReadAllText(Path.Combine(packageRoot, "authoring/newp.plugin.json")))!.AsObject(),
+            JsonNode.Parse(File.ReadAllText(Path.Combine(packageRoot, "projections/standard-data.json")))!.AsObject(),
+            StandardDataMetadataProjection.ReadDocuments(Path.Combine(packageRoot, "metadata")));
+        return StandardFeatureMetadataCompiler.Read("Partner.AssetCatalog", documents.Values.Select(document => JsonSerializer.SerializeToElement(document)));
+    }
 
     private static void WriteStandardDataPackage(string packageRoot, string detailScenario = "valid")
     {
@@ -384,12 +397,7 @@ public sealed class RuntimeViewStagingTests : IDisposable
                   "resourceKey": "Asset",
                   "apiRoute": "/api/standard/partner-asset-catalog/assets",
                   "pageRoute": "/assets",
-                  "permissionCodes": [
-                    "Partner.AssetCatalog.Asset.View",
-                    "Partner.AssetCatalog.Asset.Create",
-                    "Partner.AssetCatalog.Asset.Update",
-                    "Partner.AssetCatalog.Asset.Delete"
-                  ]
+                  "permissionCodes": []
                 }
               ]
             }

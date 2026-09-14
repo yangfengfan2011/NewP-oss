@@ -109,7 +109,7 @@ public sealed class ProductionEndpointAccessCoverageTests
             plan.ActivePermissions
                 .Where(static permission => permission.Code.StartsWith("Example.Record.", StringComparison.Ordinal))
                 .Select(static permission => permission.Code));
-        Assert.Equal(8, exampleRecordEndpoints.Length);
+        Assert.Equal(9, exampleRecordEndpoints.Length);
         Assert.All(
             exampleRecordEndpoints,
             static endpoint =>

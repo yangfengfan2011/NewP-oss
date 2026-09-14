@@ -45,6 +45,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
     private string? _keyRingRoot;
     private string? _lastDevRunId;
     private int _hostPort;
+    private AcceptanceFeatureCatalog? _features;
     private int _shellPort;
     private bool _catalogCreated;
     private FixtureData? _fixture;
@@ -423,9 +424,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             var reader = _reader ?? throw new InvalidOperationException("Reader was not prepared.");
             if (phase == "initial")
             {
-                string[] views = ["Organization.Company.View", "Organization.Department.View", "Organization.Position.View", "Organization.Person.View"];
-                _roleId = await CreateRoleFromBrowserAndConfigureUsingApiAsync(driver, "M", [.. views, "Organization.Person.Create", "Organization.Person.Update"], cancellationToken);
-                _readerRoleId = await CreateRoleFromBrowserAndConfigureUsingApiAsync(driver, "R", views, cancellationToken);
+                _roleId = await CreateRoleFromBrowserAndConfigureUsingApiAsync(driver, "M", true, cancellationToken);
+                _readerRoleId = await CreateRoleFromBrowserAndConfigureUsingApiAsync(driver, "R", false, cancellationToken);
                 await AssignAccountRoleFromBrowserAsync(driver, _roleId, "M", maintainer);
                 await AssignAccountRoleFromBrowserAsync(driver, _readerRoleId, "R", reader);
             }
@@ -434,7 +434,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             browserAssertions.Add("administrator-assigned-two-ordinary-account-roles-and-opened-change-details");
             await OpenAuditDetailFromBrowserAsync(driver,
                 _roleId ?? throw new InvalidOperationException("Role configuration did not create a role."),
-                "role.permissions.changed", phase);
+                "role.features.changed", phase);
             browserAssertions.Add("administrator-configured-role-and-opened-permission-change-detail");
 
             if (phase == "initial")
@@ -800,7 +800,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
     }
 
     // 角色和权限集合均通过正式管理页面维护，记录值与事务语义留在 SQL/API 层。
-    private async Task<string> CreateRoleFromBrowserAndConfigureUsingApiAsync(StandardCrudPageDriver driver, string suffix, string[] permissions, CancellationToken cancellationToken)
+    private async Task<string> CreateRoleFromBrowserAndConfigureUsingApiAsync(StandardCrudPageDriver driver, string suffix, bool maintenance, CancellationToken cancellationToken)
     {
         var page = driver.Page;
         await page.GetByRole(AriaRole.Link, new PageGetByRoleOptions { Name = "角色管理", Exact = true }).First.ClickAsync();
@@ -819,7 +819,15 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         var id = payload.RootElement.GetProperty("id").GetString() ?? throw new InvalidOperationException("Role creation omitted id.");
         using var administrator = CreateClient(_hostPort);
         await LoginAdminAsync(administrator, cancellationToken);
-        await SetRolePermissionsUsingApiAsync(administrator, id, permissions, cancellationToken);
+        var features = _features!;
+        var entries = new[] { "structure", "companies", "departments", "positions", "persons" }.Select(features.OrganizationTab).ToList();
+        if (maintenance)
+        {
+            var persons = features.OrganizationTab("persons");
+            entries.Add(features.Action(persons, "create", "list.pageActions"));
+            entries.Add(features.Action(persons, "edit", "list.rowActions"));
+        }
+        await SetRoleFeaturesUsingApiAsync(administrator, id, features.GrantSet(entries.ToArray()), cancellationToken);
         return id;
     }
 
@@ -919,29 +927,34 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         return await driver.WaitForVisibleDrawerAsync("person edit drawer");
     }
 
-    // Organization 尚未切换的旧授权仅作为旅程前置；#203 退出旧 Permission 后由 Gate owner 同步替换。
+    // 只撤销本旅程实际使用的人员列表编辑位置，保留树和其他入口的独立授权。
     private async Task RevokeUpdateUsingApiAsync(string roleId, CancellationToken cancellationToken)
     {
         using var administrator = CreateClient(_hostPort);
         await LoginAdminAsync(administrator, cancellationToken);
-        using var response = await administrator.GetAsync($"/api/authorization/roles/{roleId}/permissions", cancellationToken);
+        var features = _features!;
+        var edit = features.Action(features.OrganizationTab("persons"), "edit", "list.rowActions").Position;
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/authorization/workbench/roles/{roleId}");
+        request.Headers.Add("X-NewP-Feature", features.Behavior("Authorization", "authorization.workbench.read").Position);
+        using var response = await administrator.SendAsync(request, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        EnsureStatus(response, HttpStatusCode.OK, body, "read role permissions before revocation");
+        EnsureStatus(response, HttpStatusCode.OK, body, "read role features before revocation");
         using var payload = JsonDocument.Parse(body);
-        var permissions = payload.RootElement.GetProperty("permissionCodes").EnumerateArray()
-            .Select(value => value.GetString() ?? throw new InvalidOperationException("Role permission code was null.")).ToArray();
-        if (!permissions.Contains("Organization.Person.Update", StringComparer.Ordinal))
-            throw new InvalidOperationException("Revocation prerequisite did not grant Organization.Person.Update.");
-        await SetRolePermissionsUsingApiAsync(administrator, roleId,
-            permissions.Where(code => code != "Organization.Person.Update").ToArray(), cancellationToken);
+        var positions = payload.RootElement.GetProperty("positions").EnumerateArray()
+            .Select(value => value.GetString() ?? throw new InvalidOperationException("Role feature position was null.")).ToArray();
+        if (!positions.Contains(edit, StringComparer.Ordinal))
+            throw new InvalidOperationException("Revocation prerequisite did not grant the personnel list edit position.");
+        await SetRoleFeaturesUsingApiAsync(administrator, roleId,
+            positions.Where(position => position != edit).ToArray(), cancellationToken);
     }
 
-    private static async Task SetRolePermissionsUsingApiAsync(HttpClient administrator, string roleId, string[] permissions, CancellationToken cancellationToken)
+    private async Task SetRoleFeaturesUsingApiAsync(HttpClient administrator, string roleId, string[] positions, CancellationToken cancellationToken)
     {
         using var response = await SendJsonWithAntiforgeryAsync(administrator, HttpMethod.Put,
-            $"/api/authorization/roles/{roleId}/permissions", new { PermissionCodes = permissions }, cancellationToken);
+            $"/api/authorization/workbench/roles/{roleId}", new { positions }, cancellationToken,
+            request => request.Headers.Add("X-NewP-Feature", _features!.Behavior("Authorization", "authorization.workbench.save").Position));
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        EnsureStatus(response, HttpStatusCode.NoContent, body, "configure Personnel prerequisite permissions");
+        EnsureStatus(response, HttpStatusCode.NoContent, body, "configure Personnel prerequisite features");
     }
 
     // 一次标准编辑同时维护岗位与时间字段，避免把同一主旅程拆成两次独立提交。
@@ -1540,16 +1553,17 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             "admin",
             _adminPassword ?? throw new InvalidOperationException("Administrator password was not prepared."),
             cancellationToken);
-        EnsurePersonnelJourneyPermissions(user.RootElement);
+        _features ??= await AcceptanceFeatureCatalog.LoadAsync(client, cancellationToken);
+        EnsurePersonnelJourneyFeatures(user.RootElement);
     }
 
-    // 浏览器动作权限来自同一认证快照；在 API 层先给出缺失 permission 的精确失败信号。
-    private static void EnsurePersonnelJourneyPermissions(JsonElement user)
+    // 浏览器动作资格来自同一认证快照；按正式位置在 API 层先给出缺失授权的精确信号。
+    private void EnsurePersonnelJourneyFeatures(JsonElement user)
     {
-        if (!user.TryGetProperty("permissions", out var permissions)
+        if (!user.TryGetProperty("featurePositions", out var permissions)
             || permissions.ValueKind != JsonValueKind.Array)
         {
-            throw new InvalidOperationException("Administrator authentication response did not contain permissions.");
+            throw new InvalidOperationException("Administrator authentication response did not contain feature positions.");
         }
 
         var granted = permissions.EnumerateArray()
@@ -1559,15 +1573,15 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             .ToHashSet(StringComparer.Ordinal);
         var required = new[]
         {
-            "Organization.Company.Create",
-            "Organization.Department.Create",
-            "Organization.Person.Update"
+            _features!.Action(_features.OrganizationTab("companies"), "create", "list.pageActions").Position,
+            _features.Action(_features.OrganizationTab("departments"), "create", "list.pageActions").Position,
+            _features.Action(_features.OrganizationTab("persons"), "edit", "list.rowActions").Position
         };
         var missing = required.Where(permission => !granted.Contains(permission)).ToArray();
         if (missing.Length > 0)
         {
             throw new InvalidOperationException(
-                $"Administrator authentication response is missing Personnel journey permissions: {string.Join(", ", missing)}.");
+                $"Administrator authentication response is missing Personnel journey positions: {string.Join(", ", missing)}.");
         }
     }
 
@@ -1649,7 +1663,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         return await client.SendAsync(request, cancellationToken);
     }
 
-    private static async Task<PersonData> CreatePersonAsync(
+    private async Task<PersonData> CreatePersonAsync(
         HttpClient client,
         string personNo,
         string name,
@@ -1663,7 +1677,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             HttpMethod.Post,
             "/api/organization/persons",
             payload,
-            cancellationToken);
+            cancellationToken,
+            request => request.Headers.Add("X-NewP-Feature", _features!.Action(_features.OrganizationTab("persons"), "create", "list.pageActions").Position));
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(response, HttpStatusCode.Created, body, $"create person {personNo}");
         return ReadPerson(body, personNo, name);

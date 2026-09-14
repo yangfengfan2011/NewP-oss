@@ -266,13 +266,17 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         await LoginAsync(boundSessionTwo, boundCode, boundPassword, cancellationToken);
 
         var personNo = $"ID-{_runId[..10]}";
+        var features = await AcceptanceFeatureCatalog.LoadAsync(admin.Client, cancellationToken);
+        var persons = features.OrganizationTab("persons");
+        Action<HttpRequestMessage> At(string key, string scope) => request =>
+            request.Headers.Add("X-NewP-Feature", features.Action(persons, key, scope).Position);
         var person = await SendJsonAndReadAsync(
             admin,
             HttpMethod.Post,
             "/api/organization/persons",
             PersonPayload(personNo, "Identity Acceptance Person", true),
             HttpStatusCode.Created,
-            cancellationToken);
+            cancellationToken, At("create", "list.pageActions"));
         var personEid = ReadNestedString(person.RootElement, "fields", "EID");
         EnsurePropertyAbsent(ReadObject(person.RootElement, "fields"), "Revision", "created Person fields");
         var personUpdatePayload = PersonPayload(personNo, "Identity Acceptance Person Updated", true);
@@ -282,7 +286,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
             $"/api/organization/persons/{personEid}",
             personUpdatePayload,
             HttpStatusCode.OK,
-            cancellationToken);
+            cancellationToken, At("edit", "list.rowActions"));
         EnsurePropertyAbsent(ReadObject(updatedPerson.RootElement, "fields"), "Revision", "updated Person fields");
 
         await SendJsonAndReadAsync(
@@ -291,7 +295,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
             $"/api/organization/persons/{personEid}/user-binding",
             new { accountEid = bound.AccountEid, expectedRevision = boundRegular.Revision, reason = "纵向验收永久绑定" },
             HttpStatusCode.OK,
-            cancellationToken);
+            cancellationToken, At("linkUser", "detail.custom"));
         var competing = await CreateUserAsync(admin, $"other.{_runId[..8]}", "Other Account", cancellationToken);
         RegisterSecret(competing.TemporaryCredential);
         using (var conflict = await SendJsonAsync(
@@ -299,7 +303,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
                    HttpMethod.Put,
                    $"/api/organization/persons/{personEid}/user-binding",
                    new { accountEid = competing.AccountEid, expectedRevision = competing.Revision, reason = "禁止改绑" },
-                   cancellationToken))
+                   cancellationToken, At("linkUser", "detail.custom")))
         {
             await EnsureProblemAsync(conflict, HttpStatusCode.Conflict, "ORGANIZATION_PERSON_ALREADY_BOUND", "permanent binding conflict", cancellationToken);
         }
@@ -307,10 +311,10 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         var disabledPerson = await SendJsonAndReadAsync(
             admin,
             HttpMethod.Put,
-            $"/api/organization/persons/{personEid}/status",
+            $"/api/organization/persons/{personEid}/status/disable",
             new { isEnabled = false, reason = "纵向验收人员停用" },
             HttpStatusCode.OK,
-            cancellationToken);
+            cancellationToken, At("disable", "list.rowActions"));
         EnsurePropertyAbsent(disabledPerson.RootElement, "revision", "Person disable response");
         EnsureBoolean(ReadObject(disabledPerson.RootElement, "account"), "personnelDisableHold", true, "personnel disable hold");
         await EnsureSessionInvalidAsync(boundSessionOne, cancellationToken);
@@ -318,10 +322,10 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         var recoveredPerson = await SendJsonAndReadAsync(
             admin,
             HttpMethod.Put,
-            $"/api/organization/persons/{personEid}/status",
+            $"/api/organization/persons/{personEid}/status/enable",
             new { isEnabled = true, reason = "纵向验收人员恢复" },
             HttpStatusCode.OK,
-            cancellationToken);
+            cancellationToken, At("enable", "list.rowActions"));
         EnsurePropertyAbsent(recoveredPerson.RootElement, "revision", "Person recovery response");
         EnsureString(ReadObject(recoveredPerson.RootElement, "account"), "status", "Disabled", "person recovery keeps account disabled");
         var recoveredAccount = ReadObject(recoveredPerson.RootElement, "account");
@@ -335,7 +339,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         await EnsureSessionInvalidAsync(boundSessionOne, cancellationToken);
         await EnsureSessionInvalidAsync(boundSessionTwo, cancellationToken);
 
-        using (var deletePerson = await SendJsonAsync(admin, HttpMethod.Delete, $"/api/organization/persons/{personEid}", new { }, cancellationToken))
+        using (var deletePerson = await SendJsonAsync(admin, HttpMethod.Delete, $"/api/organization/persons/{personEid}", new { }, cancellationToken, At("delete", "list.rowActions")))
         {
             if (deletePerson.StatusCode is not HttpStatusCode.Conflict and not HttpStatusCode.BadRequest)
             {
@@ -1080,9 +1084,10 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         string path,
         object payload,
         HttpStatusCode expected,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<HttpRequestMessage>? configure = null)
     {
-        using var response = await SendJsonAsync(session, method, path, payload, cancellationToken);
+        using var response = await SendJsonAsync(session, method, path, payload, cancellationToken, configure);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(response, expected, body, path);
         return JsonDocument.Parse(body);

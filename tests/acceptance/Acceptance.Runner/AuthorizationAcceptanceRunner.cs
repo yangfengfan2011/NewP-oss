@@ -67,11 +67,10 @@ internal sealed class AuthorizationAcceptanceRunner(string repositoryRoot, strin
         var password = "Aa1!" + Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
         RegisterSecret(password);
         using var changed = await PostAsync(client, "/api/identity/me/password-change", new { currentPassword = bootstrap.TemporaryCredential, newPassword = password, expectedRevision = revision }, token);
-        using var manifest = await client.GetFromJsonAsync<JsonDocument>("/plugins/metadata-runtime-manifest.json", token);
-        var points = manifest!.RootElement.GetProperty("modules").EnumerateArray().Single(module => module.GetProperty("moduleId").GetString() == "Authorization").GetProperty("features");
-        var position = points.EnumerateArray().Single(point => point.GetProperty("behaviorKey").GetString() == "authorization.workbench.read").GetProperty("position").GetString();
-        client.DefaultRequestHeaders.Add("X-NewP-Feature", position);
-        using var response = await client.GetAsync("/api/authorization/workbench/catalog", token);
+        var features = await AcceptanceFeatureCatalog.LoadAsync(client, token);
+        using var readRequest = new HttpRequestMessage(HttpMethod.Get, "/api/authorization/workbench/catalog");
+        readRequest.Headers.Add("X-NewP-Feature", features.Behavior("Authorization", "authorization.workbench.read").Position);
+        using var response = await client.SendAsync(readRequest, token);
         await EnsureSuccessAsync(response, token);
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(token));
         if (body.RootElement.GetProperty("points").GetArrayLength() == 0) throw new InvalidOperationException("Workbench catalog is empty.");

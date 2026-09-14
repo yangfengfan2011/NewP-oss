@@ -89,9 +89,9 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
     {
         var runner = ReadPersonnelRunner();
 
-        Assert.Contains("Organization.Company.Create", runner, StringComparison.Ordinal);
-        Assert.Contains("Organization.Department.Create", runner, StringComparison.Ordinal);
-        Assert.Contains("Organization.Person.Update", runner, StringComparison.Ordinal);
+        Assert.Contains("EnsurePersonnelJourneyFeatures", runner, StringComparison.Ordinal);
+        Assert.Contains("\"featurePositions\"", runner, StringComparison.Ordinal);
+        Assert.Contains("AcceptanceFeatureCatalog.LoadAsync", runner, StringComparison.Ordinal);
         var lookupJourney = runner[
             runner.IndexOf("private static async Task SelectOrganizationLookupAsync", StringComparison.Ordinal)..
             runner.IndexOf("private static async Task AssertPersonBirthDateRangeAsync", StringComparison.Ordinal)];

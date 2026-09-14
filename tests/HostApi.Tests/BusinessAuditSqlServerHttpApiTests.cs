@@ -713,6 +713,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         _app.MapControllers();
         _app.MapStandardCrudResources();
         _app.MapRelationTrees();
+        ICP.Platform.HostApi.Authorization.FeatureEndpointBindings.Validate(((Microsoft.AspNetCore.Routing.IEndpointRouteBuilder)_app).DataSources, modulePlan.FeatureCatalog);
         using (var scope = _app.Services.CreateScope())
         {
             await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Database.EnsureCreatedAsync();

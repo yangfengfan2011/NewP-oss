@@ -4,11 +4,27 @@ namespace ICP.Platform.Kernel.ModulePlanning;
 
 /// <summary>可提交的轻量功能声明；Key 属于模块声明，行为绑定不拥有授权身份。</summary>
 public sealed record FeatureDeclaration(string ModuleId, string Key, string Kind, string Title,
-    string? ParentKey, string BehaviorKey, int Order = 0);
+    string? ParentKey, string BehaviorKey, int Order = 0)
+{
+    public string? ReferenceKey { get; init; }
+    public string? StaticScope { get; init; }
+    public string? StaticScopeTitle { get; init; }
+    public string? ActionScope { get; init; }
+    public IReadOnlyList<string> ReadBehaviors { get; init; } = [];
+    public bool Container { get; init; }
+}
 
 /// <summary>完整位置与入口依赖由编译器派生，页面实现不形成授权点。</summary>
 public sealed record FeaturePoint(string Position, string ModuleId, string Key, string Kind, string Title,
-    string? ParentPosition, string BehaviorKey, IReadOnlyList<string> EntryDependencies, int Order);
+    string? ParentPosition, string BehaviorKey, IReadOnlyList<string> EntryDependencies, int Order)
+{
+    public string ReferenceKey { get; init; } = Key;
+    public string? StaticScope { get; init; }
+    public string? StaticScopeTitle { get; init; }
+    public string? ActionScope { get; init; }
+    public IReadOnlyList<string> ReadBehaviors { get; init; } = [];
+    public bool Container { get; init; }
+}
 
 /// <summary>以确定规则将模块声明编译为全有或全无的功能目录。</summary>
 public static class FeatureCatalogCompiler
@@ -33,13 +49,14 @@ public static class FeatureCatalogCompiler
         foreach (var node in declarations)
         {
             if (string.IsNullOrWhiteSpace(node.ModuleId) || string.IsNullOrWhiteSpace(node.Key)
-                || string.IsNullOrWhiteSpace(node.Title) || string.IsNullOrWhiteSpace(node.BehaviorKey)
+                || string.IsNullOrWhiteSpace(node.Title) || (!node.Container && string.IsNullOrWhiteSpace(node.BehaviorKey))
                 || node.Kind is not ("navigation" or "tab" or "action")
-                || !nodes.TryAdd((node.ModuleId, node.Key), node))
+                || !nodes.TryAdd((node.ModuleId, node.ReferenceKey ?? node.Key), node))
                 throw new InvalidOperationException("功能声明存在重复身份、非法种类或缺少必需绑定。");
         }
         var compiled = new Dictionary<(string Module, string Key), FeaturePoint>();
         var visiting = new HashSet<(string Module, string Key)>();
+        var positions = new HashSet<string>(StringComparer.Ordinal);
         // 入口链只遍历一次；活动目录构建不访问角色分配。
         FeaturePoint Visit((string Module, string Key) identity)
         {
@@ -49,9 +66,19 @@ public static class FeatureCatalogCompiler
             var parent = node.ParentKey is null ? null : Visit((node.ModuleId, node.ParentKey));
             if (parent?.Kind == "action" || (parent is null && node.Kind != "navigation"))
                 throw new InvalidOperationException("Tab 和动作必须声明所属入口，动作不能承载子入口。");
-            var position = $"{parent?.Position ?? Uri.EscapeDataString(node.ModuleId)}/{node.Kind}:{Uri.EscapeDataString(node.Key)}";
+            var scope = node.StaticScope is null ? "" : $"/node-type:{Uri.EscapeDataString(node.StaticScope)}";
+            var actionScope = node.ActionScope is null ? "" : $"/surface:{Uri.EscapeDataString(node.ActionScope)}";
+            var position = $"{parent?.Position ?? Uri.EscapeDataString(node.ModuleId)}{scope}{actionScope}/{node.Kind}:{Uri.EscapeDataString(node.Key)}";
+            if (!positions.Add(position))
+                throw new InvalidOperationException("功能声明在同一静态位置重复。");
             result = new(position, node.ModuleId, node.Key, node.Kind, node.Title, parent?.Position,
-                node.BehaviorKey, parent is null ? [] : [.. parent.EntryDependencies, parent.Position], node.Order);
+                node.BehaviorKey, parent is null ? [] : [.. parent.EntryDependencies, parent.Position], node.Order)
+            {
+                ReferenceKey = node.ReferenceKey ?? node.Key,
+                Container = node.Container,
+                StaticScope = node.StaticScope, StaticScopeTitle = node.StaticScopeTitle, ActionScope = node.ActionScope,
+                ReadBehaviors = node.ReadBehaviors.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray()
+            };
             compiled.Add(identity, result);
             visiting.Remove(identity);
             return result;

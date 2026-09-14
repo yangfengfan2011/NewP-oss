@@ -15,6 +15,8 @@ import { useStandardCrudActionExecution } from './useStandardCrudActionExecution
 export interface StandardCrudActionsProps<TDetail = unknown, TRow = unknown> {
   actions: StandardCrudPresentationActionDefinition[];
   grantedPermissions?: string[];
+  featurePositionForAction?: (action: StandardCrudActionDefinition) => string | undefined;
+  hasFeature?: (position: string) => boolean;
   handlers?: Record<string, StandardCrudActionHandler<TDetail, TRow>>;
   actionInputs?: Record<string, StandardCrudActionInputRenderer>;
   actionStateResolver?: StandardCrudActionStateResolver<TDetail, TRow>;
@@ -45,6 +47,8 @@ function resolveActionHandler<TDetail = unknown, TRow = unknown>(
 export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
   actions,
   grantedPermissions = [],
+  featurePositionForAction,
+  hasFeature,
   handlers = {},
   actionInputs = {},
   actionStateResolver,
@@ -65,10 +69,13 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
     };
   });
   const visibleActions = resolvedActions.filter((action) => (
-    action.runtimeVisible && hasPermission(action, grantedPermissions)
+    action.runtimeVisible && (featurePositionForAction
+      ? hasFeature?.(featurePositionForAction(action) ?? '') === true : hasPermission(action, grantedPermissions))
   ));
 
   async function runAction(action: StandardCrudActionDefinition, input?: unknown): Promise<boolean> {
+    const featurePosition = featurePositionForAction?.(action);
+    if (featurePositionForAction && !hasFeature?.(featurePosition ?? '')) return false;
     const handler = resolveActionHandler(action, handlers);
     if (!handler) {
       return false;
@@ -77,7 +84,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
     const outcome = await actionExecution.execute({
       key: action.key,
       handler,
-      context: { ...context, ...(action.inputKey ? { input } : {}) },
+      context: { ...context, ...(featurePosition ? { featurePosition } : {}), ...(action.inputKey ? { input } : {}) },
       refreshOnSuccess: action.standardAction !== 'edit',
       refreshOnConflict: action.standardAction !== 'delete',
     });

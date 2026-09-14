@@ -8,6 +8,12 @@
     "descriptionKey": "Description",
     "mode": "detail",
     "model": "Department",
+    "resourceKey": "organization.department",
+    "lookupBindings": {
+      "organization.companies": "organization.department.company.lookup",
+      "organization.department.parents": "organization.department.parent.lookup",
+      "organization.department.parent-filter": "organization.department.parent.lookup"
+    },
     "sections": [
       {
         "key": "basic",

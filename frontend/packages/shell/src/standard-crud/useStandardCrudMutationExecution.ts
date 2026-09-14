@@ -12,6 +12,7 @@ const STANDARD_CRUD_MUTATION_CONFLICT_MESSAGE = '记录已发生变化，未覆�
 
 export interface StandardCrudMutationExecutionRequest {
   mode: 'create' | 'edit';
+  featurePosition?: string;
   id?: string;
   fields: StandardCrudFieldDefinition[];
   values: Record<string, unknown>;
@@ -78,6 +79,7 @@ export function useStandardCrudMutationExecution({
 
   const execute = useCallback(async ({
     mode,
+    featurePosition,
     id,
     fields,
     values,
@@ -117,7 +119,7 @@ export function useStandardCrudMutationExecution({
           throw new Error(`标准资源 "${registration.resourceKey}" 未提供创建能力。`);
         }
 
-        result = await registration.dataAdapter.create({ ...mutationValues, ...fixedCreateValues }, detailFields);
+        result = await registration.dataAdapter.create({ ...mutationValues, ...fixedCreateValues }, detailFields, ...(featurePosition ? [{ featurePosition }] : []));
       } else {
         if (!id) {
           throw new Error('缺少资源标识，无法保存修改。');
@@ -126,7 +128,7 @@ export function useStandardCrudMutationExecution({
           throw new Error(`标准资源 "${registration.resourceKey}" 未提供更新能力。`);
         }
 
-        result = await registration.dataAdapter.update(id, mutationValues, detailFields);
+        result = await registration.dataAdapter.update(id, mutationValues, detailFields, ...(featurePosition ? [{ featurePosition }] : []));
       }
 
       // 写入已经提交；后置呈现或读取失败不能进入写入错误分支，也不能重放写入。

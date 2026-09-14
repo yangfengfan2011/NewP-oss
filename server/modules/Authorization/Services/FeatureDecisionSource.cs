@@ -11,7 +11,7 @@ public sealed class FeatureDecisionSource(EfPlatformDbContext db, ActiveFeatureC
     public async ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string position, string behaviorKey, CancellationToken cancellationToken)
     {
         var snapshot = catalog.Snapshot;
-        if (!snapshot.ByPosition.TryGetValue(position, out var point) || point.Point.BehaviorKey != behaviorKey)
+        if (!snapshot.ByPosition.TryGetValue(position, out var point) || (point.Point.Container || (point.Point.BehaviorKey != behaviorKey && !point.Point.ReadBehaviors.Contains(behaviorKey, StringComparer.Ordinal))))
             return PermissionDecision.Denied;
         return await EffectiveLinks(subjectId).AnyAsync(link => EF.Property<string>(link, "FunctionPointId") == point.Id, cancellationToken)
             ? PermissionDecision.Granted : PermissionDecision.Denied;

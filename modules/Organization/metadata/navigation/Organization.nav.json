@@ -11,6 +11,7 @@
       },
       {
         "key": "organization.personCenter",
+        "featureOwner": "navigation:organization.structure/tab:persons",
         "titleKey": "Navigation.PersonCenter",
         "icon": "persons",
         "parentKey": "organization",
@@ -26,6 +27,7 @@
       },
       {
         "key": "organization.companyManagement",
+        "featureOwner": "navigation:organization.structure/tab:companies",
         "titleKey": "Navigation.CompanyManagement",
         "icon": "companies",
         "parentKey": "organization",
@@ -41,6 +43,7 @@
       },
       {
         "key": "organization.departmentManagement",
+        "featureOwner": "navigation:organization.structure/tab:departments",
         "titleKey": "Navigation.DepartmentManagement",
         "icon": "departments",
         "parentKey": "organization",
@@ -56,6 +59,7 @@
       },
       {
         "key": "organization.positionManagement",
+        "featureOwner": "navigation:organization.structure/tab:positions",
         "titleKey": "Navigation.PositionManagement",
         "icon": "positions",
         "parentKey": "organization",
@@ -71,6 +75,7 @@
       },
       {
         "key": "organization.structure",
+        "featureAuthorization": true,
         "titleKey": "Navigation.OrganizationManagement",
         "parentKey": "organization",
         "path": "/organization/structure",
@@ -90,6 +95,7 @@
       },
       {
         "key": "organization.person.detail",
+        "featureOwner": "navigation:organization.structure/tab:persons",
         "path": "/organization/persons/:id",
         "routeOnly": true,
         "entryType": "standard-crud-detail",

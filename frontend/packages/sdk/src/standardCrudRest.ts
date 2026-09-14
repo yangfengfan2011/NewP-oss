@@ -1,5 +1,6 @@
 import type {
   StandardCrudDetail,
+  StandardCrudFeatureRequestContext,
   StandardCrudOperationResult,
   StandardCrudOption,
   StandardCrudLookupPage,
@@ -139,6 +140,10 @@ async function requestBlob(
 }
 
 /** 创建标准 CRUD fetch 客户端；调用方可注入 fetcher 用于测试、鉴权包装或 Host 级横切处理。 */
+function featureHeaders(context?: StandardCrudFeatureRequestContext): Record<string, string> {
+  return context?.featurePosition ? { 'X-NewP-Feature': context.featurePosition } : {};
+}
+
 export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch): StandardCrudClient {
   return {
     list: (query, readContext) => requestJson<unknown>(
@@ -146,17 +151,18 @@ export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch
       buildStandardCrudPath(apiRoute, { ...query, ...(readContext?.queryScope ? { queryScope: JSON.stringify(readContext.queryScope) } : {}) }),
       {
         method: 'GET',
+        ...(readContext?.featurePosition ? { headers: featureHeaders(readContext) } : {}),
         ...(readContext?.signal ? { signal: readContext.signal } : {}),
       },
       '加载标准列表失败',
     ),
-    exportList: (request) =>
+    exportList: (request, context) =>
       requestBlob(
         fetcher,
         `${apiRoute}/export`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...featureHeaders(context) },
           body: JSON.stringify(request),
         },
         '导出标准列表失败',
@@ -168,50 +174,51 @@ export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch
           `${apiRoute}/${encodeURIComponent(id)}`,
           {
             method: 'GET',
+        ...(readContext?.featurePosition ? { headers: featureHeaders(readContext) } : {}),
             ...(readContext?.signal ? { signal: readContext.signal } : {}),
           },
           '加载标准详情失败',
         ),
       ),
-    create: async (values) =>
+    create: async (values, context) =>
       normalizeStandardCrudDetail(
         await requestJson<unknown>(
           fetcher,
           apiRoute,
           {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...featureHeaders(context) },
             body: JSON.stringify(values),
           },
           '创建标准资源失败',
         ),
       ),
-    update: async (id, values) =>
+    update: async (id, values, context) =>
       normalizeStandardCrudDetail(
         await requestJson<unknown>(
           fetcher,
           `${apiRoute}/${encodeURIComponent(id)}`,
           {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...featureHeaders(context) },
             body: JSON.stringify(values),
           },
           '保存标准资源失败',
         ),
       ),
-    delete: (id) =>
+    delete: (id, context) =>
       requestJson<void>(
         fetcher,
         `${apiRoute}/${encodeURIComponent(id)}`,
-        { method: 'DELETE' },
+        { method: 'DELETE', ...(context?.featurePosition ? { headers: featureHeaders(context) } : {}) },
         '删除标准资源失败',
       ),
-    disable: async (id) =>
+    disable: async (id, context) =>
       normalizeStandardCrudDetail(
         await requestJson<unknown>(
           fetcher,
           `${apiRoute}/${encodeURIComponent(id)}/disable`,
-          { method: 'POST' },
+          { method: 'POST', ...(context?.featurePosition ? { headers: featureHeaders(context) } : {}) },
           '停用标准资源失败',
         ),
       ),
@@ -223,9 +230,9 @@ export function createStandardCrudRestDataAdapter<TRow, TDetail = StandardCrudDe
   options: StandardCrudRestDataAdapterOptions<TRow, TDetail>,
 ): StandardCrudRestDataAdapter<TRow, TDetail> {
   const client = createStandardCrudClient(options.apiRoute, options.fetcher);
-  const snapshot = async (id: string, before?: Record<string, unknown>) =>
+  const snapshot = async (id: string, before?: Record<string, unknown>, context?: StandardCrudFeatureRequestContext) =>
     options.hasChangeSnapshot && !options.hasChangeSnapshot(before ?? {})
-      ? (await client.getDetail(id)).fields : before;
+      ? (await client.getDetail(id, context)).fields : before;
 
   // HTTP 成功后的业务映射也属于同步阶段；失败保留成功事实，以 unknown 位置进行只读恢复。
   const mutationResult = (operation: 'create' | 'update', detail: StandardCrudDetail, before?: Record<string, unknown>, previousId = ''): StandardCrudOperationResult => {
@@ -250,21 +257,21 @@ export function createStandardCrudRestDataAdapter<TRow, TDetail = StandardCrudDe
         value: options.mapDetail ? options.mapDetail(normalized) : normalized as TDetail,
       };
     },
-    create: async (values) => {
-      const detail = await client.create(values);
+    create: async (values, _before, context) => {
+      const detail = await client.create(values, context);
       return mutationResult('create', detail);
     },
-    update: async (id, values, before) => {
-      before = await snapshot(id, before);
-      const detail = await client.update(id, values);
+    update: async (id, values, before, context) => {
+      before = await snapshot(id, before, context);
+      const detail = await client.update(id, values, context);
       return mutationResult('update', detail, before, id);
     },
-    remove: async (id, fields) => {
-      const before = await snapshot(id, fields);
-      await client.delete(id);
+    remove: async (id, fields, context) => {
+      const before = await snapshot(id, fields, context);
+      await client.delete(id, context);
       return { operation: 'action', payload: undefined, change: { operation: 'delete', id, before } };
     },
-    exportList: (request) => client.exportList(request),
+    exportList: (request, context) => client.exportList(request, context),
     getRowId: options.getRowId,
   };
 }
@@ -288,7 +295,7 @@ export function createStandardCrudRestLookupProvider(
         options.fetcher,
         `${options.apiRoute.replace(/\/$/, '')}/options?${search.toString()}`,
         {
-          headers: { Accept: 'application/json' },
+          headers: { Accept: 'application/json', ...featureHeaders(context) },
           ...(context?.signal ? { signal: context.signal } : {}),
         },
         '加载标准 CRUD lookup 失败',

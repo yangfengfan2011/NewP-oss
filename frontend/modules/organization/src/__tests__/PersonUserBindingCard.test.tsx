@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const searchMock = vi.hoisted(() => vi.fn());
 const bindMock = vi.hoisted(() => vi.fn());
-vi.mock('@icp-platform/core', () => ({ usePermission: () => true }));
 vi.mock('../services/organizationService', async (importOriginal) => ({
   ...await importOriginal<typeof import('../services/organizationService')>(),
   searchPersonUserBindingCandidates: searchMock,
@@ -51,7 +50,7 @@ describe('PersonUserBindingCard', () => {
     expect(searchMock).not.toHaveBeenCalled();
     await click(button('搜索候选'));
     await act(async () => { await Promise.resolve(); });
-    expect(searchMock).toHaveBeenCalledWith('Person_1', '');
+    expect(searchMock).toHaveBeenCalledWith('Person_1', '', 'declared-link-user');
 
     const radio = document.querySelector<HTMLInputElement>('input[type="radio"]')!;
     await click(radio);
@@ -62,7 +61,7 @@ describe('PersonUserBindingCard', () => {
 
     expect(bindMock).toHaveBeenCalledWith('Person_1', {
       accountEid: 'User_1', expectedRevision: 7, reason: '入职绑定',
-    });
+    }, 'declared-link-user');
     expect(document.body.textContent).toContain('已永久绑定');
     expect(document.body.textContent).toContain('alice');
     expect(document.body.textContent).toContain('Alice');
@@ -74,7 +73,7 @@ describe('PersonUserBindingCard', () => {
     document.body.append(container);
     await act(async () => {
       root = createRoot(container!);
-      root.render(<PersonUserBindingCard summary={{
+      root.render(<PersonUserBindingCard featureAction={{ position: 'declared-link-user', allowed: true }} summary={{
         status: 'ready',
         data: {
           personEid: 'Person_1', personName: '张三', isPersonEnabled, accountEid: null,

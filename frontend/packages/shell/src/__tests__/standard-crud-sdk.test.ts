@@ -12,6 +12,21 @@ import {
 } from '@icp-platform/sdk';
 
 describe('standard CRUD SDK helpers', () => {
+  it('passes an explicit feature position per standard request without contaminating concurrent reads', async () => {
+    const calls: Array<RequestInit | undefined> = [];
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      calls.push(init);
+      return new Response(JSON.stringify({ fields: { EID: 'person-1' }, summaries: {} }), { status: 200 });
+    });
+    const client = createStandardCrudClient('/api/organization/persons', fetcher);
+    await Promise.all([
+      client.create({ ENAME: '人员' }, { featurePosition: 'Organization/navigation:management/tab:persons/action:create' }),
+      client.getDetail('person-1', { featurePosition: 'Organization/navigation:management/tab:persons' }),
+    ]);
+    expect(new Headers(calls[0]?.headers).get('X-NewP-Feature')).toBe('Organization/navigation:management/tab:persons/action:create');
+    expect(new Headers(calls[1]?.headers).get('X-NewP-Feature')).toBe('Organization/navigation:management/tab:persons');
+    expect(JSON.parse(String(calls[0]?.body))).toEqual({ ENAME: '人员' });
+  });
   it('resolves an opaque operation result through a module-neutral presenter registry', () => {
     const result = { operation: 'create' as const, payload: { receipt: 'opaque' } };
     const unsupported = {

@@ -9,6 +9,7 @@ import type {
 } from '../metadata/runtimeMetadataManifest';
 
 export interface StandardCrudDetailRouteEntry {
+  featurePosition?: string;
   path: string;
   viewKey: string;
   permissions?: string[];
@@ -141,7 +142,7 @@ export function compileStandardCrudRouteProjection(
       if (!item.targetKey || !item.path || targetCount !== 1)
         fail('STANDARD_CRUD_DETAIL_CAPABILITY_ORPHAN', item.targetKey ?? item.key);
       resolveExplicitDetailRoute(navDocuments, item.targetKey);
-      return { path: item.path!, viewKey: item.targetKey!, permissions: item.permissions };
+      return { path: item.path!, viewKey: item.targetKey!, permissions: item.permissions, featurePosition: item.featurePosition };
     });
   const detailEntries = [...explicitEntries, ...owners.flatMap((owner) => owner.detailViewKey && owner.projectsFullDetail
     && !explicitEntries.some(entry => entry.viewKey === owner.detailViewKey)

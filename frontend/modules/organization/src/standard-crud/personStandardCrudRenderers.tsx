@@ -7,11 +7,13 @@ import type { PersonUserBindingSummaryData } from '../services/organizationServi
 export function PersonUserBindingSummary({
   summary,
   title,
+  featureAction,
 }: {
+  featureAction?: { position: string; allowed: boolean };
   summary: StandardCrudSummaryBlock<PersonUserBindingSummaryData>;
   title: string;
 }) {
-  return <PersonUserBindingCard summary={summary} title={title} />;
+  return <PersonUserBindingCard summary={summary} title={title} featureAction={featureAction} />;
 }
 
 export function AuthorizationSummary({

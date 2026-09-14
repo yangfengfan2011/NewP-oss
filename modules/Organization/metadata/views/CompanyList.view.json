@@ -8,6 +8,7 @@
     "descriptionKey": "Description",
     "mode": "list",
     "model": "Company",
+    "resourceKey": "organization.company",
     "editorMode": "drawer",
     "detailViewKey": "organization.company.detail",
     "query": {

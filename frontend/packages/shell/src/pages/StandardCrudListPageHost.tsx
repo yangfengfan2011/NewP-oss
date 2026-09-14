@@ -1,3 +1,4 @@
+import { useFeaturePlacement } from '../authorization/FeaturePlacementContext';
 import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthorization, useLocalization, usePlatformQuery } from '@icp-platform/core';
@@ -769,6 +770,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     write: (search, options) => navigate({ pathname: routePathname, search }, { replace: options?.replace === true }),
   }), [navigate, routePathname, routeSearch]);
   const host = useStandardCrudHostEnvironment(routeAddress);
+  const features = useFeaturePlacement();
   // 不拥有地址时查询串恒为空：列表状态与 Drawer 参数都不进入外层 URL。
   const location = { search: host.address?.search ?? '' };
   const [messageApi, messageContextHolder] = useMessage();
@@ -776,6 +778,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const currentSubjectId = useOptionalCurrentSubjectId();
   const sessionTimeZoneId = useOptionalSessionTimeZoneId();
   const grantedPermissions = useOptionalGrantedPermissions(registration.permissions);
+  const allowAction = (action: StandardCrudRuntimeActionSchema, surface = "list.rowActions") => features.placement
+    ? features.hasFeature(features.action(action.key, surface) ?? "") : hasActionPermission(action, grantedPermissions);
   const schema = useMemo(() => buildStandardCrudListSchema(view, registration, {
     modelDocuments,
   }), [view, registration, modelDocuments]);
@@ -865,6 +869,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       }))
   ), [registration.lookupProviders, schema.advancedFilter.sections, schema.query.fields]);
   const queryLookupRuntime = useStandardCrudLookupRuntime({
+    featurePosition: features.readPosition,
     resourceKey: registration.resourceKey,
     fields: queryLookupFields,
     providers: registration.lookupProviders ?? [],
@@ -881,6 +886,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     resourceKey: registration.resourceKey,
     id: drawerState.mode === 'view' || drawerState.mode === 'edit' ? drawerState.id : null,
     dataAdapter,
+    featurePosition: drawerState.mode === 'edit' ? features.action('edit', 'list.rowActions') : features.readPosition,
   });
   const detailFields = useMemo(
     () => drawerDetailQuery.detail?.normalized.fields ?? {},
@@ -891,6 +897,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     resourceKey: registration.resourceKey,
     id: embeddedActionRequest?.id,
     dataAdapter,
+    featurePosition: features.readPosition,
   });
   const embeddedAction = embeddedActionRequest && (!embeddedActionRequest.id || embeddedActionQuery.detail)
     ? { ...embeddedActionRequest, row: (embeddedActionQuery.detail?.normalized.fields ?? {}) as TRow }
@@ -1011,10 +1018,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     [host.input.instanceId, host.input.queryScope, metadataListRequest, registration.resourceKey],
   );
   const metadataListQuery = usePlatformQuery<{ items: TRow[]; total: number }>({
-    key: metadataListQueryKey,
+    key: [...metadataListQueryKey, ...(features.readPosition ? [features.readPosition] : [])],
     enabled: schema.columnSource !== 'runtime' && host.presentation.kind !== 'action-drawer',
     load: async ({ signal }) => {
-      const result = await dataAdapter.list(metadataListRequest, { signal, queryScope: host.input.queryScope });
+      const result = await dataAdapter.list(metadataListRequest, { signal, queryScope: host.input.queryScope, ...(features.readPosition ? { featurePosition: features.readPosition } : {}) });
       return { items: result.items, total: result.total };
     },
   });
@@ -1026,7 +1033,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     [appliedFilters, registration.resourceKey],
   );
   const runtimeColumnsQuery = usePlatformQuery<StandardCrudRuntimeColumnGeneration>({
-    key: runtimeColumnsQueryKey,
+    key: [...runtimeColumnsQueryKey, ...(features.readPosition ? [features.readPosition] : [])],
     enabled: schema.columnSource === 'runtime' && registration.columnProvider !== undefined,
     load: async ({ signal }) => {
       const provider = registration.columnProvider;
@@ -1103,7 +1110,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     && runtimeColumnGeneration !== null
     && runtimeColumnGeneration.id === runtimeColumnsQuery.data?.id;
   const runtimeRowsQuery = usePlatformQuery<{ items: TRow[]; total: number }>({
-    key: runtimeRowsQueryKey,
+    key: [...runtimeRowsQueryKey, ...(features.readPosition ? [features.readPosition] : [])],
     enabled: runtimeRowsEnabled,
     load: async ({ signal }) => {
       if (!runtimeColumnGeneration) throw new Error('runtime rows require a successful column generation');
@@ -1112,6 +1119,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           ? { columnContextToken: runtimeColumnGeneration.contextToken }
           : {}),
         signal,
+        ...(features.readPosition ? { featurePosition: features.readPosition } : {}),
       });
       return { items: result.items, total: result.total };
     },
@@ -1257,6 +1265,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       ? editFields
       : [];
   const formLookupRuntime = useStandardCrudLookupRuntime({
+    featurePosition: features.action(drawerState.mode === "create" ? "create" : "edit", drawerState.mode === "create" ? "list.pageActions" : "list.rowActions"),
     resourceKey: registration.resourceKey,
     fields: activeFormFields,
     providers: registration.lookupProviders ?? [],
@@ -1507,6 +1516,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const handleDrawerSave = async () => {
     const succeeded = await mutationExecution.execute({
       mode: drawerState.mode === 'create' ? 'create' : 'edit',
+      featurePosition: features.action(drawerState.mode === 'create' ? 'create' : 'edit', drawerState.mode === 'create' ? 'list.pageActions' : 'list.rowActions'),
       id: drawerState.id,
       fields: drawerState.mode === 'create' ? createFields : editFields,
       values: formValues,
@@ -1576,7 +1586,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   useEffect(() => {
     if (presentation.kind !== 'action-drawer') return;
     const action = [...schema.pageActions, ...schema.rowActions].find(item => actionDrawerActionKey ? item.key === actionDrawerActionKey : item.standardAction === actionDrawerStandardAction);
-    if (!action || !hasActionPermission(action, grantedPermissions)) { setEmbeddedActionError('当前操作不可用。'); return; }
+    if (!action || !allowAction(action)) { setEmbeddedActionError('当前操作不可用。'); return; }
     if (action.standardAction === 'create') { void openCreateDrawer(); return; }
     const id = host.input.recordId;
     if (!id && schema.rowActions.includes(action)) { setEmbeddedActionError('当前操作缺少记录上下文。'); return; }
@@ -1600,7 +1610,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   // 列表菜单与组合动作入口共享资源动作解析与执行，Tree 不持有业务 handler。
   function buildRowActions(row: TRow, definitions: StandardCrudRuntimeActionSchema[], rowId: string): RowActionItem[] {
     return definitions
-      .filter((action) => hasActionPermission(action, grantedPermissions))
+      .filter((action) => allowAction(action))
       .filter((action) => isRowActionVisibleForRow(action, row as Record<string, unknown>))
       .map((action) => ({
         action,
@@ -1669,12 +1679,13 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 if (!dataAdapter.remove) {
                   throw new Error(`标准资源 "${registration.resourceKey}" 未提供删除能力。`);
                 }
-                return dataAdapter.remove(rowId, isStandardCrudRecord(row) ? row : undefined);
+                const featurePosition = features.action(action.key, 'list.rowActions');
+                return dataAdapter.remove(rowId, isStandardCrudRecord(row) ? row : undefined, ...(featurePosition ? [{ featurePosition }] : []));
               });
               const outcome = await actionExecution.execute({
                 key: pendingKey,
                 handler: deleteHandler,
-                context: { id: rowId, row },
+                context: { id: rowId, row, featurePosition: features.action(action.key, 'list.rowActions') },
                 refreshOnConflict: false,
                 fallbackErrorMessage: '删除标准资源失败',
               });
@@ -1710,7 +1721,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             const outcome = await actionExecution.execute({
               key: pendingKey,
               handler,
-              context: { id: rowId, row },
+              context: { id: rowId, row, featurePosition: features.action(action.key, 'list.rowActions') },
             });
             if (outcome.status === 'succeeded') host.lifecycle.close?.();
             return outcome.status === 'succeeded';
@@ -1815,7 +1826,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         )),
   }));
 
-  const visiblePageActions = schema.pageActions.filter((action) => hasActionPermission(action, grantedPermissions));
+  const visiblePageActions = schema.pageActions.filter((action) => allowAction(action, "list.pageActions"));
   const visibleHeaderActions = visiblePageActions.filter((action) => action.standardAction === 'create');
   const handleExport = async (mode: StandardCrudExportMode) => {
     if (exportRequestPendingRef.current) {
@@ -1843,7 +1854,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           sortDirection: tableQuery.sortDirection,
           filters: filtersQuery,
         },
-      });
+      }, ...(features.action('export', 'list') ? [{ featurePosition: features.action('export', 'list') }] : []));
       const fallbackModeLabel = mode === 'current' ? '当前页' : '全部';
       downloadStandardCrudBlob(
         response.blob,
@@ -1856,7 +1867,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       setExportingMode(null);
     }
   };
-  const exportToolbar = schema.exportModes.length > 0 ? (
+  const exportToolbar = schema.exportModes.length > 0 && (!features.placement || features.hasFeature(features.action('export', 'list') ?? '')) ? (
     <Dropdown
       trigger={['click']}
       disabled={exportingMode !== null}
@@ -1957,7 +1968,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     editAction
     && drawerDetailPresentation?.kind === 'ready'
     && !drawerDetailQuery.refreshing
-    && hasActionPermission(editAction, grantedPermissions)
+    && allowAction(editAction)
     && drawerEditActionState?.visible !== false
     && drawerEditActionState?.available !== false,
   );
@@ -2190,7 +2201,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 const outcome = await actionExecution.execute({
                   key: pendingKey,
                   handler,
-                  context: { id: rowId, row, input: rowInputValue },
+                  context: { id: rowId, row, input: rowInputValue, featurePosition: features.action(action.key, 'list.rowActions') },
                 });
                 if (outcome.status === 'succeeded') {
                   setRowInputAction(null);

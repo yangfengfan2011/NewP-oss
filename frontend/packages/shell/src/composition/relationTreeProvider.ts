@@ -5,7 +5,7 @@ import type { TreeNodeLocation, TreeProviderBinding, TreeView } from '@icp-platf
 export const relationTreeProviderKey = 'platform.relations';
 
 /** 常规树共用网络与变更映射；View key 选择服务器配置，不向服务器提交字段映射。 */
-export function createRelationTreeProvider(view: TreeView): TreeProviderBinding {
+export function createRelationTreeProvider(view: TreeView, featurePosition?: string): TreeProviderBinding {
   const source = view.relationSource;
   if (!source?.nodes.length) throw new Error('标准关系树缺少 relationSource');
   const checkScope = (scope: Record<string, unknown>) => {
@@ -14,7 +14,7 @@ export function createRelationTreeProvider(view: TreeView): TreeProviderBinding 
   const read = async <T,>(operation: string, scope: Record<string, unknown>, parameters: Record<string, string | number>, signal?: AbortSignal): Promise<T> => {
     checkScope(scope);
     const query = new URLSearchParams({ scope: 'global', ...Object.fromEntries(Object.entries(parameters).map(([key, value]) => [key, String(value)])) });
-    const response = await platformFetch(`/api/trees/${encodeURIComponent(view.key)}/${operation}?${query}`, { signal });
+    const response = await platformFetch(`/api/trees/${encodeURIComponent(view.key)}/${operation}?${query}`, { signal, ...(featurePosition ? { headers: { 'X-NewP-Feature': featurePosition } } : {}) });
     if (response.status === 404) throw new TreeNodeNotFoundError('树节点已不存在');
     if (!response.ok) throw new Error(`树读取失败 (${response.status})`);
     return response.json() as Promise<T>;

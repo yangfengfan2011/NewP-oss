@@ -1,3 +1,4 @@
+import { useFeaturePlacement } from '../authorization/FeaturePlacementContext';
 import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { useAuthorization, useLocalization } from '@icp-platform/core';
 import {
@@ -152,6 +153,7 @@ function StandardCrudDetailPageContent<TDetail>({
   const { t } = useLocalization();
   // 详情宿主从不拥有地址；独立路由下也传 null。
   const host = useStandardCrudHostEnvironment(null);
+  const features = useFeaturePlacement();
   const composed = host.presentation.kind !== 'workspace' || host.presentation.composed;
   const sessionTimeZoneId = useOptionalAuth()?.user?.timeZoneId;
   const grantedPermissions = useOptionalGrantedPermissions(registration.permissions);
@@ -178,6 +180,7 @@ function StandardCrudDetailPageContent<TDetail>({
     resourceKey: registration.resourceKey,
     id,
     dataAdapter,
+    featurePosition: features.readPosition,
   });
 
   useEffect(() => {
@@ -243,6 +246,8 @@ function StandardCrudDetailPageContent<TDetail>({
               : undefined,
           }))}
           grantedPermissions={grantedPermissions}
+          featurePositionForAction={features.placement ? (action) => features.action(action.key, 'detail.pageActions') : undefined}
+          hasFeature={features.hasFeature}
           handlers={detailActionHandlers}
           actionInputs={registration.actionInputRenderers}
           actionStateResolver={registration.actionStateResolver}
@@ -282,15 +287,17 @@ function StandardCrudDetailPageContent<TDetail>({
             blocks={schema.summaryBlocks}
             summaries={currentNormalizedDetail.summaries}
             renderers={registration.summaryRenderers}
+            featureActions={features.placement ? Object.fromEntries(features.points.filter(point => point.parentPosition === features.placement?.entryPosition && point.staticScope === features.placement?.staticScope && point.actionScope === 'detail.custom').map(point => [point.key, { position: point.position, allowed: features.hasFeature(point.position) }])) : undefined}
             titleForBlock={(key) => t(`${schema.dicKey}.${toDictionaryBlockKey(key)}`, key)}
           />
           {detailSectionPages}
-          {editing && editFields.length > 0 ? (
+          {editing && editFields.length > 0 && (!features.placement || features.hasFeature(features.action('edit', 'detail.pageActions') ?? '')) ? (
             <Suspense fallback={<div className="sh-loading-state" role="status">正在加载编辑表单…</div>}>
               <StandardCrudDetailEditor
                 key={id}
                 id={id}
                 resourceKey={schema.resourceKey}
+                featurePosition={features.action('edit', 'detail.pageActions')}
                 detail={currentNormalizedDetail}
                 fields={editFields}
                 sections={formSchema.sections}

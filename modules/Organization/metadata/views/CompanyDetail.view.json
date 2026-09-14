@@ -8,6 +8,7 @@
     "descriptionKey": "Description",
     "mode": "detail",
     "model": "Company",
+    "resourceKey": "organization.company",
     "sections": [
       {
         "key": "basic",

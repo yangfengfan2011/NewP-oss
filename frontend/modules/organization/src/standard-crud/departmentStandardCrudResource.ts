@@ -59,6 +59,7 @@ const departmentCompanyLookupProvider: StandardCrudLookupProvider = {
     request,
     request.fieldKey === 'companyId',
     context?.signal,
+    context?.featurePosition,
   ),
 };
 
@@ -73,7 +74,7 @@ const departmentParentLookupProvider: StandardCrudLookupProvider = {
     const code = typeof request.values.ECODE === 'string' && request.values.ECODE.length > 0
       ? request.values.ECODE
       : undefined;
-    return getDepartmentParentLookup(companyId, code, request, false, context?.signal);
+    return getDepartmentParentLookup(companyId, code, request, false, context?.signal, context?.featurePosition);
   },
 };
 
@@ -85,7 +86,7 @@ const departmentParentFilterLookupProvider: StandardCrudLookupProvider = {
       return { options: [], currentOptions: [], page: request.page, pageSize: request.pageSize, hasMore: false };
     }
 
-    return getDepartmentParentLookup(companyId, undefined, request, true, context?.signal);
+    return getDepartmentParentLookup(companyId, undefined, request, true, context?.signal, context?.featurePosition);
   },
 };
 

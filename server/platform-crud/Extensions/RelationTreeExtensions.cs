@@ -14,13 +14,16 @@ namespace ICP.Platform.Crud.Extensions;
 /// <summary>从活动配置装配标准树读取；特殊业务继续使用模块自己的 Provider/API。</summary>
 public static class RelationTreeExtensions
 {
-    private sealed record Catalog(IReadOnlyList<RelationTreeDefinition> Trees);
+    private sealed record Catalog(IReadOnlyList<RelationTreeDefinition> Trees, IReadOnlySet<string> FeatureTrees);
 
     /// <summary>消费冻结候选的关系树配置，权限从节点对应的已注册资源派生。</summary>
     public static IServiceCollection AddRelationTrees(this IServiceCollection services, CanonicalModulePlan plan)
     {
         var trees = RelationTreeMetadata.Project(plan);
-        services.AddSingleton(new Catalog(trees));
+        var featureTrees = trees.Where(tree => plan.FeatureCatalog.Any(point => point.ModuleId == tree.ModuleId
+            && (point.BehaviorKey == "tree:" + tree.ViewKey || point.ReadBehaviors.Contains("tree:" + tree.ViewKey, StringComparer.Ordinal))))
+            .Select(tree => tree.ViewKey).ToHashSet(StringComparer.Ordinal);
+        services.AddSingleton(new Catalog(trees, featureTrees));
         services.AddScoped<RelationTreeSql>();
         services.AddScoped<RelationTreeReader>();
         if (trees.Count == 0) return services;
@@ -28,6 +31,7 @@ public static class RelationTreeExtensions
         {
             foreach (var tree in trees)
             {
+                if (featureTrees.Contains(tree.ViewKey)) continue;
                 var permissions = tree.Source.Nodes.Select(node =>
                 {
                     var resource = registry.FindByResourceKey(node.ResourceKey)
@@ -48,7 +52,8 @@ public static class RelationTreeExtensions
     /// <summary>每棵树使用服务端固定路由和完整读取权限；请求只能携带定位及分页输入。</summary>
     public static IEndpointRouteBuilder MapRelationTrees(this IEndpointRouteBuilder endpoints)
     {
-        var trees = endpoints.ServiceProvider.GetRequiredService<Catalog>().Trees;
+        var catalog = endpoints.ServiceProvider.GetRequiredService<Catalog>();
+        var trees = catalog.Trees;
         using var scope = endpoints.ServiceProvider.CreateScope();
         foreach (var tree in trees)
         {
@@ -82,7 +87,8 @@ public static class RelationTreeExtensions
                         if (string.IsNullOrWhiteSpace(nodeKey)) return Invalid("nodeKey", "缺少 nodeKey。");
                         var result = operation == "children" ? await reader.ChildrenAsync(tree, nodeKey, token) : await reader.PathAsync(tree, nodeKey, token);
                         return result is null ? Results.NotFound() : Results.Ok(result);
-                    }).WithMetadata(new EndpointModuleAttribute(tree.ModuleId)).RequireAuthorization(Policy(tree));
+                    }).WithMetadata(new EndpointModuleAttribute(tree.ModuleId)).RequireAuthorization(catalog.FeatureTrees.Contains(tree.ViewKey)
+                        ? new RequireFeatureAttribute("tree:" + tree.ViewKey) : new AuthorizeAttribute(Policy(tree)));
             }
         }
         return endpoints;

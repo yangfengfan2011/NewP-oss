@@ -101,7 +101,7 @@ export interface StandardCrudLookupPage {
 }
 
 /** lookup 单次执行上下文；只承载不可序列化的生命周期信号。 */
-export interface StandardCrudLookupExecutionContext {
+export interface StandardCrudLookupExecutionContext extends StandardCrudFeatureRequestContext {
   readonly signal: AbortSignal;
 }
 
@@ -208,7 +208,7 @@ export interface StandardCrudActionDefinition {
 }
 
 /** 标准动作上下文；Shell 只向模块处理器提供当前资源数据，不暴露页面状态与失效策略。 */
-export interface StandardCrudActionContext<TDetail = unknown, TRow = unknown> {
+export interface StandardCrudActionContext<TDetail = unknown, TRow = unknown> extends StandardCrudFeatureRequestContext {
   id?: string;
   detail?: TDetail;
   row?: TRow;
@@ -246,6 +246,8 @@ export type StandardCrudActionHandler<TDetail = unknown, TRow = unknown> = (
 
 /** 摘要渲染上下文；模块只接收规范化摘要块和详情数据，不读取 Host 私有状态。 */
 export interface StandardCrudSummaryRendererContext<TData = unknown> {
+  /** 当前 View 已声明专用动作的正式位置及本次有效授权。 */
+  featureActions?: Readonly<Record<string, { position: string; allowed: boolean }>>;
   blockKey: string;
   block: StandardCrudSummaryBlock<TData>;
   title: string;
@@ -338,26 +340,27 @@ export interface StandardCrudListQueryRequest {
 }
 
 /** 行读取上下文承载取消、列代际与独立范围；范围单独序列化，不混入用户筛选。 */
-export interface StandardCrudListReadContext {
+export interface StandardCrudFeatureRequestContext { featurePosition?: string }
+export interface StandardCrudListReadContext extends StandardCrudFeatureRequestContext {
   columnContextToken?: string;
   queryScope?: Record<string, string | null>;
   signal?: AbortSignal;
 }
 
 /** 详情读取执行上下文只承载取消，不参与资源标识、查询 key 或 URL。 */
-export interface StandardCrudDetailReadContext {
+export interface StandardCrudDetailReadContext extends StandardCrudFeatureRequestContext {
   signal?: AbortSignal;
 }
 
 /** 标准 CRUD 客户端最小方法集，供 Shell Host 复用统一路径、错误和详情规范化行为。 */
 export interface StandardCrudClient {
   list: (query?: StandardCrudListQueryRequest, readContext?: StandardCrudListReadContext) => Promise<unknown>;
-  exportList: (request: StandardCrudExportRequest) => Promise<StandardCrudExportResponse>;
+  exportList: (request: StandardCrudExportRequest, context?: StandardCrudFeatureRequestContext) => Promise<StandardCrudExportResponse>;
   getDetail: (id: string, readContext?: StandardCrudDetailReadContext) => Promise<StandardCrudDetail>;
-  create: (values: StandardCrudMutationValues) => Promise<StandardCrudDetail>;
-  update: (id: string, values: StandardCrudMutationValues) => Promise<StandardCrudDetail>;
-  delete: (id: string) => Promise<void>;
-  disable: (id: string) => Promise<StandardCrudDetail>;
+  create: (values: StandardCrudMutationValues, context?: StandardCrudFeatureRequestContext) => Promise<StandardCrudDetail>;
+  update: (id: string, values: StandardCrudMutationValues, context?: StandardCrudFeatureRequestContext) => Promise<StandardCrudDetail>;
+  delete: (id: string, context?: StandardCrudFeatureRequestContext) => Promise<void>;
+  disable: (id: string, context?: StandardCrudFeatureRequestContext) => Promise<StandardCrudDetail>;
 }
 
 /** 一次详情读取同时保留共享呈现数据和模块动作需要的映射值。 */
@@ -376,14 +379,16 @@ export interface StandardCrudDataAdapter<TRow = Record<string, unknown>, TDetail
   create?: (
     values: StandardCrudMutationValues,
     detailFields?: Record<string, unknown>,
+    context?: StandardCrudFeatureRequestContext,
   ) => Promise<StandardCrudOperationResult>;
   update?: (
     id: string,
     values: StandardCrudMutationValues,
     detailFields?: Record<string, unknown>,
+    context?: StandardCrudFeatureRequestContext,
   ) => Promise<StandardCrudOperationResult>;
-  remove?: (id: string, before?: Record<string, unknown>) => Promise<StandardCrudOperationResult | void>;
-  exportList?: (request: StandardCrudExportRequest) => Promise<StandardCrudExportResponse>;
+  remove?: (id: string, before?: Record<string, unknown>, context?: StandardCrudFeatureRequestContext) => Promise<StandardCrudOperationResult | void>;
+  exportList?: (request: StandardCrudExportRequest, context?: StandardCrudFeatureRequestContext) => Promise<StandardCrudExportResponse>;
   getRowId: (row: TRow) => string;
 }
 
@@ -393,14 +398,16 @@ export interface StandardCrudRestDataAdapter<TRow, TDetail = StandardCrudDetail>
   create: (
     values: StandardCrudMutationValues,
     detailFields?: Record<string, unknown>,
+    context?: StandardCrudFeatureRequestContext,
   ) => Promise<StandardCrudOperationResult>;
   update: (
     id: string,
     values: StandardCrudMutationValues,
     detailFields?: Record<string, unknown>,
+    context?: StandardCrudFeatureRequestContext,
   ) => Promise<StandardCrudOperationResult>;
-  remove: (id: string, before?: Record<string, unknown>) => Promise<StandardCrudOperationResult>;
-  exportList: (request: StandardCrudExportRequest) => Promise<StandardCrudExportResponse>;
+  remove: (id: string, before?: Record<string, unknown>, context?: StandardCrudFeatureRequestContext) => Promise<StandardCrudOperationResult>;
+  exportList: (request: StandardCrudExportRequest, context?: StandardCrudFeatureRequestContext) => Promise<StandardCrudExportResponse>;
 }
 
 /** 标准 REST Adapter 的固定配置；模块只提供传输、行映射和稳定标识读取。 */

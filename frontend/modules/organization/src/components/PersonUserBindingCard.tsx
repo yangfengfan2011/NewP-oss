@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { usePermission } from '@icp-platform/core';
 import { Button, EmptyState, ErrorState, LoadingState, Modal, Panel, StatusBadge } from '@icp-platform/ui/core';
 import type { StandardCrudSummaryBlock } from '@icp-platform/sdk';
 import {
@@ -12,10 +11,11 @@ import {
 interface PersonUserBindingCardProps {
   summary: StandardCrudSummaryBlock<PersonUserBindingSummaryData>;
   title?: string;
+  featureAction?: { position: string; allowed: boolean };
 }
 
-export default function PersonUserBindingCard({ summary, title = '账号绑定' }: PersonUserBindingCardProps) {
-  const canBind = usePermission('Organization.Person.LinkUser');
+export default function PersonUserBindingCard({ summary, title = '账号绑定', featureAction }: PersonUserBindingCardProps) {
+  const canBind = featureAction?.allowed === true;
   const [binding, setBinding] = useState(summary.data);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -36,10 +36,11 @@ export default function PersonUserBindingCard({ summary, title = '账号绑定' 
   const maySubmit = !isBound && binding.isPersonEnabled && canBind;
 
   async function search() {
+    if (!canBind) return;
     try {
       setLoading(true);
       setError('');
-      const result = await searchPersonUserBindingCandidates(binding!.personEid, query);
+      const result = await searchPersonUserBindingCandidates(binding!.personEid, query, featureAction?.position);
       setCandidates(result);
       setSelectedAccountEid('');
     } catch (failure) {
@@ -53,6 +54,7 @@ export default function PersonUserBindingCard({ summary, title = '账号绑定' 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (!selected || !confirmed || reason.trim().length === 0) return;
+    if (!canBind) return;
     try {
       setSubmitting(true);
       setError('');
@@ -60,7 +62,7 @@ export default function PersonUserBindingCard({ summary, title = '账号绑定' 
         accountEid: selected.accountEid,
         expectedRevision: selected.revision,
         reason,
-      });
+      }, featureAction?.position);
       setBinding({
         ...binding!,
         accountEid: result.accountEid,

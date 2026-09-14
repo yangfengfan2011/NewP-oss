@@ -191,8 +191,8 @@ async function requestJson<T>(path: string, init: RequestInit, errorMessage: str
   return response.json() as Promise<T>;
 }
 
-async function fetchJson<T>(path: string, errorMessage: string, signal?: AbortSignal): Promise<T> {
-  return requestJson<T>(path, { method: 'GET', signal }, errorMessage);
+async function fetchJson<T>(path: string, errorMessage: string, signal?: AbortSignal, featurePosition?: string): Promise<T> {
+  return requestJson<T>(path, { method: 'GET', signal, ...(featurePosition ? { headers: { 'X-NewP-Feature': featurePosition } } : {}) }, errorMessage);
 }
 
 function readDateString(record: Record<string, unknown>, keys: string[], fallback = ''): string {
@@ -308,12 +308,14 @@ export async function getCompanyLookup(
   request: StandardCrudLookupRequest,
   includeDisabled: boolean,
   signal?: AbortSignal,
+  featurePosition?: string,
 ): Promise<StandardCrudLookupPage> {
   const search = buildOrganizationLookupSearch(request, includeDisabled);
   return mapOrganizationLookupPage(await fetchJson<OrganizationLookupPageResponse>(
     `/api/organization/person-lookups/companies?${search.toString()}`,
     '加载公司列表失败',
     signal,
+    featurePosition,
   ));
 }
 
@@ -321,12 +323,14 @@ export async function getDepartmentCompanyLookup(
   request: StandardCrudLookupRequest,
   includeDisabled: boolean,
   signal?: AbortSignal,
+  featurePosition?: string,
 ): Promise<StandardCrudLookupPage> {
   const search = buildOrganizationLookupSearch(request, includeDisabled);
   return mapOrganizationLookupPage(await fetchJson<OrganizationLookupPageResponse>(
     `/api/organization/department-lookups/companies?${search.toString()}`,
     '加载公司列表失败',
     signal,
+    featurePosition,
   ));
 }
 
@@ -335,6 +339,7 @@ export async function getDepartmentLookup(
   request: StandardCrudLookupRequest,
   includeDisabled: boolean,
   signal?: AbortSignal,
+  featurePosition?: string,
 ): Promise<StandardCrudLookupPage> {
   const search = buildOrganizationLookupSearch(request, includeDisabled);
   search.set('companyId', companyId);
@@ -342,6 +347,7 @@ export async function getDepartmentLookup(
     `/api/organization/person-lookups/departments?${search.toString()}`,
     '加载部门列表失败',
     signal,
+    featurePosition,
   ));
 }
 
@@ -351,6 +357,7 @@ export async function getDepartmentParentLookup(
   request: StandardCrudLookupRequest,
   includeDisabled: boolean,
   signal?: AbortSignal,
+  featurePosition?: string,
 ): Promise<StandardCrudLookupPage> {
   const search = buildOrganizationLookupSearch(request, includeDisabled);
   search.set('companyId', companyId);
@@ -359,6 +366,7 @@ export async function getDepartmentParentLookup(
     `/api/organization/department-lookups/parents?${search.toString()}`,
     '加载上级部门列表失败',
     signal,
+    featurePosition,
   ));
 }
 
@@ -454,10 +462,10 @@ export async function updatePerson(personId: string, values: StandardCrudMutatio
   );
 }
 
-export async function deletePerson(personId: string): Promise<void> {
+export async function deletePerson(personId: string, featurePosition?: string): Promise<void> {
   await requestJson<void>(
     `/api/organization/persons/${personId}`,
-    { method: 'DELETE' },
+    { method: 'DELETE', ...(featurePosition ? { headers: { 'X-NewP-Feature': featurePosition } } : {}) },
     '删除人员失败',
   );
 }
@@ -465,12 +473,13 @@ export async function deletePerson(personId: string): Promise<void> {
 export async function setPersonLifecycleStatus(
   personId: string,
   input: { isEnabled: boolean; reason: string },
+  featurePosition?: string,
 ): Promise<void> {
   await requestJson<unknown>(
-    `/api/organization/persons/${encodeURIComponent(personId)}/status`,
+    `/api/organization/persons/${encodeURIComponent(personId)}/status/${input.isEnabled ? "enable" : "disable"}`,
     {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...(featurePosition ? { 'X-NewP-Feature': featurePosition } : {}) },
       body: JSON.stringify(input),
     },
     input.isEnabled ? '恢复人员失败' : '停用人员失败',
@@ -480,22 +489,26 @@ export async function setPersonLifecycleStatus(
 export async function searchPersonUserBindingCandidates(
   personEid: string,
   query: string,
+  featurePosition?: string,
 ): Promise<PersonUserBindingCandidateDto[]> {
   return fetchJson<PersonUserBindingCandidateDto[]>(
     `/api/organization/persons/${encodeURIComponent(personEid)}/user-binding/candidates?query=${encodeURIComponent(query)}`,
     '加载可绑定账号失败',
+    undefined,
+    featurePosition,
   );
 }
 
 export async function bindPersonUser(
   personEid: string,
   input: { accountEid: string; expectedRevision: number; reason: string },
+  featurePosition?: string,
 ): Promise<PersonUserBindingDto> {
   return requestJson<PersonUserBindingDto>(
     `/api/organization/persons/${encodeURIComponent(personEid)}/user-binding`,
     {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...(featurePosition ? { 'X-NewP-Feature': featurePosition } : {}) },
       body: JSON.stringify(input),
     },
     '绑定账号失败',

@@ -8,6 +8,12 @@
     "descriptionKey": "Description",
     "mode": "detail",
     "model": "Person",
+    "resourceKey": "organization.person",
+    "lookupBindings": {
+      "organization.companies": "organization.person.company.lookup",
+      "organization.departments": "organization.person.department.lookup",
+      "organization.positions": "organization.position.lookup"
+    },
     "sections": [
       {
         "key": "basic",
@@ -53,6 +59,9 @@
           "UpdatedAt"
         ]
       }
+    ],
+    "featureActions": [
+      { "key": "linkUser", "titleKey": "绑定用户账号", "behaviorKey": "organization.person.linkUser", "readBehaviors": ["organization.person.linkUser.lookup"] }
     ],
     "summaryBlocks": [
       "userBinding",

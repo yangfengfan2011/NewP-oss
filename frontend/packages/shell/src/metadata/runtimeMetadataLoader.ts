@@ -151,10 +151,11 @@ async function mapWithConcurrency<T, TResult>(
 }
 
 // 引用只解析正式编译目录；缺失或歧义声明不可退回旧权限入口。
-function bindFeaturePositions(document: RuntimeNavItemDocument, features: { key: string; position: string; kind: string }[]): RuntimeNavItemDocument {
+function bindFeaturePositions(document: RuntimeNavItemDocument, features: NonNullable<RuntimeMetadataManifest["modules"][number]["features"]>): RuntimeNavItemDocument {
   return { ...document, navigation: { ...document.navigation, items: document.navigation.items.map(item => {
-    if (!item.featureKey) return item;
-    const matches = features.filter(point => point.key === item.featureKey && point.kind === "navigation");
+    const declared = features.filter(point => point.referenceKey === (item.featureOwner ?? `navigation:${item.key}`));
+    if (!item.featureKey && !item.featureAuthorization && !item.featureOwner && declared.length === 0) return item;
+    const matches = item.featureKey ? features.filter(point => point.key === item.featureKey && point.kind === "navigation") : declared;
     if (matches.length !== 1) throw new Error(`导航功能引用无效：${item.featureKey}`);
     return { ...item, featurePosition: matches[0].position };
   }) } };

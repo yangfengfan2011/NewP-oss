@@ -29,7 +29,7 @@ public static class CompanyCrudDescriptorFactory
             DefaultSortField = "SortOrder",
             DefaultSortDirection = "asc",
             StableSortFields = ["ECODE"],
-            Authorization = StandardCrudAuthorization.ByConvention(OrganizationPermissions.CompanyStem),
+            Authorization = StandardCrudAuthorization.ByFeature("organization.company", StandardCrudOperation.List, StandardCrudOperation.Detail, StandardCrudOperation.Create, StandardCrudOperation.Update, StandardCrudOperation.Delete),
             FieldSet = fieldSet,
             OptionLabelFields = ["ECODE", "ENAME"],
             DeletePolicy = StandardCrudDeletePolicy.Conditional,

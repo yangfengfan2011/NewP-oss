@@ -38,7 +38,7 @@ public static class DepartmentCrudDescriptorFactory
             DefaultSortField = "SortOrder",
             DefaultSortDirection = "asc",
             StableSortFields = ["ECODE"],
-            Authorization = StandardCrudAuthorization.ByConvention(OrganizationPermissions.DepartmentStem),
+            Authorization = StandardCrudAuthorization.ByFeature("organization.department", StandardCrudOperation.List, StandardCrudOperation.Detail, StandardCrudOperation.Create, StandardCrudOperation.Update, StandardCrudOperation.Delete),
             FieldSet = fieldSet,
             OptionLabelFields = ["ECODE", "ENAME"],
             DeletePolicy = StandardCrudDeletePolicy.Conditional,

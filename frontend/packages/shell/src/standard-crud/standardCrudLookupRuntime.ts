@@ -23,6 +23,7 @@ export type {
 
 export interface UseStandardCrudLookupRuntimeInput extends SdkUseStandardCrudLookupRuntimeInput {
   resourceKey: string;
+  featurePosition?: string;
 }
 
 export interface StandardCrudLookupRuntimeState extends SdkStandardCrudLookupRuntimeState {
@@ -56,6 +57,7 @@ class StandardCrudLookupQueryError extends Error {
 
 export function useStandardCrudLookupRuntime({
   resourceKey,
+  featurePosition,
   fields,
   providers = [],
   values,
@@ -70,6 +72,7 @@ export function useStandardCrudLookupRuntime({
   const previous = useRef<{ scope: typeof queryScope; key: string; data: StandardCrudLookupQueryData }>();
   const queryKey = createStandardCrudLookupQueryKey({
     resourceKey,
+  featurePosition,
     fields: lookupFields,
     providers,
     values,
@@ -82,6 +85,7 @@ export function useStandardCrudLookupRuntime({
     enabled: lookupFields.length > 0,
     load: async ({ signal }) => loadLookupQuery({
       resourceKey,
+  featurePosition,
       previous: previous.current?.scope === queryScope && previous.current.key !== serializedKey
         ? previous.current.data : undefined,
       lookupFields,
@@ -154,6 +158,7 @@ export function useStandardCrudLookupRuntime({
 
 async function loadLookupQuery({
   resourceKey,
+  featurePosition,
   previous,
   lookupFields,
   providers,
@@ -163,6 +168,7 @@ async function loadLookupQuery({
   signal,
 }: {
   resourceKey: string;
+  featurePosition?: string;
   previous?: StandardCrudLookupQueryData;
   lookupFields: StandardCrudFieldDefinition[];
   providers: NonNullable<SdkUseStandardCrudLookupRuntimeInput['providers']>;
@@ -178,7 +184,7 @@ async function loadLookupQuery({
 
   for (const field of lookupFields) {
     const request = requests[field.key] ?? { keyword: '', page: 1, pageSize: 20 };
-    const inputKey = JSON.stringify(createStandardCrudLookupQueryKey({ resourceKey, fields: [field], providers, values, detailFields, requests }));
+    const inputKey = JSON.stringify(createStandardCrudLookupQueryKey({ resourceKey, featurePosition, fields: [field], providers, values, detailFields, requests }));
     const retained = previous?.lookupPages[field.key];
     if (retained?.inputKey === inputKey && !retained.error) {
       data.lookupPages[field.key] = retained;
@@ -190,7 +196,7 @@ async function loadLookupQuery({
       values,
       detailFields,
       ...request,
-    }, { signal });
+    }, { signal, ...(featurePosition ? { featurePosition } : {}) });
     data.lookupPages[field.key] = { ...result, inputKey };
     if (result.error && isProviderExecutionFailure(field, providers, values)) {
       providerFailed = true;

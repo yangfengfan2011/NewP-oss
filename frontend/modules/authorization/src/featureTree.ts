@@ -1,8 +1,9 @@
 export interface FeaturePoint {
   position: string; parentPosition: string | null; moduleId: string; key: string;
   kind: string; title: string; behaviorKey: string; entryDependencies: string[]; order: number;
+  staticScope?: string; staticScopeTitle?: string; actionScope?: string;
 }
-export interface FeatureTreeNode { key: string; title: string; children?: FeatureTreeNode[] }
+export interface FeatureTreeNode { key: string; title: string; children?: FeatureTreeNode[]; checkable?: boolean; selectable?: boolean }
 
 // 搜索与授权筛选只改变可见节点，完整勾选集合始终由页面草稿持有。
 export function buildFeatureTree(points: FeaturePoint[], query: string, selected: Set<string>, grantedOnly: boolean): FeatureTreeNode[] {
@@ -22,10 +23,30 @@ export function buildFeatureTree(points: FeaturePoint[], query: string, selected
   for (const point of [...points].sort((a, b) => a.order - b.order || a.position.localeCompare(b.position))) {
     const node = nodes.get(point.position);
     if (!node) continue;
-    const parent = point.parentPosition ? nodes.get(point.parentPosition) : undefined;
+    let parent = point.parentPosition ? nodes.get(point.parentPosition) : undefined;
+    if (parent && point.staticScope) parent = group(parent, `type:${point.staticScope}`, point.staticScopeTitle ?? point.staticScope);
+    if (parent && point.actionScope) parent = group(parent, `surface:${point.actionScope}`, surfaceTitle(point.actionScope));
     if (parent) parent.children!.push(node); else roots.push(node);
   }
   return roots;
+}
+
+// 分组仅组织当前展示，不是可选功能点，也不能成为分支授权的输入。
+function group(parent: FeatureTreeNode, scope: string, title: string): FeatureTreeNode {
+  const key = `display:${parent.key}:${scope}`;
+  let node = parent.children!.find(child => child.key === key);
+  if (!node) { node = { key, title, children: [], checkable: false, selectable: false }; parent.children!.push(node); }
+  return node;
+}
+
+function surfaceTitle(scope: string): string {
+  return ({ 'list.pageActions': '列表操作', 'list.rowActions': '行操作', 'detail.pageActions': '详情操作',
+    'detail.custom': '专用操作', contextMenu: '节点操作', treeActions: '树操作', list: '导出' } as Record<string, string>)[scope] ?? scope;
+}
+
+// 展开操作包括展示组，但授权数量仍只统计目录中的正式点。
+export function featureTreeKeys(nodes: FeatureTreeNode[]): string[] {
+  return nodes.flatMap(node => [node.key, ...featureTreeKeys(node.children ?? [])]);
 }
 
 // 分支批量操作只覆盖当前快照的真实后代，不记录可授权未来节点的通配规则。

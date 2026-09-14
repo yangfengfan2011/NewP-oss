@@ -1,10 +1,11 @@
+import { FeaturePlacementContext } from '../authorization/FeaturePlacementContext';
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
-import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
+import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry, createStandardCrudRestDataAdapter } from '@icp-platform/sdk';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { StandardCrudHostEnvironmentContext, type StandardCrudHostEnvironment } from '../standard-crud/standardCrudHostEnvironment';
@@ -254,6 +255,7 @@ describe('StandardCrudListPageHost', () => {
     initialEntry = '/organization/persons',
     options: {
       strictMode?: boolean;
+      feature?: { entry: string; create: string };
       embedded?: StandardCrudHostEnvironment;
       modelDocument?: typeof personModelDocument;
     } = {},
@@ -279,7 +281,7 @@ describe('StandardCrudListPageHost', () => {
             <PlatformQueryProvider scopeKey="user-1">
               <RuntimeMetadataProvider
                 value={{
-                  manifest: { modules: [] },
+                  manifest: { modules: options.feature ? [{ moduleId: "Organization", metadataBasePath: "", navFiles: [], viewFiles: [], modelFiles: [], features: [{ key: "create", kind: "action", position: options.feature.create, parentPosition: options.feature.entry, actionScope: "list.pageActions" }] }] : [] },
                   navDocuments: [],
                   modelDocuments: [options.modelDocument ?? personModelDocument],
                   viewDocuments: [viewDocument, personDetailViewDocument],
@@ -291,7 +293,8 @@ describe('StandardCrudListPageHost', () => {
           </LocalizationProvider>
         </MemoryRouter>
       );
-      root.render(options.strictMode ? <StrictMode>{host}</StrictMode> : host);
+      const authorizedHost = options.feature ? <AuthorizationProvider permissions={[]} featurePositions={[options.feature.entry, options.feature.create]}><FeaturePlacementContext.Provider value={{ entryPosition: options.feature.entry }}>{host}</FeaturePlacementContext.Provider></AuthorizationProvider> : host;
+      root.render(options.strictMode ? <StrictMode>{authorizedHost}</StrictMode> : authorizedHost);
     });
   }
 
@@ -2109,6 +2112,70 @@ describe('StandardCrudListPageHost', () => {
 
     expect(document.body.textContent).toContain('放弃未保存的更改？');
     expect(document.body.querySelector('.ant-drawer')).not.toBeNull();
+  });
+
+  it('uses one declared create position from opening the Drawer through submission without old permissions', async () => {
+    const create = vi.fn().mockResolvedValue({
+      operation: 'create',
+      payload: { receipt: 'opaque-result' },
+    });
+    mockStandardCrudModule({
+      dataAdapter: {
+        ...createStandardCrudRestDataAdapter({
+          apiRoute: '/api/organization/persons',
+          fetcher: (input, init) => globalThis.fetch(input, init),
+          mapListItem: (value) => value as { id: string; name: string },
+          getRowId: (row) => row.id,
+        }),
+        create,
+      },
+      operationResultPresenters: [{
+        supports: (result) => result.operation === 'create',
+        render: ({ result, close }) => (
+          <div>
+            <span>{String((result.payload as { receipt?: string }).receipt)}</span>
+            <button type="button" onClick={close}>关闭结果</button>
+          </div>
+        ),
+      }],
+    });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      items: [], total: 0, page: 1, pageSize: 20,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    const feature = { entry: "Organization/navigation:management/tab:persons", create: "Organization/navigation:management/tab:persons/surface:list.pageActions/action:create" };
+    await renderHost({}, personListViewDocument, "/organization/persons", { feature });
+    await flushProTableRequest();
+    const createButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.replace(/\s+/g, '') === '新建人员');
+    await act(async () => createButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await waitForBodyText('基础信息');
+    const personNoInput = document.body.querySelector<HTMLInputElement>('#PersonNo');
+    const nameInput = document.body.querySelector<HTMLInputElement>('#ENAME');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(personNoInput, 'P002');
+      personNoInput?.dispatchEvent(new Event('input', { bubbles: true }));
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(nameInput, '李四');
+      nameInput?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      const saveButton = Array.from(document.body.querySelectorAll('button')).find((button) =>
+        button.textContent?.trim() === '保存并关闭');
+      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flushProTableRequest();
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ PersonNo: 'P002', ENAME: '李四' }),
+      {},
+      { featurePosition: feature.create },
+    );
+    expect(document.body.textContent).toContain('opaque-result');
+    const closeResult = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent === '关闭结果');
+    await act(async () => closeResult?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(document.body.textContent).not.toContain('opaque-result');
   });
 
   it('hands an opaque create result to the registered presenter and blocks duplicate submits', async () => {

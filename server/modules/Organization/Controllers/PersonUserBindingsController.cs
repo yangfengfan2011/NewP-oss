@@ -15,8 +15,9 @@ namespace ICP.Platform.Modules.Organization.Controllers;
 [PlatformRequestValidation]
 public sealed class PersonUserBindingsController(IPersonUserBindingService bindingService) : ControllerBase
 {
+    /// <summary>绑定动作按其已授权位置搜索候选账号。</summary>
     [HttpGet("{personEid}/user-binding/candidates")]
-    [RequirePermission(OrganizationPermissions.PersonLinkUser)]
+    [RequireFeature("organization.person.linkUser.lookup")]
     public async Task<ActionResult<IReadOnlyList<PersonUserBindingCandidateDto>>> SearchCandidates(
         string personEid,
         [FromQuery] string? query,
@@ -32,8 +33,9 @@ public sealed class PersonUserBindingsController(IPersonUserBindingService bindi
         }
     }
 
+    /// <summary>在可信主体的绑定动作授权后执行既有不可逆绑定事务。</summary>
     [HttpPut("{personEid}/user-binding")]
-    [RequirePermission(OrganizationPermissions.PersonLinkUser)]
+    [RequireFeature("organization.person.linkUser")]
     public async Task<ActionResult<PersonUserBindingDto>> Bind(
         string personEid,
         [FromBody] BindPersonUserRequest request,

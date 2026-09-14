@@ -17,7 +17,7 @@ public sealed class DepartmentCompanyLookupsController(ICompanyDirectory company
     /// 搜索一页部门归属公司候选；当前停用值仍可解析，但不会成为新候选。
     /// </summary>
     [HttpGet]
-    [RequirePermission(OrganizationPermissions.DepartmentView)]
+    [RequireFeature("organization.department.company.lookup")]
     public async Task<ActionResult<StandardCrudLookupResult>> Companies(
         [FromQuery] string? keyword = null,
         [FromQuery] int page = 1,

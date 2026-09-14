@@ -28,7 +28,7 @@ public static class PositionCrudDescriptorFactory
             SortableFields = ["ENAME", "IsEnabled"],
             DefaultSortField = "ENAME",
             DefaultSortDirection = "asc",
-            Authorization = StandardCrudAuthorization.ByConvention(OrganizationPermissions.PositionStem),
+            Authorization = StandardCrudAuthorization.ByFeature("organization.position", StandardCrudOperation.List, StandardCrudOperation.Detail, StandardCrudOperation.Create, StandardCrudOperation.Update, StandardCrudOperation.Delete, StandardCrudOperation.Options),
             FieldSet = fieldSet,
             OptionLabelFields = ["ENAME"],
             DeletePolicy = StandardCrudDeletePolicy.Conditional,

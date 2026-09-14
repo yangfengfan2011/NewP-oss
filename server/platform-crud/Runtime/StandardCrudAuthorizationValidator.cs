@@ -35,7 +35,7 @@ public static class StandardCrudAuthorizationValidator
         foreach (var descriptor in descriptorList)
         {
             if (descriptor.Authorization is null
-                || string.IsNullOrWhiteSpace(descriptor.Authorization.PermissionStem))
+                || (string.IsNullOrWhiteSpace(descriptor.Authorization.PermissionStem) && string.IsNullOrWhiteSpace(descriptor.Authorization.FeatureBehaviorStem)))
             {
                 diagnostics.Add(new StandardCrudAuthorizationDiagnostic(
                     StandardCrudAuthorizationFailureCodes.PermissionStemMissing,

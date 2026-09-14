@@ -3,7 +3,7 @@ import { Alert, Button, Card, Checkbox, Flex, Input, List, Modal, Pagination, Sp
 import { platformFetch, useAuthorization } from "@icp-platform/core";
 import type { PageProps } from "@icp-platform/sdk";
 import { requestRole } from "./roleResource";
-import { buildFeatureTree, changeBranch, featureDiff, type FeaturePoint } from "./featureTree";
+import { buildFeatureTree, changeBranch, featureDiff, featureTreeKeys, type FeaturePoint } from "./featureTree";
 
 interface RoleSummary { id: string; code: string; displayName: string; isEnabled: boolean }
 interface RoleState { role: RoleSummary; positions: string[] }
@@ -131,7 +131,7 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
           <Space wrap style={{ marginBottom: 12 }}>
             <Input.Search aria-label="搜索功能" placeholder="功能名称或位置" value={query} onChange={event => setQuery(event.target.value)} />
             <Checkbox checked={grantedOnly} onChange={event => setGrantedOnly(event.target.checked)}>仅已授权</Checkbox>
-            <Button onClick={() => setExpanded(catalog.points.map(point => point.position))}>展开全部</Button>
+            <Button onClick={() => setExpanded(featureTreeKeys(tree))}>展开全部</Button>
             <Button onClick={() => setExpanded([])}>收起全部</Button>
           </Space>
           <Space wrap style={{ marginBottom: 12 }}>

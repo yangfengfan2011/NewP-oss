@@ -164,7 +164,7 @@ public sealed class ModuleCapsuleCandidateReader
                     "built-in",
                     Path.GetFullPath(manifestPath),
                     "/"),
-            ReadPersistence(root, manifestPath)) { Features = FeatureCatalogCompiler.Read(root, moduleId) };
+            ReadPersistence(root, manifestPath)) { Features = ReadFeatures(root, moduleId, Path.Combine(moduleRoot, "metadata"), snapshot) };
     }
 
     private static ModuleCapsuleCandidate ReadInstalledModule(InstalledPluginRecord record)
@@ -211,9 +211,22 @@ public sealed class ModuleCapsuleCandidateReader
             metadata.PermissionReferences,
             metadata.ModelKeys,
             new ModulePlanProvenance("installed-package", manifestPath, "/"),
-            ReadPersistence(root, manifestPath)) { Features = FeatureCatalogCompiler.Read(root, moduleId) };
+            ReadPersistence(root, manifestPath)) { Features = ReadFeatures(root, moduleId, Path.Combine(packageRoot, "modules", moduleId, "metadata"), null) };
     }
 
+    // 功能声明与已校验 metadata 来自同一候选快照，不能旁读变化中的 authoring 文件。
+    private static IReadOnlyList<FeatureDeclaration> ReadFeatures(JsonElement capsule, string moduleId,
+        string metadataRoot, VerifiedModuleArtifactSnapshot? snapshot)
+    {
+        var documents = snapshot is not null
+            ? snapshot.EnumerateFiles("metadata").Where(path => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                .Select(path => JsonSerializer.Deserialize<JsonElement>(ReadMetadataText(snapshot, path)))
+            : Directory.Exists(metadataRoot)
+                ? Directory.EnumerateFiles(metadataRoot, "*.json", SearchOption.AllDirectories)
+                    .Select(path => JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(path)))
+                : Enumerable.Empty<JsonElement>();
+        return [.. FeatureCatalogCompiler.Read(capsule, moduleId), .. StandardFeatureMetadataCompiler.Read(moduleId, documents)];
+    }
     private static ModulePersistenceContribution? ReadPersistence(JsonElement root, string sourcePath)
     {
         if (!TryGetObject(root, "persistence", out var persistence))

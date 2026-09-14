@@ -7,6 +7,7 @@ import type {
 
 export interface StandardCrudLookupQueryKeyInput {
   resourceKey: string;
+  featurePosition?: string;
   fields: StandardCrudFieldDefinition[];
   providers: StandardCrudLookupProvider[];
   values: Record<string, unknown>;
@@ -103,6 +104,7 @@ export function createStandardCrudLookupQueryKey(
   return [
     'standard-crud.lookup',
     input.resourceKey,
+    ...(input.featurePosition ? [input.featurePosition] : []),
     {
       fields: lookupFields,
       values: normalizeLookupQueryKeyObject(Object.fromEntries(input.fields.flatMap(field =>

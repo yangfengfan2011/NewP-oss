@@ -1,3 +1,4 @@
+import { useFeaturePlacement } from '../authorization/FeaturePlacementContext';
 import { useContext, useEffect, useId, useState } from 'react';
 import Tabs from 'antd/es/tabs';
 import { useLocalization } from '@icp-platform/core';
@@ -10,6 +11,7 @@ import { createTabLocationMemory } from './compositionNavigation';
 /** 已打开的标签保持挂载，未激活页面仍参与当前组合保护。 */
 export default function StandardTabPage({ input }: PageProps) {
   const metadata = useRuntimeMetadata();
+  const features = useFeaturePlacement();
   const runtime = useContext(CompositionContext)!;
   const { t } = useLocalization();
   const view = metadata?.viewDocuments.find(document => document.view.key === input.parameters.viewKey)?.view as unknown as TabView;
@@ -17,8 +19,11 @@ export default function StandardTabPage({ input }: PageProps) {
   const treeNavigation = useContext(TreeNavigationContext);
   const instanceId = useId();
   const id = `np-tabs-${instanceId.replace(/:/g, '')}`;
+  const availableTabs = view.tabs.filter(tab => !features.placement || features.hasFeature(features.tab(tab.key) ?? ""));
+  const fallback = availableTabs.find(tab => tab.key === view.defaultTabKey)?.key ?? availableTabs[0]?.key ?? "";
   const [localSelected, setSelected] = useState(view.defaultTabKey);
-  const selected = navigation ? (view.tabs.some(tab => tab.key === navigation.tabKey) ? navigation.tabKey! : view.defaultTabKey) : localSelected;
+  const requested = navigation?.tabKey ?? localSelected;
+  const selected = availableTabs.some(tab => tab.key === requested) ? requested : fallback;
   const [treeLocations] = useState(createTabLocationMemory);
   const tabTreeNavigation = treeLocations.forSelection(selected, treeNavigation);
   const [opened, setOpened] = useState(() => new Set([selected]));
@@ -30,10 +35,10 @@ export default function StandardTabPage({ input }: PageProps) {
       if (navigation) { setOpened(current => new Set(current).add(selected)); navigation.selectTab(key, tabTreeNavigation.handoff(key)); }
       else runtime.leave(() => { setSelected(key); setOpened(current => new Set(current).add(key)); });
     }}
-    items={view.tabs.map(tab => ({
+    items={availableTabs.map(tab => ({
       key: tab.key,
       label: t(`${view.dicKey}.${tab.titleKey}`, tab.titleKey),
       forceRender: visibleTabs.has(tab.key),
-      children: <PageOutlet key={input.context?.nodeKey} page={tab.pageRef} context={input.context} active={tab.key === selected} treeNavigation={tabTreeNavigation.forTab(tab.key)} />,
+      children: <PageOutlet key={input.context?.nodeKey} page={tab.pageRef} featurePlacement={features.placement ? { entryPosition: features.tab(tab.key)! } : undefined} context={input.context} active={tab.key === selected} treeNavigation={tabTreeNavigation.forTab(tab.key)} />,
     }))} />;
 }

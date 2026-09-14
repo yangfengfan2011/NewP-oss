@@ -15,8 +15,9 @@ namespace ICP.Platform.Modules.Organization.Controllers;
 [PlatformRequestValidation]
 public sealed class PersonLifecycleController(IPersonLifecycleService lifecycleService) : ControllerBase
 {
+    /// <summary>旧的混合状态入口显式冻结，状态改变由独立动作绑定拥有。</summary>
     [HttpPut("{personEid}/status")]
-    [RequirePermission(OrganizationPermissions.PersonUpdate)]
+    [DenyAll("人员状态操作已由独立启用和停用位置承接。")]
     public async Task<ActionResult<PersonLifecycleDto>> SetStatus(
         string personEid,
         [FromBody] SetPersonLifecycleStatusRequest request,
@@ -42,6 +43,19 @@ public sealed class PersonLifecycleController(IPersonLifecycleService lifecycleS
         }
     }
 
+    /// <summary>启用动作只允许启用参数；不能借用该位置提交停用。</summary>
+    [HttpPut("{personEid}/status/enable")]
+    [RequireFeature("organization.person.enable")]
+    public Task<ActionResult<PersonLifecycleDto>> Enable(string personEid, [FromBody] SetPersonLifecycleStatusRequest request,
+        CancellationToken cancellationToken = default) => request.IsEnabled ? SetStatus(personEid, request, cancellationToken)
+            : Task.FromResult<ActionResult<PersonLifecycleDto>>(BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]> { ["isEnabled"] = ["启用动作要求 true。"] })));
+
+    /// <summary>停用动作只允许停用参数，保留原领域事务与会话撤销逻辑。</summary>
+    [HttpPut("{personEid}/status/disable")]
+    [RequireFeature("organization.person.disable")]
+    public Task<ActionResult<PersonLifecycleDto>> Disable(string personEid, [FromBody] SetPersonLifecycleStatusRequest request,
+        CancellationToken cancellationToken = default) => !request.IsEnabled ? SetStatus(personEid, request, cancellationToken)
+            : Task.FromResult<ActionResult<PersonLifecycleDto>>(BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]> { ["isEnabled"] = ["停用动作要求 false。"] })));
     private ObjectResult LifecycleProblem(PersonLifecycleException exception)
     {
         var status = exception.FailureCode switch

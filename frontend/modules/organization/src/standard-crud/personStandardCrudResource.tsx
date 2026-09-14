@@ -40,6 +40,7 @@ export const organizationCompanyLookupProvider: StandardCrudLookupProvider = {
     request,
     request.fieldKey === 'companyId',
     context?.signal,
+    context?.featurePosition,
   ),
 };
 
@@ -64,6 +65,7 @@ const organizationLookupProviders: StandardCrudLookupProvider[] = [
         request,
         request.fieldKey === 'departmentId',
         context?.signal,
+    context?.featurePosition,
       );
     },
   },
@@ -75,10 +77,11 @@ const organizationLookupProviders: StandardCrudLookupProvider[] = [
 ];
 
 const personSummaryRenderers = {
-  userBinding: ({ block, title }: { block: StandardCrudSummaryBlock<unknown>; title: string }) => (
+  userBinding: ({ block, title, featureActions }: import('@icp-platform/sdk').StandardCrudSummaryRendererContext) => (
     <Suspense fallback={null}>
       <LazyPersonUserBindingSummary
         summary={block as StandardCrudSummaryBlock<PersonUserBindingSummaryData>}
+        featureAction={featureActions?.linkUser}
         title={title}
       />
     </Suspense>
@@ -137,14 +140,14 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Record
     ),
   },
   actionHandlers: {
-    delete: async ({ id }) => {
+    delete: async ({ id, featurePosition }) => {
       if (!id) {
         throw new Error('缺少人员标识，无法删除。');
       }
 
-      await deletePerson(id);
+      await deletePerson(id, featurePosition);
     },
-    disable: async ({ id, input }) => {
+    disable: async ({ id, input, featurePosition }) => {
       if (!id) {
         throw new Error('缺少人员标识，无法停用。');
       }
@@ -157,9 +160,9 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Record
       await setPersonLifecycleStatus(id, {
         isEnabled: false,
         reason,
-      });
+      }, featurePosition);
     },
-    enable: async ({ id }) => {
+    enable: async ({ id, featurePosition }) => {
       if (!id) {
         throw new Error('缺少人员标识，无法启用。');
       }
@@ -167,7 +170,7 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Record
       await setPersonLifecycleStatus(id, {
         isEnabled: true,
         reason: '人员中心恢复人员',
-      });
+      }, featurePosition);
     },
   },
 };

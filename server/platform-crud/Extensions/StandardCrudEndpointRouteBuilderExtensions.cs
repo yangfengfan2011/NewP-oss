@@ -74,7 +74,7 @@ public static class StandardCrudEndpointRouteBuilderExtensions
                 });
             }
         }).WithMetadata(new EndpointModuleAttribute(descriptor.ModuleId))
-            .RequirePermission(authorization.GetPermissionCode(StandardCrudOperation.List));
+            .RequireCrudOperation(authorization, StandardCrudOperation.List);
 
         endpoints.MapGet(route + "/options", async (
             HttpContext context,
@@ -84,7 +84,7 @@ public static class StandardCrudEndpointRouteBuilderExtensions
             var result = await endpoint.OptionsAsync(descriptor, BuildLookupRequest(context.Request.Query), cancellationToken);
             return Results.Ok(result);
         }).WithMetadata(new EndpointModuleAttribute(descriptor.ModuleId))
-            .RequirePermission(authorization.GetPermissionCode(StandardCrudOperation.Options));
+            .RequireCrudOperation(authorization, StandardCrudOperation.Options);
 
         endpoints.MapPost(route + "/export", async (
             HttpContext context,
@@ -135,7 +135,7 @@ public static class StandardCrudEndpointRouteBuilderExtensions
                 });
             }
         }).WithMetadata(new EndpointModuleAttribute(descriptor.ModuleId))
-            .RequirePermission(authorization.GetPermissionCode(StandardCrudOperation.Export));
+            .RequireCrudOperation(authorization, StandardCrudOperation.Export);
 
         endpoints.MapGet(route + "/{id}", async (
             string id,
@@ -145,7 +145,7 @@ public static class StandardCrudEndpointRouteBuilderExtensions
             var detail = await endpoint.GetDetailAsync(descriptor, id, cancellationToken);
             return detail is null ? Results.NotFound() : Results.Ok(detail);
         }).WithMetadata(new EndpointModuleAttribute(descriptor.ModuleId))
-            .RequirePermission(authorization.GetPermissionCode(StandardCrudOperation.Detail));
+            .RequireCrudOperation(authorization, StandardCrudOperation.Detail);
 
         endpoints.MapPost(route, async (
             HttpContext context,
@@ -156,7 +156,7 @@ public static class StandardCrudEndpointRouteBuilderExtensions
             var result = await endpoint.CreateAsync(descriptor, values, cancellationToken);
             return ToMutationResult(result, detail => Results.Created(BuildCreatedLocation(route, descriptor, detail), detail));
         }).WithMetadata(new EndpointModuleAttribute(descriptor.ModuleId))
-            .RequirePermission(authorization.GetPermissionCode(StandardCrudOperation.Create));
+            .RequireCrudOperation(authorization, StandardCrudOperation.Create);
 
         endpoints.MapPut(route + "/{id}", async (
             string id,
@@ -168,7 +168,7 @@ public static class StandardCrudEndpointRouteBuilderExtensions
             var result = await endpoint.UpdateAsync(descriptor, id, values, cancellationToken);
             return ToMutationResult(result, Results.Ok);
         }).WithMetadata(new EndpointModuleAttribute(descriptor.ModuleId))
-            .RequirePermission(authorization.GetPermissionCode(StandardCrudOperation.Update));
+            .RequireCrudOperation(authorization, StandardCrudOperation.Update);
 
         endpoints.MapPost(route + "/{id}/disable", async (
             string id,
@@ -178,7 +178,7 @@ public static class StandardCrudEndpointRouteBuilderExtensions
             var result = await endpoint.DisableAsync(descriptor, id, cancellationToken);
             return ToMutationResult(result, Results.Ok);
         }).WithMetadata(new EndpointModuleAttribute(descriptor.ModuleId))
-            .RequirePermission(authorization.GetPermissionCode(StandardCrudOperation.Disable));
+            .RequireCrudOperation(authorization, StandardCrudOperation.Disable);
 
         endpoints.MapDelete(route + "/{id}", async (
             string id,
@@ -190,9 +190,18 @@ public static class StandardCrudEndpointRouteBuilderExtensions
                 ? Results.NoContent()
                 : ToErrorResult(result.Error!);
         }).WithMetadata(new EndpointModuleAttribute(descriptor.ModuleId))
-            .RequirePermission(authorization.GetPermissionCode(StandardCrudOperation.Delete));
+            .RequireCrudOperation(authorization, StandardCrudOperation.Delete);
     }
 
+    // 显式采用位置绑定的资源不再消费旧 Permission；未开放操作仍映射为拒绝以封闭遗留地址。
+    private static RouteHandlerBuilder RequireCrudOperation(this RouteHandlerBuilder endpoint,
+        StandardCrudAuthorization authorization, StandardCrudOperation operation)
+    {
+        if (authorization.FeatureBehaviorStem is null) return endpoint.RequirePermission(authorization.GetPermissionCode(operation));
+        var behavior = authorization.GetFeatureBehavior(operation);
+        return behavior is null ? endpoint.RequireAuthorization(new DenyAllAttribute("该标准操作没有活动功能声明。"))
+            : endpoint.RequireAuthorization(new RequireFeatureAttribute(behavior));
+    }
     // 自动映射会从一个 descriptor 派生多个路由；这里在启动期拦截派生路由遮挡，避免运行期出现双真源。
     private static void ValidateStandardRouteConflicts(IReadOnlyList<StandardCrudDescriptor> descriptors)
     {

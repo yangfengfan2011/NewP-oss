@@ -19,7 +19,7 @@ public sealed class DepartmentHierarchyLookupsController(
     /// 搜索一页同公司上级候选；当前停用值仍可解析，但不会成为新候选。
     /// </summary>
     [HttpGet("parents")]
-    [RequirePermission(OrganizationPermissions.DepartmentView)]
+    [RequireFeature("organization.department.parent.lookup")]
     public async Task<ActionResult<StandardCrudLookupResult>> Parents(
         [FromQuery] string companyId,
         [FromQuery] string? currentDepartmentCode = null,

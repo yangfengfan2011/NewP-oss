@@ -18,6 +18,7 @@ import {
 interface StandardCrudDetailEditorProps {
   id: string;
   resourceKey: string;
+  featurePosition?: string;
   detail: { fields: Record<string, unknown> };
   fields: StandardCrudFieldDefinition[];
   sections: StandardCrudFormSection[];
@@ -33,6 +34,7 @@ interface StandardCrudDetailEditorProps {
 export default function StandardCrudDetailEditor({
   id,
   resourceKey,
+  featurePosition,
   detail,
   fields,
   sections,
@@ -47,6 +49,7 @@ export default function StandardCrudDetailEditor({
   );
   const lookupRuntime = useStandardCrudLookupRuntime({
     resourceKey,
+  featurePosition,
     fields,
     providers: registration.lookupProviders ?? [],
     values: formValues,
@@ -65,6 +68,7 @@ export default function StandardCrudDetailEditor({
   const handleSave = async () => {
     const succeeded = await mutationExecution.execute({
       mode: 'edit',
+      featurePosition,
       id,
       fields,
       values: formValues,

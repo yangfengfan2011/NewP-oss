@@ -9,6 +9,7 @@ import { resolveComposedHostPresentation, StandardCrudHostEnvironmentContext, ty
 import { PageComposition } from './PageCompositionContext';
 import { createAddressNavigation } from './compositionNavigation';
 import './composition.css';
+import { FeaturePlacementContext, type FeaturePlacement } from '../authorization/FeaturePlacementContext';
 const TreePage = lazy(() => import('./StandardTreePage'));
 const TabPage = lazy(() => import('./StandardTabPage'));
 const ListPage = lazy(() => import('../pages/StandardCrudListPageHost'));
@@ -31,9 +32,11 @@ export function PageEntry({ page }: { page: PageRef }) {
     <PageOutlet page={entryPage} navigation={navigation} treeNavigation={treeNavigation} />
   </div></PageComposition>;
 }
-export function PageOutlet({ page, context, close, navigation, treeNavigation, active = true }: { page: PageRef; context?: PageInput['context']; close?: () => void; navigation?: React.ContextType<typeof PageNavigationContext>; treeNavigation?: TreeNavigation | null; active?: boolean }) {
+export function PageOutlet({ page, context, close, navigation, treeNavigation, active = true, featurePlacement }: { featurePlacement?: FeaturePlacement; page: PageRef; context?: PageInput['context']; close?: () => void; navigation?: React.ContextType<typeof PageNavigationContext>; treeNavigation?: TreeNavigation | null; active?: boolean }) {
   const runtime = useContext(CompositionContext);
   const parentActive = useContext(PageActivityContext);
+  const inheritedPlacement = useContext(FeaturePlacementContext);
+  const placement = useMemo(() => featurePlacement ?? (typeof page.parameters?.featurePosition === "string" ? { entryPosition: page.parameters.featurePosition } : inheritedPlacement), [featurePlacement, inheritedPlacement, page.parameters]);
   const instanceId = useId();
   const reportState = useCallback((state: PageLifecycleState, discard?: () => void, save?: () => Promise<boolean>) => runtime?.report(instanceId, state, discard, save), [instanceId, runtime]);
   useEffect(() => () => runtime?.report(instanceId, null), [instanceId, runtime]);
@@ -43,13 +46,13 @@ export function PageOutlet({ page, context, close, navigation, treeNavigation, a
   }, [context, page]);
   if (!resolved.input) return <div role="alert">页面配置／上下文错误：{resolved.error}</div>;
   const props: PageProps = { input: resolved.input, reportState, active: parentActive && active };
-  return <PageActivityContext.Provider value={props.active!}><TreeNavigationContext.Provider value={treeNavigation ?? null}><PageNavigationContext.Provider value={navigation ?? null}><Suspense fallback={<div role="status">正在加载页面…</div>}>
+  return <FeaturePlacementContext.Provider value={placement}><PageActivityContext.Provider value={props.active!}><TreeNavigationContext.Provider value={treeNavigation ?? null}><PageNavigationContext.Provider value={navigation ?? null}><Suspense fallback={<div role="status">正在加载页面…</div>}>
     {page.pageKey === 'platform.tree' ? <TreePage {...props} />
       : page.pageKey === 'platform.tabs' ? <TabPage {...props} />
         : page.pageKey === 'platform.list' || page.pageKey === 'platform.detail'
           ? <StandardPage pageKey={page.pageKey} {...props} close={close} />
           : <CustomPage pageKey={page.pageKey} {...props} />}
-  </Suspense></PageNavigationContext.Provider></TreeNavigationContext.Provider></PageActivityContext.Provider>;
+  </Suspense></PageNavigationContext.Provider></TreeNavigationContext.Provider></PageActivityContext.Provider></FeaturePlacementContext.Provider>;
 }
 function CustomPage({ pageKey, ...props }: PageProps & { pageKey: string }) {
   const [component, setComponent] = useState<ComponentType<PageProps> | null>(null);

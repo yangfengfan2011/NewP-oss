@@ -21,7 +21,7 @@ public sealed class PersonOrganizationLookupsController(
     /// 搜索一页公司候选，并独立解析可能已停用的当前公司。
     /// </summary>
     [HttpGet("companies")]
-    [RequirePermission(OrganizationPermissions.PersonView)]
+    [RequireFeature("organization.person.company.lookup")]
     public async Task<ActionResult<StandardCrudLookupResult>> Companies(
         [FromQuery] string? keyword = null,
         [FromQuery] int page = 1,
@@ -41,7 +41,7 @@ public sealed class PersonOrganizationLookupsController(
     /// 在显式公司范围内搜索一页部门候选，并拒绝跨公司解析当前部门。
     /// </summary>
     [HttpGet("departments")]
-    [RequirePermission(OrganizationPermissions.PersonView)]
+    [RequireFeature("organization.person.department.lookup")]
     public async Task<ActionResult<StandardCrudLookupResult>> Departments(
         [FromQuery] string companyId,
         [FromQuery] string? keyword = null,

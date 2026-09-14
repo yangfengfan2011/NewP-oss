@@ -8,6 +8,12 @@
     "descriptionKey": "Description",
     "mode": "list",
     "model": "Person",
+    "resourceKey": "organization.person",
+    "lookupBindings": {
+      "organization.companies": "organization.person.company.lookup",
+      "organization.departments": "organization.person.department.lookup",
+      "organization.positions": "organization.position.lookup"
+    },
     "editorMode": "drawer",
     "detailViewKey": "organization.person.detail",
     "query": {

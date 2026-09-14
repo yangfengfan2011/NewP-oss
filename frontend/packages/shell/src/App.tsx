@@ -1,3 +1,4 @@
+import { FeaturePlacementContext } from './authorization/FeaturePlacementContext';
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { EntryNavigationProvider } from './navigation/EntryNavigationContext';
@@ -87,7 +88,7 @@ function RouteAccess({
   featurePosition?: string;
 }) {
   const auth = useAuth();
-  if (featurePosition) return auth.user?.featurePositions?.includes(featurePosition) ? <>{children}</> : <Navigate to="/" replace />;
+  if (featurePosition) return auth.user?.featurePositions?.includes(featurePosition) ? <FeaturePlacementContext.Provider value={{ entryPosition: featurePosition }}>{children}</FeaturePlacementContext.Provider> : <Navigate to="/" replace />;
   let content = <>{children}</>;
   if (permissions && permissions.length > 0) {
     content = <PermissionGuard permissions={permissions}>{content}</PermissionGuard>;
@@ -178,7 +179,7 @@ function AppRoutes() {
             key={entry.path}
             path={entry.path}
             element={(
-              <RouteAccess permissions={entry.permissions}>
+              <RouteAccess permissions={entry.permissions} featurePosition={entry.featurePosition}>
                 <RouteCapabilityOutlet capability={{
                   kind: 'standard-crud-detail',
                   targetKey: entry.viewKey,

@@ -9,7 +9,8 @@ public static class FeatureEndpointBindings
     /// <summary>每个声明必须有本模块执行端，每个执行端必须对应活动声明。</summary>
     public static void Validate(IEnumerable<EndpointDataSource> sources, IReadOnlyList<FeaturePoint> points)
     {
-        var declared = points.Select(point => (point.ModuleId, point.BehaviorKey)).ToHashSet();
+        var reads = points.SelectMany(point => point.ReadBehaviors.Select(behavior => (point.ModuleId, BehaviorKey: behavior))).ToHashSet();
+        var declared = points.Where(point => !point.Container).Select(point => (point.ModuleId, point.BehaviorKey)).Concat(reads).ToHashSet();
         var consumed = new HashSet<(string ModuleId, string BehaviorKey)>();
         foreach (var endpoint in sources.SelectMany(source => source.Endpoints))
         {
@@ -19,6 +20,10 @@ public static class FeatureEndpointBindings
             if (owners.Count != 1 || bindings.Count != 1
                 || !declared.Contains((owners[0].ModuleId, bindings[0].BehaviorKey)))
                 throw new InvalidOperationException($"功能执行端 {endpoint.DisplayName} 缺少唯一有效声明或模块归属不符。");
+            if (reads.Contains((owners[0].ModuleId, bindings[0].BehaviorKey))
+                && (endpoint.Metadata.GetMetadata<IHttpMethodMetadata>() is not { HttpMethods: var methods }
+                    || methods.Count == 0 || methods.Any(method => method is not ("GET" or "HEAD"))))
+                throw new InvalidOperationException("功能附加读取不能绑定写入端点。");
             consumed.Add((owners[0].ModuleId, bindings[0].BehaviorKey));
         }
         if (!declared.IsSubsetOf(consumed))

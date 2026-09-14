@@ -19,6 +19,7 @@ interface UseStandardCrudDetailQueryInput<TRow extends Record<string, unknown>, 
   id: string | null | undefined;
   dataAdapter: StandardCrudDataAdapter<TRow, TDetail>;
   enabled?: boolean;
+  featurePosition?: string;
 }
 
 /**
@@ -29,13 +30,14 @@ export function useStandardCrudDetailQuery<TRow extends Record<string, unknown>,
   id,
   dataAdapter,
   enabled = true,
+  featurePosition,
 }: UseStandardCrudDetailQueryInput<TRow, TDetail>): StandardCrudDetailQueryResult<TDetail> {
   const selectedId = id ?? '';
   const active = enabled && selectedId.length > 0;
   const query = usePlatformQuery({
-    key: createStandardCrudDetailQueryKey(resourceKey, selectedId),
+    key: [...createStandardCrudDetailQueryKey(resourceKey, selectedId), ...(featurePosition ? [featurePosition] : [])],
     enabled: active,
-    load: ({ signal }) => dataAdapter.get(selectedId, { signal }),
+    load: ({ signal }) => dataAdapter.get(selectedId, { signal, ...(featurePosition ? { featurePosition } : {}) }),
   });
   const detail = active ? query.data : undefined;
 

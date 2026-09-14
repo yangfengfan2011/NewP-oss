@@ -8,6 +8,7 @@
     "descriptionKey": "Description",
     "mode": "detail",
     "model": "Position",
+    "resourceKey": "organization.position",
     "sections": [
       {
         "key": "basic",

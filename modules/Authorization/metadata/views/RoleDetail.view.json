@@ -4,6 +4,7 @@
   "view": {
     "dicKey": "RoleView",
     "model": "Role",
+    "resourceKey": "authorization.role",
     "titleKey": "Title",
     "key": "authorization.role.detail",
     "mode": "detail",
@@ -34,23 +35,19 @@
       {
         "key": "edit",
         "labelKey": "Edit",
-        "standardAction": "edit",
-        "requiredPermissions": [
-          "Authorization.Role.Edit"
-        ]
+        "standardAction": "edit"
       },
       {
         "key": "permissions",
         "labelKey": "Permissions",
-        "handlerKey": "permissions"
+        "handlerKey": "permissions",
+        "navigationTargetKey": "authorization.workbench"
       },
       {
         "labelKey": "UserRoles",
-        "requiredPermissions": [
-          "Authorization.User.AssignRole"
-        ],
         "key": "userRoles",
         "handlerKey": "userRoles",
+        "readBehaviors": ["authorization.userRoles.read"],
         "inputKey": "userRoles",
         "confirmMessageKey": "ConfirmUserRoles"
       }

@@ -246,7 +246,7 @@ function StandardCrudDetailPageContent<TDetail>({
               : undefined,
           }))}
           grantedPermissions={grantedPermissions}
-          featurePositionForAction={features.placement ? (action) => features.action(action.key, 'detail.pageActions') : undefined}
+          featurePositionForAction={features.placement ? (action) => action.navigationTargetKey ? features.navigation(action.navigationTargetKey) : features.action(action.key, 'detail.pageActions') : undefined}
           hasFeature={features.hasFeature}
           handlers={detailActionHandlers}
           actionInputs={registration.actionInputRenderers}

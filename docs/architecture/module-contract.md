@@ -28,9 +28,11 @@ View 的 `resourceKey` 指定稳定资源；`lookupBindings` 在该 View 的资�
 
 完整位置由声明引用及其祖先、静态节点类型和动作所在位置编译产生，不能使用 URL、文案、数组序号或记录 ID。导航的 `featureOwner` 为重定向别名和独立详情指定已有入口引用；别名不创建重复授权点。`ReferenceKey`、`StaticScope`、`ActionScope`、`StaticScopeTitle` 和 `Container` 是标准适配器的派生事实，不能据此推断 Capsule 自定义声明已经支持这些输入字段。
 
+纯导航快捷动作以 `navigationTargetKey` 引用已有导航，沿用现有 handler 与 navigation-result 跳转；按目标导航的位置资格呈现，不生成独立业务动作点。目标必须是采用位置授权的真实导航，缺失或无效引用拒绝候选；不能借用当前资源的查看或保存资格。
+
 Host 在开放请求前核对目录与真实端点的模块归属及执行绑定。`RequireFeature` 只允许当前位置声明的行为；附加读取必须绑定 GET/HEAD 端点，纯容器不获得后代读取。缺失、冲突或无效绑定拒绝整份候选。运行时投影提供编译后的 position，前后端不得另外拼装授权身份。
 
-当前 Organization 标准路径与 Authorization 工作台消费位置授权；未切换消费者暂保留原 Permission 路径。已切换端点不以新旧任一授权通过作为放行条件。其余消费者切换与旧目录一次性退出由 [Issue #200](https://github.com/yangfengfan2011/NewP/issues/200) 的后续 child 完成。
+当前 Organization 标准路径，以及 Authorization 的角色读取、创建、编辑、账号角色分配和工作台消费位置授权。角色页面未声明删除动作，遗留删除 HTTP 入口明确拒绝；旧角色 Permission 读取/保存接口暂保留原 Permission 与 LocalAdmin 准入，随旧模型退出。其他未切换消费者暂保留原 Permission 路径。已切换端点不以新旧任一授权通过作为放行条件。其余消费者切换与旧目录一次性退出由 [Issue #200](https://github.com/yangfengfan2011/NewP/issues/200) 的后续 child 完成。
 
 ## Guardrails
 

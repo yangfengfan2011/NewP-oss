@@ -225,7 +225,8 @@ public sealed class ModuleCapsuleCandidateReader
                 ? Directory.EnumerateFiles(metadataRoot, "*.json", SearchOption.AllDirectories)
                     .Select(path => JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(path)))
                 : Enumerable.Empty<JsonElement>();
-        return [.. FeatureCatalogCompiler.Read(capsule, moduleId), .. StandardFeatureMetadataCompiler.Read(moduleId, documents)];
+        var custom = FeatureCatalogCompiler.Read(capsule, moduleId);
+        return [.. custom, .. StandardFeatureMetadataCompiler.Read(moduleId, documents, custom)];
     }
     private static ModulePersistenceContribution? ReadPersistence(JsonElement root, string sourcePath)
     {

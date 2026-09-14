@@ -33,6 +33,9 @@ export function useFeaturePlacement() {
       return points.find(point => point.kind === 'action' && point.parentPosition === placement.entryPosition
         && (point.staticScope ?? undefined) === placement.staticScope && point.actionScope === surface && point.key === key)?.position;
     },
+    navigation(key: string): string | undefined {
+      return metadata?.navDocuments.flatMap(document => document.navigation.items).find(item => item.key === key)?.featurePosition;
+    },
     tab(key: string): string | undefined {
       return placement ? points.find(point => point.kind === 'tab' && point.parentPosition === placement.entryPosition
         && (point.staticScope ?? undefined) === placement.staticScope && point.key === key)?.position : undefined;

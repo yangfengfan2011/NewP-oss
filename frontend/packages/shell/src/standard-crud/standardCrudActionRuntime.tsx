@@ -161,6 +161,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
           title={inputAction.labelKey}
           confirmMessage={inputAction.confirmMessage}
           inputRenderer={actionInputs[inputAction.inputKey]}
+          featurePosition={featurePositionForAction?.(inputAction)}
           value={inputValue}
           detail={context.detail}
           row={context.row}

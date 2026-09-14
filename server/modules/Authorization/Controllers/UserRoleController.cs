@@ -7,7 +7,6 @@ using ICP.Platform.Identity.Contracts;
 namespace ICP.Platform.Modules.Authorization.Controllers;
 
 [ApiController]
-[ServiceFilter(typeof(LocalAdministratorManagementFilter))]
 [Route("api/authorization/users")]
 [EndpointModule("Authorization")]
 public class UserRoleController : ControllerBase
@@ -26,7 +25,7 @@ public class UserRoleController : ControllerBase
 
     /// <summary>按关键词搜索有界账号候选，停用账号仍可引用。</summary>
     [HttpGet("candidates")]
-    [RequirePermission(AuthorizationPermissions.RoleView)]
+    [RequireFeature("authorization.userRoles.read")]
     public async Task<IActionResult> Candidates([FromQuery] string? query, CancellationToken cancellationToken) =>
         Ok((await _accounts.SearchAsync(new IdentityAccountSearch { Query = query }, cancellationToken))
             .Where(a => !a.IsLocalAdministrator && a.Status != IdentityAccountStatus.Deleted)
@@ -34,7 +33,7 @@ public class UserRoleController : ControllerBase
 
     /// <summary>查询普通账号配置，受保护账号返回明确失败。</summary>
     [HttpGet("{userId}/roles")]
-    [RequirePermission(AuthorizationPermissions.RoleView)]
+    [RequireFeature("authorization.userRoles.read")]
     public async Task<ActionResult<UserRoleAssignmentsDto>> GetUserRoles(string userId, CancellationToken cancellationToken)
     {
         try { return Ok(await _roleService.GetUserRolesAsync(userId, cancellationToken)); }
@@ -43,7 +42,7 @@ public class UserRoleController : ControllerBase
 
     /// <summary>完整替换普通角色，登记及提交异常继续传播。</summary>
     [HttpPut("{userId}/roles")]
-    [RequirePermission(AuthorizationPermissions.UserAssignRole)]
+    [RequireFeature("authorization.role.userRoles")]
     public async Task<ActionResult> AssignUserRoles(string userId, [FromBody] AssignUserRolesRequest request, CancellationToken cancellationToken)
     {
         try

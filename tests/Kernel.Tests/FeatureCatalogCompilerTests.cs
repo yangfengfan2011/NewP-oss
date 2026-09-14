@@ -3,6 +3,44 @@ using Xunit;
 namespace ICP.Platform.Kernel.Tests;
 public sealed class FeatureCatalogCompilerTests
 {
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"featureAuthorization\":false}")]
+    [InlineData("{\"featureKey\":\"\"}")]
+    [InlineData("{\"featureKey\":\"missing\"}")]
+    public void Shortcut_RejectsTargetWithoutRealNavigationFeature(string targetProperties)
+    {
+        var target = System.Text.Json.Nodes.JsonNode.Parse(targetProperties)!;
+        target["key"] = "target";
+        var documents = new[]
+        {
+            "{\"navigation\":{\"items\":[{\"key\":\"roles\",\"featureAuthorization\":true,\"targetKey\":\"roles\"}," + target.ToJsonString() + "]}}",
+            """{"view":{"key":"roles","mode":"list","resourceKey":"role","rowActions":[{"key":"open","handlerKey":"open","navigationTargetKey":"target"}]}}"""
+        }.Select(value => System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(value));
+        Assert.Throws<InvalidOperationException>(() => StandardFeatureMetadataCompiler.Read("Authorization", documents));
+    }
+    [Fact]
+    public void AuthorizationAuthoring_SeparatesManagementActionsAndKeepsShortcutAtTarget()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "ICP-Platform.sln"))) root = root.Parent;
+        Assert.NotNull(root);
+        var module = Path.Combine(root.FullName, "modules", "Authorization");
+        var documents = Directory.GetFiles(Path.Combine(module, "metadata"), "*.json", SearchOption.AllDirectories)
+            .Select(path => System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(File.ReadAllText(path)));
+        var capsule = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(File.ReadAllText(Path.Combine(module, "newp.plugin.json")));
+        var points = FeatureCatalogCompiler.Compile(FeatureCatalogCompiler.Read(capsule, "Authorization")
+            .Concat(StandardFeatureMetadataCompiler.Read("Authorization", documents, FeatureCatalogCompiler.Read(capsule, "Authorization"))));
+        var entry = Assert.Single(points, point => point.Key == "authorization.roles");
+        Assert.Equal("authorization.role.read", entry.BehaviorKey);
+        Assert.Single(points, point => point.BehaviorKey == "authorization.role.create");
+        Assert.Equal(2, points.Count(point => point.BehaviorKey == "authorization.role.update"));
+        var members = points.Where(point => point.BehaviorKey == "authorization.role.userRoles").ToArray();
+        Assert.Equal(2, members.Length);
+        Assert.All(members, point => Assert.Contains("authorization.userRoles.read", point.ReadBehaviors));
+        Assert.DoesNotContain(points, point => point.Key is "permissions" or "export" or "delete");
+        Assert.Single(points, point => point.BehaviorKey == "authorization.workbench.save");
+    }
     [Fact]
     public void Compile_PreservesPlacementAndRequiresItsOwnEntry()
     {

@@ -58,6 +58,10 @@ Shell 会导入并校验整份目录，全部成功后通过 `ModuleRegistry.rep
 
 `StandardCrudFeatureRequestContext.featurePosition` 是每次请求的执行上下文。标准 client、data adapter、Lookup 和 action handler 沿调用链传递它，由请求写入 `X-NewP-Feature`；不把位置加入业务 payload、筛选值或查询 URL，也不使用可被并发操作覆盖的全局请求头。自定义 handler 调用模块服务时同样传递 `context.featurePosition`。位置只表明请求要执行的声明功能，服务端仍按当前可信主体判权。
 
+需要输入的动作通过 `StandardCrudActionInputRenderContext.featurePosition` 将发起动作位置传给 renderer。列表及详情共用 ReviewDialog；renderer 调用准备端点时传递该位置，最终 handler 继续使用同一位置。例如账号角色弹窗的账号候选、角色分页目录、当前分配与保存由该动作拥有，不能要求用户再获得其他管理页面的资格。
+
+快捷跳转动作声明 `navigationTargetKey`，并保留现有 handler 返回 `StandardCrudOperationResult.navigation`。宿主按目标导航资格显示，目标路由仍执行正常准入；它不新增可授予动作，也不借用 `standardAction: view` 来改变原查看动作的含义。
+
 列表与详情读取、Lookup 的缓存按位置隔离。标准宿主只加载可用入口及动作所需读取，创建或编辑的准备步骤和提交使用同一动作位置；动作 Drawer 不加载底层列表查询的 Lookup。纯容器没有可用后代时隐藏，默认 Tab 不可用时进入首个可用 Tab，不预读未授权内容。
 
 详情摘要 renderer 通过 `featureActions` 接收本 View 声明的专用动作映射，形状为 `Record<key, { position, allowed }>`。模块以 `allowed` 控制呈现、以 `position` 发起该动作请求，例如 Organization 的账号绑定；不要导入 Shell 的内部位置 Context，也不要把其他动作或入口资格用作写入授权。输入、确认、pending、错误及刷新仍沿用既有动作生命周期。

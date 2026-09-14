@@ -11,6 +11,7 @@ interface StandardCrudActionReviewDialogProps {
   title: ReactNode;
   confirmMessage?: string;
   inputRenderer: StandardCrudActionInputRenderer;
+  featurePosition?: string;
   value: unknown;
   detail?: unknown;
   row?: unknown;
@@ -27,6 +28,7 @@ export function StandardCrudActionReviewDialog({
   title,
   confirmMessage,
   inputRenderer,
+  featurePosition,
   value,
   detail,
   row,
@@ -49,6 +51,7 @@ export function StandardCrudActionReviewDialog({
       {confirmMessage ? <p>{confirmMessage}</p> : null}
       {inputRenderer({
         action,
+        featurePosition,
         value,
         onChange,
         detail,

@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.Mvc;
 namespace ICP.Platform.Modules.Authorization.Controllers;
 
 [ApiController]
-[ServiceFilter(typeof(LocalAdministratorManagementFilter))]
 [Route("api/authorization/roles")]
 [EndpointModule("Authorization")]
 public class RoleController : ControllerBase
@@ -15,7 +14,7 @@ public class RoleController : ControllerBase
     private readonly RoleManagementQuery _query;
     private readonly ActivePermissionCatalog _catalog;
 
-    // 组合普通命令与有界查询，所有动作仍经过当前管理员准入。
+    // 组合普通命令与有界查询，管理动作由各自的位置准入。
     public RoleController(IRoleService roleService, RoleManagementQuery query, ActivePermissionCatalog catalog)
     {
         _roleService = roleService;
@@ -25,20 +24,22 @@ public class RoleController : ControllerBase
 
     /// <summary>标准列表在存储侧按代码筛选及分页，旧列表 API 保持原协议。</summary>
     [HttpGet("query")]
-    [RequirePermission(AuthorizationPermissions.RoleView)]
+    [RequireFeature("authorization.role.read")]
     public async Task<IActionResult> Query([FromQuery] string? query, [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 20, CancellationToken cancellationToken = default) =>
         Ok(await _query.ListAsync(query, pageIndex, pageSize, cancellationToken));
 
+    /// <summary>按当前入口读取角色目录。</summary>
     [HttpGet]
-    [RequirePermission(AuthorizationPermissions.RoleView)]
+    [RequireFeature("authorization.role.read")]
     public async Task<ActionResult<List<RoleDto>>> GetAllRoles(CancellationToken cancellationToken)
     {
         var roles = await _roleService.GetAllRolesAsync(cancellationToken);
         return Ok(roles);
     }
 
+    /// <summary>按入口或发起动作读取角色详情。</summary>
     [HttpGet("{roleId}")]
-    [RequirePermission(AuthorizationPermissions.RoleView)]
+    [RequireFeature("authorization.role.read")]
     public async Task<ActionResult<RoleDto>> GetRoleById(string roleId, CancellationToken cancellationToken)
     {
         var role = await _query.GetAsync(roleId, cancellationToken);
@@ -51,7 +52,7 @@ public class RoleController : ControllerBase
 
     /// <summary>创建普通角色，校验失败保持请求失败。</summary>
     [HttpPost]
-    [RequirePermission(AuthorizationPermissions.RoleCreate)]
+    [RequireFeature("authorization.role.create")]
     public async Task<ActionResult<RoleDto>> CreateRole([FromBody] RoleDto dto, CancellationToken cancellationToken)
     {
         try
@@ -67,7 +68,7 @@ public class RoleController : ControllerBase
 
     /// <summary>保留旧更新协议和管理员保护，客户端不能改写角色身份。</summary>
     [HttpPut("{roleId}")]
-    [RequirePermission(AuthorizationPermissions.RoleEdit)]
+    [RequireFeature("authorization.role.update")]
     public async Task<ActionResult<RoleDto>> UpdateRole(string roleId, [FromBody] RoleDto dto, CancellationToken cancellationToken)
     {
         try
@@ -81,9 +82,9 @@ public class RoleController : ControllerBase
         }
     }
 
-    /// <summary>仅删除普通角色，历史 Audit 记录不随目标清理。</summary>
+    /// <summary>保留旧协议；当前没有声明删除入口，HTTP 明确拒绝。</summary>
     [HttpDelete("{roleId}")]
-    [RequirePermission(AuthorizationPermissions.RoleDelete)]
+    [DenyAll("Role deletion has no declared user entry position.")]
     public async Task<ActionResult> DeleteRole(string roleId, CancellationToken cancellationToken)
     {
         try
@@ -99,6 +100,7 @@ public class RoleController : ControllerBase
 
     /// <summary>只公开当前活动目录中的配置关系。</summary>
     [HttpGet("{roleId}/permissions")]
+    [ServiceFilter(typeof(LocalAdministratorManagementFilter))]
     [RequirePermission(AuthorizationPermissions.RoleView)]
     public async Task<ActionResult<RolePermissionsDto>> GetRolePermissions(string roleId, CancellationToken cancellationToken)
     {
@@ -108,6 +110,7 @@ public class RoleController : ControllerBase
 
     /// <summary>校验错误返回 Problem Details，存储和提交故障继续传播。</summary>
     [HttpPut("{roleId}/permissions")]
+    [ServiceFilter(typeof(LocalAdministratorManagementFilter))]
     [RequirePermission(AuthorizationPermissions.PermissionAssign)]
     public async Task<ActionResult> AssignRolePermissions(string roleId, [FromBody] AssignRolePermissionsRequest request, CancellationToken cancellationToken)
     {

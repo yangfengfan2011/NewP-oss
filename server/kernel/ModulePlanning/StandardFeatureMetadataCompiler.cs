@@ -6,7 +6,7 @@ namespace ICP.Platform.Kernel.ModulePlanning;
 public static class StandardFeatureMetadataCompiler
 {
     /// <summary>仅投影明确采用位置授权的导航；未切换模块由原授权协议拥有。</summary>
-    public static IReadOnlyList<FeatureDeclaration> Read(string moduleId, IEnumerable<JsonElement> documents)
+    public static IReadOnlyList<FeatureDeclaration> Read(string moduleId, IEnumerable<JsonElement> documents, IReadOnlyList<FeatureDeclaration>? customFeatures = null)
     {
         var all = documents.ToArray();
         var views = all.Where(document => document.TryGetProperty("view", out _))
@@ -92,7 +92,7 @@ public static class StandardFeatureMetadataCompiler
                     foreach (var action in customActions.EnumerateArray())
                         Action(owner, scope, Text(action, "key"), Title(Text(action, "titleKey"), Optional(view, "dicKey")), Text(action, "behaviorKey"), mode + ".custom",
                             action.TryGetProperty("readBehaviors", out var reads) ? reads.EnumerateArray().Select(read => read.GetString()!).ToArray() : []);
-                if (mode == "list" && view.TryGetProperty("export", out _))
+                if (mode == "list" && view.TryGetProperty("export", out var export) && (!export.TryGetProperty("enabled", out var enabled) || enabled.ValueKind != JsonValueKind.False))
                     Action(owner, scope, "export", "导出", resource + ".export", "list");
             }
             else throw new InvalidOperationException("不支持的标准授权 View 类型。");
@@ -113,11 +113,22 @@ public static class StandardFeatureMetadataCompiler
             if (!view.TryGetProperty(property, out var actions)) return;
             foreach (var action in actions.EnumerateArray())
             {
+                // 快捷跳转复用目标导航资格，不形成另一份业务动作授权。
+                if (Optional(action, "navigationTargetKey") is { } target)
+                {
+                    if (!navigation.TryGetValue(target, out var targetEntry)
+                        || !(Optional(targetEntry, "featureKey") is { } featureKey
+                            ? customFeatures?.Any(feature => feature.Key == featureKey && feature.Kind == "navigation") == true
+                            : targetEntry.TryGetProperty("featureAuthorization", out var targetEnabled) && targetEnabled.ValueKind == JsonValueKind.True))
+                        throw new InvalidOperationException("动作快捷跳转缺少有效功能导航目标。");
+                    continue;
+                }
                 var operation = Optional(action, "standardAction") ?? Optional(action, "handlerKey");
                 if (operation is null or "view") continue;
                 Action(owner, scope, Text(action, "key"), Title(Optional(action, "labelKey") ?? Text(action, "key"), Optional(view, "dicKey")),
                     resource + "." + (operation == "edit" ? "update" : operation), Text(view, "mode") + "." + property,
-                    operation is "create" or "edit" ? LookupBehaviors(view, true).Append(resource + ".read").ToArray() : [resource + ".read"]);
+                    (operation is "create" or "edit" ? LookupBehaviors(view, true).Append(resource + ".read") : [resource + ".read"])
+                        .Concat(action.TryGetProperty("readBehaviors", out var reads) ? reads.EnumerateArray().Select(read => read.GetString()!) : []).ToArray());
             }
         }
 

@@ -3,6 +3,9 @@ import { platformFetch } from '@icp-platform/core';
 import { createStandardCrudRestDataAdapter, isStandardCrudRecord, StandardCrudRequestError,
   type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 
+export const featureHeaders = (position?: string): Record<string, string> => position ? { 'X-NewP-Feature': position } : {};
+export const featureInit = (position?: string): RequestInit => position ? { headers: featureHeaders(position) } : {};
+
 const route = '/api/authorization/roles';
 function fields(value: unknown): Record<string, unknown> {
   const row = isStandardCrudRecord(value) ? value : {};
@@ -37,18 +40,18 @@ export function createRoleResource(fetcher: typeof fetch = platformFetch as type
     resourceKey: 'authorization.role', listViewKey: 'authorization.role.list', detailViewKey: 'authorization.role.detail',
     dataAdapter: {
       list: list.list, getRowId: list.getRowId,
-      get: async (id, context) => { const normalized = { fields: mapRole(await requestRole(fetcher, `${route}/${encodeURIComponent(id)}`, { signal: context?.signal })), summaries: {} }; return { normalized, value: normalized }; },
-      create: async values => ({ operation: 'create', payload: await requestRole(fetcher, route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ Code: values.ECODE, Name: values.ENAME, Description: values.Description }) }) }),
-      update: async (id, values, current) => ({ operation: 'update', payload: await requestRole(fetcher, `${route}/${encodeURIComponent(id ?? '')}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ Name: values.ENAME, Description: values.Description, IsEnabled: current?.IsEnabled }) }) }),
+      get: async (id, context) => { const normalized = { fields: mapRole(await requestRole(fetcher, `${route}/${encodeURIComponent(id)}`, { signal: context?.signal, ...featureInit(context?.featurePosition) })), summaries: {} }; return { normalized, value: normalized }; },
+      create: async (values, _current, context) => ({ operation: 'create', payload: await requestRole(fetcher, route, { method: 'POST', headers: { 'Content-Type': 'application/json', ...featureHeaders(context?.featurePosition) }, body: JSON.stringify({ Code: values.ECODE, Name: values.ENAME, Description: values.Description }) }) }),
+      update: async (id, values, current, context) => ({ operation: 'update', payload: await requestRole(fetcher, `${route}/${encodeURIComponent(id ?? '')}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...featureHeaders(context?.featurePosition) }, body: JSON.stringify({ Name: values.ENAME, Description: values.Description, IsEnabled: current?.IsEnabled }) }) }),
     },
     actionStateResolver: ({ action, detail, row }) => {
       const current = fields(detail ?? row);
       const protectedAction = (current.ECODE === 'LocalAdmin' && action.key === 'edit') || (current.IsBuiltIn === true && action.key === 'edit');
       return { visible: !protectedAction, available: !protectedAction };
     },
-    actionHandlers: { userRoles: async ({ input }) => {
+    actionHandlers: { userRoles: async ({ input, featurePosition }) => {
       if (!isStandardCrudRecord(input) || typeof input.accountId !== 'string' || !Array.isArray(input.codes)) throw new Error('请选择账号并等待角色读取成功。');
-      await requestRole(fetcher, `/api/authorization/users/${encodeURIComponent(input.accountId)}/roles`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ RoleCodes: input.codes }) });
+      await requestRole(fetcher, `/api/authorization/users/${encodeURIComponent(input.accountId)}/roles`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...featureHeaders(featurePosition) }, body: JSON.stringify({ RoleCodes: input.codes }) });
     }, permissions: async ({ id }) => {
       if (!id) throw new Error('请选择一个角色。');
       return { operation: 'action', payload: null, navigation: { entryKey: 'authorization.workbench', parameters: { roleId: id } } };    } },

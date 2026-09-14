@@ -779,7 +779,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const sessionTimeZoneId = useOptionalSessionTimeZoneId();
   const grantedPermissions = useOptionalGrantedPermissions(registration.permissions);
   const allowAction = (action: StandardCrudRuntimeActionSchema, surface = "list.rowActions") => features.placement
-    ? features.hasFeature(features.action(action.key, surface) ?? "") : hasActionPermission(action, grantedPermissions);
+    ? features.hasFeature((action.navigationTargetKey ? features.navigation(action.navigationTargetKey) : features.action(action.key, surface)) ?? "") : hasActionPermission(action, grantedPermissions);
   const schema = useMemo(() => buildStandardCrudListSchema(view, registration, {
     modelDocuments,
   }), [view, registration, modelDocuments]);
@@ -2186,6 +2186,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 )
               : undefined}
             inputRenderer={registration.actionInputRenderers[rowInputAction.action.inputKey]}
+            featurePosition={features.action(rowInputAction.action.key, 'list.rowActions')}
             value={rowInputValue}
             row={rowInputAction.row}
             pending={actionExecution.pendingKey === rowInputAction.pendingKey}

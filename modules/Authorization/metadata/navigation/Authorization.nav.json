@@ -19,9 +19,7 @@
         "order": 10,
         "entryType": "standard-list",
         "targetKey": "authorization.role.list",
-        "permissions": [
-          "Authorization.Role.View"
-        ]
+        "featureAuthorization": true
       },
       {
         "key": "authorization.role.detail",
@@ -29,9 +27,7 @@
         "routeOnly": true,
         "entryType": "standard-crud-detail",
         "targetKey": "authorization.role.detail",
-        "permissions": [
-          "Authorization.Role.View"
-        ]
+        "featureOwner": "navigation:authorization.roles"
       }
     ]
   }

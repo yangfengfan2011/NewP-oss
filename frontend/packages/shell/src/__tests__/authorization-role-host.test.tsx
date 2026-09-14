@@ -11,11 +11,20 @@ import { createRoleResource } from '../../../../modules/authorization/src/roleRe
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
+import { FeaturePlacementContext } from '../authorization/FeaturePlacementContext';
 import { EntryNavigationContext } from '../navigation/entryNavigation';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 beforeAll(async () => { await Promise.all([import('@ant-design/pro-table'), import('@ant-design/pro-descriptions'), import('../pages/StandardCrudListDrawerRuntime')]); });
-const permissions = ['Authorization.Role.View', 'Authorization.Role.Create', 'Authorization.Role.Edit', 'Authorization.Permission.Assign', 'Authorization.User.AssignRole'];
+const entryPosition = 'Authorization/navigation:authorization.roles';
+const workbenchPosition = 'Authorization/navigation:authorization.workbench';
+const points = [
+  { key: 'authorization.roles', kind: 'navigation', position: entryPosition },
+  { key: 'authorization.workbench', kind: 'navigation', position: workbenchPosition },
+  ...[['create', 'list.pageActions'], ['edit', 'list.rowActions'], ['userRoles', 'list.rowActions'], ['edit', 'detail.pageActions'], ['userRoles', 'detail.pageActions']]
+    .map(([key, surface]) => ({ key, kind: 'action', position: `${entryPosition}/surface:${surface}/action:${key}`, parentPosition: entryPosition, actionScope: surface })),
+];
+const memberPosition = `${entryPosition}/surface:detail.pageActions/action:userRoles`;
 it('角色列表、Drawer表单与独立详情消费正式runtime字段和动作', async () => {
   const container = document.createElement('div'); document.body.append(container);
   const root = createRoot(container);
@@ -34,11 +43,11 @@ it('角色列表、Drawer表单与独立详情消费正式runtime字段和动作
   const resource = createRoleResource(fetcher);
   const openEntry = vi.fn();
   const catalog = Object.fromEntries(Object.entries(dictionary.RoleView).map(([key, value]) => [`RoleView.${key}`, value.zhs]));
-  const render = async (isDetail: boolean) => act(async () => root.render(<MemoryRouter>
+  const render = async (isDetail: boolean, canOpenWorkbench = true) => act(async () => root.render(<MemoryRouter>
     <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]} catalogs={{ zhs: catalog }}>
-      <PlatformQueryProvider scopeKey="role-host"><AuthorizationProvider permissions={permissions}>
-        <RuntimeMetadataProvider value={{ manifest: { modules: [] }, modelDocuments: [model], viewDocuments: [list, detail], navDocuments: [] }}>
-          <EntryNavigationContext.Provider value={openEntry}>{isDetail ? <StandardCrudDetailPageHost viewKey="authorization.role.detail" id="role-1" registration={resource} /> : <StandardCrudListPageHost viewKey="authorization.role.list" registration={resource} />}</EntryNavigationContext.Provider>
+      <PlatformQueryProvider scopeKey="role-host"><AuthorizationProvider permissions={[]} featurePositions={points.filter(point => canOpenWorkbench || point.position !== workbenchPosition).map(point => point.position)}>
+        <RuntimeMetadataProvider value={{ manifest: { modules: [{ moduleId: 'Authorization', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: points }] }, modelDocuments: [model], viewDocuments: [list, detail], navDocuments: [{ type: 'nav', navigation: { items: [{ key: 'authorization.workbench', featurePosition: workbenchPosition }] } }] }}>
+          <FeaturePlacementContext.Provider value={{ entryPosition }}><EntryNavigationContext.Provider value={openEntry}>{isDetail ? <StandardCrudDetailPageHost viewKey="authorization.role.detail" id="role-1" registration={resource} /> : <StandardCrudListPageHost viewKey="authorization.role.list" registration={resource} />}</EntryNavigationContext.Provider></FeaturePlacementContext.Provider>
         </RuntimeMetadataProvider>
       </AuthorizationProvider></PlatformQueryProvider>
     </LocalizationProvider>
@@ -76,6 +85,11 @@ it('角色列表、Drawer表单与独立详情消费正式runtime字段和动作
   await act(async () => (saveRoles as HTMLButtonElement).click());
   await vi.waitFor(() => expect(fetcher.mock.calls.some(([url, init]) => String(url).endsWith('/users/user-1/roles') && init?.method === 'PUT')).toBe(true));
   expect(JSON.parse(String(fetcher.mock.calls.find(([url, init]) => String(url).endsWith('/users/user-1/roles') && init?.method === 'PUT')![1]?.body))).toEqual({ RoleCodes: ['offpage', 'ordinary'] });
+  for (const [url, init] of fetcher.mock.calls.filter(([url]) => String(url).includes('/users/'))) {
+    expect(new Headers(init?.headers).get('X-NewP-Feature'), String(url)).toBe(memberPosition);
+  }
+  const roleOptions = fetcher.mock.calls.filter(([url, init]) => String(url).includes('/roles/query') && new Headers(init?.headers).get('X-NewP-Feature') === memberPosition);
+  expect(roleOptions.length).toBeGreaterThanOrEqual(3);
   await render(false);
   await vi.waitFor(async () => { await act(async () => undefined); expect(container.textContent).toContain('真实角色'); });
   const create = Array.from(container.querySelectorAll('button')).find(b => b.textContent === '新建角色');
@@ -93,4 +107,7 @@ it('角色列表、Drawer表单与独立详情消费正式runtime字段和动作
   await act(async () => configure!.click());
   expect(openEntry).toHaveBeenCalledWith({ entryKey: 'authorization.workbench', parameters: { roleId: 'role-1' } });
   expect(fetcher.mock.calls.some(([url]) => String(url).endsWith('/role-1/permissions'))).toBe(false);
+  await render(true, false);
+  expect(container.textContent).not.toContain('配置权限');
+  expect(container.textContent).toContain('账号角色');
 });

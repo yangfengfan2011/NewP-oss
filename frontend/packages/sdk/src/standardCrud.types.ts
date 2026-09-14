@@ -203,6 +203,8 @@ export interface StandardCrudActionDefinition {
   confirmMessage?: string;
   confirmMessageKey?: string;
   requiredPermissions?: string[];
+  /** 快捷跳转使用目标导航资格，不声明独立业务动作。 */
+  navigationTargetKey?: string;
   handlerKey?: string;
   inputKey?: string;
 }
@@ -228,7 +230,7 @@ export type StandardCrudActionStateResolver<TDetail = unknown, TRow = unknown> =
 ) => StandardCrudActionState;
 
 /** 模块动作输入渲染上下文；值由 Shell 持有，模块只渲染业务输入并报告变化。 */
-export interface StandardCrudActionInputRenderContext {
+export interface StandardCrudActionInputRenderContext extends StandardCrudFeatureRequestContext {
   action: StandardCrudActionDefinition;
   value: unknown;
   onChange: (value: unknown) => void;

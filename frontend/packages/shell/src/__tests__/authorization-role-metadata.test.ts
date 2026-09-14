@@ -13,6 +13,8 @@ it('正式角色authoring经runtime投影进入列表、详情和表单', () => 
   const schema = buildStandardCrudListSchema(list.view, roleResource, { modelDocuments: [model] });
   expect(schema.columns.map(c => c.field)).toEqual(['ECODE', 'ENAME', 'Description', 'IsEnabled', 'IsBuiltIn']);
   expect(schema.rowActions.map(a => a.key)).toEqual(['edit', 'permissions', 'userRoles']);
+  expect(schema.rowActions.find(a => a.key === 'permissions')?.navigationTargetKey).toBe('authorization.workbench');
+  expect(schema.rowActions.every(a => !a.requiredPermissions?.length)).toBe(true);
   const resolved = resolveStandardCrudDetailSchema([detail], roleResource, { modelDocuments: [model] });
   expect(resolved.pageActions.map(a => a.key)).toEqual(['edit', 'permissions', 'userRoles']);
   const create = buildStandardCrudFormSchemaFromModel(model.Role, { mode: 'create', enumOptions: {} });
@@ -23,5 +25,5 @@ it('正式角色authoring经runtime投影进入列表、详情和表单', () => 
 });
 it('角色详情路由来自实际导航与lazy binding', () => {
   const routes = compileStandardCrudRouteProjection([{ ...bindings, metadata: { moduleId: 'Authorization', displayName: '权限管理', version: '1.0.0' } }], [navigation], [list, detail], []);
-  expect(routes.detailEntries).toContainEqual({ path: '/authorization/roles/:id', viewKey: 'authorization.role.detail', permissions: ['Authorization.Role.View'] });
+  expect(routes.detailEntries).toContainEqual({ path: '/authorization/roles/:id', viewKey: 'authorization.role.detail', permissions: undefined, featurePosition: undefined });
 });

@@ -44,6 +44,7 @@ export interface StandardCrudRuntimeActionSchema {
   standardAction?: StandardCrudActionDefinition['standardAction'];
   variant?: StandardCrudActionDefinition['variant'];
   confirmMessageKey?: string;
+  navigationTargetKey?: string;
   handlerKey?: string;
   inputKey?: string;
   requiredPermissions?: string[];
@@ -206,6 +207,7 @@ function readAction(value: MetadataRecord): StandardCrudRuntimeActionSchema {
     ...(variant.length > 0 ? { variant: variant as StandardCrudRuntimeActionSchema['variant'] } : {}),
     ...(confirmMessageKey.length > 0 ? { confirmMessageKey } : {}),
     ...(handlerKey.length > 0 ? { handlerKey } : {}),
+    ...(readString(value.navigationTargetKey) ? { navigationTargetKey: readString(value.navigationTargetKey) } : {}),
     ...(inputKey.length > 0 ? { inputKey } : {}),
     ...(requiredPermissions.length > 0 ? { requiredPermissions } : {}),
     ...(visibleWhen ? { visibleWhen } : {}),

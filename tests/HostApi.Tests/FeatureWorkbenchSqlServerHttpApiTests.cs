@@ -29,7 +29,7 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
         SetPosition(ordinary, read);
         fixture.Fault.FeatureCommands.Clear();
         using (var list = await ordinary.GetAsync("/api/authorization/workbench/roles?pageIndex=1&pageSize=20")) Assert.Equal(HttpStatusCode.OK, list.StatusCode);
-        Assert.Single(fixture.Fault.FeatureCommands.Where(command => command.Contains("EXISTS", StringComparison.Ordinal) && command.Contains("RoleFunctionGrant", StringComparison.Ordinal)));
+        Assert.Single(fixture.Fault.FeatureCommands, command => command.Contains("EXISTS", StringComparison.Ordinal) && command.Contains("RoleFunctionGrant", StringComparison.Ordinal));
         SetPosition(ordinary, save);
         using (var denied = await ordinary.PutAsJsonAsync($"/api/authorization/workbench/roles/{targetId}", new { positions = new[] { read } })) Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
         using (var grant = await admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{roleId}", new { positions = new[] { read, save } })) Assert.Equal(HttpStatusCode.NoContent, grant.StatusCode);
@@ -37,9 +37,120 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
         using (var wrong = await ordinary.PutAsJsonAsync($"/api/authorization/workbench/roles/{targetId}", new { positions = new[] { read } })) Assert.Equal(HttpStatusCode.Forbidden, wrong.StatusCode);
         SetPosition(ordinary, save);
         using (var allowed = await ordinary.PutAsJsonAsync($"/api/authorization/workbench/roles/{targetId}", new { positions = new[] { read } })) Assert.Equal(HttpStatusCode.NoContent, allowed.StatusCode);
-        using (var revoke = await admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{roleId}", new { positions = Array.Empty<string>() })) Assert.Equal(HttpStatusCode.NoContent, revoke.StatusCode);
+        var admitted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var finish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        fixture.Fault.AfterRegister = async (change, token) =>
+        {
+            if (change.EventType == "role.features.changed" && change.TargetId == targetId)
+            { admitted.TrySetResult(); await finish.Task.WaitAsync(token); }
+        };
+        var inFlight = ordinary.PutAsJsonAsync($"/api/authorization/workbench/roles/{targetId}", new { positions = new[] { read, save } });
+        try
+        {
+            await admitted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            using var revoke = await admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{roleId}", new { positions = Array.Empty<string>() });
+            Assert.Equal(HttpStatusCode.NoContent, revoke.StatusCode);
+        }
+        finally { finish.TrySetResult(); }
+        using (var completed = await inFlight) Assert.Equal(HttpStatusCode.NoContent, completed.StatusCode);
+        fixture.Fault.AfterRegister = null;
         SetPosition(ordinary, read);
         using (var revoked = await ordinary.GetAsync("/api/authorization/workbench/catalog")) Assert.Equal(HttpStatusCode.Forbidden, revoked.StatusCode);
+        using (var assign = await admin.PutAsJsonAsync($"/api/authorization/users/{actor}/roles", new { RoleCodes = new[] { "FeatureReader", "GlobalTarget" } })) Assert.Equal(HttpStatusCode.NoContent, assign.StatusCode);
+        using (var union = await ordinary.GetAsync("/api/authorization/workbench/catalog")) Assert.Equal(HttpStatusCode.OK, union.StatusCode);
+        using (var disabled = await admin.PutAsJsonAsync($"/api/authorization/roles/{targetId}", new { Name = "其他角色", IsEnabled = false })) Assert.Equal(HttpStatusCode.OK, disabled.StatusCode);
+        using (var denied = await ordinary.GetAsync("/api/authorization/workbench/catalog")) Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        fixture.Fault.Mode = "feature-decision";
+        using (var unavailable = await ordinary.GetAsync("/api/authorization/workbench/catalog")) Assert.Equal(HttpStatusCode.ServiceUnavailable, unavailable.StatusCode);
+        fixture.Fault.Mode = "";
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "功能授权整组校验、幂等及各事务失败点共同回滚")]
+    public async Task Replacement_ValidatesWholeSetAndRollsBackGrantAndAuditTogether()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        await fixture.RepeatFeatureSynchronizationAsync();
+        using var admin = await fixture.LoginAdministratorAsync();
+        var (read, save) = await PositionsAsync(admin);
+        var role = await CreateAsync(admin, "/api/authorization/roles", new { Code = "Replace", Name = "替换测试" });
+        var id = role.GetProperty("id").GetString()!;
+        SetPosition(admin, save);
+        foreach (var invalid in new[] { new[] { save }, new[] { "unknown" } })
+        {
+            using var result = await admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{id}", new { positions = invalid });
+            Assert.Equal(HttpStatusCode.BadRequest, result.StatusCode);
+            var problem = await result.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(400, problem.GetProperty("status").GetInt32());
+            Assert.Contains(invalid[0] == save ? "缺少本分支入口" : "未知或失效", problem.GetProperty("title").GetString());
+        }
+        using (var initial = await admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{id}", new { positions = new[] { read } }))
+            Assert.Equal(HttpStatusCode.NoContent, initial.StatusCode);
+        using (var same = await admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{id}", new { positions = new[] { read, read } }))
+            Assert.Equal(HttpStatusCode.NoContent, same.StatusCode);
+        foreach (var mode in new[] { "register", "write", "save", "commit" })
+        {
+            fixture.Fault.Mode = mode;
+            using var result = await admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{id}", new { positions = new[] { read, save } });
+            fixture.Fault.Mode = "";
+            Assert.Equal(HttpStatusCode.InternalServerError, result.StatusCode);
+            SetPosition(admin, read);
+            var actual = await admin.GetFromJsonAsync<JsonElement>($"/api/authorization/workbench/roles/{id}");
+            Assert.Equal(read, Assert.Single(actual.GetProperty("positions").EnumerateArray()).GetString());
+            var audit = await admin.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes?TargetId={id}&EventType=role.features.changed");
+            Assert.Equal(1, audit.GetProperty("total").GetInt32());
+            SetPosition(admin, save);
+        }
+        SetPosition(admin, read);
+        var list = await admin.GetFromJsonAsync<JsonElement>("/api/authorization/workbench/roles?query=LocalAdmin");
+        var administrator = Assert.Single(list.GetProperty("items").EnumerateArray()).GetProperty("EID").GetString();
+        SetPosition(admin, save);
+        using var protectedResult = await admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{administrator}", new { positions = Array.Empty<string>() });
+        Assert.Equal(HttpStatusCode.BadRequest, protectedResult.StatusCode);
+        Assert.Contains("LocalAdmin", (await protectedResult.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("title").GetString());
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "功能授权并发整组替换审计使用锁内实际前驱")]
+    public async Task ConcurrentReplacement_RecordsActualPredecessor()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        using var admin = await fixture.LoginAdministratorAsync();
+        var (read, save) = await PositionsAsync(admin);
+        var role = await CreateAsync(admin, "/api/authorization/roles", new { Code = "Race", Name = "并发测试" });
+        var id = role.GetProperty("id").GetString()!;
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        fixture.Fault.AfterRegister = async (change, token) =>
+        {
+            if (change.EventType == "role.features.changed" && change.Fields.Count == 1 && change.Fields[0].After.Value == "true")
+            { entered.TrySetResult(); await release.Task.WaitAsync(token); }
+        };
+        SetPosition(admin, save);
+        var first = admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{id}", new { positions = new[] { read } });
+        Task<HttpResponseMessage>? second = null;
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            second = admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{id}", new { positions = new[] { read, save } });
+            await fixture.Fault.ConcurrentCommand.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        finally { release.TrySetResult(); }
+        using var firstResult = await first;
+        using var secondResult = await second!;
+        Assert.Equal(HttpStatusCode.NoContent, firstResult.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, secondResult.StatusCode);
+        var audit = await admin.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes?TargetId={id}&EventType=role.features.changed");
+        var changes = audit.GetProperty("items").EnumerateArray().Select(row => Assert.Single(row.GetProperty("Changes").EnumerateArray())).ToArray();
+        Assert.Equal(2, changes.Length);
+        Assert.Equal(new[] { read, save }.Order(), changes.Select(change => change.GetProperty("field").GetString()).Order());
+        Assert.All(changes, change => { Assert.Equal("false", change.GetProperty("before").GetProperty("value").GetString()); Assert.Equal("true", change.GetProperty("after").GetProperty("value").GetString()); });
+    }
+
+    private static async Task<(string Read, string Save)> PositionsAsync(HttpClient client)
+    {
+        var current = await client.GetFromJsonAsync<JsonElement>("/api/auth/current-user");
+        var positions = current.GetProperty("featurePositions").EnumerateArray().Select(position => position.GetString()!).ToArray();
+        return (positions.Single(position => !position.EndsWith("/action:save", StringComparison.Ordinal)),
+            positions.Single(position => position.EndsWith("/action:save", StringComparison.Ordinal)));
     }
 
     // 准备经正式HTTP，响应失败直接保留最小Problem Details。

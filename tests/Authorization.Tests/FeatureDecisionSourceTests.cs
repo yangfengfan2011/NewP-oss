@@ -11,6 +11,18 @@ namespace ICP.Platform.Modules.Authorization.Tests;
 public sealed class FeatureDecisionSourceTests
 {
     [Fact]
+    public void PublicationRejectsPartialOrMergedIdentityAndKeepsPreviousSnapshot()
+    {
+        var catalog = new ActiveFeatureCatalog();
+        var points = FeatureCatalogCompiler.Compile([new("Authorization", "first", "navigation", "一", null, "read"),
+            new("Authorization", "second", "navigation", "二", null, "read")]);
+        catalog.Publish(points, new Dictionary<string, string> { [points[0].Position] = "one", [points[1].Position] = "two" });
+        var previous = catalog.Snapshot;
+        Assert.Throws<InvalidOperationException>(() => catalog.Publish(points, new Dictionary<string, string> { [points[0].Position] = "one" }));
+        Assert.Throws<ArgumentException>(() => catalog.Publish(points, new Dictionary<string, string> { [points[0].Position] = "same", [points[1].Position] = "same" }));
+        Assert.Same(previous, catalog.Snapshot);
+    }
+    [Fact]
     public async Task UsesEnabledRoleUnionAndCurrentLinksWithoutSubstitutingAnotherBehavior()
     {
         using var db = new EfPlatformDbContext(new DbContextOptionsBuilder<EfPlatformDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options,

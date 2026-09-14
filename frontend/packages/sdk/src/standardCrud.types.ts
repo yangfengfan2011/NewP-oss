@@ -33,6 +33,8 @@ export type StandardCrudOperationKind = 'create' | 'update' | 'action';
 
 /** 操作结果保持不透明；只有声明支持该结果的模块 presenter 才能解释 payload。 */
 export interface StandardCrudOperationResult {
+  /** 只引用已注册导航入口；Shell 解析路径并执行目标入口的正常准入。 */
+  navigation?: { entryKey: string; parameters?: Record<string, string> };
   change?: Omit<import("./pageComposition").ResourceChange, "resourceKey">;
   operation: StandardCrudOperationKind;
   payload: unknown;

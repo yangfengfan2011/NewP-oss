@@ -16,7 +16,8 @@ export interface PageProps {
   input: PageInput;
   /** 外层隐藏时保留实例；页面据此隐藏 Portal 等脱离 DOM 层级的呈现。 */
   active?: boolean;
-  reportState: (state: PageLifecycleState, discard?: () => void) => void;
+  /** save 返回 false 时保留当前页面与输入；调用方不得自动重放写入。 */
+  reportState: (state: PageLifecycleState, discard?: () => void, save?: () => Promise<boolean>) => void;
 }
 export interface PageBinding {
   pageKey: string; requiredParameters?: string[]; requiresRecordId?: boolean;

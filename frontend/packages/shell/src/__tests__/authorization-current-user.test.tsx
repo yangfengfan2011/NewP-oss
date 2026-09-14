@@ -57,6 +57,15 @@ describe('AuthorizationProvider current subject projection', () => {
     expect(refreshPermissions).toHaveBeenCalledOnce();
   });
 
+  it('projects live feature positions separately and never substitutes permission codes', async () => {
+    container = document.createElement('div'); document.body.append(container); root = createRoot(container);
+    for (const positions of [undefined, ['read', 'save'], ['read'], ['read', 'save']]) {
+      await act(async () => root!.render(<AuthorizationProvider permissions={['save']} featurePositions={positions}><PermissionProbe /></AuthorizationProvider>));
+      expect(observedAuthorization!.hasFeature('save')).toBe(positions?.includes('save') ?? false);
+      expect(observedAuthorization!.hasPermission('save')).toBe(true);
+    }
+  });
+
   it('keeps the legacy current-user loading contract when no snapshot is supplied', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       id: 'current-subject',

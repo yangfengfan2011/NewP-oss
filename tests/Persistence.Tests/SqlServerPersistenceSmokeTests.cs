@@ -133,6 +133,31 @@ public sealed class SqlServerPersistenceSmokeTests
             var actual = await ICP.Platform.Persistence.EfCore.ProviderTargets.SqlServerSchemaSnapshotReader.ReadAsync(db.Database.GetDbConnection(), CancellationToken.None);
             var mismatch = ICP.Platform.Persistence.EfCore.ProviderTargets.SqlServerProviderTargetComparer.FindFirstMismatch(expected, actual);
             Assert.True(mismatch is null, $"{mismatch}; expected={System.Text.Json.JsonSerializer.Serialize(expected.Tables.Single(t => t.Name == "FunctionPoint"))}; actual={System.Text.Json.JsonSerializer.Serialize(actual.Tables.Single(t => t.Name == "FunctionPoint"))}");
+            await using var sql = new SqlConnection(connection);
+            await sql.OpenAsync();
+            var keys = new[] { "Module/navigation:Case", "Module/navigation:case", "模块/navigation:é", "模块/navigation:e\u0301", "Module/navigation:" + new string('长', 5000) };
+            async Task InsertAsync(string id, string key, SqlTransaction? transaction = null)
+            {
+                await using var command = sql.CreateCommand(); command.Transaction = transaction;
+                command.CommandText = "INSERT INTO [FunctionPoint] ([EID],[PositionKey],[CreatedAt],[CreatedBy],[UpdatedAt],[UpdatedBy]) VALUES (@id,@key,SYSUTCDATETIME(),N'test',SYSUTCDATETIME(),N'test')";
+                command.Parameters.AddWithValue("@id", id);
+                command.Parameters.Add(new SqlParameter("@key", System.Data.SqlDbType.NVarChar, -1) { Value = key });
+                await command.ExecuteNonQueryAsync();
+            }
+            for (var i = 0; i < keys.Length; i++) await InsertAsync($"ordinal-{i}", keys[i]);
+            await using (var transaction = (SqlTransaction)await sql.BeginTransactionAsync())
+            {
+                await InsertAsync("rolled-back", "new-in-failed-sync", transaction);
+                var collision = await Assert.ThrowsAsync<SqlException>(() => InsertAsync("duplicate", keys[0], transaction));
+                Assert.Contains(collision.Number, new[] { 2601, 2627 });
+                await transaction.RollbackAsync();
+            }
+            await using var read = sql.CreateCommand();
+            read.CommandText = "SELECT [PositionKey], DATALENGTH([__ordinal_PositionKey]) FROM [FunctionPoint] ORDER BY [EID]";
+            await using var reader = await read.ExecuteReaderAsync();
+            var roundTrips = new List<string>();
+            while (await reader.ReadAsync()) { roundTrips.Add(reader.GetString(0)); Assert.Equal(128, reader.GetInt32(1)); }
+            Assert.Equal(keys, roundTrips);
         });
     private async Task RunCatalogScenarioAsync(
         string purpose,

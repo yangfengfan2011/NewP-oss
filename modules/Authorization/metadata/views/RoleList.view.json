@@ -81,12 +81,7 @@
       {
         "key": "permissions",
         "labelKey": "Permissions",
-        "handlerKey": "permissions",
-        "inputKey": "permissions",
-        "confirmMessageKey": "ConfirmPermissions",
-        "requiredPermissions": [
-          "Authorization.Permission.Assign"
-        ]
+        "handlerKey": "permissions"
       },
       {
         "labelKey": "UserRoles",

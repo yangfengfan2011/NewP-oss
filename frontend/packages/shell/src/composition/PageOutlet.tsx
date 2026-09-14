@@ -16,6 +16,7 @@ const DetailPage = lazy(() => import('../pages/StandardCrudDetailPageHost'));
 
 export function PageEntry({ page }: { page: PageRef }) {
   const location = useLocation();
+  const entryPage = useMemo(() => ({ ...page, parameters: { ...location.state?.pageParameters, ...page.parameters } }), [location.state, page]);
   const navigate = useNavigate();
   const { token } = theme.useToken();
   const { navigation, treeNavigation } = createAddressNavigation(location.search, (search, replace) => {
@@ -27,14 +28,14 @@ export function PageEntry({ page }: { page: PageRef }) {
     '--np-composition-secondary': token.colorTextSecondary,
     '--np-composition-radius': `${token.borderRadiusLG}px`,
   } as CSSProperties}>
-    <PageOutlet page={page} navigation={navigation} treeNavigation={treeNavigation} />
+    <PageOutlet page={entryPage} navigation={navigation} treeNavigation={treeNavigation} />
   </div></PageComposition>;
 }
 export function PageOutlet({ page, context, close, navigation, treeNavigation, active = true }: { page: PageRef; context?: PageInput['context']; close?: () => void; navigation?: React.ContextType<typeof PageNavigationContext>; treeNavigation?: TreeNavigation | null; active?: boolean }) {
   const runtime = useContext(CompositionContext);
   const parentActive = useContext(PageActivityContext);
   const instanceId = useId();
-  const reportState = useCallback((state: PageLifecycleState, discard?: () => void) => runtime?.report(instanceId, state, discard), [instanceId, runtime]);
+  const reportState = useCallback((state: PageLifecycleState, discard?: () => void, save?: () => Promise<boolean>) => runtime?.report(instanceId, state, discard, save), [instanceId, runtime]);
   useEffect(() => () => runtime?.report(instanceId, null), [instanceId, runtime]);
   const resolved = useMemo(() => {
     try { return { input: resolvePageInput(page, ModuleRegistry.getAllModules(), context) }; }

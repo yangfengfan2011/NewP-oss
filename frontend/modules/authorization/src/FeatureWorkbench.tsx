@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Button, Card, Checkbox, Flex, Input, List, Modal, Pagination, Space, Spin, Tag, Tree, Typography } from "antd";
-import { platformFetch } from "@icp-platform/core";
+import { platformFetch, useAuthorization } from "@icp-platform/core";
 import type { PageProps } from "@icp-platform/sdk";
 import { requestRole } from "./roleResource";
 import { buildFeatureTree, changeBranch, featureDiff, type FeaturePoint } from "./featureTree";
@@ -8,12 +8,13 @@ import { buildFeatureTree, changeBranch, featureDiff, type FeaturePoint } from "
 interface RoleSummary { id: string; code: string; displayName: string; isEnabled: boolean }
 interface RoleState { role: RoleSummary; positions: string[] }
 interface RolePage { items: { EID: string; ECODE: string; ENAME: string; IsEnabled: boolean }[]; total: number }
-interface Catalog { points: FeaturePoint[]; canSave: boolean }
+interface Catalog { points: FeaturePoint[] }
 const endpoint = "/api/authorization/workbench";
 const message = (error: unknown) => error instanceof Error ? error.message : "功能授权操作失败";
 
 /** 功能授权的局部草稿 owner；所有写入由正式 API 判权，不在浏览器推断管理员放行。 */
 export default function FeatureWorkbench({ input, reportState }: PageProps) {
+  const { hasFeature } = useAuthorization();
   const [catalog, setCatalog] = useState<Catalog>();
   const [roles, setRoles] = useState<RolePage>();
   const [roleQuery, setRoleQuery] = useState("");
@@ -35,7 +36,8 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
   const saved = useMemo(() => new Set(current?.positions ?? []), [current]);
   const diff = useMemo(() => featureDiff(saved, draft), [saved, draft]);
   const dirty = diff.added.length + diff.removed.length > 0;
-  const readOnly = !catalog?.canSave || current?.role.code.toLowerCase() === "localadmin";
+  const savePoint = catalog?.points.find(point => point.behaviorKey === "authorization.workbench.save");
+  const readOnly = !savePoint || !hasFeature(savePoint.position) || current?.role.code.toLowerCase() === "localadmin";
   const tree = useMemo(() => buildFeatureTree(catalog?.points ?? [], query, draft, grantedOnly), [catalog, query, draft, grantedOnly]);
   const read = useCallback((path: string, signal?: AbortSignal) => requestRole(platformFetch as typeof fetch, endpoint + path,
     { signal, headers: { "X-NewP-Feature": entryPosition } }), [entryPosition]);
@@ -96,7 +98,7 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
     } catch (failure) { setError(message(failure)); return false; }
     finally { pending.current = false; setSaving(false); }
   }, [catalog, current, draft, readOnly]);
-  useEffect(() => { reportState({ dirty, submitting: saving || loading }, reset); }, [dirty, saving, loading, reset, reportState]);
+  useEffect(() => { reportState({ dirty, submitting: saving || loading }, reset, save); }, [dirty, saving, loading, reset, save, reportState]);
   const chooseRole = (id: string) => {
     if (pending.current || id === current?.role.id) return;
     if (dirty) setSwitchTarget(id); else void loadRole(id);
@@ -119,6 +121,7 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
       </Card>
       <Card style={{ flex: "1 1 460px", minWidth: 0 }} title={current ? `${current.role.displayName} · ${current.role.code}` : "选择一个角色"}>
         {!catalog ? <Spin /> : !current ? <Typography.Text type="secondary">从左侧选择角色以查看授权。</Typography.Text> : <Spin spinning={loading}>
+          {!current.role.isEnabled && <Alert type="warning" message="此角色已停用，保留的授权当前不生效。" style={{ marginBottom: 16 }} />}
           {readOnly && <Alert type="info" message={current.role.code.toLowerCase() === "localadmin" ? "本地管理员授权由活动目录维护，只读。" : "当前账号可查看，未获保存授权。"} style={{ marginBottom: 16 }} />}
           <Space wrap style={{ marginBottom: 12 }}>
             <Input.Search aria-label="搜索功能" placeholder="功能名称或位置" value={query} onChange={event => setQuery(event.target.value)} />
@@ -126,7 +129,7 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
             <Button onClick={() => setExpanded(catalog.points.map(point => point.position))}>展开全部</Button>
             <Button onClick={() => setExpanded([])}>收起全部</Button>
           </Space>
-          <Space style={{ marginBottom: 12 }}>
+          <Space wrap style={{ marginBottom: 12 }}>
             <Button disabled={!branch || readOnly || saving} onClick={() => setDraft(changeBranch(catalog.points, draft, branch!, true))}>全选此分支</Button>
             <Button disabled={!branch || readOnly || saving} onClick={() => setDraft(changeBranch(catalog.points, draft, branch!, false))}>清除此分支</Button>
             <Typography.Text type="secondary">勾选独立生效；点击名称选定批量操作分支。</Typography.Text>
@@ -134,7 +137,8 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
           <Tree checkable checkStrictly virtual height={420} treeData={tree} checkedKeys={[...draft]} expandedKeys={expanded}
             onExpand={setExpanded} onSelect={keys => setBranch(keys[0]?.toString())} disabled={readOnly || saving}
             onCheck={(_keys, info) => setDraft(previous => { const next = new Set(previous); if (info.checked) next.add(String(info.node.key)); else next.delete(String(info.node.key)); return next; })} />
-          <Space style={{ marginTop: 16 }}>
+          <Space wrap style={{ marginTop: 16 }}>
+            <Typography.Text>已授权 {draft.size} / {catalog.points.length}</Typography.Text>
             <Tag color="green">新增 {diff.added.length}</Tag><Tag color="red">移除 {diff.removed.length}</Tag>
             <Button type="primary" disabled={!dirty || readOnly || loading} loading={saving} onClick={() => void save()}>保存授权</Button>
             <Button disabled={!dirty || saving || loading} onClick={reset}>重置</Button>

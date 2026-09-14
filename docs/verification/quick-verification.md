@@ -159,7 +159,7 @@ Gate 超时先由资产 owner 检查现有截图、DOM／可访问名称、失�
 .\scripts\verify.ps1 -AcceptanceGate IdentityFoundation,Personnel
 ```
 
-`accept.ps1` 除了启用环境开关和选择测试，还读取本次运行的原生 TRX，确认每个所选 Gate 恰好有一个通过结果。零匹配、跳过、缺失或不可读的结果都失败；`-Gate All` 要求三个 Gate 全部通过。测试自身失败时保留 `dotnet test` 原始输出和退出码。TRX 是临时执行确认，检查后删除，不另建裁决或证据协议。
+`accept.ps1` 除了启用环境开关和选择测试，还读取本次运行的原生 TRX，确认每个所选 Gate 恰好有一个通过结果。零匹配、跳过、缺失或不可读的结果都失败；`-Gate All` 要求四个 Gate 全部通过。测试自身失败时保留 `dotnet test` 原始输出和退出码。TRX 是临时执行确认，检查后删除，不另建裁决或证据协议。
 
 ### 环境集成测试的选择与报告
 

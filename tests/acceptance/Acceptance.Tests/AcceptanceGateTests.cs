@@ -36,8 +36,8 @@ public sealed class AcceptanceGateTests
         await new PersonnelAcceptanceRunner(RepositoryRoot, root, runId).RunAsync(CancellationToken.None);
     }
 
-    [EnvironmentGatedFact("NEWP_RUN_AUTHORIZATION_QUALIFICATION", "新功能授权的真实启动与读取切片")]
-    public async Task Authorization_StartupAndReadQualification()
+    [EnvironmentGatedFact(RunEnvironmentVariable, "功能授权真实启动、角色入口跳转与整组保存")]
+    public async Task Authorization_CompletesEveryScenario()
     {
         var (root, runId) = PrepareRun("authorization");
         await new AuthorizationAcceptanceRunner(RepositoryRoot, root, runId).RunAsync(CancellationToken.None);

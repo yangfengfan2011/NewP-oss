@@ -43,4 +43,7 @@ public sealed class FeatureCatalogCompilerTests
         Assert.Throws<InvalidOperationException>(() => FeatureCatalogCompiler.Compile([node, node]));
         Assert.Throws<InvalidOperationException>(() => FeatureCatalogCompiler.Compile([node with { BehaviorKey = "" }]));
     }
+    [Fact]
+    public void Selection_RejectsNullPositionAsValidationFailure() =>
+        Assert.Throws<InvalidOperationException>(() => FeatureCatalogCompiler.ValidateSelection([], [null!]));
 }

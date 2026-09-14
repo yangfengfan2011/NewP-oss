@@ -11,6 +11,7 @@ import { createRoleResource } from '../../../../modules/authorization/src/roleRe
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
+import { EntryNavigationContext } from '../navigation/entryNavigation';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 beforeAll(async () => { await Promise.all([import('@ant-design/pro-table'), import('@ant-design/pro-descriptions'), import('../pages/StandardCrudListDrawerRuntime')]); });
@@ -31,12 +32,13 @@ it('角色列表、Drawer表单与独立详情消费正式runtime字段和动作
   });
   vi.stubGlobal('fetch', fetcher);
   const resource = createRoleResource(fetcher);
+  const openEntry = vi.fn();
   const catalog = Object.fromEntries(Object.entries(dictionary.RoleView).map(([key, value]) => [`RoleView.${key}`, value.zhs]));
   const render = async (isDetail: boolean) => act(async () => root.render(<MemoryRouter>
     <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]} catalogs={{ zhs: catalog }}>
       <PlatformQueryProvider scopeKey="role-host"><AuthorizationProvider permissions={permissions}>
         <RuntimeMetadataProvider value={{ manifest: { modules: [] }, modelDocuments: [model], viewDocuments: [list, detail], navDocuments: [] }}>
-          {isDetail ? <StandardCrudDetailPageHost viewKey="authorization.role.detail" id="role-1" registration={resource} /> : <StandardCrudListPageHost viewKey="authorization.role.list" registration={resource} />}
+          <EntryNavigationContext.Provider value={openEntry}>{isDetail ? <StandardCrudDetailPageHost viewKey="authorization.role.detail" id="role-1" registration={resource} /> : <StandardCrudListPageHost viewKey="authorization.role.list" registration={resource} />}</EntryNavigationContext.Provider>
         </RuntimeMetadataProvider>
       </AuthorizationProvider></PlatformQueryProvider>
     </LocalizationProvider>
@@ -89,11 +91,6 @@ it('角色列表、Drawer表单与独立详情消费正式runtime字段和动作
   expect(container.textContent).not.toContain('停用角色');
   const configure = Array.from(container.querySelectorAll('button')).find(b => b.textContent === '配置权限');
   await act(async () => configure!.click());
-  await vi.waitFor(async () => { await act(async () => undefined); expect(document.body.textContent).toContain('Organization.Person.View'); });
-  await act(async () => (document.body.querySelector('.ant-modal input[type="checkbox"]') as HTMLInputElement).click());
-  const confirm = Array.from(document.body.querySelectorAll('.ant-modal button')).find(b => b.textContent?.replace(/\s/g, '') === '确认');
-  await act(async () => (confirm as HTMLButtonElement).click());
-  await vi.waitFor(() => expect(fetcher.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(true));
-  const body = fetcher.mock.calls.find(([url, init]) => String(url).endsWith('/role-1/permissions') && init?.method === 'PUT')![1]?.body;
-  expect(JSON.parse(String(body))).toEqual({ PermissionCodes: ['Organization.Person.View'] });
+  expect(openEntry).toHaveBeenCalledWith({ entryKey: 'authorization.workbench', parameters: { roleId: 'role-1' } });
+  expect(fetcher.mock.calls.some(([url]) => String(url).endsWith('/role-1/permissions'))).toBe(false);
 });

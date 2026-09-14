@@ -4,7 +4,7 @@ import type { PageLifecycleState, ResourceChange } from '@icp-platform/sdk';
 export type CompositionChange = ResourceChange & { originTreeId?: string };
 export const TreeInstanceContext = createContext<string | undefined>(undefined);
 export interface CompositionRuntime {
-  report: (id: string, state: PageLifecycleState | null, discard?: () => void) => void;
+  report: (id: string, state: PageLifecycleState | null, discard?: () => void, save?: () => Promise<boolean>) => void;
   leave: (proceed: () => void) => void;
   subscribe: (id: string, read: (change: CompositionChange) => Promise<void>) => () => void;
   committed: (change: CompositionChange) => Promise<void>;

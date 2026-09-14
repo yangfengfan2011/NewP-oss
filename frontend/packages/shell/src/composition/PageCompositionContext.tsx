@@ -12,7 +12,9 @@ export function PageComposition({ children }: { children: ReactNode }) {
   return existing ? <>{children}</> : <CompositionOwner>{children}</CompositionOwner>;
 }
 function CompositionOwner({ children }: { children: ReactNode }) {
-  const states = useRef(new Map<string, PageLifecycleState & { discard?: () => void }>());
+  const states = useRef(new Map<string, PageLifecycleState & { discard?: () => void; save?: () => Promise<boolean> }>());
+  const savingLeave = useRef(false);
+  const [saving, setSaving] = useState(false);
   const readers = useRef(new Map<string, (change: CompositionChange) => Promise<void>>());
   const queuedChanges = useRef<CompositionChange[]>([]);
   const draining = useRef(false);
@@ -23,6 +25,7 @@ function CompositionOwner({ children }: { children: ReactNode }) {
   const blocker = useBlocker(useCallback(() => [...states.current.values()].some(state => state.dirty || state.submitting), []));
   useEffect(() => {
     if (blocker.state !== 'blocked') return;
+    if (savingLeave.current) return;
     if ([...states.current.values()].some(state => state.submitting)) { blocker.reset(); return; }
     setPendingLeave({ proceed: blocker.proceed, cancel: blocker.reset });
   }, [blocker]);
@@ -56,7 +59,7 @@ function CompositionOwner({ children }: { children: ReactNode }) {
     await drain();
   }, [drain]);
   const runtime = useMemo<CompositionRuntime>(() => ({
-    report: (id, state, discard) => { if (state) states.current.set(id, { ...state, discard }); else states.current.delete(id); void drain(); },
+    report: (id, state, discard, save) => { if (state) states.current.set(id, { ...state, discard, save }); else states.current.delete(id); void drain(); },
     leave: (proceed) => {
       if ([...states.current.values()].some(state => state.submitting)) return;
       if ([...states.current.values()].some(state => state.dirty)) setPendingLeave({ proceed });
@@ -65,13 +68,29 @@ function CompositionOwner({ children }: { children: ReactNode }) {
     subscribe: (id, read) => { readers.current.set(id, read); return () => { readers.current.delete(id); }; },
     committed,
   }), [committed, drain]);
+  const canSave = [...states.current.values()].filter(state => state.dirty).every(state => !!state.save);
+  const cancelLeave = () => { if (savingLeave.current) return; pendingLeave?.cancel?.(); setPendingLeave(null); };
+  const discardLeave = () => {
+    if (savingLeave.current || [...states.current.values()].some(state => state.submitting)) return;
+    for (const state of states.current.values()) if (state.dirty) state.discard?.();
+    const proceed = pendingLeave?.proceed; setPendingLeave(null); proceed?.();
+  };
+  const saveLeave = async () => {
+    if (savingLeave.current || !canSave) return;
+    savingLeave.current = true; setSaving(true);
+    try {
+      for (const state of states.current.values()) if (state.dirty && !await state.save!()) return;
+      const proceed = pendingLeave?.proceed; setPendingLeave(null); proceed?.();
+    } catch { setError('保存失败，当前页面和未保存输入已保留。'); }
+    finally { savingLeave.current = false; setSaving(false); }
+  };
   return <CompositionContext.Provider value={runtime}>
     {error && <Alert type="warning" message={error} action={<Button onClick={() => runtime.leave(() => { void retryRead.current?.(); })}>重试读取</Button>} />}
     {children}
-    <Modal open={pendingLeave !== null} title="放弃未保存的修改？" okText="放弃修改" cancelText="继续编辑"
-      onCancel={() => { pendingLeave?.cancel?.(); setPendingLeave(null); }} onOk={() => { if ([...states.current.values()].some(state => state.submitting)) return;
-        for (const state of states.current.values()) if (state.dirty) state.discard?.();
-        const proceed = pendingLeave?.proceed; setPendingLeave(null); proceed?.(); }}>
+    <Modal open={pendingLeave !== null} title="放弃未保存的修改？" closable={!saving} onCancel={cancelLeave}
+      footer={<><Button disabled={saving} onClick={cancelLeave}>继续编辑</Button>
+        <Button disabled={saving} onClick={discardLeave}>放弃修改</Button>
+        {canSave && <Button type="primary" loading={saving} onClick={() => void saveLeave()}>保存并离开</Button>}</>}>
       当前组合包含未保存的输入，离开将放弃这些修改。
     </Modal>
   </CompositionContext.Provider>;

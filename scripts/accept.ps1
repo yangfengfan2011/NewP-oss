@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("IdentityFoundation", "Personnel", "ExampleRequiredField", "All")]
+    [ValidateSet("IdentityFoundation", "Personnel", "ExampleRequiredField", "Authorization", "All")]
     [string]$Gate,
     [switch]$NoBuild
 )
@@ -12,13 +12,13 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $testProject = Join-Path $repoRoot "tests\acceptance\Acceptance.Tests\Acceptance.Tests.csproj"
 
 if ([string]::IsNullOrWhiteSpace($Gate)) {
-    [Console]::Error.WriteLine("ACCEPT_GATE_REQUIRED: specify -Gate IdentityFoundation, Personnel, ExampleRequiredField, or All.")
+    [Console]::Error.WriteLine("ACCEPT_GATE_REQUIRED: specify -Gate IdentityFoundation, Personnel, ExampleRequiredField, Authorization, or All.")
     exit 2
 }
 
 $suite = "ICP.Platform.Acceptance.Tests.AcceptanceGateTests"
 $selectedGates = if ($Gate -eq "All") {
-    @("IdentityFoundation", "Personnel", "ExampleRequiredField")
+    @("IdentityFoundation", "Personnel", "ExampleRequiredField", "Authorization")
 } else {
     @($Gate)
 }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { EntryNavigationProvider } from './navigation/EntryNavigationContext';
 import {
   AuthorizationProvider,
   FirstPasswordChangePage,
@@ -101,6 +102,7 @@ function AuthorizationGate({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthorizationProvider
+      featurePositions={auth.user?.featurePositions ?? []}
       permissions={auth.user?.permissions ?? []}
       loading={!auth.isInitialized}
       refreshPermissions={auth.retrySessionValidation}
@@ -332,7 +334,7 @@ function App({ initialUser }: { initialUser?: AuthUser }) {
                 >
                   <RuntimeMetadataProvider value={runtimeMetadata}>
                     <AuthorizationGate>
-                      <AppRoutes />
+                      <EntryNavigationProvider><AppRoutes /></EntryNavigationProvider>
                     </AuthorizationGate>
                   </RuntimeMetadataProvider>
                 </PlatformProvider>

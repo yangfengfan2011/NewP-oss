@@ -11,7 +11,7 @@ import { CurrentPermissionScope } from '../components/CurrentPermissionScope';
 // 本测试要覆盖真实网络边界，撤销通用 AntD 夹具的 fetch 直通替身。
 vi.unmock('@icp-platform/core');
 
-const initialUser = { id: 'reader', ecode: 'reader', ename: 'Reader', revision: 1, mustChangePassword: false, isLocalAdministrator: false, timeZoneId: 'Asia/Taipei', permissions: ['Resource.View', 'Resource.Update'] };
+const initialUser = { id: 'reader', ecode: 'reader', ename: 'Reader', revision: 1, mustChangePassword: false, isLocalAdministrator: false, timeZoneId: 'Asia/Taipei', permissions: ['Resource.View', 'Resource.Update'], featurePositions: ['read', 'save'] };
 const container = document.createElement('div');
 let root: ReturnType<typeof createRoot> | undefined;
 afterEach(async () => { if (root) await act(async () => root?.unmount()); root = undefined; container.replaceChildren(); invalidatePlatformAntiforgeryToken(); vi.unstubAllGlobals(); });
@@ -26,6 +26,18 @@ async function render(user = initialUser) {
   await act(async () => { root = createRoot(container); root.render(<MemoryRouter><LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]} catalogs={{ zhs: {} }}><AuthProvider initialUser={user}><CurrentPermissionScope><Consumer /></CurrentPermissionScope></AuthProvider></LocalizationProvider></MemoryRouter>); });
 }
 const json = (value: unknown) => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } });
+
+it('invalidates cached reads when only feature positions change during navigation', async () => {
+  let reads = 0;
+  const fetcher = vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('current-user')
+    ? json({ ...initialUser, featurePositions: ['read'] }) : json({ value: ++reads === 1 ? '旧功能结果' : '当前功能结果' }));
+  vi.stubGlobal('fetch', fetcher);
+  await render();
+  expect(container.textContent).toContain('旧功能结果');
+  await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '进入另一页面')!.click());
+  expect(container.textContent).toContain('当前功能结果');
+  expect(fetcher.mock.calls.filter(([input]) => String(input).endsWith('current-user'))).toHaveLength(1);
+});
 
 it('refreshes buttons and drops cached data after an explicit rejected write without replay', async () => {
   let reads = 0;

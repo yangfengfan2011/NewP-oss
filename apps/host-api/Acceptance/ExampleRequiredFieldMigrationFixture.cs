@@ -136,9 +136,11 @@ internal static class ExampleRequiredFieldMigrationFixture
             }
         }
 
+        var historicalOwners = historicalModels.Values.Select(model => model.OwnerModuleId).ToHashSet(StringComparer.Ordinal);
         var models = current.Models
             .Select(model => ReferenceEquals(model, currentModel) ? stageModel : model)
             .Where(model => !droppedModules.Contains(model.OwnerModuleId))
+            .Where(model => !historicalOwners.Contains(model.OwnerModuleId) || historicalModels.ContainsKey(model.LogicalKey))
             .Select(model => historicalModels.GetValueOrDefault(model.LogicalKey) ?? model)
             .ToArray();
         var planDigest = PersistenceModelDigest.Compute(models);
@@ -161,22 +163,26 @@ internal static class ExampleRequiredFieldMigrationFixture
         ICollection<ModuleMigrationStream> streams,
         IDictionary<string, ModelDefinition> historicalModels)
     {
-        if (!string.Equals(stream.ModuleId, "Organization", StringComparison.Ordinal) || migrationCount != 1)
+        if (stream.ModuleId is not ("Organization" or "platform.foundation") || migrationCount != 1)
         {
             throw new InvalidOperationException(
                 $"Module {stream.ModuleId} has an unsupported historical prefix of {migrationCount} migrations.");
         }
 
         var migrations = stream.Migrations.Take(migrationCount).ToArray();
-        var organizationModels = LoadHistoricalModels(repositoryRoot, "Organization.Foundation", "Organization");
+        var isFoundation = stream.ModuleId == "platform.foundation";
+        var organizationModels = isFoundation
+            ? LoadHistoricalModels(repositoryRoot, "Platform.Foundation/Authorization", "Authorization")
+                .Concat(LoadHistoricalModels(repositoryRoot, "Platform.Foundation/ConfigCenter", "ConfigCenter")).ToArray()
+            : LoadHistoricalModels(repositoryRoot, "Organization.Foundation", "Organization");
         var modelDigest = PersistenceModelDigest.Compute(organizationModels);
         if (!string.Equals(modelDigest, migrations[^1].ToModelDigest, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
-                $"Organization foundation model digest {modelDigest} no longer matches accepted prefix {migrations[^1].ToModelDigest}.");
+                $"{stream.ModuleId} foundation model digest {modelDigest} no longer matches accepted prefix {migrations[^1].ToModelDigest}.");
         }
 
-        streams.Add(WithHistoricalBundle(stream, "Organization.Foundation.SqlServerMigrations") with
+        streams.Add(WithHistoricalBundle(stream, isFoundation ? "Platform.Foundation.SqlServerMigrations" : "Organization.Foundation.SqlServerMigrations") with
         {
             ModelDigest = modelDigest,
             ExpectedFrontier = migrations[^1].MigrationId,

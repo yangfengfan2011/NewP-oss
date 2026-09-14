@@ -733,6 +733,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
         {
             if (command.CommandText.Contains("[RoleFunctionGrant]", StringComparison.Ordinal)) FeatureCommands.Add(command.CommandText);
+            if (Mode == "feature-decision" && command.CommandText.Contains("[RoleFunctionGrant]", StringComparison.Ordinal)) throw new InvalidOperationException("injected feature decision failure");
             if (RegistrationWaiting && (command.CommandText.Contains("[Person]", StringComparison.Ordinal) || command.CommandText.Contains("[Role]", StringComparison.Ordinal) || command.CommandText.Contains("sp_getapplock", StringComparison.Ordinal))) ConcurrentCommand.TrySetResult();
             if (command.CommandText.Contains("[BusinessChange]", StringComparison.Ordinal))
             {
@@ -805,6 +806,16 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         var service = scope.ServiceProvider.GetRequiredService<ICP.Platform.Modules.Authorization.Services.IPermissionService>();
         var active = await service.GetAllPermissionsAsync();
         await service.SyncPermissionsAsync(active.Where(p => p.Code != code).Select(p => new PermissionDescriptor { Code = p.Code, DisplayName = p.DisplayName, ModuleId = p.ModuleId, Group = p.Group }));
+    }
+    internal async Task RepeatFeatureSynchronizationAsync()
+    {
+        using var scope = _app.Services.CreateScope();
+        var catalog = scope.ServiceProvider.GetRequiredService<ICP.Platform.Modules.Authorization.Services.ActiveFeatureCatalog>();
+        var before = catalog.Snapshot.ByPosition.ToDictionary(pair => pair.Key, pair => pair.Value.Id);
+        Fault.FeatureCommands.Clear();
+        await scope.ServiceProvider.GetRequiredService<IFeatureCatalogSynchronizer>().SynchronizeAsync(catalog.Snapshot.Points);
+        Assert.Equal(before.OrderBy(pair => pair.Key), catalog.Snapshot.ByPosition.Select(pair => KeyValuePair.Create(pair.Key, pair.Value.Id)).OrderBy(pair => pair.Key));
+        Assert.DoesNotContain(Fault.FeatureCommands, command => command.Contains("INSERT", StringComparison.Ordinal) || command.Contains("DELETE", StringComparison.Ordinal) || command.Contains("UPDATE", StringComparison.Ordinal));
     }
     // 只在本用例证明已受支持的内部初始化边界；普通职责准备仍全部走正式HTTP。
     internal async Task AssignInternalAdministratorAsync(string id)

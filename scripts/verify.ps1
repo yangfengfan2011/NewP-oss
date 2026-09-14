@@ -10,7 +10,7 @@
 [CmdletBinding()]
 param(
     [switch]$Quick,
-    [ValidateSet("IdentityFoundation", "Personnel", "ExampleRequiredField")]
+    [ValidateSet("IdentityFoundation", "Personnel", "ExampleRequiredField", "Authorization")]
     [string[]]$AcceptanceGate = @(),
     [ValidateSet("Baseline", "Candidate")]
     [string]$ProductionColdStartMode,

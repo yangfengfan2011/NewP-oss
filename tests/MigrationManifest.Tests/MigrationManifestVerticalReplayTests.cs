@@ -104,6 +104,49 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
     }
 
     [Fact]
+    public void FoundationTail_InIsolatedRepository_FinalizesIdempotentlyAndPreservesInputs()
+    {
+        var source = FindRepositoryRoot();
+        foreach (var module in new[] { "Authorization", "ConfigCenter" })
+            CopyDirectory(Path.Combine(source, "modules", module), Path.Combine(_fixtureRoot, "modules", module));
+        var relative = Path.Combine("server", "platform-persistence-efcore.migrations.sqlserver");
+        CopyDirectory(Path.Combine(source, relative, "Migrations"), Path.Combine(_fixtureRoot, relative, "Migrations"));
+        CopyDirectory(Path.Combine(source, relative, "bin", "Release"), Path.Combine(_fixtureRoot, relative, "bin", "Release"));
+        foreach (var path in new[] { Path.Combine(relative, "PlatformPersistence.EfCore.SqlServerMigrations.csproj"),
+            Path.Combine(relative, "PlatformFoundation.SqlServerMigrations.json"), Path.Combine("apps", "host-api", "HostApi.csproj"),
+            Path.Combine("server", "platform-modeling", "metadata", "storage-types.json") })
+            CopyFile(Path.Combine(source, path), Path.Combine(_fixtureRoot, path));
+        var host = Path.Combine(_fixtureRoot, "apps", "host-api", "bin", "Release", "net10.0");
+        CopyDirectory(Path.Combine(source, "apps", "host-api", "bin", "Release", "net10.0"), host);
+        var manifestPath = Path.Combine(_fixtureRoot, relative, "PlatformFoundation.SqlServerMigrations.json");
+        var manifest = MigrationManifestIntegrity.Parse(File.ReadAllBytes(manifestPath));
+        var tail = manifest.Migrations.Last();
+        var prefix = manifest with { Migrations = manifest.Migrations.SkipLast(1).ToArray() };
+        File.WriteAllBytes(manifestPath, MigrationManifestIntegrity.SerializeCanonical(prefix));
+        var hostManifest = Path.Combine(host, "PlatformFoundation.SqlServerMigrations.json");
+        File.Copy(manifestPath, hostManifest, true);
+        var application = new MigrationManifestApplication(_fixtureRoot);
+        var first = application.Finalize("platform.foundation", "SqlServer", tail.MigrationId, tail.Compatibility);
+        var firstBytes = File.ReadAllBytes(manifestPath);
+        var second = application.Finalize("platform.foundation", "SqlServer", tail.MigrationId, null);
+        Assert.True(first.Changed); Assert.False(second.Changed);
+        Assert.Equal(firstBytes, File.ReadAllBytes(manifestPath));
+        File.Copy(manifestPath, hostManifest, true);
+        InitializeIsolatedGitRepository();
+        var git = CaptureGitSnapshot();
+        var assets = new[] { manifestPath, hostManifest, Path.Combine(host, "PlatformPersistence.EfCore.SqlServerMigrations.dll"),
+            Path.Combine(_fixtureRoot, relative, "bin", "Release", "net10.0", "PlatformPersistence.EfCore.SqlServerMigrations.dll") };
+        var before = SnapshotFiles(assets);
+        var check = application.CheckAll(true);
+        Assert.Equal(1, check.CheckedBundles);
+        Assert.Equal(before, SnapshotFiles(assets)); Assert.Equal(git, CaptureGitSnapshot());
+        _output.WriteLine(JsonSerializer.Serialize(new { module = "platform.foundation", provider = "SqlServer", migration = tail.MigrationId,
+            compatibility = tail.Compatibility, firstFinalize = "finalized", secondFinalize = "already finalized",
+            manifestSha256 = Convert.ToHexStringLower(SHA256.HashData(firstBytes)), check.CheckedBundles, check.ProviderResults,
+            git, assets = before }));
+    }
+
+    [Fact]
     public void AuditFirstStream_InNewModule_FinalizesAndReplaysWithoutChangingCheckInputs()
     {
         InitializeIsolatedOrganizationRepository(FindRepositoryRoot(), "Audit");
@@ -155,6 +198,20 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
             checkedBundles = check.CheckedBundles,
             unchanged = true
         }));
+    }
+
+    [EnvironmentGatedFact(DatabaseEvidenceEnvironmentVariable, "当前完整正式 bundle 的数据库只读证据，包含 foundation 新尾")]
+    public async Task CheckCurrentAll_WithSqlServerReadOnlyObserver_PreservesDatabaseState()
+    {
+        var repository = FindRepositoryRoot();
+        var configuration = ResolveSqlServerObserver(repository);
+        await using var observer = await SqlServerDatabaseObserver.OpenAsync(configuration.ConnectionString);
+        var before = await observer.CaptureAsync();
+        var check = new MigrationManifestApplication(repository).CheckAll(true);
+        var after = await observer.CaptureAsync();
+        Assert.Equal(before, after);
+        _output.WriteLine(JsonSerializer.Serialize(new { connectionSource = configuration.Source, before, after,
+            check.CheckedBundles, check.ProviderResults, unchanged = true }));
     }
 
     [EnvironmentGatedFact(

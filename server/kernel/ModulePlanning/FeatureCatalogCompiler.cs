@@ -67,7 +67,7 @@ public static class FeatureCatalogCompiler
         var known = catalog.ToDictionary(point => point.Position, StringComparer.Ordinal);
         foreach (var position in selected)
         {
-            if (!known.TryGetValue(position, out var point)) throw new InvalidOperationException("授权集合包含未知或失效功能。");
+            if (string.IsNullOrWhiteSpace(position) || !known.TryGetValue(position, out var point)) throw new InvalidOperationException("授权集合包含未知或失效功能。");
             if (point.EntryDependencies.Any(dependency => !selected.Contains(dependency)))
                 throw new InvalidOperationException($"功能 {point.Title} 缺少本分支入口授权。");
         }

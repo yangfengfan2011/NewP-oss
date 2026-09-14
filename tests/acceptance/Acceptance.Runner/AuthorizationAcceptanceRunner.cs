@@ -93,22 +93,39 @@ internal sealed class AuthorizationAcceptanceRunner(string repositoryRoot, strin
         });
         var context = await browser.NewContextAsync(new() { Locale = "zh-CN", ViewportSize = new() { Width = 1440, Height = 1000 } });
         var page = await context.NewPageAsync();
+        var browserErrors = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        var failedResponses = new System.Collections.Concurrent.ConcurrentQueue<IResponse>();
+        page.PageError += (_, message) => browserErrors.Enqueue(message);
+        page.RequestFailed += (_, request) => browserErrors.Enqueue($"{request.Method} {request.Url}: {request.Failure}");
+        page.Response += (_, response) => { if (response.Status >= 400) failedResponses.Enqueue(response); };
         page.SetDefaultTimeout(30_000);
         try
         {
             await new ShellPageDriver(page, $"http://127.0.0.1:{port}").LoginAsync("admin", password);
-            await page.GetByRole(AriaRole.Link, new() { Name = "功能授权", Exact = true }).ClickAsync();
-            await page.GetByRole(AriaRole.Button, new() { Name = roleName, Exact = true }).ClickAsync();
+            await page.GetByRole(AriaRole.Link, new() { Name = "角色管理", Exact = true }).ClickAsync();
+            var row = await new StandardCrudPageDriver(page).WaitForRowAsync(roleName);
+            await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "role-list-baseline.png"), FullPage = true });
+            await row.GetByRole(AriaRole.Button, new() { Name = "配置权限", Exact = true }).ClickAsync();
+            await page.GetByText(roleName + " · AUTH-" + _runId[..8], new() { Exact = true }).WaitForAsync();
             await page.Locator(".ant-tree-checkbox").First.ClickAsync();
             await page.GetByRole(AriaRole.Button, new() { Name = "保存授权", Exact = true }).ClickAsync();
             await page.GetByText("授权已保存", new() { Exact = true }).WaitForAsync();
+            await page.Locator(".ant-btn-loading, .ant-spin-spinning").WaitForAsync(new() { State = WaitForSelectorState.Detached });
             await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "workbench.png"), FullPage = true });
+            await page.SetViewportSizeAsync(900, 1000);
+            await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "workbench-narrow.png"), FullPage = true });
         }
         catch (Exception failure)
         {
             try
             {
-                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "browser-failure.json"), new { url = page.Url, diagnostic = Sanitize(failure.ToString()), dom = Sanitize(await page.Locator("body").InnerTextAsync()) });
+                var diagnostics = new List<string>(browserErrors);
+                foreach (var response in failedResponses)
+                {
+                    try { diagnostics.Add($"{response.Request.Method} {response.Url}: {response.Status} {await response.TextAsync()}"); }
+                    catch (Exception exception) { diagnostics.Add($"Failed response body unavailable: {exception.Message}"); }
+                }
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "browser-failure.json"), new { url = page.Url, diagnostic = Sanitize(failure.ToString()), errors = diagnostics.Select(Sanitize), dom = Sanitize(await page.Locator("body").InnerTextAsync()) });
                 await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "browser-failure.png"), FullPage = true, Mask = [page.Locator("input,textarea")] });
             }
             catch (Exception) { /* 诊断采集不得覆盖原始浏览器失败。 */ }

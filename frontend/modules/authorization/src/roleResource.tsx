@@ -1,9 +1,7 @@
 import { UserRoleInput } from './userRoleInput';
-import { useEffect, useState } from 'react';
-import { Alert, Checkbox, Spin, Typography } from 'antd';
 import { platformFetch } from '@icp-platform/core';
 import { createStandardCrudRestDataAdapter, isStandardCrudRecord, StandardCrudRequestError,
-  type StandardCrudActionInputRenderContext, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
+  type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 
 const route = '/api/authorization/roles';
 function fields(value: unknown): Record<string, unknown> {
@@ -32,39 +30,6 @@ export async function requestRole(fetcher: typeof fetch, url: string, init?: Req
     throw new Error(isRead ? '角色读取失败，请重试。' : '操作结果未知，请刷新后核对；系统不会自动重试。');
   }
 }
-interface PermissionOption { code: string; displayName: string; moduleId: string; group?: string }
-export function RolePermissionInput({ detail, row, value, onChange }: StandardCrudActionInputRenderContext) {
-  const id = String(fields(detail ?? row).EID ?? '');
-  const [options, setOptions] = useState<PermissionOption[] | null>(null);
-  const [error, setError] = useState('');
-  // 加载只依赖角色标识，用户编辑由共享动作弹层持有；卸载取消请求和过期回写。
-  useEffect(() => {
-    const controller = new AbortController();
-    setOptions(null);
-    setError('');
-    onChange(undefined);
-    void Promise.all([
-      requestRole(platformFetch as typeof fetch, '/api/authorization/permissions', { signal: controller.signal }),
-      requestRole(platformFetch as typeof fetch, `${route}/${encodeURIComponent(id)}/permissions`, { signal: controller.signal }),
-    ]).then(([catalog, assigned]) => {
-      if (controller.signal.aborted) return;
-      if (!Array.isArray(catalog) || !isStandardCrudRecord(assigned) || !Array.isArray(assigned.permissionCodes)) throw new Error('权限目录响应无效');
-      setOptions(catalog as PermissionOption[]);
-      onChange({ codes: assigned.permissionCodes });
-    }).catch((failure: unknown) => { if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : '权限读取失败'); });
-    return () => controller.abort();
-  // onChange 属于宿主当前动作实例，读取不会因受控输入改变而重复。
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
-  if (error) return <Alert type="error" message={error} />;
-  if (!options) return <Spin />;
-  const selected = isStandardCrudRecord(value) && Array.isArray(value.codes) ? value.codes as string[] : [];
-  return <div><Typography.Paragraph>从当前生效目录选择角色权限。</Typography.Paragraph>
-    <Checkbox.Group style={{ display: 'flex', flexDirection: 'column', gap: 8 }} value={selected}
-      options={options.map(p => ({ value: p.code, label: `${p.moduleId} / ${p.group ?? ''} · ${p.displayName} (${p.code})` }))}
-      onChange={codes => onChange({ codes })} />
-  </div>;
-}
 export function createRoleResource(fetcher: typeof fetch = platformFetch as typeof fetch): StandardCrudResourceRegistration {
   const list = createStandardCrudRestDataAdapter<Record<string, unknown>>({ apiRoute: `${route}/query`, fetcher,
     mapListItem: value => { if (!isStandardCrudRecord(value) || typeof value.EID !== 'string') throw new Error('角色列表响应无效'); return { ...value, id: value.EID }; }, getRowId: row => String(row.id) });
@@ -78,17 +43,16 @@ export function createRoleResource(fetcher: typeof fetch = platformFetch as type
     },
     actionStateResolver: ({ action, detail, row }) => {
       const current = fields(detail ?? row);
-      const protectedAction = (current.ECODE === 'LocalAdmin' && ['edit', 'permissions'].includes(action.key)) || (current.IsBuiltIn === true && action.key === 'edit');
+      const protectedAction = (current.ECODE === 'LocalAdmin' && action.key === 'edit') || (current.IsBuiltIn === true && action.key === 'edit');
       return { visible: !protectedAction, available: !protectedAction };
     },
     actionHandlers: { userRoles: async ({ input }) => {
       if (!isStandardCrudRecord(input) || typeof input.accountId !== 'string' || !Array.isArray(input.codes)) throw new Error('请选择账号并等待角色读取成功。');
       await requestRole(fetcher, `/api/authorization/users/${encodeURIComponent(input.accountId)}/roles`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ RoleCodes: input.codes }) });
-    }, permissions: async ({ id, input }) => {
-      if (!id || !isStandardCrudRecord(input) || !Array.isArray(input.codes)) throw new Error('请等待权限目录读取成功。');
-      await requestRole(fetcher, `${route}/${encodeURIComponent(id)}/permissions`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ PermissionCodes: input.codes }) });
-    } },
-    actionInputRenderers: { userRoles: context => <UserRoleInput {...context} />, permissions: context => <RolePermissionInput {...context} /> },
+    }, permissions: async ({ id }) => {
+      if (!id) throw new Error('请选择一个角色。');
+      return { operation: 'action', payload: null, navigation: { entryKey: 'authorization.workbench', parameters: { roleId: id } } };    } },
+    actionInputRenderers: { userRoles: context => <UserRoleInput {...context} /> },
   };
 }
 export const roleResource = createRoleResource();

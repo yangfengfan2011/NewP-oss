@@ -1,4 +1,5 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useContext, useRef, useState } from 'react';
+import { EntryNavigationContext } from '../navigation/entryNavigation';
 import { StandardCrudRequestError } from '@icp-platform/sdk';
 import { handoffStandardCrudSuccess } from './standardCrudSuccessHandoff';
 import type {
@@ -43,6 +44,7 @@ export function useStandardCrudActionExecution<TDetail = unknown, TRow = unknown
   onResult, resourceKey, onCommitted,
 }: UseStandardCrudActionExecutionOptions) {
   const [synchronizationError, setSynchronizationError] = useState<string | null>(null);
+  const navigateEntry = useContext(EntryNavigationContext);
   const pendingRef = useRef(false);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [error, setError] = useState<StandardCrudActionExecutionError | null>(null);
@@ -64,6 +66,11 @@ export function useStandardCrudActionExecution<TDetail = unknown, TRow = unknown
     setError(null);
     try {
       const result = await handler(context);
+      if (result?.navigation) {
+        if (!navigateEntry) throw new Error('导航入口运行时不可用。');
+        navigateEntry(result.navigation);
+        return { status: 'succeeded', result };
+      }
       // 业务成功已确定；呈现和组合只读失败不能把动作标成失败或重放。
       setSynchronizationError(null);
       await handoffStandardCrudSuccess({
@@ -87,7 +94,7 @@ export function useStandardCrudActionExecution<TDetail = unknown, TRow = unknown
       pendingRef.current = false;
       setPendingKey(null);
     }
-  }, [onCommitted, onResult, refresh, resourceKey]);
+  }, [navigateEntry, onCommitted, onResult, refresh, resourceKey]);
 
   const clearError = useCallback(() => setError(null), []);
 

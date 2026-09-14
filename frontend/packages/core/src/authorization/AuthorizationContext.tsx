@@ -8,6 +8,7 @@ export interface Permission {
 }
 
 export interface AuthorizationContextValue {
+  hasFeature: (position: string) => boolean;
   permissions: string[];
   hasPermission: (permission: string) => boolean;
   hasAnyPermission: (permissions: string[]) => boolean;
@@ -19,6 +20,8 @@ export interface AuthorizationContextValue {
 const AuthorizationContext = createContext<AuthorizationContextValue | undefined>(undefined);
 
 export interface AuthorizationProviderProps {
+  /** 仅消费认证 owner 的当前完整位置投影，缺失时不放行。 */
+  featurePositions?: string[];
   children: ReactNode;
   permissions?: string[];
   loading?: boolean;
@@ -31,6 +34,7 @@ export interface AuthorizationProviderProps {
 
 export function AuthorizationProvider({
   children,
+  featurePositions = [],
   permissions: controlledPermissions,
   loading: controlledLoading,
   refreshPermissions: controlledRefreshPermissions,
@@ -94,6 +98,7 @@ export function AuthorizationProvider({
   };
 
   const value: AuthorizationContextValue = {
+    hasFeature: position => featurePositions.includes(position),
     permissions,
     hasPermission,
     hasAnyPermission,

@@ -2,8 +2,8 @@
   "schemaVersion": "1.0",
   "provider": "SqlServer",
   "moduleId": "platform.foundation",
-  "modelDigest": "038748ee556ade48658e64abc43230578eec7d4b9a7aab3429034bc53d7cf666",
-  "bundleChecksum": "b42c35c451478ecf5d83963d03611126483d49c092e22da4540b8f43c870ae55",
+  "modelDigest": "4de84f39bb8325d13ec34bd2d3c8db1ddfc58aa109d365328f8c34c20f94f08c",
+  "bundleChecksum": "74581e6d6afbf4bf1c1cea4a9769fb5ffd59c90b24855b1a0efea7dc9919b8e3",
   "migrations": [
     {
       "sequence": "000001",
@@ -12,6 +12,15 @@
       "contentDigest": "567d13d1d876229c52d36fba71554433ec2025e981987faa1df3990632bf2dd8",
       "fromModelDigest": "0000000000000000000000000000000000000000000000000000000000000000",
       "toModelDigest": "038748ee556ade48658e64abc43230578eec7d4b9a7aab3429034bc53d7cf666",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000002",
+      "migrationId": "20260914114935_AddFunctionalAuthorization",
+      "previousContentDigest": "567d13d1d876229c52d36fba71554433ec2025e981987faa1df3990632bf2dd8",
+      "contentDigest": "ad9b3c6ff3992f256ce40fd3677c0e950511ba2c90c2cad768f5c78e41663dec",
+      "fromModelDigest": "038748ee556ade48658e64abc43230578eec7d4b9a7aab3429034bc53d7cf666",
+      "toModelDigest": "4de84f39bb8325d13ec34bd2d3c8db1ddfc58aa109d365328f8c34c20f94f08c",
       "compatibility": "safe-expand"
     }
   ]

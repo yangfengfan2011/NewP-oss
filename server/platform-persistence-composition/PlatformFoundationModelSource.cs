@@ -1,4 +1,7 @@
 using ICP.Platform.Modeling.Definitions;
+using ICP.Platform.Modeling.Metadata;
+using ICP.Platform.Modeling.Projection;
+using ICP.Platform.Modeling.Validation;
 using ICP.Platform.Modules.Authorization.Persistence.Descriptors;
 using ICP.Platform.Modules.ConfigCenter.Persistence.Descriptors;
 
@@ -16,6 +19,23 @@ public static class PlatformFoundationModelSource
         AdaptOwner(new AuthorizationModelMetadataProvider().GetDefinitions(), "Authorization")
             .Concat(AdaptOwner(new ConfigCenterModelMetadataProvider().GetDefinitions(), "ConfigCenter"))
             .ToArray();
+
+    /// <summary>从显式隔离根读取同一基础流 authoring，供 finalize 重放而不消费调用进程的源码路径。</summary>
+    public static IReadOnlyList<ModelDefinition> GetDefinitions(string repositoryRoot)
+    {
+        var map = new JsonStorageTypeMapLoader().LoadFromFile(Path.Combine(repositoryRoot, "server", "platform-modeling", "metadata", "storage-types.json"));
+        var loader = new JsonModelMetadataDocumentLoader();
+        var validator = new ModelMetadataValidator();
+        var projector = new ModelMetadataProjector();
+        return new[] { "Authorization", "ConfigCenter" }.SelectMany(owner =>
+            Directory.EnumerateFiles(Path.Combine(repositoryRoot, "modules", owner, "metadata", "models"), "*.model.json")
+                .Order(StringComparer.Ordinal).Select(path =>
+                {
+                    var document = loader.LoadFromFile(path);
+                    validator.Validate(document, map);
+                    return projector.Project(document, map, "SqlServer") with { OwnerModuleId = owner, SchemaName = "dbo" };
+                })).ToArray();
+    }
 
     private static IEnumerable<ModelDefinition> AdaptOwner(
         IEnumerable<ModelDefinition> definitions,

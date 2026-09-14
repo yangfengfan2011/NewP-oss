@@ -164,7 +164,7 @@ public sealed class ModuleCapsuleCandidateReader
                     "built-in",
                     Path.GetFullPath(manifestPath),
                     "/"),
-            ReadPersistence(root, manifestPath));
+            ReadPersistence(root, manifestPath)) { Features = FeatureCatalogCompiler.Read(root, moduleId) };
     }
 
     private static ModuleCapsuleCandidate ReadInstalledModule(InstalledPluginRecord record)
@@ -211,7 +211,7 @@ public sealed class ModuleCapsuleCandidateReader
             metadata.PermissionReferences,
             metadata.ModelKeys,
             new ModulePlanProvenance("installed-package", manifestPath, "/"),
-            ReadPersistence(root, manifestPath));
+            ReadPersistence(root, manifestPath)) { Features = FeatureCatalogCompiler.Read(root, moduleId) };
     }
 
     private static ModulePersistenceContribution? ReadPersistence(JsonElement root, string sourcePath)

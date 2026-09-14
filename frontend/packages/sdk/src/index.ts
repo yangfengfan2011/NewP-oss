@@ -19,6 +19,7 @@ export interface RouteConfig {
   exact?: boolean;
   requireAuth?: boolean;
   permissions?: string[];
+  featurePosition?: string;
   localAdministratorOnly?: boolean;
 }
 
@@ -29,6 +30,7 @@ export interface MenuConfig {
   icon?: string;
   order?: number;
   permissions?: string[];
+  featurePosition?: string;
   localAdministratorOnly?: boolean;
   children?: MenuConfig[];
 }
@@ -255,6 +257,8 @@ export interface UiConfig {
 export type ShellView = 'business' | 'platform';
 
 export interface AuthUser {
+  /** 当前请求从启用角色并集解析的完整功能位置。 */
+  featurePositions?: string[];
   id: string;
   ecode: string;
   ename: string;

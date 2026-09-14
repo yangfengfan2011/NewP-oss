@@ -119,6 +119,21 @@ public sealed class SqlServerPersistenceSmokeTests
     public Task SqlServerOrganizationDepartmentHierarchy_EnforcesSiblingUniquenessAndCompanyScopedParent() =>
         RunCatalogScenarioAsync("departmenthierarchy", VerifyOrganizationDepartmentHierarchyAsync);
 
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server，完整位置物理目标与正式迁移一致")]
+    public Task SqlServerOrdinalIdentity_ActualSchemaMatchesFormalTarget() =>
+        RunCatalogScenarioAsync("ordinal", async (admin, catalog, identity) =>
+        {
+            var connection = BuildCatalogConnectionString(admin, catalog);
+            await using var provider = BuildProvider(connection, identity);
+            await RunMigrationsAsync(provider);
+            using var scope = provider.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+            var plan = scope.ServiceProvider.GetRequiredService<CompiledPersistencePlan>();
+            var expected = new ICP.Platform.Persistence.EfCore.ProviderTargets.EfProviderTargetSource(db, plan).Read();
+            var actual = await ICP.Platform.Persistence.EfCore.ProviderTargets.SqlServerSchemaSnapshotReader.ReadAsync(db.Database.GetDbConnection(), CancellationToken.None);
+            var mismatch = ICP.Platform.Persistence.EfCore.ProviderTargets.SqlServerProviderTargetComparer.FindFirstMismatch(expected, actual);
+            Assert.True(mismatch is null, $"{mismatch}; expected={System.Text.Json.JsonSerializer.Serialize(expected.Tables.Single(t => t.Name == "FunctionPoint"))}; actual={System.Text.Json.JsonSerializer.Serialize(actual.Tables.Single(t => t.Name == "FunctionPoint"))}");
+        });
     private async Task RunCatalogScenarioAsync(
         string purpose,
         Func<string, string, WorktreeDatabaseIdentity, Task> scenario)

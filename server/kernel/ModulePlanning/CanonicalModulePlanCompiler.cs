@@ -35,7 +35,7 @@ public sealed class CanonicalModulePlanCompiler
             .Concat(ValidateBindings(candidateId, candidateArray))
             .Concat(ValidatePermissionReferences(candidateId, candidateArray))
             .Concat(ValidateRouteOwners(candidateId, candidateArray))
-            .Concat(ValidateModelOwners(candidateId, candidateArray))
+            .Concat(ValidateModelOwners(candidateId, candidateArray)).Concat(ValidateFeatures(candidateId, candidateArray))
             .OrderBy(static diagnostic => diagnostic.Stage, StringComparer.Ordinal)
             .ThenBy(static diagnostic => diagnostic.Code, StringComparer.Ordinal)
             .ThenBy(static diagnostic => diagnostic.ModuleId, StringComparer.Ordinal)
@@ -347,6 +347,27 @@ public sealed class CanonicalModulePlanCompiler
             .ToArray();
     }
 
+    // 功能结构与模块归属在 canonical candidate 阶段失败关闭，不能留到首次页面访问。
+    private static IReadOnlyList<ModulePlanDiagnostic> ValidateFeatures(string candidateId, IEnumerable<ModuleCapsuleCandidate> candidates)
+    {
+        var diagnostics = new List<ModulePlanDiagnostic>();
+        foreach (var candidate in candidates)
+        {
+            try
+            {
+                if (candidate.Features.Any(node => node.ModuleId != candidate.ModuleId))
+                    throw new InvalidOperationException("功能声明不能跨模块冒领归属。");
+                FeatureCatalogCompiler.Compile(candidate.Features);
+            }
+            catch (InvalidOperationException exception)
+            {
+                diagnostics.Add(new(candidateId, candidate.ModuleId, candidate.Version, "features",
+                    candidate.Provenance.SourcePath, "/features", "features", "MODULE_FEATURE_INVALID", exception.Message));
+            }
+        }
+        return diagnostics;
+    }
+
     private static CanonicalModulePlanModule Normalize(ModuleCapsuleCandidate candidate)
     {
         ArgumentNullException.ThrowIfNull(candidate);
@@ -371,7 +392,7 @@ public sealed class CanonicalModulePlanCompiler
             Sort(candidate.PermissionReferences),
             Sort(candidate.ModelKeys),
             provenance,
-            NormalizePersistence(candidate.Persistence));
+            NormalizePersistence(candidate.Persistence)) { Features = candidate.Features.OrderBy(node => node.Key, StringComparer.Ordinal).ToArray() };
     }
 
     private static ModulePersistenceContribution? NormalizePersistence(ModulePersistenceContribution? persistence)

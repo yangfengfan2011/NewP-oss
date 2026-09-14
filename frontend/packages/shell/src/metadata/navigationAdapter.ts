@@ -15,7 +15,7 @@ export function buildMenusFromNavDocuments(
     label: resolveLabel(item.titleKey, item.key),
     path: item.path || undefined,
     order: item.order,
-    permissions: item.permissions,
+    permissions: item.permissions, featurePosition: item.featurePosition,
     localAdministratorOnly: item.localAdministratorOnly,
     children: [],
     _parentKey: item.parentKey,
@@ -51,7 +51,7 @@ function stripInternalFields(menu: RuntimeMenuNode): MenuConfig {
     path: menu.path,
     icon: menu.icon,
     order: menu.order,
-    permissions: menu.permissions,
+    permissions: menu.permissions, featurePosition: menu.featurePosition,
     localAdministratorOnly: menu.localAdministratorOnly,
     children: menu.children?.map((child) => stripInternalFields(child as RuntimeMenuNode)),
   };

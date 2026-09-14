@@ -15,6 +15,9 @@ public sealed class PermissionAuthorizationPolicyProvider : DefaultAuthorization
 
     public override Task<AuthorizationPolicy?> GetPolicyAsync(string policyName)
     {
+        if (policyName.StartsWith(RequireFeatureAttribute.Prefix, StringComparison.Ordinal))
+            return Task.FromResult<AuthorizationPolicy?>(new AuthorizationPolicyBuilder().RequireAuthenticatedUser()
+                .AddRequirements(new FeatureAuthorizationRequirement(policyName[RequireFeatureAttribute.Prefix.Length..])).Build());
         if (policyName.StartsWith(RequirePermissionAttribute.PolicyPrefix, StringComparison.Ordinal))
         {
             var permissionCode = policyName[RequirePermissionAttribute.PolicyPrefix.Length..];

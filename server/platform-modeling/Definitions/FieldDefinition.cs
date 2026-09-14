@@ -10,4 +10,8 @@ public sealed record FieldDefinition(
     bool Required,
     bool IsPrimaryKey,
     bool IsAuditField,
-    FieldDisplayRuleDefinition? DisplayRule = null);
+    FieldDisplayRuleDefinition? DisplayRule = null)
+{
+    /// <summary>完整文本身份使用 Ordinal 比较，物理索引由 provider 派生。</summary>
+    public bool OrdinalKey { get; init; }
+}

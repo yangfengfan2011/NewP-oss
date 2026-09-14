@@ -14,6 +14,7 @@
     "entry": "authorization",
     "bindingMode": "behavior-bindings",
     "bindings": [
+      "authorization.workbench",
       "authorization.role.list",
       "authorization.role.detail"
     ]
@@ -21,6 +22,8 @@
   "persistence": {
     "models": [
       "metadata/models/Permission.model.json",
+      "metadata/models/FunctionPoint.model.json",
+      "metadata/models/RoleFunctionGrant.model.json",
       "metadata/models/Role.model.json",
       "metadata/models/RolePermission.model.json",
       "metadata/models/UserRole.model.json"
@@ -30,6 +33,10 @@
   "backend": {
     "behaviorKey": "authorization.backend"
   },
+  "features": [
+    { "key": "authorization.workbench", "kind": "navigation", "title": "功能授权", "behaviorKey": "authorization.workbench.read" },
+    { "key": "save", "kind": "action", "title": "保存授权", "parentKey": "authorization.workbench", "behaviorKey": "authorization.workbench.save" }
+  ],
   "security": {
     "permissions": [
       {

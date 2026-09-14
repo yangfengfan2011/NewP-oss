@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "FunctionPoint": {
+    "kind": "Entity",
+    "fields": [ { "name": "PositionKey", "storage": { "type": "string", "ordinalKey": true } } ],
+    "indexes": [ { "name": "UX_FunctionPoint_PositionKey", "fields": ["PositionKey"], "unique": true } ]
+  }
+}

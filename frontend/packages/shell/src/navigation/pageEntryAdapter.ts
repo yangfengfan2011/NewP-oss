@@ -12,10 +12,10 @@ export function buildPageEntriesFromNavDocuments(
       entryType: item.entryType,
       targetKey: item.targetKey,
       ...(item.redirectTo ? { redirectTo: item.redirectTo } : {}),
-      permissions: item.permissions,
+      permissions: item.permissions, featurePosition: item.featurePosition,
       ...(item.localAdministratorOnly ? { localAdministratorOnly: true } : {}),
     })), ...document.navigation.items.filter(item => item.path && item.page).map(item => ({
-      path: item.path!, entryType: 'page' as const, targetKey: item.page!.pageKey, page: item.page, permissions: item.permissions,
+      path: item.path!, entryType: 'page' as const, targetKey: item.page!.pageKey, page: { ...item.page!, parameters: { ...item.page!.parameters, ...(item.featurePosition ? { featurePosition: item.featurePosition } : {}) } }, permissions: item.permissions, featurePosition: item.featurePosition,
     }))],
   );
 }

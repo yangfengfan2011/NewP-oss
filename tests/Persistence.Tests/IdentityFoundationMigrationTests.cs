@@ -54,15 +54,17 @@ public sealed class IdentityFoundationMigrationTests
             .ToArray();
 
         Assert.Equal(
-            "038748ee556ade48658e64abc43230578eec7d4b9a7aab3429034bc53d7cf666",
+            "4de84f39bb8325d13ec34bd2d3c8db1ddfc58aa109d365328f8c34c20f94f08c",
             PersistenceModelDigest.Compute(definitions));
+        Assert.Equal("038748ee556ade48658e64abc43230578eec7d4b9a7aab3429034bc53d7cf666",
+            PersistenceModelDigest.Compute(definitions.Where(model => model.Name is not ("FunctionPoint" or "RoleFunctionGrant"))));
     }
 
     [Fact]
     public void SqlServerPlatformFoundationFrontier_IsCurrentEmptyDatabaseMigration()
     {
         Assert.Equal(
-            "20260812144154_PlatformFoundation",
+            "20260914114935_AddFunctionalAuthorization",
             PlatformCoreMigrationFrontiers.SqlServerPlatformFoundation);
     }
 
@@ -103,7 +105,7 @@ public sealed class IdentityFoundationMigrationTests
         var definitions = PlatformFoundationModelSource.GetDefinitions();
 
         Assert.Equal(
-            ["ConfigItem", "Permission", "Role", "RolePermission", "UserRole", "ValueListItem"],
+            ["ConfigItem", "FunctionPoint", "Permission", "Role", "RoleFunctionGrant", "RolePermission", "UserRole", "ValueListItem"],
             definitions.Select(static model => model.Name).Order(StringComparer.Ordinal));
 
         var adapted = PlatformPersistenceModelCatalog.AdaptPlatformCore(definitions);
@@ -637,7 +639,9 @@ public sealed class IdentityFoundationMigrationTests
             "PlatformFoundation.SqlServerMigrations.json");
         using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
         var root = document.RootElement;
-        var migration = Assert.Single(root.GetProperty("migrations").EnumerateArray());
+        var migrations = root.GetProperty("migrations").EnumerateArray().ToArray();
+        Assert.Equal(2, migrations.Length);
+        var migration = migrations[0];
         var sourcePath = Path.Combine(
             repositoryRoot,
             "server",
@@ -647,7 +651,8 @@ public sealed class IdentityFoundationMigrationTests
 
         Assert.Equal("platform.foundation", root.GetProperty("moduleId").GetString());
         Assert.Equal(new string('0', 64), migration.GetProperty("fromModelDigest").GetString());
-        Assert.Equal(root.GetProperty("modelDigest").GetString(), migration.GetProperty("toModelDigest").GetString());
+        Assert.Equal(root.GetProperty("modelDigest").GetString(), migrations[^1].GetProperty("toModelDigest").GetString());
+        Assert.Equal(migration.GetProperty("toModelDigest").GetString(), migrations[1].GetProperty("fromModelDigest").GetString());
         Assert.Equal(
             root.GetProperty("bundleChecksum").GetString(),
             MigrationManifestIntegrity.ComputeBundleChecksum(File.ReadAllBytes(

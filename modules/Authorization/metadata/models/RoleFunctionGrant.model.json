@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "RoleFunctionGrant": {
+    "kind": "Entity",
+    "fields": [
+      { "name": "RoleId", "storage": { "type": "string" } },
+      { "name": "FunctionPointId", "storage": { "type": "string" } },
+      { "name": "GrantedAt", "storage": { "type": "datetime" } },
+      { "name": "GrantedBy", "storage": { "type": "string", "nullable": true } }
+    ],
+    "indexes": [
+      { "name": "UX_RoleFunctionGrant_Role_Function", "fields": ["RoleId", "FunctionPointId"], "unique": true },
+      { "name": "IX_RoleFunctionGrant_Function_Role", "fields": ["FunctionPointId", "RoleId"], "unique": false }
+    ]
+  }
+}

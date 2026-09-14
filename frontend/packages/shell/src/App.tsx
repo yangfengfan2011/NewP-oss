@@ -78,11 +78,15 @@ function RouteAccess({
   children,
   permissions,
   localAdministratorOnly,
+  featurePosition,
 }: {
   children: React.ReactNode;
   permissions?: string[];
   localAdministratorOnly?: boolean;
+  featurePosition?: string;
 }) {
+  const auth = useAuth();
+  if (featurePosition) return auth.user?.featurePositions?.includes(featurePosition) ? <>{children}</> : <Navigate to="/" replace />;
   let content = <>{children}</>;
   if (permissions && permissions.length > 0) {
     content = <PermissionGuard permissions={permissions}>{content}</PermissionGuard>;
@@ -156,7 +160,7 @@ function AppRoutes() {
             path={entry.path}
             element={(
               <RouteAccess
-                permissions={entry.permissions}
+                permissions={entry.permissions} featurePosition={entry.featurePosition}
                 localAdministratorOnly={entry.localAdministratorOnly}
               >
                 {renderPageEntry(entry)}
@@ -187,7 +191,7 @@ function AppRoutes() {
             path={route.path}
             element={(
               <RouteAccess
-                permissions={route.permissions}
+                permissions={route.permissions} featurePosition={route.featurePosition}
                 localAdministratorOnly={route.localAdministratorOnly}
               >
                 <RouteCapabilityOutlet capability={{

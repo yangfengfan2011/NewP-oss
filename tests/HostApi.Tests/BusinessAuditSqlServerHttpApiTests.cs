@@ -718,6 +718,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
             await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Database.EnsureCreatedAsync();
             var permissions = modules.OfType<IPermissionProvider>().SelectMany(p => p.GetPermissions()).ToArray();
             await scope.ServiceProvider.GetRequiredService<AuthorizationCatalogInitializer>().InitializeAsync(permissions);
+            await scope.ServiceProvider.GetRequiredService<IFeatureCatalogSynchronizer>().SynchronizeAsync(modulePlan.FeatureCatalog);
         }
         await _app.StartAsync();
     }
@@ -728,8 +729,10 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         internal volatile bool RegistrationWaiting;
         internal TaskCompletionSource ConcurrentCommand { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal List<string> Commands { get; } = [];
+        internal List<string> FeatureCommands { get; } = [];
         public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
         {
+            if (command.CommandText.Contains("[RoleFunctionGrant]", StringComparison.Ordinal)) FeatureCommands.Add(command.CommandText);
             if (RegistrationWaiting && (command.CommandText.Contains("[Person]", StringComparison.Ordinal) || command.CommandText.Contains("[Role]", StringComparison.Ordinal) || command.CommandText.Contains("sp_getapplock", StringComparison.Ordinal))) ConcurrentCommand.TrySetResult();
             if (command.CommandText.Contains("[BusinessChange]", StringComparison.Ordinal))
             {

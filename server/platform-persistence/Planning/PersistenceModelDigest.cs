@@ -34,7 +34,12 @@ public static class PersistenceModelDigest
                 kind = definition.Kind.ToString(),
                 fields = definition.Fields
                     .OrderBy(static field => field.Name, StringComparer.Ordinal)
-                    .Select(static field => new
+                    .Select(static field => field.OrdinalKey ? (object)new
+                    {
+                        field.Name, field.StoreName, kind = field.Kind.ToString(),
+                        valueType = (field.ValueType == FieldValueType.Instant ? FieldValueType.DateTime : field.ValueType).ToString(),
+                        field.StoreType, field.Required, field.IsPrimaryKey, field.IsAuditField, field.OrdinalKey
+                    } : new
                     {
                         field.Name,
                         field.StoreName,

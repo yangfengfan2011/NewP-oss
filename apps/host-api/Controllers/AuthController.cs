@@ -43,6 +43,7 @@ public sealed class AuthController : ControllerBase
     private readonly PasswordVerificationGate _passwordVerificationGate;
     private readonly PlatformAuthorizationService _authorizationService;
     private readonly ILogger<AuthController> _logger;
+    private readonly IFeatureGrantProjection? _featureGrants;
 
     public AuthController(
         ILocalCredentialAuthenticator credentialAuthenticator,
@@ -51,7 +52,8 @@ public sealed class AuthController : ControllerBase
         IHostAuthenticationCookie cookie,
         PasswordVerificationGate passwordVerificationGate,
         PlatformAuthorizationService authorizationService,
-        ILogger<AuthController> logger)
+        ILogger<AuthController> logger,
+        IFeatureGrantProjection? featureGrants = null)
     {
         _credentialAuthenticator = credentialAuthenticator;
         _sessionRegistry = sessionRegistry;
@@ -60,6 +62,7 @@ public sealed class AuthController : ControllerBase
         _passwordVerificationGate = passwordVerificationGate;
         _authorizationService = authorizationService;
         _logger = logger;
+        _featureGrants = featureGrants;
     }
 
     [HttpPost("login")]
@@ -97,6 +100,9 @@ public sealed class AuthController : ControllerBase
         var permissions = await _authorizationService.GetUserPermissionsAsync(
             authentication.Account.AccountEid,
             cancellationToken);
+        IReadOnlyList<string> features;
+        try { features = _featureGrants is null ? [] : await _featureGrants.GetCurrentPositionsAsync(authentication.Account.AccountEid, cancellationToken); }
+        catch (Exception error) when (error is not OperationCanceledException) { return ProblemResult(503, "AUTHORIZATION_DECISION_UNAVAILABLE"); }
         AuthenticationSessionIssuance issuance;
         try
         {
@@ -124,7 +130,7 @@ public sealed class AuthController : ControllerBase
             authentication.Account,
             permissions,
             authentication.IsTemporary,
-            issuance.Session.TimeZoneId));
+            issuance.Session.TimeZoneId) with { FeaturePositions = features });
     }
 
     [HttpPost("logout")]
@@ -168,6 +174,9 @@ public sealed class AuthController : ControllerBase
         }
 
         var permissions = await _authorizationService.GetUserPermissionsAsync(userId, cancellationToken);
+        IReadOnlyList<string> features;
+        try { features = _featureGrants is null ? [] : await _featureGrants.GetCurrentPositionsAsync(userId, cancellationToken); }
+        catch (Exception error) when (error is not OperationCanceledException) { return ProblemResult(503, "AUTHORIZATION_DECISION_UNAVAILABLE"); }
         var restricted = string.Equals(
             User.FindFirstValue(HostSessionAuthenticationHandler.SessionTypeClaim),
             AuthenticationSessionType.Restricted.ToString(),
@@ -194,7 +203,7 @@ public sealed class AuthController : ControllerBase
             restricted,
             revision,
             isLocalAdministrator,
-            timeZoneId));
+            timeZoneId) { FeaturePositions = features });
     }
 
     private ObjectResult ProblemResult(int status, string code)
@@ -240,4 +249,7 @@ public sealed record AuthUserResponse(
     bool MustChangePassword,
     long Revision,
     bool IsLocalAdministrator,
-    string TimeZoneId);
+    string TimeZoneId)
+{
+    public IReadOnlyList<string> FeaturePositions { get; init; } = [];
+}

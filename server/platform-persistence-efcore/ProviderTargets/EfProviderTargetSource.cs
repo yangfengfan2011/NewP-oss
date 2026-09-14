@@ -51,6 +51,10 @@ public sealed class EfProviderTargetSource(
             var columns = providerFields
                 .Select(field => entity.FindProperty(field.Name)
                     ?? throw new InvalidOperationException($"Provider model is missing '{definition.LogicalKey}.{field.Name}'."))
+                // ordinalKey 的派生列是 EF 正式物理模型的一部分，不属于业务字段集合。
+                .Concat(definition.Fields.Where(field => field.OrdinalKey).Select(field =>
+                    entity.FindProperty("__ordinal_" + field.Name)
+                    ?? throw new InvalidOperationException($"Provider ordinal index column is missing for {definition.LogicalKey}.{field.Name}.")))
                 .Select(property => ProjectColumn(property, storeObject, plan.Provider))
                 .ToArray();
             var primaryKey = entity.FindPrimaryKey()

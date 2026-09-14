@@ -6,4 +6,6 @@ public sealed class ModelMetadataStorageSection
     public string Type { get; init; } = string.Empty;
 
     public bool Nullable { get; init; }
+
+    public bool OrdinalKey { get; init; }
 }

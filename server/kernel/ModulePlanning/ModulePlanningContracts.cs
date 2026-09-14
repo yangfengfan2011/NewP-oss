@@ -25,7 +25,10 @@ public sealed record ModuleCapsuleCandidate(
     IReadOnlyList<string> PermissionReferences,
     IReadOnlyList<string> ModelKeys,
     ModulePlanProvenance Provenance,
-    ModulePersistenceContribution? Persistence = null);
+    ModulePersistenceContribution? Persistence = null)
+{
+    public IReadOnlyList<FeatureDeclaration> Features { get; init; } = [];
+}
 
 /// <summary>
 /// 模块胶囊对持久化编译器公开的声明式工件引用。
@@ -194,7 +197,7 @@ public sealed class ModulePlanProvenance
             candidate.PermissionCodes,
             candidate.PermissionReferences,
             candidate.ModelKeys,
-            candidate.Persistence);
+            candidate.Persistence, candidate.Features);
 
     private static string ComputeCanonicalFingerprint(CanonicalModulePlanModule module) =>
         ComputeCanonicalFingerprint(
@@ -215,7 +218,7 @@ public sealed class ModulePlanProvenance
             module.PermissionCodes,
             module.PermissionReferences,
             module.ModelKeys,
-            module.Persistence);
+            module.Persistence, module.Features);
 
     private static string ComputeCanonicalFingerprint(
         string moduleId,
@@ -235,7 +238,7 @@ public sealed class ModulePlanProvenance
         IReadOnlyList<string> permissionCodes,
         IReadOnlyList<string> permissionReferences,
         IReadOnlyList<string> modelKeys,
-        ModulePersistenceContribution? persistence)
+        ModulePersistenceContribution? persistence, IReadOnlyList<FeatureDeclaration> features)
     {
         var bytes = JsonSerializer.SerializeToUtf8Bytes(new
         {
@@ -256,6 +259,7 @@ public sealed class ModulePlanProvenance
             permissionCodes = Sort(permissionCodes),
             permissionReferences = Sort(permissionReferences),
             modelKeys = Sort(modelKeys),
+            features = features.OrderBy(node => node.Key, StringComparer.Ordinal).ToArray(),
             persistence = persistence is null
                 ? null
                 : new
@@ -330,7 +334,10 @@ public sealed record CanonicalModulePlanModule(
     IReadOnlyList<string> PermissionReferences,
     IReadOnlyList<string> ModelKeys,
     ModulePlanProvenance Provenance,
-    ModulePersistenceContribution? Persistence = null);
+    ModulePersistenceContribution? Persistence = null)
+{
+    public IReadOnlyList<FeatureDeclaration> Features { get; init; } = [];
+}
 
 /// <summary>
 /// 编译成功后唯一可供 runtime materializer 消费的计划。
@@ -341,7 +348,11 @@ public sealed record CanonicalModulePlan(
     string PlanHash,
     string SnapshotId,
     byte[] CanonicalBytes,
-    IReadOnlyList<CanonicalModulePlanModule> Modules);
+    IReadOnlyList<CanonicalModulePlanModule> Modules)
+{
+    /// <summary>由已验证声明一次派生的完整目录，所有运行时投影共享该结果。</summary>
+    public IReadOnlyList<FeaturePoint> FeatureCatalog { get; } = FeatureCatalogCompiler.Compile(Modules.SelectMany(module => module.Features));
+}
 
 /// <summary>
 /// 模块计划编译失败的稳定诊断。

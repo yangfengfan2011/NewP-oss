@@ -40,6 +40,15 @@ public sealed class EfModelProjector
                     property.HasMaxLength(GetMaxLength(field));
                 }
 
+                if (field.OrdinalKey)
+                {
+                    // 完整身份不截断；派生哈希只属于数据库索引，不用于授权身份或关联查询。
+                    property.HasColumnType("nvarchar(max)").UseCollation("Latin1_General_100_BIN2");
+                    var escapedColumn = field.StoreName.Replace("]", "]]", StringComparison.Ordinal);
+                    entity.IndexerProperty<string>("__ordinal_" + field.Name).HasMaxLength(64).IsRequired()
+                        .HasComputedColumnSql($"isnull(CONVERT([nvarchar](64),hashbytes('SHA2_256',CONVERT([varbinary](max),[{escapedColumn}])),(2)),N'')", stored: true);
+                }
+
                 if (field.Required)
                 {
                     property.IsRequired();
@@ -55,7 +64,7 @@ public sealed class EfModelProjector
 
             foreach (var index in definition.Indexes)
             {
-                var indexBuilder = entity.HasIndex(index.Fields.ToArray())
+                var indexBuilder = entity.HasIndex(index.Fields.Select(name => definition.Fields.Single(field => field.Name == name).OrdinalKey ? "__ordinal_" + name : name).ToArray())
                     .HasDatabaseName(index.Name);
 
                 if (index.IsUnique)
@@ -127,7 +136,7 @@ public sealed class EfModelProjector
             : definition.LogicalKey;
 
     private static bool ShouldApplyMaxLength(FieldDefinition field) =>
-        MapClrType(field) == typeof(string) && field.ValueType != FieldValueType.Description;
+        MapClrType(field) == typeof(string) && field.ValueType != FieldValueType.Description && !field.OrdinalKey;
 
     private static int GetMaxLength(FieldDefinition field) =>
         field.ValueType switch

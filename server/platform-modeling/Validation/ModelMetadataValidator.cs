@@ -134,6 +134,10 @@ public sealed class ModelMetadataValidator
             ValidateServerOwnedFormMode(document, field, "edit", field.Form?.Edit);
 
             ValidateTemporalContract(field);
+            if (field.Storage?.OrdinalKey == true && (field.Storage.Type != "string" || field.Storage.Nullable))
+                throw new InvalidOperationException($"Field '{field.Name}' ordinalKey requires a non-null string.");
+            if (field.Name.StartsWith("__ordinal_", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Field name conflicts with the reserved physical identity index namespace.");
         }
 
         ValidateDisplayRules(document);

@@ -77,7 +77,7 @@ async function loadRuntimeMetadataOnce(fetcher: typeof fetch): Promise<RuntimeMe
       const url = `${entry.metadataBasePath}/${relativePath}`;
       tasks.push(async () => ({
         kind: 'nav',
-        document: await loadJson<RuntimeNavItemDocument>(fetcher, url),
+        document: bindFeaturePositions(await loadJson<RuntimeNavItemDocument>(fetcher, url), entry.features ?? []),
       }));
     }
 
@@ -148,4 +148,14 @@ async function mapWithConcurrency<T, TResult>(
     Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
   );
   return results;
+}
+
+// 引用只解析正式编译目录；缺失或歧义声明不可退回旧权限入口。
+function bindFeaturePositions(document: RuntimeNavItemDocument, features: { key: string; position: string; kind: string }[]): RuntimeNavItemDocument {
+  return { ...document, navigation: { ...document.navigation, items: document.navigation.items.map(item => {
+    if (!item.featureKey) return item;
+    const matches = features.filter(point => point.key === item.featureKey && point.kind === "navigation");
+    if (matches.length !== 1) throw new Error(`导航功能引用无效：${item.featureKey}`);
+    return { ...item, featurePosition: matches[0].position };
+  }) } };
 }

@@ -109,6 +109,59 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                     b.ToTable("ConfigItem", (string)null);
                 });
 
+            modelBuilder.Entity("FunctionPoint", b =>
+                {
+                    b.Property<string>("EID")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("EID");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CreatedAt");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("CreatedBy");
+
+                    b.Property<string>("PositionKey")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("PositionKey")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("UpdatedAt");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("UpdatedBy");
+
+                    b.Property<string>("__ordinal_PositionKey")
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasComputedColumnSql("isnull(CONVERT([nvarchar](64),hashbytes('SHA2_256',CONVERT([varbinary](max),[PositionKey])),(2)),N'')", true);
+
+                    b.HasKey("EID");
+
+                    b.HasIndex("EID")
+                        .IsUnique()
+                        .HasDatabaseName("UX_FunctionPoint_EID");
+
+                    b.HasIndex("__ordinal_PositionKey")
+                        .IsUnique()
+                        .HasDatabaseName("UX_FunctionPoint_PositionKey");
+
+                    b.ToTable("FunctionPoint", (string)null);
+                });
+
             modelBuilder.Entity("Permission", b =>
                 {
                     b.Property<string>("EID")
@@ -241,6 +294,70 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasDatabaseName("UX_Role_EID");
 
                     b.ToTable("Role", (string)null);
+                });
+
+            modelBuilder.Entity("RoleFunctionGrant", b =>
+                {
+                    b.Property<string>("EID")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("EID");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CreatedAt");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("CreatedBy");
+
+                    b.Property<string>("FunctionPointId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("FunctionPointId");
+
+                    b.Property<DateTime>("GrantedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("GrantedAt");
+
+                    b.Property<string>("GrantedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("GrantedBy");
+
+                    b.Property<string>("RoleId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("RoleId");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("UpdatedAt");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("UpdatedBy");
+
+                    b.HasKey("EID");
+
+                    b.HasIndex("EID")
+                        .IsUnique()
+                        .HasDatabaseName("UX_RoleFunctionGrant_EID");
+
+                    b.HasIndex("FunctionPointId", "RoleId")
+                        .HasDatabaseName("IX_RoleFunctionGrant_Function_Role");
+
+                    b.HasIndex("RoleId", "FunctionPointId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_RoleFunctionGrant_Role_Function");
+
+                    b.ToTable("RoleFunctionGrant", (string)null);
                 });
 
             modelBuilder.Entity("RolePermission", b =>

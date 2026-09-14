@@ -9,6 +9,7 @@ export interface RuntimePageEntry {
   page?: import("@icp-platform/sdk").PageRef;
   redirectTo?: string;
   permissions?: string[];
+  featurePosition?: string;
   localAdministratorOnly?: boolean;
 }
 

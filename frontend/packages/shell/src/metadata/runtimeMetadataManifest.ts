@@ -1,5 +1,6 @@
 export interface RuntimeMetadataModuleEntry {
   moduleId: string;
+  features?: { key: string; position: string; kind: string }[];
   metadataBasePath: string;
   navFiles: string[];
   viewFiles: string[];
@@ -19,6 +20,8 @@ export interface RuntimeNavItemDocument {
 }
 
 export interface RuntimeNavItem {
+  featureKey?: string;
+  featurePosition?: string;
   key: string;
   titleKey?: string;
   icon?: string;

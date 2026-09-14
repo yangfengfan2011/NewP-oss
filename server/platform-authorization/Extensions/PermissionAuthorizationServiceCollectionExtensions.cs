@@ -19,8 +19,10 @@ public static class PermissionAuthorizationServiceCollectionExtensions
         services.AddAuthorization();
         services.TryAddScoped<IPermissionDecisionSource, IndeterminatePermissionDecisionSource>();
         services.TryAddScoped<PermissionGate>();
+        services.TryAddScoped<IFeatureDecisionSource, IndeterminateFeatureDecisionSource>();
         services.TryAddEnumerable(
             ServiceDescriptor.Transient<IAuthorizationHandler, PermissionAuthorizationHandler>());
+        services.TryAddEnumerable(ServiceDescriptor.Transient<IAuthorizationHandler, FeatureAuthorizationHandler>());
         services.Replace(
             ServiceDescriptor.Singleton<IAuthorizationPolicyProvider, PermissionAuthorizationPolicyProvider>());
         services.Replace(

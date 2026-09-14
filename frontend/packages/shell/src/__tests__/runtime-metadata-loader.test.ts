@@ -134,3 +134,15 @@ describe('runtime metadata loader', () => {
   });
 });
 
+
+it("resolves navigation feature references only from the compiled catalog", async () => {
+  const load = (features: { key: string; kind: string; position: string }[]) => loadRuntimeMetadata(vi.fn(async (url: string) => new Response(JSON.stringify(
+    url.endsWith("metadata-runtime-manifest.json")
+      ? { modules: [{ moduleId: "Authorization", metadataBasePath: "/metadata", navFiles: ["nav.json"], viewFiles: [], modelFiles: [], features }] }
+      : { type: "nav", navigation: { items: [{ key: "workbench", featureKey: "workbench", path: "/authorization/workbench", page: { pageKey: "authorization.workbench" } }] } },
+  ))) as typeof fetch);
+  const result = await load([{ key: "workbench", kind: "navigation", position: "compiled/full-position" }]);
+  expect(result.navDocuments[0].navigation.items[0].featurePosition).toBe("compiled/full-position");
+  await expect(load([])).rejects.toThrow("导航功能引用无效");
+  await expect(load([{ key: "workbench", kind: "navigation", position: "first" }, { key: "workbench", kind: "navigation", position: "second" }])).rejects.toThrow("导航功能引用无效");
+});

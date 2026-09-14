@@ -21,6 +21,13 @@ public class AuthorizationModule : ModuleCapsuleBindingBase
         services.AddScoped<ICP.Platform.Crud.Abstractions.IStandardCrudQueryCustomizer, RoleReadResource>();
         services.AddScoped<RoleManagementQuery>();
         services.AddSingleton<ActivePermissionCatalog>();
+        services.AddSingleton<ActiveFeatureCatalog>();
+        services.AddScoped<FeatureDecisionSource>();
+        services.AddScoped<ICP.Platform.Authorization.Http.IFeatureGrantProjection>(provider => provider.GetRequiredService<FeatureDecisionSource>());
+        services.AddScoped<ICP.Platform.Authorization.Http.IFeatureDecisionSource>(provider => provider.GetRequiredService<FeatureDecisionSource>());
+        services.AddScoped<FeatureCatalogSynchronizer>();
+        services.AddScoped<ICP.Platform.Kernel.ModulePlanning.IFeatureCatalogSynchronizer>(provider => provider.GetRequiredService<FeatureCatalogSynchronizer>());
+        services.AddScoped<RoleFeatureWriter>();
         services.AddScoped<ICP.Platform.Modules.Audit.Contracts.IBusinessAuditNameDirectory, BusinessAuditRoleNames>();
         services.AddScoped<Controllers.LocalAdministratorManagementFilter>();
         services.AddScoped<IRolePermissionWriter, RolePermissionWriter>();

@@ -251,6 +251,8 @@ public sealed class MigrationManifestApplication
                 $"module='{moduleId}', provider='{providerName}': supported providers are {string.Join(", ", Enum.GetNames<PersistenceProvider>())}.");
         }
 
+        if (string.Equals(moduleId, "platform.foundation", StringComparison.Ordinal)) return OpenFoundationBundle(provider);
+
         var capsulePath = Directory.GetFiles(
                 Path.Combine(_repositoryRoot, "modules"),
                 "newp.plugin.json",
@@ -265,6 +267,25 @@ public sealed class MigrationManifestApplication
         return OpenBundle(capsulePath, provider);
     }
 
+    // 基础流的 owner 是正式 Composition；它不伪装成可安装 capsule，也不改写已发布前缀。
+    private BundleWorkspace OpenFoundationBundle(PersistenceProvider provider)
+    {
+        const string moduleId = "platform.foundation";
+        if (provider != PersistenceProvider.SqlServer) throw new MigrationManifestToolException("MIGRATION_MANIFEST_PROVIDER_UNSUPPORTED", "platform.foundation only supports SqlServer.");
+        var root = Path.Combine(_repositoryRoot, "server", "platform-persistence-efcore.migrations.sqlserver");
+        var project = Path.Combine(root, "PlatformPersistence.EfCore.SqlServerMigrations.csproj");
+        ValidateDeterministicProject(project, moduleId, provider);
+        var framework = ReadRequiredProjectProperty(project, "TargetFramework", moduleId, provider);
+        const string assembly = "PlatformPersistence.EfCore.SqlServerMigrations.dll";
+        const string manifest = "PlatformFoundation.SqlServerMigrations.json";
+        var bundle = Path.Combine(root, "bin", "Release", framework, assembly);
+        EnsureReleaseAsset(bundle, project, moduleId, provider);
+        var hostRoot = ResolveHostReleaseRoot();
+        return new(moduleId, provider, Path.Combine(root, manifest), root, project, bundle,
+            Path.Combine(root, manifest), PersistenceModelDigest.Compute(PlatformFoundationModelSource.GetDefinitions(_repositoryRoot)),
+            Path.Combine(hostRoot, assembly), Path.Combine(hostRoot, manifest));
+    }
+
     // 枚举实际声明，而不是从项目名或目录名推断 bundle。
     private IReadOnlyList<BundleWorkspace> DiscoverBundles()
     {
@@ -275,6 +296,9 @@ public sealed class MigrationManifestApplication
         }
 
         var workspaces = new List<BundleWorkspace>();
+        // 隔离的模块 replay 根可以不包含平台流；一旦携带基础流目录，其全部正式资产必须可验证。
+        if (Directory.Exists(Path.Combine(_repositoryRoot, "server", "platform-persistence-efcore.migrations.sqlserver")))
+            workspaces.Add(OpenFoundationBundle(PersistenceProvider.SqlServer));
         foreach (var capsulePath in Directory.GetFiles(
                      modulesRoot,
                      "newp.plugin.json",

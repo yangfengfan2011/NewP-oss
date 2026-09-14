@@ -45,8 +45,8 @@ public sealed class PluginActivationGateTests : IDisposable
                 "permission-catalog",
                 "persistence-plan",
                 "migration",
-                "permission-sync",
                 "runtime-stage",
+                "permission-sync",
                 "runtime-begin-commit",
                 "runtime-complete"
             ],
@@ -177,6 +177,20 @@ public sealed class PluginActivationGateTests : IDisposable
         Assert.Equal("1.0.0", Assert.Single(manager.Resolve(inventory).ActiveSnapshot!.Modules).Version);
     }
 
+    [Fact]
+    public async Task CompleteAsync_WhenRuntimeStageFails_DoesNotSynchronizeCatalog()
+    {
+        var events = new List<string>();
+        var manager = CreateManager();
+        var plan = CreateModulePlan("snapshot-1-1", "1.1.0");
+        var projection = new RecordingProjection(events, "legacy-active", failStage: true);
+        using var session = CreateGate(events, manager, plan, CreatePersistencePlan(plan), projection).Prepare(CreateInventory());
+        var error = await Assert.ThrowsAsync<PluginActivationException>(() => session.CompleteAsync(
+            new RecordingMigrationExecutor(events), new RecordingPermissionSynchronizer(events)));
+        Assert.Equal(PluginActivationFailureCodes.RuntimeStagingFailed, error.FailureCode);
+        Assert.DoesNotContain("permission-sync", events);
+        Assert.Equal("legacy-active", projection.ActiveSnapshotId);
+    }
     public void Dispose()
     {
         if (Directory.Exists(_root))
@@ -334,7 +348,7 @@ public sealed class PluginActivationGateTests : IDisposable
     private sealed class RecordingProjection(
         List<string> events,
         string activeSnapshotId,
-        bool failValidation = false) : IPluginRuntimeProjection
+        bool failValidation = false, bool failStage = false) : IPluginRuntimeProjection
     {
         public string ActiveSnapshotId { get; private set; } = activeSnapshotId;
 
@@ -350,6 +364,7 @@ public sealed class PluginActivationGateTests : IDisposable
         public IPluginRuntimeStage Stage(CanonicalModulePlan plan)
         {
             events.Add("runtime-stage");
+            if (failStage) throw new InvalidOperationException("runtime stage invalid");
             return new RecordingStage(this, events, plan.SnapshotId);
         }
 

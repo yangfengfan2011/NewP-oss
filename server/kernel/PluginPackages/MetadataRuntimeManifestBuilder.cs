@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ICP.Platform.Kernel.ModulePlanning;
 
 namespace ICP.Platform.Kernel.PluginPackages;
 
@@ -24,7 +25,8 @@ public sealed class MetadataRuntimeManifestBuilder
     public string Build(
         string runtimeRoot,
         IReadOnlyList<string> moduleOrder,
-        IReadOnlyCollection<string> frontendModuleIds)
+        IReadOnlyCollection<string> frontendModuleIds,
+        IReadOnlyList<FeaturePoint>? features = null)
     {
         var frontendModules = frontendModuleIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var modules = moduleOrder
@@ -35,7 +37,8 @@ public sealed class MetadataRuntimeManifestBuilder
                 $"/plugins/runtime/modules/{moduleId}/metadata",
                 EnumerateMetadataFiles(runtimeRoot, moduleId, "navigation"),
                 EnumerateMetadataFiles(runtimeRoot, moduleId, "views"),
-                EnumerateMetadataFiles(runtimeRoot, moduleId, "models")))
+                EnumerateMetadataFiles(runtimeRoot, moduleId, "models"),
+                (features ?? []).Where(point => point.ModuleId == moduleId).ToArray()))
             .Where(module => module.NavFiles.Count > 0 || module.ViewFiles.Count > 0 || module.ModelFiles.Count > 0)
             .ToArray();
 
@@ -65,5 +68,6 @@ public sealed class MetadataRuntimeManifestBuilder
         string MetadataBasePath,
         IReadOnlyList<string> NavFiles,
         IReadOnlyList<string> ViewFiles,
-        IReadOnlyList<string> ModelFiles);
+        IReadOnlyList<string> ModelFiles,
+        IReadOnlyList<FeaturePoint> Features);
 }

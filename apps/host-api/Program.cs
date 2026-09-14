@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Text.Json.Serialization;
 using ICP.Platform.Authorization.Extensions;
 using ICP.Platform.Authorization.Http;
@@ -268,6 +268,8 @@ if (app.Services.GetService<IStandardCrudResourceRegistry>() is not null)
 }
 
 var registry = app.Services.GetRequiredService<ModuleRegistry>();
+var featureCatalog = activationSession.ModulePlan.FeatureCatalog;
+FeatureEndpointBindings.Validate(((IEndpointRouteBuilder)app).DataSources, featureCatalog);
 var endpointAccessPlan = EndpointAccessPlanCompiler.Compile(
     ((IEndpointRouteBuilder)app).DataSources,
     registry);
@@ -283,6 +285,7 @@ var permissionSynchronizer = new HostPluginPermissionSynchronizer(async cancella
     using var scope = app.Services.CreateScope();
     var initializer = scope.ServiceProvider.GetRequiredService<AuthorizationCatalogInitializer>();
     await initializer.InitializeAsync(endpointAccessPlan.ActivePermissions, cancellationToken);
+    await scope.ServiceProvider.GetRequiredService<IFeatureCatalogSynchronizer>().SynchronizeAsync(featureCatalog, cancellationToken);
 });
 await activationSession.CompleteAsync(
     new HostPluginMigrationExecutor(app, activationSession.PersistencePlan),

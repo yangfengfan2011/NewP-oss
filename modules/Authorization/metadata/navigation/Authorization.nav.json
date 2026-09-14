@@ -4,6 +4,14 @@
   "navigation": {
     "items": [
       {
+        "key": "authorization.workbench",
+        "titleKey": "Navigation.Workbench",
+        "path": "/authorization/workbench",
+        "featureKey": "authorization.workbench",
+        "order": 5,
+        "page": { "pageKey": "authorization.workbench" }
+      },
+      {
         "key": "authorization.roles",
         "titleKey": "Navigation.Roles",
         "path": "/authorization/roles",

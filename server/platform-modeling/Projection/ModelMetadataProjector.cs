@@ -142,7 +142,7 @@ public sealed class ModelMetadataProjector
             !storage.Nullable,
             false,
             false,
-            ProjectDisplayRule(field.Display));
+            ProjectDisplayRule(field.Display)) { OrdinalKey = storage.OrdinalKey };
     }
 
     // validator 已完成规则闭合；projector 只把 metadata 形状转换为定义层形状。

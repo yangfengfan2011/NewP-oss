@@ -45,7 +45,7 @@ public sealed class AuthorizationModelMetadataProvider : IModelDefinitionProvide
     }
 
     /// <summary>
-    /// 一次性读取授权模块四个模型真源并返回运行时定义。
+    /// 一次性读取授权模块模型真源并返回运行时定义。
     /// 外部只消费聚合后的 definitions，避免继续依赖单模型入口形成新的分叉契约。
     /// </summary>
     public IReadOnlyList<ModelDefinition> GetDefinitions()
@@ -55,6 +55,8 @@ public sealed class AuthorizationModelMetadataProvider : IModelDefinitionProvide
         return new[]
         {
             LoadModel("Role.model.json", storageTypeMap),
+            LoadModel("FunctionPoint.model.json", storageTypeMap),
+            LoadModel("RoleFunctionGrant.model.json", storageTypeMap),
             LoadModel("Permission.model.json", storageTypeMap),
             LoadModel("RolePermission.model.json", storageTypeMap),
             LoadModel("UserRole.model.json", storageTypeMap)

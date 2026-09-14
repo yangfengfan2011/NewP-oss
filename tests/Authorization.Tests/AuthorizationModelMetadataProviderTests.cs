@@ -56,6 +56,20 @@ public class AuthorizationModelMetadataProviderTests
                 Assert.Contains(role.Indexes, static index => index.Name == "UX_Role_ECODE");
                 validator.Validate(role);
             },
+            point =>
+            {
+                Assert.Equal("FunctionPoint", point.Name);
+                Assert.Contains(point.Fields, static field => field.Name == "PositionKey" && field.OrdinalKey);
+                Assert.Contains(point.Indexes, static index => index.IsUnique);
+                validator.Validate(point);
+            },
+            grant =>
+            {
+                Assert.Equal("RoleFunctionGrant", grant.Name);
+                Assert.Contains(grant.Fields, static field => field.Name == "RoleId");
+                Assert.Contains(grant.Fields, static field => field.Name == "FunctionPointId");
+                validator.Validate(grant);
+            },
             permission =>
             {
                 Assert.Equal("Permission", permission.Name);

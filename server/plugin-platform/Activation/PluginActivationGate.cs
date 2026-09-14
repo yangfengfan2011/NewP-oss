@@ -160,18 +160,6 @@ public sealed class PluginActivationSession : IDisposable
                 exception);
         }
 
-        try
-        {
-            await permissionSynchronizer.SynchronizeAsync(ModulePlan, cancellationToken);
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            throw PluginActivationException.Wrap(
-                PluginActivationFailureCodes.PermissionSyncFailed,
-                databaseAhead: true,
-                exception);
-        }
-
         IPluginRuntimeStage runtimeStage;
         try
         {
@@ -187,6 +175,19 @@ public sealed class PluginActivationSession : IDisposable
 
         using (runtimeStage)
         {
+            // 所有运行时资产 Stage 成功后才允许目录同步，失败候选不触及授权数据。
+            try
+            {
+                await permissionSynchronizer.SynchronizeAsync(ModulePlan, cancellationToken);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                throw PluginActivationException.Wrap(
+                    PluginActivationFailureCodes.PermissionSyncFailed,
+                    databaseAhead: true,
+                    exception);
+            }
+
             IPluginRuntimeCommit runtimeCommit;
             try
             {

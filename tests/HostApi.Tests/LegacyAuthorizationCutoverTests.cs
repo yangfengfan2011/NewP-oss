@@ -54,6 +54,11 @@ public sealed class LegacyAuthorizationCutoverTests
         await fixture.StartAsync();
         await AssertLegacyEmptyAsync(fixture);
         Assert.Equal(assigned, await GrantsAsync(fixture, roleId));
+        await fixture.StopAsync();
+        var unchanged = await FeatureSqlMeasurement.CaptureAsync(fixture, "legacy-cutover-restart", () => fixture.StartAsync());
+        Assert.DoesNotContain(System.Text.Json.JsonSerializer.SerializeToElement(unchanged).GetProperty("plans").EnumerateArray(), plan =>
+            plan.GetProperty("statementType").GetString() is "INSERT" or "UPDATE" or "DELETE"
+            && plan.GetProperty("indexes").EnumerateArray().Any(index => index.GetProperty("table").GetString() is "[Permission]" or "[RolePermission]"));
         using var response = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, http.Role(),
             HttpMethod.Get, "/api/authorization/roles");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);

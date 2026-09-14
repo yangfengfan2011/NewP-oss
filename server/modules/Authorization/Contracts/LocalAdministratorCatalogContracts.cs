@@ -1,7 +1,7 @@
 namespace ICP.Platform.Authorization.Contracts;
-/// <summary>仅供 Host 启动期使用的管理员目录初始化，不经过普通管理命令或审计。</summary>
+/// <summary>仅供启动期确保受保护管理员角色存在，不经过普通管理命令或审计。</summary>
 public interface ILocalAdministratorCatalog
 {
-    /// <summary>收敛管理员定义与活动权限全集；不分配任何用户成员。</summary>
-    Task SynchronizeAsync(IReadOnlyCollection<string> codes, CancellationToken cancellationToken = default);
+    /// <summary>确保管理员定义存在；不分配用户成员或旧业务权限。</summary>
+    Task EnsureAsync(CancellationToken cancellationToken = default);
 }

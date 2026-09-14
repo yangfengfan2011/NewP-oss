@@ -284,7 +284,7 @@ var permissionSynchronizer = new HostPluginPermissionSynchronizer(async cancella
 
     using var scope = app.Services.CreateScope();
     var initializer = scope.ServiceProvider.GetRequiredService<AuthorizationCatalogInitializer>();
-    await initializer.InitializeAsync(endpointAccessPlan.ActivePermissions, cancellationToken);
+    await initializer.InitializeAsync(cancellationToken);
     await scope.ServiceProvider.GetRequiredService<IFeatureCatalogSynchronizer>().SynchronizeAsync(featureCatalog, cancellationToken);
 });
 await activationSession.CompleteAsync(

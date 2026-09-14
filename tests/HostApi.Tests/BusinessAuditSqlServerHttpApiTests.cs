@@ -737,8 +737,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         using (var scope = _app.Services.CreateScope())
         {
             await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Database.EnsureCreatedAsync();
-            var permissions = modules.OfType<IPermissionProvider>().SelectMany(p => p.GetPermissions()).ToArray();
-            await scope.ServiceProvider.GetRequiredService<AuthorizationCatalogInitializer>().InitializeAsync(permissions);
+            await scope.ServiceProvider.GetRequiredService<AuthorizationCatalogInitializer>().InitializeAsync();
             await scope.ServiceProvider.GetRequiredService<IFeatureCatalogSynchronizer>().SynchronizeAsync(modulePlan.FeatureCatalog);
         }
         await _app.StartAsync();

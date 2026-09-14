@@ -11,23 +11,20 @@ public class RoleServiceTests
 {
     private readonly IRoleService _roleService;
     private readonly IRoleRepository _roleRepository;
-    private readonly IPermissionRepository _permissionRepository;
     private readonly IRolePermissionRepository _rolePermissionRepository;
     private readonly IUserRoleRepository _userRoleRepository;
 
     public RoleServiceTests()
     {
         _roleRepository = new RoleRepository();
-        _permissionRepository = new PermissionRepository();
         _rolePermissionRepository = new RolePermissionRepository();
         _userRoleRepository = new UserRoleRepository();
 
         _roleService = new RoleService(
             _roleRepository,
-            _permissionRepository,
             _rolePermissionRepository,
             _userRoleRepository,
-            new PlatformObjectIdGenerator(), new TestRolePermissionWriter(_permissionRepository, _rolePermissionRepository, new PlatformObjectIdGenerator()), new TestUserAssignments()
+            new PlatformObjectIdGenerator(), new TestUserAssignments()
         );
     }
 
@@ -134,53 +131,6 @@ public class RoleServiceTests
     }
 
     [Fact]
-    public async Task AssignRolePermissions_ValidRequest_AssignsPermissions()
-    {
-        // Arrange
-        var role = new Role { Code = "TestRole", Name = "测试角色" };
-        await _roleRepository.CreateAsync(role);
-
-        var permission1 = new Permission { Code = "Test.View", DisplayName = "查看", ModuleId = "Test" };
-        var permission2 = new Permission { Code = "Test.Edit", DisplayName = "编辑", ModuleId = "Test" };
-        await _permissionRepository.CreateAsync(permission1);
-        await _permissionRepository.CreateAsync(permission2);
-
-        var request = new AssignRolePermissionsRequest
-        {
-            PermissionCodes = new List<string> { "Test.View", "Test.Edit" }
-        };
-
-        // Act
-        await _roleService.AssignRolePermissionsAsync(role.Id, request);
-
-        // Assert
-        var rolePermissions = await _roleService.GetRolePermissionsAsync(role.Id);
-        Assert.Equal(2, rolePermissions.PermissionCodes.Count);
-        Assert.Contains("Test.View", rolePermissions.PermissionCodes);
-        Assert.Contains("Test.Edit", rolePermissions.PermissionCodes);
-    }
-
-    [Fact]
-    public async Task AssignRolePermissionsAsync_AssignsRolePermissionPrefixedIds()
-    {
-        var generator = new SequenceObjectIdGenerator(
-            "RolePermission_00000000000000000000000000000001");
-        var roleRepository = new RoleRepository();
-        var permissionRepository = new PermissionRepository();
-        var rolePermissionRepository = new RolePermissionRepository();
-        var service = new RoleService(roleRepository, permissionRepository, rolePermissionRepository, new UserRoleRepository(), generator, new TestRolePermissionWriter(permissionRepository, rolePermissionRepository, generator), new TestUserAssignments());
-        var role = new Role { Id = "Role_00000000000000000000000000000001", Code = "Admin", Name = "管理员" };
-        var permission = new Permission { Id = "Permission_00000000000000000000000000000001", Code = "Test.View", DisplayName = "查看", ModuleId = "Test" };
-        await roleRepository.CreateAsync(role);
-        await permissionRepository.CreateAsync(permission);
-
-        await service.AssignRolePermissionsAsync(role.Id, new AssignRolePermissionsRequest { PermissionCodes = ["Test.View"] });
-
-        var links = await rolePermissionRepository.GetByRoleIdAsync(role.Id);
-        Assert.Equal("RolePermission_00000000000000000000000000000001", Assert.Single(links).Id);
-    }
-
-    [Fact]
     public async Task AssignUserRoles_ValidRequest_AssignsRoles()
     {
         // Arrange
@@ -216,7 +166,7 @@ public class RoleServiceTests
     }
 
     private static RoleService BuildRoleService(IPlatformObjectIdGenerator generator) =>
-        new(new RoleRepository(), new PermissionRepository(), new RolePermissionRepository(), new UserRoleRepository(), generator, new TestRolePermissionWriter(new PermissionRepository(), new RolePermissionRepository(), generator), new TestUserAssignments());
+        new(new RoleRepository(), new RolePermissionRepository(), new UserRoleRepository(), generator, new TestUserAssignments());
 
     private sealed class TestUserAssignments : IUserRoleAssignments
     {

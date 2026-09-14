@@ -12,14 +12,12 @@ public class RoleController : ControllerBase
 {
     private readonly IRoleService _roleService;
     private readonly RoleManagementQuery _query;
-    private readonly ActivePermissionCatalog _catalog;
 
     // 组合普通命令与有界查询，管理动作由各自的位置准入。
-    public RoleController(IRoleService roleService, RoleManagementQuery query, ActivePermissionCatalog catalog)
+    public RoleController(IRoleService roleService, RoleManagementQuery query)
     {
         _roleService = roleService;
         _query = query;
-        _catalog = catalog;
     }
 
     /// <summary>标准列表在存储侧按代码筛选及分页，旧列表 API 保持原协议。</summary>
@@ -98,30 +96,4 @@ public class RoleController : ControllerBase
         }
     }
 
-    /// <summary>只公开当前活动目录中的配置关系。</summary>
-    [HttpGet("{roleId}/permissions")]
-    [ServiceFilter(typeof(LocalAdministratorManagementFilter))]
-    [RequirePermission(AuthorizationPermissions.RoleView)]
-    public async Task<ActionResult<RolePermissionsDto>> GetRolePermissions(string roleId, CancellationToken cancellationToken)
-    {
-        var permissions = await _roleService.GetRolePermissionsAsync(roleId, cancellationToken);
-        return Ok(permissions with { PermissionCodes = permissions.PermissionCodes.Where(_catalog.Codes.Contains).ToList() });
-    }
-
-    /// <summary>校验错误返回 Problem Details，存储和提交故障继续传播。</summary>
-    [HttpPut("{roleId}/permissions")]
-    [ServiceFilter(typeof(LocalAdministratorManagementFilter))]
-    [RequirePermission(AuthorizationPermissions.PermissionAssign)]
-    public async Task<ActionResult> AssignRolePermissions(string roleId, [FromBody] AssignRolePermissionsRequest request, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _roleService.AssignRolePermissionsAsync(roleId, request, User.Identity?.Name, cancellationToken);
-            return NoContent();
-        }
-        catch (RolePermissionValidationException ex)
-        {
-            return BadRequest(new ProblemDetails { Title = ex.Message, Status = 400 });
-        }
-    }
 }

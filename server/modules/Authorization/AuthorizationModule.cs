@@ -20,7 +20,6 @@ public class AuthorizationModule : ModuleCapsuleBindingBase
         services.AddStandardCrudResource(RoleReadResource.Create());
         services.AddScoped<ICP.Platform.Crud.Abstractions.IStandardCrudQueryCustomizer, RoleReadResource>();
         services.AddScoped<RoleManagementQuery>();
-        services.AddSingleton<ActivePermissionCatalog>();
         services.AddSingleton<ActiveFeatureCatalog>();
         services.AddScoped<FeatureDecisionSource>();
         services.AddScoped<ICP.Platform.Authorization.Http.IFeatureGrantProjection>(provider => provider.GetRequiredService<FeatureDecisionSource>());
@@ -29,21 +28,16 @@ public class AuthorizationModule : ModuleCapsuleBindingBase
         services.AddScoped<ICP.Platform.Kernel.ModulePlanning.IFeatureCatalogSynchronizer>(provider => provider.GetRequiredService<FeatureCatalogSynchronizer>());
         services.AddScoped<RoleFeatureWriter>();
         services.AddScoped<ICP.Platform.Modules.Audit.Contracts.IBusinessAuditNameDirectory, BusinessAuditRoleNames>();
-        services.AddScoped<Controllers.LocalAdministratorManagementFilter>();
-        services.AddScoped<IRolePermissionWriter, RolePermissionWriter>();
         services.AddScoped<IUserRoleAssignments, UserRoleAssignments>();
         services.AddScoped<ICP.Platform.Modules.Audit.Contracts.IBusinessAuditNameDirectory, BusinessAuditAccountNames>();
         services.AddScoped<ILocalAdministratorCatalog, LocalAdministratorCatalog>();
         // 注册核心服务
         services.AddScoped<IAuthorizationService, AuthorizationService>();
-        services.AddScoped<IPermissionDecisionSource, AuthorizationPermissionDecisionSource>();
         services.AddScoped<IRoleService, RoleService>();
-        services.AddScoped<IPermissionService, PermissionService>();
         services.AddScoped<ILocalAdministratorRoleAssignment, EfLocalAdministratorRoleAssignment>();
 
         // 注册仓储
         services.AddScoped<IRoleRepository, EfRoleRepository>();
-        services.AddScoped<IPermissionRepository, EfPermissionRepository>();
         services.AddScoped<IRolePermissionRepository, EfRolePermissionRepository>();
         services.AddScoped<IUserRoleRepository, EfUserRoleRepository>();
     }

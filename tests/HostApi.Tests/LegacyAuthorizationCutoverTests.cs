@@ -1,4 +1,7 @@
 using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Microsoft.Data.SqlClient;
 using System.Text.Json.Nodes;
 using ICP.Platform.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +20,7 @@ public sealed class LegacyAuthorizationCutoverTests
         var role = await FeatureHttpTestRequests.CreateAsync(fixture.Administrator, http.Role("create"),
             "/api/authorization/roles", new { Code = "cutover-role", Name = "切换角色" });
         var roleId = role.GetProperty("id").GetString()!;
+        using var ordinary = await PrepareBusinessAndOrdinaryAsync(fixture, http);
         await fixture.StopAsync();
         await using (var db = fixture.CreateContext())
         {
@@ -47,7 +51,11 @@ public sealed class LegacyAuthorizationCutoverTests
         await fixture.StartAsync();
         await AssertLegacyEmptyAsync(fixture);
         Assert.Equal(preserved, await PreservedRowsAsync(fixture));
+        using (var denied = await FeatureHttpTestRequests.SendAsync(ordinary, http.Role(), HttpMethod.Get, "/api/authorization/roles"))
+            Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
         await http.GrantAsync(fixture.Administrator, roleId, http.Role());
+        using (var allowed = await FeatureHttpTestRequests.SendAsync(ordinary, http.Role(), HttpMethod.Get, "/api/authorization/roles"))
+            Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
         var assigned = await GrantsAsync(fixture, roleId);
         Assert.NotEmpty(assigned);
         await fixture.StopAsync();
@@ -59,9 +67,40 @@ public sealed class LegacyAuthorizationCutoverTests
         Assert.DoesNotContain(System.Text.Json.JsonSerializer.SerializeToElement(unchanged).GetProperty("plans").EnumerateArray(), plan =>
             plan.GetProperty("statementType").GetString() is "INSERT" or "UPDATE" or "DELETE"
             && plan.GetProperty("indexes").EnumerateArray().Any(index => index.GetProperty("table").GetString() is "[Permission]" or "[RolePermission]"));
-        using var response = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, http.Role(),
+        var afterRestart = await PreservedRowsAsync(fixture);
+        Assert.All(preserved, row => Assert.Contains(row, afterRestart));
+        using var response = await FeatureHttpTestRequests.SendAsync(ordinary, http.Role(),
             HttpMethod.Get, "/api/authorization/roles");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    private static async Task<HttpClient> PrepareBusinessAndOrdinaryAsync(FeatureCatalogHostFixture fixture, FeatureHttpTestRequests http)
+    {
+        var admin = fixture.Administrator;
+        var company = await FeatureHttpTestRequests.CreateAsync(admin, http.Organization("companies", "create", "list.pageActions"),
+            "/api/organization/companies", new { ECODE = "CUT", ENAME = "保留公司", SortOrder = "0100" });
+        var department = await FeatureHttpTestRequests.CreateAsync(admin, http.Organization("departments", "create", "list.pageActions"),
+            "/api/organization/departments", new { ECODE = "CUT-D", ENAME = "保留部门", CompanyId = company.GetProperty("fields").GetProperty("EID").GetString(), SortOrder = "0100" });
+        await FeatureHttpTestRequests.CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"),
+            "/api/organization/persons", new { PersonNo = "CUT-P", ENAME = "保留人员", CompanyId = company.GetProperty("fields").GetProperty("EID").GetString(),
+                DepartmentId = department.GetProperty("fields").GetProperty("EID").GetString(), EmploymentStatus = "Active", IsEnabled = true });
+        var account = await FeatureHttpTestRequests.CreateAsync(admin, http.Identity("create"), "/api/identity/accounts", new { ECODE = "cutover-user", ENAME = "切换用户" });
+        var userId = account.GetProperty("account").GetProperty("eid").GetString();
+        using (var assigned = await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put,
+            $"/api/authorization/users/{userId}/roles", new { RoleCodes = new[] { "cutover-role" } }))
+            Assert.Equal(HttpStatusCode.NoContent, assigned.StatusCode);
+        var password = account.GetProperty("temporaryCredential").GetString()!;
+        var client = await fixture.LoginAsync("cutover-user", password);
+        try
+        {
+            var current = await client.GetFromJsonAsync<JsonElement>("/api/auth/current-user");
+            using var changed = await client.PostAsJsonAsync("/api/identity/me/password-change", new
+            { CurrentPassword = password, NewPassword = password + "-ready", ExpectedRevision = current.GetProperty("revision").GetInt64() });
+            Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
+            await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
+            return client;
+        }
+        catch { client.Dispose(); throw; }
     }
 
     private static async Task AssertLegacyEmptyAsync(FeatureCatalogHostFixture fixture)
@@ -89,6 +128,20 @@ public sealed class LegacyAuthorizationCutoverTests
         {
             var rows = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey(model)).AsNoTracking().ToArrayAsync();
             result.AddRange(rows.Select(row => model + ":" + System.Text.Json.JsonSerializer.Serialize(row.OrderBy(pair => pair.Key))));
+        }
+        await using var connection = new SqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        // 仅读取本夹具真实业务与历史记录；固定表名不接受外部输入，历史行不修改。
+        foreach (var table in new[] { "Company", "Department", "Person", "BusinessChange", "__NewPMigrationHistory" })
+        {
+            await using var command = new SqlCommand($"SELECT * FROM [dbo].[{table}] FOR JSON PATH, INCLUDE_NULL_VALUES", connection);
+            await using var reader = await command.ExecuteReaderAsync();
+            var json = new System.Text.StringBuilder();
+            while (await reader.ReadAsync()) json.Append(reader.GetString(0));
+            using var document = JsonDocument.Parse(json.ToString());
+            var rows = document.RootElement.EnumerateArray().Select(row => table + ":" + row.GetRawText()).ToArray();
+            Assert.NotEmpty(rows);
+            result.AddRange(rows);
         }
         return result.Order(StringComparer.Ordinal).ToArray();
     }

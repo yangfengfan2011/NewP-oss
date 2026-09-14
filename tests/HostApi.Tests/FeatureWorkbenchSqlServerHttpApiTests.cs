@@ -149,6 +149,32 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
         Assert.All(changes, change => { Assert.Equal("false", change.GetProperty("before").GetProperty("value").GetString()); Assert.Equal("true", change.GetProperty("after").GetProperty("value").GetString()); });
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "功能分配历史保留实际撤销和角色删除后的引用展示")]
+    public async Task FeatureHistory_PreservesRevocationAndDeletedRoleReference()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
+        using var admin = await fixture.LoginAdministratorAsync();
+        var role = await FeatureHttpTestRequests.CreateAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = "history-role", Name = "历史角色" });
+        var id = role.GetProperty("id").GetString()!;
+        var read = http.Workbench("authorization.workbench.read");
+        var save = http.Workbench("authorization.workbench.save");
+        await http.GrantAsync(admin, id, save);
+        await http.GrantAsync(admin, id, read);
+        var before = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), $"/api/audit/business-changes?TargetId={id}");
+        Assert.Equal(2, before.GetProperty("total").GetInt32());
+        Assert.All(before.GetProperty("items").EnumerateArray(), row => Assert.Equal("历史角色", row.GetProperty("TargetId_DisplayValue").GetString()));
+        var revoked = before.GetProperty("items").EnumerateArray().Single(row => row.GetProperty("Changes").GetArrayLength() == 1);
+        var change = Assert.Single(revoked.GetProperty("Changes").EnumerateArray());
+        Assert.Equal(save.Position, change.GetProperty("field").GetString());
+        Assert.Equal("true", change.GetProperty("before").GetProperty("value").GetString());
+        Assert.Equal("false", change.GetProperty("after").GetProperty("value").GetString());
+        await fixture.DeleteRoleForHistoryAsync(id);
+        var after = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), $"/api/audit/business-changes?TargetId={id}");
+        Assert.Equal(2, after.GetProperty("total").GetInt32());
+        Assert.All(after.GetProperty("items").EnumerateArray(), row => Assert.Equal(JsonValueKind.Null, row.GetProperty("TargetId_DisplayValue").ValueKind));
+    }
+
     private static async Task<(string Read, string Save)> PositionsAsync(BusinessAuditHostFixture fixture, HttpClient client)
     {
         var current = await client.GetFromJsonAsync<JsonElement>("/api/auth/current-user");

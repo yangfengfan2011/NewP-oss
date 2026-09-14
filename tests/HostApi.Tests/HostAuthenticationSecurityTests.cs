@@ -503,10 +503,6 @@ public sealed class HostAuthenticationSecurityTests
 
     private sealed class UnusedAuthorizationService : IAuthorizationService
     {
-        public Task<bool> HasPermissionAsync(string userId, string permissionCode, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<bool> HasAnyPermissionAsync(string userId, IEnumerable<string> permissionCodes, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<bool> HasAllPermissionsAsync(string userId, IEnumerable<string> permissionCodes, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<List<string>> GetUserPermissionsAsync(string userId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<List<string>> GetUserRolesAsync(string userId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 

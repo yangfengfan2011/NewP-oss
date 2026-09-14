@@ -11,37 +11,19 @@ namespace ICP.Platform.Modules.Authorization.Tests;
 public class EfAuthorizationRepositoryTests
 {
     [Fact]
-    public async Task AuthorizationService_UsingEfRepositories_ResolvesAssignedPermission()
+    public async Task CurrentRoleProjection_UsesEfAssignedEnabledRoles()
     {
         using var dbContext = CreateDbContext();
-        var roleRepository = new EfRoleRepository(dbContext);
-        var permissionRepository = new EfPermissionRepository(dbContext);
-        var rolePermissionRepository = new EfRolePermissionRepository(dbContext);
-        var userRoleRepository = new EfUserRoleRepository(dbContext);
-
-        var role = new Role { Code = "Admin", Name = "管理员" };
-        var permission = new Permission { Code = "Test.View", DisplayName = "查看测试", ModuleId = "Test" };
-
-        await roleRepository.CreateAsync(role);
-        await permissionRepository.CreateAsync(permission);
-        await rolePermissionRepository.CreateBatchAsync(new[]
-        {
-            new RolePermission { RoleId = role.Id, PermissionId = permission.Id }
-        });
-        await userRoleRepository.CreateBatchAsync(new[]
-        {
-            new UserRole { UserId = "user1", RoleId = role.Id }
-        });
-
-        var service = new AuthorizationService(
-            userRoleRepository,
-            rolePermissionRepository,
-            permissionRepository,
-            roleRepository, AuthorizationTestCatalog.Create("Test.View"));
-
-        var hasPermission = await service.HasPermissionAsync("user1", "Test.View");
-
-        Assert.True(hasPermission);
+        var roles = new EfRoleRepository(dbContext);
+        var members = new EfUserRoleRepository(dbContext);
+        var role = new Role { Code = "Assigned", Name = "角色" };
+        await roles.CreateAsync(role);
+        await members.CreateBatchAsync([new UserRole { UserId = "actor", RoleId = role.Id }]);
+        var service = new AuthorizationService(members, roles);
+        Assert.Equal(["Assigned"], await service.GetUserRolesAsync("actor"));
+        role.IsEnabled = false;
+        await roles.UpdateAsync(role);
+        Assert.Empty(await service.GetUserRolesAsync("actor"));
     }
 
     [Fact]

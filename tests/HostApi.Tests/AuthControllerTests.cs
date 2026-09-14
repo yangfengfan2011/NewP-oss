@@ -3,7 +3,7 @@ using ICP.Platform.Authentication.Contracts;
 using ICP.Platform.HostApi.Authentication;
 using ICP.Platform.HostApi.Controllers;
 using ICP.Platform.Identity.Contracts;
-using ICP.Platform.Modules.Authorization.Services;
+using ICP.Platform.Authorization.Http;
 using ICP.Platform.Persistence.Abstractions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -23,7 +23,7 @@ public sealed class AuthControllerTests
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         var request = JsonSerializer.Deserialize<LoginRequest>("""{"ecode":"admin","password":"secret","timeZoneId":"Asia/Taipei"}""", options);
         var response = JsonSerializer.Serialize(
-            new AuthUserResponse("User_1", "admin", "Administrator", [], false, 1, true, "Asia/Taipei"),
+            new AuthUserResponse("User_1", "admin", "Administrator", false, 1, true, "Asia/Taipei"),
             options);
 
         Assert.Equal("admin", request?.ECODE);
@@ -33,6 +33,28 @@ public sealed class AuthControllerTests
         Assert.Contains("\"ename\":", response, StringComparison.Ordinal);
         Assert.DoesNotContain("username", response, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("displayName", response, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task FeatureProjectionFailure_PreservesUnavailableResponseWithoutIssuingSession(bool login)
+    {
+        var sessions = new RecordingSessionRegistry();
+        var cookie = new RecordingCookie();
+        var controller = Controller(new StubAuthenticator { Result = new LocalCredentialAuthenticationResult
+            { Status = LocalCredentialAuthenticationStatus.Succeeded, Account = Account() } }, sessions, cookie,
+            features: new FailingFeatureProjection());
+        controller.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity([
+            new(ClaimTypes.NameIdentifier, "user-1"), new(ClaimTypes.Name, "admin"), new("ename", "Administrator"),
+            new(HostSessionAuthenticationHandler.TimeZoneIdClaim, "Asia/Taipei")], HostSessionAuthenticationHandler.SchemeName));
+        var result = login ? await controller.Login(new LoginRequest("admin", "secret"), CancellationToken.None)
+            : await controller.GetCurrentUser(CancellationToken.None);
+        var response = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(503, response.StatusCode);
+        Assert.Equal("AUTHORIZATION_DECISION_UNAVAILABLE", Assert.IsType<ProblemDetails>(response.Value).Extensions["code"]);
+        Assert.Null(cookie.AppendedCredential);
+        Assert.Null(sessions.Registration);
     }
 
     [Fact]
@@ -202,7 +224,7 @@ public sealed class AuthControllerTests
         ILocalCredentialAuthenticator authenticator,
         RecordingSessionRegistry sessions,
         RecordingCookie cookie,
-        ILogger<AuthController>? logger = null)
+        ILogger<AuthController>? logger = null, IFeatureGrantProjection? features = null)
     {
         var controller = new AuthController(
             authenticator,
@@ -210,8 +232,7 @@ public sealed class AuthControllerTests
             new InlineTransactionExecutor(),
             cookie,
             new PasswordVerificationGate(Options.Create(new HostAuthenticationOptions())),
-            new StubAuthorizationService(),
-            logger ?? NullLogger<AuthController>.Instance)
+            logger ?? NullLogger<AuthController>.Instance, features ?? new FixedFeatureProjection())
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };
@@ -310,12 +331,14 @@ public sealed class AuthControllerTests
             registerChanges(cancellationToken);
     }
 
-    private sealed class StubAuthorizationService : IAuthorizationService
+    private sealed class FixedFeatureProjection : IFeatureGrantProjection
     {
-        public Task<bool> HasPermissionAsync(string userId, string permissionCode, CancellationToken cancellationToken = default) => Task.FromResult(false);
-        public Task<bool> HasAnyPermissionAsync(string userId, IEnumerable<string> permissionCodes, CancellationToken cancellationToken = default) => Task.FromResult(false);
-        public Task<bool> HasAllPermissionsAsync(string userId, IEnumerable<string> permissionCodes, CancellationToken cancellationToken = default) => Task.FromResult(false);
-        public Task<List<string>> GetUserPermissionsAsync(string userId, CancellationToken cancellationToken = default) => Task.FromResult(new List<string>());
-        public Task<List<string>> GetUserRolesAsync(string userId, CancellationToken cancellationToken = default) => Task.FromResult(new List<string>());
+        public Task<IReadOnlyList<string>> GetCurrentPositionsAsync(string subjectId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string>>(["declared.feature"]);
+    }
+    private sealed class FailingFeatureProjection : IFeatureGrantProjection
+    {
+        public Task<IReadOnlyList<string>> GetCurrentPositionsAsync(string subjectId, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("unavailable feature store");
     }
 }

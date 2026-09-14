@@ -6,7 +6,6 @@ using ICP.Platform.HostApi.Authentication;
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Sdk.Http;
-using PlatformAuthorizationService = ICP.Platform.Modules.Authorization.Services.IAuthorizationService;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Mvc;
@@ -41,17 +40,16 @@ public sealed class AuthController : ControllerBase
     private readonly IPlatformTransactionExecutor _transactionExecutor;
     private readonly IHostAuthenticationCookie _cookie;
     private readonly PasswordVerificationGate _passwordVerificationGate;
-    private readonly PlatformAuthorizationService _authorizationService;
     private readonly ILogger<AuthController> _logger;
     private readonly IFeatureGrantProjection? _featureGrants;
 
+    // 认证会话拥有主体加载；功能授权投影只参与登录与当前用户响应。
     public AuthController(
         ILocalCredentialAuthenticator credentialAuthenticator,
         IAuthenticationSessionRegistry sessionRegistry,
         IPlatformTransactionExecutor transactionExecutor,
         IHostAuthenticationCookie cookie,
         PasswordVerificationGate passwordVerificationGate,
-        PlatformAuthorizationService authorizationService,
         ILogger<AuthController> logger,
         IFeatureGrantProjection? featureGrants = null)
     {
@@ -60,7 +58,6 @@ public sealed class AuthController : ControllerBase
         _transactionExecutor = transactionExecutor;
         _cookie = cookie;
         _passwordVerificationGate = passwordVerificationGate;
-        _authorizationService = authorizationService;
         _logger = logger;
         _featureGrants = featureGrants;
     }
@@ -97,9 +94,6 @@ public sealed class AuthController : ControllerBase
             return ProblemResult(401, "AUTH_INVALID_CREDENTIALS");
         }
 
-        var permissions = await _authorizationService.GetUserPermissionsAsync(
-            authentication.Account.AccountEid,
-            cancellationToken);
         IReadOnlyList<string> features;
         try { features = _featureGrants is null ? [] : await _featureGrants.GetCurrentPositionsAsync(authentication.Account.AccountEid, cancellationToken); }
         catch (Exception error) when (error is not OperationCanceledException) { return ProblemResult(503, "AUTHORIZATION_DECISION_UNAVAILABLE"); }
@@ -128,7 +122,6 @@ public sealed class AuthController : ControllerBase
 
         return Ok(ToResponse(
             authentication.Account,
-            permissions,
             authentication.IsTemporary,
             issuance.Session.TimeZoneId) with { FeaturePositions = features });
     }
@@ -173,7 +166,6 @@ public sealed class AuthController : ControllerBase
             return ProblemResult(401, "AUTH_SESSION_INVALID");
         }
 
-        var permissions = await _authorizationService.GetUserPermissionsAsync(userId, cancellationToken);
         IReadOnlyList<string> features;
         try { features = _featureGrants is null ? [] : await _featureGrants.GetCurrentPositionsAsync(userId, cancellationToken); }
         catch (Exception error) when (error is not OperationCanceledException) { return ProblemResult(503, "AUTHORIZATION_DECISION_UNAVAILABLE"); }
@@ -199,7 +191,6 @@ public sealed class AuthController : ControllerBase
             userId,
             accountCode,
             ename,
-            permissions,
             restricted,
             revision,
             isLocalAdministrator,
@@ -223,14 +214,12 @@ public sealed class AuthController : ControllerBase
     // 组合登录成功响应，并保持响应时区与本次签发的会话快照一致。
     private static AuthUserResponse ToResponse(
         IdentityAccountSnapshot account,
-        IReadOnlyList<string> permissions,
         bool mustChangePassword,
         string timeZoneId) =>
         new(
             account.AccountEid,
             account.ECODE,
             account.ENAME,
-            permissions,
             mustChangePassword,
             account.Revision,
             account.IsLocalAdministrator,
@@ -245,7 +234,6 @@ public sealed record AuthUserResponse(
     string Id,
     string ECODE,
     string ENAME,
-    IReadOnlyList<string> Permissions,
     bool MustChangePassword,
     long Revision,
     bool IsLocalAdministrator,

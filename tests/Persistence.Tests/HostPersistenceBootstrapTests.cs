@@ -91,7 +91,7 @@ public class HostPersistenceBootstrapTests
         var initializer = scope.ServiceProvider.GetRequiredService<AuthorizationCatalogInitializer>();
 
         Assert.NotNull(initializer);
-        Assert.IsType<RolePermissionWriter>(scope.ServiceProvider.GetRequiredService<IRolePermissionWriter>());
+        Assert.IsType<RoleFeatureWriter>(scope.ServiceProvider.GetRequiredService<RoleFeatureWriter>());
         Assert.IsType<UserRoleAssignments>(scope.ServiceProvider.GetRequiredService<IUserRoleAssignments>());
     }
 

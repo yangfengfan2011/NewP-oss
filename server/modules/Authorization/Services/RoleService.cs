@@ -8,28 +8,23 @@ namespace ICP.Platform.Modules.Authorization.Services;
 public class RoleService : IRoleService
 {
     private readonly IRoleRepository _roleRepository;
-    private readonly IPermissionRepository _permissionRepository;
     private readonly IRolePermissionRepository _rolePermissionRepository;
     private readonly IUserRoleRepository _userRoleRepository;
     private readonly IPlatformObjectIdGenerator _objectIdGenerator;
-    private readonly IRolePermissionWriter _permissionWriter;
     private readonly IUserRoleAssignments _userAssignments;
 
-    // 组合普通角色管理与完整权限集合提交；初始化使用独立入口。
+    // 组合角色维护与成员关系写入；初始化使用独立入口。
     public RoleService(
         IRoleRepository roleRepository,
-        IPermissionRepository permissionRepository,
         IRolePermissionRepository rolePermissionRepository,
         IUserRoleRepository userRoleRepository,
         IPlatformObjectIdGenerator objectIdGenerator,
-        IRolePermissionWriter permissionWriter, IUserRoleAssignments userAssignments)
+        IUserRoleAssignments userAssignments)
     {
         _roleRepository = roleRepository;
-        _permissionRepository = permissionRepository;
         _rolePermissionRepository = rolePermissionRepository;
         _userRoleRepository = userRoleRepository;
         _objectIdGenerator = objectIdGenerator;
-        _permissionWriter = permissionWriter;
         _userAssignments = userAssignments;
     }
 
@@ -123,27 +118,6 @@ public class RoleService : IRoleService
         // 删除角色
         await _roleRepository.DeleteAsync(roleId, cancellationToken);
     }
-
-    // 不把未知角色伪装为合法空集合。
-    public async Task<RolePermissionsDto> GetRolePermissionsAsync(string roleId, CancellationToken cancellationToken = default)
-    {
-        if (await _roleRepository.GetByIdAsync(roleId, cancellationToken) is null) throw new InvalidOperationException("角色不存在。");
-        var rolePermissions = await _rolePermissionRepository.GetByRoleIdAsync(roleId, cancellationToken);
-        var permissionIds = rolePermissions.Select(rp => rp.PermissionId).ToList();
-
-        var permissions = await _permissionRepository.GetByIdsAsync(permissionIds, cancellationToken);
-        var permissionCodes = permissions.Select(p => p.Code).ToList();
-
-        return new RolePermissionsDto
-        {
-            RoleId = roleId,
-            PermissionCodes = permissionCodes
-        };
-    }
-
-    // 普通调用只进入事务性权限替换，不接受初始化身份或操作者旁路。
-    public Task AssignRolePermissionsAsync(string roleId, AssignRolePermissionsRequest request, string? grantedBy = null, CancellationToken cancellationToken = default) =>
-        _permissionWriter.ReplaceAsync(roleId, request.PermissionCodes, cancellationToken);
 
     // 用户关系只通过完整校验及事务性写入边界访问。
     public Task<UserRoleAssignmentsDto> GetUserRolesAsync(string userId, CancellationToken cancellationToken = default) =>

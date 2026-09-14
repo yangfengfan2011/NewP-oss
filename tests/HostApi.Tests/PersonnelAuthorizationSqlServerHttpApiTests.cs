@@ -59,7 +59,7 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
             }
             await AssertStatusAsync(client.PostAsJsonAsync("/api/identity/accounts", new { ECODE = "denied" }), HttpStatusCode.Forbidden);
             await AssertStatusAsync(SendAsync(client, http.Workbench("authorization.workbench.save"), HttpMethod.Put, $"/api/authorization/workbench/roles/{maintainer.RoleId}", new { positions = Array.Empty<string>() }), HttpStatusCode.Forbidden);
-            await AssertStatusAsync(client.PutAsJsonAsync($"/api/authorization/users/{maintainer.Id}/roles", new { RoleCodes = Array.Empty<string>() }), HttpStatusCode.Forbidden);
+            await AssertStatusAsync(FeatureHttpTestRequests.SendAsync(client, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{maintainer.Id}/roles", new { RoleCodes = Array.Empty<string>() }), HttpStatusCode.Forbidden);
         }
         var beforeRejected = await HistoryAsync(admin, person);
         await AssertStatusAsync(SendAsync(read, create, HttpMethod.Post, "/api/organization/persons", Person("DENIED", company, a, position)), HttpStatusCode.Forbidden);
@@ -70,7 +70,7 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
         await AssertStatusAsync(SendAsync(writer, disable, HttpMethod.Put, $"/api/organization/persons/{person}/status/disable", new { isEnabled = false, reason = "正式停用" }), HttpStatusCode.OK);
         await AssertStatusAsync(SendAsync(writer, http.Organization("persons", "enable", "list.rowActions"), HttpMethod.Put, $"/api/organization/persons/{person}/status/enable", new { isEnabled = true, reason = "正式启用" }), HttpStatusCode.OK);
         var secondRole = await CreateRoleAsync(http, admin, "duplicate-source", [edit]);
-        await SetRolesAsync(admin, maintainer.Id, ["matrix-m", "duplicate-source"]);
+        await SetRolesAsync(http, admin, maintainer.Id, ["matrix-m", "duplicate-source"]);
         await http.GrantAsync(admin, maintainer.RoleId, [.. Views(http), create]);
         await AssertStatusAsync(SendAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "重复来源仍生效" }), HttpStatusCode.OK);
         await http.GrantAsync(admin, secondRole, []);
@@ -87,9 +87,9 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
         await CreateAsync(writer, create, "/api/organization/persons", Person("STILL-CREATE", company, a, position));
         await http.GrantAsync(admin, secondRole, edit);
         await AssertStatusAsync(SendAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "重新授予" }), HttpStatusCode.OK);
-        await AssertStatusAsync(admin.PutAsJsonAsync($"/api/authorization/roles/{secondRole}", new { Name = "停用来源", IsEnabled = false }), HttpStatusCode.OK);
+        await AssertStatusAsync(FeatureHttpTestRequests.SendAsync(admin, http.Role("edit"), HttpMethod.Put, $"/api/authorization/roles/{secondRole}", new { Name = "停用来源", IsEnabled = false }), HttpStatusCode.OK);
         await AssertStatusAsync(SendAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "停用后禁止" }), HttpStatusCode.Forbidden);
-        await AssertStatusAsync(admin.PutAsJsonAsync($"/api/authorization/roles/{secondRole}", new { Name = "恢复来源", IsEnabled = true }), HttpStatusCode.OK);
+        await AssertStatusAsync(FeatureHttpTestRequests.SendAsync(admin, http.Role("edit"), HttpMethod.Put, $"/api/authorization/roles/{secondRole}", new { Name = "恢复来源", IsEnabled = true }), HttpStatusCode.OK);
         // #205 接回正式删除后失效及同名再引入；当前守卫拒绝删除候选，不能误撤销活动授权。
         await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.RemoveActiveFeatureAsync(edit.Position));
         await AssertStatusAsync(SendAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "失败候选保持有效" }), HttpStatusCode.OK);
@@ -131,9 +131,10 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
         Assert.Equal(HttpStatusCode.Created, accountResponse.StatusCode);
         var account = await accountResponse.Content.ReadFromJsonAsync<JsonElement>();
         var id = account.GetProperty("account").GetProperty("eid").GetString()!;
-        var role = await CreateRoleAsync(new(fixture), admin, code, features);
+        var http = new FeatureHttpTestRequests(fixture);
+        var role = await CreateRoleAsync(http, admin, code, features);
         if (permissions is not null) await AssertStatusAsync(admin.PutAsJsonAsync($"/api/authorization/roles/{role}/permissions", new { PermissionCodes = permissions }), HttpStatusCode.NoContent);
-        await SetRolesAsync(admin, id, [code]);
+        await SetRolesAsync(http, admin, id, [code]);
         var client = await fixture.LoginAsync(code, account.GetProperty("temporaryCredential").GetString()!);
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
         return (id, role, client);
@@ -141,16 +142,16 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
     private static async Task<string> CreateRoleAsync(FeatureHttpTestRequests http, HttpClient admin, string code, FeaturePoint[] features)
     {
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(admin);
-        using var response = await admin.PostAsJsonAsync("/api/authorization/roles", new { Code = code, Name = code });
+        using var response = await FeatureHttpTestRequests.SendAsync(admin, http.Role("create"), HttpMethod.Post, "/api/authorization/roles", new { Code = code, Name = code });
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var id = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString()!;
         await http.GrantAsync(admin, id, features);
         return id;
     }
-    private static async Task SetRolesAsync(HttpClient admin, string userId, string[] roles)
+    private static async Task SetRolesAsync(FeatureHttpTestRequests http, HttpClient admin, string userId, string[] roles)
     {
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(admin);
-        await AssertStatusAsync(admin.PutAsJsonAsync($"/api/authorization/users/{userId}/roles", new { RoleCodes = roles }), HttpStatusCode.NoContent);
+        await AssertStatusAsync(FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{userId}/roles", new { RoleCodes = roles }), HttpStatusCode.NoContent);
     }
     private static async Task<string> HistoryAsync(HttpClient admin, string person) => await admin.GetStringAsync($"/api/audit/business-changes?TargetId={person}");
     private static async Task AssertStatusAsync(Task<HttpResponseMessage> pending, HttpStatusCode expected)

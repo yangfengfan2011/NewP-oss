@@ -158,9 +158,10 @@ public sealed class OrganizationFeatureSqlServerHttpApiTests
     }
     private static async Task<(string RoleId, HttpClient Client)> UserAsync(BusinessAuditHostFixture fixture, HttpClient admin, string code)
     {
-        var role = await BusinessAuditSqlServerHttpApiTests.CreateAsync(admin, "/api/authorization/roles", new { Code = code, Name = code });
+        var http = new FeatureHttpTestRequests(fixture);
+        var role = await FeatureHttpTestRequests.CreateAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = code, Name = code });
         var account = await BusinessAuditSqlServerHttpApiTests.CreateAsync(admin, "/api/identity/accounts", new { ECODE = code, ENAME = code });
-        using var membership = await admin.PutAsJsonAsync($"/api/authorization/users/{account.GetProperty("account").GetProperty("eid").GetString()}/roles", new { RoleCodes = new[] { code } });
+        using var membership = await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{account.GetProperty("account").GetProperty("eid").GetString()}/roles", new { RoleCodes = new[] { code } });
         Assert.Equal(HttpStatusCode.NoContent, membership.StatusCode);
         return (role.GetProperty("id").GetString()!, await fixture.LoginAsync(code, account.GetProperty("temporaryCredential").GetString()!));
     }

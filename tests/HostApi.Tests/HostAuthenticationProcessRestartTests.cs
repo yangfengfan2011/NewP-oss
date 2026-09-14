@@ -102,7 +102,7 @@ public sealed class HostAuthenticationProcessRestartTests
             var person = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(client, http.Organization("persons", "create", "list.pageActions"),
                 "/api/organization/persons", new { PersonNo = "RESTART-P", ENAME = "重启人员", CompanyId = company, DepartmentId = department, EmploymentStatus = "Active", IsEnabled = true }));
             await BusinessAuditSqlServerHttpApiTests.UpdateAsync(client, http.Organization("persons", "edit", "list.rowActions"), person, new { ENAME = "持久姓名" });
-            using var roleResponse = await client.PostAsJsonAsync("/api/authorization/roles", new { Code = "restart-reader", Name = "重启查询职责" });
+            using var roleResponse = await FeatureHttpTestRequests.SendAsync(client, http.Role("create"), HttpMethod.Post, "/api/authorization/roles", new { Code = "restart-reader", Name = "重启查询职责" });
             Assert.Equal(HttpStatusCode.Created, roleResponse.StatusCode);
             var roleId = (await roleResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
             using var permissionResponse = await client.PutAsJsonAsync($"/api/authorization/roles/{roleId}/permissions", new { PermissionCodes = new[] { "Organization.Person.View" } });
@@ -110,7 +110,7 @@ public sealed class HostAuthenticationProcessRestartTests
             using var accountResponse = await client.PostAsJsonAsync("/api/identity/accounts", new { ECODE = "restart-member", ENAME = "重启查询账号" });
             Assert.Equal(HttpStatusCode.Created, accountResponse.StatusCode);
             var accountId = (await accountResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("account").GetProperty("eid").GetString();
-            using var assignment = await client.PutAsJsonAsync($"/api/authorization/users/{accountId}/roles", new { RoleCodes = new[] { "restart-reader" } });
+            using var assignment = await FeatureHttpTestRequests.SendAsync(client, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{accountId}/roles", new { RoleCodes = new[] { "restart-reader" } });
             Assert.Equal(HttpStatusCode.NoContent, assignment.StatusCode);
             var historyBefore = await client.GetStringAsync("/api/audit/business-changes?pageSize=100");
             StopExactProcess(process);
@@ -127,7 +127,7 @@ public sealed class HostAuthenticationProcessRestartTests
             Assert.NotEmpty(Directory.GetFiles(keyRing, "key-*.xml"));
             var restoredPerson = await FeatureHttpTestRequests.ReadAsync(client, http.Organization("persons"), $"/api/organization/persons/{person}");
             Assert.Equal("持久姓名", restoredPerson.GetProperty("fields").GetProperty("ENAME").GetString());
-            var restoredRoles = await client.GetFromJsonAsync<JsonElement>($"/api/authorization/users/{accountId}/roles");
+            var restoredRoles = await FeatureHttpTestRequests.ReadAsync(client, http.Role("userRoles"), $"/api/authorization/users/{accountId}/roles");
             Assert.Equal("restart-reader", Assert.Single(restoredRoles.GetProperty("roleCodes").EnumerateArray()).GetString());
             var restoredPermissions = await client.GetFromJsonAsync<JsonElement>($"/api/authorization/roles/{roleId}/permissions");
             Assert.Contains("Organization.Person.View", restoredPermissions.ToString());

@@ -11,21 +11,22 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
     public async Task OrdinaryActor_ViewSaveAndRevocationUseCurrentGrantsAndExactBinding()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
         using var admin = await fixture.LoginAdministratorAsync();
         var current = await admin.GetFromJsonAsync<JsonElement>("/api/auth/current-user");
         var positions = current.GetProperty("featurePositions").EnumerateArray().Select(p => p.GetString()!).ToArray();
         var read = fixture.FeatureCatalog.Single(point => point.ModuleId == "Authorization" && point.BehaviorKey == "authorization.workbench.read").Position;
         var save = fixture.FeatureCatalog.Single(point => point.ModuleId == "Authorization" && point.BehaviorKey == "authorization.workbench.save").Position;
         Assert.Contains(read, positions); Assert.Contains(save, positions);
-        var role = await CreateAsync(admin, "/api/authorization/roles", new { Code = "FeatureReader", Name = "普通授权维护" });
+        var role = await FeatureHttpTestRequests.CreateAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = "FeatureReader", Name = "普通授权维护" });
         var roleId = role.GetProperty("id").GetString()!;
-        var target = await CreateAsync(admin, "/api/authorization/roles", new { Code = "GlobalTarget", Name = "其他角色" });
+        var target = await FeatureHttpTestRequests.CreateAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = "GlobalTarget", Name = "其他角色" });
         var targetId = target.GetProperty("id").GetString()!;
         var account = await CreateAsync(admin, "/api/identity/accounts", new { ECODE = "feature-reader", ENAME = "普通授权者" });
         var actor = account.GetProperty("account").GetProperty("eid").GetString();
         SetPosition(admin, save);
         using (var grant = await admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{roleId}", new { positions = new[] { read } })) Assert.Equal(HttpStatusCode.NoContent, grant.StatusCode);
-        using (var assign = await admin.PutAsJsonAsync($"/api/authorization/users/{actor}/roles", new { RoleCodes = new[] { "FeatureReader" } })) Assert.Equal(HttpStatusCode.NoContent, assign.StatusCode);
+        using (var assign = await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{actor}/roles", new { RoleCodes = new[] { "FeatureReader" } })) Assert.Equal(HttpStatusCode.NoContent, assign.StatusCode);
         using var ordinary = await fixture.LoginAsync("feature-reader", account.GetProperty("temporaryCredential").GetString()!);
         SetPosition(ordinary, read);
         fixture.Fault.FeatureCommands.Clear();
@@ -57,9 +58,9 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
         fixture.Fault.AfterRegister = null;
         SetPosition(ordinary, read);
         using (var revoked = await ordinary.GetAsync("/api/authorization/workbench/catalog")) Assert.Equal(HttpStatusCode.Forbidden, revoked.StatusCode);
-        using (var assign = await admin.PutAsJsonAsync($"/api/authorization/users/{actor}/roles", new { RoleCodes = new[] { "FeatureReader", "GlobalTarget" } })) Assert.Equal(HttpStatusCode.NoContent, assign.StatusCode);
+        using (var assign = await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{actor}/roles", new { RoleCodes = new[] { "FeatureReader", "GlobalTarget" } })) Assert.Equal(HttpStatusCode.NoContent, assign.StatusCode);
         using (var union = await ordinary.GetAsync("/api/authorization/workbench/catalog")) Assert.Equal(HttpStatusCode.OK, union.StatusCode);
-        using (var disabled = await admin.PutAsJsonAsync($"/api/authorization/roles/{targetId}", new { Name = "其他角色", IsEnabled = false })) Assert.Equal(HttpStatusCode.OK, disabled.StatusCode);
+        using (var disabled = await FeatureHttpTestRequests.SendAsync(admin, http.Role("edit"), HttpMethod.Put, $"/api/authorization/roles/{targetId}", new { Name = "其他角色", IsEnabled = false })) Assert.Equal(HttpStatusCode.OK, disabled.StatusCode);
         using (var denied = await ordinary.GetAsync("/api/authorization/workbench/catalog")) Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
         fixture.Fault.Mode = "feature-decision";
         using (var unavailable = await ordinary.GetAsync("/api/authorization/workbench/catalog")) Assert.Equal(HttpStatusCode.ServiceUnavailable, unavailable.StatusCode);
@@ -70,10 +71,11 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
     public async Task Replacement_ValidatesWholeSetAndRollsBackGrantAndAuditTogether()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
         await fixture.RepeatFeatureSynchronizationAsync();
         using var admin = await fixture.LoginAdministratorAsync();
         var (read, save) = await PositionsAsync(fixture, admin);
-        var role = await CreateAsync(admin, "/api/authorization/roles", new { Code = "Replace", Name = "替换测试" });
+        var role = await FeatureHttpTestRequests.CreateAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = "Replace", Name = "替换测试" });
         var id = role.GetProperty("id").GetString()!;
         SetPosition(admin, save);
         foreach (var invalid in new[] { new[] { save }, new[] { "unknown" } })
@@ -114,9 +116,10 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
     public async Task ConcurrentReplacement_RecordsActualPredecessor()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
         using var admin = await fixture.LoginAdministratorAsync();
         var (read, save) = await PositionsAsync(fixture, admin);
-        var role = await CreateAsync(admin, "/api/authorization/roles", new { Code = "Race", Name = "并发测试" });
+        var role = await FeatureHttpTestRequests.CreateAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = "Race", Name = "并发测试" });
         var id = role.GetProperty("id").GetString()!;
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

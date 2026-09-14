@@ -29,6 +29,13 @@ internal sealed class FeatureHttpTestRequests(IReadOnlyList<FeaturePoint> points
             && point.Key == action && point.ActionScope == surface && point.StaticScope == nodeType);
     }
 
+    internal FeaturePoint Role(string? action = null, string? surface = null)
+    {
+        var entry = points.Single(point => point.ModuleId == "Authorization" && point.Kind == "navigation" && point.Key == "authorization.roles");
+        return action is null ? entry : points.Single(point => point.ParentPosition == entry.Position && point.Key == action
+            && point.ActionScope == (surface ?? (action == "create" ? "list.pageActions" : "list.rowActions")));
+    }
+
     internal FeaturePoint Workbench(string behavior) => points.Single(point => point.ModuleId == "Authorization" && point.BehaviorKey == behavior);
 
     internal static Task<HttpResponseMessage> SendAsync(HttpClient client, FeaturePoint point, HttpMethod method, string path, object? body = null)

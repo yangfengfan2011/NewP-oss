@@ -1,7 +1,7 @@
 using ICP.Platform.Acceptance;
 
-// 模块闸门已经改为 dotnet test 入口；这里只剩 production cold-start，
-// 因为它要在冻结的 commit 上跑一整套构建 + 真实浏览器度量，不适合走测试宿主。
+// 模块闸门使用 dotnet test；独立测量入口分别拥有 production cold-start 或浏览器观察。
+if (args is ["--observe-feature-scale"]) return await FeatureScaleBrowserObserver.RunConsoleAsync();
 try
 {
     var values = ParseValues(args);

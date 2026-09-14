@@ -10,7 +10,7 @@
 - [Standard CRUD](./docs/contexts/standard-crud/CONTEXT.md) — 管理共享 CRUD 宿主使用的字段、表单、列表与详情展示契约
 - [View Composition](./docs/contexts/view-composition/CONTEXT.md) — 定义页面引用、视图配置及树与标签页组合的已确认目标契约，落地状态见 ADR-0046
 - [Plugin Platform](./docs/contexts/plugin-platform/CONTEXT.md) — 管理外部插件包的校验、期望状态、启动期激活与统一运行时投影
-- [Authorization](./docs/contexts/authorization/CONTEXT.md) — 把已认证主体与活动权限目录解析为服务端 endpoint 的允许、拒绝或不可判定结果
+- [Authorization](./docs/contexts/authorization/CONTEXT.md) — 把已认证主体、活动功能目录及已登记位置的执行绑定解析为服务端 endpoint 的允许、拒绝或不可判定结果
 - [Platform Persistence](./docs/contexts/platform-persistence/CONTEXT.md) — 把候选模块计划编译为共享运行时模型与可验证的 EF migration streams，并保障 SQL Server 上的确定执行
 - [Platform Acceptance](./docs/contexts/platform-acceptance/CONTEXT.md) — 编排正式观察面上的用户旅程与故障场景，并从完整证据集中产生两道闸门的唯一裁决
 
@@ -23,7 +23,7 @@
 - **Identity → Standard CRUD**：Identity 拥有用户账号、账号安全命令、一次性凭据结果与安全事件；Standard CRUD 只承载账号管理的共享列表、表单和详情呈现。Identity 通过 metadata 与模块 binding 接入共享宿主，Shell 不包含 Identity 资源或字段特判，通用 CRUD 写入也不能替代 Identity 的专用安全命令。
 - **Authentication → Host**：Authentication 拥有服务端认证会话、有效性及登录时固定的有效 IANA 时区；Host 负责 Cookie 接入和逐请求验证，并把已验证会话时区与当前请求 locale 组合为请求展示上下文，但不拥有会话状态。首阶段只支持单个活动 Host，Host 使用稳定应用名和受保护的持久化 Data Protection 密钥环保证正常重启后仍能解析既有 Cookie，多实例共享认证不在本阶段范围内。
 - **Organization → Identity / Authentication**：Organization 通过账号目录查询用户账号，并由 Person 保存不可变的 IdentityAccount EID 来拥有永久一对一绑定；Identity 不保存 Person EID，Person.Name 与 IdentityAccount.ENAME 分别维护且不自动同步。账号目录暂时不可用时，已绑定人员仍可降级读取 Organization 自有绑定事实，但新绑定安全关闭。Organization 应用层通过 Identity.Contracts、Authentication.Contracts 与平台事务执行器编排人员停用、关联账号停用、人员停用阻断和全部会话撤销的单事务提交；Host 不承载该业务流程。人员恢复只解除阻断条件，不会自动恢复账号或旧会话。
-- **Organization → Authorization**：Organization 声明业务权限和 endpoint access rule，并只通过稳定契约读取授权摘要；它不拥有角色、权限分配或授权存储实现。
+- **Organization → Authorization**：Organization 声明入口、动作及其执行绑定，并通过稳定授权契约协作；它不拥有角色、功能授权分配或授权存储实现。
 - **Organization → Standard CRUD**：Organization 拥有人员数据与业务行为，并以人员中心作为 Standard CRUD 的首个完整采用者；Standard CRUD 拥有共享列表、表单和详情宿主，不吸收人员专属规则。
 - **Organization → View Composition（目标）**：Organization 提供组织节点、读取、路径及业务上下文；视图组合承载组织管理入口与节点内容，不拥有公司／部门层级或生命周期规则。
 - **View Composition → Standard CRUD（目标）**：组合引用标准列表与详情页面，将 View 作为参数并复用表单及动作执行；Standard CRUD 继续拥有内容结构与写入生命周期，组合层协调上下文、页面实例状态和受影响呈现面。
@@ -35,9 +35,9 @@
 - **Platform Persistence → Modules**：模块拥有自己的模型和 migration stream；Platform Persistence 校验归属、线性迁移链、摘要与目标 frontier，并把所有活动模型投影进共享运行时 DbContext。
 - **Platform Persistence → Host**：Host 是数据库 migration 的唯一受支持执行入口，使用同一份已编译计划完成 DI 注册、完整 EF Up、统一 history 维护和只读一致性检查；它不枚举具体模块 provider，也不决定模块迁移顺序。
 - **Authorization → Identity / LocalAuth**：Authorization 消费可信主体标识，不拥有凭据交换、Cookie 或账号生命周期。
-- **Authorization → Plugin Platform**：Authorization 只接受活动插件快照中的权限和 access rule；未激活插件的声明不能进入有效权限目录。
-- **Authorization → Shell**：Shell 可用当前主体的有效权限改善菜单和按钮可见性，但服务端判定始终是安全事实源。
-- **Standard CRUD → Authorization**：Standard CRUD 消费 metadata 中的权限引用控制交互呈现，但字段是否出现在 View 中不构成数据授权，服务端 endpoint 判定仍是安全事实源。
+- **Authorization → Plugin Platform**：Authorization 接受经过完整目录、执行绑定和运行时准备校验的候选功能目录，事务同步成功后发布活动目录；失败或未激活候选不能成为有效授权源。
+- **Authorization → Shell**：Shell 消费当前主体的有效功能位置控制菜单、Tab 和动作可见性，但服务端判定始终是安全事实源。
+- **Standard CRUD → Authorization**：Standard CRUD 消费 metadata 编译出的功能位置控制交互呈现和请求上下文，但字段是否出现在 View 中不构成数据授权，服务端 endpoint 判定仍是安全事实源。
 - **Standard CRUD ↔ Platform Persistence**：同一 Model authoring 中的字段策略分别投影为 Standard CRUD 写入约束和 Platform Persistence 存储约束；存储必填不自动等于客户端创建必填，表单必填也不自动产生数据库非空或永久 `DEFAULT`。Required 字段的旧数据演进由模块提供语义值，Platform Persistence 统一执行迁移门禁。
 - **Platform Acceptance → Host / Shell**：Platform Acceptance 只通过受支持启动命令、就绪接口、Shell origin 与浏览器可见行为观察系统，不直接组合或启动内部组件。
 - **Platform Acceptance → Organization**：验收 Fixture 只通过受限的应用接口准备公司、部门与 actors；人员中心结果仍必须通过正式 API 与浏览器旅程证明。

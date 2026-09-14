@@ -4,10 +4,10 @@
 
 - Module Capsule 根声明唯一拥有 module id、display name、version、host contract range 与 dependencies。
 - 后端 C# behavior binding 只注册 DI、endpoint 与服务实现，并从 runtime context 获取 canonical identity。
-- navigation / view / model / security / localization authoring 分别拥有静态路由、菜单、模型、权限和文案事实。
+- navigation / view / model / security / localization authoring 分别拥有静态路由、菜单、模型、功能授权声明和文案事实。
 - 前端 TypeScript behavior binding 只把稳定 key 绑定到 page、renderer 或 action implementation。
 
-C#、TypeScript 和子清单不得重新声明 Capsule 已拥有的 identity，也不得与 authoring metadata 平行维护 route、menu 或 permission。
+C#、TypeScript 和子清单不得重新声明 Capsule 已拥有的 identity，也不得与 authoring metadata 平行维护 route、menu 或功能授权声明。
 
 ## Runtime contract
 
@@ -16,13 +16,13 @@ C#、TypeScript 和子清单不得重新声明 Capsule 已拥有的 identity，�
 - backend load view；
 - `GET /plugins/active-module-runtime.json`；
 - frontend / metadata / localization compatibility projections；
-- permission 与 model indexes。
+- feature catalog 与 model indexes。
 
 所有投影由同一启动期计划生成并记录 `snapshotId` / `planHash`。冲突或引用缺失必须在该次启动中拒绝整份 candidate；不得依赖加载顺序覆盖、warning 后跳过或部分注册。当前不支持进程存活期间改变插件集合，因此跨请求投影 identity 核对、运行中原子切换与回滚不属于本契约；见 ADR-0032。
 
 ## 功能位置授权
 
-已切换的标准入口在 navigation 声明 `featureAuthorization: true`。`StandardFeatureMetadataCompiler` 展开真实 View 和 PageRef，`FeatureCatalogCompiler` 与 Capsule 的自定义功能声明合并为同一目录。导航、Tab、动作是授权点；页面和静态类型展示组不是授权点。同一 View 在不同分支复用时分别生成位置，局部动作 Key 可以重复。
+标准功能入口在 navigation 声明 `featureAuthorization: true`。`StandardFeatureMetadataCompiler` 展开真实 View 和 PageRef，`FeatureCatalogCompiler` 与 Capsule 的自定义功能声明合并为同一目录。导航、Tab、动作是授权点；页面和静态类型展示组不是授权点。同一 View 在不同分支复用时分别生成位置，局部动作 Key 可以重复。
 
 View 的 `resourceKey` 指定稳定资源；`lookupBindings` 在该 View 的资源范围内把模型字段或查询 override 所用 provider 绑定到只读 behavior。专用动作通过 `featureActions` 声明 `key`、`titleKey`、`behaviorKey` 及可选 `readBehaviors`。标准 `pageActions` / `rowActions` 也可声明 `readBehaviors`，补充动作输入所需的只读行为；它们与资源读取和实际表单 Lookup 一同随发起动作授权。这些绑定描述实际消费能力，不向管理员增加接口权限清单。
 
@@ -32,21 +32,21 @@ View 的 `resourceKey` 指定稳定资源；`lookupBindings` 在该 View 的资�
 
 Host 在开放请求前核对目录与真实端点的模块归属及执行绑定。`RequireFeature` 只允许当前位置声明的行为；附加读取必须绑定 GET/HEAD 端点，纯容器不获得后代读取。已有 Host policy 可作为同一端点的附加约束，与功能位置判权共同满足；它不能代替位置授权，也不与旧 Permission、匿名或拒绝规则组成另一条放行路径。缺失、冲突或无效绑定拒绝整份候选。运行时投影提供编译后的 position，前后端不得另外拼装授权身份。
 
-当前 Organization 标准路径，以及 Authorization 的角色读取、创建、编辑、账号角色分配和工作台消费位置授权。角色页面未声明删除动作，遗留删除 HTTP 入口明确拒绝；旧角色 Permission 读取/保存接口暂保留原 Permission 与 LocalAdmin 准入，随旧模型退出。
+当前 Organization 标准路径，以及 Authorization 的角色读取、创建、编辑、账号角色分配和工作台消费位置授权。角色页面未声明删除动作，遗留删除 HTTP 入口明确拒绝；旧角色 Permission 读取/保存及旧权限目录接口已退出。
 
 Identity 账号管理入口也消费位置授权，并保留既有 `AdminOnly` Host policy；读取、创建、编辑、启用、停用、删除和重置凭据分别绑定声明行为。启用和停用使用独立的 `/status/enable`、`/status/disable`，校验请求的目标状态，旧 `/status` 入口明确拒绝。
 
 Audit 列表和详情使用 `audit.change.read`，并继续由 `ILocalAdministratorRoleAssignment` 检查当前有效管理员分配；入口授权不替代该资格。Example 记录的读取、创建、编辑、删除和导出分别消费正式位置，动态工作量页面的列与行共用所属入口的只读位置。
 
-其他未切换消费者暂保留原 Permission 路径。已切换端点不以新旧任一授权通过作为放行条件。其余消费者切换与旧目录一次性退出由 [Issue #200](https://github.com/yangfengfan2011/NewP/issues/200) 的后续 child 完成。
+正式业务消费者使用功能位置授权，不保留旧 Permission 放行路径。公开、仅认证、Host policy 及明确拒绝入口沿用原契约。旧存储清理与回退边界见 [ADR-0048](../adr/0048-functional-authorization-uses-entry-positions.md#切换与回退)。
 
 ## 声明式标准插件
 
 `standard-data.v1` 由 `StandardDataMetadataProjection` 根据同一包内 blueprint、标准投影和 metadata 生成导航、列表与详情声明。候选编译使用该输出登记完整功能目录，运行时物化复用同一输出；Model 仍由原持久化/模型投影拥有。刷新是纯交互，不生成授权点；显式详情保留原结构并绑定所属入口。
 
-C# 与 TypeScript 插件 SDK 生成的 `PermissionCodes` / `permissionCodes` 暂保留既有公开形状，值为空；正式候选及生成页面不再使用它们判权，也不因此跳过目录与执行绑定校验。旧字段和其他过渡引用的最终退出仍归 Issue #200 的退出片。
+C# 与 TypeScript 插件 SDK 不再提供旧 `PermissionCodes` / `permissionCodes` 形状。正式候选与生成页面消费功能声明及编译位置，目录与执行绑定仍必须完整校验。
 
-标准启用和停用绑定独立行为。`POST /{id}/enable` 与 `/disable` 固定写入对应状态，不从请求 body 接收其他更新字段；编辑动作保留其正式字段白名单。未切换的 `ByConvention` 消费者保留原权限映射，已切换的 `ByFeature` 消费者按声明操作绑定功能位置。
+标准启用和停用绑定独立行为。`POST /{id}/enable` 与 `/disable` 固定写入对应状态，不从请求 body 接收其他更新字段；编辑动作保留其正式字段白名单。`ByFeature` 按声明操作绑定功能位置，不从资源命名约定生成旧业务权限。
 
 ## Guardrails
 

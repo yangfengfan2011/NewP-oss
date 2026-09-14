@@ -5,7 +5,7 @@
 ## 所有权
 
 1. `modules/<ModuleId>/newp.plugin.json` 拥有 identity、version、dependencies 和 `frontend.behaviorKey`。
-2. `modules/<ModuleId>/metadata/**` 拥有 route、menu、permission reference、model 和 localization。
+2. `modules/<ModuleId>/metadata/**` 拥有 route、menu、功能授权声明、model 和 localization。
 3. `frontend/modules/<module-id>/src/index.ts` 只把稳定 key 绑定到页面、renderer 或 action 实现。
 
 ```typescript
@@ -42,7 +42,7 @@ Shell 会导入并校验整份目录，全部成功后通过 `ModuleRegistry.rep
 
 ## 标准 CRUD 动作输入
 
-需要短确认的标准动作继续在 metadata 声明 `confirmMessageKey`。需要额外业务输入时，metadata 只声明稳定 `inputKey`，模块在对应 `StandardCrudResourceRegistration.actionInputRenderers` 注册受控 renderer，并在 `actionHandlers` 中从 `context.input` 读取提交值。renderer 只负责呈现输入并调用 `onChange`；Shell 统一负责权限投影、弹层、pending、成功刷新、错误反馈和关闭生命周期。不要在 Shell 中根据 module id、resource id 或业务字段名选择输入组件。
+需要短确认的标准动作继续在 metadata 声明 `confirmMessageKey`。需要额外业务输入时，metadata 只声明稳定 `inputKey`，模块在对应 `StandardCrudResourceRegistration.actionInputRenderers` 注册受控 renderer，并在 `actionHandlers` 中从 `context.input` 读取提交值。renderer 只负责呈现输入并调用 `onChange`；Shell 统一负责功能位置投影、弹层、pending、成功刷新、错误反馈和关闭生命周期。不要在 Shell 中根据 module id、resource id 或业务字段名选择输入组件。
 
 不声明 `inputKey` 的既有动作和 handler 保持兼容。声明了 `inputKey` 但缺少对应 renderer 时，活动标准 CRUD 注册会 fail closed，避免动作在缺失业务输入的情况下执行。
 
@@ -70,7 +70,7 @@ Shell 会导入并校验整份目录，全部成功后通过 `ModuleRegistry.rep
 
 ## 声明式标准插件的动作
 
-`standard-data.v1` 生成页面消费同一候选目录和运行时 metadata，权限位置沿标准 CRUD client 传递，不读取插件投影中过渡保留的空 `permissionCodes`。刷新跟随所属读取入口，不登记独立业务动作。
+`standard-data.v1` 生成页面消费同一候选目录和运行时 metadata，功能位置沿标准 CRUD client 传递；插件 SDK 与运行时投影不再提供旧 `permissionCodes`。刷新跟随所属读取入口，不登记独立业务动作。
 
 生成的启用 handler 调用 `client.enable(id, context)`，停用调用对应 `disable`，均沿发起动作传递位置。不能把启用改写为通用 `update` 来借用其他执行绑定；编辑表单仍使用原已声明的字段范围，独立状态动作不引入字段级授权。
 

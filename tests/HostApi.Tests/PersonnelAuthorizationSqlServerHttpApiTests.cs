@@ -90,9 +90,15 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
         await AssertStatusAsync(FeatureHttpTestRequests.SendAsync(admin, http.Role("edit"), HttpMethod.Put, $"/api/authorization/roles/{secondRole}", new { Name = "停用来源", IsEnabled = false }), HttpStatusCode.OK);
         await AssertStatusAsync(SendAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "停用后禁止" }), HttpStatusCode.Forbidden);
         await AssertStatusAsync(FeatureHttpTestRequests.SendAsync(admin, http.Role("edit"), HttpMethod.Put, $"/api/authorization/roles/{secondRole}", new { Name = "恢复来源", IsEnabled = true }), HttpStatusCode.OK);
-        // #205 接回正式删除后失效及同名再引入；当前守卫拒绝删除候选，不能误撤销活动授权。
-        await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.RemoveActiveFeatureAsync(edit.Position));
-        await AssertStatusAsync(SendAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "失败候选保持有效" }), HttpStatusCode.OK);
+        // 正式删除永久撤销普通分配；同名重新引入只能由管理员重新授予。
+        await fixture.RemoveActiveFeatureAsync(edit.Position);
+        await AssertStatusAsync(SendAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "删除后禁止" }), HttpStatusCode.Forbidden);
+        await AssertStatusAsync(SendAsync(writer, http.Organization("persons"), HttpMethod.Get, $"/api/organization/persons/{person}"), HttpStatusCode.OK);
+        await fixture.RestoreFeatureCatalogAsync();
+        await AssertStatusAsync(SendAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "重加不恢复" }), HttpStatusCode.Forbidden);
+        await http.GrantAsync(admin, secondRole, edit);
+        await AssertStatusAsync(SendAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "明确重新授予" }), HttpStatusCode.OK);
+        await fixture.RepeatFeatureSynchronizationAsync();
     }
 
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "已通过真实判权的在途写允许完成，之后的同Cookie写拒绝")]

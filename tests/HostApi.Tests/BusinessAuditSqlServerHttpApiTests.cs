@@ -752,7 +752,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         internal List<string> FeatureCommands { get; } = [];
         public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
         {
-            if (command.CommandText.Contains("[RoleFunctionGrant]", StringComparison.Ordinal)) FeatureCommands.Add(command.CommandText);
+            if (command.CommandText.Contains("[RoleFunctionGrant]", StringComparison.Ordinal) || command.CommandText.Contains("[FunctionPoint]", StringComparison.Ordinal)) FeatureCommands.Add(command.CommandText);
             if (Mode == "feature-decision" && command.CommandText.Contains("[RoleFunctionGrant]", StringComparison.Ordinal)) throw new InvalidOperationException("injected feature decision failure");
             if (RegistrationWaiting && (command.CommandText.Contains("[Person]", StringComparison.Ordinal) || command.CommandText.Contains("[Role]", StringComparison.Ordinal) || command.CommandText.Contains("sp_getapplock", StringComparison.Ordinal))) ConcurrentCommand.TrySetResult();
             if (command.CommandText.Contains("[BusinessChange]", StringComparison.Ordinal))
@@ -766,6 +766,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         }
         public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
+            if (command.CommandText.Contains("[RoleFunctionGrant]", StringComparison.Ordinal) || command.CommandText.Contains("[FunctionPoint]", StringComparison.Ordinal)) FeatureCommands.Add(command.CommandText);
             if (RegistrationWaiting && (command.CommandText.Contains("[Person]", StringComparison.Ordinal) || command.CommandText.Contains("[Role]", StringComparison.Ordinal) || command.CommandText.Contains("sp_getapplock", StringComparison.Ordinal))) ConcurrentCommand.TrySetResult();
             return ValueTask.FromResult(result);
         }
@@ -837,12 +838,20 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         Assert.Equal(before.OrderBy(pair => pair.Key), catalog.Snapshot.ByPosition.Select(pair => KeyValuePair.Create(pair.Key, pair.Value.Id)).OrderBy(pair => pair.Key));
         Assert.DoesNotContain(Fault.FeatureCommands, command => command.Contains("INSERT", StringComparison.Ordinal) || command.Contains("DELETE", StringComparison.Ordinal) || command.Contains("UPDATE", StringComparison.Ordinal));
     }
+    internal async Task RestoreFeatureCatalogAsync()
+    {
+        using var scope = _app.Services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<IFeatureCatalogSynchronizer>().SynchronizeAsync(FeatureCatalog);
+    }
     internal async Task RemoveActiveFeatureAsync(string position)
     {
         using var scope = _app.Services.CreateScope();
         var catalog = scope.ServiceProvider.GetRequiredService<ICP.Platform.Modules.Authorization.Services.ActiveFeatureCatalog>();
+        Fault.FeatureCommands.Clear();
         await scope.ServiceProvider.GetRequiredService<IFeatureCatalogSynchronizer>().SynchronizeAsync(
             catalog.Snapshot.Points.Where(point => point.Position != position).ToArray());
+        Assert.Equal(2, Fault.FeatureCommands.Count(command => command.StartsWith("DELETE", StringComparison.Ordinal)));
+        Assert.All(Fault.FeatureCommands.Where(command => command.Contains("[RoleFunctionGrant]", StringComparison.Ordinal)), command => Assert.Contains("WHERE", command));
     }
     // 只在本用例证明已受支持的内部初始化边界；普通职责准备仍全部走正式HTTP。
     // HTTP删除没有声明入口；历史解析回归直接消费保留的角色服务删除边界。

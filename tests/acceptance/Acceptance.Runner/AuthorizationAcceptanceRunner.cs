@@ -111,6 +111,7 @@ internal sealed class AuthorizationAcceptanceRunner(string repositoryRoot, strin
             await page.Locator(".ant-tree-checkbox").First.ClickAsync();
             await page.GetByRole(AriaRole.Button, new() { Name = "保存授权", Exact = true }).ClickAsync();
             await page.GetByText("授权已保存", new() { Exact = true }).WaitForAsync();
+            await Assertions.Expect(page.GetByRole(AriaRole.Button, new() { Name = roleName, Exact = true })).ToBeEnabledAsync();
             await page.Locator(".ant-btn-loading, .ant-spin-spinning").WaitForAsync(new() { State = WaitForSelectorState.Detached });
             await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "workbench.png"), FullPage = true });
             await page.SetViewportSizeAsync(900, 1000);

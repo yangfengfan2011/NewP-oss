@@ -424,8 +424,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             if (phase == "initial")
             {
                 string[] views = ["Organization.Company.View", "Organization.Department.View", "Organization.Position.View", "Organization.Person.View"];
-                _roleId = await ConfigureRoleFromBrowserAsync(driver, "M", [.. views, "Organization.Person.Create", "Organization.Person.Update"]);
-                _readerRoleId = await ConfigureRoleFromBrowserAsync(driver, "R", views);
+                _roleId = await CreateRoleFromBrowserAndConfigureUsingApiAsync(driver, "M", [.. views, "Organization.Person.Create", "Organization.Person.Update"], cancellationToken);
+                _readerRoleId = await CreateRoleFromBrowserAndConfigureUsingApiAsync(driver, "R", views, cancellationToken);
                 await AssignAccountRoleFromBrowserAsync(driver, _roleId, "M", maintainer);
                 await AssignAccountRoleFromBrowserAsync(driver, _readerRoleId, "R", reader);
             }
@@ -501,7 +501,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 await originalDrawer.GetByLabel("姓名", new LocatorGetByLabelOptions { Exact = true }).FillAsync(person.Name + " denied");
                 page = administratorPage;
                 driver = administratorDriver;
-                await RevokeUpdateFromBrowserAsync(driver, _roleId!);
+                await RevokeUpdateUsingApiAsync(_roleId!, cancellationToken);
                 page = maintainerPage;
                 driver = maintainerDriver;
                 // 拒绝路径保持原有等待：Drawer 不会关闭，不能走驱动的提交生命周期。
@@ -800,7 +800,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
     }
 
     // 角色和权限集合均通过正式管理页面维护，记录值与事务语义留在 SQL/API 层。
-    private async Task<string> ConfigureRoleFromBrowserAsync(StandardCrudPageDriver driver, string suffix, string[] permissions)
+    private async Task<string> CreateRoleFromBrowserAndConfigureUsingApiAsync(StandardCrudPageDriver driver, string suffix, string[] permissions, CancellationToken cancellationToken)
     {
         var page = driver.Page;
         await page.GetByRole(AriaRole.Link, new PageGetByRoleOptions { Name = "角色管理", Exact = true }).First.ClickAsync();
@@ -817,16 +817,9 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             new ApiExpectation("POST", "/api/authorization/roles", 201, "role creation"));
         using var payload = JsonDocument.Parse(await created.TextAsync());
         var id = payload.RootElement.GetProperty("id").GetString() ?? throw new InvalidOperationException("Role creation omitted id.");
-        var row = driver.TableRow(code);
-        await row.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "更多", Exact = true }).ClickAsync();
-        await page.GetByRole(AriaRole.Menuitem, new PageGetByRoleOptions { Name = "配置权限", Exact = true }).ClickAsync();
-        var modal = driver.VisibleModal();
-        foreach (var permission in permissions)
-            await SelectControlledCheckboxAsync(modal.GetByRole(AriaRole.Checkbox,
-                new LocatorGetByRoleOptions { NameRegex = new Regex($@"\({Regex.Escape(permission)}\)") }));
-        await driver.ConfirmAsync(
-            modal,
-            new ApiExpectation("PUT", $"/api/authorization/roles/{id}/permissions", 204, "role permissions"));
+        using var administrator = CreateClient(_hostPort);
+        await LoginAdminAsync(administrator, cancellationToken);
+        await SetRolePermissionsUsingApiAsync(administrator, id, permissions, cancellationToken);
         return id;
     }
 
@@ -926,19 +919,29 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         return await driver.WaitForVisibleDrawerAsync("person edit drawer");
     }
 
-    private async Task RevokeUpdateFromBrowserAsync(StandardCrudPageDriver driver, string roleId)
+    // Organization 尚未切换的旧授权仅作为旅程前置；#203 退出旧 Permission 后由 Gate owner 同步替换。
+    private async Task RevokeUpdateUsingApiAsync(string roleId, CancellationToken cancellationToken)
     {
-        var page = driver.Page;
-        await page.GotoAsync($"http://127.0.0.1:{_shellPort}/authorization/roles/{roleId}");
-        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "配置权限", Exact = true }).ClickAsync();
-        var modal = driver.VisibleModal();
-        var update = modal.GetByRole(AriaRole.Checkbox, new LocatorGetByRoleOptions { NameRegex = new Regex(@"\(Organization\.Person\.Update\)") });
-        await Assertions.Expect(update).ToBeCheckedAsync();
-        await update.ClickAsync();
-        await Assertions.Expect(update).Not.ToBeCheckedAsync();
-        await driver.ConfirmAsync(
-            modal,
-            new ApiExpectation("PUT", $"/api/authorization/roles/{roleId}/permissions", 204, "administrator permission revocation"));
+        using var administrator = CreateClient(_hostPort);
+        await LoginAdminAsync(administrator, cancellationToken);
+        using var response = await administrator.GetAsync($"/api/authorization/roles/{roleId}/permissions", cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        EnsureStatus(response, HttpStatusCode.OK, body, "read role permissions before revocation");
+        using var payload = JsonDocument.Parse(body);
+        var permissions = payload.RootElement.GetProperty("permissionCodes").EnumerateArray()
+            .Select(value => value.GetString() ?? throw new InvalidOperationException("Role permission code was null.")).ToArray();
+        if (!permissions.Contains("Organization.Person.Update", StringComparer.Ordinal))
+            throw new InvalidOperationException("Revocation prerequisite did not grant Organization.Person.Update.");
+        await SetRolePermissionsUsingApiAsync(administrator, roleId,
+            permissions.Where(code => code != "Organization.Person.Update").ToArray(), cancellationToken);
+    }
+
+    private static async Task SetRolePermissionsUsingApiAsync(HttpClient administrator, string roleId, string[] permissions, CancellationToken cancellationToken)
+    {
+        using var response = await SendJsonWithAntiforgeryAsync(administrator, HttpMethod.Put,
+            $"/api/authorization/roles/{roleId}/permissions", new { PermissionCodes = permissions }, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        EnsureStatus(response, HttpStatusCode.NoContent, body, "configure Personnel prerequisite permissions");
     }
 
     // 一次标准编辑同时维护岗位与时间字段，避免把同一主旅程拆成两次独立提交。

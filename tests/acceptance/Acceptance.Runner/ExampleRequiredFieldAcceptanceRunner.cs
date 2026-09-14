@@ -373,24 +373,99 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
         var page = await context.NewPageAsync();
         page.SetDefaultTimeout(120_000);
         page.SetDefaultNavigationTimeout(120_000);
-        await new ShellPageDriver(page, $"http://127.0.0.1:{_shellPort}").LoginAsync("admin", password);
+        async Task CapturePageAsync(string name)
+        {
+            var path = Path.Combine(_runDirectory, "example-required-field", name);
+            await page.ScreenshotAsync(new PageScreenshotOptions { Path = path, FullPage = true,
+                Animations = ScreenshotAnimations.Disabled, Mask = [page.Locator("input, textarea")] });
+            AddArtifact(path);
+        }
+        var responses = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        var errors = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        var failedResponses = new System.Collections.Concurrent.ConcurrentQueue<IResponse>();
+        page.PageError += (_, error) => errors.Enqueue(error);
+        page.RequestFailed += (_, request) => errors.Enqueue($"{request.Method} {new Uri(request.Url).AbsolutePath}: {request.Failure}");
+        page.Response += (sender, response) =>
+        {
+            responses.Enqueue($"{response.Request.Method} {new Uri(response.Url).AbsolutePath}: {response.Status}");
+            while (responses.Count > 30) responses.TryDequeue(out _);
+            if (response.Status >= 400) failedResponses.Enqueue(response);
+            while (failedResponses.Count > 10) failedResponses.TryDequeue(out _);
+            while (errors.Count > 30) errors.TryDequeue(out _);
+        };
         try
         {
+            await new ShellPageDriver(page, $"http://127.0.0.1:{_shellPort}").LoginAsync("admin", password);
             await page.GotoAsync(
                 $"http://127.0.0.1:{_shellPort}/examples/standard-crud/persistent-records",
                 new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
             await page.GetByText(LegacyCode, new PageGetByTextOptions { Exact = true }).WaitForAsync();
+            await CapturePageAsync("list.png");
+
+            // 标准 Drawer 的定位、填写与提交由页面驱动持有；本旅程不观察写入响应，只以列表行出现为准。
+            var driver = new StandardCrudPageDriver(page);
+            var createDrawer = await driver.OpenCreateDrawerAsync("新建记录");
+            await StandardCrudPageDriver.FillDrawerFieldAsync(createDrawer, "示例编码", _browserCode);
+            await StandardCrudPageDriver.FillDrawerFieldAsync(createDrawer, "示例名称", browserName);
+            await CapturePageAsync("create-drawer.png");
+            await driver.SaveAndCloseWithoutResponseAsync(createDrawer);
+
+            var browserRow = page.Locator("tr").Filter(new LocatorFilterOptions { HasText = _browserCode });
+            await browserRow.WaitForAsync();
+
+            await browserRow.GetByText(_browserCode, new LocatorGetByTextOptions { Exact = true }).ClickAsync();
+            var detailDrawer = driver.VisibleDrawer();
+            await detailDrawer.GetByText("查看记录", new LocatorGetByTextOptions { Exact = true }).WaitForAsync();
+            await AssertLocatorContainsAsync(detailDrawer, _browserCode, "browser detail reached");
+            await page.ScreenshotAsync(new PageScreenshotOptions { Path = screenshotPath, FullPage = true, Animations = ScreenshotAnimations.Disabled });
+            AddArtifact(screenshotPath);
+
+            await RecordScenarioSuccessAsync(
+                BrowserScenario,
+                "example-required-field/browser.json",
+                new
+                {
+                    status = "passed",
+                    owner = "Acceptance.Runner/.NET Playwright",
+                    session = _runId,
+                    route = "/examples/standard-crud/persistent-records",
+                    checkpoint = BrowserScenario,
+                    assertions = new[]
+                    {
+                        "login-and-list-loaded",
+                        "create-write-appears-in-list",
+                        "detail-reachable"
+                    },
+                    screenshot = "example-required-field/browser.png"
+                },
+                cancellationToken);
         }
         catch (Exception exception)
         {
-            // 导航诊断复用现有脱敏产物，仅帮助定位页面状态，不能覆盖原失败。
+            // 同一旅程的导航与写入均保留脱敏诊断，不能覆盖原场景失败。
             try
             {
+                var problems = new List<object>();
+                foreach (var response in failedResponses)
+                {
+                    try
+                    {
+                        using var body = JsonDocument.Parse(await response.TextAsync());
+                        var fields = body.RootElement.EnumerateObject()
+                            .Where(field => field.Name is "code" or "title" or "status" or "type")
+                            .ToDictionary(field => field.Name, field => Sanitize(field.Value.ToString()));
+                        problems.Add(new { path = new Uri(response.Url).AbsolutePath, fields });
+                    }
+                    catch (Exception) { /* 非 JSON 或已关闭响应不影响其余诊断。 */ }
+                }
                 await WriteEvidenceAsync("example-required-field/browser-navigation-failure.json", new
                 {
                     url = Sanitize(page.Url),
                     diagnostic = Sanitize(exception.ToString()),
-                    visibleDom = Sanitize(await page.Locator("body").InnerTextAsync())
+                    visibleDom = Sanitize(await page.Locator("body").InnerTextAsync()),
+                    responses = responses.Select(Sanitize).ToArray(),
+                    errors = errors.Select(Sanitize).ToArray(),
+                    problems
                 }, CancellationToken.None);
                 await page.ScreenshotAsync(new PageScreenshotOptions
                 {
@@ -399,46 +474,10 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
                     Mask = [page.Locator("input, textarea")]
                 });
             }
-            catch (Exception) { /* 保留原始导航失败。 */ }
+            catch (Exception) { /* 保留原始场景失败。 */ }
             throw;
         }
 
-        // 标准 Drawer 的定位、填写与提交由页面驱动持有；本旅程不观察写入响应，只以列表行出现为准。
-        var driver = new StandardCrudPageDriver(page);
-        var createDrawer = await driver.OpenCreateDrawerAsync("新建记录");
-        await StandardCrudPageDriver.FillDrawerFieldAsync(createDrawer, "示例编码", _browserCode);
-        await StandardCrudPageDriver.FillDrawerFieldAsync(createDrawer, "示例名称", browserName);
-        await driver.SaveAndCloseWithoutResponseAsync(createDrawer);
-
-        var browserRow = page.Locator("tr").Filter(new LocatorFilterOptions { HasText = _browserCode });
-        await browserRow.WaitForAsync();
-
-        await browserRow.GetByText(_browserCode, new LocatorGetByTextOptions { Exact = true }).ClickAsync();
-        var detailDrawer = driver.VisibleDrawer();
-        await detailDrawer.GetByText("查看记录", new LocatorGetByTextOptions { Exact = true }).WaitForAsync();
-        await AssertLocatorContainsAsync(detailDrawer, _browserCode, "browser detail reached");
-        await page.ScreenshotAsync(new PageScreenshotOptions { Path = screenshotPath, FullPage = true });
-        AddArtifact(screenshotPath);
-
-        await RecordScenarioSuccessAsync(
-            BrowserScenario,
-            "example-required-field/browser.json",
-            new
-            {
-                status = "passed",
-                owner = "Acceptance.Runner/.NET Playwright",
-                session = _runId,
-                route = "/examples/standard-crud/persistent-records",
-                checkpoint = BrowserScenario,
-                assertions = new[]
-                {
-                    "login-and-list-loaded",
-                    "create-write-appears-in-list",
-                    "detail-reachable"
-                },
-                screenshot = "example-required-field/browser.png"
-            },
-            cancellationToken);
     }
 
     // Restart 使用新的 Host/Shell 与 API session，证明已完成 history 不重放且正式数据仍可读。
@@ -457,7 +496,15 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
 
         using var client = CreateClient(_hostPort);
         await LoginAdminAsync(client, cancellationToken);
-        using (var legacy = await client.GetAsync(
+        var features = await AcceptanceFeatureCatalog.LoadAsync(client, cancellationToken);
+        var readPosition = features.Behavior("Example", "example.record.read").Position;
+        async Task<HttpResponseMessage> ReadRecordAsync(string path, CancellationToken token)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, path);
+            request.Headers.Add("X-NewP-Feature", readPosition);
+            return await client.SendAsync(request, token);
+        }
+        using (var legacy = await ReadRecordAsync(
                    $"/api/example/records/{Uri.EscapeDataString(LegacyId)}",
                    cancellationToken))
         {
@@ -465,7 +512,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
             EnsureStatus(legacy, HttpStatusCode.OK, body, "legacy detail after restart");
             AssertField(body, "RecordSource", "Legacy", "legacy detail after restart");
         }
-        using (var list = await client.GetAsync(
+        using (var list = await ReadRecordAsync(
                    "/api/example/records?page=1&pageSize=50&sortBy=ECODE&sortDirection=asc",
                    cancellationToken))
         {

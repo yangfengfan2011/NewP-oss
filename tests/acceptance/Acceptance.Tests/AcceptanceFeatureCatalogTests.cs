@@ -10,6 +10,8 @@ public sealed class AcceptanceFeatureCatalogTests
     [InlineData("Organization")]
     [InlineData("Authorization")]
     [InlineData("Identity")]
+    [InlineData("Audit")]
+    [InlineData("Example")]
     public void RealAuthoring_ResolvesEveryGateRequestPosition(string module)
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
@@ -24,6 +26,20 @@ public sealed class AcceptanceFeatureCatalogTests
             var points = FeatureCatalogCompiler.Compile([.. custom,
                 .. StandardFeatureMetadataCompiler.Read(module, documents.Select(document => document.RootElement), custom)]);
             var catalog = new AcceptanceFeatureCatalog(points);
+            if (module == "Audit")
+            {
+                Assert.Equal("audit.changes", catalog.Behavior(module, "audit.change.read").Key);
+                return;
+            }
+            if (module == "Example")
+            {
+                var entry = catalog.Behavior(module, "example.record.read");
+                Assert.Equal("example.records", entry.Key);
+                Assert.Equal("example.record.create", catalog.Action(entry, "create", "list.pageActions").BehaviorKey);
+                Assert.Equal("example.record.export", catalog.Action(entry, "export", "list").BehaviorKey);
+                Assert.Equal("example", catalog.Behavior(module, "example.runtime-workload.read").Key);
+                return;
+            }
             if (module == "Identity")
             {
                 var entry = catalog.Behavior(module, "identity.account.read");

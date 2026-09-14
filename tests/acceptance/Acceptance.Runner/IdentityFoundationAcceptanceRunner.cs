@@ -411,7 +411,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         async Task CaptureIdentityAsync(string name)
         {
             var path = Path.Combine(_runDirectory, "identity-foundation", name);
-            await page.ScreenshotAsync(new PageScreenshotOptions { Path = path, FullPage = true,
+            await page.ScreenshotAsync(new PageScreenshotOptions { Path = path, FullPage = true, Animations = ScreenshotAnimations.Disabled,
                 Mask = [page.Locator("input, textarea"), page.GetByLabel("临时密码", new PageGetByLabelOptions { Exact = true })] });
             _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, path));
         }
@@ -438,6 +438,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
             await LoginBrowserAsync(page, "admin", adminPassword);
             await page.GotoAsync($"http://127.0.0.1:{_shellPort}/identity/accounts", new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
             await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "创建账号", Exact = true }).WaitForAsync();
+            await page.Locator(".ant-table-tbody tr.ant-table-row").First.WaitForAsync();
             await CaptureIdentityAsync("account-list.png");
             // 标准列表不重复输出页面标题，以实际创建入口作为可操作就绪点。
             await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "创建账号", Exact = true }).ClickAsync();

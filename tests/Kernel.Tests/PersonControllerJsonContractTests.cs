@@ -2,13 +2,14 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
+using System.Text.Json;
 using ICP.Platform.Authorization;
-using ICP.Platform.Authorization.Abstractions;
+using ICP.Platform.Authorization.Http;
+using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Authentication.Contracts;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
-using ICP.Platform.Modules.Organization;
 using ICP.Platform.Persistence.Abstractions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
@@ -38,13 +39,23 @@ public class PersonControllerJsonContractTests : IClassFixture<PersonControllerJ
             AllowAutoRedirect = false
         });
 
-        var response = await client.PostAsJsonAsync("/api/organization/persons", new Dictionary<string, object?>
+        using var manifest = await client.GetFromJsonAsync<JsonDocument>("/plugins/metadata-runtime-manifest.json");
+        var points = manifest!.RootElement.GetProperty("modules").EnumerateArray()
+            .SelectMany(module => module.GetProperty("features").Deserialize<FeaturePoint[]>(new JsonSerializerOptions(JsonSerializerDefaults.Web))!).ToArray();
+        var entry = points.Single(point => point.ModuleId == "Organization" && point.Kind == "tab" && point.Key == "persons");
+        _factory.PersonCreate = points.Single(point => point.ParentPosition == entry.Position
+            && point.Key == "create" && point.ActionScope == "list.pageActions");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/organization/persons");
+        request.Headers.Add("X-NewP-Feature", _factory.PersonCreate.Position);
+        request.Content = JsonContent.Create(new Dictionary<string, object?>
         {
             ["PersonNo"] = "P" + Guid.NewGuid().ToString("N")[..8],
             ["ENAME"] = "张三",
             ["EmploymentStatus"] = "FullTime",
             ["IsEnabled"] = true
         });
+
+        using var response = await client.SendAsync(request);
 
         Assert.True(
             response.StatusCode == HttpStatusCode.Created,
@@ -63,6 +74,7 @@ public class PersonControllerJsonContractTests : IClassFixture<PersonControllerJ
         }
 
         public RecordingStandardCrudService StandardCrudService { get; } = new();
+        public FeaturePoint? PersonCreate { get; set; }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -77,8 +89,8 @@ public class PersonControllerJsonContractTests : IClassFixture<PersonControllerJ
                 services.AddSingleton<IPersistenceConsistencyChecker, TestPersistenceConsistencyChecker>();
                 services.RemoveAll<IStandardCrudService>();
                 services.AddSingleton<IStandardCrudService>(StandardCrudService);
-                services.RemoveAll<IPermissionDecisionSource>();
-                services.AddSingleton<IPermissionDecisionSource, PersonCreatePermissionDecisionSource>();
+                services.RemoveAll<IFeatureDecisionSource>();
+                services.AddSingleton<IFeatureDecisionSource>(new PersonCreateFeatureDecisionSource(() => PersonCreate));
                 services
                     .AddAuthentication(options =>
                     {
@@ -101,13 +113,16 @@ public class PersonControllerJsonContractTests : IClassFixture<PersonControllerJ
         }
     }
 
-    private sealed class PersonCreatePermissionDecisionSource : IPermissionDecisionSource
+    private sealed class PersonCreateFeatureDecisionSource(Func<FeaturePoint?> selectedPoint) : IFeatureDecisionSource
     {
         public ValueTask<PermissionDecision> EvaluateAsync(
             string subjectId,
-            string permissionCode,
+            string position,
+            string behaviorKey,
             CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult(permissionCode == OrganizationPermissions.PersonCreate
+            ValueTask.FromResult(subjectId == "person-json-contract-subject"
+                && selectedPoint() is { } point && point.Position == position
+                && point.BehaviorKey == behaviorKey && behaviorKey == "organization.person.create"
                 ? PermissionDecision.Granted
                 : PermissionDecision.Denied);
     }
@@ -161,6 +176,12 @@ public class PersonControllerJsonContractTests : IClassFixture<PersonControllerJ
         }
 
         public Task<StandardCrudMutationResult> DeleteAsync(
+            StandardCrudDescriptor descriptor,
+            string id,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<StandardCrudMutationResult> EnableAsync(
             StandardCrudDescriptor descriptor,
             string id,
             CancellationToken cancellationToken = default) =>

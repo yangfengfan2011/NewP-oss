@@ -647,6 +647,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
     private readonly string _root = Path.Combine(Path.GetTempPath(), "newp-audit-" + Guid.NewGuid().ToString("N"));
     private WebApplication _app = null!;
     internal StoreFault Fault { get; } = new();
+    internal IServiceProvider Services => _app.Services;
     private string _temporaryCredential = "";
     internal string ActorId { get; private set; } = "";
     internal IReadOnlyList<FeaturePoint> FeatureCatalog { get; private set; } = [];

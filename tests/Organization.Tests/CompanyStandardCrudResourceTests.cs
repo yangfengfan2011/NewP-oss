@@ -28,10 +28,13 @@ public sealed class CompanyStandardCrudResourceTests
         Assert.Null(descriptor.ConcurrencyRevisionField);
         Assert.Equal(StandardCrudDeletePolicy.Conditional, descriptor.DeletePolicy);
         var authorization = Assert.IsType<StandardCrudAuthorization>(descriptor.Authorization);
-        Assert.Equal("Organization.Company.View", authorization.GetPermissionCode(StandardCrudOperation.List));
-        Assert.Equal("Organization.Company.Create", authorization.GetPermissionCode(StandardCrudOperation.Create));
-        Assert.Equal("Organization.Company.Update", authorization.GetPermissionCode(StandardCrudOperation.Update));
-        Assert.Equal("Organization.Company.Delete", authorization.GetPermissionCode(StandardCrudOperation.Delete));
+        Assert.Equal("organization.company.read", authorization.GetFeatureBehavior(StandardCrudOperation.List));
+        Assert.Equal("organization.company.create", authorization.GetFeatureBehavior(StandardCrudOperation.Create));
+        Assert.Equal("organization.company.update", authorization.GetFeatureBehavior(StandardCrudOperation.Update));
+        Assert.Equal("organization.company.delete", authorization.GetFeatureBehavior(StandardCrudOperation.Delete));
+
+        Assert.Null(authorization.GetFeatureBehavior(StandardCrudOperation.Export));
+        Assert.Null(authorization.GetFeatureBehavior(StandardCrudOperation.Options));
 
         Assert.Collection(
             descriptor.UniqueConstraints,

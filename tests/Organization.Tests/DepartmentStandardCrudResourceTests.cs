@@ -59,10 +59,13 @@ public sealed class DepartmentStandardCrudResourceTests
         Assert.Null(descriptor.ConcurrencyRevisionField);
         Assert.Equal(StandardCrudDeletePolicy.Conditional, descriptor.DeletePolicy);
         var authorization = Assert.IsType<StandardCrudAuthorization>(descriptor.Authorization);
-        Assert.Equal("Organization.Department.View", authorization.GetPermissionCode(StandardCrudOperation.List));
-        Assert.Equal("Organization.Department.Create", authorization.GetPermissionCode(StandardCrudOperation.Create));
-        Assert.Equal("Organization.Department.Update", authorization.GetPermissionCode(StandardCrudOperation.Update));
-        Assert.Equal("Organization.Department.Delete", authorization.GetPermissionCode(StandardCrudOperation.Delete));
+        Assert.Equal("organization.department.read", authorization.GetFeatureBehavior(StandardCrudOperation.List));
+        Assert.Equal("organization.department.create", authorization.GetFeatureBehavior(StandardCrudOperation.Create));
+        Assert.Equal("organization.department.update", authorization.GetFeatureBehavior(StandardCrudOperation.Update));
+        Assert.Equal("organization.department.delete", authorization.GetFeatureBehavior(StandardCrudOperation.Delete));
+
+        Assert.Null(authorization.GetFeatureBehavior(StandardCrudOperation.Export));
+        Assert.Null(authorization.GetFeatureBehavior(StandardCrudOperation.Options));
 
         Assert.Collection(
             descriptor.UniqueConstraints,

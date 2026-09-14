@@ -55,8 +55,9 @@ public sealed class BusinessAuditSqlServerHttpApiTests
     public async Task UserRoles_TwoRealAccountsConsumeConfiguredResponsibilitiesOnNewLogin()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
         using var admin = await fixture.LoginAdministratorAsync();
-        var views = new[] { "Organization.Company.View", "Organization.Department.View", "Organization.Position.View", "Organization.Person.View" };
+        var views = new[] { "companies", "departments", "positions", "persons" }.Select(tab => http.Organization(tab)).ToArray();
         foreach (var maintenance in new[] { true, false })
         {
             var code = maintenance ? "assignment-one" : "assignment-two";
@@ -65,15 +66,15 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             var id = account.GetProperty("account").GetProperty("eid").GetString();
             using var roleResponse = await admin.PostAsJsonAsync("/api/authorization/roles", new { Code = code, Name = code });
             var roleId = (await roleResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
-            var permissions = maintenance ? views.Concat(new[] { "Organization.Person.Create", "Organization.Person.Update" }).ToArray() : views;
-            Assert.Equal(HttpStatusCode.NoContent, (await admin.PutAsJsonAsync($"/api/authorization/roles/{roleId}/permissions", new { PermissionCodes = permissions })).StatusCode);
+            var points = maintenance ? views.Concat(new[] { http.Organization("persons", "create", "list.pageActions"), http.Organization("persons", "edit", "list.rowActions") }).ToArray() : views;
+            await http.GrantAsync(admin, roleId!, points);
             Assert.Equal(HttpStatusCode.NoContent, (await admin.PutAsJsonAsync($"/api/authorization/users/{id}/roles", new { RoleCodes = new[] { code } })).StatusCode);
             var candidates = await admin.GetFromJsonAsync<JsonElement>($"/api/authorization/users/candidates?query={code}");
             Assert.Equal(id, Assert.Single(candidates.EnumerateArray()).GetProperty("id").GetString());
             using var user = await fixture.LoginAsync(code, account.GetProperty("temporaryCredential").GetString()!);
             var current = await user.GetFromJsonAsync<JsonElement>("/api/auth/current-user");
-            Assert.Equal(permissions.Order().ToArray(), current.GetProperty("permissions").EnumerateArray().Select(p => p.GetString()).Order().ToArray());
-            Assert.Equal(HttpStatusCode.OK, (await user.GetAsync("/api/organization/persons")).StatusCode);
+            Assert.Equal(points.SelectMany(point => point.EntryDependencies.Append(point.Position)).Distinct().Order().ToArray(), current.GetProperty("featurePositions").EnumerateArray().Select(p => p.GetString()).Order().ToArray());
+            Assert.Equal(HttpStatusCode.OK, (await FeatureHttpTestRequests.SendAsync(user, http.Organization("persons"), HttpMethod.Get, "/api/organization/persons")).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await user.GetAsync("/api/authorization/users/candidates")).StatusCode);
             await BusinessAuditHostFixture.RefreshAntiforgeryAsync(admin);
         }
@@ -82,6 +83,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
     public async Task UserRoles_AtomicReplacementProtectsMembersAndResolvesHistory()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
         using var admin = await fixture.LoginAdministratorAsync();
         using var accountResponse = await admin.PostAsJsonAsync("/api/identity/accounts", new { ECODE = "assigned-user", ENAME = "分配账号" });
         var account = await accountResponse.Content.ReadFromJsonAsync<JsonElement>();
@@ -147,6 +149,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
     public async Task UserRoles_ConcurrentReplacementsRecordActualPreviousSet()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
         using var admin = await fixture.LoginAdministratorAsync();
         using var accountResponse = await admin.PostAsJsonAsync("/api/identity/accounts", new { ECODE = "race-user", ENAME = "并发账号" });
         var account = await accountResponse.Content.ReadFromJsonAsync<JsonElement>();
@@ -181,6 +184,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
     public async Task UserRoles_UnknownAccountRejectsCompleteRequest()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
         using var admin = await fixture.LoginAdministratorAsync();
         using var response = await admin.PutAsJsonAsync("/api/authorization/users/missing-account/roles", new { RoleCodes = Array.Empty<string>() });
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -190,6 +194,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
     public async Task UserRoles_InternalAdministratorMemberCannotBeRemovedByOrdinaryReplacement()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
         using var admin = await fixture.LoginAdministratorAsync();
         using var response = await admin.PostAsJsonAsync("/api/identity/accounts", new { ECODE = "internal-member", ENAME = "普通显示账号" });
         var account = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -208,6 +213,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
     public async Task RoleManagement_OrdinaryPermissionHolderCannotManageAndInactiveCatalogCannotGrant()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
         using var admin = await fixture.LoginAdministratorAsync();
         using var accountResponse = await admin.PostAsJsonAsync("/api/identity/accounts", new { ECODE = "roles-user", ENAME = "权限持有者" });
         var account = await accountResponse.Content.ReadFromJsonAsync<JsonElement>();
@@ -270,6 +276,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
     public async Task RolePermissions_ConcurrentReplacementsRecordActualPreviousSet()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
         using var client = await fixture.LoginAdministratorAsync();
         using var created = await client.PostAsJsonAsync("/api/authorization/roles", new { Code = "race-role", Name = "并发角色" });
         var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
@@ -304,6 +311,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
     public async Task RolePermissions_ReplaceAtomicallyProtectAdministratorAndRecordActualDifferences()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
         using var client = await fixture.LoginAdministratorAsync();
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
         using var created = await client.PostAsJsonAsync("/api/authorization/roles", new { Code = "audit-role", Name = "配置角色" });
@@ -381,16 +389,17 @@ public sealed class BusinessAuditSqlServerHttpApiTests
     public async Task PersonUpdate_RecordsActualChangedFieldsAndIgnoresUnchangedValues()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
         using var client = await fixture.LoginAdministratorAsync();
-        var company = await CreateAsync(client, "/api/organization/companies", new { ECODE = "EDIT", ENAME = "编辑公司", SortOrder = "0100" });
-        var a = await CreateAsync(client, "/api/organization/departments", new { ECODE = "EDIT-A", ENAME = "部门A", CompanyId = Id(company), SortOrder = "0100" });
-        var b = await CreateAsync(client, "/api/organization/departments", new { ECODE = "EDIT-B", ENAME = "部门B", CompanyId = Id(company), SortOrder = "0100" });
-        var person = await CreateAsync(client, "/api/organization/persons", new { PersonNo = "EDIT-1", ENAME = "旧姓名", CompanyId = Id(company), DepartmentId = Id(a), BirthDate = "2000-02-29", EmploymentStatus = "Active", IsEnabled = true });
+        var company = await FeatureHttpTestRequests.CreateAsync(client, http.Organization("companies", "create", "list.pageActions"), "/api/organization/companies", new { ECODE = "EDIT", ENAME = "编辑公司", SortOrder = "0100" });
+        var a = await FeatureHttpTestRequests.CreateAsync(client, http.Organization("departments", "create", "list.pageActions"), "/api/organization/departments", new { ECODE = "EDIT-A", ENAME = "部门A", CompanyId = Id(company), SortOrder = "0100" });
+        var b = await FeatureHttpTestRequests.CreateAsync(client, http.Organization("departments", "create", "list.pageActions"), "/api/organization/departments", new { ECODE = "EDIT-B", ENAME = "部门B", CompanyId = Id(company), SortOrder = "0100" });
+        var person = await FeatureHttpTestRequests.CreateAsync(client, http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons", new { PersonNo = "EDIT-1", ENAME = "旧姓名", CompanyId = Id(company), DepartmentId = Id(a), BirthDate = "2000-02-29", EmploymentStatus = "Active", IsEnabled = true });
         var edit = new { ENAME = "新姓名", CompanyId = Id(company), DepartmentId = Id(b), BirthDate = (string?)null, EmploymentStatus = "Active", EmploymentStartedAt = "2026-01-01T01:02:03Z" };
-        await UpdateAsync(client, Id(person), edit);
-        await UpdateAsync(client, Id(person), edit);
+        await UpdateAsync(client, http.Organization("persons", "edit", "list.rowActions"), Id(person), edit);
+        await UpdateAsync(client, http.Organization("persons", "edit", "list.rowActions"), Id(person), edit);
         // 等价时间表达规范化为相同 UTC 时间；四字段变化不能生成业务记录。
-        await UpdateAsync(client, Id(person), new { EmploymentStartedAt = "2026-01-01T09:02:03" });
+        await UpdateAsync(client, http.Organization("persons", "edit", "list.rowActions"), Id(person), new { EmploymentStartedAt = "2026-01-01T09:02:03" });
         var page = await client.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes?TargetId={Id(person)}&EventType=person.updated");
         var row = Assert.Single(page.GetProperty("items").EnumerateArray());
         var fields = row.GetProperty("Changes").EnumerateArray().ToDictionary(c => c.GetProperty("field").GetString()!);
@@ -404,7 +413,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.Equal(JsonValueKind.Null, fields["BirthDate"].GetProperty("after").GetProperty("value").ValueKind);
         Assert.Equal("2026-01-01T01:02:03.0000000Z", fields["EmploymentStartedAt"].GetProperty("after").GetProperty("value").GetString());
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
-        using var renamed = await client.PutAsync("/api/organization/departments/" + Id(b), JsonContent.Create(new { ENAME = "当前部门B" }, options: new JsonSerializerOptions()));
+        using var renamed = await FeatureHttpTestRequests.SendAsync(client, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put, "/api/organization/departments/" + Id(b), new { ENAME = "当前部门B" });
         Assert.True(renamed.IsSuccessStatusCode, await renamed.Content.ReadAsStringAsync());
         var currentNames = await client.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes/{row.GetProperty("EID").GetString()}");
         var departmentChange = Assert.Single(currentNames.GetProperty("fields").GetProperty("Changes").EnumerateArray(), c => c.GetProperty("field").GetString() == "DepartmentId");
@@ -417,10 +426,10 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         fixture.Fault.Mode = "";
     }
 
-    internal static async Task UpdateAsync(HttpClient client, string id, object value)
+    internal static async Task UpdateAsync(HttpClient client, FeaturePoint point, string id, object value)
     {
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
-        using var response = await client.PutAsync("/api/organization/persons/" + id, JsonContent.Create(value, options: new JsonSerializerOptions()));
+        using var response = await FeatureHttpTestRequests.SendAsync(client, point, HttpMethod.Put, "/api/organization/persons/" + id, value);
         Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
     }
 
@@ -428,16 +437,17 @@ public sealed class BusinessAuditSqlServerHttpApiTests
     public async Task PersonUpdate_FailuresAndRejectedFieldsLeaveBothStoresUnchanged()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
         using var client = await fixture.LoginAdministratorAsync();
-        var person = await CreateAsync(client, "/api/organization/persons", new { PersonNo = "FAIL-UPDATE", ENAME = "原姓名", EmploymentStatus = "Active", IsEnabled = true });
+        var person = await FeatureHttpTestRequests.CreateAsync(client, http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons", new { PersonNo = "FAIL-UPDATE", ENAME = "原姓名", EmploymentStatus = "Active", IsEnabled = true });
         foreach (var mode in new[] { "register", "write", "save", "commit" })
         {
             await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
             fixture.Fault.Mode = mode;
-            using var response = await client.PutAsync("/api/organization/persons/" + Id(person), JsonContent.Create(new { ENAME = "不应提交" }, options: new JsonSerializerOptions()));
+            using var response = await FeatureHttpTestRequests.SendAsync(client, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put, "/api/organization/persons/" + Id(person), new { ENAME = "不应提交" });
             Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
             fixture.Fault.Mode = "";
-            var actual = await client.GetFromJsonAsync<JsonElement>("/api/organization/persons/" + Id(person));
+            var actual = await FeatureHttpTestRequests.ReadAsync(client, http.Organization("persons"), "/api/organization/persons/" + Id(person));
             Assert.Equal("原姓名", actual.GetProperty("fields").GetProperty("ENAME").GetString());
             var records = await client.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes?TargetId={Id(person)}");
             Assert.Equal(1, records.GetProperty("total").GetInt32());
@@ -445,14 +455,14 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         foreach (var invalid in new object[] { new { UpdatedBy = "client-actor" }, new { CompanyId = "missing-company" }, new { BirthDate = "2999-01-01" }, new { EmploymentStartedAt = "2026-09-10T00:00:00Z", EmploymentEndedAt = "2026-09-09T00:00:00Z" } })
         {
             await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
-            using var response = await client.PutAsync("/api/organization/persons/" + Id(person), JsonContent.Create(invalid, options: new JsonSerializerOptions()));
+            using var response = await FeatureHttpTestRequests.SendAsync(client, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put, "/api/organization/persons/" + Id(person), invalid);
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
             var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
             Assert.NotEmpty(problem.GetProperty("fieldErrors").EnumerateArray());
         }
         // 启停不属于普通编辑字段；客户端塞入的字段不会扩大事件白名单。
-        await UpdateAsync(client, Id(person), new { PersonNo = "OTHER", IsEnabled = false, Arbitrary = "ignored" });
-        var unchanged = await client.GetFromJsonAsync<JsonElement>("/api/organization/persons/" + Id(person));
+        await UpdateAsync(client, http.Organization("persons", "edit", "list.rowActions"), Id(person), new { PersonNo = "OTHER", IsEnabled = false, Arbitrary = "ignored" });
+        var unchanged = await FeatureHttpTestRequests.ReadAsync(client, http.Organization("persons"), "/api/organization/persons/" + Id(person));
         Assert.True(unchanged.GetProperty("fields").GetProperty("IsEnabled").GetBoolean());
         Assert.Equal("FAIL-UPDATE", unchanged.GetProperty("fields").GetProperty("PersonNo").GetString());
         var final = await client.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes?TargetId={Id(person)}");
@@ -463,8 +473,9 @@ public sealed class BusinessAuditSqlServerHttpApiTests
     public async Task PersonUpdate_ConcurrentRequestsRecordTheActualReplacementSequence()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
         using var client = await fixture.LoginAdministratorAsync();
-        var person = await CreateAsync(client, "/api/organization/persons", new { PersonNo = "RACE-UPDATE", ENAME = "起点", EmploymentStatus = "Active", IsEnabled = true });
+        var person = await FeatureHttpTestRequests.CreateAsync(client, http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons", new { PersonNo = "RACE-UPDATE", ENAME = "起点", EmploymentStatus = "Active", IsEnabled = true });
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -476,12 +487,12 @@ public sealed class BusinessAuditSqlServerHttpApiTests
                 await release.Task.WaitAsync(token);
             }
         };
-        var first = client.PutAsync("/api/organization/persons/" + Id(person), JsonContent.Create(new { ENAME = "第一位" }, options: new JsonSerializerOptions()));
+        var first = FeatureHttpTestRequests.SendAsync(client, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put, "/api/organization/persons/" + Id(person), new { ENAME = "第一位" });
         Task<HttpResponseMessage>? second = null;
         try
         {
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
-            second = client.PutAsync("/api/organization/persons/" + Id(person), JsonContent.Create(new { ENAME = "第二位" }, options: new JsonSerializerOptions()));
+            second = FeatureHttpTestRequests.SendAsync(client, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put, "/api/organization/persons/" + Id(person), new { ENAME = "第二位" });
             // 第一笔仍未保存；第二请求已到数据库边界，再给出真实 SQL 执行窗口。
             await fixture.Fault.ConcurrentCommand.Task.WaitAsync(TimeSpan.FromSeconds(10));
             await Task.Delay(200);
@@ -498,7 +509,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         var secondChange = Assert.Single(changes, c => c.GetProperty("after").GetProperty("value").GetString() == "第二位");
         Assert.Equal("起点", firstChange.GetProperty("before").GetProperty("value").GetString());
         Assert.Equal("第一位", secondChange.GetProperty("before").GetProperty("value").GetString());
-        var final = await client.GetFromJsonAsync<JsonElement>("/api/organization/persons/" + Id(person));
+        var final = await FeatureHttpTestRequests.ReadAsync(client, http.Organization("persons"), "/api/organization/persons/" + Id(person));
         Assert.Equal("第二位", final.GetProperty("fields").GetProperty("ENAME").GetString());
     }
 
@@ -506,10 +517,11 @@ public sealed class BusinessAuditSqlServerHttpApiTests
     public async Task PersonCreation_CommitsTypedRecordAndAdministratorCanReadIt()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
         using var client = await fixture.LoginAdministratorAsync();
-        var company = await CreateAsync(client, "/api/organization/companies", new { ECODE = "AUDIT", ENAME = "审计公司", SortOrder = "0100" });
-        var department = await CreateAsync(client, "/api/organization/departments", new { ECODE = "AUDIT-A", ENAME = "部门A", CompanyId = Id(company), SortOrder = "0100" });
-        var created = await CreateAsync(client, "/api/organization/persons", new
+        var company = await FeatureHttpTestRequests.CreateAsync(client, http.Organization("companies", "create", "list.pageActions"), "/api/organization/companies", new { ECODE = "AUDIT", ENAME = "审计公司", SortOrder = "0100" });
+        var department = await FeatureHttpTestRequests.CreateAsync(client, http.Organization("departments", "create", "list.pageActions"), "/api/organization/departments", new { ECODE = "AUDIT-A", ENAME = "部门A", CompanyId = Id(company), SortOrder = "0100" });
+        var created = await FeatureHttpTestRequests.CreateAsync(client, http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons", new
         {
             PersonNo = "AUDIT-001", ENAME = "初始姓名", CompanyId = Id(company), DepartmentId = Id(department),
             BirthDate = "2000-02-29", EmploymentStatus = "Active", EmploymentStartedAt = "2026-01-01T01:02:03Z", IsEnabled = true
@@ -533,22 +545,23 @@ public sealed class BusinessAuditSqlServerHttpApiTests
     public async Task PersonCreation_WhenParticipantOrStoreFails_RollsBackPersonAndRecord()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
         using var client = await fixture.LoginAdministratorAsync();
         foreach (var mode in new[] { "register", "write", "save", "commit" })
         {
             await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
             fixture.Fault.Mode = mode;
-            using var failure = await client.PostAsync("/api/organization/persons", JsonContent.Create(new
-                { PersonNo = "ROLLBACK-" + mode, ENAME = "故障人员", EmploymentStatus = "Active", IsEnabled = true }, options: new JsonSerializerOptions()));
+            using var failure = await FeatureHttpTestRequests.SendAsync(client, http.Organization("persons", "create", "list.pageActions"), HttpMethod.Post, "/api/organization/persons", new
+                { PersonNo = "ROLLBACK-" + mode, ENAME = "故障人员", EmploymentStatus = "Active", IsEnabled = true });
             Assert.True(failure.StatusCode == HttpStatusCode.InternalServerError, mode);
             fixture.Fault.Mode = "";
-            var people = await client.GetFromJsonAsync<JsonElement>("/api/organization/persons?keyword=ROLLBACK");
+            var people = await FeatureHttpTestRequests.ReadAsync(client, http.Organization("persons"), "/api/organization/persons?keyword=ROLLBACK");
             Assert.Equal(0, people.GetProperty("total").GetInt32());
             var records = await client.GetFromJsonAsync<JsonElement>("/api/audit/business-changes");
             Assert.Equal(0, records.GetProperty("total").GetInt32());
         }
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
-        using var invalid = await client.PostAsync("/api/organization/persons", JsonContent.Create(new { PersonNo = "INVALID", ENAME = "校验失败", CompanyId = "absent", EmploymentStatus = "Active", IsEnabled = true }, options: new JsonSerializerOptions()));
+        using var invalid = await FeatureHttpTestRequests.SendAsync(client, http.Organization("persons", "create", "list.pageActions"), HttpMethod.Post, "/api/organization/persons", new { PersonNo = "INVALID", ENAME = "校验失败", CompanyId = "absent", EmploymentStatus = "Active", IsEnabled = true });
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
         Assert.Equal(0, (await client.GetFromJsonAsync<JsonElement>("/api/audit/business-changes")).GetProperty("total").GetInt32());
     }
@@ -557,6 +570,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
     public async Task Query_FiltersInSqlAndKeepsAdministratorAdmissionAndFailures()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
         using var admin = await fixture.LoginAdministratorAsync();
         using var accountResponse = await admin.PostAsJsonAsync("/api/identity/accounts", new { ECODE = "writer", ENAME = "人员操作者" });
         Assert.Equal(HttpStatusCode.Created, accountResponse.StatusCode);
@@ -565,14 +579,15 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(admin);
         using var roleResponse = await admin.PostAsJsonAsync("/api/authorization/roles", new { Code = "AuditWriter", Name = "记录验证职责" });
         var role = (await roleResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
-        using var permissionResponse = await admin.PutAsJsonAsync($"/api/authorization/roles/{role}/permissions", new { PermissionCodes = new[] { "Organization.Person.Create", "Organization.Person.View", "Audit.BusinessChange.View" } });
+        using var permissionResponse = await admin.PutAsJsonAsync($"/api/authorization/roles/{role}/permissions", new { PermissionCodes = new[] { "Audit.BusinessChange.View" } });
         Assert.Equal(HttpStatusCode.NoContent, permissionResponse.StatusCode);
+        await http.GrantAsync(admin, role!, http.Organization("persons"), http.Organization("persons", "create", "list.pageActions"));
         using var assignment = await admin.PutAsJsonAsync($"/api/authorization/users/{actor}/roles", new { RoleCodes = new[] { "AuditWriter" } });
         Assert.Equal(HttpStatusCode.NoContent, assignment.StatusCode);
         using var writer = await fixture.LoginAsync("writer", account.GetProperty("temporaryCredential").GetString()!);
-        var first = await CreateAsync(admin, "/api/organization/persons", new { PersonNo = "QUERY-A", ENAME = "管理员创建", EmploymentStatus = "Active", IsEnabled = true });
-        var second = await CreateAsync(writer, "/api/organization/persons", new { PersonNo = "QUERY-B", ENAME = "维护者创建", EmploymentStatus = "Active", IsEnabled = true });
-        using var deniedUpdate = await writer.PutAsync("/api/organization/persons/" + Id(second), JsonContent.Create(new { ENAME = "无权编辑" }, options: new JsonSerializerOptions()));
+        var first = await FeatureHttpTestRequests.CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons", new { PersonNo = "QUERY-A", ENAME = "管理员创建", EmploymentStatus = "Active", IsEnabled = true });
+        var second = await FeatureHttpTestRequests.CreateAsync(writer, http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons", new { PersonNo = "QUERY-B", ENAME = "维护者创建", EmploymentStatus = "Active", IsEnabled = true });
+        using var deniedUpdate = await FeatureHttpTestRequests.SendAsync(writer, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put, "/api/organization/persons/" + Id(second), new { ENAME = "无权编辑" });
         Assert.Equal(HttpStatusCode.Forbidden, deniedUpdate.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await writer.GetAsync("/api/audit/business-changes")).StatusCode);
         var filtered = await admin.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes?Resource=organization.person&ActorId={actor}&EventType=person.created&TargetId={Id(second)}&From=2020-01-01T00:00:00Z&To=2040-01-01T00:00:00Z");
@@ -601,7 +616,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.Equal(Id(first), Assert.Single(degraded.GetProperty("items").EnumerateArray()).GetProperty("TargetId").GetString());
         fixture.Fault.Mode = "";
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(admin);
-        Assert.Equal(HttpStatusCode.NoContent, (await admin.DeleteAsync($"/api/organization/persons/{Id(second)}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await FeatureHttpTestRequests.SendAsync(admin, http.Organization("persons", "delete", "list.rowActions"), HttpMethod.Delete, $"/api/organization/persons/{Id(second)}")).StatusCode);
         var retained = await admin.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes/{secondRecord.GetProperty("EID").GetString()}");
         Assert.Equal(Id(second), retained.GetProperty("fields").GetProperty("TargetId").GetString());
         Assert.Equal(JsonValueKind.Null, retained.GetProperty("fields").GetProperty("TargetId_DisplayValue").ValueKind);
@@ -633,6 +648,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
     internal StoreFault Fault { get; } = new();
     private string _temporaryCredential = "";
     internal string ActorId { get; private set; } = "";
+    internal IReadOnlyList<FeaturePoint> FeatureCatalog { get; private set; } = [];
     private BusinessAuditHostFixture(string admin, string catalog)
     {
         _admin = admin; _catalog = catalog;
@@ -675,6 +691,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         var candidates = new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(trust);
         var modulePlan = new CanonicalModulePlanCompiler().Compile("personnel-authorization", candidates).Plan
             ?? throw new InvalidOperationException("Formal module plan did not compile.");
+        FeatureCatalog = modulePlan.FeatureCatalog;
         builder.Services.AddRelationTrees(modulePlan);
         builder.Services.AddPlatformAuthorization();
         builder.Services.AddAuthorization(options => { options.AddPolicy("AdminOnly", p => p.RequireRole("LocalAdmin")); options.AddPolicy(ICP.Platform.Authorization.Http.DenyAllAttribute.PolicyName, p => p.RequireAssertion(_ => false)); });
@@ -817,6 +834,13 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         await scope.ServiceProvider.GetRequiredService<IFeatureCatalogSynchronizer>().SynchronizeAsync(catalog.Snapshot.Points);
         Assert.Equal(before.OrderBy(pair => pair.Key), catalog.Snapshot.ByPosition.Select(pair => KeyValuePair.Create(pair.Key, pair.Value.Id)).OrderBy(pair => pair.Key));
         Assert.DoesNotContain(Fault.FeatureCommands, command => command.Contains("INSERT", StringComparison.Ordinal) || command.Contains("DELETE", StringComparison.Ordinal) || command.Contains("UPDATE", StringComparison.Ordinal));
+    }
+    internal async Task RemoveActiveFeatureAsync(string position)
+    {
+        using var scope = _app.Services.CreateScope();
+        var catalog = scope.ServiceProvider.GetRequiredService<ICP.Platform.Modules.Authorization.Services.ActiveFeatureCatalog>();
+        await scope.ServiceProvider.GetRequiredService<IFeatureCatalogSynchronizer>().SynchronizeAsync(
+            catalog.Snapshot.Points.Where(point => point.Position != position).ToArray());
     }
     // 只在本用例证明已受支持的内部初始化边界；普通职责准备仍全部走正式HTTP。
     internal async Task AssignInternalAdministratorAsync(string id)

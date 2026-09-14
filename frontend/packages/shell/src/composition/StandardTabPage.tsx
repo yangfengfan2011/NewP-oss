@@ -19,7 +19,7 @@ export default function StandardTabPage({ input }: PageProps) {
   const treeNavigation = useContext(TreeNavigationContext);
   const instanceId = useId();
   const id = `np-tabs-${instanceId.replace(/:/g, '')}`;
-  const availableTabs = view.tabs.filter(tab => !features.placement || features.hasFeature(features.tab(tab.key) ?? ""));
+  const availableTabs = view.tabs.filter(tab => !features.placement || features.visible(features.tab(tab.key) ?? ""));
   const fallback = availableTabs.find(tab => tab.key === view.defaultTabKey)?.key ?? availableTabs[0]?.key ?? "";
   const [localSelected, setSelected] = useState(view.defaultTabKey);
   const requested = navigation?.tabKey ?? localSelected;

@@ -100,7 +100,7 @@ export interface StandardCrudLookupPage {
   hasMore: boolean;
 }
 
-/** lookup 单次执行上下文；只承载不可序列化的生命周期信号。 */
+/** lookup 单次执行上下文；取消信号与发起动作位置由宿主传入。 */
 export interface StandardCrudLookupExecutionContext extends StandardCrudFeatureRequestContext {
   readonly signal: AbortSignal;
 }
@@ -339,7 +339,7 @@ export interface StandardCrudListQueryRequest {
   fields?: string;
 }
 
-/** 行读取上下文承载取消、列代际与独立范围；范围单独序列化，不混入用户筛选。 */
+/** 正式声明位置随单次请求传输，不进入业务载荷或用户筛选。 */
 export interface StandardCrudFeatureRequestContext { featurePosition?: string }
 export interface StandardCrudListReadContext extends StandardCrudFeatureRequestContext {
   columnContextToken?: string;
@@ -347,7 +347,7 @@ export interface StandardCrudListReadContext extends StandardCrudFeatureRequestC
   signal?: AbortSignal;
 }
 
-/** 详情读取执行上下文只承载取消，不参与资源标识、查询 key 或 URL。 */
+/** 详情取消信号不进入查询 key；功能位置参与缓存隔离但不改变资源标识或 URL。 */
 export interface StandardCrudDetailReadContext extends StandardCrudFeatureRequestContext {
   signal?: AbortSignal;
 }

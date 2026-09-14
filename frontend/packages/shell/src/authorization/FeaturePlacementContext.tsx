@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo } from 'react';
 import { useAuthorization } from '@icp-platform/core';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
+import { createFeatureVisibility } from './featureVisibility';
 
 export interface FeaturePlacement {
   entryPosition: string;
@@ -22,8 +23,9 @@ export function useFeaturePlacement() {
   const metadata = useRuntimeMetadata();
   const hasFeature = useOptionalFeatureDecision();
   const points = useMemo(() => metadata?.manifest.modules.flatMap(module => module.features ?? []) ?? [], [metadata]);
+  const visible = useMemo(() => createFeatureVisibility(points, hasFeature), [points, hasFeature]);
   return {
-    placement, points, hasFeature,
+    placement, points, hasFeature, visible,
     readPosition: placement?.actionPosition ?? placement?.entryPosition,
     action(key: string, surface: string): string | undefined {
       if (!placement) return undefined;

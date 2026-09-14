@@ -14,8 +14,9 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
         using var admin = await fixture.LoginAdministratorAsync();
         var current = await admin.GetFromJsonAsync<JsonElement>("/api/auth/current-user");
         var positions = current.GetProperty("featurePositions").EnumerateArray().Select(p => p.GetString()!).ToArray();
-        var read = positions.Single(p => !p.EndsWith("/action:save", StringComparison.Ordinal));
-        var save = positions.Single(p => p.EndsWith("/action:save", StringComparison.Ordinal));
+        var read = fixture.FeatureCatalog.Single(point => point.ModuleId == "Authorization" && point.BehaviorKey == "authorization.workbench.read").Position;
+        var save = fixture.FeatureCatalog.Single(point => point.ModuleId == "Authorization" && point.BehaviorKey == "authorization.workbench.save").Position;
+        Assert.Contains(read, positions); Assert.Contains(save, positions);
         var role = await CreateAsync(admin, "/api/authorization/roles", new { Code = "FeatureReader", Name = "普通授权维护" });
         var roleId = role.GetProperty("id").GetString()!;
         var target = await CreateAsync(admin, "/api/authorization/roles", new { Code = "GlobalTarget", Name = "其他角色" });
@@ -71,7 +72,7 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
         await fixture.RepeatFeatureSynchronizationAsync();
         using var admin = await fixture.LoginAdministratorAsync();
-        var (read, save) = await PositionsAsync(admin);
+        var (read, save) = await PositionsAsync(fixture, admin);
         var role = await CreateAsync(admin, "/api/authorization/roles", new { Code = "Replace", Name = "替换测试" });
         var id = role.GetProperty("id").GetString()!;
         SetPosition(admin, save);
@@ -114,7 +115,7 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
         using var admin = await fixture.LoginAdministratorAsync();
-        var (read, save) = await PositionsAsync(admin);
+        var (read, save) = await PositionsAsync(fixture, admin);
         var role = await CreateAsync(admin, "/api/authorization/roles", new { Code = "Race", Name = "并发测试" });
         var id = role.GetProperty("id").GetString()!;
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -145,12 +146,14 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
         Assert.All(changes, change => { Assert.Equal("false", change.GetProperty("before").GetProperty("value").GetString()); Assert.Equal("true", change.GetProperty("after").GetProperty("value").GetString()); });
     }
 
-    private static async Task<(string Read, string Save)> PositionsAsync(HttpClient client)
+    private static async Task<(string Read, string Save)> PositionsAsync(BusinessAuditHostFixture fixture, HttpClient client)
     {
         var current = await client.GetFromJsonAsync<JsonElement>("/api/auth/current-user");
         var positions = current.GetProperty("featurePositions").EnumerateArray().Select(position => position.GetString()!).ToArray();
-        return (positions.Single(position => !position.EndsWith("/action:save", StringComparison.Ordinal)),
-            positions.Single(position => position.EndsWith("/action:save", StringComparison.Ordinal)));
+        var read = fixture.FeatureCatalog.Single(point => point.ModuleId == "Authorization" && point.BehaviorKey == "authorization.workbench.read").Position;
+        var save = fixture.FeatureCatalog.Single(point => point.ModuleId == "Authorization" && point.BehaviorKey == "authorization.workbench.save").Position;
+        Assert.Contains(read, positions); Assert.Contains(save, positions);
+        return (read, save);
     }
 
     // 准备经正式HTTP，响应失败直接保留最小Problem Details。

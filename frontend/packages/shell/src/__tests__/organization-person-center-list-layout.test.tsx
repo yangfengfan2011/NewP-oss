@@ -503,6 +503,7 @@ describe('organization person center list layout', () => {
       expect.objectContaining({ fieldKey: 'companyId', page: 1, pageSize: 20 }),
       true,
       expect.any(AbortSignal),
+      undefined,
     );
     expect(fetchSpy.mock.calls.filter(([url, init]) => (
       typeof url === 'string'
@@ -775,7 +776,7 @@ describe('organization person center list layout', () => {
     expect(serviceMocks.setPersonLifecycleStatus).toHaveBeenCalledWith('person-1', {
       isEnabled: false,
       reason: '人员中心停用人员',
-    });
+    }, undefined);
     expect(container.textContent).toContain('停用人员失败');
   });
 });

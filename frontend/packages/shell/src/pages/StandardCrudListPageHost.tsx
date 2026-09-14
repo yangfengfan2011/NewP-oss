@@ -871,7 +871,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const queryLookupRuntime = useStandardCrudLookupRuntime({
     featurePosition: features.readPosition,
     resourceKey: registration.resourceKey,
-    fields: queryLookupFields,
+    fields: host.presentation.kind === 'action-drawer' ? [] : queryLookupFields,
     providers: registration.lookupProviders ?? [],
     values: filters,
   });

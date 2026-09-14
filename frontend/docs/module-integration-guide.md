@@ -52,6 +52,16 @@ Shell 会导入并校验整份目录，全部成功后通过 `ModuleRegistry.rep
 
 `actionHandlers` 可以返回不透明的 `StandardCrudOperationResult`。Shell 只把该结果交给模块注册的 `operationResultPresenter`，不检查、持久或重放 payload。模块 presenter 拥有具体结果形状、展示、复制与关闭销毁时机。动作发生并发冲突时，Shell 刷新最新快照并结束旧确认流程，不自动重放写入。
 
+## 标准路径的位置授权
+
+标准功能声明与派生规则见 [Module Contract](../../docs/architecture/module-contract.md#功能位置授权)。Shell 消费活动目录中的完整 position，并按导航、Tab 和树的静态节点类型传递所属入口。独立详情使用声明的入口，重定向采用目标入口，Drawer 沿用发起动作的位置；模块不从 URL、Referer、点击历史或记录 ID 推导位置。
+
+`StandardCrudFeatureRequestContext.featurePosition` 是每次请求的执行上下文。标准 client、data adapter、Lookup 和 action handler 沿调用链传递它，由请求写入 `X-NewP-Feature`；不把位置加入业务 payload、筛选值或查询 URL，也不使用可被并发操作覆盖的全局请求头。自定义 handler 调用模块服务时同样传递 `context.featurePosition`。位置只表明请求要执行的声明功能，服务端仍按当前可信主体判权。
+
+列表与详情读取、Lookup 的缓存按位置隔离。标准宿主只加载可用入口及动作所需读取，创建或编辑的准备步骤和提交使用同一动作位置；动作 Drawer 不加载底层列表查询的 Lookup。纯容器没有可用后代时隐藏，默认 Tab 不可用时进入首个可用 Tab，不预读未授权内容。
+
+详情摘要 renderer 通过 `featureActions` 接收本 View 声明的专用动作映射，形状为 `Record<key, { position, allowed }>`。模块以 `allowed` 控制呈现、以 `position` 发起该动作请求，例如 Organization 的账号绑定；不要导入 Shell 的内部位置 Context，也不要把其他动作或入口资格用作写入授权。输入、确认、pending、错误及刷新仍沿用既有动作生命周期。
+
 ## 验证
 
 - 模块构建证明 TypeScript binding 与依赖完整。

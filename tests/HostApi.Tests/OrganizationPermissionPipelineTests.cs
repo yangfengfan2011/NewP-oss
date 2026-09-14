@@ -34,7 +34,7 @@ public sealed class OrganizationPermissionPipelineTests
     [Fact]
     public async Task BindingRoute_WhenPermissionDecisionUnavailable_ReturnsStableProblemDetails()
     {
-        var source = new MutablePermissionDecisionSource(PermissionDecision.Indeterminate);
+        var source = new MutableFeatureDecisionSource(PermissionDecision.Indeterminate);
         await using var scenario = await Scenario.StartAsync(source);
         using var request = Request(HttpMethod.Get, "/api/organization/persons/Person_1", "subject");
 
@@ -59,7 +59,7 @@ public sealed class OrganizationPermissionPipelineTests
         HttpStatusCode expectedStatus,
         int expectedBusinessCalls)
     {
-        var source = new MutablePermissionDecisionSource(decision);
+        var source = new MutableFeatureDecisionSource(decision);
         await using var scenario = await Scenario.StartAsync(source);
 
         using var request = Request(HttpMethod.Get, "/api/organization/companies", subjectId);
@@ -79,7 +79,7 @@ public sealed class OrganizationPermissionPipelineTests
 
         if (subjectId is not null)
         {
-            Assert.Equal("Organization.Company.View", source.LastPermissionCode);
+            Assert.Equal("organization.company.read", source.LastBehaviorKey);
         }
     }
 
@@ -94,7 +94,7 @@ public sealed class OrganizationPermissionPipelineTests
         HttpStatusCode expectedStatus,
         int expectedBusinessCalls)
     {
-        var source = new MutablePermissionDecisionSource(decision);
+        var source = new MutableFeatureDecisionSource(decision);
         await using var scenario = await Scenario.StartAsync(source);
 
         using var request = Request(HttpMethod.Get, "/api/organization/persons", subjectId);
@@ -104,7 +104,7 @@ public sealed class OrganizationPermissionPipelineTests
         Assert.Equal(expectedBusinessCalls, scenario.CrudService.CallCount);
         if (subjectId is not null)
         {
-            Assert.Equal("Organization.Person.View", source.LastPermissionCode);
+            Assert.Equal("organization.person.read", source.LastBehaviorKey);
         }
     }
 
@@ -119,7 +119,7 @@ public sealed class OrganizationPermissionPipelineTests
         HttpStatusCode expectedStatus,
         int expectedDirectoryCalls)
     {
-        var source = new MutablePermissionDecisionSource(decision);
+        var source = new MutableFeatureDecisionSource(decision);
         await using var scenario = await Scenario.StartAsync(source);
         using var request = Request(
             HttpMethod.Get,
@@ -132,7 +132,7 @@ public sealed class OrganizationPermissionPipelineTests
         Assert.Equal(expectedDirectoryCalls, scenario.DepartmentDirectory.LookupCallCount);
         if (subjectId is not null)
         {
-            Assert.Equal(OrganizationPermissions.PersonView, source.LastPermissionCode);
+            Assert.Equal("organization.person.department.lookup", source.LastBehaviorKey);
         }
     }
 
@@ -147,7 +147,7 @@ public sealed class OrganizationPermissionPipelineTests
         HttpStatusCode expectedStatus,
         int expectedDirectoryCalls)
     {
-        var source = new MutablePermissionDecisionSource(decision);
+        var source = new MutableFeatureDecisionSource(decision);
         await using var scenario = await Scenario.StartAsync(source);
         using var request = Request(
             HttpMethod.Get,
@@ -160,7 +160,7 @@ public sealed class OrganizationPermissionPipelineTests
         Assert.Equal(expectedDirectoryCalls, scenario.DepartmentDirectory.ParentLookupCallCount);
         if (subjectId is not null)
         {
-            Assert.Equal(OrganizationPermissions.DepartmentView, source.LastPermissionCode);
+            Assert.Equal("organization.department.parent.lookup", source.LastBehaviorKey);
         }
     }
 
@@ -175,7 +175,7 @@ public sealed class OrganizationPermissionPipelineTests
         HttpStatusCode expectedStatus,
         int expectedDirectoryCalls)
     {
-        var source = new MutablePermissionDecisionSource(decision);
+        var source = new MutableFeatureDecisionSource(decision);
         await using var scenario = await Scenario.StartAsync(source);
         using var request = Request(
             HttpMethod.Get,
@@ -188,14 +188,14 @@ public sealed class OrganizationPermissionPipelineTests
         Assert.Equal(expectedDirectoryCalls, scenario.CompanyDirectory.LookupCallCount);
         if (subjectId is not null)
         {
-            Assert.Equal(OrganizationPermissions.DepartmentView, source.LastPermissionCode);
+            Assert.Equal("organization.department.company.lookup", source.LastBehaviorKey);
         }
     }
 
     [Fact]
     public async Task DepartmentCompanyLookup_ForwardsPagingAndReturnsDisabledCurrentValue()
     {
-        var source = new MutablePermissionDecisionSource(PermissionDecision.Granted);
+        var source = new MutableFeatureDecisionSource(PermissionDecision.Granted);
         await using var scenario = await Scenario.StartAsync(source);
         scenario.CompanyDirectory.Result = new OrganizationDirectoryPage<Company>(
             [new Company { Id = "Company_1", Name = "总部", IsEnabled = true }],
@@ -212,7 +212,7 @@ public sealed class OrganizationPermissionPipelineTests
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(OrganizationPermissions.DepartmentView, source.LastPermissionCode);
+        Assert.Equal("organization.department.company.lookup", source.LastBehaviorKey);
         Assert.Equal("总部", document.RootElement.GetProperty("items")[0].GetProperty("label").GetString());
         Assert.Equal("旧公司（已停用）", document.RootElement.GetProperty("currentItems")[0].GetProperty("label").GetString());
         Assert.True(document.RootElement.GetProperty("currentItems")[0].GetProperty("disabled").GetBoolean());
@@ -225,7 +225,7 @@ public sealed class OrganizationPermissionPipelineTests
     [Fact]
     public async Task DepartmentParentLookup_ResolvesCurrentDepartmentAndAllowsExplicitDisabledCandidate()
     {
-        var source = new MutablePermissionDecisionSource(PermissionDecision.Granted);
+        var source = new MutableFeatureDecisionSource(PermissionDecision.Granted);
         await using var scenario = await Scenario.StartAsync(source);
         scenario.DepartmentDirectory.DepartmentByCode = new Department
         {
@@ -266,7 +266,7 @@ public sealed class OrganizationPermissionPipelineTests
     [Fact]
     public async Task PersonOrganizationLookup_ForwardsPagingAndReturnsDisabledCurrentValue()
     {
-        var source = new MutablePermissionDecisionSource(PermissionDecision.Granted);
+        var source = new MutableFeatureDecisionSource(PermissionDecision.Granted);
         await using var scenario = await Scenario.StartAsync(source);
         scenario.CompanyDirectory.Result = new OrganizationDirectoryPage<Company>(
             [new Company { Id = "Company_1", Name = "总部", IsEnabled = true }],
@@ -295,7 +295,7 @@ public sealed class OrganizationPermissionPipelineTests
     [Fact]
     public async Task PersonOrganizationLookup_AllowsDisabledDirectoryItemsOnlyForExplicitListFiltering()
     {
-        var source = new MutablePermissionDecisionSource(PermissionDecision.Granted);
+        var source = new MutableFeatureDecisionSource(PermissionDecision.Granted);
         await using var scenario = await Scenario.StartAsync(source);
         scenario.CompanyDirectory.Result = new OrganizationDirectoryPage<Company>(
             [new Company { Id = "Company_2", Name = "旧公司", IsEnabled = false }],
@@ -318,93 +318,121 @@ public sealed class OrganizationPermissionPipelineTests
     }
 
     [Theory]
-    [InlineData("GET", "/api/organization/persons", "Organization.Person.View")]
-    [InlineData("GET", "/api/organization/persons/options", "Organization.Person.View")]
-    [InlineData("POST", "/api/organization/persons/export", "Organization.Person.View")]
-    [InlineData("GET", "/api/organization/persons/Person_1", "Organization.Person.View")]
-    [InlineData("POST", "/api/organization/persons", "Organization.Person.Create")]
-    [InlineData("PUT", "/api/organization/persons/Person_1", "Organization.Person.Update")]
-    [InlineData("POST", "/api/organization/persons/Person_1/disable", "Organization.Person.Update")]
-    [InlineData("DELETE", "/api/organization/persons/Person_1", "Organization.Person.Delete")]
-    public async Task PersonStandardCrud_AllMappedOperationsUseFixedPermission(
+    [InlineData("GET", "/api/organization/persons", "organization.person.read")]
+    [InlineData("GET", "/api/organization/persons/options", null)]
+    [InlineData("POST", "/api/organization/persons/export", "organization.person.export")]
+    [InlineData("GET", "/api/organization/persons/Person_1", "organization.person.read")]
+    [InlineData("POST", "/api/organization/persons", "organization.person.create")]
+    [InlineData("PUT", "/api/organization/persons/Person_1", "organization.person.update")]
+    [InlineData("POST", "/api/organization/persons/Person_1/disable", null)]
+    [InlineData("DELETE", "/api/organization/persons/Person_1", "organization.person.delete")]
+    public async Task PersonStandardCrud_AllMappedOperationsUseDeclaredFeature(
         string method,
         string path,
-        string expectedPermission)
+        string? expectedBehavior)
     {
-        var source = new MutablePermissionDecisionSource(PermissionDecision.Granted);
+        var source = new MutableFeatureDecisionSource(PermissionDecision.Granted);
         await using var scenario = await Scenario.StartAsync(source);
 
         using var request = Request(new HttpMethod(method), path, "subject", JsonBody(path, method));
         using var response = await scenario.Client.SendAsync(request);
 
+        if (expectedBehavior is null)
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            Assert.Equal(0, scenario.CrudService.CallCount);
+            Assert.Equal(0, source.CallCount);
+            return;
+        }
         Assert.True(response.IsSuccessStatusCode, $"{method} {path} returned {(int)response.StatusCode}.");
-        Assert.Equal(expectedPermission, source.LastPermissionCode);
+        Assert.Equal(expectedBehavior, source.LastBehaviorKey);
         Assert.Equal(1, scenario.CrudService.CallCount);
     }
 
     [Theory]
-    [InlineData("GET", "/api/organization/positions", "Organization.Position.View")]
-    [InlineData("GET", "/api/organization/positions/options", "Organization.Position.View")]
-    [InlineData("POST", "/api/organization/positions", "Organization.Position.Create")]
-    [InlineData("PUT", "/api/organization/positions/Position_1", "Organization.Position.Update")]
-    [InlineData("DELETE", "/api/organization/positions/Position_1", "Organization.Position.Delete")]
-    public async Task PositionStandardCrud_OperationsUseFixedPermission(
+    [InlineData("GET", "/api/organization/positions", "organization.position.read")]
+    [InlineData("GET", "/api/organization/positions/options", "organization.position.lookup")]
+    [InlineData("POST", "/api/organization/positions", "organization.position.create")]
+    [InlineData("PUT", "/api/organization/positions/Position_1", "organization.position.update")]
+    [InlineData("DELETE", "/api/organization/positions/Position_1", "organization.position.delete")]
+    public async Task PositionStandardCrud_OperationsUseDeclaredFeature(
         string method,
         string path,
-        string expectedPermission)
+        string? expectedBehavior)
     {
-        var source = new MutablePermissionDecisionSource(PermissionDecision.Granted);
+        var source = new MutableFeatureDecisionSource(PermissionDecision.Granted);
         await using var scenario = await Scenario.StartAsync(source);
 
         using var request = Request(new HttpMethod(method), path, "subject", JsonBody(path, method));
         using var response = await scenario.Client.SendAsync(request);
 
+        if (expectedBehavior is null)
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            Assert.Equal(0, scenario.CrudService.CallCount);
+            Assert.Equal(0, source.CallCount);
+            return;
+        }
         Assert.True(response.IsSuccessStatusCode, $"{method} {path} returned {(int)response.StatusCode}.");
-        Assert.Equal(expectedPermission, source.LastPermissionCode);
+        Assert.Equal(expectedBehavior, source.LastBehaviorKey);
         Assert.Equal(1, scenario.CrudService.CallCount);
     }
 
     [Theory]
-    [InlineData("GET", "/api/organization/companies", "Organization.Company.View")]
-    [InlineData("GET", "/api/organization/companies/options", "Organization.Company.View")]
-    [InlineData("POST", "/api/organization/companies", "Organization.Company.Create")]
-    [InlineData("PUT", "/api/organization/companies/Company_1", "Organization.Company.Update")]
-    [InlineData("DELETE", "/api/organization/companies/Company_1", "Organization.Company.Delete")]
-    public async Task CompanyStandardCrud_OperationsUseFixedPermission(
+    [InlineData("GET", "/api/organization/companies", "organization.company.read")]
+    [InlineData("GET", "/api/organization/companies/options", null)]
+    [InlineData("POST", "/api/organization/companies", "organization.company.create")]
+    [InlineData("PUT", "/api/organization/companies/Company_1", "organization.company.update")]
+    [InlineData("DELETE", "/api/organization/companies/Company_1", "organization.company.delete")]
+    public async Task CompanyStandardCrud_OperationsUseDeclaredFeature(
         string method,
         string path,
-        string expectedPermission)
+        string? expectedBehavior)
     {
-        var source = new MutablePermissionDecisionSource(PermissionDecision.Granted);
+        var source = new MutableFeatureDecisionSource(PermissionDecision.Granted);
         await using var scenario = await Scenario.StartAsync(source);
 
         using var request = Request(new HttpMethod(method), path, "subject", JsonBody(path, method));
         using var response = await scenario.Client.SendAsync(request);
 
+        if (expectedBehavior is null)
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            Assert.Equal(0, scenario.CrudService.CallCount);
+            Assert.Equal(0, source.CallCount);
+            return;
+        }
         Assert.True(response.IsSuccessStatusCode, $"{method} {path} returned {(int)response.StatusCode}.");
-        Assert.Equal(expectedPermission, source.LastPermissionCode);
+        Assert.Equal(expectedBehavior, source.LastBehaviorKey);
         Assert.Equal(1, scenario.CrudService.CallCount);
     }
 
     [Theory]
-    [InlineData("GET", "/api/organization/departments", "Organization.Department.View")]
-    [InlineData("GET", "/api/organization/departments/options", "Organization.Department.View")]
-    [InlineData("POST", "/api/organization/departments", "Organization.Department.Create")]
-    [InlineData("PUT", "/api/organization/departments/Department_1", "Organization.Department.Update")]
-    [InlineData("DELETE", "/api/organization/departments/Department_1", "Organization.Department.Delete")]
-    public async Task DepartmentStandardCrud_OperationsUseFixedPermission(
+    [InlineData("GET", "/api/organization/departments", "organization.department.read")]
+    [InlineData("GET", "/api/organization/departments/options", null)]
+    [InlineData("POST", "/api/organization/departments", "organization.department.create")]
+    [InlineData("PUT", "/api/organization/departments/Department_1", "organization.department.update")]
+    [InlineData("DELETE", "/api/organization/departments/Department_1", "organization.department.delete")]
+    public async Task DepartmentStandardCrud_OperationsUseDeclaredFeature(
         string method,
         string path,
-        string expectedPermission)
+        string? expectedBehavior)
     {
-        var source = new MutablePermissionDecisionSource(PermissionDecision.Granted);
+        var source = new MutableFeatureDecisionSource(PermissionDecision.Granted);
         await using var scenario = await Scenario.StartAsync(source);
 
         using var request = Request(new HttpMethod(method), path, "subject", JsonBody(path, method));
         using var response = await scenario.Client.SendAsync(request);
 
+        if (expectedBehavior is null)
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            Assert.Equal(0, scenario.CrudService.CallCount);
+            Assert.Equal(0, source.CallCount);
+            return;
+        }
         Assert.True(response.IsSuccessStatusCode, $"{method} {path} returned {(int)response.StatusCode}.");
-        Assert.Equal(expectedPermission, source.LastPermissionCode);
+        Assert.Equal(expectedBehavior, source.LastBehaviorKey);
         Assert.Equal(1, scenario.CrudService.CallCount);
     }
 
@@ -418,7 +446,7 @@ public sealed class OrganizationPermissionPipelineTests
         HttpStatusCode expectedStatus,
         string? expectedCode)
     {
-        var source = new MutablePermissionDecisionSource(PermissionDecision.Granted);
+        var source = new MutableFeatureDecisionSource(PermissionDecision.Granted);
         await using var scenario = await Scenario.StartAsync(source);
         scenario.CrudService.DeleteResultFactory = currentId => currentId switch
         {
@@ -451,9 +479,9 @@ public sealed class OrganizationPermissionPipelineTests
     }
 
     [Fact]
-    public async Task PersonStandardCrud_RevokedPermissionTakesEffectOnNextRequest()
+    public async Task PersonStandardCrud_RevokedFeatureTakesEffectOnNextRequest()
     {
-        var source = new MutablePermissionDecisionSource(PermissionDecision.Granted);
+        var source = new MutableFeatureDecisionSource(PermissionDecision.Granted);
         await using var scenario = await Scenario.StartAsync(source);
 
         using var grantedRequest = Request(HttpMethod.Get, "/api/organization/persons", "subject");
@@ -475,6 +503,7 @@ public sealed class OrganizationPermissionPipelineTests
         HttpContent? content = null)
     {
         var request = new HttpRequestMessage(method, path) { Content = content };
+        request.Headers.Add("X-NewP-Feature", "test-position");
         if (subjectId is not null)
         {
             request.Headers.Add(TestAuthenticationHandler.SubjectHeader, subjectId);
@@ -528,7 +557,7 @@ public sealed class OrganizationPermissionPipelineTests
 
         public RecordingDepartmentDirectory DepartmentDirectory { get; }
 
-        public static async Task<Scenario> StartAsync(IPermissionDecisionSource source)
+        public static async Task<Scenario> StartAsync(ICP.Platform.Authorization.Http.IFeatureDecisionSource source)
         {
             var crudService = new RecordingStandardCrudService();
             var companyDirectory = new RecordingCompanyDirectory();
@@ -544,6 +573,7 @@ public sealed class OrganizationPermissionPipelineTests
                     TestAuthenticationHandler.SchemeName,
                     static _ => { });
             builder.Services.AddPlatformAuthorization();
+            builder.Services.AddAuthorization(options => options.AddPolicy(ICP.Platform.Authorization.Http.DenyAllAttribute.PolicyName, policy => policy.RequireAssertion(_ => false)));
             builder.Services.AddSingleton(source);
             builder.Services.AddSingleton<ICompanyDirectory>(companyDirectory);
             builder.Services.AddSingleton<IDepartmentDirectory>(departmentDirectory);
@@ -674,11 +704,11 @@ public sealed class OrganizationPermissionPipelineTests
         }
     }
 
-    private sealed class MutablePermissionDecisionSource : IPermissionDecisionSource
+    private sealed class MutableFeatureDecisionSource : ICP.Platform.Authorization.Http.IFeatureDecisionSource
     {
         private int _callCount;
 
-        public MutablePermissionDecisionSource(PermissionDecision decision)
+        public MutableFeatureDecisionSource(PermissionDecision decision)
         {
             Decision = decision;
         }
@@ -687,15 +717,16 @@ public sealed class OrganizationPermissionPipelineTests
 
         public int CallCount => Volatile.Read(ref _callCount);
 
-        public string? LastPermissionCode { get; private set; }
+        public string? LastBehaviorKey { get; private set; }
 
         public ValueTask<PermissionDecision> EvaluateAsync(
             string subjectId,
-            string permissionCode,
+            string position,
+            string behaviorKey,
             CancellationToken cancellationToken = default)
         {
             Interlocked.Increment(ref _callCount);
-            LastPermissionCode = permissionCode;
+            LastBehaviorKey = behaviorKey;
             return ValueTask.FromResult(Decision);
         }
     }

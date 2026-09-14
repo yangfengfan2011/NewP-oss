@@ -9,23 +9,24 @@ import { setPersonLifecycleStatus } from '../services/organizationService';
 describe('person lifecycle client', () => {
   beforeEach(() => platformFetchMock.mockReset());
 
-  it('uses the dedicated lifecycle command without a person revision', async () => {
+  it.each([false, true])('uses the matching lifecycle command and request position for enabled=%s without a person revision', async (isEnabled) => {
     platformFetchMock.mockResolvedValue(new Response('{}', {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     }));
 
     await setPersonLifecycleStatus('Person/1', {
-      isEnabled: false,
+      isEnabled,
       reason: '人员中心停用人员',
-    });
+    }, 'declared-action-position');
 
     expect(platformFetchMock).toHaveBeenCalledWith(
-      '/api/organization/persons/Person%2F1/status',
+      `/api/organization/persons/Person%2F1/status/${isEnabled ? 'enable' : 'disable'}`,
       expect.objectContaining({
         method: 'PUT',
+        headers: expect.objectContaining({ 'X-NewP-Feature': 'declared-action-position' }),
         body: JSON.stringify({
-          isEnabled: false,
+          isEnabled,
           reason: '人员中心停用人员',
         }),
       }),

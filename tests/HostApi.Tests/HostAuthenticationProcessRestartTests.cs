@@ -94,13 +94,14 @@ public sealed class HostAuthenticationProcessRestartTests
                 CurrentPassword = "restart-secret-123", NewPassword = "Restart-final-secret-123!", ExpectedRevision = current.GetProperty("revision").GetInt64() });
             Assert.Equal(HttpStatusCode.OK, changedPassword.StatusCode);
             await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
-            var company = BusinessAuditSqlServerHttpApiTests.Id(await BusinessAuditSqlServerHttpApiTests.CreateAsync(client,
+            var http = await FeatureHttpTestRequests.LoadAsync(client);
+            var company = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(client, http.Organization("companies", "create", "list.pageActions"),
                 "/api/organization/companies", new { ECODE = "RESTART", ENAME = "重启公司", SortOrder = "0100" }));
-            var department = BusinessAuditSqlServerHttpApiTests.Id(await BusinessAuditSqlServerHttpApiTests.CreateAsync(client,
+            var department = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(client, http.Organization("departments", "create", "list.pageActions"),
                 "/api/organization/departments", new { ECODE = "RESTART-D", ENAME = "重启部门", CompanyId = company, SortOrder = "0100" }));
-            var person = BusinessAuditSqlServerHttpApiTests.Id(await BusinessAuditSqlServerHttpApiTests.CreateAsync(client,
+            var person = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(client, http.Organization("persons", "create", "list.pageActions"),
                 "/api/organization/persons", new { PersonNo = "RESTART-P", ENAME = "重启人员", CompanyId = company, DepartmentId = department, EmploymentStatus = "Active", IsEnabled = true }));
-            await BusinessAuditSqlServerHttpApiTests.UpdateAsync(client, person, new { ENAME = "持久姓名" });
+            await BusinessAuditSqlServerHttpApiTests.UpdateAsync(client, http.Organization("persons", "edit", "list.rowActions"), person, new { ENAME = "持久姓名" });
             using var roleResponse = await client.PostAsJsonAsync("/api/authorization/roles", new { Code = "restart-reader", Name = "重启查询职责" });
             Assert.Equal(HttpStatusCode.Created, roleResponse.StatusCode);
             var roleId = (await roleResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
@@ -124,7 +125,7 @@ public sealed class HostAuthenticationProcessRestartTests
             Assert.Equal("admin", afterRestartUser?.ECODE);
             Assert.Equal("Asia/Shanghai", afterRestartUser?.TimeZoneId);
             Assert.NotEmpty(Directory.GetFiles(keyRing, "key-*.xml"));
-            var restoredPerson = await client.GetFromJsonAsync<JsonElement>($"/api/organization/persons/{person}");
+            var restoredPerson = await FeatureHttpTestRequests.ReadAsync(client, http.Organization("persons"), $"/api/organization/persons/{person}");
             Assert.Equal("持久姓名", restoredPerson.GetProperty("fields").GetProperty("ENAME").GetString());
             var restoredRoles = await client.GetFromJsonAsync<JsonElement>($"/api/authorization/users/{accountId}/roles");
             Assert.Equal("restart-reader", Assert.Single(restoredRoles.GetProperty("roleCodes").EnumerateArray()).GetString());
@@ -157,7 +158,9 @@ public sealed class HostAuthenticationProcessRestartTests
         int port,
         string phase)
     {
-        var hostAssembly = Path.Combine(FindRepositoryRoot(), "apps", "host-api", "bin", "Debug", "net10.0", "HostApi.dll");
+        var output = new DirectoryInfo(AppContext.BaseDirectory);
+        var configuration = output.Parent?.Name ?? throw new InvalidOperationException("Test output configuration was missing.");
+        var hostAssembly = Path.Combine(FindRepositoryRoot(), "apps", "host-api", "bin", configuration, output.Name, "HostApi.dll");
         var startInfo = new ProcessStartInfo("dotnet")
         {
             UseShellExecute = false,

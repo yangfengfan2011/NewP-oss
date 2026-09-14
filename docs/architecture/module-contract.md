@@ -20,6 +20,18 @@ C#、TypeScript 和子清单不得重新声明 Capsule 已拥有的 identity，�
 
 所有投影由同一启动期计划生成并记录 `snapshotId` / `planHash`。冲突或引用缺失必须在该次启动中拒绝整份 candidate；不得依赖加载顺序覆盖、warning 后跳过或部分注册。当前不支持进程存活期间改变插件集合，因此跨请求投影 identity 核对、运行中原子切换与回滚不属于本契约；见 ADR-0032。
 
+## 功能位置授权
+
+已切换的标准入口在 navigation 声明 `featureAuthorization: true`。`StandardFeatureMetadataCompiler` 展开真实 View 和 PageRef，`FeatureCatalogCompiler` 与 Capsule 的自定义功能声明合并为同一目录。导航、Tab、动作是授权点；页面和静态类型展示组不是授权点。同一 View 在不同分支复用时分别生成位置，局部动作 Key 可以重复。
+
+View 的 `resourceKey` 指定稳定资源；`lookupBindings` 在该 View 的资源范围内把模型字段或查询 override 所用 provider 绑定到只读 behavior。专用动作通过 `featureActions` 声明 `key`、`titleKey`、`behaviorKey` 及可选 `readBehaviors`。这些绑定描述实际消费能力，不向管理员增加接口权限清单。
+
+完整位置由声明引用及其祖先、静态节点类型和动作所在位置编译产生，不能使用 URL、文案、数组序号或记录 ID。导航的 `featureOwner` 为重定向别名和独立详情指定已有入口引用；别名不创建重复授权点。`ReferenceKey`、`StaticScope`、`ActionScope`、`StaticScopeTitle` 和 `Container` 是标准适配器的派生事实，不能据此推断 Capsule 自定义声明已经支持这些输入字段。
+
+Host 在开放请求前核对目录与真实端点的模块归属及执行绑定。`RequireFeature` 只允许当前位置声明的行为；附加读取必须绑定 GET/HEAD 端点，纯容器不获得后代读取。缺失、冲突或无效绑定拒绝整份候选。运行时投影提供编译后的 position，前后端不得另外拼装授权身份。
+
+当前 Organization 标准路径与 Authorization 工作台消费位置授权；未切换消费者暂保留原 Permission 路径。已切换端点不以新旧任一授权通过作为放行条件。其余消费者切换与旧目录一次性退出由 [Issue #200](https://github.com/yangfengfan2011/NewP/issues/200) 的后续 child 完成。
+
 ## Guardrails
 
 - Host 只组合、装载和提供宿主级横切能力，不吸收模块私有业务规则。

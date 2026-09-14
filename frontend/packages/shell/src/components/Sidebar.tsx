@@ -9,6 +9,7 @@ import { usePlatform } from '../contexts/PlatformContext';
 import { filterMenusByShellView } from '../config/uiConfig';
 import { projectMenusToAntdItems } from '../navigation/menuProjection';
 import { resolvePageChrome } from '../navigation/pageChrome';
+import { useFeaturePlacement } from '../authorization/FeaturePlacementContext';
 
 interface SidebarProps {
   menus: MenuConfig[];
@@ -19,12 +20,13 @@ interface SidebarProps {
 export function Sidebar({ menus, collapsed, onCollapse }: SidebarProps) {
   const location = useLocation();
   const auth = useAuth();
+  const features = useFeaturePlacement();
   const { shellView } = usePlatform();
   const visibleMenus = filterMenusByShellView(menus, shellView);
   const chrome = resolvePageChrome(visibleMenus, location.pathname);
   const defaultOpenKeys = Array.from(new Set([...collectExpandableKeys(visibleMenus), ...chrome.openKeys]));
   const menuItems = projectMenusToAntdItems(visibleMenus, (menu) => {
-    if (menu.featurePosition) return auth.user?.featurePositions?.includes(menu.featurePosition) ?? false;
+    if (menu.featurePosition) return features.visible(menu.featurePosition);
     if (menu.localAdministratorOnly && !auth.user?.isLocalAdministrator) {
       return false;
     }

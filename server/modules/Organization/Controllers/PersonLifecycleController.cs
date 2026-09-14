@@ -48,14 +48,26 @@ public sealed class PersonLifecycleController(IPersonLifecycleService lifecycleS
     [RequireFeature("organization.person.enable")]
     public Task<ActionResult<PersonLifecycleDto>> Enable(string personEid, [FromBody] SetPersonLifecycleStatusRequest request,
         CancellationToken cancellationToken = default) => request.IsEnabled ? SetStatus(personEid, request, cancellationToken)
-            : Task.FromResult<ActionResult<PersonLifecycleDto>>(BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]> { ["isEnabled"] = ["启用动作要求 true。"] })));
+            : Task.FromResult<ActionResult<PersonLifecycleDto>>(DirectionProblem("启用动作要求 true。"));
 
     /// <summary>停用动作只允许停用参数，保留原领域事务与会话撤销逻辑。</summary>
     [HttpPut("{personEid}/status/disable")]
     [RequireFeature("organization.person.disable")]
     public Task<ActionResult<PersonLifecycleDto>> Disable(string personEid, [FromBody] SetPersonLifecycleStatusRequest request,
         CancellationToken cancellationToken = default) => !request.IsEnabled ? SetStatus(personEid, request, cancellationToken)
-            : Task.FromResult<ActionResult<PersonLifecycleDto>>(BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]> { ["isEnabled"] = ["停用动作要求 false。"] })));
+            : Task.FromResult<ActionResult<PersonLifecycleDto>>(DirectionProblem("停用动作要求 false。"));
+
+    // 动作方向是 HTTP 输入约束，沿用平台请求校验的稳定错误和字段定位。
+    private BadRequestObjectResult DirectionProblem(string message)
+    {
+        var problem = new ValidationProblemDetails(new Dictionary<string, string[]> { ["isEnabled"] = [message] })
+        { Status = StatusCodes.Status400BadRequest, Title = "REQUEST_VALIDATION_FAILED" };
+        problem.Extensions["code"] = "REQUEST_VALIDATION_FAILED";
+        problem.Extensions["traceId"] = HttpContext.TraceIdentifier;
+        var result = BadRequest(problem);
+        result.ContentTypes.Add("application/problem+json");
+        return result;
+    }
     private ObjectResult LifecycleProblem(PersonLifecycleException exception)
     {
         var status = exception.FailureCode switch

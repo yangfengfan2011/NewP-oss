@@ -31,7 +31,7 @@ public sealed class OrganizationLifecycleHttpApiIntegrationTests
         builder.Services.AddAuthentication(TestAuthenticationHandler.SchemeName)
             .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>(TestAuthenticationHandler.SchemeName, static _ => { });
         builder.Services.AddAuthorization(options => options.AddPolicy(
-            "Permission:Organization.Person.Update",
+            "Feature:organization.person.disable",
             policy => policy.RequireAuthenticatedUser()));
         builder.Services.AddSingleton<IPersonLifecycleService>(service);
 
@@ -43,12 +43,12 @@ public sealed class OrganizationLifecycleHttpApiIntegrationTests
         using var client = app.GetTestClient();
 
         var anonymous = await client.PutAsJsonAsync(
-            "/api/organization/persons/Person_1/status",
+            "/api/organization/persons/Person_1/status/disable",
             new SetPersonLifecycleStatusRequest(false, "停用"));
         Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
         Assert.Equal(0, service.CallCount);
 
-        using var request = new HttpRequestMessage(HttpMethod.Put, "/api/organization/persons/Person_1/status")
+        using var request = new HttpRequestMessage(HttpMethod.Put, "/api/organization/persons/Person_1/status/disable")
         {
             Content = JsonContent.Create(new SetPersonLifecycleStatusRequest(false, "停用"))
         };
@@ -71,7 +71,7 @@ public sealed class OrganizationLifecycleHttpApiIntegrationTests
     {
         var service = new RecordingLifecycleService();
         await using var app = await BuildApplicationAsync(service);
-        using var request = new HttpRequestMessage(HttpMethod.Put, "/api/organization/persons/Person_1/status")
+        using var request = new HttpRequestMessage(HttpMethod.Put, "/api/organization/persons/Person_1/status/disable")
         {
             Content = new StringContent(payload, Encoding.UTF8, "application/json")
         };
@@ -96,7 +96,7 @@ public sealed class OrganizationLifecycleHttpApiIntegrationTests
         builder.Services.AddAuthentication(TestAuthenticationHandler.SchemeName)
             .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>(TestAuthenticationHandler.SchemeName, static _ => { });
         builder.Services.AddAuthorization(options => options.AddPolicy(
-            "Permission:Organization.Person.Update",
+            "Feature:organization.person.disable",
             policy => policy.RequireAuthenticatedUser()));
         builder.Services.AddSingleton<IPersonLifecycleService>(service);
 

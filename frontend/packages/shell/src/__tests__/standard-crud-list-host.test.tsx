@@ -2391,8 +2391,11 @@ describe('StandardCrudListPageHost', () => {
     });
     const get = vi.fn(async () => ({ normalized: { fields: before, summaries: {} }, value: { fields: before, summaries: {} } }));
     const list = vi.fn(); const committed = vi.fn(async () => undefined); const close = vi.fn();
-    mockStandardCrudModule({ actionHandlers: undefined, dataAdapter: { list, get, getRowId: () => 'Person_1', remove } });
-    const deleteView = { ...personListViewDocument, view: { ...personListViewDocument.view, rowActions: [{ key: 'delete', labelKey: 'Action_Delete', standardAction: 'delete', variant: 'danger' }] } } as typeof personListViewDocument;
+    const queryLookup = vi.fn(async () => []);
+    mockStandardCrudModule({ lookupProviders: [{ key: 'organization.departments', load: queryLookup }], actionHandlers: undefined, dataAdapter: { list, get, getRowId: () => 'Person_1', remove } });
+    const deleteView = { ...personListViewDocument, view: { ...personListViewDocument.view,
+      query: { ...personListViewDocument.view.query, fields: [{ key: 'departmentId', source: 'model', field: 'DepartmentId', labelKey: 'Department', dataSourceKey: 'organization.departments' }] },
+      rowActions: [{ key: 'delete', labelKey: 'Action_Delete', standardAction: 'delete', variant: 'danger' }] } } as unknown as typeof personListViewDocument;
     await renderHost({}, deleteView, '/organization/persons', { embedded: createEmbeddedHostEnvironment({
       presentation: { kind: 'action-drawer', standardAction: 'delete' },
       input: { recordId: 'Person_1' },
@@ -2403,6 +2406,7 @@ describe('StandardCrudListPageHost', () => {
     const confirm = [...document.body.querySelectorAll('button')].find(button => button.textContent?.replace(/\s/g, '') === '确认')!;
     await act(async () => confirm.click());
     expect(get).toHaveBeenCalledTimes(1); expect(list).not.toHaveBeenCalled();
+    expect(queryLookup).not.toHaveBeenCalled();
     expect(remove).toHaveBeenCalledTimes(1); expect(remove).toHaveBeenCalledWith('Person_1', before);
     expect(committed).toHaveBeenCalledTimes(succeeds ? 1 : 0); expect(close).toHaveBeenCalledTimes(succeeds ? 1 : 0);
     if (!succeeds) expect(document.body.textContent).toContain('引用阻止删除');

@@ -130,6 +130,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         _adminPassword = $"Adm-{_runId}-Pass";
         RegisterSecret(_adminPassword);
         await ChangePasswordAsync(admin, _adminTemporaryPassword, _adminPassword, revision, cancellationToken);
+        _identityFeatures = await AcceptanceFeatureCatalog.LoadAsync(admin.Client, cancellationToken);
 
         await RecordScenarioSuccessAsync(PreflightScenario, "identity-foundation/preflight.json", new
         {
@@ -150,6 +151,16 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         }, cancellationToken);
     }
 
+    private AcceptanceFeatureCatalog? _identityFeatures;
+
+    private Action<HttpRequestMessage> IdentityAt(string? action = null)
+    {
+        var catalog = _identityFeatures ?? throw new InvalidOperationException("Identity feature catalog was not loaded.");
+        var entry = catalog.Behavior("Identity", "identity.account.read");
+        var point = action is null ? entry : catalog.Action(entry, action, action == "create" ? "list.pageActions" : "list.rowActions");
+        return request => request.Headers.Add("X-NewP-Feature", point.Position);
+    }
+
     private async Task RunApiScenarioAsync(CancellationToken cancellationToken)
     {
         var adminPassword = RequireSecret(_adminPassword, "administrator permanent password");
@@ -158,7 +169,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
 
         var accountCode = $"acct.{_runId[..8]}";
         var account = await CreateUserAsync(admin, accountCode, "Acceptance Account", cancellationToken);
-        var initialDetail = await GetJsonAsync(admin, $"/api/identity/accounts/{account.AccountEid}?eventPage=1&eventPageSize=20", cancellationToken);
+        var initialDetail = await ReadIdentityAsync(admin, $"/api/identity/accounts/{account.AccountEid}?eventPage=1&eventPageSize=20", cancellationToken);
         var initialCreatedAt = ReadDateTime(ReadObject(initialDetail.RootElement, "account"), "createdAt");
         var temporaryPassword = account.TemporaryCredential;
         RegisterSecret(temporaryPassword);
@@ -188,7 +199,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
             $"/api/identity/accounts/{Uri.EscapeDataString(account.AccountEid)}",
             new { ename = "Acceptance Account Updated", expectedRevision = changed.Revision },
             HttpStatusCode.OK,
-            cancellationToken);
+            cancellationToken, IdentityAt("edit"));
         var disabled = await SetUserStatusAsync(
             admin,
             account.AccountEid,
@@ -217,7 +228,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
             ReadLong(rotatedLogin.Body.RootElement, "revision"),
             cancellationToken);
 
-        var list = await GetJsonAsync(
+        var list = await ReadIdentityAsync(
             admin,
             $"/api/identity/accounts?query={Uri.EscapeDataString(accountCode)}&status=Enabled&page=1&pageSize=20",
             cancellationToken);
@@ -225,7 +236,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         {
             throw new InvalidOperationException("Identity query/filter did not return the expected account.");
         }
-        var detail = await GetJsonAsync(admin, $"/api/identity/accounts/{account.AccountEid}?eventPage=1&eventPageSize=100", cancellationToken);
+        var detail = await ReadIdentityAsync(admin, $"/api/identity/accounts/{account.AccountEid}?eventPage=1&eventPageSize=100", cancellationToken);
         var detailAccount = ReadObject(detail.RootElement, "account");
         if (ReadDateTime(detailAccount, "createdAt") != initialCreatedAt
             || ReadDateTime(detailAccount, "updatedAt") < initialCreatedAt)
@@ -242,9 +253,9 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
             $"/api/identity/accounts/{deleted.AccountEid}/delete",
             new { expectedRevision = deleted.Revision, reason = "纵向验收墓碑删除" },
             HttpStatusCode.OK,
-            cancellationToken);
+            cancellationToken, IdentityAt("delete"));
         EnsureString(tombstone.RootElement, "status", "Deleted", "deleted tombstone status");
-        using (var duplicate = await SendJsonAsync(admin, HttpMethod.Post, "/api/identity/accounts", new { ecode = deleteCode, ename = "Reuse" }, cancellationToken))
+        using (var duplicate = await SendJsonAsync(admin, HttpMethod.Post, "/api/identity/accounts", new { ecode = deleteCode, ename = "Reuse" }, cancellationToken, IdentityAt("create")))
         {
             await EnsureProblemAsync(duplicate, HttpStatusCode.Conflict, "IDENTITY_ECODE_CONFLICT", "deleted ECODE reuse", cancellationToken);
         }
@@ -397,110 +408,146 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         var page = await context.NewPageAsync();
         page.SetDefaultTimeout(120_000);
         page.SetDefaultNavigationTimeout(120_000);
-        var navigationResponses = new System.Collections.Concurrent.ConcurrentQueue<string>();
-        page.Response += (_, response) =>
+        async Task CaptureIdentityAsync(string name)
         {
-            navigationResponses.Enqueue($"{response.Request.Method} {new Uri(response.Url).AbsolutePath}: {response.Status}");
-            while (navigationResponses.Count > 30) navigationResponses.TryDequeue(out var discardedResponse);
-        };
+            var path = Path.Combine(_runDirectory, "identity-foundation", name);
+            await page.ScreenshotAsync(new PageScreenshotOptions { Path = path, FullPage = true,
+                Mask = [page.Locator("input, textarea"), page.GetByLabel("临时密码", new PageGetByLabelOptions { Exact = true })] });
+            _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, path));
+        }
+        var activePage = page;
+        var browserErrors = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        var failedResponses = new System.Collections.Concurrent.ConcurrentQueue<IResponse>();
+        var navigationResponses = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        void ObservePage(IPage observed)
+        {
+            observed.PageError += (_, error) => browserErrors.Enqueue(error);
+            observed.RequestFailed += (_, request) => browserErrors.Enqueue($"{request.Method} {new Uri(request.Url).AbsolutePath}: {request.Failure}");
+            observed.Response += (sender, response) =>
+            {
+                navigationResponses.Enqueue($"{response.Request.Method} {new Uri(response.Url).AbsolutePath}: {response.Status}");
+                while (navigationResponses.Count > 30) navigationResponses.TryDequeue(out _);
+                if (response.Status >= 400) failedResponses.Enqueue(response);
+                while (failedResponses.Count > 10) failedResponses.TryDequeue(out _);
+                while (browserErrors.Count > 30) browserErrors.TryDequeue(out _);
+            };
+        }
+        ObservePage(page);
         try
         {
             await LoginBrowserAsync(page, "admin", adminPassword);
             await page.GotoAsync($"http://127.0.0.1:{_shellPort}/identity/accounts", new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+            await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "创建账号", Exact = true }).WaitForAsync();
+            await CaptureIdentityAsync("account-list.png");
             // 标准列表不重复输出页面标题，以实际创建入口作为可操作就绪点。
             await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "创建账号", Exact = true }).ClickAsync();
+            await page.Locator("#ECODE").WaitForAsync();
+            await CaptureIdentityAsync("account-create-drawer.png");
+            await page.Locator("#ECODE").FillAsync(browserCode);
+            await page.Locator("#ENAME").FillAsync("Browser Acceptance Account");
+            var createdResponse = await page.RunAndWaitForResponseAsync(
+                () => page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "保存并关闭", Exact = true }).ClickAsync(),
+                response => response.Request.Method == "POST" && new Uri(response.Url).AbsolutePath == "/api/identity/accounts");
+            using var createdAccount = JsonDocument.Parse(await createdResponse.TextAsync());
+            if (createdResponse.Status == 201) RegisterSecret(ReadString(createdAccount.RootElement, "temporaryCredential"));
+            var secret = page.GetByLabel("临时密码", new PageGetByLabelOptions { Exact = true });
+            await secret.WaitForAsync();
+            var browserTemporaryPassword = await secret.InnerTextAsync();
+            RegisterSecret(browserTemporaryPassword);
+            await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "我已安全保存，关闭", Exact = true }).ClickAsync();
+            if (await page.GetByLabel("临时密码", new PageGetByLabelOptions { Exact = true }).CountAsync() != 0)
+            {
+                throw new InvalidOperationException("One-time secret remained in the browser after closing the result.");
+            }
+            var browserAccountEid = ReadString(ReadObject(createdAccount.RootElement, "account"), "eid");
+            await page.GotoAsync(
+                $"http://127.0.0.1:{_shellPort}/identity/accounts/{Uri.EscapeDataString(browserAccountEid)}",
+                new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+            await page.GetByText("安全事件", new PageGetByTextOptions { Exact = true }).WaitForAsync();
+            var securityEventTimeCell = page.Locator(".ant-card")
+                .Filter(new LocatorFilterOptions { HasText = "安全事件" })
+                .Locator("tbody tr td")
+                .First;
+            await securityEventTimeCell.WaitForAsync();
+            if (string.IsNullOrWhiteSpace(await securityEventTimeCell.InnerTextAsync()))
+            {
+                throw new InvalidOperationException("Identity security event time cell was empty.");
+            }
+            await CaptureIdentityAsync("account-detail.png");
+            var restrictedContext = await browser.NewContextAsync(new BrowserNewContextOptions
+            {
+                Locale = "zh-CN",
+                ViewportSize = new ViewportSize { Width = 1440, Height = 1000 }
+            });
+            var restrictedPage = await restrictedContext.NewPageAsync();
+            activePage = restrictedPage;
+            ObservePage(restrictedPage);
+            restrictedPage.SetDefaultTimeout(120_000);
+            restrictedPage.SetDefaultNavigationTimeout(120_000);
+            await LoginBrowserAsync(restrictedPage, browserCode, browserTemporaryPassword);
+            await restrictedPage.WaitForURLAsync("**/account/change-password");
+            await restrictedPage.GotoAsync($"http://127.0.0.1:{_shellPort}/identity/accounts");
+            await restrictedPage.WaitForURLAsync("**/account/change-password");
+            await restrictedPage.Locator("#current-password").FillAsync(browserTemporaryPassword);
+            await restrictedPage.Locator("#new-password").FillAsync(browserPassword);
+            await restrictedPage.Locator("#confirm-password").FillAsync(browserPassword);
+            await restrictedPage.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "完成改密", Exact = true }).ClickAsync();
+            await restrictedPage.WaitForURLAsync(url => !new Uri(url).AbsolutePath.Equals("/account/change-password", StringComparison.Ordinal));
+            await restrictedPage.ScreenshotAsync(new PageScreenshotOptions { Path = screenshotPath, FullPage = true });
+            _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath));
+
+            await RecordScenarioSuccessAsync(BrowserScenario, "identity-foundation/browser.json", new
+            {
+                status = "passed",
+                assertions = new[]
+                {
+                    "identity-management-route-visible-to-local-administrator",
+                    "account-security-event-time-visible",
+                    "one-time-secret-destroyed-after-close",
+                    "temporary-session-route-guard",
+                    "browser-password-change-establishes-regular-session"
+                },
+                screenshot = AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath),
+                finalPath = new Uri(restrictedPage.Url).AbsolutePath
+            }, cancellationToken);
         }
         catch (Exception exception)
         {
-            // 仅捕获首次导航阶段，此时尚未产生一次性密码；诊断失败不能覆盖原异常。
+            // 全程诊断遮蔽一次性凭据与输入，诊断失败不能覆盖原场景异常。
             try
             {
+                var problems = new List<object>();
+                foreach (var response in failedResponses)
+                {
+                    try
+                    {
+                        using var body = JsonDocument.Parse(await response.TextAsync());
+                        var fields = body.RootElement.EnumerateObject()
+                            .Where(field => field.Name is "code" or "title" or "status" or "type")
+                            .ToDictionary(field => field.Name, field => Sanitize(field.Value.ToString()));
+                        problems.Add(new { path = new Uri(response.Url).AbsolutePath, fields });
+                    }
+                    catch (Exception) { /* 非 JSON 或已关闭响应不影响其他诊断。 */ }
+                }
                 await WriteEvidenceAsync("identity-foundation/browser-navigation-failure.json", new
                 {
-                    url = Sanitize(page.Url),
+                    url = Sanitize(activePage.Url),
                     diagnostic = Sanitize(exception.ToString()),
-                    visibleDom = Sanitize(await page.Locator("body").InnerTextAsync()),
-                    responses = navigationResponses.Select(Sanitize).ToArray()
+                    visibleDom = Sanitize(await activePage.EvaluateAsync<string>("() => { const body = document.body.cloneNode(true); body.querySelectorAll('input, textarea, [aria-label=\"临时密码\"]').forEach(node => node.remove()); return body.textContent ?? ''; }")),
+                    responses = navigationResponses.Select(Sanitize).ToArray(),
+                    errors = browserErrors.Select(Sanitize).ToArray(),
+                    problems
                 }, CancellationToken.None);
-                await page.ScreenshotAsync(new PageScreenshotOptions
+                await activePage.ScreenshotAsync(new PageScreenshotOptions
                 {
                     Path = Path.Combine(_runDirectory, "identity-foundation", "browser-navigation-failure.png"),
                     FullPage = true,
-                    Mask = [page.Locator("input, textarea")]
+                    Mask = [activePage.Locator("input, textarea"), activePage.GetByLabel("临时密码", new PageGetByLabelOptions { Exact = true })]
                 });
             }
-            catch (Exception) { /* 保留原始导航失败。 */ }
+            catch (Exception) { /* 保留原始场景失败。 */ }
             throw;
         }
-        await page.Locator("#ECODE").FillAsync(browserCode);
-        await page.Locator("#ENAME").FillAsync("Browser Acceptance Account");
-        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "保存并关闭", Exact = true }).ClickAsync();
-        var secret = page.GetByLabel("临时密码", new PageGetByLabelOptions { Exact = true });
-        await secret.WaitForAsync();
-        var browserTemporaryPassword = await secret.InnerTextAsync();
-        RegisterSecret(browserTemporaryPassword);
-        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "我已安全保存，关闭", Exact = true }).ClickAsync();
-        if (await page.GetByLabel("临时密码", new PageGetByLabelOptions { Exact = true }).CountAsync() != 0)
-        {
-            throw new InvalidOperationException("One-time secret remained in the browser after closing the result.");
-        }
-        var browserAccountEid = await page.EvaluateAsync<string>(
-            """
-            async (accountCode) => {
-              const response = await fetch(`/api/identity/accounts?query=${encodeURIComponent(accountCode)}&page=1&pageSize=20`);
-              if (!response.ok) throw new Error(`Identity account lookup failed (${response.status}).`);
-              const payload = await response.json();
-              return payload.items[0].eid;
-            }
-            """,
-            browserCode);
-        await page.GotoAsync(
-            $"http://127.0.0.1:{_shellPort}/identity/accounts/{Uri.EscapeDataString(browserAccountEid)}",
-            new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
-        await page.GetByText("安全事件", new PageGetByTextOptions { Exact = true }).WaitForAsync();
-        var securityEventTimeCell = page.Locator(".ant-card")
-            .Filter(new LocatorFilterOptions { HasText = "安全事件" })
-            .Locator("tbody tr td")
-            .First;
-        await securityEventTimeCell.WaitForAsync();
-        if (string.IsNullOrWhiteSpace(await securityEventTimeCell.InnerTextAsync()))
-        {
-            throw new InvalidOperationException("Identity security event time cell was empty.");
-        }
-        await using var restrictedContext = await browser.NewContextAsync(new BrowserNewContextOptions
-        {
-            Locale = "zh-CN",
-            ViewportSize = new ViewportSize { Width = 1440, Height = 1000 }
-        });
-        var restrictedPage = await restrictedContext.NewPageAsync();
-        restrictedPage.SetDefaultTimeout(120_000);
-        restrictedPage.SetDefaultNavigationTimeout(120_000);
-        await LoginBrowserAsync(restrictedPage, browserCode, browserTemporaryPassword);
-        await restrictedPage.WaitForURLAsync("**/account/change-password");
-        await restrictedPage.GotoAsync($"http://127.0.0.1:{_shellPort}/identity/accounts");
-        await restrictedPage.WaitForURLAsync("**/account/change-password");
-        await restrictedPage.Locator("#current-password").FillAsync(browserTemporaryPassword);
-        await restrictedPage.Locator("#new-password").FillAsync(browserPassword);
-        await restrictedPage.Locator("#confirm-password").FillAsync(browserPassword);
-        await restrictedPage.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "完成改密", Exact = true }).ClickAsync();
-        await restrictedPage.WaitForURLAsync(url => !new Uri(url).AbsolutePath.Equals("/account/change-password", StringComparison.Ordinal));
-        await restrictedPage.ScreenshotAsync(new PageScreenshotOptions { Path = screenshotPath, FullPage = true });
-        _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath));
-
-        await RecordScenarioSuccessAsync(BrowserScenario, "identity-foundation/browser.json", new
-        {
-            status = "passed",
-            assertions = new[]
-            {
-                "identity-management-route-visible-to-local-administrator",
-                "account-security-event-time-visible",
-                "one-time-secret-destroyed-after-close",
-                "temporary-session-route-guard",
-                "browser-password-change-establishes-regular-session"
-            },
-            screenshot = AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath),
-            finalPath = new Uri(restrictedPage.Url).AbsolutePath
-        }, cancellationToken);
     }
 
     private async Task RunRestartScenarioAsync(CancellationToken cancellationToken)
@@ -531,7 +578,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         }
         using var admin = CreateSession(_hostPort);
         await LoginAsync(admin, "admin", adminPassword, cancellationToken);
-        var persisted = await GetJsonAsync(admin, "/api/identity/accounts?isLocalAdministrator=true&page=1&pageSize=20", cancellationToken);
+        var persisted = await ReadIdentityAsync(admin, "/api/identity/accounts?isLocalAdministrator=true&page=1&pageSize=20", cancellationToken);
         if (ReadArray(persisted.RootElement, "items").GetArrayLength() != 1)
         {
             throw new InvalidOperationException("Identity state did not survive Host restart.");
@@ -966,7 +1013,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         string ename,
         CancellationToken cancellationToken)
     {
-        using var response = await SendJsonAsync(admin, HttpMethod.Post, "/api/identity/accounts", new { ecode, ename }, cancellationToken);
+        using var response = await SendJsonAsync(admin, HttpMethod.Post, "/api/identity/accounts", new { ecode, ename }, cancellationToken, IdentityAt("create"));
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(response, HttpStatusCode.Created, body, "create identity user");
         EnsureNoStore(response, "create identity user");
@@ -990,7 +1037,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
             HttpMethod.Post,
             $"/api/identity/accounts/{accountEid}/credential-reset",
             new { expectedRevision = revision, reason = "纵向验收凭据重置" },
-            cancellationToken);
+            cancellationToken, IdentityAt("credentialReset"));
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(response, HttpStatusCode.OK, body, "reset identity credential");
         EnsureNoStore(response, "reset identity credential");
@@ -1014,10 +1061,10 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         var response = await SendJsonAndReadAsync(
             admin,
             HttpMethod.Put,
-            $"/api/identity/accounts/{accountEid}/status",
+            $"/api/identity/accounts/{accountEid}/status/{(targetStatus == "Enabled" ? "enable" : "disable")}",
             new { targetStatus, expectedRevision = revision, reason },
             HttpStatusCode.OK,
-            cancellationToken);
+            cancellationToken, IdentityAt(targetStatus == "Enabled" ? "enable" : "disable"));
         EnsureString(response.RootElement, "status", targetStatus, "identity target status");
         return new AccountResult(accountEid, ReadLong(response.RootElement, "revision"));
     }
@@ -1093,9 +1140,11 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         return JsonDocument.Parse(body);
     }
 
-    private static async Task<JsonDocument> GetJsonAsync(HttpSession session, string path, CancellationToken cancellationToken)
+    private async Task<JsonDocument> ReadIdentityAsync(HttpSession session, string path, CancellationToken cancellationToken)
     {
-        using var response = await session.Client.GetAsync(path, cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
+        IdentityAt()(request);
+        using var response = await session.Client.SendAsync(request, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(response, HttpStatusCode.OK, body, path);
         return JsonDocument.Parse(body);

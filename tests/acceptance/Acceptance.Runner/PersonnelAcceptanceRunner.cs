@@ -316,7 +316,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             HttpMethod.Post,
             "/api/identity/accounts",
             new { ecode, ename = $"Personnel {purpose} {_runId[..8]}" },
-            cancellationToken);
+            cancellationToken, request => request.Headers.Add("X-NewP-Feature",
+                _features!.Action(_features.Behavior("Identity", "identity.account.read"), "create", "list.pageActions").Position));
         var createdBody = await created.Content.ReadAsStringAsync(cancellationToken);
         EnsureStatus(created, HttpStatusCode.Created, createdBody, "create unauthorized acceptance account");
         using var createdJson = JsonDocument.Parse(createdBody);

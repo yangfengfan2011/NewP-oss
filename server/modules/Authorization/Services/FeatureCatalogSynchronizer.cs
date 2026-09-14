@@ -50,6 +50,13 @@ public sealed class FeatureCatalogSynchronizer(EfPlatformDbContext db, IPlatform
                     ["EID"] = ids.NewId("RoleFunctionGrant"), ["RoleId"] = roleId, ["FunctionPointId"] = id,
                     ["GrantedAt"] = DateTime.UtcNow, ["GrantedBy"] = "system"
                 }));
+                // 完整候选已准备成功；旧目录与分配在同一同步事务清空，不触及新功能授权。
+                // 旧表仅保留历史迁移兼容，退出旧写入口后空表自身就是已完成切换的事实。
+                foreach (var legacyModel in new[] { "RolePermission", "Permission" })
+                {
+                    var legacy = db.Set<Dictionary<string, object?>>(db.ResolveModelKey(legacyModel));
+                    if (await legacy.AnyAsync(token)) await legacy.ExecuteDeleteAsync(token);
+                }
                 return current;
             }, cancellationToken);
         }

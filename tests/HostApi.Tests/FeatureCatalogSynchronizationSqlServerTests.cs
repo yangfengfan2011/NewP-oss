@@ -23,6 +23,16 @@ public sealed class FeatureCatalogSynchronizationSqlServerTests
         {
             await http.GrantAsync(admin, roleId, removed);
             using var scope = fixture.Services.CreateScope();
+            var seed = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+            seed.Set<Dictionary<string, object?>>(seed.ResolveModelKey("Permission")).Add(new()
+            {
+                ["EID"] = "Permission_rollback", ["ECODE"] = "Legacy.Rollback", ["ENAME"] = "旧权限", ["ModuleId"] = "Example"
+            });
+            seed.Set<Dictionary<string, object?>>(seed.ResolveModelKey("RolePermission")).Add(new()
+            {
+                ["EID"] = "RolePermission_rollback", ["RoleId"] = roleId, ["PermissionId"] = "Permission_rollback", ["GrantedAt"] = DateTime.UtcNow
+            });
+            await seed.SaveChangesAsync();
             var synchronizer = scope.ServiceProvider.GetRequiredService<IFeatureCatalogSynchronizer>();
             var catalog = scope.ServiceProvider.GetRequiredService<ActiveFeatureCatalog>();
             var before = catalog.Snapshot;
@@ -45,6 +55,8 @@ public sealed class FeatureCatalogSynchronizationSqlServerTests
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
             Assert.False(await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("RoleFunctionGrant"))
                 .AnyAsync(row => EF.Property<string>(row, "FunctionPointId") == before.ByPosition[removed.Position].Id));
+            Assert.False(await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Permission")).AnyAsync());
+            Assert.False(await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("RolePermission")).AnyAsync());
             await fixture.RestoreFeatureCatalogAsync();
         }
         await fixture.RepeatFeatureSynchronizationAsync();
@@ -58,6 +70,10 @@ public sealed class FeatureCatalogSynchronizationSqlServerTests
             .AsNoTracking().Select(row => new { Id = EF.Property<string>(row, "EID"), Key = EF.Property<string>(row, "PositionKey") }).ToArrayAsync();
         var grants = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("RoleFunctionGrant"))
             .AsNoTracking().Select(row => EF.Property<string>(row, "EID") + ":" + EF.Property<string>(row, "RoleId") + ":" + EF.Property<string>(row, "FunctionPointId")).ToArrayAsync();
-        return points.Select(point => point.Id + ":" + point.Key).Concat(grants).Order(StringComparer.Ordinal).ToArray();
+        var legacy = new List<string>();
+        foreach (var model in new[] { "Permission", "RolePermission" })
+            legacy.AddRange((await db.Set<Dictionary<string, object?>>(db.ResolveModelKey(model)).AsNoTracking().ToArrayAsync())
+                .Select(row => model + ":" + System.Text.Json.JsonSerializer.Serialize(row.OrderBy(pair => pair.Key))));
+        return points.Select(point => point.Id + ":" + point.Key).Concat(grants).Concat(legacy).Order(StringComparer.Ordinal).ToArray();
     }
 }

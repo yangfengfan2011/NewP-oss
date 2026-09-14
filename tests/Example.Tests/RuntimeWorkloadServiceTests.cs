@@ -64,18 +64,18 @@ public sealed class RuntimeWorkloadServiceTests
     }
 
     [Fact]
-    public void Controller_DeclaresAnEndpointOwnerMatchingItsPermissionNamespace()
+    public void Controller_DeclaresItsModuleAndSharedReadBehavior()
     {
         var controller = typeof(RuntimeWorkloadController);
 
         var owner = controller.GetCustomAttribute<EndpointModuleAttribute>();
-        var permission = controller.GetCustomAttribute<RequirePermissionAttribute>();
+        var feature = controller.GetCustomAttribute<RequireFeatureAttribute>();
 
         Assert.NotNull(owner);
-        Assert.NotNull(permission);
+        Assert.NotNull(feature);
         Assert.Equal("Example", owner.ModuleId);
-        Assert.Equal("Example.View", permission.PermissionCode);
-        Assert.StartsWith($"{owner.ModuleId}.", permission.PermissionCode, StringComparison.Ordinal);
+        Assert.Equal("example.runtime-workload.read", feature.BehaviorKey);
+        Assert.Null(controller.GetCustomAttribute<RequirePermissionAttribute>());
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset value) : TimeProvider

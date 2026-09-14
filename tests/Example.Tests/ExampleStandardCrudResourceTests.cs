@@ -44,11 +44,16 @@ public sealed class ExampleStandardCrudResourceTests
         Assert.Equal("ENAME", displayField.TargetDisplayField);
 
         Assert.NotNull(descriptor.Authorization);
-        Assert.Equal("Example.Record", descriptor.Authorization!.PermissionStem);
-        Assert.Equal(ExamplePermissions.RecordView, descriptor.Authorization.GetPermissionCode(StandardCrudOperation.List));
-        Assert.Equal(ExamplePermissions.RecordCreate, descriptor.Authorization.GetPermissionCode(StandardCrudOperation.Create));
-        Assert.Equal(ExamplePermissions.RecordUpdate, descriptor.Authorization.GetPermissionCode(StandardCrudOperation.Update));
-        Assert.Equal(ExamplePermissions.RecordDelete, descriptor.Authorization.GetPermissionCode(StandardCrudOperation.Delete));
+        Assert.Equal("example.record", descriptor.Authorization!.FeatureBehaviorStem);
+        Assert.Equal("example.record.read", descriptor.Authorization.GetFeatureBehavior(StandardCrudOperation.List));
+        Assert.Equal("example.record.read", descriptor.Authorization.GetFeatureBehavior(StandardCrudOperation.Detail));
+        Assert.Equal("example.record.create", descriptor.Authorization.GetFeatureBehavior(StandardCrudOperation.Create));
+        Assert.Equal("example.record.update", descriptor.Authorization.GetFeatureBehavior(StandardCrudOperation.Update));
+        Assert.Equal("example.record.delete", descriptor.Authorization.GetFeatureBehavior(StandardCrudOperation.Delete));
+        Assert.Equal("example.record.export", descriptor.Authorization.GetFeatureBehavior(StandardCrudOperation.Export));
+        Assert.Null(descriptor.Authorization.GetFeatureBehavior(StandardCrudOperation.Options));
+        Assert.Null(descriptor.Authorization.GetFeatureBehavior(StandardCrudOperation.Enable));
+        Assert.Null(descriptor.Authorization.GetFeatureBehavior(StandardCrudOperation.Disable));
 
         var codeRequirement = Assert.Single(
             descriptor.RequiredFields,

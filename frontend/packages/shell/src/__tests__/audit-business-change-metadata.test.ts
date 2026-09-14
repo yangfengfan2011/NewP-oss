@@ -29,5 +29,5 @@ it('projects the actual module detail route from its declared navigation and laz
   const routes = compileStandardCrudRouteProjection([{ ...auditBindings,
     metadata: { moduleId: 'Audit', displayName: 'Audit', version: '1.0.0' },
   }], [navigation], [list, detail], []);
-  expect(routes.detailEntries).toContainEqual({ path: '/audit/business-changes/:id', viewKey: 'audit.change.detail', permissions: ['Audit.BusinessChange.View'] });
+  expect(routes.detailEntries).toContainEqual({ path: '/audit/business-changes/:id', viewKey: 'audit.change.detail', permissions: undefined, featurePosition: undefined });
 });

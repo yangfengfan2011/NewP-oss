@@ -41,6 +41,7 @@
     ],
     "summaryBlocks": [
       "changes"
-    ]
+    ],
+    "resourceKey": "audit.change"
   }
 }

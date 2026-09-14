@@ -34,11 +34,9 @@
       {
         "key": "edit",
         "labelKey": "Action_Edit",
-        "standardAction": "edit",
-        "permissions": [
-          "Example.Record.Update"
-        ]
+        "standardAction": "edit"
       }
-    ]
+    ],
+    "resourceKey": "example.record"
   }
 }

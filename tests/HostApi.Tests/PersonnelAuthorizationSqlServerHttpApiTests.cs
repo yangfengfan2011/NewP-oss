@@ -61,11 +61,11 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
             await AssertStatusAsync(SendAsync(client, http.Workbench("authorization.workbench.save"), HttpMethod.Put, $"/api/authorization/workbench/roles/{maintainer.RoleId}", new { positions = Array.Empty<string>() }), HttpStatusCode.Forbidden);
             await AssertStatusAsync(FeatureHttpTestRequests.SendAsync(client, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{maintainer.Id}/roles", new { RoleCodes = Array.Empty<string>() }), HttpStatusCode.Forbidden);
         }
-        var beforeRejected = await HistoryAsync(admin, person);
+        var beforeRejected = await HistoryAsync(http, admin, person);
         await AssertStatusAsync(SendAsync(read, create, HttpMethod.Post, "/api/organization/persons", Person("DENIED", company, a, position)), HttpStatusCode.Forbidden);
         await AssertStatusAsync(SendAsync(read, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "禁止" }), HttpStatusCode.Forbidden);
         await AssertStatusAsync(SendAsync(read, disable, HttpMethod.Put, $"/api/organization/persons/{person}/status/disable", new { isEnabled = false, reason = "禁止" }), HttpStatusCode.Forbidden);
-        Assert.Equal(beforeRejected, await HistoryAsync(admin, person));
+        Assert.Equal(beforeRejected, await HistoryAsync(http, admin, person));
         await AssertStatusAsync(SendAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { DepartmentId = b }), HttpStatusCode.OK);
         await AssertStatusAsync(SendAsync(writer, disable, HttpMethod.Put, $"/api/organization/persons/{person}/status/disable", new { isEnabled = false, reason = "正式停用" }), HttpStatusCode.OK);
         await AssertStatusAsync(SendAsync(writer, http.Organization("persons", "enable", "list.rowActions"), HttpMethod.Put, $"/api/organization/persons/{person}/status/enable", new { isEnabled = true, reason = "正式启用" }), HttpStatusCode.OK);
@@ -78,11 +78,11 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
         Assert.Equal(maintainer.Id, current.GetProperty("id").GetString());
         Assert.DoesNotContain(current.GetProperty("featurePositions").EnumerateArray(), point => point.GetString() == edit.Position);
         var before = await ReadTextAsync(admin, http.Organization("persons"), $"/api/organization/persons/{person}");
-        var history = await HistoryAsync(admin, person);
+        var history = await HistoryAsync(http, admin, person);
         await AssertStatusAsync(SendAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "撤权后禁止" }), HttpStatusCode.Forbidden);
         await AssertStatusAsync(SendAsync(writer, disable, HttpMethod.Put, $"/api/organization/persons/{person}/status/disable", new { isEnabled = false, reason = "撤权后禁止" }), HttpStatusCode.Forbidden);
         Assert.Equal(before, await ReadTextAsync(admin, http.Organization("persons"), $"/api/organization/persons/{person}"));
-        Assert.Equal(history, await HistoryAsync(admin, person));
+        Assert.Equal(history, await HistoryAsync(http, admin, person));
         await AssertStatusAsync(SendAsync(writer, http.Organization("persons"), HttpMethod.Get, $"/api/organization/persons/{person}"), HttpStatusCode.OK);
         await CreateAsync(writer, create, "/api/organization/persons", Person("STILL-CREATE", company, a, position));
         await http.GrantAsync(admin, secondRole, edit);
@@ -116,9 +116,9 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
         finally { release.TrySetResult(); }
         await inflight;
         fixture.Fault.AfterRegister = null;
-        var history = await HistoryAsync(admin, person);
+        var history = await HistoryAsync(http, admin, person);
         await AssertStatusAsync(SendAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "禁止" }), HttpStatusCode.Forbidden);
-        Assert.Equal(history, await HistoryAsync(admin, person));
+        Assert.Equal(history, await HistoryAsync(http, admin, person));
         var detail = await ReadAsync(writer, http.Organization("persons"), $"/api/organization/persons/{person}");
         Assert.Equal("已判权在途", detail.GetProperty("fields").GetProperty("ENAME").GetString());
     }
@@ -153,7 +153,7 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(admin);
         await AssertStatusAsync(FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{userId}/roles", new { RoleCodes = roles }), HttpStatusCode.NoContent);
     }
-    private static async Task<string> HistoryAsync(HttpClient admin, string person) => await admin.GetStringAsync($"/api/audit/business-changes?TargetId={person}");
+    private static async Task<string> HistoryAsync(FeatureHttpTestRequests http, HttpClient admin, string person) => await FeatureHttpTestRequests.ReadTextAsync(admin, http.Audit(), $"/api/audit/business-changes?TargetId={person}");
     private static async Task AssertStatusAsync(Task<HttpResponseMessage> pending, HttpStatusCode expected)
     {
         using var response = await pending;

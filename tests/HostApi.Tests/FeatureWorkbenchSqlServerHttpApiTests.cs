@@ -99,7 +99,7 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
             SetPosition(admin, read);
             var actual = await admin.GetFromJsonAsync<JsonElement>($"/api/authorization/workbench/roles/{id}");
             Assert.Equal(read, Assert.Single(actual.GetProperty("positions").EnumerateArray()).GetString());
-            var audit = await admin.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes?TargetId={id}&EventType=role.features.changed");
+            var audit = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), $"/api/audit/business-changes?TargetId={id}&EventType=role.features.changed");
             Assert.Equal(1, audit.GetProperty("total").GetInt32());
             SetPosition(admin, save);
         }
@@ -142,7 +142,7 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
         using var secondResult = await second!;
         Assert.Equal(HttpStatusCode.NoContent, firstResult.StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, secondResult.StatusCode);
-        var audit = await admin.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes?TargetId={id}&EventType=role.features.changed");
+        var audit = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), $"/api/audit/business-changes?TargetId={id}&EventType=role.features.changed");
         var changes = audit.GetProperty("items").EnumerateArray().Select(row => Assert.Single(row.GetProperty("Changes").EnumerateArray())).ToArray();
         Assert.Equal(2, changes.Length);
         Assert.Equal(new[] { read, save }.Order(), changes.Select(change => change.GetProperty("field").GetString()).Order());

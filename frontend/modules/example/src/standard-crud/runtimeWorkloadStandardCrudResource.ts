@@ -64,11 +64,11 @@ export function createRuntimeWorkloadStandardCrudResource(
     resourceKey: 'example.runtime-workload',
     listViewKey: 'example.runtime-workload.list',
     columnProvider: {
-      load: async ({ filters, signal }): Promise<StandardCrudColumnSet> => {
+      load: async ({ filters, signal, featurePosition }): Promise<StandardCrudColumnSet> => {
         const dto = await requestJson<RuntimeWorkloadColumnSetDto>(
           fetcher,
           buildPath(`${API_ROUTE}/columns`, { keyword: filters.keyword }),
-          { method: 'GET', signal },
+          { method: 'GET', signal, ...(featurePosition ? { headers: { 'X-NewP-Feature': featurePosition } } : {}) },
         );
         return {
           columns: dto.columns.map((column) => ({
@@ -95,7 +95,7 @@ export function createRuntimeWorkloadStandardCrudResource(
           buildPath(`${API_ROUTE}/rows`, query),
           {
             method: 'GET',
-            headers: { [COLUMN_CONTEXT_HEADER]: contextToken },
+            headers: { [COLUMN_CONTEXT_HEADER]: contextToken, ...(readContext?.featurePosition ? { 'X-NewP-Feature': readContext.featurePosition } : {}) },
             signal: readContext?.signal,
           },
         );

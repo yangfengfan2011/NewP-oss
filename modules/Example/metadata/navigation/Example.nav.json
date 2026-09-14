@@ -11,9 +11,7 @@
         "order": 999,
         "entryType": "standard-list",
         "targetKey": "example.runtime-workload.list",
-        "permissions": [
-          "Example.View"
-        ]
+        "featureAuthorization": true
       },
       {
         "key": "example.records",
@@ -23,9 +21,15 @@
         "order": 998,
         "entryType": "standard-list",
         "targetKey": "example.record.list",
-        "permissions": [
-          "Example.Record.View"
-        ]
+        "featureAuthorization": true
+      },
+      {
+        "key": "example.record.detail",
+        "path": "/examples/standard-crud/persistent-records/:id",
+        "routeOnly": true,
+        "entryType": "standard-crud-detail",
+        "targetKey": "example.record.detail",
+        "featureOwner": "navigation:example.records"
       }
     ]
   }

@@ -1038,7 +1038,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     load: async ({ signal }) => {
       const provider = registration.columnProvider;
       if (!provider) throw new Error('runtime column source requires a column provider');
-      const result = validateRuntimeColumnSet(await provider.load({ filters: appliedFilters, signal }));
+      const result = validateRuntimeColumnSet(await provider.load({ filters: appliedFilters, signal, ...(features.readPosition ? { featurePosition: features.readPosition } : {}) }));
       nextRuntimeColumnGenerationId += 1;
       return {
         id: nextRuntimeColumnGenerationId,

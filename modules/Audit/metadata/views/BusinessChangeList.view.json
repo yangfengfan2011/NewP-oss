@@ -97,6 +97,7 @@
         "responsivePriority": "medium"
       }
     ],
-    "rowActions": []
+    "rowActions": [],
+    "resourceKey": "audit.change"
   }
 }

@@ -62,6 +62,8 @@ Shell 会导入并校验整份目录，全部成功后通过 `ModuleRegistry.rep
 
 快捷跳转动作声明 `navigationTargetKey`，并保留现有 handler 返回 `StandardCrudOperationResult.navigation`。宿主按目标导航资格显示，目标路由仍执行正常准入；它不新增可授予动作，也不借用 `standardAction: view` 来改变原查看动作的含义。
 
+运行时动态列的 `StandardCrudColumnContext.featurePosition` 同样来自所属读取入口。column provider 与行 data adapter 各自沿请求传递该位置；例如 Example 动态工作量的列请求和行请求使用相同的入口位置，原有模块列上下文 token 仍负责列与行的业务一致性，不能用它替代授权位置。宿主的动态列缓存已经按读取位置隔离。
+
 列表与详情读取、Lookup 的缓存按位置隔离。标准宿主只加载可用入口及动作所需读取，创建或编辑的准备步骤和提交使用同一动作位置；动作 Drawer 不加载底层列表查询的 Lookup。纯容器没有可用后代时隐藏，默认 Tab 不可用时进入首个可用 Tab，不预读未授权内容。
 
 详情摘要 renderer 通过 `featureActions` 接收本 View 声明的专用动作映射，形状为 `Record<key, { position, allowed }>`。模块以 `allowed` 控制呈现、以 `position` 发起该动作请求，例如 Organization 的账号绑定；不要导入 Shell 的内部位置 Context，也不要把其他动作或入口资格用作写入授权。输入、确认、pending、错误及刷新仍沿用既有动作生命周期。摘要的内容读取使用所属详情的读取上下文；例如 Identity 安全事件由模块自己的 summary data 传递 `readContext.featurePosition`，查询缓存同时区分位置，不能借用写动作或其他页面的读取资格。

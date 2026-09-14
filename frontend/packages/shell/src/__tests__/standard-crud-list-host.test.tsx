@@ -721,8 +721,9 @@ describe('StandardCrudListPageHost', () => {
       },
       columnProvider: { load: loadColumns },
     });
-    await renderHost({}, createRuntimePersonListViewDocument());
+    await renderHost({}, createRuntimePersonListViewDocument(), '/organization/persons', { feature: { entry: 'runtime-entry', create: 'runtime-create' } });
     expect(loadColumns).toHaveBeenCalledTimes(1);
+    expect(loadColumns).toHaveBeenCalledWith(expect.objectContaining({ featurePosition: 'runtime-entry' }));
     expect(list).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -741,6 +742,7 @@ describe('StandardCrudListPageHost', () => {
       expect.objectContaining({ fields: 'EID,memberName,currentWeekDay1', pageIndex: 1, pageSize: 20 }),
       expect.objectContaining({
         columnContextToken: 'opaque-week-token',
+        featurePosition: 'runtime-entry',
         signal: expect.any(AbortSignal),
       }),
     );

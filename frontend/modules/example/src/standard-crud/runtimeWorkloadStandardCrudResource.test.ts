@@ -29,10 +29,11 @@ describe('runtime workload Standard CRUD resource', () => {
     const columnSet = await resource.columnProvider?.load({
       filters: { keyword: '陈' },
       signal: columnAbortController.signal,
+      featurePosition: 'example-entry',
     });
     const rows = await resource.dataAdapter.list(
       { keyword: '陈', fields: 'id,memberName,currentWeekDay1', pageIndex: 1, pageSize: 20 },
-      { columnContextToken: columnSet?.contextToken, signal: rowAbortController.signal },
+      { columnContextToken: columnSet?.contextToken, signal: rowAbortController.signal, featurePosition: 'example-entry' },
     );
 
     expect(columnSet).toEqual({
@@ -47,13 +48,13 @@ describe('runtime workload Standard CRUD resource', () => {
       contextToken: 'runtime-workload:2026-08-17',
     });
     expect(fetcher.mock.calls[0]?.[0]).toBe('/api/example/runtime-workload/columns?keyword=%E9%99%88');
-    expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ method: 'GET', signal: columnAbortController.signal });
+    expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ method: 'GET', signal: columnAbortController.signal, headers: { 'X-NewP-Feature': 'example-entry' } });
     expect(fetcher.mock.calls[1]?.[0]).toBe(
       '/api/example/runtime-workload/rows?keyword=%E9%99%88&fields=id%2CmemberName%2CcurrentWeekDay1&pageIndex=1&pageSize=20',
     );
     expect(fetcher.mock.calls[1]?.[1]).toMatchObject({
       method: 'GET',
-      headers: { 'X-Example-Column-Context': 'runtime-workload:2026-08-17' },
+      headers: { 'X-Example-Column-Context': 'runtime-workload:2026-08-17', 'X-NewP-Feature': 'example-entry' },
       signal: rowAbortController.signal,
     });
     expect(rows.items[0]).toMatchObject({ id: 'member-1', memberName: '陈示例', currentWeekDay1: 1 });

@@ -284,8 +284,8 @@ export interface StandardCrudColumnSet {
   contextToken?: string;
 }
 
-/** Provider 只接收已提交筛选条件与取消信号，不读取 Shell 私有状态。 */
-export interface StandardCrudColumnContext<TFilter> {
+/** Provider 接收已提交筛选条件、所属读取位置与取消信号，不读取 Shell 私有状态。 */
+export interface StandardCrudColumnContext<TFilter> extends StandardCrudFeatureRequestContext {
   filters: Readonly<TFilter>;
   signal: AbortSignal;
 }

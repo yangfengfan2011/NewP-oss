@@ -19,6 +19,7 @@
         }
       ],
       "defaultPageSize": 20
-    }
+    },
+    "resourceKey": "example.runtime-workload"
   }
 }

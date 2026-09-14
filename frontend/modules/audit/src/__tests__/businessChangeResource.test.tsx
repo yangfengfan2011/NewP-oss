@@ -8,8 +8,9 @@ describe('业务变更记录只读资源', () => {
       items: [{ EID: 'record-1', TargetId: 'person-1', TargetId_DisplayValue: '当前姓名' }], total: 1,
     })));
     const resource = createBusinessChangeResource(fetcher);
-    const page = await resource.dataAdapter.list({ TargetId: 'person-1', ActorId: 'actor-1', EventType: 'person.created', From: '2026-09-10T00:00:00Z' });
+    const page = await resource.dataAdapter.list({ TargetId: 'person-1', ActorId: 'actor-1', EventType: 'person.created', From: '2026-09-10T00:00:00Z' }, { featurePosition: 'audit-entry' });
     expect(page.items[0]).toMatchObject({ id: 'record-1', TargetId: 'person-1', TargetId_DisplayValue: '当前姓名' });
+    expect(new Headers(fetcher.mock.calls[0][1]?.headers).get('X-NewP-Feature')).toBe('audit-entry');
     const url = new URL(String(fetcher.mock.calls[0][0]), 'http://localhost');
     expect(url.searchParams.get('TargetId')).toBe('person-1');
     expect(url.searchParams.get('ActorId')).toBe('actor-1');

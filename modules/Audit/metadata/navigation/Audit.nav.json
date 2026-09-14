@@ -11,9 +11,8 @@
         "order": 20,
         "entryType": "standard-list",
         "targetKey": "audit.change.list",
-        "permissions": [
-          "Audit.BusinessChange.View"
-        ]
+        "localAdministratorOnly": true,
+        "featureAuthorization": true
       },
       {
         "key": "audit.change.detail",
@@ -21,9 +20,8 @@
         "routeOnly": true,
         "entryType": "standard-crud-detail",
         "targetKey": "audit.change.detail",
-        "permissions": [
-          "Audit.BusinessChange.View"
-        ]
+        "localAdministratorOnly": true,
+        "featureOwner": "navigation:audit.changes"
       }
     ]
   }

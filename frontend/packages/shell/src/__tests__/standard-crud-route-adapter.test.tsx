@@ -136,11 +136,11 @@ describe('standard CRUD route adapter', () => {
 
     expect(resolveStandardCrudListRoute([navigation], 'example.runtime-workload.list')).toEqual({
       path: '/examples/standard-crud/runtime-columns',
-      permissions: ['Example.View'],
+      permissions: undefined,
     });
     expect(resolveStandardCrudListRoute([navigation], 'example.record.list')).toEqual({
       path: '/examples/standard-crud/persistent-records',
-      permissions: ['Example.Record.View'],
+      permissions: undefined,
     });
     expect(compileStandardCrudRouteProjection(
       [exampleModule],
@@ -151,7 +151,8 @@ describe('standard CRUD route adapter', () => {
       detailEntries: [{
         path: '/examples/standard-crud/persistent-records/:id',
         viewKey: 'example.record.detail',
-        permissions: ['Example.Record.View'],
+        permissions: undefined,
+        featurePosition: undefined,
       }],
       drawerRedirects: [{
         from: '/examples/standard-crud/persistent-records/new',

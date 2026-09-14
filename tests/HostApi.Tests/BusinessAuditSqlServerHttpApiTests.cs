@@ -108,7 +108,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             fixture.Fault.Mode = "";
             var current = await FeatureHttpTestRequests.ReadAsync(admin, http.Role("userRoles"), route);
             Assert.Equal(new[] { "Assigned", "Other" }, current.GetProperty("roleCodes").EnumerateArray().Select(c => c.GetString()).Order().ToArray());
-            var history = await admin.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes?TargetId={userId}&Resource=identity.account&EventType=user.roles.changed");
+            var history = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), $"/api/audit/business-changes?TargetId={userId}&Resource=identity.account&EventType=user.roles.changed");
             var record = Assert.Single(history.GetProperty("items").EnumerateArray());
             Assert.Equal("分配账号", record.GetProperty("TargetId_DisplayValue").GetString());
             Assert.Equal(2, record.GetProperty("Changes").GetArrayLength());
@@ -123,9 +123,9 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.Equal(HttpStatusCode.NoContent, (await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, route, new { RoleCodes = new[] { "Assigned", "Other" } })).StatusCode);
         var inactive = await user.GetFromJsonAsync<JsonElement>("/api/auth/current-user");
         Assert.DoesNotContain(inactive.GetProperty("permissions").EnumerateArray(), p => p.GetString() == "Organization.Person.View");
-        var historyAfterRename = await admin.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes?TargetId={userId}");
+        var historyAfterRename = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), $"/api/audit/business-changes?TargetId={userId}");
         var unchangedRecord = Assert.Single(historyAfterRename.GetProperty("items").EnumerateArray());
-        var detail = await admin.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes/{unchangedRecord.GetProperty("EID").GetString()}");
+        var detail = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), $"/api/audit/business-changes/{unchangedRecord.GetProperty("EID").GetString()}");
         Assert.Contains(detail.GetProperty("fields").GetProperty("Changes").EnumerateArray(), c => c.GetProperty("afterDisplay").GetString() == "新职责名");
         var administrator = await admin.GetFromJsonAsync<JsonElement>("/api/auth/current-user");
         var administratorId = administrator.GetProperty("id").GetString();
@@ -140,7 +140,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.True(deleted.IsSuccessStatusCode, await deleted.Content.ReadAsStringAsync());
         Assert.Equal(HttpStatusCode.BadRequest, (await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, route, new { RoleCodes = Array.Empty<string>() })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Get, route)).StatusCode);
-        var retained = await admin.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes?TargetId={userId}");
+        var retained = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), $"/api/audit/business-changes?TargetId={userId}");
         Assert.Equal(2, retained.GetProperty("total").GetInt32());
         Assert.All(retained.GetProperty("items").EnumerateArray(), r => Assert.Equal(JsonValueKind.Null, r.GetProperty("TargetId_DisplayValue").ValueKind));
     }
@@ -173,7 +173,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         finally { release.TrySetResult(); }
         Assert.Equal(HttpStatusCode.NoContent, (await first).StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, (await second!).StatusCode);
-        var records = await admin.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes?TargetId={userId}");
+        var records = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), $"/api/audit/business-changes?TargetId={userId}");
         Assert.Equal(2, records.GetProperty("total").GetInt32());
         var replacement = records.GetProperty("items").EnumerateArray().Single(r => r.GetProperty("Changes").GetArrayLength() == 2);
         Assert.Contains(replacement.GetProperty("Changes").EnumerateArray(), c => c.GetProperty("beforeDisplay").GetString() == "First" && c.GetProperty("after").GetProperty("value").ValueKind == JsonValueKind.Null);
@@ -206,7 +206,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.Equal(HttpStatusCode.BadRequest, (await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Get, $"/api/authorization/users/{id}/roles")).StatusCode);
         using var member = await fixture.LoginAsync("internal-member", account.GetProperty("temporaryCredential").GetString()!);
         Assert.Equal(HttpStatusCode.OK, (await FeatureHttpTestRequests.SendAsync(member, http.Role(), HttpMethod.Get, "/api/authorization/roles")).StatusCode);
-        var records = await admin.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes?TargetId={id}");
+        var records = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), $"/api/audit/business-changes?TargetId={id}");
         Assert.Empty(records.GetProperty("items").EnumerateArray());
     }
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "当前管理员准入覆盖全部旧API，停用配置与活动权限投影分开")]
@@ -268,7 +268,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         using var deleted = await admin.DeleteAsync($"/api/authorization/roles/{id}");
         Assert.Equal(HttpStatusCode.Forbidden, deleted.StatusCode);
         await fixture.DeleteRoleForHistoryAsync(id!);
-        var history = await admin.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes?TargetId={id}");
+        var history = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), $"/api/audit/business-changes?TargetId={id}");
         Assert.Equal(2, history.GetProperty("total").GetInt32());
         Assert.All(history.GetProperty("items").EnumerateArray(), row => Assert.Equal(JsonValueKind.Null, row.GetProperty("TargetId_DisplayValue").ValueKind));
     }
@@ -300,7 +300,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         using var secondResult = await second!;
         Assert.True(firstResult.IsSuccessStatusCode, await firstResult.Content.ReadAsStringAsync());
         Assert.True(secondResult.IsSuccessStatusCode, await secondResult.Content.ReadAsStringAsync());
-        var records = await client.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes?TargetId={id}");
+        var records = await FeatureHttpTestRequests.ReadAsync(client, http.Audit(), $"/api/audit/business-changes?TargetId={id}");
         Assert.Equal(2, records.GetProperty("total").GetInt32());
         var replacement = records.GetProperty("items").EnumerateArray().Single(r => r.GetProperty("Changes").GetArrayLength() == 2);
         var removed = replacement.GetProperty("Changes").EnumerateArray().Single(c => c.GetProperty("field").GetString() == "Organization.Person.View");
@@ -352,7 +352,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             fixture.Fault.Mode = "";
             var current = await client.GetFromJsonAsync<JsonElement>(route);
             Assert.Equal(initial.Order().ToArray(), current.GetProperty("permissionCodes").EnumerateArray().Select(x => x.GetString()).Order().ToArray());
-            var records = await client.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes?TargetId={id}");
+            var records = await FeatureHttpTestRequests.ReadAsync(client, http.Audit(), $"/api/audit/business-changes?TargetId={id}");
             var row = Assert.Single(records.GetProperty("items").EnumerateArray());
             Assert.Equal("role.permissions.changed", row.GetProperty("EventType").GetString());
             Assert.Equal("配置角色", row.GetProperty("TargetId_DisplayValue").GetString());
@@ -361,7 +361,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
         using var changed = await client.PutAsJsonAsync(route, new { PermissionCodes = new[] { "Organization.Person.Update" } });
         Assert.True(changed.IsSuccessStatusCode, await changed.Content.ReadAsStringAsync());
-        var after = await client.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes?TargetId={id}");
+        var after = await FeatureHttpTestRequests.ReadAsync(client, http.Audit(), $"/api/audit/business-changes?TargetId={id}");
         Assert.Equal(2, after.GetProperty("total").GetInt32());
         var changes = after.GetProperty("items").EnumerateArray().Single(r => r.GetProperty("Changes").GetArrayLength() == 3).GetProperty("Changes").EnumerateArray().ToArray();
         Assert.Equal(3, changes.Length);
@@ -401,7 +401,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         await UpdateAsync(client, http.Organization("persons", "edit", "list.rowActions"), Id(person), edit);
         // 等价时间表达规范化为相同 UTC 时间；四字段变化不能生成业务记录。
         await UpdateAsync(client, http.Organization("persons", "edit", "list.rowActions"), Id(person), new { EmploymentStartedAt = "2026-01-01T09:02:03" });
-        var page = await client.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes?TargetId={Id(person)}&EventType=person.updated");
+        var page = await FeatureHttpTestRequests.ReadAsync(client, http.Audit(), $"/api/audit/business-changes?TargetId={Id(person)}&EventType=person.updated");
         var row = Assert.Single(page.GetProperty("items").EnumerateArray());
         var fields = row.GetProperty("Changes").EnumerateArray().ToDictionary(c => c.GetProperty("field").GetString()!);
         Assert.Equal(new[] { "BirthDate", "DepartmentId", "ENAME", "EmploymentStartedAt" }, fields.Keys.Order(StringComparer.Ordinal).ToArray());
@@ -416,11 +416,11 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
         using var renamed = await FeatureHttpTestRequests.SendAsync(client, http.Organization("departments", "edit", "list.rowActions"), HttpMethod.Put, "/api/organization/departments/" + Id(b), new { ENAME = "当前部门B" });
         Assert.True(renamed.IsSuccessStatusCode, await renamed.Content.ReadAsStringAsync());
-        var currentNames = await client.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes/{row.GetProperty("EID").GetString()}");
+        var currentNames = await FeatureHttpTestRequests.ReadAsync(client, http.Audit(), $"/api/audit/business-changes/{row.GetProperty("EID").GetString()}");
         var departmentChange = Assert.Single(currentNames.GetProperty("fields").GetProperty("Changes").EnumerateArray(), c => c.GetProperty("field").GetString() == "DepartmentId");
         Assert.Equal("当前部门B", departmentChange.GetProperty("afterDisplay").GetString());
         fixture.Fault.Mode = "names";
-        var degraded = await client.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes/{row.GetProperty("EID").GetString()}");
+        var degraded = await FeatureHttpTestRequests.ReadAsync(client, http.Audit(), $"/api/audit/business-changes/{row.GetProperty("EID").GetString()}");
         var degradedDepartment = Assert.Single(degraded.GetProperty("fields").GetProperty("Changes").EnumerateArray(), c => c.GetProperty("field").GetString() == "DepartmentId");
         Assert.Equal(Id(a), degradedDepartment.GetProperty("beforeDisplay").GetString());
         Assert.Equal(Id(b), degradedDepartment.GetProperty("afterDisplay").GetString());
@@ -450,7 +450,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             fixture.Fault.Mode = "";
             var actual = await FeatureHttpTestRequests.ReadAsync(client, http.Organization("persons"), "/api/organization/persons/" + Id(person));
             Assert.Equal("原姓名", actual.GetProperty("fields").GetProperty("ENAME").GetString());
-            var records = await client.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes?TargetId={Id(person)}");
+            var records = await FeatureHttpTestRequests.ReadAsync(client, http.Audit(), $"/api/audit/business-changes?TargetId={Id(person)}");
             Assert.Equal(1, records.GetProperty("total").GetInt32());
         }
         foreach (var invalid in new object[] { new { UpdatedBy = "client-actor" }, new { CompanyId = "missing-company" }, new { BirthDate = "2999-01-01" }, new { EmploymentStartedAt = "2026-09-10T00:00:00Z", EmploymentEndedAt = "2026-09-09T00:00:00Z" } })
@@ -466,7 +466,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         var unchanged = await FeatureHttpTestRequests.ReadAsync(client, http.Organization("persons"), "/api/organization/persons/" + Id(person));
         Assert.True(unchanged.GetProperty("fields").GetProperty("IsEnabled").GetBoolean());
         Assert.Equal("FAIL-UPDATE", unchanged.GetProperty("fields").GetProperty("PersonNo").GetString());
-        var final = await client.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes?TargetId={Id(person)}");
+        var final = await FeatureHttpTestRequests.ReadAsync(client, http.Audit(), $"/api/audit/business-changes?TargetId={Id(person)}");
         Assert.Equal(1, final.GetProperty("total").GetInt32());
     }
 
@@ -503,7 +503,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         using var secondResult = await second!;
         Assert.True(firstResult.IsSuccessStatusCode, await firstResult.Content.ReadAsStringAsync());
         Assert.True(secondResult.IsSuccessStatusCode, await secondResult.Content.ReadAsStringAsync());
-        var page = await client.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes?TargetId={Id(person)}&EventType=person.updated");
+        var page = await FeatureHttpTestRequests.ReadAsync(client, http.Audit(), $"/api/audit/business-changes?TargetId={Id(person)}&EventType=person.updated");
         var changes = page.GetProperty("items").EnumerateArray().Select(r => Assert.Single(r.GetProperty("Changes").EnumerateArray())).ToArray();
         Assert.Equal(2, changes.Length);
         var firstChange = Assert.Single(changes, c => c.GetProperty("after").GetProperty("value").GetString() == "第一位");
@@ -527,13 +527,13 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             PersonNo = "AUDIT-001", ENAME = "初始姓名", CompanyId = Id(company), DepartmentId = Id(department),
             BirthDate = "2000-02-29", EmploymentStatus = "Active", EmploymentStartedAt = "2026-01-01T01:02:03Z", IsEnabled = true
         });
-        var page = await client.GetFromJsonAsync<JsonElement>("/api/audit/business-changes?Resource=organization.person&TargetId=" + Id(created));
+        var page = await FeatureHttpTestRequests.ReadAsync(client, http.Audit(), "/api/audit/business-changes?Resource=organization.person&TargetId=" + Id(created));
         var row = Assert.Single(page.GetProperty("items").EnumerateArray());
         Assert.Equal("person.created", row.GetProperty("EventType").GetString());
         Assert.Equal(fixture.ActorId, row.GetProperty("ActorId").GetString());
         Assert.EndsWith("Z", row.GetProperty("OccurredAt").GetString());
         Assert.False(string.IsNullOrWhiteSpace(row.GetProperty("TraceId").GetString()));
-        var detail = await client.GetFromJsonAsync<JsonElement>("/api/audit/business-changes/" + row.GetProperty("EID").GetString());
+        var detail = await FeatureHttpTestRequests.ReadAsync(client, http.Audit(), "/api/audit/business-changes/" + row.GetProperty("EID").GetString());
         var changes = detail.GetProperty("fields").GetProperty("Changes").EnumerateArray().ToDictionary(c => c.GetProperty("field").GetString()!);
         Assert.Equal(10, changes.Count);
         Assert.Equal("2000-02-29", changes["BirthDate"].GetProperty("after").GetProperty("value").GetString());
@@ -558,13 +558,13 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             fixture.Fault.Mode = "";
             var people = await FeatureHttpTestRequests.ReadAsync(client, http.Organization("persons"), "/api/organization/persons?keyword=ROLLBACK");
             Assert.Equal(0, people.GetProperty("total").GetInt32());
-            var records = await client.GetFromJsonAsync<JsonElement>("/api/audit/business-changes");
+            var records = await FeatureHttpTestRequests.ReadAsync(client, http.Audit(), "/api/audit/business-changes");
             Assert.Equal(0, records.GetProperty("total").GetInt32());
         }
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
         using var invalid = await FeatureHttpTestRequests.SendAsync(client, http.Organization("persons", "create", "list.pageActions"), HttpMethod.Post, "/api/organization/persons", new { PersonNo = "INVALID", ENAME = "校验失败", CompanyId = "absent", EmploymentStatus = "Active", IsEnabled = true });
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
-        Assert.Equal(0, (await client.GetFromJsonAsync<JsonElement>("/api/audit/business-changes")).GetProperty("total").GetInt32());
+        Assert.Equal(0, (await FeatureHttpTestRequests.ReadAsync(client, http.Audit(), "/api/audit/business-changes")).GetProperty("total").GetInt32());
     }
 
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "管理员查询存储过滤稳定分页，普通账号不能用 View 绕过")]
@@ -580,9 +580,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(admin);
         using var roleResponse = await FeatureHttpTestRequests.SendAsync(admin, http.Role("create"), HttpMethod.Post, "/api/authorization/roles", new { Code = "AuditWriter", Name = "记录验证职责" });
         var role = (await roleResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
-        using var permissionResponse = await admin.PutAsJsonAsync($"/api/authorization/roles/{role}/permissions", new { PermissionCodes = new[] { "Audit.BusinessChange.View" } });
-        Assert.Equal(HttpStatusCode.NoContent, permissionResponse.StatusCode);
-        await http.GrantAsync(admin, role!, http.Organization("persons"), http.Organization("persons", "create", "list.pageActions"));
+        await http.GrantAsync(admin, role!, http.Organization("persons"), http.Organization("persons", "create", "list.pageActions"), http.Audit());
         using var assignment = await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{actor}/roles", new { RoleCodes = new[] { "AuditWriter" } });
         Assert.Equal(HttpStatusCode.NoContent, assignment.StatusCode);
         using var writer = await fixture.LoginAsync("writer", account.GetProperty("temporaryCredential").GetString()!);
@@ -590,8 +588,10 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         var second = await FeatureHttpTestRequests.CreateAsync(writer, http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons", new { PersonNo = "QUERY-B", ENAME = "维护者创建", EmploymentStatus = "Active", IsEnabled = true });
         using var deniedUpdate = await FeatureHttpTestRequests.SendAsync(writer, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put, "/api/organization/persons/" + Id(second), new { ENAME = "无权编辑" });
         Assert.Equal(HttpStatusCode.Forbidden, deniedUpdate.StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await writer.GetAsync("/api/audit/business-changes")).StatusCode);
-        var filtered = await admin.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes?Resource=organization.person&ActorId={actor}&EventType=person.created&TargetId={Id(second)}&From=2020-01-01T00:00:00Z&To=2040-01-01T00:00:00Z");
+        Assert.Equal(HttpStatusCode.Forbidden, (await FeatureHttpTestRequests.SendAsync(writer, http.Audit(), HttpMethod.Get, "/api/audit/business-changes")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync("/api/audit/business-changes")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await FeatureHttpTestRequests.SendAsync(admin, http.Identity(), HttpMethod.Get, "/api/audit/business-changes")).StatusCode);
+        var filtered = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), $"/api/audit/business-changes?Resource=organization.person&ActorId={actor}&EventType=person.created&TargetId={Id(second)}&From=2020-01-01T00:00:00Z&To=2040-01-01T00:00:00Z");
         Assert.Equal(1, filtered.GetProperty("total").GetInt32());
         var secondRecord = Assert.Single(filtered.GetProperty("items").EnumerateArray());
         Assert.Equal(actor, secondRecord.GetProperty("ActorId").GetString());
@@ -599,10 +599,10 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.Equal("维护者创建", secondRecord.GetProperty("TargetId_DisplayValue").GetString());
         Assert.Equal(secondRecord.GetProperty("ActorId_DisplayValue").GetString(), secondRecord.GetProperty("CreatedBy_DisplayValue").GetString());
         foreach (var range in new[] { "From=invalid", "From=2026-01-01T00:00:00", "From=2040-01-01T00:00:00Z&To=2020-01-01T00:00:00Z" })
-            Assert.Equal(HttpStatusCode.BadRequest, (await admin.GetAsync("/api/audit/business-changes?" + range)).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, (await FeatureHttpTestRequests.SendAsync(admin, http.Audit(), HttpMethod.Get, "/api/audit/business-changes?" + range)).StatusCode);
         fixture.Fault.Commands.Clear();
-        var page1 = await admin.GetFromJsonAsync<JsonElement>("/api/audit/business-changes?Resource=organization.person&PageSize=1&pageIndex=1");
-        var page2 = await admin.GetFromJsonAsync<JsonElement>("/api/audit/business-changes?Resource=organization.person&PageSize=1&pageIndex=2");
+        var page1 = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), "/api/audit/business-changes?Resource=organization.person&PageSize=1&pageIndex=1");
+        var page2 = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), "/api/audit/business-changes?Resource=organization.person&PageSize=1&pageIndex=2");
         Assert.Equal(2, page1.GetProperty("total").GetInt32());
         var row1 = Assert.Single(page1.GetProperty("items").EnumerateArray());
         var row2 = Assert.Single(page2.GetProperty("items").EnumerateArray());
@@ -611,14 +611,14 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.Contains(fixture.Fault.Commands, sql => sql.Contains("COUNT(*)") && sql.Contains("WHERE"));
         Assert.Contains(fixture.Fault.Commands, sql => sql.Contains("ORDER BY") && sql.Contains("[OccurredAt] DESC") && sql.Contains("[EID] DESC") && sql.Contains("OFFSET") && sql.Contains("FETCH NEXT"));
         fixture.Fault.Mode = "query";
-        Assert.Equal(HttpStatusCode.InternalServerError, (await admin.GetAsync("/api/audit/business-changes")).StatusCode);
+        Assert.Equal(HttpStatusCode.InternalServerError, (await FeatureHttpTestRequests.SendAsync(admin, http.Audit(), HttpMethod.Get, "/api/audit/business-changes")).StatusCode);
         fixture.Fault.Mode = "names";
-        var degraded = await admin.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes?TargetId={Id(first)}");
+        var degraded = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), $"/api/audit/business-changes?TargetId={Id(first)}");
         Assert.Equal(Id(first), Assert.Single(degraded.GetProperty("items").EnumerateArray()).GetProperty("TargetId").GetString());
         fixture.Fault.Mode = "";
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(admin);
         Assert.Equal(HttpStatusCode.NoContent, (await FeatureHttpTestRequests.SendAsync(admin, http.Organization("persons", "delete", "list.rowActions"), HttpMethod.Delete, $"/api/organization/persons/{Id(second)}")).StatusCode);
-        var retained = await admin.GetFromJsonAsync<JsonElement>($"/api/audit/business-changes/{secondRecord.GetProperty("EID").GetString()}");
+        var retained = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), $"/api/audit/business-changes/{secondRecord.GetProperty("EID").GetString()}");
         Assert.Equal(Id(second), retained.GetProperty("fields").GetProperty("TargetId").GetString());
         Assert.Equal(JsonValueKind.Null, retained.GetProperty("fields").GetProperty("TargetId_DisplayValue").ValueKind);
         foreach (var method in new[] { HttpMethod.Post, HttpMethod.Put, HttpMethod.Delete })
@@ -626,7 +626,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             using var request = new HttpRequestMessage(method, "/api/audit/business-changes" + (method == HttpMethod.Post ? "" : "/" + secondRecord.GetProperty("EID").GetString()));
             Assert.Equal(HttpStatusCode.MethodNotAllowed, (await admin.SendAsync(request)).StatusCode);
         }
-        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync("/api/audit/business-changes/export")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await FeatureHttpTestRequests.SendAsync(admin, http.Audit(), HttpMethod.Get, "/api/audit/business-changes/export")).StatusCode);
     }
 
     internal static string Id(JsonElement detail) => detail.GetProperty("fields").GetProperty("EID").GetString()!;
@@ -689,7 +689,8 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         foreach (var module in modules) module.ConfigureServices(builder.Services);
         var hostRoot = Path.GetDirectoryName(typeof(AuthController).Assembly.Location)!;
         var trust = TrustedBuiltInModuleSource.CreateForHost(hostRoot, Path.Combine(hostRoot, "modules"));
-        var candidates = new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(trust);
+        var candidates = new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(trust)
+            .Where(candidate => modules.Any(module => module.ModuleId == candidate.ModuleId)).ToArray();
         var modulePlan = new CanonicalModulePlanCompiler().Compile("personnel-authorization", candidates).Plan
             ?? throw new InvalidOperationException("Formal module plan did not compile.");
         FeatureCatalog = modulePlan.FeatureCatalog;

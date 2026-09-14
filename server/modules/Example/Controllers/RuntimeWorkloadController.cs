@@ -8,7 +8,7 @@ namespace ICP.Platform.Modules.Example.Controllers;
 [ApiController]
 [Route("api/example/runtime-workload")]
 [EndpointModule("Example")]
-[RequirePermission("Example.View")]
+[RequireFeature("example.runtime-workload.read")]
 public sealed class RuntimeWorkloadController : ControllerBase
 {
     private const string ColumnContextHeader = "X-Example-Column-Context";

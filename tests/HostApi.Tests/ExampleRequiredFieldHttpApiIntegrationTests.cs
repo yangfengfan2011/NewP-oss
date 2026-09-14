@@ -5,12 +5,19 @@ using System.Text.Json;
 using ICP.Platform.Authorization;
 using ICP.Platform.Authorization.Abstractions;
 using ICP.Platform.Authorization.Extensions;
+using ICP.Platform.Authorization.Http;
+using ICP.Platform.Kernel.ModulePlanning;
+using ICP.Platform.HostApi.Controllers;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Example.Crud;
+using ICP.Platform.Modules.Example.Controllers;
+using ICP.Platform.Modules.Example.Services;
+using ICP.Platform.HostApi.Authorization;
+using Microsoft.AspNetCore.Routing;
 using ICP.Platform.Persistence.Auditing;
 using ICP.Platform.Query.Descriptors;
 using ICP.Platform.Query.Models;
@@ -25,6 +32,17 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class ExampleRequiredFieldHttpApiIntegrationTests
 {
+    private static readonly IReadOnlyList<FeaturePoint> Points = LoadFeatures();
+    private static readonly FeatureHttpTestRequests Http = new(Points);
+
+    private static IReadOnlyList<FeaturePoint> LoadFeatures()
+    {
+        var root = Path.GetDirectoryName(typeof(AuthController).Assembly.Location)!;
+        var candidates = new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(TrustedBuiltInModuleSource.CreateForHost(root, Path.Combine(root, "modules")));
+        return new CanonicalModulePlanCompiler().Compile("example-api-tests", candidates).Plan?.FeatureCatalog
+            ?? throw new InvalidOperationException("Formal module plan did not compile.");
+    }
+
     private static readonly DateTime TrustedAuditTime =
         new(2026, 8, 28, 10, 45, 0, DateTimeKind.Utc);
 
@@ -36,7 +54,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         await app.StartAsync();
         var client = app.GetTestClient();
 
-        var missingResponse = await client.PostAsJsonAsync(
+        var missingResponse = await FeatureHttpTestRequests.SendAsync(client, Http.Example("create"), HttpMethod.Post,
             "/api/example/records",
             new Dictionary<string, object?>
             {
@@ -49,7 +67,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         Assert.Equal("Example.Record.SourceRequired", problem.GetProperty("code").GetString());
         Assert.Empty(repository.Rows);
 
-        var createdResponse = await client.PostAsJsonAsync(
+        var createdResponse = await FeatureHttpTestRequests.SendAsync(client, Http.Example("create"), HttpMethod.Post,
             "/api/example/records",
             new Dictionary<string, object?>
             {
@@ -75,7 +93,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         await using var app = BuildApplication(repository);
         await app.StartAsync();
         var client = app.GetTestClient();
-        var createdResponse = await client.PostAsJsonAsync(
+        var createdResponse = await FeatureHttpTestRequests.SendAsync(client, Http.Example("create"), HttpMethod.Post,
             "/api/example/records",
             new Dictionary<string, object?>
             {
@@ -87,7 +105,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         var row = Assert.Single(repository.Rows);
         var id = Assert.IsType<string>(row["EID"]);
 
-        var omittedResponse = await client.PutAsJsonAsync(
+        var omittedResponse = await FeatureHttpTestRequests.SendAsync(client, Http.Example("edit"), HttpMethod.Put,
             $"/api/example/records/{id}",
             new Dictionary<string, object?> { ["ENAME"] = "省略来源更新" });
 
@@ -95,7 +113,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         Assert.Equal("省略来源更新", row["ENAME"]);
         Assert.Equal("Legacy", row["RecordSource"]);
 
-        var explicitNullResponse = await client.PutAsJsonAsync(
+        var explicitNullResponse = await FeatureHttpTestRequests.SendAsync(client, Http.Example("edit"), HttpMethod.Put,
             $"/api/example/records/{id}",
             new Dictionary<string, object?> { ["RecordSource"] = null });
 
@@ -105,7 +123,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         Assert.Equal("Legacy", row["RecordSource"]);
 
         row["RecordSource"] = "";
-        var inheritedInvalidResponse = await client.PutAsJsonAsync(
+        var inheritedInvalidResponse = await FeatureHttpTestRequests.SendAsync(client, Http.Example("edit"), HttpMethod.Put,
             $"/api/example/records/{id}",
             new Dictionary<string, object?> { ["ENAME"] = "不应写入" });
 
@@ -124,7 +142,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         await app.StartAsync();
         var client = app.GetTestClient();
 
-        var forgedCreateResponse = await client.PostAsJsonAsync(
+        var forgedCreateResponse = await FeatureHttpTestRequests.SendAsync(client, Http.Example("create"), HttpMethod.Post,
             "/api/example/records",
             new Dictionary<string, object?>
             {
@@ -139,7 +157,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         Assert.Equal("StandardCrud.ServerOwnedFieldReadOnly", forgedCreateError.GetProperty("code").GetString());
         Assert.Empty(repository.Rows);
 
-        var createdResponse = await client.PostAsJsonAsync(
+        var createdResponse = await FeatureHttpTestRequests.SendAsync(client, Http.Example("create"), HttpMethod.Post,
             "/api/example/records",
             new Dictionary<string, object?>
             {
@@ -151,7 +169,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         var row = Assert.Single(repository.Rows);
         var id = Assert.IsType<string>(row["EID"]);
 
-        var forgedUpdateResponse = await client.PutAsJsonAsync(
+        var forgedUpdateResponse = await FeatureHttpTestRequests.SendAsync(client, Http.Example("edit"), HttpMethod.Put,
             $"/api/example/records/{id}",
             new Dictionary<string, object?>
             {
@@ -175,7 +193,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         await app.StartAsync();
         var client = app.GetTestClient();
 
-        var response = await client.PostAsJsonAsync(
+        var response = await FeatureHttpTestRequests.SendAsync(client, Http.Example("create"), HttpMethod.Post,
             "/api/example/records",
             new Dictionary<string, object?>
             {
@@ -190,14 +208,57 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         Assert.Empty(repository.Rows);
     }
 
+    [Fact]
+    public async Task ExampleRecordApi_RequiresTheDeclaredActionAndRejectsUnpublishedOperations()
+    {
+        var repository = new RecordingRepository();
+        await using var app = BuildApplication(repository);
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+        var body = new { ECODE = "FEATURE", ENAME = "功能位置", RecordSource = "Manual" };
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/example/records", body)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await FeatureHttpTestRequests.SendAsync(client, Http.Example(), HttpMethod.Post, "/api/example/records", body)).StatusCode);
+        Assert.Empty(repository.Rows);
+        using var created = await FeatureHttpTestRequests.SendAsync(client, Http.Example("create"), HttpMethod.Post, "/api/example/records", body);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var id = Assert.Single(repository.Rows)["EID"];
+        Assert.Equal(HttpStatusCode.Forbidden, (await FeatureHttpTestRequests.SendAsync(client, Http.Example("create"), HttpMethod.Put, $"/api/example/records/{id}", new { ENAME = "越权" })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await FeatureHttpTestRequests.SendAsync(client, Http.Example(), HttpMethod.Get, $"/api/example/records/{id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await FeatureHttpTestRequests.SendAsync(client, Http.Example(), HttpMethod.Get, "/api/example/records/options")).StatusCode);
+        Assert.Equal(0, repository.UpdateCallCount);
+    }
+
+    [Fact]
+    public async Task RuntimeColumnsAndRows_UseTheSameDeclaredReadPosition()
+    {
+        await using var app = BuildApplication(new RecordingRepository());
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+        var entry = Assert.Single(Points, point => point.BehaviorKey == "example.runtime-workload.read");
+        Assert.Equal("example", entry.Key);
+        Assert.Equal("example.record.export", Http.Example("export").BehaviorKey);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/example/runtime-workload/columns")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await FeatureHttpTestRequests.SendAsync(client, Http.Example(), HttpMethod.Get, "/api/example/runtime-workload/columns")).StatusCode);
+        var columns = await FeatureHttpTestRequests.ReadAsync(client, entry, "/api/example/runtime-workload/columns");
+        using var rows = new HttpRequestMessage(HttpMethod.Get, "/api/example/runtime-workload/rows");
+        rows.Headers.Add("X-NewP-Feature", entry.Position);
+        rows.Headers.Add("X-Example-Column-Context", columns.GetProperty("contextToken").GetString());
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(rows)).StatusCode);
+    }
+
     private static WebApplication BuildApplication(
         RecordingRepository repository,
         bool registerAuditProvider = true)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
+        builder.Services.AddAuthentication("ExampleApiTests").AddCookie("ExampleApiTests", options =>
+            options.Events.OnRedirectToAccessDenied = context => { context.Response.StatusCode = 403; return Task.CompletedTask; });
         builder.Services.AddPlatformAuthorization();
-        builder.Services.AddSingleton<IPermissionDecisionSource, GrantAllPermissionDecisionSource>();
+        builder.Services.AddAuthorization(options => options.AddPolicy(DenyAllAttribute.PolicyName, policy => policy.RequireAssertion(_ => false)));
+        builder.Services.AddSingleton<IFeatureDecisionSource, DeclaredFeatureDecisionSource>();
+        builder.Services.AddControllers().AddApplicationPart(typeof(RuntimeWorkloadController).Assembly);
+        builder.Services.AddSingleton<IRuntimeWorkloadService>(new RuntimeWorkloadService(TimeProvider.System));
         builder.Services.AddStandardCrudKernel();
         builder.Services.AddSingleton<IStandardCrudRepository>(repository);
         builder.Services.AddSingleton<IPlatformQueryExecutor, UnusedQueryExecutor>();
@@ -220,16 +281,16 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         });
         app.UseAuthorization();
         app.MapStandardCrudResources();
+        app.MapControllers();
+        FeatureEndpointBindings.Validate(((IEndpointRouteBuilder)app).DataSources, Points.Where(point => point.ModuleId == "Example").ToArray());
         return app;
     }
 
-    private sealed class GrantAllPermissionDecisionSource : IPermissionDecisionSource
+    private sealed class DeclaredFeatureDecisionSource : IFeatureDecisionSource
     {
-        public ValueTask<PermissionDecision> EvaluateAsync(
-            string subjectId,
-            string permissionCode,
-            CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult(PermissionDecision.Granted);
+        public ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string position, string behaviorKey, CancellationToken cancellationToken) =>
+            ValueTask.FromResult(Points.Any(point => point.Position == position && point.BehaviorKey == behaviorKey)
+                ? PermissionDecision.Granted : PermissionDecision.Denied);
     }
 
     private sealed class UnusedQueryExecutor : IPlatformQueryExecutor

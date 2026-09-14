@@ -112,7 +112,7 @@ public sealed class HostAuthenticationProcessRestartTests
             var accountId = (await accountResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("account").GetProperty("eid").GetString();
             using var assignment = await FeatureHttpTestRequests.SendAsync(client, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{accountId}/roles", new { RoleCodes = new[] { "restart-reader" } });
             Assert.Equal(HttpStatusCode.NoContent, assignment.StatusCode);
-            var historyBefore = await client.GetStringAsync("/api/audit/business-changes?pageSize=100");
+            var historyBefore = await FeatureHttpTestRequests.ReadTextAsync(client, http.Audit(), "/api/audit/business-changes?pageSize=100");
             StopExactProcess(process);
             process = null;
 
@@ -131,7 +131,7 @@ public sealed class HostAuthenticationProcessRestartTests
             Assert.Equal("restart-reader", Assert.Single(restoredRoles.GetProperty("roleCodes").EnumerateArray()).GetString());
             var restoredPermissions = await client.GetFromJsonAsync<JsonElement>($"/api/authorization/roles/{roleId}/permissions");
             Assert.Contains("Organization.Person.View", restoredPermissions.ToString());
-            var restoredHistory = await client.GetStringAsync("/api/audit/business-changes?pageSize=100");
+            var restoredHistory = await FeatureHttpTestRequests.ReadTextAsync(client, http.Audit(), "/api/audit/business-changes?pageSize=100");
             Assert.Equal(historyBefore, restoredHistory);
             using var historyDocument = JsonDocument.Parse(restoredHistory);
             Assert.Equal(new[] { "person.created", "person.updated", "role.permissions.changed", "user.roles.changed" },

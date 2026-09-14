@@ -4,9 +4,9 @@ using ICP.Platform.Authorization.Http;
 using ICP.Platform.Modules.Audit.Services;
 using Microsoft.AspNetCore.Mvc;
 namespace ICP.Platform.Modules.Audit.Controllers;
-/// <summary>只读管理员入口；View 权限不替代当前 LocalAdmin 资格。</summary>
+/// <summary>只读管理员入口；位置读取授权不替代当前 LocalAdmin 资格。</summary>
 [ApiController, Route("api/audit/business-changes"), EndpointModule("Audit")]
-[RequirePermission("Audit.BusinessChange.View")]
+[RequireFeature("audit.change.read")]
 public sealed class BusinessChangesController(BusinessAuditQuery query, ILocalAdministratorRoleAssignment administrators) : ControllerBase
 {
     /// <summary>在当前角色资格校验后读取存储侧筛选分页。</summary>

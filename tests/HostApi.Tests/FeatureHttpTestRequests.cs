@@ -36,6 +36,15 @@ internal sealed class FeatureHttpTestRequests(IReadOnlyList<FeaturePoint> points
             && point.ActionScope == (surface ?? (action == "create" ? "list.pageActions" : "list.rowActions")));
     }
 
+    internal FeaturePoint Example(string? action = null, string? surface = null)
+    {
+        var entry = points.Single(point => point.ModuleId == "Example" && point.Kind == "navigation" && point.Key == "example.records");
+        return action is null ? entry : points.Single(point => point.ParentPosition == entry.Position && point.Key == action
+            && point.ActionScope == (surface ?? (action == "export" ? "list" : action == "create" ? "list.pageActions" : "list.rowActions")));
+    }
+
+    internal FeaturePoint Audit() => points.Single(point => point.ModuleId == "Audit" && point.Key == "audit.changes" && point.Kind == "navigation");
+
     internal FeaturePoint Role(string? action = null, string? surface = null)
     {
         var entry = points.Single(point => point.ModuleId == "Authorization" && point.Kind == "navigation" && point.Key == "authorization.roles");

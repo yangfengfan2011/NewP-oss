@@ -46,11 +46,13 @@ describe('Example persisted record Standard CRUD resource', () => {
       }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     const resource = createExampleRecordStandardCrudResource(fetcher as unknown as typeof fetch);
 
-    const list = await resource.dataAdapter.list({ keyword: '示例', pageIndex: 1, pageSize: 20 });
-    const detail = await resource.dataAdapter.get('ExampleRecord_1');
+    const list = await resource.dataAdapter.list({ keyword: '示例', pageIndex: 1, pageSize: 20 }, { featurePosition: 'example-read' });
+    const detail = await resource.dataAdapter.get('ExampleRecord_1', { featurePosition: 'example-read' });
 
     expect(fetcher.mock.calls[0]?.[0]).toBe('/api/example/records?keyword=%E7%A4%BA%E4%BE%8B&pageIndex=1&pageSize=20');
     expect(fetcher.mock.calls[1]?.[0]).toBe('/api/example/records/ExampleRecord_1');
+    expect(new Headers(fetcher.mock.calls[0]?.[1]?.headers).get('X-NewP-Feature')).toBe('example-read');
+    expect(new Headers(fetcher.mock.calls[1]?.[1]?.headers).get('X-NewP-Feature')).toBe('example-read');
     expect(list.items).toEqual([{
       id: 'ExampleRecord_1',
       EID: 'ExampleRecord_1',

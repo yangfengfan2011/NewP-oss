@@ -117,20 +117,14 @@ public sealed class ProductionEndpointAccessCoverageTests
                 Assert.Equal(
                     "Example",
                     Assert.Single(endpoint.Metadata.GetOrderedMetadata<EndpointModuleAttribute>()).ModuleId);
-                Assert.Single(endpoint.Metadata.GetOrderedMetadata<RequirePermissionAttribute>());
+                Assert.Empty(endpoint.Metadata.GetOrderedMetadata<RequirePermissionAttribute>());
+                Assert.Equal(1, endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>().Count
+                    + endpoint.Metadata.GetOrderedMetadata<DenyAllAttribute>().Count);
             });
         Assert.Equal(
-            [
-                "Example.Record.Create",
-                "Example.Record.Delete",
-                "Example.Record.Update",
-                "Example.Record.View"
-            ],
-            exampleRecordEndpoints
-                .SelectMany(static endpoint => endpoint.Metadata.GetOrderedMetadata<RequirePermissionAttribute>())
-                .Select(static permission => permission.PermissionCode)
-                .Distinct(StringComparer.Ordinal)
-                .Order(StringComparer.Ordinal));
+            ["example.record.create", "example.record.delete", "example.record.export", "example.record.read", "example.record.update"],
+            exampleRecordEndpoints.SelectMany(static endpoint => endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>())
+                .Select(static feature => feature.BehaviorKey).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal));
         Assert.Equal(4, manifestEndpoints.Length);
         Assert.Contains(
             manifestEndpoints,

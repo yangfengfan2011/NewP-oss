@@ -314,7 +314,7 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
 
     private sealed class DeclaredFeatures(IReadOnlyList<FeaturePoint> points) : IFeatureDecisionSource
     {
-        public ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string position, string behaviorKey, CancellationToken cancellationToken) =>
+        public ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string position, string moduleId, string behaviorKey, CancellationToken cancellationToken) =>
             ValueTask.FromResult(points.Any(point => point.Position == position && point.BehaviorKey == behaviorKey)
                 ? PermissionDecision.Granted : PermissionDecision.Denied);
     }

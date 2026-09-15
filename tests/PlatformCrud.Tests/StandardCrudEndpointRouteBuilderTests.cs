@@ -406,6 +406,7 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         public ValueTask<PermissionDecision> EvaluateAsync(
             string subjectId,
             string position,
+            string moduleId,
             string behaviorKey,
             CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(PermissionDecision.Granted);

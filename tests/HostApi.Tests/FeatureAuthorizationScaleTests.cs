@@ -92,7 +92,7 @@ public sealed class FeatureAuthorizationScaleTests
             active.Publish(fixture.Catalog, index.ToDictionary(row => row.Key, row => row.Id, StringComparer.Ordinal));
             var decision = new FeatureDecisionSource(db, active);
             var single = await FeatureSqlMeasurement.CaptureAsync(fixture, "single-decision", async () =>
-                Assert.Equal(PermissionDecision.Granted, await decision.EvaluateAsync(userId, positions[0], "example.runtime-workload.read", CancellationToken.None)));
+                Assert.Equal(PermissionDecision.Granted, await decision.EvaluateAsync(userId, positions[0], "Example", "example.runtime-workload.read", CancellationToken.None)));
             Assert.Equal(1, JsonSerializer.SerializeToElement(single).GetProperty("queryCount").GetInt32());
             measurements.Add(single);
         }

@@ -20,8 +20,8 @@ public sealed class RequireFeatureAttribute : AuthorizeAttribute
 /// <summary>功能位置的在线判权依赖，由 Authorization 模块实现。</summary>
 public interface IFeatureDecisionSource
 {
-    /// <summary>核对位置绑定并以可信主体查询当前有效角色；依赖异常由统一 handler 转译为不可判定。</summary>
-    ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string position, string behaviorKey, CancellationToken cancellationToken);
+    /// <summary>核对位置与服务端执行端 moduleId 归属及行为绑定，再以可信主体查询当前有效角色；依赖异常由统一 handler 转译为不可判定。</summary>
+    ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string position, string moduleId, string behaviorKey, CancellationToken cancellationToken);
 }
 
 /// <summary>为当前会话提供可呈现的功能集合；单点判权不得依赖此批量投影。</summary>
@@ -41,7 +41,8 @@ public sealed class FeatureAuthorizationHandler(IFeatureDecisionSource source) :
     {
         if (context.Resource is not HttpContext http || context.User.Identity?.IsAuthenticated != true) return;
         var positions = http.Request.Headers["X-NewP-Feature"];
-        if (positions.Count != 1 || string.IsNullOrWhiteSpace(positions[0]))
+        var owners = http.GetEndpoint()?.Metadata.GetOrderedMetadata<EndpointModuleAttribute>();
+        if (owners?.Count != 1 || positions.Count != 1 || string.IsNullOrWhiteSpace(positions[0]))
         {
             context.Fail();
             return;
@@ -49,7 +50,7 @@ public sealed class FeatureAuthorizationHandler(IFeatureDecisionSource source) :
         try
         {
             var subject = AuthenticatedSubject.FromPrincipal(context.User);
-            var decision = await source.EvaluateAsync(subject.SubjectId, positions[0]!, requirement.BehaviorKey, http.RequestAborted);
+            var decision = await source.EvaluateAsync(subject.SubjectId, positions[0]!, owners[0].ModuleId, requirement.BehaviorKey, http.RequestAborted);
             if (decision == PermissionDecision.Granted) context.Succeed(requirement);
             else context.Fail(new AuthorizationFailureReason(this, decision == PermissionDecision.Denied
                 ? "FEATURE_DENIED" : PermissionGateFailureCodes.DecisionUnavailable));

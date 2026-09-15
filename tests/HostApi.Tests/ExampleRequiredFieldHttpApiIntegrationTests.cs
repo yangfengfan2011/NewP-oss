@@ -287,7 +287,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
 
     private sealed class DeclaredFeatureDecisionSource : IFeatureDecisionSource
     {
-        public ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string position, string behaviorKey, CancellationToken cancellationToken) =>
+        public ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string position, string moduleId, string behaviorKey, CancellationToken cancellationToken) =>
             ValueTask.FromResult(Points.Any(point => point.Position == position && point.BehaviorKey == behaviorKey)
                 ? PermissionDecision.Granted : PermissionDecision.Denied);
     }

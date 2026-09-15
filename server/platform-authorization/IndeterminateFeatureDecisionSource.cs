@@ -4,6 +4,6 @@ namespace ICP.Platform.Authorization;
 public sealed class IndeterminateFeatureDecisionSource : IFeatureDecisionSource
 {
     /// <inheritdoc/>
-    public ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string position, string behaviorKey, CancellationToken cancellationToken)
+    public ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string position, string moduleId, string behaviorKey, CancellationToken cancellationToken)
         => ValueTask.FromResult(PermissionDecision.Indeterminate);
 }

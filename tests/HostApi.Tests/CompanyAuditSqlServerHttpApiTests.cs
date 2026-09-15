@@ -128,7 +128,7 @@ public sealed class CompanyAuditSqlServerHttpApiTests
     }
     private sealed class GrantedPermissions : ICP.Platform.Authorization.Http.IFeatureDecisionSource
     {
-        public ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string position, string behaviorKey, CancellationToken cancellationToken = default) =>
+        public ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string position, string moduleId, string behaviorKey, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(PermissionDecision.Granted);
     }
 }

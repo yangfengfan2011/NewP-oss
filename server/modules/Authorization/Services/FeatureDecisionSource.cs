@@ -8,10 +8,10 @@ namespace ICP.Platform.Modules.Authorization.Services;
 public sealed class FeatureDecisionSource(EfPlatformDbContext db, ActiveFeatureCatalog catalog) : IFeatureDecisionSource, IFeatureGrantProjection
 {
     /// <inheritdoc/>
-    public async ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string position, string behaviorKey, CancellationToken cancellationToken)
+    public async ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string position, string moduleId, string behaviorKey, CancellationToken cancellationToken)
     {
         var snapshot = catalog.Snapshot;
-        if (!snapshot.ByPosition.TryGetValue(position, out var point) || (point.Point.Container || (point.Point.BehaviorKey != behaviorKey && !point.Point.ReadBehaviors.Contains(behaviorKey, StringComparer.Ordinal))))
+        if (!snapshot.ByPosition.TryGetValue(position, out var point) || point.Point.ModuleId != moduleId || (point.Point.Container || (point.Point.BehaviorKey != behaviorKey && !point.Point.ReadBehaviors.Contains(behaviorKey, StringComparer.Ordinal))))
             return PermissionDecision.Denied;
         return await EffectiveLinks(subjectId).AnyAsync(link => EF.Property<string>(link, "FunctionPointId") == point.Id, cancellationToken)
             ? PermissionDecision.Granted : PermissionDecision.Denied;

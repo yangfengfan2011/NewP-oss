@@ -112,7 +112,7 @@ public sealed class IdentityHttpApiIntegrationTests
 
     private sealed class TestFeatures : IFeatureDecisionSource
     {
-        public ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string position, string behaviorKey, CancellationToken cancellationToken) =>
+        public ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string position, string moduleId, string behaviorKey, CancellationToken cancellationToken) =>
             ValueTask.FromResult(position == "test-feature" ? PermissionDecision.Granted : PermissionDecision.Denied);
     }
 

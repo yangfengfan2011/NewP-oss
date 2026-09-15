@@ -9,6 +9,15 @@ namespace ICP.Platform.HostApi.Tests;
 public sealed class FeatureEndpointBindingsTests
 {
     [Fact]
+    public void Validate_AcceptsSameBehaviorOwnedByDifferentModules()
+    {
+        var points = FeatureCatalogCompiler.Compile([new("A", "entry", "navigation", "A", null, "shared.read"),
+            new("B", "entry", "navigation", "B", null, "shared.read")]);
+        var endpoints = new[] { "A", "B" }.Select(module => new Endpoint(_ => Task.CompletedTask,
+            new EndpointMetadataCollection(new EndpointModuleAttribute(module), new RequireFeatureAttribute("shared.read")), module));
+        FeatureEndpointBindings.Validate([new DefaultEndpointDataSource(endpoints)], points);
+    }
+    [Fact]
     public void Validate_RejectsMissingDeclarationMissingConsumerAndWrongOwner()
     {
         var catalog = FeatureCatalogCompiler.Compile([new("Authorization", "entry", "navigation", "授权", null, "authorization.read")]);

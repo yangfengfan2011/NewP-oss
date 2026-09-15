@@ -15,7 +15,7 @@ public sealed class PermissionGateTests
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
         var source = scope.ServiceProvider.GetRequiredService<IFeatureDecisionSource>();
-        Assert.Equal(PermissionDecision.Indeterminate, await source.EvaluateAsync("subject", "read", "resource.read", default));
+        Assert.Equal(PermissionDecision.Indeterminate, await source.EvaluateAsync("subject", "read", "Resource", "resource.read", default));
     }
     [Fact]
     public void FromPrincipal_RejectsAuthenticatedPrincipalWithoutTrustedSubjectId()

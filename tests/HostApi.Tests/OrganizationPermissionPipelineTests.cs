@@ -721,6 +721,7 @@ public sealed class OrganizationPermissionPipelineTests
         public ValueTask<PermissionDecision> EvaluateAsync(
             string subjectId,
             string position,
+            string moduleId,
             string behaviorKey,
             CancellationToken cancellationToken = default)
         {

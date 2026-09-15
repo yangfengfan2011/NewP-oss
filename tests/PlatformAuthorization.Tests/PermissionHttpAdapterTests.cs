@@ -100,6 +100,7 @@ public sealed class PermissionHttpAdapterTests
                     Interlocked.Increment(ref scenario._businessCalls);
                     return Results.Ok();
                 })
+                .WithMetadata(new EndpointModuleAttribute("Organization"))
                 .RequireAuthorization(new RequireFeatureAttribute("organization.person.read"));
             await application.StartAsync();
             scenario.Client = application.GetTestClient();
@@ -133,6 +134,7 @@ public sealed class PermissionHttpAdapterTests
         public ValueTask<PermissionDecision> EvaluateAsync(
             string subjectId,
             string position,
+            string moduleId,
             string behaviorKey,
             CancellationToken cancellationToken = default)
         {

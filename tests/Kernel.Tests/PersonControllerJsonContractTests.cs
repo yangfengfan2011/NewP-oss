@@ -118,6 +118,7 @@ public class PersonControllerJsonContractTests : IClassFixture<PersonControllerJ
         public ValueTask<PermissionDecision> EvaluateAsync(
             string subjectId,
             string position,
+            string moduleId,
             string behaviorKey,
             CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(subjectId == "person-json-contract-subject"

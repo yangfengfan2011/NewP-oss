@@ -54,7 +54,7 @@ public sealed class TemplateFeatureContractTests
 
     private sealed class Source(FeaturePoint point) : IFeatureDecisionSource
     {
-        public ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string position, string behaviorKey, CancellationToken cancellationToken) =>
+        public ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string position, string moduleId, string behaviorKey, CancellationToken cancellationToken) =>
             ValueTask.FromResult(position == point.Position && behaviorKey == point.BehaviorKey ? PermissionDecision.Granted : PermissionDecision.Denied);
     }
 }

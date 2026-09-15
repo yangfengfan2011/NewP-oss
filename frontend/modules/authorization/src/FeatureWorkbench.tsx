@@ -118,7 +118,8 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
       <Card title="角色" style={{ width: 280, flexShrink: 0 }}>
         <Input.Search aria-label="搜索角色" placeholder="名称或代码" onSearch={value => { setRoleQuery(value); setPage(1); }} disabled={saving} />
         <List dataSource={roles?.items ?? []} loading={!roles} renderItem={role => <List.Item>
-          <Button type={current?.role.id === role.EID ? "primary" : "text"} block disabled={saving} onClick={() => chooseRole(role.EID)}>
+          <Button type={current?.role.id === role.EID ? "primary" : "text"} block disabled={saving} onClick={() => chooseRole(role.EID)}
+            style={{ display: "block", height: "auto", minHeight: 32, whiteSpace: "normal", overflowWrap: "anywhere", textAlign: "left" }}>
             {role.ENAME} · {role.ECODE} {!role.IsEnabled && <Tag>停用</Tag>}
           </Button>
         </List.Item>} />

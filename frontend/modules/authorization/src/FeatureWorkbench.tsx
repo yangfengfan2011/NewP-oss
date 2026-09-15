@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Button, Card, Checkbox, Flex, Input, List, Modal, Pagination, Space, Spin, Tag, Tree, Typography } from "antd";
+import useMessage from "antd/es/message/useMessage";
 import { platformFetch, useAuthorization } from "@icp-platform/core";
 import type { PageProps } from "@icp-platform/sdk";
 import { requestRole } from "./roleResource";
@@ -26,7 +27,7 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
   const [expanded, setExpanded] = useState<React.Key[]>([]);
   const [branch, setBranch] = useState<string>();
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [messageApi, messageContextHolder] = useMessage();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [switchTarget, setSwitchTarget] = useState<string>();
@@ -98,11 +99,11 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
         body: JSON.stringify({ positions: [...draft] }),
       });
       setCurrent({ ...current, positions: [...draft] });
-      setNotice("授权已保存");
+      void messageApi.success({ content: "授权已保存", duration: 3, key: "authorization-saved" });
       return true;
     } catch (failure) { setError(message(failure)); return false; }
     finally { pending.current = false; setSaving(false); }
-  }, [catalog, current, draft, readOnly, missingEntries]);
+  }, [catalog, current, draft, readOnly, missingEntries, messageApi]);
   useEffect(() => { reportState({ dirty, submitting: saving || loading }, reset, save); }, [dirty, saving, loading, reset, save, reportState]);
   const chooseRole = (id: string) => {
     if (pending.current || id === current?.role.id) return;
@@ -113,7 +114,7 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
     <Typography.Title level={3}>功能授权</Typography.Title>
     <Typography.Paragraph type="secondary">选择角色，按入口位置配置功能。保存一次提交该角色的完整授权集合。</Typography.Paragraph>
     {error && <Alert type="error" message={error} showIcon style={{ marginBottom: 16 }} />}
-    {notice && <Alert type="success" message={notice} showIcon style={{ marginBottom: 16 }} />}
+    {messageContextHolder}
     <Flex gap={20} align="stretch" wrap>
       <Card title="角色" style={{ width: 280, flexShrink: 0 }}>
         <Input.Search aria-label="搜索角色" placeholder="名称或代码" onSearch={value => { setRoleQuery(value); setPage(1); }} disabled={saving} />

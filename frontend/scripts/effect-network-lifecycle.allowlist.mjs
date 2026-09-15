@@ -11,17 +11,6 @@ export const effectNetworkLifecycleAllowlist = [
     exitCondition: '删除无 snapshot 兼容入口，或把该读取迁入 Platform Query Runtime。',
   },
   {
-    id: 'packages/core/src/authorization/AuthorizationContext.tsx::AuthorizationProvider::useEffect::fetchPermissions>fetch',
-    file: 'packages/core/src/authorization/AuthorizationContext.tsx',
-    enclosingFunction: 'AuthorizationProvider',
-    hook: 'useEffect',
-    triggerChain: 'fetchPermissions>fetch',
-    classification: 'read-query',
-    owner: 'Core Authorization',
-    reason: '仓库内正式采用者已迁移到受控权限快照；uncontrolled AuthorizationProvider 仅保留 public compatibility。',
-    exitCondition: '通过独立的 versioned public-contract 决策删除 deprecated uncontrolled props。',
-  },
-  {
     id: 'packages/sdk/src/standardCrud.ts::useStandardCrudLookupRuntime::useEffect::loadLookups>loadStandardCrudLookupOptions>loadStandardCrudLookupPage>provider.load',
     file: 'packages/sdk/src/standardCrud.ts',
     enclosingFunction: 'useStandardCrudLookupRuntime',

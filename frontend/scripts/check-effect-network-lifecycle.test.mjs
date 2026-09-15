@@ -791,7 +791,7 @@ test('rejects a production SearchTablePage adoption without controlledResult', (
   ]);
 });
 
-test('rejects a production AuthorizationProvider adoption without controlled permissions', (t) => {
+test('rejects a production AuthorizationProvider adoption without controlled feature positions', (t) => {
   const frontendRoot = mkdtempSync(path.join(tmpdir(), 'newp-effect-gate-'));
   t.after(() => rmSync(frontendRoot, { recursive: true, force: true }));
   const target = path.join(frontendRoot, 'templates/example/src/UncontrolledAuthorizationProbe.tsx');
@@ -818,7 +818,7 @@ test('rejects explicit undefined values that keep compatibility-only JSX paths u
     import { SearchTablePage } from '@icp-platform/ui/crud-list';
     export function UndefinedControlledValuesProbe({ request }) {
       return (
-        <AuthorizationProvider permissions={undefined}>
+        <AuthorizationProvider featurePositions={undefined}>
           <SearchTablePage
             rowKey="id"
             columns={[]}
@@ -845,9 +845,9 @@ test('fails closed for unprovable controlled expressions while recognizing JSX s
   mkdirSync(path.dirname(unknownTarget), { recursive: true });
   writeFileSync(unknownTarget, `import { AuthorizationProvider } from '@icp-platform/core';
     import { SearchTablePage } from '@icp-platform/ui/crud-list';
-    export function UnknownControlledValuesProbe({ request, permissions, controlledResult }) {
+    export function UnknownControlledValuesProbe({ request, featurePositions, controlledResult }) {
       return (
-        <AuthorizationProvider permissions={permissions}>
+        <AuthorizationProvider featurePositions={featurePositions}>
           <SearchTablePage rowKey="id" columns={[]} request={request} controlledResult={controlledResult} />
         </AuthorizationProvider>
       );
@@ -858,7 +858,7 @@ test('fails closed for unprovable controlled expressions while recognizing JSX s
     import { SearchTablePage } from '@icp-platform/ui/crud-list';
     export function ShorthandControlledValuesProbe({ request }) {
       return (
-        <AuthorizationProvider permissions>
+        <AuthorizationProvider featurePositions>
           <SearchTablePage rowKey="id" columns={[]} request={request} controlledResult />
         </AuthorizationProvider>
       );
@@ -880,10 +880,10 @@ test('allows the Shell private lookup hook and statically controlled table and a
   writeFileSync(target, `import { AuthorizationProvider } from '@icp-platform/core';
     import { CrudTableSection } from '@icp-platform/ui/crud';
     import { useStandardCrudLookupRuntime } from './standard-crud/standardCrudLookupRuntime';
-    export function ControlledAdoptersProbe({ input, request, maybePermissions }) {
+    export function ControlledAdoptersProbe({ input, request, maybeFeaturePositions }) {
       useStandardCrudLookupRuntime(input);
       return (
-        <AuthorizationProvider permissions={maybePermissions ?? []}>
+        <AuthorizationProvider featurePositions={maybeFeaturePositions ?? []}>
           <CrudTableSection
             rowKey="id"
             columns={[]}
@@ -906,6 +906,24 @@ test('allows the Shell private lookup hook and statically controlled table and a
 
   assert.deepEqual(result.compatibilityDiagnostics, []);
   assert.equal(result.ok, true);
+});
+
+test('rejects retired permissions as a substitute for controlled feature positions', (t) => {
+  const frontendRoot = mkdtempSync(path.join(tmpdir(), 'newp-effect-gate-'));
+  t.after(() => rmSync(frontendRoot, { recursive: true, force: true }));
+  const target = path.join(frontendRoot, 'packages/shell/src/RetiredPermissionsProbe.tsx');
+  mkdirSync(path.dirname(target), { recursive: true });
+  writeFileSync(target, `import { AuthorizationProvider } from '@icp-platform/core';
+    export function RetiredPermissionsProbe() {
+      return <AuthorizationProvider permissions={[]}>{null}</AuthorizationProvider>;
+    }`);
+
+  const result = runEffectNetworkLifecycleGate({ frontendRoot, allowlist: [] });
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.compatibilityDiagnostics.map(({ code }) => code), [
+    'COMPATIBILITY_ONLY_AUTHORIZATION_UNCONTROLLED_READOPTED',
+  ]);
 });
 
 test('matches the reviewed current-tree baseline with no effect write commands', () => {
@@ -960,7 +978,7 @@ test('runs as a standalone current-tree gate', () => {
   });
 
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /6 reviewed effect findings, 6 platform query loads, 0 write commands/);
+  assert.match(result.stdout, /5 reviewed effect findings, 6 platform query loads, 0 write commands/);
 });
 
 test('keeps repeated sink call sites distinct without using line numbers in ids', () => {

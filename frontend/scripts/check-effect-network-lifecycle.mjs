@@ -704,12 +704,12 @@ export function analyzeCompatibilityOnlyReAdoptionsSource({ file, source }) {
           && ts.isIdentifier(tagName.expression)
           && coreNamespaces.has(tagName.expression.text)
           && tagName.name.text === 'AuthorizationProvider';
-      const hasControlledPermissions = jsxAttributeDefinitelyProvides(
+      const hasControlledFeaturePositions = jsxAttributeDefinitelyProvides(
         node.attributes,
-        'permissions',
+        'featurePositions',
         isDefinitelyNonUndefinedExpression,
       );
-      if (isAuthorizationProvider && !hasControlledPermissions) {
+      if (isAuthorizationProvider && !hasControlledFeaturePositions) {
         diagnostics.push({
           code: 'COMPATIBILITY_ONLY_AUTHORIZATION_UNCONTROLLED_READOPTED',
           id: `${file}::${enclosingFunctionName(node)}::${tagName.getText(sourceFile)}`,

@@ -14,7 +14,7 @@ describe('personnel center first vertical slice', () => {
   });
 
   it('leaves route authorization to the runtime metadata projection', () => {
-    expect(personStandardCrudResource.permissions).toBeUndefined();
+    expect(personStandardCrudResource).not.toHaveProperty('permissions');
     expect(personStandardCrudResource.listRoutePath).toBeUndefined();
     expect(personStandardCrudResource.detailRoutePath).toBeUndefined();
   });

@@ -499,6 +499,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
                 "items": [
                   {
                     "key": "audit.home",
+                    "featureKey": "audit.home",
                     "path": "/audit",
                     "entryType": "standard-list",
                     "targetKey": "audit.list"
@@ -603,6 +604,16 @@ public class HostApiPluginManifestRouteTests : IDisposable
             "Organization" => typeof(ICP.Platform.Modules.Organization.OrganizationModule).Assembly.Location,
             _ => throw new InvalidOperationException($"No test module assembly is registered for '{moduleId}'.")
         };
+        if (moduleId == "Audit")
+        {
+            var manifestPath = Path.Combine(packageRoot, "plugin.json");
+            var manifest = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(manifestPath))!;
+            // 测试包拥有自己的入口声明，并与实际装载的 Audit 执行端保持一致。
+            manifest["features"] = System.Text.Json.Nodes.JsonNode.Parse("""
+                [{"key":"audit.home","kind":"navigation","title":"Audit","behaviorKey":"audit.change.read"}]
+                """);
+            File.WriteAllText(manifestPath, manifest.ToJsonString());
+        }
         File.Copy(moduleAssemblyPath, Path.Combine(packageRoot, "backend", "AuditModule.dll"), overwrite: true);
 
         var stateStore = new InstalledPluginStateStore(installRoot);

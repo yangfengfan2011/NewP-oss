@@ -95,7 +95,7 @@ public sealed class AcceptanceScriptTests : IDisposable
             return;
         }
         XNamespace ns = "http://microsoft.com/schemas/VisualStudio/TeamTest/2010";
-        string[] gates = gate == "All" ? ["IdentityFoundation", "Personnel", "ExampleRequiredField"] : [gate];
+        string[] gates = gate == "All" ? ["Authorization", "IdentityFoundation", "Personnel", "ExampleRequiredField"] : [gate];
         var results = new XElement(ns + "Results");
         foreach (var selected in gates)
         {

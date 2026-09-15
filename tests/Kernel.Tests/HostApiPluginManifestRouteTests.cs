@@ -164,6 +164,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
             "audit.change.list",
             "authorization.role.detail",
             "authorization.role.list",
+            "authorization.workbench",
             "example.record.detail",
             "example.record.list",
             "example.runtime-workload.list",

@@ -88,6 +88,7 @@ public sealed class ProviderTargetTests
                 .OrderByDescending(static field => field.IsPrimaryKey)
                 .ThenBy(static field => field.Name, StringComparer.Ordinal)
                 .Select(static field => field.Name)
+                .Concat(model.Fields.Where(static field => field.OrdinalKey).Select(static field => "__ordinal_" + field.Name))
                 .ToArray();
 
             Assert.Equal(expectedProviderOrder, table.Columns.Select(static column => column.Name));

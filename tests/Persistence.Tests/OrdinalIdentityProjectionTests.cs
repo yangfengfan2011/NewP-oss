@@ -28,7 +28,7 @@ public sealed class OrdinalIdentityProjectionTests
         Assert.Equal("nvarchar(max)", entity.FindProperty("Key")!.GetColumnType());
         Assert.Equal("Latin1_General_100_BIN2", entity.FindProperty("Key")!.GetCollation());
         var hash = entity.FindProperty("__ordinal_Key")!;
-        Assert.Contains("HASHBYTES", hash.GetComputedColumnSql());
+        Assert.Equal("isnull(CONVERT([nvarchar](64),hashbytes('SHA2_256',CONVERT([varbinary](max),[Key])),(2)),N'')", hash.GetComputedColumnSql());
         Assert.True(hash.GetIsStored());
         Assert.Equal(64, hash.GetMaxLength());
         Assert.Equal("__ordinal_Key", Assert.Single(Assert.Single(entity.GetIndexes()).Properties).Name);

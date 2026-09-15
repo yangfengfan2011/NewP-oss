@@ -52,9 +52,9 @@ it('preserves draft after unknown save and failed role load, and does not refetc
     await act(async () => { finish(); await saved; });
     expect(container.textContent).toContain('操作结果未知');
     expect(lifecycle[0].dirty).toBe(true);
-    await click('two'); await click('取消');
+    await click('two·two'); await click('取消');
     expect(lifecycle[0].dirty).toBe(true);
-    await click('two'); await click('放弃并切换');
+    await click('two·two'); await click('放弃并切换');
     expect(container.textContent).toContain('角色读取失败');
     expect(lifecycle[0].dirty).toBe(true);
     expect(container.textContent).toContain('one · one');
@@ -76,13 +76,13 @@ it('discards a late response after switching to another role', async () => {
     await act(async () => root.render(<FeatureWorkbench input={{ parameters: { featurePosition: 'read', roleId: 'one' } }} reportState={() => undefined} />));
     await vi.waitFor(async () => {
       await act(async () => undefined);
-      expect([...container.querySelectorAll('button')].some(button => button.textContent?.replace(/\s/g, '') === 'two')).toBe(true);
+      expect([...container.querySelectorAll('button')].some(button => button.textContent?.replace(/\s/g, '') === 'two·two')).toBe(true);
     });
-    const target = [...container.querySelectorAll('button')].find(button => button.textContent?.replace(/\s/g, '') === 'two')!;
+    const target = [...container.querySelectorAll('button')].find(button => button.textContent?.replace(/\s/g, '') === 'two·two')!;
     await act(async () => target.click());
     await act(async () => finish(json({ role: role('one'), positions: ['read'] })));
     expect(container.textContent).toContain('two · two');
-    expect(container.textContent).not.toContain('one · one');
+    expect(container.querySelectorAll('.ant-card-head-title')[1]?.textContent).toBe('two · two');
     expect(fetcher.mock.calls.filter(call => String(call[0]).endsWith('/catalog'))).toHaveLength(1);
   } finally { await act(async () => root.unmount()); container.remove(); }
 });
@@ -101,5 +101,18 @@ it('asks for missing entry selections and blocks saving an isolated action', asy
     expect([...container.querySelectorAll('button')].find(button => button.textContent === '保存授权')!.disabled).toBe(true);
     await act(async () => { expect(await lifecycle[2]!()).toBe(false); });
     expect(fetcher.mock.calls.filter(call => call[1]?.method === 'PUT')).toHaveLength(0);
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});
+
+it('shows distinct codes for same-name roles before selection', async () => {
+  fetcher.mockImplementation((url: string) => Promise.resolve(json(url.endsWith('/catalog') ? { points } : {
+    items: ['TEAM-A', 'TEAM-B'].map(code => ({ EID: code, ECODE: code, ENAME: '同名角色', IsEnabled: true })), total: 2,
+  })));
+  const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+  try {
+    await act(async () => root.render(<FeatureWorkbench input={{ parameters: { featurePosition: 'read' } }} reportState={() => {}} />));
+    const labels = [...container.querySelectorAll('.ant-list-item button')].map(button => button.textContent);
+    expect(labels).toEqual(['同名角色 · TEAM-A ', '同名角色 · TEAM-B ']);
+    expect(fetcher.mock.calls.some(([url]) => /\/roles\/[^?]+$/.test(String(url)))).toBe(false);
   } finally { await act(async () => root.unmount()); container.remove(); }
 });

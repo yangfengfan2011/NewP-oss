@@ -178,7 +178,7 @@ internal static class FeatureScaleBrowserObserver
                     await search.PressAsync("Enter");
                     await listed;
                     var detail = page.WaitForResponseAsync(value => Endpoint(value, "/roles/" + role.Id));
-                    await page.GetByRole(AriaRole.Button, new() { Name = role.Name, Exact = true }).ClickAsync();
+                    await page.GetByRole(AriaRole.Button, new() { Name = $"{role.Name} · {role.Code}", Exact = true }).ClickAsync();
                     await detail;
                     await page.GetByText(role.Name + " · " + role.Code, new() { Exact = true }).WaitForAsync();
                 });

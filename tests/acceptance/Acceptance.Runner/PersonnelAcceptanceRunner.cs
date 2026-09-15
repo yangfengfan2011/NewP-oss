@@ -600,7 +600,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 driver = administratorDriver;
                 await page.GotoAsync($"http://127.0.0.1:{_shellPort}/authorization/roles/{_roleId}");
                 await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "配置权限", Exact = true }).ClickAsync();
-                await Assertions.Expect(page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = $"Personnel Gate Role M {_runId[..8]}", Exact = true })).ToBeEnabledAsync();
+                await Assertions.Expect(page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = $"Personnel Gate Role M {_runId[..8]} · PersonnelGateRoleM{_runId[..8]}", Exact = true })).ToBeEnabledAsync();
                 await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "展开全部", Exact = true }).ClickAsync();
                 await CapturePresentationAsync("workbench-expanded-groups");
                 await page.GetByLabel("搜索功能", new PageGetByLabelOptions { Exact = true }).FillAsync("编辑");

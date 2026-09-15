@@ -31,9 +31,11 @@ public sealed class OrganizationBindingHttpApiIntegrationTests
         builder.Services.AddControllers().AddApplicationPart(typeof(PersonUserBindingsController).Assembly);
         builder.Services.AddAuthentication(TestAuthenticationHandler.SchemeName)
             .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>(TestAuthenticationHandler.SchemeName, static _ => { });
-        builder.Services.AddAuthorization(options => options.AddPolicy(
-            "Permission:Organization.Person.LinkUser",
-            policy => policy.RequireAuthenticatedUser()));
+        builder.Services.AddAuthorization(options =>
+        {
+            options.AddPolicy("Feature:organization.person.linkUser.lookup", policy => policy.RequireAuthenticatedUser());
+            options.AddPolicy("Feature:organization.person.linkUser", policy => policy.RequireAuthenticatedUser());
+        });
         builder.Services.AddSingleton<IPersonUserBindingService>(service);
 
         await using var app = builder.Build();

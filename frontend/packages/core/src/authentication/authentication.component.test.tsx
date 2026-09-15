@@ -16,7 +16,7 @@ const authenticatedUser = {
   id: 'User_1',
   ecode: 'alice',
   ename: 'Alice',
-  permissions: [],
+  featurePositions: [],
   mustChangePassword: false,
   revision: 1,
   isLocalAdministrator: false,
@@ -54,16 +54,16 @@ describe('authentication components', () => {
     let resolveOld!: (value: Response) => void;
     const old = new Promise<Response>(resolve => { resolveOld = resolve; });
     const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse(authenticatedUser)).mockReturnValueOnce(old)
-      .mockResolvedValueOnce(jsonResponse({ ...authenticatedUser, permissions: ['Current.View'] }));
+      .mockResolvedValueOnce(jsonResponse({ ...authenticatedUser, featurePositions: ['Current.View'] }));
     vi.stubGlobal('fetch', fetchMock);
     await renderAuthenticationProbe();
     await act(async () => {
       const earlier = observedAuthentication!.retrySessionValidation();
       await observedAuthentication!.retrySessionValidation();
-      resolveOld(jsonResponse({ ...authenticatedUser, permissions: ['Stale.Update'] }));
+      resolveOld(jsonResponse({ ...authenticatedUser, featurePositions: ['Stale.Update'] }));
       await earlier;
     });
-    expect(observedAuthentication?.user?.permissions).toEqual(['Current.View']);
+    expect(observedAuthentication?.user?.featurePositions).toEqual(['Current.View']);
   });
 
   it('keeps a rejected read as an error without a cache-reset refresh loop', async () => {
@@ -77,15 +77,15 @@ describe('authentication components', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
-  it('refreshes current permissions after rejection and advances query ownership without another write', async () => {
+  it('refreshes current featurePositions after rejection and advances query ownership without another write', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse(authenticatedUser))
       .mockResolvedValueOnce(jsonResponse({ requestToken: 'token' }))
       .mockResolvedValueOnce(problemResponse(403, 'AUTH_FORBIDDEN'))
-      .mockResolvedValueOnce(jsonResponse({ ...authenticatedUser, permissions: ['Resource.View'] }));
+      .mockResolvedValueOnce(jsonResponse({ ...authenticatedUser, featurePositions: ['Resource.View'] }));
     vi.stubGlobal('fetch', fetchMock);
     await renderAuthenticationProbe();
     await act(async () => { expect((await platformFetch('/api/resource', { method: 'PUT' })).status).toBe(403); });
-    expect(observedAuthentication?.user?.permissions).toEqual(['Resource.View']);
+    expect(observedAuthentication?.user?.featurePositions).toEqual(['Resource.View']);
     expect(observedAuthentication?.permissionEpoch).toBe(1);
     expect(fetchMock).toHaveBeenCalledTimes(4);
     invalidatePlatformAntiforgeryToken();
@@ -252,7 +252,7 @@ describe('authentication components', () => {
       sessionError: undefined,
       permissionEpoch: 0,
       user: {
-        id: 'User_1', ecode: 'alice', ename: 'Alice', permissions: [], mustChangePassword: true,
+        id: 'User_1', ecode: 'alice', ename: 'Alice', featurePositions: [], mustChangePassword: true,
         revision: 1, isLocalAdministrator: false,
         timeZoneId: 'Asia/Taipei',
       },

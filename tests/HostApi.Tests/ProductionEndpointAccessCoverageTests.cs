@@ -60,21 +60,7 @@ public sealed class ProductionEndpointAccessCoverageTests
         app.MapStandardCrudResources();
         app.MapPluginManifestEndpoints("test-plugin-root");
 
-        var registry = new ModuleRegistry();
-        registry.RegisterModule(new AuditModule());
-        registry.RegisterModule(new AuthorizationModule());
-        registry.RegisterModule(new ConfigCenterModule());
-        registry.RegisterModule(new DemoModule());
-        registry.RegisterModule(new ExampleModule());
-        registry.RegisterModule(new FilesModule());
-        registry.RegisterModule(new MetadataConfigCenterModule());
-        registry.RegisterModule(new IdentityModule());
-        registry.RegisterModule(new ModuleTemplateSampleModule());
-        registry.RegisterModule(new OrganizationModule());
-
-        var plan = EndpointAccessPlanCompiler.Compile(
-            ((IEndpointRouteBuilder)app).DataSources,
-            registry);
+        EndpointAccessPlanCompiler.Compile(((IEndpointRouteBuilder)app).DataSources);
         var manifestEndpoints = ((IEndpointRouteBuilder)app).DataSources
             .SelectMany(static source => source.Endpoints)
             .OfType<RouteEndpoint>()
@@ -90,25 +76,6 @@ public sealed class ProductionEndpointAccessCoverageTests
                 StringComparison.Ordinal) == true)
             .ToArray();
 
-        Assert.Contains(
-            plan.ActivePermissions,
-            static permission => permission.Code == OrganizationPermissions.PersonDelete);
-        Assert.Contains(
-            plan.ActivePermissions,
-            static permission => permission.Code == OrganizationPermissions.CompanyDelete);
-        Assert.Contains(
-            plan.ActivePermissions,
-            static permission => permission.Code == OrganizationPermissions.DepartmentDelete);
-        Assert.Equal(
-            [
-                "Example.Record.Create",
-                "Example.Record.Delete",
-                "Example.Record.Update",
-                "Example.Record.View"
-            ],
-            plan.ActivePermissions
-                .Where(static permission => permission.Code.StartsWith("Example.Record.", StringComparison.Ordinal))
-                .Select(static permission => permission.Code));
         Assert.Equal(9, exampleRecordEndpoints.Length);
         Assert.All(
             exampleRecordEndpoints,
@@ -117,7 +84,6 @@ public sealed class ProductionEndpointAccessCoverageTests
                 Assert.Equal(
                     "Example",
                     Assert.Single(endpoint.Metadata.GetOrderedMetadata<EndpointModuleAttribute>()).ModuleId);
-                Assert.Empty(endpoint.Metadata.GetOrderedMetadata<RequirePermissionAttribute>());
                 Assert.Equal(1, endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>().Count
                     + endpoint.Metadata.GetOrderedMetadata<DenyAllAttribute>().Count);
             });

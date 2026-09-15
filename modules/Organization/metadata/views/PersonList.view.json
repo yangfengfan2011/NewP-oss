@@ -188,20 +188,14 @@
         "key": "create",
         "labelKey": "Action_Create",
         "standardAction": "create",
-        "variant": "primary",
-        "permissions": [
-          "Organization.Person.Create"
-        ]
+        "variant": "primary"
       }
     ],
     "rowActions": [
       {
         "key": "edit",
         "labelKey": "Action_Edit",
-        "standardAction": "edit",
-        "permissions": [
-          "Organization.Person.Update"
-        ]
+        "standardAction": "edit"
       },
       {
         "key": "delete",
@@ -210,9 +204,6 @@
         "variant": "danger",
         "confirmMessageKey": "Action_Delete_Confirm",
         "handlerKey": "delete",
-        "permissions": [
-          "Organization.Person.Delete"
-        ],
         "disabledWhen": {
           "field": "AccountEID",
           "operator": "notEmpty",
@@ -227,9 +218,6 @@
         "confirmMessageKey": "Action_Disable_Confirm",
         "handlerKey": "disable",
         "inputKey": "disableReason",
-        "permissions": [
-          "Organization.Person.Update"
-        ],
         "visibleWhen": {
           "field": "IsEnabled",
           "operator": "equals",
@@ -242,9 +230,6 @@
         "standardAction": "enable",
         "confirmMessageKey": "Action_Enable_Confirm",
         "handlerKey": "enable",
-        "permissions": [
-          "Organization.Person.Update"
-        ],
         "visibleWhen": {
           "field": "IsEnabled",
           "operator": "equals",

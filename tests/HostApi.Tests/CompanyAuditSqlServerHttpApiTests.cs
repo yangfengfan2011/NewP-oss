@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
 using ICP.Platform.Authorization;
-using ICP.Platform.Authorization.Abstractions;
 using ICP.Platform.Authorization.Extensions;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Modules.Organization.Crud;
@@ -47,7 +46,7 @@ public sealed class CompanyAuditSqlServerHttpApiTests
             var builder = WebApplication.CreateBuilder();
             builder.WebHost.UseTestServer();
             builder.Services.AddPlatformAuthorization();
-            builder.Services.AddSingleton<IPermissionDecisionSource, GrantedPermissions>();
+            builder.Services.AddSingleton<ICP.Platform.Authorization.Http.IFeatureDecisionSource, GrantedPermissions>();
             builder.Services.AddStandardCrudKernel();
             builder.Services.AddStandardCrudResource(CompanyCrudDescriptorFactory.Create());
             builder.Services.AddSingleton(plan);
@@ -73,6 +72,7 @@ public sealed class CompanyAuditSqlServerHttpApiTests
             }
             await app.StartAsync();
             using var client = app.GetTestClient();
+            client.DefaultRequestHeaders.Add("X-NewP-Feature", "fixture");
             const string route = "/api/organization/companies";
             using var created = await client.PostAsJsonAsync(route, new Dictionary<string, object?> { ["ECODE"] = "AUDIT", ["ENAME"] = "Audit company", ["SortOrder"] = "0100" });
             Assert.True(created.StatusCode == HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
@@ -126,9 +126,9 @@ public sealed class CompanyAuditSqlServerHttpApiTests
     {
         public RequestPresentationContext? Current => new("zh-CN", "Asia/Taipei");
     }
-    private sealed class GrantedPermissions : IPermissionDecisionSource
+    private sealed class GrantedPermissions : ICP.Platform.Authorization.Http.IFeatureDecisionSource
     {
-        public ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string permissionCode, CancellationToken cancellationToken = default) =>
+        public ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string position, string behaviorKey, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(PermissionDecision.Granted);
     }
 }

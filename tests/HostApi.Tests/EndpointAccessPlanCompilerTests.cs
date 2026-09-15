@@ -22,14 +22,13 @@ public sealed class EndpointAccessPlanCompilerTests
         using var app = builder.Build();
         app.MapGet("/account", static () => "ok")
             .RequireAuthorization(new RequireFeatureAttribute("identity.account.read"), new AuthorizeAttribute("AdminOnly"));
-        EndpointAccessPlanCompiler.Compile(((IEndpointRouteBuilder)app).DataSources, Registry());
+        EndpointAccessPlanCompiler.Compile(((IEndpointRouteBuilder)app).DataSources);
     }
     [Theory]
     [InlineData("anonymous")]
     [InlineData("authenticated")]
     [InlineData("denied")]
     [InlineData("feature")]
-    [InlineData("permission")]
     public void Compile_FeatureRejectsAnotherTerminalRule(string kind)
     {
         var builder = WebApplication.CreateBuilder();
@@ -41,134 +40,33 @@ public sealed class EndpointAccessPlanCompilerTests
         {
             "authenticated" => new AuthenticatedOnlyAttribute(),
             "denied" => new DenyAllAttribute("frozen"),
-            "feature" => new RequireFeatureAttribute("identity.account.create"),
-            _ => new RequirePermissionAttribute("Identity.Old")
+            _ => new RequireFeatureAttribute("identity.account.create")
         });
         var error = Assert.Throws<EndpointAccessPlanValidationException>(() =>
-            EndpointAccessPlanCompiler.Compile(((IEndpointRouteBuilder)app).DataSources, Registry()));
+            EndpointAccessPlanCompiler.Compile(((IEndpointRouteBuilder)app).DataSources));
         Assert.Contains(error.Diagnostics, item => item.Code == EndpointAccessFailureCodes.RuleConflict);
     }
 
     [Fact]
-    public void Compile_AcceptsExactlyOneTerminalRuleAndKnownOwnedPermission()
+    public void Compile_AcceptsPublicAuthenticatedDeniedAndFeatureEndpoints()
     {
-        var registry = Registry(new PermissionModule(
-            "Organization",
-            Permission("Organization.Person.View", "Organization")));
         var builder = WebApplication.CreateBuilder();
         using var app = builder.Build();
         app.MapGet("/public", static () => "ok").AllowAnonymous();
-        app.MapGet("/authenticated", static () => "ok")
-            .RequireAuthorization(new AuthenticatedOnlyAttribute());
-        app.MapGet("/frozen", static () => "never")
-            .RequireAuthorization(new DenyAllAttribute("Frozen until a later batch."));
-        app.MapGet("/person", static () => "ok")
-            .WithMetadata(new EndpointModuleAttribute("Organization"))
-            .RequirePermission("Organization.Person.View");
-
-        var plan = EndpointAccessPlanCompiler.Compile(
-            ((IEndpointRouteBuilder)app).DataSources,
-            registry);
-
-        Assert.Equal(
-            ["Organization.Person.View"],
-            plan.ActivePermissions.Select(static permission => permission.Code));
+        app.MapGet("/authenticated", static () => "ok").RequireAuthorization(new AuthenticatedOnlyAttribute());
+        app.MapGet("/frozen", static () => "never").RequireAuthorization(new DenyAllAttribute("Frozen"));
+        app.MapGet("/person", static () => "ok").RequireAuthorization(new RequireFeatureAttribute("organization.person.read"));
+        EndpointAccessPlanCompiler.Compile(((IEndpointRouteBuilder)app).DataSources);
     }
-
     [Fact]
-    public void Compile_CompositePermissionPolicy_HasOneTerminalRulePerRead()
+    public void Compile_AggregatesMissingAndConflictingRulesInStableOrder()
     {
-        // 与标准关系树读取策略同形：一个命名策略组合两项既有权限，不新增权限码。
-        const string policyName = "Organization.Tree.Read";
-        var builder = WebApplication.CreateBuilder();
-        builder.Services.AddAuthorization(options => options.AddPolicy(policyName, policy => policy.RequireAuthenticatedUser().AddRequirements(
-            new PermissionAuthorizationRequirement("Organization.Company.View"),
-            new PermissionAuthorizationRequirement("Organization.Department.View"))));
-        using var app = builder.Build();
-        foreach (var operation in new[] { "roots", "children", "path", "search" })
-            app.MapGet("/api/trees/organization.structure/" + operation, static () => "ok").RequireAuthorization(policyName);
-        var endpoints = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints)
-            .OfType<RouteEndpoint>().Where(endpoint => endpoint.RoutePattern.RawText?.StartsWith("/api/trees/", StringComparison.Ordinal) == true).ToArray();
-        Assert.Equal(4, endpoints.Length);
-        var policy = app.Services.GetRequiredService<IOptions<AuthorizationOptions>>().Value.GetPolicy(policyName)!;
-        Assert.Equal(new[] { "Organization.Company.View", "Organization.Department.View" },
-            policy.Requirements.OfType<PermissionAuthorizationRequirement>().Select(requirement => requirement.Requirement.PermissionCode));
-        EndpointAccessPlanCompiler.Compile([new DefaultEndpointDataSource(endpoints)], Registry(new PermissionModule("Organization",
-            Permission("Organization.Company.View", "Organization"), Permission("Organization.Department.View", "Organization"))));
-    }
-
-    [Fact]
-    public void Compile_AggregatesRulesAndCatalogFailuresInStableOrder()
-    {
-        var registry = Registry(
-            new PermissionModule(
-                "Organization",
-                Permission("Organization.Person.View", "Organization")),
-            new PermissionModule(
-                "Collision",
-                Permission("organization.person.view", "Collision")));
         var builder = WebApplication.CreateBuilder();
         using var app = builder.Build();
         app.MapGet("/missing", static () => "missing");
-        app.MapGet("/conflict", static () => "conflict")
-            .AllowAnonymous()
-            .WithMetadata(new EndpointModuleAttribute("Organization"))
-            .RequirePermission("Organization.Person.View");
-        app.MapGet("/unknown", static () => "unknown")
-            .WithMetadata(new EndpointModuleAttribute("Organization"))
-            .RequirePermission("Organization.Person.Unknown");
-        app.MapGet("/wrong-owner", static () => "wrong")
-            .WithMetadata(new EndpointModuleAttribute("Collision"))
-            .RequirePermission("Organization.Person.View");
-
-        var exception = Assert.Throws<EndpointAccessPlanValidationException>(() =>
-            EndpointAccessPlanCompiler.Compile(
-                ((IEndpointRouteBuilder)app).DataSources,
-                registry));
-
-        Assert.Equal(
-            [
-                EndpointAccessFailureCodes.RuleConflict,
-                EndpointAccessFailureCodes.RuleMissing,
-                EndpointAccessFailureCodes.PermissionCodeCollision,
-                EndpointAccessFailureCodes.PermissionModuleMismatch,
-                EndpointAccessFailureCodes.PermissionUnknown
-            ],
-            exception.Diagnostics.Select(static diagnostic => diagnostic.Code).Distinct());
-    }
-
-    private static ModuleRegistry Registry(params IModule[] modules)
-    {
-        var registry = new ModuleRegistry();
-        foreach (var module in modules)
-        {
-            registry.RegisterModule(module);
-        }
-
-        return registry;
-    }
-
-    private static PermissionDescriptor Permission(string code, string moduleId) => new()
-    {
-        Code = code,
-        DisplayName = code,
-        ModuleId = moduleId
-    };
-
-    private sealed class PermissionModule : ModuleBase, IPermissionProvider
-    {
-        private readonly IReadOnlyList<PermissionDescriptor> _permissions;
-
-        public PermissionModule(string moduleId, params PermissionDescriptor[] permissions)
-        {
-            ModuleId = moduleId;
-            _permissions = permissions;
-        }
-
-        public override string ModuleId { get; }
-
-        public override string DisplayName => ModuleId;
-
-        public IReadOnlyList<PermissionDescriptor> GetPermissions() => _permissions;
+        app.MapGet("/bare", static () => "bare").RequireAuthorization();
+        app.MapGet("/conflict", static () => "conflict").AllowAnonymous().RequireAuthorization(new RequireFeatureAttribute("organization.person.read"));
+        var error = Assert.Throws<EndpointAccessPlanValidationException>(() => EndpointAccessPlanCompiler.Compile(((IEndpointRouteBuilder)app).DataSources));
+        Assert.Equal(new[] { EndpointAccessFailureCodes.RuleConflict, EndpointAccessFailureCodes.RuleMissing, EndpointAccessFailureCodes.RuleMissing }, error.Diagnostics.Select(item => item.Code));
     }
 }

@@ -8,7 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace ICP.Platform.Modules.Files;
 
-public class FilesModule : ModuleBase, IPermissionProvider, IMenuProvider, IConfigProvider
+public class FilesModule : ModuleBase, IMenuProvider, IConfigProvider
 {
     public override string ModuleId => "Files";
     public override string DisplayName => "文件管理";
@@ -31,45 +31,6 @@ public class FilesModule : ModuleBase, IPermissionProvider, IMenuProvider, IConf
         services.AddScoped<IFileService, FileService>();
     }
 
-    public IReadOnlyList<PermissionDescriptor> GetPermissions()
-    {
-        return new[]
-        {
-            new PermissionDescriptor
-            {
-                Code = "Files.Upload",
-                DisplayName = "上传文件",
-                Description = "允许上传文件",
-                ModuleId = ModuleId,
-                Group = "文件管理"
-            },
-            new PermissionDescriptor
-            {
-                Code = "Files.Download",
-                DisplayName = "下载文件",
-                Description = "允许下载文件",
-                ModuleId = ModuleId,
-                Group = "文件管理"
-            },
-            new PermissionDescriptor
-            {
-                Code = "Files.Delete",
-                DisplayName = "删除文件",
-                Description = "允许删除文件",
-                ModuleId = ModuleId,
-                Group = "文件管理"
-            },
-            new PermissionDescriptor
-            {
-                Code = "Files.View",
-                DisplayName = "查看文件",
-                Description = "允许查看文件列表和元数据",
-                ModuleId = ModuleId,
-                Group = "文件管理"
-            }
-        };
-    }
-
     public IReadOnlyList<MenuDescriptor> GetMenus()
     {
         return new[]
@@ -82,7 +43,6 @@ public class FilesModule : ModuleBase, IPermissionProvider, IMenuProvider, IConf
                 Route = "/files",
                 Icon = "file-icon",
                 Order = 50,
-                RequiredPermission = "Files.View",
                 ModuleId = ModuleId
             }
         };

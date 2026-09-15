@@ -5,7 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace ICP.Platform.Modules.ModuleTemplateSample;
 
-public class ModuleTemplateSampleModule : ModuleBase, IPermissionProvider, IConfigProvider
+public class ModuleTemplateSampleModule : ModuleBase, IConfigProvider
 {
     public override string ModuleId => "ModuleTemplateSample";
     public override string DisplayName => "模块模板示例";
@@ -14,20 +14,6 @@ public class ModuleTemplateSampleModule : ModuleBase, IPermissionProvider, IConf
     public override void ConfigureServices(IServiceCollection services)
     {
         services.AddScoped<ISampleStatusService, SampleStatusService>();
-    }
-
-    public IReadOnlyList<PermissionDescriptor> GetPermissions()
-    {
-        return new[]
-        {
-            new PermissionDescriptor
-            {
-                Code = "ModuleTemplateSample.View",
-                DisplayName = "查看模块模板示例",
-                ModuleId = ModuleId,
-                Group = "模块模板示例"
-            }
-        };
     }
 
     public IReadOnlyList<ConfigDescriptor> GetConfigSchema()

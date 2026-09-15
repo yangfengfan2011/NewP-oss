@@ -847,8 +847,6 @@ public sealed class PersistencePlanCompilerTests
                 module.Routes,
                 module.FrontendBindings,
                 module.FrontendBindingReferences,
-                module.PermissionCodes,
-                module.PermissionReferences,
                 module.ModelKeys,
                 module.Provenance,
                 module.Persistence);
@@ -882,8 +880,6 @@ public sealed class PersistencePlanCompilerTests
             module.Routes,
             module.FrontendBindings,
             module.FrontendBindingReferences,
-            module.PermissionCodes,
-            module.PermissionReferences,
             module.ModelKeys,
             module.Provenance,
             module.Persistence);
@@ -1040,8 +1036,6 @@ public sealed class PersistencePlanCompilerTests
                 Routes: [],
                 FrontendBindings: [],
                 FrontendBindingReferences: [],
-                PermissionCodes: [],
-                PermissionReferences: [],
                 ModelKeys: modelKeys ?? [_modelKey],
                 Provenance: new ModulePlanProvenance("installed-package", Path.Combine(Root, "plugin.json"), "/"),
                 Persistence: new ModulePersistenceContribution(

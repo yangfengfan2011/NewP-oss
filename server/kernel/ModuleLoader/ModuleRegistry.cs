@@ -8,7 +8,6 @@ namespace ICP.Platform.Kernel.ModuleLoader;
 public class ModuleRegistry
 {
     private readonly Dictionary<string, IModule> _modules = new();
-    private readonly Dictionary<string, List<PermissionDescriptor>> _permissions = new();
     private readonly Dictionary<string, List<MenuDescriptor>> _menus = new();
     private readonly Dictionary<string, List<ConfigDescriptor>> _configs = new();
     private readonly Dictionary<string, List<MigrationDescriptor>> _migrations = new();
@@ -24,12 +23,6 @@ public class ModuleRegistry
         }
 
         _modules[module.ModuleId] = module;
-
-        // 收集权限声明
-        if (module is IPermissionProvider permissionProvider)
-        {
-            _permissions[module.ModuleId] = permissionProvider.GetPermissions().ToList();
-        }
 
         // 收集菜单声明
         if (module is IMenuProvider menuProvider)
@@ -54,14 +47,6 @@ public class ModuleRegistry
     /// 获取所有模块
     /// </summary>
     public IReadOnlyDictionary<string, IModule> GetAllModules() => _modules;
-
-    /// <summary>
-    /// 获取所有权限
-    /// </summary>
-    public IReadOnlyList<PermissionDescriptor> GetAllPermissions()
-    {
-        return _permissions.Values.SelectMany(p => p).ToList();
-    }
 
     /// <summary>
     /// 获取所有菜单

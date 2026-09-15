@@ -9,7 +9,7 @@ const businessShortcuts = [
 
 const platformShortcuts = [
   { label: '角色管理', to: '/authorization/roles', note: '查看权限状态与角色页骨架' },
-  { label: '权限列表', to: '/authorization/permissions', note: '查看平台侧目录式列表页结构' },
+  { label: '功能授权', to: '/authorization/workbench', note: '按功能入口配置角色授权' },
   { label: '配置管理', to: '/config/items', note: '查看配置页摘要区与表格区组合' },
   { label: '值列表管理', to: '/config/value-lists', note: '管理基础值列表数据与表格操作' },
   { label: '元数据配置中心', to: '/metadata-config/modules', note: '进入 SettingDefinition 元数据定义工作台' },

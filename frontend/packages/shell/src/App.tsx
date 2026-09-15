@@ -9,7 +9,6 @@ import {
   resolveAuthenticationDestination,
 } from '@icp-platform/core';
 import { ModuleRegistry, ShellView, type AuthUser } from '@icp-platform/sdk';
-import { PermissionGuard } from './components/PermissionGuard';
 import { RouteCapabilityOutlet } from './capabilities/RouteCapabilityOutlet';
 import { AuthenticationSessionBoundary } from './components/AuthenticationSessionBoundary';
 import { CurrentPermissionScope } from './components/CurrentPermissionScope';
@@ -78,21 +77,17 @@ function LocalAdministratorGuard({ children }: { children: React.ReactNode }) {
 
 function RouteAccess({
   children,
-  permissions,
   localAdministratorOnly,
   featurePosition,
 }: {
   children: React.ReactNode;
-  permissions?: string[];
   localAdministratorOnly?: boolean;
   featurePosition?: string;
 }) {
   const auth = useAuth();
+  if (localAdministratorOnly && !auth.user?.isLocalAdministrator) return <Navigate to="/" replace />;
   if (featurePosition) return auth.user?.featurePositions?.includes(featurePosition) ? <FeaturePlacementContext.Provider value={{ entryPosition: featurePosition }}>{children}</FeaturePlacementContext.Provider> : <Navigate to="/" replace />;
-  let content = <>{children}</>;
-  if (permissions && permissions.length > 0) {
-    content = <PermissionGuard permissions={permissions}>{content}</PermissionGuard>;
-  }
+  const content = <>{children}</>;
   return localAdministratorOnly
     ? <LocalAdministratorGuard>{content}</LocalAdministratorGuard>
     : content;
@@ -104,9 +99,8 @@ function AuthorizationGate({ children }: { children: React.ReactNode }) {
   return (
     <AuthorizationProvider
       featurePositions={auth.user?.featurePositions ?? []}
-      permissions={auth.user?.permissions ?? []}
       loading={!auth.isInitialized}
-      refreshPermissions={auth.retrySessionValidation}
+      refreshFeatures={auth.retrySessionValidation}
     >
       {children}
     </AuthorizationProvider>
@@ -163,7 +157,7 @@ function AppRoutes() {
             path={entry.path}
             element={(
               <RouteAccess
-                permissions={entry.permissions} featurePosition={entry.featurePosition}
+                featurePosition={entry.featurePosition}
                 localAdministratorOnly={entry.localAdministratorOnly}
               >
                 {renderPageEntry(entry)}
@@ -179,7 +173,7 @@ function AppRoutes() {
             key={entry.path}
             path={entry.path}
             element={(
-              <RouteAccess permissions={entry.permissions} featurePosition={entry.featurePosition}>
+              <RouteAccess featurePosition={entry.featurePosition}>
                 <RouteCapabilityOutlet capability={{
                   kind: 'standard-crud-detail',
                   targetKey: entry.viewKey,
@@ -194,7 +188,7 @@ function AppRoutes() {
             path={route.path}
             element={(
               <RouteAccess
-                permissions={route.permissions} featurePosition={route.featurePosition}
+                featurePosition={route.featurePosition}
                 localAdministratorOnly={route.localAdministratorOnly}
               >
                 <RouteCapabilityOutlet capability={{

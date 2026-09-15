@@ -16,7 +16,7 @@ public static class RelationTreeExtensions
 {
     private sealed record Catalog(IReadOnlyList<RelationTreeDefinition> Trees, IReadOnlySet<string> FeatureTrees);
 
-    /// <summary>消费冻结候选的关系树配置，权限从节点对应的已注册资源派生。</summary>
+    /// <summary>消费冻结候选的关系树配置，读取资格来自活动功能声明。</summary>
     public static IServiceCollection AddRelationTrees(this IServiceCollection services, CanonicalModulePlan plan)
     {
         var trees = RelationTreeMetadata.Project(plan);
@@ -26,26 +26,6 @@ public static class RelationTreeExtensions
         services.AddSingleton(new Catalog(trees, featureTrees));
         services.AddScoped<RelationTreeSql>();
         services.AddScoped<RelationTreeReader>();
-        if (trees.Count == 0) return services;
-        services.AddOptions<AuthorizationOptions>().Configure<IStandardCrudResourceRegistry>((options, registry) =>
-        {
-            foreach (var tree in trees)
-            {
-                if (featureTrees.Contains(tree.ViewKey)) continue;
-                var permissions = tree.Source.Nodes.Select(node =>
-                {
-                    var resource = registry.FindByResourceKey(node.ResourceKey)
-                        ?? throw new InvalidOperationException($"Missing tree resource: {node.ResourceKey}");
-                    var permission = resource.Authorization?.GetPermissionCode(StandardCrudOperation.List);
-                    if (resource.ModuleId != tree.ModuleId || permission is null
-                        || !plan.Modules.Single(module => module.ModuleId == tree.ModuleId).PermissionCodes.Contains(permission, StringComparer.Ordinal))
-                        throw new InvalidOperationException($"Invalid tree resource permission: {node.ResourceKey}");
-                    return permission;
-                }).Distinct(StringComparer.Ordinal).ToArray();
-                options.AddPolicy(Policy(tree), policy => policy.RequireAuthenticatedUser().AddRequirements(
-                    permissions.Select(permission => new PermissionAuthorizationRequirement(permission)).ToArray()));
-            }
-        });
         return services;
     }
 
@@ -88,14 +68,11 @@ public static class RelationTreeExtensions
                         var result = operation == "children" ? await reader.ChildrenAsync(tree, nodeKey, token) : await reader.PathAsync(tree, nodeKey, token);
                         return result is null ? Results.NotFound() : Results.Ok(result);
                     }).WithMetadata(new EndpointModuleAttribute(tree.ModuleId)).RequireAuthorization(catalog.FeatureTrees.Contains(tree.ViewKey)
-                        ? new RequireFeatureAttribute("tree:" + tree.ViewKey) : new AuthorizeAttribute(Policy(tree)));
+                        ? new RequireFeatureAttribute("tree:" + tree.ViewKey) : new DenyAllAttribute("该关系树没有活动功能声明。"));
             }
         }
         return endpoints;
     }
-
-    // 每棵树一个包含全部节点权限的终端策略，与 endpoint 覆盖审计保持一致。
-    private static string Policy(RelationTreeDefinition tree) => "Platform.RelationTree." + tree.ViewKey;
 
     // 输入错误使用带字段的 Problem Details，便于调用方定位而不解析消息文本。
     private static IResult Invalid(string field, string message) => Results.ValidationProblem(new Dictionary<string, string[]> { [field] = [message] });

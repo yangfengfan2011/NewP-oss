@@ -4,7 +4,7 @@ using Microsoft.Extensions.Options;
 namespace ICP.Platform.Authorization.Http;
 
 /// <summary>
-/// 把 RequirePermission policy 名编译为单一 PermissionGate requirement。
+/// 把 功能 policy 名编译为功能位置 requirement。
 /// </summary>
 public sealed class PermissionAuthorizationPolicyProvider : DefaultAuthorizationPolicyProvider
 {
@@ -18,18 +18,6 @@ public sealed class PermissionAuthorizationPolicyProvider : DefaultAuthorization
         if (policyName.StartsWith(RequireFeatureAttribute.Prefix, StringComparison.Ordinal))
             return Task.FromResult<AuthorizationPolicy?>(new AuthorizationPolicyBuilder().RequireAuthenticatedUser()
                 .AddRequirements(new FeatureAuthorizationRequirement(policyName[RequireFeatureAttribute.Prefix.Length..])).Build());
-        if (policyName.StartsWith(RequirePermissionAttribute.PolicyPrefix, StringComparison.Ordinal))
-        {
-            var permissionCode = policyName[RequirePermissionAttribute.PolicyPrefix.Length..];
-            if (!string.IsNullOrWhiteSpace(permissionCode))
-            {
-                var policy = new AuthorizationPolicyBuilder()
-                    .RequireAuthenticatedUser()
-                    .AddRequirements(new PermissionAuthorizationRequirement(permissionCode))
-                    .Build();
-                return Task.FromResult<AuthorizationPolicy?>(policy);
-            }
-        }
 
         return base.GetPolicyAsync(policyName);
     }

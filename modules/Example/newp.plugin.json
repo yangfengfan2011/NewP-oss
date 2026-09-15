@@ -25,40 +25,6 @@
       "example.record.detail"
     ]
   },
-  "security": {
-    "permissions": [
-      {
-        "code": "Example.View",
-        "displayName": "查看功能示例",
-        "description": "允许访问功能示例页面",
-        "group": "功能示例"
-      },
-      {
-        "code": "Example.Record.View",
-        "displayName": "查看示例记录",
-        "description": "允许查看持久化示例记录",
-        "group": "功能示例"
-      },
-      {
-        "code": "Example.Record.Create",
-        "displayName": "新建示例记录",
-        "description": "允许新建持久化示例记录",
-        "group": "功能示例"
-      },
-      {
-        "code": "Example.Record.Update",
-        "displayName": "更新示例记录",
-        "description": "允许更新持久化示例记录",
-        "group": "功能示例"
-      },
-      {
-        "code": "Example.Record.Delete",
-        "displayName": "删除示例记录",
-        "description": "允许删除持久化示例记录",
-        "group": "功能示例"
-      }
-    ]
-  },
   "persistence": {
     "models": [
       "metadata/models/ExampleRecord.model.json"

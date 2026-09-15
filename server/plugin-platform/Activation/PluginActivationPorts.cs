@@ -25,14 +25,6 @@ public interface IPluginCandidatePlanCompiler
 }
 
 /// <summary>
-/// 在 Host 组合前验证候选计划的有效权限目录。
-/// </summary>
-public interface IPluginPermissionCatalogValidator
-{
-    void Validate(CanonicalModulePlan plan);
-}
-
-/// <summary>
 /// 从同一个 Canonical Module Plan 编译唯一持久化计划实例。
 /// </summary>
 public interface IPluginPersistencePlanCompiler

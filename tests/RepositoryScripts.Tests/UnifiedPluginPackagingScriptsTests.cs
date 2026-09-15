@@ -123,7 +123,6 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
         var point = Assert.Single(compilation.Plan!.FeatureCatalog);
         Assert.Equal("CanonicalSample", point.ModuleId);
         Assert.Equal("canonical-sample.read", point.BehaviorKey);
-        Assert.Empty(Assert.Single(compilation.Plan.Modules).PermissionCodes);
 
         var backendProject = File.ReadAllText(
             Path.Combine(fixtureRoot, "server", "modules", "CanonicalSample", "CanonicalSample.csproj"));

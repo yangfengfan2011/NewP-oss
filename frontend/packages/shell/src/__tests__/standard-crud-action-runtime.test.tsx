@@ -31,7 +31,7 @@ describe('standard CRUD action runtime', () => {
 
   async function renderActions({
     actions,
-    grantedPermissions = [],
+    grantedPositions = actions.map(action => action.key),
     handlers,
     actionInputs,
     actionStateResolver,
@@ -39,7 +39,7 @@ describe('standard CRUD action runtime', () => {
     refresh = vi.fn(),
   }: {
     actions: StandardCrudActionDefinition[];
-    grantedPermissions?: string[];
+    grantedPositions?: string[];
     handlers?: Record<string, StandardCrudActionHandler>;
     actionInputs?: Record<string, StandardCrudActionInputRenderer>;
     actionStateResolver?: StandardCrudActionStateResolver;
@@ -54,7 +54,8 @@ describe('standard CRUD action runtime', () => {
       root.render(
         <StandardCrudActions
           actions={actions}
-          grantedPermissions={grantedPermissions}
+          featurePositionForAction={action => action.key}
+          hasFeature={position => grantedPositions.includes(position)}
           handlers={handlers}
           actionInputs={actionInputs}
           actionStateResolver={actionStateResolver}
@@ -90,13 +91,13 @@ describe('standard CRUD action runtime', () => {
     });
   }
 
-  it('filters actions by required permissions', async () => {
+  it('filters actions by their declared feature positions', async () => {
     await renderActions({
       actions: [
-        { key: 'edit', labelKey: '编辑', requiredPermissions: ['Organization.Person.Edit'] },
-        { key: 'disable', labelKey: '停用', requiredPermissions: ['Organization.Person.Disable'] },
+        { key: 'edit', labelKey: '编辑' },
+        { key: 'disable', labelKey: '停用' },
       ],
-      grantedPermissions: ['Organization.Person.Edit'],
+      grantedPositions: ['edit'],
       handlers: {
         edit: vi.fn(),
         disable: vi.fn(),

@@ -30,7 +30,6 @@ export interface RuntimeNavItem {
   path?: string;
   parentKey?: string;
   order?: number;
-  permissions?: string[];
   localAdministratorOnly?: boolean;
   shellViews?: string[];
   entryType?: 'standard-list' | 'custom' | 'standard-crud-detail';

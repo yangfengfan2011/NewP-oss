@@ -36,44 +36,5 @@
   "features": [
     { "key": "authorization.workbench", "kind": "navigation", "title": "功能授权", "behaviorKey": "authorization.workbench.read" },
     { "key": "save", "kind": "action", "title": "保存授权", "parentKey": "authorization.workbench", "behaviorKey": "authorization.workbench.save" }
-  ],
-  "security": {
-    "permissions": [
-      {
-        "code": "Authorization.Role.View",
-        "displayName": "查看角色",
-        "group": "角色管理"
-      },
-      {
-        "code": "Authorization.Role.Create",
-        "displayName": "创建角色",
-        "group": "角色管理"
-      },
-      {
-        "code": "Authorization.Role.Edit",
-        "displayName": "编辑角色",
-        "group": "角色管理"
-      },
-      {
-        "code": "Authorization.Role.Delete",
-        "displayName": "删除角色",
-        "group": "角色管理"
-      },
-      {
-        "code": "Authorization.Permission.View",
-        "displayName": "查看权限",
-        "group": "角色管理"
-      },
-      {
-        "code": "Authorization.Permission.Assign",
-        "displayName": "分配权限",
-        "group": "角色管理"
-      },
-      {
-        "code": "Authorization.User.AssignRole",
-        "displayName": "分配用户角色",
-        "group": "角色管理"
-      }
-    ]
-  }
+  ]
 }

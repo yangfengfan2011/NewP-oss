@@ -27,7 +27,6 @@ public sealed class StandardPluginBlueprintCompilerTests : IDisposable
         Assert.Equal("Assets", resource.TableName);
         Assert.Equal("partner.asset.detail", resource.DetailViewKey);
         Assert.Equal("UX_Assets_Code", Assert.Single(resource.UniqueIndexes));
-        Assert.Empty(resource.PermissionCodes);
     }
 
     [Theory]

@@ -13,7 +13,7 @@ const coreAuthentication = vi.hoisted(() => ({
     id: 'User_1',
     ecode: 'admin',
     ename: 'Administrator',
-    permissions: ['Identity.Users.Manage'],
+    featurePositions: ['Identity.Users.Manage'],
     mustChangePassword: false,
     revision: 4,
     isLocalAdministrator: true,
@@ -60,7 +60,7 @@ describe('AuthProvider core authentication composition', () => {
 
     expect(observedAuth?.user?.revision).toBe(4);
     expect(observedAuth?.user?.isLocalAdministrator).toBe(true);
-    expect(observedAuth?.hasPermission('Identity.Users.Manage')).toBe(true);
+    expect(observedAuth?.user?.featurePositions).toEqual(['Identity.Users.Manage']);
     expect(observedAuth?.changePassword).toBe(coreAuthentication.changePassword);
   });
 });

@@ -7,22 +7,22 @@ namespace ICP.Platform.Crud.Tests;
 public sealed class StandardCrudAuthorizationTests
 {
     [Theory]
-    [InlineData(StandardCrudOperation.List, "Organization.Person.View")]
-    [InlineData(StandardCrudOperation.Detail, "Organization.Person.View")]
-    [InlineData(StandardCrudOperation.Options, "Organization.Person.View")]
-    [InlineData(StandardCrudOperation.Export, "Organization.Person.View")]
-    [InlineData(StandardCrudOperation.Create, "Organization.Person.Create")]
-    [InlineData(StandardCrudOperation.Update, "Organization.Person.Update")]
-    [InlineData(StandardCrudOperation.Disable, "Organization.Person.Update")]
-    [InlineData(StandardCrudOperation.Enable, "Organization.Person.Update")]
-    [InlineData(StandardCrudOperation.Delete, "Organization.Person.Delete")]
-    public void ByConvention_MapsOperationToFixedPermission(
+    [InlineData(StandardCrudOperation.List, "organization.person.read")]
+    [InlineData(StandardCrudOperation.Detail, "organization.person.read")]
+    [InlineData(StandardCrudOperation.Options, "organization.person.lookup")]
+    [InlineData(StandardCrudOperation.Export, "organization.person.export")]
+    [InlineData(StandardCrudOperation.Create, "organization.person.create")]
+    [InlineData(StandardCrudOperation.Update, "organization.person.update")]
+    [InlineData(StandardCrudOperation.Disable, "organization.person.disable")]
+    [InlineData(StandardCrudOperation.Enable, "organization.person.enable")]
+    [InlineData(StandardCrudOperation.Delete, "organization.person.delete")]
+    public void ByFeature_MapsOperationToFixedPermission(
         StandardCrudOperation operation,
         string expectedPermission)
     {
-        var authorization = StandardCrudAuthorization.ByConvention("Organization.Person");
+        var authorization = StandardCrudAuthorization.ByFeature("organization.person", Enum.GetValues<StandardCrudOperation>());
 
-        var permission = authorization.GetPermissionCode(operation);
+        var permission = authorization.GetFeatureBehavior(operation);
 
         Assert.Equal(expectedPermission, permission);
     }
@@ -39,8 +39,8 @@ public sealed class StandardCrudAuthorizationTests
 
         Assert.Equal(
             [
-                StandardCrudAuthorizationFailureCodes.OperationUnmapped,
-                StandardCrudAuthorizationFailureCodes.PermissionStemMissing
+                StandardCrudAuthorizationFailureCodes.FeatureBehaviorStemMissing,
+                StandardCrudAuthorizationFailureCodes.OperationUnmapped
             ],
             exception.Diagnostics.Select(static diagnostic => diagnostic.Code));
     }
@@ -50,8 +50,8 @@ public sealed class StandardCrudAuthorizationTests
     {
         var descriptors = new[]
         {
-            Descriptor("organization.person", StandardCrudAuthorization.ByConvention("Organization.Person")),
-            Descriptor("organization.person", StandardCrudAuthorization.ByConvention("Organization.Person"))
+            Descriptor("organization.person", StandardCrudAuthorization.ByFeature("Organization.Person")),
+            Descriptor("organization.person", StandardCrudAuthorization.ByFeature("Organization.Person"))
         };
 
         var exception = Assert.Throws<StandardCrudAuthorizationValidationException>(() =>
@@ -66,8 +66,8 @@ public sealed class StandardCrudAuthorizationTests
     {
         var descriptors = new[]
         {
-            Descriptor("organization.person", StandardCrudAuthorization.ByConvention("Organization.Person")),
-            Descriptor("organization.person", StandardCrudAuthorization.ByConvention("Other.Person"))
+            Descriptor("organization.person", StandardCrudAuthorization.ByFeature("Organization.Person")),
+            Descriptor("organization.person", StandardCrudAuthorization.ByFeature("Other.Person"))
         };
 
         var exception = Assert.Throws<StandardCrudAuthorizationValidationException>(() =>

@@ -38,8 +38,6 @@ public sealed class CanonicalModuleAssemblyLoaderTests : IDisposable
             [],
             [],
             [],
-            [],
-            [],
             new ModulePlanProvenance("installed-package", Path.Combine(packageRoot, "plugin.json"), "/"));
         var plan = new CanonicalModulePlan(
             "candidate",
@@ -72,8 +70,6 @@ public sealed class CanonicalModuleAssemblyLoaderTests : IDisposable
             null,
             null,
             "legacy-module",
-            [],
-            [],
             [],
             [],
             [],

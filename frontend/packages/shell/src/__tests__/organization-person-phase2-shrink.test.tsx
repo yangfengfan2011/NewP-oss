@@ -20,13 +20,13 @@ describe('organization person standard CRUD phase 2 registration', () => {
     expect(Object.keys(personStandardCrudResource.actionHandlers ?? {})).toEqual(['delete', 'disable', 'enable']);
   });
 
-  it('keeps permissions in metadata and exposes one runtime data adapter', () => {
+  it('uses metadata ownership and exposes one runtime data adapter', () => {
     const personnelNavigation = organizationNavDocument.navigation.items.find(
       (item) => item.targetKey === personStandardCrudResource.listViewKey,
     );
 
-    expect(personStandardCrudResource.permissions).toBeUndefined();
-    expect(personnelNavigation?.permissions).toEqual(['Organization.Person.View']);
+    expect(personStandardCrudResource).not.toHaveProperty('permissions');
+    expect(personnelNavigation).not.toHaveProperty('permissions');
     expect(personStandardCrudResource).not.toHaveProperty('createEmptyFilters');
     expect(personStandardCrudResource).not.toHaveProperty('buildListQuery');
     expect(personStandardCrudResource).not.toHaveProperty('apiRoute');

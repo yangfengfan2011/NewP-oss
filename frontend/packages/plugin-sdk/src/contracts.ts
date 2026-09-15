@@ -70,6 +70,6 @@ export interface StandardDataResourceProjection {
   schemaName: string;
   tableName: string;
   uniqueIndexes: string[];
-  permissionCodes: string[];
+
   detailViewKey?: string;
 }

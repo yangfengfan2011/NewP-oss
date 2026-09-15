@@ -5,7 +5,7 @@ using ICP.Platform.Kernel.Abstractions;
 namespace ICP.Platform.Sdk;
 
 /// <summary>
-/// C# 行为实现只暴露稳定 behavior key；模块身份、版本与权限由嵌入的根 capsule 拥有。
+/// C# 行为实现只暴露稳定 behavior key；模块身份与版本由嵌入的根 capsule 拥有。
 /// </summary>
 public interface IModuleBehaviorBinding
 {
@@ -13,9 +13,9 @@ public interface IModuleBehaviorBinding
 }
 
 /// <summary>
-/// 把嵌入式 Module Capsule 适配到现有 IModule/IPermissionProvider 接口。
+/// 把嵌入式 Module Capsule 适配到现有 IModule 接口。
 /// </summary>
-public abstract class ModuleCapsuleBindingBase : ModuleBase, IPermissionProvider, IModuleBehaviorBinding
+public abstract class ModuleCapsuleBindingBase : ModuleBase, IModuleBehaviorBinding
 {
     private CapsuleDocument? _capsule;
 
@@ -30,20 +30,6 @@ public abstract class ModuleCapsuleBindingBase : ModuleBase, IPermissionProvider
     public sealed override string? Description => Capsule.Description;
 
     public sealed override IReadOnlyList<string> Dependencies => Capsule.Dependencies;
-
-    public IReadOnlyList<PermissionDescriptor> GetPermissions()
-    {
-        return Capsule.Security.Permissions
-            .Select(permission => new PermissionDescriptor
-            {
-                Code = permission.Code,
-                DisplayName = permission.DisplayName,
-                Description = permission.Description,
-                ModuleId = ModuleId,
-                Group = permission.Group
-            })
-            .ToArray();
-    }
 
     private CapsuleDocument Capsule => _capsule ??= LoadCapsule();
 
@@ -91,7 +77,6 @@ public abstract class ModuleCapsuleBindingBase : ModuleBase, IPermissionProvider
         public string? Description { get; set; }
         public IReadOnlyList<string> Dependencies { get; set; } = Array.Empty<string>();
         public CapsuleBackend Backend { get; set; } = new();
-        public CapsuleSecurity Security { get; set; } = new();
     }
 
     private sealed class CapsuleBackend
@@ -99,16 +84,4 @@ public abstract class ModuleCapsuleBindingBase : ModuleBase, IPermissionProvider
         public string BehaviorKey { get; set; } = string.Empty;
     }
 
-    private sealed class CapsuleSecurity
-    {
-        public IReadOnlyList<CapsulePermission> Permissions { get; set; } = Array.Empty<CapsulePermission>();
-    }
-
-    private sealed class CapsulePermission
-    {
-        public string Code { get; set; } = string.Empty;
-        public string DisplayName { get; set; } = string.Empty;
-        public string? Description { get; set; }
-        public string? Group { get; set; }
-    }
 }

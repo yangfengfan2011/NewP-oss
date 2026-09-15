@@ -333,14 +333,8 @@ public sealed class CanonicalRuntimeViewMaterializerTests : IDisposable
         {
             CreatePublicBuiltInModule("Identity", identityRoot) with { FrontendEntry = "entry.js" },
             CreatePublicBuiltInModule("Organization", organizationRoot) with { FrontendEntry = "entry.js" },
-            CreatePublicBuiltInModule("Authentication", authenticationRoot) with
-            {
-                PermissionCodes = ["authentication.session.read"]
-            },
-            CreatePublicBuiltInModule("Authorization", authorizationRoot) with
-            {
-                PermissionCodes = ["authorization.permission.read"]
-            }
+            CreatePublicBuiltInModule("Authentication", authenticationRoot),
+            CreatePublicBuiltInModule("Authorization", authorizationRoot)
         };
         var plan = new CanonicalModulePlan(
             "candidate",
@@ -366,16 +360,9 @@ public sealed class CanonicalRuntimeViewMaterializerTests : IDisposable
             File.ReadAllText(Path.Combine(stage.StagedRuntimeRoot, "active-module-runtime.json")));
         var activeModules = activeCatalog.RootElement.GetProperty("modules").EnumerateArray().ToArray();
         Assert.Equal(4, activeModules.Length);
+        Assert.All(activeModules, module => Assert.False(module.TryGetProperty("permissionCodes", out _)));
         Assert.Contains(activeModules, module => module.GetProperty("moduleId").GetString() == "Authentication");
         Assert.Contains(activeModules, module => module.GetProperty("moduleId").GetString() == "Authorization");
-        Assert.Contains(
-            "authentication.session.read",
-            activeModules.Single(module => module.GetProperty("moduleId").GetString() == "Authentication")
-                .GetProperty("permissionCodes").EnumerateArray().Select(static code => code.GetString()));
-        Assert.Contains(
-            "authorization.permission.read",
-            activeModules.Single(module => module.GetProperty("moduleId").GetString() == "Authorization")
-                .GetProperty("permissionCodes").EnumerateArray().Select(static code => code.GetString()));
     }
 
     [Fact]
@@ -529,7 +516,7 @@ public sealed class CanonicalRuntimeViewMaterializerTests : IDisposable
     }
 
     private static CanonicalModulePlanModule CreatePublicBuiltInModule(string moduleId, string packageRoot) =>
-        new(
+        new CanonicalModulePlanModule(
             moduleId,
             "1.0.0",
             moduleId,
@@ -540,8 +527,6 @@ public sealed class CanonicalRuntimeViewMaterializerTests : IDisposable
             null,
             null,
             "legacy-module",
-            [],
-            [],
             [],
             [],
             [],

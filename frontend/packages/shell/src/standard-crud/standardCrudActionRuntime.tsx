@@ -14,7 +14,6 @@ import { useStandardCrudActionExecution } from './useStandardCrudActionExecution
 
 export interface StandardCrudActionsProps<TDetail = unknown, TRow = unknown> {
   actions: StandardCrudPresentationActionDefinition[];
-  grantedPermissions?: string[];
   featurePositionForAction?: (action: StandardCrudActionDefinition) => string | undefined;
   hasFeature?: (position: string) => boolean;
   handlers?: Record<string, StandardCrudActionHandler<TDetail, TRow>>;
@@ -32,9 +31,6 @@ export interface StandardCrudPresentationActionDefinition extends StandardCrudAc
   disabledReason?: string;
 }
 
-function hasPermission(action: StandardCrudActionDefinition, grantedPermissions: string[]): boolean {
-  return (action.requiredPermissions ?? []).every((permission) => grantedPermissions.includes(permission));
-}
 
 function resolveActionHandler<TDetail = unknown, TRow = unknown>(
   action: StandardCrudActionDefinition,
@@ -46,7 +42,6 @@ function resolveActionHandler<TDetail = unknown, TRow = unknown>(
 /** 标准 CRUD 动作运行时只收口权限、确认、pending 和错误展示；具体业务副作用由模块 handler 承担。 */
 export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
   actions,
-  grantedPermissions = [],
   featurePositionForAction,
   hasFeature,
   handlers = {},
@@ -69,13 +64,12 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
     };
   });
   const visibleActions = resolvedActions.filter((action) => (
-    action.runtimeVisible && (featurePositionForAction
-      ? hasFeature?.(featurePositionForAction(action) ?? '') === true : hasPermission(action, grantedPermissions))
+    action.runtimeVisible && hasFeature?.(featurePositionForAction?.(action) ?? '') === true
   ));
 
   async function runAction(action: StandardCrudActionDefinition, input?: unknown): Promise<boolean> {
     const featurePosition = featurePositionForAction?.(action);
-    if (featurePositionForAction && !hasFeature?.(featurePosition ?? '')) return false;
+    if (!hasFeature?.(featurePosition ?? '')) return false;
     const handler = resolveActionHandler(action, handlers);
     if (!handler) {
       return false;

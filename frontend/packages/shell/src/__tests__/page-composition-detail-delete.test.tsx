@@ -1,3 +1,4 @@
+import './authorizedFeatureUiFixture';
 // @vitest-environment jsdom
 import { act, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';

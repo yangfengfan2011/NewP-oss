@@ -1,3 +1,5 @@
+import './authorizedFeatureUiFixture';
+import { FeaturePlacementContext } from '../authorization/FeaturePlacementContext';
 // @vitest-environment jsdom
 import { act, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -67,7 +69,7 @@ it.each(['standard', 'stable', 'handler', 'input', 'denied', 'disabled', 'create
     nodeTypes: [{ key: 'department', titleKey: 'Department', pageRef: { pageKey: 'content' }, contextMenu: [actionReference] }] } };
 
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
-  const router = createMemoryRouter([{ path: '/', element: <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={{ zhs: {} }}><AuthorizationProvider permissions={scenario === 'denied' ? ['Organization.Department.View'] : ['Organization.Department.View', 'Organization.Department.Delete', 'Organization.Department.Create']}><PlatformQueryProvider scopeKey="test"><RuntimeMetadataProvider value={{ manifest: { modules: [] }, navDocuments: [], modelDocuments: [runtimeModels.department], viewDocuments: [listDocument, detail, tree] }}><PageEntry page={{ pageKey: 'platform.tree', parameters: { viewKey: 'tree' }, inputResolverKey: 'scope' }} /></RuntimeMetadataProvider></PlatformQueryProvider></AuthorizationProvider></LocalizationProvider> }]);
+  const router = createMemoryRouter([{ path: '/', element: <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={{ zhs: {} }}><AuthorizationProvider featurePositions={[]}><FeaturePlacementContext.Provider value={scenario === 'denied' ? { entryPosition: 'denied.read' } : null}><PlatformQueryProvider scopeKey="test"><RuntimeMetadataProvider value={{ manifest: { modules: [] }, navDocuments: [], modelDocuments: [runtimeModels.department], viewDocuments: [listDocument, detail, tree] }}><PageEntry page={{ pageKey: 'platform.tree', parameters: { viewKey: 'tree' }, inputResolverKey: 'scope' }} /></RuntimeMetadataProvider></PlatformQueryProvider></FeaturePlacementContext.Provider></AuthorizationProvider></LocalizationProvider> }]);
   let finished = false;
   const cleanup = async () => {
     if (finished) return;
@@ -83,6 +85,14 @@ it.each(['standard', 'stable', 'handler', 'input', 'denied', 'disabled', 'create
   try {
     await act(async () => root.render(<StrictMode><RouterProvider router={router} /></StrictMode>));
     await waitFor(() => Boolean(container.querySelector('.ant-tree-title')));
+    if (scenario === 'denied') {
+      expect(container.querySelector('[role=toolbar][aria-label="树操作"]')).toBeNull();
+      await act(async () => container.querySelector('.ant-tree-title')!.firstElementChild!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
+      expect(document.querySelector('[role=menuitem]')).toBeNull();
+      expect(requests.filter(item => item.startsWith('DELETE'))).toHaveLength(0);
+      expect(document.querySelector('[role=dialog]')).toBeNull();
+      return;
+    }
     const treeActions = container.querySelector('[role=toolbar][aria-label="树操作"]')!;
     expect([...treeActions.querySelectorAll('button')].map(button => button.textContent?.replace(/\s/g, ''))).toEqual(['CreateCompany', 'Department']);
     if (scenario === 'create') {
@@ -106,7 +116,7 @@ it.each(['standard', 'stable', 'handler', 'input', 'denied', 'disabled', 'create
       expect(requests.filter(item => item.startsWith('DELETE'))).toHaveLength(0);
       return;
     }
-    if (scenario === 'denied' || scenario === 'disabled') {
+    if (scenario === 'disabled') {
       await waitFor(() => Boolean(document.querySelector('[role=alert]')));
       expect(requests.filter(item => item.startsWith('DELETE'))).toHaveLength(0);
       expect(document.querySelector('[role=dialog]')).toBeNull();

@@ -81,7 +81,7 @@ public sealed record StandardPersistenceBlueprint(
 public sealed record StandardMigrationBundleBlueprint(string Assembly, string Manifest);
 
 /// <summary>
-/// 单个资源的确定性 API、页面、权限和物理存储投影。
+/// 单个资源的确定性 API、页面和物理存储投影。
 /// </summary>
 public sealed record StandardDataResourceProjection(
     string ResourceKey,
@@ -90,7 +90,6 @@ public sealed record StandardDataResourceProjection(
     string SchemaName,
     string TableName,
     IReadOnlyList<string> UniqueIndexes,
-    IReadOnlyList<string> PermissionCodes,
     string? DetailViewKey = null);
 
 /// <summary>

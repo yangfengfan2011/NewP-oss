@@ -30,7 +30,7 @@ describe('Organization management authoring consumers', () => {
       expect(entries.find(entry => entry.path === `/organization/${tab}`)).toMatchObject({ redirectTo: `/organization/structure?tab=${tab}` });
     }
     const projection = compileStandardCrudRouteProjection(modules, metadata.navDocuments, metadata.viewDocuments, []);
-    expect(projection.detailEntries).toEqual([{ path: '/organization/persons/:id', viewKey: 'organization.person.detail', permissions: ['Organization.Person.View'] }]);
+    expect(projection.detailEntries).toEqual([{ path: '/organization/persons/:id', viewKey: 'organization.person.detail', featurePosition: undefined }]);
     const withoutAliases = metadata.navDocuments.map(document => ({ ...document, navigation: { items: document.navigation.items.filter(item => !item.redirectTo) } }));
     expect(compileStandardCrudRouteProjection(modules, withoutAliases, metadata.viewDocuments, []).detailEntries).toEqual(projection.detailEntries);
   });

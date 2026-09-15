@@ -3,7 +3,7 @@ using ICP.Platform.Crud.Descriptors;
 namespace ICP.Platform.Crud.Runtime;
 
 /// <summary>
-/// 在 endpoint 映射前聚合校验 Standard CRUD 权限前缀和操作声明。
+/// 在 endpoint 映射前聚合校验 Standard CRUD 功能行为前缀和操作声明。
 /// </summary>
 public static class StandardCrudAuthorizationValidator
 {
@@ -36,12 +36,12 @@ public static class StandardCrudAuthorizationValidator
         foreach (var descriptor in descriptorList)
         {
             if (descriptor.Authorization is null
-                || (string.IsNullOrWhiteSpace(descriptor.Authorization.PermissionStem) && string.IsNullOrWhiteSpace(descriptor.Authorization.FeatureBehaviorStem)))
+                || string.IsNullOrWhiteSpace(descriptor.Authorization.FeatureBehaviorStem))
             {
                 diagnostics.Add(new StandardCrudAuthorizationDiagnostic(
-                    StandardCrudAuthorizationFailureCodes.PermissionStemMissing,
+                    StandardCrudAuthorizationFailureCodes.FeatureBehaviorStemMissing,
                     descriptor.ResourceKey,
-                    "Standard CRUD descriptor must declare a Permission Stem."));
+                    "Standard CRUD descriptor must declare a Feature Behavior Stem."));
             }
         }
 
@@ -52,7 +52,7 @@ public static class StandardCrudAuthorizationValidator
                 diagnostics.Add(new StandardCrudAuthorizationDiagnostic(
                     StandardCrudAuthorizationFailureCodes.OperationUnmapped,
                     "*",
-                    $"Standard CRUD operation {(int)operation} is not mapped to a permission."));
+                    $"Standard CRUD operation {(int)operation} is not mapped to a feature behavior."));
             }
         }
 
@@ -66,7 +66,7 @@ public static class StandardCrudAuthorizationValidator
             }
 
             var stems = group
-                .Select(static descriptor => descriptor.Authorization?.PermissionStem)
+                .Select(static descriptor => descriptor.Authorization?.FeatureBehaviorStem)
                 .Where(static stem => !string.IsNullOrWhiteSpace(stem))
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
@@ -77,8 +77,8 @@ public static class StandardCrudAuthorizationValidator
                     : StandardCrudAuthorizationFailureCodes.DeclarationDuplicate,
                 group.Key,
                 isConflict
-                    ? "Standard CRUD resource declares conflicting Permission Stems."
-                    : "Standard CRUD resource repeats the same Permission Stem declaration."));
+                    ? "Standard CRUD resource declares conflicting Feature Behavior Stems."
+                    : "Standard CRUD resource repeats the same Feature Behavior Stem declaration."));
         }
 
         if (diagnostics.Count == 0)

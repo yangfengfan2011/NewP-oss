@@ -207,7 +207,6 @@ public static class StandardCrudEndpointRouteBuilderExtensions
     private static RouteHandlerBuilder RequireCrudOperation(this RouteHandlerBuilder endpoint,
         StandardCrudAuthorization authorization, StandardCrudOperation operation)
     {
-        if (authorization.FeatureBehaviorStem is null) return endpoint.RequirePermission(authorization.GetPermissionCode(operation));
         var behavior = authorization.GetFeatureBehavior(operation);
         return behavior is null ? endpoint.RequireAuthorization(new DenyAllAttribute("该标准操作没有活动功能声明。"))
             : endpoint.RequireAuthorization(new RequireFeatureAttribute(behavior));

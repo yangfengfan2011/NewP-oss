@@ -47,11 +47,6 @@ public record MenuDescriptor
     public int Order { get; init; }
 
     /// <summary>
-    /// 所需权限代码
-    /// </summary>
-    public string? RequiredPermission { get; init; }
-
-    /// <summary>
     /// 所属模块 ID
     /// </summary>
     public required string ModuleId { get; init; }

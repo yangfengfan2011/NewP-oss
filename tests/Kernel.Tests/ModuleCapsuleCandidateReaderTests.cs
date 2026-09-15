@@ -143,12 +143,6 @@ public sealed class ModuleCapsuleCandidateReaderTests : IDisposable
         Assert.Equal(
             ["organization.person.detail", "organization.person.list", "organization.tree.page"],
             candidate.FrontendBindingReferences.OrderBy(static key => key, StringComparer.Ordinal));
-        Assert.Equal(
-            ["Organization.Person.Update", "Organization.Person.View"],
-            candidate.PermissionCodes.OrderBy(static code => code, StringComparer.Ordinal));
-        Assert.Equal(
-            ["Organization.Person.Update", "Organization.Person.View"],
-            candidate.PermissionReferences.Distinct(StringComparer.Ordinal).OrderBy(static code => code, StringComparer.Ordinal));
         Assert.Equal(["Organization.Person"], candidate.ModelKeys);
         Assert.NotNull(candidate.Persistence);
         Assert.Equal(["metadata/models/Person.model.json"], candidate.Persistence.ModelPaths);

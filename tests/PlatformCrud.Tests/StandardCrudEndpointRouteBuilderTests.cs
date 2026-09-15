@@ -5,7 +5,6 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using ICP.Platform.Authorization;
-using ICP.Platform.Authorization.Abstractions;
 using ICP.Platform.Authorization.Extensions;
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Abstractions;
@@ -28,7 +27,7 @@ namespace ICP.Platform.Crud.Tests;
 public sealed class StandardCrudEndpointRouteBuilderTests
 {
     [Fact]
-    public void MapStandardCrudResources_AttachesFixedPermissionRequirementsToEveryRoute()
+    public void MapStandardCrudResources_AttachesFeatureBehaviorRequirementsToEveryRoute()
     {
         var recording = new RecordingStandardCrudService();
         using var app = BuildApp(recording);
@@ -39,17 +38,17 @@ public sealed class StandardCrudEndpointRouteBuilderTests
             .Select(endpoint => new EndpointPermission(
                 endpoint.RoutePattern.RawText,
                 endpoint.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods ?? [],
-                endpoint.Metadata.GetMetadata<RequirePermissionAttribute>()?.PermissionCode))
+                endpoint.Metadata.GetMetadata<RequireFeatureAttribute>()?.BehaviorKey))
             .ToArray();
 
-        AssertPermission(requirements, "GET", "/api/organization/persons", "Organization.Person.View");
-        AssertPermission(requirements, "GET", "/api/organization/persons/options", "Organization.Person.View");
-        AssertPermission(requirements, "POST", "/api/organization/persons/export", "Organization.Person.View");
-        AssertPermission(requirements, "GET", "/api/organization/persons/{id}", "Organization.Person.View");
-        AssertPermission(requirements, "POST", "/api/organization/persons", "Organization.Person.Create");
-        AssertPermission(requirements, "PUT", "/api/organization/persons/{id}", "Organization.Person.Update");
-        AssertPermission(requirements, "POST", "/api/organization/persons/{id}/disable", "Organization.Person.Update");
-        AssertPermission(requirements, "DELETE", "/api/organization/persons/{id}", "Organization.Person.Delete");
+        AssertPermission(requirements, "GET", "/api/organization/persons", "organization.person.read");
+        AssertPermission(requirements, "GET", "/api/organization/persons/options", "organization.person.lookup");
+        AssertPermission(requirements, "POST", "/api/organization/persons/export", "organization.person.export");
+        AssertPermission(requirements, "GET", "/api/organization/persons/{id}", "organization.person.read");
+        AssertPermission(requirements, "POST", "/api/organization/persons", "organization.person.create");
+        AssertPermission(requirements, "PUT", "/api/organization/persons/{id}", "organization.person.update");
+        AssertPermission(requirements, "POST", "/api/organization/persons/{id}/disable", "organization.person.disable");
+        AssertPermission(requirements, "DELETE", "/api/organization/persons/{id}", "organization.person.delete");
         Assert.All(requirements, static requirement => Assert.NotNull(requirement.Permission));
     }
 
@@ -380,6 +379,7 @@ public sealed class StandardCrudEndpointRouteBuilderTests
             context.User = new ClaimsPrincipal(new ClaimsIdentity(
                 [new Claim(ClaimTypes.NameIdentifier, "standard-crud-test-subject")],
                 "StandardCrudTests"));
+            context.Request.Headers["X-NewP-Feature"] = "fixture.read";
             await next();
         });
         app.UseAuthorization();
@@ -392,7 +392,7 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
         builder.Services.AddPlatformAuthorization();
-        builder.Services.AddSingleton<IPermissionDecisionSource, GrantAllPermissionDecisionSource>();
+        builder.Services.AddSingleton<ICP.Platform.Authorization.Http.IFeatureDecisionSource, GrantAllPermissionDecisionSource>();
         builder.Services.AddSingleton<IStandardCrudService>(recording);
         builder.Services.AddSingleton<StandardCrudXlsxWriter>();
         builder.Services.AddScoped<StandardCrudEndpoint>();
@@ -401,11 +401,12 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         return builder;
     }
 
-    private sealed class GrantAllPermissionDecisionSource : IPermissionDecisionSource
+    private sealed class GrantAllPermissionDecisionSource : ICP.Platform.Authorization.Http.IFeatureDecisionSource
     {
         public ValueTask<PermissionDecision> EvaluateAsync(
             string subjectId,
-            string permissionCode,
+            string position,
+            string behaviorKey,
             CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(PermissionDecision.Granted);
     }
@@ -438,7 +439,7 @@ public sealed class StandardCrudEndpointRouteBuilderTests
                     new TemporalFieldDisplayProjectionPlan("EmploymentStartedAt", "EmploymentStartedAt_DisplayValue", TemporalDisplayFormat.DateTime),
                     new TemporalFieldDisplayProjectionPlan("EmploymentEndedAt", "EmploymentEndedAt_DisplayValue", TemporalDisplayFormat.DateTime)
                 ]),
-            Authorization = StandardCrudAuthorization.ByConvention("Organization.Person"),
+            Authorization = StandardCrudAuthorization.ByFeature("organization.person", Enum.GetValues<StandardCrudOperation>()),
             DeletePolicy = StandardCrudDeletePolicy.Conditional
         };
 

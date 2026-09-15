@@ -13,14 +13,12 @@ public sealed class CanonicalModulePlanCompilerTests
             dependencies: ["Authorization"],
             routes: ["/organization/tree", "/organization/persons"],
             frontendBindings: ["organization.tree.page", "organization.positions.page"],
-            permissions: ["Organization.Person.Update", "Organization.Person.View"],
             models: ["Organization.Person", "Organization.Department"]);
         var authorization = CreateCapsule(
             moduleId: "Authorization",
             dependencies: [],
             routes: ["/authorization/roles"],
             frontendBindings: ["authorization.roles.page"],
-            permissions: ["Authorization.Role.View"],
             models: ["Authorization.Role"]);
 
         var compiler = new CanonicalModulePlanCompiler();
@@ -33,7 +31,6 @@ public sealed class CanonicalModulePlanCompilerTests
                 {
                     Routes = authorization.Routes.Reverse().ToArray(),
                     FrontendBindings = authorization.FrontendBindings.Reverse().ToArray(),
-                    PermissionCodes = authorization.PermissionCodes.Reverse().ToArray(),
                     ModelKeys = authorization.ModelKeys.Reverse().ToArray()
                 },
                 organization with
@@ -41,7 +38,6 @@ public sealed class CanonicalModulePlanCompilerTests
                     Dependencies = organization.Dependencies.Reverse().ToArray(),
                     Routes = organization.Routes.Reverse().ToArray(),
                     FrontendBindings = organization.FrontendBindings.Reverse().ToArray(),
-                    PermissionCodes = organization.PermissionCodes.Reverse().ToArray(),
                     ModelKeys = organization.ModelKeys.Reverse().ToArray()
                 }
             ]);
@@ -64,14 +60,12 @@ public sealed class CanonicalModulePlanCompilerTests
             dependencies: [],
             routes: ["/organization/persons"],
             frontendBindings: ["organization.person.list"],
-            permissions: ["Organization.Person.View"],
             models: ["Organization.Person"]);
         var lower = CreateCapsule(
             moduleId: "organization",
             dependencies: [],
             routes: ["/duplicate"],
             frontendBindings: ["organization.duplicate.page"],
-            permissions: ["organization.Duplicate.View"],
             models: ["organization.Duplicate"]);
 
         var result = new CanonicalModulePlanCompiler().Compile("candidate-collision", [lower, upper]);
@@ -92,7 +86,6 @@ public sealed class CanonicalModulePlanCompilerTests
             dependencies: ["Authorization"],
             routes: ["/organization/persons"],
             frontendBindings: ["organization.person.list"],
-            permissions: ["Organization.Person.View"],
             models: ["Organization.Person"]);
 
         var result = new CanonicalModulePlanCompiler().Compile("candidate-missing-dependency", [organization]);
@@ -113,14 +106,12 @@ public sealed class CanonicalModulePlanCompilerTests
             dependencies: ["Authorization"],
             routes: ["/organization/persons"],
             frontendBindings: ["organization.person.list"],
-            permissions: ["Organization.Person.View"],
             models: ["Organization.Person"]);
         var authorization = CreateCapsule(
             moduleId: "Authorization",
             dependencies: ["Organization"],
             routes: ["/authorization/roles"],
             frontendBindings: ["authorization.roles.page"],
-            permissions: ["Authorization.Role.View"],
             models: ["Authorization.Role"]);
 
         var result = new CanonicalModulePlanCompiler().Compile(
@@ -142,7 +133,6 @@ public sealed class CanonicalModulePlanCompilerTests
             dependencies: [],
             routes: ["/organization/tree"],
             frontendBindings: ["organization.tree.page"],
-            permissions: ["Organization.Person.View"],
             models: ["Organization.Person"])
             with
             {
@@ -166,7 +156,6 @@ public sealed class CanonicalModulePlanCompilerTests
             dependencies: [],
             routes: ["/organization/tree"],
             frontendBindings: ["organization.tree.page", "organization.orphan.page"],
-            permissions: ["Organization.Person.View"],
             models: ["Organization.Person"])
             with
             {
@@ -182,29 +171,7 @@ public sealed class CanonicalModulePlanCompilerTests
         Assert.Equal("organization.orphan.page", diagnostic.CanonicalKey);
     }
 
-    [Fact]
-    public void Compile_PermissionReferenceIsNotDeclaredByCandidate_RejectsWholeCandidate()
-    {
-        var organization = CreateCapsule(
-            moduleId: "Organization",
-            dependencies: [],
-            routes: ["/organization/persons"],
-            frontendBindings: ["organization.person.list"],
-            permissions: ["Organization.Person.View"],
-            models: ["Organization.Person"])
-            with
-            {
-                PermissionReferences = ["Organization.Person.View", "Organization.Person.Missing"]
-            };
 
-        var result = new CanonicalModulePlanCompiler().Compile("candidate-invalid-permission", [organization]);
-
-        Assert.False(result.IsSuccess);
-        Assert.Null(result.Plan);
-        var diagnostic = Assert.Single(result.Diagnostics);
-        Assert.Equal("MODULE_PERMISSION_REFERENCE_INVALID", diagnostic.Code);
-        Assert.Equal("Organization.Person.Missing", diagnostic.CanonicalKey);
-    }
 
     [Fact]
     public void Compile_NormalizedRoutesHaveDifferentOwners_RejectsWholeCandidate()
@@ -214,14 +181,12 @@ public sealed class CanonicalModulePlanCompilerTests
             dependencies: [],
             routes: ["/organization/persons/"],
             frontendBindings: ["organization.person.list"],
-            permissions: ["Organization.Person.View"],
             models: ["Organization.Person"]);
         var partner = CreateCapsule(
             moduleId: "Partner",
             dependencies: [],
             routes: ["/ORGANIZATION/PERSONS"],
             frontendBindings: ["partner.asset.list"],
-            permissions: ["Partner.Asset.View"],
             models: ["Partner.Asset"]);
 
         var result = new CanonicalModulePlanCompiler().Compile("candidate-route-conflict", [partner, organization]);
@@ -243,14 +208,12 @@ public sealed class CanonicalModulePlanCompilerTests
             dependencies: [],
             routes: ["/organization/persons"],
             frontendBindings: ["organization.person.list"],
-            permissions: ["Organization.Person.View"],
             models: ["shared.Person"]);
         var partner = CreateCapsule(
             moduleId: "Partner",
             dependencies: [],
             routes: ["/partner/assets"],
             frontendBindings: ["partner.asset.list"],
-            permissions: ["Partner.Asset.View"],
             models: ["shared.Person"]);
 
         var result = new CanonicalModulePlanCompiler().Compile("candidate-model-conflict", [partner, organization]);
@@ -269,7 +232,6 @@ public sealed class CanonicalModulePlanCompilerTests
         IReadOnlyList<string> dependencies,
         IReadOnlyList<string> routes,
         IReadOnlyList<string> frontendBindings,
-        IReadOnlyList<string> permissions,
         IReadOnlyList<string> models)
     {
         return new ModuleCapsuleCandidate(
@@ -287,8 +249,6 @@ public sealed class CanonicalModulePlanCompilerTests
             Routes: routes,
             FrontendBindings: frontendBindings,
             FrontendBindingReferences: frontendBindings,
-            PermissionCodes: permissions,
-            PermissionReferences: permissions,
             ModelKeys: models,
             Provenance: new ModulePlanProvenance(
                 SourceKind: "fixture",

@@ -5,7 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace ICP.Platform.ExternalPluginTemplate;
 
-public class ExternalPluginModule : ModuleBase, IPermissionProvider
+public class ExternalPluginModule : ModuleBase
 {
     public override string ModuleId => "ExternalPlugin";
     public override string DisplayName => "外部插件模板";
@@ -16,17 +16,4 @@ public class ExternalPluginModule : ModuleBase, IPermissionProvider
         services.AddScoped<IExternalPluginStatusService, ExternalPluginStatusService>();
     }
 
-    public IReadOnlyList<PermissionDescriptor> GetPermissions()
-    {
-        return new[]
-        {
-            new PermissionDescriptor
-            {
-                Code = "ExternalPlugin.View",
-                DisplayName = "查看外部插件模板",
-                ModuleId = ModuleId,
-                Group = "外部插件模板"
-            }
-        };
-    }
 }

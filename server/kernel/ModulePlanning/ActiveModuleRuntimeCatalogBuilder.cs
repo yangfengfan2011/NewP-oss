@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 
 namespace ICP.Platform.Kernel.ModulePlanning;
@@ -19,20 +17,12 @@ public sealed class ActiveModuleRuntimeCatalogBuilder
     public string Build(CanonicalModulePlan plan)
     {
         ArgumentNullException.ThrowIfNull(plan);
-        var permissionBytes = Encoding.UTF8.GetBytes(string.Join(
-            "\n",
-            plan.Modules
-                .SelectMany(static module => module.PermissionCodes)
-                .Distinct(StringComparer.Ordinal)
-                .OrderBy(static code => code, StringComparer.Ordinal)));
-        var permissionCatalogHash = Convert.ToHexStringLower(SHA256.HashData(permissionBytes));
         var catalog = new
         {
             schemaVersion = "1.0",
             snapshotId = plan.SnapshotId,
             compilerContractVersion = plan.CompilerContractVersion,
             planHash = plan.PlanHash,
-            permissionCatalogHash,
             projections = new
             {
                 frontend = "/plugins/frontend-plugin-manifest.json",
@@ -56,7 +46,6 @@ public sealed class ActiveModuleRuntimeCatalogBuilder
                     },
                 frontend = BuildFrontend(module),
                 metadataBasePath = $"/plugins/runtime/modules/{module.ModuleId}/metadata",
-                permissionCodes = module.PermissionCodes,
                 modelKeys = module.ModelKeys
             }).ToArray()
         };

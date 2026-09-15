@@ -261,7 +261,6 @@ public sealed partial class StandardPluginBlueprintCompiler
             schemaName,
             resource.PluralName,
             indexes,
-            [],
             resource.DetailViewKey);
     }
 

@@ -93,8 +93,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         using var otherResponse = await FeatureHttpTestRequests.SendAsync(admin, http.Role("create"), HttpMethod.Post, "/api/authorization/roles", new { Code = "Other", Name = "另一职责" });
         var otherId = (await otherResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
         var route = $"/api/authorization/users/{userId}/roles";
-        using var permissions = await admin.PutAsJsonAsync($"/api/authorization/roles/{roleId}/permissions", new { PermissionCodes = new[] { "Organization.Person.View" } });
-        Assert.Equal(HttpStatusCode.NoContent, permissions.StatusCode);
+        await http.GrantAsync(admin, roleId!, http.Organization("persons"));
         using var saved = await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, route, new { RoleCodes = new[] { "Assigned", "Other" } });
         Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         foreach (var codes in new[] { new[] { "Assigned", "Other" }, new[] { "Other", "Assigned", "Assigned" } })
@@ -116,13 +115,13 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         }
         using var user = await fixture.LoginAsync("assigned-user", account.GetProperty("temporaryCredential").GetString()!);
         var projection = await user.GetFromJsonAsync<JsonElement>("/api/auth/current-user");
-        Assert.Contains(projection.GetProperty("permissions").EnumerateArray(), p => p.GetString() == "Organization.Person.View");
+        Assert.Contains(projection.GetProperty("featurePositions").EnumerateArray(), p => p.GetString() == http.Organization("persons").Position);
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(admin);
         using var rename = await FeatureHttpTestRequests.SendAsync(admin, http.Role("edit"), HttpMethod.Put, $"/api/authorization/roles/{roleId}", new { Name = "新职责名", IsEnabled = false });
         Assert.True(rename.IsSuccessStatusCode);
         Assert.Equal(HttpStatusCode.NoContent, (await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, route, new { RoleCodes = new[] { "Assigned", "Other" } })).StatusCode);
         var inactive = await user.GetFromJsonAsync<JsonElement>("/api/auth/current-user");
-        Assert.DoesNotContain(inactive.GetProperty("permissions").EnumerateArray(), p => p.GetString() == "Organization.Person.View");
+        Assert.DoesNotContain(inactive.GetProperty("featurePositions").EnumerateArray(), p => p.GetString() == http.Organization("persons").Position);
         var historyAfterRename = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), $"/api/audit/business-changes?TargetId={userId}");
         var unchangedRecord = Assert.Single(historyAfterRename.GetProperty("items").EnumerateArray());
         var detail = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), $"/api/audit/business-changes/{unchangedRecord.GetProperty("EID").GetString()}");

@@ -1,3 +1,4 @@
+import './authorizedFeatureUiFixture';
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -863,6 +864,7 @@ describe('StandardCrudDetailPageHost', () => {
       'Person_1',
       { ENAME: '李四', Revision: 4 },
       initialDetail.fields,
+      { featurePosition: 'ui-fixture:detail.pageActions:edit' },
     );
 
     const reloadButton = Array.from(document.body.querySelectorAll('button')).find((button) =>
@@ -885,6 +887,7 @@ describe('StandardCrudDetailPageHost', () => {
       'Person_1',
       { ENAME: '李四', Revision: 5 },
       latestDetail.fields,
+      { featurePosition: 'ui-fixture:detail.pageActions:edit' },
     );
     expect(get).toHaveBeenCalledTimes(3);
   });

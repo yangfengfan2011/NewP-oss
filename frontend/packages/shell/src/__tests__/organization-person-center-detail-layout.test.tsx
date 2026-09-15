@@ -1,3 +1,4 @@
+import './authorizedFeatureUiFixture';
 // @vitest-environment jsdom
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

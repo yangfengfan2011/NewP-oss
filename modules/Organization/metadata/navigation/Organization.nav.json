@@ -19,9 +19,6 @@
         "order": 110,
         "entryType": "standard-list",
         "targetKey": "organization.person.list",
-        "permissions": [
-          "Organization.Person.View"
-        ],
         "routeOnly": true,
         "redirectTo": "/organization/structure?tab=persons"
       },
@@ -35,9 +32,6 @@
         "order": 120,
         "entryType": "standard-list",
         "targetKey": "organization.company.list",
-        "permissions": [
-          "Organization.Company.View"
-        ],
         "routeOnly": true,
         "redirectTo": "/organization/structure?tab=companies"
       },
@@ -51,9 +45,6 @@
         "order": 130,
         "entryType": "standard-list",
         "targetKey": "organization.department.list",
-        "permissions": [
-          "Organization.Department.View"
-        ],
         "routeOnly": true,
         "redirectTo": "/organization/structure?tab=departments"
       },
@@ -67,9 +58,6 @@
         "order": 140,
         "entryType": "standard-list",
         "targetKey": "organization.position.list",
-        "permissions": [
-          "Organization.Position.View"
-        ],
         "routeOnly": true,
         "redirectTo": "/organization/structure?tab=positions"
       },
@@ -80,12 +68,6 @@
         "parentKey": "organization",
         "path": "/organization/structure",
         "order": 105,
-        "permissions": [
-          "Organization.Company.View",
-          "Organization.Department.View",
-          "Organization.Position.View",
-          "Organization.Person.View"
-        ],
         "page": {
           "pageKey": "platform.tabs",
           "parameters": {
@@ -99,10 +81,7 @@
         "path": "/organization/persons/:id",
         "routeOnly": true,
         "entryType": "standard-crud-detail",
-        "targetKey": "organization.person.detail",
-        "permissions": [
-          "Organization.Person.View"
-        ]
+        "targetKey": "organization.person.detail"
       }
     ]
   }

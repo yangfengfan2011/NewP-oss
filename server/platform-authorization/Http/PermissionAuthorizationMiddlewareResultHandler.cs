@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace ICP.Platform.Authorization.Http;
 
 /// <summary>
-/// 保留标准 401/403，并将 PermissionGate 的不可判定结果稳定映射为 503。
+/// 保留标准 401/403，并将功能判权的不可判定结果稳定映射为 503。
 /// </summary>
 public sealed class PermissionAuthorizationMiddlewareResultHandler
     : IAuthorizationMiddlewareResultHandler

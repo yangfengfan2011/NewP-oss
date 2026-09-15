@@ -5,7 +5,6 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Authorization;
-using ICP.Platform.Authorization.Abstractions;
 using ICP.Platform.Authorization.Extensions;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Crud.Abstractions;
@@ -58,7 +57,7 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
             builder.WebHost.UseTestServer();
             builder.Services.AddAuthentication("Test").AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, TestAuthentication>("Test", _ => { });
             builder.Services.AddPlatformAuthorization();
-            builder.Services.AddSingleton<IPermissionDecisionSource, GrantedPermissions>();
+            builder.Services.AddSingleton<ICP.Platform.Authorization.Http.IFeatureDecisionSource, GrantedPermissions>();
             builder.Services.AddStandardCrudKernel();
             builder.Services.AddStandardCrudResource(CompanyCrudDescriptorFactory.Create());
             builder.Services.AddStandardCrudResource(DepartmentCrudDescriptorFactory.Create());
@@ -98,6 +97,7 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
             }
             await app.StartAsync();
             using var client = app.GetTestClient();
+            client.DefaultRequestHeaders.Add("X-NewP-Feature", "fixture");
             async Task<string> Create(string resource, Dictionary<string, object?> values)
             {
                 using var response = await client.PostAsJsonAsync("/api/organization/" + resource, values);
@@ -157,8 +157,8 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
             Assert.Equal(HttpStatusCode.Forbidden, rejected.StatusCode); Assert.Empty(recorder.Commands);
 
             const string standard = "/api/trees/organization.structure/";
-            // 树读取策略组合公司与部门两项权限：整体拒绝或缺任一项都在执行 SQL 之前被拒绝。
-            foreach (var deny in new[] { "1", "Organization.Company.View", "Organization.Department.View" })
+            // 树读取使用其声明的功能行为；拒绝发生在执行 SQL 之前。
+            foreach (var deny in new[] { "1", "tree:organization.structure" })
             {
                 recorder.Commands.Clear();
                 using var deniedTree = new HttpRequestMessage(HttpMethod.Get, standard + "roots?scope=global");
@@ -181,7 +181,7 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
             // 原生 DbCommand 沿用连接直接执行；SQL 形状由执行器测试证明，结果由真实数据库证明。
             var standardPath = await client.GetFromJsonAsync<JsonElement>(standard + "path?scope=global&nodeKey=" + Uri.EscapeDataString("department:" + second));
             Assert.Equal(2, standardPath.GetArrayLength());
-            foreach (var permission in new[] { "Organization.Company.View", "Organization.Department.View" })
+            foreach (var permission in new[] { "tree:organization.structure" })
             {
                 using var request = new HttpRequestMessage(HttpMethod.Get, standard + "search?scope=global&keyword=Department&page=1&pageSize=20");
                 request.Headers.Add("X-Deny", permission);
@@ -306,9 +306,9 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
     {
         public RequestPresentationContext? Current => new("zh-CN", "Asia/Taipei");
     }
-    private sealed class GrantedPermissions : IPermissionDecisionSource
+    private sealed class GrantedPermissions : ICP.Platform.Authorization.Http.IFeatureDecisionSource
     {
-        public ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string permissionCode, CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult(subjectId == "1" || subjectId == permissionCode ? PermissionDecision.Denied : PermissionDecision.Granted);
+        public ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string position, string behaviorKey, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(subjectId == "1" || subjectId == behaviorKey ? PermissionDecision.Denied : PermissionDecision.Granted);
     }
 }

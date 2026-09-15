@@ -22,9 +22,6 @@
       "identity.account.detail"
     ]
   },
-  "security": {
-    "permissions": []
-  },
   "persistence": {
     "models": [
       "metadata/models/IdentityAccount.model.json",

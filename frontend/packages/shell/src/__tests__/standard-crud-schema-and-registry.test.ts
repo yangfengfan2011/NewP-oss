@@ -641,7 +641,6 @@ describe('standard CRUD schema resolver and registry', () => {
       key: 'create',
       standardAction: 'create',
       variant: 'primary',
-      requiredPermissions: ['Organization.Person.Create'],
     });
     expect(schema.rowActions[0]).toMatchObject({
       key: 'disable',

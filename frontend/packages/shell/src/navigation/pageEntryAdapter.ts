@@ -12,10 +12,10 @@ export function buildPageEntriesFromNavDocuments(
       entryType: item.entryType,
       targetKey: item.targetKey,
       ...(item.redirectTo ? { redirectTo: item.redirectTo } : {}),
-      permissions: item.permissions, featurePosition: item.featurePosition,
+      featurePosition: item.featurePosition,
       ...(item.localAdministratorOnly ? { localAdministratorOnly: true } : {}),
     })), ...document.navigation.items.filter(item => item.path && item.page).map(item => ({
-      path: item.path!, entryType: 'page' as const, targetKey: item.page!.pageKey, page: { ...item.page!, parameters: { ...item.page!.parameters, ...(item.featurePosition ? { featurePosition: item.featurePosition } : {}) } }, permissions: item.permissions, featurePosition: item.featurePosition,
+      path: item.path!, entryType: 'page' as const, targetKey: item.page!.pageKey, page: { ...item.page!, parameters: { ...item.page!.parameters, ...(item.featurePosition ? { featurePosition: item.featurePosition } : {}) } }, featurePosition: item.featurePosition,
     }))],
   );
 }
@@ -46,17 +46,10 @@ export function resolveRouteableMetadataEntries(
 
     const entry = entries[0];
     const moduleRoute = moduleRouteByPath.get(path);
-    const inheritedPermissions = entry.permissions && entry.permissions.length > 0
-      ? entry.permissions
-      : moduleRoute?.permissions;
     const localAdministratorOnly = entry.localAdministratorOnly || moduleRoute?.localAdministratorOnly;
     const access = localAdministratorOnly ? { localAdministratorOnly: true } : {};
 
-    resolvedEntries.push(
-      inheritedPermissions && inheritedPermissions.length > 0
-        ? { ...entry, permissions: inheritedPermissions, ...access }
-        : { ...entry, permissions: undefined, ...access },
-    );
+    resolvedEntries.push({ ...entry, featurePosition: entry.featurePosition ?? moduleRoute?.featurePosition, ...access });
   }
 
   return resolvedEntries;

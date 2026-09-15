@@ -15,6 +15,6 @@ export function CurrentPermissionScope({ children }: { children: ReactNode }) {
     previousPath.current = pathname;
     if (isAuthenticated) void retrySessionValidation().catch(() => undefined);
   }, [pathname, isAuthenticated, retrySessionValidation]);
-  const scopeKey = JSON.stringify([auth.user?.id, currentLanguage, auth.permissionEpoch, [...(auth.user?.permissions ?? [])].sort(), [...(auth.user?.featurePositions ?? [])].sort()]);
+  const scopeKey = JSON.stringify([auth.user?.id, currentLanguage, auth.permissionEpoch, [...(auth.user?.featurePositions ?? [])].sort()]);
   return <PlatformQueryProvider scopeKey={scopeKey}>{children}</PlatformQueryProvider>;
 }

@@ -12,7 +12,6 @@ public sealed class PluginActivationGate
     private readonly PluginLifecycleManager _lifecycleManager;
     private readonly IPluginPackagePreflight _packagePreflight;
     private readonly IPluginCandidatePlanCompiler _modulePlanCompiler;
-    private readonly IPluginPermissionCatalogValidator _permissionCatalogValidator;
     private readonly IPluginPersistencePlanCompiler _persistencePlanCompiler;
     private readonly IPluginRuntimeProjection _runtimeProjection;
 
@@ -20,14 +19,12 @@ public sealed class PluginActivationGate
         PluginLifecycleManager lifecycleManager,
         IPluginPackagePreflight packagePreflight,
         IPluginCandidatePlanCompiler modulePlanCompiler,
-        IPluginPermissionCatalogValidator permissionCatalogValidator,
         IPluginPersistencePlanCompiler persistencePlanCompiler,
         IPluginRuntimeProjection runtimeProjection)
     {
         _lifecycleManager = lifecycleManager;
         _packagePreflight = packagePreflight;
         _modulePlanCompiler = modulePlanCompiler;
-        _permissionCatalogValidator = permissionCatalogValidator;
         _persistencePlanCompiler = persistencePlanCompiler;
         _runtimeProjection = runtimeProjection;
     }
@@ -47,9 +44,6 @@ public sealed class PluginActivationGate
         RunPhase(
             PluginActivationFailureCodes.RuntimeMetadataValidationFailed,
             () => _runtimeProjection.Validate(modulePlan));
-        RunPhase(
-            PluginActivationFailureCodes.PermissionCatalogFailed,
-            () => _permissionCatalogValidator.Validate(modulePlan));
         var persistencePlan = RunPhase(
             PluginActivationFailureCodes.PersistencePlanFailed,
             () => _persistencePlanCompiler.Compile(modulePlan));

@@ -502,13 +502,13 @@ describe('active-module-runtime-loader', () => {
             apiRoute: '/api/standard/partner-asset-catalog/assets',
             pageRoute: '/assets',
             detailViewKey: 'partner.asset.detail',
-            permissionCodes: [],
+
           },
           {
             resourceKey: 'Audit',
             apiRoute: '/api/standard/partner-asset-catalog/audits',
             pageRoute: '/audits',
-            permissionCodes: [],
+
           },
         ],
       };

@@ -18,7 +18,6 @@ export interface RouteConfig {
   component: ComponentType;
   exact?: boolean;
   requireAuth?: boolean;
-  permissions?: string[];
   featurePosition?: string;
   localAdministratorOnly?: boolean;
 }
@@ -29,17 +28,9 @@ export interface MenuConfig {
   path?: string;
   icon?: string;
   order?: number;
-  permissions?: string[];
   featurePosition?: string;
   localAdministratorOnly?: boolean;
   children?: MenuConfig[];
-}
-
-export interface PermissionDeclaration {
-  code: string;
-  name: string;
-  description?: string;
-  category?: string;
 }
 
 export interface StandardListPageDefinition {
@@ -243,7 +234,6 @@ export interface FrontendModule {
   treeProviders?: TreeProviderBinding[];
   routes?: RouteConfig[];
   menus?: MenuConfig[];
-  permissions?: PermissionDeclaration[];
   i18n?: I18nResource[];
   initialize?: () => void | Promise<void>;
   cleanup?: () => void | Promise<void>;
@@ -263,7 +253,6 @@ export interface AuthUser {
   id: string;
   ecode: string;
   ename: string;
-  permissions: string[];
   mustChangePassword: boolean;
   revision: number;
   isLocalAdministrator: boolean;
@@ -335,9 +324,6 @@ export class ModuleRegistry {
     return menus.sort((a, b) => (a.order || 999) - (b.order || 999));
   }
 
-  static getPermissions(): PermissionDeclaration[] {
-    return this.getAllModules().flatMap(m => m.permissions || []);
-  }
 
   static getI18nResources(locale: string): Record<string, string> {
     const resources: Record<string, string> = {};
@@ -392,9 +378,6 @@ export interface AuthContext {
   login: (ecode: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
-  hasPermission: (permission: string) => boolean;
-  hasAnyPermission: (permissions: string[]) => boolean;
-  hasAllPermissions: (permissions: string[]) => boolean;
 }
 
 export interface PlatformContext {

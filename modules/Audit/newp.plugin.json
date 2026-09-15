@@ -25,25 +25,6 @@
       "audit.change.detail"
     ]
   },
-  "security": {
-    "permissions": [
-      {
-        "code": "Audit.BusinessChange.View",
-        "displayName": "查看业务变更记录",
-        "group": "业务变更记录"
-      },
-      {
-        "code": "Audit.OperationLog.View",
-        "displayName": "查看操作日志",
-        "group": "操作日志"
-      },
-      {
-        "code": "Audit.AccessLog.View",
-        "displayName": "查看访问日志",
-        "group": "访问日志"
-      }
-    ]
-  },
   "persistence": {
     "models": [
       "metadata/models/BusinessChange.model.json"

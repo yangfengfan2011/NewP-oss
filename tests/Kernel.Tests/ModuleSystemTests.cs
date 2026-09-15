@@ -27,22 +27,7 @@ public class ModuleSystemTests
         Assert.Equal("Test", modules["Test"].ModuleId);
     }
 
-    [Fact]
-    public void ModuleRegistry_CollectsPermissions()
-    {
-        // Arrange
-        var registry = new ModuleRegistry();
-        var module = new TestModuleWithPermissions();
 
-        // Act
-        registry.RegisterModule(module);
-
-        // Assert
-        var permissions = registry.GetAllPermissions();
-        Assert.Equal(2, permissions.Count);
-        Assert.Contains(permissions, p => p.Code == "Test.View");
-        Assert.Contains(permissions, p => p.Code == "Test.Manage");
-    }
 
     [Fact]
     public void ModuleRegistry_CollectsMenus()
@@ -174,30 +159,7 @@ public class TestModule : ModuleBase
     public void SetModuleId(string id) => _moduleId = id;
 }
 
-public class TestModuleWithPermissions : ModuleBase, IPermissionProvider
-{
-    public override string ModuleId => "TestPermissions";
-    public override string DisplayName => "测试权限模块";
 
-    public IReadOnlyList<PermissionDescriptor> GetPermissions()
-    {
-        return new[]
-        {
-            new PermissionDescriptor
-            {
-                Code = "Test.View",
-                DisplayName = "查看",
-                ModuleId = ModuleId
-            },
-            new PermissionDescriptor
-            {
-                Code = "Test.Manage",
-                DisplayName = "管理",
-                ModuleId = ModuleId
-            }
-        };
-    }
-}
 
 public class TestModuleWithMenus : ModuleBase, IMenuProvider
 {

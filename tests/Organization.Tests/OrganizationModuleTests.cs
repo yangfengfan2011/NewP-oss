@@ -1,3 +1,4 @@
+using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Modules.Organization;
 using ICP.Platform.Modules.Organization.Services;
@@ -35,25 +36,26 @@ public class OrganizationModuleTests
     }
 
     [Fact]
-    public void GetPermissions_DeclaresPersonCompanyDepartmentAndPositionLifecyclePermissions()
+    public void CurrentAuthoring_CompilesLifecyclePositionsWithTheirExecutionBehaviors()
     {
-        var module = new OrganizationModule();
-        var permissions = module.GetPermissions();
+        var module = Path.Combine(FindRepositoryRoot(), "modules", "Organization");
+        var documents = Directory.GetFiles(Path.Combine(module, "metadata"), "*.json", SearchOption.AllDirectories)
+            .Select(path => JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(path)));
+        var capsule = JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(Path.Combine(module, "newp.plugin.json")));
+        var declared = FeatureCatalogCompiler.Read(capsule, "Organization");
+        var points = FeatureCatalogCompiler.Compile(declared
+            .Concat(StandardFeatureMetadataCompiler.Read("Organization", documents, declared)));
 
-        Assert.Contains(permissions, permission => permission.Code == "Organization.Person.View");
-        Assert.Contains(permissions, permission => permission.Code == "Organization.Person.Create");
-        Assert.Contains(permissions, permission => permission.Code == "Organization.Company.View");
-        Assert.Contains(permissions, permission => permission.Code == "Organization.Company.Create");
-        Assert.Contains(permissions, permission => permission.Code == "Organization.Company.Update");
-        Assert.Contains(permissions, permission => permission.Code == "Organization.Company.Delete");
-        Assert.Contains(permissions, permission => permission.Code == "Organization.Department.View");
-        Assert.Contains(permissions, permission => permission.Code == "Organization.Department.Create");
-        Assert.Contains(permissions, permission => permission.Code == "Organization.Department.Update");
-        Assert.Contains(permissions, permission => permission.Code == "Organization.Department.Delete");
-        Assert.Contains(permissions, permission => permission.Code == "Organization.Position.View");
-        Assert.Contains(permissions, permission => permission.Code == "Organization.Position.Create");
-        Assert.Contains(permissions, permission => permission.Code == "Organization.Position.Update");
-        Assert.Contains(permissions, permission => permission.Code == "Organization.Position.Delete");
+        foreach (var resource in new[] { "person", "company", "department", "position" })
+        {
+            foreach (var operation in new[] { "read", "create", "update" })
+            {
+                Assert.Contains(points, point => point.BehaviorKey == $"organization.{resource}.{operation}");
+            }
+        }
+        Assert.Contains(points, point => point.BehaviorKey == "organization.person.enable");
+        Assert.Contains(points, point => point.BehaviorKey == "organization.person.disable");
+        Assert.All(points, point => Assert.StartsWith("Organization/", point.Position));
     }
 
     [Fact]
@@ -139,9 +141,9 @@ public class OrganizationModuleTests
             Path.Combine(root, @"modules\Organization\metadata\views\PersonList.view.json"),
             Encoding.UTF8));
         var actions = listView.RootElement.GetProperty("view").GetProperty("rowActions").EnumerateArray().ToArray();
-        Assert.Equal("Organization.Person.Update", RequiredPermission(actions, "edit"));
-        Assert.Equal("Organization.Person.Update", RequiredPermission(actions, "disable"));
-        Assert.Equal("Organization.Person.Update", RequiredPermission(actions, "enable"));
+        Assert.Equal("edit", StandardAction(actions, "edit"));
+        Assert.Equal("disable", StandardAction(actions, "disable"));
+        Assert.Equal("enable", StandardAction(actions, "enable"));
 
         var advancedSections = listView.RootElement.GetProperty("view")
             .GetProperty("advancedFilter")
@@ -212,11 +214,11 @@ public class OrganizationModuleTests
         Assert.Equal(2, actions.Length);
         var edit = actions.Single(action => action.GetProperty("key").GetString() == "edit");
         Assert.Equal("edit", edit.GetProperty("standardAction").GetString());
-        Assert.Equal("Organization.Position.Update", RequiredPermission(actions, "edit"));
+        Assert.Equal("edit", StandardAction(actions, "edit"));
         var delete = actions.Single(action => action.GetProperty("key").GetString() == "delete");
         Assert.Equal("delete", delete.GetProperty("standardAction").GetString());
         Assert.Equal("Action_Delete_Confirm", delete.GetProperty("confirmMessageKey").GetString());
-        Assert.Equal("Organization.Position.Delete", RequiredPermission(actions, "delete"));
+        Assert.Equal("delete", StandardAction(actions, "delete"));
         Assert.False(delete.TryGetProperty("visibleWhen", out _));
         Assert.False(delete.TryGetProperty("disabledWhen", out _));
     }
@@ -248,8 +250,8 @@ public class OrganizationModuleTests
         Assert.Equal("create", Assert.Single(view.GetProperty("pageActions").EnumerateArray()).GetProperty("standardAction").GetString());
         var rowActions = view.GetProperty("rowActions").EnumerateArray().ToArray();
         Assert.Equal(["edit", "delete"], rowActions.Select(action => action.GetProperty("standardAction").GetString()));
-        Assert.Equal("Organization.Company.Update", RequiredPermission(rowActions, "edit"));
-        Assert.Equal("Organization.Company.Delete", RequiredPermission(rowActions, "delete"));
+        Assert.Equal("edit", StandardAction(rowActions, "edit"));
+        Assert.Equal("delete", StandardAction(rowActions, "delete"));
         Assert.Equal("organization.company.detail", view.GetProperty("detailViewKey").GetString());
         Assert.False(view.TryGetProperty("export", out _));
         Assert.False(view.TryGetProperty("bulkActions", out _));
@@ -293,8 +295,8 @@ public class OrganizationModuleTests
         Assert.Equal("create", Assert.Single(view.GetProperty("pageActions").EnumerateArray()).GetProperty("standardAction").GetString());
         var rowActions = view.GetProperty("rowActions").EnumerateArray().ToArray();
         Assert.Equal(["edit", "delete"], rowActions.Select(action => action.GetProperty("standardAction").GetString()));
-        Assert.Equal("Organization.Department.Update", RequiredPermission(rowActions, "edit"));
-        Assert.Equal("Organization.Department.Delete", RequiredPermission(rowActions, "delete"));
+        Assert.Equal("edit", StandardAction(rowActions, "edit"));
+        Assert.Equal("delete", StandardAction(rowActions, "delete"));
         Assert.Equal("organization.department.detail", view.GetProperty("detailViewKey").GetString());
         Assert.False(view.TryGetProperty("export", out _));
         Assert.False(view.TryGetProperty("bulkActions", out _));
@@ -360,9 +362,9 @@ public class OrganizationModuleTests
             .GetProperty("mode")
             .GetString();
 
-    private static string? RequiredPermission(JsonElement[] actions, string actionKey) =>
+    private static string? StandardAction(JsonElement[] actions, string actionKey) =>
         actions.Single(action => action.GetProperty("key").GetString() == actionKey)
-            .GetProperty("permissions")[0]
+            .GetProperty("standardAction")
             .GetString();
 
     private static string FindRepositoryRoot()

@@ -1668,8 +1668,6 @@ public sealed class SqlServerPersistenceSmokeTests
                 [],
                 [],
                 [],
-                [],
-                [],
                 [modelKey],
                 provenance,
                 new ModulePersistenceContribution(
@@ -1693,8 +1691,6 @@ public sealed class SqlServerPersistenceSmokeTests
                 module.Routes,
                 module.FrontendBindings,
                 module.FrontendBindingReferences,
-                module.PermissionCodes,
-                module.PermissionReferences,
                 module.ModelKeys,
                 module.Provenance,
                 module.Persistence);
@@ -1799,8 +1795,6 @@ public sealed class SqlServerPersistenceSmokeTests
                 [],
                 [],
                 [],
-                [],
-                [],
                 ["Company", "Department", "Person", "Position"],
                 provenance,
                 new ModulePersistenceContribution(
@@ -1829,8 +1823,6 @@ public sealed class SqlServerPersistenceSmokeTests
                 module.Routes,
                 module.FrontendBindings,
                 module.FrontendBindingReferences,
-                module.PermissionCodes,
-                module.PermissionReferences,
                 module.ModelKeys,
                 module.Provenance,
                 module.Persistence);

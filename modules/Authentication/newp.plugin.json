@@ -18,9 +18,6 @@
   "frontend": {
     "enabled": false
   },
-  "security": {
-    "permissions": []
-  },
   "persistence": {
     "models": [
       "metadata/models/AuthenticationSession.model.json"

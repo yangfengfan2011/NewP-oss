@@ -57,14 +57,7 @@ vi.mock('../contexts/AuthContext', () => ({
     isAuthenticated: state.isAuthenticated,
     user: state.user,
     sessionError: null,
-    retrySessionValidation: vi.fn(),
-    hasPermission: (permission: string) => Boolean(state.user?.permissions.includes(permission)),
-    hasAnyPermission: (permissions: string[]) => permissions.some(
-      (permission) => Boolean(state.user?.permissions.includes(permission)),
-    ),
-    hasAllPermissions: (permissions: string[]) => permissions.every(
-      (permission) => Boolean(state.user?.permissions.includes(permission)),
-    ),
+    retrySessionValidation: vi.fn().mockResolvedValue(undefined),
   }),
 }));
 
@@ -123,13 +116,13 @@ vi.mock('../metadata/runtimeMetadataLoader', () => ({
           path: '/records',
           entryType: 'standard-list',
           targetKey: state.standardCrudTargetKey,
-          permissions: ['Example.View'],
+          featurePosition: 'example.read',
         }] : [{
           key: 'example.page',
           path: '/example',
           entryType: 'custom',
           targetKey: 'example.page',
-          permissions: ['Example.View'],
+          featurePosition: 'example.read',
           ...(state.localAdministratorOnly ? { localAdministratorOnly: true } : {}),
         }],
       },
@@ -176,7 +169,7 @@ describe('route capability authorization ordering', () => {
       id: 'user-1',
       ecode: 'user',
       ename: 'User',
-      permissions: ['Example.View'],
+      featurePositions: ['example.read'],
       mustChangePassword: false,
       revision: 1,
       isLocalAdministrator: true,
@@ -229,7 +222,7 @@ describe('route capability authorization ordering', () => {
       state.user = undefined;
     }],
     ['without permission', () => {
-      state.user = { ...state.user!, permissions: [] };
+      state.user = { ...state.user!, featurePositions: [] };
     }],
     ['not a local administrator', () => {
       state.localAdministratorOnly = true;
@@ -258,7 +251,7 @@ describe('route capability authorization ordering', () => {
     window.history.replaceState({}, '', '/records?keyword=alice');
     state.standardCrudTargetKey = 'organization.person.list';
     state.standardCrudDetailViewKey = 'organization.person.detail';
-    state.user = { ...state.user!, permissions: [] };
+    state.user = { ...state.user!, featurePositions: [] };
     const listBinding = organizationBindings.standardCrudCapabilities?.find(
       (binding) => binding.kind === 'standard-list',
     );
@@ -281,7 +274,7 @@ describe('route capability authorization ordering', () => {
     window.history.replaceState({}, '', '/records/person-42');
     state.standardCrudTargetKey = 'organization.person.list';
     state.standardCrudDetailViewKey = 'organization.person.detail';
-    state.user = { ...state.user!, permissions: [] };
+    state.user = { ...state.user!, featurePositions: [] };
     const detailBinding = organizationBindings.standardCrudCapabilities?.find(
       (binding) => binding.kind === 'standard-crud-detail',
     );
@@ -296,7 +289,7 @@ describe('route capability authorization ordering', () => {
     });
 
     expect(detailLoad).not.toHaveBeenCalled();
-    expect(container.textContent).toContain('无权限访问');
+    expect(container.textContent).toContain('home');
     detailLoad.mockRestore();
   });
 
@@ -423,7 +416,7 @@ describe('route capability authorization ordering', () => {
         { kind: 'standard-list', targetKey: 'invalid.records.list', load },
         { kind: 'standard-crud-detail', targetKey: 'invalid.records.detail', load },
       ],
-      routes: [{ path: '/records/:id', component: fallback, permissions: ['Example.View'] }],
+      routes: [{ path: '/records/:id', component: fallback, featurePosition: 'example.read' }],
     }], 'snapshot-invalid-projection');
 
     await act(async () => {
@@ -454,7 +447,7 @@ describe('route capability authorization ordering', () => {
       routes: [{
         path: '/legacy/:id',
         component: LegacyFallbackPage,
-        permissions: ['Example.View'],
+        featurePosition: 'example.read',
       }],
     }], 'snapshot-legacy-fallback');
 

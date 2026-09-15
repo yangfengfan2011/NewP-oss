@@ -1,8 +1,8 @@
 using System.Net;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
-using ICP.Platform.Authorization.Abstractions;
 using ICP.Platform.Authorization.Extensions;
+using ICP.Platform.Authorization.Http;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -22,7 +22,7 @@ public sealed class PermissionHttpAdapterTests
     [InlineData("trusted-subject", PermissionDecision.Granted, HttpStatusCode.OK, 1, 1)]
     [InlineData("trusted-subject", PermissionDecision.Denied, HttpStatusCode.Forbidden, 0, 1)]
     [InlineData("trusted-subject", PermissionDecision.Indeterminate, HttpStatusCode.ServiceUnavailable, 0, 1)]
-    public async Task RequirePermission_MapsDecisionBeforeBusinessInvocation(
+    public async Task RequireFeature_MapsDecisionBeforeBusinessInvocation(
         string? subjectId,
         PermissionDecision decision,
         HttpStatusCode expectedStatus,
@@ -51,7 +51,7 @@ public sealed class PermissionHttpAdapterTests
     }
 
     [Fact]
-    public async Task RequirePermission_UsesTrustedClaimInsteadOfRequestUserId()
+    public async Task RequireFeature_UsesTrustedClaimInsteadOfRequestUserId()
     {
         var source = new RecordingPermissionDecisionSource(PermissionDecision.Granted);
         await using var scenario = await PermissionHttpScenario.StartAsync(source);
@@ -62,7 +62,7 @@ public sealed class PermissionHttpAdapterTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("trusted-subject", source.LastSubjectId);
-        Assert.Equal("Organization.Person.View", source.LastPermissionCode);
+        Assert.Equal("organization.person.read", source.LastPermissionCode);
     }
 
     private sealed class PermissionHttpScenario : IAsyncDisposable
@@ -79,7 +79,7 @@ public sealed class PermissionHttpAdapterTests
 
         public int BusinessCalls => Volatile.Read(ref _businessCalls);
 
-        public static async Task<PermissionHttpScenario> StartAsync(IPermissionDecisionSource source)
+        public static async Task<PermissionHttpScenario> StartAsync(IFeatureDecisionSource source)
         {
             var builder = WebApplication.CreateBuilder();
             builder.WebHost.UseTestServer();
@@ -100,9 +100,10 @@ public sealed class PermissionHttpAdapterTests
                     Interlocked.Increment(ref scenario._businessCalls);
                     return Results.Ok();
                 })
-                .RequirePermission("Organization.Person.View");
+                .RequireAuthorization(new RequireFeatureAttribute("organization.person.read"));
             await application.StartAsync();
             scenario.Client = application.GetTestClient();
+            scenario.Client.DefaultRequestHeaders.Add("X-NewP-Feature", "declared.read");
             return scenario;
         }
 
@@ -113,7 +114,7 @@ public sealed class PermissionHttpAdapterTests
         }
     }
 
-    private sealed class RecordingPermissionDecisionSource : IPermissionDecisionSource
+    private sealed class RecordingPermissionDecisionSource : IFeatureDecisionSource
     {
         private readonly PermissionDecision _decision;
         private int _callCount;
@@ -131,12 +132,13 @@ public sealed class PermissionHttpAdapterTests
 
         public ValueTask<PermissionDecision> EvaluateAsync(
             string subjectId,
-            string permissionCode,
+            string position,
+            string behaviorKey,
             CancellationToken cancellationToken = default)
         {
             Interlocked.Increment(ref _callCount);
             LastSubjectId = subjectId;
-            LastPermissionCode = permissionCode;
+            LastPermissionCode = behaviorKey;
             return ValueTask.FromResult(_decision);
         }
     }

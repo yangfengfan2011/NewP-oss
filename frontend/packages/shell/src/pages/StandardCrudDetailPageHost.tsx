@@ -1,6 +1,6 @@
 import { useFeaturePlacement } from '../authorization/FeaturePlacementContext';
 import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
-import { useAuthorization, useLocalization } from '@icp-platform/core';
+import { useLocalization } from '@icp-platform/core';
 import {
   ModuleRegistry,
   createStandardCrudOperationResultPresenterRegistry,
@@ -94,13 +94,6 @@ function readMetadataString(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim().length > 0 ? value : fallback;
 }
 
-function useOptionalGrantedPermissions(fallbackPermissions: string[] = []): string[] {
-  try {
-    return useAuthorization().permissions;
-  } catch {
-    return fallbackPermissions;
-  }
-}
 
 export default function StandardCrudDetailPageHost({
   viewKey,
@@ -156,7 +149,6 @@ function StandardCrudDetailPageContent<TDetail>({
   const features = useFeaturePlacement();
   const composed = host.presentation.kind !== 'workspace' || host.presentation.composed;
   const sessionTimeZoneId = useOptionalAuth()?.user?.timeZoneId;
-  const grantedPermissions = useOptionalGrantedPermissions(registration.permissions);
   const dicKey = readMetadataString(view.dicKey, registration.resourceKey);
   const dataAdapter = registration.dataAdapter;
   const operationResultPresenterRegistry = useMemo(
@@ -245,8 +237,7 @@ function StandardCrudDetailPageContent<TDetail>({
               ? t(`${schema.dicKey}.${action.confirmMessageKey}`, action.confirmMessageKey)
               : undefined,
           }))}
-          grantedPermissions={grantedPermissions}
-          featurePositionForAction={features.placement ? (action) => action.navigationTargetKey ? features.navigation(action.navigationTargetKey) : features.action(action.key, 'detail.pageActions') : undefined}
+          featurePositionForAction={(action) => action.navigationTargetKey ? features.navigation(action.navigationTargetKey) : features.action(action.key, 'detail.pageActions')}
           hasFeature={features.hasFeature}
           handlers={detailActionHandlers}
           actionInputs={registration.actionInputRenderers}

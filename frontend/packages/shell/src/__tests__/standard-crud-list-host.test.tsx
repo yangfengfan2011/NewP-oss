@@ -1,3 +1,4 @@
+import './authorizedFeatureUiFixture';
 import { FeaturePlacementContext } from '../authorization/FeaturePlacementContext';
 // @vitest-environment jsdom
 
@@ -1892,7 +1893,7 @@ describe('StandardCrudListPageHost', () => {
     expect(document.body.textContent).toContain('姓名');
   });
 
-  it('reuses one detail generation when the compatibility route changes a drawer from view to edit', async () => {
+  it('loads the edit position after the compatibility route changes a drawer from view to edit', async () => {
     const get = vi.fn().mockResolvedValue({
       normalized: {
         fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentId: null },
@@ -1926,7 +1927,8 @@ describe('StandardCrudListPageHost', () => {
       { timeout: 3_000 },
     );
 
-    expect(get).toHaveBeenCalledTimes(1);
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(get.mock.calls[1][1]).toEqual(expect.objectContaining({ featurePosition: 'ui-fixture:list.rowActions:edit' }));
     expect(document.body.querySelector<HTMLInputElement>('#ENAME')?.value).toBe('张三');
   });
 
@@ -2235,6 +2237,7 @@ describe('StandardCrudListPageHost', () => {
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({ PersonNo: 'P002', ENAME: '李四' }),
       {},
+      { featurePosition: 'ui-fixture:list.pageActions:create' },
     );
     expect(document.body.textContent).toContain('opaque-result');
     const closeResult = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent === '关闭结果');
@@ -2409,7 +2412,7 @@ describe('StandardCrudListPageHost', () => {
     await act(async () => confirm.click());
     expect(get).toHaveBeenCalledTimes(1); expect(list).not.toHaveBeenCalled();
     expect(queryLookup).not.toHaveBeenCalled();
-    expect(remove).toHaveBeenCalledTimes(1); expect(remove).toHaveBeenCalledWith('Person_1', before);
+    expect(remove).toHaveBeenCalledTimes(1); expect(remove).toHaveBeenCalledWith('Person_1', before, { featurePosition: 'ui-fixture:list.rowActions:delete' });
     expect(committed).toHaveBeenCalledTimes(succeeds ? 1 : 0); expect(close).toHaveBeenCalledTimes(succeeds ? 1 : 0);
     if (!succeeds) expect(document.body.textContent).toContain('引用阻止删除');
   });

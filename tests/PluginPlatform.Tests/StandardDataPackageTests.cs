@@ -125,7 +125,6 @@ public sealed class StandardDataPackageTests : IDisposable
         Assert.Equal("standard-data", module.FrontendBindingMode);
         Assert.Contains("/api/standard/partner-asset-catalog/assets", module.Routes);
         Assert.Contains("/assets", module.Routes);
-        Assert.Empty(module.PermissionCodes);
         Assert.Equal(["", "Partner.AssetCatalog.Asset.create", "Partner.AssetCatalog.Asset.read", "Partner.AssetCatalog.Asset.update"],
             plan.FeatureCatalog.Select(point => point.BehaviorKey).Order(StringComparer.Ordinal));
         Assert.DoesNotContain(plan.FeatureCatalog, point => point.Key == "refresh");
@@ -273,13 +272,7 @@ public sealed class StandardDataPackageTests : IDisposable
                     "/assets",
                     "np_partner_assetcatalog",
                     "assets",
-                    ["Name"],
-                    [
-                        "Partner.AssetCatalog.Asset.View",
-                        "Partner.AssetCatalog.Asset.Create",
-                        "Partner.AssetCatalog.Asset.Update",
-                        "Partner.AssetCatalog.Asset.Delete"
-                    ])
+                    ["Name"])
             ]);
 
     private static PlatformApiAttestation Attestation() =>

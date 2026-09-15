@@ -47,7 +47,8 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
                 await AssertStatusAsync(SendAsync(client, create, HttpMethod.Get, route), client == writer ? HttpStatusCode.OK : HttpStatusCode.Forbidden);
             foreach (var route in new[] { "/api/organization/department-lookups/companies", $"/api/organization/department-lookups/parents?companyId={company}" })
                 await AssertStatusAsync(SendAsync(client, http.Organization("departments"), HttpMethod.Get, route), HttpStatusCode.OK);
-            foreach (var route in new[] { "/api/identity/accounts", "/api/authorization/roles", "/api/authorization/permissions", "/api/audit/business-changes" })
+            await AssertStatusAsync(client.GetAsync("/api/authorization/permissions"), HttpStatusCode.NotFound);
+            foreach (var route in new[] { "/api/identity/accounts", "/api/authorization/roles", "/api/audit/business-changes" })
                 await AssertStatusAsync(client.GetAsync(route), HttpStatusCode.Forbidden);
             await AssertStatusAsync(SendAsync(client, http.Organization("persons", "delete", "list.rowActions"), HttpMethod.Delete, $"/api/organization/persons/{person}"), HttpStatusCode.Forbidden);
             await AssertStatusAsync(SendAsync(client, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put, $"/api/organization/persons/{person}/user-binding", new { UserId = reader.Id, Reason = "不应绑定" }), HttpStatusCode.Forbidden);
@@ -130,7 +131,7 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
     }
 
     private static object Person(string number, string company, string department, string position) => new { PersonNo = number, ENAME = number, CompanyId = company, DepartmentId = department, PositionId = position, EmploymentStatus = "Active", IsEnabled = true };
-    internal static async Task<(string Id, string RoleId, HttpClient Client)> CreateActorAsync(BusinessAuditHostFixture fixture, HttpClient admin, string code, FeaturePoint[] features, string[]? permissions = null)
+    internal static async Task<(string Id, string RoleId, HttpClient Client)> CreateActorAsync(BusinessAuditHostFixture fixture, HttpClient admin, string code, FeaturePoint[] features)
     {
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(admin);
         using var accountResponse = await FeatureHttpTestRequests.SendAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), HttpMethod.Post, "/api/identity/accounts", new { ECODE = code, ENAME = code });
@@ -139,7 +140,6 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
         var id = account.GetProperty("account").GetProperty("eid").GetString()!;
         var http = new FeatureHttpTestRequests(fixture);
         var role = await CreateRoleAsync(http, admin, code, features);
-        if (permissions is not null) await AssertStatusAsync(admin.PutAsJsonAsync($"/api/authorization/roles/{role}/permissions", new { PermissionCodes = permissions }), HttpStatusCode.NoContent);
         await SetRolesAsync(http, admin, id, [code]);
         var client = await fixture.LoginAsync(code, account.GetProperty("temporaryCredential").GetString()!);
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);

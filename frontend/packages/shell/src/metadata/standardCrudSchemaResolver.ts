@@ -47,7 +47,6 @@ export interface StandardCrudRuntimeActionSchema {
   navigationTargetKey?: string;
   handlerKey?: string;
   inputKey?: string;
-  requiredPermissions?: string[];
   visibleWhen?: StandardCrudRowActionVisibilitySchema;
   disabledWhen?: StandardCrudRowActionDisabledSchema;
   dataDependency?: StandardCrudActionDataDependencySchema;
@@ -161,10 +160,6 @@ function readRecord(value: unknown): MetadataRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as MetadataRecord) : {};
 }
 
-function readPermissions(value: unknown): string[] {
-  return readArray<unknown>(value).filter((item): item is string => typeof item === 'string' && item.length > 0);
-}
-
 function readActionVisibility(value: unknown): StandardCrudRowActionVisibilitySchema {
   const record = readRecord(value);
   const field = readString(record.field);
@@ -183,7 +178,6 @@ function readAction(value: MetadataRecord): StandardCrudRuntimeActionSchema {
   const confirmMessageKey = readString(value.confirmMessageKey);
   const handlerKey = readString(value.handlerKey);
   const inputKey = readString(value.inputKey);
-  const requiredPermissions = readPermissions(value.requiredPermissions ?? value.permissions);
   const visibleWhen = Object.prototype.hasOwnProperty.call(value, 'visibleWhen')
     ? readActionVisibility(value.visibleWhen)
     : undefined;
@@ -209,7 +203,6 @@ function readAction(value: MetadataRecord): StandardCrudRuntimeActionSchema {
     ...(handlerKey.length > 0 ? { handlerKey } : {}),
     ...(readString(value.navigationTargetKey) ? { navigationTargetKey: readString(value.navigationTargetKey) } : {}),
     ...(inputKey.length > 0 ? { inputKey } : {}),
-    ...(requiredPermissions.length > 0 ? { requiredPermissions } : {}),
     ...(visibleWhen ? { visibleWhen } : {}),
     ...(disabledWhen ? { disabledWhen } : {}),
     ...(dataDependency ? { dataDependency } : {}),

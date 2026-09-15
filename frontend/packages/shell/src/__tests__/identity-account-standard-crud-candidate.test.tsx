@@ -1,3 +1,4 @@
+import './authorizedFeatureUiFixture';
 // @vitest-environment jsdom
 
 import { act } from 'react';

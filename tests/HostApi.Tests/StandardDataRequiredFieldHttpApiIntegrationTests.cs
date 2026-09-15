@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
 using ICP.Platform.Authorization;
-using ICP.Platform.Authorization.Abstractions;
 using ICP.Platform.Authorization.Extensions;
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.HostApi.Authorization;
@@ -215,7 +214,7 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         return Assert.Single(new StandardDataCrudDescriptorProjector().Project(plan));
     }
 
-    private CanonicalModulePlanModule CreateModule() => new(
+    private CanonicalModulePlanModule CreateModule() => new CanonicalModulePlanModule(
         "Partner.AssetCatalog",
         "1.0.0",
         "Asset Catalog",
@@ -230,8 +229,6 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         ["/api/standard/partner-asset-catalog/assets", "/assets"],
         ["Partner.AssetCatalog.Asset"],
         ["Partner.AssetCatalog.Asset"],
-        [],
-        [],
         ["Asset"],
         new ModulePlanProvenance("installed-package", Path.Combine(_packageRoot, "plugin.json"), "/"));
 
@@ -273,8 +270,7 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
                     "/assets",
                     "np_partner_asset_catalog",
                     "assets",
-                    ["UX_assets_SerialNo"],
-                    [])
+                    ["UX_assets_SerialNo"])
             ]);
         var manifest = new StandardPluginPackageManifest(
             1,

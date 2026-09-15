@@ -82,7 +82,7 @@ interface StandardDataProjectionResource {
   apiRoute: string;
   pageRoute: string;
   detailViewKey?: string;
-  permissionCodes: string[];
+
 }
 
 interface StandardDataProjection {

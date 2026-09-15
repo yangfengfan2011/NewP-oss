@@ -202,7 +202,6 @@ export interface StandardCrudActionDefinition {
   standardAction?: 'create' | 'view' | 'edit' | 'refresh' | 'delete' | 'disable' | 'enable' | 'submit';
   confirmMessage?: string;
   confirmMessageKey?: string;
-  requiredPermissions?: string[];
   /** 快捷跳转使用目标导航资格，不声明独立业务动作。 */
   navigationTargetKey?: string;
   handlerKey?: string;
@@ -315,7 +314,6 @@ export interface StandardCrudResourceRegistration<
   /** 普通更新需要从已加载详情原样回传的单调递增并发版本字段。 */
   concurrencyRevisionField?: string;
   listPanelTitle?: string;
-  permissions?: string[];
   // 第二批扩展只声明资源允许的平台化能力；lookup 加载、动作状态、summary 状态和提交流程仍由 Shell 运行时执行。
   fields?: StandardCrudFieldDefinition[];
   formSections?: StandardCrudFormSection[];

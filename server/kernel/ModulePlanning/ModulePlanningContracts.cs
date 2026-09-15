@@ -21,8 +21,6 @@ public sealed record ModuleCapsuleCandidate(
     IReadOnlyList<string> Routes,
     IReadOnlyList<string> FrontendBindings,
     IReadOnlyList<string> FrontendBindingReferences,
-    IReadOnlyList<string> PermissionCodes,
-    IReadOnlyList<string> PermissionReferences,
     IReadOnlyList<string> ModelKeys,
     ModulePlanProvenance Provenance,
     ModulePersistenceContribution? Persistence = null)
@@ -194,8 +192,6 @@ public sealed class ModulePlanProvenance
             candidate.Routes,
             candidate.FrontendBindings,
             candidate.FrontendBindingReferences,
-            candidate.PermissionCodes,
-            candidate.PermissionReferences,
             candidate.ModelKeys,
             candidate.Persistence, candidate.Features);
 
@@ -215,8 +211,6 @@ public sealed class ModulePlanProvenance
             module.Routes,
             module.FrontendBindings,
             module.FrontendBindingReferences,
-            module.PermissionCodes,
-            module.PermissionReferences,
             module.ModelKeys,
             module.Persistence, module.Features);
 
@@ -235,8 +229,6 @@ public sealed class ModulePlanProvenance
         IReadOnlyList<string> routes,
         IReadOnlyList<string> frontendBindings,
         IReadOnlyList<string> frontendBindingReferences,
-        IReadOnlyList<string> permissionCodes,
-        IReadOnlyList<string> permissionReferences,
         IReadOnlyList<string> modelKeys,
         ModulePersistenceContribution? persistence, IReadOnlyList<FeatureDeclaration> features)
     {
@@ -256,8 +248,6 @@ public sealed class ModulePlanProvenance
             routes = Sort(routes),
             frontendBindings = Sort(frontendBindings),
             frontendBindingReferences = Sort(frontendBindingReferences),
-            permissionCodes = Sort(permissionCodes),
-            permissionReferences = Sort(permissionReferences),
             modelKeys = Sort(modelKeys),
             features = features.OrderBy(node => node.Key, StringComparer.Ordinal).ToArray(),
             persistence = persistence is null
@@ -330,8 +320,6 @@ public sealed record CanonicalModulePlanModule(
     IReadOnlyList<string> Routes,
     IReadOnlyList<string> FrontendBindings,
     IReadOnlyList<string> FrontendBindingReferences,
-    IReadOnlyList<string> PermissionCodes,
-    IReadOnlyList<string> PermissionReferences,
     IReadOnlyList<string> ModelKeys,
     ModulePlanProvenance Provenance,
     ModulePersistenceContribution? Persistence = null)

@@ -30,11 +30,7 @@ export function Sidebar({ menus, collapsed, onCollapse }: SidebarProps) {
     if (menu.localAdministratorOnly && !auth.user?.isLocalAdministrator) {
       return false;
     }
-    if (!menu.permissions || menu.permissions.length === 0) {
-      return true;
-    }
-
-    return auth.hasAnyPermission(menu.permissions);
+    return true;
   });
 
   return (

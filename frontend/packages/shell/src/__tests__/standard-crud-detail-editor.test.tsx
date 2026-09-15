@@ -1,3 +1,4 @@
+import './authorizedFeatureUiFixture';
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -130,7 +131,7 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ fields: { EID: 'Person_1', ENAME: '张三' }, summaries: {} }), {
         status: 200,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-NewP-Feature': 'ui-fixture:detail.pageActions:edit' },
       }),
     );
 
@@ -173,7 +174,7 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ fields: { EID: 'Person_1', ENAME: ' 张三 ', Revision: 7 }, summaries: {} }), {
         status: 200,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-NewP-Feature': 'ui-fixture:detail.pageActions:edit' },
       }),
     );
 
@@ -190,7 +191,7 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/organization/persons/Person_1', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-NewP-Feature': 'ui-fixture:detail.pageActions:edit' },
       body: JSON.stringify({ ENAME: '张三', Revision: 7 }),
     });
   });
@@ -269,7 +270,7 @@ describe('StandardCrudDetailPageHost editor fallback', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/organization/persons/Person_1', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-NewP-Feature': 'ui-fixture:detail.pageActions:edit' },
       body: JSON.stringify({ CompanyId: 'Company_2', DepartmentId: null, PositionId: null }),
     });
   });

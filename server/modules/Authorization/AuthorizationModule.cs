@@ -1,5 +1,4 @@
 using ICP.Platform.Crud.Extensions;
-using ICP.Platform.Authorization.Abstractions;
 using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Modules.Authorization.Persistence.Ef;
 using ICP.Platform.Modules.Authorization.Repositories;

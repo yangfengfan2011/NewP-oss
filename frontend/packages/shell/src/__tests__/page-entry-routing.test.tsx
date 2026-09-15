@@ -6,20 +6,20 @@ import {
   resolveRouteableMetadataEntries,
 } from '../navigation/pageEntryAdapter';
 
-function createRoute(path: string, permissions?: string[]): RouteConfig {
+function createRoute(path: string, featurePosition?: string): RouteConfig {
   return {
     path,
     component: function DummyRoute() {
       return null;
     },
-    permissions,
+    featurePosition,
   };
 }
 
 function snapshotRoutes(routes: RouteConfig[]) {
   return routes.map((route) => ({
     path: route.path,
-    permissions: route.permissions,
+    featurePosition: route.featurePosition,
   }));
 }
 
@@ -35,7 +35,7 @@ describe('page entry routing', () => {
               path: '/organization/persons',
               entryType: 'standard-list',
               targetKey: 'organization.person.list',
-              permissions: ['Organization.Person.View'],
+              featurePosition: 'Organization.Person.View',
             },
             {
               key: 'organization.tree',
@@ -54,7 +54,7 @@ describe('page entry routing', () => {
         path: '/organization/persons',
         entryType: 'standard-list',
         targetKey: 'organization.person.list',
-        permissions: ['Organization.Person.View'],
+        featurePosition: 'Organization.Person.View',
       },
       {
         path: '/organization/tree',
@@ -124,7 +124,7 @@ describe('page entry routing', () => {
     ]);
 
     const moduleRoutes = [
-      createRoute('/organization/persons', ['Organization.Person.View']),
+      createRoute('/organization/persons', 'Organization.Person.View'),
       createRoute('/organization/persons/new'),
     ];
 
@@ -135,13 +135,13 @@ describe('page entry routing', () => {
         path: '/organization/persons',
         entryType: 'standard-list',
         targetKey: 'organization.person.list',
-        permissions: ['Organization.Person.View'],
+        featurePosition: 'Organization.Person.View',
       },
     ]);
     expect(snapshotRoutes(filterFallbackRoutesByMetadataEntries(moduleRoutes, resolvedEntries))).toEqual([
       {
         path: '/organization/persons/new',
-        permissions: undefined,
+        featurePosition: undefined,
       },
     ]);
   });
@@ -157,7 +157,7 @@ describe('page entry routing', () => {
               path: '/organization/persons',
               entryType: 'standard-list',
               targetKey: 'organization.person.list',
-              permissions: ['Organization.Person.View'],
+              featurePosition: 'Organization.Person.View',
             },
           ],
         },
@@ -165,9 +165,9 @@ describe('page entry routing', () => {
     ]);
 
     const moduleRoutes = [
-      createRoute('/organization/persons', ['Organization.Person.View']),
-      createRoute('/organization/persons/new', ['Organization.Person.View']),
-      createRoute('/organization/persons/:id', ['Organization.Person.View']),
+      createRoute('/organization/persons', 'Organization.Person.View'),
+      createRoute('/organization/persons/new', 'Organization.Person.View'),
+      createRoute('/organization/persons/:id', 'Organization.Person.View'),
     ];
 
     const resolvedEntries = resolveRouteableMetadataEntries(rawEntries, moduleRoutes);
@@ -178,17 +178,17 @@ describe('page entry routing', () => {
         path: '/organization/persons',
         entryType: 'standard-list',
         targetKey: 'organization.person.list',
-        permissions: ['Organization.Person.View'],
+        featurePosition: 'Organization.Person.View',
       },
     ]);
     expect(snapshotRoutes(fallbackRoutes)).toEqual([
       {
         path: '/organization/persons/new',
-        permissions: ['Organization.Person.View'],
+        featurePosition: 'Organization.Person.View',
       },
       {
         path: '/organization/persons/:id',
-        permissions: ['Organization.Person.View'],
+        featurePosition: 'Organization.Person.View',
       },
     ]);
   });
@@ -219,8 +219,8 @@ describe('page entry routing', () => {
     ]);
 
     const moduleRoutes = [
-      createRoute('/organization/persons', ['Organization.Person.View']),
-      createRoute('/organization/persons/new', ['Organization.Person.View']),
+      createRoute('/organization/persons', 'Organization.Person.View'),
+      createRoute('/organization/persons/new', 'Organization.Person.View'),
     ];
 
     const resolvedEntries = resolveRouteableMetadataEntries(rawEntries, moduleRoutes);

@@ -9,7 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace ICP.Platform.Modules.ConfigCenter;
 
-public class ConfigCenterModule : ModuleBase, IConfigProvider, IMenuProvider, IPermissionProvider
+public class ConfigCenterModule : ModuleBase, IConfigProvider, IMenuProvider
 {
     public override string ModuleId => "ConfigCenter";
     public override string DisplayName => "配置中心";
@@ -81,7 +81,6 @@ public class ConfigCenterModule : ModuleBase, IConfigProvider, IMenuProvider, IP
                 Route = "/config",
                 Icon = "settings",
                 Order = 20,
-                RequiredPermission = "ConfigCenter.Config.View",
                 ModuleId = ModuleId
             },
             new MenuDescriptor
@@ -92,7 +91,6 @@ public class ConfigCenterModule : ModuleBase, IConfigProvider, IMenuProvider, IP
                 Route = "/config/items",
                 Icon = "cog",
                 Order = 1,
-                RequiredPermission = "ConfigCenter.Config.View",
                 ModuleId = ModuleId
             },
             new MenuDescriptor
@@ -103,48 +101,9 @@ public class ConfigCenterModule : ModuleBase, IConfigProvider, IMenuProvider, IP
                 Route = "/config/value-lists",
                 Icon = "list",
                 Order = 2,
-                RequiredPermission = "ConfigCenter.Config.View",
                 ModuleId = ModuleId
             }
         };
     }
 
-    public IReadOnlyList<PermissionDescriptor> GetPermissions()
-    {
-        return new[]
-        {
-            new PermissionDescriptor
-            {
-                Code = "ConfigCenter.Config.View",
-                DisplayName = "查看配置",
-                Description = "允许查看配置项列表和详情",
-                ModuleId = ModuleId,
-                Group = "配置管理"
-            },
-            new PermissionDescriptor
-            {
-                Code = "ConfigCenter.Config.Create",
-                DisplayName = "创建配置",
-                Description = "允许创建新配置项",
-                ModuleId = ModuleId,
-                Group = "配置管理"
-            },
-            new PermissionDescriptor
-            {
-                Code = "ConfigCenter.Config.Edit",
-                DisplayName = "编辑配置",
-                Description = "允许编辑配置项",
-                ModuleId = ModuleId,
-                Group = "配置管理"
-            },
-            new PermissionDescriptor
-            {
-                Code = "ConfigCenter.Config.Delete",
-                DisplayName = "删除配置",
-                Description = "允许删除配置项",
-                ModuleId = ModuleId,
-                Group = "配置管理"
-            }
-        };
-    }
 }

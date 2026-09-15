@@ -5,7 +5,6 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Encodings.Web;
 using ICP.Platform.Authorization;
-using ICP.Platform.Authorization.Abstractions;
 using ICP.Platform.Authorization.Extensions;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;

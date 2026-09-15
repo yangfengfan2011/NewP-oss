@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace ICP.Platform.Modules.MetadataConfigCenter;
 
-public class MetadataConfigCenterModule : ModuleBase, IMenuProvider, IPermissionProvider
+public class MetadataConfigCenterModule : ModuleBase, IMenuProvider
 {
     public override string ModuleId => "MetadataConfigCenter";
     public override string DisplayName => "元数据配置中心";
@@ -35,7 +35,6 @@ public class MetadataConfigCenterModule : ModuleBase, IMenuProvider, IPermission
                 Route = null,
                 Icon = "database",
                 Order = 21,
-                RequiredPermission = "MetadataConfigCenter.View",
                 ModuleId = ModuleId
             },
             new MenuDescriptor
@@ -46,48 +45,9 @@ public class MetadataConfigCenterModule : ModuleBase, IMenuProvider, IPermission
                 Route = "/metadata-config/modules",
                 Icon = "grid",
                 Order = 1,
-                RequiredPermission = "MetadataConfigCenter.View",
                 ModuleId = ModuleId
             }
         ];
     }
 
-    public IReadOnlyList<PermissionDescriptor> GetPermissions()
-    {
-        return
-        [
-            new PermissionDescriptor
-            {
-                Code = "MetadataConfigCenter.View",
-                DisplayName = "查看元数据配置中心",
-                Description = "允许查看模块元数据配置中心页面",
-                ModuleId = ModuleId,
-                Group = "元数据配置中心"
-            },
-            new PermissionDescriptor
-            {
-                Code = "MetadataConfigCenter.Edit",
-                DisplayName = "编辑元数据定义",
-                Description = "允许编辑模块元数据定义层内容",
-                ModuleId = ModuleId,
-                Group = "元数据配置中心"
-            },
-            new PermissionDescriptor
-            {
-                Code = "MetadataConfigCenter.Apply",
-                DisplayName = "应用元数据变更",
-                Description = "允许执行元数据应用动作",
-                ModuleId = ModuleId,
-                Group = "元数据配置中心"
-            },
-            new PermissionDescriptor
-            {
-                Code = "MetadataConfigCenter.GitSync",
-                DisplayName = "同步元数据 Git 变更",
-                Description = "允许执行元数据 Git 同步动作",
-                ModuleId = ModuleId,
-                Group = "元数据配置中心"
-            }
-        ];
-    }
 }

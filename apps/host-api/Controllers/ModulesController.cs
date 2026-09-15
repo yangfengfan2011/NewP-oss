@@ -30,13 +30,6 @@ public class ModulesController : ControllerBase
         return Ok(modules);
     }
 
-    [HttpGet("permissions")]
-    public IActionResult GetPermissions()
-    {
-        var permissions = _registry.GetAllPermissions();
-        return Ok(permissions);
-    }
-
     [HttpGet("menus")]
     public IActionResult GetMenus()
     {

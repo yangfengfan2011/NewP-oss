@@ -88,24 +88,21 @@
         "key": "create",
         "labelKey": "Action_Create",
         "standardAction": "create",
-        "variant": "primary",
-        "permissions": ["Organization.Company.Create"]
+        "variant": "primary"
       }
     ],
     "rowActions": [
       {
         "key": "edit",
         "labelKey": "Action_Edit",
-        "standardAction": "edit",
-        "permissions": ["Organization.Company.Update"]
+        "standardAction": "edit"
       },
       {
         "key": "delete",
         "labelKey": "Action_Delete",
         "standardAction": "delete",
         "variant": "danger",
-        "confirmMessageKey": "Action_Delete_Confirm",
-        "permissions": ["Organization.Company.Delete"]
+        "confirmMessageKey": "Action_Delete_Confirm"
       }
     ]
   }

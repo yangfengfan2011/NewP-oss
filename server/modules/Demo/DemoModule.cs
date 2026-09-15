@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace ICP.Platform.Modules.Demo;
 
-public class DemoModule : ModuleBase, IPermissionProvider, IMenuProvider, IConfigProvider
+public class DemoModule : ModuleBase, IMenuProvider, IConfigProvider
 {
     public override string ModuleId => "Demo";
     public override string DisplayName => "演示模块";
@@ -15,29 +15,6 @@ public class DemoModule : ModuleBase, IPermissionProvider, IMenuProvider, IConfi
     {
         // 注册演示服务
         services.AddScoped<IDemoService, DemoService>();
-    }
-
-    public IReadOnlyList<PermissionDescriptor> GetPermissions()
-    {
-        return new[]
-        {
-            new PermissionDescriptor
-            {
-                Code = "Demo.View",
-                DisplayName = "查看演示",
-                Description = "允许查看演示模块内容",
-                ModuleId = ModuleId,
-                Group = "演示"
-            },
-            new PermissionDescriptor
-            {
-                Code = "Demo.Manage",
-                DisplayName = "管理演示",
-                Description = "允许管理演示模块",
-                ModuleId = ModuleId,
-                Group = "演示"
-            }
-        };
     }
 
     public IReadOnlyList<MenuDescriptor> GetMenus()
@@ -52,7 +29,6 @@ public class DemoModule : ModuleBase, IPermissionProvider, IMenuProvider, IConfi
                 Route = "/demo",
                 Icon = "demo-icon",
                 Order = 100,
-                RequiredPermission = "Demo.View",
                 ModuleId = ModuleId
             },
             new MenuDescriptor
@@ -63,7 +39,6 @@ public class DemoModule : ModuleBase, IPermissionProvider, IMenuProvider, IConfi
                 Route = "/demo/dashboard",
                 Icon = "dashboard-icon",
                 Order = 1,
-                RequiredPermission = "Demo.View",
                 ModuleId = ModuleId
             }
         };

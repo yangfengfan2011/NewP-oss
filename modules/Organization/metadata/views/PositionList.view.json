@@ -70,28 +70,21 @@
         "key": "create",
         "labelKey": "Action_Create",
         "standardAction": "create",
-        "variant": "primary",
-        "permissions": ["Organization.Position.Create"]
+        "variant": "primary"
       }
     ],
     "rowActions": [
       {
         "key": "edit",
         "labelKey": "Action_Edit",
-        "standardAction": "edit",
-        "permissions": [
-          "Organization.Position.Update"
-        ]
+        "standardAction": "edit"
       },
       {
         "key": "delete",
         "labelKey": "Action_Delete",
         "standardAction": "delete",
         "variant": "danger",
-        "confirmMessageKey": "Action_Delete_Confirm",
-        "permissions": [
-          "Organization.Position.Delete"
-        ]
+        "confirmMessageKey": "Action_Delete_Confirm"
       }
     ]
   }

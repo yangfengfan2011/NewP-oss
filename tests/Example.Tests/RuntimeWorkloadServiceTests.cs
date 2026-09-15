@@ -75,7 +75,6 @@ public sealed class RuntimeWorkloadServiceTests
         Assert.NotNull(feature);
         Assert.Equal("Example", owner.ModuleId);
         Assert.Equal("example.runtime-workload.read", feature.BehaviorKey);
-        Assert.Null(controller.GetCustomAttribute<RequirePermissionAttribute>());
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset value) : TimeProvider

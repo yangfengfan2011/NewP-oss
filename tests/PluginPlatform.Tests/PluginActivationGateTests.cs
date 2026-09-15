@@ -28,7 +28,7 @@ public sealed class PluginActivationGateTests : IDisposable
         using var session = gate.Prepare(inventory);
 
         Assert.Equal(
-            ["preflight", "module-plan", "runtime-metadata-validation", "permission-catalog", "persistence-plan"],
+            ["preflight", "module-plan", "runtime-metadata-validation", "persistence-plan"],
             events);
         Assert.Equal("1.0.0", Assert.Single(manager.Resolve(inventory).ActiveSnapshot!.Modules).Version);
         Assert.Equal("legacy-active", projection.ActiveSnapshotId);
@@ -42,7 +42,6 @@ public sealed class PluginActivationGateTests : IDisposable
                 "preflight",
                 "module-plan",
                 "runtime-metadata-validation",
-                "permission-catalog",
                 "persistence-plan",
                 "migration",
                 "runtime-stage",
@@ -139,7 +138,6 @@ public sealed class PluginActivationGateTests : IDisposable
                 "preflight",
                 "module-plan",
                 "runtime-metadata-validation",
-                "permission-catalog",
                 "persistence-plan",
                 "migration"
             ],
@@ -215,7 +213,6 @@ public sealed class PluginActivationGateTests : IDisposable
             manager,
             new RecordingPreflight(events),
             new RecordingModulePlanCompiler(events, plan),
-            new RecordingPermissionCatalogValidator(events),
             new RecordingPersistencePlanCompiler(events, persistencePlan),
             projection);
 
@@ -235,8 +232,6 @@ public sealed class PluginActivationGateTests : IDisposable
             [],
             ["/assets"],
             ["standard-crud:Asset"],
-            [],
-            ["Partner.AssetCatalog.Asset.View"],
             [],
             ["Asset"],
             new ModulePlanProvenance("installed-package", "newp.plugin.json", "/"));
@@ -281,11 +276,7 @@ public sealed class PluginActivationGateTests : IDisposable
         }
     }
 
-    private sealed class RecordingPermissionCatalogValidator(List<string> events)
-        : IPluginPermissionCatalogValidator
-    {
-        public void Validate(CanonicalModulePlan plan) => events.Add("permission-catalog");
-    }
+
 
     private sealed class RecordingPersistencePlanCompiler(
         List<string> events,

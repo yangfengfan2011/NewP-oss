@@ -164,7 +164,6 @@ var activationGate = new PluginActivationGate(
         builtInModuleSource,
         standardDataInspector,
         externalPluginsEnabled ? null : ["PluginOps"]),
-    new HostPluginPermissionCatalogValidator(),
     new HostPluginPersistencePlanCompiler(storageTypeMapPath, persistenceProvider),
     new HostPluginRuntimeProjection(materializer, pluginInstallRoot));
 using var activationSession = activationGate.Prepare(pluginInventory);
@@ -270,9 +269,8 @@ if (app.Services.GetService<IStandardCrudResourceRegistry>() is not null)
 var registry = app.Services.GetRequiredService<ModuleRegistry>();
 var featureCatalog = activationSession.ModulePlan.FeatureCatalog;
 FeatureEndpointBindings.Validate(((IEndpointRouteBuilder)app).DataSources, featureCatalog);
-var endpointAccessPlan = EndpointAccessPlanCompiler.Compile(
-    ((IEndpointRouteBuilder)app).DataSources,
-    registry);
+EndpointAccessPlanCompiler.Compile(
+    ((IEndpointRouteBuilder)app).DataSources);
 
 var skipAuthorizationCatalogInitialization = builder.Configuration.GetValue<bool>("Platform:SkipAuthorizationCatalogInitialization");
 var permissionSynchronizer = new HostPluginPermissionSynchronizer(async cancellationToken =>
@@ -346,10 +344,6 @@ foreach (var (moduleId, module) in modules)
     logger.LogInformation("Module: {ModuleId} - {DisplayName} (v{Version})",
         moduleId, module.DisplayName, module.Version);
 }
-
-logger.LogInformation("=== Permissions ===");
-var permissions = registry.GetAllPermissions();
-logger.LogInformation("Loaded {Count} permission descriptors", permissions.Count);
 
 logger.LogInformation("=== Menus ===");
 var menus = registry.GetAllMenus();

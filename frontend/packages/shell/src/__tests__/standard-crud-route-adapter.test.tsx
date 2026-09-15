@@ -38,7 +38,7 @@ const navDocuments: RuntimeNavItemDocument[] = [{
       path: '/organization/persons',
       entryType: 'standard-list',
       targetKey: 'organization.person.list',
-      permissions: ['Organization.Person.View'],
+      featurePosition: 'Organization.Person.View',
     }],
   },
 }];
@@ -61,9 +61,9 @@ const viewDocuments: RuntimeViewDocument[] = [{
 }];
 
 const fallbackRoutes: RouteConfig[] = [
-  { path: '/organization/persons', component: () => null, permissions: ['Organization.Person.View'] },
-  { path: '/organization/persons/new', component: () => null, permissions: ['Organization.Person.View'] },
-  { path: '/organization/persons/:id', component: () => null, permissions: ['Organization.Person.View'] },
+  { path: '/organization/persons', component: () => null, featurePosition: 'Organization.Person.View' },
+  { path: '/organization/persons/new', component: () => null, featurePosition: 'Organization.Person.View' },
+  { path: '/organization/persons/:id', component: () => null, featurePosition: 'Organization.Person.View' },
 ];
 
 describe('standard CRUD route adapter', () => {
@@ -74,7 +74,7 @@ describe('standard CRUD route adapter', () => {
       {
         path: '/organization/persons/:id',
         viewKey: 'organization.person.detail',
-        permissions: ['Organization.Person.View'],
+        featurePosition: 'Organization.Person.View',
       },
     ]);
   });
@@ -115,7 +115,7 @@ describe('standard CRUD route adapter', () => {
     expect(projection.detailEntries).toEqual([{
       path: '/organization/persons/:id',
       viewKey: 'organization.person.detail',
-      permissions: ['Organization.Person.View'],
+      featurePosition: 'Organization.Person.View',
     }]);
     expect(projection.drawerRedirects).toEqual([{
       from: '/organization/persons/new',
@@ -136,11 +136,11 @@ describe('standard CRUD route adapter', () => {
 
     expect(resolveStandardCrudListRoute([navigation], 'example.runtime-workload.list')).toEqual({
       path: '/examples/standard-crud/runtime-columns',
-      permissions: undefined,
+      featurePosition: undefined,
     });
     expect(resolveStandardCrudListRoute([navigation], 'example.record.list')).toEqual({
       path: '/examples/standard-crud/persistent-records',
-      permissions: undefined,
+      featurePosition: undefined,
     });
     expect(compileStandardCrudRouteProjection(
       [exampleModule],
@@ -151,7 +151,7 @@ describe('standard CRUD route adapter', () => {
       detailEntries: [{
         path: '/examples/standard-crud/persistent-records/:id',
         viewKey: 'example.record.detail',
-        permissions: undefined,
+        featurePosition: undefined,
         featurePosition: undefined,
       }],
       drawerRedirects: [{
@@ -229,7 +229,7 @@ describe('standard CRUD route projection compiler', () => {
   const listTarget = 'sample.records.list';
   const detailTarget = 'sample.records.detail';
   const path = '/sample/records';
-  const permissions = ['Sample.Record.View'];
+  const featurePosition = 'Sample/navigation:records';
 
   const lazyModule: FrontendModule = {
     metadata: { moduleId: 'sample', displayName: 'Sample', version: '1.0.0' },
@@ -246,7 +246,7 @@ describe('standard CRUD route projection compiler', () => {
         path,
         entryType: 'standard-list',
         targetKey: listTarget,
-        permissions,
+        featurePosition,
       }],
     },
   }];
@@ -405,21 +405,6 @@ describe('standard CRUD route projection compiler', () => {
     );
   });
 
-  it('fails when legacy resource permissions conflict with nav truth', () => {
-    const legacyModule: FrontendModule = {
-      ...modules[0],
-      standardCrudResources: [{
-        ...modules[0].standardCrudResources![0],
-        permissions: ['Sample.Record.Update'],
-      }],
-    };
-
-    expectProjectionFailure(
-      () => compileStandardCrudRouteProjection([legacyModule], navDocuments, viewDocuments, []),
-      'STANDARD_CRUD_PERMISSION_CONFLICT',
-    );
-  });
-
   it('fails when legacy registration detail truth differs from the list view', () => {
     const legacyModule: FrontendModule = {
       ...modules[0],
@@ -470,7 +455,7 @@ describe('standard CRUD route projection compiler', () => {
     const conflictingFallback: RouteConfig = {
       path: `${path}/new`,
       component: () => null,
-      permissions: ['Sample.Record.Update'],
+      featurePosition: 'Sample.Record.Update',
     };
 
     expectProjectionFailure(
@@ -483,7 +468,7 @@ describe('standard CRUD route projection compiler', () => {
     const fallback: RouteConfig = {
       path: `${path}/new`,
       component: () => null,
-      permissions,
+      featurePosition,
     };
 
     expectProjectionFailure(
@@ -496,7 +481,7 @@ describe('standard CRUD route projection compiler', () => {
     const compatibleFallback: RouteConfig = {
       path: `${path}/new`,
       component: () => null,
-      permissions,
+      featurePosition,
     };
 
     expect(compileStandardCrudRouteProjection(
@@ -505,7 +490,7 @@ describe('standard CRUD route projection compiler', () => {
       lazyViews,
       [compatibleFallback, { path: '/unowned', component: () => null }],
     )).toEqual({
-      detailEntries: [{ path: `${path}/:id`, viewKey: detailTarget, permissions }],
+      detailEntries: [{ path: `${path}/:id`, viewKey: detailTarget, featurePosition }],
       drawerRedirects: [{ from: `${path}/new`, to: `${path}?drawer=create` }],
       fallbackRoutes: [{ path: '/unowned', component: expect.any(Function) }],
     });

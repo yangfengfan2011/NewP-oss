@@ -5,7 +5,7 @@ namespace ICP.Platform.Crud.Descriptors;
 /// </summary>
 public static class StandardCrudAuthorizationFailureCodes
 {
-    public const string PermissionStemMissing = "AUTH_CRUD_PERMISSION_STEM_MISSING";
+    public const string FeatureBehaviorStemMissing = "AUTH_CRUD_FEATURE_BEHAVIOR_STEM_MISSING";
     public const string OperationUnmapped = "AUTH_CRUD_OPERATION_UNMAPPED";
     public const string DeclarationDuplicate = "AUTH_CRUD_PERMISSION_DECLARATION_DUPLICATE";
     public const string DeclarationConflict = "AUTH_CRUD_PERMISSION_DECLARATION_CONFLICT";

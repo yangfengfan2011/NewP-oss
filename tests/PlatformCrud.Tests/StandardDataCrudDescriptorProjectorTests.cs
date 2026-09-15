@@ -72,7 +72,7 @@ public sealed class StandardDataCrudDescriptorProjectorTests : IDisposable
         }
     }
 
-    private CanonicalModulePlanModule CreateModule() => new(
+    private CanonicalModulePlanModule CreateModule() => new CanonicalModulePlanModule(
         "Partner.AssetCatalog",
         "1.0.0",
         "Asset Catalog",
@@ -87,13 +87,6 @@ public sealed class StandardDataCrudDescriptorProjectorTests : IDisposable
         ["/api/standard/partner-asset-catalog/assets", "/assets"],
         ["Partner.AssetCatalog.Asset"],
         ["Partner.AssetCatalog.Asset"],
-        [
-            "Partner.AssetCatalog.Asset.View",
-            "Partner.AssetCatalog.Asset.Create",
-            "Partner.AssetCatalog.Asset.Update",
-            "Partner.AssetCatalog.Asset.Delete"
-        ],
-        [],
         ["Asset"],
         new ModulePlanProvenance("installed-package", Path.Combine(_packageRoot, "plugin.json"), "/"));
 
@@ -134,13 +127,7 @@ public sealed class StandardDataCrudDescriptorProjectorTests : IDisposable
                     "/assets",
                     "np_partner_asset_catalog",
                     "assets",
-                    ["UX_assets_SerialNo"],
-                    [
-                        "Partner.AssetCatalog.Asset.View",
-                        "Partner.AssetCatalog.Asset.Create",
-                        "Partner.AssetCatalog.Asset.Update",
-                        "Partner.AssetCatalog.Asset.Delete"
-                    ])
+                    ["UX_assets_SerialNo"])
             ]);
         var manifest = new StandardPluginPackageManifest(
             1,

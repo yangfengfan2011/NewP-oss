@@ -14,33 +14,6 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace ICP.Platform.HostApi.PluginActivation;
 
-public sealed class HostPluginPermissionCatalogValidator : IPluginPermissionCatalogValidator
-{
-    public void Validate(CanonicalModulePlan plan)
-    {
-        ArgumentNullException.ThrowIfNull(plan);
-        var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var module in plan.Modules)
-        {
-            foreach (var code in module.PermissionCodes)
-            {
-                if (string.IsNullOrWhiteSpace(code))
-                {
-                    throw new InvalidDataException($"Module '{module.ModuleId}' declares an empty permission code.");
-                }
-
-                if (owners.TryGetValue(code, out var owner))
-                {
-                    throw new InvalidDataException(
-                        $"Permission '{code}' is declared by both '{owner}' and '{module.ModuleId}'.");
-                }
-
-                owners[code] = module.ModuleId;
-            }
-        }
-    }
-}
-
 public sealed class HostPluginPersistencePlanCompiler : IPluginPersistencePlanCompiler
 {
     private readonly string _storageTypeMapPath;
@@ -471,27 +444,16 @@ public sealed class CanonicalModuleAssemblyLoader
 }
 
 /// <summary>
-/// standard-data 模块没有可执行程序集；该投影只把活动身份与权限放入 Host 注册表。
+/// standard-data 模块没有可执行程序集；该投影只把活动身份放入 Host 注册表。
 /// </summary>
-public sealed class ProjectedStandardDataModule : IModule, IPermissionProvider
+public sealed class ProjectedStandardDataModule : IModule
 {
-    private readonly IReadOnlyList<PermissionDescriptor> _permissions;
 
     public ProjectedStandardDataModule(CanonicalModulePlanModule module)
     {
         ModuleId = module.ModuleId;
         DisplayName = module.DisplayName;
         Version = module.Version;
-        _permissions = module.PermissionCodes
-            .Select(code => new PermissionDescriptor
-            {
-                Code = code,
-                DisplayName = code,
-                Description = "由 standard-data.v1 活动投影声明。",
-                ModuleId = module.ModuleId,
-                Group = "标准数据"
-            })
-            .ToArray();
     }
 
     public string ModuleId { get; }
@@ -505,5 +467,4 @@ public sealed class ProjectedStandardDataModule : IModule, IPermissionProvider
         _ = services;
     }
 
-    public IReadOnlyList<PermissionDescriptor> GetPermissions() => _permissions;
 }

@@ -105,8 +105,7 @@ public sealed class HostAuthenticationProcessRestartTests
             using var roleResponse = await FeatureHttpTestRequests.SendAsync(client, http.Role("create"), HttpMethod.Post, "/api/authorization/roles", new { Code = "restart-reader", Name = "重启查询职责" });
             Assert.Equal(HttpStatusCode.Created, roleResponse.StatusCode);
             var roleId = (await roleResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
-            using var permissionResponse = await client.PutAsJsonAsync($"/api/authorization/roles/{roleId}/permissions", new { PermissionCodes = new[] { "Organization.Person.View" } });
-            Assert.Equal(HttpStatusCode.NoContent, permissionResponse.StatusCode);
+            await http.GrantAsync(client, roleId!, http.Organization("persons"));
             using var accountResponse = await FeatureHttpTestRequests.SendAsync(client, http.Identity("create"), HttpMethod.Post, "/api/identity/accounts", new { ECODE = "restart-member", ENAME = "重启查询账号" });
             Assert.Equal(HttpStatusCode.Created, accountResponse.StatusCode);
             var accountId = (await accountResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("account").GetProperty("eid").GetString();
@@ -129,12 +128,12 @@ public sealed class HostAuthenticationProcessRestartTests
             Assert.Equal("持久姓名", restoredPerson.GetProperty("fields").GetProperty("ENAME").GetString());
             var restoredRoles = await FeatureHttpTestRequests.ReadAsync(client, http.Role("userRoles"), $"/api/authorization/users/{accountId}/roles");
             Assert.Equal("restart-reader", Assert.Single(restoredRoles.GetProperty("roleCodes").EnumerateArray()).GetString());
-            var restoredPermissions = await client.GetFromJsonAsync<JsonElement>($"/api/authorization/roles/{roleId}/permissions");
-            Assert.Contains("Organization.Person.View", restoredPermissions.ToString());
+            var restoredPermissions = await FeatureHttpTestRequests.ReadAsync(client, http.Workbench("authorization.workbench.read"), $"/api/authorization/workbench/roles/{roleId}");
+            Assert.Contains(restoredPermissions.GetProperty("positions").EnumerateArray(), point => point.GetString() == http.Organization("persons").Position);
             var restoredHistory = await FeatureHttpTestRequests.ReadTextAsync(client, http.Audit(), "/api/audit/business-changes?pageSize=100");
             Assert.Equal(historyBefore, restoredHistory);
             using var historyDocument = JsonDocument.Parse(restoredHistory);
-            Assert.Equal(new[] { "person.created", "person.updated", "role.permissions.changed", "user.roles.changed" },
+            Assert.Equal(new[] { "person.created", "person.updated", "role.features.changed", "user.roles.changed" },
                 historyDocument.RootElement.GetProperty("items").EnumerateArray().Select(row => row.GetProperty("EventType").GetString()).Order().ToArray());
         }
         finally

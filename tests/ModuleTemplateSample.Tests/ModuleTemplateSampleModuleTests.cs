@@ -52,18 +52,10 @@ public class ModuleTemplateSampleModuleTests
     }
 
     [Fact]
-    public void GetPermissions_ReturnsExpectedPermissions()
+    public void SampleStatus_RemainsExplicitlyDeniedWithoutAProductionFeature()
     {
-        // 执行
-        var permissions = _module.GetPermissions();
-
-        // 断言
-        Assert.Single(permissions);
-        var permission = permissions[0];
-        Assert.Equal("ModuleTemplateSample.View", permission.Code);
-        Assert.Equal("查看模块模板示例", permission.DisplayName);
-        Assert.Equal("ModuleTemplateSample", permission.ModuleId);
-        Assert.Equal("模块模板示例", permission.Group);
+        Assert.Single(typeof(Controllers.SampleStatusController)
+            .GetCustomAttributes(typeof(ICP.Platform.Authorization.Http.DenyAllAttribute), inherit: true));
     }
 
     [Fact]

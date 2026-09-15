@@ -9,10 +9,9 @@ import type {
 } from '../metadata/runtimeMetadataManifest';
 
 export interface StandardCrudDetailRouteEntry {
-  featurePosition?: string;
   path: string;
   viewKey: string;
-  permissions?: string[];
+  featurePosition?: string;
 }
 
 export interface StandardCrudDrawerRouteRedirect {
@@ -37,7 +36,6 @@ export type StandardCrudProjectionDiagnostic =
   | 'STANDARD_CRUD_DETAIL_CAPABILITY_ORPHAN'
   | 'STANDARD_CRUD_DETAIL_PATH_CONFLICT'
   | 'STANDARD_CRUD_DRAWER_PATH_CONFLICT'
-  | 'STANDARD_CRUD_PERMISSION_CONFLICT'
   | 'STANDARD_CRUD_DETAIL_FALLBACK_CONFLICT'
   | 'STANDARD_CRUD_DRAWER_FALLBACK_CONFLICT'
   | 'STANDARD_CRUD_FALLBACK_OWNERSHIP_CONFLICT';
@@ -58,7 +56,7 @@ interface StandardCrudProjectionOwner {
   detailViewKey?: string;
   projectsFullDetail?: boolean;
   path: string;
-  permissions?: string[];
+  featurePosition?: string;
   projectsDrawer: boolean;
 }
 
@@ -103,7 +101,7 @@ export function compileStandardCrudRouteProjection(
         }
         if (nav) owners.push({
           path: nav.path,
-          permissions: nav.permissions,
+          featurePosition: nav.featurePosition,
           projectsDrawer: false,
         });
         continue;
@@ -123,7 +121,7 @@ export function compileStandardCrudRouteProjection(
         detailViewKey,
         projectsFullDetail: matchingDetailTargets.length === 1,
         path: nav.path,
-        permissions: nav.permissions,
+        featurePosition: nav.featurePosition,
         projectsDrawer: true,
       });
     }
@@ -142,14 +140,14 @@ export function compileStandardCrudRouteProjection(
       if (!item.targetKey || !item.path || targetCount !== 1)
         fail('STANDARD_CRUD_DETAIL_CAPABILITY_ORPHAN', item.targetKey ?? item.key);
       resolveExplicitDetailRoute(navDocuments, item.targetKey);
-      return { path: item.path!, viewKey: item.targetKey!, permissions: item.permissions, featurePosition: item.featurePosition };
+      return { path: item.path!, viewKey: item.targetKey!, featurePosition: item.featurePosition };
     });
   const detailEntries = [...explicitEntries, ...owners.flatMap((owner) => owner.detailViewKey && owner.projectsFullDetail
     && !explicitEntries.some(entry => entry.viewKey === owner.detailViewKey)
     ? [{
         path: `${normalizeListPath(owner.path)}/:id`,
         viewKey: owner.detailViewKey,
-        permissions: owner.permissions,
+        featurePosition: owner.featurePosition,
       }]
     : [])];
   requireUniquePaths(
@@ -170,12 +168,12 @@ export function compileStandardCrudRouteProjection(
   const ownedRoutes = [
     ...detailEntries.map((entry) => ({
       path: entry.path,
-      permissions: entry.permissions,
+      featurePosition: entry.featurePosition,
       diagnostic: 'STANDARD_CRUD_DETAIL_FALLBACK_CONFLICT' as const,
     })),
     ...drawerRedirects.map((entry, index) => ({
       path: entry.from,
-      permissions: drawerOwners[index].permissions,
+      featurePosition: drawerOwners[index].featurePosition,
       diagnostic: 'STANDARD_CRUD_DRAWER_FALLBACK_CONFLICT' as const,
     })),
   ];
@@ -186,7 +184,7 @@ export function compileStandardCrudRouteProjection(
       fail('STANDARD_CRUD_FALLBACK_OWNERSHIP_CONFLICT', owned.path);
     }
     if (matchingFallbacks.length === 1
-      && !permissionSetsEqual(matchingFallbacks[0].permissions, owned.permissions)) {
+      && matchingFallbacks[0].featurePosition !== owned.featurePosition) {
       fail(owned.diagnostic, owned.path);
     }
   }
@@ -205,9 +203,6 @@ function compileLegacyResourceOwner(
   viewDocuments: RuntimeViewDocument[],
 ): StandardCrudProjectionOwner {
   const nav = requireUniqueListNav(navDocuments, resource.listViewKey);
-  if (resource.permissions && !permissionSetsEqual(resource.permissions, nav.permissions)) {
-    fail('STANDARD_CRUD_PERMISSION_CONFLICT', resource.listViewKey);
-  }
 
   const listView = requireUniqueView(viewDocuments, resource.listViewKey, 'STANDARD_CRUD_LIST_VIEW_NOT_UNIQUE');
   const metadataDetailViewKey = readNonEmptyString(listView.view.detailViewKey);
@@ -226,7 +221,7 @@ function compileLegacyResourceOwner(
     detailViewKey: resource.detailViewKey,
     projectsFullDetail: Boolean(resource.detailRoutePath),
     path: nav.path,
-    permissions: nav.permissions,
+    featurePosition: nav.featurePosition,
     projectsDrawer: true,
   };
 }
@@ -254,7 +249,7 @@ export function hasStandardCrudFullDetailPage(modules: FrontendModule[], detailV
 function requireUniqueListNav(
   navDocuments: RuntimeNavItemDocument[],
   listViewKey: string,
-): { path: string; permissions?: string[] } {
+): { path: string; featurePosition?: string } {
   const matches = navDocuments
     .flatMap((document) => document.navigation.items)
     .filter((item) => item.entryType === 'standard-list'
@@ -267,7 +262,7 @@ function requireUniqueListNav(
 
   return {
     path: matches[0].path!,
-    permissions: matches[0].permissions,
+    featurePosition: matches[0].featurePosition,
   };
 }
 
@@ -314,17 +309,10 @@ function readNonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
-function permissionSetsEqual(left: string[] | undefined, right: string[] | undefined): boolean {
-  const normalizedLeft = [...new Set(left ?? [])].sort();
-  const normalizedRight = [...new Set(right ?? [])].sort();
-  return normalizedLeft.length === normalizedRight.length
-    && normalizedLeft.every((permission, index) => permission === normalizedRight[index]);
-}
-
 export function resolveStandardCrudListRoute(
   navDocuments: RuntimeNavItemDocument[],
   listViewKey: string,
-): { path: string; permissions?: string[] } | null {
+): { path: string; featurePosition?: string } | null {
   const matches = navDocuments
     .flatMap((document) => document.navigation.items)
     .filter((item) => item.entryType === 'standard-list'
@@ -338,7 +326,7 @@ export function resolveStandardCrudListRoute(
 
   return {
     path: matches[0].redirectTo ?? matches[0].path!,
-    permissions: matches[0].permissions,
+    featurePosition: matches[0].featurePosition,
   };
 }
 

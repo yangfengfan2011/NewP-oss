@@ -1,7 +1,7 @@
 namespace ICP.Platform.Authorization;
 
 /// <summary>
-/// PermissionGate 的三态授权决策。
+/// 共享的三态授权决策。
 /// </summary>
 public enum PermissionDecision
 {

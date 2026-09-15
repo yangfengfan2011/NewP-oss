@@ -167,8 +167,6 @@ public sealed class RequiredBuiltinReadinessTests : IDisposable
             [],
             [],
             [],
-            [],
-            [],
             provenance);
         var candidate = new ModuleCapsuleCandidate(
             module.ModuleId,
@@ -185,8 +183,6 @@ public sealed class RequiredBuiltinReadinessTests : IDisposable
             module.Routes,
             module.FrontendBindings,
             module.FrontendBindingReferences,
-            module.PermissionCodes,
-            module.PermissionReferences,
             module.ModelKeys,
             module.Provenance,
             module.Persistence);

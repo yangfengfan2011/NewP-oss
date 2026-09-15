@@ -6,6 +6,5 @@ export default {
     description: 'A Vite-managed runtime plugin sample for shell manifest smoke validation.'
   },
   routes: [],
-  menus: [],
-  permissions: []
+  menus: []
 };

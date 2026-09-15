@@ -1,7 +1,7 @@
 import { useFeaturePlacement } from '../authorization/FeaturePlacementContext';
 import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useAuthorization, useLocalization, usePlatformQuery } from '@icp-platform/core';
+import { useLocalization, usePlatformQuery } from '@icp-platform/core';
 import { DownOutlined, DownloadOutlined } from '@ant-design/icons';
 import {
   ModuleRegistry,
@@ -648,13 +648,6 @@ function resolveDrawerTitle(
   return `${fallbackAction}${resourceTitle}`;
 }
 
-function useOptionalGrantedPermissions(fallbackPermissions: string[] = []): string[] {
-  try {
-    return useAuthorization().permissions;
-  } catch {
-    return fallbackPermissions;
-  }
-}
 
 function useOptionalCurrentSubjectId(): string {
   try {
@@ -685,9 +678,6 @@ function resolveResponsiveBreakpoints(priority: 'high' | 'medium' | 'low' | unde
   return undefined;
 }
 
-function hasActionPermission(action: { requiredPermissions?: string[] }, grantedPermissions: string[] = []): boolean {
-  return (action.requiredPermissions ?? []).every((permission) => grantedPermissions.includes(permission));
-}
 
 function formatTimestampForFileName(date = new Date()): string {
   const pad = (value: number) => String(value).padStart(2, '0');
@@ -777,9 +767,12 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const { t } = useLocalization();
   const currentSubjectId = useOptionalCurrentSubjectId();
   const sessionTimeZoneId = useOptionalSessionTimeZoneId();
-  const grantedPermissions = useOptionalGrantedPermissions(registration.permissions);
-  const allowAction = (action: StandardCrudRuntimeActionSchema, surface = "list.rowActions") => features.placement
-    ? features.hasFeature((action.navigationTargetKey ? features.navigation(action.navigationTargetKey) : features.action(action.key, surface)) ?? "") : hasActionPermission(action, grantedPermissions);
+  const allowAction = (action: StandardCrudRuntimeActionSchema, surface = 'list.rowActions') => {
+    const position = action.navigationTargetKey
+      ? features.navigation(action.navigationTargetKey)
+      : (action.standardAction === 'refresh' || action.standardAction === 'view') ? features.readPosition : features.action(action.key, surface);
+    return features.hasFeature(position ?? '');
+  };
   const schema = useMemo(() => buildStandardCrudListSchema(view, registration, {
     modelDocuments,
   }), [view, registration, modelDocuments]);
@@ -1867,7 +1860,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       setExportingMode(null);
     }
   };
-  const exportToolbar = schema.exportModes.length > 0 && (!features.placement || features.hasFeature(features.action('export', 'list') ?? '')) ? (
+  const exportToolbar = schema.exportModes.length > 0 && features.hasFeature(features.action('export', 'list') ?? '') ? (
     <Dropdown
       trigger={['click']}
       disabled={exportingMode !== null}

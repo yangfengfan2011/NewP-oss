@@ -197,8 +197,6 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
                 .ToArray(),
             FrontendBindings: frontendBindings,
             FrontendBindingReferences: frontendBindings,
-            PermissionCodes: [],
-            PermissionReferences: [],
             ModelKeys: projection.Resources
                 .Select(static resource => resource.ResourceKey)
                 .OrderBy(static key => key, StringComparer.Ordinal)

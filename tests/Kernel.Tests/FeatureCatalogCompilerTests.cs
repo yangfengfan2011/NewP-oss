@@ -56,7 +56,7 @@ public sealed class FeatureCatalogCompilerTests
     public void CanonicalPlan_ContainsFeaturesInItsHashAndRejectsBrokenCandidate()
     {
         var candidate = new ModuleCapsuleCandidate("Authorization", "1.0.0", "Authorization", null,
-            "packages/Authorization", null, null, null, null, "legacy-module", [], [], [], [], [], [], [],
+            "packages/Authorization", null, null, null, null, "legacy-module", [], [], [], [], [],
             new("fixture", "capsule", "/")) { Features = [new("Authorization", "workbench", "navigation", "功能授权", null, "read")] };
         var compiler = new CanonicalModulePlanCompiler();
         var first = compiler.Compile("feature-test", [candidate]);

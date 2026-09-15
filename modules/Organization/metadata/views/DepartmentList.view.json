@@ -37,11 +37,11 @@
       { "key": "updatedAt", "labelKey": "Column_UpdatedAt", "source": "model", "field": "UpdatedAt", "sortable": true, "responsivePriority": "low" }
     ],
     "pageActions": [
-      { "key": "create", "labelKey": "Action_Create", "standardAction": "create", "variant": "primary", "permissions": ["Organization.Department.Create"] }
+      { "key": "create", "labelKey": "Action_Create", "standardAction": "create", "variant": "primary" }
     ],
     "rowActions": [
-      { "key": "edit", "labelKey": "Action_Edit", "standardAction": "edit", "permissions": ["Organization.Department.Update"] },
-      { "key": "delete", "labelKey": "Action_Delete", "standardAction": "delete", "variant": "danger", "confirmMessageKey": "Action_Delete_Confirm", "permissions": ["Organization.Department.Delete"] }
+      { "key": "edit", "labelKey": "Action_Edit", "standardAction": "edit" },
+      { "key": "delete", "labelKey": "Action_Delete", "standardAction": "delete", "variant": "danger", "confirmMessageKey": "Action_Delete_Confirm" }
     ]
   }
 }

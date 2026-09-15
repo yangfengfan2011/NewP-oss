@@ -33,7 +33,6 @@ public sealed class CanonicalModulePlanCompiler
         var diagnostics = ValidateIdentity(candidateId, candidateArray)
             .Concat(ValidateDependencies(candidateId, candidateArray))
             .Concat(ValidateBindings(candidateId, candidateArray))
-            .Concat(ValidatePermissionReferences(candidateId, candidateArray))
             .Concat(ValidateRouteOwners(candidateId, candidateArray))
             .Concat(ValidateModelOwners(candidateId, candidateArray)).Concat(ValidateFeatures(candidateId, candidateArray))
             .OrderBy(static diagnostic => diagnostic.Stage, StringComparer.Ordinal)
@@ -241,31 +240,6 @@ public sealed class CanonicalModulePlanCompiler
             .ToArray();
     }
 
-    private static IReadOnlyList<ModulePlanDiagnostic> ValidatePermissionReferences(
-        string candidateId,
-        IReadOnlyList<ModuleCapsuleCandidate> candidates)
-    {
-        var permissionCatalog = candidates
-            .SelectMany(static candidate => candidate.PermissionCodes)
-            .ToHashSet(StringComparer.Ordinal);
-
-        return candidates
-            .SelectMany(candidate => candidate.PermissionReferences
-                .Where(reference => !permissionCatalog.Contains(reference))
-                .Distinct(StringComparer.Ordinal)
-                .Select(reference => new ModulePlanDiagnostic(
-                    candidateId,
-                    candidate.ModuleId,
-                    candidate.Version,
-                    reference,
-                    candidate.Provenance.SourcePath,
-                    candidate.Provenance.JsonPointer,
-                    "permission-references",
-                    "MODULE_PERMISSION_REFERENCE_INVALID",
-                    $"Permission reference '{reference}' is absent from the candidate permission catalog.")))
-            .ToArray();
-    }
-
     private static IReadOnlyList<ModulePlanDiagnostic> ValidateRouteOwners(
         string candidateId,
         IReadOnlyList<ModuleCapsuleCandidate> candidates)
@@ -388,8 +362,6 @@ public sealed class CanonicalModulePlanCompiler
             Sort(candidate.Routes),
             Sort(candidate.FrontendBindings),
             Sort(candidate.FrontendBindingReferences),
-            Sort(candidate.PermissionCodes),
-            Sort(candidate.PermissionReferences),
             Sort(candidate.ModelKeys),
             provenance,
             NormalizePersistence(candidate.Persistence)) { Features = candidate.Features.OrderBy(node => node.Key, StringComparer.Ordinal).ToArray() };

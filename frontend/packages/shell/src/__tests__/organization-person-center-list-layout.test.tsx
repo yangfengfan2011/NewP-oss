@@ -1,3 +1,4 @@
+import './authorizedFeatureUiFixture';
 // @vitest-environment jsdom
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -776,7 +777,7 @@ describe('organization person center list layout', () => {
     expect(serviceMocks.setPersonLifecycleStatus).toHaveBeenCalledWith('person-1', {
       isEnabled: false,
       reason: '人员中心停用人员',
-    }, undefined);
+    }, 'ui-fixture:list.rowActions:disable');
     expect(container.textContent).toContain('停用人员失败');
   });
 });

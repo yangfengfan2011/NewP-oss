@@ -106,28 +106,12 @@ public sealed class ModuleCapsuleCandidateReader
             }
         }
 
-        var permissionCodes = TryGetObject(root, "security", out var security)
-            && security.TryGetProperty("permissions", out var permissions)
-            && permissions.ValueKind == JsonValueKind.Array
-                ? permissions.EnumerateArray()
-                    .Select(permission => RequiredString(permission, "code", manifestPath))
-                    .ToArray()
-                : Array.Empty<string>();
-
         var declaredBindings = frontendBindingMode == "behavior-bindings"
             ? frontendBindings.ToHashSet(StringComparer.Ordinal)
             : null;
         var metadata = snapshot is null
             ? ReadMetadata(Path.Combine(moduleRoot, "metadata"), moduleId, declaredBindings)
             : ReadMetadata(snapshot, moduleId, declaredBindings);
-        if (permissionCodes.Length == 0)
-        {
-            // 未完成 capsule cutover 的内建模块通过显式 legacy adapter 保持现有权限引用可编译；
-            // adopter 必须在根 security owner 中声明权限，不能依赖该兼容路径。
-            permissionCodes = metadata.PermissionReferences
-                .Distinct(StringComparer.Ordinal)
-                .ToArray();
-        }
 
         if (frontendBindings.Count == 0)
         {
@@ -149,8 +133,6 @@ public sealed class ModuleCapsuleCandidateReader
             metadata.Routes,
             frontendBindings,
             metadata.FrontendBindingReferences,
-            permissionCodes,
-            metadata.PermissionReferences,
             metadata.ModelKeys,
             trustedSource is not null
                 ? ModulePlanProvenance.CreateTrustedBuiltInRoot(
@@ -207,8 +189,6 @@ public sealed class ModuleCapsuleCandidateReader
             metadata.Routes,
             metadata.FrontendBindingReferences,
             metadata.FrontendBindingReferences,
-            metadata.PermissionReferences,
-            metadata.PermissionReferences,
             metadata.ModelKeys,
             new ModulePlanProvenance("installed-package", manifestPath, "/"),
             ReadPersistence(root, manifestPath)) { Features = ReadFeatures(root, moduleId, Path.Combine(packageRoot, "modules", moduleId, "metadata"), null) };
@@ -276,7 +256,6 @@ public sealed class ModuleCapsuleCandidateReader
 
         var routes = new List<string>();
         var bindingReferences = new List<string>();
-        var permissionReferences = new List<string>();
         bindingReferences.AddRange(PageCompositionMetadataValidator.Validate(
             Directory.EnumerateFiles(metadataRoot, "*.json", SearchOption.AllDirectories)
                 .Select(path => JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(path))), declaredBindings));
@@ -298,7 +277,6 @@ public sealed class ModuleCapsuleCandidateReader
                 {
                     AddOptionalString(item, "path", routes);
                     AddOptionalString(item, "targetKey", bindingReferences);
-                    CollectStringArrayProperties(item, "permissions", permissionReferences);
                 }
             }
         }
@@ -313,7 +291,6 @@ public sealed class ModuleCapsuleCandidateReader
                 if (TryGetObject(document.RootElement, "view", out var view))
                 {
                     AddViewBindingReference(view, bindingReferences, declaredBindings);
-                    CollectStringArrayProperties(view, "permissions", permissionReferences);
                 }
             }
         }
@@ -343,7 +320,6 @@ public sealed class ModuleCapsuleCandidateReader
         return new MetadataFacts(
             routes.Distinct(StringComparer.Ordinal).OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
             bindingReferences.Distinct(StringComparer.Ordinal).OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
-            permissionReferences.Distinct(StringComparer.Ordinal).OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
             modelKeys.Distinct(StringComparer.Ordinal).OrderBy(static value => value, StringComparer.Ordinal).ToArray());
     }
 
@@ -355,7 +331,6 @@ public sealed class ModuleCapsuleCandidateReader
     {
         var routes = new List<string>();
         var bindingReferences = new List<string>();
-        var permissionReferences = new List<string>();
         bindingReferences.AddRange(PageCompositionMetadataValidator.Validate(
             snapshot.EnumerateFiles("metadata").Where(path => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
                 .Select(path => JsonSerializer.Deserialize<JsonElement>(ReadMetadataText(snapshot, path))), declaredBindings));
@@ -374,7 +349,6 @@ public sealed class ModuleCapsuleCandidateReader
             {
                 AddOptionalString(item, "path", routes);
                 AddOptionalString(item, "targetKey", bindingReferences);
-                CollectStringArrayProperties(item, "permissions", permissionReferences);
             }
         }
 
@@ -385,7 +359,6 @@ public sealed class ModuleCapsuleCandidateReader
             if (TryGetObject(document.RootElement, "view", out var view))
             {
                 AddViewBindingReference(view, bindingReferences, declaredBindings);
-                CollectStringArrayProperties(view, "permissions", permissionReferences);
             }
         }
 
@@ -410,7 +383,6 @@ public sealed class ModuleCapsuleCandidateReader
         return new MetadataFacts(
             routes.Distinct(StringComparer.Ordinal).OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
             bindingReferences.Distinct(StringComparer.Ordinal).OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
-            permissionReferences.Distinct(StringComparer.Ordinal).OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
             modelKeys.Distinct(StringComparer.Ordinal).OrderBy(static value => value, StringComparer.Ordinal).ToArray());
     }
 
@@ -583,11 +555,9 @@ public sealed class ModuleCapsuleCandidateReader
     private sealed record MetadataFacts(
         IReadOnlyList<string> Routes,
         IReadOnlyList<string> FrontendBindingReferences,
-        IReadOnlyList<string> PermissionReferences,
         IReadOnlyList<string> ModelKeys)
     {
         public static MetadataFacts Empty { get; } = new(
-            Array.Empty<string>(),
             Array.Empty<string>(),
             Array.Empty<string>(),
             Array.Empty<string>());

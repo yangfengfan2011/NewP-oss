@@ -320,8 +320,6 @@ public sealed class RuntimeViewStagingTests : IDisposable
                     ["/api/standard/partner-asset-catalog/assets", "/assets"],
                     ["Partner.AssetCatalog.Asset"],
                     ["Partner.AssetCatalog.Asset"],
-                    [],
-                    [],
                     ["Asset"],
                     new ModulePlanProvenance(
                         "installed-package",

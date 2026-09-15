@@ -180,7 +180,8 @@ internal static class FeatureScaleBrowserObserver
                     var detail = page.WaitForResponseAsync(value => Endpoint(value, "/roles/" + role.Id));
                     await page.GetByRole(AriaRole.Button, new() { Name = $"{role.Name} · {role.Code}", Exact = true }).ClickAsync();
                     await detail;
-                    await page.GetByText(role.Name + " · " + role.Code, new() { Exact = true }).WaitForAsync();
+                    await page.GetByText(role.Name + " · " + role.Code, new() { Exact = true })
+                        .And(page.Locator(".ant-card-head-title")).WaitForAsync();
                 });
             }
             await StageAsync("expand-tree", () => page.GetByRole(AriaRole.Button, new() { Name = "展开全部", Exact = true }).ClickAsync());

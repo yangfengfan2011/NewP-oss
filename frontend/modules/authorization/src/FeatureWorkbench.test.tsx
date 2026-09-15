@@ -82,7 +82,8 @@ it('discards a late response after switching to another role', async () => {
     await act(async () => target.click());
     await act(async () => finish(json({ role: role('one'), positions: ['read'] })));
     expect(container.textContent).toContain('two · two');
-    expect(container.querySelectorAll('.ant-card-head-title')[1]?.textContent).toBe('two · two');
+    expect([...container.querySelectorAll('.ant-card-head-title')].filter(title => title.textContent === 'two · two')).toHaveLength(1);
+    expect([...container.querySelectorAll('.ant-card-head-title')].some(title => title.textContent === 'one · one')).toBe(false);
     expect(fetcher.mock.calls.filter(call => String(call[0]).endsWith('/catalog'))).toHaveLength(1);
   } finally { await act(async () => root.unmount()); container.remove(); }
 });

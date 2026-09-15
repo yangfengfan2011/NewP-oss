@@ -108,7 +108,8 @@ internal sealed class AuthorizationAcceptanceRunner(string repositoryRoot, strin
             await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "role-list-baseline.png"), FullPage = true });
             await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
             await page.GetByRole(AriaRole.Menuitem, new() { Name = "配置权限", Exact = true }).ClickAsync();
-            await page.GetByText(roleName + " · AUTH-" + _runId[..8], new() { Exact = true }).WaitForAsync();
+            await page.GetByText(roleName + " · AUTH-" + _runId[..8], new() { Exact = true })
+                .And(page.Locator(".ant-card-head-title")).WaitForAsync();
             await page.Locator(".ant-tree-checkbox").First.ClickAsync();
             await page.GetByRole(AriaRole.Button, new() { Name = "保存授权", Exact = true }).ClickAsync();
             await page.GetByText("授权已保存", new() { Exact = true }).WaitForAsync();

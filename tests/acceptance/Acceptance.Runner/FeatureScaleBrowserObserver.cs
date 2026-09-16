@@ -136,6 +136,7 @@ internal static class FeatureScaleBrowserObserver
             page.PageError += (_, error) => errors.Enqueue(error);
             page.RequestFailed += (_, message) => errors.Enqueue($"{message.Method} {new Uri(message.Url).AbsolutePath}: {message.Failure}");
             await new ShellPageDriver(page, request.ShellUrl.TrimEnd('/')).LoginAsync(request.AdministratorECode, request.AdministratorPassword);
+            var workbench = new AuthorizationWorkbenchPageDriver(page);
 
             int CatalogRequests() => requests.Count(path => path.Split('?')[0] == Workbench + "/catalog");
             async Task SettledAsync() => await page.EvaluateAsync("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
@@ -153,9 +154,9 @@ internal static class FeatureScaleBrowserObserver
             {
                 var catalog = page.WaitForResponseAsync(response => Endpoint(response, "/catalog"));
                 var roles = page.WaitForResponseAsync(response => Endpoint(response, "/roles"));
-                await page.Locator(".np-sidebar-menu").GetByRole(AriaRole.Link, new() { Name = "功能授权", Exact = true }).ClickAsync();
+                await workbench.ClickSidebarEntryAsync();
                 await Task.WhenAll(catalog, roles);
-                await page.Locator(".ant-list-item button").First.WaitForAsync();
+                await workbench.WaitForFirstRoleVisibleAsync();
             });
             foreach (var target in new[] { 2, 1 })
             {
@@ -163,7 +164,8 @@ internal static class FeatureScaleBrowserObserver
                 {
                     var response = page.WaitForResponseAsync(value => Endpoint(value, "/roles")
                         && StandardCrudPageDriver.HasQueryValue(new Uri(value.Url), "pageIndex", target.ToString()));
-                    await page.Locator(target == 2 ? ".ant-pagination-next" : ".ant-pagination-prev").ClickAsync();
+                    if (target == 2) await workbench.ClickNextRolePageAsync();
+                    else await workbench.ClickPreviousRolePageAsync();
                     await response;
                 });
             }
@@ -171,20 +173,17 @@ internal static class FeatureScaleBrowserObserver
             {
                 await StageAsync($"select-role-{role.Code}", async () =>
                 {
-                    var search = page.GetByLabel("搜索角色", new() { Exact = true });
                     var listed = page.WaitForResponseAsync(value => Endpoint(value, "/roles")
                         && StandardCrudPageDriver.HasQueryValue(new Uri(value.Url), "query", role.Code));
-                    await search.FillAsync(role.Code);
-                    await search.PressAsync("Enter");
+                    await workbench.SubmitRoleSearchAsync(role.Code);
                     await listed;
                     var detail = page.WaitForResponseAsync(value => Endpoint(value, "/roles/" + role.Id));
-                    await page.GetByRole(AriaRole.Button, new() { Name = $"{role.Name} · {role.Code}", Exact = true }).ClickAsync();
+                    await workbench.ClickRoleAsync(role.Name, role.Code);
                     await detail;
-                    await page.GetByText(role.Name + " · " + role.Code, new() { Exact = true })
-                        .And(page.Locator(".ant-card-head-title")).WaitForAsync();
+                    await workbench.WaitForCurrentRoleTitleAsync(role.Name, role.Code);
                 });
             }
-            await StageAsync("expand-tree", () => page.GetByRole(AriaRole.Button, new() { Name = "展开全部", Exact = true }).ClickAsync());
+            await StageAsync("expand-tree", workbench.ExpandAllAsync);
             const string treeSelector = ".ant-tree-list-holder";
             await page.Locator(treeSelector).WaitForAsync();
             async Task ReadTreeAsync(string stage)

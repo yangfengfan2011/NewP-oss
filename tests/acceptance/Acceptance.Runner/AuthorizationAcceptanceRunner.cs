@@ -78,13 +78,15 @@ internal sealed class AuthorizationAcceptanceRunner(string repositoryRoot, strin
         var roleCreate = features.Action(features.Behavior("Authorization", "authorization.role.read"), "create", "list.pageActions");
         using var role = await PostAsync(client, "/api/authorization/roles", new { Code = "AUTH-" + _runId[..8], Name = roleName }, token,
             request => request.Headers.Add("X-NewP-Feature", roleCreate.Position));
+        var roleId = role.RootElement.GetProperty("id").GetString()
+            ?? throw new InvalidOperationException("Role creation omitted id.");
         var shellPort = state.RootElement.GetProperty("ports").GetProperty("shell").GetInt32();
-        await RunScenarioAsync("authorization.browser", _ => RunBrowserAsync(shellPort, password, roleName), token);
+        await RunScenarioAsync("authorization.browser", _ => RunBrowserAsync(shellPort, password, roleId, roleName), token);
         await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "startup-read.json"), new { catalog = _catalog, devRun = _devRun, formalMigration = true, workbenchRead = true }, token);
     }
 
     // 唯一浏览器旅程只观察进入、读取、提交和用户可见结果；授权值和错误边界在 API 层验证。
-    private async Task RunBrowserAsync(int port, string password, string roleName)
+    private async Task RunBrowserAsync(int port, string password, string roleId, string roleName)
     {
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync(new()
@@ -103,18 +105,18 @@ internal sealed class AuthorizationAcceptanceRunner(string repositoryRoot, strin
         try
         {
             await new ShellPageDriver(page, $"http://127.0.0.1:{port}").LoginAsync("admin", password);
+            var workbench = new AuthorizationWorkbenchPageDriver(page);
             await page.Locator(".np-sidebar-menu").GetByRole(AriaRole.Link, new() { Name = "角色管理", Exact = true }).ClickAsync();
             var row = await new StandardCrudPageDriver(page).WaitForRowAsync(roleName);
             await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "role-list-baseline.png"), FullPage = true });
             await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
             await page.GetByRole(AriaRole.Menuitem, new() { Name = "配置权限", Exact = true }).ClickAsync();
-            await page.GetByText(roleName + " · AUTH-" + _runId[..8], new() { Exact = true })
-                .And(page.Locator(".ant-card-head-title")).WaitForAsync();
-            await page.Locator(".ant-tree-checkbox").First.ClickAsync();
-            await page.GetByRole(AriaRole.Button, new() { Name = "保存授权", Exact = true }).ClickAsync();
-            await page.GetByText("授权已保存", new() { Exact = true }).WaitForAsync();
-            await Assertions.Expect(page.GetByRole(AriaRole.Button, new() { Name = $"{roleName} · AUTH-{_runId[..8]}", Exact = true })).ToBeEnabledAsync();
-            await page.Locator(".ant-btn-loading, .ant-spin-spinning").WaitForAsync(new() { State = WaitForSelectorState.Detached });
+            var roleCode = "AUTH-" + _runId[..8];
+            await workbench.WaitForCurrentRoleTitleAsync(roleName, roleCode);
+            await workbench.ClickFirstVisibleFeatureCheckboxAsync();
+            await workbench.SaveAsync(roleId);
+            await workbench.WaitForRoleButtonEnabledAsync(roleName, roleCode);
+            await workbench.WaitForSavePresentationFinishedAsync();
             await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "workbench.png"), FullPage = true });
             await page.SetViewportSizeAsync(900, 1000);
             await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "workbench-narrow.png"), FullPage = true });

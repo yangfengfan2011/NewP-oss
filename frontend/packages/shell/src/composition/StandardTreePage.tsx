@@ -23,8 +23,7 @@ import { createRelationTreeProvider, relationTreeProviderKey } from './relationT
 export default function StandardTreePage({ input, active = true }: PageProps) {
   const metadata = useRuntimeMetadata();
   const features = useFeaturePlacement();
-  const actionPosition = (key: string, surface: string, scope?: string) => features.points.find(point => point.parentPosition === features.placement?.entryPosition && point.staticScope === scope && point.actionScope === surface && point.key === key)?.position;
-  const allowedAction = (key: string, surface: string, scope?: string) => !features.placement || features.hasFeature(actionPosition(key, surface, scope) ?? '');
+  const allowedAction = (key: string, surface: string, scope?: string) => !features.placement || features.hasFeature(features.action(key, surface, scope) ?? '');
   const [editFeature, setEditFeature] = useState<FeaturePlacement | undefined>();
   const runtime = useContext(CompositionContext)!;
   const navigation = useContext(TreeNavigationContext);
@@ -47,7 +46,7 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
     const type = view.nodeTypes.find(item => item.key === node.nodeType);
     const title = <span style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }} title={type ? t(`${view.dicKey}.${type.titleKey}`, type.titleKey) : ''}>{node.label}{node.isEnabled === false ? '（停用）' : ''}</span>;
     return { key: node.nodeKey, isLeaf: branches[node.nodeKey] ? branches[node.nodeKey].length === 0 : !node.hasChildren,
-      title: <Dropdown trigger={['contextMenu']} open={menuNode === node.nodeKey} menu={{ items: (type?.contextMenu ?? []).filter(menu => allowedAction(menu.key, 'contextMenu', node.nodeType)).map(menu => ({ key: menu.key, label: t(`${view.dicKey}.${menu.labelKey}`, menu.labelKey), onClick: () => tree.select(node.nodeKey, () => { setMenuNode(null); setEditFeature(features.placement ? { ...features.placement, staticScope: node.nodeType, actionPosition: actionPosition(menu.key, 'contextMenu', node.nodeType), actionKey: menu.actionKey ?? menu.standardAction } : undefined); setEditContext(node); setEditPage({ pageKey: 'platform.list', parameters: { viewKey: menu.viewKey, presentation: 'drawer', standardAction: menu.standardAction, actionKey: menu.actionKey }, inputResolverKey: menu.inputResolverKey }); }) })) }}
+      title: <Dropdown trigger={['contextMenu']} open={menuNode === node.nodeKey} menu={{ items: (type?.contextMenu ?? []).filter(menu => allowedAction(menu.key, 'contextMenu', node.nodeType)).map(menu => ({ key: menu.key, label: t(`${view.dicKey}.${menu.labelKey}`, menu.labelKey), onClick: () => tree.select(node.nodeKey, () => { setMenuNode(null); setEditFeature(features.placement ? { ...features.placement, staticScope: node.nodeType, actionPosition: features.action(menu.key, 'contextMenu', node.nodeType), actionKey: menu.actionKey ?? menu.standardAction } : undefined); setEditContext(node); setEditPage({ pageKey: 'platform.list', parameters: { viewKey: menu.viewKey, presentation: 'drawer', standardAction: menu.standardAction, actionKey: menu.actionKey }, inputResolverKey: menu.inputResolverKey }); }) })) }}
         onOpenChange={open => { if (open) tree.select(node.nodeKey, () => setMenuNode(node.nodeKey)); else setMenuNode(null); }}>{title}</Dropdown>,
       children: branches[node.nodeKey] ? data(branches[node.nodeKey]) : undefined };
   });
@@ -58,7 +57,7 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
         styles={{ header: { minHeight: token.controlHeightLG, padding: `${token.paddingXXS}px ${token.paddingSM}px` }, body: { padding: token.paddingSM } }}
         title={view.treeActions?.length ? <Space role="toolbar" aria-label="树操作" size={token.marginXS} style={{ width: '100%' }} wrap>
           {view.treeActions.filter(action => allowedAction(action.key, 'treeActions')).map(action => <Button key={action.key} size="small" icon={action.standardAction === 'create' ? <PlusOutlined aria-hidden="true" /> : undefined}
-            onClick={() => runtime.leave(() => { setEditContext(undefined); setEditFeature(features.placement ? { ...features.placement, actionPosition: actionPosition(action.key, 'treeActions'), actionKey: action.actionKey ?? action.standardAction } : undefined); setEditPage({ pageKey: 'platform.list', parameters: { viewKey: action.viewKey, presentation: 'drawer', standardAction: action.standardAction, actionKey: action.actionKey }, inputResolverKey: action.inputResolverKey }); })}>{t(`${view.dicKey}.${action.labelKey}`, action.labelKey)}</Button>)}
+            onClick={() => runtime.leave(() => { setEditContext(undefined); setEditFeature(features.placement ? { ...features.placement, actionPosition: features.action(action.key, 'treeActions'), actionKey: action.actionKey ?? action.standardAction } : undefined); setEditPage({ pageKey: 'platform.list', parameters: { viewKey: action.viewKey, presentation: 'drawer', standardAction: action.standardAction, actionKey: action.actionKey }, inputResolverKey: action.inputResolverKey }); })}>{t(`${view.dicKey}.${action.labelKey}`, action.labelKey)}</Button>)}
         </Space> : undefined}>
       <TreeSearch provider={provider} scope={treeScope} view={view} choose={tree.locate} />
       {tree.error && <div role="alert">树读取失败：{tree.error}<Button onClick={() => tree.retry({ kind: 'tree' })}>重试</Button></div>}

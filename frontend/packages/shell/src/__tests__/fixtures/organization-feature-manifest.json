@@ -1,0 +1,1096 @@
+{
+  "modules": [
+    {
+      "moduleId": "Organization",
+      "metadataBasePath": "/plugins/runtime/modules/Organization/metadata",
+      "navFiles": [
+        "navigation/Organization.nav.json"
+      ],
+      "viewFiles": [
+        "views/CompanyDetail.view.json",
+        "views/CompanyList.view.json",
+        "views/CompanyTabs.view.json",
+        "views/DepartmentDetail.view.json",
+        "views/DepartmentList.view.json",
+        "views/DepartmentTabs.view.json",
+        "views/OrganizationManagement.view.json",
+        "views/OrganizationStructure.view.json",
+        "views/PersonDetail.view.json",
+        "views/PersonList.view.json",
+        "views/PositionDetail.view.json",
+        "views/PositionList.view.json"
+      ],
+      "modelFiles": [
+        "models/Company.model.json",
+        "models/Department.model.json",
+        "models/Person.model.json",
+        "models/Position.model.json"
+      ],
+      "features": [
+        {
+          "position": "Organization/navigation:organization",
+          "moduleId": "Organization",
+          "key": "organization",
+          "kind": "navigation",
+          "title": "\u7EC4\u7EC7\u7ED3\u6784",
+          "parentPosition": null,
+          "behaviorKey": "",
+          "entryDependencies": [],
+          "order": 0,
+          "referenceKey": "navigation:organization",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": null,
+          "readBehaviors": [],
+          "container": true
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure",
+          "moduleId": "Organization",
+          "key": "organization.structure",
+          "kind": "navigation",
+          "title": "\u7EC4\u7EC7\u7BA1\u7406",
+          "parentPosition": "Organization/navigation:organization",
+          "behaviorKey": "",
+          "entryDependencies": [
+            "Organization/navigation:organization"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": null,
+          "readBehaviors": [],
+          "container": true
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:companies",
+          "moduleId": "Organization",
+          "key": "companies",
+          "kind": "tab",
+          "title": "\u516C\u53F8",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure",
+          "behaviorKey": "organization.company.read",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:companies",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": null,
+          "readBehaviors": [
+            "organization.company.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:companies/surface:list.pageActions/action:create",
+          "moduleId": "Organization",
+          "key": "create",
+          "kind": "action",
+          "title": "\u65B0\u5EFA\u516C\u53F8",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:companies",
+          "behaviorKey": "organization.company.create",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:companies"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:companies/surface:list.pageActions/action:create",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.pageActions",
+          "readBehaviors": [
+            "organization.company.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:companies/surface:list.rowActions/action:delete",
+          "moduleId": "Organization",
+          "key": "delete",
+          "kind": "action",
+          "title": "\u5220\u9664",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:companies",
+          "behaviorKey": "organization.company.delete",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:companies"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:companies/surface:list.rowActions/action:delete",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.rowActions",
+          "readBehaviors": [
+            "organization.company.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:companies/surface:list.rowActions/action:edit",
+          "moduleId": "Organization",
+          "key": "edit",
+          "kind": "action",
+          "title": "\u7F16\u8F91",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:companies",
+          "behaviorKey": "organization.company.update",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:companies"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:companies/surface:list.rowActions/action:edit",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.rowActions",
+          "readBehaviors": [
+            "organization.company.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:departments",
+          "moduleId": "Organization",
+          "key": "departments",
+          "kind": "tab",
+          "title": "\u90E8\u95E8",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure",
+          "behaviorKey": "organization.department.read",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:departments",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": null,
+          "readBehaviors": [
+            "organization.department.company.lookup",
+            "organization.department.parent.lookup",
+            "organization.department.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:departments/surface:list.pageActions/action:create",
+          "moduleId": "Organization",
+          "key": "create",
+          "kind": "action",
+          "title": "\u65B0\u5EFA\u90E8\u95E8",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:departments",
+          "behaviorKey": "organization.department.create",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:departments"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:departments/surface:list.pageActions/action:create",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.pageActions",
+          "readBehaviors": [
+            "organization.department.company.lookup",
+            "organization.department.parent.lookup",
+            "organization.department.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:departments/surface:list.rowActions/action:delete",
+          "moduleId": "Organization",
+          "key": "delete",
+          "kind": "action",
+          "title": "\u5220\u9664",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:departments",
+          "behaviorKey": "organization.department.delete",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:departments"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:departments/surface:list.rowActions/action:delete",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.rowActions",
+          "readBehaviors": [
+            "organization.department.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:departments/surface:list.rowActions/action:edit",
+          "moduleId": "Organization",
+          "key": "edit",
+          "kind": "action",
+          "title": "\u7F16\u8F91",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:departments",
+          "behaviorKey": "organization.department.update",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:departments"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:departments/surface:list.rowActions/action:edit",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.rowActions",
+          "readBehaviors": [
+            "organization.department.company.lookup",
+            "organization.department.parent.lookup",
+            "organization.department.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:persons",
+          "moduleId": "Organization",
+          "key": "persons",
+          "kind": "tab",
+          "title": "\u4EBA\u5458",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure",
+          "behaviorKey": "organization.person.read",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:persons",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": null,
+          "readBehaviors": [
+            "organization.person.company.lookup",
+            "organization.person.department.lookup",
+            "organization.person.read",
+            "organization.position.lookup"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:detail.custom/action:linkUser",
+          "moduleId": "Organization",
+          "key": "linkUser",
+          "kind": "action",
+          "title": "\u7ED1\u5B9A\u7528\u6237\u8D26\u53F7",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:persons",
+          "behaviorKey": "organization.person.linkUser",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:persons"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:persons/surface:detail.custom/action:linkUser",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "detail.custom",
+          "readBehaviors": [
+            "organization.person.linkUser.lookup"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:detail.pageActions/action:disable",
+          "moduleId": "Organization",
+          "key": "disable",
+          "kind": "action",
+          "title": "\u505C\u7528",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:persons",
+          "behaviorKey": "organization.person.disable",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:persons"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:persons/surface:detail.pageActions/action:disable",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "detail.pageActions",
+          "readBehaviors": [
+            "organization.person.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:detail.pageActions/action:edit",
+          "moduleId": "Organization",
+          "key": "edit",
+          "kind": "action",
+          "title": "\u7F16\u8F91",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:persons",
+          "behaviorKey": "organization.person.update",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:persons"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:persons/surface:detail.pageActions/action:edit",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "detail.pageActions",
+          "readBehaviors": [
+            "organization.person.company.lookup",
+            "organization.person.department.lookup",
+            "organization.person.read",
+            "organization.position.lookup"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:list.pageActions/action:create",
+          "moduleId": "Organization",
+          "key": "create",
+          "kind": "action",
+          "title": "\u65B0\u5EFA\u4EBA\u5458",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:persons",
+          "behaviorKey": "organization.person.create",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:persons"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:persons/surface:list.pageActions/action:create",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.pageActions",
+          "readBehaviors": [
+            "organization.person.company.lookup",
+            "organization.person.department.lookup",
+            "organization.person.read",
+            "organization.position.lookup"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:list.rowActions/action:delete",
+          "moduleId": "Organization",
+          "key": "delete",
+          "kind": "action",
+          "title": "\u5220\u9664",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:persons",
+          "behaviorKey": "organization.person.delete",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:persons"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:persons/surface:list.rowActions/action:delete",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.rowActions",
+          "readBehaviors": [
+            "organization.person.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:list.rowActions/action:disable",
+          "moduleId": "Organization",
+          "key": "disable",
+          "kind": "action",
+          "title": "\u505C\u7528",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:persons",
+          "behaviorKey": "organization.person.disable",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:persons"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:persons/surface:list.rowActions/action:disable",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.rowActions",
+          "readBehaviors": [
+            "organization.person.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:list.rowActions/action:edit",
+          "moduleId": "Organization",
+          "key": "edit",
+          "kind": "action",
+          "title": "\u7F16\u8F91",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:persons",
+          "behaviorKey": "organization.person.update",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:persons"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:persons/surface:list.rowActions/action:edit",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.rowActions",
+          "readBehaviors": [
+            "organization.person.company.lookup",
+            "organization.person.department.lookup",
+            "organization.person.read",
+            "organization.position.lookup"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:list.rowActions/action:enable",
+          "moduleId": "Organization",
+          "key": "enable",
+          "kind": "action",
+          "title": "\u542F\u7528",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:persons",
+          "behaviorKey": "organization.person.enable",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:persons"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:persons/surface:list.rowActions/action:enable",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.rowActions",
+          "readBehaviors": [
+            "organization.person.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:list/action:export",
+          "moduleId": "Organization",
+          "key": "export",
+          "kind": "action",
+          "title": "\u5BFC\u51FA",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:persons",
+          "behaviorKey": "organization.person.export",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:persons"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:persons/surface:list/action:export",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list",
+          "readBehaviors": [],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:positions",
+          "moduleId": "Organization",
+          "key": "positions",
+          "kind": "tab",
+          "title": "\u5C97\u4F4D",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure",
+          "behaviorKey": "organization.position.read",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:positions",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": null,
+          "readBehaviors": [
+            "organization.position.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:positions/surface:list.pageActions/action:create",
+          "moduleId": "Organization",
+          "key": "create",
+          "kind": "action",
+          "title": "\u65B0\u5EFA\u5C97\u4F4D",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:positions",
+          "behaviorKey": "organization.position.create",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:positions"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:positions/surface:list.pageActions/action:create",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.pageActions",
+          "readBehaviors": [
+            "organization.position.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:positions/surface:list.rowActions/action:delete",
+          "moduleId": "Organization",
+          "key": "delete",
+          "kind": "action",
+          "title": "\u5220\u9664",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:positions",
+          "behaviorKey": "organization.position.delete",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:positions"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:positions/surface:list.rowActions/action:delete",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.rowActions",
+          "readBehaviors": [
+            "organization.position.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:positions/surface:list.rowActions/action:edit",
+          "moduleId": "Organization",
+          "key": "edit",
+          "kind": "action",
+          "title": "\u7F16\u8F91",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:positions",
+          "behaviorKey": "organization.position.update",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:positions"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:positions/surface:list.rowActions/action:edit",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.rowActions",
+          "readBehaviors": [
+            "organization.position.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+          "moduleId": "Organization",
+          "key": "structure",
+          "kind": "tab",
+          "title": "\u7EC4\u7EC7\u7ED3\u6784",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure",
+          "behaviorKey": "tree:organization.structure",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": null,
+          "readBehaviors": [
+            "organization.person.read",
+            "tree:organization.structure"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/surface:contextMenu/action:delete",
+          "moduleId": "Organization",
+          "key": "delete",
+          "kind": "action",
+          "title": "\u5220\u9664",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+          "behaviorKey": "organization.company.delete",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:company/surface:contextMenu/action:delete",
+          "staticScope": "company",
+          "staticScopeTitle": "\u516C\u53F8",
+          "actionScope": "contextMenu",
+          "readBehaviors": [
+            "organization.company.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/surface:contextMenu/action:edit",
+          "moduleId": "Organization",
+          "key": "edit",
+          "kind": "action",
+          "title": "\u7F16\u8F91",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+          "behaviorKey": "organization.company.update",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:company/surface:contextMenu/action:edit",
+          "staticScope": "company",
+          "staticScopeTitle": "\u516C\u53F8",
+          "actionScope": "contextMenu",
+          "readBehaviors": [
+            "organization.company.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct",
+          "moduleId": "Organization",
+          "key": "direct",
+          "kind": "tab",
+          "title": "\u76F4\u5C5E\u90E8\u95E8",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+          "behaviorKey": "organization.department.read",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:company/tab:direct",
+          "staticScope": "company",
+          "staticScopeTitle": "\u516C\u53F8",
+          "actionScope": null,
+          "readBehaviors": [
+            "organization.department.company.lookup",
+            "organization.department.parent.lookup",
+            "organization.department.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct/surface:list.pageActions/action:create",
+          "moduleId": "Organization",
+          "key": "create",
+          "kind": "action",
+          "title": "\u65B0\u5EFA\u90E8\u95E8",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct",
+          "behaviorKey": "organization.department.create",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:company/tab:direct/surface:list.pageActions/action:create",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.pageActions",
+          "readBehaviors": [
+            "organization.department.company.lookup",
+            "organization.department.parent.lookup",
+            "organization.department.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct/surface:list.rowActions/action:delete",
+          "moduleId": "Organization",
+          "key": "delete",
+          "kind": "action",
+          "title": "\u5220\u9664",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct",
+          "behaviorKey": "organization.department.delete",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:company/tab:direct/surface:list.rowActions/action:delete",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.rowActions",
+          "readBehaviors": [
+            "organization.department.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct/surface:list.rowActions/action:edit",
+          "moduleId": "Organization",
+          "key": "edit",
+          "kind": "action",
+          "title": "\u7F16\u8F91",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct",
+          "behaviorKey": "organization.department.update",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:company/tab:direct/surface:list.rowActions/action:edit",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.rowActions",
+          "readBehaviors": [
+            "organization.department.company.lookup",
+            "organization.department.parent.lookup",
+            "organization.department.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:information",
+          "moduleId": "Organization",
+          "key": "information",
+          "kind": "tab",
+          "title": "\u57FA\u672C\u4FE1\u606F",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+          "behaviorKey": "organization.company.read",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:company/tab:information",
+          "staticScope": "company",
+          "staticScopeTitle": "\u516C\u53F8",
+          "actionScope": null,
+          "readBehaviors": [
+            "organization.company.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/surface:contextMenu/action:delete",
+          "moduleId": "Organization",
+          "key": "delete",
+          "kind": "action",
+          "title": "\u5220\u9664",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+          "behaviorKey": "organization.department.delete",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:department/surface:contextMenu/action:delete",
+          "staticScope": "department",
+          "staticScopeTitle": "\u90E8\u95E8",
+          "actionScope": "contextMenu",
+          "readBehaviors": [
+            "organization.department.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/surface:contextMenu/action:edit",
+          "moduleId": "Organization",
+          "key": "edit",
+          "kind": "action",
+          "title": "\u7F16\u8F91",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+          "behaviorKey": "organization.department.update",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:department/surface:contextMenu/action:edit",
+          "staticScope": "department",
+          "staticScopeTitle": "\u90E8\u95E8",
+          "actionScope": "contextMenu",
+          "readBehaviors": [
+            "organization.department.company.lookup",
+            "organization.department.parent.lookup",
+            "organization.department.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct",
+          "moduleId": "Organization",
+          "key": "direct",
+          "kind": "tab",
+          "title": "\u76F4\u5C5E\u5B50\u90E8\u95E8",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+          "behaviorKey": "organization.department.read",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:department/tab:direct",
+          "staticScope": "department",
+          "staticScopeTitle": "\u90E8\u95E8",
+          "actionScope": null,
+          "readBehaviors": [
+            "organization.department.company.lookup",
+            "organization.department.parent.lookup",
+            "organization.department.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct/surface:list.pageActions/action:create",
+          "moduleId": "Organization",
+          "key": "create",
+          "kind": "action",
+          "title": "\u65B0\u5EFA\u90E8\u95E8",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct",
+          "behaviorKey": "organization.department.create",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:department/tab:direct/surface:list.pageActions/action:create",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.pageActions",
+          "readBehaviors": [
+            "organization.department.company.lookup",
+            "organization.department.parent.lookup",
+            "organization.department.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct/surface:list.rowActions/action:delete",
+          "moduleId": "Organization",
+          "key": "delete",
+          "kind": "action",
+          "title": "\u5220\u9664",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct",
+          "behaviorKey": "organization.department.delete",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:department/tab:direct/surface:list.rowActions/action:delete",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.rowActions",
+          "readBehaviors": [
+            "organization.department.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct/surface:list.rowActions/action:edit",
+          "moduleId": "Organization",
+          "key": "edit",
+          "kind": "action",
+          "title": "\u7F16\u8F91",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct",
+          "behaviorKey": "organization.department.update",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:department/tab:direct/surface:list.rowActions/action:edit",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.rowActions",
+          "readBehaviors": [
+            "organization.department.company.lookup",
+            "organization.department.parent.lookup",
+            "organization.department.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:information",
+          "moduleId": "Organization",
+          "key": "information",
+          "kind": "tab",
+          "title": "\u57FA\u672C\u4FE1\u606F",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+          "behaviorKey": "organization.department.read",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:department/tab:information",
+          "staticScope": "department",
+          "staticScopeTitle": "\u90E8\u95E8",
+          "actionScope": null,
+          "readBehaviors": [
+            "organization.department.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:person/surface:contextMenu/action:delete",
+          "moduleId": "Organization",
+          "key": "delete",
+          "kind": "action",
+          "title": "\u5220\u9664",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+          "behaviorKey": "organization.person.delete",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:person/surface:contextMenu/action:delete",
+          "staticScope": "person",
+          "staticScopeTitle": "\u4EBA\u5458",
+          "actionScope": "contextMenu",
+          "readBehaviors": [
+            "organization.person.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:person/surface:contextMenu/action:edit",
+          "moduleId": "Organization",
+          "key": "edit",
+          "kind": "action",
+          "title": "\u7F16\u8F91",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+          "behaviorKey": "organization.person.update",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:person/surface:contextMenu/action:edit",
+          "staticScope": "person",
+          "staticScopeTitle": "\u4EBA\u5458",
+          "actionScope": "contextMenu",
+          "readBehaviors": [
+            "organization.person.company.lookup",
+            "organization.person.department.lookup",
+            "organization.person.read",
+            "organization.position.lookup"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:person/surface:detail.custom/action:linkUser",
+          "moduleId": "Organization",
+          "key": "linkUser",
+          "kind": "action",
+          "title": "\u7ED1\u5B9A\u7528\u6237\u8D26\u53F7",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+          "behaviorKey": "organization.person.linkUser",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:person/surface:detail.custom/action:linkUser",
+          "staticScope": "person",
+          "staticScopeTitle": "\u4EBA\u5458",
+          "actionScope": "detail.custom",
+          "readBehaviors": [
+            "organization.person.linkUser.lookup"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:person/surface:detail.pageActions/action:disable",
+          "moduleId": "Organization",
+          "key": "disable",
+          "kind": "action",
+          "title": "\u505C\u7528",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+          "behaviorKey": "organization.person.disable",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:person/surface:detail.pageActions/action:disable",
+          "staticScope": "person",
+          "staticScopeTitle": "\u4EBA\u5458",
+          "actionScope": "detail.pageActions",
+          "readBehaviors": [
+            "organization.person.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:person/surface:detail.pageActions/action:edit",
+          "moduleId": "Organization",
+          "key": "edit",
+          "kind": "action",
+          "title": "\u7F16\u8F91",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+          "behaviorKey": "organization.person.update",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:person/surface:detail.pageActions/action:edit",
+          "staticScope": "person",
+          "staticScopeTitle": "\u4EBA\u5458",
+          "actionScope": "detail.pageActions",
+          "readBehaviors": [
+            "organization.person.company.lookup",
+            "organization.person.department.lookup",
+            "organization.person.read",
+            "organization.position.lookup"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/surface:treeActions/action:createCompany",
+          "moduleId": "Organization",
+          "key": "createCompany",
+          "kind": "action",
+          "title": "\u65B0\u5EFA\u516C\u53F8",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+          "behaviorKey": "organization.company.create",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/surface:treeActions/action:createCompany",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "treeActions",
+          "readBehaviors": [
+            "organization.company.read"
+          ],
+          "container": false
+        }
+      ]
+    }
+  ]
+}

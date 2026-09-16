@@ -85,6 +85,19 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
     }
 
     [Fact]
+    public void BrowserScenario_CreatesCompanyFromTheOrganizationTreeToolbar()
+    {
+        var runner = ReadPersonnelRunner();
+        var start = runner.IndexOf("private async Task<CompanyData> CreateCompanyFromBrowserAsync", StringComparison.Ordinal);
+        var end = runner.IndexOf("private async Task<DepartmentData> CreateDepartmentFromBrowserAsync", start, StringComparison.Ordinal);
+        var companyJourney = runner[start..end];
+
+        Assert.Contains("driver.OpenOrganizationTabAsync(\"组织结构\", \"structure\")", companyJourney, StringComparison.Ordinal);
+        Assert.Contains("driver.OpenCreateDrawerAsync(\"新建公司\")", companyJourney, StringComparison.Ordinal);
+        Assert.DoesNotContain("OpenCompanyManagementFromShellAsync", companyJourney, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BrowserScenario_ProvesAdministratorPermissionsAndKeepsLookupSearchTyped()
     {
         var runner = ReadPersonnelRunner();

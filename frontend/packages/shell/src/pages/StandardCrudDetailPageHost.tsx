@@ -185,6 +185,16 @@ function StandardCrudDetailPageContent<TDetail>({
     () => resolveStandardCrudDetailSchema(viewDocuments, registration, { modelDocuments }),
     [modelDocuments, registration, viewDocuments],
   );
+  const detailFeatureActions = useMemo(() => {
+    if (!features.placement || !Array.isArray(view.featureActions)) return undefined;
+    return Object.fromEntries(view.featureActions.flatMap((action) => {
+      if (typeof action !== 'object' || action === null || Array.isArray(action)) return [];
+      const key = (action as Record<string, unknown>).key;
+      if (typeof key !== 'string') return [];
+      const position = features.action(key, 'detail.custom');
+      return position ? [[key, { position, allowed: features.hasFeature(position) }]] : [];
+    }));
+  }, [features, view.featureActions]);
   const presentation = useMemo(() => currentNormalizedDetail
     ? resolveStandardCrudDetailPresentation({ schema, fields: currentNormalizedDetail.fields, expectedId: id })
     : null, [currentNormalizedDetail, id, schema]);
@@ -278,7 +288,7 @@ function StandardCrudDetailPageContent<TDetail>({
             blocks={schema.summaryBlocks}
             summaries={currentNormalizedDetail.summaries}
             renderers={registration.summaryRenderers}
-            featureActions={features.placement ? Object.fromEntries(features.points.filter(point => point.parentPosition === features.placement?.entryPosition && point.staticScope === features.placement?.staticScope && point.actionScope === 'detail.custom').map(point => [point.key, { position: point.position, allowed: features.hasFeature(point.position) }])) : undefined}
+            featureActions={detailFeatureActions}
             titleForBlock={(key) => t(`${schema.dicKey}.${toDictionaryBlockKey(key)}`, key)}
           />
           {detailSectionPages}

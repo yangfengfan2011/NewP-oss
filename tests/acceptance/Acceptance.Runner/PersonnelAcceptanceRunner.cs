@@ -658,17 +658,17 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
 
     private static Task OpenPersonnelFromShellAsync(StandardCrudPageDriver driver) => driver.OpenOrganizationTabAsync("人员", "persons");
 
-    private static Task OpenCompanyManagementFromShellAsync(StandardCrudPageDriver driver) => driver.OpenOrganizationTabAsync("公司", "companies");
-
     private static Task OpenPositionManagementFromShellAsync(StandardCrudPageDriver driver) => driver.OpenOrganizationTabAsync("岗位", "positions");
 
-    // 同一浏览器主旅程先通过公司标准 Drawer 建立后续部门与人员归属的真实前置资源。
+    // 同一浏览器主旅程从组织结构树工具栏进入公司标准 Drawer，建立后续部门与人员归属的真实前置资源。
     private async Task<CompanyData> CreateCompanyFromBrowserAsync(
         StandardCrudPageDriver driver,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        await OpenCompanyManagementFromShellAsync(driver);
+        await driver.OpenOrganizationTabAsync("组织结构", "structure");
+        var page = driver.Page;
+        var tree = page.GetByRole(AriaRole.Complementary, new PageGetByRoleOptions { Name = "结构树" });
         var company = new CompanyData(
             $"ACC-BC-{_runId[..8]}",
             $"Personnel Gate Browser Company {_runId[..8]}");
@@ -679,6 +679,9 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await driver.SaveAndCloseAsync(
             drawer,
             new ApiExpectation("POST", "/api/organization/companies", (int)HttpStatusCode.Created, "company create"));
+        await tree.GetByText(company.Name, new LocatorGetByTextOptions { Exact = true })
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        await driver.OpenOrganizationTabAsync("公司", "companies");
         await driver.WaitForRowAsync(company.Code, company.Name);
         await OpenAndCloseDirectoryDetailAsync(driver, company.Name);
         return company;
@@ -1616,7 +1619,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             .ToHashSet(StringComparer.Ordinal);
         var required = new[]
         {
-            _features!.Action(_features.OrganizationTab("companies"), "create", "list.pageActions").Position,
+            _features!.Action(_features.OrganizationTab("structure"), "createCompany", "treeActions").Position,
             _features.Action(_features.OrganizationTab("departments"), "create", "list.pageActions").Position,
             _features.Action(_features.OrganizationTab("persons"), "edit", "list.rowActions").Position
         };

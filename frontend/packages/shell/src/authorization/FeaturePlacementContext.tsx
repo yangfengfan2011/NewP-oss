@@ -27,11 +27,12 @@ export function useFeaturePlacement() {
   return {
     placement, points, hasFeature, visible,
     readPosition: placement?.actionPosition ?? placement?.entryPosition,
-    action(key: string, surface: string): string | undefined {
+    action(key: string, surface: string, scope?: string): string | undefined {
       if (!placement) return undefined;
       if (placement.actionPosition) return placement.actionKey === key ? placement.actionPosition : undefined;
+      const staticScope = scope ?? placement.staticScope;
       return points.find(point => point.kind === 'action' && point.parentPosition === placement.entryPosition
-        && (point.staticScope ?? undefined) === placement.staticScope && point.actionScope === surface && point.key === key)?.position;
+        && (point.staticScope ?? undefined) === (staticScope ?? undefined) && point.actionScope === surface && point.key === key)?.position;
     },
     navigation(key: string): string | undefined {
       return metadata?.navDocuments.flatMap(document => document.navigation.items).find(item => item.key === key)?.featurePosition;

@@ -1,4 +1,5 @@
 using ICP.Platform.Kernel.ModulePlanning;
+using ICP.Platform.Kernel.PluginPackages;
 using System.Text.Json;
 using Xunit;
 
@@ -6,6 +7,43 @@ namespace ICP.Platform.Acceptance.Tests;
 
 public sealed class AcceptanceFeatureCatalogTests
 {
+    [Fact]
+    public void OrganizationAuthoring_ProducesTheShellFeatureManifestFixture()
+    {
+        var root = GetRepositoryRoot();
+        var documents = ReadMetadataDocuments(root, "Organization");
+        try
+        {
+            var points = CompileFeatureCatalog(root, "Organization", documents);
+            var actual = new MetadataRuntimeManifestBuilder().Build(
+                root.FullName,
+                ["Organization"],
+                ["Organization"],
+                points);
+            var fixturePath = Path.Combine(
+                root.FullName,
+                "frontend",
+                "packages",
+                "shell",
+                "src",
+                "__tests__",
+                "fixtures",
+                "organization-feature-manifest.json");
+
+            Assert.True(File.Exists(fixturePath), $"Shell feature manifest fixture was not found: {fixturePath}");
+            Assert.Equal(
+                File.ReadAllText(fixturePath).ReplaceLineEndings("\n"),
+                actual.ReplaceLineEndings("\n"));
+        }
+        finally
+        {
+            foreach (var document in documents)
+            {
+                document.Dispose();
+            }
+        }
+    }
+
     [Theory]
     [InlineData("Organization")]
     [InlineData("Authorization")]
@@ -104,4 +142,33 @@ public sealed class AcceptanceFeatureCatalogTests
 
     private static FeaturePoint Point(string position, string kind, string key, string? parent) =>
         new(position, "Organization", key, kind, key, parent, "", [], 0);
+
+    private static DirectoryInfo GetRepositoryRoot()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "AGENTS.md")))
+        {
+            root = root.Parent;
+        }
+
+        return root ?? throw new InvalidOperationException("无法定位仓库根目录。");
+    }
+
+    private static JsonDocument[] ReadMetadataDocuments(DirectoryInfo root, string module) =>
+        Directory.EnumerateFiles(Path.Combine(root.FullName, "modules", module, "metadata"), "*.json", SearchOption.AllDirectories)
+            .Select(path => JsonDocument.Parse(File.ReadAllText(path)))
+            .ToArray();
+
+    private static IReadOnlyList<FeaturePoint> CompileFeatureCatalog(
+        DirectoryInfo root,
+        string module,
+        IReadOnlyList<JsonDocument> documents)
+    {
+        using var capsule = JsonDocument.Parse(File.ReadAllText(Path.Combine(root.FullName, "modules", module, "newp.plugin.json")));
+        var custom = FeatureCatalogCompiler.Read(capsule.RootElement, module);
+        return FeatureCatalogCompiler.Compile([
+            .. custom,
+            .. StandardFeatureMetadataCompiler.Read(module, documents.Select(document => document.RootElement), custom)
+        ]);
+    }
 }

@@ -5,3 +5,5 @@ packages:
 shamefullyHoist: true
 allowBuilds:
   esbuild: true
+patchedDependencies:
+  '@ant-design/pro-descriptions@2.6.10': patches/@ant-design__pro-descriptions@2.6.10.patch

@@ -11,11 +11,11 @@ import type {
 } from '@icp-platform/sdk';
 import { StandardCrudActionReviewDialog } from './StandardCrudActionReviewDialog';
 import { useStandardCrudActionExecution } from './useStandardCrudActionExecution';
+import { resolvedFeaturePosition, type FeatureResolution } from '../authorization/featurePlacementResolver';
 
 export interface StandardCrudActionsProps<TDetail = unknown, TRow = unknown> {
   actions: StandardCrudPresentationActionDefinition[];
-  featurePositionForAction?: (action: StandardCrudActionDefinition) => string | undefined;
-  hasFeature?: (position: string) => boolean;
+  featureResolutionForAction: (action: StandardCrudActionDefinition) => FeatureResolution;
   handlers?: Record<string, StandardCrudActionHandler<TDetail, TRow>>;
   actionInputs?: Record<string, StandardCrudActionInputRenderer>;
   actionStateResolver?: StandardCrudActionStateResolver<TDetail, TRow>;
@@ -42,8 +42,7 @@ function resolveActionHandler<TDetail = unknown, TRow = unknown>(
 /** 标准 CRUD 动作运行时只收口权限、确认、pending 和错误展示；具体业务副作用由模块 handler 承担。 */
 export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
   actions,
-  featurePositionForAction,
-  hasFeature,
+  featureResolutionForAction,
   handlers = {},
   actionInputs = {},
   actionStateResolver,
@@ -58,18 +57,24 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
     const state = actionStateResolver?.({ action, detail: context.detail, row: context.row });
     return {
       ...action,
+      featureResolution: featureResolutionForAction(action),
       runtimeDisabled: action.runtimeDisabled === true || state?.available === false,
       disabledReason: action.disabledReason ?? state?.reason,
       runtimeVisible: state?.visible !== false,
     };
   });
-  const visibleActions = resolvedActions.filter((action) => (
-    action.runtimeVisible && hasFeature?.(featurePositionForAction?.(action) ?? '') === true
-  ));
+  const visibleActions = resolvedActions.filter((action) => action.runtimeVisible && action.featureResolution.kind === 'allowed');
+  const currentInputAction = inputAction
+    ? resolvedActions.find(action => action.key === inputAction.key)
+    : undefined;
 
-  async function runAction(action: StandardCrudActionDefinition, input?: unknown): Promise<boolean> {
-    const featurePosition = featurePositionForAction?.(action);
-    if (!hasFeature?.(featurePosition ?? '')) return false;
+  async function runAction(
+    action: StandardCrudActionDefinition,
+    featureResolution: FeatureResolution,
+    input?: unknown,
+  ): Promise<boolean> {
+    if (featureResolution.kind !== 'allowed') return false;
+    const featurePosition = featureResolution.position;
     const handler = resolveActionHandler(action, handlers);
     if (!handler) {
       return false;
@@ -88,7 +93,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
     return outcome.status === 'succeeded';
   }
 
-  function requestAction(action: StandardCrudPresentationActionDefinition) {
+  function requestAction(action: typeof resolvedActions[number]) {
     if (action.runtimeDisabled) {
       return;
     }
@@ -97,7 +102,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
       setInputAction(action);
       return;
     }
-    void runAction(action);
+    void runAction(action, action.featureResolution);
   }
 
   return (
@@ -149,23 +154,23 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
           {actionExecution.error.message}
         </span>
       ) : null}
-      {inputAction?.inputKey && actionInputs[inputAction.inputKey] ? (
+      {currentInputAction?.inputKey && actionInputs[currentInputAction.inputKey] ? (
         <StandardCrudActionReviewDialog
-          action={inputAction}
-          title={inputAction.labelKey}
-          confirmMessage={inputAction.confirmMessage}
-          inputRenderer={actionInputs[inputAction.inputKey]}
-          featurePosition={featurePositionForAction?.(inputAction)}
+          action={currentInputAction}
+          title={currentInputAction.labelKey}
+          confirmMessage={currentInputAction.confirmMessage}
+          inputRenderer={actionInputs[currentInputAction.inputKey]}
+          featurePosition={resolvedFeaturePosition(currentInputAction.featureResolution)}
           value={inputValue}
           detail={context.detail}
           row={context.row}
-          pending={actionExecution.pendingKey === inputAction.key}
+          pending={actionExecution.pendingKey === currentInputAction.key}
           onChange={setInputValue}
           onCancel={() => {
             if (actionExecution.pendingKey === null) setInputAction(null);
           }}
           onConfirm={() => {
-            void runAction(inputAction, inputValue).then((succeeded) => {
+            void runAction(currentInputAction, currentInputAction.featureResolution, inputValue).then((succeeded) => {
               if (succeeded) setInputAction(null);
             });
           }}

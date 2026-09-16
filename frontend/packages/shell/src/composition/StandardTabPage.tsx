@@ -7,6 +7,7 @@ import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { CompositionContext, PageNavigationContext, TreeNavigationContext } from './pageCompositionRuntime';
 import { PageOutlet } from './PageOutlet';
 import { createTabLocationMemory } from './compositionNavigation';
+import { resolvedFeaturePosition } from '../authorization/featurePlacementResolver';
 
 /** 已打开的标签保持挂载，未激活页面仍参与当前组合保护。 */
 export default function StandardTabPage({ input }: PageProps) {
@@ -19,11 +20,12 @@ export default function StandardTabPage({ input }: PageProps) {
   const treeNavigation = useContext(TreeNavigationContext);
   const instanceId = useId();
   const id = `np-tabs-${instanceId.replace(/:/g, '')}`;
-  const availableTabs = view.tabs.filter(tab => !features.placement || features.visible(features.tab(tab.key) ?? ""));
-  const fallback = availableTabs.find(tab => tab.key === view.defaultTabKey)?.key ?? availableTabs[0]?.key ?? "";
+  const resolvedTabs = view.tabs.map(tab => ({ tab, resolution: features.tab(tab.key) }));
+  const availableTabs = resolvedTabs.filter(({ resolution }) => !features.placement || resolution.kind === 'allowed');
+  const fallback = availableTabs.find(({ tab }) => tab.key === view.defaultTabKey)?.tab.key ?? availableTabs[0]?.tab.key ?? "";
   const [localSelected, setSelected] = useState(view.defaultTabKey);
   const requested = navigation?.tabKey ?? localSelected;
-  const selected = availableTabs.some(tab => tab.key === requested) ? requested : fallback;
+  const selected = availableTabs.some(({ tab }) => tab.key === requested) ? requested : fallback;
   const [treeLocations] = useState(createTabLocationMemory);
   const tabTreeNavigation = treeLocations.forSelection(selected, treeNavigation);
   const [opened, setOpened] = useState(() => new Set([selected]));
@@ -35,10 +37,10 @@ export default function StandardTabPage({ input }: PageProps) {
       if (navigation) { setOpened(current => new Set(current).add(selected)); navigation.selectTab(key, tabTreeNavigation.handoff(key)); }
       else runtime.leave(() => { setSelected(key); setOpened(current => new Set(current).add(key)); });
     }}
-    items={availableTabs.map(tab => ({
+    items={availableTabs.map(({ tab, resolution }) => ({
       key: tab.key,
       label: t(`${view.dicKey}.${tab.titleKey}`, tab.titleKey),
       forceRender: visibleTabs.has(tab.key),
-      children: <PageOutlet key={input.context?.nodeKey} page={tab.pageRef} featurePlacement={features.placement ? { entryPosition: features.tab(tab.key)! } : undefined} context={input.context} active={tab.key === selected} treeNavigation={tabTreeNavigation.forTab(tab.key)} />,
+      children: <PageOutlet key={input.context?.nodeKey} page={tab.pageRef} featurePlacement={features.placement ? { entryPosition: resolvedFeaturePosition(resolution)! } : undefined} context={input.context} active={tab.key === selected} treeNavigation={tabTreeNavigation.forTab(tab.key)} />,
     }))} />;
 }

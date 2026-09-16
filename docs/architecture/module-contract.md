@@ -32,6 +32,8 @@ View 的 `resourceKey` 指定稳定资源；`lookupBindings` 在该 View 的资�
 
 Host 在开放请求前核对目录与真实端点的模块归属及执行绑定。`RequireFeature` 只允许当前位置声明的行为；附加读取必须绑定 GET/HEAD 端点，纯容器不获得后代读取。已有 Host policy 可作为同一端点的附加约束，与功能位置判权共同满足；它不能代替位置授权，也不与旧 Permission、匿名或拒绝规则组成另一条放行路径。缺失、冲突或无效绑定拒绝整份候选。运行时投影提供编译后的 position，前后端不得另外拼装授权身份。
 
+Shell 在私有上下文解析器内把当前入口、静态范围和目录绑定为 `read`、`navigation`、`tab` 及具体 surface 的 `action`，consumer 只接收 `allowed(position)`、`denied(position)` 或 `unresolved` 三态，不读取原始目录点或自行匹配身份。目录定位独立于当前授权投影；授权刷新只按已绑定位置重投影当前三态，展示与执行消费同一轮结果。`unresolved` 不等于放行，各宿主按既有无位置契约显式处理；该解析器是 Shell 内部边界，不新增 SDK 或服务端契约。
+
 当前 Organization 标准路径，以及 Authorization 的角色读取、创建、编辑、账号角色分配和工作台消费位置授权。角色页面未声明删除动作，遗留删除 HTTP 入口明确拒绝；旧角色 Permission 读取/保存及旧权限目录接口已退出。
 
 Identity 账号管理入口也消费位置授权，并保留既有 `AdminOnly` Host policy；读取、创建、编辑、启用、停用、删除和重置凭据分别绑定声明行为。启用和停用使用独立的 `/status/enable`、`/status/disable`，校验请求的目标状态，旧 `/status` 入口明确拒绝。

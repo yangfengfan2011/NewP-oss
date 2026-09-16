@@ -11,9 +11,11 @@ vi.mock('../authorization/FeaturePlacementContext', async (importOriginal) => {
       if (features.placement) return features;
       return {
         ...features,
-        hasFeature: (position: string) => position === '' || position.startsWith('ui-fixture:'),
-        action: (key: string, surface: string) => `ui-fixture:${surface}:${key}`,
-        navigation: (key: string) => `ui-fixture:navigation:${key}`,
+        read: () => ({ kind: 'allowed' as const, position: 'ui-fixture:read' }),
+        action: (key: string, surface: string) => ({ kind: 'allowed' as const, position: `ui-fixture:${surface}:${key}` }),
+        navigation: (key: string) => ({ kind: 'allowed' as const, position: `ui-fixture:navigation:${key}` }),
+        tab: (key: string) => ({ kind: 'allowed' as const, position: `ui-fixture:tab:${key}` }),
+        menu: (position: string) => ({ kind: 'allowed' as const, position }),
       };
     },
   };

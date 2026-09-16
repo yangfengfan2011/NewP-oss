@@ -12,6 +12,7 @@ import type {
   StandardCrudActionStateResolver,
   StandardCrudOperationResult,
 } from '@icp-platform/sdk';
+import type { FeatureResolution } from '../authorization/featurePlacementResolver';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -54,8 +55,9 @@ describe('standard CRUD action runtime', () => {
       root.render(
         <StandardCrudActions
           actions={actions}
-          featurePositionForAction={action => action.key}
-          hasFeature={position => grantedPositions.includes(position)}
+          featureResolutionForAction={action => grantedPositions.includes(action.key)
+            ? { kind: 'allowed', position: action.key }
+            : { kind: 'denied', position: action.key }}
           handlers={handlers}
           actionInputs={actionInputs}
           actionStateResolver={actionStateResolver}
@@ -313,6 +315,35 @@ describe('standard CRUD action runtime', () => {
 
     expect(handler).toHaveBeenCalledWith(expect.objectContaining({ input: '季度归档' }));
     expect(document.body.querySelector('input[aria-label="归档说明"]')).toBeNull();
+  });
+
+  it('does not run an input action after the current rendered decision is revoked', async () => {
+    const handler = vi.fn();
+    const action = { key: 'archive', labelKey: '归档', inputKey: 'archive-input' };
+    let resolution: FeatureResolution = { kind: 'allowed', position: 'archive-position' };
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    const render = async () => act(async () => root?.render(
+      <StandardCrudActions
+        actions={[action]}
+        featureResolutionForAction={() => resolution}
+        handlers={{ archive: handler }}
+        actionInputs={{ 'archive-input': () => <span>归档输入</span> }}
+        refresh={vi.fn()}
+        context={{ id: 'Person_1' }}
+      />,
+    ));
+
+    await render();
+    await clickActionButton('归档');
+    expect(document.body.textContent).toContain('归档输入');
+
+    resolution = { kind: 'denied', position: 'archive-position' };
+    await render();
+    await clickPopconfirmButton('确认');
+
+    expect(handler).not.toHaveBeenCalled();
   });
 
   it('uses one review dialog for a danger action that also requires input', async () => {

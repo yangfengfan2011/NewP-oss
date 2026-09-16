@@ -256,7 +256,12 @@ describe('StandardCrudListPageHost', () => {
     initialEntry = '/organization/persons',
     options: {
       strictMode?: boolean;
-      feature?: { entry: string; create: string };
+      feature?: {
+        entry: string;
+        create?: string;
+        points?: Array<{ key: string; kind: string; position: string; parentPosition: string; actionScope: string }>;
+        positions?: string[];
+      };
       embedded?: StandardCrudHostEnvironment;
       modelDocument?: typeof personModelDocument;
     } = {},
@@ -264,8 +269,9 @@ describe('StandardCrudListPageHost', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
 
-    await act(async () => {
-      root = createRoot(container);
+    root = createRoot(container);
+    const render = async (featurePositions = options.feature?.positions
+      ?? [options.feature?.entry, options.feature?.create].filter((value): value is string => Boolean(value))) => act(async () => {
       const host = (
         <MemoryRouter initialEntries={[initialEntry]}>
           <NavigationProbe />
@@ -282,7 +288,7 @@ describe('StandardCrudListPageHost', () => {
             <PlatformQueryProvider scopeKey="user-1">
               <RuntimeMetadataProvider
                 value={{
-                  manifest: { modules: options.feature ? [{ moduleId: "Organization", metadataBasePath: "", navFiles: [], viewFiles: [], modelFiles: [], features: [{ key: "create", kind: "action", position: options.feature.create, parentPosition: options.feature.entry, actionScope: "list.pageActions" }] }] : [] },
+                  manifest: { modules: options.feature ? [{ moduleId: "Organization", metadataBasePath: "", navFiles: [], viewFiles: [], modelFiles: [], features: options.feature.points ?? (options.feature.create ? [{ key: "create", kind: "action", position: options.feature.create, parentPosition: options.feature.entry, actionScope: "list.pageActions" }] : []) }] : [] },
                   navDocuments: [],
                   modelDocuments: [options.modelDocument ?? personModelDocument],
                   viewDocuments: [viewDocument, personDetailViewDocument],
@@ -294,9 +300,11 @@ describe('StandardCrudListPageHost', () => {
           </LocalizationProvider>
         </MemoryRouter>
       );
-      const authorizedHost = options.feature ? <AuthorizationProvider permissions={[]} featurePositions={[options.feature.entry, options.feature.create]}><FeaturePlacementContext.Provider value={{ entryPosition: options.feature.entry }}>{host}</FeaturePlacementContext.Provider></AuthorizationProvider> : host;
+      const authorizedHost = options.feature ? <AuthorizationProvider permissions={[]} featurePositions={featurePositions}><FeaturePlacementContext.Provider value={{ entryPosition: options.feature.entry }}>{host}</FeaturePlacementContext.Provider></AuthorizationProvider> : host;
       root.render(options.strictMode ? <StrictMode>{authorizedHost}</StrictMode> : authorizedHost);
     });
+    await render();
+    return { setFeaturePositions: render };
   }
 
   function createExportablePersonListViewDocument(): typeof personListViewDocument {
@@ -1472,6 +1480,103 @@ describe('StandardCrudListPageHost', () => {
       { key: 'name', field: 'ENAME', title: '姓名' },
       { key: 'departmentName', field: 'DepartmentName', title: '部门' },
     ]);
+  });
+
+  it('uses the fixed list export position for both visibility and execution', async () => {
+    const entryPosition = 'organization.person.entry';
+    const exportPosition = 'organization.person.action.export';
+    mockStandardCrudModule();
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn(() => 'blob:authorized-export'),
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [], total: 0, page: 1, pageSize: 20 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([80, 75]), { status: 200 }));
+
+    await renderHost({}, createExportablePersonListViewDocument(), '/organization/persons', {
+      feature: {
+        entry: entryPosition,
+        positions: [entryPosition, exportPosition],
+        points: [{
+          key: 'export',
+          kind: 'action',
+          position: exportPosition,
+          parentPosition: entryPosition,
+          actionScope: 'list',
+        }],
+      },
+    });
+    await flushProTableRequest();
+    await act(async () => {
+      Array.from(container.querySelectorAll('button')).find(button => button.textContent?.replace(/\s+/g, '') === '导出')?.click();
+    });
+    await flushProTableRequest();
+    await act(async () => {
+      Array.from(document.body.querySelectorAll<HTMLElement>('.ant-dropdown-menu-item'))
+        .find(item => item.textContent?.replace(/\s+/g, '') === '导出当前')?.click();
+    });
+    await flushProTableRequest();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get('X-NewP-Feature')).toBe(exportPosition);
+  });
+
+  it('does not execute a row input action after its current grant is revoked', async () => {
+    const entryPosition = 'organization.person.entry';
+    const reviewPosition = 'organization.person.action.review';
+    const review = vi.fn();
+    const list = vi.fn(async () => ({
+      items: [{ id: 'Person_1', PersonNo: 'P001', ENAME: '张三', DepartmentName: '人力资源部' }],
+      total: 1,
+    }));
+    mockStandardCrudModule({
+      dataAdapter: { list, getRowId: (row: { id: string }) => row.id },
+      actionHandlers: { review },
+      actionInputRenderers: { reason: () => <span>复核输入</span> },
+    });
+    const reviewView = {
+      ...personListViewDocument,
+      view: {
+        ...personListViewDocument.view,
+        rowActions: [{ key: 'review', labelKey: 'Action_Review', handlerKey: 'review', inputKey: 'reason' }],
+      },
+    } as unknown as typeof personListViewDocument;
+    const rendered = await renderHost({ 'PersonListView.Action_Review': '复核' }, reviewView, '/organization/persons', {
+      feature: {
+        entry: entryPosition,
+        positions: [entryPosition, reviewPosition],
+        points: [{
+          key: 'review',
+          kind: 'action',
+          position: reviewPosition,
+          parentPosition: entryPosition,
+          actionScope: 'list.rowActions',
+        }],
+      },
+    });
+    await flushProTableRequest();
+    await act(async () => {
+      Array.from(container.querySelectorAll('button')).find(button => button.textContent?.replace(/\s+/g, '') === '更多')?.click();
+    });
+    await flushProTableRequest();
+    await act(async () => {
+      Array.from(document.body.querySelectorAll<HTMLElement>('.ant-dropdown-menu-item'))
+        .find(item => item.textContent?.trim() === '复核')?.click();
+    });
+    expect(document.body.textContent).toContain('复核输入');
+
+    await rendered.setFeaturePositions([entryPosition]);
+    const confirm = Array.from(document.body.querySelectorAll<HTMLButtonElement>('button'))
+      .find(button => button.textContent?.replace(/\s+/g, '') === '确认');
+    await act(async () => confirm?.click());
+
+    expect(review).not.toHaveBeenCalled();
   });
 
   it.each([

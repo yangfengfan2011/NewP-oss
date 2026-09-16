@@ -1,4 +1,5 @@
 import { useFeaturePlacement } from '../authorization/FeaturePlacementContext';
+import { resolvedFeaturePosition } from '../authorization/featurePlacementResolver';
 import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { useLocalization } from '@icp-platform/core';
 import {
@@ -147,6 +148,9 @@ function StandardCrudDetailPageContent<TDetail>({
   // 详情宿主从不拥有地址；独立路由下也传 null。
   const host = useStandardCrudHostEnvironment(null);
   const features = useFeaturePlacement();
+  const readResolution = features.read();
+  const readPosition = features.placement ? resolvedFeaturePosition(readResolution) : undefined;
+  const editResolution = features.action('edit', 'detail.pageActions');
   const composed = host.presentation.kind !== 'workspace' || host.presentation.composed;
   const sessionTimeZoneId = useOptionalAuth()?.user?.timeZoneId;
   const dicKey = readMetadataString(view.dicKey, registration.resourceKey);
@@ -172,7 +176,7 @@ function StandardCrudDetailPageContent<TDetail>({
     resourceKey: registration.resourceKey,
     id,
     dataAdapter,
-    featurePosition: features.readPosition,
+    featurePosition: readPosition,
   });
 
   useEffect(() => {
@@ -191,8 +195,10 @@ function StandardCrudDetailPageContent<TDetail>({
       if (typeof action !== 'object' || action === null || Array.isArray(action)) return [];
       const key = (action as Record<string, unknown>).key;
       if (typeof key !== 'string') return [];
-      const position = features.action(key, 'detail.custom');
-      return position ? [[key, { position, allowed: features.hasFeature(position) }]] : [];
+      const resolution = features.action(key, 'detail.custom');
+      return resolution.kind === 'unresolved'
+        ? []
+        : [[key, { position: resolution.position, allowed: resolution.kind === 'allowed' }]];
     }));
   }, [features, view.featureActions]);
   const presentation = useMemo(() => currentNormalizedDetail
@@ -247,8 +253,9 @@ function StandardCrudDetailPageContent<TDetail>({
               ? t(`${schema.dicKey}.${action.confirmMessageKey}`, action.confirmMessageKey)
               : undefined,
           }))}
-          featurePositionForAction={(action) => action.navigationTargetKey ? features.navigation(action.navigationTargetKey) : features.action(action.key, 'detail.pageActions')}
-          hasFeature={features.hasFeature}
+          featureResolutionForAction={(action) => action.navigationTargetKey
+            ? features.navigation(action.navigationTargetKey)
+            : features.action(action.key, 'detail.pageActions')}
           handlers={detailActionHandlers}
           actionInputs={registration.actionInputRenderers}
           actionStateResolver={registration.actionStateResolver}
@@ -292,13 +299,13 @@ function StandardCrudDetailPageContent<TDetail>({
             titleForBlock={(key) => t(`${schema.dicKey}.${toDictionaryBlockKey(key)}`, key)}
           />
           {detailSectionPages}
-          {editing && editFields.length > 0 && (!features.placement || features.hasFeature(features.action('edit', 'detail.pageActions') ?? '')) ? (
+          {editing && editFields.length > 0 && (!features.placement || editResolution.kind === 'allowed') ? (
             <Suspense fallback={<div className="sh-loading-state" role="status">正在加载编辑表单…</div>}>
               <StandardCrudDetailEditor
                 key={id}
                 id={id}
                 resourceKey={schema.resourceKey}
-                featurePosition={features.action('edit', 'detail.pageActions')}
+                featurePosition={resolvedFeaturePosition(editResolution)}
                 detail={currentNormalizedDetail}
                 fields={editFields}
                 sections={formSchema.sections}

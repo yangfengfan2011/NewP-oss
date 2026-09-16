@@ -1,14 +1,13 @@
 import { createContext, useContext, useMemo } from 'react';
 import { useAuthorization } from '@icp-platform/core';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
-import { createFeatureVisibility } from './featureVisibility';
+import {
+  createFeaturePlacementLocator,
+  projectFeaturePlacement,
+  type FeaturePlacement,
+} from './featurePlacementResolver';
 
-export interface FeaturePlacement {
-  entryPosition: string;
-  staticScope?: string;
-  actionPosition?: string;
-  actionKey?: string;
-}
+export type { FeaturePlacement } from './featurePlacementResolver';
 
 export const FeaturePlacementContext = createContext<FeaturePlacement | null>(null);
 
@@ -23,23 +22,15 @@ export function useFeaturePlacement() {
   const metadata = useRuntimeMetadata();
   const hasFeature = useOptionalFeatureDecision();
   const points = useMemo(() => metadata?.manifest.modules.flatMap(module => module.features ?? []) ?? [], [metadata]);
-  const visible = useMemo(() => createFeatureVisibility(points, hasFeature), [points, hasFeature]);
-  return {
-    placement, points, hasFeature, visible,
-    readPosition: placement?.actionPosition ?? placement?.entryPosition,
-    action(key: string, surface: string, scope?: string): string | undefined {
-      if (!placement) return undefined;
-      if (placement.actionPosition) return placement.actionKey === key ? placement.actionPosition : undefined;
-      const staticScope = scope ?? placement.staticScope;
-      return points.find(point => point.kind === 'action' && point.parentPosition === placement.entryPosition
-        && (point.staticScope ?? undefined) === (staticScope ?? undefined) && point.actionScope === surface && point.key === key)?.position;
-    },
-    navigation(key: string): string | undefined {
-      return metadata?.navDocuments.flatMap(document => document.navigation.items).find(item => item.key === key)?.featurePosition;
-    },
-    tab(key: string): string | undefined {
-      return placement ? points.find(point => point.kind === 'tab' && point.parentPosition === placement.entryPosition
-        && (point.staticScope ?? undefined) === placement.staticScope && point.key === key)?.position : undefined;
-    },
-  };
+  const navigationPositions = useMemo(() => new Map(
+    metadata?.navDocuments
+      .flatMap(document => document.navigation.items)
+      .flatMap(item => item.featurePosition ? [[item.key, item.featurePosition] as const] : []) ?? [],
+  ), [metadata]);
+  const locator = useMemo(() => createFeaturePlacementLocator({
+    placement,
+    points,
+    navigationPositions,
+  }), [navigationPositions, placement, points]);
+  return useMemo(() => projectFeaturePlacement(locator, hasFeature), [hasFeature, locator]);
 }

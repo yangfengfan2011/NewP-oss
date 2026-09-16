@@ -1,12 +1,72 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 namespace ICP.Platform.HostApi.Tests;
 
 public sealed class FeatureWorkbenchSqlServerHttpApiTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "目标角色读取保留既有 HTTP 契约并过滤非活动目录分配")]
+    public async Task RoleRead_PreservesMissingDisabledProtectedAndActiveCatalogContract()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
+        using var admin = await fixture.LoginAdministratorAsync();
+        var read = http.Workbench("authorization.workbench.read");
+        var role = await FeatureHttpTestRequests.CreateAsync(admin, http.Role("create"), "/api/authorization/roles",
+            new { Code = "ReadContract", Name = "读取契约" });
+        var roleId = role.GetProperty("id").GetString()!;
+        await http.GrantAsync(admin, roleId, read);
+        using (var disabled = await FeatureHttpTestRequests.SendAsync(admin, http.Role("edit"), HttpMethod.Put,
+            $"/api/authorization/roles/{roleId}", new { Name = "读取契约", IsEnabled = false }))
+            Assert.Equal(HttpStatusCode.OK, disabled.StatusCode);
+
+        // 关系表没有外键；历史残留不能进入当前活动目录响应。
+        using (var scope = fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+            db.Set<Dictionary<string, object?>>(db.ResolveModelKey("RoleFunctionGrant")).Add(new()
+            {
+                ["EID"] = "RoleFunctionGrant_Residual",
+                ["RoleId"] = roleId,
+                ["FunctionPointId"] = "FunctionPoint_Residual",
+                ["GrantedAt"] = DateTime.UtcNow,
+                ["GrantedBy"] = "test"
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var actual = await FeatureHttpTestRequests.ReadAsync(admin, read, $"/api/authorization/workbench/roles/{roleId}");
+        var actualRole = actual.GetProperty("role");
+        Assert.Equal(roleId, actualRole.GetProperty("id").GetString());
+        Assert.Equal("ReadContract", actualRole.GetProperty("code").GetString());
+        Assert.Equal("读取契约", actualRole.GetProperty("displayName").GetString());
+        Assert.Equal("读取契约", actualRole.GetProperty("name").GetString());
+        Assert.False(actualRole.GetProperty("isEnabled").GetBoolean());
+        Assert.False(actualRole.GetProperty("isBuiltIn").GetBoolean());
+        Assert.Equal(read.Position, Assert.Single(actual.GetProperty("positions").EnumerateArray()).GetString());
+
+        using (var missing = await FeatureHttpTestRequests.SendAsync(admin, read, HttpMethod.Get,
+            "/api/authorization/workbench/roles/Role_Missing"))
+            Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+
+        var roles = await FeatureHttpTestRequests.ReadAsync(admin, read,
+            "/api/authorization/workbench/roles?query=LocalAdmin&pageIndex=1&pageSize=20");
+        var administratorId = Assert.Single(roles.GetProperty("items").EnumerateArray()).GetProperty("EID").GetString();
+        var administrator = await FeatureHttpTestRequests.ReadAsync(admin, read,
+            $"/api/authorization/workbench/roles/{administratorId}");
+        Assert.Equal("LocalAdmin", administrator.GetProperty("role").GetProperty("code").GetString());
+        Assert.True(administrator.GetProperty("role").GetProperty("isBuiltIn").GetBoolean());
+        var expectedPositions = fixture.FeatureCatalog.Select(point => point.Position).ToHashSet(StringComparer.Ordinal);
+        var administratorPositions = administrator.GetProperty("positions").EnumerateArray()
+            .Select(position => position.GetString()!).ToArray();
+        Assert.Equal(expectedPositions.Count, administratorPositions.Length);
+        Assert.True(expectedPositions.SetEquals(administratorPositions));
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "真实普通主体功能授权与同会话在线撤权")]
     public async Task OrdinaryActor_ViewSaveAndRevocationUseCurrentGrantsAndExactBinding()
     {

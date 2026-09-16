@@ -71,7 +71,7 @@ _Avoid_: 角色详情授权弹窗、角色基础信息编辑、用户角色分�
 - 角色读取、创建、编辑、角色功能配置和用户角色分配分别按声明位置判权。普通主体可以显式获得这些管理动作，获授动作在全局范围生效，不以操作者自己的功能集裁剪可配置目录。拥有一个管理动作不自动获得其他动作。
 - LocalAdministratorCatalog 只收敛受保护角色定义；FeatureCatalogSynchronizer 在完整候选准备后同步功能点与 LocalAdmin 全集。管理员不通过角色名绕过正常判权，也不重建旧 Permission 目录。
 - FeatureCatalogSynchronizer 在事务成功后发布不可变活动目录。历史或失效功能行不能成为授权源；停用角色可以配置，但不进入有效授权。
-- RoleFeatureWriter 在角色主键写锁内读取实际旧集合、校验完整新集合及本分支入口依赖，通过平台事务统一保存关系和 role.features.changed 审计。相同集合或排列变化不产生分配记录，不引入 Revision 或自动重放。
+- RoleFeatureAssignments 统一读取目标角色的当前活动功能集合，并在角色主键写锁内读取实际旧集合、校验完整新集合及本分支入口依赖，通过平台事务统一保存关系和 role.features.changed 审计。相同集合或排列变化不产生分配记录，不引入 Revision 或自动重放。
 - Authorization 只引用 Audit.Contracts，由 Audit 登记稳定 authorization.role 目标和字段差异；不形成反向模块加载依赖。缺少 recorder 或登记、写入、保存、确定未提交的提交失败都不会返回成功。当前角色名称由 Authorization 批量提供，删除目标后记录保留 ID。
 - 角色列表与详情复用 StandardCrudService 的 Entity display 计划：用户字段批量解析，时间按请求 locale/timeZone 显示，原始审计值保持不变。角色页面未声明删除动作，遗留删除 HTTP 入口继续明确拒绝。
 - 独立工作台拥有数据库分页角色选择、完整虚拟功能树和当前角色草稿。节点独立勾选，分支全选是显式操作；搜索保留祖先，筛选保留隐藏选择。保存一次提交完整集合；切换角色和离开页面均保护未保存草稿，失败保留草稿，未知写入结果先查询实际状态。

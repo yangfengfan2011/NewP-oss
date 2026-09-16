@@ -1,15 +1,13 @@
 using ICP.Platform.Authorization;
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Modules.Authorization.Services;
-using ICP.Platform.Persistence.EfCore;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 namespace ICP.Platform.Modules.Authorization.Controllers;
 
 /// <summary>工作台业务只在 Authorization 内部组合；位置判权由平台在请求执行前完成。</summary>
 [ApiController, Route("api/authorization/workbench"), EndpointModule("Authorization")]
 public sealed class FeatureWorkbenchController(RoleManagementQuery roles, ActiveFeatureCatalog catalog,
-    RoleFeatureWriter writer, EfPlatformDbContext db) : ControllerBase
+    RoleFeatureAssignments assignments) : ControllerBase
 {
     /// <summary>公开完整活动目录，不以操作者已有授权裁剪可配置目录；动态资格由当前主体投影提供。</summary>
     [HttpGet("catalog"), RequireFeature("authorization.workbench.read")]
@@ -25,13 +23,8 @@ public sealed class FeatureWorkbenchController(RoleManagementQuery roles, Active
     [HttpGet("roles/{roleId}"), RequireFeature("authorization.workbench.read")]
     public async Task<IActionResult> Role(string roleId, CancellationToken cancellationToken)
     {
-        var role = await roles.GetAsync(roleId, cancellationToken);
-        if (role is null) return NotFound();
-        var snapshot = catalog.Snapshot;
-        var assigned = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("RoleFunctionGrant")).AsNoTracking()
-            .Where(row => EF.Property<string>(row, "RoleId") == roleId)
-            .Select(row => EF.Property<string>(row, "FunctionPointId")).ToArrayAsync(cancellationToken);
-        return Ok(new { role, positions = assigned.Where(snapshot.ById.ContainsKey).Select(id => snapshot.ById[id].Point.Position).ToArray() });
+        var result = await assignments.GetAsync(roleId, cancellationToken);
+        return result is null ? NotFound() : Ok(result);
     }
 
     /// <summary>独立保存动作一次提交完整集合；校验失败保留明确 Problem Details。</summary>
@@ -41,7 +34,7 @@ public sealed class FeatureWorkbenchController(RoleManagementQuery roles, Active
         try
         {
             if (request.Positions is null) throw new RolePermissionValidationException("必须提供完整功能集合。");
-            await writer.ReplaceAsync(roleId, request.Positions, cancellationToken);
+            await assignments.ReplaceAsync(roleId, request.Positions, cancellationToken);
             return NoContent();
         }
         catch (RolePermissionValidationException exception)

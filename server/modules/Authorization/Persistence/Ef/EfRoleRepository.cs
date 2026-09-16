@@ -49,17 +49,6 @@ public sealed class EfRoleRepository : IRoleRepository
         return entities.Select(Map).ToList();
     }
 
-    public async Task<List<Role>> GetByCodesAsync(IEnumerable<string> codes, CancellationToken cancellationToken = default)
-    {
-        var codeList = codes.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        var entities = await Entities
-            .AsNoTracking()
-            .Where(role => codeList.Contains(EF.Property<string>(role, "ECODE")))
-            .ToListAsync(cancellationToken);
-
-        return entities.Select(Map).ToList();
-    }
-
     public async Task CreateAsync(Role role, CancellationToken cancellationToken = default)
     {
         Entities.Add(ToEntity(role));

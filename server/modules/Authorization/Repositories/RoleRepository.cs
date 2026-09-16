@@ -43,15 +43,6 @@ public class RoleRepository : IRoleRepository
         }
     }
 
-    public Task<List<Role>> GetByCodesAsync(IEnumerable<string> codes, CancellationToken cancellationToken = default)
-    {
-        lock (_lock)
-        {
-            var codeSet = codes.ToHashSet();
-            return Task.FromResult(_roles.Where(r => codeSet.Contains(r.Code)).ToList());
-        }
-    }
-
     public Task CreateAsync(Role role, CancellationToken cancellationToken = default)
     {
         lock (_lock)

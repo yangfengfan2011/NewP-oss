@@ -34,18 +34,6 @@ public class RoleService : IRoleService
         return roles.Select(MapToDto).ToList();
     }
 
-    public async Task<RoleDto?> GetRoleByIdAsync(string roleId, CancellationToken cancellationToken = default)
-    {
-        var role = await _roleRepository.GetByIdAsync(roleId, cancellationToken);
-        return role != null ? MapToDto(role) : null;
-    }
-
-    public async Task<RoleDto?> GetRoleByCodeAsync(string code, CancellationToken cancellationToken = default)
-    {
-        var role = await _roleRepository.GetByCodeAsync(code, cancellationToken);
-        return role != null ? MapToDto(role) : null;
-    }
-
     // 普通角色创建拒绝保留身份和内建标记。
     public async Task<RoleDto> CreateRoleAsync(RoleDto dto, string? createdBy = null, CancellationToken cancellationToken = default)
     {

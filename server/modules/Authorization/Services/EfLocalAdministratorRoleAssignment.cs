@@ -77,6 +77,7 @@ public sealed class EfLocalAdministratorRoleAssignment(
         };
     }
 
+    // 按数据库比较规则读取最多两条启用的规范角色，以辨别角色是否唯一。
     private async ValueTask<Dictionary<string, object?>?> FindRoleAsync(CancellationToken cancellationToken)
     {
         var matches = await Roles.AsNoTracking()

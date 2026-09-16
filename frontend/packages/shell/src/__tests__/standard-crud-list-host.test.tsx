@@ -2287,6 +2287,80 @@ describe('StandardCrudListPageHost', () => {
     expect(document.body.textContent).not.toContain('opaque-result');
   });
 
+  it.each([
+    { mode: 'create' as const, actionKey: 'create', surface: 'list.pageActions', openLabel: '新建人员', saveLabel: '保存并关闭' },
+    { mode: 'edit' as const, actionKey: 'edit', surface: 'list.rowActions', openLabel: '编辑', saveLabel: '保存修改' },
+  ])('does not submit an open $mode Drawer after its current grant is revoked', async ({
+    mode,
+    actionKey,
+    surface,
+    openLabel,
+    saveLabel,
+  }) => {
+    const entryPosition = 'organization.person.entry';
+    const actionPosition = `organization.person.action.${actionKey}`;
+    const create = vi.fn().mockResolvedValue({ operation: 'create', payload: undefined });
+    const update = vi.fn().mockResolvedValue({ operation: 'update', payload: undefined });
+    const fields = {
+      EID: 'Person_1',
+      PersonNo: 'P001',
+      ENAME: '张三',
+      DepartmentId: null,
+      EmploymentStatus: 'FullTime',
+      IsEnabled: true,
+    };
+    mockStandardCrudModule({
+      dataAdapter: {
+        list: vi.fn(async () => ({ items: [{ id: 'Person_1', ...fields }], total: 1 })),
+        get: vi.fn(async () => ({
+          normalized: { fields, summaries: {} },
+          value: { fields, summaries: {} },
+        })),
+        getRowId: (row: { id?: string; EID?: string }) => row.id ?? row.EID ?? '',
+        create,
+        update,
+      },
+    });
+    const rendered = await renderHost({}, personListViewDocument, '/organization/persons', {
+      feature: {
+        entry: entryPosition,
+        positions: [entryPosition, actionPosition],
+        points: [{
+          key: actionKey,
+          kind: 'action',
+          position: actionPosition,
+          parentPosition: entryPosition,
+          actionScope: surface,
+        }],
+      },
+    });
+    await flushProTableRequest();
+    await act(async () => {
+      Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+        .find(button => button.textContent?.replace(/\s+/g, '') === openLabel)?.click();
+    });
+    await vi.waitFor(() => expect(document.body.querySelector<HTMLInputElement>('#ENAME')).not.toBeNull());
+    if (mode === 'create') {
+      await act(async () => {
+        const personNo = document.body.querySelector<HTMLInputElement>('#PersonNo');
+        const name = document.body.querySelector<HTMLInputElement>('#ENAME');
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(personNo, 'P002');
+        personNo?.dispatchEvent(new Event('input', { bubbles: true }));
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(name, '李四');
+        name?.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    }
+
+    await rendered.setFeaturePositions([entryPosition]);
+    const save = Array.from(document.body.querySelectorAll<HTMLButtonElement>('button'))
+      .find(button => button.textContent?.replace(/\s+/g, '') === saveLabel);
+    expect(save).toBeDefined();
+    await act(async () => save?.click());
+    await flushProTableRequest();
+
+    expect(mode === 'create' ? create : update).not.toHaveBeenCalled();
+  });
+
   it('hands an opaque create result to the registered presenter and blocks duplicate submits', async () => {
     const create = vi.fn().mockResolvedValue({
       operation: 'create',

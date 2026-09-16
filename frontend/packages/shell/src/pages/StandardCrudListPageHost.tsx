@@ -1520,6 +1520,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   }, [drawerDetailQuery.error, drawerState.id, drawerState.mode, drawerState.source]);
 
   const handleDrawerSave = async () => {
+    if (features.placement && drawerActionResolution.kind !== 'allowed') {
+      return;
+    }
     const succeeded = await mutationExecution.execute({
       mode: drawerState.mode === 'create' ? 'create' : 'edit',
       featurePosition: resolvedFeaturePosition(drawerActionResolution),

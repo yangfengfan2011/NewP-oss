@@ -11,6 +11,7 @@ using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Persistence.Abstractions;
+using ICP.Platform.Testing.Authorization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -40,8 +41,7 @@ public class PersonControllerJsonContractTests : IClassFixture<PersonControllerJ
         });
 
         using var manifest = await client.GetFromJsonAsync<JsonDocument>("/plugins/metadata-runtime-manifest.json");
-        var points = manifest!.RootElement.GetProperty("modules").EnumerateArray()
-            .SelectMany(module => module.GetProperty("features").Deserialize<FeaturePoint[]>(new JsonSerializerOptions(JsonSerializerDefaults.Web))!).ToArray();
+        var points = RuntimeFeatureCatalogTestSupport.Parse(manifest!.RootElement);
         var entry = points.Single(point => point.ModuleId == "Organization" && point.Kind == "tab" && point.Key == "persons");
         _factory.PersonCreate = points.Single(point => point.ParentPosition == entry.Position
             && point.Key == "create" && point.ActionScope == "list.pageActions");

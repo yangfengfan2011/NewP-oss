@@ -20,6 +20,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\..\TestSupport\Authorization\RuntimeFeatureCatalogTestSupport.cs"
+             Link="TestSupport\Authorization\RuntimeFeatureCatalogTestSupport.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../../Acceptance.HistoricalMigrations/Example.Stage2.SqlServerMigrations/Example.Stage2.SqlServerMigrations.csproj" />
     <ProjectReference Include="../../Acceptance.HistoricalMigrations/Example.Stage3.SqlServerMigrations/Example.Stage3.SqlServerMigrations.csproj" />
     <ProjectReference Include="../../Acceptance.HistoricalMigrations/Organization.Foundation.SqlServerMigrations/Organization.Foundation.SqlServerMigrations.csproj" />

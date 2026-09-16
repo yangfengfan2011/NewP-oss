@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using ICP.Platform.Kernel.ModulePlanning;
+using ICP.Platform.Testing.Authorization;
 using Xunit;
 
 namespace ICP.Platform.HostApi.Tests;
@@ -15,10 +16,7 @@ internal sealed class FeatureHttpTestRequests(IReadOnlyList<FeaturePoint> points
     {
         using var manifest = await client.GetFromJsonAsync<JsonDocument>("/plugins/metadata-runtime-manifest.json")
             ?? throw new InvalidOperationException("Runtime metadata manifest was empty.");
-        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-        return new(manifest.RootElement.GetProperty("modules").EnumerateArray()
-            .SelectMany(module => module.GetProperty("features").Deserialize<FeaturePoint[]>(options)
-                ?? throw new InvalidOperationException("Runtime feature catalog was empty.")).ToArray());
+        return new(RuntimeFeatureCatalogTestSupport.Parse(manifest.RootElement));
     }
 
     internal FeaturePoint Organization(string tab, string? action = null, string? surface = null, string? nodeType = null)
@@ -86,7 +84,7 @@ internal sealed class FeatureHttpTestRequests(IReadOnlyList<FeaturePoint> points
 
     internal async Task GrantAsync(HttpClient admin, string roleId, params FeaturePoint[] points)
     {
-        var positions = points.SelectMany(point => point.EntryDependencies.Append(point.Position)).Distinct().ToArray();
+        var positions = RuntimeFeatureCatalogTestSupport.ExpandGrantSet(points);
         using var response = await SendAsync(admin, Workbench("authorization.workbench.save"), HttpMethod.Put,
             $"/api/authorization/workbench/roles/{roleId}", new { positions });
         Assert.True(response.StatusCode == HttpStatusCode.NoContent, await response.Content.ReadAsStringAsync());

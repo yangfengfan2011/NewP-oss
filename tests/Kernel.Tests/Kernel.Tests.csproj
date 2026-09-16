@@ -28,6 +28,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\TestSupport\Authorization\RuntimeFeatureCatalogTestSupport.cs"
+             Link="TestSupport\Authorization\RuntimeFeatureCatalogTestSupport.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="TestData\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

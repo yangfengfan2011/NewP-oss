@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using ICP.Platform.Kernel.ModulePlanning;
+using ICP.Platform.Testing.Authorization;
 
 namespace ICP.Platform.Acceptance;
 
@@ -11,10 +12,7 @@ internal sealed class AcceptanceFeatureCatalog(IReadOnlyList<FeaturePoint> point
     {
         using var manifest = await client.GetFromJsonAsync<JsonDocument>("/plugins/metadata-runtime-manifest.json", token)
             ?? throw new InvalidOperationException("Runtime metadata manifest was empty.");
-        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-        return new(manifest.RootElement.GetProperty("modules").EnumerateArray()
-            .SelectMany(module => module.GetProperty("features").Deserialize<FeaturePoint[]>(options)
-                ?? throw new InvalidOperationException("Runtime feature catalog was empty.")).ToArray());
+        return new(RuntimeFeatureCatalogTestSupport.Parse(manifest.RootElement));
     }
 
     internal FeaturePoint Behavior(string module, string behavior) => Require(point =>
@@ -33,8 +31,8 @@ internal sealed class AcceptanceFeatureCatalog(IReadOnlyList<FeaturePoint> point
         && point.Key == key && point.ActionScope == scope && point.StaticScope == staticScope,
         $"{entry.Position} action {scope}/{key}");
 
-    internal string[] GrantSet(params FeaturePoint[] selected) => selected
-        .SelectMany(point => point.EntryDependencies.Append(point.Position)).Distinct(StringComparer.Ordinal).ToArray();
+    internal string[] GrantSet(params FeaturePoint[] selected) =>
+        RuntimeFeatureCatalogTestSupport.ExpandGrantSet(selected);
 
     private FeaturePoint Require(Func<FeaturePoint, bool> predicate, string description)
     {

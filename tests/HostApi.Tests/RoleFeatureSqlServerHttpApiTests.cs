@@ -14,16 +14,15 @@ public sealed class RoleFeatureSqlServerHttpApiTests
         using var admin = await fixture.LoginAdministratorAsync();
         var requests = new FeatureHttpTestRequests(fixture);
         var create = Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "authorization.role.create");
-        var manager = await FeatureHttpTestRequests.CreateAsync(admin, create, "/api/authorization/roles", new { Code = "RoleCreator", Name = "角色创建者" });
-        using var accountResponse = await FeatureHttpTestRequests.SendAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), HttpMethod.Post, "/api/identity/accounts", new { ECODE = "role-creator", ENAME = "普通角色创建者" });
-        Assert.Equal(HttpStatusCode.Created, accountResponse.StatusCode);
-        var account = await accountResponse.Content.ReadFromJsonAsync<JsonElement>();
-        var accountId = account.GetProperty("account").GetProperty("eid").GetString();
-        var assign = fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.role.userRoles" && point.ActionScope == "list.rowActions");
-        using (var assigned = await FeatureHttpTestRequests.SendAsync(admin, assign, HttpMethod.Put, $"/api/authorization/users/{accountId}/roles", new { RoleCodes = new[] { "RoleCreator" } }))
-            Assert.Equal(HttpStatusCode.NoContent, assigned.StatusCode);
-        await requests.GrantAsync(admin, manager.GetProperty("id").GetString()!, create);
-        using var ordinary = await fixture.LoginAsync("role-creator", account.GetProperty("temporaryCredential").GetString()!);
+        var actor = await HttpTestActors.CreateAuthorizedActorAsync(
+            fixture,
+            admin,
+            "RoleCreator",
+            "角色创建者",
+            "role-creator",
+            "普通角色创建者",
+            create);
+        using var ordinary = actor.Client;
         var role = await FeatureHttpTestRequests.CreateAsync(ordinary, create, "/api/authorization/roles", new { Code = "GlobalCreated", Name = "普通主体全局创建" });
         using var wrongOperation = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Put,
             $"/api/authorization/roles/{role.GetProperty("id").GetString()}", new { Name = "不可编辑" });
@@ -31,7 +30,7 @@ public sealed class RoleFeatureSqlServerHttpApiTests
         var roleRoute = $"/api/authorization/roles/{role.GetProperty("id").GetString()}";
         await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, requests.Role("edit"), HttpMethod.Put, roleRoute, new { Name = "未授编辑" }), HttpStatusCode.Forbidden);
         await ExpectAsync(ordinary.PostAsJsonAsync("/api/authorization/roles", new { Code = "MissingPosition", Name = "缺少位置" }), HttpStatusCode.Forbidden);
-        await requests.GrantAsync(admin, manager.GetProperty("id").GetString()!, create, requests.Role("edit"));
+        await requests.GrantAsync(admin, actor.RoleId, create, requests.Role("edit"));
         await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, requests.Role("edit"), HttpMethod.Put, roleRoute, new { Name = "获授全局编辑", IsEnabled = true }), HttpStatusCode.OK);
         await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, requests.Role("edit", "detail.pageActions"), HttpMethod.Put, roleRoute, new { Name = "另一位置" }), HttpStatusCode.Forbidden);
         using var protectedRole = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post,

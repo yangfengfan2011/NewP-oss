@@ -128,6 +128,7 @@ public sealed class AcceptanceFeatureCatalogTests
 
         Assert.Equal(edit, catalog.Action(catalog.OrganizationTab("persons"), "edit", "list.rowActions"));
         Assert.Equal(new[] { "management", "persons", "list-edit" }, catalog.GrantSet(edit));
+        Assert.Empty(catalog.GrantSet());
         Assert.Throws<InvalidOperationException>(() => catalog.Action(persons, "edit", "contextMenu"));
     }
 

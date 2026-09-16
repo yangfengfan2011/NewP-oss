@@ -24,8 +24,10 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
         var a = Id(await CreateAsync(admin, http.Organization("departments", "create", "list.pageActions"), "/api/organization/departments", new { ECODE = "A", ENAME = "部门A", CompanyId = company, SortOrder = "0100" }));
         var b = Id(await CreateAsync(admin, http.Organization("departments", "create", "list.pageActions"), "/api/organization/departments", new { ECODE = "B", ENAME = "部门B", CompanyId = company, SortOrder = "0200" }));
         var position = Id(await CreateAsync(admin, http.Organization("positions", "create", "list.pageActions"), "/api/organization/positions", new { ECODE = "P", ENAME = "岗位", SortOrder = "0100" }));
-        var maintainer = await CreateActorAsync(fixture, admin, "matrix-m", Maintenance(http));
-        var reader = await CreateActorAsync(fixture, admin, "matrix-r", Views(http));
+        var maintainer = await HttpTestActors.CreateAuthorizedActorAsync(
+            fixture, admin, "matrix-m", "matrix-m", "matrix-m", "matrix-m", Maintenance(http));
+        var reader = await HttpTestActors.CreateAuthorizedActorAsync(
+            fixture, admin, "matrix-r", "matrix-r", "matrix-r", "matrix-r", Views(http));
         using var writer = maintainer.Client;
         using var read = reader.Client;
         var create = http.Organization("persons", "create", "list.pageActions");
@@ -51,7 +53,7 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
             foreach (var route in new[] { "/api/identity/accounts", "/api/authorization/roles", "/api/audit/business-changes" })
                 await AssertStatusAsync(client.GetAsync(route), HttpStatusCode.Forbidden);
             await AssertStatusAsync(SendAsync(client, http.Organization("persons", "delete", "list.rowActions"), HttpMethod.Delete, $"/api/organization/persons/{person}"), HttpStatusCode.Forbidden);
-            await AssertStatusAsync(SendAsync(client, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put, $"/api/organization/persons/{person}/user-binding", new { UserId = reader.Id, Reason = "不应绑定" }), HttpStatusCode.Forbidden);
+            await AssertStatusAsync(SendAsync(client, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put, $"/api/organization/persons/{person}/user-binding", new { UserId = reader.AccountId, Reason = "不应绑定" }), HttpStatusCode.Forbidden);
             foreach (var (route, id) in new[] { ("companies", company), ("departments", a), ("positions", position) })
             {
                 await AssertStatusAsync(SendAsync(client, http.Organization(route, "create", "list.pageActions"), HttpMethod.Post, $"/api/organization/{route}", new { ECODE = "DENIED", ENAME = "禁止" }), HttpStatusCode.Forbidden);
@@ -60,7 +62,7 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
             }
             await AssertStatusAsync(client.PostAsJsonAsync("/api/identity/accounts", new { ECODE = "denied" }), HttpStatusCode.Forbidden);
             await AssertStatusAsync(SendAsync(client, http.Workbench("authorization.workbench.save"), HttpMethod.Put, $"/api/authorization/workbench/roles/{maintainer.RoleId}", new { positions = Array.Empty<string>() }), HttpStatusCode.Forbidden);
-            await AssertStatusAsync(FeatureHttpTestRequests.SendAsync(client, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{maintainer.Id}/roles", new { RoleCodes = Array.Empty<string>() }), HttpStatusCode.Forbidden);
+            await AssertStatusAsync(FeatureHttpTestRequests.SendAsync(client, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{maintainer.AccountId}/roles", new { RoleCodes = Array.Empty<string>() }), HttpStatusCode.Forbidden);
         }
         var beforeRejected = await HistoryAsync(http, admin, person);
         await AssertStatusAsync(SendAsync(read, create, HttpMethod.Post, "/api/organization/persons", Person("DENIED", company, a, position)), HttpStatusCode.Forbidden);
@@ -71,12 +73,12 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
         await AssertStatusAsync(SendAsync(writer, disable, HttpMethod.Put, $"/api/organization/persons/{person}/status/disable", new { isEnabled = false, reason = "正式停用" }), HttpStatusCode.OK);
         await AssertStatusAsync(SendAsync(writer, http.Organization("persons", "enable", "list.rowActions"), HttpMethod.Put, $"/api/organization/persons/{person}/status/enable", new { isEnabled = true, reason = "正式启用" }), HttpStatusCode.OK);
         var secondRole = await CreateRoleAsync(http, admin, "duplicate-source", [edit]);
-        await SetRolesAsync(http, admin, maintainer.Id, ["matrix-m", "duplicate-source"]);
+        await SetRolesAsync(http, admin, maintainer.AccountId, ["matrix-m", "duplicate-source"]);
         await http.GrantAsync(admin, maintainer.RoleId, [.. Views(http), create]);
         await AssertStatusAsync(SendAsync(writer, edit, HttpMethod.Put, $"/api/organization/persons/{person}", new { ENAME = "重复来源仍生效" }), HttpStatusCode.OK);
         await http.GrantAsync(admin, secondRole, []);
         var current = await writer.GetFromJsonAsync<JsonElement>("/api/auth/current-user");
-        Assert.Equal(maintainer.Id, current.GetProperty("id").GetString());
+        Assert.Equal(maintainer.AccountId, current.GetProperty("id").GetString());
         Assert.DoesNotContain(current.GetProperty("featurePositions").EnumerateArray(), point => point.GetString() == edit.Position);
         var before = await ReadTextAsync(admin, http.Organization("persons"), $"/api/organization/persons/{person}");
         var history = await HistoryAsync(http, admin, person);
@@ -111,7 +113,8 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
         var create = http.Organization("persons", "create", "list.pageActions");
         var edit = http.Organization("persons", "edit", "list.rowActions");
         var company = Id(await CreateAsync(admin, http.Organization("companies", "create", "list.pageActions"), "/api/organization/companies", new { ECODE = "INFLIGHT", ENAME = "公司", SortOrder = "0100" }));
-        var actor = await CreateActorAsync(fixture, admin, "inflight", Maintenance(http));
+        var actor = await HttpTestActors.CreateAuthorizedActorAsync(
+            fixture, admin, "inflight", "inflight", "inflight", "inflight", Maintenance(http));
         using var writer = actor.Client;
         var department = Id(await CreateAsync(admin, http.Organization("departments", "create", "list.pageActions"), "/api/organization/departments", new { ECODE = "D", ENAME = "部门", CompanyId = company, SortOrder = "0100" }));
         var person = Id(await CreateAsync(writer, create, "/api/organization/persons", new { PersonNo = "FLIGHT", ENAME = "起点", CompanyId = company, DepartmentId = department, EmploymentStatus = "Active", IsEnabled = true }));
@@ -131,20 +134,6 @@ public sealed class PersonnelAuthorizationSqlServerHttpApiTests
     }
 
     private static object Person(string number, string company, string department, string position) => new { PersonNo = number, ENAME = number, CompanyId = company, DepartmentId = department, PositionId = position, EmploymentStatus = "Active", IsEnabled = true };
-    internal static async Task<(string Id, string RoleId, HttpClient Client)> CreateActorAsync(BusinessAuditHostFixture fixture, HttpClient admin, string code, FeaturePoint[] features)
-    {
-        await BusinessAuditHostFixture.RefreshAntiforgeryAsync(admin);
-        using var accountResponse = await FeatureHttpTestRequests.SendAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), HttpMethod.Post, "/api/identity/accounts", new { ECODE = code, ENAME = code });
-        Assert.Equal(HttpStatusCode.Created, accountResponse.StatusCode);
-        var account = await accountResponse.Content.ReadFromJsonAsync<JsonElement>();
-        var id = account.GetProperty("account").GetProperty("eid").GetString()!;
-        var http = new FeatureHttpTestRequests(fixture);
-        var role = await CreateRoleAsync(http, admin, code, features);
-        await SetRolesAsync(http, admin, id, [code]);
-        var client = await fixture.LoginAsync(code, account.GetProperty("temporaryCredential").GetString()!);
-        await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
-        return (id, role, client);
-    }
     private static async Task<string> CreateRoleAsync(FeatureHttpTestRequests http, HttpClient admin, string code, FeaturePoint[] features)
     {
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(admin);

@@ -18,6 +18,7 @@ using ICP.Platform.Modules.Identity.Persistence.Ef;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Persistence.EfCore.Projection;
 using ICP.Platform.Persistence.EfCore.Transactions;
+using ICP.Platform.Testing.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -140,8 +141,7 @@ internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
                 {
                     Assert.False(expectFailure, "Invalid candidate opened HTTP requests.");
                     using var manifest = await client.GetFromJsonAsync<JsonDocument>("/plugins/metadata-runtime-manifest.json");
-                    Catalog = manifest!.RootElement.GetProperty("modules").EnumerateArray().SelectMany(module =>
-                        module.GetProperty("features").Deserialize<FeaturePoint[]>(new JsonSerializerOptions(JsonSerializerDefaults.Web))!).ToArray();
+                    Catalog = RuntimeFeatureCatalogTestSupport.Parse(manifest!.RootElement);
                     return;
                 }
             }

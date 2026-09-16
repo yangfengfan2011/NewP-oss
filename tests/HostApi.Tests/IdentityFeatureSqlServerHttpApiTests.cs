@@ -49,7 +49,14 @@ public sealed class IdentityFeatureSqlServerHttpApiTests
         using var disabled = await SendAsync(admin, http.Identity("disable"), HttpMethod.Put, $"/api/identity/accounts/{id}/status/disable",
             new { TargetStatus = "Disabled", ExpectedRevision = revision, Reason = "正式停用" });
         Assert.Equal(HttpStatusCode.OK, disabled.StatusCode);
-        var actor = await PersonnelAuthorizationSqlServerHttpApiTests.CreateActorAsync(fixture, admin, "identity-guard", [create]);
+        var actor = await HttpTestActors.CreateAuthorizedActorAsync(
+            fixture,
+            admin,
+            "identity-guard",
+            "identity-guard",
+            "identity-guard",
+            "identity-guard",
+            create);
         using (actor.Client)
         {
             using var guarded = await SendAsync(actor.Client, create, HttpMethod.Post, "/api/identity/accounts", new { ECODE = "guarded", ENAME = "不应扩大管理权" });

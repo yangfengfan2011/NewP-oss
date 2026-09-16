@@ -78,16 +78,19 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
         var read = fixture.FeatureCatalog.Single(point => point.ModuleId == "Authorization" && point.BehaviorKey == "authorization.workbench.read").Position;
         var save = fixture.FeatureCatalog.Single(point => point.ModuleId == "Authorization" && point.BehaviorKey == "authorization.workbench.save").Position;
         Assert.Contains(read, positions); Assert.Contains(save, positions);
-        var role = await FeatureHttpTestRequests.CreateAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = "FeatureReader", Name = "普通授权维护" });
-        var roleId = role.GetProperty("id").GetString()!;
         var target = await FeatureHttpTestRequests.CreateAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = "GlobalTarget", Name = "其他角色" });
         var targetId = target.GetProperty("id").GetString()!;
-        var account = await FeatureHttpTestRequests.CreateAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), "/api/identity/accounts", new { ECODE = "feature-reader", ENAME = "普通授权者" });
-        var actor = account.GetProperty("account").GetProperty("eid").GetString();
+        var actor = await HttpTestActors.CreateAuthorizedActorAsync(
+            fixture,
+            admin,
+            "FeatureReader",
+            "普通授权维护",
+            "feature-reader",
+            "普通授权者",
+            http.Workbench("authorization.workbench.read"));
+        var roleId = actor.RoleId;
         SetPosition(admin, save);
-        using (var grant = await admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{roleId}", new { positions = new[] { read } })) Assert.Equal(HttpStatusCode.NoContent, grant.StatusCode);
-        using (var assign = await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{actor}/roles", new { RoleCodes = new[] { "FeatureReader" } })) Assert.Equal(HttpStatusCode.NoContent, assign.StatusCode);
-        using var ordinary = await fixture.LoginAsync("feature-reader", account.GetProperty("temporaryCredential").GetString()!);
+        using var ordinary = actor.Client;
         SetPosition(ordinary, read);
         fixture.Fault.FeatureCommands.Clear();
         using (var list = await ordinary.GetAsync("/api/authorization/workbench/roles?pageIndex=1&pageSize=20")) Assert.Equal(HttpStatusCode.OK, list.StatusCode);
@@ -118,7 +121,7 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
         fixture.Fault.AfterRegister = null;
         SetPosition(ordinary, read);
         using (var revoked = await ordinary.GetAsync("/api/authorization/workbench/catalog")) Assert.Equal(HttpStatusCode.Forbidden, revoked.StatusCode);
-        using (var assign = await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{actor}/roles", new { RoleCodes = new[] { "FeatureReader", "GlobalTarget" } })) Assert.Equal(HttpStatusCode.NoContent, assign.StatusCode);
+        using (var assign = await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{actor.AccountId}/roles", new { RoleCodes = new[] { "FeatureReader", "GlobalTarget" } })) Assert.Equal(HttpStatusCode.NoContent, assign.StatusCode);
         using (var union = await ordinary.GetAsync("/api/authorization/workbench/catalog")) Assert.Equal(HttpStatusCode.OK, union.StatusCode);
         using (var disabled = await FeatureHttpTestRequests.SendAsync(admin, http.Role("edit"), HttpMethod.Put, $"/api/authorization/roles/{targetId}", new { Name = "其他角色", IsEnabled = false })) Assert.Equal(HttpStatusCode.OK, disabled.StatusCode);
         using (var denied = await ordinary.GetAsync("/api/authorization/workbench/catalog")) Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);

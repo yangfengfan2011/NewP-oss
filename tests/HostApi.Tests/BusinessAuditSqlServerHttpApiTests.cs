@@ -415,17 +415,17 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
         var http = new FeatureHttpTestRequests(fixture);
         using var admin = await fixture.LoginAdministratorAsync();
-        using var accountResponse = await FeatureHttpTestRequests.SendAsync(admin, new FeatureHttpTestRequests(fixture).Identity("create"), HttpMethod.Post, "/api/identity/accounts", new { ECODE = "writer", ENAME = "人员操作者" });
-        Assert.Equal(HttpStatusCode.Created, accountResponse.StatusCode);
-        var account = await accountResponse.Content.ReadFromJsonAsync<JsonElement>();
-        var actor = account.GetProperty("account").GetProperty("eid").GetString()!;
-        await BusinessAuditHostFixture.RefreshAntiforgeryAsync(admin);
-        using var roleResponse = await FeatureHttpTestRequests.SendAsync(admin, http.Role("create"), HttpMethod.Post, "/api/authorization/roles", new { Code = "AuditWriter", Name = "记录验证职责" });
-        var role = (await roleResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
-        await http.GrantAsync(admin, role!, http.Organization("persons"), http.Organization("persons", "create", "list.pageActions"), http.Audit());
-        using var assignment = await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{actor}/roles", new { RoleCodes = new[] { "AuditWriter" } });
-        Assert.Equal(HttpStatusCode.NoContent, assignment.StatusCode);
-        using var writer = await fixture.LoginAsync("writer", account.GetProperty("temporaryCredential").GetString()!);
+        var actor = await HttpTestActors.CreateAuthorizedActorAsync(
+            fixture,
+            admin,
+            "AuditWriter",
+            "记录验证职责",
+            "writer",
+            "人员操作者",
+            http.Organization("persons"),
+            http.Organization("persons", "create", "list.pageActions"),
+            http.Audit());
+        using var writer = actor.Client;
         var first = await FeatureHttpTestRequests.CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons", new { PersonNo = "QUERY-A", ENAME = "管理员创建", EmploymentStatus = "Active", IsEnabled = true });
         var second = await FeatureHttpTestRequests.CreateAsync(writer, http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons", new { PersonNo = "QUERY-B", ENAME = "维护者创建", EmploymentStatus = "Active", IsEnabled = true });
         using var deniedUpdate = await FeatureHttpTestRequests.SendAsync(writer, http.Organization("persons", "edit", "list.rowActions"), HttpMethod.Put, "/api/organization/persons/" + Id(second), new { ENAME = "无权编辑" });
@@ -433,10 +433,10 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.Equal(HttpStatusCode.Forbidden, (await FeatureHttpTestRequests.SendAsync(writer, http.Audit(), HttpMethod.Get, "/api/audit/business-changes")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync("/api/audit/business-changes")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await FeatureHttpTestRequests.SendAsync(admin, http.Identity(), HttpMethod.Get, "/api/audit/business-changes")).StatusCode);
-        var filtered = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), $"/api/audit/business-changes?Resource=organization.person&ActorId={actor}&EventType=person.created&TargetId={Id(second)}&From=2020-01-01T00:00:00Z&To=2040-01-01T00:00:00Z");
+        var filtered = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), $"/api/audit/business-changes?Resource=organization.person&ActorId={actor.AccountId}&EventType=person.created&TargetId={Id(second)}&From=2020-01-01T00:00:00Z&To=2040-01-01T00:00:00Z");
         Assert.Equal(1, filtered.GetProperty("total").GetInt32());
         var secondRecord = Assert.Single(filtered.GetProperty("items").EnumerateArray());
-        Assert.Equal(actor, secondRecord.GetProperty("ActorId").GetString());
+        Assert.Equal(actor.AccountId, secondRecord.GetProperty("ActorId").GetString());
         Assert.Equal("人员操作者", secondRecord.GetProperty("ActorId_DisplayValue").GetString());
         Assert.Equal("维护者创建", secondRecord.GetProperty("TargetId_DisplayValue").GetString());
         Assert.Equal(secondRecord.GetProperty("ActorId_DisplayValue").GetString(), secondRecord.GetProperty("CreatedBy_DisplayValue").GetString());

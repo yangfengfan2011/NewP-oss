@@ -9,8 +9,6 @@ public sealed class EfLocalAdministratorRoleAssignment(
     EfPlatformDbContext dbContext,
     IPlatformObjectIdGenerator objectIdGenerator) : ILocalAdministratorRoleAssignment
 {
-    private const string LocalAdministratorRoleCode = "LocalAdmin";
-
     public async ValueTask AssignAsync(
         string accountEid,
         string actorId,
@@ -82,7 +80,7 @@ public sealed class EfLocalAdministratorRoleAssignment(
     private async ValueTask<Dictionary<string, object?>?> FindRoleAsync(CancellationToken cancellationToken)
     {
         var matches = await Roles.AsNoTracking()
-            .Where(role => EF.Property<string>(role, "ECODE") == LocalAdministratorRoleCode
+            .Where(role => EF.Property<string>(role, "ECODE") == LocalAdministratorRole.Code
                 && EF.Property<bool>(role, "IsEnabled"))
             .Take(2)
             .ToArrayAsync(cancellationToken);

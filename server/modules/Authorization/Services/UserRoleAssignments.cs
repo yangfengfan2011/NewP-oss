@@ -1,3 +1,4 @@
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Audit.Contracts;
@@ -52,7 +53,7 @@ public sealed class UserRoleAssignments(EfPlatformDbContext db, IIdentityAccount
             if (!requested.SetEquals(selected.Select(r => r.Code))) throw new UserRoleValidationException("角色集合包含未知角色。");
             var old = await Links().Where(r => EF.Property<string>(r, "UserId") == userId).ToListAsync(token);
             var oldIds = old.Select(r => (string)r["RoleId"]!).ToHashSet(StringComparer.Ordinal);
-            if (await Roles().AsNoTracking().AnyAsync(r => oldIds.Contains(EF.Property<string>(r, "EID")) && EF.Property<string>(r, "ECODE") == "LocalAdmin", token))
+            if (await Roles().AsNoTracking().AnyAsync(r => oldIds.Contains(EF.Property<string>(r, "EID")) && EF.Property<string>(r, "ECODE") == LocalAdministratorRole.Code, token))
                 throw new UserRoleValidationException("本地管理员成员不能通过普通管理修改。");
             var newIds = selected.Select(r => r.Id).ToHashSet(StringComparer.Ordinal);
             if (oldIds.SetEquals(newIds)) return true;
@@ -80,7 +81,7 @@ public sealed class UserRoleAssignments(EfPlatformDbContext db, IIdentityAccount
     // 角色停用不影响配置资格。
     private DbSet<Dictionary<string, object?>> Roles() => db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Role"));
     // 保留身份按规范的不区分大小写规则判断。
-    private static bool IsAdministrator(string code) => string.Equals(code, "LocalAdmin", StringComparison.OrdinalIgnoreCase);
+    private static bool IsAdministrator(string code) => LocalAdministratorCatalog.MatchesRoleCode(code);
 }
 
 /// <summary>普通成员管理的确定性输入错误。</summary>

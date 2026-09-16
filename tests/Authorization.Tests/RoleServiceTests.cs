@@ -158,6 +158,8 @@ public class RoleServiceTests
     [Theory]
     [InlineData("LocalAdmin", false)]
     [InlineData("localadmin", false)]
+    [InlineData(" LocalAdmin ", false)]
+    [InlineData("   ", false)]
     [InlineData("Ordinary", true)]
     public async Task CreateRole_ReservedIdentityRejectsEvenSystemActor(string code, bool builtIn)
     {

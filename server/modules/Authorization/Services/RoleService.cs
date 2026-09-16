@@ -49,7 +49,7 @@ public class RoleService : IRoleService
     // 普通角色创建拒绝保留身份和内建标记。
     public async Task<RoleDto> CreateRoleAsync(RoleDto dto, string? createdBy = null, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(dto.Code) || dto.IsBuiltIn || string.Equals(dto.Code.Trim(), "LocalAdmin", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(dto.Code) || dto.IsBuiltIn || LocalAdministratorCatalog.MatchesRoleCode(dto.Code.Trim()))
             throw new InvalidOperationException("受保护的角色身份不能通过普通管理创建。");
         var existing = await _roleRepository.GetByCodeAsync(dto.Code, cancellationToken);
         if (existing != null)
@@ -79,7 +79,7 @@ public class RoleService : IRoleService
             throw new InvalidOperationException($"角色 '{roleId}' 不存在");
         }
 
-        if (role.IsBuiltIn || string.Equals(role.Code, "LocalAdmin", StringComparison.OrdinalIgnoreCase))
+        if (role.IsBuiltIn || LocalAdministratorCatalog.MatchesRoleCode(role.Code))
         {
             throw new InvalidOperationException("系统内置角色不允许修改");
         }
@@ -104,7 +104,7 @@ public class RoleService : IRoleService
             throw new InvalidOperationException($"角色 '{roleId}' 不存在");
         }
 
-        if (role.IsBuiltIn || string.Equals(role.Code, "LocalAdmin", StringComparison.OrdinalIgnoreCase))
+        if (role.IsBuiltIn || LocalAdministratorCatalog.MatchesRoleCode(role.Code))
         {
             throw new InvalidOperationException("系统内置角色不允许删除");
         }

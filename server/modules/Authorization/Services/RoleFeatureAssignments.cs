@@ -39,7 +39,7 @@ public sealed class RoleFeatureAssignments(EfPlatformDbContext db, IPlatformTran
                 .ExecuteUpdateAsync(setter => setter.SetProperty(row => EF.Property<string>(row, "EID"), row => EF.Property<string>(row, "EID")), token);
             if (found == 0) throw new RolePermissionValidationException("角色不存在。");
             var role = await roleRows.AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == roleId, token);
-            if (string.Equals((string)role["ECODE"]!, "LocalAdmin", StringComparison.OrdinalIgnoreCase))
+            if (LocalAdministratorCatalog.MatchesRoleCode((string)role["ECODE"]!))
                 throw new RolePermissionValidationException("LocalAdmin 的完整功能授权由初始化维护，不能修改。");
             var grants = db.Set<Dictionary<string, object?>>(db.ResolveModelKey("RoleFunctionGrant"));
             var old = await grants.Where(row => EF.Property<string>(row, "RoleId") == roleId).ToListAsync(token);

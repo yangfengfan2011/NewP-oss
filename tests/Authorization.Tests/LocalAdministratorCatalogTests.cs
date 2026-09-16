@@ -5,6 +5,19 @@ using Xunit;
 namespace ICP.Platform.Modules.Authorization.Tests;
 public sealed class LocalAdministratorCatalogTests
 {
+    [Theory]
+    [InlineData("LocalAdmin", true)]
+    [InlineData("localadmin", true)]
+    [InlineData("", false)]
+    [InlineData(" ", false)]
+    [InlineData(" LocalAdmin", false)]
+    [InlineData("LocalAdmin ", false)]
+    [InlineData(null, false)]
+    public void MatchesRoleCode_PreservesOrdinalIgnoreCaseWithoutTrimming(string? code, bool expected)
+    {
+        Assert.Equal(expected, LocalAdministratorCatalog.MatchesRoleCode(code));
+    }
+
     [Fact]
     public async Task StartupCatalog_PreservesProtectedRoleIdentityAcrossRestarts()
     {

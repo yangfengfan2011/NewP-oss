@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json.Serialization;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Authorization.Extensions;
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Abstractions;
@@ -64,7 +65,7 @@ builder.Services.AddHostReadiness();
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy =>
-        policy.RequireRole("LocalAdmin"));
+        policy.RequireRole(LocalAdministratorRole.Code));
     options.AddPolicy(DenyAllAttribute.PolicyName, policy =>
         policy.RequireAuthenticatedUser().RequireAssertion(static _ => false));
     // 启动审计阻止当前漏标 endpoint；fallback 继续覆盖运行期后来加入的漏网 endpoint。

@@ -1,3 +1,4 @@
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Persistence.Abstractions;
@@ -39,7 +40,7 @@ public sealed class FeatureCatalogSynchronizer(EfPlatformDbContext db, IPlatform
                     current.Add(point.Position, id);
                 }
                 var role = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Role")).AsNoTracking()
-                    .SingleAsync(row => EF.Property<string>(row, "ECODE") == "LocalAdmin", token);
+                    .SingleAsync(row => EF.Property<string>(row, "ECODE") == LocalAdministratorRole.Code, token);
                 var roleId = (string)role["EID"]!;
                 var oldIds = (await grants.AsNoTracking().Where(row => EF.Property<string>(row, "RoleId") == roleId)
                     .Select(row => EF.Property<string>(row, "FunctionPointId")).ToListAsync(token)).ToHashSet(StringComparer.Ordinal);

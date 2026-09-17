@@ -512,6 +512,12 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             }
             page = administratorPage;
             driver = administratorDriver;
+            if (phase == "initial")
+            {
+                await DisableAndRestoreCompanyFromBrowserAsync(driver,
+                    _company ?? throw new InvalidOperationException("Browser company was not created."), cancellationToken);
+                browserAssertions.Add("administrator-disabled-and-restored-company-with-existing-departments-and-person");
+            }
             await OpenAuditDetailFromBrowserAsync(driver, person.Id, "person.created", phase);
             browserAssertions.Add("administrator-opened-person-business-change-detail");
             await OpenAuditDetailFromBrowserAsync(driver, person.Id, "person.updated", phase);
@@ -703,6 +709,26 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await driver.WaitForRowAsync(company.Code, company.Name);
         await OpenAndCloseDirectoryDetailAsync(driver, company.Name);
         return company;
+    }
+
+    // 公司已有真实部门和人员后，用LocalAdmin走同一编辑入口完成停用和恢复；下级状态与会话语义留在SQL测试。
+    private async Task DisableAndRestoreCompanyFromBrowserAsync(StandardCrudPageDriver driver, CompanyData company,
+        CancellationToken cancellationToken)
+    {
+        await driver.OpenOrganizationTabAsync("公司", "companies");
+        foreach (var enabled in new[] { false, true })
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var row = await driver.WaitForRowAsync(company.Code, company.Name);
+            await row.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "编辑", Exact = true }).ClickAsync();
+            var drawer = await driver.WaitForVisibleDrawerAsync("company enablement editor");
+            await StandardCrudPageDriver.SetDrawerSwitchAsync(drawer, "启用状态", enabled);
+            await driver.SaveChangesAsync(drawer,
+                new ApiExpectation("PUT", "/api/organization/companies/", 200,
+                    enabled ? "company restore" : "company disable", PathIsPrefix: true));
+            await driver.WaitForRowAsync(company.Code, company.Name);
+        }
+        await OpenAndCloseDirectoryDetailAsync(driver, company.Name);
     }
 
     // 在真实组织树直属列表创建部门，沿自动选择的节点右键编辑，再消费更新后的结果。

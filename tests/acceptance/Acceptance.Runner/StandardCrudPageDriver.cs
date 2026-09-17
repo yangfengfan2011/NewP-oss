@@ -101,6 +101,15 @@ internal sealed class StandardCrudPageDriver
     internal static Task FillDrawerFieldAsync(ILocator drawer, string label, string value) =>
         drawer.GetByLabel(label, new LocatorGetByLabelOptions { Exact = true }).FillAsync(value);
 
+    // 根据控件的可访问状态设置Switch输入，不对保存后的业务语义作浏览器断言。
+    internal static async Task SetDrawerSwitchAsync(ILocator drawer, string label, bool enabled)
+    {
+        var control = drawer.GetByRole(AriaRole.Switch, new LocatorGetByRoleOptions { Name = label, Exact = true });
+        await control.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+        if (await control.GetAttributeAsync("aria-checked") != (enabled ? "true" : "false"))
+            await control.ClickAsync();
+    }
+
     internal Task<IResponse> SaveAndCloseAsync(ILocator drawer, ApiExpectation expectation) =>
         SubmitDrawerAsync(drawer, SaveAndCloseLabel, expectation);
 

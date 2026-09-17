@@ -1,6 +1,7 @@
 using ICP.Platform.Modeling;
 using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Persistence.Abstractions;
+using ICP.Platform.Persistence.Transactions;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Persistence.EfCore.Transactions;
 using Microsoft.EntityFrameworkCore;
@@ -52,6 +53,65 @@ public sealed class PlatformTransactionExecutorTests
         Assert.Empty(await verification.Set<Dictionary<string, object?>>("platform.core/TransactionProbe").ToListAsync());
     }
 
+    [Fact]
+    public async Task ExecuteAsync_PersistsChangesRegisteredDuringPreparationBeforePublishing()
+    {
+        var options = CreateOptions(nameof(ExecuteAsync_PersistsChangesRegisteredDuringPreparationBeforePublishing));
+        var definitions = new[] { Definition(), Definition("DeferredProbe") };
+        await using var db = new EfPlatformDbContext(options, definitions);
+        var participant = new PreparingParticipant(_ =>
+        {
+            // 模拟提交参与者登记另一上下文的tracked变更；只有平台执行器负责保存。
+            db.Set<Dictionary<string, object?>>("platform.core/DeferredProbe").Add(new() { ["EID"] = "deferred" });
+            return ValueTask.CompletedTask;
+        }, () => Assert.True(db.Set<Dictionary<string, object?>>("platform.core/DeferredProbe").AsNoTracking().Any()));
+        var executor = new EfPlatformTransactionExecutor(db, [new("platform.core/TransactionProbe", participant)]);
+        await executor.ExecuteAsync(["TransactionProbe"], _ =>
+        {
+            db.Set<Dictionary<string, object?>>("platform.core/TransactionProbe").Add(new() { ["EID"] = "business" });
+            return ValueTask.FromResult(true);
+        });
+        await using var verification = new EfPlatformDbContext(options, definitions);
+        Assert.Single(await verification.Set<Dictionary<string, object?>>("platform.core/DeferredProbe").ToListAsync());
+        Assert.Equal(1, participant.PublishCount);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteAsync_RejectsCacheModelChangesDuringPreparationWithoutPublishing(bool explicitRegistration)
+    {
+        var options = CreateOptions($"{nameof(ExecuteAsync_RejectsCacheModelChangesDuringPreparationWithoutPublishing)}-{explicitRegistration}");
+        await using var db = new EfPlatformDbContext(options, [Definition()]);
+        EfPlatformTransactionExecutor? executor = null;
+        var participant = new PreparingParticipant(_ =>
+        {
+            var row = new Dictionary<string, object?> { ["EID"] = "too-late" };
+            if (explicitRegistration) executor!.RegisterChange(new("TransactionProbe", "too-late", null, row));
+            else db.Set<Dictionary<string, object?>>("platform.core/TransactionProbe").Add(row);
+            return ValueTask.CompletedTask;
+        });
+        executor = new EfPlatformTransactionExecutor(db, [new("platform.core/TransactionProbe", participant)]);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => executor.ExecuteAsync(["TransactionProbe"],
+            _ => ValueTask.FromResult(true)).AsTask());
+        Assert.Equal(0, participant.PublishCount);
+        // InMemory不证明数据库事务回滚；这里证明最后保存之前拒绝缓存模型新变更。
+        await using var verification = new EfPlatformDbContext(options, [Definition()]);
+        Assert.Empty(await verification.Set<Dictionary<string, object?>>("platform.core/TransactionProbe").ToListAsync());
+    }
+
+    private sealed class PreparingParticipant(Func<CancellationToken, ValueTask> prepare, Action? published = null) : IPlatformCommitParticipant, IPlatformCommitScope
+    {
+        public string Name => "preparation-probe";
+        public int PublishCount { get; private set; }
+        public ValueTask<IPlatformCommitScope> BeginAsync(CancellationToken cancellationToken) => ValueTask.FromResult<IPlatformCommitScope>(this);
+        public ValueTask PrepareAsync(IReadOnlyList<PlatformRecordChange> changes, CancellationToken cancellationToken) => prepare(cancellationToken);
+        public void BlockReads() { }
+        public ValueTask PublishAsync() { published?.Invoke(); PublishCount++; return ValueTask.CompletedTask; }
+        public void MarkUnavailable() { }
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
     private static DbContextOptions<EfPlatformDbContext> CreateOptions(string databaseName) =>
         new DbContextOptionsBuilder<EfPlatformDbContext>()
             .UseInMemoryDatabase(databaseName)
@@ -59,10 +119,10 @@ public sealed class PlatformTransactionExecutorTests
             .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>()
             .Options;
 
-    private static ModelDefinition Definition() =>
+    private static ModelDefinition Definition(string name = "TransactionProbe") =>
         new(
-            "TransactionProbe",
-            "TransactionProbe",
+            name,
+            name,
             ModelKind.Entity,
             [
                 new FieldDefinition(

@@ -16,7 +16,10 @@ public interface IPlatformCommitParticipant
 
 public interface IPlatformCommitScope : IAsyncDisposable
 {
-    /// <summary>使用实际保存的前后值准备完整候选；不向读取方发布。</summary>
+    /// <summary>
+    /// 使用实际保存的前后值准备完整候选；不向读取方发布。
+    /// 可登记未缓存模型的事务性变化，由执行器统一保存；准备开始后禁止改变缓存模型。
+    /// </summary>
     ValueTask PrepareAsync(IReadOnlyList<PlatformRecordChange> changes, CancellationToken cancellationToken);
     /// <summary>在数据库提交前暂停新读取，封闭提交至发布窗口。</summary>
     void BlockReads();

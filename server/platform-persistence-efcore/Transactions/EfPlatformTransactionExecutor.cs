@@ -14,6 +14,7 @@ public sealed class EfPlatformTransactionExecutor : IPlatformTransactionExecutor
     private readonly List<PlatformRecordChange> _changes = [];
     private HashSet<IPlatformCommitParticipant> _activeParticipants = [];
     private List<(EntityEntry Entry, EntityState State, IReadOnlyDictionary<string, object?>? Before)> _pending = [];
+    private bool _preparing;
     public bool IsActive { get; private set; }
 
     /// <summary>模块注册拥有者，平台只消费模型映射，不识别业务模型。</summary>
@@ -58,8 +59,11 @@ public sealed class EfPlatformTransactionExecutor : IPlatformTransactionExecutor
             {
                 var result = await registerChanges(cancellationToken);
                 await _dbContext.SaveChangesAsync(cancellationToken);
+                _preparing = true;
                 foreach (var (participant, scope) in scopes)
                     await scope.PrepareAsync(_changes.Where(c => _participants.GetValueOrDefault(c.ModelKey) == participant).ToArray(), cancellationToken);
+                // 准备阶段可登记未缓存模型的事务性副作用；唯一执行器保存后才能提交，缓存模型禁止晚到变更。
+                if (scopes.Count > 0) await _dbContext.SaveChangesAsync(cancellationToken);
                 foreach (var (_, scope) in scopes) scope.BlockReads();
                 await transaction.CommitAsync(cancellationToken);
                 committed = true;
@@ -83,6 +87,7 @@ public sealed class EfPlatformTransactionExecutor : IPlatformTransactionExecutor
             _dbContext.SavingChanges -= CollectPending;
             _dbContext.SavedChanges -= CollectSaved;
             IsActive = false;
+            _preparing = false;
             _pending.Clear();
             _activeParticipants.Clear();
             for (var index = scopes.Count - 1; index >= 0; index--) await scopes[index].Scope.DisposeAsync();
@@ -96,6 +101,8 @@ public sealed class EfPlatformTransactionExecutor : IPlatformTransactionExecutor
         if (!IsActive) throw new InvalidOperationException("Changes must be registered inside a platform transaction.");
         if (_participants.TryGetValue(key, out var participant) && !_activeParticipants.Contains(participant))
             throw new InvalidOperationException("The changed model was not declared before the write.");
+        if (_preparing && _participants.ContainsKey(key))
+            throw new InvalidOperationException("Cache model changes cannot be registered after preparation begins.");
         _changes.Add(change with { ModelKey = key });
     }
 
@@ -105,6 +112,8 @@ public sealed class EfPlatformTransactionExecutor : IPlatformTransactionExecutor
         _pending = _dbContext.ChangeTracker.Entries().Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
             .Where(e => _participants.ContainsKey(e.Metadata.Name))
             .Select(e => (e, e.State, e.State == EntityState.Added ? null : Freeze(e.OriginalValues))).ToList();
+        if (_preparing && _pending.Count > 0)
+            throw new InvalidOperationException("Cache model changes cannot be saved after preparation begins.");
         foreach (var (entry, _, _) in _pending)
             if (!_activeParticipants.Contains(_participants[entry.Metadata.Name]))
                 throw new InvalidOperationException("The changed model was not declared before the write.");

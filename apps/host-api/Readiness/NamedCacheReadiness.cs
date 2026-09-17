@@ -13,9 +13,11 @@ public sealed class NamedCacheReadinessContributor(IEnumerable<IPlatformCacheSta
     public ValueTask<ReadinessContribution> CheckAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var unavailable = caches.Where(cache => !cache.IsAvailable).Select(cache => cache.Name).Order(StringComparer.Ordinal).ToArray();
-        return ValueTask.FromResult(unavailable.Length == 0
-            ? ReadinessContribution.Ready("Named caches ready.")
-            : new ReadinessContribution(ReadinessState.Starting, "CACHE_UNAVAILABLE", $"Caches awaiting recovery: {string.Join(", ", unavailable)}."));
+        // 每个缓存只观察一次数量；null 同时表达不可用，避免分别读取状态和数量形成混合诊断。
+        var quantities = caches.Select(cache => (cache.Name, Count: cache.RecordCount)).OrderBy(cache => cache.Name, StringComparer.Ordinal).ToArray();
+        var diagnostic = string.Join(", ", quantities.Select(cache => $"{cache.Name}: {cache.Count?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown"}"));
+        return ValueTask.FromResult(quantities.All(cache => cache.Count.HasValue)
+            ? ReadinessContribution.Ready($"Named caches ready. Record counts: {diagnostic}.")
+            : new ReadinessContribution(ReadinessState.Starting, "CACHE_UNAVAILABLE", $"Caches awaiting recovery. Record counts: {diagnostic}."));
     }
 }

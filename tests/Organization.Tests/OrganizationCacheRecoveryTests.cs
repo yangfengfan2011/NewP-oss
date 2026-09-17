@@ -12,6 +12,61 @@ namespace ICP.Platform.Modules.Organization.Tests;
 public sealed class OrganizationCacheRecoveryTests
 {
     [Fact]
+    public async Task RecordCount_FollowsWholePublicationAndBecomesUnknownUntilRecovery()
+    {
+        await using var fixture = new Fixture();
+        var cache = new ControlledCache(fixture.Services.GetRequiredService<IServiceScopeFactory>());
+        IPlatformCacheStatus status = cache;
+        Assert.Null(status.RecordCount);
+        await fixture.SaveAsync(Row("company"));
+        await using (var scope = fixture.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+            var department = Row("department"); department["CompanyId"] = "company";
+            db.Set<Dictionary<string, object?>>("Organization/Department").Add(department);
+            db.Set<Dictionary<string, object?>>("Organization/Position").Add(new()
+            { ["EID"] = "position", ["ENAME"] = "岗位", ["IsEnabled"] = false });
+            db.Set<Dictionary<string, object?>>("Organization/Person").Add(new()
+            { ["EID"] = "person", ["PersonNo"] = "P1", ["ENAME"] = "人员", ["IsEnabled"] = false });
+            await db.SaveChangesAsync();
+        }
+        await cache.InitializeAsync();
+        Assert.Equal(4L, status.RecordCount);
+        var added = new Dictionary<string, object?>
+        { ["EID"] = "added", ["PersonNo"] = "P2", ["ENAME"] = "新增人员", ["IsEnabled"] = true };
+        await using (var commit = await cache.BeginAsync(default))
+        {
+            await commit.PrepareAsync([new("Organization/Person", "added", null, added)], default);
+            Assert.Equal(4L, status.RecordCount);
+            commit.BlockReads();
+            await commit.PublishAsync();
+        }
+        Assert.Equal(5L, status.RecordCount);
+        await using (var commit = await cache.BeginAsync(default))
+        {
+            await commit.PrepareAsync([new("Organization/Person", "added", added, null)], default);
+            Assert.Equal(5L, status.RecordCount);
+            commit.BlockReads();
+            await commit.PublishAsync();
+        }
+        Assert.Equal(4L, status.RecordCount);
+        await using (var commit = await cache.BeginAsync(default))
+        {
+            await commit.PrepareAsync([new("Organization/Company", "company", null, Row("company"))], default);
+            commit.MarkUnavailable();
+        }
+        Assert.False(status.IsAvailable);
+        Assert.Null(status.RecordCount);
+        cache.FailReload = true;
+        await Assert.ThrowsAsync<IOException>(() => cache.InitializeAsync().AsTask());
+        Assert.Null(status.RecordCount);
+        cache.FailReload = false;
+        await cache.InitializeAsync();
+        Assert.Equal(4L, status.RecordCount);
+        Assert.True(status.IsAvailable);
+    }
+
+    [Fact]
     public async Task UnavailableRecovery_DoesNotQueueNewBusinessTransaction()
     {
         await using var fixture = new Fixture();
@@ -168,6 +223,7 @@ public sealed class OrganizationCacheRecoveryTests
         await using var fixture = new Fixture();
         var cache = fixture.Cache;
         await cache.InitializeAsync();
+        Assert.Equal(0L, cache.RecordCount);
         var before = await cache.ReadAsync();
         await using (var commit = await cache.BeginAsync(default))
         {

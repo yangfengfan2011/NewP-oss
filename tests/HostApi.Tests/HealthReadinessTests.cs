@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using ICP.Platform.HostApi.Controllers;
 using ICP.Platform.HostApi.Readiness;
+using ICP.Platform.Persistence.Transactions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Hosting;
@@ -15,6 +16,38 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class HealthReadinessTests
 {
+    [Fact]
+    public async Task NamedCacheReadiness_ReportsPublishedCountAndUnknownWithoutReadingData()
+    {
+        var cache = new MutableCacheStatus();
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseTestServer();
+        builder.Services.AddControllers().AddApplicationPart(typeof(HealthController).Assembly);
+        builder.Services.AddHostReadiness();
+        builder.Services.AddSingleton<IPlatformCacheStatus>(cache);
+        await using var app = builder.Build();
+        app.MapControllers();
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+        foreach (var count in new long?[] { null, 0, 4, null })
+        {
+            cache.RecordCount = count;
+            using var response = await client.GetAsync("/api/health/ready");
+            Assert.Equal(count.HasValue ? HttpStatusCode.OK : HttpStatusCode.ServiceUnavailable, response.StatusCode);
+            using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            var stage = Assert.Single(body.RootElement.GetProperty("stages").EnumerateArray());
+            Assert.Equal("named-caches", stage.GetProperty("name").GetString());
+            Assert.Contains($"Fixture: {count?.ToString() ?? "unknown"}", stage.GetProperty("diagnostic").GetString());
+        }
+    }
+
+    private sealed class MutableCacheStatus : IPlatformCacheStatus
+    {
+        public string Name => "Fixture";
+        public bool IsAvailable => RecordCount.HasValue;
+        public long? RecordCount { get; set; }
+    }
+
     [Fact]
     public void Get_LivenessRemainsIndependentFromReadinessContributors()
     {

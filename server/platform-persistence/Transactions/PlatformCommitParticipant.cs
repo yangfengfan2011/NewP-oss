@@ -15,6 +15,8 @@ public interface IPlatformCacheStatus
 {
     string Name { get; }
     bool IsAvailable { get; }
+    /// <summary>完整已发布结果的记录数；0 表示已知空缓存，null 表示当前不可用且数量未知。</summary>
+    long? RecordCount { get; }
 }
 
 public interface IPlatformCommitParticipant

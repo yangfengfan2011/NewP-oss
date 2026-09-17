@@ -8,6 +8,7 @@ public abstract class NamedCache<TSnapshot> : IPlatformCommitParticipant, IPlatf
     private readonly SemaphoreSlim _writer = new(1, 1);
     private readonly object _state = new();
     private TSnapshot? _snapshot;
+    private long? _recordCount;
     private TSnapshot? _repairBase;
     private IReadOnlyList<PlatformRecordChange>? _repairChanges;
     private TaskCompletionSource? _publication;
@@ -15,6 +16,8 @@ public abstract class NamedCache<TSnapshot> : IPlatformCommitParticipant, IPlatf
     private TimeSpan? _lastMaintenanceDuration;
     public abstract string Name { get; }
     public bool IsAvailable { get { lock (_state) return _snapshot is not null; } }
+    /// <inheritdoc/>
+    public long? RecordCount { get { lock (_state) return _recordCount; } }
     /// <summary>最近一次实际装载或刷新尝试的耗时；不包含等待协调权的时间，也不表示性能达标。</summary>
     public TimeSpan? LastMaintenanceDuration { get { lock (_state) return _lastMaintenanceDuration; } }
 
@@ -24,12 +27,16 @@ public abstract class NamedCache<TSnapshot> : IPlatformCommitParticipant, IPlatf
     protected abstract ValueTask<TSnapshot> ApplyAsync(TSnapshot snapshot, IReadOnlyList<PlatformRecordChange> changes, CancellationToken cancellationToken);
     /// <summary>只读取已确定受影响记录的当前持久化事实；不重放原业务写入。</summary>
     protected abstract ValueTask<IReadOnlyList<PlatformRecordChange>> ReloadAsync(IReadOnlyList<PlatformRecordChange> changes, CancellationToken cancellationToken);
+    /// <summary>具体缓存以已有集合数量统计完整记录，不遍历档案或重复计算关系索引。</summary>
+    protected abstract long CountRecords(TSnapshot snapshot);
     /// <summary>单一发布入口；可在测试中注入发布故障，生产实现只做原子替换。</summary>
     protected virtual void Publish(TSnapshot snapshot)
     {
+        var recordCount = CountRecords(snapshot);
         lock (_state)
         {
             _snapshot = snapshot;
+            _recordCount = recordCount;
             // 健康写入沿用尚未触发的信号，不能把已等待的恢复服务留在旧任务上。
             if (_unavailable.Task.IsCompleted) _unavailable = new(TaskCreationOptions.RunContinuationsAsynchronously);
         }
@@ -128,6 +135,7 @@ public abstract class NamedCache<TSnapshot> : IPlatformCommitParticipant, IPlatf
         lock (_state)
         {
             _snapshot = null;
+            _recordCount = null;
             _repairBase = snapshot;
             _repairChanges = changes;
             _unavailable.TrySetResult();

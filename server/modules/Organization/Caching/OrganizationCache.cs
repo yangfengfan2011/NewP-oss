@@ -16,6 +16,10 @@ public class OrganizationCache(IServiceScopeFactory scopes) : NamedCache<Organiz
     public override string Name => "Organization";
 
     /// <inheritdoc/>
+    protected override long CountRecords(OrganizationSnapshot snapshot) =>
+        (long)snapshot.Companies.Count + snapshot.Departments.Count + snapshot.Positions.Count + snapshot.Persons.Count;
+
+    /// <inheritdoc/>
     protected override async ValueTask<OrganizationSnapshot> LoadAsync(CancellationToken cancellationToken)
     {
         await using var scope = scopes.CreateAsyncScope();

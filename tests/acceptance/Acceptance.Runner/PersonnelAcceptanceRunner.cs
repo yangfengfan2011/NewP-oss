@@ -305,6 +305,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         return (actor.ECode, actor.Password);
     }
 
+    // 普通账号先有可用组织及永久绑定再首次登录；denied仍不赋角色，不能把准入失败冒充权限拒绝。
     private async Task<OrdinaryActor> CreateOrdinaryActorAsync(string purpose, CancellationToken cancellationToken)
     {
         var ecode = $"acceptance.{purpose}.{_runId[..8]}";
@@ -325,6 +326,20 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         RegisterSecret(temporaryCredential);
         RegisterSecret(password);
 
+        var fixture = _fixture ?? throw new InvalidOperationException("Personnel fixture was not prepared.");
+        var account = createdJson.RootElement.GetProperty("account");
+        var accountId = ReadString(account, "eid");
+        var person = await CreatePersonAsync(administrator, $"ACC-LOGIN-{purpose}-{_runId[..8]}",
+            $"Personnel login {purpose} {_runId[..8]}", fixture.CompanyId, fixture.DepartmentId, cancellationToken);
+        using (var binding = await SendJsonWithAntiforgeryAsync(administrator, HttpMethod.Put,
+            $"/api/organization/persons/{person.Id}/user-binding",
+            new { accountEid = accountId, expectedRevision = ReadLong(account, "revision"), reason = "验收账号登录前准备" }, cancellationToken,
+            request => request.Headers.Add("X-NewP-Feature", _features!.Action(_features.OrganizationTab("persons"), "linkUser", "detail.custom").Position)))
+        {
+            var body = await binding.Content.ReadAsStringAsync(cancellationToken);
+            EnsureStatus(binding, HttpStatusCode.OK, body, "prepare acceptance account organization binding");
+        }
+
         using var unauthorized = CreateClient(_hostPort);
         using var restrictedLogin = await LoginAsync(
             unauthorized,
@@ -337,7 +352,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             password,
             ReadLong(restrictedLogin.RootElement, "revision"),
             cancellationToken);
-        return new OrdinaryActor(ReadString(createdJson.RootElement.GetProperty("account"), "eid"), ecode, password);
+        return new OrdinaryActor(accountId, ecode, password);
     }
 
     // API 场景只准备浏览器旅程所需的真实人员；字段语义、权限和错误矩阵留在低层集成测试。

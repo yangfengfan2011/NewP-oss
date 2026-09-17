@@ -152,6 +152,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
     }
 
     private AcceptanceFeatureCatalog? _identityFeatures;
+    private (string CompanyId, string DepartmentId)? _loginOrganization;
 
     private Action<HttpRequestMessage> IdentityAt(string? action = null)
     {
@@ -159,6 +160,46 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         var entry = catalog.Behavior("Identity", "identity.account.read");
         var point = action is null ? entry : catalog.Action(entry, action, action == "create" ? "list.pageActions" : "list.rowActions");
         return request => request.Headers.Add("X-NewP-Feature", point.Position);
+    }
+
+    // 正式位置来自当前metadata；准备业务身份不复制旧权限代码或使用直接数据库写入。
+    private Action<HttpRequestMessage> OrganizationAt(string tab, string action, string scope)
+    {
+        var catalog = _identityFeatures ?? throw new InvalidOperationException("Identity feature catalog was not loaded.");
+        var point = catalog.Action(catalog.OrganizationTab(tab), action, scope);
+        return request => request.Headers.Add("X-NewP-Feature", point.Position);
+    }
+
+    // 所有需要登录的普通账号复用一条启用的根部门链，LocalAdmin及不登录账号保持独立。
+    private async Task<(string CompanyId, string DepartmentId)> EnsureLoginOrganizationAsync(HttpSession admin, CancellationToken token)
+    {
+        if (_loginOrganization is { } current) return current;
+        using var company = await SendJsonAndReadAsync(admin, HttpMethod.Post, "/api/organization/companies",
+            new Dictionary<string, object?> { ["ECODE"] = $"ID-C-{_runId[..8]}", ["ENAME"] = $"Identity Gate Company {_runId[..8]}", ["SortOrder"] = "0100" },
+            HttpStatusCode.Created, token, OrganizationAt("companies", "create", "list.pageActions"));
+        var companyId = ReadNestedString(company.RootElement, "fields", "EID");
+        using var department = await SendJsonAndReadAsync(admin, HttpMethod.Post, "/api/organization/departments",
+            new Dictionary<string, object?> { ["ECODE"] = $"ID-D-{_runId[..8]}", ["ENAME"] = $"Identity Gate Department {_runId[..8]}",
+                ["CompanyId"] = companyId, ["SortOrder"] = "0100" },
+            HttpStatusCode.Created, token, OrganizationAt("departments", "create", "list.pageActions"));
+        var organization = (CompanyId: companyId, DepartmentId: ReadNestedString(department.RootElement, "fields", "EID"));
+        _loginOrganization = organization;
+        return organization;
+    }
+
+    // 首次临时密码登录之前完成有效归属和永久绑定，不为验收账号放宽准入。
+    private async Task PrepareLoginPersonAsync(HttpSession admin, string accountId, long accountRevision, string purpose, CancellationToken token)
+    {
+        var organization = await EnsureLoginOrganizationAsync(admin, token);
+        var payload = PersonPayload($"ID-LOGIN-{purpose}-{_runId[..8]}", $"Identity Gate {purpose} {_runId[..8]}", true);
+        payload["CompanyId"] = organization.CompanyId;
+        payload["DepartmentId"] = organization.DepartmentId;
+        using var person = await SendJsonAndReadAsync(admin, HttpMethod.Post, "/api/organization/persons", payload,
+            HttpStatusCode.Created, token, OrganizationAt("persons", "create", "list.pageActions"));
+        var id = ReadNestedString(person.RootElement, "fields", "EID");
+        using var binding = await SendJsonAndReadAsync(admin, HttpMethod.Put, $"/api/organization/persons/{id}/user-binding",
+            new { accountEid = accountId, expectedRevision = accountRevision, reason = "验收账号登录前准备" },
+            HttpStatusCode.OK, token, OrganizationAt("persons", "linkUser", "detail.custom"));
     }
 
     private async Task RunApiScenarioAsync(CancellationToken cancellationToken)
@@ -173,6 +214,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         var initialCreatedAt = ReadDateTime(ReadObject(initialDetail.RootElement, "account"), "createdAt");
         var temporaryPassword = account.TemporaryCredential;
         RegisterSecret(temporaryPassword);
+        await PrepareLoginPersonAsync(admin, account.AccountEid, account.Revision, "account", cancellationToken);
 
         using var restricted = CreateSession(_hostPort);
         var restrictedLogin = await LoginAsync(restricted, accountCode, temporaryPassword, cancellationToken);
@@ -263,19 +305,6 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         var boundCode = $"bound.{_runId[..8]}";
         var bound = await CreateUserAsync(admin, boundCode, "Bound Account", cancellationToken);
         RegisterSecret(bound.TemporaryCredential);
-        using var boundSessionOne = CreateSession(_hostPort);
-        var boundRestricted = await LoginAsync(boundSessionOne, boundCode, bound.TemporaryCredential, cancellationToken);
-        var boundPassword = $"Bound-{_runId}-Pass";
-        RegisterSecret(boundPassword);
-        var boundRegular = await ChangePasswordAsync(
-            boundSessionOne,
-            bound.TemporaryCredential,
-            boundPassword,
-            ReadLong(boundRestricted.Body.RootElement, "revision"),
-            cancellationToken);
-        using var boundSessionTwo = CreateSession(_hostPort);
-        await LoginAsync(boundSessionTwo, boundCode, boundPassword, cancellationToken);
-
         var personNo = $"ID-{_runId[..10]}";
         var features = await AcceptanceFeatureCatalog.LoadAsync(admin.Client, cancellationToken);
         var persons = features.OrganizationTab("persons");
@@ -300,13 +329,31 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
             cancellationToken, At("edit", "list.rowActions"));
         EnsurePropertyAbsent(ReadObject(updatedPerson.RootElement, "fields"), "Revision", "updated Person fields");
 
+        var organization = await EnsureLoginOrganizationAsync(admin, cancellationToken);
+        using var affiliated = await SendJsonAndReadAsync(admin, HttpMethod.Put, $"/api/organization/persons/{personEid}",
+            new Dictionary<string, object?> { ["CompanyId"] = organization.CompanyId, ["DepartmentId"] = organization.DepartmentId },
+            HttpStatusCode.OK, cancellationToken, At("edit", "list.rowActions"));
+
         await SendJsonAndReadAsync(
             admin,
             HttpMethod.Put,
             $"/api/organization/persons/{personEid}/user-binding",
-            new { accountEid = bound.AccountEid, expectedRevision = boundRegular.Revision, reason = "纵向验收永久绑定" },
+            new { accountEid = bound.AccountEid, expectedRevision = bound.Revision, reason = "纵向验收永久绑定" },
             HttpStatusCode.OK,
             cancellationToken, At("linkUser", "detail.custom"));
+        using var boundSessionOne = CreateSession(_hostPort);
+        var boundRestricted = await LoginAsync(boundSessionOne, boundCode, bound.TemporaryCredential, cancellationToken);
+        var boundPassword = $"Bound-{_runId}-Pass";
+        RegisterSecret(boundPassword);
+        var boundRegular = await ChangePasswordAsync(
+            boundSessionOne,
+            bound.TemporaryCredential,
+            boundPassword,
+            ReadLong(boundRestricted.Body.RootElement, "revision"),
+            cancellationToken);
+        using var boundSessionTwo = CreateSession(_hostPort);
+        await LoginAsync(boundSessionTwo, boundCode, boundPassword, cancellationToken);
+
         var competing = await CreateUserAsync(admin, $"other.{_runId[..8]}", "Other Account", cancellationToken);
         RegisterSecret(competing.TemporaryCredential);
         using (var conflict = await SendJsonAsync(
@@ -475,6 +522,12 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
                 throw new InvalidOperationException("Identity security event time cell was empty.");
             }
             await CaptureIdentityAsync("account-detail.png");
+            using (var administrator = CreateSession(_hostPort))
+            {
+                await LoginAsync(administrator, "admin", adminPassword, cancellationToken);
+                await PrepareLoginPersonAsync(administrator, browserAccountEid,
+                    ReadLong(ReadObject(createdAccount.RootElement, "account"), "revision"), "browser", cancellationToken);
+            }
             var restrictedContext = await browser.NewContextAsync(new BrowserNewContextOptions
             {
                 Locale = "zh-CN",

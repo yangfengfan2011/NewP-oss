@@ -402,9 +402,16 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
         Assert.Equal([otherDepartment], moved.ChildDepartments[parent]);
         await Update("departments", otherDepartment, new { ParentDepartmentId = parent });
         Assert.Equal([otherDepartment], (await cache.ReadAsync()).ChildDepartments[parent]);
-        using (var blocked = await SendAsync(admin, http.Organization("companies", "edit", "list.rowActions"), HttpMethod.Put,
+        using (var disabled = await SendAsync(admin, http.Organization("companies", "edit", "list.rowActions"), HttpMethod.Put,
             $"/api/organization/companies/{company}", new { IsEnabled = false }))
-            Assert.Equal(HttpStatusCode.Conflict, blocked.StatusCode);
+        {
+            Assert.Equal(HttpStatusCode.OK, disabled.StatusCode);
+            Assert.False((await disabled.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("fields").GetProperty("IsEnabled").GetBoolean());
+        }
+        var companyDisabled = await cache.ReadAsync();
+        Assert.Equal(false, companyDisabled.Companies[company]["IsEnabled"]);
+        Assert.Equal(true, companyDisabled.Departments[department]["IsEnabled"]);
+        Assert.Equal([department], companyDisabled.DepartmentsByCompany[company]);
         await Update("departments", department, new { IsEnabled = false });
         foreach (var (tab, id) in new[] { ("companies", company), ("positions", position) })
         {

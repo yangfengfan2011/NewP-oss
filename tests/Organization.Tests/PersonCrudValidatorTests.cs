@@ -15,6 +15,23 @@ public sealed class PersonCrudValidatorTests
     private const string DepartmentId = "Department_11111111111111111111111111111111";
     private const string OtherDepartmentId = "Department_22222222222222222222222222222222";
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ChangedAffiliation_RejectsDisabledAncestorBeyondImmediateDepartment(bool update)
+    {
+        var root = Department("root", CompanyId, false);
+        var middle = Department("middle", CompanyId, true);
+        middle.ParentDepartmentId = root.Id;
+        var leaf = Department(DepartmentId, CompanyId, true);
+        leaf.ParentDepartmentId = middle.Id;
+        var validator = CreateValidator([Company(CompanyId, true)], [root, middle, leaf], existing: Values(null, null));
+        var error = update
+            ? await validator.ValidateUpdateAsync(PersonCrudDescriptorFactory.Create(), "person", Values(CompanyId, DepartmentId))
+            : await validator.ValidateCreateAsync(PersonCrudDescriptorFactory.Create(), Values(CompanyId, DepartmentId));
+        AssertError(error, "Organization.Person.DepartmentChainDisabled", "DepartmentId");
+    }
+
     [Fact]
     public async Task ValidateCreateAsync_WithValidEnabledAffiliation_ReturnsNoError()
     {
@@ -485,7 +502,8 @@ public sealed class PersonCrudValidatorTests
             new FakeCompanyDirectory(companies),
             new FakeDepartmentDirectory(departments),
             new FakePositionRepository(positions ?? []),
-            repository ?? new FakeStandardCrudRepository(existing));
+            repository ?? new FakeStandardCrudRepository(existing),
+            new RecordingOrganizationQuery(companies, departments));
 
     private static Dictionary<string, object?> Values(string? companyId, string? departmentId) => new(StringComparer.Ordinal)
     {

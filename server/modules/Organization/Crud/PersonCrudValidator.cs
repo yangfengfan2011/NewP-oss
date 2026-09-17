@@ -2,6 +2,7 @@ using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Modules.Organization.Directories;
+using ICP.Platform.Organization.Contracts;
 using ICP.Platform.Presentation;
 
 namespace ICP.Platform.Modules.Organization.Crud;
@@ -13,18 +14,20 @@ namespace ICP.Platform.Modules.Organization.Crud;
 /// <param name="departmentDirectory">部门归属事实的窄读取入口。</param>
 /// <param name="positionDirectory">与公司、部门独立的全局岗位读取目录。</param>
 /// <param name="standardCrudRepository">更新时读取当前人员候选值的标准仓储。</param>
+/// <param name="organizationQuery">同一写协调中的完整组织视图，用于目标祖先链校验。</param>
 /// <param name="temporalInputNormalizer">平台 temporal 规范化器，用于按会话本地日期校验生日。</param>
 public sealed class PersonCrudValidator(
     ICompanyDirectory companyDirectory,
     IDepartmentDirectory departmentDirectory,
     IPositionDirectory positionDirectory,
     IStandardCrudRepository standardCrudRepository,
+    IOrganizationQuery organizationQuery,
     ITemporalInputNormalizer? temporalInputNormalizer = null) : IStandardCrudValidator
 {
     public string ResourceKey => "organization.person";
 
     /// <summary>
-    /// 人员可以暂不建立组织归属；创建时一旦填写，则要求公司、部门成对出现、存在且启用，并校验部门归属公司。
+    /// 人员可以暂不建立组织归属；创建时一旦填写，则要求公司、部门成对出现、属于同公司且完整目标链启用。
     /// </summary>
     public Task<StandardCrudError?> ValidateCreateAsync(
         StandardCrudDescriptor descriptor,
@@ -134,6 +137,12 @@ public sealed class PersonCrudValidator(
             if (!string.Equals(department.CompanyId, company.Id, StringComparison.Ordinal))
             {
                 return FieldError("DepartmentId", "Organization.Person.DepartmentCompanyMismatch", "所属部门不属于所选公司。", "organization.person.departmentCompanyMismatch");
+            }
+
+            if (requireEnabledAffiliation && !OrganizationTargetChain.IsEnabled(
+                await organizationQuery.ReadAsync(cancellationToken), companyId, departmentId, cancellationToken))
+            {
+                return FieldError("DepartmentId", "Organization.Person.DepartmentChainDisabled", "所属部门或其上级部门已停用。", "organization.person.departmentChainDisabled");
             }
         }
 

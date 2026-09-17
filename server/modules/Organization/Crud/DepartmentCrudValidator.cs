@@ -3,6 +3,7 @@ using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Persistence.Ef;
+using ICP.Platform.Organization.Contracts;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,28 +13,31 @@ public sealed class DepartmentCrudValidator : IStandardCrudValidator
 {
     private readonly EfPlatformDbContext _dbContext;
     private readonly IDepartmentHierarchyQuery _hierarchyQuery;
+    private readonly IOrganizationQuery _organizationQuery;
 
     /// <summary>
-    /// 使用 Organization 当前 SQL Server 层级查询构造部门写入校验器。
+    /// 组合数据库防环查询与一致组织视图，校验部门目标的完整启用链。
     /// </summary>
-    public DepartmentCrudValidator(EfPlatformDbContext dbContext)
-        : this(dbContext, new SqlServerDepartmentHierarchyQuery(dbContext))
+    public DepartmentCrudValidator(EfPlatformDbContext dbContext, IOrganizationQuery organizationQuery)
+        : this(dbContext, new SqlServerDepartmentHierarchyQuery(dbContext), organizationQuery)
     {
     }
 
     // 测试可替换内部层级查询，不把 provider 细节扩大到公共模块协议。
     internal DepartmentCrudValidator(
         EfPlatformDbContext dbContext,
-        IDepartmentHierarchyQuery hierarchyQuery)
+        IDepartmentHierarchyQuery hierarchyQuery,
+        IOrganizationQuery organizationQuery)
     {
         _dbContext = dbContext;
         _hierarchyQuery = hierarchyQuery;
+        _organizationQuery = organizationQuery;
     }
 
     public string ResourceKey => "organization.department";
 
     /// <summary>
-    /// 校验部门创建时的排序码、所属公司与可选同公司启用上级。
+    /// 校验部门创建时的排序码、所属公司与可选同公司完整启用上级链。
     /// </summary>
     public async Task<StandardCrudError?> ValidateCreateAsync(
         StandardCrudDescriptor descriptor,
@@ -76,7 +80,7 @@ public sealed class DepartmentCrudValidator : IStandardCrudValidator
     }
 
     /// <summary>
-    /// 校验部门普通编辑中的排序码、同公司换父、防环与启用子级停用守卫。
+    /// 校验部门排序码、同公司换父及防环；直接停用由统一提交参与者处理下属准入。
     /// </summary>
     public async Task<StandardCrudError?> ValidateUpdateAsync(
         StandardCrudDescriptor descriptor,
@@ -97,18 +101,8 @@ public sealed class DepartmentCrudValidator : IStandardCrudValidator
             return null;
         }
 
-        if (values.GetValueOrDefault("IsEnabled") is false
-            && await Departments().AsNoTracking().AnyAsync(
-                department => EF.Property<string?>(department, "ParentDepartmentId") == id
-                    && EF.Property<bool>(department, "IsEnabled"),
-                cancellationToken))
-        {
-            return LifecycleError(
-                "DisableBlockedByEnabledChild",
-                "部门仍有启用子部门，不能停用。");
-        }
-
-        if (!values.ContainsKey("ParentDepartmentId"))
+        if (!values.ContainsKey("ParentDepartmentId")
+            || string.Equals(current.ParentDepartmentId, ReadNullableId(values, "ParentDepartmentId"), StringComparison.Ordinal))
         {
             return null;
         }
@@ -129,7 +123,7 @@ public sealed class DepartmentCrudValidator : IStandardCrudValidator
     {
         if (parentDepartmentId is null)
         {
-            return null;
+            return await ValidateTargetChainAsync(companyId, null, cancellationToken);
         }
 
         var parent = await FindDepartmentAsync(parentDepartmentId, cancellationToken);
@@ -150,7 +144,7 @@ public sealed class DepartmentCrudValidator : IStandardCrudValidator
 
         if (currentDepartmentId is null)
         {
-            return null;
+            return await ValidateTargetChainAsync(companyId, parentDepartmentId, cancellationToken);
         }
 
         var relationship = await _hierarchyQuery.ClassifyParentAsync(
@@ -159,7 +153,7 @@ public sealed class DepartmentCrudValidator : IStandardCrudValidator
             parentDepartmentId,
             cancellationToken);
 
-        return relationship switch
+        var relationshipError = relationship switch
         {
             DepartmentParentRelationship.Self => ParentError(
                 400,
@@ -174,6 +168,20 @@ public sealed class DepartmentCrudValidator : IStandardCrudValidator
                 "现有部门层级包含环或断链，不能调整上级。"),
             _ => null
         };
+        return relationshipError ?? await ValidateTargetChainAsync(companyId, parentDepartmentId, cancellationToken);
+    }
+
+    // 换到根部门同样要求公司启用；保留来源停用状态，只检查一次发布的目标完整链。
+    private async Task<StandardCrudError?> ValidateTargetChainAsync(string companyId, string? parentId, CancellationToken cancellationToken)
+    {
+        var view = await _organizationQuery.ReadAsync(cancellationToken);
+        var company = view.Find(OrganizationRecordKind.Company, companyId);
+        if (company is null) return CompanyError(404, "CompanyNotFound", "所属公司不存在。");
+        if (company.GetValueOrDefault("IsEnabled") is not true)
+            return CompanyError(409, "CompanyDisabled", "所属公司已停用，不能创建或调整部门归属。");
+        return parentId is not null && !OrganizationTargetChain.IsEnabled(view, companyId, parentId, cancellationToken)
+            ? ParentError(400, "ParentChainDisabled", "上级部门或其上级链已停用，不能作为新的上级。")
+            : null;
     }
 
     // 单次读取一个部门状态所需的最小字段，避免把动态持久化行泄漏到领域校验分支。

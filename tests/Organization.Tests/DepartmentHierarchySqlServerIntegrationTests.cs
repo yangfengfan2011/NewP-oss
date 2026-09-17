@@ -282,8 +282,9 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
 
             await using var context = CreateContext(fixture.ConnectionString);
             var connection = Assert.IsType<SqlConnection>(context.Database.GetDbConnection());
+            var validator = await CreateValidatorAsync(context);
             connection.StatisticsEnabled = true;
-            var error = await new DepartmentCrudValidator(context).ValidateUpdateAsync(
+            var error = await validator.ValidateUpdateAsync(
                 DepartmentCrudDescriptorFactory.Create(),
                 "Department_000",
                 new Dictionary<string, object?> { ["ParentDepartmentId"] = "Department_063" });
@@ -327,7 +328,7 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
             }
 
             await using var context = CreateContext(fixture.ConnectionString);
-            var error = await new DepartmentCrudValidator(context).ValidateUpdateAsync(
+            var error = await (await CreateValidatorAsync(context)).ValidateUpdateAsync(
                 DepartmentCrudDescriptorFactory.Create(),
                 "Department_0000",
                 new Dictionary<string, object?> { ["ParentDepartmentId"] = "Department_1024" });
@@ -375,7 +376,7 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
             }
 
             await using var context = CreateContext(fixture.ConnectionString);
-            var error = await new DepartmentCrudValidator(context).ValidateUpdateAsync(
+            var error = await (await CreateValidatorAsync(context)).ValidateUpdateAsync(
                 DepartmentCrudDescriptorFactory.Create(),
                 "Department_Current",
                 new Dictionary<string, object?> { ["ParentDepartmentId"] = "Department_A" });
@@ -391,6 +392,15 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
         }
     }
 
+    private static async Task<DepartmentCrudValidator> CreateValidatorAsync(EfPlatformDbContext context)
+    {
+        var companies = await context.Set<Dictionary<string, object?>>(context.ResolveModelKey("Company")).AsNoTracking()
+            .Select(row => new ICP.Platform.Modules.Organization.Models.Company { Id = EF.Property<string>(row, "EID"), IsEnabled = EF.Property<bool>(row, "IsEnabled") }).ToListAsync();
+        var departments = await context.Set<Dictionary<string, object?>>(context.ResolveModelKey("Department")).AsNoTracking()
+            .Select(row => new ICP.Platform.Modules.Organization.Models.Department { Id = EF.Property<string>(row, "EID"), CompanyId = EF.Property<string>(row, "CompanyId"),
+                ParentDepartmentId = EF.Property<string?>(row, "ParentDepartmentId"), IsEnabled = EF.Property<bool>(row, "IsEnabled") }).ToListAsync();
+        return new DepartmentCrudValidator(context, new RecordingOrganizationQuery(companies, departments));
+    }
     private static EfPlatformDbContext CreateContext(string connectionString)
     {
         var options = new DbContextOptionsBuilder<EfPlatformDbContext>()

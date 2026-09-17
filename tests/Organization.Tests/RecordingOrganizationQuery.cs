@@ -10,9 +10,12 @@ internal sealed class RecordingOrganizationQuery : IOrganizationQuery, IOrganiza
     public RecordingOrganizationQuery(IEnumerable<Company>? companies = null, IEnumerable<Department>? departments = null, IEnumerable<Position>? positions = null)
     {
         _rows[OrganizationRecordKind.Company] = (companies ?? []).ToDictionary(r => r.Id, r => Row(r.Id, r.Name, r.IsEnabled));
-        _rows[OrganizationRecordKind.Department] = (departments ?? []).ToDictionary(r => r.Id, r => Row(r.Id, r.Name, r.IsEnabled));
+        _rows[OrganizationRecordKind.Department] = (departments ?? []).ToDictionary(r => r.Id, r => DepartmentRow(r));
         _rows[OrganizationRecordKind.Position] = (positions ?? []).ToDictionary(r => r.Id, r => Row(r.Id, r.Name, r.IsEnabled));
     }
+    private static IReadOnlyDictionary<string, object?> DepartmentRow(Department department) =>
+        new Dictionary<string, object?> { ["EID"] = department.Id, ["ENAME"] = department.Name, ["IsEnabled"] = department.IsEnabled,
+            ["CompanyId"] = department.CompanyId, ["ParentDepartmentId"] = department.ParentDepartmentId };
     private static IReadOnlyDictionary<string, object?> Row(string id, string name, bool enabled) =>
         new Dictionary<string, object?> { ["EID"] = id, ["ENAME"] = name, ["IsEnabled"] = enabled };
     public ValueTask<IOrganizationReadView> ReadAsync(CancellationToken cancellationToken = default) { Reads++; return ValueTask.FromResult<IOrganizationReadView>(this); }

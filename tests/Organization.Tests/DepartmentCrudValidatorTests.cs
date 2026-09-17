@@ -13,6 +13,35 @@ namespace ICP.Platform.Modules.Organization.Tests;
 
 public sealed class DepartmentCrudValidatorTests
 {
+    [Fact]
+    public async Task ValidateCreateAsync_RejectsDisabledAncestorBeyondImmediateParent()
+    {
+        await using var context = CreateContext();
+        AddCompany(context, "company", true);
+        AddDepartment(context, "root", "company", enabled: false);
+        AddDepartment(context, "middle", "company", "root");
+        AddDepartment(context, "leaf", "company", "middle");
+        await context.SaveChangesAsync();
+        var error = await CreateValidator(context).ValidateCreateAsync(DepartmentCrudDescriptorFactory.Create(),
+            new Dictionary<string, object?> { ["CompanyId"] = "company", ["ParentDepartmentId"] = "leaf" });
+        Assert.Equal("Organization.Department.ParentChainDisabled", error?.Code);
+        Assert.Equal("ParentDepartmentId", Assert.Single(error!.FieldErrors).Field);
+    }
+
+    [Fact]
+    public async Task ValidateUpdateAsync_ReparentToRootStillRequiresEnabledCompany()
+    {
+        await using var context = CreateContext();
+        AddCompany(context, "company", false);
+        AddDepartment(context, "root", "company");
+        AddDepartment(context, "child", "company", "root");
+        await context.SaveChangesAsync();
+        var error = await CreateValidator(context).ValidateUpdateAsync(DepartmentCrudDescriptorFactory.Create(), "child",
+            new Dictionary<string, object?> { ["ParentDepartmentId"] = null });
+        Assert.Equal("Organization.Department.CompanyDisabled", error?.Code);
+        Assert.Equal("CompanyId", Assert.Single(error!.FieldErrors).Field);
+    }
+
     [Theory]
     [InlineData("0")]
     [InlineData("0100")]
@@ -24,7 +53,7 @@ public sealed class DepartmentCrudValidatorTests
         AddCompany(context, "Company_1", true);
         await context.SaveChangesAsync();
 
-        var error = await new DepartmentCrudValidator(context).ValidateCreateAsync(
+        var error = await CreateValidator(context).ValidateCreateAsync(
             DepartmentCrudDescriptorFactory.Create(),
             new Dictionary<string, object?> { ["CompanyId"] = "Company_1", ["SortOrder"] = sortOrder });
 
@@ -44,7 +73,7 @@ public sealed class DepartmentCrudValidatorTests
         AddCompany(context, "Company_1", true);
         await context.SaveChangesAsync();
 
-        var error = await new DepartmentCrudValidator(context).ValidateCreateAsync(
+        var error = await CreateValidator(context).ValidateCreateAsync(
             DepartmentCrudDescriptorFactory.Create(),
             new Dictionary<string, object?> { ["CompanyId"] = "Company_1", ["SortOrder"] = sortOrder });
 
@@ -65,7 +94,7 @@ public sealed class DepartmentCrudValidatorTests
         AddCompany(context, "Company_Disabled", false);
         await context.SaveChangesAsync();
 
-        var error = await new DepartmentCrudValidator(context).ValidateCreateAsync(
+        var error = await CreateValidator(context).ValidateCreateAsync(
             DepartmentCrudDescriptorFactory.Create(),
             new Dictionary<string, object?> { ["CompanyId"] = companyId, ["SortOrder"] = "0100" });
 
@@ -83,7 +112,7 @@ public sealed class DepartmentCrudValidatorTests
         AddPerson(context, "Person_1", "Company_1", "Department_1");
         await context.SaveChangesAsync();
 
-        var error = await new DepartmentCrudValidator(context).ValidateUpdateAsync(
+        var error = await CreateValidator(context).ValidateUpdateAsync(
             DepartmentCrudDescriptorFactory.Create(),
             "Department_1",
             new Dictionary<string, object?> { ["IsEnabled"] = false, ["SortOrder"] = "0100" });
@@ -112,7 +141,7 @@ public sealed class DepartmentCrudValidatorTests
         AddDepartment(context, "Department_OtherCompany", "Company_2");
         await context.SaveChangesAsync();
 
-        var error = await new DepartmentCrudValidator(context).ValidateCreateAsync(
+        var error = await CreateValidator(context).ValidateCreateAsync(
             DepartmentCrudDescriptorFactory.Create(),
             new Dictionary<string, object?>
             {
@@ -135,7 +164,7 @@ public sealed class DepartmentCrudValidatorTests
         AddDepartment(context, "Department_Child", "Company_1", "Department_Root");
         AddDepartment(context, "Department_Grandchild", "Company_1", "Department_Child");
         await context.SaveChangesAsync();
-        var validator = new DepartmentCrudValidator(
+        var validator = CreateValidator(
             context,
             new StubHierarchyQuery((current, parent) =>
                 string.Equals(current, parent, StringComparison.Ordinal)
@@ -175,7 +204,7 @@ public sealed class DepartmentCrudValidatorTests
 
         await context.SaveChangesAsync();
 
-        var error = await new DepartmentCrudValidator(
+        var error = await CreateValidator(
             context,
             new StubHierarchyQuery(static (_, _) => DepartmentParentRelationship.Descendant)).ValidateUpdateAsync(
             DepartmentCrudDescriptorFactory.Create(),
@@ -196,7 +225,7 @@ public sealed class DepartmentCrudValidatorTests
         AddDepartment(context, "Department_B", "Company_1", "Department_A");
         await context.SaveChangesAsync();
 
-        var error = await new DepartmentCrudValidator(
+        var error = await CreateValidator(
             context,
             new StubHierarchyQuery(static (_, _) => DepartmentParentRelationship.Corrupted)).ValidateUpdateAsync(
             DepartmentCrudDescriptorFactory.Create(),
@@ -215,7 +244,7 @@ public sealed class DepartmentCrudValidatorTests
         AddDepartment(context, "Department_1", "Company_1");
         AddDepartment(context, "Department_2", "Company_1");
         await context.SaveChangesAsync();
-        var validator = new DepartmentCrudValidator(
+        var validator = CreateValidator(
             context,
             new StubHierarchyQuery(static (_, _) => DepartmentParentRelationship.Allowed));
 
@@ -233,7 +262,7 @@ public sealed class DepartmentCrudValidatorTests
     }
 
     [Fact]
-    public async Task ValidateUpdateAsync_DisablingParentWithEnabledChildReturnsStableConflict()
+    public async Task ValidateUpdateAsync_DisablingParentWithEnabledChildIsAllowed()
     {
         await using var context = CreateContext();
         AddCompany(context, "Company_1", true);
@@ -241,15 +270,26 @@ public sealed class DepartmentCrudValidatorTests
         AddDepartment(context, "Department_Child", "Company_1", "Department_Parent");
         await context.SaveChangesAsync();
 
-        var error = await new DepartmentCrudValidator(context).ValidateUpdateAsync(
+        var error = await CreateValidator(context).ValidateUpdateAsync(
             DepartmentCrudDescriptorFactory.Create(),
             "Department_Parent",
             new Dictionary<string, object?> { ["IsEnabled"] = false });
 
-        Assert.Equal(409, error?.StatusCode);
-        Assert.Equal("Organization.Department.DisableBlockedByEnabledChild", error?.Code);
+        Assert.Null(error);
     }
 
+    private static DepartmentCrudValidator CreateValidator(EfPlatformDbContext context, IDepartmentHierarchyQuery? hierarchy = null)
+    {
+        var companies = context.ChangeTracker.Entries<Dictionary<string, object?>>()
+            .Where(entry => entry.Metadata.Name == context.ResolveModelKey("Company")).Select(entry => entry.Entity)
+            .Select(row => new ICP.Platform.Modules.Organization.Models.Company { Id = (string)row["EID"]!, IsEnabled = row["IsEnabled"] is true });
+        var departments = context.ChangeTracker.Entries<Dictionary<string, object?>>()
+            .Where(entry => entry.Metadata.Name == context.ResolveModelKey("Department")).Select(entry => entry.Entity)
+            .Select(row => new ICP.Platform.Modules.Organization.Models.Department { Id = (string)row["EID"]!, CompanyId = (string)row["CompanyId"]!,
+                ParentDepartmentId = row["ParentDepartmentId"] as string, IsEnabled = row["IsEnabled"] is true });
+        var query = new RecordingOrganizationQuery(companies, departments);
+        return new DepartmentCrudValidator(context, hierarchy ?? new SqlServerDepartmentHierarchyQuery(context), query);
+    }
     private static EfPlatformDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<EfPlatformDbContext>()

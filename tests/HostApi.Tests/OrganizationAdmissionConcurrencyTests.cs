@@ -86,13 +86,19 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
         public override DateTimeOffset GetUtcNow() => Now;
     }
 
-    private static async Task AssertCreationOrderAsync(string operation, bool creationFirst, bool restoreBeforeCreation = false)
+    private static async Task AssertCreationOrderAsync(string operation, bool creationFirst, bool restoreBeforeCreation = false, bool ancestor = false)
     {
         var control = new Control();
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(services => ConfigureControl(services, control));
         using var admin = await fixture.LoginAdministratorAsync();
         var http = new FeatureHttpTestRequests(fixture);
         var prepared = await PrepareAsync(admin, http);
+        if (ancestor)
+        {
+            var child = await CreateDepartmentAsync(admin, http, prepared.Company, "CONCURRENT-CHILD", prepared.Department);
+            var leaf = await CreateDepartmentAsync(admin, http, prepared.Company, "CONCURRENT-LEAF", child);
+            await UpdateAsync(admin, http, prepared.Person, new { DepartmentId = leaf });
+        }
         using var client = operation == "rotation" ? await fixture.LoginAsync("admitted", prepared.Password) : fixture.CreateClient();
         if (operation == "first-password") await LoginAsync(client, prepared.Password);
         var password = operation == "rotation" ? "Audit-test-secure-938!" : prepared.Password;

@@ -3,6 +3,8 @@ using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Modules.Organization.Repositories;
 using ICP.Platform.Persistence.EfCore;
+using ICP.Platform.Persistence.Abstractions;
+using ICP.Platform.Persistence.Transactions;
 using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Modules.Organization.Crud;
@@ -11,13 +13,17 @@ public sealed class PersonCrudDeleteGuard : IStandardCrudDeleteGuard, IStandardC
 {
     private readonly IPersonUserBindingRepository _bindingRepository;
     private readonly EfPlatformDbContext _dbContext;
+    private readonly IPlatformTransactionExecutor? _transactions;
 
+    /// <summary>条件删除复用组织统一提交参与者，同时保留永久绑定保护。</summary>
     public PersonCrudDeleteGuard(
         IPersonUserBindingRepository bindingRepository,
-        EfPlatformDbContext dbContext)
+        EfPlatformDbContext dbContext,
+        IPlatformTransactionExecutor? transactions = null)
     {
         _bindingRepository = bindingRepository;
         _dbContext = dbContext;
+        _transactions = transactions;
     }
 
     public string ResourceKey => "organization.person";
@@ -41,6 +47,7 @@ public sealed class PersonCrudDeleteGuard : IStandardCrudDeleteGuard, IStandardC
             : BoundError();
     }
 
+    /// <summary>在统一事务内执行原子条件删除并登记实际删除标识。</summary>
     public async Task<StandardCrudMutationResult> DeleteAsync(
         StandardCrudDescriptor descriptor,
         string id,
@@ -51,6 +58,10 @@ public sealed class PersonCrudDeleteGuard : IStandardCrudDeleteGuard, IStandardC
             return StandardCrudMutationResult.Failure(InvalidIdError());
         }
 
+        if (_transactions is { IsActive: false } && _transactions.HasParticipants(descriptor.ModelName))
+            return await _transactions.ExecuteAsync([descriptor.ModelName],
+                token => new ValueTask<StandardCrudMutationResult>(DeleteAsync(descriptor, id, token)), cancellationToken);
+
         var persons = _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName));
         var affected = await persons
             .Where(row => EF.Property<string>(row, descriptor.IdField) == id
@@ -58,6 +69,8 @@ public sealed class PersonCrudDeleteGuard : IStandardCrudDeleteGuard, IStandardC
             .ExecuteDeleteAsync(cancellationToken);
         if (affected == 1)
         {
+            if (_transactions?.HasParticipants(descriptor.ModelName) is true)
+                _transactions.RegisterChange(new PlatformRecordChange(descriptor.ModelName, id, null, null));
             return StandardCrudMutationResult.Success();
         }
 

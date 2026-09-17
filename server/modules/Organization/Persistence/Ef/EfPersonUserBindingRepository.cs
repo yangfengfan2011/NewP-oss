@@ -1,11 +1,14 @@
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Repositories;
 using ICP.Platform.Persistence.EfCore;
+using ICP.Platform.Persistence.Abstractions;
+using ICP.Platform.Persistence.Transactions;
 using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Modules.Organization.Persistence.Ef;
 
-public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext) : IPersonUserBindingRepository
+/// <summary>人员专用 SQL 在共享事务内报告完整实际变更，缓存维护由统一提交参与者负责。</summary>
+public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext, IPlatformTransactionExecutor? transactions = null) : IPersonUserBindingRepository
 {
     /// <summary>
     /// 读取人员绑定与生命周期状态。
@@ -38,6 +41,7 @@ public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext)
             throw new InvalidOperationException("Person binding writes require IPlatformTransactionExecutor.");
         }
 
+        var before = await ReadBeforeWriteAsync(personEid, cancellationToken);
         var affected = await Persons
             .Where(row => EF.Property<string>(row, "EID") == personEid
                 && EF.Property<bool>(row, "IsEnabled")
@@ -51,6 +55,7 @@ public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext)
                     .SetProperty(row => EF.Property<string?>(row, "UpdatedBy"), actorId)
                     .SetProperty(row => EF.Property<DateTime?>(row, "UpdatedAt"), boundAt),
                 cancellationToken);
+        if (affected == 1) await RegisterActualChangeAsync(personEid, before, cancellationToken);
         return affected == 1;
     }
 
@@ -69,7 +74,8 @@ public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext)
             throw new InvalidOperationException("Person lifecycle writes require IPlatformTransactionExecutor.");
         }
 
-        await Persons
+        var before = await ReadBeforeWriteAsync(personEid, cancellationToken);
+        var affected = await Persons
             .Where(row => EF.Property<string>(row, "EID") == personEid)
             .ExecuteUpdateAsync(
                 setters => setters
@@ -77,6 +83,23 @@ public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext)
                     .SetProperty(row => EF.Property<string?>(row, "UpdatedBy"), actorId)
                     .SetProperty(row => EF.Property<DateTime?>(row, "UpdatedAt"), changedAt),
                 cancellationToken);
+        if (affected == 1) await RegisterActualChangeAsync(personEid, before, cancellationToken);
+    }
+
+    // 特殊 SQL 不进入 EF 跟踪；仅有已注册缓存时读取完整前值，且必须已取得外层事务协调权。
+    private async Task<IReadOnlyDictionary<string, object?>?> ReadBeforeWriteAsync(string id, CancellationToken cancellationToken)
+    {
+        if (transactions?.HasParticipants("Person") is not true) return null;
+        if (!transactions.IsActive) throw new InvalidOperationException("Person writes require an active platform transaction.");
+        return await Persons.AsNoTracking().SingleOrDefaultAsync(row => EF.Property<string>(row, "EID") == id, cancellationToken);
+    }
+
+    // 用数据库实际写后值（包括手动审计盖章）登记，不复制缓存算法，也不提前发布。
+    private async Task RegisterActualChangeAsync(string id, IReadOnlyDictionary<string, object?>? before, CancellationToken cancellationToken)
+    {
+        if (transactions?.HasParticipants("Person") is not true) return;
+        var after = await Persons.AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == id, cancellationToken);
+        transactions.RegisterChange(new PlatformRecordChange("Person", id, before, after));
     }
 
     private DbSet<Dictionary<string, object?>> Persons =>

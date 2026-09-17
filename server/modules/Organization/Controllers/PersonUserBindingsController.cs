@@ -3,6 +3,7 @@ using ICP.Platform.Authorization.Http;
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.DTOs.Requests;
 using ICP.Platform.Modules.Organization.Services;
+using ICP.Platform.Persistence.Transactions;
 using ICP.Platform.Sdk.Http;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -58,6 +59,10 @@ public sealed class PersonUserBindingsController(IPersonUserBindingService bindi
         catch (PersonUserBindingException exception)
         {
             return BindingProblem(exception);
+        }
+        catch (PlatformCacheUnavailableException exception)
+        {
+            return OrganizationCacheProblem.Create(exception, HttpContext.TraceIdentifier);
         }
     }
 

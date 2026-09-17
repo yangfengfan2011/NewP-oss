@@ -59,6 +59,7 @@ public sealed class PersonUserBindingService(
             .ToArray();
     }
 
+    /// <summary>在组织写协调和共享事务内永久绑定人员及账号，提交后统一发布完整人员结果。</summary>
     public async ValueTask<PersonUserBindingDto> BindAsync(
         string personEid,
         BindPersonUserRequest request,
@@ -85,6 +86,7 @@ public sealed class PersonUserBindingService(
         var boundAt = timeProvider.GetUtcNow().UtcDateTime;
 
         return await transactionExecutor.ExecuteAsync(
+            ["Person"],
             async transactionCancellationToken =>
             {
                 var person = await GetRequiredPersonAsync(personEid, transactionCancellationToken);

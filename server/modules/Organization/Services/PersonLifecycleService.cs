@@ -6,6 +6,7 @@ using ICP.Platform.Modules.Organization.DTOs.Requests;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Repositories;
 using ICP.Platform.Persistence.Abstractions;
+using ICP.Platform.Persistence.Transactions;
 
 namespace ICP.Platform.Modules.Organization.Services;
 
@@ -46,6 +47,7 @@ public sealed class PersonLifecycleService(
         {
             // Organization 负责人员生命周期编排；Person、Identity 与 Authentication 都只在此共享事务内登记变化，禁止参与者自行 SaveChanges。
             return await transactionExecutor.ExecuteAsync(
+                ["Person"],
                 async transactionCancellationToken =>
                 {
                     var person = await GetRequiredPersonAsync(personEid, transactionCancellationToken);
@@ -122,6 +124,11 @@ public sealed class PersonLifecycleService(
         }
         catch (OperationCanceledException)
         {
+            throw;
+        }
+        catch (PlatformCacheUnavailableException)
+        {
+            // 已提交后的发布失败不能降格为可重试的依赖失败，HTTP 边界保留确定提交事实。
             throw;
         }
         catch (Exception exception)

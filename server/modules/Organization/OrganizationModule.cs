@@ -21,7 +21,8 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
     {
         services.AddStandardCrudKernel();
         services.AddSingleton<OrganizationCache>();
-        services.AddSingleton(sp => new PlatformCommitRegistration("Organization/Company", sp.GetRequiredService<OrganizationCache>()));
+        foreach (var model in new[] { "Company", "Department", "Position", "Person" })
+            services.AddSingleton(sp => new PlatformCommitRegistration($"Organization/{model}", sp.GetRequiredService<OrganizationCache>()));
         services.AddHostedService<OrganizationCacheInitializer>();
         services.AddScoped<IStandardCrudCreationRecorder, PersonCreationRecorder>();
         services.AddScoped<IStandardCrudUpdateRecorder, PersonUpdateRecorder>();

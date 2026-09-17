@@ -1,3 +1,5 @@
+using ICP.Platform.Persistence.Abstractions;
+using ICP.Platform.Persistence.Transactions;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
@@ -6,7 +8,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Modules.Organization.Crud;
 
-public sealed class PositionCrudDeleteExecutor(EfPlatformDbContext dbContext)
+/// <summary>岗位条件删除保留人员引用约束，并通过统一提交入口登记实际删除结果。</summary>
+public sealed class PositionCrudDeleteExecutor(EfPlatformDbContext dbContext, IPlatformTransactionExecutor? transactions = null)
     : IStandardCrudDeleteGuard, IStandardCrudConditionalDeleteExecutor
 {
     public string ResourceKey => "organization.position";
@@ -44,6 +47,10 @@ public sealed class PositionCrudDeleteExecutor(EfPlatformDbContext dbContext)
             return StandardCrudMutationResult.Failure(InvalidIdError());
         }
 
+        if (transactions is { IsActive: false } && transactions.HasParticipants(descriptor.ModelName))
+            return await transactions.ExecuteAsync([descriptor.ModelName],
+                token => new ValueTask<StandardCrudMutationResult>(DeleteAsync(descriptor, id, token)), cancellationToken);
+
         var positions = Positions(descriptor);
         var persons = Persons(descriptor);
         int affected;
@@ -76,6 +83,8 @@ public sealed class PositionCrudDeleteExecutor(EfPlatformDbContext dbContext)
 
         if (affected == 1)
         {
+            if (transactions?.HasParticipants(descriptor.ModelName) is true)
+                transactions.RegisterChange(new PlatformRecordChange(descriptor.ModelName, id, null, null));
             return StandardCrudMutationResult.Success();
         }
 

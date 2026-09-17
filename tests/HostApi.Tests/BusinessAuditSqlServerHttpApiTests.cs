@@ -498,7 +498,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         _admin = admin; _catalog = catalog;
         _connection = new SqlConnectionStringBuilder(admin) { InitialCatalog = catalog }.ConnectionString;
     }
-    internal static async Task<BusinessAuditHostFixture> CreateAsync()
+    internal static async Task<BusinessAuditHostFixture> CreateAsync(Action<IServiceCollection>? configureServices = null)
     {
         var admin = new SqlConnectionStringBuilder(Environment.GetEnvironmentVariable("NEWP_ORGANIZATION_SQLSERVER_ADMIN_CONNECTION")
             ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true") { InitialCatalog = "master" }.ConnectionString;
@@ -506,7 +506,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         await fixture.ExecuteAdminAsync($"CREATE DATABASE [{fixture._catalog}]");
         try
         {
-            await fixture.StartAsync();
+            await fixture.StartAsync(configureServices);
             using var scope = fixture._app.Services.CreateScope();
             var result = await scope.ServiceProvider.GetRequiredService<IIdentityLocalAdministratorMaintenanceService>().BootstrapAsync(new(
                 "admin", "审计管理员", "审计集成准备", new(IdentityMaintenanceActors.LocalMaintenance, IdentitySecurityActorKind.LocalMaintenance, Guid.NewGuid().ToString("N"))));
@@ -516,7 +516,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         }
         catch { await fixture.DisposeAsync(); throw; }
     }
-    private async Task StartAsync()
+    private async Task StartAsync(Action<IServiceCollection>? configureServices)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
         builder.WebHost.UseTestServer();
@@ -564,6 +564,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         builder.Services.AddControllers(options => { options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true; options.Filters.Add<AuthenticationSessionCookieResultFilter>(); })
             .AddApplicationPart(typeof(AuthController).Assembly).AddApplicationPart(typeof(IdentityModule).Assembly).AddApplicationPart(typeof(AuditModule).Assembly).AddApplicationPart(typeof(AuthorizationModule).Assembly).AddApplicationPart(typeof(OrganizationModule).Assembly)
             .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+        configureServices?.Invoke(builder.Services);
         _app = builder.Build();
         _app.Use(async (context, next) => { using var activity = new Activity("business-audit-http").Start(); await next(); });
         _app.UseRouting();

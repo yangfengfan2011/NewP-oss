@@ -12,9 +12,12 @@ describe('login admission feedback', () => {
   it.each([
     ['AUTH_ADMISSION_DENIED', '账号当前不满足登录条件，请联系管理员确认账号和业务身份。'],
     ['Persistence.CacheUnavailable', '登录服务暂时不可用，请稍后重试。'],
+    ['Persistence.CommittedCacheUnavailable', '登录服务暂时不可用，请稍后重试。'],
+    ['Persistence.CommitOutcomeUnknown', '提交结果未能确认，请查询后再操作。'],
     ['AUTH_ADMISSION_UNAVAILABLE', '登录服务暂时不可用，请稍后重试。'],
     ['AUTH_INVALID_CREDENTIALS', '登录失败，请检查用户名和密码。'],
   ])('explains %s without reporting every failure as a bad password', async (code, expected) => {
+    login.mockClear();
     login.mockRejectedValueOnce(new Error(code));
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const container = document.createElement('div');
@@ -24,6 +27,7 @@ describe('login admission feedback', () => {
       await act(async () => root.render(<Login />));
       await act(async () => container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
       expect(container.querySelector('.sh-form-error')?.textContent).toBe(expected);
+      expect(login).toHaveBeenCalledTimes(1);
     } finally {
       await act(async () => root.unmount());
       container.remove();

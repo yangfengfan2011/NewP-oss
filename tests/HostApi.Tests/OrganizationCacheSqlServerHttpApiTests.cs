@@ -34,7 +34,7 @@ using Xunit;
 
 namespace ICP.Platform.HostApi.Tests;
 
-public sealed class OrganizationCacheSqlServerHttpApiTests
+public sealed class OrganizationCacheSqlServerHttpApiTests(Xunit.Abstractions.ITestOutputHelper output)
 {
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "组织公司正式提交与缓存发布一致性")]
     public async Task CompanyApi_UpdatesCacheForEveryWriteAndDistinguishesCommittedPublicationFailure()
@@ -66,6 +66,7 @@ public sealed class OrganizationCacheSqlServerHttpApiTests
             builder.Services.AddSingleton(sp => new PlatformCommitRegistration("Organization/Company", sp.GetRequiredService<ControlledParticipant>()));
             builder.Services.AddScoped<ICompanyDirectory, EfCompanyDirectory>();
             var sql = new SqlCounter();
+            var commitFault = new AfterCommitFault();
             builder.Services.AddSingleton(plan);
             builder.Services.AddSingleton<IEntityAuditStampProvider>(stamp);
             builder.Services.AddSingleton<IRequestPresentationContextAccessor, Presentation>();
@@ -73,7 +74,7 @@ public sealed class OrganizationCacheSqlServerHttpApiTests
             builder.Services.AddSingleton<ITemporalDisplayProjectionExecutor, TemporalDisplayProjectionExecutor>();
             var database = new SqlConnectionStringBuilder(admin.ConnectionString) { InitialCatalog = catalog }.ConnectionString;
             builder.Services.AddScoped(_ => new EfPlatformDbContext(new DbContextOptionsBuilder<EfPlatformDbContext>()
-                .UseSqlServer(database).AddInterceptors(sql).ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().Options, plan, stamp));
+                .UseSqlServer(database).AddInterceptors(sql, commitFault).ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().Options, plan, stamp));
             builder.Services.AddScoped<IPlatformQueryExecutor, EfPlatformQueryExecutor>();
             await using var app = builder.Build();
             app.Use(async (context, next) =>
@@ -172,12 +173,122 @@ public sealed class OrganizationCacheSqlServerHttpApiTests
             await Assert.ThrowsAsync<PlatformCacheUnavailableException>(() => cache.ReadAsync().AsTask());
             var listing = await client.GetFromJsonAsync<JsonElement>(route);
             Assert.Equal("已保存不可重放", Assert.Single(listing.GetProperty("items").EnumerateArray()).GetProperty("ENAME").GetString());
+            publication.Fail = false;
+            await cache.InitializeAsync();
+            commitFault.Enabled = true;
+            var savedId = Assert.Single(listing.GetProperty("items").EnumerateArray()).GetProperty("EID").GetString();
+            using var unknown = await client.PutAsJsonAsync($"{route}/{savedId}", new Dictionary<string, object?> { ["ENAME"] = "提交结果待确认" });
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, unknown.StatusCode);
+            var unknownProblem = await unknown.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal("Persistence.CommitOutcomeUnknown", unknownProblem.GetProperty("code").GetString());
+            Assert.Equal("persistence.commitOutcomeUnknown", unknownProblem.GetProperty("reasonKey").GetString());
+            Assert.Equal("提交结果未能确认，请查询后再操作。", unknownProblem.GetProperty("message").GetString());
+            Assert.Equal("提交结果待确认", (await client.GetFromJsonAsync<JsonElement>($"{route}/{savedId}")).GetProperty("fields").GetProperty("ENAME").GetString());
+            await Assert.ThrowsAsync<PlatformCacheUnavailableException>(() => cache.ReadAsync().AsTask());
+            Assert.Equal(1, commitFault.CompletionFailures);
+
         }
         finally
         {
             SqlConnection.ClearAllPools();
             command.CommandText = $"ALTER DATABASE [{catalog}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{catalog}]";
             await command.ExecuteNonQueryAsync();
+        }
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "提交完成回调失败不能继续读取旧公司缓存")]
+    public Task CommitAcknowledgementFailure_AfterSqlCommit_MakesCacheUnavailable() => AssertCommitFailureAsync(afterCommit: true);
+
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "提交前失败成功回滚且保留有效公司缓存")]
+    public Task CommitFailure_BeforeSqlCommit_RollsBackAndRetainsCache() => AssertCommitFailureAsync(afterCommit: false);
+
+    private async Task AssertCommitFailureAsync(bool afterCommit)
+    {
+        var admin = new SqlConnectionStringBuilder(Environment.GetEnvironmentVariable("NEWP_ORGANIZATION_SQLSERVER_ADMIN_CONNECTION")
+            ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true") { InitialCatalog = "master" };
+        var catalog = $"NewPCompanyCommit_{Guid.NewGuid():N}";
+        await using var connection = new SqlConnection(admin.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"CREATE DATABASE [{catalog}]";
+        await command.ExecuteNonQueryAsync();
+        try
+        {
+            var database = new SqlConnectionStringBuilder(admin.ConnectionString) { InitialCatalog = catalog }.ConnectionString;
+            var models = OrganizationModelDefinitions.All.Select(model => model with { OwnerModuleId = "Organization" }).ToArray();
+            var fault = new AfterCommitFault();
+            var options = new DbContextOptionsBuilder<EfPlatformDbContext>().UseSqlServer(database).AddInterceptors(fault)
+                .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().Options;
+            var services = new ServiceCollection();
+            services.AddScoped(_ => new EfPlatformDbContext(options, models));
+            await using var provider = services.BuildServiceProvider();
+            await using var db = new EfPlatformDbContext(options, models);
+            await db.Database.EnsureCreatedAsync();
+            var cache = new OrganizationCache(provider.GetRequiredService<IServiceScopeFactory>());
+            await cache.InitializeAsync();
+            var executor = new EfPlatformTransactionExecutor(db, [new("Organization/Company", cache)]);
+            var rows = db.Set<Dictionary<string, object?>>("Organization/Company");
+            await executor.ExecuteAsync(["Company"], _ =>
+            {
+                rows.Add(new() { ["EID"] = "company", ["ECODE"] = "COMMIT", ["ENAME"] = "before", ["SortOrder"] = "01", ["IsEnabled"] = true });
+                return ValueTask.FromResult(true);
+            });
+            Assert.Equal("before", (await cache.ReadAsync()).Companies["company"]["ENAME"]);
+            fault.BeforeCommit = !afterCommit;
+            fault.Enabled = true;
+            var writeError = await Record.ExceptionAsync(() => executor.ExecuteAsync(["Company"], async token =>
+            {
+                (await rows.SingleAsync(token))["ENAME"] = "committed";
+                return true;
+            }).AsTask());
+            Assert.NotNull(writeError);
+            await using var observer = new EfPlatformDbContext(new DbContextOptionsBuilder<EfPlatformDbContext>().UseSqlServer(database)
+                .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().Options, models);
+            var saved = (await observer.Set<Dictionary<string, object?>>("Organization/Company").AsNoTracking().SingleAsync())["ENAME"];
+            Assert.Equal(afterCommit ? "committed" : "before", saved);
+            object? visible = null;
+            var readError = await Record.ExceptionAsync(async () => visible = (await cache.ReadAsync()).Companies["company"]["ENAME"]);
+            output.WriteLine($"Write exception: {writeError.GetType().Name}: {writeError.Message}; SQL value: {saved}; cache value: {visible ?? "<unavailable>"}");
+            if (afterCommit)
+            {
+                var unknown = Assert.IsType<PlatformCacheUnavailableException>(writeError);
+                Assert.True(unknown.CommitOutcomeUnknown);
+                Assert.False(unknown.DatabaseCommitted);
+                Assert.Equal("injected after-SQL-commit acknowledgement failure", unknown.InnerException!.Message);
+                Assert.IsType<InvalidOperationException>(unknown.InnerException.Data["PlatformRollbackFailure"]);
+                Assert.IsType<PlatformCacheUnavailableException>(readError);
+            }
+            else
+            {
+                Assert.IsType<InvalidOperationException>(writeError);
+                Assert.Equal("injected known-uncommitted failure", writeError.Message);
+                Assert.Null(readError);
+                Assert.Equal("before", visible);
+            }
+        }
+        finally
+        {
+            SqlConnection.ClearAllPools();
+            command.CommandText = $"ALTER DATABASE [{catalog}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{catalog}]";
+            await command.ExecuteNonQueryAsync();
+        }
+    }
+
+    private sealed class AfterCommitFault : DbTransactionInterceptor
+    {
+        public bool Enabled;
+        public bool BeforeCommit;
+        public int CompletionFailures;
+        public override ValueTask<InterceptionResult> TransactionCommittingAsync(DbTransaction transaction, TransactionEventData eventData,
+            InterceptionResult result, CancellationToken cancellationToken = default) => Enabled && BeforeCommit
+                ? ValueTask.FromException<InterceptionResult>(new InvalidOperationException("injected known-uncommitted failure"))
+                : ValueTask.FromResult(result);
+        public override Task TransactionCommittedAsync(DbTransaction transaction, TransactionEndEventData eventData,
+            CancellationToken cancellationToken = default)
+        {
+            if (!Enabled) return Task.CompletedTask;
+            CompletionFailures++;
+            return Task.FromException(new InvalidOperationException("injected after-SQL-commit acknowledgement failure"));
         }
     }
 

@@ -134,7 +134,7 @@ public sealed class AuthController : ControllerBase
         }
         catch (PlatformCacheUnavailableException exception)
         {
-            return ProblemResult(503, exception.DatabaseCommitted ? "Persistence.CommittedCacheUnavailable" : "Persistence.CacheUnavailable", exception.Message);
+            return ProblemResult(503, exception.Code, exception.Message);
         }
         catch (AuthenticationSessionException exception)
         {

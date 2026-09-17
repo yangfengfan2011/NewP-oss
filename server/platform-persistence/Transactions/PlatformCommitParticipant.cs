@@ -33,8 +33,20 @@ public sealed class PlatformCacheUnavailableException : Exception
 {
     public string CacheName { get; }
     public bool DatabaseCommitted { get; }
-    /// <summary>区分暂不可用与已保存但发布失败，避免调用方错误重放。</summary>
-    public PlatformCacheUnavailableException(string cacheName, bool databaseCommitted = false, Exception? inner = null)
-        : base(databaseCommitted ? $"已保存，但缓存 {cacheName} 暂时不可用。" : $"缓存 {cacheName} 暂时不可用。", inner)
-    { CacheName = cacheName; DatabaseCommitted = databaseCommitted; }
+    public bool CommitOutcomeUnknown { get; }
+    public string Code => CommitOutcomeUnknown ? "Persistence.CommitOutcomeUnknown"
+        : DatabaseCommitted ? "Persistence.CommittedCacheUnavailable" : "Persistence.CacheUnavailable";
+    public string ReasonKey => CommitOutcomeUnknown ? "persistence.commitOutcomeUnknown"
+        : DatabaseCommitted ? "persistence.committedCacheUnavailable" : "persistence.cacheUnavailable";
+    /// <summary>区分缓存不可用、确认已保存及提交结果未知，不引导调用方重放未知结果的写入。</summary>
+    public PlatformCacheUnavailableException(string cacheName, bool databaseCommitted = false, Exception? inner = null,
+        bool commitOutcomeUnknown = false)
+        : base(commitOutcomeUnknown ? "提交结果未能确认，请查询后再操作。"
+            : databaseCommitted ? $"已保存，但缓存 {cacheName} 暂时不可用。" : $"缓存 {cacheName} 暂时不可用。", inner)
+    {
+        if (databaseCommitted && commitOutcomeUnknown) throw new ArgumentException("A commit cannot be both confirmed and unknown.");
+        CacheName = cacheName;
+        DatabaseCommitted = databaseCommitted;
+        CommitOutcomeUnknown = commitOutcomeUnknown;
+    }
 }

@@ -589,9 +589,9 @@ public sealed class StandardCrudService : IStandardCrudService
             return StandardCrudMutationResult.Failure(new StandardCrudError
             {
                 StatusCode = 503,
-                Code = exception.DatabaseCommitted ? "Persistence.CommittedCacheUnavailable" : "Persistence.CacheUnavailable",
+                Code = exception.Code,
                 Message = exception.Message,
-                ReasonKey = exception.DatabaseCommitted ? "persistence.committedCacheUnavailable" : "persistence.cacheUnavailable"
+                ReasonKey = exception.ReasonKey
             });
         }
     }

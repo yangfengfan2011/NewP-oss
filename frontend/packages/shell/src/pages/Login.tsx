@@ -20,9 +20,11 @@ export default function Login() {
       const code = loginError instanceof Error ? loginError.message : '';
       setError(code === 'AUTH_ADMISSION_DENIED'
         ? '账号当前不满足登录条件，请联系管理员确认账号和业务身份。'
-        : ['Persistence.CacheUnavailable', 'AUTH_SESSION_STORE_UNAVAILABLE', 'AUTH_ADMISSION_UNAVAILABLE'].includes(code)
-          ? '登录服务暂时不可用，请稍后重试。'
-          : '登录失败，请检查用户名和密码。');
+        : code === 'Persistence.CommitOutcomeUnknown'
+          ? '提交结果未能确认，请查询后再操作。'
+          : ['Persistence.CacheUnavailable', 'Persistence.CommittedCacheUnavailable', 'AUTH_SESSION_STORE_UNAVAILABLE', 'AUTH_ADMISSION_UNAVAILABLE'].includes(code)
+            ? '登录服务暂时不可用，请稍后重试。'
+            : '登录失败，请检查用户名和密码。');
     } finally {
       setLoading(false);
     }

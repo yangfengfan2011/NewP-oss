@@ -9,7 +9,7 @@ internal static class IdentityControllerProblemDetails
     // 安全命令也依赖已登记协调；将缓存故障与确定无效的业务输入分开，保留提交事实。
     internal static ObjectResult FromCacheException(ControllerBase controller, PlatformCacheUnavailableException exception)
     {
-        var result = Create(controller, 503, exception.DatabaseCommitted ? "Persistence.CommittedCacheUnavailable" : "Persistence.CacheUnavailable");
+        var result = Create(controller, 503, exception.Code);
         var problem = (ProblemDetails)result.Value!;
         problem.Detail = exception.Message;
         problem.Extensions["message"] = exception.Message;

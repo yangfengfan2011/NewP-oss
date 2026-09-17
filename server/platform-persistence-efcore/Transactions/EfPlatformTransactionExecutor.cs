@@ -54,6 +54,7 @@ public sealed class EfPlatformTransactionExecutor : IPlatformTransactionExecutor
             _dbContext.SavingChanges += CollectPending;
             _dbContext.SavedChanges += CollectSaved;
             await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+            bool commitAttempted = false;
             bool committed = false;
             try
             {
@@ -65,6 +66,7 @@ public sealed class EfPlatformTransactionExecutor : IPlatformTransactionExecutor
                 // 准备阶段可登记未缓存模型的事务性副作用；唯一执行器保存后才能提交，缓存模型禁止晚到变更。
                 if (scopes.Count > 0) await _dbContext.SaveChangesAsync(cancellationToken);
                 foreach (var (_, scope) in scopes) scope.BlockReads();
+                commitAttempted = true;
                 await transaction.CommitAsync(cancellationToken);
                 committed = true;
                 foreach (var (_, scope) in scopes) await scope.PublishAsync();
@@ -77,8 +79,22 @@ public sealed class EfPlatformTransactionExecutor : IPlatformTransactionExecutor
                     foreach (var (_, scope) in scopes) scope.MarkUnavailable();
                     throw new PlatformCacheUnavailableException(string.Join(",", requested.Select(p => p.Name)), true, exception);
                 }
-                await transaction.RollbackAsync(CancellationToken.None);
+                Exception? rollbackFailure = null;
+                try { await transaction.RollbackAsync(CancellationToken.None); }
+                catch (Exception cleanupException)
+                {
+                    // 真实提交后的完成回调也可能抛错；已完成事务的回滚错误不能覆盖原始提交诊断。
+                    rollbackFailure = cleanupException;
+                    exception.Data["PlatformRollbackFailure"] = cleanupException;
+                }
                 _dbContext.ChangeTracker.Clear();
+                if (commitAttempted && rollbackFailure is not null)
+                {
+                    // 无法用成功回滚证明未提交时，必须先封闭旧结果，再释放提交发布屏障。
+                    foreach (var (_, scope) in scopes) scope.MarkUnavailable();
+                    throw new PlatformCacheUnavailableException(string.Join(",", requested.Select(p => p.Name)),
+                        inner: exception, commitOutcomeUnknown: true);
+                }
                 throw;
             }
         }

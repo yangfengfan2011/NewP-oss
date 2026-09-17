@@ -132,6 +132,26 @@ public sealed class AuthControllerTests
     }
 
     [Fact]
+    public async Task Login_UnknownCommitReturnsStable503AndDoesNotIssueCookie()
+    {
+        var sessions = new RecordingSessionRegistry
+        {
+            Failure = new ICP.Platform.Persistence.Transactions.PlatformCacheUnavailableException("Organization", commitOutcomeUnknown: true)
+        };
+        var cookie = new RecordingCookie();
+        var controller = Controller(new StubAuthenticator
+        {
+            Result = new LocalCredentialAuthenticationResult { Status = LocalCredentialAuthenticationStatus.Succeeded, Account = Account() }
+        }, sessions, cookie);
+        var result = Assert.IsType<ObjectResult>((await controller.Login(new LoginRequest("admin", "secret"), CancellationToken.None)).Result);
+        Assert.Equal(503, result.StatusCode);
+        var problem = Assert.IsType<ProblemDetails>(result.Value);
+        Assert.Equal("Persistence.CommitOutcomeUnknown", problem.Extensions["code"]);
+        Assert.Equal("提交结果未能确认，请查询后再操作。", problem.Detail);
+        Assert.Null(cookie.AppendedCredential);
+    }
+
+    [Fact]
     public async Task Login_InvalidTimeZoneReturnsStableProblemAndDoesNotIssueCookie()
     {
         var sessions = new RecordingSessionRegistry

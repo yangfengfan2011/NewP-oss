@@ -1,113 +1,41 @@
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
-using ICP.Platform.Modules.Organization.Directories;
-using ICP.Platform.Modules.Organization.Models;
+using ICP.Platform.Organization.Contracts;
 using ICP.Platform.Query.Descriptors;
 
 namespace ICP.Platform.Modules.Organization.Crud;
 
-public sealed class PersonCrudDisplayValueResolver : IStandardCrudDisplayValueResolver
+/// <summary>在同一组织结果中批量解析请求字段，保留原始值及既有 canonical companion 约束。</summary>
+public sealed class PersonCrudDisplayValueResolver(IOrganizationQuery query) : IStandardCrudDisplayValueResolver
 {
-    private readonly ICompanyDirectory _companyDirectory;
-    private readonly IDepartmentDirectory _departmentDirectory;
-    private readonly IPositionDirectory _positionDirectory;
-
-    /// <summary>
-    /// 绑定组织归属窄目录与独立岗位目录，供一页人员显示值批量投影。
-    /// </summary>
-    public PersonCrudDisplayValueResolver(
-        ICompanyDirectory companyDirectory,
-        IDepartmentDirectory departmentDirectory,
-        IPositionDirectory positionDirectory)
-    {
-        _companyDirectory = companyDirectory;
-        _departmentDirectory = departmentDirectory;
-        _positionDirectory = positionDirectory;
-    }
-
     public string ResourceKey => "organization.person";
 
-    /// <summary>
-    /// 按请求字段批量补齐人员显示名；只批量读取当前真正需要的引用实体，避免列表逐行放大查询。
-    /// </summary>
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> ResolveListAsync(
         StandardCrudDescriptor descriptor,
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
         IReadOnlyList<PlatformDisplayValueField> requestedDisplayFields,
         CancellationToken cancellationToken = default)
     {
-        _ = descriptor;
         var requested = requestedDisplayFields.Select(field => field.Field).ToHashSet(StringComparer.Ordinal);
-        IReadOnlyDictionary<string, Company> companies = requested.Contains("CompanyId_DisplayValue")
-            ? await _companyDirectory.GetByIdsAsync(CollectIds(rows, "CompanyId"), cancellationToken)
-            : new Dictionary<string, Company>(StringComparer.Ordinal);
-        IReadOnlyDictionary<string, Department> departments = requested.Contains("DepartmentName")
-            ? await _departmentDirectory.GetByIdsAsync(CollectIds(rows, "DepartmentId"), cancellationToken)
-            : new Dictionary<string, Department>(StringComparer.Ordinal);
-        IReadOnlyDictionary<string, Position> positions = requested.Contains("PositionName")
-            ? await _positionDirectory.GetByIdsAsync(CollectIds(rows, "PositionId"), cancellationToken)
-            : new Dictionary<string, Position>(StringComparer.Ordinal);
-
-        return rows.Select(row =>
+        var mappings = new (string Source, string Display, OrganizationRecordKind Kind)[]
         {
-            var displayValues = new Dictionary<string, object?>(StringComparer.Ordinal);
-            if (requested.Contains("CompanyId_DisplayValue"))
-            {
-                displayValues["CompanyId_DisplayValue"] = ReadDisplayName(row, "CompanyId", companies);
-            }
-
-            if (requested.Contains("DepartmentName"))
-            {
-                displayValues["DepartmentName"] = ReadDisplayName(row, "DepartmentId", departments);
-            }
-
-            if (requested.Contains("PositionName"))
-            {
-                displayValues["PositionName"] = ReadDisplayName(row, "PositionId", positions);
-            }
-
-            return (IReadOnlyDictionary<string, object?>)displayValues;
-        }).ToList();
+            ("CompanyId", "CompanyId_DisplayValue", OrganizationRecordKind.Company),
+            ("DepartmentId", "DepartmentName", OrganizationRecordKind.Department),
+            ("PositionId", "PositionName", OrganizationRecordKind.Position)
+        }.Where(mapping => requested.Contains(mapping.Display)).ToArray();
+        var result = rows.Select(_ => new Dictionary<string, object?>(StringComparer.Ordinal)).ToArray();
+        if (mappings.Length == 0 || rows.Count == 0) return result;
+        var view = await query.ReadAsync(cancellationToken);
+        foreach (var (source, display, kind) in mappings)
+        {
+            var ids = rows.Select(row => row.GetValueOrDefault(source) as string)
+                .Where(id => !string.IsNullOrWhiteSpace(id)).Select(id => id!).Distinct(StringComparer.Ordinal).ToArray();
+            var names = view.ResolveNames(kind, ids);
+            for (var index = 0; index < rows.Count; index++)
+                result[index][display] = rows[index].GetValueOrDefault(source) is string id && names.TryGetValue(id, out var name)
+                    ? name.IsEnabled ? name.Name : $"{name.Name}（已停用）" : string.Empty;
+        }
+        return result;
     }
-
-    private static IReadOnlyCollection<string> CollectIds(
-        IEnumerable<IReadOnlyDictionary<string, object?>> rows,
-        string field) =>
-        rows.Select(row => ReadStringOrNull(row, field))
-            .Where(id => id is not null)
-            .Select(id => id!)
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-
-    // 公司显示值保留当前名称，并显式标记停用事实。
-    private static string ReadDisplayName(
-        IReadOnlyDictionary<string, object?> row,
-        string sourceField,
-        IReadOnlyDictionary<string, Company> companies) =>
-        ReadStringOrNull(row, sourceField) is { } id && companies.TryGetValue(id, out var company)
-            ? company.IsEnabled ? company.Name : $"{company.Name}（已停用）"
-            : string.Empty;
-
-    // 部门显示值保留当前名称，并显式标记停用事实。
-    private static string ReadDisplayName(
-        IReadOnlyDictionary<string, object?> row,
-        string sourceField,
-        IReadOnlyDictionary<string, Department> departments) =>
-        ReadStringOrNull(row, sourceField) is { } id && departments.TryGetValue(id, out var department)
-            ? department.IsEnabled ? department.Name : $"{department.Name}（已停用）"
-            : string.Empty;
-
-    // 人员读取始终消费岗位目录当前名称，并在停用后保留可见的生命周期标记。
-    private static string ReadDisplayName(
-        IReadOnlyDictionary<string, object?> row,
-        string sourceField,
-        IReadOnlyDictionary<string, Position> positions) =>
-        ReadStringOrNull(row, sourceField) is { } id && positions.TryGetValue(id, out var position)
-            ? position.IsEnabled ? position.Name : $"{position.Name}（已停用）"
-            : string.Empty;
-
-    private static string? ReadStringOrNull(IReadOnlyDictionary<string, object?> row, string field) =>
-        row.TryGetValue(field, out var value) && !string.IsNullOrWhiteSpace(value?.ToString())
-            ? value.ToString()
-            : null;
 }

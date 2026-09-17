@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="Contracts\Organization.Contracts.csproj" />
     <ProjectReference Include="..\Audit\Contracts\Audit.Contracts.csproj" />
     <ProjectReference Include="..\Authentication\Contracts\Authentication.Contracts.csproj" />
     <ProjectReference Include="..\Identity\Contracts\Identity.Contracts.csproj" />
@@ -28,6 +29,7 @@
 
   <ItemGroup>
     <Compile Remove="Migrations.SqlServer\**\*.cs" />
+    <Compile Remove="Contracts\**\*.cs" />
     <EmbeddedResource Include="..\..\..\modules\Organization\newp.plugin.json">
       <LogicalName>ICP.Platform.Modules.Organization.newp.plugin.json</LogicalName>
     </EmbeddedResource>

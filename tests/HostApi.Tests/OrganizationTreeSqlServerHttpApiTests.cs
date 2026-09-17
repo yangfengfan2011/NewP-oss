@@ -59,6 +59,11 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
             builder.Services.AddPlatformAuthorization();
             builder.Services.AddSingleton<ICP.Platform.Authorization.Http.IFeatureDecisionSource, GrantedPermissions>();
             builder.Services.AddStandardCrudKernel();
+            builder.Services.AddSingleton<ICP.Platform.Modules.Organization.Caching.OrganizationCache>();
+            builder.Services.AddSingleton<ICP.Platform.Organization.Contracts.IOrganizationQuery, ICP.Platform.Modules.Organization.Caching.OrganizationQuery>();
+            builder.Services.AddScoped<ICP.Platform.Persistence.Abstractions.IPlatformTransactionExecutor, ICP.Platform.Persistence.EfCore.Transactions.EfPlatformTransactionExecutor>();
+            foreach (var model in new[] { "Company", "Department", "Person" })
+                builder.Services.AddSingleton(sp => new ICP.Platform.Persistence.Transactions.PlatformCommitRegistration($"Organization/{model}", sp.GetRequiredService<ICP.Platform.Modules.Organization.Caching.OrganizationCache>()));
             builder.Services.AddStandardCrudResource(CompanyCrudDescriptorFactory.Create());
             builder.Services.AddStandardCrudResource(DepartmentCrudDescriptorFactory.Create());
             // 组织结构树视图含人员节点，树 SQL 在启动期需要能解析全部节点资源。
@@ -95,6 +100,7 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
             {
                 await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Database.EnsureCreatedAsync();
             }
+            await app.Services.GetRequiredService<ICP.Platform.Modules.Organization.Caching.OrganizationCache>().InitializeAsync();
             await app.StartAsync();
             using var client = app.GetTestClient();
             client.DefaultRequestHeaders.Add("X-NewP-Feature", "fixture");
@@ -143,7 +149,7 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
             var list = await client.GetFromJsonAsync<JsonElement>(route);
             Assert.Equal(2, list.GetProperty("total").GetInt32());
             Assert.Equal(second, Assert.Single(list.GetProperty("items").EnumerateArray()).GetProperty("EID").GetString());
-            Assert.Equal(3, recorder.Commands.Count); // count + page + canonical company display batch
+            Assert.Equal(2, recorder.Commands.Count); // 管理 count + page 仍读库；canonical display 来自同一组织缓存视图。
             var scopedReads = recorder.Commands.Where(sql => sql.Contains("[Department]")).ToArray();
             Assert.Equal(2, scopedReads.Length);
             Assert.All(scopedReads, sql => { Assert.Contains("CompanyId", sql); Assert.Contains("ParentDepartmentId] IS NULL", sql); });

@@ -1,4 +1,4 @@
-using ICP.Platform.Modules.Organization.Caching;
+using ICP.Platform.Organization.Contracts;
 using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Persistence.EfCore;
@@ -9,23 +9,17 @@ namespace ICP.Platform.Modules.Organization.Persistence.Ef;
 /// <summary>
 /// 从 Organization Company 模型提供人员所需的窄目录读取。
 /// </summary>
-/// <param name="dbContext">当前请求范围内的动态模型数据库上下文。</param>
-public sealed class EfCompanyDirectory(EfPlatformDbContext dbContext, OrganizationCache? cache = null) : ICompanyDirectory
+/// <param name="dbContext">仅分页 Lookup 使用的当前请求动态模型数据库上下文。</param>
+/// <param name="query">按标识、编码及批量业务读取使用的唯一稳定组织查询。</param>
+public sealed class EfCompanyDirectory(EfPlatformDbContext dbContext, IOrganizationQuery query) : ICompanyDirectory
 {
     /// <inheritdoc/>
     public async Task<Company?> GetByIdAsync(
         string companyId,
         CancellationToken cancellationToken = default)
     {
-        if (cache is not null)
-        {
-            var snapshot = await cache.ReadAsync(cancellationToken);
-            return snapshot.Companies.TryGetValue(companyId, out var current) ? Map(current) : null;
-        }
-        var entity = await Entities
-            .AsNoTracking()
-            .FirstOrDefaultAsync(row => EF.Property<string>(row, "EID") == companyId, cancellationToken);
-        return entity is null ? null : Map(entity);
+        var row = (await query.ReadAsync(cancellationToken)).Find(OrganizationRecordKind.Company, companyId);
+        return row is null ? null : Map(row);
     }
 
     /// <inheritdoc/>
@@ -33,39 +27,16 @@ public sealed class EfCompanyDirectory(EfPlatformDbContext dbContext, Organizati
         IReadOnlyCollection<string> companyIds,
         CancellationToken cancellationToken = default)
     {
-        var ids = NormalizeIds(companyIds);
-        if (ids.Count == 0)
-        {
-            return new Dictionary<string, Company>(StringComparer.Ordinal);
-        }
-
-        if (cache is not null)
-        {
-            var snapshot = await cache.ReadAsync(cancellationToken);
-            return ids.Where(snapshot.Companies.ContainsKey).ToDictionary(id => id, id => Map(snapshot.Companies[id]), StringComparer.Ordinal);
-        }
-        var entities = await Entities
-            .AsNoTracking()
-            .Where(row => ids.Contains(EF.Property<string>(row, "EID")))
-            .ToListAsync(cancellationToken);
-        return entities.Select(Map).ToDictionary(company => company.Id, StringComparer.Ordinal);
+        var view = await query.ReadAsync(cancellationToken);
+        return NormalizeIds(companyIds).Select(id => view.Find(OrganizationRecordKind.Company, id))
+            .Where(row => row is not null).Select(row => Map(row!)).ToDictionary(company => company.Id, StringComparer.Ordinal);
     }
 
     /// <inheritdoc/>
     public async Task<Company?> GetByCodeAsync(string code, CancellationToken cancellationToken = default)
     {
-        if (cache is not null)
-        {
-            var snapshot = await cache.ReadAsync(cancellationToken);
-            return snapshot.CompanyCodes.TryGetValue(code.Trim(), out var id) ? Map(snapshot.Companies[id]) : null;
-        }
-        var normalized = code.Trim().ToLowerInvariant();
-        var entity = await Entities
-            .AsNoTracking()
-            .FirstOrDefaultAsync(
-                row => EF.Property<string>(row, "ECODE").ToLower() == normalized,
-                cancellationToken);
-        return entity is null ? null : Map(entity);
+        var row = (await query.ReadAsync(cancellationToken)).FindCompanyByCode(code);
+        return row is null ? null : Map(row);
     }
 
     /// <inheritdoc/>

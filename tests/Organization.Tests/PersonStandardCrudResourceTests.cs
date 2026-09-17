@@ -301,16 +301,8 @@ public sealed class PersonStandardCrudResourceTests
     [Fact]
     public async Task PersonCrudDisplayValueResolver_ReturnsOnlyRequestedCompanyCompanionAndBatchesDistinctIds()
     {
-        var companyDirectory = new FakeCompanyDirectory(
-        [
-            new Company { Id = "Company_1", Name = "总公司" }
-        ]);
-        var departmentDirectory = new FakeDepartmentDirectory([]);
-        var positionRepository = new FakePositionRepository([]);
-        var resolver = new PersonCrudDisplayValueResolver(
-            companyDirectory,
-            departmentDirectory,
-            positionRepository);
+        var query = new RecordingOrganizationQuery(companies: [new Company { Id = "Company_1", Name = "总公司" }]);
+        var resolver = new PersonCrudDisplayValueResolver(query);
         var descriptor = OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create());
         var companyDisplayField = Assert.Single(
             descriptor.DisplayValueFields,
@@ -336,34 +328,19 @@ public sealed class PersonStandardCrudResourceTests
         Assert.Equal("总公司", resolved[0]["CompanyId_DisplayValue"]);
         Assert.Equal("总公司", resolved[1]["CompanyId_DisplayValue"]);
         Assert.Equal(string.Empty, resolved[2]["CompanyId_DisplayValue"]);
-        Assert.Equal(1, companyDirectory.BatchCallCount);
-        Assert.Equal(
-            new[] { "Company_1", "Company_missing" },
-            Assert.Single(companyDirectory.RequestedBatches));
-        Assert.Equal(0, departmentDirectory.BatchCallCount);
-        Assert.Equal(0, positionRepository.BatchCallCount);
+        Assert.Equal(1, query.Reads);
+        Assert.Equal(new[] { "Company_1", "Company_missing" }, Assert.Single(query.Batches).Value);
+
     }
 
     [Fact]
     public async Task PersonCrudDisplayValueResolver_ResolvesRequestedDisplayFieldsInBatch()
     {
-        var companyDirectory = new FakeCompanyDirectory(
-        [
-            new Company { Id = "Company_1", Name = "总公司" }
-        ]);
-        var departmentDirectory = new FakeDepartmentDirectory(
-        [
-            new Department { Id = "Department_1", Name = "研发部" }
-        ]);
-        var positionRepository = new FakePositionRepository(
-        [
-            new Position { Id = "Position_1", Name = "工程师", IsEnabled = true },
-            new Position { Id = "Position_2", Name = "旧岗位", IsEnabled = false }
-        ]);
-        var resolver = new PersonCrudDisplayValueResolver(
-            companyDirectory,
-            departmentDirectory,
-            positionRepository);
+        var query = new RecordingOrganizationQuery(
+            companies: [new Company { Id = "Company_1", Name = "总公司" }],
+            departments: [new Department { Id = "Department_1", Name = "研发部" }],
+            positions: [new Position { Id = "Position_1", Name = "工程师" }, new Position { Id = "Position_2", Name = "旧岗位", IsEnabled = false }]);
+        var resolver = new PersonCrudDisplayValueResolver(query);
 
         var descriptor = OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create());
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows =
@@ -383,18 +360,17 @@ public sealed class PersonStandardCrudResourceTests
         Assert.Equal("研发部", resolved[1]["DepartmentName"]);
         Assert.Equal("工程师", resolved[0]["PositionName"]);
         Assert.Equal("旧岗位（已停用）", resolved[1]["PositionName"]);
-        Assert.Equal(1, companyDirectory.BatchCallCount);
-        Assert.Equal(1, departmentDirectory.BatchCallCount);
-        Assert.Equal(1, positionRepository.BatchCallCount);
+        Assert.Equal(1, query.Reads);
+        Assert.Equal(3, query.Batches.Count);
+
     }
 
     [Fact]
     public async Task PersonCrudDisplayValueResolver_MarksDisabledAffiliationWithoutHidingItsName()
     {
-        var resolver = new PersonCrudDisplayValueResolver(
-            new FakeCompanyDirectory([new Company { Id = "Company_1", Name = "旧公司", IsEnabled = false }]),
-            new FakeDepartmentDirectory([new Department { Id = "Department_1", Name = "旧部门", IsEnabled = false }]),
-            new FakePositionRepository([]));
+        var resolver = new PersonCrudDisplayValueResolver(new RecordingOrganizationQuery(
+            companies: [new Company { Id = "Company_1", Name = "旧公司", IsEnabled = false }],
+            departments: [new Department { Id = "Department_1", Name = "旧部门", IsEnabled = false }]));
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows =
         [
             new Dictionary<string, object?>
@@ -414,105 +390,4 @@ public sealed class PersonStandardCrudResourceTests
         Assert.Equal("旧部门（已停用）", result[0]["DepartmentName"]);
     }
 
-    private sealed class FakeCompanyDirectory : ICompanyDirectory
-    {
-        private readonly IReadOnlyDictionary<string, Company> _companies;
-
-        public FakeCompanyDirectory(IEnumerable<Company> companies)
-        {
-            _companies = companies.ToDictionary(company => company.Id, StringComparer.Ordinal);
-        }
-
-        public int BatchCallCount { get; private set; }
-
-        public List<IReadOnlyCollection<string>> RequestedBatches { get; } = [];
-
-        public Task<Company?> GetByIdAsync(string companyId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(_companies.TryGetValue(companyId, out var company) ? company : null);
-
-        public Task<IReadOnlyDictionary<string, Company>> GetByIdsAsync(
-            IReadOnlyCollection<string> companyIds,
-            CancellationToken cancellationToken = default)
-        {
-            BatchCallCount++;
-            RequestedBatches.Add(companyIds.ToArray());
-            return Task.FromResult<IReadOnlyDictionary<string, Company>>(
-                _companies.Values
-                    .Where(company => companyIds.Contains(company.Id))
-                    .ToDictionary(company => company.Id, StringComparer.Ordinal));
-        }
-
-        public Task<Company?> GetByCodeAsync(string code, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<OrganizationDirectoryPage<Company>> LookupAsync(
-            OrganizationDirectoryLookupRequest request,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-    }
-
-    private sealed class FakeDepartmentDirectory : IDepartmentDirectory
-    {
-        private readonly IReadOnlyDictionary<string, Department> _departments;
-
-        public FakeDepartmentDirectory(IEnumerable<Department> departments)
-        {
-            _departments = departments.ToDictionary(department => department.Id, StringComparer.Ordinal);
-        }
-
-        public int BatchCallCount { get; private set; }
-
-        public Task<Department?> GetByIdAsync(string departmentId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(_departments.TryGetValue(departmentId, out var department) ? department : null);
-
-        public Task<IReadOnlyDictionary<string, Department>> GetByIdsAsync(
-            IReadOnlyCollection<string> departmentIds,
-            CancellationToken cancellationToken = default)
-        {
-            BatchCallCount++;
-            return Task.FromResult<IReadOnlyDictionary<string, Department>>(
-                _departments.Values
-                    .Where(department => departmentIds.Contains(department.Id))
-                    .ToDictionary(department => department.Id, StringComparer.Ordinal));
-        }
-
-        public Task<Department?> GetByCompanyAndCodeAsync(
-            string companyId,
-            string code,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<OrganizationDirectoryPage<Department>> LookupAsync(
-            string companyId,
-            OrganizationDirectoryLookupRequest request,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-    }
-
-    private sealed class FakePositionRepository : IPositionDirectory
-    {
-        private readonly IReadOnlyDictionary<string, Position> _positions;
-
-        public FakePositionRepository(IEnumerable<Position> positions)
-        {
-            _positions = positions.ToDictionary(position => position.Id, StringComparer.Ordinal);
-        }
-
-        public int BatchCallCount { get; private set; }
-
-        public Task<Position?> GetByIdAsync(string positionId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(_positions.TryGetValue(positionId, out var position) ? position : null);
-
-        public Task<IReadOnlyDictionary<string, Position>> GetByIdsAsync(
-            IReadOnlyCollection<string> positionIds,
-            CancellationToken cancellationToken = default)
-        {
-            BatchCallCount++;
-            return Task.FromResult<IReadOnlyDictionary<string, Position>>(
-                _positions.Values
-                    .Where(position => positionIds.Contains(position.Id))
-                    .ToDictionary(position => position.Id, StringComparer.Ordinal));
-        }
-
-    }
 }

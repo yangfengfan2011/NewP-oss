@@ -61,6 +61,7 @@ public sealed class OrganizationCacheSqlServerHttpApiTests
             builder.Services.AddStandardCrudConditionalDelete<CompanyCrudDeleteExecutor>();
             builder.Services.AddScoped<IPlatformTransactionExecutor, EfPlatformTransactionExecutor>();
             builder.Services.AddSingleton<OrganizationCache>();
+            builder.Services.AddSingleton<ICP.Platform.Organization.Contracts.IOrganizationQuery, OrganizationQuery>();
             builder.Services.AddSingleton<ControlledParticipant>();
             builder.Services.AddSingleton(sp => new PlatformCommitRegistration("Organization/Company", sp.GetRequiredService<ControlledParticipant>()));
             builder.Services.AddScoped<ICompanyDirectory, EfCompanyDirectory>();

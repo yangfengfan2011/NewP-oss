@@ -4,6 +4,8 @@ using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 using ICP.Platform.Modules.Organization.Persistence.Ef;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace ICP.Platform.Modules.Organization.Tests;
@@ -20,7 +22,7 @@ public sealed class OrganizationDirectoryTests
             Company("Company_2", "C002", "B研发", enabled: true),
             Company("Company_1", "C001", "A研发", enabled: true)
         ]);
-        var directory = new EfCompanyDirectory(dbContext);
+        var directory = new EfCompanyDirectory(dbContext, null!);
 
         var page = await directory.LookupAsync(new OrganizationDirectoryLookupRequest(
             Keyword: "研发",
@@ -137,13 +139,24 @@ public sealed class OrganizationDirectoryTests
             Department("Department_2", "Company_2", "D002", "旧部门", enabled: false)
         ]);
 
-        var companies = await new EfCompanyDirectory(dbContext)
+        var companies = await new EfCompanyDirectory(dbContext, await CreateQueryAsync(dbContext))
             .GetByIdsAsync(["Company_1", "Company_2", "Company_1"]);
         var departments = await new EfDepartmentDirectory(dbContext)
             .GetByIdsAsync(["Department_1", "Department_2", "Department_1"]);
 
         Assert.Equal(2, companies.Count);
         Assert.Equal(2, departments.Count);
+    }
+
+    private static async Task<ICP.Platform.Organization.Contracts.IOrganizationQuery> CreateQueryAsync(EfPlatformDbContext source)
+    {
+        var options = (DbContextOptions<EfPlatformDbContext>)source.GetService<IDbContextOptions>();
+        var services = new ServiceCollection();
+        services.AddScoped(_ => new EfPlatformDbContext(options, OrganizationModelDefinitions.All.Select(d => d with { OwnerModuleId = "Organization", SchemaName = "dbo" }).ToArray()));
+        await using var provider = services.BuildServiceProvider();
+        var cache = new ICP.Platform.Modules.Organization.Caching.OrganizationCache(provider.GetRequiredService<IServiceScopeFactory>());
+        await cache.InitializeAsync();
+        return new ICP.Platform.Modules.Organization.Caching.OrganizationQuery(cache);
     }
 
     private static EfPlatformDbContext CreateDbContext()

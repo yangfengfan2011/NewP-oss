@@ -828,7 +828,7 @@ public sealed class StandardCrudService : IStandardCrudService
         return new StandardCrudDetail { Fields = fields, Summaries = summaries };
     }
 
-    // 摘要 provider 是跨模块依赖入口，失败时返回稳定状态，避免详情主数据被附属摘要拖垮。
+    // 普通附属摘要可降级；关键缓存不可用及请求取消必须上抛，不能伪装成业务数据缺失。
     private async Task<StandardCrudSummaryBlock> BuildSummaryAsync(
         StandardCrudDescriptor descriptor,
         IReadOnlyDictionary<string, object?> row,
@@ -844,7 +844,8 @@ public sealed class StandardCrudService : IStandardCrudService
         {
             return await provider.BuildAsync(descriptor, row, cancellationToken);
         }
-        catch (Exception)
+        catch (Exception exception) when (exception is not ICP.Platform.Persistence.Transactions.PlatformCacheUnavailableException
+            and not OperationCanceledException)
         {
             return new StandardCrudSummaryBlock { Status = "dependencyUnavailable" };
         }

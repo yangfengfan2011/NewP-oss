@@ -15,16 +15,9 @@ public sealed class DepartmentCrudDisplayValueResolverTests
     [Fact]
     public async Task ResolveListAsync_ResolvesCompanyAndParentDisplaysInOneBatchEach()
     {
-        var directory = new RecordingCompanyDirectory(
-        [
-            new Company { Id = "Company_1", Name = "总部", IsEnabled = true },
-            new Company { Id = "Company_2", Name = "旧公司", IsEnabled = false }
-        ]);
-        var departments = new RecordingDepartmentDirectory(
-        [
-            new Department { Id = "Department_Parent", Name = "研发中心", IsEnabled = true },
-            new Department { Id = "Department_Disabled", Name = "旧中心", IsEnabled = false }
-        ]);
+        var query = new RecordingOrganizationQuery(
+            companies: [new Company { Id = "Company_1", Name = "总部" }, new Company { Id = "Company_2", Name = "旧公司", IsEnabled = false }],
+            departments: [new Department { Id = "Department_Parent", Name = "研发中心" }, new Department { Id = "Department_Disabled", Name = "旧中心", IsEnabled = false }]);
         var rows = new IReadOnlyDictionary<string, object?>[]
         {
             new Dictionary<string, object?> { ["CompanyId"] = "Company_1", ["ParentDepartmentId"] = "Department_Parent" },
@@ -46,7 +39,7 @@ public sealed class DepartmentCrudDisplayValueResolverTests
             repository: null!,
             executor,
             queryCustomizers: [],
-            displayResolvers: [new DepartmentCrudDisplayValueResolver(directory, departments)],
+            displayResolvers: [new DepartmentCrudDisplayValueResolver(query)],
             summaryProviders: [],
             validators: [],
             deleteGuards: []);
@@ -55,10 +48,10 @@ public sealed class DepartmentCrudDisplayValueResolverTests
             descriptor,
             new StandardCrudListQuery(Fields: ["CompanyId", "ParentDepartmentId"]));
 
-        Assert.Equal(1, directory.BatchCallCount);
-        Assert.Equal(1, departments.BatchCallCount);
-        Assert.Equal(["Company_1", "Company_2"], directory.RequestedIds);
-        Assert.Equal(["Department_Parent", "Department_Disabled"], departments.RequestedIds);
+        Assert.Equal(1, query.Reads);
+        Assert.Equal(2, query.Batches.Count);
+        Assert.Equal(["Company_1", "Company_2"], query.Batches[ICP.Platform.Organization.Contracts.OrganizationRecordKind.Company]);
+        Assert.Equal(["Department_Parent", "Department_Disabled"], query.Batches[ICP.Platform.Organization.Contracts.OrganizationRecordKind.Department]);
         Assert.Equal(
             ["CompanyId", "CompanyId_DisplayValue", "ParentDepartmentId", "ParentDepartmentId_DisplayValue"],
             executor.Request!.Fields);
@@ -84,60 +77,4 @@ public sealed class DepartmentCrudDisplayValueResolverTests
         }
     }
 
-    private sealed class RecordingCompanyDirectory(IEnumerable<Company> companies) : ICompanyDirectory
-    {
-        private readonly IReadOnlyDictionary<string, Company> _companies =
-            companies.ToDictionary(static company => company.Id, StringComparer.Ordinal);
-
-        public int BatchCallCount { get; private set; }
-
-        public IReadOnlyCollection<string> RequestedIds { get; private set; } = [];
-
-        public Task<Company?> GetByIdAsync(string companyId, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<IReadOnlyDictionary<string, Company>> GetByIdsAsync(
-            IReadOnlyCollection<string> companyIds,
-            CancellationToken cancellationToken = default)
-        {
-            BatchCallCount++;
-            RequestedIds = companyIds;
-            return Task.FromResult<IReadOnlyDictionary<string, Company>>(
-                companyIds.ToDictionary(id => id, id => _companies[id], StringComparer.Ordinal));
-        }
-
-        public Task<Company?> GetByCodeAsync(string code, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<OrganizationDirectoryPage<Company>> LookupAsync(
-            OrganizationDirectoryLookupRequest request,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-    }
-
-    private sealed class RecordingDepartmentDirectory(IEnumerable<Department> departments) : IDepartmentDirectory
-    {
-        private readonly IReadOnlyDictionary<string, Department> _departments =
-            departments.ToDictionary(static department => department.Id, StringComparer.Ordinal);
-
-        public int BatchCallCount { get; private set; }
-        public IReadOnlyCollection<string> RequestedIds { get; private set; } = [];
-        public Task<Department?> GetByIdAsync(string departmentId, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-        public Task<IReadOnlyDictionary<string, Department>> GetByIdsAsync(
-            IReadOnlyCollection<string> departmentIds,
-            CancellationToken cancellationToken = default)
-        {
-            BatchCallCount++;
-            RequestedIds = departmentIds;
-            return Task.FromResult<IReadOnlyDictionary<string, Department>>(
-                departmentIds.ToDictionary(id => id, id => _departments[id], StringComparer.Ordinal));
-        }
-        public Task<Department?> GetByCompanyAndCodeAsync(string companyId, string code, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-        public Task<OrganizationDirectoryPage<Department>> LookupAsync(
-            string companyId,
-            OrganizationDirectoryLookupRequest request,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-    }
 }

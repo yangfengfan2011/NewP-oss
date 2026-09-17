@@ -23,6 +23,8 @@ public class OrganizationModuleTests
         var services = new ServiceCollection();
         new OrganizationModule().ConfigureServices(services);
         using var provider = services.BuildServiceProvider();
+        Assert.IsType<ICP.Platform.Modules.Organization.Caching.OrganizationQuery>(provider.GetRequiredService<ICP.Platform.Organization.Contracts.IOrganizationQuery>());
+        Assert.Single(services, d => d.ServiceType == typeof(ICP.Platform.Organization.Contracts.IOrganizationQuery));
         var registrations = provider.GetServices<ICP.Platform.Persistence.Transactions.PlatformCommitRegistration>().ToArray();
         Assert.Equal(["Organization/Company", "Organization/Department", "Organization/Person", "Organization/Position"],
             registrations.Select(r => r.ModelKey).Order(StringComparer.Ordinal));

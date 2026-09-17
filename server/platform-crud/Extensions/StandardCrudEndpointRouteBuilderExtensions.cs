@@ -6,6 +6,7 @@ using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Query.Runtime;
+using ICP.Platform.Persistence.Transactions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -207,6 +208,21 @@ public static class StandardCrudEndpointRouteBuilderExtensions
     private static RouteHandlerBuilder RequireCrudOperation(this RouteHandlerBuilder endpoint,
         StandardCrudAuthorization authorization, StandardCrudOperation operation)
     {
+        // 依赖缓存的读取统一返回暂不可用；固定数据库查询本身不改变数据源或字段权限。
+        if (operation is StandardCrudOperation.List or StandardCrudOperation.Detail or StandardCrudOperation.Options or StandardCrudOperation.Export)
+            endpoint.AddEndpointFilter(async (context, next) =>
+            {
+                try { return await next(context); }
+                catch (PlatformCacheUnavailableException exception)
+                {
+                    const string code = "Persistence.CacheUnavailable";
+                    return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: code, detail: exception.Message,
+                        extensions: new Dictionary<string, object?>
+                        {
+                            ["code"] = code, ["message"] = exception.Message, ["traceId"] = context.HttpContext.TraceIdentifier
+                        });
+                }
+            });
         var behavior = authorization.GetFeatureBehavior(operation);
         return behavior is null ? endpoint.RequireAuthorization(new DenyAllAttribute("该标准操作没有活动功能声明。"))
             : endpoint.RequireAuthorization(new RequireFeatureAttribute(behavior));

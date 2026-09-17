@@ -564,6 +564,9 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         builder.Services.AddControllers(options => { options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true; options.Filters.Add<AuthenticationSessionCookieResultFilter>(); })
             .AddApplicationPart(typeof(AuthController).Assembly).AddApplicationPart(typeof(IdentityModule).Assembly).AddApplicationPart(typeof(AuditModule).Assembly).AddApplicationPart(typeof(AuthorizationModule).Assembly).AddApplicationPart(typeof(OrganizationModule).Assembly)
             .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+        // 名称故障注入放在稳定查询契约，避免数据库拦截器因缓存接入而不再触发。
+        builder.Services.AddSingleton<ICP.Platform.Organization.Contracts.IOrganizationQuery>(sp =>
+            new FaultedOrganizationQuery(sp.GetRequiredService<ICP.Platform.Modules.Organization.Caching.OrganizationCache>(), Fault));
         configureServices?.Invoke(builder.Services);
         _app = builder.Build();
         _app.Use(async (context, next) => { using var activity = new Activity("business-audit-http").Start(); await next(); });
@@ -613,6 +616,13 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
             if (RegistrationWaiting && (command.CommandText.Contains("[Person]", StringComparison.Ordinal) || command.CommandText.Contains("[Role]", StringComparison.Ordinal) || command.CommandText.Contains("sp_getapplock", StringComparison.Ordinal))) ConcurrentCommand.TrySetResult();
             return ValueTask.FromResult(result);
         }
+    }
+    private sealed class FaultedOrganizationQuery(ICP.Platform.Modules.Organization.Caching.OrganizationCache cache, StoreFault fault)
+        : ICP.Platform.Organization.Contracts.IOrganizationQuery
+    {
+        public ValueTask<ICP.Platform.Organization.Contracts.IOrganizationReadView> ReadAsync(CancellationToken cancellationToken = default) =>
+            fault.Mode == "names" ? throw new InvalidOperationException("injected name directory failure")
+                : new ICP.Platform.Modules.Organization.Caching.OrganizationQuery(cache).ReadAsync(cancellationToken);
     }
     private sealed class FrozenClock : TimeProvider
     {

@@ -43,7 +43,7 @@ public sealed class BusinessAuditQuery(EfPlatformDbContext db, IEnumerable<IBusi
     }
     // 只从 Audit 当前编译计划的 shared model 读取，不连接业务实体。
     private IQueryable<Dictionary<string, object?>> Rows() => db.Set<Dictionary<string, object?>>("Audit/BusinessChange").AsNoTracking();
-    // 每类目录只调用一次，目录故障只降级名称；数据库查询故障不在此吞掉。
+    // 每类目录只调用一次，非关键目录故障只降级名称；关键缓存及数据库故障继续传播。
     private async Task ProjectAsync(List<Dictionary<string, object?>> rows, CancellationToken token)
     {
         var actors = rows.SelectMany(r => new[] { "ActorId", "CreatedBy", "UpdatedBy" }.Select(field => r.GetValueOrDefault(field) as string))
@@ -86,11 +86,12 @@ public sealed class BusinessAuditQuery(EfPlatformDbContext db, IEnumerable<IBusi
         }
         return names.GetValueOrDefault(value.Kind)?.GetValueOrDefault(raw) ?? raw;
     }
-    // 名称缺失允许 ID 降级，取消必须保持原语义。
+    // 非关键名称故障允许 ID 降级；缓存不可用与取消继续传播，避免伪装成名称缺失。
     private static async Task<IReadOnlyDictionary<string, string>> ResolveAsync(Func<Task<IReadOnlyDictionary<string, string>>> read, CancellationToken token)
     {
         try { return await read(); }
         catch (OperationCanceledException) { throw; }
-        catch { token.ThrowIfCancellationRequested(); return new Dictionary<string, string>(); }
+        catch (Exception exception) when (exception is not ICP.Platform.Persistence.Transactions.PlatformCacheUnavailableException)
+        { token.ThrowIfCancellationRequested(); return new Dictionary<string, string>(); }
     }
 }

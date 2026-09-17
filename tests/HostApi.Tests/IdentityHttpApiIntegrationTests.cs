@@ -71,6 +71,7 @@ public sealed class IdentityHttpApiIntegrationTests
 
         Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
         Assert.Equal("Asia/Shanghai", accounts.LastCommand?.TimeZoneId);
+        Assert.Equal("source-session-1", accounts.LastCommand?.SessionEid);
         Assert.Equal("rotated-session-secret", cookie.Credential);
         Assert.DoesNotContain("rotated-session-secret", await changed.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
@@ -200,7 +201,8 @@ public sealed class IdentityHttpApiIntegrationTests
             var claims = new List<Claim>
             {
                 new(ClaimTypes.NameIdentifier, accountEid.ToString()),
-                new(AuthenticationSessionClaimTypes.TimeZoneId, "Asia/Shanghai")
+                new(AuthenticationSessionClaimTypes.TimeZoneId, "Asia/Shanghai"),
+                new(AuthenticationSessionClaimTypes.SessionEid, "source-session-1")
             };
             if (Request.Headers.TryGetValue("X-Test-Role", out var role))
             {

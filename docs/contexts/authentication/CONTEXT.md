@@ -9,7 +9,7 @@ Authentication 是 Host 的必需内建上下文，管理服务端认证会话�
 _Avoid_: 用户账号、Cookie、在线用户
 
 **活动会话（Active Session）**：
-尚未撤销或过期且所属账号仍允许登录的认证会话；受保护请求必须解析到一个活动会话。
+尚未撤销或过期且所属账号仍允许登录的认证会话；受保护请求必须解析到一个活动会话，并验证普通账号当前的组织准入资格。缓存不可用返回暂不可用并保留 Cookie，不将基础设施故障解释为资格中断。
 _Avoid_: 永久登录、浏览器在线状态、账号启用状态
 
 **会话注册表（Session Registry）**：
@@ -24,7 +24,7 @@ _Avoid_: Session EID、用户标识、可读 Cookie 载荷
 使一个或某账号全部认证会话永久失效的生命周期转换；账号恢复不会重新激活已撤销会话。
 _Avoid_: 临时隐藏、账号停用、Cookie 删除
 
-**准入资格中断（Admission Eligibility Interruption，已确认目标见 [ADR-0049](../../adr/0049-ordinary-account-admission-requires-active-organization.md)）**：
+**准入资格中断（Admission Eligibility Interruption，见 [ADR-0049](../../adr/0049-ordinary-account-admission-requires-active-organization.md)）**：
 普通账号由满足准入条件变为不满足条件的一次已生效变化；正式写入路径须使此前全部会话永久失效，即使中断期间没有请求，恢复资格也只允许重新登录，停服直接改库的处理暂不纳入范围。始终满足条件的组织调整不属于资格中断。
 _Avoid_: 会话暂停、自动恢复旧会话、组织信息变化
 

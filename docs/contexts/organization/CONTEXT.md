@@ -6,6 +6,8 @@ Organization 上下文管理组织主数据与人员档案。它描述人员属�
 
 组织树读取由本模块提供根、直属子节点、分页搜索和当前路径；节点上下文由模块解析为标准页面输入。公司直属部门范围显式使用空上级，查询范围与用户筛选相交并在总数、分页前执行。组织管理统一入口组合组织结构与公司、部门、岗位、人员四个全局目录；全局部门通过显式解析器移除节点上下文与固定创建值，以 `queryScope: { kind: "global" }` 向本模块声明全局资源语义。空范围和不完整直属范围仍拒绝，全局范围不得混入直属字段。旧目录地址跳转到对应标签，人员完整详情由导航 metadata 独立声明。完整结构操作及搜索呈现见 [交付地图 #179](https://github.com/yangfengfan2011/NewP/issues/179)。
 
+组织业务查询通过 `Organization.Contracts` 的 `IOrganizationQuery.ReadAsync` 取得同一份不可变当前视图，提供完整档案、当前账号的人员与组织链及批量名称解析。缓存包含四类完整档案及停用记录；标准 CRUD 管理列表、详情和通用组织树保留固定数据库查询及分页。所有正式写入通过统一事务参与机制局部维护缓存，故障期间依赖请求暂不可用，恢复与维护边界见 [ADR-0050](../../adr/0050-organization-cache-holds-full-records-and-fails-closed.md)。
+
 ## Language
 
 **人员档案（Person）**：
@@ -33,7 +35,7 @@ _Avoid_: 租户、客户、法人账号
 _Avoid_: 公司名称、租户编号、公司 EID
 
 **公司启用状态（Company Enablement Status）**：
-公司自身是否启用的独立状态；按 [ADR-0049](../../adr/0049-ordinary-account-admission-requires-active-organization.md) 的已确认目标，公司可直接停用并阻断其下普通账号准入，保留既有引用及下级对象自身状态。该目标替代现行“仍有启用部门时不得停用”的限制。
+公司自身是否启用的独立状态；按 [ADR-0049](../../adr/0049-ordinary-account-admission-requires-active-organization.md)，公司可直接停用并阻断其下普通账号准入，保留既有引用及下级对象自身状态。原“仍有启用部门时不得停用”的限制已取消。
 _Avoid_: 删除状态、人员启用状态、账号状态
 
 **部门（Department）**：
@@ -45,11 +47,11 @@ _Avoid_: 团队、用户组、授权组
 _Avoid_: 部门名称、部门 EID、全局部门编号
 
 **部门层级（Department Hierarchy）**：
-部门通过可选的同公司上级形成无环层级；部门创建后不能迁移到另一公司，但可以在原公司内调整上级；按 [ADR-0049](../../adr/0049-ordinary-account-admission-requires-active-organization.md) 的已确认目标，调整时目标公司、目标部门及全部上级部门必须启用，允许从停用范围移出。
+部门通过可选的同公司上级形成无环层级；部门创建后不能迁移到另一公司，但可以在原公司内调整上级；按 [ADR-0049](../../adr/0049-ordinary-account-admission-requires-active-organization.md)，调整时目标公司、目标部门及全部上级部门必须启用，允许从停用范围移出。
 _Avoid_: 组织树页面、授权层级、跨公司部门移动
 
 **部门启用状态（Department Enablement Status）**：
-部门自身是否启用的独立状态；按 [ADR-0049](../../adr/0049-ordinary-account-admission-requires-active-organization.md) 的已确认目标，部门可直接停用并阻断本部门及全部下级部门的普通账号准入，保留既有引用及下级对象自身状态。该目标替代现行“仍有启用子部门时不得停用”的限制。
+部门自身是否启用的独立状态；按 [ADR-0049](../../adr/0049-ordinary-account-admission-requires-active-organization.md)，部门可直接停用并阻断本部门及全部下级部门的普通账号准入，保留既有引用及下级对象自身状态。原“仍有启用子部门时不得停用”的限制已取消。
 _Avoid_: 删除状态、人员启用状态、账号状态
 
 **排序码（Sort Order Code）**：
@@ -57,10 +59,10 @@ _Avoid_: 删除状态、人员启用状态、账号状态
 _Avoid_: 排序数字、数值权重、自然数序号
 
 **组织归属（Organization Affiliation）**：
-人员档案可选的公司与部门组合。公司和部门可以同时为空；新增或改变归属时，两者必须成对出现，部门必须属于该公司，且二者都处于启用状态；[ADR-0049](../../adr/0049-ordinary-account-admission-requires-active-organization.md) 的已确认目标进一步要求目标部门的全部上级部门启用，并允许移出停用范围。公司或部门后来停用时保留既有归属，并允许人员维护与归属无关的信息；岗位不属于组织归属，人员可以独立选择岗位。
+人员档案可选的公司与部门组合。公司和部门可以同时为空；新增或改变归属时，两者必须成对出现，部门必须属于该公司，且二者都处于启用状态；[ADR-0049](../../adr/0049-ordinary-account-admission-requires-active-organization.md) 进一步要求目标部门的全部上级部门启用，并允许移出停用范围。公司或部门后来停用时保留既有归属，并允许人员维护与归属无关的信息；岗位不属于组织归属，人员可以独立选择岗位。
 _Avoid_: 用户组成员关系、授权归属、原始组织 ID
 
-**普通账号组织准入（Ordinary Account Organization Admission，已确认目标见 [ADR-0049](../../adr/0049-ordinary-account-admission-requires-active-organization.md)）**：
+**普通账号组织准入（Ordinary Account Organization Admission，见 [ADR-0049](../../adr/0049-ordinary-account-admission-requires-active-organization.md)）**：
 普通账号进入系统所需的业务身份与组织条件：账号永久绑定人员，人员具有相互匹配的公司与部门归属，且账号、人员、所属部门、全部上级部门及公司均启用；任一对象停用均阻止进入系统。LocalAdmin 保留独立维护身份例外。
 _Avoid_: 功能授权、数据隔离、账号启用状态
 

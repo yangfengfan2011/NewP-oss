@@ -1,6 +1,6 @@
 # 统一缓存基类承载完整组织档案与一致更新
 
-状态：已接受的目标决策，尚未实施。来源：[讨论 #207](https://github.com/yangfengfan2011/NewP/issues/207)。实施规格：[Spec #208](https://github.com/yangfengfan2011/NewP/issues/208)。
+状态：已接受并实施。来源：[讨论 #207](https://github.com/yangfengfan2011/NewP/issues/207)。实施规格：[Spec #208](https://github.com/yangfengfan2011/NewP/issues/208)。
 
 组织缓存包含公司、部门、岗位、人员的全部当前档案字段和关系，包括停用记录；账号凭据、角色授权、认证会话与历史审计记录仍由各自模块管理，不纳入这组缓存。完整缓存保留在服务端，对外接口仍按权限和既有契约返回字段，不能因内部完整装载而扩大数据暴露范围。档案字段变更也需要维护缓存，容量和更新成本按完整档案评估。
 
@@ -30,4 +30,6 @@
 
 首期以 1 万人员、1 千部门作为代表性验证规模，包含多级部门和停用记录，使用完整档案评估内存、启动装载与更新成本。该规模不是产品数量上限，不据此宣称已达到性能目标；测量用于评估并优化已确定的启动全量重建、日常局部更新策略，不能据此自行把日常变更切换为全量重建。
 
-缓存名称抽象与职责边界按上文执行；具体方法签名、局部更新算法及性能门槛仍需结合真实组织切片确定。回退缓存实现时必须保持数据库事实与 ADR-0049 的准入及会话失效规则；若增加回源或放宽故障处理，须显式重新评审读取一致性，不能隐式降级。
+实现边界：`NamedCache<TSnapshot>` 持有协调与发布；模块通过 `PlatformCommitRegistration` 登记模型，统一事务执行器收集实际变更。事务内 `RegisterChange` 仅登记，事务外 `RefreshAsync` 按 `PlatformCacheRecord` 范围读取并复用 `ApplyAsync/Publish`；调用方不能在已持有事务协调权时调用独立刷新。后台 `MaintainAsync` 在初载及故障信号后恢复，健康时不查询数据库。Host 通过 `IPlatformCacheStatus` 汇总就绪，Organization 自身约束其端点可用性。已保存但发布失败返回 `Persistence.CommittedCacheUnavailable`；提交尝试后无法确认提交或回滚结果时返回 `Persistence.CommitOutcomeUnknown`，封闭缓存并从数据库恢复，不能按失败自动重放。
+
+缓存名称抽象与职责边界按上文执行；当前使用不可变集合与直接关系索引局部更新；代表性规模证据见[实施 Issue #214](https://github.com/yangfengfan2011/NewP/issues/214)，尚未约定性能通过门槛。回退缓存实现时必须保持数据库事实与 ADR-0049 的准入及会话失效规则；若增加回源或放宽故障处理，须显式重新评审读取一致性，不能隐式降级。

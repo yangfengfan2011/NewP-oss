@@ -6,6 +6,7 @@ using ICP.Platform.Persistence.Transactions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace ICP.Platform.Modules.Organization.Caching;
 
@@ -48,6 +49,27 @@ public class OrganizationCache(IServiceScopeFactory scopes) : NamedCache<Organiz
         var candidate = builder.Build();
         OrganizationSnapshotValidation.ValidateChanges(candidate, changes, cancellationToken);
         return ValueTask.FromResult(candidate);
+    }
+
+    /// <inheritdoc/>
+    protected override async ValueTask<IReadOnlyList<PlatformRecordChange>> ReloadAsync(
+        IReadOnlyList<PlatformRecordChange> changes, CancellationToken cancellationToken)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        await using var transaction = db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken) : null;
+        var result = new List<PlatformRecordChange>();
+        foreach (var group in changes.GroupBy(change => change.ModelKey))
+        {
+            var ids = group.Select(change => change.Id).Distinct(StringComparer.Ordinal).ToArray();
+            var rows = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey(group.Key)).AsNoTracking()
+                .Where(row => ids.Contains(EF.Property<string>(row, "EID"))).ToListAsync(cancellationToken);
+            var byId = rows.ToDictionary(row => (string)row["EID"]!, StringComparer.Ordinal);
+            foreach (var id in ids) result.Add(new(group.Key, id, null, byId.GetValueOrDefault(id)));
+        }
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        return result;
     }
 
     // 只复制不可变集合的受影响分支，自动跟踪和主动登记进入同一个模型分派与关系维护算法。
@@ -147,11 +169,23 @@ public class OrganizationCache(IServiceScopeFactory scopes) : NamedCache<Organiz
     private static string? Text(IReadOnlyDictionary<string, object?> row, string field) => row.GetValueOrDefault(field) as string;
 }
 
-/// <summary>模块启动时装载完整组织缓存；故障自动恢复由后续恢复切片统一接入。</summary>
-public sealed class OrganizationCacheInitializer(OrganizationCache cache) : IHostedService
+/// <summary>模块启动尝试装载，缓存故障保留 Host；后续交给具名缓存的信号驱动恢复。</summary>
+public sealed class OrganizationCacheInitializer(OrganizationCache cache, ILogger<OrganizationCacheInitializer> logger) : BackgroundService
 {
     /// <inheritdoc/>
-    public Task StartAsync(CancellationToken cancellationToken) => cache.InitializeAsync(cancellationToken).AsTask();
+    public override async Task StartAsync(CancellationToken cancellationToken)
+    {
+        try { await cache.InitializeAsync(cancellationToken); }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            ReportFailure(exception);
+        }
+        await base.StartAsync(cancellationToken);
+    }
     /// <inheritdoc/>
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) => cache.MaintainAsync(ReportFailure, stoppingToken);
+
+    // 详细异常只进入宿主诊断日志，公开 readiness 不泄露数据库内容。
+    private void ReportFailure(Exception exception) => logger.LogWarning(exception,
+        "Cache {CacheName} is unavailable after {ElapsedMilliseconds} ms; recovery will retry.", cache.Name, cache.LastMaintenanceDuration?.TotalMilliseconds);
 }

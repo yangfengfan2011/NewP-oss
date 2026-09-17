@@ -252,24 +252,26 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
         var first = new EfPlatformTransactionExecutor(firstDb, registrations);
         var second = new EfPlatformTransactionExecutor(secondDb, registrations);
         var entered = false;
-        var firstWrite = first.ExecuteAsync(["Company"], async token =>
+        Task<bool> FirstWrite() => first.ExecuteAsync(["Company"], async token =>
         {
             entered = true;
             var row = await firstDb.Set<Dictionary<string, object?>>("Organization/Company").SingleAsync(token);
             row["ENAME"] = "已更新公司";
             return true;
         }).AsTask();
-        var secondWrite = second.ExecuteAsync(["Person"], async token =>
+        Task<bool> SecondWrite() => second.ExecuteAsync(["Person"], async token =>
         {
             var row = await secondDb.Set<Dictionary<string, object?>>("Organization/Person").SingleAsync(token);
             row["ENAME"] = "已更新人员";
             return true;
         }).AsTask();
+        // 未通过首次完整校验前，业务写入直接不可用，不把待执行业务挂在初始化队列上。
+        await Assert.ThrowsAsync<PlatformCacheUnavailableException>(() => FirstWrite());
+        await Assert.ThrowsAsync<PlatformCacheUnavailableException>(() => SecondWrite());
         Assert.False(entered);
-        Assert.False(firstWrite.IsCompleted);
-        Assert.False(secondWrite.IsCompleted);
         cache.Release.TrySetResult();
-        await Task.WhenAll(loading, firstWrite, secondWrite);
+        await loading;
+        await Task.WhenAll(FirstWrite(), SecondWrite());
         var result = await cache.ReadAsync();
         Assert.Equal("已更新公司", result.Companies[company]["ENAME"]);
         Assert.Equal("已更新人员", result.Persons[person]["ENAME"]);
@@ -492,6 +494,12 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
         {
             if (Fail) { FailedPublications++; throw new InvalidOperationException("publication failure"); }
             base.Publish(snapshot);
+        }
+        protected override async ValueTask<IReadOnlyList<PlatformRecordChange>> ReloadAsync(IReadOnlyList<PlatformRecordChange> changes, CancellationToken token)
+        {
+            // 该回归只检查首次业务提交的反馈；恢复独立测试，这里保持故障直到fixture停止。
+            if (Fail) await Task.Delay(Timeout.Infinite, token);
+            return await base.ReloadAsync(changes, token);
         }
     }
 

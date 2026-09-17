@@ -24,7 +24,10 @@ public sealed class OrganizationQuerySqlServerHttpApiTests
     {
         var counter = new OrganizationSqlObserver();
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
-            services.AddDbContext<EfPlatformDbContext>((_, options) => options.AddInterceptors(counter)));
+        {
+            services.AddSingleton<OrganizationCache, PausedRecoveryCache>();
+            services.AddDbContext<EfPlatformDbContext>((_, options) => options.AddInterceptors(counter));
+        });
         using var admin = await fixture.LoginAdministratorAsync();
         var http = new FeatureHttpTestRequests(fixture);
         var company = await Create("companies", new { ECODE = "QUERY", ENAME = "查询公司", SortOrder = "01" });
@@ -104,13 +107,15 @@ public sealed class OrganizationQuerySqlServerHttpApiTests
             }
         }
 
-        // 故障只阻断真正依赖缓存的读取；固定管理主查询及分页Lookup仍执行原数据库路径。
+        // 固定管理SQL读取不豁免端点可用性；暂停恢复使503断言不与后台成功恢复竞争。
+        ((PausedRecoveryCache)fixture.Services.GetRequiredService<OrganizationCache>()).HoldRecovery = true;
         await using (var write = await fixture.Services.GetRequiredService<OrganizationCache>().BeginAsync(default)) write.MarkUnavailable();
         await Assert.ThrowsAsync<PlatformCacheUnavailableException>(() => query.ReadAsync().AsTask());
         using var unavailable = await SendAsync(reader, http.Organization("persons"), HttpMethod.Get, "/api/organization/persons");
         await AssertUnavailable(unavailable);
         counter.Commands.Clear();
-        await ReadAsync(admin, http.Organization("companies"), $"/api/organization/companies/{company}");
+        using (var management = await SendAsync(admin, http.Organization("companies"), HttpMethod.Get, $"/api/organization/companies/{company}"))
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, management.StatusCode);
         await using var scope = fixture.Services.CreateAsyncScope();
         Assert.Single((await scope.ServiceProvider.GetRequiredService<ICompanyDirectory>().LookupAsync(new(Keyword: null, Page: 1, PageSize: 1))).Items);
         Assert.NotEmpty(counter.Commands);
@@ -122,7 +127,11 @@ public sealed class OrganizationQuerySqlServerHttpApiTests
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "摘要缓存读取故障不得被普通附属摘要降级吞掉")]
     public async Task Detail_WhenCacheBecomesUnavailableAfterDisplay_ReturnsUnavailableInsteadOfEmptySummary()
     {
-        await using var fixture = await BusinessAuditHostFixture.CreateAsync(services => services.AddSingleton<IOrganizationQuery, InvalidatingQuery>());
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
+        {
+            services.AddSingleton<OrganizationCache, PausedRecoveryCache>();
+            services.AddSingleton<IOrganizationQuery, InvalidatingQuery>();
+        });
         using var admin = await fixture.LoginAdministratorAsync();
         var http = new FeatureHttpTestRequests(fixture);
         var person = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"),
@@ -135,13 +144,14 @@ public sealed class OrganizationQuerySqlServerHttpApiTests
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "审计组织名称的关键缓存故障必须503，不能伪作名称缺失")]
     public async Task Audit_WhenOrganizationCacheUnavailable_ReturnsUnavailableForListAndDetail()
     {
-        await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(services => services.AddSingleton<OrganizationCache, PausedRecoveryCache>());
         using var admin = await fixture.LoginAdministratorAsync();
         var http = new FeatureHttpTestRequests(fixture);
         var person = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"),
             "/api/organization/persons", new { PersonNo = "AUDIT", ENAME = "审计人员", EmploymentStatus = "Active", IsEnabled = true }));
         var page = await ReadAsync(admin, http.Audit(), $"/api/audit/business-changes?TargetId={person}");
         var id = Assert.Single(page.GetProperty("items").EnumerateArray()).GetProperty("EID").GetString();
+        ((PausedRecoveryCache)fixture.Services.GetRequiredService<OrganizationCache>()).HoldRecovery = true;
         await using (var write = await fixture.Services.GetRequiredService<OrganizationCache>().BeginAsync(default)) write.MarkUnavailable();
         foreach (var route in new[] { $"/api/audit/business-changes?TargetId={person}", $"/api/audit/business-changes/{id}" })
         {
@@ -171,10 +181,21 @@ public sealed class OrganizationQuerySqlServerHttpApiTests
             if (InvalidateAfterRead)
             {
                 InvalidateAfterRead = false;
+                ((PausedRecoveryCache)cache).HoldRecovery = true;
                 await using var write = await cache.BeginAsync(cancellationToken);
                 write.MarkUnavailable();
             }
             return result;
+        }
+    }
+
+    private sealed class PausedRecoveryCache(IServiceScopeFactory scopes) : OrganizationCache(scopes)
+    {
+        public bool HoldRecovery;
+        protected override async ValueTask<OrganizationSnapshot> LoadAsync(CancellationToken token)
+        {
+            if (HoldRecovery) await Task.Delay(Timeout.Infinite, token);
+            return await base.LoadAsync(token);
         }
     }
 

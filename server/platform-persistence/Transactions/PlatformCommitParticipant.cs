@@ -7,6 +7,16 @@ public sealed record PlatformRecordChange(string ModelKey, string Id,
 /// <summary>模块装配时将归属模型登记到唯一提交参与者。</summary>
 public sealed record PlatformCommitRegistration(string ModelKey, IPlatformCommitParticipant Participant);
 
+/// <summary>独立刷新使用归属模型与实际持久化主键，不包含业务写入或待保存值。</summary>
+public sealed record PlatformCacheRecord(string ModelKey, string Id);
+
+/// <summary>宿主只观察具名缓存的可用状态，不触发数据库读取或恢复。</summary>
+public interface IPlatformCacheStatus
+{
+    string Name { get; }
+    bool IsAvailable { get; }
+}
+
 public interface IPlatformCommitParticipant
 {
     string Name { get; }

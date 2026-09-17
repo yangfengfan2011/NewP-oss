@@ -28,7 +28,7 @@ using ICP.Platform.Testing;
 
 namespace ICP.Platform.HostApi.Tests;
 
-public sealed class HostAuthenticationProcessRestartTests
+public sealed partial class HostAuthenticationProcessRestartTests
 {
     private const string RunEnvironmentVariable = "NEWP_RUN_HOST_AUTH_RESTART_INTEGRATION";
     private static readonly ConcurrentDictionary<int, Task[]> CaptureTasks = new();

@@ -22,6 +22,8 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
     {
         services.AddStandardCrudKernel();
         services.AddSingleton<OrganizationCache>();
+        services.AddSingleton<IPlatformCacheStatus>(sp => sp.GetRequiredService<OrganizationCache>());
+        services.AddScoped<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, OrganizationAvailabilityHandler>();
         services.AddSingleton<IOrganizationQuery, OrganizationQuery>();
         services.AddScoped<ICP.Platform.Identity.Contracts.IIdentityAdmissionPolicy, OrganizationAdmissionPolicy>();
         services.AddScoped<OrganizationAdmissionCommitParticipant>();

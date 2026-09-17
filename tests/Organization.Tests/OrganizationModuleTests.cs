@@ -37,6 +37,10 @@ public class OrganizationModuleTests
         Assert.All(registrations, registration => Assert.Same(scope.ServiceProvider.GetRequiredService<OrganizationAdmissionCommitParticipant>(), registration.Participant));
         Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, d => d.ServiceType == typeof(OrganizationAdmissionCommitParticipant)).Lifetime);
         Assert.Equal(ServiceLifetime.Singleton, Assert.Single(services, d => d.ServiceType == typeof(ICP.Platform.Modules.Organization.Caching.OrganizationCache)).Lifetime);
+        Assert.Same(provider.GetRequiredService<ICP.Platform.Modules.Organization.Caching.OrganizationCache>(),
+            provider.GetRequiredService<ICP.Platform.Persistence.Transactions.IPlatformCacheStatus>());
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(Microsoft.AspNetCore.Authorization.IAuthorizationHandler)
+            && descriptor.ImplementationType == typeof(ICP.Platform.Modules.Organization.Caching.OrganizationAvailabilityHandler));
     }
 
     [Fact]

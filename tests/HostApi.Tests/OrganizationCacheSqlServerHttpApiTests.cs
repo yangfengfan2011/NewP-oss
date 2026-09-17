@@ -174,7 +174,10 @@ public sealed class OrganizationCacheSqlServerHttpApiTests(Xunit.Abstractions.IT
             var listing = await client.GetFromJsonAsync<JsonElement>(route);
             Assert.Equal("已保存不可重放", Assert.Single(listing.GetProperty("items").EnumerateArray()).GetProperty("ENAME").GetString());
             publication.Fail = false;
+            var readsBeforeRecovery = sql.Reads;
             await cache.InitializeAsync();
+            Assert.Equal(1, sql.Reads - readsBeforeRecovery);
+            Assert.Equal("已保存不可重放", Assert.Single((await cache.ReadAsync()).Companies).Value["ENAME"]);
             commitFault.Enabled = true;
             var savedId = Assert.Single(listing.GetProperty("items").EnumerateArray()).GetProperty("EID").GetString();
             using var unknown = await client.PutAsJsonAsync($"{route}/{savedId}", new Dictionary<string, object?> { ["ENAME"] = "提交结果待确认" });

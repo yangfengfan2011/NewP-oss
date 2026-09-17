@@ -104,16 +104,18 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "缓存故障保留Cookie和会话，LocalAdmin保持维护身份")]
     public async Task CacheUnavailable_PreservesCookieAndDoesNotRevokeOrBlockAdministrator()
     {
-        await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(services => services.AddSingleton<OrganizationCache, RecoveryCache>());
         using var admin = await fixture.LoginAdministratorAsync();
         var prepared = await PrepareAsync(admin, new FeatureHttpTestRequests(fixture));
         using var client = await fixture.LoginAsync("admitted", prepared.Password);
         var accountBeforeFault = await client.GetFromJsonAsync<JsonElement>("/api/auth/current-user");
-        var cache = fixture.Services.GetRequiredService<OrganizationCache>();
-        await using (var scope = await cache.BeginAsync(default)) scope.MarkUnavailable();
+        var cache = (RecoveryCache)fixture.Services.GetRequiredService<OrganizationCache>();
+        await using (var scope = await cache.BeginAsync(default)) { await scope.PrepareAsync([], default); scope.MarkUnavailable(); }
         using var unavailable = await client.GetAsync("/api/auth/current-user");
         Assert.Equal(HttpStatusCode.ServiceUnavailable, unavailable.StatusCode);
         Assert.False(unavailable.Headers.Contains("Set-Cookie"));
+        using var organizationRead = await SendAsync(admin, new FeatureHttpTestRequests(fixture).Organization("companies"), HttpMethod.Get, "/api/organization/companies");
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, organizationRead.StatusCode);
         using var administrator = fixture.CreateClient();
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(administrator);
         using var maintenance = await administrator.PostAsJsonAsync("/api/auth/login", new { ECODE = "admin", Password = "Audit-test-secure-938!" });
@@ -128,8 +130,9 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
             new { TargetStatus = "Disabled", ExpectedRevision = accountBeforeFault.GetProperty("revision").GetInt64(), Reason = "缓存故障期间的协调写入" });
         Assert.Equal(HttpStatusCode.ServiceUnavailable, statusChange.StatusCode);
         Assert.Equal("Persistence.CacheUnavailable", (await statusChange.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
-        // 本片只显式恢复以验证Cookie连续性；自动恢复属于后续child。
-        await cache.InitializeAsync();
+        // 可控范围读取释放后，正式后台恢复保留同一Cookie。
+        cache.Release.TrySetResult();
+        await cache.Recovered.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/auth/current-user")).StatusCode);
     }
 

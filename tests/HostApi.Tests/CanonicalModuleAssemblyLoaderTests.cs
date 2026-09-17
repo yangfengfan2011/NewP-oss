@@ -257,6 +257,12 @@ public sealed class CanonicalModuleAssemblyLoaderTests : IDisposable
         Assert.False(VerifiedAssemblyIdentityPolicy.IsHostPlatformSharedDependency(expected));
         Assert.True(VerifiedAssemblyIdentityPolicy.IsHostPlatformSharedDependency(new System.Reflection.AssemblyName("Audit.Contracts, Version=1.0.0.0")));
         Assert.True(VerifiedAssemblyIdentityPolicy.IsHostPlatformSharedDependency(
+            new System.Reflection.AssemblyName("Organization.Contracts, Version=1.0.0.0")));
+        Assert.False(VerifiedAssemblyIdentityPolicy.IsHostPlatformSharedDependency(
+            new System.Reflection.AssemblyName("OrganizationModule, Version=1.0.0.0")));
+        Assert.False(VerifiedAssemblyIdentityPolicy.IsHostPlatformSharedDependency(
+            new System.Reflection.AssemblyName("Unregistered.Contracts, Version=1.0.0.0")));
+        Assert.True(VerifiedAssemblyIdentityPolicy.IsHostPlatformSharedDependency(
             new System.Reflection.AssemblyName("PlatformPersistence, Version=1.0.0.0")));
         Assert.True(VerifiedAssemblyIdentityPolicy.IsHostPlatformSharedDependency(
             new System.Reflection.AssemblyName("PlatformPresentation, Version=1.0.0.0")));

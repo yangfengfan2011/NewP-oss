@@ -26,6 +26,7 @@ internal static class VerifiedAssemblyIdentityPolicy
             "Identity.Contracts",
             "Authentication.Contracts",
             "Authorization.Contracts",
+            "Organization.Contracts",
             "Audit.Contracts"
         ],
         StringComparer.Ordinal);

@@ -74,7 +74,8 @@ public sealed class IdentityModule : ModuleCapsuleBindingBase
                 serviceProvider.GetRequiredService<IPasswordHasher<IdentityAccount>>(),
                 serviceProvider.GetRequiredService<ITemporaryCredentialIssuer>(),
                 serviceProvider.GetRequiredService<IPlatformObjectIdGenerator>(),
-                serviceProvider.GetRequiredService<TimeProvider>()));
+                serviceProvider.GetRequiredService<TimeProvider>(),
+                serviceProvider.GetServices<IIdentityAdmissionPolicy>()));
         services.AddScoped<IIdentityLifecycleParticipant>(serviceProvider =>
             new IdentityLifecycleParticipant(
                 serviceProvider.GetRequiredService<IIdentityRepository>(),

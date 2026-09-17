@@ -17,18 +17,25 @@ namespace ICP.Platform.Modules.Organization.Tests;
 
 public class OrganizationModuleTests
 {
+    private sealed class UnusedBatchRevoker : ICP.Platform.Authentication.Contracts.IAuthenticationSessionBatchRevoker
+    {
+        public ValueTask<int> RevokeAccountsAsync(IReadOnlyCollection<string> ids, string reason, string actorId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
     [Fact]
     public void ConfigureServices_RegistersAllOrganizationModelsWithOneSharedCache()
     {
         var services = new ServiceCollection();
         new OrganizationModule().ConfigureServices(services);
+        services.AddSingleton<ICP.Platform.Authentication.Contracts.IAuthenticationSessionBatchRevoker, UnusedBatchRevoker>();
         using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
         Assert.IsType<ICP.Platform.Modules.Organization.Caching.OrganizationQuery>(provider.GetRequiredService<ICP.Platform.Organization.Contracts.IOrganizationQuery>());
         Assert.Single(services, d => d.ServiceType == typeof(ICP.Platform.Organization.Contracts.IOrganizationQuery));
-        var registrations = provider.GetServices<ICP.Platform.Persistence.Transactions.PlatformCommitRegistration>().ToArray();
+        var registrations = scope.ServiceProvider.GetServices<ICP.Platform.Persistence.Transactions.PlatformCommitRegistration>().ToArray();
         Assert.Equal(["Organization/Company", "Organization/Department", "Organization/Person", "Organization/Position"],
             registrations.Select(r => r.ModelKey).Order(StringComparer.Ordinal));
-        Assert.All(registrations, registration => Assert.Same(provider.GetRequiredService<ICP.Platform.Modules.Organization.Caching.OrganizationCache>(), registration.Participant));
+        Assert.All(registrations, registration => Assert.Same(scope.ServiceProvider.GetRequiredService<OrganizationAdmissionCommitParticipant>(), registration.Participant));
+        Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, d => d.ServiceType == typeof(OrganizationAdmissionCommitParticipant)).Lifetime);
         Assert.Equal(ServiceLifetime.Singleton, Assert.Single(services, d => d.ServiceType == typeof(ICP.Platform.Modules.Organization.Caching.OrganizationCache)).Lifetime);
     }
 

@@ -165,7 +165,7 @@ public sealed class AuthenticationSessionSqlServerIntegrationTests
             new GuidObjectIdGenerator(),
             credentialGenerator ?? new DefaultAuthenticationSessionCredentialGenerator(),
             new MutableTimeProvider(InitialTime),
-            new AuthenticationSessionOptions());
+            new AuthenticationSessionOptions(), [new AuthenticationSessionRegistryTests.IsolatedAdmissionPolicy()]);
 
     private static ValueTask<AuthenticationSessionIssuance> IssueAsync(
         IAuthenticationSessionRegistry registry,

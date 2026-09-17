@@ -20,7 +20,9 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
     private readonly ITemporaryCredentialIssuer _temporaryCredentialIssuer;
     private readonly IPlatformObjectIdGenerator _objectIdGenerator;
     private readonly TimeProvider _timeProvider;
+    private readonly IIdentityAdmissionPolicy[] _admissionPolicies;
 
+    // 准入参与者只提供最外层协调范围；Identity 保持账号与凭据变更的所有权。
     public IdentityAccountApplicationService(
         IIdentityRepository repository,
         IPlatformTransactionExecutor transactionExecutor,
@@ -28,7 +30,8 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
         IPasswordHasher<IdentityAccount> passwordHasher,
         ITemporaryCredentialIssuer temporaryCredentialIssuer,
         IPlatformObjectIdGenerator objectIdGenerator,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IEnumerable<IIdentityAdmissionPolicy>? admissionPolicies = null)
     {
         _repository = repository;
         _transactionExecutor = transactionExecutor;
@@ -37,6 +40,7 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
         _temporaryCredentialIssuer = temporaryCredentialIssuer;
         _objectIdGenerator = objectIdGenerator;
         _timeProvider = timeProvider;
+        _admissionPolicies = admissionPolicies?.ToArray() ?? [];
     }
 
     public async ValueTask<IdentityAccountCreationResult> CreateAsync(
@@ -104,6 +108,7 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
         }
     }
 
+    // 与会话创建协调账号版本变化，持久化冲突仍由原账号协议判断。
     public async ValueTask<IdentityAccountSnapshot> UpdateNameAsync(
         UpdateIdentityAccountNameCommand command,
         CancellationToken cancellationToken = default)
@@ -120,6 +125,7 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
         StampSecurityChange(account, command.Actor.ActorId, now);
 
         return await _transactionExecutor.ExecuteAsync(
+            _admissionPolicies.SelectMany(policy => policy.GetCoordinationModels(ToSnapshot(account))).Distinct().ToArray(),
             async token =>
             {
                 await ReplaceAccountOrThrowConflictAsync(account, expectedRevision, token);
@@ -134,6 +140,7 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
             cancellationToken);
     }
 
+    // 账号停用与全部旧会话撤销共同提交，并与新会话创建排序。
     public async ValueTask<IdentityAccountSnapshot> SetStatusAsync(
         SetIdentityAccountStatusCommand command,
         CancellationToken cancellationToken = default)
@@ -173,6 +180,7 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
             : IdentitySecurityEventTypes.AccountDisabled;
 
         return await _transactionExecutor.ExecuteAsync(
+            _admissionPolicies.SelectMany(policy => policy.GetCoordinationModels(ToSnapshot(account))).Distinct().ToArray(),
             async token =>
             {
                 await ReplaceAccountOrThrowConflictAsync(account, expectedRevision, token);
@@ -187,6 +195,7 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
             cancellationToken);
     }
 
+    // 重置凭据与撤销在相同准入协调内完成，禁止旧凭据等待后继续签发。
     public async ValueTask<IdentityCredentialResetResult> ResetCredentialAsync(
         ResetIdentityCredentialCommand command,
         CancellationToken cancellationToken = default)
@@ -213,6 +222,7 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
         StampSecurityChange(account, command.Actor.ActorId, now);
 
         return await _transactionExecutor.ExecuteAsync(
+            _admissionPolicies.SelectMany(policy => policy.GetCoordinationModels(ToSnapshot(account))).Distinct().ToArray(),
             async token =>
             {
                 await ReplaceAccountOrThrowConflictAsync(account, expectedRevision, token);
@@ -262,8 +272,12 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
         StampSecurityChange(account, command.Actor.ActorId, now);
 
         return await _transactionExecutor.ExecuteAsync(
+            _admissionPolicies.SelectMany(policy => policy.GetCoordinationModels(ToSnapshot(account))).Distinct().ToArray(),
             async token =>
             {
+                // 资格中断后即使组织已恢复，已撤销的来源会话也不得签发新会话。
+                if (!await _sessionRegistry.IsActiveAsync(command.SessionEid, account.EID, token))
+                    throw new AuthenticationSessionException(AuthenticationSessionFailureCodes.AdmissionDenied);
                 await ReplaceAccountOrThrowConflictAsync(account, expectedRevision, token);
                 await _repository.ReplaceCredentialAsync(credential, token);
                 await RevokeAllSessionsAsync(account.EID, "password-changed", command.Actor.ActorId, token);
@@ -287,6 +301,7 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
             cancellationToken);
     }
 
+    // 删除未绑定账号时保持安全变更和会话撤销原子性。
     public async ValueTask<IdentityAccountSnapshot> DeleteAsync(
         DeleteIdentityAccountCommand command,
         CancellationToken cancellationToken = default)
@@ -317,6 +332,7 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
         StampSecurityChange(account, command.Actor.ActorId, now);
 
         return await _transactionExecutor.ExecuteAsync(
+            _admissionPolicies.SelectMany(policy => policy.GetCoordinationModels(ToSnapshot(account))).Distinct().ToArray(),
             async token =>
             {
                 await ReplaceAccountOrThrowConflictAsync(account, expectedRevision, token);

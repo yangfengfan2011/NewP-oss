@@ -71,6 +71,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             Assert.Equal(HttpStatusCode.NoContent, (await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{id}/roles", new { RoleCodes = new[] { code } })).StatusCode);
             var candidates = await FeatureHttpTestRequests.ReadAsync(admin, http.Role("userRoles"), $"/api/authorization/users/candidates?query={code}");
             Assert.Equal(id, Assert.Single(candidates.EnumerateArray()).GetProperty("id").GetString());
+            await HttpTestActors.PrepareOrganizationAsync(admin, http, account.GetProperty("account"));
             using var user = await fixture.LoginAsync(code, account.GetProperty("temporaryCredential").GetString()!);
             var current = await user.GetFromJsonAsync<JsonElement>("/api/auth/current-user");
             Assert.Equal(points.SelectMany(point => point.EntryDependencies.Append(point.Position)).Distinct().Order().ToArray(), current.GetProperty("featurePositions").EnumerateArray().Select(p => p.GetString()).Order().ToArray());
@@ -113,6 +114,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             Assert.Equal(2, record.GetProperty("Changes").GetArrayLength());
             Assert.Contains(record.GetProperty("Changes").EnumerateArray(), c => c.GetProperty("after").GetProperty("value").GetString() == roleId && c.GetProperty("afterDisplay").GetString() == "分配职责");
         }
+        await HttpTestActors.PrepareOrganizationAsync(admin, http, account.GetProperty("account"));
         using var user = await fixture.LoginAsync("assigned-user", account.GetProperty("temporaryCredential").GetString()!);
         var projection = await user.GetFromJsonAsync<JsonElement>("/api/auth/current-user");
         Assert.Contains(projection.GetProperty("featurePositions").EnumerateArray(), p => p.GetString() == http.Organization("persons").Position);
@@ -135,7 +137,16 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.True(disabled.IsSuccessStatusCode, await disabled.Content.ReadAsStringAsync());
         var disabledAccount = await disabled.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal(HttpStatusCode.NoContent, (await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, route, new { RoleCodes = new[] { "Assigned" } })).StatusCode);
-        using var deleted = await FeatureHttpTestRequests.SendAsync(admin, new FeatureHttpTestRequests(fixture).Identity("delete"), HttpMethod.Post, $"/api/identity/accounts/{userId}/delete", new { ExpectedRevision = disabledAccount.GetProperty("revision").GetInt64(), Reason = "测试删除" });
+        using var protectedDeletion = await FeatureHttpTestRequests.SendAsync(admin, http.Identity("delete"), HttpMethod.Post,
+            $"/api/identity/accounts/{userId}/delete", new { ExpectedRevision = disabledAccount.GetProperty("revision").GetInt64(), Reason = "永久绑定保护" });
+        Assert.Equal(HttpStatusCode.Conflict, protectedDeletion.StatusCode);
+        // 已登录账号必须永久绑定；删除后的历史解析由另一个从未绑定、从未登录的账号证明。
+        var deletable = await FeatureHttpTestRequests.CreateAsync(admin, http.Identity("create"), "/api/identity/accounts", new { ECODE = "history-delete", ENAME = "删除历史账号" });
+        userId = deletable.GetProperty("account").GetProperty("eid").GetString();
+        route = $"/api/authorization/users/{userId}/roles";
+        foreach (var roles in new[] { new[] { "Assigned", "Other" }, new[] { "Assigned" } })
+            Assert.Equal(HttpStatusCode.NoContent, (await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, route, new { RoleCodes = roles })).StatusCode);
+        using var deleted = await FeatureHttpTestRequests.SendAsync(admin, http.Identity("delete"), HttpMethod.Post, $"/api/identity/accounts/{userId}/delete", new { ExpectedRevision = deletable.GetProperty("account").GetProperty("revision").GetInt64(), Reason = "测试删除" });
         Assert.True(deleted.IsSuccessStatusCode, await deleted.Content.ReadAsStringAsync());
         Assert.Equal(HttpStatusCode.BadRequest, (await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, route, new { RoleCodes = Array.Empty<string>() })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Get, route)).StatusCode);
@@ -203,6 +214,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         foreach (var codes in new[] { Array.Empty<string>(), new[] { "LocalAdmin" } })
             Assert.Equal(HttpStatusCode.BadRequest, (await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put, $"/api/authorization/users/{id}/roles", new { RoleCodes = codes })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Get, $"/api/authorization/users/{id}/roles")).StatusCode);
+        await HttpTestActors.PrepareOrganizationAsync(admin, http, account.GetProperty("account"));
         using var member = await fixture.LoginAsync("internal-member", account.GetProperty("temporaryCredential").GetString()!);
         Assert.Equal(HttpStatusCode.OK, (await FeatureHttpTestRequests.SendAsync(member, http.Role(), HttpMethod.Get, "/api/authorization/roles")).StatusCode);
         var records = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), $"/api/audit/business-changes?TargetId={id}");
@@ -445,7 +457,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         fixture.Fault.Commands.Clear();
         var page1 = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), "/api/audit/business-changes?Resource=organization.person&PageSize=1&pageIndex=1");
         var page2 = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), "/api/audit/business-changes?Resource=organization.person&PageSize=1&pageIndex=2");
-        Assert.Equal(2, page1.GetProperty("total").GetInt32());
+        Assert.Equal(3, page1.GetProperty("total").GetInt32()); // 包含管理员为普通主体准备的真实人员创建。
         var row1 = Assert.Single(page1.GetProperty("items").EnumerateArray());
         var row2 = Assert.Single(page2.GetProperty("items").EnumerateArray());
         Assert.Equal(row1.GetProperty("OccurredAt").GetString(), row2.GetProperty("OccurredAt").GetString());
@@ -717,9 +729,10 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         });
     }
     internal Task<HttpClient> LoginAdministratorAsync() => LoginAsync("admin", _temporaryCredential);
+    internal HttpClient CreateClient() => new(new Cookies(_app.GetTestServer().CreateHandler())) { BaseAddress = new Uri("http://localhost") };
     internal async Task<HttpClient> LoginAsync(string code, string password)
     {
-        var client = new HttpClient(new Cookies(_app.GetTestServer().CreateHandler())) { BaseAddress = new Uri("http://localhost") };
+        var client = CreateClient();
         await RefreshAntiforgeryAsync(client);
         var response = await client.PostAsJsonAsync("/api/auth/login", new { ECODE = code, Password = password });
         Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());

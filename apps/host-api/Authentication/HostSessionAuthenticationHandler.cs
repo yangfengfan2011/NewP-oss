@@ -13,7 +13,7 @@ namespace ICP.Platform.HostApi.Authentication;
 public sealed class HostSessionAuthenticationHandler : AuthenticationHandler<AuthenticationSchemeOptions>
 {
     public const string SchemeName = "HostSession";
-    public const string SessionEidClaim = "authentication_session_eid";
+    public const string SessionEidClaim = AuthenticationSessionClaimTypes.SessionEid;
     public const string SessionTypeClaim = "authentication_session_type";
     public const string AccountRevisionClaim = "identity_account_revision";
     public const string TimeZoneIdClaim = AuthenticationSessionClaimTypes.TimeZoneId;
@@ -58,8 +58,8 @@ public sealed class HostSessionAuthenticationHandler : AuthenticationHandler<Aut
         var validation = await _registry.ValidateAsync(credential, Context.RequestAborted);
         if (validation.Status == AuthenticationSessionValidationStatus.StoreUnavailable)
         {
-            Context.Items[StoreUnavailableItem] = true;
-            return AuthenticateResult.Fail(AuthenticationSessionFailureCodes.StoreUnavailable);
+            Context.Items[StoreUnavailableItem] = validation.FailureCode ?? AuthenticationSessionFailureCodes.StoreUnavailable;
+            return AuthenticateResult.Fail(validation.FailureCode ?? AuthenticationSessionFailureCodes.StoreUnavailable);
         }
 
         if (validation is not { Status: AuthenticationSessionValidationStatus.Active, Session: not null })
@@ -107,13 +107,14 @@ public sealed class HostSessionAuthenticationHandler : AuthenticationHandler<Aut
         }
     }
 
+    // 暂不可验证的失败码由认证模块提供，保留Cookie并返回可重试的具体问题。
     protected override Task HandleChallengeAsync(AuthenticationProperties properties)
     {
         if (Context.Items.ContainsKey(StoreUnavailableItem))
         {
             return WriteProblemAsync(
                 StatusCodes.Status503ServiceUnavailable,
-                AuthenticationSessionFailureCodes.StoreUnavailable);
+                Context.Items[StoreUnavailableItem] as string ?? AuthenticationSessionFailureCodes.StoreUnavailable);
         }
 
         return WriteProblemAsync(StatusCodes.Status401Unauthorized, "AUTH_AUTHENTICATION_REQUIRED");
@@ -124,6 +125,7 @@ public sealed class HostSessionAuthenticationHandler : AuthenticationHandler<Aut
         return WriteProblemAsync(StatusCodes.Status403Forbidden, "AUTH_FORBIDDEN");
     }
 
+    // 通用认证反馈不解释模块准入规则。
     private Task WriteProblemAsync(int status, string code)
     {
         Context.Response.StatusCode = status;
@@ -132,6 +134,9 @@ public sealed class HostSessionAuthenticationHandler : AuthenticationHandler<Aut
         {
             status,
             code,
+            title = code,
+            detail = status == 503 ? "依赖数据暂时不可用，请稍后重试。" : "请重新登录或联系管理员。",
+            message = status == 503 ? "依赖数据暂时不可用，请稍后重试。" : "请重新登录或联系管理员。",
             traceId = Context.TraceIdentifier
         }));
     }

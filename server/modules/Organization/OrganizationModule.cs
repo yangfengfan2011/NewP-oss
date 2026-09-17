@@ -23,8 +23,10 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         services.AddStandardCrudKernel();
         services.AddSingleton<OrganizationCache>();
         services.AddSingleton<IOrganizationQuery, OrganizationQuery>();
+        services.AddScoped<ICP.Platform.Identity.Contracts.IIdentityAdmissionPolicy, OrganizationAdmissionPolicy>();
+        services.AddScoped<OrganizationAdmissionCommitParticipant>();
         foreach (var model in new[] { "Company", "Department", "Position", "Person" })
-            services.AddSingleton(sp => new PlatformCommitRegistration($"Organization/{model}", sp.GetRequiredService<OrganizationCache>()));
+            services.AddScoped(sp => new PlatformCommitRegistration($"Organization/{model}", sp.GetRequiredService<OrganizationAdmissionCommitParticipant>()));
         services.AddHostedService<OrganizationCacheInitializer>();
         services.AddScoped<IStandardCrudCreationRecorder, PersonCreationRecorder>();
         services.AddScoped<IStandardCrudUpdateRecorder, PersonUpdateRecorder>();

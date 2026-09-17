@@ -17,6 +17,13 @@ public sealed class EfAuthenticationSessionRepository : IAuthenticationSessionRe
 
     public void Add(AuthenticationSession session) => Sessions.Add(ToEntity(session));
 
+    /// <inheritdoc/>
+    public async ValueTask<AuthenticationSession?> FindByIdAsync(string sessionEid, CancellationToken cancellationToken = default)
+    {
+        var entity = await Sessions.AsNoTracking().FirstOrDefaultAsync(row => EF.Property<string>(row, "EID") == sessionEid, cancellationToken);
+        return entity is null ? null : Map(entity);
+    }
+
     public async ValueTask<AuthenticationSession?> FindByTokenHashAsync(
         string tokenHash,
         CancellationToken cancellationToken = default)
@@ -92,6 +99,28 @@ public sealed class EfAuthenticationSessionRepository : IAuthenticationSessionRe
             ApplyRevocation(entity, revokedAtUtc, reason, actorId);
         }
 
+        return entities.Count;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<int> RevokeAccountsAsync(IReadOnlyCollection<string> accountIds, DateTime revokedAtUtc,
+        string reason, string actorId, CancellationToken cancellationToken = default)
+    {
+        if (accountIds.Count == 0) return 0;
+        var ids = accountIds.Distinct(StringComparer.Ordinal).ToArray();
+        var query = Sessions.Where(row => ids.Contains(EF.Property<string>(row, "AccountEID"))
+            && EF.Property<DateTime?>(row, "RevokedAt") == null);
+        if (_dbContext.Database.IsRelational())
+        {
+            EnsureRelationalTransaction();
+            return await query.ExecuteUpdateAsync(setters => setters
+                .SetProperty(row => EF.Property<DateTime?>(row, "RevokedAt"), revokedAtUtc)
+                .SetProperty(row => EF.Property<string?>(row, "RevocationReason"), reason)
+                .SetProperty(row => EF.Property<string>(row, "UpdatedBy"), actorId)
+                .SetProperty(row => EF.Property<DateTime>(row, "UpdatedAt"), revokedAtUtc), cancellationToken);
+        }
+        var entities = await query.ToListAsync(cancellationToken);
+        foreach (var entity in entities) ApplyRevocation(entity, revokedAtUtc, reason, actorId);
         return entities.Count;
     }
 

@@ -1,10 +1,21 @@
 using ICP.Platform.Modules.Identity.Application;
+using ICP.Platform.Persistence.Transactions;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ICP.Platform.Modules.Identity.Controllers;
 
 internal static class IdentityControllerProblemDetails
 {
+    // 安全命令也依赖已登记协调；将缓存故障与确定无效的业务输入分开，保留提交事实。
+    internal static ObjectResult FromCacheException(ControllerBase controller, PlatformCacheUnavailableException exception)
+    {
+        var result = Create(controller, 503, exception.DatabaseCommitted ? "Persistence.CommittedCacheUnavailable" : "Persistence.CacheUnavailable");
+        var problem = (ProblemDetails)result.Value!;
+        problem.Detail = exception.Message;
+        problem.Extensions["message"] = exception.Message;
+        return result;
+    }
+
     internal static ObjectResult Create(ControllerBase controller, int status, string code)
     {
         var problem = new ProblemDetails { Status = status, Title = code };

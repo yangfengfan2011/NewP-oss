@@ -33,14 +33,17 @@ public sealed class AuthenticationModule : ModuleCapsuleBindingBase
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<IAuthenticationSessionCredentialGenerator, DefaultAuthenticationSessionCredentialGenerator>();
         services.AddScoped<IAuthenticationSessionRepository, EfAuthenticationSessionRepository>();
-        services.AddScoped<IAuthenticationSessionRegistry>(serviceProvider =>
+        services.AddScoped<AuthenticationSessionRegistry>(serviceProvider =>
             new AuthenticationSessionRegistry(
                 serviceProvider.GetRequiredService<IAuthenticationSessionRepository>(),
                 serviceProvider.GetRequiredService<IIdentityAccountDirectory>(),
                 serviceProvider.GetRequiredService<IPlatformObjectIdGenerator>(),
                 serviceProvider.GetRequiredService<IAuthenticationSessionCredentialGenerator>(),
                 serviceProvider.GetRequiredService<TimeProvider>(),
-                serviceProvider.GetRequiredService<IOptions<AuthenticationSessionOptions>>().Value));
+                serviceProvider.GetRequiredService<IOptions<AuthenticationSessionOptions>>().Value,
+                serviceProvider.GetServices<IIdentityAdmissionPolicy>()));
+        services.AddScoped<IAuthenticationSessionRegistry>(sp => sp.GetRequiredService<AuthenticationSessionRegistry>());
+        services.AddScoped<IAuthenticationSessionBatchRevoker>(sp => sp.GetRequiredService<AuthenticationSessionRegistry>());
         services.AddScoped<IAuthenticationSessionPurgeService>(serviceProvider =>
             new AuthenticationSessionPurgeService(
                 serviceProvider.GetRequiredService<IAuthenticationSessionRepository>(),

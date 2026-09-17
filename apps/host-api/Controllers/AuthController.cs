@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using ICP.Platform.Persistence.Transactions;
 using ICP.Platform.Authentication.Contracts;
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.HostApi.Antiforgery;
@@ -42,6 +43,7 @@ public sealed class AuthController : ControllerBase
     private readonly PasswordVerificationGate _passwordVerificationGate;
     private readonly ILogger<AuthController> _logger;
     private readonly IFeatureGrantProjection? _featureGrants;
+    private readonly IIdentityAdmissionPolicy[] _admissionPolicies;
 
     // 认证会话拥有主体加载；功能授权投影只参与登录与当前用户响应。
     public AuthController(
@@ -51,7 +53,8 @@ public sealed class AuthController : ControllerBase
         IHostAuthenticationCookie cookie,
         PasswordVerificationGate passwordVerificationGate,
         ILogger<AuthController> logger,
-        IFeatureGrantProjection? featureGrants = null)
+        IFeatureGrantProjection? featureGrants = null,
+        IEnumerable<IIdentityAdmissionPolicy>? admissionPolicies = null)
     {
         _credentialAuthenticator = credentialAuthenticator;
         _sessionRegistry = sessionRegistry;
@@ -60,6 +63,7 @@ public sealed class AuthController : ControllerBase
         _passwordVerificationGate = passwordVerificationGate;
         _logger = logger;
         _featureGrants = featureGrants;
+        _admissionPolicies = admissionPolicies?.ToArray() ?? [];
     }
 
     [HttpPost("login")]
@@ -101,22 +105,40 @@ public sealed class AuthController : ControllerBase
         try
         {
             issuance = await _transactionExecutor.ExecuteAsync(
-                token => _sessionRegistry.RegisterAsync(new AuthenticationSessionRegistration
+                _admissionPolicies.SelectMany(policy => policy.GetCoordinationModels(authentication.Account)).Distinct().ToArray(),
+                async token =>
                 {
-                    AccountEid = authentication.Account.AccountEid,
-                    Type = authentication.IsTemporary
-                        ? AuthenticationSessionType.Restricted
-                        : AuthenticationSessionType.Regular,
-                    ActorId = authentication.Account.AccountEid,
-                    TimeZoneId = request.TimeZoneId
-                }, token),
-                cancellationToken);
+                    // 协调权取得后重新验证凭据，防止等待期间账号停用或凭据轮换后仍签发。
+                    var current = await _credentialAuthenticator.AuthenticateAsync(request.ECODE, request.Password, token);
+                    if (current.Status == LocalCredentialAuthenticationStatus.StoreUnavailable)
+                        throw new AuthenticationSessionException(AuthenticationSessionFailureCodes.StoreUnavailable);
+                    if (current is not { Status: LocalCredentialAuthenticationStatus.Succeeded, Account: not null }
+                        || current.Account.Revision != authentication.Account.Revision)
+                        throw new AuthenticationSessionException(AuthenticationSessionFailureCodes.AdmissionDenied);
+                    return await _sessionRegistry.RegisterAsync(new AuthenticationSessionRegistration
+                    {
+                        AccountEid = authentication.Account.AccountEid,
+                        Type = authentication.IsTemporary
+                            ? AuthenticationSessionType.Restricted
+                            : AuthenticationSessionType.Regular,
+                        ActorId = authentication.Account.AccountEid,
+                        TimeZoneId = request.TimeZoneId
+                    }, token);
+                }, cancellationToken);
         }
         catch (AuthenticationSessionException exception)
             when (exception.FailureCode == AuthenticationSessionFailureCodes.InvalidTimeZone)
         {
             LogLoginFailure(_logger, "InvalidTimeZone", null);
             return ProblemResult(StatusCodes.Status400BadRequest, exception.FailureCode);
+        }
+        catch (PlatformCacheUnavailableException exception)
+        {
+            return ProblemResult(503, exception.DatabaseCommitted ? "Persistence.CommittedCacheUnavailable" : "Persistence.CacheUnavailable", exception.Message);
+        }
+        catch (AuthenticationSessionException exception)
+        {
+            return ProblemResult(exception.FailureCode is AuthenticationSessionFailureCodes.StoreUnavailable or AuthenticationSessionFailureCodes.AdmissionUnavailable ? 503 : 401, exception.FailureCode);
         }
         _cookie.Append(HttpContext, issuance.Credential, issuance.Session.ExpiresAtUtc);
 
@@ -197,12 +219,14 @@ public sealed class AuthController : ControllerBase
             timeZoneId) { FeaturePositions = features });
     }
 
-    private ObjectResult ProblemResult(int status, string code)
+    // 所有登录故障返回统一问题契约；基础设施故障不删除已有 Cookie。
+    private ObjectResult ProblemResult(int status, string code, string? detail = null)
     {
         var problem = new ProblemDetails
         {
             Status = status,
-            Title = code
+            Title = code,
+            Detail = detail
         };
         problem.Extensions["code"] = code;
         problem.Extensions["traceId"] = HttpContext.TraceIdentifier;

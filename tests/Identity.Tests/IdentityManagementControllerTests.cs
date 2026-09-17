@@ -220,6 +220,7 @@ public sealed class IdentityManagementControllerTests
         Assert.DoesNotContain("new-session-secret", JsonSerializer.Serialize(ok.Value), StringComparison.Ordinal);
         Assert.Equal("account-1", accounts.LastPasswordChange?.AccountEid);
         Assert.Equal("Asia/Taipei", accounts.LastPasswordChange?.TimeZoneId);
+        Assert.Equal("trusted-session", accounts.LastPasswordChange?.SessionEid);
     }
 
     [Fact]
@@ -348,6 +349,7 @@ public sealed class IdentityManagementControllerTests
                 new Claim(ClaimTypes.NameIdentifier, "account-1"),
                 new Claim(ClaimTypes.Name, "alice"),
                 new Claim(AuthenticationSessionClaimTypes.TimeZoneId, "Asia/Taipei"),
+                new Claim(AuthenticationSessionClaimTypes.SessionEid, "trusted-session"),
                 new Claim(ClaimTypes.Role, "LocalAdmin")
             ], "test"))
         };

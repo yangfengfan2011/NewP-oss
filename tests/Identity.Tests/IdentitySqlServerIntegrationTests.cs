@@ -26,6 +26,13 @@ namespace ICP.Platform.Identity.Tests;
 
 public sealed class IdentitySqlServerIntegrationTests
 {
+    // 本fixture仅证明会话或跨owner事务；完整组织准入由Host真实业务fixture另行证明。
+    internal sealed class IsolatedAdmissionPolicy : IIdentityAdmissionPolicy
+    {
+        public IReadOnlyCollection<string> GetCoordinationModels(IdentityAccountSnapshot account) => [];
+        public ValueTask<bool> IsAllowedAsync(IdentityAccountSnapshot account, CancellationToken cancellationToken = default) => ValueTask.FromResult(true);
+    }
+
     private const string RunEnvironmentVariable = "NEWP_RUN_IDENTITY_SQLSERVER_INTEGRATION";
     private const string AdminConnectionEnvironmentVariable = "NEWP_IDENTITY_SQLSERVER_ADMIN_CONNECTION";
 
@@ -265,7 +272,7 @@ public sealed class IdentitySqlServerIntegrationTests
                 var repository = new EfIdentityRepository(setup);
                 var transaction = new EfPlatformTransactionExecutor(setup);
                 var account = AccountAtRevision(1, "Alice", new DateTime(2026, 8, 10, 8, 0, 0, DateTimeKind.Utc));
-                oldSession = await transaction.ExecuteAsync(async token =>
+                await transaction.ExecuteAsync(_ =>
                 {
                     repository.AddAccount(account);
                     repository.AddCredential(new LocalCredential
@@ -280,7 +287,10 @@ public sealed class IdentitySqlServerIntegrationTests
                         UpdatedAt = account.CreatedAt
                     });
                     repository.AddSecurityEvent(Event("IdentitySecurityEvent_1", "AccountCreated", account.CreatedAt));
-                    return await CreateSessionRegistry(setup, repository).RegisterAsync(
+                    return ValueTask.FromResult(true);
+                });
+                // 先完成账号准备，再让会话注册表读取真实存在的账号事实。
+                oldSession = await transaction.ExecuteAsync(token => CreateSessionRegistry(setup, repository).RegisterAsync(
                         new AuthenticationSessionRegistration
                         {
                             AccountEid = account.EID,
@@ -288,8 +298,7 @@ public sealed class IdentitySqlServerIntegrationTests
                             ActorId = account.EID,
                             TimeZoneId = "Asia/Taipei"
                         },
-                        token);
-                });
+                        token));
             }
 
             IdentityPasswordChangeResult changed;
@@ -304,7 +313,7 @@ public sealed class IdentitySqlServerIntegrationTests
                         "replacement-secret",
                         1,
                         new IdentityActorContext("User_1", IdentitySecurityActorKind.IdentityAccount, "trace-change"),
-                        "Asia/Taipei"));
+                        "Asia/Taipei", oldSession.Session.SessionEid));
             }
 
             await using (var verification = CreateIdentityAndAuthenticationContext(applicationConnectionString))
@@ -341,7 +350,7 @@ public sealed class IdentitySqlServerIntegrationTests
                         "second-replacement",
                         2,
                         new IdentityActorContext("User_1", IdentitySecurityActorKind.IdentityAccount, "trace-rollback"),
-                        "Asia/Taipei")).AsTask());
+                        "Asia/Taipei", changed.Session.Session.SessionEid)).AsTask());
             }
 
             await using (var rollbackVerification = CreateIdentityAndAuthenticationContext(applicationConnectionString))
@@ -402,7 +411,7 @@ public sealed class IdentitySqlServerIntegrationTests
             new GuidObjectIdGenerator(),
             new DefaultAuthenticationSessionCredentialGenerator(),
             TimeProvider.System,
-            new AuthenticationSessionOptions());
+            new AuthenticationSessionOptions(), [new IsolatedAdmissionPolicy()]);
 
     private static IdentityAccountApplicationService CreateAccountService(
         EfPlatformDbContext context,
@@ -469,6 +478,7 @@ public sealed class IdentitySqlServerIntegrationTests
 
     private sealed class FailAfterRegisterSessionRegistry(IAuthenticationSessionRegistry inner) : IAuthenticationSessionRegistry
     {
+        public ValueTask<bool> IsActiveAsync(string sessionEid, string accountEid, CancellationToken cancellationToken = default) => inner.IsActiveAsync(sessionEid, accountEid, cancellationToken);
         public async ValueTask<AuthenticationSessionIssuance> RegisterAsync(
             AuthenticationSessionRegistration registration,
             CancellationToken cancellationToken = default)

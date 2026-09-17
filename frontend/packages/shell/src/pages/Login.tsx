@@ -17,7 +17,12 @@ export default function Login() {
       window.location.assign('/');
     } catch (loginError) {
       console.error('Login failed:', loginError);
-      setError('登录失败，请检查用户名和密码。');
+      const code = loginError instanceof Error ? loginError.message : '';
+      setError(code === 'AUTH_ADMISSION_DENIED'
+        ? '账号当前不满足登录条件，请联系管理员确认账号和业务身份。'
+        : ['Persistence.CacheUnavailable', 'AUTH_SESSION_STORE_UNAVAILABLE', 'AUTH_ADMISSION_UNAVAILABLE'].includes(code)
+          ? '登录服务暂时不可用，请稍后重试。'
+          : '登录失败，请检查用户名和密码。');
     } finally {
       setLoading(false);
     }

@@ -1,3 +1,4 @@
+using ICP.Platform.Persistence.Transactions;
 using System.Security.Claims;
 using System.ComponentModel.DataAnnotations;
 using ICP.Platform.Authorization.Http;
@@ -48,6 +49,10 @@ public sealed class IdentityAccountsController : ControllerBase
                 new IdentityCredentialIssuanceResponse(
                     IdentityAccountResponse.From(result.Account),
                     result.TemporaryCredential));
+        }
+        catch (PlatformCacheUnavailableException exception)
+        {
+            return IdentityControllerProblemDetails.FromCacheException(this, exception);
         }
         catch (IdentityApplicationException exception)
         {
@@ -137,6 +142,10 @@ public sealed class IdentityAccountsController : ControllerBase
                 cancellationToken);
             return Ok(IdentityAccountResponse.From(account));
         }
+        catch (PlatformCacheUnavailableException exception)
+        {
+            return IdentityControllerProblemDetails.FromCacheException(this, exception);
+        }
         catch (IdentityApplicationException exception)
         {
             return ApplicationProblem(exception);
@@ -162,6 +171,10 @@ public sealed class IdentityAccountsController : ControllerBase
                     Actor()),
                 cancellationToken);
             return Ok(IdentityAccountResponse.From(account));
+        }
+        catch (PlatformCacheUnavailableException exception)
+        {
+            return IdentityControllerProblemDetails.FromCacheException(this, exception);
         }
         catch (IdentityApplicationException exception)
         {
@@ -209,6 +222,10 @@ public sealed class IdentityAccountsController : ControllerBase
                 cancellationToken);
             return Ok(IdentityAccountResponse.From(account));
         }
+        catch (PlatformCacheUnavailableException exception)
+        {
+            return IdentityControllerProblemDetails.FromCacheException(this, exception);
+        }
         catch (IdentityApplicationException exception)
         {
             return ApplicationProblem(exception);
@@ -233,6 +250,10 @@ public sealed class IdentityAccountsController : ControllerBase
             return Ok(new IdentityCredentialIssuanceResponse(
                 IdentityAccountResponse.From(result.Account),
                 result.TemporaryCredential));
+        }
+        catch (PlatformCacheUnavailableException exception)
+        {
+            return IdentityControllerProblemDetails.FromCacheException(this, exception);
         }
         catch (IdentityApplicationException exception)
         {

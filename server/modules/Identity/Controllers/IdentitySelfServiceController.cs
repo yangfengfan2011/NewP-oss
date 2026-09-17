@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using ICP.Platform.Persistence.Transactions;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using ICP.Platform.Authentication.Contracts;
@@ -33,7 +34,8 @@ public sealed class IdentitySelfServiceController : ControllerBase
     {
         var accountEid = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var timeZoneId = User.FindFirstValue(AuthenticationSessionClaimTypes.TimeZoneId);
-        if (string.IsNullOrWhiteSpace(accountEid) || string.IsNullOrWhiteSpace(timeZoneId))
+        var sessionEid = User.FindFirstValue(AuthenticationSessionClaimTypes.SessionEid);
+        if (string.IsNullOrWhiteSpace(accountEid) || string.IsNullOrWhiteSpace(timeZoneId) || string.IsNullOrWhiteSpace(sessionEid))
         {
             return ProblemResult(StatusCodes.Status401Unauthorized, "AUTH_SESSION_INVALID");
         }
@@ -50,13 +52,23 @@ public sealed class IdentitySelfServiceController : ControllerBase
                         accountEid,
                         IdentitySecurityActorKind.IdentityAccount,
                         HttpContext.TraceIdentifier),
-                    timeZoneId),
+                    timeZoneId,
+                    sessionEid),
                 cancellationToken);
             Response.Headers.CacheControl = "no-store";
             return Ok(new IdentityPasswordChangeResponse(
                 IdentityAccountResponse.From(result.Account),
                 result.Session.Credential,
                 result.Session.Session.ExpiresAtUtc));
+        }
+        catch (AuthenticationSessionException exception) when (exception.FailureCode is AuthenticationSessionFailureCodes.AdmissionDenied or AuthenticationSessionFailureCodes.AdmissionUnavailable)
+        {
+            return ProblemResult(exception.FailureCode == AuthenticationSessionFailureCodes.AdmissionUnavailable
+                ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status401Unauthorized, exception.FailureCode);
+        }
+        catch (PlatformCacheUnavailableException exception)
+        {
+            return IdentityControllerProblemDetails.FromCacheException(this, exception);
         }
         catch (IdentityApplicationException exception)
         {

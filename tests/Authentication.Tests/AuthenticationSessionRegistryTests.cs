@@ -19,6 +19,29 @@ namespace ICP.Platform.Authentication.Tests;
 public sealed class AuthenticationSessionRegistryTests
 {
     [Fact]
+    public async Task MissingAdmissionOwner_DoesNotInvalidateExistingSessionOrIssueAnOrdinarySession()
+    {
+        await using var context = CreateContext();
+        var admitted = CreateRegistry(context);
+        var issuance = await new EfPlatformTransactionExecutor(context).ExecuteAsync(token => IssueAsync(admitted, cancellationToken: token));
+        var missing = CreateRegistry(context, policies: []);
+        var unavailable = await missing.ValidateAsync(issuance.Credential);
+        Assert.Equal(AuthenticationSessionValidationStatus.StoreUnavailable, unavailable.Status);
+        Assert.Equal(AuthenticationSessionFailureCodes.AdmissionUnavailable, unavailable.FailureCode);
+        var failure = await Assert.ThrowsAsync<AuthenticationSessionException>(() =>
+            new EfPlatformTransactionExecutor(context).ExecuteAsync(token => IssueAsync(missing, cancellationToken: token)).AsTask());
+        Assert.Equal(AuthenticationSessionFailureCodes.AdmissionUnavailable, failure.FailureCode);
+        Assert.Equal(AuthenticationSessionValidationStatus.Active, (await admitted.ValidateAsync(issuance.Credential)).Status);
+        Assert.Single(await context.Set<Dictionary<string, object?>>(context.ResolveModelKey("Authentication/AuthenticationSession")).ToListAsync());
+    }
+    // 本fixture仅证明会话或跨owner事务；完整组织准入由Host真实业务fixture另行证明。
+    internal sealed class IsolatedAdmissionPolicy : IIdentityAdmissionPolicy
+    {
+        public IReadOnlyCollection<string> GetCoordinationModels(IdentityAccountSnapshot account) => [];
+        public ValueTask<bool> IsAllowedAsync(IdentityAccountSnapshot account, CancellationToken cancellationToken = default) => ValueTask.FromResult(true);
+    }
+
+    [Fact]
     public async Task RegisterAsync_IssuesOneTime256BitCredentialAndPersistsOnlyItsDigest()
     {
         var now = new DateTime(2026, 8, 10, 8, 0, 0, DateTimeKind.Utc);
@@ -30,7 +53,7 @@ public sealed class AuthenticationSessionRegistryTests
             new GuidObjectIdGenerator(),
             new DefaultAuthenticationSessionCredentialGenerator(),
             new FixedTimeProvider(now),
-            new AuthenticationSessionOptions());
+            new AuthenticationSessionOptions(), [new IsolatedAdmissionPolicy()]);
 
         var issuance = await new EfPlatformTransactionExecutor(context).ExecuteAsync(
             token => registry.RegisterAsync(new AuthenticationSessionRegistration
@@ -150,10 +173,15 @@ public sealed class AuthenticationSessionRegistryTests
         });
         var issuance = await new EfPlatformTransactionExecutor(context).ExecuteAsync(token => IssueAsync(registry, cancellationToken: token));
 
+        Assert.False(await registry.IsActiveAsync(issuance.Session.SessionEid, "other-account"));
+        Assert.False(await registry.IsActiveAsync("unknown", "User_1"));
+        Assert.False(await registry.IsActiveAsync("", "User_1"));
         time.UtcNow = now.AddMinutes(4).AddSeconds(59);
+        Assert.True(await registry.IsActiveAsync(issuance.Session.SessionEid, "User_1"));
         Assert.Equal(AuthenticationSessionValidationStatus.Active, (await registry.ValidateAsync(issuance.Credential)).Status);
         Assert.Equal(now.AddMinutes(5), issuance.Session.ExpiresAtUtc);
         time.UtcNow = now.AddMinutes(5);
+        Assert.False(await registry.IsActiveAsync(issuance.Session.SessionEid, "User_1"));
         Assert.Equal(AuthenticationSessionValidationStatus.Expired, (await registry.ValidateAsync(issuance.Credential)).Status);
         Assert.Equal(now.AddMinutes(5), issuance.Session.ExpiresAtUtc);
     }
@@ -165,7 +193,7 @@ public sealed class AuthenticationSessionRegistryTests
         var disabledRegistry = CreateRegistry(
             context,
             accountDirectory: new FixedAccountDirectory(IdentityAccountStatus.Disabled));
-        var issuance = await new EfPlatformTransactionExecutor(context).ExecuteAsync(token => IssueAsync(disabledRegistry, cancellationToken: token));
+        var issuance = await new EfPlatformTransactionExecutor(context).ExecuteAsync(token => IssueAsync(CreateRegistry(context), cancellationToken: token));
 
         Assert.Equal(AuthenticationSessionValidationStatus.Unknown, (await disabledRegistry.ValidateAsync("unknown")).Status);
         Assert.Equal(AuthenticationSessionValidationStatus.AccountUnavailable, (await disabledRegistry.ValidateAsync(issuance.Credential)).Status);
@@ -191,6 +219,7 @@ public sealed class AuthenticationSessionRegistryTests
             Reason = "logout",
             ActorId = "User_1"
         }, token)));
+        Assert.False(await registry.IsActiveAsync(first.Session.SessionEid, "User_1"));
         var revoked = await registry.ValidateAsync(first.Credential);
         Assert.Equal(AuthenticationSessionValidationStatus.Revoked, revoked.Status);
         Assert.Equal("logout", revoked.Session!.RevocationReason);
@@ -247,13 +276,14 @@ public sealed class AuthenticationSessionRegistryTests
         EfPlatformDbContext context,
         IIdentityAccountDirectory? accountDirectory = null,
         TimeProvider? timeProvider = null,
-        AuthenticationSessionOptions? options = null) => new(
+        AuthenticationSessionOptions? options = null,
+        IIdentityAdmissionPolicy[]? policies = null) => new(
             new EfAuthenticationSessionRepository(context),
             accountDirectory ?? new FixedAccountDirectory(IdentityAccountStatus.Enabled),
             new GuidObjectIdGenerator(),
             new DefaultAuthenticationSessionCredentialGenerator(),
             timeProvider ?? new FixedTimeProvider(new DateTime(2026, 8, 10, 8, 0, 0, DateTimeKind.Utc)),
-            options ?? new AuthenticationSessionOptions());
+            options ?? new AuthenticationSessionOptions(), policies ?? [new IsolatedAdmissionPolicy()]);
 
     private static ValueTask<AuthenticationSessionIssuance> IssueAsync(
         IAuthenticationSessionRegistry registry,

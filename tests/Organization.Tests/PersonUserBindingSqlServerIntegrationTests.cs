@@ -29,6 +29,13 @@ namespace ICP.Platform.Modules.Organization.Tests;
 
 public sealed class PersonUserBindingSqlServerIntegrationTests
 {
+    // 本fixture仅证明会话或跨owner事务；完整组织准入由Host真实业务fixture另行证明。
+    internal sealed class IsolatedAdmissionPolicy : IIdentityAdmissionPolicy
+    {
+        public IReadOnlyCollection<string> GetCoordinationModels(IdentityAccountSnapshot account) => [];
+        public ValueTask<bool> IsAllowedAsync(IdentityAccountSnapshot account, CancellationToken cancellationToken = default) => ValueTask.FromResult(true);
+    }
+
     private const string RunEnvironmentVariable = "NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION";
     private const string AdminConnectionEnvironmentVariable = "NEWP_ORGANIZATION_SQLSERVER_ADMIN_CONNECTION";
 
@@ -569,7 +576,7 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
         new PlatformObjectIdGenerator(),
         new DefaultAuthenticationSessionCredentialGenerator(),
         TimeProvider.System,
-        new AuthenticationSessionOptions());
+        new AuthenticationSessionOptions(), [new IsolatedAdmissionPolicy()]);
 
     private sealed class UnusedSessionRegistry : IAuthenticationSessionRegistry
     {

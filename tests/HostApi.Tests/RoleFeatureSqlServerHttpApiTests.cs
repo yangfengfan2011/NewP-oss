@@ -59,6 +59,8 @@ public sealed class RoleFeatureSqlServerHttpApiTests
         var managerId = manager.GetProperty("account").GetProperty("eid").GetString();
         var targetId = target.GetProperty("account").GetProperty("eid").GetString();
         await ExpectAsync(FeatureHttpTestRequests.SendAsync(admin, member, HttpMethod.Put, $"/api/authorization/users/{managerId}/roles", new { RoleCodes = new[] { "ManagerA", "ManagerB" } }), HttpStatusCode.NoContent);
+        await HttpTestActors.PrepareOrganizationAsync(admin, http, manager.GetProperty("account"));
+        await HttpTestActors.PrepareOrganizationAsync(admin, http, target.GetProperty("account"));
         using var ordinary = await fixture.LoginAsync("member-manager", manager.GetProperty("temporaryCredential").GetString()!);
         using var targetClient = await fixture.LoginAsync("member-target", target.GetProperty("temporaryCredential").GetString()!);
         var targetRoute = $"/api/authorization/users/{targetId}/roles";

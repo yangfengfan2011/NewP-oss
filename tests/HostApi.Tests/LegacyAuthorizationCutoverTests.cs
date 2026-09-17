@@ -81,7 +81,7 @@ public sealed class LegacyAuthorizationCutoverTests
             "/api/organization/companies", new { ECODE = "CUT", ENAME = "保留公司", SortOrder = "0100" });
         var department = await FeatureHttpTestRequests.CreateAsync(admin, http.Organization("departments", "create", "list.pageActions"),
             "/api/organization/departments", new { ECODE = "CUT-D", ENAME = "保留部门", CompanyId = company.GetProperty("fields").GetProperty("EID").GetString(), SortOrder = "0100" });
-        await FeatureHttpTestRequests.CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"),
+        var person = await FeatureHttpTestRequests.CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"),
             "/api/organization/persons", new { PersonNo = "CUT-P", ENAME = "保留人员", CompanyId = company.GetProperty("fields").GetProperty("EID").GetString(),
                 DepartmentId = department.GetProperty("fields").GetProperty("EID").GetString(), EmploymentStatus = "Active", IsEnabled = true });
         var account = await FeatureHttpTestRequests.CreateAsync(admin, http.Identity("create"), "/api/identity/accounts", new { ECODE = "cutover-user", ENAME = "切换用户" });
@@ -89,6 +89,9 @@ public sealed class LegacyAuthorizationCutoverTests
         using (var assigned = await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put,
             $"/api/authorization/users/{userId}/roles", new { RoleCodes = new[] { "cutover-role" } }))
             Assert.Equal(HttpStatusCode.NoContent, assigned.StatusCode);
+        using (var binding = await FeatureHttpTestRequests.SendAsync(admin, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
+            $"/api/organization/persons/{BusinessAuditSqlServerHttpApiTests.Id(person)}/user-binding", new { accountEid = userId, expectedRevision = account.GetProperty("account").GetProperty("revision").GetInt64(), reason = "准备切换主体" }))
+            Assert.Equal(HttpStatusCode.OK, binding.StatusCode);
         var password = account.GetProperty("temporaryCredential").GetString()!;
         var client = await fixture.LoginAsync("cutover-user", password);
         try

@@ -127,6 +127,12 @@ public static class AuthenticationSessionFailureCodes
     /// <summary>会话注册表或账号目录当前不可用。</summary>
     public const string StoreUnavailable = "AUTH_SESSION_STORE_UNAVAILABLE";
 
+    /// <summary>账号当前不满足已登记的登录资格。</summary>
+    public const string AdmissionDenied = "AUTH_ADMISSION_DENIED";
+
+    /// <summary>普通账号的准入拥有者尚未装配，不能确认资格。</summary>
+    public const string AdmissionUnavailable = "AUTH_ADMISSION_UNAVAILABLE";
+
     /// <summary>登录提交或部署配置的时区不是有效 IANA 标识。</summary>
     public const string InvalidTimeZone = "AUTH_SESSION_TIME_ZONE_INVALID";
 }
@@ -134,6 +140,9 @@ public static class AuthenticationSessionFailureCodes
 /// <summary>Authentication 会话向已验证主体投影的稳定 claim 名。</summary>
 public static class AuthenticationSessionClaimTypes
 {
+    /// <summary>Host验证令牌后投影的服务端会话标识，不接受客户端业务payload提供。 </summary>
+    public const string SessionEid = "authentication_session_eid";
+
     /// <summary>当前认证会话在登录时冻结的规范 IANA 时区。</summary>
     public const string TimeZoneId = "authentication_session_time_zone_id";
 }
@@ -190,6 +199,10 @@ public sealed record AccountAuthenticationSessionsRevocation
 /// </summary>
 public interface IAuthenticationSessionRegistry
 {
+    /// <summary>在会话轮换的协调事务内确认服务端来源会话属于目标账号且未撤销、未过期；标识本身不是认证凭据。</summary>
+    ValueTask<bool> IsActiveAsync(string sessionEid, string accountEid, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Source session validation is required for rotation.");
+
     /// <summary>
     /// 生成一次性 256-bit 凭据，并只登记其不可逆摘要。
     /// </summary>

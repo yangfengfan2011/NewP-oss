@@ -1,3 +1,4 @@
+using ICP.Platform.Persistence.Transactions;
 using System.Security.Cryptography;
 using System.Text;
 using System.Data.Common;
@@ -9,7 +10,7 @@ using ICP.Platform.Modules.Authentication.Repositories;
 
 namespace ICP.Platform.Modules.Authentication.Application;
 
-public sealed class AuthenticationSessionRegistry : IAuthenticationSessionRegistry
+public sealed class AuthenticationSessionRegistry : IAuthenticationSessionRegistry, IAuthenticationSessionBatchRevoker
 {
     private readonly IAuthenticationSessionRepository _repository;
     private readonly IIdentityAccountDirectory _accountDirectory;
@@ -17,14 +18,17 @@ public sealed class AuthenticationSessionRegistry : IAuthenticationSessionRegist
     private readonly IAuthenticationSessionCredentialGenerator _credentialGenerator;
     private readonly TimeProvider _timeProvider;
     private readonly AuthenticationSessionOptions _options;
+    private readonly IIdentityAdmissionPolicy[] _admissionPolicies;
 
+    // 组合会话存储及模块准入规则，认证模块不解释组织事实。
     public AuthenticationSessionRegistry(
         IAuthenticationSessionRepository repository,
         IIdentityAccountDirectory accountDirectory,
         IPlatformObjectIdGenerator objectIdGenerator,
         IAuthenticationSessionCredentialGenerator credentialGenerator,
         TimeProvider timeProvider,
-        AuthenticationSessionOptions options)
+        AuthenticationSessionOptions options,
+        IEnumerable<IIdentityAdmissionPolicy>? admissionPolicies = null)
     {
         _repository = repository;
         _accountDirectory = accountDirectory;
@@ -32,10 +36,20 @@ public sealed class AuthenticationSessionRegistry : IAuthenticationSessionRegist
         _credentialGenerator = credentialGenerator;
         _timeProvider = timeProvider;
         _options = options;
+        _admissionPolicies = admissionPolicies?.ToArray() ?? [];
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> IsActiveAsync(string sessionEid, string accountEid, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(sessionEid) || string.IsNullOrWhiteSpace(accountEid)) return false;
+        var session = await _repository.FindByIdAsync(sessionEid, cancellationToken);
+        return session is not null && session.AccountEID == accountEid && session.RevokedAt is null
+            && _timeProvider.GetUtcNow().UtcDateTime < session.ExpiresAt;
     }
 
     // 在生成凭据和登记实体之前解析最终会话时区，确保非法输入没有持久化副作用。
-    public ValueTask<AuthenticationSessionIssuance> RegisterAsync(
+    public async ValueTask<AuthenticationSessionIssuance> RegisterAsync(
         AuthenticationSessionRegistration registration,
         CancellationToken cancellationToken = default)
     {
@@ -55,6 +69,15 @@ public sealed class AuthenticationSessionRegistry : IAuthenticationSessionRegist
             registration.TimeZoneId,
             _options.DefaultTimeZoneId);
 
+        var account = await _accountDirectory.FindAsync(registration.AccountEid, cancellationToken);
+        if (account is not { Status: IdentityAccountStatus.Enabled } || account.PersonnelDisableHold)
+            throw new AuthenticationSessionException(AuthenticationSessionFailureCodes.AdmissionDenied);
+        if (!account.IsLocalAdministrator && _admissionPolicies.Length == 0)
+            throw new AuthenticationSessionException(AuthenticationSessionFailureCodes.AdmissionUnavailable);
+        foreach (var policy in _admissionPolicies)
+            if (!await policy.IsAllowedAsync(account, cancellationToken))
+                throw new AuthenticationSessionException(AuthenticationSessionFailureCodes.AdmissionDenied);
+
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         var credential = _credentialGenerator.Issue();
         EnsureCredentialIs256Bit(credential);
@@ -72,13 +95,14 @@ public sealed class AuthenticationSessionRegistry : IAuthenticationSessionRegist
             UpdatedAt = now
         };
         _repository.Add(session);
-        return ValueTask.FromResult(new AuthenticationSessionIssuance
+        return new AuthenticationSessionIssuance
         {
             Credential = credential,
             Session = ToSnapshot(session)
-        });
+        };
     }
 
+    // 每次验证当前准入；临时不可验证保留凭据，确定失效才拒绝会话。
     public async ValueTask<AuthenticationSessionValidation> ValidateAsync(
         string credential,
         CancellationToken cancellationToken = default)
@@ -107,6 +131,21 @@ public sealed class AuthenticationSessionRegistry : IAuthenticationSessionRegist
             }
 
             var account = await _accountDirectory.FindAsync(session.AccountEID, cancellationToken);
+            if (account is { Status: IdentityAccountStatus.Enabled, IsLocalAdministrator: false } && _admissionPolicies.Length == 0)
+                return new AuthenticationSessionValidation { Status = AuthenticationSessionValidationStatus.StoreUnavailable,
+                    FailureCode = AuthenticationSessionFailureCodes.AdmissionUnavailable };
+            if (account is { Status: IdentityAccountStatus.Enabled })
+                foreach (var policy in _admissionPolicies)
+                    if (!await policy.IsAllowedAsync(account, cancellationToken))
+                        return Result(AuthenticationSessionValidationStatus.AccountUnavailable, session);
+            // 准入读取可能等待发布；重新确认会话，封闭停用再恢复期间旧会话事实的复活窗口。
+            if (_admissionPolicies.Length != 0)
+            {
+                var current = await _repository.FindByTokenHashAsync(ComputeHash(credential), cancellationToken);
+                if (current is null) return Result(AuthenticationSessionValidationStatus.Unknown);
+                if (current.RevokedAt is not null) return Result(AuthenticationSessionValidationStatus.Revoked, current);
+                if (_timeProvider.GetUtcNow().UtcDateTime >= current.ExpiresAt) return Result(AuthenticationSessionValidationStatus.Expired, current);
+            }
             return account is { Status: IdentityAccountStatus.Enabled }
                 ? Result(AuthenticationSessionValidationStatus.Active, session)
                 : Result(AuthenticationSessionValidationStatus.AccountUnavailable, session);
@@ -115,12 +154,12 @@ public sealed class AuthenticationSessionRegistry : IAuthenticationSessionRegist
         {
             throw;
         }
-        catch (Exception exception) when (exception is DbException or TimeoutException)
+        catch (Exception exception) when (exception is DbException or TimeoutException or PlatformCacheUnavailableException)
         {
             return new AuthenticationSessionValidation
             {
                 Status = AuthenticationSessionValidationStatus.StoreUnavailable,
-                FailureCode = AuthenticationSessionFailureCodes.StoreUnavailable
+                FailureCode = exception is PlatformCacheUnavailableException ? "Persistence.CacheUnavailable" : AuthenticationSessionFailureCodes.StoreUnavailable
             };
         }
     }
@@ -155,6 +194,16 @@ public sealed class AuthenticationSessionRegistry : IAuthenticationSessionRegist
             reason,
             revocation.ActorId,
             cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<int> RevokeAccountsAsync(IReadOnlyCollection<string> accountIds, string reason, string actorId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(accountIds);
+        ArgumentException.ThrowIfNullOrWhiteSpace(actorId);
+        if (accountIds.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("Account identifiers must not be empty.", nameof(accountIds));
+        return _repository.RevokeAccountsAsync(accountIds, _timeProvider.GetUtcNow().UtcDateTime, NormalizeReason(reason), actorId, cancellationToken);
     }
 
     private static string ComputeHash(string credential) =>

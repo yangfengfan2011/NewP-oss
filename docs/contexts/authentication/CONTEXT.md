@@ -24,6 +24,10 @@ _Avoid_: Session EID、用户标识、可读 Cookie 载荷
 使一个或某账号全部认证会话永久失效的生命周期转换；账号恢复不会重新激活已撤销会话。
 _Avoid_: 临时隐藏、账号停用、Cookie 删除
 
+**准入资格中断（Admission Eligibility Interruption，已确认目标见 [ADR-0049](../../adr/0049-ordinary-account-admission-requires-active-organization.md)）**：
+普通账号由满足准入条件变为不满足条件的一次已生效变化；正式写入路径须使此前全部会话永久失效，即使中断期间没有请求，恢复资格也只允许重新登录，停服直接改库的处理暂不纳入范围。始终满足条件的组织调整不属于资格中断。
+_Avoid_: 会话暂停、自动恢复旧会话、组织信息变化
+
 **会话轮换（Session Rotation）**：
 用户成功修改凭据时撤销全部旧会话并为当前客户端建立一个新会话的原子转换。
 _Avoid_: 延长旧会话、恢复已撤销会话、管理员重置

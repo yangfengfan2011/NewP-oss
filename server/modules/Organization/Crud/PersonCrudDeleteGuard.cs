@@ -63,28 +63,39 @@ public sealed class PersonCrudDeleteGuard : IStandardCrudDeleteGuard, IStandardC
                 token => new ValueTask<StandardCrudMutationResult>(DeleteAsync(descriptor, id, token)), cancellationToken);
 
         var persons = _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName));
+        // 数据库可接受主键别名；后续谓词和缓存登记都使用实际持久化标识。
+        var persistedId = await persons.AsNoTracking()
+            .Where(row => EF.Property<string>(row, descriptor.IdField) == id)
+            .Select(row => EF.Property<string>(row, descriptor.IdField))
+            .SingleOrDefaultAsync(cancellationToken);
+        if (persistedId is null)
+            return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
+
         var affected = await persons
-            .Where(row => EF.Property<string>(row, descriptor.IdField) == id
+            .Where(row => EF.Property<string>(row, descriptor.IdField) == persistedId
                 && EF.Property<string?>(row, "AccountEID") == null)
             .ExecuteDeleteAsync(cancellationToken);
         if (affected == 1)
         {
             if (_transactions?.HasParticipants(descriptor.ModelName) is true)
-                _transactions.RegisterChange(new PlatformRecordChange(descriptor.ModelName, id, null, null));
+                _transactions.RegisterChange(new PlatformRecordChange(descriptor.ModelName, persistedId, null, null));
             return StandardCrudMutationResult.Success();
         }
 
-        var remaining = await _bindingRepository.FindAsync(id, cancellationToken);
+        var remaining = await _bindingRepository.FindAsync(persistedId, cancellationToken);
         return remaining?.AccountEid is not null
             ? StandardCrudMutationResult.Failure(BoundError())
-            : StandardCrudMutationResult.Failure(new StandardCrudError
-            {
-                StatusCode = 404,
-                Code = "StandardCrud.NotFound",
-                Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 中不存在标识 {id}。",
-                ReasonKey = "standardCrud.notFound"
-            });
+            : StandardCrudMutationResult.Failure(NotFound(descriptor, id));
     }
+
+    // 未匹配记录或并发已删除时保留标准 CRUD 的 404 形状。
+    private static StandardCrudError NotFound(StandardCrudDescriptor descriptor, string id) => new()
+    {
+        StatusCode = 404,
+        Code = "StandardCrud.NotFound",
+        Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 中不存在标识 {id}。",
+        ReasonKey = "standardCrud.notFound"
+    };
 
     private static StandardCrudError BoundError() => new()
     {

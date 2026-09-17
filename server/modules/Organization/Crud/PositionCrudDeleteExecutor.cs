@@ -52,23 +52,31 @@ public sealed class PositionCrudDeleteExecutor(EfPlatformDbContext dbContext, IP
                 token => new ValueTask<StandardCrudMutationResult>(DeleteAsync(descriptor, id, token)), cancellationToken);
 
         var positions = Positions(descriptor);
+        // 数据库可接受主键别名；后续谓词和缓存登记都使用实际持久化标识。
+        var persistedId = await positions.AsNoTracking()
+            .Where(position => EF.Property<string>(position, descriptor.IdField) == id)
+            .Select(position => EF.Property<string>(position, descriptor.IdField))
+            .SingleOrDefaultAsync(cancellationToken);
+        if (persistedId is null)
+            return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
+
         var persons = Persons(descriptor);
         int affected;
         if (dbContext.Database.IsRelational())
         {
             affected = await positions
                 .Where(position =>
-                    EF.Property<string>(position, descriptor.IdField) == id
-                    && !persons.Any(person => EF.Property<string?>(person, "PositionId") == id))
+                    EF.Property<string>(position, descriptor.IdField) == persistedId
+                    && !persons.Any(person => EF.Property<string?>(person, "PositionId") == persistedId))
                 .ExecuteDeleteAsync(cancellationToken);
         }
         else
         {
             var position = await positions.FirstOrDefaultAsync(
-                item => EF.Property<string>(item, descriptor.IdField) == id,
+                item => EF.Property<string>(item, descriptor.IdField) == persistedId,
                 cancellationToken);
             var referenced = position is not null && await persons.AnyAsync(
-                person => EF.Property<string?>(person, "PositionId") == id,
+                person => EF.Property<string?>(person, "PositionId") == persistedId,
                 cancellationToken);
             if (position is null || referenced)
             {
@@ -84,12 +92,12 @@ public sealed class PositionCrudDeleteExecutor(EfPlatformDbContext dbContext, IP
         if (affected == 1)
         {
             if (transactions?.HasParticipants(descriptor.ModelName) is true)
-                transactions.RegisterChange(new PlatformRecordChange(descriptor.ModelName, id, null, null));
+                transactions.RegisterChange(new PlatformRecordChange(descriptor.ModelName, persistedId, null, null));
             return StandardCrudMutationResult.Success();
         }
 
         var exists = await positions.AsNoTracking().AnyAsync(
-            position => EF.Property<string>(position, descriptor.IdField) == id,
+            position => EF.Property<string>(position, descriptor.IdField) == persistedId,
             cancellationToken);
         return exists
             ? StandardCrudMutationResult.Failure(ReferencedError())

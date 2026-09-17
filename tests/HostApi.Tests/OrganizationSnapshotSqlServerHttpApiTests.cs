@@ -16,12 +16,136 @@ using Microsoft.EntityFrameworkCore;
 using ICP.Platform.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using Xunit.Abstractions;
 using static ICP.Platform.HostApi.Tests.FeatureHttpTestRequests;
 
 namespace ICP.Platform.HostApi.Tests;
 
-public sealed class OrganizationSnapshotSqlServerHttpApiTests
+public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper output)
 {
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "人员别名绑定按实际持久化 EID 登记缓存")]
+    public Task Binding_WithPersonEidAlias_RegistersPersistedIdentity() => DedicatedWriteCaseVariantAsync(true);
+
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "人员别名启停按实际持久化 EID 登记缓存")]
+    public Task Lifecycle_WithPersonEidAlias_RegistersPersistedIdentity() => DedicatedWriteCaseVariantAsync(false);
+
+    private async Task DedicatedWriteCaseVariantAsync(bool binding)
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        using var admin = await fixture.LoginAdministratorAsync();
+        var http = new FeatureHttpTestRequests(fixture);
+        var canonical = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"),
+            "/api/organization/persons", new { PersonNo = "PERSON-ALIAS", ENAME = "人员别名", EmploymentStatus = "Active", IsEnabled = true }));
+        var alias = canonical.ToLowerInvariant();
+        Assert.False(string.Equals(canonical, alias, StringComparison.Ordinal));
+        output.WriteLine($"canonical={canonical}; alias={alias}");
+        string? accountId = null;
+        HttpResponseMessage response;
+        if (binding)
+        {
+            var account = (await CreateAsync(admin, http.Identity("create"), "/api/identity/accounts", new { ECODE = "canonical-target", ENAME = "规范标识账号" })).GetProperty("account");
+            accountId = account.GetProperty("eid").GetString()!;
+            response = await SendAsync(admin, http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
+                $"/api/organization/persons/{alias}/user-binding", new { accountEid = accountId, expectedRevision = account.GetProperty("revision").GetInt64(), reason = "实际标识" });
+        }
+        else response = await SendAsync(admin, http.Organization("persons", "disable", "list.rowActions"), HttpMethod.Put,
+            $"/api/organization/persons/{alias}/status/disable", new { isEnabled = false, reason = "实际标识" });
+        using (response)
+        {
+            output.WriteLine($"PUT status={(int)response.StatusCode}; body={await response.Content.ReadAsStringAsync()}");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        }
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        var stored = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Person")).AsNoTracking()
+            .SingleAsync(row => EF.Property<string>(row, "EID") == canonical);
+        Assert.Equal(canonical, stored["EID"]);
+        var snapshot = await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync();
+        Assert.Equal(stored.OrderBy(p => p.Key), snapshot.Persons[canonical].OrderBy(p => p.Key));
+        Assert.False(snapshot.Persons.ContainsKey(alias));
+        if (binding)
+        {
+            Assert.Equal(accountId, stored["AccountEID"]);
+            Assert.Equal(canonical, snapshot.PersonByAccount[accountId!]);
+        }
+        else Assert.Equal(false, stored["IsEnabled"]);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "公司条件删除使用实际命中的 EID 维护缓存")]
+    public Task CompanyDelete_WithCaseVariantEid_RemovesCanonicalCacheRecord() => DeleteCaseVariantAsync("Company", "companies");
+
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "部门条件删除使用实际命中的 EID 维护缓存")]
+    public Task DepartmentDelete_WithCaseVariantEid_RemovesCanonicalCacheRecord() => DeleteCaseVariantAsync("Department", "departments");
+
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "岗位条件删除使用实际命中的 EID 维护缓存")]
+    public Task PositionDelete_WithCaseVariantEid_RemovesCanonicalCacheRecord() => DeleteCaseVariantAsync("Position", "positions");
+
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "人员条件删除使用实际命中的 EID 维护缓存")]
+    public Task PersonDelete_WithCaseVariantEid_RemovesCanonicalCacheRecord() => DeleteCaseVariantAsync("Person", "persons");
+
+    private async Task DeleteCaseVariantAsync(string model, string tab)
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        using var admin = await fixture.LoginAdministratorAsync();
+        var http = new FeatureHttpTestRequests(fixture);
+        object data;
+        if (model == "Department")
+        {
+            var company = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization("companies", "create", "list.pageActions"),
+                "/api/organization/companies", new { ECODE = "ALIAS-PARENT", ENAME = "部门所属公司", SortOrder = "01" }));
+            data = new { ECODE = "ALIAS", ENAME = "无引用部门", CompanyId = company, SortOrder = "01" };
+        }
+        else data = model switch
+        {
+            "Company" => new { ECODE = "ALIAS", ENAME = "无引用公司", SortOrder = "01" },
+            "Position" => new { ENAME = "无引用岗位" },
+            "Person" => new { PersonNo = "ALIAS", ENAME = "未绑定人员", EmploymentStatus = "Active", IsEnabled = true },
+            _ => throw new ArgumentOutOfRangeException(nameof(model))
+        };
+        var canonical = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(admin, http.Organization(tab, "create", "list.pageActions"),
+            $"/api/organization/{tab}", data));
+        var alias = canonical.ToLowerInvariant();
+        Assert.False(string.Equals(canonical, alias, StringComparison.Ordinal));
+        output.WriteLine($"canonical={canonical}; alias={alias}");
+        output.WriteLine($"canonicalUtf8={Convert.ToHexString(System.Text.Encoding.UTF8.GetBytes(canonical))}; aliasUtf8={Convert.ToHexString(System.Text.Encoding.UTF8.GetBytes(alias))}");
+
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        await db.Database.OpenConnectionAsync();
+        await using (var command = db.Database.GetDbConnection().CreateCommand())
+        {
+            command.CommandText = "SELECT c.collation_name FROM sys.columns c JOIN sys.tables t ON c.object_id=t.object_id WHERE t.name=@model AND c.name=N'EID'";
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = "@model";
+            parameter.Value = model;
+            command.Parameters.Add(parameter);
+            output.WriteLine($"actualEidCollation={await command.ExecuteScalarAsync()}");
+        }
+        var rows = db.Set<Dictionary<string, object?>>(db.ResolveModelKey(model)).AsNoTracking();
+        Assert.True(await rows.AnyAsync(row => EF.Property<string>(row, "EID") == alias));
+        using (var deleted = await SendAsync(admin, http.Organization(tab, "delete", "list.rowActions"), HttpMethod.Delete,
+            $"/api/organization/{tab}/{alias}"))
+        {
+            output.WriteLine($"DELETE status={(int)deleted.StatusCode}; body={await deleted.Content.ReadAsStringAsync()}");
+            Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
+        }
+        using (var detail = await SendAsync(admin, http.Organization(tab), HttpMethod.Get, $"/api/organization/{tab}/{canonical}"))
+        {
+            output.WriteLine($"GET canonical status={(int)detail.StatusCode}; body={await detail.Content.ReadAsStringAsync()}");
+            Assert.Equal(HttpStatusCode.NotFound, detail.StatusCode);
+        }
+        Assert.False(await rows.AnyAsync(row => EF.Property<string>(row, "EID") == canonical));
+        var snapshot = await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync();
+        var records = model switch
+        {
+            "Company" => snapshot.Companies, "Department" => snapshot.Departments,
+            "Position" => snapshot.Positions, "Person" => snapshot.Persons,
+            _ => throw new ArgumentOutOfRangeException(nameof(model))
+        };
+        output.WriteLine($"canonicalStillCached={records.ContainsKey(canonical)}");
+        Assert.False(records.ContainsKey(canonical));
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "条件删除执行器单独调用仍进入同一组织提交管道")]
     public async Task ConditionalExecutors_WhenCalledDirectly_MaintainRegisteredCache()
     {
@@ -40,7 +164,7 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests
         var executors = scope.ServiceProvider.GetServices<IStandardCrudConditionalDeleteExecutor>().ToDictionary(e => e.ResourceKey);
         foreach (var (descriptor, id) in new[] { (PersonCrudDescriptorFactory.Create(), person), (PositionCrudDescriptorFactory.Create(), position),
             (DepartmentCrudDescriptorFactory.Create(), department), (CompanyCrudDescriptorFactory.Create(), company) })
-            Assert.True((await executors[descriptor.ResourceKey].DeleteAsync(descriptor, id)).Succeeded);
+            Assert.True((await executors[descriptor.ResourceKey].DeleteAsync(descriptor, id.ToLowerInvariant())).Succeeded);
         var snapshot = await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync();
         Assert.Empty(snapshot.Companies);
         Assert.Empty(snapshot.Departments);

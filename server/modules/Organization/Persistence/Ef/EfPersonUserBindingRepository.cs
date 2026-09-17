@@ -94,12 +94,12 @@ public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext,
         return await Persons.AsNoTracking().SingleOrDefaultAsync(row => EF.Property<string>(row, "EID") == id, cancellationToken);
     }
 
-    // 用数据库实际写后值（包括手动审计盖章）登记，不复制缓存算法，也不提前发布。
+    // 记录和主键都来自数据库实际写后值；请求别名不能成为缓存标识，也不提前发布。
     private async Task RegisterActualChangeAsync(string id, IReadOnlyDictionary<string, object?>? before, CancellationToken cancellationToken)
     {
         if (transactions?.HasParticipants("Person") is not true) return;
         var after = await Persons.AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == id, cancellationToken);
-        transactions.RegisterChange(new PlatformRecordChange("Person", id, before, after));
+        transactions.RegisterChange(new PlatformRecordChange("Person", (string)after["EID"]!, before, after));
     }
 
     private DbSet<Dictionary<string, object?>> Persons =>

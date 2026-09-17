@@ -54,6 +54,14 @@ public sealed class DepartmentCrudDeleteExecutor(EfPlatformDbContext dbContext, 
                 token => new ValueTask<StandardCrudMutationResult>(DeleteAsync(descriptor, id, token)), cancellationToken);
 
         var departments = Departments(descriptor);
+        // 数据库可接受主键别名；后续谓词和缓存登记都使用实际持久化标识。
+        var persistedId = await departments.AsNoTracking()
+            .Where(department => EF.Property<string>(department, descriptor.IdField) == id)
+            .Select(department => EF.Property<string>(department, descriptor.IdField))
+            .SingleOrDefaultAsync(cancellationToken);
+        if (persistedId is null)
+            return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
+
         int affected;
         try
         {
@@ -62,20 +70,20 @@ public sealed class DepartmentCrudDeleteExecutor(EfPlatformDbContext dbContext, 
                 var persons = Persons();
                 affected = await departments
                     .Where(department =>
-                        EF.Property<string>(department, descriptor.IdField) == id
+                        EF.Property<string>(department, descriptor.IdField) == persistedId
                         && !departments.Any(child =>
-                            EF.Property<string?>(child, "ParentDepartmentId") == id)
-                        && !persons.Any(person => EF.Property<string?>(person, "DepartmentId") == id))
+                            EF.Property<string?>(child, "ParentDepartmentId") == persistedId)
+                        && !persons.Any(person => EF.Property<string?>(person, "DepartmentId") == persistedId))
                     .ExecuteDeleteAsync(cancellationToken);
             }
             else
             {
                 var department = await departments.FirstOrDefaultAsync(
-                    row => EF.Property<string>(row, descriptor.IdField) == id,
+                    row => EF.Property<string>(row, descriptor.IdField) == persistedId,
                     cancellationToken);
                 if (department is null
-                    || await HasChildReferenceAsync(descriptor, id, cancellationToken)
-                    || await HasPersonReferenceAsync(id, cancellationToken))
+                    || await HasChildReferenceAsync(descriptor, persistedId, cancellationToken)
+                    || await HasPersonReferenceAsync(persistedId, cancellationToken))
                 {
                     affected = 0;
                 }
@@ -96,19 +104,19 @@ public sealed class DepartmentCrudDeleteExecutor(EfPlatformDbContext dbContext, 
         if (affected == 1)
         {
             if (transactions?.HasParticipants(descriptor.ModelName) is true)
-                transactions.RegisterChange(new PlatformRecordChange(descriptor.ModelName, id, null, null));
+                transactions.RegisterChange(new PlatformRecordChange(descriptor.ModelName, persistedId, null, null));
             return StandardCrudMutationResult.Success();
         }
 
         var exists = await departments.AsNoTracking().AnyAsync(
-            department => EF.Property<string>(department, descriptor.IdField) == id,
+            department => EF.Property<string>(department, descriptor.IdField) == persistedId,
             cancellationToken);
         if (!exists)
         {
             return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
         }
 
-        if (await HasChildReferenceAsync(descriptor, id, cancellationToken))
+        if (await HasChildReferenceAsync(descriptor, persistedId, cancellationToken))
         {
             return StandardCrudMutationResult.Failure(ChildReferencedError());
         }

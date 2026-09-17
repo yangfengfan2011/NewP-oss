@@ -1,3 +1,4 @@
+using ICP.Platform.Modules.Organization.Caching;
 using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Persistence.EfCore;
@@ -9,13 +10,18 @@ namespace ICP.Platform.Modules.Organization.Persistence.Ef;
 /// 从 Organization Company 模型提供人员所需的窄目录读取。
 /// </summary>
 /// <param name="dbContext">当前请求范围内的动态模型数据库上下文。</param>
-public sealed class EfCompanyDirectory(EfPlatformDbContext dbContext) : ICompanyDirectory
+public sealed class EfCompanyDirectory(EfPlatformDbContext dbContext, OrganizationCache? cache = null) : ICompanyDirectory
 {
     /// <inheritdoc/>
     public async Task<Company?> GetByIdAsync(
         string companyId,
         CancellationToken cancellationToken = default)
     {
+        if (cache is not null)
+        {
+            var snapshot = await cache.ReadAsync(cancellationToken);
+            return snapshot.Companies.TryGetValue(companyId, out var current) ? Map(current) : null;
+        }
         var entity = await Entities
             .AsNoTracking()
             .FirstOrDefaultAsync(row => EF.Property<string>(row, "EID") == companyId, cancellationToken);
@@ -33,6 +39,11 @@ public sealed class EfCompanyDirectory(EfPlatformDbContext dbContext) : ICompany
             return new Dictionary<string, Company>(StringComparer.Ordinal);
         }
 
+        if (cache is not null)
+        {
+            var snapshot = await cache.ReadAsync(cancellationToken);
+            return ids.Where(snapshot.Companies.ContainsKey).ToDictionary(id => id, id => Map(snapshot.Companies[id]), StringComparer.Ordinal);
+        }
         var entities = await Entities
             .AsNoTracking()
             .Where(row => ids.Contains(EF.Property<string>(row, "EID")))
@@ -43,6 +54,11 @@ public sealed class EfCompanyDirectory(EfPlatformDbContext dbContext) : ICompany
     /// <inheritdoc/>
     public async Task<Company?> GetByCodeAsync(string code, CancellationToken cancellationToken = default)
     {
+        if (cache is not null)
+        {
+            var snapshot = await cache.ReadAsync(cancellationToken);
+            return snapshot.CompanyCodes.TryGetValue(code.Trim(), out var id) ? Map(snapshot.Companies[id]) : null;
+        }
         var normalized = code.Trim().ToLowerInvariant();
         var entity = await Entities
             .AsNoTracking()
@@ -126,7 +142,10 @@ public sealed class EfCompanyDirectory(EfPlatformDbContext dbContext) : ICompany
         Id = ReadString(row, "EID"),
         Code = ReadString(row, "ECODE"),
         Name = ReadString(row, "ENAME"),
-        IsEnabled = row.GetValueOrDefault("IsEnabled") is true
+        IsEnabled = row.GetValueOrDefault("IsEnabled") is true,
+        SortOrder = ReadString(row, "SortOrder"),
+        CreatedAt = row.GetValueOrDefault("CreatedAt") is DateTime created ? created : default,
+        UpdatedAt = row.GetValueOrDefault("UpdatedAt") as DateTime?
     };
 
     // 动态模型缺失字符串字段时使用空值，保持目录模型非空契约。

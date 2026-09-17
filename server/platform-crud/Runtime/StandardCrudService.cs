@@ -219,6 +219,8 @@ public sealed class StandardCrudService : IStandardCrudService
         IReadOnlyDictionary<string, object?> values,
         CancellationToken cancellationToken = default)
     {
+        if (_transactionExecutor is { IsActive: false } && _transactionExecutor.HasParticipants(descriptor.ModelName))
+            return await ExecuteCoordinatedAsync(descriptor, token => CreateAsync(descriptor, values, token), cancellationToken);
         StandardCrudDescriptorValidator.Validate(descriptor);
         var ownershipFieldError = FindReadOnlyOwnershipFieldError(descriptor, values, isCreate: true);
         if (ownershipFieldError is not null)
@@ -319,6 +321,8 @@ public sealed class StandardCrudService : IStandardCrudService
         IReadOnlyDictionary<string, object?> values,
         CancellationToken cancellationToken = default)
     {
+        if (_transactionExecutor is { IsActive: false } && _transactionExecutor.HasParticipants(descriptor.ModelName))
+            return await ExecuteCoordinatedAsync(descriptor, token => UpdateAsync(descriptor, id, values, token), cancellationToken);
         StandardCrudDescriptorValidator.Validate(descriptor);
         if (!descriptor.RequiresUpdateRecord)
             return await UpdateCoreAsync(descriptor, id, values, null, null, cancellationToken);
@@ -496,11 +500,14 @@ public sealed class StandardCrudService : IStandardCrudService
         return await UpdateAsync(descriptor, id, new Dictionary<string, object?> { [descriptor.EnabledField] = enabled }, cancellationToken);
     }
 
+    /// <summary>按资源声明提前协调条件删除与普通删除，并统一发布提交结果。</summary>
     public async Task<StandardCrudMutationResult> DeleteAsync(
         StandardCrudDescriptor descriptor,
         string id,
         CancellationToken cancellationToken = default)
     {
+        if (_transactionExecutor is { IsActive: false } && _transactionExecutor.HasParticipants(descriptor.ModelName))
+            return await ExecuteCoordinatedAsync(descriptor, token => DeleteAsync(descriptor, id, token), cancellationToken);
         StandardCrudDescriptorValidator.Validate(descriptor);
         if (descriptor.DeletePolicy == StandardCrudDeletePolicy.None)
         {
@@ -562,6 +569,36 @@ public sealed class StandardCrudService : IStandardCrudService
 
         var deleted = await _repository.DeleteAsync(descriptor, id, cancellationToken);
         return deleted ? StandardCrudMutationResult.Success() : StandardCrudMutationResult.Failure(NotFound(descriptor, id));
+    }
+
+    // 正式失败结果也必须回滚，避免事务末尾重试失败的受跟踪保存。
+    private async Task<StandardCrudMutationResult> ExecuteCoordinatedAsync(StandardCrudDescriptor descriptor,
+        Func<CancellationToken, Task<StandardCrudMutationResult>> write, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _transactionExecutor!.ExecuteAsync([descriptor.ModelName], async token =>
+            {
+                var result = await write(token);
+                return result.Succeeded ? result : throw new MutationRejectedException(result);
+            }, cancellationToken);
+        }
+        catch (MutationRejectedException exception) { return exception.Result; }
+        catch (ICP.Platform.Persistence.Transactions.PlatformCacheUnavailableException exception)
+        {
+            return StandardCrudMutationResult.Failure(new StandardCrudError
+            {
+                StatusCode = 503,
+                Code = exception.DatabaseCommitted ? "Persistence.CommittedCacheUnavailable" : "Persistence.CacheUnavailable",
+                Message = exception.Message,
+                ReasonKey = exception.DatabaseCommitted ? "persistence.committedCacheUnavailable" : "persistence.cacheUnavailable"
+            });
+        }
+    }
+
+    private sealed class MutationRejectedException(StandardCrudMutationResult result) : Exception
+    {
+        public StandardCrudMutationResult Result { get; } = result;
     }
 
     // 查询扩展点只产出标准条件；列表真正执行统一收口到平台查询内核，避免模块逻辑直接进入持久化实现。

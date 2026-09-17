@@ -1,3 +1,5 @@
+using ICP.Platform.Modules.Organization.Caching;
+using ICP.Platform.Persistence.Transactions;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Modules.Organization.Crud;
@@ -18,6 +20,9 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
     public override void ConfigureServices(IServiceCollection services)
     {
         services.AddStandardCrudKernel();
+        services.AddSingleton<OrganizationCache>();
+        services.AddSingleton(sp => new PlatformCommitRegistration("Organization/Company", sp.GetRequiredService<OrganizationCache>()));
+        services.AddHostedService<OrganizationCacheInitializer>();
         services.AddScoped<IStandardCrudCreationRecorder, PersonCreationRecorder>();
         services.AddScoped<IStandardCrudUpdateRecorder, PersonUpdateRecorder>();
         foreach (var (kind, model) in new[] { ("company", "Company"), ("department", "Department"), ("position", "Position"), ("organization.person", "Person") })

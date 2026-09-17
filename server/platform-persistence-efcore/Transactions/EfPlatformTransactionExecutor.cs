@@ -1,37 +1,127 @@
+using System.Collections.Frozen;
 using ICP.Platform.Persistence.Abstractions;
+using ICP.Platform.Persistence.Transactions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace ICP.Platform.Persistence.EfCore.Transactions;
 
-/// <summary>
-/// 基于当前 scoped EfPlatformDbContext 的平台事务执行器。
-/// </summary>
+/// <summary>共享 DbContext 的唯一提交所有者，同时协调已登记模型的缓存参与者。</summary>
 public sealed class EfPlatformTransactionExecutor : IPlatformTransactionExecutor
 {
     private readonly EfPlatformDbContext _dbContext;
+    private readonly IReadOnlyDictionary<string, IPlatformCommitParticipant> _participants;
+    private readonly List<PlatformRecordChange> _changes = [];
+    private HashSet<IPlatformCommitParticipant> _activeParticipants = [];
+    private List<(EntityEntry Entry, EntityState State, IReadOnlyDictionary<string, object?>? Before)> _pending = [];
+    public bool IsActive { get; private set; }
 
-    public EfPlatformTransactionExecutor(EfPlatformDbContext dbContext)
+    /// <summary>模块注册拥有者，平台只消费模型映射，不识别业务模型。</summary>
+    public EfPlatformTransactionExecutor(EfPlatformDbContext dbContext, IEnumerable<PlatformCommitRegistration>? registrations = null)
     {
         _dbContext = dbContext;
+        _participants = (registrations ?? []).ToDictionary(r => dbContext.ResolveModelKey(r.ModelKey), r => r.Participant, StringComparer.Ordinal);
     }
+    /// <inheritdoc/>
+    public bool HasParticipants(string modelKey) => _participants.ContainsKey(_dbContext.ResolveModelKey(modelKey));
+    /// <inheritdoc/>
+    public ValueTask<TResult> ExecuteAsync<TResult>(Func<CancellationToken, ValueTask<TResult>> registerChanges,
+        CancellationToken cancellationToken = default) => ExecuteAsync([], registerChanges, cancellationToken);
 
-    public async ValueTask<TResult> ExecuteAsync<TResult>(
-        Func<CancellationToken, ValueTask<TResult>> registerChanges,
-        CancellationToken cancellationToken = default)
+    /// <inheritdoc/>
+    public async ValueTask<TResult> ExecuteAsync<TResult>(IReadOnlyCollection<string> modelKeys,
+        Func<CancellationToken, ValueTask<TResult>> registerChanges, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(registerChanges);
-
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var requested = modelKeys.Select(_dbContext.ResolveModelKey).Where(_participants.ContainsKey)
+            .Select(key => _participants[key]).Distinct().OrderBy(p => p.Name, StringComparer.Ordinal).ToArray();
+        if (IsActive)
+        {
+            if (requested.Any(p => !_activeParticipants.Contains(p)))
+                throw new InvalidOperationException("Nested writes must declare their models before the outer transaction begins.");
+            var nested = await registerChanges(cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return nested;
+        }
+        var scopes = new List<(IPlatformCommitParticipant Participant, IPlatformCommitScope Scope)>();
         try
         {
-            var result = await registerChanges(cancellationToken);
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-            return result;
+            foreach (var participant in requested) scopes.Add((participant, await participant.BeginAsync(cancellationToken)));
+            _activeParticipants = requested.ToHashSet();
+            _changes.Clear();
+            IsActive = true;
+            _dbContext.SavingChanges += CollectPending;
+            _dbContext.SavedChanges += CollectSaved;
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+            bool committed = false;
+            try
+            {
+                var result = await registerChanges(cancellationToken);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                foreach (var (participant, scope) in scopes)
+                    await scope.PrepareAsync(_changes.Where(c => _participants.GetValueOrDefault(c.ModelKey) == participant).ToArray(), cancellationToken);
+                foreach (var (_, scope) in scopes) scope.BlockReads();
+                await transaction.CommitAsync(cancellationToken);
+                committed = true;
+                foreach (var (_, scope) in scopes) await scope.PublishAsync();
+                return result;
+            }
+            catch (Exception exception)
+            {
+                if (committed)
+                {
+                    foreach (var (_, scope) in scopes) scope.MarkUnavailable();
+                    throw new PlatformCacheUnavailableException(string.Join(",", requested.Select(p => p.Name)), true, exception);
+                }
+                await transaction.RollbackAsync(CancellationToken.None);
+                _dbContext.ChangeTracker.Clear();
+                throw;
+            }
         }
-        catch
+        finally
         {
-            await transaction.RollbackAsync(CancellationToken.None);
-            throw;
+            _dbContext.SavingChanges -= CollectPending;
+            _dbContext.SavedChanges -= CollectSaved;
+            IsActive = false;
+            _pending.Clear();
+            _activeParticipants.Clear();
+            for (var index = scopes.Count - 1; index >= 0; index--) await scopes[index].Scope.DisposeAsync();
         }
     }
+
+    /// <inheritdoc/>
+    public void RegisterChange(PlatformRecordChange change)
+    {
+        var key = _dbContext.ResolveModelKey(change.ModelKey);
+        if (!IsActive) throw new InvalidOperationException("Changes must be registered inside a platform transaction.");
+        if (_participants.TryGetValue(key, out var participant) && !_activeParticipants.Contains(participant))
+            throw new InvalidOperationException("The changed model was not declared before the write.");
+        _changes.Add(change with { ModelKey = key });
+    }
+
+    // SavingChanges 在审计字段盖章之后触发，因此前后值来自实际持久化实体而不是客户端 payload。
+    private void CollectPending(object? sender, SavingChangesEventArgs args)
+    {
+        _pending = _dbContext.ChangeTracker.Entries().Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+            .Where(e => _participants.ContainsKey(e.Metadata.Name))
+            .Select(e => (e, e.State, e.State == EntityState.Added ? null : Freeze(e.OriginalValues))).ToList();
+        foreach (var (entry, _, _) in _pending)
+            if (!_activeParticipants.Contains(_participants[entry.Metadata.Name]))
+                throw new InvalidOperationException("The changed model was not declared before the write.");
+    }
+    // 仅在保存成功后登记；自保存仓储与事务末尾保存进入同一变更集合。
+    private void CollectSaved(object? sender, SavedChangesEventArgs args)
+    {
+        foreach (var (entry, state, before) in _pending)
+        {
+            var after = state == EntityState.Deleted ? null : Freeze(entry.CurrentValues);
+            var idField = entry.Metadata.FindPrimaryKey()!.Properties.Single().Name;
+            var id = Convert.ToString((after ?? before!)[idField])!;
+            RegisterChange(new(entry.Metadata.Name, id, before, after));
+        }
+        _pending.Clear();
+    }
+    // 动态模型标量值从 EF PropertyValues 复制为不可变字典，禁止外部改写变更事实。
+    private static IReadOnlyDictionary<string, object?> Freeze(PropertyValues values) =>
+        values.Properties.ToFrozenDictionary(p => p.Name, p => values[p.Name], StringComparer.Ordinal);
 }

@@ -18,6 +18,18 @@ namespace ICP.Platform.Modules.Organization.Tests;
 public class OrganizationModuleTests
 {
     [Fact]
+    public void ConfigureServices_RegistersCompanyCommitParticipantAndOneSharedCache()
+    {
+        var services = new ServiceCollection();
+        new OrganizationModule().ConfigureServices(services);
+        using var provider = services.BuildServiceProvider();
+        var registration = Assert.Single(provider.GetServices<ICP.Platform.Persistence.Transactions.PlatformCommitRegistration>());
+        Assert.Equal("Organization/Company", registration.ModelKey);
+        Assert.Same(provider.GetRequiredService<ICP.Platform.Modules.Organization.Caching.OrganizationCache>(), registration.Participant);
+        Assert.Equal(ServiceLifetime.Singleton, Assert.Single(services, d => d.ServiceType == typeof(ICP.Platform.Modules.Organization.Caching.OrganizationCache)).Lifetime);
+    }
+
+    [Fact]
     public void ModuleId_ReturnsOrganization()
     {
         var module = new OrganizationModule();

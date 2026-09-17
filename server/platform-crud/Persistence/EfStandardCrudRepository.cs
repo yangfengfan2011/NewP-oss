@@ -1,3 +1,4 @@
+using ICP.Platform.Persistence.Abstractions;
 using System.Globalization;
 using System.Linq.Expressions;
 using ICP.Platform.Crud.Abstractions;
@@ -12,13 +13,17 @@ namespace ICP.Platform.Crud.Persistence;
 public sealed class EfStandardCrudRepository : IStandardCrudRepository, IStandardCrudCreationParticipant, IStandardCrudUpdateParticipant
 {
     private readonly EfPlatformDbContext _dbContext;
+    private readonly IPlatformTransactionExecutor? _transactions;
     private readonly IPlatformObjectIdGenerator _objectIdGenerator;
 
+    // 自保存仓储也进入统一提交，调用方不需要额外维护缓存。
     public EfStandardCrudRepository(
         EfPlatformDbContext dbContext,
-        IPlatformObjectIdGenerator objectIdGenerator)
+        IPlatformObjectIdGenerator objectIdGenerator,
+        IPlatformTransactionExecutor? transactions = null)
     {
         _dbContext = dbContext;
+        _transactions = transactions;
         _objectIdGenerator = objectIdGenerator;
     }
 
@@ -207,6 +212,10 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository, IStandar
         IReadOnlyDictionary<string, object?> values,
         CancellationToken cancellationToken = default)
     {
+        if (_transactions is { IsActive: false } && _transactions.HasParticipants(descriptor.ModelName))
+            return await _transactions.ExecuteAsync([descriptor.ModelName],
+                token => new ValueTask<IReadOnlyDictionary<string, object?>>(CreateAsync(descriptor, values, token)), cancellationToken);
+
         var row = new Dictionary<string, object?>(values, StringComparer.Ordinal);
         if (!row.ContainsKey(descriptor.IdField))
         {
@@ -264,6 +273,10 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository, IStandar
         IReadOnlyDictionary<string, object?> values,
         CancellationToken cancellationToken = default)
     {
+        if (_transactions is { IsActive: false } && _transactions.HasParticipants(descriptor.ModelName))
+            return await _transactions.ExecuteAsync([descriptor.ModelName],
+                token => new ValueTask<IReadOnlyDictionary<string, object?>?>(UpdateAsync(descriptor, id, values, token)), cancellationToken);
+
         var modelKey = _dbContext.ResolveModelKey(descriptor.ModelName);
         var row = await _dbContext.Set<Dictionary<string, object?>>(modelKey)
             .FirstOrDefaultAsync(item => EF.Property<string>(item, descriptor.IdField) == id, cancellationToken);
@@ -417,6 +430,10 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository, IStandar
         string id,
         CancellationToken cancellationToken = default)
     {
+        if (_transactions is { IsActive: false } && _transactions.HasParticipants(descriptor.ModelName))
+            return await _transactions.ExecuteAsync([descriptor.ModelName],
+                token => new ValueTask<bool>(DeleteAsync(descriptor, id, token)), cancellationToken);
+
         var row = await _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName))
             .FirstOrDefaultAsync(item => EF.Property<string>(item, descriptor.IdField) == id, cancellationToken);
 

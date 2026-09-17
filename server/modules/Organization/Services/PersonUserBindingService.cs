@@ -77,7 +77,7 @@ public sealed class PersonUserBindingService(
         var initialPerson = await GetRequiredPersonAsync(personEid, cancellationToken);
         if (initialPerson.AccountEid is not null)
         {
-            return EnsureSameBindingOrThrow(initialPerson, request.AccountEid);
+            return await EnsureExistingBindingAsync(initialPerson, request.AccountEid, cancellationToken);
         }
 
         EnsurePersonCanStartBinding(initialPerson);
@@ -92,13 +92,13 @@ public sealed class PersonUserBindingService(
                 var person = await GetRequiredPersonAsync(personEid, transactionCancellationToken);
                 if (person.AccountEid is not null)
                 {
-                    return EnsureSameBindingOrThrow(person, request.AccountEid);
+                    return EnsureSameBindingOrThrow(person, account.AccountEid);
                 }
 
                 EnsurePersonCanStartBinding(person);
                 var bound = await repository.TryBindAsync(
                     personEid,
-                    request.AccountEid,
+                    account.AccountEid,
                     boundAt,
                     actor.ActorId,
                     reason,
@@ -108,7 +108,7 @@ public sealed class PersonUserBindingService(
                     var latest = await GetRequiredPersonAsync(personEid, transactionCancellationToken);
                     if (latest.AccountEid is not null)
                     {
-                        return EnsureSameBindingOrThrow(latest, request.AccountEid);
+                        return EnsureSameBindingOrThrow(latest, account.AccountEid);
                     }
 
                     EnsurePersonCanStartBinding(latest);
@@ -122,7 +122,7 @@ public sealed class PersonUserBindingService(
                         new PersonnelBindingRegistration
                         {
                             PersonEid = personEid,
-                            AccountEid = request.AccountEid,
+                            AccountEid = account.AccountEid,
                             ExpectedRevision = request.ExpectedRevision,
                             Reason = reason,
                             ActorId = actor.ActorId,
@@ -155,13 +155,30 @@ public sealed class PersonUserBindingService(
 
                 return new PersonUserBindingDto(
                     personEid,
-                    request.AccountEid,
+                    account.AccountEid,
                     boundAt,
                     actor.ActorId,
                     reason,
                     ToAccount(identityResult.Account));
             },
             cancellationToken);
+    }
+
+    // 已知相同标识仍可直接幂等返回；其他输入先经 Identity 解析，再按实际标识判断永久绑定目标。
+    private async ValueTask<PersonUserBindingDto> EnsureExistingBindingAsync(PersonUserBindingState person,
+        string requestedAccountEid, CancellationToken cancellationToken)
+    {
+        if (string.Equals(person.AccountEid, requestedAccountEid, StringComparison.Ordinal))
+            return EnsureSameBindingOrThrow(person, requestedAccountEid);
+
+        IdentityAccountSnapshot account;
+        try { account = await FindAccountAsync(requestedAccountEid, cancellationToken); }
+        catch (PersonUserBindingException exception) when (exception.FailureCode == PersonUserBindingFailureCodes.UserNotAvailable)
+        {
+            // 不存在的目标仍是改绑冲突，不改变已绑定人员的既有失败契约。
+            throw new PersonUserBindingException(PersonUserBindingFailureCodes.PersonAlreadyBound, person);
+        }
+        return EnsureSameBindingOrThrow(person, account.AccountEid);
     }
 
     private async ValueTask<IdentityAccountSnapshot> FindAccountAsync(

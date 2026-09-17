@@ -13,6 +13,38 @@ public sealed class PersonUserBindingServiceTests
     private static readonly DateTime BoundAt = new(2026, 8, 10, 10, 30, 0, DateTimeKind.Utc);
 
     [Fact]
+    public async Task BindAsync_UsesDirectoryCanonicalIdForPersistenceParticipationAndAliasRetry()
+    {
+        var fixture = Fixture();
+        fixture.Directory.Aliases["user_1"] = "User_1";
+        var result = await fixture.Service.BindAsync("Person_1", new BindPersonUserRequest("user_1", 7, "首次绑定"),
+            new PersonUserBindingActor("User_Admin", "canonical"));
+        Assert.Equal("User_1", result.AccountEid);
+        Assert.Equal("User_1", result.Account!.AccountEid);
+        Assert.Equal("User_1", fixture.Repository.Current.AccountEid);
+        Assert.Equal("User_1", fixture.Identity.LastBinding!.AccountEid);
+
+        var repeated = await fixture.Service.BindAsync("Person_1", new BindPersonUserRequest("user_1", 0, "不覆盖"),
+            new PersonUserBindingActor("User_Other", "retry-alias"));
+        Assert.Equal("User_1", repeated.AccountEid);
+        Assert.Equal("首次绑定", repeated.Reason);
+        Assert.Equal(1, fixture.Transaction.ExecutionCount);
+        Assert.Single(fixture.Identity.Events);
+    }
+
+    [Fact]
+    public async Task BindAsync_ExistingBindingRejectsDifferentResolvedTarget()
+    {
+        var fixture = Fixture(person: Person(accountEid: "User_1"), accounts: [Account("User_1"), Account("User_2")]);
+        fixture.Directory.Aliases["user_2"] = "User_2";
+        var error = await Assert.ThrowsAsync<PersonUserBindingException>(() => fixture.Service.BindAsync("Person_1",
+            new BindPersonUserRequest("user_2", 7, "拒绝改绑"), new PersonUserBindingActor("User_Admin", "conflict-alias")).AsTask());
+        Assert.Equal(PersonUserBindingFailureCodes.PersonAlreadyBound, error.FailureCode);
+        Assert.Equal("User_1", fixture.Repository.Current.AccountEid);
+        Assert.Equal(0, fixture.Transaction.ExecutionCount);
+    }
+
+    [Fact]
     public async Task SearchCandidatesAsync_ReturnsAtMostTwentyEligibleEnabledOrDisabledAccounts()
     {
         var accounts = Enumerable.Range(1, 24)
@@ -193,9 +225,10 @@ public sealed class PersonUserBindingServiceTests
     private sealed class RecordingAccountDirectory(IReadOnlyList<IdentityAccountSnapshot> accounts) : IIdentityAccountDirectory
     {
         public IdentityAccountSearch? LastSearch { get; private set; }
+        public Dictionary<string, string> Aliases { get; } = new(StringComparer.Ordinal);
 
         public ValueTask<IdentityAccountSnapshot?> FindAsync(string accountEid, CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult(accounts.FirstOrDefault(account => account.AccountEid == accountEid));
+            ValueTask.FromResult(accounts.FirstOrDefault(account => account.AccountEid == Aliases.GetValueOrDefault(accountEid, accountEid)));
 
         public ValueTask<IReadOnlyDictionary<string, IdentityAccountSnapshot>> FindManyAsync(
             IReadOnlyCollection<string> accountEids,
@@ -220,11 +253,13 @@ public sealed class PersonUserBindingServiceTests
     {
         public IdentityAccountSnapshot Account { get; set; } = account;
         public List<string> Events { get; } = [];
+        public PersonnelBindingRegistration? LastBinding { get; private set; }
 
         public ValueTask<IdentityLifecycleRegistrationResult> RegisterPersonnelBindingAsync(
             PersonnelBindingRegistration registration,
             CancellationToken cancellationToken = default)
         {
+            LastBinding = registration;
             if (failureStage == BindingFailureStage.IdentityRegistration)
             {
                 throw new InvalidOperationException("identity-registration-failed");

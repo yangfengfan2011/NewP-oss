@@ -49,6 +49,14 @@ public sealed class CompanyCrudDeleteExecutor(EfPlatformDbContext dbContext, IPl
                 token => new ValueTask<StandardCrudMutationResult>(DeleteAsync(descriptor, id, token)), cancellationToken);
 
         var companies = Companies(descriptor);
+        // 数据库可能接受大小写或尾空格别名；登记缓存影响必须使用实际持久化主键，而不是请求文本。
+        var persistedId = await companies.AsNoTracking()
+            .Where(company => EF.Property<string>(company, descriptor.IdField) == id)
+            .Select(company => EF.Property<string>(company, descriptor.IdField))
+            .SingleOrDefaultAsync(cancellationToken);
+        if (persistedId is null)
+            return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
+
         int affected;
         try
         {
@@ -58,17 +66,17 @@ public sealed class CompanyCrudDeleteExecutor(EfPlatformDbContext dbContext, IPl
                 var persons = Persons();
                 affected = await companies
                     .Where(company =>
-                        EF.Property<string>(company, descriptor.IdField) == id
-                        && !departments.Any(department => EF.Property<string>(department, "CompanyId") == id)
-                        && !persons.Any(person => EF.Property<string?>(person, "CompanyId") == id))
+                        EF.Property<string>(company, descriptor.IdField) == persistedId
+                        && !departments.Any(department => EF.Property<string>(department, "CompanyId") == persistedId)
+                        && !persons.Any(person => EF.Property<string?>(person, "CompanyId") == persistedId))
                     .ExecuteDeleteAsync(cancellationToken);
             }
             else
             {
                 var company = await companies.FirstOrDefaultAsync(
-                    row => EF.Property<string>(row, descriptor.IdField) == id,
+                    row => EF.Property<string>(row, descriptor.IdField) == persistedId,
                     cancellationToken);
-                if (company is null || await HasReferenceAsync(id, cancellationToken))
+                if (company is null || await HasReferenceAsync(persistedId, cancellationToken))
                 {
                     affected = 0;
                 }
@@ -89,12 +97,12 @@ public sealed class CompanyCrudDeleteExecutor(EfPlatformDbContext dbContext, IPl
         if (affected == 1)
         {
             if (transactions?.HasParticipants(descriptor.ModelName) is true)
-                transactions.RegisterChange(new PlatformRecordChange(descriptor.ModelName, id, null, null));
+                transactions.RegisterChange(new PlatformRecordChange(descriptor.ModelName, persistedId, null, null));
             return StandardCrudMutationResult.Success();
         }
 
         var exists = await companies.AsNoTracking().AnyAsync(
-            company => EF.Property<string>(company, descriptor.IdField) == id,
+            company => EF.Property<string>(company, descriptor.IdField) == persistedId,
             cancellationToken);
         return exists
             ? StandardCrudMutationResult.Failure(ReferencedError())

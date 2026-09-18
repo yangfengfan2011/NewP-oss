@@ -29,7 +29,7 @@ public sealed class RoleManagementDisplayTests
         var stamp = new Stamp();
         var options = new DbContextOptionsBuilder<EfPlatformDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString())
             .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().Options;
-        await using var db = new EfPlatformDbContext(options, plan, stamp);
+        await using var db = new EfPlatformDbContext(options, plan, new EntityAuditValueProvider(stamp));
         var rows = db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Role"));
         foreach (var id in new[] { "role-1", "role-2" })
         {

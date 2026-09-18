@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Text.Json.Serialization;
 using ICP.Platform.Authorization.Extensions;
 using ICP.Platform.Crud.Extensions;
+using ICP.Platform.Crud.ObjectOperations;
 using ICP.Platform.HostApi.Extensions;
 using ICP.Platform.HostApi.Authentication;
 using ICP.Platform.HostApi.Authorization;
@@ -22,6 +23,7 @@ using ICP.Platform.Modules.Authorization.Persistence.Descriptors;
 using ICP.Platform.Modules.Identity;
 using ICP.Platform.Modules.Identity.Persistence.Descriptors;
 using ICP.Platform.Modules.Organization;
+using ICP.Platform.Modules.Organization.Caching;
 using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.Auditing;
@@ -381,6 +383,29 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             PersonNo = "AUDIT-001", ENAME = "初始姓名", CompanyId = Id(company), DepartmentId = Id(department),
             BirthDate = "2000-02-29", EmploymentStatus = "Active", EmploymentStartedAt = "2026-01-01T01:02:03Z", IsEnabled = true
         });
+        var personId = Id(created);
+        var createdFields = created.GetProperty("fields");
+        var createdAt = createdFields.GetProperty("CreatedAt").GetDateTime();
+        Assert.Equal(fixture.ActorId, createdFields.GetProperty("CreatedBy").GetString());
+        Assert.Equal(fixture.ActorId, createdFields.GetProperty("UpdatedBy").GetString());
+        Assert.Equal(createdAt, createdFields.GetProperty("UpdatedAt").GetDateTime());
+        Assert.EndsWith("Z", createdFields.GetProperty("CreatedAt").GetString());
+        await using (var scope = fixture.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+            var stored = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Person"))
+                .AsNoTracking()
+                .SingleAsync(row => EF.Property<string>(row, "EID") == personId);
+            var cached = (await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync()).Persons[personId];
+            foreach (var field in new[] { "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt" })
+            {
+                Assert.Equal(stored[field], cached[field]);
+            }
+            Assert.Equal(createdAt, stored["CreatedAt"]);
+            Assert.Equal(createdAt, stored["UpdatedAt"]);
+            Assert.Equal(fixture.ActorId, stored["CreatedBy"]);
+            Assert.Equal(fixture.ActorId, stored["UpdatedBy"]);
+        }
         var page = await FeatureHttpTestRequests.ReadAsync(client, http.Audit(), "/api/audit/business-changes?Resource=organization.person&TargetId=" + Id(created));
         var row = Assert.Single(page.GetProperty("items").EnumerateArray());
         Assert.Equal("person.created", row.GetProperty("EventType").GetString());
@@ -395,6 +420,39 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.Equal(JsonValueKind.Null, changes["EmploymentEndedAt"].GetProperty("after").GetProperty("value").ValueKind);
         Assert.Equal("AUDIT-001", changes["PersonNo"].GetProperty("after").GetProperty("value").GetString());
         Assert.Equal("true", changes["IsEnabled"].GetProperty("after").GetProperty("value").GetString());
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "人员正式服务端调用与 Standard CRUD 消费同一对象行为")]
+    public async Task PersonCreation_DirectObjectOperationCommitsPersonAuditAndCache()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        await using var scope = fixture.Services.CreateAsyncScope();
+        using var activity = new Activity(nameof(PersonCreation_DirectObjectOperationCommitsPersonAuditAndCache)).Start();
+        var result = await scope.ServiceProvider.GetRequiredService<IObjectOperationExecutor>().ExecuteAsync(
+            "organization.person",
+            ObjectOperationAction.Create,
+            new Dictionary<string, object?>
+            {
+                ["PersonNo"] = "DIRECT-OBJECT",
+                ["ENAME"] = "服务端创建",
+                ["EmploymentStatus"] = "Active",
+                ["IsEnabled"] = true
+            });
+
+        Assert.True(result.Succeeded, result.Error?.Message);
+        var personId = Convert.ToString(result.Detail!.Fields["EID"])!;
+        var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        var stored = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Person"))
+            .AsNoTracking()
+            .SingleAsync(row => EF.Property<string>(row, "EID") == personId);
+        var cached = (await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync()).Persons[personId];
+        Assert.Equal(stored.OrderBy(static pair => pair.Key), cached.OrderBy(static pair => pair.Key));
+        var audit = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("BusinessChange"))
+            .AsNoTracking()
+            .SingleAsync(row => EF.Property<string>(row, "TargetId") == personId);
+        Assert.Equal("person.created", audit["EventType"]);
+        Assert.Equal(SystemEntityAuditStampProvider.SystemActorId, stored["CreatedBy"]);
+        Assert.Equal(stored["CreatedAt"], stored["UpdatedAt"]);
     }
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "登记、写入、保存和确定未提交故障共同回滚")]
     public async Task PersonCreation_WhenParticipantOrStoreFails_RollsBackPersonAndRecord()

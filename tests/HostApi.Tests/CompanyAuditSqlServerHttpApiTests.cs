@@ -56,7 +56,9 @@ public sealed class CompanyAuditSqlServerHttpApiTests
             builder.Services.AddSingleton<ITemporalDisplayProjectionExecutor, TemporalDisplayProjectionExecutor>();
             var database = new SqlConnectionStringBuilder(admin.ConnectionString) { InitialCatalog = catalog }.ConnectionString;
             builder.Services.AddScoped(_ => new EfPlatformDbContext(new DbContextOptionsBuilder<EfPlatformDbContext>()
-                .UseSqlServer(database).ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().Options, plan, stamp));
+                .UseSqlServer(database).ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().Options,
+                plan,
+                new EntityAuditValueProvider(stamp)));
             builder.Services.AddScoped<IPlatformQueryExecutor, EfPlatformQueryExecutor>();
             await using var app = builder.Build();
             app.Use(async (context, next) =>

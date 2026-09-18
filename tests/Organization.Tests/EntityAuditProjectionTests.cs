@@ -34,7 +34,7 @@ public sealed class EntityAuditProjectionTests
         var stamp = new FixedStamp();
         var options = new DbContextOptionsBuilder<EfPlatformDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString())
             .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().Options;
-        await using var context = new EfPlatformDbContext(options, plan, stamp);
+        await using var context = new EfPlatformDbContext(options, plan, new EntityAuditValueProvider(stamp));
         var directory = new Names();
         IStandardCrudService service = new StandardCrudService(new EfStandardCrudRepository(context, new PlatformObjectIdGenerator()),
             new EfPlatformQueryExecutor(context), [], [], [], [], [], auditStampProvider: stamp,

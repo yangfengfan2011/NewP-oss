@@ -1,0 +1,19 @@
+using ICP.Platform.Crud.Models;
+
+namespace ICP.Platform.Crud.ObjectOperations;
+
+/// <summary>
+/// 对正式对象写入统一施加动作声明、事务协调及可信审计作用域。
+/// </summary>
+public interface IObjectOperationExecutor
+{
+    /// <summary>判断对象拥有者是否声明并实现指定动作。</summary>
+    bool CanExecute(string objectKey, ObjectOperationAction action);
+
+    /// <summary>通过唯一正式入口执行对象写入。</summary>
+    Task<StandardCrudMutationResult> ExecuteAsync(
+        string objectKey,
+        ObjectOperationAction action,
+        IReadOnlyDictionary<string, object?> values,
+        CancellationToken cancellationToken = default);
+}

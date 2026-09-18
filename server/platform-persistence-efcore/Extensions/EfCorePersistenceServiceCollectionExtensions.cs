@@ -35,6 +35,7 @@ public static class EfCorePersistenceServiceCollectionExtensions
         services.AddSingleton(databaseIdentity);
         services.TryAddSingleton<TimeProvider>(TimeProvider.System);
         services.TryAddScoped<IEntityAuditStampProvider, SystemEntityAuditStampProvider>();
+        services.TryAddScoped<IEntityAuditValueProvider, EntityAuditValueProvider>();
         services.AddOptions<PersistenceOptions>()
             .Bind(
                 configuration.GetSection(PersistenceOptions.SectionName),

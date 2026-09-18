@@ -76,6 +76,77 @@ public sealed class EfEntityAuditTests
     }
 
     [Fact]
+    public async Task SaveChangesAsync_WithinAuditOperationScope_ReusesBehaviorAuditValues()
+    {
+        var behaviorTime = new DateTime(2026, 9, 18, 9, 30, 0, DateTimeKind.Utc);
+        var provider = new CountingEntityAuditStampProvider(
+            new EntityAuditStamp("person-creator", behaviorTime),
+            new EntityAuditStamp("unexpected-second-owner", behaviorTime.AddMinutes(1)));
+        var auditValues = new EntityAuditValueProvider(provider);
+        await using var dbContext = CreateDbContext(
+            nameof(SaveChangesAsync_WithinAuditOperationScope_ReusesBehaviorAuditValues),
+            auditValues);
+        var row = new Dictionary<string, object?> { ["EID"] = "person-1" };
+
+        using (auditValues.BeginOperation())
+        {
+            auditValues.ForCreate().ApplyTo(row);
+            dbContext.Set<Dictionary<string, object?>>("platform.core/Person").Add(row);
+            await dbContext.SaveChangesAsync();
+        }
+
+        Assert.Equal(1, provider.Reads);
+        Assert.Equal("person-creator", row["CreatedBy"]);
+        Assert.Equal(behaviorTime, row["CreatedAt"]);
+        Assert.Equal("person-creator", row["UpdatedBy"]);
+        Assert.Equal(behaviorTime, row["UpdatedAt"]);
+    }
+
+    [Fact]
+    public void BeginOperation_EachTopLevelWriteGetsItsOwnTrustedStamp()
+    {
+        var firstTime = new DateTime(2026, 9, 18, 9, 30, 0, DateTimeKind.Utc);
+        var secondTime = firstTime.AddMinutes(1);
+        var provider = new CountingEntityAuditStampProvider(
+            new EntityAuditStamp("first-actor", firstTime),
+            new EntityAuditStamp("second-actor", secondTime));
+        var auditValues = new EntityAuditValueProvider(provider);
+
+        EntityAuditValues first;
+        using (auditValues.BeginOperation())
+        {
+            first = auditValues.ForCreate();
+        }
+
+        EntityAuditValues second;
+        using (auditValues.BeginOperation())
+        {
+            second = auditValues.ForCreate();
+        }
+
+        Assert.Equal("first-actor", first.CreatedBy);
+        Assert.Equal(firstTime, first.CreatedAt);
+        Assert.Equal("second-actor", second.CreatedBy);
+        Assert.Equal(secondTime, second.CreatedAt);
+        Assert.Equal(2, provider.Reads);
+    }
+
+    [Fact]
+    public void ForUpdate_WhenSqlTimestampHasUnspecifiedKind_PreservesUtcTicksAndLowerBound()
+    {
+        var createdAt = new DateTime(2026, 9, 18, 9, 30, 0, DateTimeKind.Unspecified);
+        var provider = new EntityAuditValueProvider(new FakeEntityAuditStampProvider(
+            "editor",
+            DateTime.SpecifyKind(createdAt.AddMinutes(-1), DateTimeKind.Utc)));
+
+        var values = provider.ForUpdate("creator", createdAt);
+
+        Assert.Equal(DateTimeKind.Utc, values.CreatedAt.Kind);
+        Assert.Equal(createdAt.Ticks, values.CreatedAt.Ticks);
+        Assert.Equal(values.CreatedAt, values.UpdatedAt);
+    }
+
+    [Fact]
     public async Task SaveChangesAsync_WhenAuditOwnerReturnsNoValue_FailsWithStableCodeBeforeStoreWrite()
     {
         var databaseName = nameof(SaveChangesAsync_WhenAuditOwnerReturnsNoValue_FailsWithStableCodeBeforeStoreWrite);
@@ -118,6 +189,17 @@ public sealed class EfEntityAuditTests
         return new EfPlatformDbContext(options, [EntityDefinition()], auditStampProvider);
     }
 
+    private static EfPlatformDbContext CreateDbContext(
+        string databaseName,
+        IEntityAuditValueProvider auditValueProvider)
+    {
+        var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
+            .UseInMemoryDatabase(databaseName)
+            .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>()
+            .Options;
+        return new EfPlatformDbContext(options, [EntityDefinition()], auditValueProvider);
+    }
+
     private static ModelDefinition EntityDefinition() => new(
         "Person",
         "Person",
@@ -156,5 +238,12 @@ public sealed class EfEntityAuditTests
     private sealed class MissingActorEntityAuditStampProvider : IEntityAuditStampProvider
     {
         public EntityAuditStamp GetCurrent() => new(" ", DateTime.UtcNow);
+    }
+
+    private sealed class CountingEntityAuditStampProvider(params EntityAuditStamp[] stamps) : IEntityAuditStampProvider
+    {
+        public int Reads { get; private set; }
+
+        public EntityAuditStamp GetCurrent() => stamps[Reads++];
     }
 }

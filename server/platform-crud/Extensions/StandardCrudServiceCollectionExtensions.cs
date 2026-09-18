@@ -2,9 +2,11 @@ using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Exports;
 using ICP.Platform.Crud.ObjectIds;
+using ICP.Platform.Crud.ObjectOperations;
 using ICP.Platform.Crud.Persistence;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Query.Runtime;
+using ICP.Platform.Persistence.Auditing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -28,9 +30,15 @@ public static class StandardCrudServiceCollectionExtensions
     {
         services.AddPlatformObjectIdGeneration();
         services.AddPlatformQueryKernel();
+        services.TryAddScoped<IEntityAuditValueProvider>(static provider =>
+            new EntityAuditValueProvider(provider.GetRequiredService<IEntityAuditStampProvider>()));
         services.TryAddSingleton<IStandardCrudResourceRegistry, StandardCrudResourceRegistry>();
         services.TryAddSingleton<StandardCrudXlsxWriter>();
-        services.AddScoped<IStandardCrudRepository, EfStandardCrudRepository>();
+        services.AddScoped<EfStandardCrudRepository>();
+        services.AddScoped<IStandardCrudRepository>(static provider =>
+            provider.GetRequiredService<EfStandardCrudRepository>());
+        services.AddScoped<StandardCrudCreateRequestPreparer>();
+        services.AddScoped<IObjectOperationExecutor, ObjectOperationExecutor>();
         services.AddScoped<IStandardCrudService, StandardCrudService>();
         services.AddScoped<StandardCrudExportService>();
         services.AddScoped<StandardCrudEndpoint>();

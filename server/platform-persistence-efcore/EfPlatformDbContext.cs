@@ -13,7 +13,7 @@ namespace ICP.Platform.Persistence.EfCore;
 public sealed class EfPlatformDbContext : DbContext
 {
     private readonly IReadOnlyList<ModelDefinition> _definitions;
-    private readonly IEntityAuditStampProvider _auditStampProvider;
+    private readonly IEntityAuditValueProvider _auditValueProvider;
     private readonly HashSet<string> _entityModelKeys;
     private readonly string _modelCacheSignature;
 
@@ -21,13 +21,13 @@ public sealed class EfPlatformDbContext : DbContext
     public EfPlatformDbContext(
         DbContextOptions<EfPlatformDbContext> options,
         CompiledPersistencePlan plan,
-        IEntityAuditStampProvider auditStampProvider)
+        IEntityAuditValueProvider auditValueProvider)
         : base(options)
     {
-        ArgumentNullException.ThrowIfNull(auditStampProvider);
+        ArgumentNullException.ThrowIfNull(auditValueProvider);
         PersistencePlan = plan;
         _definitions = plan.Models;
-        _auditStampProvider = auditStampProvider;
+        _auditValueProvider = auditValueProvider;
         _entityModelKeys = plan.Models
             .Where(static definition => definition.Kind == ModelKind.Entity)
             .Select(static definition => definition.LogicalKey)
@@ -43,7 +43,7 @@ public sealed class EfPlatformDbContext : DbContext
         : this(
             options,
             plan,
-            new SystemEntityAuditStampProvider(TimeProvider.System))
+            new EntityAuditValueProvider(new SystemEntityAuditStampProvider(TimeProvider.System)))
     {
     }
 
@@ -53,7 +53,7 @@ public sealed class EfPlatformDbContext : DbContext
         : this(
             options,
             CreateLegacyPlan(definitions),
-            new SystemEntityAuditStampProvider(TimeProvider.System))
+            new EntityAuditValueProvider(new SystemEntityAuditStampProvider(TimeProvider.System)))
     {
     }
 
@@ -61,7 +61,15 @@ public sealed class EfPlatformDbContext : DbContext
         DbContextOptions<EfPlatformDbContext> options,
         IReadOnlyList<ModelDefinition> definitions,
         IEntityAuditStampProvider auditStampProvider)
-        : this(options, CreateLegacyPlan(definitions), auditStampProvider)
+        : this(options, CreateLegacyPlan(definitions), new EntityAuditValueProvider(auditStampProvider))
+    {
+    }
+
+    public EfPlatformDbContext(
+        DbContextOptions<EfPlatformDbContext> options,
+        IReadOnlyList<ModelDefinition> definitions,
+        IEntityAuditValueProvider auditValueProvider)
+        : this(options, CreateLegacyPlan(definitions), auditValueProvider)
     {
     }
 
@@ -128,56 +136,34 @@ public sealed class EfPlatformDbContext : DbContext
             return;
         }
 
-        var stamp = ResolveAuditStamp();
         foreach (var entry in entries)
         {
             if (entry.State == EntityState.Added)
             {
-                SetAuditValue(entry, "CreatedBy", stamp.ActorId);
-                SetAuditValue(entry, "CreatedAt", stamp.OccurredAtUtc);
+                ApplyAuditValues(entry, _auditValueProvider.ForCreate());
             }
             else
             {
+                var createdBy = Convert.ToString(entry.Property("CreatedBy").OriginalValue)
+                    ?? throw new EntityAuditStampUnavailableException();
+                var createdAt = entry.Property("CreatedAt").OriginalValue is DateTime value
+                    ? value
+                    : throw new EntityAuditStampUnavailableException();
+                ApplyAuditValues(entry, _auditValueProvider.ForUpdate(createdBy, createdAt));
                 RestoreCreationAuditValue(entry, "CreatedBy");
                 RestoreCreationAuditValue(entry, "CreatedAt");
             }
-
-            SetAuditValue(entry, "UpdatedBy", stamp.ActorId);
-            SetAuditValue(entry, "UpdatedAt", ResolveUpdatedAt(entry, stamp.OccurredAtUtc));
         }
     }
 
-    // provider 无法构造非空可信值时统一翻译为稳定平台失败，避免泄漏实现相关参数异常。
-    private EntityAuditStamp ResolveAuditStamp()
-    {
-        try
-        {
-            return _auditStampProvider.GetCurrent()
-                ?? throw new EntityAuditStampUnavailableException();
-        }
-        catch (EntityAuditStampUnavailableException)
-        {
-            throw;
-        }
-        catch (ArgumentException exception)
-        {
-            throw new EntityAuditStampUnavailableException(exception);
-        }
-    }
-
-    private static DateTime ResolveUpdatedAt(
+    private static void ApplyAuditValues(
         Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry entry,
-        DateTime occurredAtUtc)
+        EntityAuditValues values)
     {
-        if (entry.State == EntityState.Modified
-            && entry.Metadata.FindProperty("CreatedAt") is not null
-            && entry.Property("CreatedAt").OriginalValue is DateTime createdAt
-            && occurredAtUtc < createdAt)
-        {
-            return createdAt;
-        }
-
-        return occurredAtUtc;
+        SetAuditValue(entry, "CreatedBy", values.CreatedBy);
+        SetAuditValue(entry, "CreatedAt", values.CreatedAt);
+        SetAuditValue(entry, "UpdatedBy", values.UpdatedBy);
+        SetAuditValue(entry, "UpdatedAt", values.UpdatedAt);
     }
 
     private static void SetAuditValue(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry entry, string fieldName, object value)

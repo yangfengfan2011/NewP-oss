@@ -1,6 +1,7 @@
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
+using ICP.Platform.Crud.ObjectOperations;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Crud.Tests.Support;
 using ICP.Platform.Modeling;
@@ -16,6 +17,25 @@ namespace ICP.Platform.Crud.Tests;
 
 public sealed class StandardCrudServiceWriteTests
 {
+    [Fact]
+    public async Task CreateAsync_WhenObjectBehaviorIsRegistered_UsesOnlyUnifiedOperationEntry()
+    {
+        var repository = new RecordingMutationStandardCrudRepository([]);
+        var operations = new RecordingObjectOperationExecutor();
+        var service = Service(repository, objectOperations: operations);
+
+        var result = await service.CreateAsync(Descriptor(), new Dictionary<string, object?>
+        {
+            ["PersonNo"] = "P001",
+            ["ENAME"] = "张三"
+        });
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(1, operations.Executions);
+        Assert.Equal("P001", operations.LastValues!["PersonNo"]);
+        Assert.Equal(0, repository.CreateCallCount);
+    }
+
     [Fact]
     public async Task CreateAsync_NormalizesTemporalInputsBeforeRepositoryCreate()
     {
@@ -1325,7 +1345,8 @@ public sealed class StandardCrudServiceWriteTests
     private static StandardCrudService Service(
         IStandardCrudRepository? repository = null,
         IEnumerable<IStandardCrudDisplayValueResolver>? displayValueResolvers = null,
-        IEntityAuditStampProvider? auditStampProvider = null) =>
+        IEntityAuditStampProvider? auditStampProvider = null,
+        IObjectOperationExecutor? objectOperations = null) =>
         new(
             repository ?? new InMemoryStandardCrudRepository([]),
             EmptyQueryExecutor(),
@@ -1335,7 +1356,8 @@ public sealed class StandardCrudServiceWriteTests
             [],
             [],
             [],
-            auditStampProvider: auditStampProvider);
+            auditStampProvider: auditStampProvider,
+            objectOperations: objectOperations);
 
     private static StandardCrudFieldPolicy ServerOwnedAuditPolicy(string field) => new()
     {
@@ -1884,6 +1906,34 @@ public sealed class StandardCrudServiceWriteTests
     private sealed class FixedAuditStampProvider(string actorId, DateTime occurredAtUtc) : IEntityAuditStampProvider
     {
         public EntityAuditStamp GetCurrent() => new(actorId, occurredAtUtc);
+    }
+
+    private sealed class RecordingObjectOperationExecutor : IObjectOperationExecutor
+    {
+        public int Executions { get; private set; }
+        public IReadOnlyDictionary<string, object?>? LastValues { get; private set; }
+
+        public bool CanExecute(string objectKey, ObjectOperationAction action) =>
+            objectKey == "organization.person" && action == ObjectOperationAction.Create;
+
+        public Task<StandardCrudMutationResult> ExecuteAsync(
+            string objectKey,
+            ObjectOperationAction action,
+            IReadOnlyDictionary<string, object?> values,
+            CancellationToken cancellationToken = default)
+        {
+            Executions++;
+            LastValues = values;
+            return Task.FromResult(StandardCrudMutationResult.Success(new StandardCrudDetail
+            {
+                Fields = new Dictionary<string, object?>
+                {
+                    ["EID"] = "Person_1",
+                    ["PersonNo"] = values["PersonNo"],
+                    ["ENAME"] = values["ENAME"]
+                }
+            }));
+        }
     }
 
     private sealed class FixedPresentationContextAccessor(RequestPresentationContext? context)

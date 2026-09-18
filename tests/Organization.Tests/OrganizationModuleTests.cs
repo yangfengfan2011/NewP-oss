@@ -1,6 +1,8 @@
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Crud.Abstractions;
+using ICP.Platform.Crud.ObjectOperations;
 using ICP.Platform.Modules.Organization;
+using ICP.Platform.Modules.Organization.Crud;
 using ICP.Platform.Modules.Organization.Services;
 using ICP.Platform.Persistence.Composition;
 using ICP.Platform.Persistence.EfCore;
@@ -41,6 +43,26 @@ public class OrganizationModuleTests
             provider.GetRequiredService<ICP.Platform.Persistence.Transactions.IPlatformCacheStatus>());
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(Microsoft.AspNetCore.Authorization.IAuthorizationHandler)
             && descriptor.ImplementationType == typeof(ICP.Platform.Modules.Organization.Caching.OrganizationAvailabilityHandler));
+    }
+
+    [Fact]
+    public void ConfigureServices_RegistersPersonCreateAsTheOnlyObjectBehavior()
+    {
+        var services = new ServiceCollection();
+
+        new OrganizationModule().ConfigureServices(services);
+
+        var registration = Assert.Single(services, descriptor =>
+            descriptor.ServiceType == typeof(IObjectBehavior));
+        Assert.Equal(typeof(PersonObjectBehavior), registration.ImplementationType);
+        Assert.Equal(ServiceLifetime.Scoped, registration.Lifetime);
+        Assert.Equal("organization.person", PersonObjectBehavior.BehaviorDefinition.ObjectKey);
+        Assert.Equal("Organization/Person", PersonObjectBehavior.BehaviorDefinition.ModelKey);
+        Assert.Equal([ObjectOperationAction.Create], PersonObjectBehavior.BehaviorDefinition.SupportedActions);
+        Assert.Equal([ObjectOperationAction.Create], PersonObjectBehavior.BehaviorDefinition.OpenExtensionActions);
+        Assert.DoesNotContain(
+            typeof(ObjectOperationContext).GetConstructors(),
+            constructor => constructor.IsPublic);
     }
 
     [Fact]

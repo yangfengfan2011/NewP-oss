@@ -3,6 +3,7 @@ using ICP.Platform.Organization.Contracts;
 using ICP.Platform.Persistence.Transactions;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Extensions;
+using ICP.Platform.Crud.ObjectOperations;
 using ICP.Platform.Modules.Organization.Crud;
 using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Persistence.Ef;
@@ -30,8 +31,11 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         foreach (var model in new[] { "Company", "Department", "Position", "Person" })
             services.AddScoped(sp => new PlatformCommitRegistration($"Organization/{model}", sp.GetRequiredService<OrganizationAdmissionCommitParticipant>()));
         services.AddHostedService<OrganizationCacheInitializer>();
-        services.AddScoped<IStandardCrudCreationRecorder, PersonCreationRecorder>();
+        services.AddScoped<PersonCreationRecorder>();
+        services.AddScoped<IStandardCrudCreationRecorder>(static provider =>
+            provider.GetRequiredService<PersonCreationRecorder>());
         services.AddScoped<IStandardCrudUpdateRecorder, PersonUpdateRecorder>();
+        services.AddScoped<IObjectBehavior, PersonObjectBehavior>();
         foreach (var (kind, model) in new[] { ("company", OrganizationRecordKind.Company), ("department", OrganizationRecordKind.Department), ("position", OrganizationRecordKind.Position), ("organization.person", OrganizationRecordKind.Person) })
             services.AddScoped<ICP.Platform.Modules.Audit.Contracts.IBusinessAuditNameDirectory>(sp =>
                 new BusinessAuditOrganizationNames(sp.GetRequiredService<IOrganizationQuery>(), kind, model));

@@ -239,17 +239,14 @@ public sealed class StandardCrudService : IStandardCrudService
                 var operation = await _objectOperations.ExecuteAsync(
                     descriptor.ResourceKey,
                     ObjectOperationAction.Create,
+                    null,
                     values,
                     cancellationToken);
-                if (!operation.Succeeded)
-                {
-                    return operation;
-                }
-
-                var row = operation.Detail?.Fields
-                    ?? throw new InvalidOperationException("Object create behavior returned no created row.");
-                return StandardCrudMutationResult.Success(
-                    await BuildDetailFromRowAsync(descriptor, row, cancellationToken));
+                return await BuildMutationDetailAsync(
+                    descriptor,
+                    operation,
+                    "Object create behavior returned no created row.",
+                    cancellationToken);
             }
             catch (StandardCrudPersistenceConflictException)
             {
@@ -257,8 +254,25 @@ public sealed class StandardCrudService : IStandardCrudService
             }
         }
 
+        var result = await ExecuteDefaultCreateAsync(descriptor, values, cancellationToken);
+        return await BuildMutationDetailAsync(
+            descriptor,
+            result,
+            "Default create behavior returned no created row.",
+            cancellationToken);
+    }
+
+    // 默认创建核心可由统一对象行为复用；已处于对象事务时只登记变化，不再取得第二次事务所有权。
+    internal async ValueTask<StandardCrudMutationResult> ExecuteDefaultCreateAsync(
+        StandardCrudDescriptor descriptor,
+        IReadOnlyDictionary<string, object?> values,
+        CancellationToken cancellationToken)
+    {
         if (_transactionExecutor is { IsActive: false } && _transactionExecutor.HasParticipants(descriptor.ModelName))
-            return await ExecuteCoordinatedAsync(descriptor, token => CreateAsync(descriptor, values, token), cancellationToken);
+            return await ExecuteCoordinatedAsync(
+                descriptor,
+                token => ExecuteDefaultCreateAsync(descriptor, values, token).AsTask(),
+                cancellationToken);
         var preparation = await _createPreparer.PrepareAsync(descriptor, values, cancellationToken);
         if (!preparation.Succeeded)
             return StandardCrudMutationResult.Failure(preparation.Error!);
@@ -272,14 +286,24 @@ public sealed class StandardCrudService : IStandardCrudService
                 if (!_creationRecorders.TryGetValue(descriptor.ResourceKey, out var recorder)
                     || _transactionExecutor is null || _repository is not IStandardCrudCreationParticipant participant)
                     throw new InvalidOperationException("Required creation registration is unavailable.");
-                var id = await _transactionExecutor.ExecuteAsync(async token =>
+
+                if (_transactionExecutor.IsActive)
                 {
                     var row = participant.RegisterCreate(descriptor, allowed);
-                    await recorder.RegisterAsync(row, token);
-                    return Convert.ToString(row[descriptor.IdField])!;
-                }, cancellationToken);
-                created = await _repository.GetByIdAsync(descriptor, id, cancellationToken)
-                    ?? throw new InvalidOperationException("Committed resource is unavailable.");
+                    await recorder.RegisterAsync(row, cancellationToken);
+                    created = row;
+                }
+                else
+                {
+                    var id = await _transactionExecutor.ExecuteAsync(async token =>
+                    {
+                        var row = participant.RegisterCreate(descriptor, allowed);
+                        await recorder.RegisterAsync(row, token);
+                        return Convert.ToString(row[descriptor.IdField])!;
+                    }, cancellationToken);
+                    created = await _repository.GetByIdAsync(descriptor, id, cancellationToken)
+                        ?? throw new InvalidOperationException("Committed resource is unavailable.");
+                }
             }
             else
             {
@@ -290,7 +314,10 @@ public sealed class StandardCrudService : IStandardCrudService
         {
             return StandardCrudMutationResult.Failure(PersistenceConflict(descriptor));
         }
-        return StandardCrudMutationResult.Success(await BuildDetailFromRowAsync(descriptor, created, cancellationToken));
+        return StandardCrudMutationResult.Success(new StandardCrudDetail
+        {
+            Fields = created
+        });
     }
 
     /// <summary>
@@ -303,8 +330,48 @@ public sealed class StandardCrudService : IStandardCrudService
         IReadOnlyDictionary<string, object?> values,
         CancellationToken cancellationToken = default)
     {
+        if (_objectOperations?.CanExecute(descriptor.ResourceKey, ObjectOperationAction.Update) == true)
+        {
+            try
+            {
+                var operation = await _objectOperations.ExecuteAsync(
+                    descriptor.ResourceKey,
+                    ObjectOperationAction.Update,
+                    id,
+                    values,
+                    cancellationToken);
+                return await BuildMutationDetailAsync(
+                    descriptor,
+                    operation,
+                    "Object update behavior returned no updated row.",
+                    cancellationToken);
+            }
+            catch (StandardCrudPersistenceConflictException)
+            {
+                return StandardCrudMutationResult.Failure(PersistenceConflict(descriptor));
+            }
+        }
+
+        var result = await ExecuteDefaultUpdateAsync(descriptor, id, values, cancellationToken);
+        return await BuildMutationDetailAsync(
+            descriptor,
+            result,
+            "Default update behavior returned no updated row.",
+            cancellationToken);
+    }
+
+    // 默认更新核心在对象事务内直接保护旧值、校验最终输入并登记业务审计，避免形成第二个事务 owner。
+    internal async ValueTask<StandardCrudMutationResult> ExecuteDefaultUpdateAsync(
+        StandardCrudDescriptor descriptor,
+        string id,
+        IReadOnlyDictionary<string, object?> values,
+        CancellationToken cancellationToken)
+    {
         if (_transactionExecutor is { IsActive: false } && _transactionExecutor.HasParticipants(descriptor.ModelName))
-            return await ExecuteCoordinatedAsync(descriptor, token => UpdateAsync(descriptor, id, values, token), cancellationToken);
+            return await ExecuteCoordinatedAsync(
+                descriptor,
+                token => ExecuteDefaultUpdateAsync(descriptor, id, values, token).AsTask(),
+                cancellationToken);
         StandardCrudDescriptorValidator.Validate(descriptor);
         if (!descriptor.RequiresUpdateRecord)
             return await UpdateCoreAsync(descriptor, id, values, null, null, cancellationToken);
@@ -314,6 +381,11 @@ public sealed class StandardCrudService : IStandardCrudService
             throw new InvalidOperationException("Required protected update registration is unavailable.");
         try
         {
+            if (_transactionExecutor.IsActive)
+            {
+                return await UpdateCoreAsync(descriptor, id, values, participant, recorder, cancellationToken);
+            }
+
             return await _transactionExecutor.ExecuteAsync(token => new ValueTask<StandardCrudMutationResult>(
                 UpdateCoreAsync(descriptor, id, values, participant, recorder, token)), cancellationToken);
         }
@@ -404,7 +476,13 @@ public sealed class StandardCrudService : IStandardCrudService
             return StandardCrudMutationResult.Failure(storageInvariantError);
         }
 
-        var uniqueError = await ValidateUniqueConstraintsAsync(descriptor, candidate, excludedId: id, cancellationToken);
+        // 数据库可能按 provider 规则以别名命中主键；唯一性排除必须使用受保护旧值中的实际持久化标识。
+        var persistedId = Convert.ToString(existing.GetValueOrDefault(descriptor.IdField)) ?? id;
+        var uniqueError = await ValidateUniqueConstraintsAsync(
+            descriptor,
+            candidate,
+            excludedId: persistedId,
+            cancellationToken);
         if (uniqueError is not null)
         {
             return StandardCrudMutationResult.Failure(uniqueError);
@@ -442,7 +520,10 @@ public sealed class StandardCrudService : IStandardCrudService
             ? StandardCrudMutationResult.Failure(expectedRevision.HasValue
                 ? ConcurrencyConflict(descriptor)
                 : NotFound(descriptor, id))
-            : StandardCrudMutationResult.Success(await BuildDetailFromRowAsync(descriptor, updated, cancellationToken));
+            : StandardCrudMutationResult.Success(new StandardCrudDetail
+            {
+                Fields = updated
+            });
     }
 
     /// <summary>停用仅生成固定状态写入，复用标准更新的校验和事务。</summary>
@@ -488,8 +569,30 @@ public sealed class StandardCrudService : IStandardCrudService
         string id,
         CancellationToken cancellationToken = default)
     {
+        if (_objectOperations?.CanExecute(descriptor.ResourceKey, ObjectOperationAction.Delete) == true)
+        {
+            return await _objectOperations.ExecuteAsync(
+                descriptor.ResourceKey,
+                ObjectOperationAction.Delete,
+                id,
+                new Dictionary<string, object?>(StringComparer.Ordinal),
+                cancellationToken);
+        }
+
+        return await ExecuteDefaultDeleteAsync(descriptor, id, cancellationToken);
+    }
+
+    // 默认删除核心在统一行为事务内执行 guard 或原子条件删除，不更新即将物理删除行的审计字段。
+    internal async ValueTask<StandardCrudMutationResult> ExecuteDefaultDeleteAsync(
+        StandardCrudDescriptor descriptor,
+        string id,
+        CancellationToken cancellationToken)
+    {
         if (_transactionExecutor is { IsActive: false } && _transactionExecutor.HasParticipants(descriptor.ModelName))
-            return await ExecuteCoordinatedAsync(descriptor, token => DeleteAsync(descriptor, id, token), cancellationToken);
+            return await ExecuteCoordinatedAsync(
+                descriptor,
+                token => ExecuteDefaultDeleteAsync(descriptor, id, token).AsTask(),
+                cancellationToken);
         StandardCrudDescriptorValidator.Validate(descriptor);
         if (descriptor.DeletePolicy == StandardCrudDeletePolicy.None)
         {
@@ -808,6 +911,24 @@ public sealed class StandardCrudService : IStandardCrudService
         }
 
         return new StandardCrudDetail { Fields = fields, Summaries = summaries };
+    }
+
+    // 对象行为只返回实际持久化字段；正式 CRUD 响应在边界统一补齐 display 与 summary。
+    private async Task<StandardCrudMutationResult> BuildMutationDetailAsync(
+        StandardCrudDescriptor descriptor,
+        StandardCrudMutationResult result,
+        string missingRowMessage,
+        CancellationToken cancellationToken)
+    {
+        if (!result.Succeeded)
+        {
+            return result;
+        }
+
+        var row = result.Detail?.Fields
+            ?? throw new InvalidOperationException(missingRowMessage);
+        return StandardCrudMutationResult.Success(
+            await BuildDetailFromRowAsync(descriptor, row, cancellationToken));
     }
 
     // 普通附属摘要可降级；关键缓存不可用及请求取消必须上抛，不能伪装成业务数据缺失。

@@ -12,11 +12,13 @@ public sealed class ObjectOperationAfterContext
     internal ObjectOperationAfterContext(
         string objectKey,
         ObjectOperationAction action,
+        string? targetId,
         IReadOnlyDictionary<string, object?> inputValues,
         StandardCrudMutationResult result)
     {
         ObjectKey = objectKey;
         Action = action;
+        TargetId = targetId;
         InputValues = inputValues.ToFrozenDictionary(StringComparer.Ordinal);
         ResultFields = result.Detail?.Fields.ToFrozenDictionary(StringComparer.Ordinal);
     }
@@ -25,6 +27,8 @@ public sealed class ObjectOperationAfterContext
     public string ObjectKey { get; }
     /// <summary>目标整个动作。</summary>
     public ObjectOperationAction Action { get; }
+    /// <summary>核心行为实际处理的更新或删除目标；创建时为 null。</summary>
+    public string? TargetId { get; }
     /// <summary>核心行为实际消费的最终输入快照。</summary>
     public IReadOnlyDictionary<string, object?> InputValues { get; }
     /// <summary>核心行为成功结果的字段快照；无详情时为 null。</summary>

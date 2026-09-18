@@ -14,11 +14,13 @@ public sealed class ObjectOperationBeforeContext
     internal ObjectOperationBeforeContext(
         string objectKey,
         ObjectOperationAction action,
+        string? targetId,
         IReadOnlyDictionary<string, object?> values,
         IReadOnlyCollection<string> protectedFields)
     {
         ObjectKey = objectKey;
         Action = action;
+        TargetId = targetId;
         _values = new Dictionary<string, object?>(values, StringComparer.Ordinal);
         _protectedFields = protectedFields.ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
@@ -27,6 +29,8 @@ public sealed class ObjectOperationBeforeContext
     public string ObjectKey { get; }
     /// <summary>目标整个动作。</summary>
     public ObjectOperationAction Action { get; }
+    /// <summary>更新或删除的不可变目标标识；扩展不能把请求改向其他对象。</summary>
+    public string? TargetId { get; }
     /// <summary>返回当前输入的独立冻结快照，不暴露内部可变容器。</summary>
     public IReadOnlyDictionary<string, object?> Values => SnapshotValues();
 

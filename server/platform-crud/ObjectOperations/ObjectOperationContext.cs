@@ -11,6 +11,7 @@ public sealed class ObjectOperationContext
     internal ObjectOperationContext(
         string objectKey,
         ObjectOperationAction action,
+        string? targetId,
         IReadOnlyDictionary<string, object?> values)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(objectKey);
@@ -18,6 +19,7 @@ public sealed class ObjectOperationContext
         ArgumentNullException.ThrowIfNull(values);
         ObjectKey = objectKey;
         Action = action;
+        TargetId = targetId;
         Values = values.ToFrozenDictionary(StringComparer.Ordinal);
     }
 
@@ -25,6 +27,8 @@ public sealed class ObjectOperationContext
     public string ObjectKey { get; }
     /// <summary>本次执行的明确动作。</summary>
     public ObjectOperationAction Action { get; }
+    /// <summary>更新或删除的不可变目标标识；创建时为 null。</summary>
+    public string? TargetId { get; }
     /// <summary>本次调用独占的输入副本。</summary>
     public IReadOnlyDictionary<string, object?> Values { get; }
 }

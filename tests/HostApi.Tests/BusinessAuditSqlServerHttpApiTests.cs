@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Text.Json.Serialization;
 using ICP.Platform.Authorization.Extensions;
 using ICP.Platform.Crud.Extensions;
+using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.ObjectOperations;
 using ICP.Platform.HostApi.Extensions;
 using ICP.Platform.HostApi.Authentication;
@@ -24,6 +25,7 @@ using ICP.Platform.Modules.Identity;
 using ICP.Platform.Modules.Identity.Persistence.Descriptors;
 using ICP.Platform.Modules.Organization;
 using ICP.Platform.Modules.Organization.Caching;
+using ICP.Platform.Modules.Organization.Crud;
 using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.Auditing;
@@ -442,6 +444,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         var result = await scope.ServiceProvider.GetRequiredService<IObjectOperationExecutor>().ExecuteAsync(
             "organization.person",
             ObjectOperationAction.Create,
+            null,
             new Dictionary<string, object?>
             {
                 ["PersonNo"] = "DIRECT-OBJECT",
@@ -464,6 +467,97 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.Equal("person.created", audit["EventType"]);
         Assert.Equal(SystemEntityAuditStampProvider.SystemActorId, stored["CreatedBy"]);
         Assert.Equal(stored["CreatedAt"], stored["UpdatedAt"]);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "人员服务端更新和别名删除共用对象行为、审计与实际EID缓存登记")]
+    public async Task PersonUpdateAndDelete_DirectObjectOperationsUseRulesAuditAndCanonicalCacheIdentity()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        await using var scope = fixture.Services.CreateAsyncScope();
+        using var activity = new Activity(nameof(PersonUpdateAndDelete_DirectObjectOperationsUseRulesAuditAndCanonicalCacheIdentity)).Start();
+        var operations = scope.ServiceProvider.GetRequiredService<IObjectOperationExecutor>();
+        var control = fixture.Services.GetRequiredService<ObjectOperationExtensionProbeControl>();
+        var created = await operations.ExecuteAsync(
+            "organization.person",
+            ObjectOperationAction.Create,
+            null,
+            new Dictionary<string, object?>
+            {
+                ["PersonNo"] = "DIRECT-UPDATE-DELETE",
+                ["ENAME"] = "修改前",
+                ["EmploymentStatus"] = "Active",
+                ["IsEnabled"] = true
+            });
+        var personId = Convert.ToString(created.Detail!.Fields["EID"])!;
+        var createdBy = created.Detail.Fields["CreatedBy"];
+        var createdAt = (DateTime)created.Detail.Fields["CreatedAt"]!;
+        var alias = personId.ToLowerInvariant();
+        Assert.False(string.Equals(personId, alias, StringComparison.Ordinal));
+
+        control.Mode = ObjectOperationExtensionProbeMode.InvalidFinalInput;
+        var rejected = await operations.ExecuteAsync(
+            "organization.person",
+            ObjectOperationAction.Update,
+            alias,
+            new Dictionary<string, object?> { ["ENAME"] = "原本合法" });
+        Assert.False(rejected.Succeeded);
+        Assert.Equal("Organization.Person.NameRequired", rejected.Error?.Code);
+        Assert.Equal("修改前", (await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync()).Persons[personId]["ENAME"]);
+
+        control.Mode = ObjectOperationExtensionProbeMode.Supplement;
+        control.SupplementedName = "修改后";
+        var updated = await operations.ExecuteAsync(
+            "organization.person",
+            ObjectOperationAction.Update,
+            alias,
+            new Dictionary<string, object?> { ["ENAME"] = "调用方姓名" });
+
+        Assert.True(updated.Succeeded, updated.Error?.Message);
+        Assert.Equal(personId, updated.Detail!.Fields["EID"]);
+        Assert.Equal("修改后", updated.Detail.Fields["ENAME"]);
+        Assert.Equal(SystemEntityAuditStampProvider.SystemActorId, updated.Detail.Fields["UpdatedBy"]);
+        Assert.Equal(createdBy, updated.Detail.Fields["CreatedBy"]);
+        Assert.Equal(createdAt, updated.Detail.Fields["CreatedAt"]);
+        Assert.True((DateTime)updated.Detail.Fields["UpdatedAt"]! >= createdAt);
+        Assert.Equal(alias, control.TargetId);
+        var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        var storedAfterUpdate = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Person"))
+            .AsNoTracking()
+            .SingleAsync(row => EF.Property<string>(row, "EID") == personId);
+        var audit = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("BusinessChange"))
+            .AsNoTracking()
+            .Where(row => EF.Property<string>(row, "TargetId") == personId)
+            .ToListAsync();
+        Assert.Single(audit, row => Equals(row["EventType"], "person.updated"));
+        var cached = (await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync()).Persons;
+        Assert.Equal("修改后", cached[personId]["ENAME"]);
+        Assert.False(cached.ContainsKey(alias));
+        foreach (var field in new[] { "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt" })
+        {
+            Assert.Equal(updated.Detail.Fields[field], storedAfterUpdate[field]);
+            Assert.Equal(storedAfterUpdate[field], cached[personId][field]);
+        }
+        var conditionalDelete = scope.ServiceProvider
+            .GetServices<IStandardCrudConditionalDeleteExecutor>()
+            .Single(executor => executor.ResourceKey == "organization.person");
+
+        control.Mode = ObjectOperationExtensionProbeMode.AfterFailure;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => conditionalDelete.DeleteAsync(
+            PersonCrudDescriptorFactory.Create(),
+            alias));
+        Assert.True(await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Person"))
+            .AsNoTracking()
+            .AnyAsync(row => EF.Property<string>(row, "EID") == personId));
+        Assert.True((await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync()).Persons.ContainsKey(personId));
+
+        control.Mode = ObjectOperationExtensionProbeMode.None;
+        var deleted = await conditionalDelete.DeleteAsync(PersonCrudDescriptorFactory.Create(), alias);
+
+        Assert.True(deleted.Succeeded, deleted.Error?.Message);
+        Assert.False(await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Person"))
+            .AsNoTracking()
+            .AnyAsync(row => EF.Property<string>(row, "EID") == personId));
+        Assert.False((await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync()).Persons.ContainsKey(personId));
     }
 
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "真实模块扩展与人员创建在同一 SQL 事务内成功或共同回滚")]

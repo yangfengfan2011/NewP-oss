@@ -1,6 +1,7 @@
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
+using ICP.Platform.Crud.ObjectOperations;
 using ICP.Platform.Modules.Organization.Repositories;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,9 +11,24 @@ public sealed class PersonCrudDeleteGuard : IStandardCrudDeleteGuard, IStandardC
 {
     private readonly IPersonUserBindingRepository _bindingRepository;
     private readonly OrganizationConditionalDeleteExecutor _conditionalDelete;
+    private readonly Func<IObjectOperationExecutor>? _resolveObjectOperations;
+    private readonly IObjectOperationExecutionContext? _executionContext;
 
     /// <summary>条件删除复用组织统一提交参与者，同时保留永久绑定保护。</summary>
     public PersonCrudDeleteGuard(
+        IPersonUserBindingRepository bindingRepository,
+        OrganizationConditionalDeleteExecutor conditionalDelete,
+        Func<IObjectOperationExecutor> resolveObjectOperations,
+        IObjectOperationExecutionContext executionContext)
+    {
+        _bindingRepository = bindingRepository;
+        _conditionalDelete = conditionalDelete;
+        _resolveObjectOperations = resolveObjectOperations;
+        _executionContext = executionContext;
+    }
+
+    // 定向存储测试只调用核心 adapter；正式 DI 构造始终注入统一入口和当前行为身份。
+    internal PersonCrudDeleteGuard(
         IPersonUserBindingRepository bindingRepository,
         OrganizationConditionalDeleteExecutor conditionalDelete)
     {
@@ -50,6 +66,17 @@ public sealed class PersonCrudDeleteGuard : IStandardCrudDeleteGuard, IStandardC
         if (string.IsNullOrWhiteSpace(id))
         {
             return StandardCrudMutationResult.Failure(InvalidIdError());
+        }
+
+        if (_resolveObjectOperations is not null
+            && _executionContext?.IsExecuting(ResourceKey, ObjectOperationAction.Delete, id) != true)
+        {
+            return await _resolveObjectOperations().ExecuteAsync(
+                ResourceKey,
+                ObjectOperationAction.Delete,
+                id,
+                new Dictionary<string, object?>(StringComparer.Ordinal),
+                cancellationToken);
         }
 
         return await _conditionalDelete.DeleteAsync(

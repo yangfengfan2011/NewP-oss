@@ -1,4 +1,5 @@
 using ICP.Platform.Crud.Extensions;
+using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.ObjectOperations;
 using ICP.Platform.Kernel.Abstractions;
@@ -49,6 +50,7 @@ public sealed class ObjectOperationExtensionAssemblyTests
         var result = await scope.ServiceProvider.GetRequiredService<IObjectOperationExecutor>().ExecuteAsync(
             "organization.person",
             ObjectOperationAction.Create,
+            null,
             new Dictionary<string, object?> { ["PersonNo"] = "P-001" });
 
         Assert.True(result.Succeeded);
@@ -78,6 +80,7 @@ public sealed class ObjectOperationExtensionAssemblyTests
             scope.ServiceProvider.GetRequiredService<IObjectOperationExecutor>().ExecuteAsync(
                 "organization.person",
                 ObjectOperationAction.Create,
+                null,
                 new Dictionary<string, object?>()));
 
         Assert.Equal($"OBJECT_OPERATION_INPUT_PROTECTED: organization.person/create/{field}", exception.Message);
@@ -101,6 +104,7 @@ public sealed class ObjectOperationExtensionAssemblyTests
         var result = await scope.ServiceProvider.GetRequiredService<IObjectOperationExecutor>().ExecuteAsync(
             "organization.person",
             ObjectOperationAction.Create,
+            null,
             new Dictionary<string, object?>());
 
         Assert.False(result.Succeeded);
@@ -143,6 +147,31 @@ public sealed class ObjectOperationExtensionAssemblyTests
         {
             await host.StopAsync();
         }
+    }
+
+    [Fact]
+    public void AddStandardCrudObjectBehavior_ReusesOneDefaultImplementationWithoutEmptyObjectClasses()
+    {
+        var services = CreateServices();
+        var owner = new TestModule("Organization", []);
+        var person = ReusableDefinition("organization.person", "Organization/Person");
+        var company = ReusableDefinition("organization.company", "Organization/Company");
+        services.AddStandardCrudResource(Resource("organization.person", "Person"));
+        services.AddStandardCrudResource(Resource("organization.company", "Company"));
+        services.AddStandardCrudObjectBehavior(owner, person);
+        services.AddStandardCrudObjectBehavior(owner, company);
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var behaviors = scope.ServiceProvider.GetServices<IObjectBehaviorContribution>()
+            .Select(contribution => contribution.Behavior)
+            .ToArray();
+
+        Assert.Equal(2, behaviors.Length);
+        Assert.Single(behaviors.Select(behavior => behavior.GetType()).Distinct());
+        Assert.Equal(
+            ["organization.company", "organization.person"],
+            behaviors.Select(behavior => behavior.Definition.ObjectKey).Order(StringComparer.Ordinal));
     }
 
     private static IServiceCollection CreateServices(RecordingTransactionExecutor? transaction = null)
@@ -209,6 +238,21 @@ public sealed class ObjectOperationExtensionAssemblyTests
         [ObjectOperationAction.Create],
         [ObjectOperationAction.Create],
         ["EID", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"]);
+
+    private static StandardCrudDescriptor Resource(string resourceKey, string modelName) => new()
+    {
+        ResourceKey = resourceKey,
+        ModuleId = "Organization",
+        ModelName = modelName,
+        Route = $"api/organization/{modelName.ToLowerInvariant()}",
+        IdField = "EID",
+        DisplayField = "ENAME",
+        FieldSet = new StandardCrudFieldSet(
+            ListFields: ["EID", "ENAME"],
+            DetailFields: ["EID", "ENAME"],
+            CreateFields: ["ENAME"],
+            UpdateFields: ["ENAME"])
+    };
 
     private static ObjectOperationExtensionDefinition Extension(
         string key,

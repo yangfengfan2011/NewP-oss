@@ -43,14 +43,24 @@ public static class StandardCrudServiceCollectionExtensions
         services.AddOptions<ObjectOperationAssemblyOptions>();
         services.TryAddSingleton<ObjectOperationAssemblyPlan>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, ObjectOperationAssemblyStartupValidator>());
-        services.AddScoped<IObjectOperationExecutor>(static provider =>
+        services.TryAddScoped<ObjectOperationExecutionContext>();
+        services.TryAddScoped<IObjectOperationExecutionContext>(static provider =>
+            provider.GetRequiredService<ObjectOperationExecutionContext>());
+        services.AddScoped<ObjectOperationExecutor>(static provider =>
             new ObjectOperationExecutor(
                 provider.GetServices<IObjectBehaviorContribution>(),
                 provider.GetServices<IObjectOperationExtensionContribution>(),
                 provider.GetRequiredService<ObjectOperationAssemblyPlan>(),
                 provider.GetRequiredService<IEntityAuditValueProvider>(),
-                provider.GetService<ICP.Platform.Persistence.Abstractions.IPlatformTransactionExecutor>()));
-        services.AddScoped<IStandardCrudService, StandardCrudService>();
+                provider.GetService<ICP.Platform.Persistence.Abstractions.IPlatformTransactionExecutor>(),
+                provider.GetRequiredService<ObjectOperationExecutionContext>()));
+        services.AddScoped<IObjectOperationExecutor>(static provider =>
+            provider.GetRequiredService<ObjectOperationExecutor>());
+        services.TryAddScoped<Func<IObjectOperationExecutor>>(static provider =>
+            () => provider.GetRequiredService<IObjectOperationExecutor>());
+        services.AddScoped<StandardCrudService>();
+        services.AddScoped<IStandardCrudService>(static provider =>
+            provider.GetRequiredService<StandardCrudService>());
         services.AddScoped<StandardCrudExportService>();
         services.AddScoped<StandardCrudEndpoint>();
         return services;
@@ -93,6 +103,21 @@ public static class StandardCrudServiceCollectionExtensions
                 factory(provider, definition)));
         return services;
     }
+
+    /// <summary>
+    /// 注册可直接复用的标准 CRUD 对象行为；同一实现按 object identity 提供默认创建、更新和删除。
+    /// </summary>
+    public static IServiceCollection AddStandardCrudObjectBehavior(
+        this IServiceCollection services,
+        IModuleMetadata owner,
+        ObjectBehaviorDefinition definition) =>
+        services.AddObjectBehavior<StandardCrudObjectBehavior>(
+            owner,
+            definition,
+            static (provider, declaredDefinition) => new StandardCrudObjectBehavior(
+                declaredDefinition,
+                provider.GetRequiredService<IStandardCrudResourceRegistry>(),
+                () => provider.GetRequiredService<StandardCrudService>()));
 
     /// <summary>
     /// 以扩展提供模块的正式 metadata 注册一个对象动作扩展；模块依赖由启动期装配校验。

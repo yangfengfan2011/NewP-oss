@@ -37,6 +37,59 @@ public sealed class StandardCrudServiceWriteTests
     }
 
     [Fact]
+    public async Task UpdateAsync_WhenObjectBehaviorIsRegistered_UsesTargetedUnifiedOperationEntry()
+    {
+        var repository = new RecordingMutationStandardCrudRepository(
+        [
+            new Dictionary<string, object?>
+            {
+                ["EID"] = "person-1",
+                ["PersonNo"] = "P001",
+                ["ENAME"] = "旧姓名"
+            }
+        ]);
+        var operations = new RecordingObjectOperationExecutor(ObjectOperationAction.Update);
+        var service = Service(repository, objectOperations: operations);
+
+        var result = await service.UpdateAsync(
+            Descriptor(),
+            "person-1",
+            new Dictionary<string, object?> { ["ENAME"] = "新姓名" });
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(1, operations.Executions);
+        Assert.Equal("person-1", operations.LastTargetId);
+        Assert.Equal("新姓名", operations.LastValues!["ENAME"]);
+        Assert.Null(repository.LastUpdatedValues);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_WhenObjectBehaviorIsRegistered_UsesTargetedUnifiedOperationEntry()
+    {
+        var repository = new InMemoryStandardCrudRepository(
+        [
+            new Dictionary<string, object?>
+            {
+                ["EID"] = "person-1",
+                ["PersonNo"] = "P001",
+                ["ENAME"] = "张三"
+            }
+        ]);
+        var operations = new RecordingObjectOperationExecutor(ObjectOperationAction.Delete);
+        var service = Service(repository, objectOperations: operations);
+
+        var result = await service.DeleteAsync(
+            Descriptor(StandardCrudDeletePolicy.Conditional),
+            "person-1");
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(1, operations.Executions);
+        Assert.Equal("person-1", operations.LastTargetId);
+        Assert.Empty(operations.LastValues!);
+        Assert.NotNull(await repository.GetByIdAsync(Descriptor(), "person-1"));
+    }
+
+    [Fact]
     public async Task CreateAsync_NormalizesTemporalInputsBeforeRepositoryCreate()
     {
         var repository = new RecordingMutationStandardCrudRepository([]);
@@ -1908,29 +1961,34 @@ public sealed class StandardCrudServiceWriteTests
         public EntityAuditStamp GetCurrent() => new(actorId, occurredAtUtc);
     }
 
-    private sealed class RecordingObjectOperationExecutor : IObjectOperationExecutor
+    private sealed class RecordingObjectOperationExecutor(
+        ObjectOperationAction? supportedAction = null) : IObjectOperationExecutor
     {
         public int Executions { get; private set; }
+        public string? LastTargetId { get; private set; }
         public IReadOnlyDictionary<string, object?>? LastValues { get; private set; }
 
         public bool CanExecute(string objectKey, ObjectOperationAction action) =>
-            objectKey == "organization.person" && action == ObjectOperationAction.Create;
+            objectKey == "organization.person"
+            && action == (supportedAction ?? ObjectOperationAction.Create);
 
         public Task<StandardCrudMutationResult> ExecuteAsync(
             string objectKey,
             ObjectOperationAction action,
+            string? targetId,
             IReadOnlyDictionary<string, object?> values,
             CancellationToken cancellationToken = default)
         {
             Executions++;
+            LastTargetId = targetId;
             LastValues = values;
             return Task.FromResult(StandardCrudMutationResult.Success(new StandardCrudDetail
             {
                 Fields = new Dictionary<string, object?>
                 {
-                    ["EID"] = "Person_1",
-                    ["PersonNo"] = values["PersonNo"],
-                    ["ENAME"] = values["ENAME"]
+                    ["EID"] = targetId ?? "Person_1",
+                    ["PersonNo"] = values.GetValueOrDefault("PersonNo") ?? "P001",
+                    ["ENAME"] = values.GetValueOrDefault("ENAME") ?? "张三"
                 }
             }));
         }

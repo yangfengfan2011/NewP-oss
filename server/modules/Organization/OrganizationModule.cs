@@ -35,7 +35,7 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         services.AddScoped<IStandardCrudCreationRecorder>(static provider =>
             provider.GetRequiredService<PersonCreationRecorder>());
         services.AddScoped<IStandardCrudUpdateRecorder, PersonUpdateRecorder>();
-        services.AddObjectBehavior<PersonObjectBehavior>(this, PersonObjectBehavior.BehaviorDefinition);
+        services.AddStandardCrudObjectBehavior(this, PersonObjectBehavior.BehaviorDefinition);
         foreach (var (kind, model) in new[] { ("company", OrganizationRecordKind.Company), ("department", OrganizationRecordKind.Department), ("position", OrganizationRecordKind.Position), ("organization.person", OrganizationRecordKind.Person) })
             services.AddScoped<ICP.Platform.Modules.Audit.Contracts.IBusinessAuditNameDirectory>(sp =>
                 new BusinessAuditOrganizationNames(sp.GetRequiredService<IOrganizationQuery>(), kind, model));

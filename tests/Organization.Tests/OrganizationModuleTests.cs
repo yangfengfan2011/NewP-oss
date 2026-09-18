@@ -46,7 +46,7 @@ public class OrganizationModuleTests
     }
 
     [Fact]
-    public void ConfigureServices_RegistersPersonCreateAsTheOnlyObjectBehavior()
+    public void ConfigureServices_RegistersPersonCrudAsTheOnlyObjectBehavior()
     {
         var services = new ServiceCollection();
 
@@ -60,8 +60,13 @@ public class OrganizationModuleTests
         Assert.Equal("organization.person", PersonObjectBehavior.BehaviorDefinition.ObjectKey);
         Assert.Equal("Organization", PersonObjectBehavior.BehaviorDefinition.OwnerModuleId);
         Assert.Equal("Organization/Person", PersonObjectBehavior.BehaviorDefinition.ModelKey);
-        Assert.Equal([ObjectOperationAction.Create], PersonObjectBehavior.BehaviorDefinition.SupportedActions);
-        Assert.Equal([ObjectOperationAction.Create], PersonObjectBehavior.BehaviorDefinition.OpenExtensionActions);
+        Assert.Equal(
+            [ObjectOperationAction.Create, ObjectOperationAction.Update, ObjectOperationAction.Delete],
+            PersonObjectBehavior.BehaviorDefinition.SupportedActions);
+        Assert.Equal(
+            [ObjectOperationAction.Create, ObjectOperationAction.Update, ObjectOperationAction.Delete],
+            PersonObjectBehavior.BehaviorDefinition.OpenExtensionActions);
+        Assert.True(typeof(PersonObjectBehavior).IsAbstract && typeof(PersonObjectBehavior).IsSealed);
         Assert.Equal(
             ["CreatedAt", "CreatedBy", "EID", "UpdatedAt", "UpdatedBy"],
             PersonObjectBehavior.BehaviorDefinition.ProtectedInputFields.Order(StringComparer.Ordinal));

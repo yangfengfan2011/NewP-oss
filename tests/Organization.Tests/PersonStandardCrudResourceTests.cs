@@ -2,6 +2,7 @@ using System.Text.Json;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
+using ICP.Platform.Crud.ObjectOperations;
 using ICP.Platform.Crud.Planning;
 using ICP.Platform.Modeling.DisplayPlanning;
 using ICP.Platform.Modules.Organization;
@@ -9,6 +10,7 @@ using ICP.Platform.Modules.Organization.Controllers;
 using ICP.Platform.Modules.Organization.Crud;
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.Models;
+using ICP.Platform.Modules.Organization.Repositories;
 using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 using ICP.Platform.Query.Descriptors;
@@ -20,6 +22,25 @@ namespace ICP.Platform.Modules.Organization.Tests;
 
 public sealed class PersonStandardCrudResourceTests
 {
+    [Fact]
+    public async Task ConditionalDeleteExecutor_WhenCalledDirectly_RoutesToUnifiedObjectOperation()
+    {
+        var operations = new RecordingDeleteObjectOperations();
+        var executor = new PersonCrudDeleteGuard(
+            new UnusedBindingRepository(),
+            null!,
+            () => operations,
+            new InactiveObjectOperationContext());
+
+        var result = await executor.DeleteAsync(
+            PersonCrudDescriptorFactory.Create(),
+            "person-alias");
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(1, operations.Executions);
+        Assert.Equal("person-alias", operations.TargetId);
+    }
+
     [Fact]
     public void PersonDto_SerializesCalendarDateAsIsoDateAndKeepsTemporalCompanions()
     {
@@ -388,6 +409,57 @@ public sealed class PersonStandardCrudResourceTests
 
         Assert.Equal("旧公司（已停用）", result[0]["CompanyId_DisplayValue"]);
         Assert.Equal("旧部门（已停用）", result[0]["DepartmentName"]);
+    }
+
+    private sealed class RecordingDeleteObjectOperations : IObjectOperationExecutor
+    {
+        public int Executions { get; private set; }
+        public string? TargetId { get; private set; }
+
+        public bool CanExecute(string objectKey, ObjectOperationAction action) =>
+            objectKey == "organization.person" && action == ObjectOperationAction.Delete;
+
+        public Task<StandardCrudMutationResult> ExecuteAsync(
+            string objectKey,
+            ObjectOperationAction action,
+            string? targetId,
+            IReadOnlyDictionary<string, object?> values,
+            CancellationToken cancellationToken = default)
+        {
+            Executions++;
+            TargetId = targetId;
+            return Task.FromResult(StandardCrudMutationResult.Success());
+        }
+    }
+
+    private sealed class InactiveObjectOperationContext : IObjectOperationExecutionContext
+    {
+        public bool IsExecuting(string objectKey, ObjectOperationAction action, string? targetId) => false;
+    }
+
+    private sealed class UnusedBindingRepository : IPersonUserBindingRepository
+    {
+        public ValueTask<PersonUserBindingState?> FindAsync(
+            string personEid,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<bool> TryBindAsync(
+            string personEid,
+            string accountEid,
+            DateTime boundAt,
+            string actorId,
+            string reason,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask SetEnablementAsync(
+            string personEid,
+            bool isEnabled,
+            string actorId,
+            DateTime changedAt,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
 }

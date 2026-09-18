@@ -21,8 +21,9 @@ public sealed class ObjectOperationExecutorTests
         var context = new ObjectOperationContext(
             "organization.person",
             ObjectOperationAction.Create,
+            null,
             new Dictionary<string, object?> { ["PersonNo"] = "P-001" });
-        var result = await executor.ExecuteAsync(context.ObjectKey, context.Action, context.Values);
+        var result = await executor.ExecuteAsync(context.ObjectKey, context.Action, context.TargetId, context.Values);
 
         Assert.True(result.Succeeded);
         Assert.Equal(["Organization/Person"], transaction.LastModelKeys);
@@ -50,6 +51,7 @@ public sealed class ObjectOperationExecutorTests
         var result = await executor.ExecuteAsync(
             "organization.person",
             ObjectOperationAction.Create,
+            null,
             new Dictionary<string, object?>());
 
         Assert.False(result.Succeeded);
@@ -105,6 +107,7 @@ public sealed class ObjectOperationExecutorTests
         var result = await executor.ExecuteAsync(
             "organization.person",
             ObjectOperationAction.Create,
+            null,
             new Dictionary<string, object?>());
 
         Assert.False(result.Succeeded);

@@ -16,13 +16,14 @@ public sealed class ObjectOperationExecutor : IObjectOperationExecutor
     private readonly IReadOnlyDictionary<ObjectOperationExtensionIdentity, IObjectOperationExtension> _extensions;
     private readonly IPlatformTransactionExecutor? _transactions;
     private readonly IEntityAuditValueProvider _auditValues;
+    private readonly ObjectOperationExecutionContext _executionContext;
 
     /// <summary>为不含组件扩展的直接消费者构建行为计划；正式模块贡献使用 DI 注册帮助器。</summary>
     public ObjectOperationExecutor(
         IEnumerable<IObjectBehavior> behaviors,
         IEntityAuditValueProvider auditValues,
         IPlatformTransactionExecutor? transactions = null)
-        : this(Materialize(behaviors), auditValues, transactions)
+        : this(Materialize(behaviors), auditValues, transactions, null)
     {
     }
 
@@ -30,7 +31,8 @@ public sealed class ObjectOperationExecutor : IObjectOperationExecutor
     private ObjectOperationExecutor(
         IObjectBehavior[] behaviors,
         IEntityAuditValueProvider auditValues,
-        IPlatformTransactionExecutor? transactions)
+        IPlatformTransactionExecutor? transactions,
+        ObjectOperationExecutionContext? executionContext)
         : this(
             behaviors.Select(static behavior =>
                 (IObjectBehaviorContribution)new ObjectBehaviorContribution(
@@ -39,7 +41,8 @@ public sealed class ObjectOperationExecutor : IObjectOperationExecutor
             [],
             ObjectOperationAssemblyPlan.ForBehaviors(behaviors),
             auditValues,
-            transactions)
+            transactions,
+            executionContext)
     {
     }
 
@@ -49,13 +52,15 @@ public sealed class ObjectOperationExecutor : IObjectOperationExecutor
         IEnumerable<IObjectOperationExtensionContribution> extensions,
         ObjectOperationAssemblyPlan plan,
         IEntityAuditValueProvider auditValues,
-        IPlatformTransactionExecutor? transactions = null)
+        IPlatformTransactionExecutor? transactions = null,
+        ObjectOperationExecutionContext? executionContext = null)
     {
         ArgumentNullException.ThrowIfNull(behaviors);
         ArgumentNullException.ThrowIfNull(extensions);
         _plan = plan ?? throw new ArgumentNullException(nameof(plan));
         _auditValues = auditValues ?? throw new ArgumentNullException(nameof(auditValues));
         _transactions = transactions;
+        _executionContext = executionContext ?? new ObjectOperationExecutionContext();
         _behaviors = IndexBehaviors(behaviors);
         _extensions = IndexExtensions(extensions);
         ValidateResolvedContributions();
@@ -74,6 +79,7 @@ public sealed class ObjectOperationExecutor : IObjectOperationExecutor
     public async Task<StandardCrudMutationResult> ExecuteAsync(
         string objectKey,
         ObjectOperationAction action,
+        string? targetId,
         IReadOnlyDictionary<string, object?> values,
         CancellationToken cancellationToken = default)
     {
@@ -98,9 +104,11 @@ public sealed class ObjectOperationExecutor : IObjectOperationExecutor
                 [behaviorPlan.Definition.ModelKey],
                 async token =>
                 {
+                    using var execution = _executionContext.Enter(objectKey, action, targetId);
                     var before = new ObjectOperationBeforeContext(
                         objectKey,
                         action,
+                        targetId,
                         values,
                         behaviorPlan.Definition.ProtectedInputFields);
                     foreach (var extensionPlan in extensionPlans)
@@ -117,7 +125,7 @@ public sealed class ObjectOperationExecutor : IObjectOperationExecutor
                         }
                     }
 
-                    var context = new ObjectOperationContext(objectKey, action, before.SnapshotValues());
+                    var context = new ObjectOperationContext(objectKey, action, targetId, before.SnapshotValues());
                     var result = await behavior.ExecuteAsync(context, token);
                     if (!result.Succeeded)
                     {
@@ -125,7 +133,7 @@ public sealed class ObjectOperationExecutor : IObjectOperationExecutor
                     }
 
                     var snapshot = SnapshotResult(result);
-                    var after = new ObjectOperationAfterContext(objectKey, action, context.Values, snapshot);
+                    var after = new ObjectOperationAfterContext(objectKey, action, targetId, context.Values, snapshot);
                     foreach (var extensionPlan in extensionPlans)
                     {
                         var identity = new ObjectOperationExtensionIdentity(

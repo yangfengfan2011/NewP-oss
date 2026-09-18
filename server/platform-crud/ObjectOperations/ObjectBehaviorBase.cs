@@ -19,7 +19,7 @@ public abstract class ObjectBehaviorBase : IObjectBehavior
     }
 
     // 公共默认行为持有正式资源目录与同作用域核心解析器，不保存单次操作状态。
-    internal ObjectBehaviorBase(
+    protected ObjectBehaviorBase(
         ObjectBehaviorDefinition definition,
         IStandardCrudResourceRegistry resources,
         Func<StandardCrudService> resolveDefaultOperations)

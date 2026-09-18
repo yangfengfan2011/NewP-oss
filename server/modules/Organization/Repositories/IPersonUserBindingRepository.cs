@@ -1,4 +1,5 @@
 using ICP.Platform.Modules.Organization.Models;
+using ICP.Platform.Persistence.Auditing;
 
 namespace ICP.Platform.Modules.Organization.Repositories;
 
@@ -14,9 +15,8 @@ public interface IPersonUserBindingRepository
     ValueTask<bool> TryBindAsync(
         string personEid,
         string accountEid,
-        DateTime boundAt,
-        string actorId,
         string reason,
+        EntityAuditValues auditValues,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -25,7 +25,6 @@ public interface IPersonUserBindingRepository
     ValueTask SetEnablementAsync(
         string personEid,
         bool isEnabled,
-        string actorId,
-        DateTime changedAt,
+        EntityAuditValues auditValues,
         CancellationToken cancellationToken = default);
 }

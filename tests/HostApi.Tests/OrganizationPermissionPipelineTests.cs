@@ -323,6 +323,7 @@ public sealed class OrganizationPermissionPipelineTests
     [InlineData("GET", "/api/organization/persons/Person_1", "organization.person.read")]
     [InlineData("POST", "/api/organization/persons", "organization.person.create")]
     [InlineData("PUT", "/api/organization/persons/Person_1", "organization.person.update")]
+    [InlineData("POST", "/api/organization/persons/Person_1/enable", null)]
     [InlineData("POST", "/api/organization/persons/Person_1/disable", null)]
     [InlineData("DELETE", "/api/organization/persons/Person_1", "organization.person.delete")]
     public async Task PersonStandardCrud_AllMappedOperationsUseDeclaredFeature(

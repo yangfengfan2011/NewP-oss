@@ -4,6 +4,7 @@ using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Repositories;
 using ICP.Platform.Modules.Organization.Services;
 using ICP.Platform.Persistence.Abstractions;
+using ICP.Platform.Persistence.Auditing;
 using Xunit;
 
 namespace ICP.Platform.Modules.Organization.Tests;
@@ -175,7 +176,7 @@ public sealed class PersonUserBindingServiceTests
             directory,
             identity,
             transaction,
-            new FixedTimeProvider(BoundAt));
+            new EntityAuditValueProvider(new FixedAuditStampProvider("User_Admin", BoundAt)));
         return new TestFixture(service, repository, directory, identity, transaction);
     }
 
@@ -188,6 +189,8 @@ public sealed class PersonUserBindingServiceTests
         BoundAt = accountEid is null ? null : BoundAt,
         BoundBy = accountEid is null ? null : "User_Admin",
         BindingReason = accountEid is null ? null : "首次绑定",
+        CreatedBy = "User_Creator",
+        CreatedAt = new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc),
         UpdatedBy = "User_Creator",
         UpdatedAt = new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc)
     };
@@ -298,9 +301,8 @@ public sealed class PersonUserBindingServiceTests
         public ValueTask<bool> TryBindAsync(
             string personEid,
             string accountEid,
-            DateTime boundAt,
-            string actorId,
             string reason,
+            EntityAuditValues auditValues,
             CancellationToken cancellationToken = default)
         {
             if (failureStage == BindingFailureStage.PersonWrite)
@@ -316,11 +318,11 @@ public sealed class PersonUserBindingServiceTests
             Current = Current with
             {
                 AccountEid = accountEid,
-                BoundAt = boundAt,
-                BoundBy = actorId,
+                BoundAt = auditValues.UpdatedAt,
+                BoundBy = auditValues.UpdatedBy,
                 BindingReason = reason,
-                UpdatedBy = actorId,
-                UpdatedAt = boundAt
+                UpdatedBy = auditValues.UpdatedBy,
+                UpdatedAt = auditValues.UpdatedAt
             };
             return ValueTask.FromResult(true);
         }
@@ -328,8 +330,7 @@ public sealed class PersonUserBindingServiceTests
         public ValueTask SetEnablementAsync(
             string personEid,
             bool isEnabled,
-            string actorId,
-            DateTime changedAt,
+            EntityAuditValues auditValues,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
@@ -369,8 +370,8 @@ public sealed class PersonUserBindingServiceTests
         }
     }
 
-    private sealed class FixedTimeProvider(DateTime utcNow) : TimeProvider
+    private sealed class FixedAuditStampProvider(string actorId, DateTime utcNow) : IEntityAuditStampProvider
     {
-        public override DateTimeOffset GetUtcNow() => new(utcNow, TimeSpan.Zero);
+        public EntityAuditStamp GetCurrent() => new(actorId, utcNow);
     }
 }

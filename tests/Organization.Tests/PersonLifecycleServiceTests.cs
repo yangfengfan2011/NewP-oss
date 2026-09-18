@@ -5,6 +5,7 @@ using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Repositories;
 using ICP.Platform.Modules.Organization.Services;
 using ICP.Platform.Persistence.Abstractions;
+using ICP.Platform.Persistence.Auditing;
 using Xunit;
 
 namespace ICP.Platform.Modules.Organization.Tests;
@@ -183,7 +184,7 @@ public sealed class PersonLifecycleServiceTests
             identity,
             identity,
             transaction,
-            new FixedTimeProvider(ChangedAt));
+            new EntityAuditValueProvider(new FixedAuditStampProvider("User_Admin", ChangedAt)));
         return new TestFixture(service, repository, identity, transaction, stages);
     }
 
@@ -207,6 +208,8 @@ public sealed class PersonLifecycleServiceTests
         BoundAt = ChangedAt.AddDays(-1),
         BoundBy = "User_Admin",
         BindingReason = "入职绑定",
+        CreatedBy = "User_Creator",
+        CreatedAt = ChangedAt.AddDays(-3),
         UpdatedBy = "User_Creator",
         UpdatedAt = ChangedAt.AddDays(-2)
     };
@@ -236,14 +239,13 @@ public sealed class PersonLifecycleServiceTests
         public ValueTask<PersonUserBindingState?> FindAsync(string personEid, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult<PersonUserBindingState?>(Current.PersonEid == personEid ? Current with { } : null);
 
-        public ValueTask<bool> TryBindAsync(string personEid, string accountEid, DateTime boundAt, string actorId, string reason, CancellationToken cancellationToken = default) =>
+        public ValueTask<bool> TryBindAsync(string personEid, string accountEid, string reason, EntityAuditValues auditValues, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
         public ValueTask SetEnablementAsync(
             string personEid,
             bool isEnabled,
-            string actorId,
-            DateTime changedAt,
+            EntityAuditValues auditValues,
             CancellationToken cancellationToken = default)
         {
             if (failureStage == LifecycleFailureStage.Person)
@@ -254,8 +256,8 @@ public sealed class PersonLifecycleServiceTests
             Current = Current with
             {
                 IsEnabled = isEnabled,
-                UpdatedBy = actorId,
-                UpdatedAt = changedAt
+                UpdatedBy = auditValues.UpdatedBy,
+                UpdatedAt = auditValues.UpdatedAt
             };
             stages.Add("person");
             return ValueTask.CompletedTask;
@@ -410,8 +412,8 @@ public sealed class PersonLifecycleServiceTests
         }
     }
 
-    private sealed class FixedTimeProvider(DateTime utcNow) : TimeProvider
+    private sealed class FixedAuditStampProvider(string actorId, DateTime utcNow) : IEntityAuditStampProvider
     {
-        public override DateTimeOffset GetUtcNow() => new(utcNow, TimeSpan.Zero);
+        public EntityAuditStamp GetCurrent() => new(actorId, utcNow);
     }
 }

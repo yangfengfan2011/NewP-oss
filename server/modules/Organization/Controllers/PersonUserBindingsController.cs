@@ -68,17 +68,7 @@ public sealed class PersonUserBindingsController(IPersonUserBindingService bindi
 
     private ObjectResult BindingProblem(PersonUserBindingException exception)
     {
-        var status = exception.FailureCode switch
-        {
-            PersonUserBindingFailureCodes.PersonNotFound => StatusCodes.Status404NotFound,
-            PersonUserBindingFailureCodes.IdentityUnavailable => StatusCodes.Status503ServiceUnavailable,
-            PersonUserBindingFailureCodes.PersonDisabled
-                or PersonUserBindingFailureCodes.PersonAlreadyBound
-                or PersonUserBindingFailureCodes.UserAlreadyBound
-                or PersonUserBindingFailureCodes.LocalAdministratorProtected
-                or PersonUserBindingFailureCodes.RevisionConflict => StatusCodes.Status409Conflict,
-            _ => StatusCodes.Status400BadRequest
-        };
+        var status = exception.StatusCode;
         var problem = new ProblemDetails { Status = status, Title = exception.FailureCode };
         problem.Extensions["code"] = exception.FailureCode;
         problem.Extensions["traceId"] = HttpContext.TraceIdentifier;

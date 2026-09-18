@@ -3,6 +3,7 @@ using ICP.Platform.Modules.Organization.Repositories;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.Transactions;
+using ICP.Platform.Persistence.Auditing;
 using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Modules.Organization.Persistence.Ef;
@@ -31,9 +32,8 @@ public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext,
     public async ValueTask<bool> TryBindAsync(
         string personEid,
         string accountEid,
-        DateTime boundAt,
-        string actorId,
         string reason,
+        EntityAuditValues auditValues,
         CancellationToken cancellationToken = default)
     {
         if (dbContext.Database.IsRelational() && dbContext.Database.CurrentTransaction is null)
@@ -49,11 +49,11 @@ public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext,
             .ExecuteUpdateAsync(
                 setters => setters
                     .SetProperty(row => EF.Property<string?>(row, "AccountEID"), accountEid)
-                    .SetProperty(row => EF.Property<DateTime?>(row, "AccountBoundAt"), boundAt)
-                    .SetProperty(row => EF.Property<string?>(row, "AccountBoundBy"), actorId)
+                    .SetProperty(row => EF.Property<DateTime?>(row, "AccountBoundAt"), auditValues.UpdatedAt)
+                    .SetProperty(row => EF.Property<string?>(row, "AccountBoundBy"), auditValues.UpdatedBy)
                     .SetProperty(row => EF.Property<string?>(row, "AccountBindingReason"), reason)
-                    .SetProperty(row => EF.Property<string?>(row, "UpdatedBy"), actorId)
-                    .SetProperty(row => EF.Property<DateTime?>(row, "UpdatedAt"), boundAt),
+                    .SetProperty(row => EF.Property<string?>(row, "UpdatedBy"), auditValues.UpdatedBy)
+                    .SetProperty(row => EF.Property<DateTime?>(row, "UpdatedAt"), auditValues.UpdatedAt),
                 cancellationToken);
         if (affected == 1) await RegisterActualChangeAsync(personEid, before, cancellationToken);
         return affected == 1;
@@ -65,8 +65,7 @@ public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext,
     public async ValueTask SetEnablementAsync(
         string personEid,
         bool isEnabled,
-        string actorId,
-        DateTime changedAt,
+        EntityAuditValues auditValues,
         CancellationToken cancellationToken = default)
     {
         if (dbContext.Database.IsRelational() && dbContext.Database.CurrentTransaction is null)
@@ -80,8 +79,8 @@ public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext,
             .ExecuteUpdateAsync(
                 setters => setters
                     .SetProperty(row => EF.Property<bool>(row, "IsEnabled"), isEnabled)
-                    .SetProperty(row => EF.Property<string?>(row, "UpdatedBy"), actorId)
-                    .SetProperty(row => EF.Property<DateTime?>(row, "UpdatedAt"), changedAt),
+                    .SetProperty(row => EF.Property<string?>(row, "UpdatedBy"), auditValues.UpdatedBy)
+                    .SetProperty(row => EF.Property<DateTime?>(row, "UpdatedAt"), auditValues.UpdatedAt),
                 cancellationToken);
         if (affected == 1) await RegisterActualChangeAsync(personEid, before, cancellationToken);
     }
@@ -97,9 +96,29 @@ public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext,
     // 记录和主键都来自数据库实际写后值；请求别名不能成为缓存标识，也不提前发布。
     private async Task RegisterActualChangeAsync(string id, IReadOnlyDictionary<string, object?>? before, CancellationToken cancellationToken)
     {
-        if (transactions?.HasParticipants("Person") is not true) return;
         var after = await Persons.AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == id, cancellationToken);
+        SynchronizeTrackedRecord(after);
+        if (transactions?.HasParticipants("Person") is not true) return;
         transactions.RegisterChange(new PlatformRecordChange("Person", (string)after["EID"]!, before, after));
+    }
+
+    // ExecuteUpdate 绕过 change tracker；把数据库实际值同步到同一事务内已跟踪的 Person，防止后续普通更新覆盖专用写入。
+    private void SynchronizeTrackedRecord(IReadOnlyDictionary<string, object?> after)
+    {
+        var id = (string)after["EID"]!;
+        foreach (var entity in Persons.Local
+            .Where(row => string.Equals(GetString(row, "EID"), id, StringComparison.Ordinal))
+            .ToArray())
+        {
+            var entry = dbContext.Entry(entity);
+            foreach (var property in entry.Properties)
+            {
+                var value = after[property.Metadata.Name];
+                property.CurrentValue = value;
+                property.OriginalValue = value;
+            }
+            entry.State = EntityState.Unchanged;
+        }
     }
 
     private DbSet<Dictionary<string, object?>> Persons =>
@@ -114,6 +133,8 @@ public sealed class EfPersonUserBindingRepository(EfPlatformDbContext dbContext,
         BoundAt = GetDateTime(entity, "AccountBoundAt"),
         BoundBy = GetString(entity, "AccountBoundBy"),
         BindingReason = GetString(entity, "AccountBindingReason"),
+        CreatedBy = GetString(entity, "CreatedBy"),
+        CreatedAt = GetDateTime(entity, "CreatedAt"),
         UpdatedBy = GetString(entity, "UpdatedBy"),
         UpdatedAt = GetDateTime(entity, "UpdatedAt")
     };

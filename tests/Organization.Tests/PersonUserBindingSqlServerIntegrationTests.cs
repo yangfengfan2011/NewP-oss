@@ -14,6 +14,7 @@ using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 using ICP.Platform.Modules.Organization.Services;
 using ICP.Platform.Modules.Organization.Migrations.SqlServer.Migrations;
 using ICP.Platform.Persistence.Composition;
+using ICP.Platform.Persistence.Auditing;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Persistence.EfCore.Projection;
 using ICP.Platform.Persistence.EfCore.Transactions;
@@ -69,7 +70,7 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
                     new IdentityAccountDirectory(identityRepository),
                     participant,
                     new EfPlatformTransactionExecutor(context),
-                    TimeProvider.System);
+                    AuditValues());
 
                 await service.BindAsync(
                     "Person_1",
@@ -91,7 +92,7 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
                     new IdentityAccountDirectory(identityRepository),
                     failing,
                     new EfPlatformTransactionExecutor(context),
-                    TimeProvider.System);
+                    AuditValues());
 
                 var failure = await Assert.ThrowsAsync<PersonUserBindingException>(async () =>
                     await service.BindAsync(
@@ -145,7 +146,7 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
                     new IdentityLifecycleParticipant(identityRepository, new PlatformObjectIdGenerator(), TimeProvider.System),
                     sessions,
                     new EfPlatformTransactionExecutor(context),
-                    TimeProvider.System);
+                    AuditValues());
 
                 var disabled = await service.SetStatusAsync(
                     "Person_1",
@@ -171,7 +172,7 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
                     new IdentityLifecycleParticipant(identityRepository, new PlatformObjectIdGenerator(), TimeProvider.System),
                     sessions,
                     new EfPlatformTransactionExecutor(context),
-                    TimeProvider.System);
+                    AuditValues());
 
                 var restored = await service.SetStatusAsync(
                     "Person_1",
@@ -196,7 +197,7 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
                     failing,
                     sessions,
                     new EfPlatformTransactionExecutor(context),
-                    TimeProvider.System);
+                    AuditValues());
 
                 var failure = await Assert.ThrowsAsync<PersonLifecycleException>(async () =>
                     await service.SetStatusAsync(
@@ -238,9 +239,8 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
                     token => repository.TryBindAsync(
                         "Person_Race",
                         "User_Race",
-                        DateTime.UtcNow,
-                        "User_Admin",
                         "并发绑定",
+                        AuditValues().ForUpdate("User_Admin", DateTime.UtcNow.AddDays(-1)),
                         token));
             });
             var deleteTask = Task.Run(async () =>
@@ -585,6 +585,14 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
         new DefaultAuthenticationSessionCredentialGenerator(),
         TimeProvider.System,
         new AuthenticationSessionOptions(), [new IsolatedAdmissionPolicy()]);
+
+    private static IEntityAuditValueProvider AuditValues() =>
+        new EntityAuditValueProvider(new FixedAuditStampProvider());
+
+    private sealed class FixedAuditStampProvider : IEntityAuditStampProvider
+    {
+        public EntityAuditStamp GetCurrent() => new("User_Admin", DateTime.UtcNow);
+    }
 
     private sealed class UnusedSessionRegistry : IAuthenticationSessionRegistry
     {

@@ -75,13 +75,7 @@ public sealed class PersonLifecycleController(IPersonLifecycleService lifecycleS
     }
     private ObjectResult LifecycleProblem(PersonLifecycleException exception)
     {
-        var status = exception.FailureCode switch
-        {
-            PersonLifecycleFailureCodes.PersonNotFound => StatusCodes.Status404NotFound,
-            PersonLifecycleFailureCodes.Conflict => StatusCodes.Status409Conflict,
-            PersonLifecycleFailureCodes.DependencyUnavailable => StatusCodes.Status503ServiceUnavailable,
-            _ => StatusCodes.Status400BadRequest
-        };
+        var status = exception.StatusCode;
         var problem = new ProblemDetails { Status = status, Title = exception.FailureCode };
         problem.Extensions["code"] = exception.FailureCode;
         problem.Extensions["traceId"] = HttpContext.TraceIdentifier;

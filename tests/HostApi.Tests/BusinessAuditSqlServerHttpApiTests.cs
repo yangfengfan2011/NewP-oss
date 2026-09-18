@@ -27,7 +27,9 @@ using ICP.Platform.Modules.Identity.Persistence.Descriptors;
 using ICP.Platform.Modules.Organization;
 using ICP.Platform.Modules.Organization.Caching;
 using ICP.Platform.Modules.Organization.Crud;
+using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.Persistence.Descriptors;
+using ICP.Platform.Modules.Organization.Services;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.Auditing;
 using ICP.Platform.Persistence.EfCore.Transactions;
@@ -468,6 +470,89 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.Equal("person.created", audit["EventType"]);
         Assert.Equal(SystemEntityAuditStampProvider.SystemActorId, stored["CreatedBy"]);
         Assert.Equal(stored["CreatedAt"], stored["UpdatedAt"]);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "人员专用 HTTP 动作经过正式对象横切并让失败整体回滚")]
+    public async Task PersonSpecialActions_HttpUsesObjectExtensionsAuditAndRollback()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
+        using var client = await fixture.LoginAdministratorAsync();
+        using var accountResponse = await FeatureHttpTestRequests.SendAsync(
+            client,
+            http.Identity("create"),
+            HttpMethod.Post,
+            "/api/identity/accounts",
+            new { ECODE = "person-special-action", ENAME = "人员专用动作账号" });
+        Assert.Equal(HttpStatusCode.Created, accountResponse.StatusCode);
+        var accountEnvelope = await accountResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var account = accountEnvelope.GetProperty("account");
+        var person = await FeatureHttpTestRequests.CreateAsync(
+            client,
+            http.Organization("persons", "create", "list.pageActions"),
+            "/api/organization/persons",
+            new { PersonNo = "SPECIAL-ACTION", ENAME = "人员专用动作", EmploymentStatus = "Active", IsEnabled = true });
+        var personId = Id(person);
+        var createdFields = person.GetProperty("fields");
+        var control = fixture.Services.GetRequiredService<ObjectOperationExtensionProbeControl>();
+        control.Mode = ObjectOperationExtensionProbeMode.Supplement;
+        control.SupplementedName = "对象横切规范化绑定原因";
+
+        using var binding = await FeatureHttpTestRequests.SendAsync(
+            client,
+            http.Organization("persons", "linkUser", "detail.custom"),
+            HttpMethod.Put,
+            $"/api/organization/persons/{personId}/user-binding",
+            new
+            {
+                accountEid = account.GetProperty("eid").GetString(),
+                expectedRevision = account.GetProperty("revision").GetInt64(),
+                reason = "原始绑定原因"
+            });
+        Assert.Equal(HttpStatusCode.OK, binding.StatusCode);
+        var bindingResult = await binding.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("对象横切规范化绑定原因", bindingResult.GetProperty("reason").GetString());
+        Assert.Equal("对象横切规范化绑定原因", control.AfterInput!["Reason"]);
+        Assert.Equal(personId, control.AfterResult!["EID"]);
+
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        var storedAfterBinding = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Person"))
+            .AsNoTracking()
+            .SingleAsync(row => EF.Property<string>(row, "EID") == personId);
+        var cachedAfterBinding = (await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync()).Persons[personId];
+        Assert.Equal("对象横切规范化绑定原因", storedAfterBinding["AccountBindingReason"]);
+        Assert.Equal(createdFields.GetProperty("CreatedBy").GetString(), storedAfterBinding["CreatedBy"]);
+        Assert.Equal(createdFields.GetProperty("CreatedAt").GetDateTime(), storedAfterBinding["CreatedAt"]);
+        foreach (var field in new[] { "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt" })
+        {
+            Assert.Equal(storedAfterBinding[field], control.AfterResult[field]);
+            Assert.Equal(storedAfterBinding[field], cachedAfterBinding[field]);
+        }
+
+        control.Mode = ObjectOperationExtensionProbeMode.AfterFailure;
+        using var failedDisable = await FeatureHttpTestRequests.SendAsync(
+            client,
+            http.Organization("persons", "disable", "list.rowActions"),
+            HttpMethod.Put,
+            $"/api/organization/persons/{personId}/status/disable",
+            new { isEnabled = false, reason = "after 故障必须回滚" });
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, failedDisable.StatusCode);
+        var storedAfterFailure = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Person"))
+            .AsNoTracking()
+            .SingleAsync(row => EF.Property<string>(row, "EID") == personId);
+        Assert.True((bool)storedAfterFailure["IsEnabled"]!);
+        Assert.Equal(storedAfterBinding["UpdatedAt"], storedAfterFailure["UpdatedAt"]);
+        Assert.True((bool)(await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync()).Persons[personId]["IsEnabled"]!);
+
+        control.Mode = ObjectOperationExtensionProbeMode.None;
+        using var disabled = await FeatureHttpTestRequests.SendAsync(
+            client,
+            http.Organization("persons", "disable", "list.rowActions"),
+            HttpMethod.Put,
+            $"/api/organization/persons/{personId}/status/disable",
+            new { isEnabled = false, reason = "正式停用" });
+        Assert.Equal(HttpStatusCode.OK, disabled.StatusCode);
     }
 
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "人员服务端更新和别名删除共用对象行为、审计与实际EID缓存登记")]
@@ -940,6 +1025,184 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             .AnyAsync(row => EF.Property<string>(row, "EID") == companyId));
         Assert.True((await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync())
             .Companies.ContainsKey(companyId));
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "同事务人员停用后绑定读取当前 SQL 事实且忽略内层失败仍回滚根操作")]
+    public async Task NestedPersonDisableThenBind_UsesEffectiveSqlViewAndRollsBackRootOperation()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
+        using var client = await fixture.LoginAdministratorAsync();
+        var company = await FeatureHttpTestRequests.CreateAsync(
+            client,
+            http.Organization("companies", "create", "list.pageActions"),
+            "/api/organization/companies",
+            new { ECODE = "SPECIAL-ROOT", ENAME = "专用动作根公司", SortOrder = "0100" });
+        var person = await FeatureHttpTestRequests.CreateAsync(
+            client,
+            http.Organization("persons", "create", "list.pageActions"),
+            "/api/organization/persons",
+            new { PersonNo = "SPECIAL-NESTED", ENAME = "嵌套专用动作人员", EmploymentStatus = "Active", IsEnabled = true });
+        using var accountResponse = await FeatureHttpTestRequests.SendAsync(
+            client,
+            http.Identity("create"),
+            HttpMethod.Post,
+            "/api/identity/accounts",
+            new { ECODE = "special-nested", ENAME = "嵌套专用动作账号" });
+        Assert.Equal(HttpStatusCode.Created, accountResponse.StatusCode);
+        var account = (await accountResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("account");
+        var control = fixture.Services.GetRequiredService<ObjectOperationExtensionProbeControl>();
+        control.Mode = ObjectOperationExtensionProbeMode.NestedDisableThenBind;
+        control.NestedPersonId = Id(person);
+        control.NestedAccountId = account.GetProperty("eid").GetString();
+        control.NestedAccountRevision = account.GetProperty("revision").GetInt64();
+        control.ActorId = fixture.ActorId;
+        await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
+
+        using var response = await FeatureHttpTestRequests.SendAsync(
+            client,
+            http.Organization("companies", "edit", "list.rowActions"),
+            HttpMethod.Put,
+            "/api/organization/companies/" + Id(company),
+            new { ENAME = "不应提交的公司名" });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(PersonUserBindingFailureCodes.PersonDisabled, problem.GetProperty("code").GetString());
+        control.Mode = ObjectOperationExtensionProbeMode.None;
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        var storedCompany = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Company"))
+            .AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == Id(company));
+        var storedPerson = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Person"))
+            .AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == Id(person));
+        var storedAccount = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Identity/IdentityAccount"))
+            .AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == control.NestedAccountId);
+        Assert.Equal("专用动作根公司", storedCompany["ENAME"]);
+        Assert.True((bool)storedPerson["IsEnabled"]!);
+        Assert.Null(storedPerson["AccountEID"]);
+        Assert.False((bool)storedAccount["IsPersonnelBound"]!);
+        var cache = await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync();
+        Assert.Equal("专用动作根公司", cache.Companies[Id(company)]["ENAME"]);
+        Assert.True((bool)cache.Persons[Id(person)]["IsEnabled"]!);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "人员专用命名动作可由公共对象入口直接执行")]
+    public async Task PersonSpecialActions_DirectObjectExecutorUsesTrustedActorAndPublishesCanonicalResult()
+    {
+        var stamps = new SteppingEntityAuditStampProvider();
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
+        {
+            services.RemoveAll<IEntityAuditStampProvider>();
+            services.AddSingleton<IEntityAuditStampProvider>(stamps);
+        });
+        var http = new FeatureHttpTestRequests(fixture);
+        using var client = await fixture.LoginAdministratorAsync();
+        using var accountResponse = await FeatureHttpTestRequests.SendAsync(
+            client,
+            http.Identity("create"),
+            HttpMethod.Post,
+            "/api/identity/accounts",
+            new { ECODE = "direct-special", ENAME = "直接专用动作账号" });
+        var account = (await accountResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("account");
+        var person = await FeatureHttpTestRequests.CreateAsync(
+            client,
+            http.Organization("persons", "create", "list.pageActions"),
+            "/api/organization/persons",
+            new { PersonNo = "DIRECT-SPECIAL", ENAME = "直接专用动作人员", EmploymentStatus = "Active", IsEnabled = true });
+        var personId = Id(person);
+        stamps.Begin(fixture.ActorId, new DateTime(2031, 2, 3, 4, 5, 6, DateTimeKind.Utc));
+
+        await using var scope = fixture.Services.CreateAsyncScope();
+        using var activity = new Activity(nameof(PersonSpecialActions_DirectObjectExecutorUsesTrustedActorAndPublishesCanonicalResult)).Start();
+        var operations = scope.ServiceProvider.GetRequiredService<IObjectOperationExecutor>();
+        var bound = await operations.ExecuteAsync(
+            "organization.person",
+            PersonObjectBehavior.BindUserAction,
+            personId,
+            new Dictionary<string, object?>
+            {
+                ["AccountEid"] = account.GetProperty("eid").GetString(),
+                ["ExpectedRevision"] = account.GetProperty("revision").GetInt64(),
+                ["Reason"] = "公共对象入口绑定"
+            });
+        Assert.True(bound.Succeeded, bound.Error?.Message);
+        var bindingDto = Assert.IsType<PersonUserBindingDto>(bound.Detail!.Fields["Result"]);
+        Assert.Equal(fixture.ActorId, bindingDto.BoundBy);
+
+        var disabled = await operations.ExecuteAsync(
+            "organization.person",
+            PersonObjectBehavior.DisableAction,
+            personId,
+            new Dictionary<string, object?> { ["Reason"] = "公共对象入口停用" });
+        Assert.True(disabled.Succeeded, disabled.Error?.Message);
+        var lifecycleDto = Assert.IsType<PersonLifecycleDto>(disabled.Detail!.Fields["Result"]);
+        Assert.False(lifecycleDto.IsEnabled);
+        var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        var stored = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Person"))
+            .AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == personId);
+        var cached = (await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync()).Persons[personId];
+        Assert.Equal(account.GetProperty("eid").GetString(), stored["AccountEID"]);
+        Assert.False((bool)stored["IsEnabled"]!);
+        foreach (var field in new[] { "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt" })
+        {
+            Assert.Equal(stored[field], disabled.Detail.Fields[field]);
+            Assert.Equal(stored[field], cached[field]);
+        }
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "同事务 Person 创建、直接 DML 绑定和普通更新保持绑定及审计事实")]
+    public async Task NestedPersonCreateBindUpdate_PreservesTrackedBindingAndAuditInDatabaseResultAndCache()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
+        using var client = await fixture.LoginAdministratorAsync();
+        var company = await FeatureHttpTestRequests.CreateAsync(
+            client,
+            http.Organization("companies", "create", "list.pageActions"),
+            "/api/organization/companies",
+            new { ECODE = "TRACKED-ROOT", ENAME = "跟踪链根公司", SortOrder = "0100" });
+        using var accountResponse = await FeatureHttpTestRequests.SendAsync(
+            client,
+            http.Identity("create"),
+            HttpMethod.Post,
+            "/api/identity/accounts",
+            new { ECODE = "tracked-special", ENAME = "跟踪链账号" });
+        var account = (await accountResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("account");
+        var control = fixture.Services.GetRequiredService<ObjectOperationExtensionProbeControl>();
+        control.Mode = ObjectOperationExtensionProbeMode.NestedCreateBindUpdate;
+        control.NestedCompanyId = null;
+        control.NestedDepartmentId = null;
+        control.NestedAccountId = account.GetProperty("eid").GetString();
+        control.NestedAccountRevision = account.GetProperty("revision").GetInt64();
+        control.ActorId = fixture.ActorId;
+        await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
+
+        using var response = await FeatureHttpTestRequests.SendAsync(
+            client,
+            http.Organization("companies", "edit", "list.rowActions"),
+            HttpMethod.Put,
+            "/api/organization/companies/" + Id(company),
+            new { ENAME = "跟踪链已提交" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(control.NestedPersonResult?.Succeeded);
+        Assert.True(control.NestedPersonUpdateResult?.Succeeded);
+        Assert.Equal(control.NestedAccountId, control.NestedBindingResult?.AccountEid);
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        var stored = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Person"))
+            .AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == control.NestedPersonId);
+        var cached = (await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync()).Persons[control.NestedPersonId!];
+        Assert.Equal(control.NestedAccountId, stored["AccountEID"]);
+        Assert.Equal("绑定后同事务更新", stored["ENAME"]);
+        Assert.Equal(control.NestedAccountId, cached["AccountEID"]);
+        Assert.Equal("绑定后同事务更新", cached["ENAME"]);
+        foreach (var field in new[] { "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt" })
+        {
+            Assert.Equal(stored[field], control.NestedPersonUpdateResult!.Detail!.Fields[field]);
+            Assert.Equal(stored[field], cached[field]);
+        }
     }
 
     private sealed record ObjectOperationTarget(

@@ -90,6 +90,8 @@ public sealed class EfEntityAuditTests
 
         using (auditValues.BeginOperation())
         {
+            Assert.Equal("person-creator", auditValues.Current().ActorId);
+            Assert.Equal(behaviorTime, auditValues.Current().OccurredAtUtc);
             auditValues.ForCreate().ApplyTo(row);
             dbContext.Set<Dictionary<string, object?>>("platform.core/Person").Add(row);
             await dbContext.SaveChangesAsync();

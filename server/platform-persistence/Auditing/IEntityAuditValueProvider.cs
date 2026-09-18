@@ -11,6 +11,11 @@ public interface IEntityAuditValueProvider
     IDisposable BeginOperation();
 
     /// <summary>
+    /// 取得当前写入作用域的可信主体和 UTC 时间；没有显式作用域时读取当前服务端来源。
+    /// </summary>
+    EntityAuditStamp Current();
+
+    /// <summary>
     /// 生成创建所需的四个审计字段值。
     /// </summary>
     EntityAuditValues ForCreate();

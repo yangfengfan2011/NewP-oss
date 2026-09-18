@@ -12,6 +12,8 @@ public sealed record PersonUserBindingState
     public DateTime? BoundAt { get; init; }
     public string? BoundBy { get; init; }
     public string? BindingReason { get; init; }
+    public string? CreatedBy { get; init; }
+    public DateTime? CreatedAt { get; init; }
     public string? UpdatedBy { get; init; }
     public DateTime? UpdatedAt { get; init; }
 }

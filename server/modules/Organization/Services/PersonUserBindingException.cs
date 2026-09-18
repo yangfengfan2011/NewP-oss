@@ -18,8 +18,20 @@ public static class PersonUserBindingFailureCodes
 public sealed class PersonUserBindingException(
     string failureCode,
     object? current = null,
-    Exception? innerException = null) : InvalidOperationException(failureCode, innerException)
+    Exception? innerException = null,
+    int? statusCode = null) : InvalidOperationException(failureCode, innerException)
 {
     public string FailureCode { get; } = failureCode;
     public object? Current { get; } = current;
+    public int StatusCode { get; } = statusCode ?? failureCode switch
+    {
+        PersonUserBindingFailureCodes.PersonNotFound => 404,
+        PersonUserBindingFailureCodes.IdentityUnavailable => 503,
+        PersonUserBindingFailureCodes.PersonDisabled
+            or PersonUserBindingFailureCodes.PersonAlreadyBound
+            or PersonUserBindingFailureCodes.UserAlreadyBound
+            or PersonUserBindingFailureCodes.LocalAdministratorProtected
+            or PersonUserBindingFailureCodes.RevisionConflict => 409,
+        _ => 400
+    };
 }

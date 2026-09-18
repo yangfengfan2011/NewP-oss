@@ -2,6 +2,9 @@ using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.ObjectOperations;
+using ICP.Platform.Modules.Organization.Crud;
+using ICP.Platform.Modules.Organization.DTOs;
+using ICP.Platform.Modules.Organization.Services;
 using ICP.Platform.Sdk;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -22,6 +25,10 @@ public sealed class ObjectOperationExtensionProbeModule : ModuleCapsuleBindingBa
         services.AddObjectOperationExtension<PersonCreateProbeExtension>(this, PersonCreateProbeExtension.Definition);
         services.AddObjectOperationExtension<PersonCreateProbeExtension>(this, PersonCreateProbeExtension.UpdateDefinition);
         services.AddObjectOperationExtension<PersonCreateProbeExtension>(this, PersonCreateProbeExtension.DeleteDefinition);
+        foreach (var definition in PersonSpecialActionProbeExtension.Definitions)
+        {
+            services.AddObjectOperationExtension<PersonSpecialActionProbeExtension>(this, definition);
+        }
         foreach (var definition in PersonCreateProbeExtension.CompanyAndPositionDefinitions)
         {
             services.AddObjectOperationExtension<PersonCreateProbeExtension>(this, definition);
@@ -46,7 +53,9 @@ internal enum ObjectOperationExtensionProbeMode
     NestedCreate,
     NestedDisableThenCreate,
     NestedDeleteThenCreate,
-    AfterRepeatDelete
+    AfterRepeatDelete,
+    NestedDisableThenBind,
+    NestedCreateBindUpdate
 }
 
 internal sealed class ObjectOperationExtensionProbeControl
@@ -63,8 +72,57 @@ internal sealed class ObjectOperationExtensionProbeControl
     internal StandardCrudMutationResult? NestedDepartmentResult { get; set; }
     internal StandardCrudMutationResult? NestedPersonResult { get; set; }
     internal StandardCrudMutationResult? RepeatedDeleteResult { get; set; }
+    internal string? NestedAccountId { get; set; }
+    internal long NestedAccountRevision { get; set; }
+    internal string ActorId { get; set; } = "test-system";
+    internal PersonUserBindingDto? NestedBindingResult { get; set; }
+    internal StandardCrudMutationResult? NestedPersonUpdateResult { get; set; }
     internal TaskCompletionSource? NestedWritesCompleted { get; set; }
     internal TaskCompletionSource? ReleaseNestedWrite { get; set; }
+}
+
+internal sealed class PersonSpecialActionProbeExtension(ObjectOperationExtensionProbeControl control)
+    : IObjectOperationExtension
+{
+    internal static IReadOnlyList<ObjectOperationExtensionDefinition> Definitions { get; } =
+    [
+        new("host-api-tests.person-special-action-probe", "Organization", "organization.person", PersonObjectBehavior.EnableAction),
+        new("host-api-tests.person-special-action-probe", "Organization", "organization.person", PersonObjectBehavior.DisableAction),
+        new("host-api-tests.person-special-action-probe", "Organization", "organization.person", PersonObjectBehavior.BindUserAction)
+    ];
+
+    public ValueTask<StandardCrudError?> BeforeAsync(
+        ObjectOperationBeforeContext context,
+        CancellationToken cancellationToken = default)
+    {
+        if (control.Mode == ObjectOperationExtensionProbeMode.Supplement)
+        {
+            context.SetValue("Reason", control.SupplementedName);
+        }
+        else if (control.Mode == ObjectOperationExtensionProbeMode.Reject)
+        {
+            return ValueTask.FromResult<StandardCrudError?>(new StandardCrudError
+            {
+                StatusCode = 409,
+                Code = "Organization.Person.ExtensionRejected",
+                Message = "测试扩展拒绝人员专用动作。"
+            });
+        }
+        return ValueTask.FromResult<StandardCrudError?>(null);
+    }
+
+    public ValueTask AfterAsync(
+        ObjectOperationAfterContext context,
+        CancellationToken cancellationToken = default)
+    {
+        control.AfterInput = context.InputValues;
+        control.AfterResult = context.ResultFields;
+        if (control.Mode == ObjectOperationExtensionProbeMode.AfterFailure)
+        {
+            throw new InvalidOperationException("injected person special action after failure");
+        }
+        return ValueTask.CompletedTask;
+    }
 }
 
 internal sealed class PersonCreateProbeExtension(
@@ -179,7 +237,9 @@ internal sealed class PersonCreateProbeExtension(
 
 internal sealed class OrganizationNestedWriteProbeExtension(
     Func<IObjectOperationExecutor> executor,
-    ObjectOperationExtensionProbeControl control) : IObjectOperationExtension
+    ObjectOperationExtensionProbeControl control,
+    IPersonLifecycleService lifecycle,
+    IPersonUserBindingService binding) : IObjectOperationExtension
 {
     internal static ObjectOperationExtensionDefinition CompanyCreateDefinition { get; } = new(
         "host-api-tests.organization-nested-write-probe",
@@ -201,7 +261,10 @@ internal sealed class OrganizationNestedWriteProbeExtension(
         [
             new ObjectOperationTarget("organization.department", ObjectOperationAction.Update),
             new ObjectOperationTarget("organization.department", ObjectOperationAction.Delete),
-            new ObjectOperationTarget("organization.person", ObjectOperationAction.Create)
+            new ObjectOperationTarget("organization.person", ObjectOperationAction.Create),
+            new ObjectOperationTarget("organization.person", ObjectOperationAction.Update),
+            new ObjectOperationTarget("organization.person", PersonObjectBehavior.DisableAction),
+            new ObjectOperationTarget("organization.person", PersonObjectBehavior.BindUserAction)
         ]);
 
     /// <inheritdoc />
@@ -240,6 +303,44 @@ internal sealed class OrganizationNestedWriteProbeExtension(
                 new Dictionary<string, object?>(),
                 cancellationToken);
             control.NestedPersonResult = await CreatePersonAsync(cancellationToken);
+            return;
+        }
+        if (control.Mode == ObjectOperationExtensionProbeMode.NestedDisableThenBind)
+        {
+            await lifecycle.SetStatusAsync(
+                control.NestedPersonId!,
+                new(false, "嵌套停用"),
+                new(control.ActorId, "nested-disable"),
+                cancellationToken);
+            try
+            {
+                _ = await binding.BindAsync(
+                    control.NestedPersonId!,
+                    new(control.NestedAccountId!, control.NestedAccountRevision, "停用后不得绑定"),
+                    new(control.ActorId, "nested-bind"),
+                    cancellationToken);
+            }
+            catch (PersonUserBindingException)
+            {
+                // 探针故意忽略内层稳定拒绝，根对象操作仍必须由执行上下文标记为失败。
+            }
+            return;
+        }
+        if (control.Mode == ObjectOperationExtensionProbeMode.NestedCreateBindUpdate)
+        {
+            control.NestedPersonResult = await CreatePersonAsync(cancellationToken);
+            control.NestedPersonId = Convert.ToString(control.NestedPersonResult.Detail!.Fields["EID"]);
+            control.NestedBindingResult = await binding.BindAsync(
+                control.NestedPersonId!,
+                new(control.NestedAccountId!, control.NestedAccountRevision, "同事务永久绑定"),
+                new(control.ActorId, "nested-create-bind"),
+                cancellationToken);
+            control.NestedPersonUpdateResult = await executor().ExecuteAsync(
+                "organization.person",
+                ObjectOperationAction.Update,
+                control.NestedPersonId,
+                new Dictionary<string, object?> { ["ENAME"] = "绑定后同事务更新" },
+                cancellationToken);
         }
     }
 

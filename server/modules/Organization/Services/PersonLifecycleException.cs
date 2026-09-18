@@ -13,8 +13,16 @@ public static class PersonLifecycleFailureCodes
 public sealed class PersonLifecycleException(
     string failureCode,
     object? current = null,
-    Exception? innerException = null) : InvalidOperationException(failureCode, innerException)
+    Exception? innerException = null,
+    int? statusCode = null) : InvalidOperationException(failureCode, innerException)
 {
     public string FailureCode { get; } = failureCode;
     public object? Current { get; } = current;
+    public int StatusCode { get; } = statusCode ?? failureCode switch
+    {
+        PersonLifecycleFailureCodes.PersonNotFound => 404,
+        PersonLifecycleFailureCodes.Conflict => 409,
+        PersonLifecycleFailureCodes.DependencyUnavailable => 503,
+        _ => 400
+    };
 }

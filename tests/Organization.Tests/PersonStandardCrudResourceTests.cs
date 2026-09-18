@@ -11,6 +11,7 @@ using ICP.Platform.Modules.Organization.Crud;
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Repositories;
+using ICP.Platform.Persistence.Auditing;
 using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 using ICP.Platform.Query.Descriptors;
@@ -447,17 +448,15 @@ public sealed class PersonStandardCrudResourceTests
         public ValueTask<bool> TryBindAsync(
             string personEid,
             string accountEid,
-            DateTime boundAt,
-            string actorId,
             string reason,
+            EntityAuditValues auditValues,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
         public ValueTask SetEnablementAsync(
             string personEid,
             bool isEnabled,
-            string actorId,
-            DateTime changedAt,
+            EntityAuditValues auditValues,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }

@@ -11,6 +11,7 @@ using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Repositories;
 using ICP.Platform.Modules.Organization.Services;
 using ICP.Platform.Persistence.Abstractions;
+using ICP.Platform.Persistence.Auditing;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -41,7 +42,7 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
             new IdentityLifecycleParticipant(identity, new PlatformObjectIdGenerator(), new FixedTimeProvider(now)),
             sessions,
             transaction,
-            new FixedTimeProvider(now));
+            new EntityAuditValueProvider(new FixedAuditStampProvider("User_Admin", now)));
         var accounts = new IdentityAccountApplicationService(
             identity,
             transaction,
@@ -166,6 +167,8 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
         BoundAt = now.AddDays(-1),
         BoundBy = "User_Admin",
         BindingReason = "入职绑定",
+        CreatedBy = "User_Admin",
+        CreatedAt = now.AddDays(-2),
         UpdatedBy = "User_Admin",
         UpdatedAt = now.AddDays(-1)
     };
@@ -177,19 +180,24 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
         public ValueTask<PersonUserBindingState?> FindAsync(string personEid, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult<PersonUserBindingState?>(Current.PersonEid == personEid ? Current with { } : null);
 
-        public ValueTask<bool> TryBindAsync(string personEid, string accountEid, DateTime boundAt, string actorId, string reason, CancellationToken cancellationToken = default) =>
+        public ValueTask<bool> TryBindAsync(string personEid, string accountEid, string reason, EntityAuditValues auditValues, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public ValueTask SetEnablementAsync(string personEid, bool isEnabled, string actorId, DateTime changedAt, CancellationToken cancellationToken = default)
+        public ValueTask SetEnablementAsync(string personEid, bool isEnabled, EntityAuditValues auditValues, CancellationToken cancellationToken = default)
         {
             Current = Current with
             {
                 IsEnabled = isEnabled,
-                UpdatedBy = actorId,
-                UpdatedAt = changedAt
+                UpdatedBy = auditValues.UpdatedBy,
+                UpdatedAt = auditValues.UpdatedAt
             };
             return ValueTask.CompletedTask;
         }
+    }
+
+    private sealed class FixedAuditStampProvider(string actorId, DateTime utcNow) : IEntityAuditStampProvider
+    {
+        public EntityAuditStamp GetCurrent() => new(actorId, utcNow);
     }
 
     private sealed class RecordingIdentityRepository(IdentityAccount user) : IIdentityRepository

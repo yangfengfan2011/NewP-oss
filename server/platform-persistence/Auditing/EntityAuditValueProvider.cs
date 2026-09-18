@@ -18,6 +18,9 @@ public sealed class EntityAuditValueProvider(IEntityAuditStampProvider stampProv
     }
 
     /// <inheritdoc />
+    public EntityAuditStamp Current() => CurrentStamp();
+
+    /// <inheritdoc />
     public EntityAuditValues ForCreate()
     {
         var stamp = CurrentStamp();

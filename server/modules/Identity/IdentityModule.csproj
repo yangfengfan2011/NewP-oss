@@ -13,6 +13,7 @@
     <ProjectReference Include="..\Authorization\Contracts\Authorization.Contracts.csproj" />
     <ProjectReference Include="..\Authentication\Contracts\Authentication.Contracts.csproj" />
     <ProjectReference Include="..\..\sdk\Sdk.csproj" />
+    <ProjectReference Include="..\..\platform-authorization\PlatformAuthorization.csproj" />
     <ProjectReference Include="..\..\platform-crud\PlatformCrud.csproj" />
     <ProjectReference Include="..\..\platform-modeling\PlatformModeling.csproj" />
     <ProjectReference Include="..\..\platform-persistence\PlatformPersistence.csproj" />
@@ -34,6 +35,15 @@
     <EmbeddedResource Include="..\..\..\modules\Identity\newp.plugin.json">
       <LogicalName>ICP.Platform.Modules.Identity.newp.plugin.json</LogicalName>
     </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>Identity.Tests</_Parameter1>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>HostApi.Tests</_Parameter1>
+    </AssemblyAttribute>
   </ItemGroup>
 
 </Project>

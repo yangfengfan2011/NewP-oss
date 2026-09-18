@@ -6,8 +6,8 @@ using System.Text.Json;
 using ICP.Platform.Authentication.Contracts;
 using ICP.Platform.HostApi.Authentication;
 using ICP.Platform.HostApi.Controllers;
-using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Authorization.Services;
+using ICP.Platform.Modules.Identity.Application;
 using ICP.Platform.Modules.Identity.Controllers;
 using ICP.Platform.Modules.Organization.Controllers;
 using ICP.Platform.Persistence.Abstractions;
@@ -33,7 +33,7 @@ public sealed class PlatformRequestValidationHttpApiIntegrationTests
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
         builder.Services.AddControllers().AddApplicationPart(typeof(AuthController).Assembly);
-        builder.Services.AddSingleton<ILocalCredentialAuthenticator, UnusedAuthenticator>();
+        builder.Services.AddSingleton<IIdentityLoginApplicationService, UnusedLoginApplicationService>();
         builder.Services.AddSingleton<IAuthenticationSessionRegistry, UnusedSessionRegistry>();
         builder.Services.AddSingleton<IPlatformTransactionExecutor, UnusedTransactionExecutor>();
         builder.Services.AddSingleton<IHostAuthenticationCookie, UnusedCookie>();
@@ -86,11 +86,10 @@ public sealed class PlatformRequestValidationHttpApiIntegrationTests
         Assert.DoesNotContain("REQUEST_VALIDATION_FAILED", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
     }
 
-    private sealed class UnusedAuthenticator : ILocalCredentialAuthenticator
+    private sealed class UnusedLoginApplicationService : IIdentityLoginApplicationService
     {
-        public ValueTask<LocalCredentialAuthenticationResult> AuthenticateAsync(
-            string accountCode,
-            string password,
+        public ValueTask<IdentityLoginResult> LoginAsync(
+            IdentityLoginCommand command,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 

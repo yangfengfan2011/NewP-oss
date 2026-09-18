@@ -1,6 +1,6 @@
 # Authentication
 
-Authentication 是 Host 的必需内建上下文，管理服务端认证会话及其有效性。它不拥有用户账号、本地凭据、人员档案、角色或业务权限。
+Authentication 是 Host 的必需内建上下文，管理服务端认证会话及其有效性，并在登记与验证时执行账号和已登记准入策略检查。完整本地登录与凭据轮换顺序由 Identity 应用层编排；Authentication 不拥有用户账号、本地凭据、人员档案、角色或业务权限。
 
 ## Language
 

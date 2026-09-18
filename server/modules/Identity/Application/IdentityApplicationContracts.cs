@@ -60,6 +60,48 @@ public sealed record IdentityPasswordChangeResult(
     IdentityAccountSnapshot Account,
     AuthenticationSessionIssuance Session);
 
+/// <summary>本地凭据登录应用用例的输入；时区仍由 Authentication 验证并冻结。</summary>
+public sealed record IdentityLoginCommand(
+    string ECODE,
+    string Password,
+    string? TimeZoneId = null);
+
+/// <summary>Identity 登录应用用例的稳定完成状态。</summary>
+public enum IdentityLoginStatus
+{
+    Succeeded,
+    InvalidCredentials,
+    CredentialStoreUnavailable,
+    AuthorizationUnavailable
+}
+
+/// <summary>登录应用用例的结果；会话凭据只供提交成功后的 Host Cookie 适配。</summary>
+public sealed record IdentityLoginResult
+{
+    public required IdentityLoginStatus Status { get; init; }
+    public string? FailureCode { get; init; }
+    public IdentityAccountSnapshot? Account { get; init; }
+    public bool IsTemporary { get; init; }
+    public AuthenticationSessionIssuance? Issuance { get; init; }
+    public IReadOnlyList<string> FeaturePositions { get; init; } = [];
+}
+
+/// <summary>Identity 实现程序集向 Host 暴露的完整本地登录应用 seam。</summary>
+public interface IIdentityLoginApplicationService
+{
+    /// <summary>完成凭据初验、功能位置读取、协调后二次验证及认证会话登记。</summary>
+    ValueTask<IdentityLoginResult> LoginAsync(
+        IdentityLoginCommand command,
+        CancellationToken cancellationToken = default);
+}
+
+/// <summary>完整登录应用用例向 Host 返回的既有稳定失败码。</summary>
+public static class IdentityLoginFailureCodes
+{
+    public const string InvalidCredentials = "AUTH_INVALID_CREDENTIALS";
+    public const string AuthorizationUnavailable = "AUTHORIZATION_DECISION_UNAVAILABLE";
+}
+
 public static class IdentityFailureCodes
 {
     public const string InvalidAccountCode = "IDENTITY_ECODE_INVALID";

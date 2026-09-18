@@ -5,6 +5,7 @@ using ICP.Platform.Authorization.Http;
 using ICP.Platform.HostApi.Antiforgery;
 using ICP.Platform.HostApi.Authentication;
 using ICP.Platform.Identity.Contracts;
+using ICP.Platform.Modules.Identity.Application;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Sdk.Http;
 using Microsoft.AspNetCore.Authorization;
@@ -36,34 +37,31 @@ public sealed class AuthController : ControllerBase
         return Ok(new AntiforgeryTokenResponse(tokens.RequestToken!));
     }
 
-    private readonly ILocalCredentialAuthenticator _credentialAuthenticator;
+    private readonly IIdentityLoginApplicationService _login;
     private readonly IAuthenticationSessionRegistry _sessionRegistry;
     private readonly IPlatformTransactionExecutor _transactionExecutor;
     private readonly IHostAuthenticationCookie _cookie;
     private readonly PasswordVerificationGate _passwordVerificationGate;
     private readonly ILogger<AuthController> _logger;
     private readonly IFeatureGrantProjection? _featureGrants;
-    private readonly IIdentityAdmissionPolicy[] _admissionPolicies;
 
-    // 认证会话拥有主体加载；功能授权投影只参与登录与当前用户响应。
+    // Identity 拥有完整登录用例；Host 只保留 HTTP、限流、Cookie 与当前用户投影。
     public AuthController(
-        ILocalCredentialAuthenticator credentialAuthenticator,
+        IIdentityLoginApplicationService login,
         IAuthenticationSessionRegistry sessionRegistry,
         IPlatformTransactionExecutor transactionExecutor,
         IHostAuthenticationCookie cookie,
         PasswordVerificationGate passwordVerificationGate,
         ILogger<AuthController> logger,
-        IFeatureGrantProjection? featureGrants = null,
-        IEnumerable<IIdentityAdmissionPolicy>? admissionPolicies = null)
+        IFeatureGrantProjection? featureGrants = null)
     {
-        _credentialAuthenticator = credentialAuthenticator;
+        _login = login;
         _sessionRegistry = sessionRegistry;
         _transactionExecutor = transactionExecutor;
         _cookie = cookie;
         _passwordVerificationGate = passwordVerificationGate;
         _logger = logger;
         _featureGrants = featureGrants;
-        _admissionPolicies = admissionPolicies?.ToArray() ?? [];
     }
 
     [HttpPost("login")]
@@ -82,49 +80,12 @@ public sealed class AuthController : ControllerBase
             return ProblemResult(429, "AUTH_PASSWORD_VERIFICATION_BUSY");
         }
 
-        var authentication = await _credentialAuthenticator.AuthenticateAsync(
-            request.ECODE,
-            request.Password,
-            cancellationToken);
-        if (authentication.Status == LocalCredentialAuthenticationStatus.StoreUnavailable)
-        {
-            LogLoginFailure(_logger, "StoreUnavailable", null);
-            return ProblemResult(503, authentication.FailureCode ?? LocalCredentialAuthenticationFailureCodes.StoreUnavailable);
-        }
-
-        if (authentication is not { Status: LocalCredentialAuthenticationStatus.Succeeded, Account: not null })
-        {
-            LogLoginFailure(_logger, "InvalidCredentials", null);
-            return ProblemResult(401, "AUTH_INVALID_CREDENTIALS");
-        }
-
-        IReadOnlyList<string> features;
-        try { features = _featureGrants is null ? [] : await _featureGrants.GetCurrentPositionsAsync(authentication.Account.AccountEid, cancellationToken); }
-        catch (Exception error) when (error is not OperationCanceledException) { return ProblemResult(503, "AUTHORIZATION_DECISION_UNAVAILABLE"); }
-        AuthenticationSessionIssuance issuance;
+        IdentityLoginResult login;
         try
         {
-            issuance = await _transactionExecutor.ExecuteAsync(
-                _admissionPolicies.SelectMany(policy => policy.GetCoordinationModels(authentication.Account)).Distinct().ToArray(),
-                async token =>
-                {
-                    // 协调权取得后重新验证凭据，防止等待期间账号停用或凭据轮换后仍签发。
-                    var current = await _credentialAuthenticator.AuthenticateAsync(request.ECODE, request.Password, token);
-                    if (current.Status == LocalCredentialAuthenticationStatus.StoreUnavailable)
-                        throw new AuthenticationSessionException(AuthenticationSessionFailureCodes.StoreUnavailable);
-                    if (current is not { Status: LocalCredentialAuthenticationStatus.Succeeded, Account: not null }
-                        || current.Account.Revision != authentication.Account.Revision)
-                        throw new AuthenticationSessionException(AuthenticationSessionFailureCodes.AdmissionDenied);
-                    return await _sessionRegistry.RegisterAsync(new AuthenticationSessionRegistration
-                    {
-                        AccountEid = authentication.Account.AccountEid,
-                        Type = authentication.IsTemporary
-                            ? AuthenticationSessionType.Restricted
-                            : AuthenticationSessionType.Regular,
-                        ActorId = authentication.Account.AccountEid,
-                        TimeZoneId = request.TimeZoneId
-                    }, token);
-                }, cancellationToken);
+            login = await _login.LoginAsync(
+                new IdentityLoginCommand(request.ECODE, request.Password, request.TimeZoneId),
+                cancellationToken);
         }
         catch (AuthenticationSessionException exception)
             when (exception.FailureCode == AuthenticationSessionFailureCodes.InvalidTimeZone)
@@ -140,12 +101,41 @@ public sealed class AuthController : ControllerBase
         {
             return ProblemResult(exception.FailureCode is AuthenticationSessionFailureCodes.StoreUnavailable or AuthenticationSessionFailureCodes.AdmissionUnavailable ? 503 : 401, exception.FailureCode);
         }
-        _cookie.Append(HttpContext, issuance.Credential, issuance.Session.ExpiresAtUtc);
+
+        if (login.Status == IdentityLoginStatus.CredentialStoreUnavailable)
+        {
+            LogLoginFailure(_logger, "StoreUnavailable", null);
+            return ProblemResult(
+                StatusCodes.Status503ServiceUnavailable,
+                login.FailureCode ?? LocalCredentialAuthenticationFailureCodes.StoreUnavailable);
+        }
+
+        if (login.Status == IdentityLoginStatus.InvalidCredentials)
+        {
+            LogLoginFailure(_logger, "InvalidCredentials", null);
+            return ProblemResult(
+                StatusCodes.Status401Unauthorized,
+                login.FailureCode ?? IdentityLoginFailureCodes.InvalidCredentials);
+        }
+
+        if (login.Status == IdentityLoginStatus.AuthorizationUnavailable)
+        {
+            return ProblemResult(
+                StatusCodes.Status503ServiceUnavailable,
+                login.FailureCode ?? IdentityLoginFailureCodes.AuthorizationUnavailable);
+        }
+
+        if (login is not { Status: IdentityLoginStatus.Succeeded, Account: not null, Issuance: not null })
+        {
+            throw new InvalidOperationException("Identity login returned an incomplete success result.");
+        }
+
+        _cookie.Append(HttpContext, login.Issuance.Credential, login.Issuance.Session.ExpiresAtUtc);
 
         return Ok(ToResponse(
-            authentication.Account,
-            authentication.IsTemporary,
-            issuance.Session.TimeZoneId) with { FeaturePositions = features });
+            login.Account,
+            login.IsTemporary,
+            login.Issuance.Session.TimeZoneId) with { FeaturePositions = login.FeaturePositions });
     }
 
     [HttpPost("logout")]

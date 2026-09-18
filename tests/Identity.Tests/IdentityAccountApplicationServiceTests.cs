@@ -663,6 +663,7 @@ public sealed class IdentityAccountApplicationServiceTests
             Service = new IdentityAccountApplicationService(
                 Repository,
                 Transaction,
+                new IdentityAdmissionTransactionCoordinator(Transaction),
                 Sessions,
                 new PasswordHasher<IdentityAccount>(),
                 new QueueTemporaryCredentialIssuer(

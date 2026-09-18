@@ -45,6 +45,7 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
         var accounts = new IdentityAccountApplicationService(
             identity,
             transaction,
+            new IdentityAdmissionTransactionCoordinator(transaction),
             sessions,
             new PasswordHasher<IdentityAccount>(),
             new UnusedTemporaryCredentialIssuer(),

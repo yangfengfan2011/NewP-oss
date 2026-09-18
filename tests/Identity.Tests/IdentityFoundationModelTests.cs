@@ -40,6 +40,7 @@ public sealed class IdentityFoundationModelTests
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IIdentityAccountDirectory));
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IIdentityLifecycleParticipant));
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IIdentityAccountApplicationService));
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IIdentityLoginApplicationService));
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IPlatformQueryExecutor));
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(IValidateOptions<IdentityCredentialOptions>));
     }

@@ -1,5 +1,6 @@
 using ICP.Platform.Authentication.Contracts;
 using ICP.Platform.Authorization.Contracts;
+using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Identity.Contracts;
@@ -56,6 +57,15 @@ public sealed class IdentityModule : ModuleCapsuleBindingBase
         services.AddScoped<IIdentityManagementQueryService, IdentityManagementQueryService>();
         services.AddScoped<IPasswordHasher<IdentityAccount>, PasswordHasher<IdentityAccount>>();
         services.AddScoped<ILocalCredentialAuthenticator, LocalCredentialAuthenticator>();
+        services.AddScoped(serviceProvider => new IdentityAdmissionTransactionCoordinator(
+            serviceProvider.GetRequiredService<IPlatformTransactionExecutor>(),
+            serviceProvider.GetServices<IIdentityAdmissionPolicy>()));
+        services.AddScoped<IIdentityLoginApplicationService>(serviceProvider =>
+            new IdentityLoginApplicationService(
+                serviceProvider.GetRequiredService<ILocalCredentialAuthenticator>(),
+                serviceProvider.GetService<IFeatureGrantProjection>(),
+                serviceProvider.GetRequiredService<IAuthenticationSessionRegistry>(),
+                serviceProvider.GetRequiredService<IdentityAdmissionTransactionCoordinator>()));
         services.AddSingleton<ITemporaryCredentialIssuer>(serviceProvider =>
         {
             var environment = serviceProvider.GetRequiredService<IWebHostEnvironment>();
@@ -70,12 +80,12 @@ public sealed class IdentityModule : ModuleCapsuleBindingBase
             new IdentityAccountApplicationService(
                 serviceProvider.GetRequiredService<IIdentityRepository>(),
                 serviceProvider.GetRequiredService<IPlatformTransactionExecutor>(),
+                serviceProvider.GetRequiredService<IdentityAdmissionTransactionCoordinator>(),
                 serviceProvider.GetRequiredService<IAuthenticationSessionRegistry>(),
                 serviceProvider.GetRequiredService<IPasswordHasher<IdentityAccount>>(),
                 serviceProvider.GetRequiredService<ITemporaryCredentialIssuer>(),
                 serviceProvider.GetRequiredService<IPlatformObjectIdGenerator>(),
-                serviceProvider.GetRequiredService<TimeProvider>(),
-                serviceProvider.GetServices<IIdentityAdmissionPolicy>()));
+                serviceProvider.GetRequiredService<TimeProvider>()));
         services.AddScoped<IIdentityLifecycleParticipant>(serviceProvider =>
             new IdentityLifecycleParticipant(
                 serviceProvider.GetRequiredService<IIdentityRepository>(),

@@ -3,6 +3,7 @@ using ICP.Platform.Authentication.Contracts;
 using ICP.Platform.HostApi.Authentication;
 using ICP.Platform.HostApi.Controllers;
 using ICP.Platform.Identity.Contracts;
+using ICP.Platform.Modules.Identity.Application;
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Persistence.Abstractions;
 using Microsoft.AspNetCore.Http;
@@ -246,13 +247,20 @@ public sealed class AuthControllerTests
         RecordingCookie cookie,
         ILogger<AuthController>? logger = null, IFeatureGrantProjection? features = null)
     {
+        var featureProjection = features ?? new FixedFeatureProjection();
+        var transaction = new InlineTransactionExecutor();
         var controller = new AuthController(
-            authenticator,
+            new IdentityLoginApplicationService(
+                authenticator,
+                featureProjection,
+                sessions,
+                new IdentityAdmissionTransactionCoordinator(transaction)),
             sessions,
-            new InlineTransactionExecutor(),
+            transaction,
             cookie,
             new PasswordVerificationGate(Options.Create(new HostAuthenticationOptions())),
-            logger ?? NullLogger<AuthController>.Instance, features ?? new FixedFeatureProjection())
+            logger ?? NullLogger<AuthController>.Instance,
+            featureProjection)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };

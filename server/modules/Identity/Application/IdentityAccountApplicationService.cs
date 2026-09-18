@@ -15,32 +15,32 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
     // 账号与会话撤销仅在平台事务回调内登记；Identity 与 Authentication 的实现都不得在阶段中自行 SaveChanges。
     private readonly IIdentityRepository _repository;
     private readonly IPlatformTransactionExecutor _transactionExecutor;
+    private readonly IdentityAdmissionTransactionCoordinator _admissionCoordinator;
     private readonly IAuthenticationSessionRegistry _sessionRegistry;
     private readonly IPasswordHasher<IdentityAccount> _passwordHasher;
     private readonly ITemporaryCredentialIssuer _temporaryCredentialIssuer;
     private readonly IPlatformObjectIdGenerator _objectIdGenerator;
     private readonly TimeProvider _timeProvider;
-    private readonly IIdentityAdmissionPolicy[] _admissionPolicies;
 
-    // 准入参与者只提供最外层协调范围；Identity 保持账号与凭据变更的所有权。
-    public IdentityAccountApplicationService(
+    // 统一协调器持有最外层事务排序；Identity 保持账号与凭据变更的所有权。
+    internal IdentityAccountApplicationService(
         IIdentityRepository repository,
         IPlatformTransactionExecutor transactionExecutor,
+        IdentityAdmissionTransactionCoordinator admissionCoordinator,
         IAuthenticationSessionRegistry sessionRegistry,
         IPasswordHasher<IdentityAccount> passwordHasher,
         ITemporaryCredentialIssuer temporaryCredentialIssuer,
         IPlatformObjectIdGenerator objectIdGenerator,
-        TimeProvider timeProvider,
-        IEnumerable<IIdentityAdmissionPolicy>? admissionPolicies = null)
+        TimeProvider timeProvider)
     {
         _repository = repository;
         _transactionExecutor = transactionExecutor;
+        _admissionCoordinator = admissionCoordinator;
         _sessionRegistry = sessionRegistry;
         _passwordHasher = passwordHasher;
         _temporaryCredentialIssuer = temporaryCredentialIssuer;
         _objectIdGenerator = objectIdGenerator;
         _timeProvider = timeProvider;
-        _admissionPolicies = admissionPolicies?.ToArray() ?? [];
     }
 
     public async ValueTask<IdentityAccountCreationResult> CreateAsync(
@@ -124,8 +124,8 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
         account.ENAME = ename;
         StampSecurityChange(account, command.Actor.ActorId, now);
 
-        return await _transactionExecutor.ExecuteAsync(
-            _admissionPolicies.SelectMany(policy => policy.GetCoordinationModels(ToSnapshot(account))).Distinct().ToArray(),
+        return await _admissionCoordinator.ExecuteAsync(
+            ToSnapshot(account),
             async token =>
             {
                 await ReplaceAccountOrThrowConflictAsync(account, expectedRevision, token);
@@ -179,8 +179,8 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
             ? IdentitySecurityEventTypes.AccountEnabled
             : IdentitySecurityEventTypes.AccountDisabled;
 
-        return await _transactionExecutor.ExecuteAsync(
-            _admissionPolicies.SelectMany(policy => policy.GetCoordinationModels(ToSnapshot(account))).Distinct().ToArray(),
+        return await _admissionCoordinator.ExecuteAsync(
+            ToSnapshot(account),
             async token =>
             {
                 await ReplaceAccountOrThrowConflictAsync(account, expectedRevision, token);
@@ -221,8 +221,8 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
         credential.UpdatedAt = now;
         StampSecurityChange(account, command.Actor.ActorId, now);
 
-        return await _transactionExecutor.ExecuteAsync(
-            _admissionPolicies.SelectMany(policy => policy.GetCoordinationModels(ToSnapshot(account))).Distinct().ToArray(),
+        return await _admissionCoordinator.ExecuteAsync(
+            ToSnapshot(account),
             async token =>
             {
                 await ReplaceAccountOrThrowConflictAsync(account, expectedRevision, token);
@@ -271,8 +271,8 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
         credential.UpdatedAt = now;
         StampSecurityChange(account, command.Actor.ActorId, now);
 
-        return await _transactionExecutor.ExecuteAsync(
-            _admissionPolicies.SelectMany(policy => policy.GetCoordinationModels(ToSnapshot(account))).Distinct().ToArray(),
+        return await _admissionCoordinator.ExecuteAsync(
+            ToSnapshot(account),
             async token =>
             {
                 // 资格中断后即使组织已恢复，已撤销的来源会话也不得签发新会话。
@@ -331,8 +331,8 @@ public sealed class IdentityAccountApplicationService : IIdentityAccountApplicat
         account.Status = IdentityAccountStatus.Deleted;
         StampSecurityChange(account, command.Actor.ActorId, now);
 
-        return await _transactionExecutor.ExecuteAsync(
-            _admissionPolicies.SelectMany(policy => policy.GetCoordinationModels(ToSnapshot(account))).Distinct().ToArray(),
+        return await _admissionCoordinator.ExecuteAsync(
+            ToSnapshot(account),
             async token =>
             {
                 await ReplaceAccountOrThrowConflictAsync(account, expectedRevision, token);

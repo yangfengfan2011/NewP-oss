@@ -417,14 +417,19 @@ public sealed class IdentitySqlServerIntegrationTests
         EfPlatformDbContext context,
         EfIdentityRepository repository,
         IAuthenticationSessionRegistry sessionRegistry,
-        IPasswordHasher<IdentityAccount> passwordHasher) => new(
+        IPasswordHasher<IdentityAccount> passwordHasher)
+    {
+        var transaction = new EfPlatformTransactionExecutor(context);
+        return new IdentityAccountApplicationService(
             repository,
-            new EfPlatformTransactionExecutor(context),
+            transaction,
+            new IdentityAdmissionTransactionCoordinator(transaction),
             sessionRegistry,
             passwordHasher,
             new FixedCredentialIssuer(),
             new GuidObjectIdGenerator(),
             TimeProvider.System);
+    }
 
     private static async Task<string> BootstrapAsync(string connectionString, string ecode)
     {

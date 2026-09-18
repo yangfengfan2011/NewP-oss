@@ -22,6 +22,6 @@
 
 停服直接改库后的旧会话处理暂不纳入本次范围；不新增统一会话撤销，也不保证识别维护期间发生后又恢复的资格中断，范围见 ADR-0050。
 
-实现边界：Organization 实现 `Identity.Contracts.IIdentityAdmissionPolicy`，Authentication 在会话登记与验证时消费该契约；首次改密及其他轮换在统一事务内重新检查来源会话和准入条件。Organization 提交参与者计算资格中断范围，调用 Authentication 批量撤销契约，与组织变更原子提交。Host 只负责认证接入，缓存基类不拥有准入规则。
+实现边界：Organization 实现 `Identity.Contracts.IIdentityAdmissionPolicy`；Identity 应用层在完整登录与五个账号安全命令开始最外层事务前汇集该契约声明的协调模型，登录等待后重新验证同一凭据和账号 Revision，首次改密及其他轮换在统一事务内重新检查来源会话。Authentication 在会话登记与验证时消费同一策略的资格判定，并继续拥有会话登记与撤销。Organization 提交参与者计算资格中断范围，调用 Authentication 批量撤销契约，与组织变更原子提交。Host 只负责认证 HTTP 接入、限流、问题响应和提交成功后的 Cookie 交付，缓存基类不拥有准入规则。
 
 回退边界：人员可选归属和永久绑定保持原决策；若撤回本决策的登录限制，须显式重新评审准入规则，不通过缓存降级或登录旁路隐式放宽。

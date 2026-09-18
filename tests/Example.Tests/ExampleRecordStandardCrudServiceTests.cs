@@ -149,6 +149,7 @@ public sealed class ExampleRecordStandardCrudServiceTests
     public async Task UpdateAsync_ReturnsRawReviewerUserAndResolvedDisplayValue()
     {
         var descriptor = ExampleCrudTestResources.Create();
+        var createdAt = new DateTime(2026, 8, 27, 8, 0, 0, DateTimeKind.Utc);
         var repository = new RecordingMutationStandardCrudRepository(
             [
                 new Dictionary<string, object?>
@@ -157,7 +158,11 @@ public sealed class ExampleRecordStandardCrudServiceTests
                     ["ECODE"] = "R001",
                     ["ENAME"] = "旧名称",
                     ["ReviewerUserEID"] = "User_A",
-                    ["RecordSource"] = "Legacy"
+                    ["RecordSource"] = "Legacy",
+                    ["CreatedBy"] = "creator",
+                    ["CreatedAt"] = createdAt,
+                    ["UpdatedBy"] = "creator",
+                    ["UpdatedAt"] = createdAt
                 }
             ]);
         var directory = new RecordingAccountDirectory([Account("User_B", "Bob")]);
@@ -176,6 +181,10 @@ public sealed class ExampleRecordStandardCrudServiceTests
         Assert.Equal("User_B", result.Detail!.Fields["ReviewerUserEID"]);
         Assert.Equal("Bob", result.Detail.Fields["ReviewerUserEID_DisplayValue"]);
         Assert.Equal("Legacy", result.Detail.Fields["RecordSource"]);
+        Assert.Equal("creator", result.Detail.Fields["CreatedBy"]);
+        Assert.Equal(createdAt, result.Detail.Fields["CreatedAt"]);
+        Assert.Equal(SystemEntityAuditStampProvider.SystemActorId, result.Detail.Fields["UpdatedBy"]);
+        Assert.True((DateTime)result.Detail.Fields["UpdatedAt"]! >= createdAt);
         Assert.Equal(1, repository.UpdateCallCount);
         Assert.Equal(1, directory.FindManyCallCount);
     }

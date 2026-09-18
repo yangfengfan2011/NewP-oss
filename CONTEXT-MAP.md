@@ -7,6 +7,7 @@
 - [Identity](./docs/contexts/identity/CONTEXT.md) — 管理用户账号、账号状态与可供认证机制使用的账号目录
 - [Authentication](./docs/contexts/authentication/CONTEXT.md) — 管理认证会话、服务端有效性与统一撤销
 - [Organization](./docs/contexts/organization/CONTEXT.md) — 管理公司、部门、岗位、人员档案及人员与用户账号的永久绑定
+- [Object Operations（目标）](./docs/contexts/object-operations/CONTEXT.md) — 定义正式业务写入的统一对象操作与对象拥有者声明的横切扩展点；目标边界见 [ADR-0051](./docs/adr/0051-object-operations-own-explicit-action-extensions.md)，尚未实施
 - [Standard CRUD](./docs/contexts/standard-crud/CONTEXT.md) — 管理共享 CRUD 宿主使用的字段、表单、列表与详情展示契约
 - [View Composition](./docs/contexts/view-composition/CONTEXT.md) — 定义页面引用、视图配置及树与标签页组合的已确认目标契约，落地状态见 ADR-0046
 - [Plugin Platform](./docs/contexts/plugin-platform/CONTEXT.md) — 管理外部插件包的校验、期望状态、启动期激活与统一运行时投影
@@ -15,6 +16,9 @@
 - [Platform Acceptance](./docs/contexts/platform-acceptance/CONTEXT.md) — 编排正式观察面上的用户旅程与故障场景，并从完整证据集中产生两道闸门的唯一裁决
 
 ## Relationships
+
+- **Organization → Object Operations（目标）**：Organization 首期接入公司、部门、岗位、人员的正式写操作，并拥有对象行为、必需规则与可扩展动作；任意组件可向已声明动作提供横切实现，边界见 ADR-0051。
+- **Object Operations → Platform Persistence（目标）**：对象操作统一执行必需规则、前后横切及跨对象调用，复用已有事务执行与缓存提交机制；操作内部读取本事务前序已完成的变化，公共缓存仍在提交后发布。
 
 - **Organization → Audit → Platform Persistence**：Organization 通过稳定 Audit.Contracts 登记明确业务字段；Audit 登记自身记录，平台事务执行器统一保存和提交。Identity 与对象拥有者只批量提供当前展示名称，不改变历史事实。
 

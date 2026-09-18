@@ -12,7 +12,8 @@ public sealed class ObjectOperationExtensionDefinition
         string objectKey,
         ObjectOperationAction action,
         IEnumerable<string>? runsAfter = null,
-        IEnumerable<string>? runsBefore = null)
+        IEnumerable<string>? runsBefore = null,
+        IEnumerable<ObjectOperationTarget>? calls = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(extensionKey);
         ArgumentException.ThrowIfNullOrWhiteSpace(targetModuleId);
@@ -24,6 +25,7 @@ public sealed class ObjectOperationExtensionDefinition
         Action = action;
         RunsAfter = CopyDependencies(runsAfter);
         RunsBefore = CopyDependencies(runsBefore);
+        Calls = calls?.Distinct().ToArray() ?? [];
     }
 
     /// <summary>扩展点内稳定且唯一的扩展键。</summary>
@@ -38,6 +40,8 @@ public sealed class ObjectOperationExtensionDefinition
     public IReadOnlyList<string> RunsAfter { get; }
     /// <summary>必须后于本扩展执行的扩展键。</summary>
     public IReadOnlyList<string> RunsBefore { get; }
+    /// <summary>本扩展可能调用的目标对象操作。</summary>
+    public IReadOnlyList<ObjectOperationTarget> Calls { get; }
 
     // 复制并收敛声明，避免模块注册后通过原集合改变启动期计划。
     private static IReadOnlyList<string> CopyDependencies(IEnumerable<string>? values) =>

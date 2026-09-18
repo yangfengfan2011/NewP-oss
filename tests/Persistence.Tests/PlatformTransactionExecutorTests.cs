@@ -54,6 +54,36 @@ public sealed class PlatformTransactionExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_WhenOuterCallerCatchesNestedFailure_RemainsRollbackOnly()
+    {
+        var options = CreateOptions(nameof(ExecuteAsync_WhenOuterCallerCatchesNestedFailure_RemainsRollbackOnly));
+        await using var dbContext = new EfPlatformDbContext(options, [Definition()]);
+        IPlatformTransactionExecutor executor = new EfPlatformTransactionExecutor(dbContext);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => executor.ExecuteAsync<string>(
+            async token =>
+            {
+                dbContext.Set<Dictionary<string, object?>>("platform.core/TransactionProbe")
+                    .Add(new Dictionary<string, object?> { ["EID"] = "outer" });
+                try
+                {
+                    await executor.ExecuteAsync<string>(_ =>
+                    {
+                        throw new InvalidOperationException("nested failure");
+                    }, token);
+                }
+                catch (InvalidOperationException)
+                {
+                }
+                return "ignored";
+            }).AsTask());
+
+        Assert.Equal("nested failure", exception.Message);
+        await using var verification = new EfPlatformDbContext(options, [Definition()]);
+        Assert.Empty(await verification.Set<Dictionary<string, object?>>("platform.core/TransactionProbe").ToListAsync());
+    }
+
+    [Fact]
     public async Task ExecuteAsync_PersistsChangesRegisteredDuringPreparationBeforePublishing()
     {
         var options = CreateOptions(nameof(ExecuteAsync_PersistsChangesRegisteredDuringPreparationBeforePublishing));

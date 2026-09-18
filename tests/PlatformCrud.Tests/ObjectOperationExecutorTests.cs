@@ -165,6 +165,9 @@ public sealed class ObjectOperationExecutorTests
                 throw;
             }
         }
+
+        public ValueTask FlushAsync(CancellationToken cancellationToken = default) =>
+            ValueTask.CompletedTask;
     }
 
     private sealed class FailingTransactionExecutor(Exception exception) : IPlatformTransactionExecutor

@@ -16,14 +16,54 @@ namespace ICP.Platform.Modules.Organization.Crud;
 /// <param name="standardCrudRepository">更新时读取当前人员候选值的标准仓储。</param>
 /// <param name="organizationQuery">同一写协调中的完整组织视图，用于目标祖先链校验。</param>
 /// <param name="temporalInputNormalizer">平台 temporal 规范化器，用于按会话本地日期校验生日。</param>
-public sealed class PersonCrudValidator(
-    ICompanyDirectory companyDirectory,
-    IDepartmentDirectory departmentDirectory,
-    IPositionDirectory positionDirectory,
-    IStandardCrudRepository standardCrudRepository,
-    IOrganizationQuery organizationQuery,
-    ITemporalInputNormalizer? temporalInputNormalizer = null) : IStandardCrudValidator
+public sealed class PersonCrudValidator : IStandardCrudValidator
 {
+    private readonly ICompanyDirectory _companyDirectory;
+    private readonly IDepartmentDirectory _departmentDirectory;
+    private readonly IPositionDirectory _positionDirectory;
+    private readonly IStandardCrudRepository _standardCrudRepository;
+    private readonly IOrganizationQuery _organizationQuery;
+    private readonly ITemporalInputNormalizer? _temporalInputNormalizer;
+    private readonly OrganizationTargetChainReader? _targetChainReader;
+
+    /// <summary>构造兼容事务外规则测试与直接消费者的人员校验器。</summary>
+    public PersonCrudValidator(
+        ICompanyDirectory companyDirectory,
+        IDepartmentDirectory departmentDirectory,
+        IPositionDirectory positionDirectory,
+        IStandardCrudRepository standardCrudRepository,
+        IOrganizationQuery organizationQuery,
+        ITemporalInputNormalizer? temporalInputNormalizer = null)
+        : this(
+            companyDirectory,
+            departmentDirectory,
+            positionDirectory,
+            standardCrudRepository,
+            organizationQuery,
+            targetChainReader: null,
+            temporalInputNormalizer)
+    {
+    }
+
+    // 正式模块装配额外提供事务内目标链读取器，不把该实现扩大成公共查询契约。
+    internal PersonCrudValidator(
+        ICompanyDirectory companyDirectory,
+        IDepartmentDirectory departmentDirectory,
+        IPositionDirectory positionDirectory,
+        IStandardCrudRepository standardCrudRepository,
+        IOrganizationQuery organizationQuery,
+        OrganizationTargetChainReader? targetChainReader,
+        ITemporalInputNormalizer? temporalInputNormalizer = null)
+    {
+        _companyDirectory = companyDirectory;
+        _departmentDirectory = departmentDirectory;
+        _positionDirectory = positionDirectory;
+        _standardCrudRepository = standardCrudRepository;
+        _organizationQuery = organizationQuery;
+        _targetChainReader = targetChainReader;
+        _temporalInputNormalizer = temporalInputNormalizer;
+    }
+
     public string ResourceKey => "organization.person";
 
     /// <summary>
@@ -56,7 +96,7 @@ public sealed class PersonCrudValidator(
         IReadOnlyDictionary<string, object?> values,
         CancellationToken cancellationToken)
     {
-        var existing = await standardCrudRepository.GetByIdAsync(descriptor, id, cancellationToken);
+        var existing = await _standardCrudRepository.GetByIdAsync(descriptor, id, cancellationToken);
         if (existing is null)
         {
             // 标准 CRUD 内核在调用校验器前已处理不存在；这里只保留竞态下的无副作用退出。
@@ -112,7 +152,7 @@ public sealed class PersonCrudValidator(
 
         if (companyId is not null && departmentId is not null)
         {
-            var company = await companyDirectory.GetByIdAsync(companyId, cancellationToken);
+            var company = await _companyDirectory.GetByIdAsync(companyId, cancellationToken);
             if (company is null)
             {
                 return FieldError("CompanyId", "Organization.Person.CompanyNotFound", "所属公司不存在。", "organization.person.companyNotFound");
@@ -123,7 +163,7 @@ public sealed class PersonCrudValidator(
                 return FieldError("CompanyId", "Organization.Person.CompanyDisabled", "所属公司已停用。", "organization.person.companyDisabled");
             }
 
-            var department = await departmentDirectory.GetByIdAsync(departmentId, cancellationToken);
+            var department = await _departmentDirectory.GetByIdAsync(departmentId, cancellationToken);
             if (department is null)
             {
                 return FieldError("DepartmentId", "Organization.Person.DepartmentNotFound", "所属部门不存在。", "organization.person.departmentNotFound");
@@ -139,10 +179,16 @@ public sealed class PersonCrudValidator(
                 return FieldError("DepartmentId", "Organization.Person.DepartmentCompanyMismatch", "所属部门不属于所选公司。", "organization.person.departmentCompanyMismatch");
             }
 
-            if (requireEnabledAffiliation && !OrganizationTargetChain.IsEnabled(
-                await organizationQuery.ReadAsync(cancellationToken), companyId, departmentId, cancellationToken))
+            if (requireEnabledAffiliation)
             {
-                return FieldError("DepartmentId", "Organization.Person.DepartmentChainDisabled", "所属部门或其上级部门已停用。", "organization.person.departmentChainDisabled");
+                var targetChainEnabled = _targetChainReader is null
+                    ? OrganizationTargetChain.IsEnabled(
+                        await _organizationQuery.ReadAsync(cancellationToken), companyId, departmentId, cancellationToken)
+                    : await _targetChainReader.IsEnabledAsync(companyId, departmentId, cancellationToken);
+                if (!targetChainEnabled)
+                {
+                    return FieldError("DepartmentId", "Organization.Person.DepartmentChainDisabled", "所属部门或其上级部门已停用。", "organization.person.departmentChainDisabled");
+                }
             }
         }
 
@@ -151,7 +197,7 @@ public sealed class PersonCrudValidator(
             return null;
         }
 
-        var position = await positionDirectory.GetByIdAsync(positionId, cancellationToken);
+        var position = await _positionDirectory.GetByIdAsync(positionId, cancellationToken);
         if (position is null)
         {
             return FieldError("PositionId", "Organization.Person.PositionNotFound", "岗位不存在。", "organization.person.positionNotFound");
@@ -170,7 +216,7 @@ public sealed class PersonCrudValidator(
         if (values.TryGetValue("BirthDate", out var birthValue)
             && birthValue is DateOnly birthDate)
         {
-            var today = temporalInputNormalizer?.GetCurrentLocalDate()
+            var today = _temporalInputNormalizer?.GetCurrentLocalDate()
                 ?? DateOnly.FromDateTime(DateTime.UtcNow);
             if (birthDate > today)
             {

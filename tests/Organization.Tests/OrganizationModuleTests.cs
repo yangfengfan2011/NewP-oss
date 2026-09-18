@@ -46,7 +46,7 @@ public class OrganizationModuleTests
     }
 
     [Fact]
-    public void ConfigureServices_RegistersCompanyPositionAndPersonCrudObjectBehaviors()
+    public void ConfigureServices_RegistersAllFourCrudObjectBehaviors()
     {
         var services = new ServiceCollection();
 
@@ -54,7 +54,7 @@ public class OrganizationModuleTests
 
         var registrations = services.Where(descriptor =>
             descriptor.ServiceType.Name == "IObjectBehaviorContribution").ToArray();
-        Assert.Equal(3, registrations.Length);
+        Assert.Equal(4, registrations.Length);
         Assert.All(registrations, registration =>
         {
             Assert.NotNull(registration.ImplementationFactory);
@@ -66,6 +66,11 @@ public class OrganizationModuleTests
             "organization.company",
             "Organization/Company");
         AssertCrudBehavior(
+            DepartmentObjectBehavior.BehaviorDefinition,
+            "organization.department",
+            "Organization/Department",
+            "CompanyId");
+        AssertCrudBehavior(
             PositionObjectBehavior.BehaviorDefinition,
             "organization.position",
             "Organization/Position");
@@ -74,6 +79,7 @@ public class OrganizationModuleTests
             "organization.person",
             "Organization/Person");
         Assert.True(typeof(CompanyObjectBehavior).IsAbstract && typeof(CompanyObjectBehavior).IsSealed);
+        Assert.True(typeof(DepartmentObjectBehavior).IsAbstract && typeof(DepartmentObjectBehavior).IsSealed);
         Assert.True(typeof(PositionObjectBehavior).IsAbstract && typeof(PositionObjectBehavior).IsSealed);
         Assert.True(typeof(PersonObjectBehavior).IsAbstract && typeof(PersonObjectBehavior).IsSealed);
         Assert.DoesNotContain(services, descriptor =>
@@ -85,7 +91,8 @@ public class OrganizationModuleTests
         static void AssertCrudBehavior(
             ObjectBehaviorDefinition definition,
             string objectKey,
-            string modelKey)
+            string modelKey,
+            params string[] additionalProtectedFields)
         {
             Assert.Equal(objectKey, definition.ObjectKey);
             Assert.Equal("Organization", definition.OwnerModuleId);
@@ -97,7 +104,9 @@ public class OrganizationModuleTests
                 [ObjectOperationAction.Create, ObjectOperationAction.Update, ObjectOperationAction.Delete],
                 definition.OpenExtensionActions);
             Assert.Equal(
-                ["CreatedAt", "CreatedBy", "EID", "UpdatedAt", "UpdatedBy"],
+                new[] { "CreatedAt", "CreatedBy", "EID", "UpdatedAt", "UpdatedBy" }
+                    .Concat(additionalProtectedFields)
+                    .Order(StringComparer.Ordinal),
                 definition.ProtectedInputFields.Order(StringComparer.Ordinal));
         }
     }

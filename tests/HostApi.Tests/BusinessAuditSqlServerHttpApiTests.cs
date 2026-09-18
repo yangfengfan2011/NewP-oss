@@ -757,6 +757,191 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.Equal("正式扩展补充姓名", cached["ENAME"]);
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "公司HTTP经正式扩展嵌套创建部门与人员，提交前缓存隔离且各次审计值保持一致")]
+    public async Task NestedCompanyDepartmentPersonCreation_UsesEffectiveSqlViewAndPublishesOneCacheCandidate()
+    {
+        var stamps = new SteppingEntityAuditStampProvider();
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
+        {
+            services.RemoveAll<IEntityAuditStampProvider>();
+            services.AddSingleton<IEntityAuditStampProvider>(stamps);
+        });
+        var http = new FeatureHttpTestRequests(fixture);
+        using var client = await fixture.LoginAdministratorAsync();
+        var control = fixture.Services.GetRequiredService<ObjectOperationExtensionProbeControl>();
+        control.Mode = ObjectOperationExtensionProbeMode.NestedCreate;
+        control.NestedWritesCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        control.ReleaseNestedWrite = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        var auditStart = new DateTime(2030, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+        stamps.Begin(fixture.ActorId, auditStart);
+        await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
+
+        var request = FeatureHttpTestRequests.SendAsync(
+            client,
+            http.Organization("companies", "create", "list.pageActions"),
+            HttpMethod.Post,
+            "/api/organization/companies",
+            new { ECODE = "NESTED-COMPANY", ENAME = "嵌套公司", SortOrder = "0100" });
+        await control.NestedWritesCompleted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        var unpublished = await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync();
+        Assert.DoesNotContain(control.NestedCompanyId!, unpublished.Companies.Keys);
+        Assert.DoesNotContain(control.NestedDepartmentId!, unpublished.Departments.Keys);
+        Assert.DoesNotContain(control.NestedPersonId!, unpublished.Persons.Keys);
+        control.ReleaseNestedWrite.TrySetResult();
+        using var response = await request;
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var companyResponse = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(control.NestedCompanyId, Id(companyResponse));
+
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        var company = await ReadOrganizationRowAsync(db, "Company", control.NestedCompanyId!);
+        var department = await ReadOrganizationRowAsync(db, "Department", control.NestedDepartmentId!);
+        var person = await ReadOrganizationRowAsync(db, "Person", control.NestedPersonId!);
+        Assert.Equal(company["EID"], department["CompanyId"]);
+        Assert.Equal(company["EID"], person["CompanyId"]);
+        Assert.Equal(department["EID"], person["DepartmentId"]);
+        Assert.Equal(auditStart, company["CreatedAt"]);
+        Assert.Equal(auditStart.AddMinutes(1), department["CreatedAt"]);
+        Assert.Equal(auditStart.AddMinutes(2), person["CreatedAt"]);
+        Assert.True(stamps.Reads >= 3);
+        var published = await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync();
+        AssertAuditMatches(company, companyResponse.GetProperty("fields"), published.Companies[control.NestedCompanyId!]);
+        AssertAuditMatches(department, control.NestedDepartmentResult!.Detail!.Fields, published.Departments[control.NestedDepartmentId!]);
+        AssertAuditMatches(person, control.NestedPersonResult!.Detail!.Fields, published.Persons[control.NestedPersonId!]);
+
+        static async Task<Dictionary<string, object?>> ReadOrganizationRowAsync(
+            EfPlatformDbContext db,
+            string model,
+            string id) => await db.Set<Dictionary<string, object?>>(db.ResolveModelKey(model))
+            .AsNoTracking()
+            .SingleAsync(row => EF.Property<string>(row, "EID") == id);
+
+        static void AssertAuditMatches(
+            IReadOnlyDictionary<string, object?> stored,
+            object? returned,
+            IReadOnlyDictionary<string, object?> cached)
+        {
+            foreach (var field in new[] { "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt" })
+            {
+                Assert.Equal(stored[field], cached[field]);
+                if (returned is IReadOnlyDictionary<string, object?> fields)
+                {
+                    Assert.Equal(stored[field], fields[field]);
+                }
+                else if (returned is JsonElement element)
+                {
+                    if (field.EndsWith("By", StringComparison.Ordinal))
+                    {
+                        Assert.Equal(stored[field], element.GetProperty(field).GetString());
+                    }
+                    else
+                    {
+                        Assert.Equal(((DateTime)stored[field]!).ToString("O"), element.GetProperty(field).GetDateTime().ToString("O"));
+                    }
+                }
+            }
+        }
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "前序部门修改或删除立即影响人员规则，嵌套失败被忽略仍整体回滚")]
+    public async Task NestedDepartmentUpdateOrDelete_WhenLaterPersonFails_RollsBackWholeCompanyOperation()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
+        using var client = await fixture.LoginAdministratorAsync();
+        var company = await FeatureHttpTestRequests.CreateAsync(
+            client,
+            http.Organization("companies", "create", "list.pageActions"),
+            "/api/organization/companies",
+            new { ECODE = "NESTED-ROLLBACK", ENAME = "回滚公司", SortOrder = "0100" });
+        var department = await FeatureHttpTestRequests.CreateAsync(
+            client,
+            http.Organization("departments", "create", "list.pageActions"),
+            "/api/organization/departments",
+            new { ECODE = "NESTED-ROLLBACK", ENAME = "回滚部门", CompanyId = Id(company), SortOrder = "0100" });
+        var control = fixture.Services.GetRequiredService<ObjectOperationExtensionProbeControl>();
+        control.NestedCompanyId = Id(company);
+        control.NestedDepartmentId = Id(department);
+
+        control.Mode = ObjectOperationExtensionProbeMode.NestedDisableThenCreate;
+        await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
+        using var disabled = await FeatureHttpTestRequests.SendAsync(
+            client,
+            http.Organization("companies", "edit", "list.rowActions"),
+            HttpMethod.Put,
+            "/api/organization/companies/" + Id(company),
+            new { ENAME = "不应提交的公司名" });
+        Assert.Equal(HttpStatusCode.BadRequest, disabled.StatusCode);
+        Assert.Equal("Organization.Person.DepartmentDisabled", control.NestedPersonResult?.Error?.Code);
+
+        control.Mode = ObjectOperationExtensionProbeMode.None;
+        await using (var scope = fixture.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+            var storedCompany = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Company"))
+                .AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == Id(company));
+            var storedDepartment = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Department"))
+                .AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == Id(department));
+            Assert.Equal("回滚公司", storedCompany["ENAME"]);
+            Assert.True((bool)storedDepartment["IsEnabled"]!);
+        }
+
+        control.Mode = ObjectOperationExtensionProbeMode.NestedDeleteThenCreate;
+        await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
+        using var deleted = await FeatureHttpTestRequests.SendAsync(
+            client,
+            http.Organization("companies", "edit", "list.rowActions"),
+            HttpMethod.Put,
+            "/api/organization/companies/" + Id(company),
+            new { ENAME = "仍不应提交" });
+        Assert.Equal(HttpStatusCode.BadRequest, deleted.StatusCode);
+        Assert.Equal("Organization.Person.DepartmentNotFound", control.NestedPersonResult?.Error?.Code);
+        control.Mode = ObjectOperationExtensionProbeMode.None;
+        var cache = await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync();
+        Assert.Equal("回滚公司", cache.Companies[Id(company)]["ENAME"]);
+        Assert.True((bool)cache.Departments[Id(department)]["IsEnabled"]!);
+        await using var verification = fixture.Services.CreateAsyncScope();
+        var verificationDb = verification.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        Assert.True(await verificationDb.Set<Dictionary<string, object?>>(verificationDb.ResolveModelKey("Department"))
+            .AsNoTracking().AnyAsync(row => EF.Property<string>(row, "EID") == Id(department)));
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "删除 after 再调用同目标正式 adapter 必须进入嵌套入口并使根删除回滚")]
+    public async Task CompanyDelete_AfterExtensionRepeatsDeclaredDelete_RollsBackRootDeletion()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
+        using var client = await fixture.LoginAdministratorAsync();
+        var created = await FeatureHttpTestRequests.CreateAsync(
+            client,
+            http.Organization("companies", "create", "list.pageActions"),
+            "/api/organization/companies",
+            new { ECODE = "REPEAT-DELETE", ENAME = "重复删除公司", SortOrder = "0100" });
+        var companyId = Id(created);
+        var control = fixture.Services.GetRequiredService<ObjectOperationExtensionProbeControl>();
+        control.Mode = ObjectOperationExtensionProbeMode.AfterRepeatDelete;
+        await BusinessAuditHostFixture.RefreshAntiforgeryAsync(client);
+
+        using var response = await FeatureHttpTestRequests.SendAsync(
+            client,
+            http.Organization("companies", "delete", "list.rowActions"),
+            HttpMethod.Delete,
+            "/api/organization/companies/" + companyId);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("StandardCrud.NotFound", control.RepeatedDeleteResult?.Error?.Code);
+        control.Mode = ObjectOperationExtensionProbeMode.None;
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        Assert.True(await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Company"))
+            .AsNoTracking()
+            .AnyAsync(row => EF.Property<string>(row, "EID") == companyId));
+        Assert.True((await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync())
+            .Companies.ContainsKey(companyId));
+    }
+
     private sealed record ObjectOperationTarget(
         string ObjectKey,
         string ModelName,
@@ -859,6 +1044,43 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         using var response = await client.PostAsync(route, JsonContent.Create(value, options: new JsonSerializerOptions()));
         Assert.True(response.StatusCode == HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
         return await response.Content.ReadFromJsonAsync<JsonElement>();
+    }
+}
+
+internal sealed class SteppingEntityAuditStampProvider : IEntityAuditStampProvider
+{
+    private readonly object _gate = new();
+    private string _actorId = SystemEntityAuditStampProvider.SystemActorId;
+    private DateTime _start = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private bool _enabled;
+
+    internal int Reads { get; private set; }
+
+    // 在目标请求前重置可推进的可信 actor 与 UTC 时间序列。
+    internal void Begin(string actorId, DateTime start)
+    {
+        lock (_gate)
+        {
+            _actorId = actorId;
+            _start = start;
+            Reads = 0;
+            _enabled = true;
+        }
+    }
+
+    /// <inheritdoc />
+    public EntityAuditStamp GetCurrent()
+    {
+        lock (_gate)
+        {
+            if (!_enabled)
+            {
+                return new EntityAuditStamp(
+                    SystemEntityAuditStampProvider.SystemActorId,
+                    new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+            }
+            return new EntityAuditStamp(_actorId, _start.AddMinutes(Reads++));
+        }
     }
 }
 

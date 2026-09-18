@@ -33,6 +33,29 @@ public sealed class ObjectOperationExtensionAssemblyTests
     }
 
     [Fact]
+    public async Task StartAsync_WhenDeclaredCallTargetDoesNotExist_FailsBeforeFirstRequest()
+    {
+        using var host = BuildHost(services =>
+        {
+            var owner = new TestModule("Organization", []);
+            var contributor = new TestModule("ExtensionProvider", ["Organization"]);
+            services.AddObjectBehavior<RecordingBehavior>(owner, PersonDefinition());
+            services.AddObjectOperationExtension<ExtensionA>(
+                contributor,
+                new ObjectOperationExtensionDefinition(
+                    "missing-call-target",
+                    "Organization",
+                    "organization.person",
+                    ObjectOperationAction.Create,
+                    calls: [new ObjectOperationTarget("organization.missing", ObjectOperationAction.Create)]));
+        });
+
+        var exception = await Assert.ThrowsAnyAsync<Exception>(() => host.StartAsync());
+
+        Assert.Contains("OBJECT_OPERATION_CALL_TARGET_NOT_FOUND", exception.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_RunsStableTopologyAroundCoreAndSnapshotsAfterResult()
     {
         var calls = new InvocationLog();
@@ -174,6 +197,145 @@ public sealed class ObjectOperationExtensionAssemblyTests
             behaviors.Select(behavior => behavior.Definition.ObjectKey).Order(StringComparer.Ordinal));
     }
 
+    [Fact]
+    public async Task ExecuteAsync_DeclaredNestedOperationPrecoordinatesClosureAndFlushesEachCore()
+    {
+        var transaction = new RecordingTransactionExecutor();
+        var services = CreateServices(transaction);
+        var owner = new TestModule("Organization", []);
+        var contributor = new TestModule("ExtensionProvider", ["Organization"]);
+        services.AddObjectBehavior<ConfigurableBehavior>(owner, ReusableDefinition("organization.company", "Organization/Company"), static (_, definition) => new(definition));
+        services.AddObjectBehavior<ConfigurableBehavior>(owner, ReusableDefinition("organization.person", "Organization/Person"), static (_, definition) => new(definition));
+        services.AddObjectOperationExtension<NestedCallExtension>(
+            contributor,
+            new ObjectOperationExtensionDefinition(
+                "nested-person",
+                "Organization",
+                "organization.company",
+                ObjectOperationAction.Create,
+                calls: [new ObjectOperationTarget("organization.person", ObjectOperationAction.Create)]));
+        services.AddSingleton(new NestedCallControl("organization.person", IgnoreFailure: false));
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var result = await scope.ServiceProvider.GetRequiredService<IObjectOperationExecutor>().ExecuteAsync(
+            "organization.company",
+            ObjectOperationAction.Create,
+            null,
+            new Dictionary<string, object?>());
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(["Organization/Company", "Organization/Person"], transaction.RootModelKeys.Order(StringComparer.Ordinal));
+        Assert.Equal(2, transaction.Executions);
+        Assert.Equal(2, transaction.Flushes);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenNestedFailureIsIgnored_RollsBackOuterWithNestedFailure()
+    {
+        var transaction = new RecordingTransactionExecutor();
+        var services = CreateServices(transaction);
+        var owner = new TestModule("Organization", []);
+        var contributor = new TestModule("ExtensionProvider", ["Organization"]);
+        var nestedError = new StandardCrudError
+        {
+            StatusCode = 409,
+            Code = "Organization.Person.NestedRejected",
+            Message = "嵌套人员写入失败。"
+        };
+        services.AddObjectBehavior<ConfigurableBehavior>(owner, ReusableDefinition("organization.company", "Organization/Company"), static (_, definition) => new(definition));
+        services.AddObjectBehavior<RejectingBehavior>(owner, ReusableDefinition("organization.person", "Organization/Person"), (_, definition) => new(definition, nestedError));
+        services.AddObjectOperationExtension<NestedCallExtension>(
+            contributor,
+            new ObjectOperationExtensionDefinition(
+                "nested-person",
+                "Organization",
+                "organization.company",
+                ObjectOperationAction.Create,
+                calls: [new ObjectOperationTarget("organization.person", ObjectOperationAction.Create)]));
+        services.AddSingleton(new NestedCallControl("organization.person", IgnoreFailure: true));
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var result = await scope.ServiceProvider.GetRequiredService<IObjectOperationExecutor>().ExecuteAsync(
+            "organization.company",
+            ObjectOperationAction.Create,
+            null,
+            new Dictionary<string, object?>());
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(nestedError.Code, result.Error?.Code);
+        Assert.True(transaction.DelegateFailed);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenUndeclaredNestedOperationIsCaught_StillPoisonsOuterOperation()
+    {
+        var transaction = new RecordingTransactionExecutor();
+        var services = CreateServices(transaction);
+        var owner = new TestModule("Organization", []);
+        var contributor = new TestModule("ExtensionProvider", ["Organization"]);
+        services.AddObjectBehavior<ConfigurableBehavior>(owner, ReusableDefinition("organization.company", "Organization/Company"), static (_, definition) => new(definition));
+        services.AddObjectBehavior<ConfigurableBehavior>(owner, ReusableDefinition("organization.person", "Organization/Person"), static (_, definition) => new(definition));
+        services.AddObjectOperationExtension<NestedCallExtension>(
+            contributor,
+            new ObjectOperationExtensionDefinition(
+                "nested-person",
+                "Organization",
+                "organization.company",
+                ObjectOperationAction.Create));
+        services.AddSingleton(new NestedCallControl("organization.company", IgnoreFailure: true));
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            scope.ServiceProvider.GetRequiredService<IObjectOperationExecutor>().ExecuteAsync(
+                "organization.company",
+                ObjectOperationAction.Create,
+                null,
+                new Dictionary<string, object?>()));
+
+        Assert.Equal("OBJECT_OPERATION_TARGET_NOT_DECLARED: organization.company/create", exception.Message);
+        Assert.True(transaction.DelegateFailed);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_InnerAfterDoesNotExposeInnerOrRestoredOuterCoreMarker()
+    {
+        var services = CreateServices();
+        var owner = new TestModule("Organization", []);
+        var contributor = new TestModule("ExtensionProvider", ["Organization"]);
+        services.AddSingleton<CoreMarkerLog>();
+        services.AddObjectBehavior<OuterCallingBehavior>(owner, OuterDefinition());
+        services.AddObjectBehavior<ConfigurableBehavior>(
+            owner,
+            ReusableDefinition("organization.inner", "Organization/Inner"),
+            static (_, definition) => new(definition));
+        services.AddObjectOperationExtension<CoreMarkerExtension>(
+            contributor,
+            new ObjectOperationExtensionDefinition(
+                "core-marker",
+                "Organization",
+                "organization.inner",
+                ObjectOperationAction.Create));
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var result = await scope.ServiceProvider.GetRequiredService<IObjectOperationExecutor>().ExecuteAsync(
+            "organization.outer",
+            ObjectOperationAction.Create,
+            null,
+            new Dictionary<string, object?>());
+
+        var log = scope.ServiceProvider.GetRequiredService<CoreMarkerLog>();
+        Assert.True(result.Succeeded);
+        Assert.True(log.OuterCoreSeen);
+        Assert.False(log.InnerBeforeSawInnerCore);
+        Assert.False(log.InnerBeforeSawOuterCore);
+        Assert.False(log.InnerAfterSawInnerCore);
+        Assert.False(log.InnerAfterSawOuterCore);
+    }
+
     private static IServiceCollection CreateServices(RecordingTransactionExecutor? transaction = null)
     {
         var services = new ServiceCollection();
@@ -238,6 +400,17 @@ public sealed class ObjectOperationExtensionAssemblyTests
         [ObjectOperationAction.Create],
         [ObjectOperationAction.Create],
         ["EID", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"]);
+
+    private static ObjectBehaviorDefinition OuterDefinition() => new(
+        "organization.outer",
+        "Organization",
+        "Organization/Outer",
+        [ObjectOperationAction.Create],
+        [ObjectOperationAction.Create],
+        ["EID", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"],
+        [new ObjectOperationCall(
+            ObjectOperationAction.Create,
+            new ObjectOperationTarget("organization.inner", ObjectOperationAction.Create))]);
 
     private static StandardCrudDescriptor Resource(string resourceKey, string modelName) => new()
     {
@@ -306,6 +479,116 @@ public sealed class ObjectOperationExtensionAssemblyTests
             ObjectOperationContext context,
             CancellationToken cancellationToken) =>
             ValueTask.FromResult(StandardCrudMutationResult.Success());
+    }
+
+    private sealed class RejectingBehavior(
+        ObjectBehaviorDefinition definition,
+        StandardCrudError error) : ObjectBehaviorBase(definition)
+    {
+        protected override ValueTask<StandardCrudMutationResult> CreateAsync(
+            ObjectOperationContext context,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult(StandardCrudMutationResult.Failure(error));
+    }
+
+    private sealed class CoreMarkerLog
+    {
+        internal bool OuterCoreSeen { get; set; }
+        internal bool InnerBeforeSawInnerCore { get; set; }
+        internal bool InnerBeforeSawOuterCore { get; set; }
+        internal bool InnerAfterSawInnerCore { get; set; }
+        internal bool InnerAfterSawOuterCore { get; set; }
+    }
+
+    private sealed class OuterCallingBehavior(
+        Func<IObjectOperationExecutor> executor,
+        IObjectOperationExecutionContext executionContext,
+        CoreMarkerLog log) : ObjectBehaviorBase(OuterDefinition())
+    {
+        protected override async ValueTask<StandardCrudMutationResult> CreateAsync(
+            ObjectOperationContext context,
+            CancellationToken cancellationToken)
+        {
+            log.OuterCoreSeen = executionContext.IsExecuting(
+                "organization.outer",
+                ObjectOperationAction.Create,
+                null);
+            return await executor().ExecuteAsync(
+                "organization.inner",
+                ObjectOperationAction.Create,
+                null,
+                new Dictionary<string, object?>(),
+                cancellationToken);
+        }
+    }
+
+    private sealed class CoreMarkerExtension(
+        IObjectOperationExecutionContext executionContext,
+        CoreMarkerLog log) : IObjectOperationExtension
+    {
+        public ValueTask<StandardCrudError?> BeforeAsync(
+            ObjectOperationBeforeContext context,
+            CancellationToken cancellationToken)
+        {
+            log.InnerBeforeSawInnerCore = executionContext.IsExecuting(
+                "organization.inner",
+                ObjectOperationAction.Create,
+                null);
+            log.InnerBeforeSawOuterCore = executionContext.IsExecuting(
+                "organization.outer",
+                ObjectOperationAction.Create,
+                null);
+            return ValueTask.FromResult<StandardCrudError?>(null);
+        }
+
+        public ValueTask AfterAsync(
+            ObjectOperationAfterContext context,
+            CancellationToken cancellationToken)
+        {
+            log.InnerAfterSawInnerCore = executionContext.IsExecuting(
+                "organization.inner",
+                ObjectOperationAction.Create,
+                null);
+            log.InnerAfterSawOuterCore = executionContext.IsExecuting(
+                "organization.outer",
+                ObjectOperationAction.Create,
+                null);
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed record NestedCallControl(string TargetObjectKey, bool IgnoreFailure);
+
+    private sealed class NestedCallExtension(
+        Func<IObjectOperationExecutor> executor,
+        NestedCallControl control) : IObjectOperationExtension
+    {
+        public ValueTask<StandardCrudError?> BeforeAsync(
+            ObjectOperationBeforeContext context,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult<StandardCrudError?>(null);
+
+        public async ValueTask AfterAsync(
+            ObjectOperationAfterContext context,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                var result = await executor().ExecuteAsync(
+                    control.TargetObjectKey,
+                    ObjectOperationAction.Create,
+                    null,
+                    new Dictionary<string, object?>(),
+                    cancellationToken);
+                if (!control.IgnoreFailure && !result.Succeeded)
+                {
+                    throw new InvalidOperationException(result.Error?.Code);
+                }
+            }
+            catch when (control.IgnoreFailure)
+            {
+            }
+        }
     }
 
     private abstract class RecordingExtension(InvocationLog calls, string key) : IObjectOperationExtension
@@ -401,6 +684,11 @@ public sealed class ObjectOperationExtensionAssemblyTests
     private sealed class RecordingTransactionExecutor : IPlatformTransactionExecutor
     {
         public bool DelegateFailed { get; private set; }
+        public bool IsActive => _depth > 0;
+        public int Executions { get; private set; }
+        public int Flushes { get; private set; }
+        public IReadOnlyCollection<string> RootModelKeys { get; private set; } = [];
+        private int _depth;
 
         public ValueTask<TResult> ExecuteAsync<TResult>(
             Func<CancellationToken, ValueTask<TResult>> registerChanges,
@@ -412,6 +700,12 @@ public sealed class ObjectOperationExtensionAssemblyTests
             Func<CancellationToken, ValueTask<TResult>> registerChanges,
             CancellationToken cancellationToken = default)
         {
+            if (_depth == 0)
+            {
+                RootModelKeys = modelKeys.ToArray();
+            }
+            Executions++;
+            _depth++;
             try
             {
                 return await registerChanges(cancellationToken);
@@ -421,6 +715,17 @@ public sealed class ObjectOperationExtensionAssemblyTests
                 DelegateFailed = true;
                 throw;
             }
+            finally
+            {
+                _depth--;
+            }
+        }
+
+        public ValueTask FlushAsync(CancellationToken cancellationToken = default)
+        {
+            Assert.True(IsActive);
+            Flushes++;
+            return ValueTask.CompletedTask;
         }
     }
 

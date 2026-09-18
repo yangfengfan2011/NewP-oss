@@ -23,11 +23,22 @@ internal readonly record struct ObjectOperationExtensionIdentity(
     ObjectOperationAction Action,
     string ExtensionKey);
 
-internal sealed record ObjectOperationExtensionPlan(string ExtensionKey);
+internal readonly record struct ObjectOperationIdentity(
+    string ObjectKey,
+    ObjectOperationAction Action);
+
+internal sealed record ObjectOperationExtensionPlan(
+    string ExtensionKey,
+    IReadOnlyList<ObjectOperationTarget> Calls);
+
+internal sealed record ObjectOperationCoordinationPlan(
+    IReadOnlyCollection<string> ModelKeys,
+    IReadOnlyDictionary<ObjectOperationIdentity, IReadOnlySet<ObjectOperationIdentity>> CallsByOperation);
 
 internal sealed record ObjectBehaviorPlan(
     ObjectBehaviorDefinition Definition,
-    IReadOnlyDictionary<ObjectOperationAction, IReadOnlyList<ObjectOperationExtensionPlan>> Extensions);
+    IReadOnlyDictionary<ObjectOperationAction, IReadOnlyList<ObjectOperationExtensionPlan>> Extensions,
+    IReadOnlyDictionary<ObjectOperationAction, ObjectOperationCoordinationPlan> Coordinations);
 
 internal interface IObjectBehaviorContribution
 {
@@ -122,13 +133,23 @@ internal sealed class ObjectOperationAssemblyPlan
                 static group => group.Key,
                 group => CompileExtensions(group.Key.ObjectKey, group.Key.Action, group.ToArray(), behaviors));
 
-        return behaviors.ToDictionary(
+        var plans = behaviors.ToDictionary(
             static pair => pair.Key,
             pair => new ObjectBehaviorPlan(
                 pair.Value.Definition,
                 extensions
                     .Where(extension => string.Equals(extension.Key.ObjectKey, pair.Key, StringComparison.Ordinal))
-                    .ToDictionary(static extension => extension.Key.Action, static extension => extension.Value)),
+                    .ToDictionary(static extension => extension.Key.Action, static extension => extension.Value),
+                new Dictionary<ObjectOperationAction, ObjectOperationCoordinationPlan>()),
+            StringComparer.Ordinal);
+        return plans.ToDictionary(
+            static pair => pair.Key,
+            pair => pair.Value with
+            {
+                Coordinations = pair.Value.Definition.SupportedActions.ToDictionary(
+                    static action => action,
+                    action => CompileCoordination(new(pair.Key, action), plans))
+            },
             StringComparer.Ordinal);
     }
 
@@ -151,6 +172,13 @@ internal sealed class ObjectOperationAssemblyPlan
         {
             throw new InvalidOperationException(
                 $"OBJECT_OPERATION_OPEN_ACTION_UNSUPPORTED: {definition.ObjectKey}/{unsupported.Value}");
+        }
+        var unsupportedCall = definition.Calls.FirstOrDefault(call =>
+            !definition.SupportedActions.Contains(call.SourceAction));
+        if (unsupportedCall is not null)
+        {
+            throw new InvalidOperationException(
+                $"OBJECT_OPERATION_CALL_SOURCE_UNSUPPORTED: {definition.ObjectKey}/{unsupportedCall.SourceAction.Value}");
         }
     }
 
@@ -214,7 +242,7 @@ internal sealed class ObjectOperationAssemblyPlan
         {
             var key = ready.Min!;
             ready.Remove(key);
-            ordered.Add(new(key));
+            ordered.Add(new(key, byKey[key].Definition.Calls));
             foreach (var dependent in outgoing[key].Order(StringComparer.Ordinal))
             {
                 if (--indegree[dependent] == 0)
@@ -229,6 +257,66 @@ internal sealed class ObjectOperationAssemblyPlan
                 $"OBJECT_OPERATION_EXTENSION_ORDER_CYCLE: {objectKey}/{action.Value}");
         }
         return ordered;
+    }
+
+    // 从根操作沿行为与扩展的静态声明计算完整闭包；visited 只避免重复展开，不裁决运行时递归。
+    private static ObjectOperationCoordinationPlan CompileCoordination(
+        ObjectOperationIdentity root,
+        IReadOnlyDictionary<string, ObjectBehaviorPlan> behaviors)
+    {
+        var operations = new HashSet<ObjectOperationIdentity>();
+        var callsByOperation = new Dictionary<ObjectOperationIdentity, IReadOnlySet<ObjectOperationIdentity>>();
+        var pending = new Stack<ObjectOperationIdentity>();
+        pending.Push(root);
+        while (pending.TryPop(out var current))
+        {
+            if (!operations.Add(current))
+            {
+                continue;
+            }
+
+            if (!behaviors.TryGetValue(current.ObjectKey, out var behavior)
+                || !behavior.Definition.SupportedActions.Contains(current.Action))
+            {
+                throw new InvalidOperationException(
+                    $"OBJECT_OPERATION_CALL_TARGET_NOT_FOUND: {current.ObjectKey}/{current.Action.Value}");
+            }
+
+            var directTargets = DirectTargets(current, behavior)
+                .Select(target => new ObjectOperationIdentity(target.ObjectKey, target.Action))
+                .ToHashSet();
+            callsByOperation[current] = directTargets;
+            foreach (var targetOperation in directTargets)
+            {
+                pending.Push(targetOperation);
+            }
+        }
+
+        var modelKeys = operations
+            .Select(operation => behaviors[operation.ObjectKey].Definition.ModelKey)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        return new ObjectOperationCoordinationPlan(modelKeys, callsByOperation);
+    }
+
+    // 一个动作的直接目标同时来自对象拥有者和该动作上全部正式扩展。
+    private static IEnumerable<ObjectOperationTarget> DirectTargets(
+        ObjectOperationIdentity operation,
+        ObjectBehaviorPlan behavior)
+    {
+        foreach (var call in behavior.Definition.Calls.Where(call => call.SourceAction == operation.Action))
+        {
+            yield return call.Target;
+        }
+        if (!behavior.Extensions.TryGetValue(operation.Action, out var extensions))
+        {
+            yield break;
+        }
+        foreach (var target in extensions.SelectMany(static extension => extension.Calls))
+        {
+            yield return target;
+        }
     }
 
     // 顺序依赖必须引用同一扩展点内的已登记扩展，重复边只计算一次。

@@ -95,16 +95,28 @@ public sealed class ObjectOperationExecutor : IObjectOperationExecutor
             throw new InvalidOperationException("OBJECT_OPERATION_TRANSACTION_EXECUTOR_REQUIRED");
         }
 
+        var operation = new ObjectOperationIdentity(objectKey, action);
         var behavior = _behaviors[objectKey];
         var extensionPlans = behaviorPlan.Extensions.GetValueOrDefault(action) ?? [];
+        var coordination = behaviorPlan.Coordinations[action];
+        var nested = _executionContext.IsActive;
+        IDisposable? root = null;
+        if (nested)
+        {
+            _executionContext.EnsureTargetAllowed(operation);
+        }
+        else
+        {
+            root = _executionContext.BeginRoot(coordination.CallsByOperation);
+        }
         using var auditOperation = _auditValues.BeginOperation();
         try
         {
             return await _transactions.ExecuteAsync(
-                [behaviorPlan.Definition.ModelKey],
+                coordination.ModelKeys,
                 async token =>
                 {
-                    using var execution = _executionContext.Enter(objectKey, action, targetId);
+                    using var operationScope = _executionContext.EnterOperation(objectKey, action, targetId);
                     var before = new ObjectOperationBeforeContext(
                         objectKey,
                         action,
@@ -126,12 +138,18 @@ public sealed class ObjectOperationExecutor : IObjectOperationExecutor
                     }
 
                     var context = new ObjectOperationContext(objectKey, action, targetId, before.SnapshotValues());
-                    var result = await behavior.ExecuteAsync(context, token);
+                    StandardCrudMutationResult result;
+                    using (_executionContext.EnterCore())
+                    {
+                        result = await behavior.ExecuteAsync(context, token);
+                    }
                     if (!result.Succeeded)
                     {
                         throw new OperationRejectedException(result);
                     }
 
+                    // 核心成功即由唯一事务 owner 保存但不提交，让后续嵌套规则读取真实前序事实。
+                    await _transactions.FlushAsync(token);
                     var snapshot = SnapshotResult(result);
                     var after = new ObjectOperationAfterContext(objectKey, action, targetId, context.Values, snapshot);
                     foreach (var extensionPlan in extensionPlans)
@@ -142,23 +160,49 @@ public sealed class ObjectOperationExecutor : IObjectOperationExecutor
                             extensionPlan.ExtensionKey);
                         await _extensions[identity].AfterAsync(after, token);
                     }
+                    if (_executionContext.RejectedResult is { } rejected)
+                    {
+                        throw new OperationRejectedException(rejected);
+                    }
+                    _executionContext.ThrowFailureException();
                     return snapshot;
                 },
                 cancellationToken);
         }
         catch (OperationRejectedException exception)
         {
+            if (nested)
+            {
+                _executionContext.Fail(exception.Result);
+            }
             return exception.Result;
         }
         catch (PlatformCacheUnavailableException exception)
         {
-            return StandardCrudMutationResult.Failure(new StandardCrudError
+            var failure = StandardCrudMutationResult.Failure(new StandardCrudError
             {
                 StatusCode = 503,
                 Code = exception.Code,
                 Message = exception.Message,
                 ReasonKey = exception.ReasonKey
             });
+            if (nested)
+            {
+                _executionContext.Fail(failure);
+            }
+            return failure;
+        }
+        catch (Exception exception)
+        {
+            if (nested)
+            {
+                _executionContext.Fail(exception);
+            }
+            throw;
+        }
+        finally
+        {
+            root?.Dispose();
         }
     }
 
@@ -245,7 +289,8 @@ public sealed class ObjectOperationExecutor : IObjectOperationExecutor
         && left.SupportedActions.ToHashSet().SetEquals(right.SupportedActions)
         && left.OpenExtensionActions.ToHashSet().SetEquals(right.OpenExtensionActions)
         && left.ProtectedInputFields.ToHashSet(StringComparer.OrdinalIgnoreCase)
-            .SetEquals(right.ProtectedInputFields);
+            .SetEquals(right.ProtectedInputFields)
+        && left.Calls.ToHashSet().SetEquals(right.Calls);
 
     // 公开构造不得枚举同一延迟序列两次。
     private static IObjectBehavior[] Materialize(IEnumerable<IObjectBehavior> behaviors)

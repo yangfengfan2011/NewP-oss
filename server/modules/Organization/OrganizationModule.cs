@@ -36,6 +36,7 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
             provider.GetRequiredService<PersonCreationRecorder>());
         services.AddScoped<IStandardCrudUpdateRecorder, PersonUpdateRecorder>();
         services.AddStandardCrudObjectBehavior(this, CompanyObjectBehavior.BehaviorDefinition);
+        services.AddStandardCrudObjectBehavior(this, DepartmentObjectBehavior.BehaviorDefinition);
         services.AddStandardCrudObjectBehavior(this, PositionObjectBehavior.BehaviorDefinition);
         services.AddStandardCrudObjectBehavior(this, PersonObjectBehavior.BehaviorDefinition);
         foreach (var (kind, model) in new[] { ("company", OrganizationRecordKind.Company), ("department", OrganizationRecordKind.Department), ("position", OrganizationRecordKind.Position), ("organization.person", OrganizationRecordKind.Person) })
@@ -64,9 +65,22 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         services.AddScoped<IStandardCrudDisplayValueResolver, DepartmentCrudDisplayValueResolver>();
         services.AddScoped<IStandardCrudSummaryProvider, PersonUserBindingSummaryProvider>();
         services.AddScoped<IStandardCrudSummaryProvider, PersonAuthorizationSummaryProvider>();
-        services.AddScoped<IStandardCrudValidator, PersonCrudValidator>();
+        services.AddScoped<OrganizationTargetChainReader>();
+        services.AddScoped<IStandardCrudValidator>(serviceProvider => new PersonCrudValidator(
+            serviceProvider.GetRequiredService<ICompanyDirectory>(),
+            serviceProvider.GetRequiredService<IDepartmentDirectory>(),
+            serviceProvider.GetRequiredService<IPositionDirectory>(),
+            serviceProvider.GetRequiredService<IStandardCrudRepository>(),
+            serviceProvider.GetRequiredService<IOrganizationQuery>(),
+            serviceProvider.GetRequiredService<OrganizationTargetChainReader>(),
+            serviceProvider.GetService<ICP.Platform.Presentation.ITemporalInputNormalizer>()));
         services.AddScoped<IStandardCrudValidator, CompanyCrudValidator>();
-        services.AddScoped<IStandardCrudValidator, DepartmentCrudValidator>();
+        services.AddScoped<IStandardCrudValidator>(serviceProvider => new DepartmentCrudValidator(
+            serviceProvider.GetRequiredService<ICP.Platform.Persistence.EfCore.EfPlatformDbContext>(),
+            new SqlServerDepartmentHierarchyQuery(
+                serviceProvider.GetRequiredService<ICP.Platform.Persistence.EfCore.EfPlatformDbContext>()),
+            serviceProvider.GetRequiredService<IOrganizationQuery>(),
+            serviceProvider.GetRequiredService<OrganizationTargetChainReader>()));
         services.AddScoped<OrganizationConditionalDeleteExecutor>();
         services.AddStandardCrudConditionalDelete<CompanyCrudDeleteExecutor>();
         services.AddStandardCrudConditionalDelete<DepartmentCrudDeleteExecutor>();

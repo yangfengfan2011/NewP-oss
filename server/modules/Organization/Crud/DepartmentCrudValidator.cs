@@ -14,12 +14,13 @@ public sealed class DepartmentCrudValidator : IStandardCrudValidator
     private readonly EfPlatformDbContext _dbContext;
     private readonly IDepartmentHierarchyQuery _hierarchyQuery;
     private readonly IOrganizationQuery _organizationQuery;
+    private readonly OrganizationTargetChainReader? _targetChainReader;
 
     /// <summary>
     /// 组合数据库防环查询与一致组织视图，校验部门目标的完整启用链。
     /// </summary>
     public DepartmentCrudValidator(EfPlatformDbContext dbContext, IOrganizationQuery organizationQuery)
-        : this(dbContext, new SqlServerDepartmentHierarchyQuery(dbContext), organizationQuery)
+        : this(dbContext, new SqlServerDepartmentHierarchyQuery(dbContext), organizationQuery, null)
     {
     }
 
@@ -27,11 +28,13 @@ public sealed class DepartmentCrudValidator : IStandardCrudValidator
     internal DepartmentCrudValidator(
         EfPlatformDbContext dbContext,
         IDepartmentHierarchyQuery hierarchyQuery,
-        IOrganizationQuery organizationQuery)
+        IOrganizationQuery organizationQuery,
+        OrganizationTargetChainReader? targetChainReader = null)
     {
         _dbContext = dbContext;
         _hierarchyQuery = hierarchyQuery;
         _organizationQuery = organizationQuery;
+        _targetChainReader = targetChainReader;
     }
 
     public string ResourceKey => "organization.department";
@@ -174,6 +177,17 @@ public sealed class DepartmentCrudValidator : IStandardCrudValidator
     // 换到根部门同样要求公司启用；保留来源停用状态，只检查一次发布的目标完整链。
     private async Task<StandardCrudError?> ValidateTargetChainAsync(string companyId, string? parentId, CancellationToken cancellationToken)
     {
+        if (_targetChainReader is not null)
+        {
+            var enabled = parentId is null
+                ? await _targetChainReader.IsCompanyEnabledAsync(companyId, cancellationToken)
+                : await _targetChainReader.IsEnabledAsync(companyId, parentId, cancellationToken);
+            return enabled
+                ? null
+                : parentId is null
+                    ? CompanyError(409, "CompanyDisabled", "所属公司已停用，不能创建或调整部门归属。")
+                    : ParentError(400, "ParentChainDisabled", "上级部门或其上级链已停用，不能作为新的上级。");
+        }
         var view = await _organizationQuery.ReadAsync(cancellationToken);
         var company = view.Find(OrganizationRecordKind.Company, companyId);
         if (company is null) return CompanyError(404, "CompanyNotFound", "所属公司不存在。");

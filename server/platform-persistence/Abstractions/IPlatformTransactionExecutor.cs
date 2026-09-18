@@ -20,6 +20,9 @@ public interface IPlatformTransactionExecutor
     ValueTask<TResult> ExecuteAsync<TResult>(IReadOnlyCollection<string> modelKeys,
         Func<CancellationToken, ValueTask<TResult>> registerChanges, CancellationToken cancellationToken = default) =>
         ExecuteAsync(registerChanges, cancellationToken);
+    /// <summary>在当前统一事务中保存已登记变化但不提交，使后续正式操作可读取前序已完成事实。</summary>
+    ValueTask FlushAsync(CancellationToken cancellationToken = default) =>
+        throw new InvalidOperationException("Platform transaction flush is unavailable.");
     /// <summary>特殊数据库操作在当前事务内登记实际变更，绝不立即发布。</summary>
     void RegisterChange(ICP.Platform.Persistence.Transactions.PlatformRecordChange change) =>
         throw new InvalidOperationException("Transaction change registration is unavailable.");

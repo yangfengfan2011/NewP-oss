@@ -3,6 +3,7 @@ using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.Transactions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using System.Runtime.ExceptionServices;
 
 namespace ICP.Platform.Persistence.EfCore.Transactions;
 
@@ -15,6 +16,7 @@ public sealed class EfPlatformTransactionExecutor : IPlatformTransactionExecutor
     private HashSet<IPlatformCommitParticipant> _activeParticipants = [];
     private List<(EntityEntry Entry, EntityState State, IReadOnlyDictionary<string, object?>? Before)> _pending = [];
     private bool _preparing;
+    private ExceptionDispatchInfo? _rollbackOnly;
     public bool IsActive { get; private set; }
 
     /// <summary>模块注册拥有者，平台只消费模型映射，不识别业务模型。</summary>
@@ -39,10 +41,22 @@ public sealed class EfPlatformTransactionExecutor : IPlatformTransactionExecutor
         if (IsActive)
         {
             if (requested.Any(p => !_activeParticipants.Contains(p)))
-                throw new InvalidOperationException("Nested writes must declare their models before the outer transaction begins.");
-            var nested = await registerChanges(cancellationToken);
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            return nested;
+            {
+                var exception = new InvalidOperationException("Nested writes must declare their models before the outer transaction begins.");
+                MarkRollbackOnly(exception);
+                throw exception;
+            }
+            try
+            {
+                var nested = await registerChanges(cancellationToken);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                return nested;
+            }
+            catch (Exception exception)
+            {
+                MarkRollbackOnly(exception);
+                throw;
+            }
         }
         var scopes = new List<(IPlatformCommitParticipant Participant, IPlatformCommitScope Scope)>();
         try
@@ -59,6 +73,7 @@ public sealed class EfPlatformTransactionExecutor : IPlatformTransactionExecutor
             try
             {
                 var result = await registerChanges(cancellationToken);
+                ThrowIfRollbackOnly();
                 await _dbContext.SaveChangesAsync(cancellationToken);
                 _preparing = true;
                 foreach (var (participant, scope) in scopes)
@@ -106,7 +121,30 @@ public sealed class EfPlatformTransactionExecutor : IPlatformTransactionExecutor
             _preparing = false;
             _pending.Clear();
             _activeParticipants.Clear();
+            _rollbackOnly = null;
             for (var index = scopes.Count - 1; index >= 0; index--) await scopes[index].Scope.DisposeAsync();
+        }
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask FlushAsync(CancellationToken cancellationToken = default)
+    {
+        if (!IsActive)
+        {
+            throw new InvalidOperationException("Platform transaction flush requires an active transaction.");
+        }
+        if (_preparing)
+        {
+            throw new InvalidOperationException("Platform transaction flush is unavailable after preparation begins.");
+        }
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            MarkRollbackOnly(exception);
+            throw;
         }
     }
 
@@ -149,4 +187,11 @@ public sealed class EfPlatformTransactionExecutor : IPlatformTransactionExecutor
     // 动态模型标量值从 EF PropertyValues 复制为不可变字典，禁止外部改写变更事实。
     private static IReadOnlyDictionary<string, object?> Freeze(PropertyValues values) =>
         values.Properties.ToFrozenDictionary(p => p.Name, p => values[p.Name], StringComparer.Ordinal);
+
+    // 唯一事务 owner 保留首个嵌套失败，防止外层调用方吞掉异常后提交部分变化。
+    private void MarkRollbackOnly(Exception exception) =>
+        _rollbackOnly ??= ExceptionDispatchInfo.Capture(exception);
+
+    // 根 delegate 返回后、最终保存前重新抛出首个被吞嵌套失败。
+    private void ThrowIfRollbackOnly() => _rollbackOnly?.Throw();
 }

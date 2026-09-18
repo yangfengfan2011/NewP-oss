@@ -303,6 +303,32 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
         }
     }
 
+    [EnvironmentGatedFact(RunEnvironmentVariable, "事务内目标链在真实 SQL Server 以单个递归查询返回标量结果")]
+    [Trait("Category", "SqlServerSmoke")]
+    public async Task EnabledTargetChainUsesOneDatabaseRoundTripAtDepthSixtyFour()
+    {
+        await using var fixture = await SqlFixture.CreateAsync();
+        await using var context = CreateContext(fixture.ConnectionString);
+        await context.Database.EnsureCreatedAsync();
+        AddCompany(context, "Company_1");
+        string? parentId = null;
+        for (var index = 0; index < 64; index++)
+        {
+            var id = $"Department_{index:D3}";
+            AddDepartment(context, id, "Company_1", parentId);
+            parentId = id;
+        }
+        await context.SaveChangesAsync();
+        var connection = Assert.IsType<SqlConnection>(context.Database.GetDbConnection());
+        connection.StatisticsEnabled = true;
+
+        var enabled = await new SqlServerDepartmentHierarchyQuery(context)
+            .IsEnabledTargetChainAsync("Company_1", parentId!, default);
+
+        Assert.True(enabled);
+        Assert.Equal(1L, connection.RetrieveStatistics()["SelectCount"]);
+    }
+
     [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server 上超过 1024 个部门的层级操作")]
     [Trait("Category", "SqlServerSmoke")]
     public async Task DepartmentHierarchyAboveOneThousandTwentyFourKeepsReparentAndPagedLookupAvailable()

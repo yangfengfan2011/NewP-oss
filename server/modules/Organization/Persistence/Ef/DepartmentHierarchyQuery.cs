@@ -29,6 +29,13 @@ internal interface IDepartmentHierarchyQuery
         string candidateParentId,
         CancellationToken cancellationToken);
 
+    // 在数据库侧一次读取目标部门到根的完整启用链。
+    Task<bool> IsEnabledTargetChainAsync(
+        string companyId,
+        string departmentId,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
     // 在数据库侧递归排除后代并返回有界候选页。
     Task<DepartmentHierarchyCandidatePage> LookupParentCandidatesAsync(
         string companyId,
@@ -160,6 +167,56 @@ internal sealed class SqlServerDepartmentHierarchyQuery(EfPlatformDbContext dbCo
         DROP TABLE #DepartmentDescendants;
         """;
 
+    private const string EnabledTargetChainSql = """
+        ;WITH [Ancestors] AS
+        (
+            SELECT [department].[EID],
+                   [department].[CompanyId],
+                   [department].[ParentDepartmentId],
+                   [department].[IsEnabled],
+                   CAST(N'|' + REPLACE([department].[EID], N'|', N'||') + N'|' AS nvarchar(max)) AS [Path],
+                   CAST(0 AS bit) AS [IsCycle]
+            FROM [Department] AS [department]
+            WHERE [department].[CompanyId] = @companyId
+              AND [department].[EID] = @departmentId
+
+            UNION ALL
+
+            SELECT [parent].[EID],
+                   [parent].[CompanyId],
+                   [parent].[ParentDepartmentId],
+                   [parent].[IsEnabled],
+                   CAST([ancestor].[Path] + REPLACE([parent].[EID], N'|', N'||') + N'|' AS nvarchar(max)),
+                   CAST(CASE WHEN CHARINDEX(
+                       N'|' + REPLACE([parent].[EID], N'|', N'||') + N'|',
+                       [ancestor].[Path]) > 0 THEN 1 ELSE 0 END AS bit)
+            FROM [Department] AS [parent]
+            INNER JOIN [Ancestors] AS [ancestor]
+                ON [parent].[EID] = [ancestor].[ParentDepartmentId]
+            WHERE [parent].[CompanyId] = @companyId
+              AND [ancestor].[IsCycle] = 0
+        )
+        SELECT CAST(CASE
+            WHEN NOT EXISTS (
+                SELECT 1 FROM [Company]
+                WHERE [EID] = @companyId AND [IsEnabled] = 1) THEN 0
+            WHEN NOT EXISTS (SELECT 1 FROM [Ancestors]) THEN 0
+            WHEN EXISTS (
+                SELECT 1 FROM [Ancestors]
+                WHERE [IsEnabled] = 0 OR [CompanyId] <> @companyId OR [IsCycle] = 1) THEN 0
+            WHEN EXISTS (
+                SELECT 1 FROM [Ancestors] AS [ancestor]
+                WHERE [ancestor].[IsCycle] = 0
+                  AND [ancestor].[ParentDepartmentId] IS NOT NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM [Department] AS [parent]
+                      WHERE [parent].[CompanyId] = @companyId
+                        AND [parent].[EID] = [ancestor].[ParentDepartmentId])) THEN 0
+            ELSE 1
+        END AS bit)
+        OPTION (MAXRECURSION 0);
+        """;
+
     // 祖先关系只返回单个枚举值，递归工作量留在数据库且查询次数不随深度增长。
     public Task<DepartmentParentRelationship> ClassifyParentAsync(
         string companyId,
@@ -181,6 +238,27 @@ internal sealed class SqlServerDepartmentHierarchyQuery(EfPlatformDbContext dbCo
             }
 
             return (DepartmentParentRelationship)reader.GetInt32(0);
+        },
+        cancellationToken);
+
+    // 公司、目标部门、全部祖先、断链和环在一个递归 SQL 命令中共同裁决。
+    public Task<bool> IsEnabledTargetChainAsync(
+        string companyId,
+        string departmentId,
+        CancellationToken cancellationToken) => ExecuteAsync(
+        EnabledTargetChainSql,
+        new Dictionary<string, object?>
+        {
+            ["@companyId"] = companyId,
+            ["@departmentId"] = departmentId
+        },
+        async (reader, token) =>
+        {
+            if (!await reader.ReadAsync(token))
+            {
+                throw new InvalidOperationException("Department target chain query returned no result.");
+            }
+            return reader.GetBoolean(0);
         },
         cancellationToken);
 

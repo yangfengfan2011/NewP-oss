@@ -2,6 +2,7 @@ using ICP.Platform.Organization.Contracts;
 using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Persistence.EfCore;
+using ICP.Platform.Persistence.Abstractions;
 using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Modules.Organization.Persistence.Ef;
@@ -11,13 +12,23 @@ namespace ICP.Platform.Modules.Organization.Persistence.Ef;
 /// </summary>
 /// <param name="dbContext">仅分页 Lookup 使用的当前请求动态模型数据库上下文。</param>
 /// <param name="query">按标识、编码及批量业务读取使用的唯一稳定组织查询。</param>
-public sealed class EfCompanyDirectory(EfPlatformDbContext dbContext, IOrganizationQuery query) : ICompanyDirectory
+/// <param name="transactions">事务内写规则用于选择当前 SQL 事实；事务外仍读取发布视图。</param>
+public sealed class EfCompanyDirectory(
+    EfPlatformDbContext dbContext,
+    IOrganizationQuery query,
+    IPlatformTransactionExecutor? transactions = null) : ICompanyDirectory
 {
     /// <inheritdoc/>
     public async Task<Company?> GetByIdAsync(
         string companyId,
         CancellationToken cancellationToken = default)
     {
+        if (transactions?.IsActive == true)
+        {
+            var current = await Entities.AsNoTracking()
+                .SingleOrDefaultAsync(row => EF.Property<string>(row, "EID") == companyId, cancellationToken);
+            return current is null ? null : Map(current);
+        }
         var row = (await query.ReadAsync(cancellationToken)).Find(OrganizationRecordKind.Company, companyId);
         return row is null ? null : Map(row);
     }
@@ -27,6 +38,18 @@ public sealed class EfCompanyDirectory(EfPlatformDbContext dbContext, IOrganizat
         IReadOnlyCollection<string> companyIds,
         CancellationToken cancellationToken = default)
     {
+        if (transactions?.IsActive == true)
+        {
+            var ids = NormalizeIds(companyIds);
+            if (ids.Count == 0)
+            {
+                return new Dictionary<string, Company>(StringComparer.Ordinal);
+            }
+            var current = await Entities.AsNoTracking()
+                .Where(row => ids.Contains(EF.Property<string>(row, "EID")))
+                .ToListAsync(cancellationToken);
+            return current.Select(Map).ToDictionary(company => company.Id, StringComparer.Ordinal);
+        }
         var view = await query.ReadAsync(cancellationToken);
         return NormalizeIds(companyIds).Select(id => view.Find(OrganizationRecordKind.Company, id))
             .Where(row => row is not null).Select(row => Map(row!)).ToDictionary(company => company.Id, StringComparer.Ordinal);
@@ -35,6 +58,14 @@ public sealed class EfCompanyDirectory(EfPlatformDbContext dbContext, IOrganizat
     /// <inheritdoc/>
     public async Task<Company?> GetByCodeAsync(string code, CancellationToken cancellationToken = default)
     {
+        if (transactions?.IsActive == true)
+        {
+            var normalized = code.Trim().ToLowerInvariant();
+            var current = await Entities.AsNoTracking().SingleOrDefaultAsync(
+                row => EF.Property<string>(row, "ECODE").ToLower() == normalized,
+                cancellationToken);
+            return current is null ? null : Map(current);
+        }
         var row = (await query.ReadAsync(cancellationToken)).FindCompanyByCode(code);
         return row is null ? null : Map(row);
     }

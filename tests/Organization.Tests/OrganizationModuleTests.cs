@@ -46,35 +46,60 @@ public class OrganizationModuleTests
     }
 
     [Fact]
-    public void ConfigureServices_RegistersPersonCrudAsTheOnlyObjectBehavior()
+    public void ConfigureServices_RegistersCompanyPositionAndPersonCrudObjectBehaviors()
     {
         var services = new ServiceCollection();
 
         new OrganizationModule().ConfigureServices(services);
 
-        var registration = Assert.Single(services, descriptor =>
-            descriptor.ServiceType.Name == "IObjectBehaviorContribution");
-        Assert.NotNull(registration.ImplementationFactory);
-        Assert.Equal(ServiceLifetime.Scoped, registration.Lifetime);
+        var registrations = services.Where(descriptor =>
+            descriptor.ServiceType.Name == "IObjectBehaviorContribution").ToArray();
+        Assert.Equal(3, registrations.Length);
+        Assert.All(registrations, registration =>
+        {
+            Assert.NotNull(registration.ImplementationFactory);
+            Assert.Equal(ServiceLifetime.Scoped, registration.Lifetime);
+        });
         Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(IObjectBehavior));
-        Assert.Equal("organization.person", PersonObjectBehavior.BehaviorDefinition.ObjectKey);
-        Assert.Equal("Organization", PersonObjectBehavior.BehaviorDefinition.OwnerModuleId);
-        Assert.Equal("Organization/Person", PersonObjectBehavior.BehaviorDefinition.ModelKey);
-        Assert.Equal(
-            [ObjectOperationAction.Create, ObjectOperationAction.Update, ObjectOperationAction.Delete],
-            PersonObjectBehavior.BehaviorDefinition.SupportedActions);
-        Assert.Equal(
-            [ObjectOperationAction.Create, ObjectOperationAction.Update, ObjectOperationAction.Delete],
-            PersonObjectBehavior.BehaviorDefinition.OpenExtensionActions);
+        AssertCrudBehavior(
+            CompanyObjectBehavior.BehaviorDefinition,
+            "organization.company",
+            "Organization/Company");
+        AssertCrudBehavior(
+            PositionObjectBehavior.BehaviorDefinition,
+            "organization.position",
+            "Organization/Position");
+        AssertCrudBehavior(
+            PersonObjectBehavior.BehaviorDefinition,
+            "organization.person",
+            "Organization/Person");
+        Assert.True(typeof(CompanyObjectBehavior).IsAbstract && typeof(CompanyObjectBehavior).IsSealed);
+        Assert.True(typeof(PositionObjectBehavior).IsAbstract && typeof(PositionObjectBehavior).IsSealed);
         Assert.True(typeof(PersonObjectBehavior).IsAbstract && typeof(PersonObjectBehavior).IsSealed);
-        Assert.Equal(
-            ["CreatedAt", "CreatedBy", "EID", "UpdatedAt", "UpdatedBy"],
-            PersonObjectBehavior.BehaviorDefinition.ProtectedInputFields.Order(StringComparer.Ordinal));
         Assert.DoesNotContain(services, descriptor =>
             descriptor.ServiceType == typeof(IObjectOperationExtension));
         Assert.DoesNotContain(
             typeof(ObjectOperationContext).GetConstructors(),
             constructor => constructor.IsPublic);
+
+        static void AssertCrudBehavior(
+            ObjectBehaviorDefinition definition,
+            string objectKey,
+            string modelKey)
+        {
+            Assert.Equal(objectKey, definition.ObjectKey);
+            Assert.Equal("Organization", definition.OwnerModuleId);
+            Assert.Equal(modelKey, definition.ModelKey);
+            Assert.Equal(
+                [ObjectOperationAction.Create, ObjectOperationAction.Update, ObjectOperationAction.Delete],
+                definition.SupportedActions);
+            Assert.Equal(
+                [ObjectOperationAction.Create, ObjectOperationAction.Update, ObjectOperationAction.Delete],
+                definition.OpenExtensionActions);
+            Assert.Equal(
+                ["CreatedAt", "CreatedBy", "EID", "UpdatedAt", "UpdatedBy"],
+                definition.ProtectedInputFields.Order(StringComparer.Ordinal));
+        }
     }
 
     [Fact]

@@ -8,7 +8,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 namespace ICP.Platform.HostApi.Tests;
 
 /// <summary>
-/// 只用于集成验证的正式组件 binding；它不声明业务模型，只向真实人员 CRUD 贡献横切。
+/// 只用于集成验证的正式组件 binding；它不声明业务模型，只向真实 Organization CRUD 贡献横切。
 /// </summary>
 public sealed class ObjectOperationExtensionProbeModule : ModuleCapsuleBindingBase
 {
@@ -21,6 +21,10 @@ public sealed class ObjectOperationExtensionProbeModule : ModuleCapsuleBindingBa
         services.AddObjectOperationExtension<PersonCreateProbeExtension>(this, PersonCreateProbeExtension.Definition);
         services.AddObjectOperationExtension<PersonCreateProbeExtension>(this, PersonCreateProbeExtension.UpdateDefinition);
         services.AddObjectOperationExtension<PersonCreateProbeExtension>(this, PersonCreateProbeExtension.DeleteDefinition);
+        foreach (var definition in PersonCreateProbeExtension.CompanyAndPositionDefinitions)
+        {
+            services.AddObjectOperationExtension<PersonCreateProbeExtension>(this, definition);
+        }
     }
 }
 
@@ -64,6 +68,16 @@ internal sealed class PersonCreateProbeExtension(ObjectOperationExtensionProbeCo
         "Organization",
         "organization.person",
         ObjectOperationAction.Delete);
+
+    internal static IReadOnlyList<ObjectOperationExtensionDefinition> CompanyAndPositionDefinitions { get; } =
+    [
+        new("host-api-tests.company-crud-probe", "Organization", "organization.company", ObjectOperationAction.Create),
+        new("host-api-tests.company-crud-probe", "Organization", "organization.company", ObjectOperationAction.Update),
+        new("host-api-tests.company-crud-probe", "Organization", "organization.company", ObjectOperationAction.Delete),
+        new("host-api-tests.position-crud-probe", "Organization", "organization.position", ObjectOperationAction.Create),
+        new("host-api-tests.position-crud-probe", "Organization", "organization.position", ObjectOperationAction.Update),
+        new("host-api-tests.position-crud-probe", "Organization", "organization.position", ObjectOperationAction.Delete)
+    ];
 
     public ValueTask<StandardCrudError?> BeforeAsync(
         ObjectOperationBeforeContext context,

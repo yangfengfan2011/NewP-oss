@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using ICP.Platform.Authorization.Extensions;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Crud.Abstractions;
+using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.ObjectOperations;
 using ICP.Platform.HostApi.Extensions;
 using ICP.Platform.HostApi.Authentication;
@@ -560,6 +561,122 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.False((await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync()).Persons.ContainsKey(personId));
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "公司与岗位服务端完整 CRUD 共用对象行为、扩展、审计与实际 EID 缓存登记")]
+    public async Task CompanyAndPositionCrud_DirectObjectOperationsUseExtensionsAuditAndCanonicalCacheIdentity()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        await using var scope = fixture.Services.CreateAsyncScope();
+        using var activity = new Activity(nameof(CompanyAndPositionCrud_DirectObjectOperationsUseExtensionsAuditAndCanonicalCacheIdentity)).Start();
+        var operations = scope.ServiceProvider.GetRequiredService<IObjectOperationExecutor>();
+        var control = fixture.Services.GetRequiredService<ObjectOperationExtensionProbeControl>();
+        var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        var cache = fixture.Services.GetRequiredService<OrganizationCache>();
+
+        foreach (var target in new[]
+        {
+            new ObjectOperationTarget(
+                "organization.company",
+                "Company",
+                CompanyCrudDescriptorFactory.Create(),
+                new Dictionary<string, object?> { ["ECODE"] = "DIRECT-COMPANY", ["SortOrder"] = "0100" },
+                new Dictionary<string, object?> { ["SortOrder"] = "0200" },
+                "Organization.Company.NameRequired"),
+            new ObjectOperationTarget(
+                "organization.position",
+                "Position",
+                PositionCrudDescriptorFactory.Create(),
+                new Dictionary<string, object?> { ["Description"] = "创建说明" },
+                new Dictionary<string, object?> { ["Description"] = "更新说明" },
+                "Organization.Position.NameRequired")
+        })
+        {
+            control.Mode = ObjectOperationExtensionProbeMode.Supplement;
+            control.SupplementedName = $"{target.ModelName} 扩展创建";
+            var created = await operations.ExecuteAsync(
+                target.ObjectKey,
+                ObjectOperationAction.Create,
+                null,
+                target.CreateValues);
+
+            Assert.True(created.Succeeded, created.Error?.Message);
+            var id = Convert.ToString(created.Detail!.Fields["EID"])!;
+            var alias = id.ToLowerInvariant();
+            Assert.False(string.Equals(id, alias, StringComparison.Ordinal));
+            Assert.Equal(control.SupplementedName, created.Detail.Fields["ENAME"]);
+
+            control.Mode = ObjectOperationExtensionProbeMode.InvalidFinalInput;
+            var rejected = await operations.ExecuteAsync(
+                target.ObjectKey,
+                ObjectOperationAction.Update,
+                alias,
+                new Dictionary<string, object?> { ["ENAME"] = "原本合法" });
+            Assert.False(rejected.Succeeded);
+            Assert.Equal(target.RequiredNameError, rejected.Error?.Code);
+            Assert.Equal(
+                control.SupplementedName,
+                (await ReadCachedRecord(cache, target.ModelName, id))["ENAME"]);
+
+            control.Mode = ObjectOperationExtensionProbeMode.Supplement;
+            control.SupplementedName = $"{target.ModelName} 扩展更新";
+            var updated = await operations.ExecuteAsync(
+                target.ObjectKey,
+                ObjectOperationAction.Update,
+                alias,
+                target.UpdateValues);
+
+            Assert.True(updated.Succeeded, updated.Error?.Message);
+            Assert.Equal(id, updated.Detail!.Fields["EID"]);
+            Assert.Equal(control.SupplementedName, updated.Detail.Fields["ENAME"]);
+            Assert.Equal(alias, control.TargetId);
+            var stored = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey(target.ModelName))
+                .AsNoTracking()
+                .SingleAsync(row => EF.Property<string>(row, "EID") == id);
+            var cached = await ReadCachedRecord(cache, target.ModelName, id);
+            foreach (var field in new[] { "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt" })
+            {
+                Assert.Equal(updated.Detail.Fields[field], stored[field]);
+                Assert.Equal(stored[field], cached[field]);
+            }
+
+            var conditionalDelete = scope.ServiceProvider
+                .GetServices<IStandardCrudConditionalDeleteExecutor>()
+                .Single(executor => executor.ResourceKey == target.ObjectKey);
+            control.Mode = ObjectOperationExtensionProbeMode.AfterFailure;
+            await Assert.ThrowsAsync<InvalidOperationException>(() => conditionalDelete.DeleteAsync(
+                target.Descriptor,
+                alias));
+            Assert.True(await db.Set<Dictionary<string, object?>>(db.ResolveModelKey(target.ModelName))
+                .AsNoTracking()
+                .AnyAsync(row => EF.Property<string>(row, "EID") == id));
+            Assert.Equal(id, (await ReadCachedRecord(cache, target.ModelName, id))["EID"]);
+
+            control.Mode = ObjectOperationExtensionProbeMode.None;
+            var deleted = await conditionalDelete.DeleteAsync(target.Descriptor, alias);
+            Assert.True(deleted.Succeeded, deleted.Error?.Message);
+            Assert.False(await db.Set<Dictionary<string, object?>>(db.ResolveModelKey(target.ModelName))
+                .AsNoTracking()
+                .AnyAsync(row => EF.Property<string>(row, "EID") == id));
+            Assert.False(await ContainsCachedRecord(cache, target.ModelName, id));
+        }
+
+        static async Task<IReadOnlyDictionary<string, object?>> ReadCachedRecord(
+            OrganizationCache cache,
+            string modelName,
+            string id)
+        {
+            var snapshot = await cache.ReadAsync();
+            return modelName == "Company" ? snapshot.Companies[id] : snapshot.Positions[id];
+        }
+
+        static async Task<bool> ContainsCachedRecord(OrganizationCache cache, string modelName, string id)
+        {
+            var snapshot = await cache.ReadAsync();
+            return modelName == "Company"
+                ? snapshot.Companies.ContainsKey(id)
+                : snapshot.Positions.ContainsKey(id);
+        }
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "真实模块扩展与人员创建在同一 SQL 事务内成功或共同回滚")]
     public async Task PersonCreation_FormalModuleExtensionsCommitOrRollbackPersonAuditAndCacheTogether()
     {
@@ -639,6 +756,14 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.Equal(personId, cached["EID"]);
         Assert.Equal("正式扩展补充姓名", cached["ENAME"]);
     }
+
+    private sealed record ObjectOperationTarget(
+        string ObjectKey,
+        string ModelName,
+        StandardCrudDescriptor Descriptor,
+        IReadOnlyDictionary<string, object?> CreateValues,
+        IReadOnlyDictionary<string, object?> UpdateValues,
+        string RequiredNameError);
 
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "登记、写入、保存和确定未提交故障共同回滚")]
     public async Task PersonCreation_WhenParticipantOrStoreFails_RollsBackPersonAndRecord()

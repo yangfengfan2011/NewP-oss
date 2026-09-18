@@ -1,5 +1,6 @@
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
+using ICP.Platform.Crud.ObjectOperations;
 using ICP.Platform.Crud.Persistence;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.EfCore;
@@ -9,10 +10,35 @@ using Microsoft.EntityFrameworkCore;
 namespace ICP.Platform.Modules.Organization.Crud;
 
 /// <summary>集中执行 Organization 条件删除的事务协调、物理删除与缓存变更登记。</summary>
-public sealed class OrganizationConditionalDeleteExecutor(
-    EfPlatformDbContext dbContext,
-    IPlatformTransactionExecutor? transactions = null)
+public sealed class OrganizationConditionalDeleteExecutor
 {
+    private readonly EfPlatformDbContext _dbContext;
+    private readonly IPlatformTransactionExecutor? _transactions;
+    private readonly Func<IObjectOperationExecutor>? _resolveObjectOperations;
+    private readonly IObjectOperationExecutionContext? _executionContext;
+
+    /// <summary>正式模块构造延迟解析对象入口，使适配器外部直调仍执行对象规则与横切。</summary>
+    public OrganizationConditionalDeleteExecutor(
+        EfPlatformDbContext dbContext,
+        Func<IObjectOperationExecutor> resolveObjectOperations,
+        IObjectOperationExecutionContext executionContext,
+        IPlatformTransactionExecutor? transactions = null)
+    {
+        _dbContext = dbContext;
+        _transactions = transactions;
+        _resolveObjectOperations = resolveObjectOperations;
+        _executionContext = executionContext;
+    }
+
+    // 定向存储测试只执行条件删除核心；正式 DI 始终注入统一入口与当前行为身份。
+    internal OrganizationConditionalDeleteExecutor(
+        EfPlatformDbContext dbContext,
+        IPlatformTransactionExecutor? transactions = null)
+    {
+        _dbContext = dbContext;
+        _transactions = transactions;
+    }
+
     /// <summary>在同一协调范围内解析实际主键、执行条件删除、解释失败并登记成功变更。</summary>
     internal async Task<StandardCrudMutationResult> DeleteAsync(
         StandardCrudDescriptor descriptor,
@@ -21,9 +47,27 @@ public sealed class OrganizationConditionalDeleteExecutor(
         OrganizationConditionalDeleteBehavior behavior,
         CancellationToken cancellationToken)
     {
-        if (transactions is { IsActive: false } && transactions.HasParticipants(descriptor.ModelName))
+        if (_resolveObjectOperations is not null
+            && _executionContext?.IsExecuting(
+                descriptor.ResourceKey,
+                ObjectOperationAction.Delete,
+                requestedId) != true)
         {
-            return await transactions.ExecuteAsync(
+            var objectOperations = _resolveObjectOperations();
+            if (objectOperations.CanExecute(descriptor.ResourceKey, ObjectOperationAction.Delete))
+            {
+                return await objectOperations.ExecuteAsync(
+                    descriptor.ResourceKey,
+                    ObjectOperationAction.Delete,
+                    requestedId,
+                    new Dictionary<string, object?>(StringComparer.Ordinal),
+                    cancellationToken);
+            }
+        }
+
+        if (_transactions is { IsActive: false } && _transactions.HasParticipants(descriptor.ModelName))
+        {
+            return await _transactions.ExecuteAsync(
                 [descriptor.ModelName],
                 token => new ValueTask<StandardCrudMutationResult>(DeleteAsync(
                     descriptor,
@@ -34,7 +78,7 @@ public sealed class OrganizationConditionalDeleteExecutor(
                 cancellationToken);
         }
 
-        var records = dbContext.Set<Dictionary<string, object?>>(dbContext.ResolveModelKey(descriptor.ModelName));
+        var records = _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName));
         var persistedId = await records.AsNoTracking()
             .Where(record => EF.Property<string>(record, descriptor.IdField) == requestedId)
             .Select(record => EF.Property<string>(record, descriptor.IdField))
@@ -53,7 +97,7 @@ public sealed class OrganizationConditionalDeleteExecutor(
         int affected;
         try
         {
-            if (dbContext.Database.IsRelational()
+            if (_dbContext.Database.IsRelational()
                 || behavior == OrganizationConditionalDeleteBehavior.RelationalOnly)
             {
                 affected = await deletable.ExecuteDeleteAsync(cancellationToken);
@@ -68,14 +112,14 @@ public sealed class OrganizationConditionalDeleteExecutor(
                 else
                 {
                     records.Remove(record);
-                    affected = await dbContext.SaveChangesAsync(cancellationToken);
+                    affected = await _dbContext.SaveChangesAsync(cancellationToken);
                 }
             }
         }
         catch (Exception exception) when (
             behavior == OrganizationConditionalDeleteBehavior.TrackedFallbackWithConstraintTranslation
             && EfPersistenceConstraintClassifier.IsKnownConstraintConflict(
-                dbContext.Database.ProviderName,
+                _dbContext.Database.ProviderName,
                 exception))
         {
             return await policy.ExplainFailureAsync(
@@ -92,9 +136,9 @@ public sealed class OrganizationConditionalDeleteExecutor(
                 cancellationToken);
         }
 
-        if (transactions?.HasParticipants(descriptor.ModelName) is true)
+        if (_transactions?.HasParticipants(descriptor.ModelName) is true)
         {
-            transactions.RegisterChange(new PlatformRecordChange(descriptor.ModelName, persistedId, null, null));
+            _transactions.RegisterChange(new PlatformRecordChange(descriptor.ModelName, persistedId, null, null));
         }
 
         return StandardCrudMutationResult.Success();

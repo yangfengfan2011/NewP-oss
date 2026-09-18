@@ -33,7 +33,7 @@ public static class StandardCrudServiceCollectionExtensions
         services.AddPlatformObjectIdGeneration();
         services.AddPlatformQueryKernel();
         services.TryAddScoped<IEntityAuditValueProvider>(static provider =>
-            new EntityAuditValueProvider(provider.GetRequiredService<IEntityAuditStampProvider>()));
+            new EntityAuditValueProvider(provider.GetService<IEntityAuditStampProvider>()));
         services.TryAddSingleton<IStandardCrudResourceRegistry, StandardCrudResourceRegistry>();
         services.TryAddSingleton<StandardCrudXlsxWriter>();
         services.AddScoped<EfStandardCrudRepository>();

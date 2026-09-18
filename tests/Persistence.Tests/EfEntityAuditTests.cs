@@ -149,6 +149,16 @@ public sealed class EfEntityAuditTests
     }
 
     [Fact]
+    public void ForCreate_WhenTrustedSourceIsNotRegistered_FailsWithStableCode()
+    {
+        var provider = new EntityAuditValueProvider(null);
+
+        var exception = Assert.Throws<EntityAuditStampUnavailableException>(provider.ForCreate);
+
+        Assert.Equal(EntityAuditFailureCodes.StampUnavailable, exception.FailureCode);
+    }
+
+    [Fact]
     public async Task SaveChangesAsync_WhenAuditOwnerReturnsNoValue_FailsWithStableCodeBeforeStoreWrite()
     {
         var databaseName = nameof(SaveChangesAsync_WhenAuditOwnerReturnsNoValue_FailsWithStableCodeBeforeStoreWrite);

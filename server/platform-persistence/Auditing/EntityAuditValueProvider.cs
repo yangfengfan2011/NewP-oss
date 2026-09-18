@@ -3,8 +3,8 @@ namespace ICP.Platform.Persistence.Auditing;
 /// <summary>
 /// 把可信主体和 UTC 时间收敛为 Entity 审计字段的唯一赋值规则。
 /// </summary>
-/// <param name="stampProvider">当前运行环境提供的可信主体与时间来源。</param>
-public sealed class EntityAuditValueProvider(IEntityAuditStampProvider stampProvider) : IEntityAuditValueProvider
+/// <param name="stampProvider">当前运行环境提供的可信主体与时间来源；未装配时在实际取值边界稳定失败。</param>
+public sealed class EntityAuditValueProvider(IEntityAuditStampProvider? stampProvider) : IEntityAuditValueProvider
 {
     private readonly AsyncLocal<OperationScope?> _current = new();
 
@@ -55,7 +55,7 @@ public sealed class EntityAuditValueProvider(IEntityAuditStampProvider stampProv
     {
         try
         {
-            return stampProvider.GetCurrent() ?? throw new EntityAuditStampUnavailableException();
+            return stampProvider?.GetCurrent() ?? throw new EntityAuditStampUnavailableException();
         }
         catch (EntityAuditStampUnavailableException)
         {

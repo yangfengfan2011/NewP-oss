@@ -257,6 +257,7 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
         public bool IsActive => inner.IsActive;
         public bool HasParticipants(string modelKey) => inner.HasParticipants(modelKey);
         public void RegisterChange(PlatformRecordChange change) => inner.RegisterChange(change);
+        public ValueTask FlushAsync(CancellationToken cancellationToken = default) => inner.FlushAsync(cancellationToken);
         public ValueTask<T> ExecuteAsync<T>(Func<CancellationToken, ValueTask<T>> action, CancellationToken cancellationToken = default) => ExecuteAsync([], action, cancellationToken);
         public async ValueTask<T> ExecuteAsync<T>(IReadOnlyCollection<string> models, Func<CancellationToken, ValueTask<T>> action, CancellationToken cancellationToken = default)
         { if (control.BeforeExecute is not null) await control.BeforeExecute(http.HttpContext?.Request.Path.Value ?? ""); return await inner.ExecuteAsync(models, action, cancellationToken); }

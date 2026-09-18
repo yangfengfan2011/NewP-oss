@@ -1,6 +1,5 @@
 using ICP.Platform.Authentication.Contracts;
 using ICP.Platform.Modules.Organization.Caching;
-using ICP.Platform.Organization.Contracts;
 using ICP.Platform.Persistence.Transactions;
 
 namespace ICP.Platform.Modules.Organization.Services;
@@ -32,13 +31,15 @@ public sealed class OrganizationAdmissionCommitParticipant(OrganizationCache cac
             await inner.PrepareAsync(changes, cancellationToken);
             var overlay = changes.GroupBy(change => (change.ModelKey, change.Id))
                 .ToDictionary(group => group.Key, group => group.Last().After);
+            var previousRelationships = new TransactionOrganizationRelationshipRecordView(before, null);
+            var currentRelationships = new TransactionOrganizationRelationshipRecordView(before, overlay);
             var interrupted = new HashSet<string>(StringComparer.Ordinal);
             foreach (var personId in AffectedPersons(before, changes))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var previous = Resolve(before, personId, null);
+                var previous = CurrentOrganizationResolver.Resolve(personId, previousRelationships);
                 if (OrganizationAdmissionPolicy.IsEligible(previous)
-                    && !OrganizationAdmissionPolicy.IsEligible(Resolve(before, personId, overlay))
+                    && !OrganizationAdmissionPolicy.IsEligible(CurrentOrganizationResolver.Resolve(personId, currentRelationships))
                     && previous!.Person.GetValueOrDefault("AccountEID") is string accountId)
                     interrupted.Add(accountId);
             }
@@ -84,27 +85,4 @@ public sealed class OrganizationAdmissionCommitParticipant(OrganizationCache cac
         return people;
     }
 
-    // 仅将实际持久化后的记录叠加到同一原快照，解析受影响人员的前后资格；不维护第二套缓存索引。
-    private static CurrentOrganization? Resolve(OrganizationSnapshot snapshot, string personId,
-        IReadOnlyDictionary<(string ModelKey, string Id), IReadOnlyDictionary<string, object?>?>? overlay)
-    {
-        var person = Find("Person", personId, snapshot.Persons);
-        if (person is null) return null;
-        var company = Find("Company", person.GetValueOrDefault("CompanyId") as string, snapshot.Companies);
-        var department = Find("Department", person.GetValueOrDefault("DepartmentId") as string, snapshot.Departments);
-        var ancestors = new List<IReadOnlyDictionary<string, object?>>();
-        var current = department;
-        while (current?.GetValueOrDefault("ParentDepartmentId") is string parent)
-        {
-            current = Find("Department", parent, snapshot.Departments);
-            if (current is null) return null;
-            ancestors.Add(current);
-        }
-        return new(person, company, department, ancestors);
-
-        // null 表示真实删除或准备阶段，而非缓存故障降级。
-        IReadOnlyDictionary<string, object?>? Find(string model, string? id, IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>> records) =>
-            id is null ? null : overlay is not null && overlay.TryGetValue(($"Organization/{model}", id), out var row)
-                ? row : records.GetValueOrDefault(id);
-    }
 }

@@ -13,6 +13,8 @@ public sealed class OrganizationQuery(OrganizationCache cache) : IOrganizationQu
 
     private sealed class ReadView(OrganizationSnapshot snapshot) : IOrganizationReadView
     {
+        private readonly PublishedOrganizationRelationshipRecordView _relationships = new(snapshot);
+
         /// <inheritdoc/>
         public IReadOnlyDictionary<string, object?>? Find(OrganizationRecordKind kind, string id) =>
             Records(kind).GetValueOrDefault(id);
@@ -25,18 +27,8 @@ public sealed class OrganizationQuery(OrganizationCache cache) : IOrganizationQu
         public CurrentOrganization? FindByAccount(string accountId)
         {
             if (!snapshot.PersonByAccount.TryGetValue(accountId, out var personId)) return null;
-            var person = snapshot.Persons[personId];
-            var company = person.GetValueOrDefault("CompanyId") is string companyId ? snapshot.Companies[companyId] : null;
-            var department = person.GetValueOrDefault("DepartmentId") is string departmentId ? snapshot.Departments[departmentId] : null;
-            var ancestors = ImmutableArray.CreateBuilder<IReadOnlyDictionary<string, object?>>();
-            var current = department;
-            // 发布前已验证同公司、无环和引用完整性；这里只沿实际上级链走索引，不扫描全量档案。
-            while (current?.GetValueOrDefault("ParentDepartmentId") is string parent)
-            {
-                current = snapshot.Departments[parent];
-                ancestors.Add(current);
-            }
-            return new(person, company, department, ancestors.ToImmutable());
+            // 发布前已验证同公司、无环和引用完整性；共享解析只沿实际上级链走索引。
+            return CurrentOrganizationResolver.Resolve(personId, _relationships);
         }
 
         /// <inheritdoc/>

@@ -34,12 +34,13 @@ public sealed class ObjectOperationExecutor : IObjectOperationExecutor
         IPlatformTransactionExecutor? transactions,
         ObjectOperationExecutionContext? executionContext)
         : this(
-            behaviors.Select(static behavior =>
-                (IObjectBehaviorContribution)new ObjectBehaviorContribution(
-                    behavior.Definition.ObjectKey,
-                    behavior)),
-            [],
-            ObjectOperationAssemblyPlan.ForBehaviors(behaviors),
+            new ObjectOperationContributionSet(
+                behaviors.Select(static behavior =>
+                    (IObjectBehaviorContribution)new ObjectBehaviorContribution(
+                        behavior.Definition.ObjectKey,
+                        behavior)),
+                [],
+                ObjectOperationAssemblyPlan.ForBehaviors(behaviors)),
             auditValues,
             transactions,
             executionContext)
@@ -48,22 +49,18 @@ public sealed class ObjectOperationExecutor : IObjectOperationExecutor
 
     // DI 路径消费 Host 启动期已验证的完整组件装配计划。
     internal ObjectOperationExecutor(
-        IEnumerable<IObjectBehaviorContribution> behaviors,
-        IEnumerable<IObjectOperationExtensionContribution> extensions,
-        ObjectOperationAssemblyPlan plan,
+        ObjectOperationContributionSet contributions,
         IEntityAuditValueProvider auditValues,
         IPlatformTransactionExecutor? transactions = null,
         ObjectOperationExecutionContext? executionContext = null)
     {
-        ArgumentNullException.ThrowIfNull(behaviors);
-        ArgumentNullException.ThrowIfNull(extensions);
-        _plan = plan ?? throw new ArgumentNullException(nameof(plan));
+        ArgumentNullException.ThrowIfNull(contributions);
+        _plan = contributions.Plan;
         _auditValues = auditValues ?? throw new ArgumentNullException(nameof(auditValues));
         _transactions = transactions;
         _executionContext = executionContext ?? new ObjectOperationExecutionContext();
-        _behaviors = IndexBehaviors(behaviors);
-        _extensions = IndexExtensions(extensions);
-        ValidateResolvedContributions();
+        _behaviors = contributions.Behaviors;
+        _extensions = contributions.Extensions;
         if (_plan.Behaviors.Count > 0 && transactions is null)
         {
             throw new InvalidOperationException("OBJECT_OPERATION_TRANSACTION_EXECUTOR_REQUIRED");
@@ -219,78 +216,6 @@ public sealed class ObjectOperationExecutor : IObjectOperationExecutor
             Summaries = result.Detail.Summaries.ToFrozenDictionary(StringComparer.Ordinal)
         });
     }
-
-    // 行为按对象 identity 绑定；实现类型可由多个对象声明安全复用。
-    private static IReadOnlyDictionary<string, IObjectBehavior> IndexBehaviors(
-        IEnumerable<IObjectBehaviorContribution> contributions)
-    {
-        var result = new Dictionary<string, IObjectBehavior>(StringComparer.Ordinal);
-        foreach (var contribution in contributions)
-        {
-            if (!result.TryAdd(contribution.ObjectKey, contribution.Behavior))
-            {
-                throw new InvalidOperationException(
-                    $"OBJECT_OPERATION_BEHAVIOR_CONTRIBUTION_DUPLICATED: {contribution.ObjectKey}");
-            }
-        }
-        return result;
-    }
-
-    // 扩展按目标动作和扩展键绑定；同一实现类型可贡献多个不同 identity。
-    private static IReadOnlyDictionary<ObjectOperationExtensionIdentity, IObjectOperationExtension> IndexExtensions(
-        IEnumerable<IObjectOperationExtensionContribution> contributions)
-    {
-        var result = new Dictionary<ObjectOperationExtensionIdentity, IObjectOperationExtension>();
-        foreach (var contribution in contributions)
-        {
-            if (!result.TryAdd(contribution.Identity, contribution.Extension))
-            {
-                throw new InvalidOperationException(
-                    $"OBJECT_OPERATION_EXTENSION_CONTRIBUTION_DUPLICATED: {contribution.Identity.ObjectKey}/{contribution.Identity.Action.Value}/{contribution.Identity.ExtensionKey}");
-            }
-        }
-        return result;
-    }
-
-    // 正式实例必须与已验证 identity 精确对应，额外直接注册不能绕过组件装配。
-    private void ValidateResolvedContributions()
-    {
-        if (!_behaviors.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(_plan.Behaviors.Keys))
-        {
-            throw new InvalidOperationException("OBJECT_OPERATION_BEHAVIOR_CONTRIBUTION_MISMATCH");
-        }
-        foreach (var behavior in _plan.Behaviors)
-        {
-            var resolved = _behaviors[behavior.Key].Definition;
-            if (!DefinitionsMatch(resolved, behavior.Value.Definition))
-            {
-                throw new InvalidOperationException(
-                    $"OBJECT_OPERATION_BEHAVIOR_DEFINITION_MISMATCH: {behavior.Key}");
-            }
-        }
-        var plannedExtensions = _plan.Behaviors
-            .SelectMany(behavior => behavior.Value.Extensions.SelectMany(extension =>
-                extension.Value.Select(plan => new ObjectOperationExtensionIdentity(
-                    behavior.Key,
-                    extension.Key,
-                    plan.ExtensionKey))))
-            .ToHashSet();
-        if (!_extensions.Keys.ToHashSet().SetEquals(plannedExtensions))
-        {
-            throw new InvalidOperationException("OBJECT_OPERATION_EXTENSION_CONTRIBUTION_MISMATCH");
-        }
-    }
-
-    // 行为实例可持有声明副本，但其 owner、协调范围、动作和保护字段必须与启动计划一致。
-    private static bool DefinitionsMatch(ObjectBehaviorDefinition left, ObjectBehaviorDefinition right) =>
-        string.Equals(left.ObjectKey, right.ObjectKey, StringComparison.Ordinal)
-        && string.Equals(left.OwnerModuleId, right.OwnerModuleId, StringComparison.Ordinal)
-        && string.Equals(left.ModelKey, right.ModelKey, StringComparison.Ordinal)
-        && left.SupportedActions.ToHashSet().SetEquals(right.SupportedActions)
-        && left.OpenExtensionActions.ToHashSet().SetEquals(right.OpenExtensionActions)
-        && left.ProtectedInputFields.ToHashSet(StringComparer.OrdinalIgnoreCase)
-            .SetEquals(right.ProtectedInputFields)
-        && left.Calls.ToHashSet().SetEquals(right.Calls);
 
     // 公开构造不得枚举同一延迟序列两次。
     private static IObjectBehavior[] Materialize(IEnumerable<IObjectBehavior> behaviors)

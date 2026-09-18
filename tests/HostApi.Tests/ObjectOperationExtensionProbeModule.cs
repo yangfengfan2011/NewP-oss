@@ -42,6 +42,31 @@ public sealed class ObjectOperationExtensionProbeModule : ModuleCapsuleBindingBa
     }
 }
 
+internal sealed class MismatchedDefinitionObjectBehavior : ObjectBehaviorBase
+{
+    internal static ObjectBehaviorDefinition DeclaredDefinition { get; } = new(
+        "host-api-tests.mismatched-behavior",
+        "ObjectOperationExtensionProbe",
+        "HostApiTests/Declared",
+        [ObjectOperationAction.Create],
+        []);
+
+    internal MismatchedDefinitionObjectBehavior()
+        : base(new ObjectBehaviorDefinition(
+            "host-api-tests.mismatched-behavior",
+            "ObjectOperationExtensionProbe",
+            "HostApiTests/Actual",
+            [ObjectOperationAction.Create],
+            []))
+    {
+    }
+
+    protected override ValueTask<StandardCrudMutationResult> CreateAsync(
+        ObjectOperationContext context,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(StandardCrudMutationResult.Success());
+}
+
 internal enum ObjectOperationExtensionProbeMode
 {
     None,

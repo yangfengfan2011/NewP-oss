@@ -69,6 +69,22 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.Contains("OBJECT_OPERATION_EXTENSION_ORDER_DEPENDENCY_NOT_FOUND", exception.ToString(), StringComparison.Ordinal);
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "正式行为工厂返回不一致 Definition 时 Host 启动失败关闭")]
+    public async Task HostStartup_WhenFormalBehaviorFactoryReturnsMismatchedDefinition_RejectsBeforeRequests()
+    {
+        var exception = await Record.ExceptionAsync(async () =>
+        {
+            await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
+                services.AddObjectBehavior<MismatchedDefinitionObjectBehavior>(
+                    new ObjectOperationExtensionProbeModule(),
+                    MismatchedDefinitionObjectBehavior.DeclaredDefinition,
+                    static (_, _) => new MismatchedDefinitionObjectBehavior()));
+        });
+
+        Assert.NotNull(exception);
+        Assert.Contains("OBJECT_OPERATION_BEHAVIOR_DEFINITION_MISMATCH", exception.ToString(), StringComparison.Ordinal);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "两个正式Identity普通账号消费父规格维护与查询职责")]
     public async Task UserRoles_TwoRealAccountsConsumeConfiguredResponsibilitiesOnNewLogin()
     {

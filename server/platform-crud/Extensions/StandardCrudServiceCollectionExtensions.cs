@@ -42,15 +42,14 @@ public static class StandardCrudServiceCollectionExtensions
         services.AddScoped<StandardCrudCreateRequestPreparer>();
         services.AddOptions<ObjectOperationAssemblyOptions>();
         services.TryAddSingleton<ObjectOperationAssemblyPlan>();
+        services.TryAddScoped<ObjectOperationContributionSet>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, ObjectOperationAssemblyStartupValidator>());
         services.TryAddScoped<ObjectOperationExecutionContext>();
         services.TryAddScoped<IObjectOperationExecutionContext>(static provider =>
             provider.GetRequiredService<ObjectOperationExecutionContext>());
         services.AddScoped<ObjectOperationExecutor>(static provider =>
             new ObjectOperationExecutor(
-                provider.GetServices<IObjectBehaviorContribution>(),
-                provider.GetServices<IObjectOperationExtensionContribution>(),
-                provider.GetRequiredService<ObjectOperationAssemblyPlan>(),
+                provider.GetRequiredService<ObjectOperationContributionSet>(),
                 provider.GetRequiredService<IEntityAuditValueProvider>(),
                 provider.GetService<ICP.Platform.Persistence.Abstractions.IPlatformTransactionExecutor>(),
                 provider.GetRequiredService<ObjectOperationExecutionContext>()));

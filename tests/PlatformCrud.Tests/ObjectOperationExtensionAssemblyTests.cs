@@ -56,6 +56,42 @@ public sealed class ObjectOperationExtensionAssemblyTests
     }
 
     [Fact]
+    public async Task StartAsync_WhenBehaviorFactoryReturnsMismatchedDefinition_FailsBeforeFirstRequest()
+    {
+        using var host = BuildHost(services =>
+        {
+            var owner = new TestModule("Organization", []);
+            var declared = ReusableDefinition("organization.person", "Organization/Person");
+            services.AddObjectBehavior<ConfigurableBehavior>(
+                owner,
+                declared,
+                static (_, _) => new ConfigurableBehavior(
+                    ReusableDefinition("organization.person", "Organization/Other")));
+        });
+
+        var exception = await Assert.ThrowsAnyAsync<Exception>(() => host.StartAsync());
+
+        Assert.Contains("OBJECT_OPERATION_BEHAVIOR_DEFINITION_MISMATCH", exception.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StartAsync_WhenBehaviorFactoryConstructionFails_FailsBeforeFirstRequest()
+    {
+        using var host = BuildHost(services =>
+        {
+            var owner = new TestModule("Organization", []);
+            services.AddObjectBehavior<ConfigurableBehavior>(
+                owner,
+                ReusableDefinition("organization.person", "Organization/Person"),
+                static (_, _) => throw new InvalidOperationException("injected behavior construction failure"));
+        });
+
+        var exception = await Assert.ThrowsAnyAsync<Exception>(() => host.StartAsync());
+
+        Assert.Contains("injected behavior construction failure", exception.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_RunsStableTopologyAroundCoreAndSnapshotsAfterResult()
     {
         var calls = new InvocationLog();

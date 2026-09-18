@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
@@ -78,6 +79,99 @@ internal sealed class ObjectOperationExtensionContribution : IObjectOperationExt
 
     public ObjectOperationExtensionIdentity Identity { get; }
     public IObjectOperationExtension Extension { get; }
+}
+
+internal sealed class ObjectOperationContributionSet
+{
+    // 解析一次作用域内的实际贡献，并用静态计划验证 identity 与行为声明完全一致。
+    public ObjectOperationContributionSet(
+        IEnumerable<IObjectBehaviorContribution> behaviors,
+        IEnumerable<IObjectOperationExtensionContribution> extensions,
+        ObjectOperationAssemblyPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(behaviors);
+        ArgumentNullException.ThrowIfNull(extensions);
+        Plan = plan ?? throw new ArgumentNullException(nameof(plan));
+        Behaviors = IndexBehaviors(behaviors);
+        Extensions = IndexExtensions(extensions);
+        ValidateResolvedContributions();
+    }
+
+    internal ObjectOperationAssemblyPlan Plan { get; }
+    internal IReadOnlyDictionary<string, IObjectBehavior> Behaviors { get; }
+    internal IReadOnlyDictionary<ObjectOperationExtensionIdentity, IObjectOperationExtension> Extensions { get; }
+
+    // 行为按对象 identity 绑定；实现类型可由多个对象声明安全复用。
+    private static IReadOnlyDictionary<string, IObjectBehavior> IndexBehaviors(
+        IEnumerable<IObjectBehaviorContribution> contributions)
+    {
+        var result = new Dictionary<string, IObjectBehavior>(StringComparer.Ordinal);
+        foreach (var contribution in contributions)
+        {
+            if (!result.TryAdd(contribution.ObjectKey, contribution.Behavior))
+            {
+                throw new InvalidOperationException(
+                    $"OBJECT_OPERATION_BEHAVIOR_CONTRIBUTION_DUPLICATED: {contribution.ObjectKey}");
+            }
+        }
+        return result;
+    }
+
+    // 扩展按目标动作和扩展键绑定；同一实现类型可贡献多个不同 identity。
+    private static IReadOnlyDictionary<ObjectOperationExtensionIdentity, IObjectOperationExtension> IndexExtensions(
+        IEnumerable<IObjectOperationExtensionContribution> contributions)
+    {
+        var result = new Dictionary<ObjectOperationExtensionIdentity, IObjectOperationExtension>();
+        foreach (var contribution in contributions)
+        {
+            if (!result.TryAdd(contribution.Identity, contribution.Extension))
+            {
+                throw new InvalidOperationException(
+                    $"OBJECT_OPERATION_EXTENSION_CONTRIBUTION_DUPLICATED: {contribution.Identity.ObjectKey}/{contribution.Identity.Action.Value}/{contribution.Identity.ExtensionKey}");
+            }
+        }
+        return result;
+    }
+
+    // 实际贡献必须与启动计划精确对应，工厂不能替换声明或绕过组件装配。
+    private void ValidateResolvedContributions()
+    {
+        if (!Behaviors.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(Plan.Behaviors.Keys))
+        {
+            throw new InvalidOperationException("OBJECT_OPERATION_BEHAVIOR_CONTRIBUTION_MISMATCH");
+        }
+        foreach (var behavior in Plan.Behaviors)
+        {
+            var resolved = Behaviors[behavior.Key].Definition;
+            if (!DefinitionsMatch(resolved, behavior.Value.Definition))
+            {
+                throw new InvalidOperationException(
+                    $"OBJECT_OPERATION_BEHAVIOR_DEFINITION_MISMATCH: {behavior.Key}");
+            }
+        }
+        var plannedExtensions = Plan.Behaviors
+            .SelectMany(behavior => behavior.Value.Extensions.SelectMany(extension =>
+                extension.Value.Select(plan => new ObjectOperationExtensionIdentity(
+                    behavior.Key,
+                    extension.Key,
+                    plan.ExtensionKey))))
+            .ToHashSet();
+        if (!Extensions.Keys.ToHashSet().SetEquals(plannedExtensions))
+        {
+            throw new InvalidOperationException("OBJECT_OPERATION_EXTENSION_CONTRIBUTION_MISMATCH");
+        }
+    }
+
+    // 行为可持有声明副本，但 owner、协调范围、动作和保护字段必须与计划一致。
+    private static bool DefinitionsMatch(ObjectBehaviorDefinition left, ObjectBehaviorDefinition right) =>
+        string.Equals(left.ObjectKey, right.ObjectKey, StringComparison.Ordinal)
+        && string.Equals(left.OwnerModuleId, right.OwnerModuleId, StringComparison.Ordinal)
+        && string.Equals(left.ModelKey, right.ModelKey, StringComparison.Ordinal)
+        && left.SupportedActions.ToHashSet().SetEquals(right.SupportedActions)
+        && left.OpenExtensionActions.ToHashSet().SetEquals(right.OpenExtensionActions)
+        && left.ProtectedInputFields.ToHashSet(StringComparer.OrdinalIgnoreCase)
+            .SetEquals(right.ProtectedInputFields)
+        && left.Calls.ToHashSet().SetEquals(right.Calls);
 }
 
 /// <summary>
@@ -342,22 +436,24 @@ internal sealed class ObjectOperationAssemblyPlan
     }
 }
 
-// Host 在接受请求前解析静态计划；构造成功后无需执行运行时代码。
+// Host 在接受请求前解析静态计划并构造实际贡献；验证作用域随后释放。
 internal sealed class ObjectOperationAssemblyStartupValidator : IHostedService
 {
-    private readonly ObjectOperationAssemblyPlan _plan;
+    private readonly IServiceScopeFactory _scopeFactory;
 
-    // 通过构造依赖强制 Host 启动解析完整静态装配计划。
-    public ObjectOperationAssemblyStartupValidator(ObjectOperationAssemblyPlan plan)
+    // 保存作用域工厂，启动时用独立短作用域实例化并验证全部正式贡献。
+    public ObjectOperationAssemblyStartupValidator(IServiceScopeFactory scopeFactory)
     {
-        _plan = plan;
+        _scopeFactory = scopeFactory;
     }
 
-    // 访问 plan 保证 DI 已完成完整候选编译。
-    public Task StartAsync(CancellationToken cancellationToken)
+    // 在 Host 接受请求前解析实际工厂；构造失败或声明漂移都会拒绝整份候选。
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
-        _ = _plan.Behaviors.Count;
-        return Task.CompletedTask;
+        cancellationToken.ThrowIfCancellationRequested();
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        _ = scope.ServiceProvider.GetRequiredService<ObjectOperationAssemblyPlan>();
+        _ = scope.ServiceProvider.GetRequiredService<ObjectOperationContributionSet>();
     }
 
     // 静态计划没有停止期资源。

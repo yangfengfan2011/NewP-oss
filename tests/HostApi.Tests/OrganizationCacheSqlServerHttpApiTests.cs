@@ -58,6 +58,7 @@ public sealed class OrganizationCacheSqlServerHttpApiTests(Xunit.Abstractions.IT
             builder.Services.AddSingleton<ICP.Platform.Authorization.Http.IFeatureDecisionSource, GrantedPermissions>();
             builder.Services.AddStandardCrudKernel();
             builder.Services.AddStandardCrudResource(CompanyCrudDescriptorFactory.Create());
+            builder.Services.AddScoped<OrganizationConditionalDeleteExecutor>();
             builder.Services.AddStandardCrudConditionalDelete<CompanyCrudDeleteExecutor>();
             builder.Services.AddScoped<IPlatformTransactionExecutor, EfPlatformTransactionExecutor>();
             builder.Services.AddSingleton<OrganizationCache>();

@@ -20,7 +20,7 @@ public sealed class PositionCrudDeleteExecutorTests
         await using var context = CreateContext();
         AddPosition(context, "Position_1", isEnabled);
         await context.SaveChangesAsync();
-        var executor = new PositionCrudDeleteExecutor(context);
+        var executor = CreateExecutor(context);
 
         var result = await executor.DeleteAsync(PositionCrudDescriptorFactory.Create(), "Position_1");
 
@@ -35,7 +35,7 @@ public sealed class PositionCrudDeleteExecutorTests
         AddPosition(context, "Position_1", true);
         AddPerson(context, "Person_1", "Position_1");
         await context.SaveChangesAsync();
-        var executor = new PositionCrudDeleteExecutor(context);
+        var executor = CreateExecutor(context);
 
         var result = await executor.DeleteAsync(PositionCrudDescriptorFactory.Create(), "Position_1");
 
@@ -57,7 +57,7 @@ public sealed class PositionCrudDeleteExecutorTests
         var person = await Persons(context).SingleAsync();
         person["PositionId"] = null;
         await context.SaveChangesAsync();
-        var executor = new PositionCrudDeleteExecutor(context);
+        var executor = CreateExecutor(context);
 
         var result = await executor.DeleteAsync(PositionCrudDescriptorFactory.Create(), "Position_1");
 
@@ -68,7 +68,7 @@ public sealed class PositionCrudDeleteExecutorTests
     public async Task DeleteAsync_MissingPosition_ReturnsStableNotFound()
     {
         await using var context = CreateContext();
-        var executor = new PositionCrudDeleteExecutor(context);
+        var executor = CreateExecutor(context);
 
         var result = await executor.DeleteAsync(PositionCrudDescriptorFactory.Create(), "Position_Missing");
 
@@ -89,6 +89,9 @@ public sealed class PositionCrudDeleteExecutorTests
             .ToArray();
         return new EfPlatformDbContext(options, definitions);
     }
+
+    private static PositionCrudDeleteExecutor CreateExecutor(EfPlatformDbContext context) =>
+        new(context, new OrganizationConditionalDeleteExecutor(context));
 
     private static DbSet<Dictionary<string, object?>> Positions(EfPlatformDbContext context) =>
         context.Set<Dictionary<string, object?>>(context.ResolveModelKey("Position"));

@@ -173,6 +173,39 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
         Assert.Empty(snapshot.DepartmentsByCompany);
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "条件删除提交后发布失败准确报告已保存")]
+    public async Task ConditionalDeleteApi_ReportsCommittedPublicationFailure()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(
+            services => services.AddSingleton<OrganizationCache, FailedPublicationCache>());
+        using var admin = await fixture.LoginAdministratorAsync();
+        var http = new FeatureHttpTestRequests(fixture);
+        var company = BusinessAuditSqlServerHttpApiTests.Id(await CreateAsync(
+            admin,
+            http.Organization("companies", "create", "list.pageActions"),
+            "/api/organization/companies",
+            new { ECODE = "DELETE-FAIL", ENAME = "删除发布故障", SortOrder = "01" }));
+        var cache = (FailedPublicationCache)fixture.Services.GetRequiredService<OrganizationCache>();
+        cache.Fail = true;
+
+        using var response = await SendAsync(
+            admin,
+            http.Organization("companies", "delete", "list.rowActions"),
+            HttpMethod.Delete,
+            $"/api/organization/companies/{company}");
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Persistence.CommittedCacheUnavailable", problem.GetProperty("code").GetString());
+        Assert.Contains("已保存", problem.GetProperty("message").GetString());
+        await Assert.ThrowsAsync<PlatformCacheUnavailableException>(() => cache.ReadAsync().AsTask());
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        Assert.False(await db.Set<Dictionary<string, object?>>("Organization/Company").AsNoTracking()
+            .AnyAsync(row => EF.Property<string>(row, "EID") == company));
+        Assert.Equal(1, cache.FailedPublications);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "绑定提交后发布失败准确报告已保存")]
     public Task BindingApi_ReportsCommittedPublicationFailure() => DedicatedApis_ReportCommittedPublicationFailure(true);
 

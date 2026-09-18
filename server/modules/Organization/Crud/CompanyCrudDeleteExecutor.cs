@@ -1,16 +1,15 @@
-using ICP.Platform.Persistence.Abstractions;
-using ICP.Platform.Persistence.Transactions;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
-using ICP.Platform.Crud.Persistence;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Modules.Organization.Crud;
 
 /// <summary>公司条件删除在统一事务内登记实际影响，引用规则仍由数据库保证。</summary>
-public sealed class CompanyCrudDeleteExecutor(EfPlatformDbContext dbContext, IPlatformTransactionExecutor? transactions = null)
+public sealed class CompanyCrudDeleteExecutor(
+    EfPlatformDbContext dbContext,
+    OrganizationConditionalDeleteExecutor conditionalDelete)
     : IStandardCrudDeleteGuard, IStandardCrudConditionalDeleteExecutor
 {
     public string ResourceKey => "organization.company";
@@ -44,69 +43,40 @@ public sealed class CompanyCrudDeleteExecutor(EfPlatformDbContext dbContext, IPl
             return StandardCrudMutationResult.Failure(InvalidIdError());
         }
 
-        if (transactions is { IsActive: false } && transactions.HasParticipants(descriptor.ModelName))
-            return await transactions.ExecuteAsync([descriptor.ModelName],
-                token => new ValueTask<StandardCrudMutationResult>(DeleteAsync(descriptor, id, token)), cancellationToken);
-
         var companies = Companies(descriptor);
-        // 数据库可能接受大小写或尾空格别名；登记缓存影响必须使用实际持久化主键，而不是请求文本。
-        var persistedId = await companies.AsNoTracking()
-            .Where(company => EF.Property<string>(company, descriptor.IdField) == id)
-            .Select(company => EF.Property<string>(company, descriptor.IdField))
-            .SingleOrDefaultAsync(cancellationToken);
-        if (persistedId is null)
-            return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
-
-        int affected;
-        try
-        {
-            if (dbContext.Database.IsRelational())
-            {
-                var departments = Departments();
-                var persons = Persons();
-                affected = await companies
-                    .Where(company =>
-                        EF.Property<string>(company, descriptor.IdField) == persistedId
-                        && !departments.Any(department => EF.Property<string>(department, "CompanyId") == persistedId)
-                        && !persons.Any(person => EF.Property<string?>(person, "CompanyId") == persistedId))
-                    .ExecuteDeleteAsync(cancellationToken);
-            }
-            else
-            {
-                var company = await companies.FirstOrDefaultAsync(
-                    row => EF.Property<string>(row, descriptor.IdField) == persistedId,
-                    cancellationToken);
-                if (company is null || await HasReferenceAsync(persistedId, cancellationToken))
+        return await conditionalDelete.DeleteAsync(
+            descriptor,
+            id,
+            new OrganizationConditionalDeletePolicy(
+                (target, persistedId) =>
                 {
-                    affected = 0;
-                }
-                else
+                    var departments = Departments();
+                    var persons = Persons();
+                    return target.Where(_ =>
+                        !departments.Any(department => EF.Property<string>(department, "CompanyId") == persistedId)
+                        && !persons.Any(person => EF.Property<string?>(person, "CompanyId") == persistedId));
+                },
+                async (failure, persistedId, token) =>
                 {
-                    companies.Remove(company);
-                    affected = await dbContext.SaveChangesAsync(cancellationToken);
-                }
-            }
-        }
-        catch (Exception exception) when (EfPersistenceConstraintClassifier.IsKnownConstraintConflict(
-            dbContext.Database.ProviderName,
-            exception))
-        {
-            return StandardCrudMutationResult.Failure(ReferencedError());
-        }
+                    if (failure == OrganizationConditionalDeleteFailure.ConstraintConflict)
+                    {
+                        return StandardCrudMutationResult.Failure(ReferencedError());
+                    }
 
-        if (affected == 1)
-        {
-            if (transactions?.HasParticipants(descriptor.ModelName) is true)
-                transactions.RegisterChange(new PlatformRecordChange(descriptor.ModelName, persistedId, null, null));
-            return StandardCrudMutationResult.Success();
-        }
+                    if (persistedId is null)
+                    {
+                        return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
+                    }
 
-        var exists = await companies.AsNoTracking().AnyAsync(
-            company => EF.Property<string>(company, descriptor.IdField) == persistedId,
+                    var exists = await companies.AsNoTracking().AnyAsync(
+                        company => EF.Property<string>(company, descriptor.IdField) == persistedId,
+                        token);
+                    return exists
+                        ? StandardCrudMutationResult.Failure(ReferencedError())
+                        : StandardCrudMutationResult.Failure(NotFound(descriptor, id));
+                }),
+            OrganizationConditionalDeleteBehavior.TrackedFallbackWithConstraintTranslation,
             cancellationToken);
-        return exists
-            ? StandardCrudMutationResult.Failure(ReferencedError())
-            : StandardCrudMutationResult.Failure(NotFound(descriptor, id));
     }
 
     // Company、Department 与 Person 都由 Organization 持久化边界拥有，引用判断保持数据库侧聚合。

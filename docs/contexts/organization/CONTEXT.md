@@ -6,7 +6,7 @@ Organization 上下文管理组织主数据与人员档案。它描述人员属�
 
 组织树读取由本模块提供根、直属子节点、分页搜索和当前路径；节点上下文由模块解析为标准页面输入。公司直属部门范围显式使用空上级，查询范围与用户筛选相交并在总数、分页前执行。组织管理统一入口组合组织结构与公司、部门、岗位、人员四个全局目录；全局部门通过显式解析器移除节点上下文与固定创建值，以 `queryScope: { kind: "global" }` 向本模块声明全局资源语义。空范围和不完整直属范围仍拒绝，全局范围不得混入直属字段。旧目录地址跳转到对应标签，人员完整详情由导航 metadata 独立声明。完整结构操作及搜索呈现见 [交付地图 #179](https://github.com/yangfengfan2011/NewP/issues/179)。
 
-组织业务查询通过 `Organization.Contracts` 的 `IOrganizationQuery.ReadAsync` 取得同一份不可变当前视图，提供完整档案、当前账号的人员与组织链及批量名称解析。缓存包含四类完整档案及停用记录；标准 CRUD 管理列表、详情和通用组织树保留固定数据库查询及分页。所有正式写入通过统一事务参与机制局部维护缓存，故障期间依赖请求暂不可用，恢复与维护边界见 [ADR-0050](../../adr/0050-organization-cache-holds-full-records-and-fails-closed.md)。
+组织业务查询通过 `Organization.Contracts` 的 `IOrganizationQuery.ReadAsync` 取得同一份不可变当前视图，提供完整档案、当前账号的人员与组织链及批量名称解析。缓存包含四类完整档案及停用记录；标准 CRUD 管理列表、详情和通用组织树保留固定数据库查询及分页。所有正式写入通过统一事务参与机制局部维护缓存，故障期间依赖请求暂不可用，恢复与维护边界见 [ADR-0050](../../adr/0050-organization-cache-holds-full-records-and-fails-closed.md)。公司、部门、岗位和人员的条件删除 adapter 各自保留业务谓词与失败解释，Organization 内部共享执行模块统一负责事务协调、实际持久化主键解析、原子物理删除和成功变更登记。
 
 ## Language
 

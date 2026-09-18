@@ -1,16 +1,15 @@
-using ICP.Platform.Persistence.Abstractions;
-using ICP.Platform.Persistence.Transactions;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
-using ICP.Platform.Crud.Persistence;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Modules.Organization.Crud;
 
 /// <summary>部门条件删除保留引用约束，并通过统一提交入口登记实际删除结果。</summary>
-public sealed class DepartmentCrudDeleteExecutor(EfPlatformDbContext dbContext, IPlatformTransactionExecutor? transactions = null)
+public sealed class DepartmentCrudDeleteExecutor(
+    EfPlatformDbContext dbContext,
+    OrganizationConditionalDeleteExecutor conditionalDelete)
     : IStandardCrudDeleteGuard, IStandardCrudConditionalDeleteExecutor
 {
     public string ResourceKey => "organization.department";
@@ -49,79 +48,48 @@ public sealed class DepartmentCrudDeleteExecutor(EfPlatformDbContext dbContext, 
             return StandardCrudMutationResult.Failure(InvalidIdError());
         }
 
-        if (transactions is { IsActive: false } && transactions.HasParticipants(descriptor.ModelName))
-            return await transactions.ExecuteAsync([descriptor.ModelName],
-                token => new ValueTask<StandardCrudMutationResult>(DeleteAsync(descriptor, id, token)), cancellationToken);
-
         var departments = Departments(descriptor);
-        // 数据库可接受主键别名；后续谓词和缓存登记都使用实际持久化标识。
-        var persistedId = await departments.AsNoTracking()
-            .Where(department => EF.Property<string>(department, descriptor.IdField) == id)
-            .Select(department => EF.Property<string>(department, descriptor.IdField))
-            .SingleOrDefaultAsync(cancellationToken);
-        if (persistedId is null)
-            return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
-
-        int affected;
-        try
-        {
-            if (dbContext.Database.IsRelational())
-            {
-                var persons = Persons();
-                affected = await departments
-                    .Where(department =>
-                        EF.Property<string>(department, descriptor.IdField) == persistedId
-                        && !departments.Any(child =>
+        return await conditionalDelete.DeleteAsync(
+            descriptor,
+            id,
+            new OrganizationConditionalDeletePolicy(
+                (target, persistedId) =>
+                {
+                    var persons = Persons();
+                    return target.Where(_ =>
+                        !departments.Any(child =>
                             EF.Property<string?>(child, "ParentDepartmentId") == persistedId)
-                        && !persons.Any(person => EF.Property<string?>(person, "DepartmentId") == persistedId))
-                    .ExecuteDeleteAsync(cancellationToken);
-            }
-            else
-            {
-                var department = await departments.FirstOrDefaultAsync(
-                    row => EF.Property<string>(row, descriptor.IdField) == persistedId,
-                    cancellationToken);
-                if (department is null
-                    || await HasChildReferenceAsync(descriptor, persistedId, cancellationToken)
-                    || await HasPersonReferenceAsync(persistedId, cancellationToken))
+                        && !persons.Any(person => EF.Property<string?>(person, "DepartmentId") == persistedId));
+                },
+                async (failure, persistedId, token) =>
                 {
-                    affected = 0;
-                }
-                else
-                {
-                    departments.Remove(department);
-                    affected = await dbContext.SaveChangesAsync(cancellationToken);
-                }
-            }
-        }
-        catch (Exception exception) when (EfPersistenceConstraintClassifier.IsKnownConstraintConflict(
-            dbContext.Database.ProviderName,
-            exception))
-        {
-            return StandardCrudMutationResult.Failure(ReferenceRaceError());
-        }
+                    if (failure == OrganizationConditionalDeleteFailure.ConstraintConflict)
+                    {
+                        return StandardCrudMutationResult.Failure(ReferenceRaceError());
+                    }
 
-        if (affected == 1)
-        {
-            if (transactions?.HasParticipants(descriptor.ModelName) is true)
-                transactions.RegisterChange(new PlatformRecordChange(descriptor.ModelName, persistedId, null, null));
-            return StandardCrudMutationResult.Success();
-        }
+                    if (persistedId is null)
+                    {
+                        return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
+                    }
 
-        var exists = await departments.AsNoTracking().AnyAsync(
-            department => EF.Property<string>(department, descriptor.IdField) == persistedId,
+                    var exists = await departments.AsNoTracking().AnyAsync(
+                        department => EF.Property<string>(department, descriptor.IdField) == persistedId,
+                        token);
+                    if (!exists)
+                    {
+                        return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
+                    }
+
+                    if (await HasChildReferenceAsync(descriptor, persistedId, token))
+                    {
+                        return StandardCrudMutationResult.Failure(ChildReferencedError());
+                    }
+
+                    return StandardCrudMutationResult.Failure(PersonReferencedError());
+                }),
+            OrganizationConditionalDeleteBehavior.TrackedFallbackWithConstraintTranslation,
             cancellationToken);
-        if (!exists)
-        {
-            return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
-        }
-
-        if (await HasChildReferenceAsync(descriptor, persistedId, cancellationToken))
-        {
-            return StandardCrudMutationResult.Failure(ChildReferencedError());
-        }
-
-        return StandardCrudMutationResult.Failure(PersonReferencedError());
     }
 
     // 任意状态的直接子部门都阻止物理删除；更深层后代必然经由直接子级形成引用。

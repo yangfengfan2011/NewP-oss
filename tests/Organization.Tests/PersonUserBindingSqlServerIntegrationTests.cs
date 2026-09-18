@@ -247,7 +247,9 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
             {
                 await using var context = CreateRuntimeContext(fixture.ConnectionString);
                 var repository = new EfPersonUserBindingRepository(context);
-                var executor = new PersonCrudDeleteGuard(repository, context);
+                var executor = new PersonCrudDeleteGuard(
+                    repository,
+                    new OrganizationConditionalDeleteExecutor(context));
                 start.SignalAndWait();
                 return await executor.DeleteAsync(PersonCrudDescriptorFactory.Create(), "Person_Race");
             });
@@ -294,7 +296,9 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
 
             await using (var context = CreateRuntimeContext(fixture.ConnectionString))
             {
-                var executor = new PositionCrudDeleteExecutor(context);
+                var executor = new PositionCrudDeleteExecutor(
+                    context,
+                    new OrganizationConditionalDeleteExecutor(context));
                 var missing = await executor.DeleteAsync(PositionCrudDescriptorFactory.Create(), "Position_Missing");
                 var enabled = await executor.DeleteAsync(PositionCrudDescriptorFactory.Create(), "Position_Enabled");
                 var disabled = await executor.DeleteAsync(PositionCrudDescriptorFactory.Create(), "Position_Disabled");
@@ -316,7 +320,9 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
                 "UPDATE [Person] SET [PositionId] = NULL WHERE [EID] = N'Person_Referenced';");
             await using (var context = CreateRuntimeContext(fixture.ConnectionString))
             {
-                var deleted = await new PositionCrudDeleteExecutor(context)
+                var deleted = await new PositionCrudDeleteExecutor(
+                        context,
+                        new OrganizationConditionalDeleteExecutor(context))
                     .DeleteAsync(PositionCrudDescriptorFactory.Create(), "Position_Referenced");
                 Assert.True(deleted.Succeeded);
             }
@@ -360,7 +366,9 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
             {
                 await using var context = CreateRuntimeContext(fixture.ConnectionString);
                 start.SignalAndWait();
-                return await new PositionCrudDeleteExecutor(context)
+                return await new PositionCrudDeleteExecutor(
+                        context,
+                        new OrganizationConditionalDeleteExecutor(context))
                     .DeleteAsync(PositionCrudDescriptorFactory.Create(), "Position_Race");
             });
 

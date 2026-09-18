@@ -1,5 +1,3 @@
-using ICP.Platform.Persistence.Abstractions;
-using ICP.Platform.Persistence.Transactions;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
@@ -9,7 +7,9 @@ using Microsoft.EntityFrameworkCore;
 namespace ICP.Platform.Modules.Organization.Crud;
 
 /// <summary>岗位条件删除保留人员引用约束，并通过统一提交入口登记实际删除结果。</summary>
-public sealed class PositionCrudDeleteExecutor(EfPlatformDbContext dbContext, IPlatformTransactionExecutor? transactions = null)
+public sealed class PositionCrudDeleteExecutor(
+    EfPlatformDbContext dbContext,
+    OrganizationConditionalDeleteExecutor conditionalDelete)
     : IStandardCrudDeleteGuard, IStandardCrudConditionalDeleteExecutor
 {
     public string ResourceKey => "organization.position";
@@ -47,61 +47,30 @@ public sealed class PositionCrudDeleteExecutor(EfPlatformDbContext dbContext, IP
             return StandardCrudMutationResult.Failure(InvalidIdError());
         }
 
-        if (transactions is { IsActive: false } && transactions.HasParticipants(descriptor.ModelName))
-            return await transactions.ExecuteAsync([descriptor.ModelName],
-                token => new ValueTask<StandardCrudMutationResult>(DeleteAsync(descriptor, id, token)), cancellationToken);
-
         var positions = Positions(descriptor);
-        // 数据库可接受主键别名；后续谓词和缓存登记都使用实际持久化标识。
-        var persistedId = await positions.AsNoTracking()
-            .Where(position => EF.Property<string>(position, descriptor.IdField) == id)
-            .Select(position => EF.Property<string>(position, descriptor.IdField))
-            .SingleOrDefaultAsync(cancellationToken);
-        if (persistedId is null)
-            return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
-
         var persons = Persons(descriptor);
-        int affected;
-        if (dbContext.Database.IsRelational())
-        {
-            affected = await positions
-                .Where(position =>
-                    EF.Property<string>(position, descriptor.IdField) == persistedId
-                    && !persons.Any(person => EF.Property<string?>(person, "PositionId") == persistedId))
-                .ExecuteDeleteAsync(cancellationToken);
-        }
-        else
-        {
-            var position = await positions.FirstOrDefaultAsync(
-                item => EF.Property<string>(item, descriptor.IdField) == persistedId,
-                cancellationToken);
-            var referenced = position is not null && await persons.AnyAsync(
-                person => EF.Property<string?>(person, "PositionId") == persistedId,
-                cancellationToken);
-            if (position is null || referenced)
-            {
-                affected = 0;
-            }
-            else
-            {
-                positions.Remove(position);
-                affected = await dbContext.SaveChangesAsync(cancellationToken);
-            }
-        }
+        return await conditionalDelete.DeleteAsync(
+            descriptor,
+            id,
+            new OrganizationConditionalDeletePolicy(
+                (target, persistedId) => target.Where(_ =>
+                    !persons.Any(person => EF.Property<string?>(person, "PositionId") == persistedId)),
+                async (_, persistedId, token) =>
+                {
+                    if (persistedId is null)
+                    {
+                        return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
+                    }
 
-        if (affected == 1)
-        {
-            if (transactions?.HasParticipants(descriptor.ModelName) is true)
-                transactions.RegisterChange(new PlatformRecordChange(descriptor.ModelName, persistedId, null, null));
-            return StandardCrudMutationResult.Success();
-        }
-
-        var exists = await positions.AsNoTracking().AnyAsync(
-            position => EF.Property<string>(position, descriptor.IdField) == persistedId,
+                    var exists = await positions.AsNoTracking().AnyAsync(
+                        position => EF.Property<string>(position, descriptor.IdField) == persistedId,
+                        token);
+                    return exists
+                        ? StandardCrudMutationResult.Failure(ReferencedError())
+                        : StandardCrudMutationResult.Failure(NotFound(descriptor, id));
+                }),
+            OrganizationConditionalDeleteBehavior.TrackedFallback,
             cancellationToken);
-        return exists
-            ? StandardCrudMutationResult.Failure(ReferencedError())
-            : StandardCrudMutationResult.Failure(NotFound(descriptor, id));
     }
 
     // Position 与 Person 都由 Organization 拥有，executor 只在模块持久化边界内组合二者。

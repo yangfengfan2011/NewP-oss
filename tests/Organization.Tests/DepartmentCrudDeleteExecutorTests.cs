@@ -20,7 +20,7 @@ public sealed class DepartmentCrudDeleteExecutorTests
         AddDepartment(context, "Department_1", "Company_1");
         await context.SaveChangesAsync();
 
-        var result = await new DepartmentCrudDeleteExecutor(context).DeleteAsync(
+        var result = await CreateExecutor(context).DeleteAsync(
             DepartmentCrudDescriptorFactory.Create(),
             "Department_1");
 
@@ -37,7 +37,7 @@ public sealed class DepartmentCrudDeleteExecutorTests
         AddPerson(context, "Person_1", "Company_1", "Department_1");
         await context.SaveChangesAsync();
 
-        var result = await new DepartmentCrudDeleteExecutor(context).DeleteAsync(
+        var result = await CreateExecutor(context).DeleteAsync(
             DepartmentCrudDescriptorFactory.Create(),
             "Department_1");
 
@@ -56,7 +56,7 @@ public sealed class DepartmentCrudDeleteExecutorTests
         AddDepartment(context, "Department_Child", "Company_1", "Department_Parent");
         await context.SaveChangesAsync();
 
-        var result = await new DepartmentCrudDeleteExecutor(context).DeleteAsync(
+        var result = await CreateExecutor(context).DeleteAsync(
             DepartmentCrudDescriptorFactory.Create(),
             "Department_Parent");
 
@@ -71,7 +71,7 @@ public sealed class DepartmentCrudDeleteExecutorTests
     {
         await using var context = CreateContext();
 
-        var result = await new DepartmentCrudDeleteExecutor(context).DeleteAsync(
+        var result = await CreateExecutor(context).DeleteAsync(
             DepartmentCrudDescriptorFactory.Create(),
             "Department_Missing");
 
@@ -92,6 +92,9 @@ public sealed class DepartmentCrudDeleteExecutorTests
             .ToArray();
         return new EfPlatformDbContext(options, definitions);
     }
+
+    private static DepartmentCrudDeleteExecutor CreateExecutor(EfPlatformDbContext context) =>
+        new(context, new OrganizationConditionalDeleteExecutor(context));
 
     private static DbSet<Dictionary<string, object?>> Rows(EfPlatformDbContext context, string modelName) =>
         context.Set<Dictionary<string, object?>>(context.ResolveModelKey(modelName));

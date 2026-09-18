@@ -2,9 +2,6 @@ using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Modules.Organization.Repositories;
-using ICP.Platform.Persistence.EfCore;
-using ICP.Platform.Persistence.Abstractions;
-using ICP.Platform.Persistence.Transactions;
 using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Modules.Organization.Crud;
@@ -12,18 +9,15 @@ namespace ICP.Platform.Modules.Organization.Crud;
 public sealed class PersonCrudDeleteGuard : IStandardCrudDeleteGuard, IStandardCrudConditionalDeleteExecutor
 {
     private readonly IPersonUserBindingRepository _bindingRepository;
-    private readonly EfPlatformDbContext _dbContext;
-    private readonly IPlatformTransactionExecutor? _transactions;
+    private readonly OrganizationConditionalDeleteExecutor _conditionalDelete;
 
     /// <summary>条件删除复用组织统一提交参与者，同时保留永久绑定保护。</summary>
     public PersonCrudDeleteGuard(
         IPersonUserBindingRepository bindingRepository,
-        EfPlatformDbContext dbContext,
-        IPlatformTransactionExecutor? transactions = null)
+        OrganizationConditionalDeleteExecutor conditionalDelete)
     {
         _bindingRepository = bindingRepository;
-        _dbContext = dbContext;
-        _transactions = transactions;
+        _conditionalDelete = conditionalDelete;
     }
 
     public string ResourceKey => "organization.person";
@@ -58,34 +52,25 @@ public sealed class PersonCrudDeleteGuard : IStandardCrudDeleteGuard, IStandardC
             return StandardCrudMutationResult.Failure(InvalidIdError());
         }
 
-        if (_transactions is { IsActive: false } && _transactions.HasParticipants(descriptor.ModelName))
-            return await _transactions.ExecuteAsync([descriptor.ModelName],
-                token => new ValueTask<StandardCrudMutationResult>(DeleteAsync(descriptor, id, token)), cancellationToken);
+        return await _conditionalDelete.DeleteAsync(
+            descriptor,
+            id,
+            new OrganizationConditionalDeletePolicy(
+                (target, _) => target.Where(row => EF.Property<string?>(row, "AccountEID") == null),
+                async (_, persistedId, token) =>
+                {
+                    if (persistedId is null)
+                    {
+                        return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
+                    }
 
-        var persons = _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName));
-        // 数据库可接受主键别名；后续谓词和缓存登记都使用实际持久化标识。
-        var persistedId = await persons.AsNoTracking()
-            .Where(row => EF.Property<string>(row, descriptor.IdField) == id)
-            .Select(row => EF.Property<string>(row, descriptor.IdField))
-            .SingleOrDefaultAsync(cancellationToken);
-        if (persistedId is null)
-            return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
-
-        var affected = await persons
-            .Where(row => EF.Property<string>(row, descriptor.IdField) == persistedId
-                && EF.Property<string?>(row, "AccountEID") == null)
-            .ExecuteDeleteAsync(cancellationToken);
-        if (affected == 1)
-        {
-            if (_transactions?.HasParticipants(descriptor.ModelName) is true)
-                _transactions.RegisterChange(new PlatformRecordChange(descriptor.ModelName, persistedId, null, null));
-            return StandardCrudMutationResult.Success();
-        }
-
-        var remaining = await _bindingRepository.FindAsync(persistedId, cancellationToken);
-        return remaining?.AccountEid is not null
-            ? StandardCrudMutationResult.Failure(BoundError())
-            : StandardCrudMutationResult.Failure(NotFound(descriptor, id));
+                    var remaining = await _bindingRepository.FindAsync(persistedId, token);
+                    return remaining?.AccountEid is not null
+                        ? StandardCrudMutationResult.Failure(BoundError())
+                        : StandardCrudMutationResult.Failure(NotFound(descriptor, id));
+                }),
+            OrganizationConditionalDeleteBehavior.RelationalOnly,
+            cancellationToken);
     }
 
     // 未匹配记录或并发已删除时保留标准 CRUD 的 404 形状。

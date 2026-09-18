@@ -61,6 +61,7 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         services.AddScoped<IStandardCrudValidator, PersonCrudValidator>();
         services.AddScoped<IStandardCrudValidator, CompanyCrudValidator>();
         services.AddScoped<IStandardCrudValidator, DepartmentCrudValidator>();
+        services.AddScoped<OrganizationConditionalDeleteExecutor>();
         services.AddStandardCrudConditionalDelete<CompanyCrudDeleteExecutor>();
         services.AddStandardCrudConditionalDelete<DepartmentCrudDeleteExecutor>();
         services.AddStandardCrudConditionalDelete<PositionCrudDeleteExecutor>();

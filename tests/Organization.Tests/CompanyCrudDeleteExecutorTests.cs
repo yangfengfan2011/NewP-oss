@@ -18,7 +18,7 @@ public sealed class CompanyCrudDeleteExecutorTests
         await using var context = CreateContext();
         AddCompany(context, "Company_1");
         await context.SaveChangesAsync();
-        var executor = new CompanyCrudDeleteExecutor(context);
+        var executor = CreateExecutor(context);
 
         var result = await executor.DeleteAsync(CompanyCrudDescriptorFactory.Create(), "Company_1");
 
@@ -42,7 +42,7 @@ public sealed class CompanyCrudDeleteExecutorTests
             AddPerson(context, "Person_1", "Company_1");
         }
         await context.SaveChangesAsync();
-        var executor = new CompanyCrudDeleteExecutor(context);
+        var executor = CreateExecutor(context);
 
         var result = await executor.DeleteAsync(CompanyCrudDescriptorFactory.Create(), "Company_1");
 
@@ -56,7 +56,7 @@ public sealed class CompanyCrudDeleteExecutorTests
     public async Task DeleteAsync_MissingCompanyReturnsStandardNotFound()
     {
         await using var context = CreateContext();
-        var executor = new CompanyCrudDeleteExecutor(context);
+        var executor = CreateExecutor(context);
 
         var result = await executor.DeleteAsync(CompanyCrudDescriptorFactory.Create(), "Company_Missing");
 
@@ -77,6 +77,9 @@ public sealed class CompanyCrudDeleteExecutorTests
             .ToArray();
         return new EfPlatformDbContext(options, definitions);
     }
+
+    private static CompanyCrudDeleteExecutor CreateExecutor(EfPlatformDbContext context) =>
+        new(context, new OrganizationConditionalDeleteExecutor(context));
 
     private static DbSet<Dictionary<string, object?>> Rows(EfPlatformDbContext context, string modelName) =>
         context.Set<Dictionary<string, object?>>(context.ResolveModelKey(modelName));

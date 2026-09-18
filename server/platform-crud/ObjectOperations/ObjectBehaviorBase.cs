@@ -2,6 +2,7 @@ using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.Runtime;
+using System.Collections.Frozen;
 
 namespace ICP.Platform.Crud.ObjectOperations;
 
@@ -74,6 +75,9 @@ public abstract class ObjectBehaviorBase(ObjectBehaviorDefinition definition) : 
             await recorder.RegisterAsync(created, cancellationToken);
         }
 
-        return StandardCrudMutationResult.Success(new StandardCrudDetail { Fields = created });
+        return StandardCrudMutationResult.Success(new StandardCrudDetail
+        {
+            Fields = created.ToFrozenDictionary(StringComparer.Ordinal)
+        });
     }
 }

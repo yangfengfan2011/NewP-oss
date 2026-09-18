@@ -12,7 +12,7 @@ using ICP.Platform.HostApi.Extensions;
 using ICP.Platform.HostApi.Authentication;
 using ICP.Platform.HostApi.Authorization;
 using ICP.Platform.HostApi.Persistence;
-using ICP.Platform.Kernel.Abstractions;
+using ICP.Platform.Kernel.Extensions;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Audit;
 using ICP.Platform.Modules.Audit.Persistence.Descriptors;
@@ -53,6 +53,17 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class BusinessAuditSqlServerHttpApiTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "正式模块无效扩展顺序在 Host 接受请求前失败关闭")]
+    public async Task HostStartup_WhenFormalModuleContributionHasMissingOrderDependency_RejectsBeforeRequests()
+    {
+        var exception = await Assert.ThrowsAnyAsync<Exception>(() => BusinessAuditHostFixture.CreateAsync(services =>
+            services.AddObjectOperationExtension<InvalidOrderPersonCreateProbeExtension>(
+                new ObjectOperationExtensionProbeModule(),
+                InvalidOrderPersonCreateProbeExtension.Definition)));
+
+        Assert.Contains("OBJECT_OPERATION_EXTENSION_ORDER_DEPENDENCY_NOT_FOUND", exception.ToString(), StringComparison.Ordinal);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "两个正式Identity普通账号消费父规格维护与查询职责")]
     public async Task UserRoles_TwoRealAccountsConsumeConfiguredResponsibilitiesOnNewLogin()
     {
@@ -454,6 +465,87 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.Equal(SystemEntityAuditStampProvider.SystemActorId, stored["CreatedBy"]);
         Assert.Equal(stored["CreatedAt"], stored["UpdatedAt"]);
     }
+
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "真实模块扩展与人员创建在同一 SQL 事务内成功或共同回滚")]
+    public async Task PersonCreation_FormalModuleExtensionsCommitOrRollbackPersonAuditAndCacheTogether()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
+        using var client = await fixture.LoginAdministratorAsync();
+        var control = fixture.Services.GetRequiredService<ObjectOperationExtensionProbeControl>();
+
+        control.Mode = ObjectOperationExtensionProbeMode.Supplement;
+        control.SupplementedName = "正式扩展补充姓名";
+        var created = await FeatureHttpTestRequests.CreateAsync(
+            client,
+            http.Organization("persons", "create", "list.pageActions"),
+            "/api/organization/persons",
+            new { PersonNo = "EXT-SUCCESS", EmploymentStatus = "Active", IsEnabled = true });
+        var personId = Id(created);
+        Assert.Equal("正式扩展补充姓名", created.GetProperty("fields").GetProperty("ENAME").GetString());
+        Assert.Equal("正式扩展补充姓名", control.AfterInput!["ENAME"]);
+        Assert.Equal("正式扩展补充姓名", control.AfterResult!["ENAME"]);
+        Assert.True(control.AfterMutationBlocked);
+
+        control.Mode = ObjectOperationExtensionProbeMode.InvalidFinalInput;
+        using var invalid = await FeatureHttpTestRequests.SendAsync(
+            client,
+            http.Organization("persons", "create", "list.pageActions"),
+            HttpMethod.Post,
+            "/api/organization/persons",
+            new { PersonNo = "EXT-INVALID", ENAME = "原始有效姓名", EmploymentStatus = "Active", IsEnabled = true });
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+
+        control.Mode = ObjectOperationExtensionProbeMode.Reject;
+        using var rejected = await FeatureHttpTestRequests.SendAsync(
+            client,
+            http.Organization("persons", "create", "list.pageActions"),
+            HttpMethod.Post,
+            "/api/organization/persons",
+            new { PersonNo = "EXT-REJECT", ENAME = "扩展拒绝", EmploymentStatus = "Active", IsEnabled = true });
+        Assert.Equal(HttpStatusCode.Conflict, rejected.StatusCode);
+
+        control.Mode = ObjectOperationExtensionProbeMode.ProtectedInput;
+        using var protectedFailure = await FeatureHttpTestRequests.SendAsync(
+            client,
+            http.Organization("persons", "create", "list.pageActions"),
+            HttpMethod.Post,
+            "/api/organization/persons",
+            new { PersonNo = "EXT-PROTECTED", ENAME = "保护字段", EmploymentStatus = "Active", IsEnabled = true });
+        Assert.Equal(HttpStatusCode.InternalServerError, protectedFailure.StatusCode);
+
+        control.Mode = ObjectOperationExtensionProbeMode.AfterFailure;
+        using var afterFailure = await FeatureHttpTestRequests.SendAsync(
+            client,
+            http.Organization("persons", "create", "list.pageActions"),
+            HttpMethod.Post,
+            "/api/organization/persons",
+            new { PersonNo = "EXT-AFTER", ENAME = "后置失败", EmploymentStatus = "Active", IsEnabled = true });
+        Assert.Equal(HttpStatusCode.InternalServerError, afterFailure.StatusCode);
+
+        control.Mode = ObjectOperationExtensionProbeMode.None;
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        var people = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Person"))
+            .AsNoTracking()
+            .Where(row => EF.Property<string>(row, "PersonNo").StartsWith("EXT-"))
+            .ToArrayAsync();
+        var stored = Assert.Single(people);
+        Assert.Equal(personId, stored["EID"]);
+        Assert.Equal("正式扩展补充姓名", stored["ENAME"]);
+        var audits = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("BusinessChange"))
+            .AsNoTracking()
+            .Where(row => EF.Property<string>(row, "Resource") == "organization.person")
+            .ToArrayAsync();
+        var audit = Assert.Single(audits);
+        Assert.Equal(personId, audit["TargetId"]);
+        var cache = await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync();
+        var cached = Assert.Single(cache.Persons.Values, person =>
+            Convert.ToString(person["PersonNo"])!.StartsWith("EXT-", StringComparison.Ordinal));
+        Assert.Equal(personId, cached["EID"]);
+        Assert.Equal("正式扩展补充姓名", cached["ENAME"]);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "登记、写入、保存和确定未提交故障共同回滚")]
     public async Task PersonCreation_WhenParticipantOrStoreFails_RollsBackPersonAndRecord()
     {
@@ -598,12 +690,27 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
             ["Identity:Credentials:UseSharedDevelopmentCredential"] = "false",
             ["Logging:LogLevel:Default"] = "Warning"
         });
-        IModule[] modules = [new IdentityModule(), new AuthenticationModule(), new AuthorizationModule(), new AuditModule(), new OrganizationModule()];
-        foreach (var module in modules) module.ConfigureServices(builder.Services);
+        var moduleAssemblies = new[]
+        {
+            typeof(IdentityModule).Assembly,
+            typeof(AuthenticationModule).Assembly,
+            typeof(AuthorizationModule).Assembly,
+            typeof(AuditModule).Assembly,
+            typeof(OrganizationModule).Assembly,
+            typeof(ObjectOperationExtensionProbeModule).Assembly
+        };
+        builder.Services.AddModuleSystem(options =>
+        {
+            foreach (var assembly in moduleAssemblies)
+            {
+                options.Assemblies.Add(assembly);
+            }
+        });
+        var productionModuleIds = new[] { "Identity", "Authentication", "Authorization", "Audit", "Organization" };
         var hostRoot = Path.GetDirectoryName(typeof(AuthController).Assembly.Location)!;
         var trust = TrustedBuiltInModuleSource.CreateForHost(hostRoot, Path.Combine(hostRoot, "modules"));
         var candidates = new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(trust)
-            .Where(candidate => modules.Any(module => module.ModuleId == candidate.ModuleId)).ToArray();
+            .Where(candidate => productionModuleIds.Contains(candidate.ModuleId, StringComparer.Ordinal)).ToArray();
         var modulePlan = new CanonicalModulePlanCompiler().Compile("personnel-authorization", candidates).Plan
             ?? throw new InvalidOperationException("Formal module plan did not compile.");
         FeatureCatalog = modulePlan.FeatureCatalog;

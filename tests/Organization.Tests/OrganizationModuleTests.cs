@@ -53,13 +53,20 @@ public class OrganizationModuleTests
         new OrganizationModule().ConfigureServices(services);
 
         var registration = Assert.Single(services, descriptor =>
-            descriptor.ServiceType == typeof(IObjectBehavior));
-        Assert.Equal(typeof(PersonObjectBehavior), registration.ImplementationType);
+            descriptor.ServiceType.Name == "IObjectBehaviorContribution");
+        Assert.NotNull(registration.ImplementationFactory);
         Assert.Equal(ServiceLifetime.Scoped, registration.Lifetime);
+        Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(IObjectBehavior));
         Assert.Equal("organization.person", PersonObjectBehavior.BehaviorDefinition.ObjectKey);
+        Assert.Equal("Organization", PersonObjectBehavior.BehaviorDefinition.OwnerModuleId);
         Assert.Equal("Organization/Person", PersonObjectBehavior.BehaviorDefinition.ModelKey);
         Assert.Equal([ObjectOperationAction.Create], PersonObjectBehavior.BehaviorDefinition.SupportedActions);
         Assert.Equal([ObjectOperationAction.Create], PersonObjectBehavior.BehaviorDefinition.OpenExtensionActions);
+        Assert.Equal(
+            ["CreatedAt", "CreatedBy", "EID", "UpdatedAt", "UpdatedBy"],
+            PersonObjectBehavior.BehaviorDefinition.ProtectedInputFields.Order(StringComparer.Ordinal));
+        Assert.DoesNotContain(services, descriptor =>
+            descriptor.ServiceType == typeof(IObjectOperationExtension));
         Assert.DoesNotContain(
             typeof(ObjectOperationContext).GetConstructors(),
             constructor => constructor.IsPublic);

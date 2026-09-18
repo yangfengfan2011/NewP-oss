@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+
 namespace ICP.Platform.Crud.ObjectOperations;
 
 /// <summary>
@@ -5,6 +7,7 @@ namespace ICP.Platform.Crud.ObjectOperations;
 /// </summary>
 public sealed class ObjectOperationContext
 {
+    // 只允许执行器创建最终输入上下文，调用方不能绕过 before 与保护字段规则。
     internal ObjectOperationContext(
         string objectKey,
         ObjectOperationAction action,
@@ -15,7 +18,7 @@ public sealed class ObjectOperationContext
         ArgumentNullException.ThrowIfNull(values);
         ObjectKey = objectKey;
         Action = action;
-        Values = new Dictionary<string, object?>(values, StringComparer.Ordinal);
+        Values = values.ToFrozenDictionary(StringComparer.Ordinal);
     }
 
     /// <summary>当前对象的稳定标识。</summary>

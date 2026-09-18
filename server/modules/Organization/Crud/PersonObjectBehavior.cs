@@ -18,9 +18,11 @@ public sealed class PersonObjectBehavior(
     /// <summary>人员首片只实现并开放创建动作。</summary>
     public static ObjectBehaviorDefinition BehaviorDefinition { get; } = new(
         "organization.person",
+        "Organization",
         "Organization/Person",
         [ObjectOperationAction.Create],
-        [ObjectOperationAction.Create]);
+        [ObjectOperationAction.Create],
+        ["EID", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"]);
 
     // 最终业务输入在行为内经过标准规则与 Person validator 后才登记写入。
     protected override ValueTask<StandardCrudMutationResult> CreateAsync(

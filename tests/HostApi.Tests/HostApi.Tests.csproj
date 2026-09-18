@@ -21,6 +21,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="ObjectOperationExtensionProbe.newp.plugin.json">
+      <LogicalName>ICP.Platform.HostApi.Tests.ObjectOperationExtensionProbe.newp.plugin.json</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\apps\host-api\HostApi.csproj" />
   </ItemGroup>
 

@@ -62,6 +62,7 @@ public sealed class ObjectOperationExecutorTests
     {
         var invalid = new ObjectBehaviorDefinition(
             "organization.person",
+            "Organization",
             "Organization/Person",
             [ObjectOperationAction.Create],
             [ObjectOperationAction.Update]);
@@ -113,6 +114,7 @@ public sealed class ObjectOperationExecutorTests
 
     private static ObjectBehaviorDefinition PersonDefinition() => new(
         "organization.person",
+        "Organization",
         "Organization/Person",
         [ObjectOperationAction.Create],
         [ObjectOperationAction.Create]);

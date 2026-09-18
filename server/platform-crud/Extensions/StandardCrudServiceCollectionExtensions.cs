@@ -7,8 +7,10 @@ using ICP.Platform.Crud.Persistence;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Query.Runtime;
 using ICP.Platform.Persistence.Auditing;
+using ICP.Platform.Kernel.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 
 namespace ICP.Platform.Crud.Extensions;
 
@@ -38,10 +40,101 @@ public static class StandardCrudServiceCollectionExtensions
         services.AddScoped<IStandardCrudRepository>(static provider =>
             provider.GetRequiredService<EfStandardCrudRepository>());
         services.AddScoped<StandardCrudCreateRequestPreparer>();
-        services.AddScoped<IObjectOperationExecutor, ObjectOperationExecutor>();
+        services.AddOptions<ObjectOperationAssemblyOptions>();
+        services.TryAddSingleton<ObjectOperationAssemblyPlan>();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, ObjectOperationAssemblyStartupValidator>());
+        services.AddScoped<IObjectOperationExecutor>(static provider =>
+            new ObjectOperationExecutor(
+                provider.GetServices<IObjectBehaviorContribution>(),
+                provider.GetServices<IObjectOperationExtensionContribution>(),
+                provider.GetRequiredService<ObjectOperationAssemblyPlan>(),
+                provider.GetRequiredService<IEntityAuditValueProvider>(),
+                provider.GetService<ICP.Platform.Persistence.Abstractions.IPlatformTransactionExecutor>()));
         services.AddScoped<IStandardCrudService, StandardCrudService>();
         services.AddScoped<StandardCrudExportService>();
         services.AddScoped<StandardCrudEndpoint>();
+        return services;
+    }
+
+    /// <summary>
+    /// 以对象拥有模块的正式 metadata 注册一个对象行为及其静态声明。
+    /// </summary>
+    public static IServiceCollection AddObjectBehavior<TBehavior>(
+        this IServiceCollection services,
+        IModuleMetadata owner,
+        ObjectBehaviorDefinition definition)
+        where TBehavior : class, IObjectBehavior =>
+        services.AddObjectBehavior<TBehavior>(
+            owner,
+            definition,
+            static (provider, _) => ActivatorUtilities.CreateInstance<TBehavior>(provider));
+
+    /// <summary>
+    /// 以显式工厂注册可复用对象行为；同一实现类型可按不同对象声明创建独立实例。
+    /// </summary>
+    public static IServiceCollection AddObjectBehavior<TBehavior>(
+        this IServiceCollection services,
+        IModuleMetadata owner,
+        ObjectBehaviorDefinition definition,
+        Func<IServiceProvider, ObjectBehaviorDefinition, TBehavior> factory)
+        where TBehavior : class, IObjectBehavior
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentNullException.ThrowIfNull(factory);
+        services.AddOptions<ObjectOperationAssemblyOptions>()
+            .Configure(options => options.Behaviors.Add(new(
+                owner.ModuleId,
+                definition)));
+        services.AddScoped<IObjectBehaviorContribution>(provider =>
+            new ObjectBehaviorContribution(
+                definition.ObjectKey,
+                factory(provider, definition)));
+        return services;
+    }
+
+    /// <summary>
+    /// 以扩展提供模块的正式 metadata 注册一个对象动作扩展；模块依赖由启动期装配校验。
+    /// </summary>
+    public static IServiceCollection AddObjectOperationExtension<TExtension>(
+        this IServiceCollection services,
+        IModuleMetadata provider,
+        ObjectOperationExtensionDefinition definition)
+        where TExtension : class, IObjectOperationExtension =>
+        services.AddObjectOperationExtension<TExtension>(
+            provider,
+            definition,
+            static (serviceProvider, _) => ActivatorUtilities.CreateInstance<TExtension>(serviceProvider));
+
+    /// <summary>
+    /// 以显式工厂注册可复用扩展实现；实例始终与声明的扩展 identity 绑定。
+    /// </summary>
+    public static IServiceCollection AddObjectOperationExtension<TExtension>(
+        this IServiceCollection services,
+        IModuleMetadata provider,
+        ObjectOperationExtensionDefinition definition,
+        Func<IServiceProvider, ObjectOperationExtensionDefinition, TExtension> factory)
+        where TExtension : class, IObjectOperationExtension
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(provider);
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentNullException.ThrowIfNull(factory);
+        var dependencies = provider.Dependencies.ToArray();
+        services.AddOptions<ObjectOperationAssemblyOptions>()
+            .Configure(options => options.Extensions.Add(new(
+                provider.ModuleId,
+                dependencies,
+                definition)));
+        var identity = new ObjectOperationExtensionIdentity(
+            definition.ObjectKey,
+            definition.Action,
+            definition.ExtensionKey);
+        services.AddScoped<IObjectOperationExtensionContribution>(serviceProvider =>
+            new ObjectOperationExtensionContribution(
+                identity,
+                factory(serviceProvider, definition)));
         return services;
     }
 

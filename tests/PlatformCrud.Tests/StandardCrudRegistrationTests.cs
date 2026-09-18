@@ -23,7 +23,9 @@ public sealed class StandardCrudRegistrationTests
         AssertFactoryRegistration<IEntityAuditValueProvider>(services);
         Assert.DoesNotContain(services, item => item.ServiceType == typeof(IStandardCrudCreationParticipant));
         Assert.DoesNotContain(services, item => item.ServiceType == typeof(IStandardCrudUpdateParticipant));
-        AssertRegistration<ObjectOperationExecutor>(services, typeof(IObjectOperationExecutor));
+        AssertFactoryRegistration<IObjectOperationExecutor>(services);
+        Assert.Contains(services, item => item.ServiceType == typeof(Microsoft.Extensions.Hosting.IHostedService)
+            && item.ImplementationType?.Name == "ObjectOperationAssemblyStartupValidator");
         AssertRegistration<StandardCrudCreateRequestPreparer>(services, typeof(StandardCrudCreateRequestPreparer));
     }
 

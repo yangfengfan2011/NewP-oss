@@ -503,7 +503,7 @@ public sealed class PersonCrudValidatorTests
             new FakeDepartmentDirectory(departments),
             new FakePositionRepository(positions ?? []),
             repository ?? new FakeStandardCrudRepository(existing),
-            new RecordingOrganizationQuery(companies, departments));
+            OrganizationFactsTestServices.Published(new RecordingOrganizationQuery(companies, departments)));
 
     private static Dictionary<string, object?> Values(string? companyId, string? departmentId) => new(StringComparer.Ordinal)
     {

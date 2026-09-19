@@ -14,6 +14,44 @@ namespace ICP.Platform.Modules.Organization.Tests;
 public sealed class DepartmentCrudValidatorTests
 {
     [Fact]
+    public async Task ValidateUpdateAsync_MissingPublishedRootCompanyRetainsFormalCompanyDisabledError()
+    {
+        await using var context = CreateContext();
+        AddCompany(context, "company", true);
+        AddDepartment(context, "root", "company");
+        AddDepartment(context, "child", "company", "root");
+        await context.SaveChangesAsync();
+        var validator = new DepartmentCrudValidator(context, new SqlServerDepartmentHierarchyQuery(context),
+            OrganizationFactsTestServices.Published(new RecordingOrganizationQuery()));
+
+        // 正式依赖路径的根目标失败始终是 CompanyDisabled；创建时的 SQL 存在性检查仍独立返回 CompanyNotFound。
+        var error = await validator.ValidateUpdateAsync(DepartmentCrudDescriptorFactory.Create(), "child",
+            new Dictionary<string, object?> { ["ParentDepartmentId"] = null });
+
+        Assert.Equal(409, error?.StatusCode);
+        Assert.Equal("Organization.Department.CompanyDisabled", error?.Code);
+        Assert.Equal("CompanyId", Assert.Single(error!.FieldErrors).Field);
+    }
+
+    [Fact]
+    public async Task ValidateCreateAsync_MissingPublishedParentRetainsFormalParentChainError()
+    {
+        await using var context = CreateContext();
+        AddCompany(context, "company", true);
+        AddDepartment(context, "parent", "company");
+        await context.SaveChangesAsync();
+        var validator = new DepartmentCrudValidator(context, new SqlServerDepartmentHierarchyQuery(context),
+            OrganizationFactsTestServices.Published(new RecordingOrganizationQuery()));
+
+        var error = await validator.ValidateCreateAsync(DepartmentCrudDescriptorFactory.Create(),
+            new Dictionary<string, object?> { ["CompanyId"] = "company", ["ParentDepartmentId"] = "parent" });
+
+        Assert.Equal(400, error?.StatusCode);
+        Assert.Equal("Organization.Department.ParentChainDisabled", error?.Code);
+        Assert.Equal("ParentDepartmentId", Assert.Single(error!.FieldErrors).Field);
+    }
+
+    [Fact]
     public async Task ValidateCreateAsync_RejectsDisabledAncestorBeyondImmediateParent()
     {
         await using var context = CreateContext();
@@ -288,7 +326,8 @@ public sealed class DepartmentCrudValidatorTests
             .Select(row => new ICP.Platform.Modules.Organization.Models.Department { Id = (string)row["EID"]!, CompanyId = (string)row["CompanyId"]!,
                 ParentDepartmentId = row["ParentDepartmentId"] as string, IsEnabled = row["IsEnabled"] is true });
         var query = new RecordingOrganizationQuery(companies, departments);
-        return new DepartmentCrudValidator(context, hierarchy ?? new SqlServerDepartmentHierarchyQuery(context), query);
+        return new DepartmentCrudValidator(context, hierarchy ?? new SqlServerDepartmentHierarchyQuery(context),
+            OrganizationFactsTestServices.Published(query));
     }
     private static EfPlatformDbContext CreateContext()
     {

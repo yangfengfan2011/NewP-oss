@@ -1,8 +1,6 @@
-using ICP.Platform.Organization.Contracts;
 using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Persistence.EfCore;
-using ICP.Platform.Persistence.Abstractions;
 using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Modules.Organization.Persistence.Ef;
@@ -10,63 +8,35 @@ namespace ICP.Platform.Modules.Organization.Persistence.Ef;
 /// <summary>
 /// 从 Organization Company 模型提供人员所需的窄目录读取。
 /// </summary>
-/// <param name="dbContext">仅分页 Lookup 使用的当前请求动态模型数据库上下文。</param>
-/// <param name="query">按标识、编码及批量业务读取使用的唯一稳定组织查询。</param>
-/// <param name="transactions">事务内写规则用于选择当前 SQL 事实；事务外仍读取发布视图。</param>
-public sealed class EfCompanyDirectory(
-    EfPlatformDbContext dbContext,
-    IOrganizationQuery query,
-    IPlatformTransactionExecutor? transactions = null) : ICompanyDirectory
+public sealed class EfCompanyDirectory : ICompanyDirectory
 {
-    /// <inheritdoc/>
-    public async Task<Company?> GetByIdAsync(
-        string companyId,
-        CancellationToken cancellationToken = default)
+    private readonly EfPlatformDbContext _dbContext;
+    private readonly OrganizationEffectiveFacts _facts;
+
+    // Lookup 保留固定 SQL 入口，公司业务事实统一委托模块内部的来源选择者。
+    internal EfCompanyDirectory(EfPlatformDbContext dbContext, OrganizationEffectiveFacts facts)
     {
-        if (transactions?.IsActive == true)
-        {
-            var current = await Entities.AsNoTracking()
-                .SingleOrDefaultAsync(row => EF.Property<string>(row, "EID") == companyId, cancellationToken);
-            return current is null ? null : Map(current);
-        }
-        var row = (await query.ReadAsync(cancellationToken)).Find(OrganizationRecordKind.Company, companyId);
+        _dbContext = dbContext;
+        _facts = facts;
+    }
+
+    /// <inheritdoc/>
+    public async Task<Company?> GetByIdAsync(string companyId, CancellationToken cancellationToken = default)
+    {
+        var row = await _facts.FindCompanyAsync(companyId, cancellationToken);
         return row is null ? null : Map(row);
     }
 
     /// <inheritdoc/>
     public async Task<IReadOnlyDictionary<string, Company>> GetByIdsAsync(
-        IReadOnlyCollection<string> companyIds,
-        CancellationToken cancellationToken = default)
-    {
-        if (transactions?.IsActive == true)
-        {
-            var ids = NormalizeIds(companyIds);
-            if (ids.Count == 0)
-            {
-                return new Dictionary<string, Company>(StringComparer.Ordinal);
-            }
-            var current = await Entities.AsNoTracking()
-                .Where(row => ids.Contains(EF.Property<string>(row, "EID")))
-                .ToListAsync(cancellationToken);
-            return current.Select(Map).ToDictionary(company => company.Id, StringComparer.Ordinal);
-        }
-        var view = await query.ReadAsync(cancellationToken);
-        return NormalizeIds(companyIds).Select(id => view.Find(OrganizationRecordKind.Company, id))
-            .Where(row => row is not null).Select(row => Map(row!)).ToDictionary(company => company.Id, StringComparer.Ordinal);
-    }
+        IReadOnlyCollection<string> companyIds, CancellationToken cancellationToken = default) =>
+        (await _facts.FindCompaniesAsync(companyIds, cancellationToken))
+            .Select(Map).ToDictionary(company => company.Id, StringComparer.Ordinal);
 
     /// <inheritdoc/>
     public async Task<Company?> GetByCodeAsync(string code, CancellationToken cancellationToken = default)
     {
-        if (transactions?.IsActive == true)
-        {
-            var normalized = code.Trim().ToLowerInvariant();
-            var current = await Entities.AsNoTracking().SingleOrDefaultAsync(
-                row => EF.Property<string>(row, "ECODE").ToLower() == normalized,
-                cancellationToken);
-            return current is null ? null : Map(current);
-        }
-        var row = (await query.ReadAsync(cancellationToken)).FindCompanyByCode(code);
+        var row = await _facts.FindCompanyByCodeAsync(code, cancellationToken);
         return row is null ? null : Map(row);
     }
 
@@ -104,7 +74,7 @@ public sealed class EfCompanyDirectory(
     }
 
     private DbSet<Dictionary<string, object?>> Entities =>
-        dbContext.Set<Dictionary<string, object?>>(dbContext.ResolveModelKey("Company"));
+        _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("Company"));
 
     // 当前值独立读取且不套用启用和关键词条件，保证停用归属仍可解析。
     private async Task<List<Dictionary<string, object?>>> ReadCurrentRowsAsync(

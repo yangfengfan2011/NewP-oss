@@ -2,7 +2,6 @@ using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Modules.Organization.Directories;
-using ICP.Platform.Organization.Contracts;
 using ICP.Platform.Presentation;
 
 namespace ICP.Platform.Modules.Organization.Crud;
@@ -10,57 +9,29 @@ namespace ICP.Platform.Modules.Organization.Crud;
 /// <summary>
 /// 人员标准 CRUD 专属校验入口；PersonNo 全局唯一由 descriptor 的 StandardCrudUniqueConstraint 承接。
 /// </summary>
-/// <param name="companyDirectory">公司归属事实的窄读取入口。</param>
-/// <param name="departmentDirectory">部门归属事实的窄读取入口。</param>
-/// <param name="positionDirectory">与公司、部门独立的全局岗位读取目录。</param>
-/// <param name="standardCrudRepository">更新时读取当前人员候选值的标准仓储。</param>
-/// <param name="organizationQuery">同一写协调中的完整组织视图，用于目标祖先链校验。</param>
-/// <param name="temporalInputNormalizer">平台 temporal 规范化器，用于按会话本地日期校验生日。</param>
 public sealed class PersonCrudValidator : IStandardCrudValidator
 {
     private readonly ICompanyDirectory _companyDirectory;
     private readonly IDepartmentDirectory _departmentDirectory;
     private readonly IPositionDirectory _positionDirectory;
     private readonly IStandardCrudRepository _standardCrudRepository;
-    private readonly IOrganizationQuery _organizationQuery;
     private readonly ITemporalInputNormalizer? _temporalInputNormalizer;
-    private readonly OrganizationTargetChainReader? _targetChainReader;
+    private readonly OrganizationEffectiveFacts _facts;
 
-    /// <summary>构造兼容事务外规则测试与直接消费者的人员校验器。</summary>
-    public PersonCrudValidator(
-        ICompanyDirectory companyDirectory,
-        IDepartmentDirectory departmentDirectory,
-        IPositionDirectory positionDirectory,
-        IStandardCrudRepository standardCrudRepository,
-        IOrganizationQuery organizationQuery,
-        ITemporalInputNormalizer? temporalInputNormalizer = null)
-        : this(
-            companyDirectory,
-            departmentDirectory,
-            positionDirectory,
-            standardCrudRepository,
-            organizationQuery,
-            targetChainReader: null,
-            temporalInputNormalizer)
-    {
-    }
-
-    // 正式模块装配额外提供事务内目标链读取器，不把该实现扩大成公共查询契约。
+    // 必需的有效事实入口负责选择事务内 SQL 与已发布视图，业务错误及校验顺序留在本类。
     internal PersonCrudValidator(
         ICompanyDirectory companyDirectory,
         IDepartmentDirectory departmentDirectory,
         IPositionDirectory positionDirectory,
         IStandardCrudRepository standardCrudRepository,
-        IOrganizationQuery organizationQuery,
-        OrganizationTargetChainReader? targetChainReader,
+        OrganizationEffectiveFacts facts,
         ITemporalInputNormalizer? temporalInputNormalizer = null)
     {
         _companyDirectory = companyDirectory;
         _departmentDirectory = departmentDirectory;
         _positionDirectory = positionDirectory;
         _standardCrudRepository = standardCrudRepository;
-        _organizationQuery = organizationQuery;
-        _targetChainReader = targetChainReader;
+        _facts = facts;
         _temporalInputNormalizer = temporalInputNormalizer;
     }
 
@@ -181,10 +152,7 @@ public sealed class PersonCrudValidator : IStandardCrudValidator
 
             if (requireEnabledAffiliation)
             {
-                var targetChainEnabled = _targetChainReader is null
-                    ? OrganizationTargetChain.IsEnabled(
-                        await _organizationQuery.ReadAsync(cancellationToken), companyId, departmentId, cancellationToken)
-                    : await _targetChainReader.IsEnabledAsync(companyId, departmentId, cancellationToken);
+                var targetChainEnabled = await _facts.IsDepartmentChainEnabledAsync(companyId, departmentId, cancellationToken);
                 if (!targetChainEnabled)
                 {
                     return FieldError("DepartmentId", "Organization.Person.DepartmentChainDisabled", "所属部门或其上级部门已停用。", "organization.person.departmentChainDisabled");

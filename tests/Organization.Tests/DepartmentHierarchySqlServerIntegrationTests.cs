@@ -3,6 +3,7 @@ using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Kernel.ModulePlanning;
 using System.Text.Json;
 using ICP.Platform.Modules.Organization.Directories;
+using ICP.Platform.Modules.Organization.Caching;
 using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 using ICP.Platform.Modules.Organization.Persistence.Ef;
 using ICP.Platform.Persistence.EfCore;
@@ -322,8 +323,15 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
         var connection = Assert.IsType<SqlConnection>(context.Database.GetDbConnection());
         connection.StatisticsEnabled = true;
 
-        var enabled = await new SqlServerDepartmentHierarchyQuery(context)
-            .IsEnabledTargetChainAsync("Company_1", parentId!, default);
+        var transactions = new OrganizationFactsTestServices.TransactionState();
+        var facts = new OrganizationEffectiveFacts(transactions,
+            new PublishedOrganizationFacts(new RecordingOrganizationQuery()),
+            new SqlOrganizationFacts(context, new SqlServerDepartmentHierarchyQuery(context)));
+        Assert.False(await facts.IsDepartmentChainEnabledAsync("Company_1", parentId!, default));
+        Assert.Equal(0L, connection.RetrieveStatistics()["SelectCount"]);
+
+        transactions.IsActive = true;
+        var enabled = await facts.IsDepartmentChainEnabledAsync("Company_1", parentId!, default);
 
         Assert.True(enabled);
         Assert.Equal(1L, connection.RetrieveStatistics()["SelectCount"]);
@@ -425,7 +433,8 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
         var departments = await context.Set<Dictionary<string, object?>>(context.ResolveModelKey("Department")).AsNoTracking()
             .Select(row => new ICP.Platform.Modules.Organization.Models.Department { Id = EF.Property<string>(row, "EID"), CompanyId = EF.Property<string>(row, "CompanyId"),
                 ParentDepartmentId = EF.Property<string?>(row, "ParentDepartmentId"), IsEnabled = EF.Property<bool>(row, "IsEnabled") }).ToListAsync();
-        return new DepartmentCrudValidator(context, new RecordingOrganizationQuery(companies, departments));
+        return new DepartmentCrudValidator(context, new SqlServerDepartmentHierarchyQuery(context),
+            OrganizationFactsTestServices.Published(new RecordingOrganizationQuery(companies, departments)));
     }
     private static EfPlatformDbContext CreateContext(string connectionString)
     {

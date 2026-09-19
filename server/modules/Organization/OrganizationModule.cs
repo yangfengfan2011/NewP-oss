@@ -55,7 +55,17 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         services.AddStandardCrudResource(PositionCrudDescriptorFactory.Create());
         services.AddStandardCrudResource(CompanyCrudDescriptorFactory.Create());
         services.AddStandardCrudResource(DepartmentCrudDescriptorFactory.Create());
-        services.AddScoped<ICompanyDirectory, EfCompanyDirectory>();
+        services.AddScoped<OrganizationEffectiveFacts>(serviceProvider =>
+        {
+            var db = serviceProvider.GetRequiredService<ICP.Platform.Persistence.EfCore.EfPlatformDbContext>();
+            return new OrganizationEffectiveFacts(
+                serviceProvider.GetRequiredService<ICP.Platform.Persistence.Abstractions.IPlatformTransactionExecutor>(),
+                new PublishedOrganizationFacts(serviceProvider.GetRequiredService<IOrganizationQuery>()),
+                new SqlOrganizationFacts(db, new SqlServerDepartmentHierarchyQuery(db)));
+        });
+        services.AddScoped<ICompanyDirectory>(serviceProvider => new EfCompanyDirectory(
+            serviceProvider.GetRequiredService<ICP.Platform.Persistence.EfCore.EfPlatformDbContext>(),
+            serviceProvider.GetRequiredService<OrganizationEffectiveFacts>()));
         services.AddScoped<EfDepartmentDirectory>();
         services.AddScoped<IDepartmentDirectory>(serviceProvider =>
             serviceProvider.GetRequiredService<EfDepartmentDirectory>());
@@ -84,22 +94,19 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         services.AddScoped<IStandardCrudDisplayValueResolver, DepartmentCrudDisplayValueResolver>();
         services.AddScoped<IStandardCrudSummaryProvider, PersonUserBindingSummaryProvider>();
         services.AddScoped<IStandardCrudSummaryProvider, PersonAuthorizationSummaryProvider>();
-        services.AddScoped<OrganizationTargetChainReader>();
         services.AddScoped<IStandardCrudValidator>(serviceProvider => new PersonCrudValidator(
             serviceProvider.GetRequiredService<ICompanyDirectory>(),
             serviceProvider.GetRequiredService<IDepartmentDirectory>(),
             serviceProvider.GetRequiredService<IPositionDirectory>(),
             serviceProvider.GetRequiredService<IStandardCrudRepository>(),
-            serviceProvider.GetRequiredService<IOrganizationQuery>(),
-            serviceProvider.GetRequiredService<OrganizationTargetChainReader>(),
+            serviceProvider.GetRequiredService<OrganizationEffectiveFacts>(),
             serviceProvider.GetService<ICP.Platform.Presentation.ITemporalInputNormalizer>()));
         services.AddScoped<IStandardCrudValidator, CompanyCrudValidator>();
         services.AddScoped<IStandardCrudValidator>(serviceProvider => new DepartmentCrudValidator(
             serviceProvider.GetRequiredService<ICP.Platform.Persistence.EfCore.EfPlatformDbContext>(),
             new SqlServerDepartmentHierarchyQuery(
                 serviceProvider.GetRequiredService<ICP.Platform.Persistence.EfCore.EfPlatformDbContext>()),
-            serviceProvider.GetRequiredService<IOrganizationQuery>(),
-            serviceProvider.GetRequiredService<OrganizationTargetChainReader>()));
+            serviceProvider.GetRequiredService<OrganizationEffectiveFacts>()));
         services.AddScoped<OrganizationConditionalDeleteExecutor>();
         services.AddStandardCrudConditionalDelete<CompanyCrudDeleteExecutor>();
         services.AddStandardCrudConditionalDelete<DepartmentCrudDeleteExecutor>();

@@ -3,7 +3,6 @@ using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Persistence.Ef;
-using ICP.Platform.Organization.Contracts;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,28 +12,17 @@ public sealed class DepartmentCrudValidator : IStandardCrudValidator
 {
     private readonly EfPlatformDbContext _dbContext;
     private readonly IDepartmentHierarchyQuery _hierarchyQuery;
-    private readonly IOrganizationQuery _organizationQuery;
-    private readonly OrganizationTargetChainReader? _targetChainReader;
+    private readonly OrganizationEffectiveFacts _facts;
 
-    /// <summary>
-    /// 组合数据库防环查询与一致组织视图，校验部门目标的完整启用链。
-    /// </summary>
-    public DepartmentCrudValidator(EfPlatformDbContext dbContext, IOrganizationQuery organizationQuery)
-        : this(dbContext, new SqlServerDepartmentHierarchyQuery(dbContext), organizationQuery, null)
-    {
-    }
-
-    // 测试可替换内部层级查询，不把 provider 细节扩大到公共模块协议。
+    // 固定 SQL 的存在性与防环检查保留原路径；只有目标启用链通过必需的有效事实入口读取。
     internal DepartmentCrudValidator(
         EfPlatformDbContext dbContext,
         IDepartmentHierarchyQuery hierarchyQuery,
-        IOrganizationQuery organizationQuery,
-        OrganizationTargetChainReader? targetChainReader = null)
+        OrganizationEffectiveFacts facts)
     {
         _dbContext = dbContext;
         _hierarchyQuery = hierarchyQuery;
-        _organizationQuery = organizationQuery;
-        _targetChainReader = targetChainReader;
+        _facts = facts;
     }
 
     public string ResourceKey => "organization.department";
@@ -174,28 +162,17 @@ public sealed class DepartmentCrudValidator : IStandardCrudValidator
         return relationshipError ?? await ValidateTargetChainAsync(companyId, parentDepartmentId, cancellationToken);
     }
 
-    // 换到根部门同样要求公司启用；保留来源停用状态，只检查一次发布的目标完整链。
+    // 保持正式对象路径的错误解释：根目标失败归于公司，非根完整链失败归于上级。
     private async Task<StandardCrudError?> ValidateTargetChainAsync(string companyId, string? parentId, CancellationToken cancellationToken)
     {
-        if (_targetChainReader is not null)
-        {
-            var enabled = parentId is null
-                ? await _targetChainReader.IsCompanyEnabledAsync(companyId, cancellationToken)
-                : await _targetChainReader.IsEnabledAsync(companyId, parentId, cancellationToken);
-            return enabled
-                ? null
-                : parentId is null
-                    ? CompanyError(409, "CompanyDisabled", "所属公司已停用，不能创建或调整部门归属。")
-                    : ParentError(400, "ParentChainDisabled", "上级部门或其上级链已停用，不能作为新的上级。");
-        }
-        var view = await _organizationQuery.ReadAsync(cancellationToken);
-        var company = view.Find(OrganizationRecordKind.Company, companyId);
-        if (company is null) return CompanyError(404, "CompanyNotFound", "所属公司不存在。");
-        if (company.GetValueOrDefault("IsEnabled") is not true)
-            return CompanyError(409, "CompanyDisabled", "所属公司已停用，不能创建或调整部门归属。");
-        return parentId is not null && !OrganizationTargetChain.IsEnabled(view, companyId, parentId, cancellationToken)
-            ? ParentError(400, "ParentChainDisabled", "上级部门或其上级链已停用，不能作为新的上级。")
-            : null;
+        var enabled = parentId is null
+            ? await _facts.IsCompanyEnabledAsync(companyId, cancellationToken)
+            : await _facts.IsDepartmentChainEnabledAsync(companyId, parentId, cancellationToken);
+        return enabled
+            ? null
+            : parentId is null
+                ? CompanyError(409, "CompanyDisabled", "所属公司已停用，不能创建或调整部门归属。")
+                : ParentError(400, "ParentChainDisabled", "上级部门或其上级链已停用，不能作为新的上级。");
     }
 
     // 单次读取一个部门状态所需的最小字段，避免把动态持久化行泄漏到领域校验分支。

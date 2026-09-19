@@ -1,4 +1,5 @@
 using ICP.Platform.Modules.Organization.Directories;
+using ICP.Platform.Modules.Organization.Caching;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 using ICP.Platform.Modules.Organization.Persistence.Ef;
@@ -13,6 +14,51 @@ namespace ICP.Platform.Modules.Organization.Tests;
 public sealed class OrganizationDirectoryTests
 {
     [Fact]
+    public async Task CompanyDirectory_SelectsCurrentSqlForEveryBusinessReadAndReturnsToPublishedFacts()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedCompaniesAsync(dbContext, [Company("company", "MiXeD", "已发布名称", enabled: true)]);
+        var published = await CreateQueryAsync(dbContext);
+        var transactions = new OrganizationFactsTestServices.TransactionState();
+        var facts = new OrganizationEffectiveFacts(transactions, new PublishedOrganizationFacts(published),
+            new SqlOrganizationFacts(dbContext, new SqlServerDepartmentHierarchyQuery(dbContext)));
+        var directory = new EfCompanyDirectory(dbContext, facts);
+
+        var stored = await dbContext.Set<Dictionary<string, object?>>(dbContext.ResolveModelKey("Company"))
+            .SingleAsync();
+        stored["ENAME"] = "当前 SQL 名称";
+        stored["IsEnabled"] = false;
+        await dbContext.SaveChangesAsync();
+        await SeedCompaniesAsync(dbContext, [Company("new-company", "NEW", "新公司", enabled: true)]);
+
+        // 同一 owner 每次读取时选择来源；此低层测试只证明选择，实际事务隔离与回滚由既有 SQL nested 测试证明。
+        Assert.Equal("已发布名称", (await directory.GetByIdAsync("company"))?.Name);
+        Assert.Null(await directory.GetByIdAsync("new-company"));
+        Assert.True(await facts.IsCompanyEnabledAsync("company", default));
+        transactions.IsActive = true;
+        Assert.Equal("当前 SQL 名称", (await directory.GetByIdAsync("company"))?.Name);
+        Assert.Equal("当前 SQL 名称", (await directory.GetByCodeAsync("  MIXED  "))?.Name);
+        Assert.NotNull(await directory.GetByIdAsync("new-company"));
+        Assert.False(await facts.IsCompanyEnabledAsync("company", default));
+        var current = await directory.GetByIdsAsync(["company", "new-company", "company", " ", "missing"]);
+        Assert.Equal(2, current.Count);
+        Assert.Equal("当前 SQL 名称", current["company"].Name);
+        Assert.Empty(await directory.GetByIdsAsync([]));
+
+        dbContext.Set<Dictionary<string, object?>>(dbContext.ResolveModelKey("Company")).Remove(stored);
+        await dbContext.SaveChangesAsync();
+        Assert.Null(await directory.GetByIdAsync("company"));
+        Assert.Null(await directory.GetByCodeAsync("MiXeD"));
+        Assert.Empty(await directory.GetByIdsAsync(["company"]));
+
+        transactions.IsActive = false;
+        Assert.Equal("已发布名称", (await directory.GetByCodeAsync("  MIXED  "))?.Name);
+        var original = await directory.GetByIdsAsync(["company", "new-company", "company", " ", "missing"]);
+        Assert.Equal("company", Assert.Single(original).Key);
+        Assert.True(original["company"].IsEnabled);
+    }
+
+    [Fact]
     public async Task CompanyDirectory_LookupPagesEnabledCandidatesAndResolvesDisabledCurrentValue()
     {
         await using var dbContext = CreateDbContext();
@@ -22,7 +68,7 @@ public sealed class OrganizationDirectoryTests
             Company("Company_2", "C002", "B研发", enabled: true),
             Company("Company_1", "C001", "A研发", enabled: true)
         ]);
-        var directory = new EfCompanyDirectory(dbContext, null!);
+        var directory = new EfCompanyDirectory(dbContext, OrganizationFactsTestServices.Published(new RecordingOrganizationQuery()));
 
         var page = await directory.LookupAsync(new OrganizationDirectoryLookupRequest(
             Keyword: "研发",
@@ -139,7 +185,7 @@ public sealed class OrganizationDirectoryTests
             Department("Department_2", "Company_2", "D002", "旧部门", enabled: false)
         ]);
 
-        var companies = await new EfCompanyDirectory(dbContext, await CreateQueryAsync(dbContext))
+        var companies = await new EfCompanyDirectory(dbContext, OrganizationFactsTestServices.Published(await CreateQueryAsync(dbContext)))
             .GetByIdsAsync(["Company_1", "Company_2", "Company_1"]);
         var departments = await new EfDepartmentDirectory(dbContext)
             .GetByIdsAsync(["Department_1", "Department_2", "Department_1"]);

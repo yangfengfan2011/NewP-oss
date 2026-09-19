@@ -3,6 +3,8 @@ using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 using ICP.Platform.Modules.Organization.Persistence.Ef;
+using ICP.Platform.Organization.Contracts;
+using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.Composition;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore;
@@ -14,7 +16,7 @@ namespace ICP.Platform.Modules.Organization.Tests;
 public class EfOrganizationRepositoryTests
 {
     [Fact]
-    public void OrganizationModule_ConfigureServices_RegistersRepositoriesAndServices()
+    public async Task OrganizationModule_ConfigureServices_RegistersRepositoriesAndServices()
     {
         var services = new ServiceCollection();
         var module = new OrganizationModule();
@@ -26,7 +28,7 @@ public class EfOrganizationRepositoryTests
             descriptor.ImplementationType == typeof(PlatformQueryPositionDirectory));
         Assert.Contains(services, descriptor =>
             descriptor.ServiceType == typeof(ICompanyDirectory) &&
-            descriptor.ImplementationType == typeof(EfCompanyDirectory));
+            descriptor.Lifetime == ServiceLifetime.Scoped);
         Assert.Contains(services, descriptor =>
             descriptor.ServiceType == typeof(EfDepartmentDirectory)
             && descriptor.ImplementationType == typeof(EfDepartmentDirectory)
@@ -42,8 +44,18 @@ public class EfOrganizationRepositoryTests
 
         using var dbContext = CreateDbContext();
         services.AddSingleton(dbContext);
+        services.AddSingleton<IPlatformTransactionExecutor>(new OrganizationFactsTestServices.TransactionState());
+        services.AddSingleton<IOrganizationQuery>(new RecordingOrganizationQuery(
+            [new Company { Id = "company", Name = "已发布公司", IsEnabled = true }]));
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
+        // 通过正式模块 factory 解析并执行业务读取，避免把注册语法误当作行为契约。
+        var companies = scope.ServiceProvider.GetRequiredService<ICompanyDirectory>();
+        Assert.IsType<EfCompanyDirectory>(companies);
+        Assert.Same(companies, scope.ServiceProvider.GetRequiredService<ICompanyDirectory>());
+        var company = await companies.GetByIdAsync("company");
+        Assert.Equal("company", company?.Id);
+        Assert.Equal("已发布公司", company?.Name);
         var concrete = scope.ServiceProvider.GetRequiredService<EfDepartmentDirectory>();
         Assert.Same(concrete, scope.ServiceProvider.GetRequiredService<IDepartmentDirectory>());
         Assert.Same(concrete, scope.ServiceProvider.GetRequiredService<IDepartmentHierarchyDirectory>());

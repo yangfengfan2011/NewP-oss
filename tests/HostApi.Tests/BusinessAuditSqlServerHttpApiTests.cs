@@ -28,6 +28,7 @@ using ICP.Platform.Modules.Organization;
 using ICP.Platform.Modules.Organization.Caching;
 using ICP.Platform.Modules.Organization.Crud;
 using ICP.Platform.Modules.Organization.DTOs;
+using ICP.Platform.Modules.Organization.DTOs.Requests;
 using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 using ICP.Platform.Modules.Organization.Services;
 using ICP.Platform.Persistence.Abstractions;
@@ -561,7 +562,8 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.Equal(storedAfterBinding["UpdatedAt"], storedAfterFailure["UpdatedAt"]);
         Assert.True((bool)(await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync()).Persons[personId]["IsEnabled"]!);
 
-        control.Mode = ObjectOperationExtensionProbeMode.None;
+        control.Mode = ObjectOperationExtensionProbeMode.Supplement;
+        control.SupplementedName = "对象横切规范化停用原因";
         using var disabled = await FeatureHttpTestRequests.SendAsync(
             client,
             http.Organization("persons", "disable", "list.rowActions"),
@@ -569,6 +571,24 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             $"/api/organization/persons/{personId}/status/disable",
             new { isEnabled = false, reason = "正式停用" });
         Assert.Equal(HttpStatusCode.OK, disabled.StatusCode);
+        Assert.Equal("对象横切规范化停用原因", control.AfterInput!["Reason"]);
+        Assert.False(Assert.IsType<PersonLifecycleDto>(control.AfterResult!["Result"]).IsEnabled);
+        Assert.Equal(personId, control.AfterResult["EID"]);
+        Assert.Equal(fixture.ActorId, control.AfterResult["UpdatedBy"]);
+
+        control.SupplementedName = "对象横切规范化恢复原因";
+        using var enabled = await FeatureHttpTestRequests.SendAsync(
+            client,
+            http.Organization("persons", "enable", "list.rowActions"),
+            HttpMethod.Put,
+            $"/api/organization/persons/{personId}/status/enable",
+            new { isEnabled = true, reason = "正式恢复" });
+        Assert.Equal(HttpStatusCode.OK, enabled.StatusCode);
+        Assert.Equal("对象横切规范化恢复原因", control.AfterInput!["Reason"]);
+        var restored = Assert.IsType<PersonLifecycleDto>(control.AfterResult!["Result"]);
+        Assert.True(restored.IsEnabled);
+        Assert.Equal("Disabled", restored.Account!.Status);
+        Assert.False(restored.Account.PersonnelDisableHold);
     }
 
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "人员服务端更新和别名删除共用对象行为、审计与实际EID缓存登记")]
@@ -1104,13 +1124,23 @@ public sealed class BusinessAuditSqlServerHttpApiTests
     }
 
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "人员专用命名动作可由公共对象入口直接执行")]
-    public async Task PersonSpecialActions_DirectObjectExecutorUsesTrustedActorAndPublishesCanonicalResult()
+    public async Task PersonSpecialActions_DirectObjectExecutorUsesTrustedActorWithoutExecutingLegacyAdapters()
     {
         var stamps = new SteppingEntityAuditStampProvider();
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
         {
             services.RemoveAll<IEntityAuditStampProvider>();
             services.AddSingleton<IEntityAuditStampProvider>(stamps);
+            // 真实行为不得解析旧 concrete adapter；既有 eager 嵌套探针只拿可构造、禁止执行的旧接口。
+            services.RemoveAll<PersonLifecycleService>();
+            services.RemoveAll<PersonUserBindingService>();
+            services.AddScoped<PersonLifecycleService>(_ => throw new InvalidOperationException("direct behavior resolved lifecycle adapter"));
+            services.AddScoped<PersonUserBindingService>(_ => throw new InvalidOperationException("direct behavior resolved binding adapter"));
+            services.RemoveAll<IPersonLifecycleService>();
+            services.RemoveAll<IPersonUserBindingService>();
+            var unused = new UnusedPersonActionAdapters();
+            services.AddSingleton<IPersonLifecycleService>(unused);
+            services.AddSingleton<IPersonUserBindingService>(unused);
         });
         var http = new FeatureHttpTestRequests(fixture);
         using var client = await fixture.LoginAdministratorAsync();
@@ -1130,7 +1160,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         stamps.Begin(fixture.ActorId, new DateTime(2031, 2, 3, 4, 5, 6, DateTimeKind.Utc));
 
         await using var scope = fixture.Services.CreateAsyncScope();
-        using var activity = new Activity(nameof(PersonSpecialActions_DirectObjectExecutorUsesTrustedActorAndPublishesCanonicalResult)).Start();
+        using var activity = new Activity(nameof(PersonSpecialActions_DirectObjectExecutorUsesTrustedActorWithoutExecutingLegacyAdapters)).Start();
         var operations = scope.ServiceProvider.GetRequiredService<IObjectOperationExecutor>();
         var bound = await operations.ExecuteAsync(
             "organization.person",
@@ -1165,6 +1195,15 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             Assert.Equal(stored[field], disabled.Detail.Fields[field]);
             Assert.Equal(stored[field], cached[field]);
         }
+
+        var enabled = await operations.ExecuteAsync(
+            "organization.person",
+            PersonObjectBehavior.EnableAction,
+            personId,
+            new Dictionary<string, object?> { ["Reason"] = "公共对象入口恢复" });
+        Assert.True(enabled.Succeeded, enabled.Error?.Message);
+        Assert.True(Assert.IsType<PersonLifecycleDto>(enabled.Detail!.Fields["Result"]).IsEnabled);
+        Assert.True((bool)(await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync()).Persons[personId]["IsEnabled"]!);
     }
 
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "同事务 Person 创建、直接 DML 绑定和普通更新保持绑定及审计事实")]
@@ -1219,6 +1258,21 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             Assert.Equal(stored[field], control.NestedPersonUpdateResult!.Detail!.Fields[field]);
             Assert.Equal(stored[field], cached[field]);
         }
+    }
+
+    private sealed class UnusedPersonActionAdapters : IPersonLifecycleService, IPersonUserBindingService
+    {
+        public ValueTask<PersonLifecycleDto> SetStatusAsync(string personEid,
+            SetPersonLifecycleStatusRequest request, PersonLifecycleActor actor, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("direct object operation executed legacy lifecycle adapter");
+
+        public ValueTask<PersonUserBindingDto> BindAsync(string personEid,
+            BindPersonUserRequest request, PersonUserBindingActor actor, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("direct object operation executed legacy binding adapter");
+
+        public ValueTask<IReadOnlyList<PersonUserBindingCandidateDto>> SearchCandidatesAsync(string personEid,
+            string? query, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("direct object operation executed legacy binding query");
     }
 
     private sealed record ObjectOperationTarget(

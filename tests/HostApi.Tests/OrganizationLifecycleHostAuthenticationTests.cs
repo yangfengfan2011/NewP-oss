@@ -36,7 +36,8 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
         var directory = new RepositoryAccountDirectory(identity);
         var person = new RecordingPersonRepository(Person(now));
         var transaction = new SnapshotTransactionExecutor(person, identity, sessions);
-        var lifecycle = new PersonLifecycleService(
+        // 隔离动作核心与 Cookie 验证，正式公开入口由 BusinessAudit Host SQL 测试覆盖。
+        var lifecycle = new PersonLifecycleActionCore(
             person,
             directory,
             new IdentityLifecycleParticipant(identity, new PlatformObjectIdGenerator(), new FixedTimeProvider(now)),
@@ -59,7 +60,7 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
 
         Assert.Equal(HttpStatusCode.OK, (await SendProtectedAsync(client, cookieHeader)).StatusCode);
 
-        await lifecycle.SetStatusAsync(
+        await lifecycle.ExecuteAsync(
             "Person_1",
             new SetPersonLifecycleStatusRequest(false, "人员离职"),
             new PersonLifecycleActor("User_Admin", "trace-disable"));
@@ -77,7 +78,7 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
                 new IdentityActorContext("User_Admin", IdentitySecurityActorKind.IdentityAccount, "trace-blocked"))));
         Assert.Equal(IdentityFailureCodes.PersonnelDisableHold, blocked.FailureCode);
 
-        await lifecycle.SetStatusAsync(
+        await lifecycle.ExecuteAsync(
             "Person_1",
             new SetPersonLifecycleStatusRequest(true, "人员返岗"),
             new PersonLifecycleActor("User_Admin", "trace-restore"));

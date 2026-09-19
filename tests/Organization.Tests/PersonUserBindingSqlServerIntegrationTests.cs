@@ -30,6 +30,7 @@ namespace ICP.Platform.Modules.Organization.Tests;
 
 public sealed class PersonUserBindingSqlServerIntegrationTests
 {
+    // 直接组合内部核心以注入跨模块失败；公开服务到对象扩展的正式装配另由 Host SQL 测试覆盖。
     // 本fixture仅证明会话或跨owner事务；完整组织准入由Host真实业务fixture另行证明。
     internal sealed class IsolatedAdmissionPolicy : IIdentityAdmissionPolicy
     {
@@ -65,14 +66,14 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
                     identityRepository,
                     new PlatformObjectIdGenerator(),
                     TimeProvider.System);
-                var service = new PersonUserBindingService(
+                var core = new PersonUserBindingActionCore(
                     new EfPersonUserBindingRepository(context),
                     new IdentityAccountDirectory(identityRepository),
                     participant,
                     new EfPlatformTransactionExecutor(context),
                     AuditValues());
 
-                await service.BindAsync(
+                await core.ExecuteAsync(
                     "Person_1",
                     new BindPersonUserRequest("User_1", 7, "SQL Server 正式绑定"),
                     new PersonUserBindingActor("User_Admin", "trace-sql-success"));
@@ -87,7 +88,7 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
                     identityRepository,
                     new PlatformObjectIdGenerator(),
                     TimeProvider.System));
-                var service = new PersonUserBindingService(
+                var core = new PersonUserBindingActionCore(
                     new EfPersonUserBindingRepository(context),
                     new IdentityAccountDirectory(identityRepository),
                     failing,
@@ -95,7 +96,7 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
                     AuditValues());
 
                 var failure = await Assert.ThrowsAsync<PersonUserBindingException>(async () =>
-                    await service.BindAsync(
+                    await core.ExecuteAsync(
                         "Person_2",
                         new BindPersonUserRequest("User_2", 4, "SQL Server 故障回滚"),
                         new PersonUserBindingActor("User_Admin", "trace-sql-rollback")));
@@ -140,7 +141,7 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
             {
                 var identityRepository = new EfIdentityRepository(context);
                 var sessions = SessionRegistry(context);
-                var service = new PersonLifecycleService(
+                var core = new PersonLifecycleActionCore(
                     new EfPersonUserBindingRepository(context),
                     new IdentityAccountDirectory(identityRepository),
                     new IdentityLifecycleParticipant(identityRepository, new PlatformObjectIdGenerator(), TimeProvider.System),
@@ -148,10 +149,10 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
                     new EfPlatformTransactionExecutor(context),
                     AuditValues());
 
-                var disabled = await service.SetStatusAsync(
+                var disabled = (await core.ExecuteAsync(
                     "Person_1",
                     new SetPersonLifecycleStatusRequest(false, "SQL Server 人员停用"),
-                    new PersonLifecycleActor("User_Admin", "trace-sql-disable"));
+                    new PersonLifecycleActor("User_Admin", "trace-sql-disable"))).Dto;
                 Assert.False(disabled.IsEnabled);
                 Assert.Equal(AuthenticationSessionValidationStatus.Revoked, (await sessions.ValidateAsync(credential)).Status);
             }
@@ -166,7 +167,7 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
             {
                 var identityRepository = new EfIdentityRepository(context);
                 var sessions = SessionRegistry(context);
-                var service = new PersonLifecycleService(
+                var core = new PersonLifecycleActionCore(
                     new EfPersonUserBindingRepository(context),
                     new IdentityAccountDirectory(identityRepository),
                     new IdentityLifecycleParticipant(identityRepository, new PlatformObjectIdGenerator(), TimeProvider.System),
@@ -174,10 +175,10 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
                     new EfPlatformTransactionExecutor(context),
                     AuditValues());
 
-                var restored = await service.SetStatusAsync(
+                var restored = (await core.ExecuteAsync(
                     "Person_1",
                     new SetPersonLifecycleStatusRequest(true, "SQL Server 人员恢复"),
-                    new PersonLifecycleActor("User_Admin", "trace-sql-restore"));
+                    new PersonLifecycleActor("User_Admin", "trace-sql-restore"))).Dto;
                 Assert.Equal("Disabled", restored.Account?.Status);
                 Assert.False(restored.Account?.PersonnelDisableHold);
                 Assert.Equal(AuthenticationSessionValidationStatus.Revoked, (await sessions.ValidateAsync(credential)).Status);
@@ -191,7 +192,7 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
                     identityRepository,
                     new PlatformObjectIdGenerator(),
                     TimeProvider.System));
-                var service = new PersonLifecycleService(
+                var core = new PersonLifecycleActionCore(
                     new EfPersonUserBindingRepository(context),
                     new IdentityAccountDirectory(identityRepository),
                     failing,
@@ -200,7 +201,7 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
                     AuditValues());
 
                 var failure = await Assert.ThrowsAsync<PersonLifecycleException>(async () =>
-                    await service.SetStatusAsync(
+                    await core.ExecuteAsync(
                         "Person_2",
                         new SetPersonLifecycleStatusRequest(false, "SQL Server 故障回滚"),
                         new PersonLifecycleActor("User_Admin", "trace-sql-rollback")));

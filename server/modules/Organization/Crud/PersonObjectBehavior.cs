@@ -45,17 +45,17 @@ public sealed class PersonObjectBehavior : ObjectBehaviorBase
         ],
         ["EID", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"]);
 
-    private readonly PersonLifecycleService _lifecycle;
-    private readonly PersonUserBindingService _binding;
+    private readonly PersonLifecycleActionCore _lifecycle;
+    private readonly PersonUserBindingActionCore _binding;
     private readonly PersonObjectActionInvocationContext _invocations;
     private readonly IEntityAuditValueProvider _auditValues;
 
     /// <summary>组合公共 CRUD 核心与人员专用动作核心，不保存单次调用状态。</summary>
-    public PersonObjectBehavior(
+    internal PersonObjectBehavior(
         IStandardCrudResourceRegistry resources,
         StandardCrudDefaultWriter defaultWriter,
-        PersonLifecycleService lifecycle,
-        PersonUserBindingService binding,
+        PersonLifecycleActionCore lifecycle,
+        PersonUserBindingActionCore binding,
         PersonObjectActionInvocationContext invocations,
         IEntityAuditValueProvider auditValues)
         : base(BehaviorDefinition, resources, defaultWriter)
@@ -89,7 +89,7 @@ public sealed class PersonObjectBehavior : ObjectBehaviorBase
     {
         try
         {
-            var result = await _lifecycle.ExecuteCoreAsync(
+            var result = await _lifecycle.ExecuteAsync(
                 RequireTarget(context),
                 new SetPersonLifecycleStatusRequest(
                     context.Action == EnableAction,
@@ -111,7 +111,7 @@ public sealed class PersonObjectBehavior : ObjectBehaviorBase
     {
         try
         {
-            var result = await _binding.ExecuteCoreAsync(
+            var result = await _binding.ExecuteAsync(
                 RequireBindingTarget(context),
                 new BindPersonUserRequest(
                     ReadString(context.Values, "AccountEid"),

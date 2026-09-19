@@ -44,8 +44,8 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
             static (provider, _) => new PersonObjectBehavior(
                 provider.GetRequiredService<IStandardCrudResourceRegistry>(),
                 provider.GetRequiredService<ICP.Platform.Crud.Runtime.StandardCrudDefaultWriter>(),
-                provider.GetRequiredService<PersonLifecycleService>(),
-                provider.GetRequiredService<PersonUserBindingService>(),
+                provider.GetRequiredService<PersonLifecycleActionCore>(),
+                provider.GetRequiredService<PersonUserBindingActionCore>(),
                 provider.GetRequiredService<PersonObjectActionInvocationContext>(),
                 provider.GetRequiredService<ICP.Platform.Persistence.Auditing.IEntityAuditValueProvider>()));
         foreach (var (kind, model) in new[] { ("company", OrganizationRecordKind.Company), ("department", OrganizationRecordKind.Department), ("position", OrganizationRecordKind.Position), ("organization.person", OrganizationRecordKind.Person) })
@@ -65,7 +65,12 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         services.AddScoped<IPersonUserBindingRepository, EfPersonUserBindingRepository>();
         services.AddScoped<IAuthorizationSummaryReader, NullAuthorizationSummaryReader>();
         services.AddScoped<PersonObjectActionInvocationContext>();
-        services.AddScoped<PersonUserBindingService>();
+        services.AddScoped<PersonLifecycleActionCore>();
+        services.AddScoped<PersonUserBindingActionCore>();
+        services.AddScoped<PersonUserBindingService>(static provider => new PersonUserBindingService(
+            provider.GetRequiredService<PersonUserBindingActionCore>(),
+            provider.GetRequiredService<Func<IObjectOperationExecutor>>(),
+            provider.GetRequiredService<PersonObjectActionInvocationContext>()));
         services.AddScoped<IPersonUserBindingService>(static provider =>
             provider.GetRequiredService<PersonUserBindingService>());
         services.AddScoped<PersonLifecycleService>();

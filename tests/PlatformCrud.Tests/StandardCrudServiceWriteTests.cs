@@ -100,12 +100,10 @@ public sealed class StandardCrudServiceWriteTests
         var service = new StandardCrudService(
             repository,
             EmptyQueryExecutor(),
+            new StandardCrudDefaultWriter(repository, [], [], temporalInputNormalizer: normalizer),
             [],
             [],
-            [],
-            [],
-            [],
-            temporalInputNormalizer: normalizer);
+            []);
 
         var result = await service.CreateAsync(TemporalDescriptor(), new Dictionary<string, object?>
         {
@@ -1318,11 +1316,10 @@ public sealed class StandardCrudServiceWriteTests
         var service = new StandardCrudService(
             repository,
             EmptyQueryExecutor(),
+            new StandardCrudDefaultWriter(repository, [], [new AllowingDeleteGuard()]),
             [],
             [],
-            [],
-            [],
-            [new AllowingDeleteGuard()]);
+            []);
 
         var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Conditional), "person-1");
 
@@ -1354,12 +1351,10 @@ public sealed class StandardCrudServiceWriteTests
         var service = new StandardCrudService(
             repository,
             EmptyQueryExecutor(),
+            new StandardCrudDefaultWriter(repository, [], [executor], conditionalDeleteExecutors: [executor]),
             [],
             [],
-            [],
-            [],
-            [executor],
-            [executor]);
+            []);
 
         var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Conditional), "person-1");
 
@@ -1379,12 +1374,10 @@ public sealed class StandardCrudServiceWriteTests
         var service = new StandardCrudService(
             repository,
             EmptyQueryExecutor(),
+            new StandardCrudDefaultWriter(repository, [], [], conditionalDeleteExecutors: [executor]),
             [],
             [],
-            [],
-            [],
-            [],
-            [executor]);
+            []);
 
         var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Hard), "person-1");
 
@@ -1399,18 +1392,18 @@ public sealed class StandardCrudServiceWriteTests
         IStandardCrudRepository? repository = null,
         IEnumerable<IStandardCrudDisplayValueResolver>? displayValueResolvers = null,
         IEntityAuditStampProvider? auditStampProvider = null,
-        IObjectOperationExecutor? objectOperations = null) =>
-        new(
-            repository ?? new InMemoryStandardCrudRepository([]),
+        IObjectOperationExecutor? objectOperations = null)
+    {
+        repository ??= new InMemoryStandardCrudRepository([]);
+        return new StandardCrudService(
+            repository,
             EmptyQueryExecutor(),
+            new StandardCrudDefaultWriter(repository, [], [], conditionalDeleteExecutors: [], auditValueProvider: auditStampProvider is null ? null : new EntityAuditValueProvider(auditStampProvider)),
             [],
             displayValueResolvers ?? [],
             [],
-            [],
-            [],
-            [],
-            auditStampProvider: auditStampProvider,
             objectOperations: objectOperations);
+    }
 
     private static StandardCrudFieldPolicy ServerOwnedAuditPolicy(string field) => new()
     {

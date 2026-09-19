@@ -26,7 +26,7 @@ public sealed class StandardCrudRegistrationTests
         AssertFactoryRegistration<IObjectOperationExecutor>(services);
         Assert.Contains(services, item => item.ServiceType == typeof(Microsoft.Extensions.Hosting.IHostedService)
             && item.ImplementationType?.Name == "ObjectOperationAssemblyStartupValidator");
-        AssertRegistration<StandardCrudCreateRequestPreparer>(services, typeof(StandardCrudCreateRequestPreparer));
+        AssertRegistration<StandardCrudDefaultWriter>(services, typeof(StandardCrudDefaultWriter));
     }
 
     private static void AssertFactoryRegistration<TService>(IServiceCollection services)

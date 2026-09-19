@@ -39,7 +39,7 @@ public static class StandardCrudServiceCollectionExtensions
         services.AddScoped<EfStandardCrudRepository>();
         services.AddScoped<IStandardCrudRepository>(static provider =>
             provider.GetRequiredService<EfStandardCrudRepository>());
-        services.AddScoped<StandardCrudCreateRequestPreparer>();
+        services.AddScoped<StandardCrudDefaultWriter>();
         services.AddOptions<ObjectOperationAssemblyOptions>();
         services.TryAddSingleton<ObjectOperationAssemblyPlan>();
         services.TryAddScoped<ObjectOperationContributionSet>();
@@ -116,7 +116,7 @@ public static class StandardCrudServiceCollectionExtensions
             static (provider, declaredDefinition) => new StandardCrudObjectBehavior(
                 declaredDefinition,
                 provider.GetRequiredService<IStandardCrudResourceRegistry>(),
-                () => provider.GetRequiredService<StandardCrudService>()));
+                provider.GetRequiredService<StandardCrudDefaultWriter>()));
 
     /// <summary>
     /// 以扩展提供模块的正式 metadata 注册一个对象动作扩展；模块依赖由启动期装配校验。

@@ -53,12 +53,12 @@ public sealed class PersonObjectBehavior : ObjectBehaviorBase
     /// <summary>组合公共 CRUD 核心与人员专用动作核心，不保存单次调用状态。</summary>
     public PersonObjectBehavior(
         IStandardCrudResourceRegistry resources,
-        Func<StandardCrudService> resolveDefaultOperations,
+        StandardCrudDefaultWriter defaultWriter,
         PersonLifecycleService lifecycle,
         PersonUserBindingService binding,
         PersonObjectActionInvocationContext invocations,
         IEntityAuditValueProvider auditValues)
-        : base(BehaviorDefinition, resources, resolveDefaultOperations)
+        : base(BehaviorDefinition, resources, defaultWriter)
     {
         _lifecycle = lifecycle;
         _binding = binding;

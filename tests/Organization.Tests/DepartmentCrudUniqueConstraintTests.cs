@@ -70,15 +70,13 @@ public sealed class DepartmentCrudUniqueConstraintTests
         Assert.Equal("Department_Current", check.ExcludedId);
     }
 
-    private static StandardCrudService CreateService(IStandardCrudRepository repository) => new(
-        repository,
-        queryExecutor: null!,
-        queryCustomizers: [],
-        displayResolvers: [],
-        summaryProviders: [],
-        validators: [],
-        deleteGuards: [],
-        auditStampProvider: new FixedAuditStampProvider());
+    private static StandardCrudService CreateService(IStandardCrudRepository repository) => new StandardCrudService(
+            repository,
+            null!,
+            new StandardCrudDefaultWriter(repository, [], [], auditValueProvider: new EntityAuditValueProvider(new FixedAuditStampProvider())),
+            [],
+            [],
+            []);
 
     private static Dictionary<string, object?> DepartmentValues(
         string companyId,

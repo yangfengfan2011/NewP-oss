@@ -43,7 +43,7 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
             PersonObjectBehavior.BehaviorDefinition,
             static (provider, _) => new PersonObjectBehavior(
                 provider.GetRequiredService<IStandardCrudResourceRegistry>(),
-                () => provider.GetRequiredService<ICP.Platform.Crud.Runtime.StandardCrudService>(),
+                provider.GetRequiredService<ICP.Platform.Crud.Runtime.StandardCrudDefaultWriter>(),
                 provider.GetRequiredService<PersonLifecycleService>(),
                 provider.GetRequiredService<PersonUserBindingService>(),
                 provider.GetRequiredService<PersonObjectActionInvocationContext>(),

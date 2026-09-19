@@ -10,7 +10,7 @@ namespace ICP.Platform.Crud.ObjectOperations;
 public abstract class ObjectBehaviorBase : IObjectBehavior
 {
     private readonly IStandardCrudResourceRegistry? _resources;
-    private readonly Func<StandardCrudService>? _resolveDefaultOperations;
+    private readonly StandardCrudDefaultWriter? _defaultWriter;
 
     // 专用行为只提供静态声明，并显式重写其拥有的动作。
     protected ObjectBehaviorBase(ObjectBehaviorDefinition definition)
@@ -18,15 +18,15 @@ public abstract class ObjectBehaviorBase : IObjectBehavior
         Definition = definition ?? throw new ArgumentNullException(nameof(definition));
     }
 
-    // 公共默认行为持有正式资源目录与同作用域核心解析器，不保存单次操作状态。
+    // 公共默认行为持有正式资源目录与同作用域默认写入模块，不保存单次操作状态。
     protected ObjectBehaviorBase(
         ObjectBehaviorDefinition definition,
         IStandardCrudResourceRegistry resources,
-        Func<StandardCrudService> resolveDefaultOperations)
+        StandardCrudDefaultWriter defaultWriter)
         : this(definition)
     {
         _resources = resources ?? throw new ArgumentNullException(nameof(resources));
-        _resolveDefaultOperations = resolveDefaultOperations ?? throw new ArgumentNullException(nameof(resolveDefaultOperations));
+        _defaultWriter = defaultWriter ?? throw new ArgumentNullException(nameof(defaultWriter));
     }
 
     /// <inheritdoc />
@@ -72,7 +72,7 @@ public abstract class ObjectBehaviorBase : IObjectBehavior
     protected virtual ValueTask<StandardCrudMutationResult> CreateAsync(
         ObjectOperationContext context,
         CancellationToken cancellationToken) =>
-        ResolveDefaultOperations(context).ExecuteDefaultCreateAsync(
+        ResolveDefaultOperations(context).CreateAsync(
             ResolveDescriptor(context),
             context.Values,
             cancellationToken);
@@ -81,7 +81,7 @@ public abstract class ObjectBehaviorBase : IObjectBehavior
     protected virtual ValueTask<StandardCrudMutationResult> UpdateAsync(
         ObjectOperationContext context,
         CancellationToken cancellationToken) =>
-        ResolveDefaultOperations(context).ExecuteDefaultUpdateAsync(
+        ResolveDefaultOperations(context).UpdateAsync(
             ResolveDescriptor(context),
             RequireTargetId(context),
             context.Values,
@@ -91,7 +91,7 @@ public abstract class ObjectBehaviorBase : IObjectBehavior
     protected virtual ValueTask<StandardCrudMutationResult> DeleteAsync(
         ObjectOperationContext context,
         CancellationToken cancellationToken) =>
-        ResolveDefaultOperations(context).ExecuteDefaultDeleteAsync(
+        ResolveDefaultOperations(context).DeleteAsync(
             ResolveDescriptor(context),
             RequireTargetId(context),
             cancellationToken);
@@ -104,8 +104,8 @@ public abstract class ObjectBehaviorBase : IObjectBehavior
             $"OBJECT_OPERATION_ACTION_UNIMPLEMENTED: {Definition.ObjectKey}/{context.Action.Value}");
 
     // 只有通过公共默认行为注册的实例拥有默认核心；专用派生类遗漏重写时保持失败关闭。
-    private StandardCrudService ResolveDefaultOperations(ObjectOperationContext context) =>
-        _resolveDefaultOperations?.Invoke()
+    private StandardCrudDefaultWriter ResolveDefaultOperations(ObjectOperationContext context) =>
+        _defaultWriter
         ?? throw new InvalidOperationException(
             $"OBJECT_OPERATION_ACTION_UNIMPLEMENTED: {Definition.ObjectKey}/{context.Action.Value}");
 

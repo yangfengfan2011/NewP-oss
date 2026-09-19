@@ -8,12 +8,12 @@ namespace ICP.Platform.Crud.ObjectOperations;
 /// </summary>
 internal sealed class StandardCrudObjectBehavior : ObjectBehaviorBase
 {
-    // 每个注册 identity 只保存静态声明和同作用域默认核心解析器，不持有操作可变状态。
+    // 每个注册 identity 只保存静态声明和同作用域默认写入模块，不持有操作可变状态。
     internal StandardCrudObjectBehavior(
         ObjectBehaviorDefinition definition,
         IStandardCrudResourceRegistry resources,
-        Func<StandardCrudService> resolveOperations)
-        : base(definition, resources, resolveOperations)
+        StandardCrudDefaultWriter defaultWriter)
+        : base(definition, resources, defaultWriter)
     {
     }
 }

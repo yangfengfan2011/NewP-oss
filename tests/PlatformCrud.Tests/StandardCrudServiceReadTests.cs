@@ -20,7 +20,14 @@ public sealed class StandardCrudServiceReadTests
         var repository = new InMemoryStandardCrudRepository(
             [new Dictionary<string, object?> { ["EID"] = "person-1", ["CreatedBy"] = "actor-1", ["UpdatedBy"] = "actor-1" }]);
         var directory = new RecordingUserDirectory();
-        var service = new StandardCrudService(repository, EmptyQueryExecutor(), [], [], [], [], [], userDisplayNameDirectory: directory);
+        var service = new StandardCrudService(
+            repository,
+            EmptyQueryExecutor(),
+            new StandardCrudDefaultWriter(repository, [], []),
+            [],
+            [],
+            [],
+            userDisplayNameDirectory: directory);
         var descriptor = new StandardCrudDescriptor
         {
             ResourceKey = "organization.person", ModuleId = "Organization", ModelName = "Person",
@@ -76,7 +83,14 @@ public sealed class StandardCrudServiceReadTests
                 new LookupFieldDisplayProjectionPlan(field, field + "_DisplayValue", LookupDisplayProjectionKind.User, "IdentityAccount", "EID", "ENAME")
                 { IsEntityAuditField = true }).ToArray())
         };
-        var service = new StandardCrudService(new InMemoryStandardCrudRepository([]), executor, [], [], [], [], [],
+        var writeRepository = new InMemoryStandardCrudRepository([]);
+        var service = new StandardCrudService(
+            writeRepository,
+            executor,
+            new StandardCrudDefaultWriter(writeRepository, [], []),
+            [],
+            [],
+            [],
             userDisplayNameDirectory: directory,
             presentationContextAccessor: new FixedPresentationContextAccessor(new RequestPresentationContext("zh-CN", "Asia/Taipei")));
 
@@ -118,8 +132,15 @@ public sealed class StandardCrudServiceReadTests
             DisplayProjectionPlan = new ModelDisplayProjectionPlan("Company", [new LookupFieldDisplayProjectionPlan(
                 "CreatedBy", "CreatedBy_DisplayValue", LookupDisplayProjectionKind.User, "IdentityAccount", "EID", "ENAME") { IsEntityAuditField = true }])
         };
-        var service = new StandardCrudService(new InMemoryStandardCrudRepository(
-            [new Dictionary<string, object?> { ["EID"] = "1", ["CreatedBy"] = actor }]), EmptyQueryExecutor(), [], [], [], [], [],
+        var writeRepository = new InMemoryStandardCrudRepository(
+            [new Dictionary<string, object?> { ["EID"] = "1", ["CreatedBy"] = actor }]);
+        var service = new StandardCrudService(
+            writeRepository,
+            EmptyQueryExecutor(),
+            new StandardCrudDefaultWriter(writeRepository, [], []),
+            [],
+            [],
+            [],
             userDisplayNameDirectory: directory,
             presentationContextAccessor: new FixedPresentationContextAccessor(new RequestPresentationContext(locale, "Asia/Taipei")));
 
@@ -148,7 +169,10 @@ public sealed class StandardCrudServiceReadTests
         var service = new StandardCrudService(
             repository,
             EmptyQueryExecutor(),
-            [], [], [], [], [],
+            new StandardCrudDefaultWriter(repository, [], []),
+            [],
+            [],
+            [],
             temporalDisplayProjectionExecutor: executor);
         var descriptor = new StandardCrudDescriptor
         {
@@ -209,10 +233,9 @@ public sealed class StandardCrudServiceReadTests
         var service = new StandardCrudService(
             repository,
             executor,
+            new StandardCrudDefaultWriter(repository, [], []),
             [new KeywordQueryCustomizer()],
             [new PersonDisplayResolver()],
-            [],
-            [],
             []);
 
         var result = await service.ListAsync(
@@ -237,13 +260,13 @@ public sealed class StandardCrudServiceReadTests
     public async Task ListAsync_WhenCanonicalDisplayCompanionRequested_AddsRawFieldBeforeDisplayField()
     {
         var executor = DisplayValueQueryExecutor();
+        var writeRepository = new InMemoryStandardCrudRepository([]);
         var service = new StandardCrudService(
-            new InMemoryStandardCrudRepository([]),
+            writeRepository,
             executor,
+            new StandardCrudDefaultWriter(writeRepository, [], []),
             [],
             [new PersonDisplayResolver()],
-            [],
-            [],
             []);
 
         var result = await service.ListAsync(
@@ -280,11 +303,11 @@ public sealed class StandardCrudServiceReadTests
             new PlatformDisplayValueField("DepartmentName", "DepartmentId", "Department", "EID", "ENAME"),
             new PlatformDisplayValueField("PositionName", "PositionId", "Position", "EID", "ENAME")
         ]);
+        var writeRepository = new InMemoryStandardCrudRepository([]);
         var service = new StandardCrudService(
-            new InMemoryStandardCrudRepository([]),
+            writeRepository,
             executor,
-            [],
-            [],
+            new StandardCrudDefaultWriter(writeRepository, [], []),
             [],
             [],
             []);
@@ -308,11 +331,10 @@ public sealed class StandardCrudServiceReadTests
         var service = new StandardCrudService(
             repository,
             EmptyQueryExecutor(),
+            new StandardCrudDefaultWriter(repository, [], []),
             [],
             [new PersonDisplayResolver()],
-            [new FailingSummaryProvider()],
-            [],
-            []);
+            [new FailingSummaryProvider()]);
 
         var detail = await service.GetDetailAsync(Descriptor(summaryKeys: ["userLink"]), "person-1");
 
@@ -336,10 +358,9 @@ public sealed class StandardCrudServiceReadTests
         var service = new StandardCrudService(
             repository,
             EmptyQueryExecutor(),
+            new StandardCrudDefaultWriter(repository, [], []),
             [],
             [new PersonDisplayResolver()],
-            [],
-            [],
             []);
 
         var detail = await service.GetDetailAsync(Descriptor(), "person-1");
@@ -356,7 +377,13 @@ public sealed class StandardCrudServiceReadTests
         [
             new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三" }
         ]);
-        var service = new StandardCrudService(repository, EmptyQueryExecutor(), [], [], [], [], []);
+        var service = new StandardCrudService(
+            repository,
+            EmptyQueryExecutor(),
+            new StandardCrudDefaultWriter(repository, [], []),
+            [],
+            [],
+            []);
 
         var options = await service.OptionsAsync(Descriptor(), new StandardCrudListQuery());
 
@@ -369,13 +396,13 @@ public sealed class StandardCrudServiceReadTests
     public async Task ListAsync_WhenDisplayResolverOverwritesRawField_ThrowsStableMessage()
     {
         var executor = DisplayValueQueryExecutor();
+        var writeRepository = new InMemoryStandardCrudRepository([]);
         var service = new StandardCrudService(
-            new InMemoryStandardCrudRepository([]),
+            writeRepository,
             executor,
+            new StandardCrudDefaultWriter(writeRepository, [], []),
             [],
             [new RawOverwritingDisplayResolver()],
-            [],
-            [],
             []);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
@@ -390,13 +417,13 @@ public sealed class StandardCrudServiceReadTests
     [Fact]
     public async Task ListAsync_WhenDisplayResolverReturnsUnrequestedField_ThrowsStableMessage()
     {
+        var writeRepository = new InMemoryStandardCrudRepository([]);
         var service = new StandardCrudService(
-            new InMemoryStandardCrudRepository([]),
+            writeRepository,
             DisplayValueQueryExecutor(),
+            new StandardCrudDefaultWriter(writeRepository, [], []),
             [],
             [new ExtraFieldDisplayResolver()],
-            [],
-            [],
             []);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
@@ -413,13 +440,13 @@ public sealed class StandardCrudServiceReadTests
     [InlineData(true)]
     public async Task ListAsync_WhenDisplayResolverReturnsNonStringDisplayValue_ThrowsStableMessage(object invalidDisplayValue)
     {
+        var writeRepository = new InMemoryStandardCrudRepository([]);
         var service = new StandardCrudService(
-            new InMemoryStandardCrudRepository([]),
+            writeRepository,
             DisplayValueQueryExecutor(),
+            new StandardCrudDefaultWriter(writeRepository, [], []),
             [],
             [new FixedDisplayValueResolver(invalidDisplayValue)],
-            [],
-            [],
             []);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
@@ -436,13 +463,13 @@ public sealed class StandardCrudServiceReadTests
     [InlineData(null)]
     public async Task ListAsync_WhenDisplayResolverReturnsSupportedDisplayValue_PreservesRawField(object? displayValue)
     {
+        var writeRepository = new InMemoryStandardCrudRepository([]);
         var service = new StandardCrudService(
-            new InMemoryStandardCrudRepository([]),
+            writeRepository,
             DisplayValueQueryExecutor(),
+            new StandardCrudDefaultWriter(writeRepository, [], []),
             [],
             [new FixedDisplayValueResolver(displayValue)],
-            [],
-            [],
             []);
 
         var result = await service.ListAsync(
@@ -483,10 +510,9 @@ public sealed class StandardCrudServiceReadTests
         var service = new StandardCrudService(
             repository,
             executor,
+            new StandardCrudDefaultWriter(repository, [], []),
             [],
             [new BrokenPersonDisplayResolver()],
-            [],
-            [],
             []);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
@@ -525,10 +551,9 @@ public sealed class StandardCrudServiceReadTests
         var service = new StandardCrudService(
             repository,
             executor,
+            new StandardCrudDefaultWriter(repository, [], []),
             [],
             [new MissingDisplayResolver()],
-            [],
-            [],
             []);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
@@ -569,8 +594,7 @@ public sealed class StandardCrudServiceReadTests
         var service = new StandardCrudService(
             repository,
             executor,
-            [],
-            [],
+            new StandardCrudDefaultWriter(repository, [], []),
             [],
             [],
             []);
@@ -601,8 +625,7 @@ public sealed class StandardCrudServiceReadTests
         var service = new StandardCrudService(
             repository,
             executor,
-            [],
-            [],
+            new StandardCrudDefaultWriter(repository, [], []),
             [],
             [],
             []);

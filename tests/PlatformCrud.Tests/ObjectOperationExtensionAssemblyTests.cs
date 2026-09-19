@@ -1,7 +1,10 @@
+using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.ObjectOperations;
+using ICP.Platform.Crud.Runtime;
+using ICP.Platform.Crud.Tests.Support;
 using ICP.Platform.Kernel.Abstractions;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.Auditing;
@@ -209,7 +212,7 @@ public sealed class ObjectOperationExtensionAssemblyTests
     }
 
     [Fact]
-    public void AddStandardCrudObjectBehavior_ReusesOneDefaultImplementationWithoutEmptyObjectClasses()
+    public async Task AddStandardCrudObjectBehavior_WritesEachDeclaredResourceWithoutResolvingReadService()
     {
         var services = CreateServices();
         var owner = new TestModule("Organization", []);
@@ -219,18 +222,28 @@ public sealed class ObjectOperationExtensionAssemblyTests
         services.AddStandardCrudResource(Resource("organization.company", "Company"));
         services.AddStandardCrudObjectBehavior(owner, person);
         services.AddStandardCrudObjectBehavior(owner, company);
+        var repository = new InMemoryStandardCrudRepository([]);
+        services.AddSingleton<IStandardCrudRepository>(repository);
+        services.AddScoped<StandardCrudService>(_ =>
+            throw new InvalidOperationException("Object writes must not resolve the read and presentation service."));
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
 
-        var behaviors = scope.ServiceProvider.GetServices<IObjectBehaviorContribution>()
-            .Select(contribution => contribution.Behavior)
-            .ToArray();
+        var operations = scope.ServiceProvider.GetRequiredService<IObjectOperationExecutor>();
+        foreach (var (key, model, name) in new[]
+                 {
+                     ("organization.person", "Person", "人员"),
+                     ("organization.company", "Company", "公司")
+                 })
+        {
+            var result = await operations.ExecuteAsync(key, ObjectOperationAction.Create, null,
+                new Dictionary<string, object?> { ["ENAME"] = name });
 
-        Assert.Equal(2, behaviors.Length);
-        Assert.Single(behaviors.Select(behavior => behavior.GetType()).Distinct());
-        Assert.Equal(
-            ["organization.company", "organization.person"],
-            behaviors.Select(behavior => behavior.Definition.ObjectKey).Order(StringComparer.Ordinal));
+            Assert.True(result.Succeeded, result.Error?.Message);
+            var id = Assert.IsType<string>(result.Detail!.Fields["EID"]);
+            var persisted = await repository.GetByIdAsync(Resource(key, model), id);
+            Assert.Equal(name, persisted!["ENAME"]);
+        }
     }
 
     [Fact]

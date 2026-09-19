@@ -36,13 +36,12 @@ public sealed class DepartmentCrudDisplayValueResolverTests
             ["CompanyId", "CompanyId_DisplayValue", "ParentDepartmentId", "ParentDepartmentId_DisplayValue"],
             descriptor.DisplayValueFields));
         var service = new StandardCrudService(
-            repository: null!,
+            null!,
             executor,
-            queryCustomizers: [],
-            displayResolvers: [new DepartmentCrudDisplayValueResolver(query)],
-            summaryProviders: [],
-            validators: [],
-            deleteGuards: []);
+            new StandardCrudDefaultWriter(null!, [], []),
+            [],
+            [new DepartmentCrudDisplayValueResolver(query)],
+            []);
 
         var result = await service.ListAsync(
             descriptor,

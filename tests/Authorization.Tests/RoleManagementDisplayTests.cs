@@ -40,8 +40,14 @@ public sealed class RoleManagementDisplayTests
         }
         db.ChangeTracker.Clear();
         var names = new Names();
-        var service = new StandardCrudService(new EfStandardCrudRepository(db, new PlatformObjectIdGenerator()),
-            new EfPlatformQueryExecutor(db), [new RoleReadResource()], [], [], [], [],
+        var writeRepository = new EfStandardCrudRepository(db, new PlatformObjectIdGenerator());
+        var service = new StandardCrudService(
+            writeRepository,
+            new EfPlatformQueryExecutor(db),
+            new StandardCrudDefaultWriter(writeRepository, [], []),
+            [new RoleReadResource()],
+            [],
+            [],
             temporalDisplayProjectionExecutor: new TemporalDisplayProjectionExecutor(new Presentation(locale, zone), new TemporalDisplayFormatter()),
             userDisplayNameDirectory: names);
         var query = new RoleManagementQuery(service, registry);

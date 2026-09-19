@@ -1,11 +1,9 @@
 using ICP.Platform.Crud.Abstractions;
-using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Persistence.Auditing;
 using ICP.Platform.Query.Models;
 using ICP.Platform.Query.Runtime;
-using ICP.Platform.Modeling;
 using ICP.Platform.Modeling.DisplayPlanning;
 using ICP.Platform.Presentation;
 using ICP.Platform.Crud.ObjectOperations;
@@ -20,71 +18,38 @@ public sealed class StandardCrudService : IStandardCrudService
     private readonly IReadOnlyDictionary<string, IStandardCrudQueryCustomizer> _queryCustomizers;
     private readonly IReadOnlyDictionary<string, IStandardCrudDisplayValueResolver> _displayResolvers;
     private readonly IReadOnlyDictionary<(string ResourceKey, string Key), IStandardCrudSummaryProvider> _summaryProviders;
-    private readonly IReadOnlyDictionary<string, IStandardCrudValidator> _validators;
-    private readonly IReadOnlyDictionary<string, IStandardCrudDeleteGuard> _deleteGuards;
-    private readonly IReadOnlyDictionary<string, IStandardCrudConditionalDeleteExecutor> _conditionalDeleteExecutors;
-    private readonly IEntityAuditValueProvider? _auditValueProvider;
-    private readonly ITemporalInputNormalizer? _temporalInputNormalizer;
     private readonly ITemporalDisplayProjectionExecutor? _temporalDisplayProjectionExecutor;
     private readonly IUserDisplayNameDirectory? _userDisplayNameDirectory;
     private readonly IRequestPresentationContextAccessor? _presentationContextAccessor;
     private readonly ILogger<StandardCrudService>? _logger;
-    private readonly IReadOnlyDictionary<string, IStandardCrudCreationRecorder> _creationRecorders;
-    private readonly IReadOnlyDictionary<string, IStandardCrudUpdateRecorder> _updateRecorders;
-    private readonly IPlatformTransactionExecutor? _transactionExecutor;
     private readonly IObjectOperationExecutor? _objectOperations;
-    private readonly StandardCrudCreateRequestPreparer _createPreparer;
+    private readonly StandardCrudDefaultWriter _defaultWriter;
 
-    /// <summary>
-    /// 组合标准 CRUD 的共享读写依赖；可信审计 owner 只在资源声明服务端必填审计字段时使用。
-    /// </summary>
+    /// <summary>组合查询与展示依赖；写入只路由到对象执行器或公共默认写入模块。</summary>
     public StandardCrudService(
         IStandardCrudRepository repository,
         IPlatformQueryExecutor queryExecutor,
+        StandardCrudDefaultWriter defaultWriter,
         IEnumerable<IStandardCrudQueryCustomizer> queryCustomizers,
         IEnumerable<IStandardCrudDisplayValueResolver> displayResolvers,
         IEnumerable<IStandardCrudSummaryProvider> summaryProviders,
-        IEnumerable<IStandardCrudValidator> validators,
-        IEnumerable<IStandardCrudDeleteGuard> deleteGuards,
-        IEnumerable<IStandardCrudConditionalDeleteExecutor>? conditionalDeleteExecutors = null,
-        IEntityAuditStampProvider? auditStampProvider = null,
-        ITemporalInputNormalizer? temporalInputNormalizer = null,
         ITemporalDisplayProjectionExecutor? temporalDisplayProjectionExecutor = null,
         IUserDisplayNameDirectory? userDisplayNameDirectory = null,
         IRequestPresentationContextAccessor? presentationContextAccessor = null,
         ILogger<StandardCrudService>? logger = null,
-        IEnumerable<IStandardCrudCreationRecorder>? creationRecorders = null,
-        IPlatformTransactionExecutor? transactionExecutor = null,
-        IEnumerable<IStandardCrudUpdateRecorder>? updateRecorders = null,
-        IObjectOperationExecutor? objectOperations = null,
-        StandardCrudCreateRequestPreparer? createPreparer = null,
-        IEntityAuditValueProvider? auditValueProvider = null)
+        IObjectOperationExecutor? objectOperations = null)
     {
         _repository = repository;
         _queryExecutor = queryExecutor;
+        _defaultWriter = defaultWriter;
         _queryCustomizers = queryCustomizers.ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
         _displayResolvers = displayResolvers.ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
         _summaryProviders = summaryProviders.ToDictionary(item => (item.ResourceKey, item.Key));
-        _validators = validators.ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
-        _deleteGuards = deleteGuards.ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
-        _conditionalDeleteExecutors = (conditionalDeleteExecutors ?? [])
-            .ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
-        _auditValueProvider = auditValueProvider
-            ?? (auditStampProvider is null ? null : new EntityAuditValueProvider(auditStampProvider));
-        _temporalInputNormalizer = temporalInputNormalizer;
         _temporalDisplayProjectionExecutor = temporalDisplayProjectionExecutor;
         _userDisplayNameDirectory = userDisplayNameDirectory;
         _presentationContextAccessor = presentationContextAccessor;
         _logger = logger;
-        _creationRecorders = (creationRecorders ?? []).ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
-        _transactionExecutor = transactionExecutor;
-        _updateRecorders = (updateRecorders ?? []).ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
         _objectOperations = objectOperations;
-        _createPreparer = createPreparer ?? new StandardCrudCreateRequestPreparer(
-            repository,
-            _validators.Values,
-            temporalInputNormalizer,
-            _auditValueProvider);
     }
 
     /// <summary>
@@ -250,74 +215,16 @@ public sealed class StandardCrudService : IStandardCrudService
             }
             catch (StandardCrudPersistenceConflictException)
             {
-                return StandardCrudMutationResult.Failure(PersistenceConflict(descriptor));
+                return StandardCrudMutationResult.Failure(StandardCrudDefaultWriter.PersistenceConflict(descriptor));
             }
         }
 
-        var result = await ExecuteDefaultCreateAsync(descriptor, values, cancellationToken);
+        var result = await _defaultWriter.CreateAsync(descriptor, values, cancellationToken);
         return await BuildMutationDetailAsync(
             descriptor,
             result,
             "Default create behavior returned no created row.",
             cancellationToken);
-    }
-
-    // 默认创建核心可由统一对象行为复用；已处于对象事务时只登记变化，不再取得第二次事务所有权。
-    internal async ValueTask<StandardCrudMutationResult> ExecuteDefaultCreateAsync(
-        StandardCrudDescriptor descriptor,
-        IReadOnlyDictionary<string, object?> values,
-        CancellationToken cancellationToken)
-    {
-        if (_transactionExecutor is { IsActive: false } && _transactionExecutor.HasParticipants(descriptor.ModelName))
-            return await ExecuteCoordinatedAsync(
-                descriptor,
-                token => ExecuteDefaultCreateAsync(descriptor, values, token).AsTask(),
-                cancellationToken);
-        var preparation = await _createPreparer.PrepareAsync(descriptor, values, cancellationToken);
-        if (!preparation.Succeeded)
-            return StandardCrudMutationResult.Failure(preparation.Error!);
-        var allowed = preparation.Values!;
-
-        IReadOnlyDictionary<string, object?> created;
-        try
-        {
-            if (descriptor.RequiresCreationRecord)
-            {
-                if (!_creationRecorders.TryGetValue(descriptor.ResourceKey, out var recorder)
-                    || _transactionExecutor is null || _repository is not IStandardCrudCreationParticipant participant)
-                    throw new InvalidOperationException("Required creation registration is unavailable.");
-
-                if (_transactionExecutor.IsActive)
-                {
-                    var row = participant.RegisterCreate(descriptor, allowed);
-                    await recorder.RegisterAsync(row, cancellationToken);
-                    created = row;
-                }
-                else
-                {
-                    var id = await _transactionExecutor.ExecuteAsync(async token =>
-                    {
-                        var row = participant.RegisterCreate(descriptor, allowed);
-                        await recorder.RegisterAsync(row, token);
-                        return Convert.ToString(row[descriptor.IdField])!;
-                    }, cancellationToken);
-                    created = await _repository.GetByIdAsync(descriptor, id, cancellationToken)
-                        ?? throw new InvalidOperationException("Committed resource is unavailable.");
-                }
-            }
-            else
-            {
-                created = await _repository.CreateAsync(descriptor, allowed, cancellationToken);
-            }
-        }
-        catch (StandardCrudPersistenceConflictException)
-        {
-            return StandardCrudMutationResult.Failure(PersistenceConflict(descriptor));
-        }
-        return StandardCrudMutationResult.Success(new StandardCrudDetail
-        {
-            Fields = created
-        });
     }
 
     /// <summary>
@@ -348,182 +255,16 @@ public sealed class StandardCrudService : IStandardCrudService
             }
             catch (StandardCrudPersistenceConflictException)
             {
-                return StandardCrudMutationResult.Failure(PersistenceConflict(descriptor));
+                return StandardCrudMutationResult.Failure(StandardCrudDefaultWriter.PersistenceConflict(descriptor));
             }
         }
 
-        var result = await ExecuteDefaultUpdateAsync(descriptor, id, values, cancellationToken);
+        var result = await _defaultWriter.UpdateAsync(descriptor, id, values, cancellationToken);
         return await BuildMutationDetailAsync(
             descriptor,
             result,
             "Default update behavior returned no updated row.",
             cancellationToken);
-    }
-
-    // 默认更新核心在对象事务内直接保护旧值、校验最终输入并登记业务审计，避免形成第二个事务 owner。
-    internal async ValueTask<StandardCrudMutationResult> ExecuteDefaultUpdateAsync(
-        StandardCrudDescriptor descriptor,
-        string id,
-        IReadOnlyDictionary<string, object?> values,
-        CancellationToken cancellationToken)
-    {
-        if (_transactionExecutor is { IsActive: false } && _transactionExecutor.HasParticipants(descriptor.ModelName))
-            return await ExecuteCoordinatedAsync(
-                descriptor,
-                token => ExecuteDefaultUpdateAsync(descriptor, id, values, token).AsTask(),
-                cancellationToken);
-        StandardCrudDescriptorValidator.Validate(descriptor);
-        if (!descriptor.RequiresUpdateRecord)
-            return await UpdateCoreAsync(descriptor, id, values, null, null, cancellationToken);
-        if (!_updateRecorders.TryGetValue(descriptor.ResourceKey, out var recorder)
-            || _transactionExecutor is null || _repository is not IStandardCrudUpdateParticipant participant
-            || !string.IsNullOrWhiteSpace(descriptor.ConcurrencyRevisionField))
-            throw new InvalidOperationException("Required protected update registration is unavailable.");
-        try
-        {
-            if (_transactionExecutor.IsActive)
-            {
-                return await UpdateCoreAsync(descriptor, id, values, participant, recorder, cancellationToken);
-            }
-
-            return await _transactionExecutor.ExecuteAsync(token => new ValueTask<StandardCrudMutationResult>(
-                UpdateCoreAsync(descriptor, id, values, participant, recorder, token)), cancellationToken);
-        }
-        catch (StandardCrudPersistenceConflictException)
-        {
-            return StandardCrudMutationResult.Failure(PersistenceConflict(descriptor));
-        }
-    }
-
-    // 复用原更新校验顺序；参与者存在时，旧值读取、校验和规范新值登记均持有同一事务保护。
-    private async Task<StandardCrudMutationResult> UpdateCoreAsync(
-        StandardCrudDescriptor descriptor, string id, IReadOnlyDictionary<string, object?> values,
-        IStandardCrudUpdateParticipant? participant, IStandardCrudUpdateRecorder? recorder,
-        CancellationToken cancellationToken)
-    {
-        var existing = participant is null
-            ? await _repository.GetByIdAsync(descriptor, id, cancellationToken)
-            : await participant.ReadForUpdateAsync(descriptor, id, cancellationToken);
-        if (existing is null)
-        {
-            return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
-        }
-
-        long? expectedRevision = null;
-        if (!string.IsNullOrWhiteSpace(descriptor.ConcurrencyRevisionField))
-        {
-            if (!TryReadRevision(values, descriptor.ConcurrencyRevisionField, out var submittedRevision))
-            {
-                return StandardCrudMutationResult.Failure(ConcurrencyRevisionRequired(descriptor));
-            }
-
-            if (!TryReadRevision(existing, descriptor.ConcurrencyRevisionField, out var currentRevision)
-                || submittedRevision != currentRevision)
-            {
-                return StandardCrudMutationResult.Failure(ConcurrencyConflict(descriptor));
-            }
-
-            expectedRevision = submittedRevision;
-        }
-
-        var ownershipFieldError = FindReadOnlyOwnershipFieldError(descriptor, values, isCreate: false);
-        if (ownershipFieldError is not null)
-        {
-            return StandardCrudMutationResult.Failure(ownershipFieldError);
-        }
-
-        var readOnlyDisplayFieldError = FindReadOnlyDisplayFieldError(descriptor, values);
-        if (readOnlyDisplayFieldError is not null)
-        {
-            return StandardCrudMutationResult.Failure(readOnlyDisplayFieldError);
-        }
-
-        var allowed = new Dictionary<string, object?>(
-            FilterFields(values, descriptor.FieldSet.UpdateFields),
-            StringComparer.Ordinal);
-        var temporalError = NormalizeTemporalInputs(descriptor, allowed);
-        if (temporalError is not null)
-        {
-            return StandardCrudMutationResult.Failure(temporalError);
-        }
-        var requiredError = ValidateRequiredFields(descriptor, allowed, isCreate: false);
-        if (requiredError is not null)
-        {
-            return StandardCrudMutationResult.Failure(requiredError);
-        }
-        var fieldPolicyError = ValidateFieldPolicies(descriptor, allowed);
-        if (fieldPolicyError is not null)
-        {
-            return StandardCrudMutationResult.Failure(fieldPolicyError);
-        }
-
-        var serverOwnedValueError = TryResolveRequiredAuditValues(descriptor, existing, out var auditValues);
-        if (serverOwnedValueError is not null)
-        {
-            return StandardCrudMutationResult.Failure(serverOwnedValueError);
-        }
-
-        ApplyUpdateAuditFields(descriptor, allowed, auditValues);
-        var candidate = new Dictionary<string, object?>(existing, StringComparer.Ordinal);
-        foreach (var pair in allowed)
-        {
-            candidate[pair.Key] = pair.Value;
-        }
-
-        var storageInvariantError = ValidateStorageInvariants(descriptor, candidate);
-        if (storageInvariantError is not null)
-        {
-            return StandardCrudMutationResult.Failure(storageInvariantError);
-        }
-
-        // 数据库可能按 provider 规则以别名命中主键；唯一性排除必须使用受保护旧值中的实际持久化标识。
-        var persistedId = Convert.ToString(existing.GetValueOrDefault(descriptor.IdField)) ?? id;
-        var uniqueError = await ValidateUniqueConstraintsAsync(
-            descriptor,
-            candidate,
-            excludedId: persistedId,
-            cancellationToken);
-        if (uniqueError is not null)
-        {
-            return StandardCrudMutationResult.Failure(uniqueError);
-        }
-
-        if (_validators.TryGetValue(descriptor.ResourceKey, out var validator))
-        {
-            var error = await validator.ValidateUpdateAsync(descriptor, id, allowed, cancellationToken);
-            if (error is not null)
-            {
-                return StandardCrudMutationResult.Failure(error);
-            }
-        }
-
-        IReadOnlyDictionary<string, object?>? updated;
-        try
-        {
-            if (participant is not null)
-            {
-                updated = await participant.RegisterUpdateAsync(descriptor, id, allowed, cancellationToken);
-                await recorder!.RegisterAsync(existing, updated, cancellationToken);
-            }
-            else
-            {
-                updated = expectedRevision.HasValue
-                    ? await _repository.UpdateAsync(descriptor, id, allowed, expectedRevision.Value, cancellationToken)
-                    : await _repository.UpdateAsync(descriptor, id, allowed, cancellationToken);
-            }
-        }
-        catch (StandardCrudPersistenceConflictException) when (participant is null)
-        {
-            return StandardCrudMutationResult.Failure(PersistenceConflict(descriptor));
-        }
-        return updated is null
-            ? StandardCrudMutationResult.Failure(expectedRevision.HasValue
-                ? ConcurrencyConflict(descriptor)
-                : NotFound(descriptor, id))
-            : StandardCrudMutationResult.Success(new StandardCrudDetail
-            {
-                Fields = updated
-            });
     }
 
     /// <summary>停用仅生成固定状态写入，复用标准更新的校验和事务。</summary>
@@ -579,111 +320,7 @@ public sealed class StandardCrudService : IStandardCrudService
                 cancellationToken);
         }
 
-        return await ExecuteDefaultDeleteAsync(descriptor, id, cancellationToken);
-    }
-
-    // 默认删除核心在统一行为事务内执行 guard 或原子条件删除，不更新即将物理删除行的审计字段。
-    internal async ValueTask<StandardCrudMutationResult> ExecuteDefaultDeleteAsync(
-        StandardCrudDescriptor descriptor,
-        string id,
-        CancellationToken cancellationToken)
-    {
-        if (_transactionExecutor is { IsActive: false } && _transactionExecutor.HasParticipants(descriptor.ModelName))
-            return await ExecuteCoordinatedAsync(
-                descriptor,
-                token => ExecuteDefaultDeleteAsync(descriptor, id, token).AsTask(),
-                cancellationToken);
-        StandardCrudDescriptorValidator.Validate(descriptor);
-        if (descriptor.DeletePolicy == StandardCrudDeletePolicy.None)
-        {
-            return StandardCrudMutationResult.Failure(new StandardCrudError
-            {
-                StatusCode = 409,
-                Code = "StandardCrud.DeleteNotSupported",
-                Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 不支持删除。",
-                ReasonKey = "standardCrud.deleteNotSupported"
-            });
-        }
-
-        if (descriptor.DeletePolicy == StandardCrudDeletePolicy.Auditable)
-        {
-            return StandardCrudMutationResult.Failure(new StandardCrudError
-            {
-                StatusCode = 409,
-                Code = "StandardCrud.AuditableDeleteNotSupported",
-                Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 声明了审计删除，但当前内核尚未提供审计删除实现。",
-                ReasonKey = "standardCrud.auditableDeleteNotSupported"
-            });
-        }
-
-        if (descriptor.DeletePolicy == StandardCrudDeletePolicy.Conditional && !_deleteGuards.TryGetValue(descriptor.ResourceKey, out var guard))
-        {
-            return StandardCrudMutationResult.Failure(new StandardCrudError
-            {
-                StatusCode = 409,
-                Code = "StandardCrud.DeleteGuardMissing",
-                Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 使用条件删除但未注册删除守卫。",
-                ReasonKey = "standardCrud.deleteGuardMissing"
-            });
-        }
-
-        if (descriptor.DeletePolicy == StandardCrudDeletePolicy.Conditional)
-        {
-            if (!_conditionalDeleteExecutors.TryGetValue(descriptor.ResourceKey, out var conditionalDeleteExecutor))
-            {
-                return StandardCrudMutationResult.Failure(new StandardCrudError
-                {
-                    StatusCode = 409,
-                    Code = "StandardCrud.ConditionalDeleteExecutorMissing",
-                    Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 使用条件删除但未注册原子条件删除执行器。",
-                    ReasonKey = "standardCrud.conditionalDeleteExecutorMissing"
-                });
-            }
-
-            return await conditionalDeleteExecutor.DeleteAsync(descriptor, id, cancellationToken);
-        }
-
-        if (_deleteGuards.TryGetValue(descriptor.ResourceKey, out var deleteGuard))
-        {
-            var guardError = await deleteGuard.CanDeleteAsync(descriptor, id, cancellationToken);
-            if (guardError is not null)
-            {
-                return StandardCrudMutationResult.Failure(guardError);
-            }
-        }
-
-        var deleted = await _repository.DeleteAsync(descriptor, id, cancellationToken);
-        return deleted ? StandardCrudMutationResult.Success() : StandardCrudMutationResult.Failure(NotFound(descriptor, id));
-    }
-
-    // 正式失败结果也必须回滚，避免事务末尾重试失败的受跟踪保存。
-    private async Task<StandardCrudMutationResult> ExecuteCoordinatedAsync(StandardCrudDescriptor descriptor,
-        Func<CancellationToken, Task<StandardCrudMutationResult>> write, CancellationToken cancellationToken)
-    {
-        try
-        {
-            return await _transactionExecutor!.ExecuteAsync([descriptor.ModelName], async token =>
-            {
-                var result = await write(token);
-                return result.Succeeded ? result : throw new MutationRejectedException(result);
-            }, cancellationToken);
-        }
-        catch (MutationRejectedException exception) { return exception.Result; }
-        catch (ICP.Platform.Persistence.Transactions.PlatformCacheUnavailableException exception)
-        {
-            return StandardCrudMutationResult.Failure(new StandardCrudError
-            {
-                StatusCode = 503,
-                Code = exception.Code,
-                Message = exception.Message,
-                ReasonKey = exception.ReasonKey
-            });
-        }
-    }
-
-    private sealed class MutationRejectedException(StandardCrudMutationResult result) : Exception
-    {
-        public StandardCrudMutationResult Result { get; } = result;
+        return await _defaultWriter.DeleteAsync(descriptor, id, cancellationToken);
     }
 
     // 查询扩展点只产出标准条件；列表真正执行统一收口到平台查询内核，避免模块逻辑直接进入持久化实现。
@@ -954,252 +591,6 @@ public sealed class StandardCrudService : IStandardCrudService
         }
     }
 
-    private static IReadOnlyDictionary<string, object?> FilterFields(
-        IReadOnlyDictionary<string, object?> values,
-        IReadOnlyList<string> allowedFields)
-    {
-        var filtered = new Dictionary<string, object?>(StringComparer.Ordinal);
-        foreach (var field in allowedFields)
-        {
-            if (values.TryGetValue(field, out var value))
-            {
-                filtered[field] = value;
-            }
-        }
-
-        return filtered;
-    }
-
-    // 短文本存储事实在公共写入边界失败，避免各模块等待数据库截断异常或复制长度协议。
-    private static StandardCrudError? ValidateFieldPolicies(
-        StandardCrudDescriptor descriptor,
-        IReadOnlyDictionary<string, object?> values)
-    {
-        foreach (var policy in descriptor.FieldPolicies)
-        {
-            if (!values.TryGetValue(policy.Field, out var value) || value is not string text)
-            {
-                continue;
-            }
-
-            if (policy.Trim && !string.Equals(text, text.Trim(), StringComparison.Ordinal)
-                || policy.EmptyAsNull && text.Length == 0)
-            {
-                return FieldPolicyError(
-                    policy.Field,
-                    "StandardCrud.ShortTextNotNormalized",
-                    $"字段 {policy.Field} 必须使用去除首尾空白后的规范短文本，空值请提交 null。",
-                    "standardCrud.shortTextNotNormalized");
-            }
-
-            if (policy.MaxLength is { } maxLength && text.Length > maxLength)
-            {
-                return FieldPolicyError(
-                    policy.Field,
-                    "StandardCrud.ShortTextTooLong",
-                    $"字段 {policy.Field} 不能超过 {maxLength} 个字符。",
-                    "standardCrud.shortTextTooLong");
-            }
-        }
-
-        return null;
-    }
-
-    // 字段策略错误统一带稳定顶层码与单字段错误，供标准表单精确定位。
-    private static StandardCrudError FieldPolicyError(
-        string field,
-        string code,
-        string message,
-        string reasonKey) => new()
-        {
-            StatusCode = 400,
-            Code = code,
-            Message = message,
-            ReasonKey = reasonKey,
-            FieldErrors = [new StandardCrudFieldError(field, code, message)]
-        };
-
-    // Modeling 标记的固定审计字段与规范字段策略共同保持服务端所有权，在过滤未知字段前拒绝越权输入。
-    private static StandardCrudError? FindReadOnlyOwnershipFieldError(
-        StandardCrudDescriptor descriptor,
-        IReadOnlyDictionary<string, object?> values,
-        bool isCreate)
-    {
-        var auditField = descriptor.DisplayProjectionPlan?.Fields.FirstOrDefault(plan => plan.IsEntityAuditField && values.ContainsKey(plan.SourceField));
-        if (auditField is not null)
-        {
-            return CreateReadOnlyServerOwnedFieldError(auditField.SourceField);
-        }
-        var submitted = descriptor.FieldPolicies.FirstOrDefault(policy =>
-            (policy.ValueOwner == StandardCrudFieldValueOwner.Server
-                || isCreate && policy.ValueOwner == StandardCrudFieldValueOwner.ServerOnCreate
-                || !isCreate && policy.ValueOwner == StandardCrudFieldValueOwner.CallerOnCreate)
-            && values.ContainsKey(policy.Field));
-        return submitted is null
-            ? null
-            : submitted.ValueOwner == StandardCrudFieldValueOwner.CallerOnCreate
-                ? CreateImmutableFieldError(submitted.Field)
-                : CreateReadOnlyServerOwnedFieldError(submitted.Field);
-    }
-
-    // 服务端拥有字段使用字段级 400，调用方可直接移除伪造值且不会把平台事实误判为普通未知字段。
-    private static StandardCrudError CreateReadOnlyServerOwnedFieldError(string field) => new()
-    {
-        StatusCode = 400,
-        Code = "StandardCrud.ServerOwnedFieldReadOnly",
-        ReasonKey = "standardCrud.serverOwnedFieldReadOnly",
-        Message = $"标准 CRUD 服务端字段 {field} 不能由客户端提交。",
-        FieldErrors =
-        [
-            new StandardCrudFieldError(
-                field,
-                "StandardCrud.ServerOwnedFieldReadOnly",
-                $"标准 CRUD 服务端字段 {field} 不能由客户端提交。")
-        ]
-    };
-
-    // 创建后不可变字段使用独立稳定码，避免把调用方创建事实误报成服务端生成事实。
-    private static StandardCrudError CreateImmutableFieldError(string field) => new()
-    {
-        StatusCode = 400,
-        Code = "StandardCrud.ImmutableFieldReadOnly",
-        ReasonKey = "standardCrud.immutableFieldReadOnly",
-        Message = $"标准 CRUD 字段 {field} 只能在创建时提交。",
-        FieldErrors =
-        [
-            new StandardCrudFieldError(
-                field,
-                "StandardCrud.ImmutableFieldReadOnly",
-                $"标准 CRUD 字段 {field} 只能在创建时提交。")
-        ]
-    };
-
-    // 服务端必填审计字段不能降级为客户端输入；owner 未装配或返回无效值时在仓储调用前独立失败。
-    private StandardCrudError? TryResolveRequiredAuditValues(
-        StandardCrudDescriptor descriptor,
-        IReadOnlyDictionary<string, object?> existing,
-        out EntityAuditValues? values)
-    {
-        var requiredAuditField = descriptor.FieldPolicies.FirstOrDefault(policy =>
-            policy.StorageRequired
-            && policy.ValueOwner == StandardCrudFieldValueOwner.Server
-            && IsEntityAuditField(policy.Field));
-        if (requiredAuditField is null)
-        {
-            values = null;
-            return null;
-        }
-
-        try
-        {
-            values = _auditValueProvider?.ForUpdate(
-                Convert.ToString(existing.GetValueOrDefault("CreatedBy"))!,
-                existing.GetValueOrDefault("CreatedAt") is DateTime createdAt
-                    ? createdAt
-                    : throw new EntityAuditStampUnavailableException());
-        }
-        catch (Exception exception) when (exception is ArgumentException or EntityAuditStampUnavailableException)
-        {
-            values = null;
-        }
-
-        return values is null
-            ? ServerOwnedValueUnavailable(descriptor, requiredAuditField.Field)
-            : null;
-    }
-
-    // ADR-0026 固定 Entity 审计四字段；主键等其他服务端字段继续由其既有 owner 处理。
-    private static bool IsEntityAuditField(string field) =>
-        field is "CreatedBy" or "CreatedAt" or "UpdatedBy" or "UpdatedAt";
-
-    // owner 缺失属于平台 500，不生成字段级调用方错误，避免把平台配置缺陷归因于请求。
-    private static StandardCrudError ServerOwnedValueUnavailable(
-        StandardCrudDescriptor descriptor,
-        string field) => new()
-        {
-            StatusCode = 500,
-            Code = "StandardCrud.ServerOwnedValueUnavailable",
-            ReasonKey = "standardCrud.serverOwnedValueUnavailable",
-            Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 的服务端必填字段 {field} 无法取得可信值。"
-        };
-
-    // 只有 canonical raw/display companion 属于 output-only；legacy 别名与未知字段继续沿既有边界处理。
-    private static StandardCrudError? FindReadOnlyDisplayFieldError(
-        StandardCrudDescriptor descriptor,
-        IReadOnlyDictionary<string, object?> values)
-    {
-        foreach (var displayField in StandardCrudQueryDescriptorAdapter.GetQueryDisplayValueFields(descriptor))
-        {
-            if (!IsCanonicalDisplayCompanion(displayField)
-                || !values.ContainsKey(displayField.Field))
-            {
-                continue;
-            }
-
-            return CreateReadOnlyDisplayFieldError(displayField.Field);
-        }
-
-        return null;
-    }
-
-    // canonical companion 以 source + "_DisplayValue" 为唯一稳定命名；其余 display 声明不参与本次写拒绝。
-    private static bool IsCanonicalDisplayCompanion(ICP.Platform.Query.Descriptors.PlatformDisplayValueField displayField) =>
-        string.Equals(displayField.Field, string.Concat(displayField.SourceField, "_DisplayValue"), StringComparison.Ordinal);
-
-    // display companion 只能由服务端在读取和写后详情阶段补齐，客户端提交视为稳定 400。
-    private static StandardCrudError CreateReadOnlyDisplayFieldError(string field) => new()
-    {
-        StatusCode = 400,
-        Code = "StandardCrud.DisplayValueFieldReadOnly",
-        ReasonKey = "standardCrud.displayValueFieldReadOnly",
-        Message = $"标准 CRUD 显示字段 {field} 只允许输出，不能提交写入。",
-        FieldErrors =
-        [
-            new StandardCrudFieldError(
-                field,
-                "StandardCrud.DisplayValueFieldReadOnly",
-                $"标准 CRUD 显示字段 {field} 只允许输出，不能提交写入。")
-        ]
-    };
-
-    // temporal 语义由字段策略触发；规范化完成后 validator 与仓储只接收 DateOnly 或 UTC DateTime。
-    private StandardCrudError? NormalizeTemporalInputs(
-        StandardCrudDescriptor descriptor,
-        IDictionary<string, object?> values)
-    {
-        foreach (var policy in descriptor.FieldPolicies.Where(static policy =>
-                     policy.ValueType is FieldValueType.CalendarDate or FieldValueType.Instant))
-        {
-            if (!values.TryGetValue(policy.Field, out var value))
-            {
-                continue;
-            }
-
-            if (_temporalInputNormalizer is null)
-            {
-                throw new InvalidOperationException(
-                    $"标准 CRUD 资源 {descriptor.ResourceKey} 声明了 temporal 输入字段，但未注册平台规范化器。");
-            }
-
-            var result = _temporalInputNormalizer.Normalize(policy.ValueType, value);
-            if (!result.IsSuccess)
-            {
-                return new StandardCrudError
-                {
-                    StatusCode = 400,
-                    Code = result.ErrorCode!,
-                    ReasonKey = "standardCrud.temporalInputInvalid",
-                    Message = result.Message!,
-                    FieldErrors = [new StandardCrudFieldError(policy.Field, result.ErrorCode!, result.Message!)]
-                };
-            }
-
-            values[policy.Field] = result.Value;
-        }
-
-        return null;
-    }
-
     private static IReadOnlyDictionary<string, object?> Project(
         IReadOnlyDictionary<string, object?> row,
         IReadOnlyList<string> responseFields)
@@ -1213,242 +604,4 @@ public sealed class StandardCrudService : IStandardCrudService
         return projected;
     }
 
-    // 必填校验属于标准写入前置校验；创建检查缺失，更新只检查本次提交字段是否被清空。
-    private static StandardCrudError? ValidateRequiredFields(
-        StandardCrudDescriptor descriptor,
-        IReadOnlyDictionary<string, object?> values,
-        bool isCreate)
-    {
-        foreach (var requiredField in descriptor.RequiredFields)
-        {
-            if (!AppliesToMutation(requiredField.Scope, isCreate))
-            {
-                continue;
-            }
-
-            if (isCreate)
-            {
-                if (!values.TryGetValue(requiredField.Field, out var value) || IsMissingRequiredValue(value))
-                {
-                    return RequiredFieldError(requiredField);
-                }
-
-                continue;
-            }
-
-            if (values.TryGetValue(requiredField.Field, out var updateValue) && IsMissingRequiredValue(updateValue))
-            {
-                return RequiredFieldError(requiredField);
-            }
-        }
-
-        return null;
-    }
-
-    private static bool AppliesToMutation(StandardCrudRequiredFieldScope scope, bool isCreate)
-    {
-        return isCreate
-            ? scope is StandardCrudRequiredFieldScope.CreateOnly or StandardCrudRequiredFieldScope.CreateAndUpdate
-            : scope is StandardCrudRequiredFieldScope.UpdateOnly or StandardCrudRequiredFieldScope.CreateAndUpdate;
-    }
-
-    private static bool IsMissingRequiredValue(object? value)
-    {
-        return value is null || value is string text && string.IsNullOrWhiteSpace(text);
-    }
-
-    private static StandardCrudError RequiredFieldError(StandardCrudRequiredField requiredField) => new()
-    {
-        StatusCode = 400,
-        Code = requiredField.ErrorCode,
-        Message = requiredField.Message,
-        ReasonKey = requiredField.ReasonKey,
-        FieldErrors = [new StandardCrudFieldError(requiredField.Field, requiredField.ErrorCode, requiredField.Message)]
-    };
-
-    // 合并后的完整候选必须满足由调用方拥有的存储非空不变量；服务端拥有值由其可信持久化 owner 在写入边界补齐。
-    private static StandardCrudError? ValidateStorageInvariants(
-        StandardCrudDescriptor descriptor,
-        IReadOnlyDictionary<string, object?> candidate)
-    {
-        var invalid = descriptor.FieldPolicies.FirstOrDefault(policy =>
-            policy.StorageRequired
-            && policy.ValueOwner != StandardCrudFieldValueOwner.Server
-            && (!candidate.TryGetValue(policy.Field, out var value) || IsMissingRequiredValue(value)));
-        return invalid is null
-            ? null
-            : new StandardCrudError
-            {
-                StatusCode = 409,
-                Code = "StandardCrud.StorageInvariantViolation",
-                Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 的存储必填字段 {invalid.Field} 当前为空。",
-                ReasonKey = "standardCrud.storageInvariantViolation"
-            };
-    }
-
-    // 唯一约束属于标准写入前置校验；descriptor 只声明约束，执行顺序由内核统一控制。
-    private async Task<StandardCrudError?> ValidateUniqueConstraintsAsync(
-        StandardCrudDescriptor descriptor,
-        IReadOnlyDictionary<string, object?> values,
-        string? excludedId,
-        CancellationToken cancellationToken)
-    {
-        foreach (var constraint in descriptor.UniqueConstraints)
-        {
-            var equalityValues = BuildUniqueEqualityValues(constraint, values);
-            if (equalityValues is null)
-            {
-                continue;
-            }
-
-            if (await _repository.ExistsAsync(descriptor, constraint, equalityValues, excludedId, cancellationToken))
-            {
-                return new StandardCrudError
-                {
-                    StatusCode = 409,
-                    Code = constraint.ErrorCode,
-                    Message = constraint.Message,
-                    ReasonKey = constraint.ReasonKey,
-                    FieldErrors = constraint.Fields.Count == 0
-                        ? []
-                        : [new StandardCrudFieldError(constraint.Fields[0], constraint.ErrorCode, constraint.Message)]
-                };
-            }
-        }
-
-        return null;
-    }
-
-    private static IReadOnlyDictionary<string, object?>? BuildUniqueEqualityValues(
-        StandardCrudUniqueConstraint constraint,
-        IReadOnlyDictionary<string, object?> values)
-    {
-        var equalityValues = new Dictionary<string, object?>(StringComparer.Ordinal);
-        foreach (var field in constraint.Fields.Concat(constraint.ScopeFields))
-        {
-            if (!values.TryGetValue(field, out var value) || value is null)
-            {
-                if (constraint.IgnoreWhenAnyFieldMissing)
-                {
-                    return null;
-                }
-
-                equalityValues[field] = null;
-                continue;
-            }
-
-            equalityValues[field] = NormalizeUniqueValue(value, constraint);
-        }
-
-        return equalityValues;
-    }
-
-    private static object? NormalizeUniqueValue(object? value, StandardCrudUniqueConstraint constraint)
-    {
-        if (value is not string text)
-        {
-            return value;
-        }
-
-        var normalized = constraint.TrimWhitespace ? text.Trim() : text;
-        return constraint.CaseInsensitive ? normalized.ToUpperInvariant() : normalized;
-    }
-
-    // 规范策略存在时只刷新服务端拥有的更新审计字段；未采用策略的资源保留既有 UpdatedAt 行为。
-    private static void ApplyUpdateAuditFields(
-        StandardCrudDescriptor descriptor,
-        IDictionary<string, object?> values,
-        EntityAuditValues? auditValues)
-    {
-        var serverOwnedUpdateAuditPolicies = descriptor.FieldPolicies
-            .Where(policy =>
-                policy.ValueOwner == StandardCrudFieldValueOwner.Server
-                && policy.Field is "UpdatedBy" or "UpdatedAt")
-            .ToArray();
-        if (serverOwnedUpdateAuditPolicies.Length > 0)
-        {
-            var trustedValues = auditValues ?? throw new InvalidOperationException("Required Entity audit values were not resolved.");
-            trustedValues.ApplyTo(values, serverOwnedUpdateAuditPolicies.Select(static policy => policy.Field));
-
-            return;
-        }
-
-        if (descriptor.FieldSet.UpdateFields.Contains("UpdatedAt", StringComparer.Ordinal))
-        {
-            values["UpdatedAt"] = DateTime.UtcNow;
-        }
-    }
-
-    // revision 可能来自 EF long、测试数值或 System.Text.Json；这里只接受可无损转换的非负整数。
-    private static bool TryReadRevision(
-        IReadOnlyDictionary<string, object?> values,
-        string field,
-        out long revision)
-    {
-        revision = default;
-        if (!values.TryGetValue(field, out var value))
-        {
-            return false;
-        }
-
-        var parsed = value switch
-        {
-            long longValue => longValue,
-            int intValue => intValue,
-            decimal decimalValue
-                when decimalValue >= 0
-                    && decimalValue <= long.MaxValue
-                    && decimal.Truncate(decimalValue) == decimalValue => (long)decimalValue,
-            System.Text.Json.JsonElement { ValueKind: System.Text.Json.JsonValueKind.Number } element
-                when element.TryGetInt64(out var jsonValue) => jsonValue,
-            string text when long.TryParse(
-                text,
-                System.Globalization.NumberStyles.None,
-                System.Globalization.CultureInfo.InvariantCulture,
-                out var textValue) => textValue,
-            _ => -1
-        };
-        if (parsed < 0)
-        {
-            return false;
-        }
-
-        revision = parsed;
-        return true;
-    }
-
-    // 缺少客户端已读取版本时不得降级为无条件覆盖，调用方需要重新加载详情后再提交。
-    private static StandardCrudError ConcurrencyRevisionRequired(StandardCrudDescriptor descriptor) => new()
-    {
-        StatusCode = 409,
-        Code = "StandardCrud.ConcurrencyRevisionRequired",
-        Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 缺少有效并发版本，请重新加载后再编辑。",
-        ReasonKey = "standardCrud.concurrencyRevisionRequired"
-    };
-
-    // 条件更新未命中时统一返回稳定冲突，不泄漏或覆盖服务器上的新版本。
-    private static StandardCrudError ConcurrencyConflict(StandardCrudDescriptor descriptor) => new()
-    {
-        StatusCode = 409,
-        Code = "StandardCrud.ConcurrencyConflict",
-        Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 已发生变化，请重新加载后再编辑。",
-        ReasonKey = "standardCrud.concurrencyConflict"
-    };
-
-    private static StandardCrudError NotFound(StandardCrudDescriptor descriptor, string id) => new()
-    {
-        StatusCode = 404,
-        Code = "StandardCrud.NotFound",
-        Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 的对象 {id} 不存在。",
-        ReasonKey = "standardCrud.notFound"
-    };
-
-    // 数据库约束是校验后的最终并发裁决；公共边界只暴露稳定冲突，不返回 provider 细节。
-    private static StandardCrudError PersistenceConflict(StandardCrudDescriptor descriptor) => new()
-    {
-        StatusCode = 409,
-        Code = "StandardCrud.PersistenceConflict",
-        Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 的关联数据已发生变化，请重新加载后重试。",
-        ReasonKey = "standardCrud.persistenceConflict"
-    };
 }

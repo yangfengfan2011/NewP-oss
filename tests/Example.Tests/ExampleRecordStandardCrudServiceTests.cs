@@ -270,16 +270,13 @@ public sealed class ExampleRecordStandardCrudServiceTests
         IStandardCrudRepository repository,
         IPlatformQueryExecutor executor,
         RecordingAccountDirectory directory) =>
-        new(
+        new StandardCrudService(
             repository,
             executor,
+            new StandardCrudDefaultWriter(repository, [], [], conditionalDeleteExecutors: [], auditValueProvider: new EntityAuditValueProvider(new SystemEntityAuditStampProvider(TimeProvider.System))),
             [],
             [new ExampleRecordDisplayValueResolver(directory)],
             [],
-            [],
-            [],
-            [],
-            auditStampProvider: new SystemEntityAuditStampProvider(TimeProvider.System),
             temporalDisplayProjectionExecutor: new ICP.Platform.Presentation.TemporalDisplayProjectionExecutor(
                 new NoPresentationContext(), new ICP.Platform.Presentation.TemporalDisplayFormatter()));
 

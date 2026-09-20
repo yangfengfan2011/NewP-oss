@@ -46,6 +46,17 @@ public sealed class IdentityFoundationModelTests
     }
 
     [Fact]
+    public void AccountCrudResource_UsesSharedReadsWithoutExposingGenericWrites()
+    {
+        var descriptor = IdentityAccountCrudResource.Create();
+
+        Assert.False(descriptor.MapStandardEndpoints);
+        Assert.Empty(descriptor.FieldSet.CreateFields);
+        Assert.Empty(descriptor.FieldSet.UpdateFields);
+        Assert.Equal("api/identity/accounts", descriptor.Route);
+    }
+
+    [Fact]
     public void Module_BindsExplicitDevelopmentSharedCredentialConfiguration()
     {
         var services = new ServiceCollection();

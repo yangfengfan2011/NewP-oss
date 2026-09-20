@@ -1,6 +1,3 @@
-using ICP.Platform.Crud.Models;
-using ICP.Platform.Crud.ObjectOperations;
-using ICP.Platform.Modules.Organization.Crud;
 using ICP.Platform.Authentication.Contracts;
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Organization.DTOs.Requests;
@@ -109,6 +106,27 @@ public sealed class PersonLifecycleActionCoreTests
     }
 
     [Fact]
+    public async Task SetStatusAsync_ConvergedTargetStillRejectsActorOutsideTrustedAuditScope()
+    {
+        var fixture = Fixture(
+            person: Person() with { IsEnabled = false },
+            account: Account() with
+            {
+                Status = IdentityAccountStatus.Disabled,
+                PersonnelDisableHold = true,
+                Revision = 8
+            });
+
+        var exception = await Assert.ThrowsAsync<PersonLifecycleException>(() => fixture.Core.ExecuteAsync(
+            "Person_1",
+            new SetPersonLifecycleStatusRequest(false, "重复停用"),
+            new PersonLifecycleActor("Other_User", "trace-untrusted")).AsTask());
+
+        Assert.Equal(PersonLifecycleFailureCodes.InvalidActor, exception.FailureCode);
+        Assert.Equal(0, fixture.Transaction.ExecutionCount);
+    }
+
+    [Fact]
     public async Task SetStatusAsync_IdentityRevisionConflictRollsBackPersonAndReturnsLifecycleConflict()
     {
         var fixture = Fixture(failureStage: LifecycleFailureStage.IdentityRevisionConflict);
@@ -166,42 +184,18 @@ public sealed class PersonLifecycleActionCoreTests
     }
 
     [Fact]
-    public async Task PublicAdapter_RoutesToObjectExecutorAndRestoresActorScopeOnRejection()
+    public async Task PublicService_ExecutesLifecycleCoreThroughTheSharedTransaction()
     {
         var fixture = Fixture();
-        var initial = fixture.Repository.Current;
-        var invocations = new PersonObjectActionInvocationContext();
         var actor = new PersonLifecycleActor("User_Admin", "adapter-trace");
-        var current = new object();
         using var cancellation = new CancellationTokenSource();
-        var executor = new RejectingObjectExecutor((objectKey, action, targetId, values, token) =>
-        {
-            Assert.Equal("organization.person", objectKey);
-            Assert.Equal(PersonObjectBehavior.DisableAction, action);
-            Assert.Equal("Person_1", targetId);
-            Assert.Equal("入口原因", values["Reason"]);
-            Assert.Same(actor, invocations.Current<PersonLifecycleActor>());
-            Assert.Equal(cancellation.Token, token);
-            return StandardCrudMutationResult.Failure(new StandardCrudError
-            {
-                StatusCode = 409,
-                Code = "Organization.Person.ExtensionRejected",
-                Message = "扩展拒绝",
-                Args = new Dictionary<string, object?> { ["current"] = current }
-            });
-        });
-        var adapter = new PersonLifecycleService(() => executor, invocations);
+        var service = new PersonLifecycleService(fixture.Core, fixture.Transaction);
 
-        var error = await Assert.ThrowsAsync<PersonLifecycleException>(() => adapter.SetStatusAsync(
-            "Person_1", new SetPersonLifecycleStatusRequest(false, "入口原因"), actor, cancellation.Token).AsTask());
+        var result = await service.SetStatusAsync(
+            "Person_1", new SetPersonLifecycleStatusRequest(false, "入口原因"), actor, cancellation.Token);
 
-        Assert.Equal("Organization.Person.ExtensionRejected", error.FailureCode);
-        Assert.Equal(409, error.StatusCode);
-        Assert.Same(current, error.Current);
-        Assert.Null(invocations.Current<PersonLifecycleActor>());
-        Assert.Equal(initial, fixture.Repository.Current);
-        Assert.Equal(0, fixture.Transaction.ExecutionCount);
-        Assert.Equal(1, executor.ExecutionCount);
+        Assert.False(result.IsEnabled);
+        Assert.Equal(1, fixture.Transaction.ExecutionCount);
     }
 
     // 内部核心的隔离门缝保留事务 fallback 与幂等计数；公开入口另由正式模块集成测试覆盖。
@@ -267,20 +261,6 @@ public sealed class PersonLifecycleActionCoreTests
         IsPersonnelBound = true,
         PersonnelDisableHold = false
     };
-
-    private sealed class RejectingObjectExecutor(
-        Func<string, ObjectOperationAction, string?, IReadOnlyDictionary<string, object?>, CancellationToken, StandardCrudMutationResult> execute)
-        : IObjectOperationExecutor
-    {
-        public int ExecutionCount { get; private set; }
-        public bool CanExecute(string objectKey, ObjectOperationAction action) => true;
-        public Task<StandardCrudMutationResult> ExecuteAsync(string objectKey, ObjectOperationAction action,
-            string? targetId, IReadOnlyDictionary<string, object?> values, CancellationToken cancellationToken = default)
-        {
-            ExecutionCount++;
-            return Task.FromResult(execute(objectKey, action, targetId, values, cancellationToken));
-        }
-    }
 
     private sealed record TestFixture(
         PersonLifecycleActionCore Core,
@@ -437,10 +417,12 @@ public sealed class PersonLifecycleActionCoreTests
     {
         public int ExecutionCount { get; private set; }
         public int SaveCount { get; private set; }
+        public bool IsActive { get; private set; }
 
         public async ValueTask<TResult> ExecuteAsync<TResult>(Func<CancellationToken, ValueTask<TResult>> registerChanges, CancellationToken cancellationToken = default)
         {
             ExecutionCount++;
+            IsActive = true;
             var person = repository.Current with { };
             var account = identity.Account with { };
             var revocations = identity.SessionRevocations;
@@ -465,6 +447,10 @@ public sealed class PersonLifecycleActionCoreTests
                 identity.Events.Clear();
                 identity.Events.AddRange(events);
                 throw;
+            }
+            finally
+            {
+                IsActive = false;
             }
         }
     }

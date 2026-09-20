@@ -74,11 +74,14 @@ public class OrganizationModuleTests
             PositionObjectBehavior.BehaviorDefinition,
             "organization.position",
             "Organization/Position");
-        AssertPersonBehavior();
+        AssertCrudBehavior(
+            PersonObjectBehavior.BehaviorDefinition,
+            "organization.person",
+            "Organization/Person");
         Assert.True(typeof(CompanyObjectBehavior).IsAbstract && typeof(CompanyObjectBehavior).IsSealed);
         Assert.True(typeof(DepartmentObjectBehavior).IsAbstract && typeof(DepartmentObjectBehavior).IsSealed);
         Assert.True(typeof(PositionObjectBehavior).IsAbstract && typeof(PositionObjectBehavior).IsSealed);
-        Assert.False(typeof(PersonObjectBehavior).IsAbstract);
+        Assert.True(typeof(PersonObjectBehavior).IsAbstract && typeof(PersonObjectBehavior).IsSealed);
         Assert.DoesNotContain(services, descriptor =>
             descriptor.ServiceType == typeof(IObjectOperationExtension));
         Assert.DoesNotContain(
@@ -107,27 +110,6 @@ public class OrganizationModuleTests
                 definition.ProtectedInputFields.Order(StringComparer.Ordinal));
         }
 
-        static void AssertPersonBehavior()
-        {
-            var definition = PersonObjectBehavior.BehaviorDefinition;
-            Assert.Equal("organization.person", definition.ObjectKey);
-            Assert.Equal("Organization", definition.OwnerModuleId);
-            Assert.Equal("Organization/Person", definition.ModelKey);
-            Assert.Equal(
-                [
-                    ObjectOperationAction.Create,
-                    ObjectOperationAction.Update,
-                    ObjectOperationAction.Delete,
-                    PersonObjectBehavior.EnableAction,
-                    PersonObjectBehavior.DisableAction,
-                    PersonObjectBehavior.BindUserAction
-                ],
-                definition.SupportedActions);
-            Assert.Equal(definition.SupportedActions, definition.OpenExtensionActions);
-            Assert.Equal(
-                ["CreatedAt", "CreatedBy", "EID", "UpdatedAt", "UpdatedBy"],
-                definition.ProtectedInputFields.Order(StringComparer.Ordinal));
-        }
     }
 
     [Fact]

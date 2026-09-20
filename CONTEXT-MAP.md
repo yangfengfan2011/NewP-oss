@@ -7,7 +7,7 @@
 - [Identity](./docs/contexts/identity/CONTEXT.md) — 管理用户账号、账号状态与可供认证机制使用的账号目录
 - [Authentication](./docs/contexts/authentication/CONTEXT.md) — 管理认证会话、服务端有效性与统一撤销
 - [Organization](./docs/contexts/organization/CONTEXT.md) — 管理公司、部门、岗位、人员档案及人员与用户账号的永久绑定
-- [Object Operations](./docs/contexts/object-operations/CONTEXT.md) — 定义正式业务写入的统一对象操作与对象拥有者声明的横切扩展点；Organization 已完成首期采用，其他模块尚未迁移
+- [Object Operations](./docs/contexts/object-operations/CONTEXT.md) — 提供可按职责复用的对象操作、默认 CRUD 行为与对象拥有者声明的横切扩展点
 - [Standard CRUD](./docs/contexts/standard-crud/CONTEXT.md) — 管理共享 CRUD 宿主使用的字段、表单、列表与详情展示契约
 - [View Composition](./docs/contexts/view-composition/CONTEXT.md) — 定义页面引用、视图配置及树与标签页组合的已确认目标契约，落地状态见 ADR-0046
 - [Plugin Platform](./docs/contexts/plugin-platform/CONTEXT.md) — 管理外部插件包的校验、期望状态、启动期激活与统一运行时投影
@@ -17,8 +17,8 @@
 
 ## Relationships
 
-- **Organization → Object Operations**：Organization 的公司、部门、岗位、人员全部现有正式写操作已经接入对象行为；人员启用、停用与永久账号绑定保留明确命名动作。任意组件可向对象拥有者开放的动作贡献横切，其他模块仍沿用各自既有写入口。
-- **Object Operations → Platform Persistence**：对象操作统一执行必需规则、前后横切及已声明跨对象调用，复用唯一事务执行器、可信审计值和缓存提交机制；操作内部读取本事务前序已完成的变化，公共缓存仍在提交后发布。
+- **Organization → Object Operations**：Organization 的公司、部门、岗位、人员普通 CRUD 复用默认对象行为及其既有扩展能力；人员启用、停用与永久账号绑定由 Organization 业务服务拥有，不声明对象动作或横切开放点。
+- **Object Operations → Platform Persistence**：对象操作执行其必需规则、已开放的前后横切及声明的跨对象调用，并复用唯一事务执行器、可信审计值和缓存提交机制；专用业务服务可直接复用同一事务与审计能力，统一规则不要求统一入口。
 
 - **Organization → Audit → Platform Persistence**：Organization 通过稳定 Audit.Contracts 登记明确业务字段；Audit 登记自身记录，平台事务执行器统一保存和提交。Identity 与对象拥有者只批量提供当前展示名称，不改变历史事实。
 

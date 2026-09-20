@@ -489,8 +489,8 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.Equal(stored["CreatedAt"], stored["UpdatedAt"]);
     }
 
-    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "人员专用 HTTP 动作经过正式对象横切并让失败整体回滚")]
-    public async Task PersonSpecialActions_HttpUsesObjectExtensionsAuditAndRollback()
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "人员生命周期与永久绑定由正式 HTTP 业务服务提交并发布缓存")]
+    public async Task PersonBusinessServices_HttpPreservesBindingLifecycleAuditAndCache()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
         var http = new FeatureHttpTestRequests(fixture);
@@ -511,9 +511,6 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             new { PersonNo = "SPECIAL-ACTION", ENAME = "人员专用动作", EmploymentStatus = "Active", IsEnabled = true });
         var personId = Id(person);
         var createdFields = person.GetProperty("fields");
-        var control = fixture.Services.GetRequiredService<ObjectOperationExtensionProbeControl>();
-        control.Mode = ObjectOperationExtensionProbeMode.Supplement;
-        control.SupplementedName = "对象横切规范化绑定原因";
 
         using var binding = await FeatureHttpTestRequests.SendAsync(
             client,
@@ -528,9 +525,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             });
         Assert.Equal(HttpStatusCode.OK, binding.StatusCode);
         var bindingResult = await binding.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal("对象横切规范化绑定原因", bindingResult.GetProperty("reason").GetString());
-        Assert.Equal("对象横切规范化绑定原因", control.AfterInput!["Reason"]);
-        Assert.Equal(personId, control.AfterResult!["EID"]);
+        Assert.Equal("原始绑定原因", bindingResult.GetProperty("reason").GetString());
 
         await using var scope = fixture.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
@@ -538,32 +533,14 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             .AsNoTracking()
             .SingleAsync(row => EF.Property<string>(row, "EID") == personId);
         var cachedAfterBinding = (await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync()).Persons[personId];
-        Assert.Equal("对象横切规范化绑定原因", storedAfterBinding["AccountBindingReason"]);
+        Assert.Equal("原始绑定原因", storedAfterBinding["AccountBindingReason"]);
         Assert.Equal(createdFields.GetProperty("CreatedBy").GetString(), storedAfterBinding["CreatedBy"]);
         Assert.Equal(createdFields.GetProperty("CreatedAt").GetDateTime(), storedAfterBinding["CreatedAt"]);
         foreach (var field in new[] { "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt" })
         {
-            Assert.Equal(storedAfterBinding[field], control.AfterResult[field]);
             Assert.Equal(storedAfterBinding[field], cachedAfterBinding[field]);
         }
 
-        control.Mode = ObjectOperationExtensionProbeMode.AfterFailure;
-        using var failedDisable = await FeatureHttpTestRequests.SendAsync(
-            client,
-            http.Organization("persons", "disable", "list.rowActions"),
-            HttpMethod.Put,
-            $"/api/organization/persons/{personId}/status/disable",
-            new { isEnabled = false, reason = "after 故障必须回滚" });
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, failedDisable.StatusCode);
-        var storedAfterFailure = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Person"))
-            .AsNoTracking()
-            .SingleAsync(row => EF.Property<string>(row, "EID") == personId);
-        Assert.True((bool)storedAfterFailure["IsEnabled"]!);
-        Assert.Equal(storedAfterBinding["UpdatedAt"], storedAfterFailure["UpdatedAt"]);
-        Assert.True((bool)(await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync()).Persons[personId]["IsEnabled"]!);
-
-        control.Mode = ObjectOperationExtensionProbeMode.Supplement;
-        control.SupplementedName = "对象横切规范化停用原因";
         using var disabled = await FeatureHttpTestRequests.SendAsync(
             client,
             http.Organization("persons", "disable", "list.rowActions"),
@@ -571,12 +548,10 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             $"/api/organization/persons/{personId}/status/disable",
             new { isEnabled = false, reason = "正式停用" });
         Assert.Equal(HttpStatusCode.OK, disabled.StatusCode);
-        Assert.Equal("对象横切规范化停用原因", control.AfterInput!["Reason"]);
-        Assert.False(Assert.IsType<PersonLifecycleDto>(control.AfterResult!["Result"]).IsEnabled);
-        Assert.Equal(personId, control.AfterResult["EID"]);
-        Assert.Equal(fixture.ActorId, control.AfterResult["UpdatedBy"]);
+        var disabledResult = await disabled.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.False(disabledResult.GetProperty("isEnabled").GetBoolean());
+        Assert.False((bool)(await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync()).Persons[personId]["IsEnabled"]!);
 
-        control.SupplementedName = "对象横切规范化恢复原因";
         using var enabled = await FeatureHttpTestRequests.SendAsync(
             client,
             http.Organization("persons", "enable", "list.rowActions"),
@@ -584,11 +559,10 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             $"/api/organization/persons/{personId}/status/enable",
             new { isEnabled = true, reason = "正式恢复" });
         Assert.Equal(HttpStatusCode.OK, enabled.StatusCode);
-        Assert.Equal("对象横切规范化恢复原因", control.AfterInput!["Reason"]);
-        var restored = Assert.IsType<PersonLifecycleDto>(control.AfterResult!["Result"]);
-        Assert.True(restored.IsEnabled);
-        Assert.Equal("Disabled", restored.Account!.Status);
-        Assert.False(restored.Account.PersonnelDisableHold);
+        var restored = await enabled.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(restored.GetProperty("isEnabled").GetBoolean());
+        Assert.Equal("Disabled", restored.GetProperty("account").GetProperty("status").GetString());
+        Assert.False(restored.GetProperty("account").GetProperty("personnelDisableHold").GetBoolean());
     }
 
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "人员服务端更新和别名删除共用对象行为、审计与实际EID缓存登记")]
@@ -1063,8 +1037,8 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             .Companies.ContainsKey(companyId));
     }
 
-    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "同事务人员停用后绑定读取当前 SQL 事实且忽略内层失败仍回滚根操作")]
-    public async Task NestedPersonDisableThenBind_UsesEffectiveSqlViewAndRollsBackRootOperation()
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "同事务人员停用后绑定读取当前 SQL 事实且吞掉内层拒绝仍回滚根操作")]
+    public async Task NestedPersonDisableThenBind_WhenRejectionIsCaught_RollsBackRootOperation()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
         var http = new FeatureHttpTestRequests(fixture);
@@ -1102,9 +1076,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             "/api/organization/companies/" + Id(company),
             new { ENAME = "不应提交的公司名" });
 
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal(PersonUserBindingFailureCodes.PersonDisabled, problem.GetProperty("code").GetString());
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         control.Mode = ObjectOperationExtensionProbeMode.None;
         await using var scope = fixture.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
@@ -1121,89 +1093,6 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         var cache = await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync();
         Assert.Equal("专用动作根公司", cache.Companies[Id(company)]["ENAME"]);
         Assert.True((bool)cache.Persons[Id(person)]["IsEnabled"]!);
-    }
-
-    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "人员专用命名动作可由公共对象入口直接执行")]
-    public async Task PersonSpecialActions_DirectObjectExecutorUsesTrustedActorWithoutExecutingLegacyAdapters()
-    {
-        var stamps = new SteppingEntityAuditStampProvider();
-        await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
-        {
-            services.RemoveAll<IEntityAuditStampProvider>();
-            services.AddSingleton<IEntityAuditStampProvider>(stamps);
-            // 真实行为不得解析旧 concrete adapter；既有 eager 嵌套探针只拿可构造、禁止执行的旧接口。
-            services.RemoveAll<PersonLifecycleService>();
-            services.RemoveAll<PersonUserBindingService>();
-            services.AddScoped<PersonLifecycleService>(_ => throw new InvalidOperationException("direct behavior resolved lifecycle adapter"));
-            services.AddScoped<PersonUserBindingService>(_ => throw new InvalidOperationException("direct behavior resolved binding adapter"));
-            services.RemoveAll<IPersonLifecycleService>();
-            services.RemoveAll<IPersonUserBindingService>();
-            var unused = new UnusedPersonActionAdapters();
-            services.AddSingleton<IPersonLifecycleService>(unused);
-            services.AddSingleton<IPersonUserBindingService>(unused);
-        });
-        var http = new FeatureHttpTestRequests(fixture);
-        using var client = await fixture.LoginAdministratorAsync();
-        using var accountResponse = await FeatureHttpTestRequests.SendAsync(
-            client,
-            http.Identity("create"),
-            HttpMethod.Post,
-            "/api/identity/accounts",
-            new { ECODE = "direct-special", ENAME = "直接专用动作账号" });
-        var account = (await accountResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("account");
-        var person = await FeatureHttpTestRequests.CreateAsync(
-            client,
-            http.Organization("persons", "create", "list.pageActions"),
-            "/api/organization/persons",
-            new { PersonNo = "DIRECT-SPECIAL", ENAME = "直接专用动作人员", EmploymentStatus = "Active", IsEnabled = true });
-        var personId = Id(person);
-        stamps.Begin(fixture.ActorId, new DateTime(2031, 2, 3, 4, 5, 6, DateTimeKind.Utc));
-
-        await using var scope = fixture.Services.CreateAsyncScope();
-        using var activity = new Activity(nameof(PersonSpecialActions_DirectObjectExecutorUsesTrustedActorWithoutExecutingLegacyAdapters)).Start();
-        var operations = scope.ServiceProvider.GetRequiredService<IObjectOperationExecutor>();
-        var bound = await operations.ExecuteAsync(
-            "organization.person",
-            PersonObjectBehavior.BindUserAction,
-            personId,
-            new Dictionary<string, object?>
-            {
-                ["AccountEid"] = account.GetProperty("eid").GetString(),
-                ["ExpectedRevision"] = account.GetProperty("revision").GetInt64(),
-                ["Reason"] = "公共对象入口绑定"
-            });
-        Assert.True(bound.Succeeded, bound.Error?.Message);
-        var bindingDto = Assert.IsType<PersonUserBindingDto>(bound.Detail!.Fields["Result"]);
-        Assert.Equal(fixture.ActorId, bindingDto.BoundBy);
-
-        var disabled = await operations.ExecuteAsync(
-            "organization.person",
-            PersonObjectBehavior.DisableAction,
-            personId,
-            new Dictionary<string, object?> { ["Reason"] = "公共对象入口停用" });
-        Assert.True(disabled.Succeeded, disabled.Error?.Message);
-        var lifecycleDto = Assert.IsType<PersonLifecycleDto>(disabled.Detail!.Fields["Result"]);
-        Assert.False(lifecycleDto.IsEnabled);
-        var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-        var stored = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Person"))
-            .AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == personId);
-        var cached = (await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync()).Persons[personId];
-        Assert.Equal(account.GetProperty("eid").GetString(), stored["AccountEID"]);
-        Assert.False((bool)stored["IsEnabled"]!);
-        foreach (var field in new[] { "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt" })
-        {
-            Assert.Equal(stored[field], disabled.Detail.Fields[field]);
-            Assert.Equal(stored[field], cached[field]);
-        }
-
-        var enabled = await operations.ExecuteAsync(
-            "organization.person",
-            PersonObjectBehavior.EnableAction,
-            personId,
-            new Dictionary<string, object?> { ["Reason"] = "公共对象入口恢复" });
-        Assert.True(enabled.Succeeded, enabled.Error?.Message);
-        Assert.True(Assert.IsType<PersonLifecycleDto>(enabled.Detail!.Fields["Result"]).IsEnabled);
-        Assert.True((bool)(await fixture.Services.GetRequiredService<OrganizationCache>().ReadAsync()).Persons[personId]["IsEnabled"]!);
     }
 
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "同事务 Person 创建、直接 DML 绑定和普通更新保持绑定及审计事实")]
@@ -1258,21 +1147,6 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             Assert.Equal(stored[field], control.NestedPersonUpdateResult!.Detail!.Fields[field]);
             Assert.Equal(stored[field], cached[field]);
         }
-    }
-
-    private sealed class UnusedPersonActionAdapters : IPersonLifecycleService, IPersonUserBindingService
-    {
-        public ValueTask<PersonLifecycleDto> SetStatusAsync(string personEid,
-            SetPersonLifecycleStatusRequest request, PersonLifecycleActor actor, CancellationToken cancellationToken = default) =>
-            throw new InvalidOperationException("direct object operation executed legacy lifecycle adapter");
-
-        public ValueTask<PersonUserBindingDto> BindAsync(string personEid,
-            BindPersonUserRequest request, PersonUserBindingActor actor, CancellationToken cancellationToken = default) =>
-            throw new InvalidOperationException("direct object operation executed legacy binding adapter");
-
-        public ValueTask<IReadOnlyList<PersonUserBindingCandidateDto>> SearchCandidatesAsync(string personEid,
-            string? query, CancellationToken cancellationToken = default) =>
-            throw new InvalidOperationException("direct object operation executed legacy binding query");
     }
 
     private sealed record ObjectOperationTarget(

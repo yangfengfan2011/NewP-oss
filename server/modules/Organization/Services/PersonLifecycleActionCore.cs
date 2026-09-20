@@ -29,6 +29,7 @@ internal sealed class PersonLifecycleActionCore(
     {
         ArgumentNullException.ThrowIfNull(request);
         ValidateActor(actor);
+        ValidateTrustedActor(actor.ActorId);
         if (string.IsNullOrWhiteSpace(personEid))
         {
             throw new PersonLifecycleException(PersonLifecycleFailureCodes.InvalidRequest);
@@ -194,6 +195,15 @@ internal sealed class PersonLifecycleActionCore(
     private static void ValidateActor(PersonLifecycleActor actor)
     {
         if (actor is null || string.IsNullOrWhiteSpace(actor.ActorId) || string.IsNullOrWhiteSpace(actor.TraceId))
+        {
+            throw new PersonLifecycleException(PersonLifecycleFailureCodes.InvalidActor);
+        }
+    }
+
+    // 服务端 actor 必须与当前可信审计主体一致，包括幂等与无变化路径。
+    private void ValidateTrustedActor(string actorId)
+    {
+        if (!string.Equals(auditValues.Current().ActorId, actorId, StringComparison.Ordinal))
         {
             throw new PersonLifecycleException(PersonLifecycleFailureCodes.InvalidActor);
         }

@@ -72,6 +72,7 @@ internal sealed class PersonUserBindingActionCore(
     {
         ArgumentNullException.ThrowIfNull(request);
         ValidateActor(actor);
+        ValidateTrustedActor(actor.ActorId);
         if (string.IsNullOrWhiteSpace(personEid) || string.IsNullOrWhiteSpace(request.AccountEid))
         {
             throw new PersonUserBindingException(PersonUserBindingFailureCodes.InvalidRequest);
@@ -286,6 +287,15 @@ internal sealed class PersonUserBindingActionCore(
         if (actor is null
             || string.IsNullOrWhiteSpace(actor.ActorId)
             || string.IsNullOrWhiteSpace(actor.TraceId))
+        {
+            throw new PersonUserBindingException(PersonUserBindingFailureCodes.InvalidActor);
+        }
+    }
+
+    // 服务端 actor 必须与当前可信审计主体一致，包括重复绑定的幂等路径。
+    private void ValidateTrustedActor(string actorId)
+    {
+        if (!string.Equals(auditValues.Current().ActorId, actorId, StringComparison.Ordinal))
         {
             throw new PersonUserBindingException(PersonUserBindingFailureCodes.InvalidActor);
         }

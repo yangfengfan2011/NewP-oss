@@ -38,16 +38,7 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         services.AddStandardCrudObjectBehavior(this, CompanyObjectBehavior.BehaviorDefinition);
         services.AddStandardCrudObjectBehavior(this, DepartmentObjectBehavior.BehaviorDefinition);
         services.AddStandardCrudObjectBehavior(this, PositionObjectBehavior.BehaviorDefinition);
-        services.AddObjectBehavior<PersonObjectBehavior>(
-            this,
-            PersonObjectBehavior.BehaviorDefinition,
-            static (provider, _) => new PersonObjectBehavior(
-                provider.GetRequiredService<IStandardCrudResourceRegistry>(),
-                provider.GetRequiredService<ICP.Platform.Crud.Runtime.StandardCrudDefaultWriter>(),
-                provider.GetRequiredService<PersonLifecycleActionCore>(),
-                provider.GetRequiredService<PersonUserBindingActionCore>(),
-                provider.GetRequiredService<PersonObjectActionInvocationContext>(),
-                provider.GetRequiredService<ICP.Platform.Persistence.Auditing.IEntityAuditValueProvider>()));
+        services.AddStandardCrudObjectBehavior(this, PersonObjectBehavior.BehaviorDefinition);
         foreach (var (kind, model) in new[] { ("company", OrganizationRecordKind.Company), ("department", OrganizationRecordKind.Department), ("position", OrganizationRecordKind.Position), ("organization.person", OrganizationRecordKind.Person) })
             services.AddScoped<ICP.Platform.Modules.Audit.Contracts.IBusinessAuditNameDirectory>(sp =>
                 new BusinessAuditOrganizationNames(sp.GetRequiredService<IOrganizationQuery>(), kind, model));
@@ -74,16 +65,16 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         services.AddScoped<IPositionDirectory, PlatformQueryPositionDirectory>();
         services.AddScoped<IPersonUserBindingRepository, EfPersonUserBindingRepository>();
         services.AddScoped<IAuthorizationSummaryReader, NullAuthorizationSummaryReader>();
-        services.AddScoped<PersonObjectActionInvocationContext>();
         services.AddScoped<PersonLifecycleActionCore>();
         services.AddScoped<PersonUserBindingActionCore>();
         services.AddScoped<PersonUserBindingService>(static provider => new PersonUserBindingService(
             provider.GetRequiredService<PersonUserBindingActionCore>(),
-            provider.GetRequiredService<Func<IObjectOperationExecutor>>(),
-            provider.GetRequiredService<PersonObjectActionInvocationContext>()));
+            provider.GetRequiredService<ICP.Platform.Persistence.Abstractions.IPlatformTransactionExecutor>()));
         services.AddScoped<IPersonUserBindingService>(static provider =>
             provider.GetRequiredService<PersonUserBindingService>());
-        services.AddScoped<PersonLifecycleService>();
+        services.AddScoped<PersonLifecycleService>(static provider => new PersonLifecycleService(
+            provider.GetRequiredService<PersonLifecycleActionCore>(),
+            provider.GetRequiredService<ICP.Platform.Persistence.Abstractions.IPlatformTransactionExecutor>()));
         services.AddScoped<IPersonLifecycleService>(static provider =>
             provider.GetRequiredService<PersonLifecycleService>());
         services.AddScoped<IStandardCrudQueryCustomizer, PersonCrudQueryCustomizer>();

@@ -1,6 +1,3 @@
-using ICP.Platform.Crud.Models;
-using ICP.Platform.Crud.ObjectOperations;
-using ICP.Platform.Modules.Organization.Crud;
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Organization.DTOs.Requests;
 using ICP.Platform.Modules.Organization.Models;
@@ -29,7 +26,7 @@ public sealed class PersonUserBindingActionCoreTests
         Assert.Equal("User_1", fixture.Identity.LastBinding!.AccountEid);
 
         var repeated = (await fixture.Core.ExecuteAsync("Person_1", new BindPersonUserRequest("user_1", 0, "不覆盖"),
-            new PersonUserBindingActor("User_Other", "retry-alias"))).Dto;
+            new PersonUserBindingActor("User_Admin", "retry-alias"))).Dto;
         Assert.Equal("User_1", repeated.AccountEid);
         Assert.Equal("首次绑定", repeated.Reason);
         Assert.Equal(1, fixture.Transaction.ExecutionCount);
@@ -99,7 +96,7 @@ public sealed class PersonUserBindingActionCoreTests
         var idempotent = (await fixture.Core.ExecuteAsync(
             "Person_1",
             new BindPersonUserRequest("User_1", 0, "不会覆盖既有原因"),
-            new PersonUserBindingActor("User_Other", "trace-repeat"))).Dto;
+            new PersonUserBindingActor("User_Admin", "trace-repeat"))).Dto;
 
         Assert.Equal("首次绑定", idempotent.Reason);
         Assert.Equal(0, fixture.Transaction.ExecutionCount);
@@ -111,6 +108,20 @@ public sealed class PersonUserBindingActionCoreTests
                 new BindPersonUserRequest("User_2", 7, "改绑"),
                 new PersonUserBindingActor("User_Admin", "trace-conflict")));
         Assert.Equal(PersonUserBindingFailureCodes.PersonAlreadyBound, conflict.FailureCode);
+    }
+
+    [Fact]
+    public async Task BindAsync_ExistingBindingStillRejectsActorOutsideTrustedAuditScope()
+    {
+        var fixture = Fixture(person: Person(accountEid: "User_1"));
+
+        var exception = await Assert.ThrowsAsync<PersonUserBindingException>(() => fixture.Core.ExecuteAsync(
+            "Person_1",
+            new BindPersonUserRequest("User_1", 0, "重复绑定"),
+            new PersonUserBindingActor("Other_User", "trace-untrusted")).AsTask());
+
+        Assert.Equal(PersonUserBindingFailureCodes.InvalidActor, exception.FailureCode);
+        Assert.Equal(0, fixture.Transaction.ExecutionCount);
     }
 
     [Fact]
@@ -166,59 +177,31 @@ public sealed class PersonUserBindingActionCoreTests
     }
 
     [Fact]
-    public async Task PublicAdapter_SearchCandidatesDelegatesToBindingRulesWithoutExecutingMutation()
+    public async Task PublicService_SearchCandidatesDelegatesToBindingRulesWithoutExecutingMutation()
     {
         var fixture = Fixture();
-        var executor = new RejectingObjectExecutor((_, _, _, _, _) => throw new InvalidOperationException("query entered object mutation"));
-        var adapter = new PersonUserBindingService(fixture.Core, () => executor, new PersonObjectActionInvocationContext());
+        var service = new PersonUserBindingService(fixture.Core, fixture.Transaction);
 
-        var candidates = await adapter.SearchCandidatesAsync("Person_1", " user ");
+        var candidates = await service.SearchCandidatesAsync("Person_1", " user ");
 
         Assert.Equal("User_1", Assert.Single(candidates).AccountEid);
         Assert.Equal("user", fixture.Directory.LastSearch!.Query);
-        Assert.Equal(0, executor.ExecutionCount);
         Assert.Equal(0, fixture.Transaction.ExecutionCount);
     }
 
     [Fact]
-    public async Task PublicAdapter_RoutesToObjectExecutorAndRestoresActorScopeOnRejection()
+    public async Task PublicService_ExecutesBindingCoreThroughTheSharedTransaction()
     {
         var fixture = Fixture();
-        var initial = fixture.Repository.Current;
-        var invocations = new PersonObjectActionInvocationContext();
         var actor = new PersonUserBindingActor("User_Admin", "adapter-trace");
-        var current = new object();
         using var cancellation = new CancellationTokenSource();
-        var executor = new RejectingObjectExecutor((objectKey, action, targetId, values, token) =>
-        {
-            Assert.Equal("organization.person", objectKey);
-            Assert.Equal(PersonObjectBehavior.BindUserAction, action);
-            Assert.Equal("Person_1", targetId);
-            Assert.Equal("入口原因", values["Reason"]);
-            Assert.Same(actor, invocations.Current<PersonUserBindingActor>());
-            Assert.Equal(cancellation.Token, token);
-            Assert.Equal("User_1", values["AccountEid"]);
-            Assert.Equal(7L, values["ExpectedRevision"]);
-            return StandardCrudMutationResult.Failure(new StandardCrudError
-            {
-                StatusCode = 409,
-                Code = "Organization.Person.ExtensionRejected",
-                Message = "扩展拒绝",
-                Args = new Dictionary<string, object?> { ["current"] = current }
-            });
-        });
-        var adapter = new PersonUserBindingService(fixture.Core, () => executor, invocations);
+        var service = new PersonUserBindingService(fixture.Core, fixture.Transaction);
 
-        var error = await Assert.ThrowsAsync<PersonUserBindingException>(() => adapter.BindAsync(
-            "Person_1", new BindPersonUserRequest("User_1", 7, "入口原因"), actor, cancellation.Token).AsTask());
+        var result = await service.BindAsync(
+            "Person_1", new BindPersonUserRequest("User_1", 7, "入口原因"), actor, cancellation.Token);
 
-        Assert.Equal("Organization.Person.ExtensionRejected", error.FailureCode);
-        Assert.Equal(409, error.StatusCode);
-        Assert.Same(current, error.Current);
-        Assert.Null(invocations.Current<PersonUserBindingActor>());
-        Assert.Equal(initial, fixture.Repository.Current);
-        Assert.Equal(0, fixture.Transaction.ExecutionCount);
-        Assert.Equal(1, executor.ExecutionCount);
+        Assert.Equal("User_1", result.AccountEid);
+        Assert.Equal(1, fixture.Transaction.ExecutionCount);
     }
 
     // 内部核心的隔离门缝保留事务 fallback 与幂等计数；公开入口另由正式模块集成测试覆盖。
@@ -276,20 +259,6 @@ public sealed class PersonUserBindingActionCoreTests
         IdentityRegistration,
         IdentityRevisionConflict,
         Commit
-    }
-
-    private sealed class RejectingObjectExecutor(
-        Func<string, ObjectOperationAction, string?, IReadOnlyDictionary<string, object?>, CancellationToken, StandardCrudMutationResult> execute)
-        : IObjectOperationExecutor
-    {
-        public int ExecutionCount { get; private set; }
-        public bool CanExecute(string objectKey, ObjectOperationAction action) => true;
-        public Task<StandardCrudMutationResult> ExecuteAsync(string objectKey, ObjectOperationAction action,
-            string? targetId, IReadOnlyDictionary<string, object?> values, CancellationToken cancellationToken = default)
-        {
-            ExecutionCount++;
-            return Task.FromResult(execute(objectKey, action, targetId, values, cancellationToken));
-        }
     }
 
     private sealed record TestFixture(
@@ -414,12 +383,14 @@ public sealed class PersonUserBindingActionCoreTests
         BindingFailureStage? failureStage) : IPlatformTransactionExecutor
     {
         public int ExecutionCount { get; private set; }
+        public bool IsActive { get; private set; }
 
         public async ValueTask<TResult> ExecuteAsync<TResult>(
             Func<CancellationToken, ValueTask<TResult>> registerChanges,
             CancellationToken cancellationToken = default)
         {
             ExecutionCount++;
+            IsActive = true;
             var person = repository.Current with { };
             var account = identity.Account with { };
             var events = identity.Events.ToArray();
@@ -440,6 +411,10 @@ public sealed class PersonUserBindingActionCoreTests
                 identity.Events.Clear();
                 identity.Events.AddRange(events);
                 throw;
+            }
+            finally
+            {
+                IsActive = false;
             }
         }
     }

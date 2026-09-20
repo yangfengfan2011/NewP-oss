@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 namespace ICP.Platform.HostApi.Tests;
@@ -166,6 +167,24 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
             Assert.Equal(1, audit.GetProperty("total").GetInt32());
             SetPosition(admin, save);
         }
+        using (var expanded = await admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{id}", new { positions = new[] { read, save } }))
+            Assert.Equal(HttpStatusCode.NoContent, expanded.StatusCode);
+        SetPosition(admin, read);
+        var configured = await admin.GetFromJsonAsync<JsonElement>($"/api/authorization/workbench/roles/{id}");
+        Assert.True(new[] { read, save }.ToHashSet(StringComparer.Ordinal).SetEquals(
+            configured.GetProperty("positions").EnumerateArray().Select(position => position.GetString()!)));
+        var grantIdsBeforeReorder = await GrantIdsAsync(fixture, id);
+        Assert.Equal(2, grantIdsBeforeReorder.Length);
+        var auditBeforeReorder = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(),
+            $"/api/audit/business-changes?TargetId={id}&EventType=role.features.changed");
+        Assert.Equal(2, auditBeforeReorder.GetProperty("total").GetInt32());
+        SetPosition(admin, save);
+        using (var reordered = await admin.PutAsJsonAsync($"/api/authorization/workbench/roles/{id}", new { positions = new[] { save, read } }))
+            Assert.Equal(HttpStatusCode.NoContent, reordered.StatusCode);
+        Assert.Equal(grantIdsBeforeReorder, await GrantIdsAsync(fixture, id));
+        var auditAfterReorder = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(),
+            $"/api/audit/business-changes?TargetId={id}&EventType=role.features.changed");
+        Assert.Equal(auditBeforeReorder.GetProperty("total").GetInt32(), auditAfterReorder.GetProperty("total").GetInt32());
         SetPosition(admin, read);
         var list = await admin.GetFromJsonAsync<JsonElement>("/api/authorization/workbench/roles?query=LocalAdmin");
         var administrator = Assert.Single(list.GetProperty("items").EnumerateArray()).GetProperty("EID").GetString();
@@ -246,6 +265,18 @@ public sealed class FeatureWorkbenchSqlServerHttpApiTests
         var save = fixture.FeatureCatalog.Single(point => point.ModuleId == "Authorization" && point.BehaviorKey == "authorization.workbench.save").Position;
         Assert.Contains(read, positions); Assert.Contains(save, positions);
         return (read, save);
+    }
+
+    private static async Task<string[]> GrantIdsAsync(BusinessAuditHostFixture fixture, string roleId)
+    {
+        using var scope = fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        return await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("RoleFunctionGrant"))
+            .AsNoTracking()
+            .Where(row => EF.Property<string>(row, "RoleId") == roleId)
+            .Select(row => EF.Property<string>(row, "EID"))
+            .OrderBy(id => id)
+            .ToArrayAsync();
     }
 
     // 准备经正式HTTP，响应失败直接保留最小Problem Details。

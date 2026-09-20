@@ -11,21 +11,18 @@ public class RoleService : IRoleService
     private readonly IRolePermissionRepository _rolePermissionRepository;
     private readonly IUserRoleRepository _userRoleRepository;
     private readonly IPlatformObjectIdGenerator _objectIdGenerator;
-    private readonly IUserRoleAssignments _userAssignments;
 
-    // 组合角色维护与成员关系写入；初始化使用独立入口。
+    // 角色维护保留内建身份和内部历史删除边界；成员关系由独立用例持有。
     public RoleService(
         IRoleRepository roleRepository,
         IRolePermissionRepository rolePermissionRepository,
         IUserRoleRepository userRoleRepository,
-        IPlatformObjectIdGenerator objectIdGenerator,
-        IUserRoleAssignments userAssignments)
+        IPlatformObjectIdGenerator objectIdGenerator)
     {
         _roleRepository = roleRepository;
         _rolePermissionRepository = rolePermissionRepository;
         _userRoleRepository = userRoleRepository;
         _objectIdGenerator = objectIdGenerator;
-        _userAssignments = userAssignments;
     }
 
     public async Task<List<RoleDto>> GetAllRolesAsync(CancellationToken cancellationToken = default)
@@ -107,13 +104,6 @@ public class RoleService : IRoleService
         await _roleRepository.DeleteAsync(roleId, cancellationToken);
     }
 
-    // 用户关系只通过完整校验及事务性写入边界访问。
-    public Task<UserRoleAssignmentsDto> GetUserRolesAsync(string userId, CancellationToken cancellationToken = default) =>
-        _userAssignments.GetAsync(userId, cancellationToken);
-
-    // 操作者由可信请求上下文产生，调用者字符串不进入审计。
-    public Task AssignUserRolesAsync(string userId, AssignUserRolesRequest request, string? assignedBy = null, CancellationToken cancellationToken = default) =>
-        _userAssignments.ReplaceAsync(userId, request.RoleCodes, cancellationToken);
     private static RoleDto MapToDto(Role role)
     {
         return new RoleDto

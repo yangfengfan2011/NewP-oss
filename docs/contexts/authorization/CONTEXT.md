@@ -68,6 +68,8 @@ _Avoid_: 角色详情授权弹窗、角色基础信息编辑、用户角色分�
 
 ## 角色管理与事务性功能配置
 
+- 角色列表与详情普通字段复用 Standard CRUD 的查询与显示计划，但 Authorization 不映射通用写入端点。角色创建和编辑仍须保护 LocalAdmin、角色代码与系统字段，遗留内部删除还承担历史引用测试，因此普通写入由 RoleService 直接持有，不为形式统一注册对象行为或纯转发类；角色删除 HTTP 继续明确拒绝。
+- 角色功能授权和普通账号角色分配是 Authorization 拥有的两个完整业务用例。Controller 分别直接调用 RoleFeatureAssignments 与 IUserRoleAssignments；它们不经 RoleService 转发，也不拆成关系逐行 CRUD。两者继续复用平台事务、可信审计和同一授权模块持久化边界。
 - 角色读取、创建、编辑、角色功能配置和用户角色分配分别按声明位置判权。普通主体可以显式获得这些管理动作，获授动作在全局范围生效，不以操作者自己的功能集裁剪可配置目录。拥有一个管理动作不自动获得其他动作。
 - LocalAdministratorCatalog 收敛受保护角色定义及模块内存中的规范身份比较；共享 Contracts 只公开 Host 与模块共同使用的稳定角色代码。FeatureCatalogSynchronizer 在完整候选准备后同步功能点与 LocalAdmin 全集。管理员不通过角色名绕过正常判权，也不重建旧 Permission 目录。
 - FeatureCatalogSynchronizer 在事务成功后发布不可变活动目录。历史或失效功能行不能成为授权源；停用角色可以配置，但不进入有效授权。

@@ -33,6 +33,7 @@ public sealed class RoleFeatureSqlServerHttpApiTests
         await requests.GrantAsync(admin, actor.RoleId, create, requests.Role("edit"));
         await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, requests.Role("edit"), HttpMethod.Put, roleRoute, new { Name = "获授全局编辑", IsEnabled = true }), HttpStatusCode.OK);
         await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, requests.Role("edit", "detail.pageActions"), HttpMethod.Put, roleRoute, new { Name = "另一位置" }), HttpStatusCode.Forbidden);
+        await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, requests.Role("edit"), HttpMethod.Delete, roleRoute), HttpStatusCode.Forbidden);
         using var protectedRole = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post,
             "/api/authorization/roles", new { Code = "LocalAdmin", Name = "不可创建" });
         Assert.Equal(HttpStatusCode.BadRequest, protectedRole.StatusCode);

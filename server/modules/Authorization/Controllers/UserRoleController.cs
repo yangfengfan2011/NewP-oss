@@ -11,13 +11,13 @@ namespace ICP.Platform.Modules.Authorization.Controllers;
 [EndpointModule("Authorization")]
 public class UserRoleController : ControllerBase
 {
-    private readonly IRoleService _roleService;
+    private readonly IUserRoleAssignments _assignments;
     private readonly IIdentityAccountDirectory _accounts;
 
     // 账号由 Identity 稳定目录提供，控制器只翻译确定性输入错误。
-    public UserRoleController(IRoleService roleService, IIdentityAccountDirectory accounts)
+    public UserRoleController(IUserRoleAssignments assignments, IIdentityAccountDirectory accounts)
     {
-        _roleService = roleService;
+        _assignments = assignments;
         _accounts = accounts;
     }
 
@@ -34,7 +34,7 @@ public class UserRoleController : ControllerBase
     [RequireFeature("authorization.userRoles.read")]
     public async Task<ActionResult<UserRoleAssignmentsDto>> GetUserRoles(string userId, CancellationToken cancellationToken)
     {
-        try { return Ok(await _roleService.GetUserRolesAsync(userId, cancellationToken)); }
+        try { return Ok(await _assignments.GetAsync(userId, cancellationToken)); }
         catch (UserRoleValidationException ex) { return BadRequest(new ProblemDetails { Title = ex.Message, Status = 400 }); }
     }
 
@@ -45,7 +45,7 @@ public class UserRoleController : ControllerBase
     {
         try
         {
-            await _roleService.AssignUserRolesAsync(userId, request, User.Identity?.Name, cancellationToken);
+            await _assignments.ReplaceAsync(userId, request.RoleCodes, cancellationToken);
             return NoContent();
         }
         catch (UserRoleValidationException ex) { return BadRequest(new ProblemDetails { Title = ex.Message, Status = 400 }); }

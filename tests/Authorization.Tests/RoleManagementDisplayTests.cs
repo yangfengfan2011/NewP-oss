@@ -3,6 +3,7 @@ using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Crud.Persistence;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Modules.Authorization.Persistence.Descriptors;
+using ICP.Platform.Modules.Authorization;
 using ICP.Platform.Modules.Authorization.Services;
 using ICP.Platform.Persistence.Auditing;
 using ICP.Platform.Persistence.EfCore;
@@ -12,12 +13,36 @@ using ICP.Platform.Presentation;
 using ICP.Platform.Query.Runtime;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace ICP.Platform.Modules.Authorization.Tests;
 
 public sealed class RoleManagementDisplayTests
 {
+    [Fact]
+    public void Module_UsesSharedRoleReadsAndDedicatedAuthorizationUseCases()
+    {
+        var descriptor = RoleReadResource.Create();
+        var services = new ServiceCollection();
+
+        new AuthorizationModule().ConfigureServices(services);
+
+        Assert.False(descriptor.MapStandardEndpoints);
+        Assert.Empty(descriptor.FieldSet.CreateFields);
+        Assert.Empty(descriptor.FieldSet.UpdateFields);
+        Assert.Equal("api/authorization/roles", descriptor.Route);
+        Assert.Contains(services, registration => registration.ServiceType == typeof(IRoleService)
+            && registration.ImplementationType == typeof(RoleService)
+            && registration.Lifetime == ServiceLifetime.Scoped);
+        Assert.Contains(services, registration => registration.ServiceType == typeof(IUserRoleAssignments)
+            && registration.ImplementationType == typeof(UserRoleAssignments)
+            && registration.Lifetime == ServiceLifetime.Scoped);
+        Assert.Contains(services, registration => registration.ServiceType == typeof(RoleFeatureAssignments)
+            && registration.ImplementationType == typeof(RoleFeatureAssignments)
+            && registration.Lifetime == ServiceLifetime.Scoped);
+    }
+
     [Theory]
     [InlineData("zh-CN", "Asia/Taipei", "2026/9/4 15:24:26")]
     [InlineData("en-US", "America/Los_Angeles", "9/4/2026 12:24:26 AM")]

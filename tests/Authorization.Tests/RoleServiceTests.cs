@@ -24,7 +24,7 @@ public class RoleServiceTests
             _roleRepository,
             _rolePermissionRepository,
             _userRoleRepository,
-            new PlatformObjectIdGenerator(), new TestUserAssignments()
+            new PlatformObjectIdGenerator()
         );
     }
 
@@ -131,28 +131,18 @@ public class RoleServiceTests
     }
 
     [Fact]
-    public async Task AssignUserRoles_ValidRequest_AssignsRoles()
+    public async Task UpdateRole_BuiltInRole_ThrowsException()
     {
-        // Arrange
-        var role1 = new Role { Code = "Role1", Name = "角色1" };
-        var role2 = new Role { Code = "Role2", Name = "角色2" };
-        await _roleRepository.CreateAsync(role1);
-        await _roleRepository.CreateAsync(role2);
-
-        var userId = "user1";
-        var request = new AssignUserRolesRequest
+        var role = new Role
         {
-            RoleCodes = new List<string> { "Role1", "Role2" }
+            Code = "SystemAdmin",
+            Name = "系统管理员",
+            IsBuiltIn = true
         };
+        await _roleRepository.CreateAsync(role);
 
-        // Act
-        await _roleService.AssignUserRolesAsync(userId, request);
-
-        // Assert
-        var userRoles = await _roleService.GetUserRolesAsync(userId);
-        Assert.Equal(2, userRoles.RoleCodes.Count);
-        Assert.Contains("Role1", userRoles.RoleCodes);
-        Assert.Contains("Role2", userRoles.RoleCodes);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _roleService.UpdateRoleAsync(role.Id, new RoleDto { Name = "不可修改", IsEnabled = false }));
     }
 
     [Theory]
@@ -168,19 +158,7 @@ public class RoleServiceTests
     }
 
     private static RoleService BuildRoleService(IPlatformObjectIdGenerator generator) =>
-        new(new RoleRepository(), new RolePermissionRepository(), new UserRoleRepository(), generator, new TestUserAssignments());
-
-    private sealed class TestUserAssignments : IUserRoleAssignments
-    {
-        private readonly Dictionary<string, List<string>> _codes = new();
-        public Task<UserRoleAssignmentsDto> GetAsync(string userId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new UserRoleAssignmentsDto { UserId = userId, RoleCodes = _codes.GetValueOrDefault(userId) ?? [] });
-        public Task ReplaceAsync(string userId, IReadOnlyCollection<string> codes, CancellationToken cancellationToken = default)
-        {
-            _codes[userId] = codes.ToList();
-            return Task.CompletedTask;
-        }
-    }
+        new(new RoleRepository(), new RolePermissionRepository(), new UserRoleRepository(), generator);
 
     private sealed class SequenceObjectIdGenerator : IPlatformObjectIdGenerator
     {

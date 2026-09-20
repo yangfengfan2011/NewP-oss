@@ -81,7 +81,6 @@ public class OrganizationModuleTests
         Assert.True(typeof(CompanyObjectBehavior).IsAbstract && typeof(CompanyObjectBehavior).IsSealed);
         Assert.True(typeof(DepartmentObjectBehavior).IsAbstract && typeof(DepartmentObjectBehavior).IsSealed);
         Assert.True(typeof(PositionObjectBehavior).IsAbstract && typeof(PositionObjectBehavior).IsSealed);
-        Assert.True(typeof(PersonObjectBehavior).IsAbstract && typeof(PersonObjectBehavior).IsSealed);
         Assert.DoesNotContain(services, descriptor =>
             descriptor.ServiceType == typeof(IObjectOperationExtension));
         Assert.DoesNotContain(

@@ -11,6 +11,7 @@ public sealed class PersonLifecycleService : IPersonLifecycleService
     private readonly PersonLifecycleActionCore _core;
     private readonly IPlatformTransactionExecutor _transactionExecutor;
 
+    // 服务入口负责事务协调，核心保持生命周期规则与跨模块编排的唯一来源。
     internal PersonLifecycleService(
         PersonLifecycleActionCore core,
         IPlatformTransactionExecutor transactionExecutor)

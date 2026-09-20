@@ -11,7 +11,7 @@ using ICP.Platform.Persistence.Transactions;
 
 namespace ICP.Platform.Modules.Organization.Services;
 
-// 人员专用动作核心仅组合业务与持久化依赖，正式写入由对象行为调用。
+// 人员生命周期核心组合业务与持久化依赖，由专用业务服务调用。
 internal sealed class PersonLifecycleActionCore(
     IPersonUserBindingRepository repository,
     IIdentityAccountDirectory accountDirectory,
@@ -20,7 +20,7 @@ internal sealed class PersonLifecycleActionCore(
     IPlatformTransactionExecutor transactionExecutor,
     IEntityAuditValueProvider auditValues)
 {
-    /// <summary>在对象行为核心中校验最终输入并同步 Person、Identity 与 Authentication 事实。</summary>
+    /// <summary>校验最终输入并同步 Person、Identity 与 Authentication 事实。</summary>
     internal async ValueTask<PersonLifecycleActionResult> ExecuteAsync(
         string personEid,
         SetPersonLifecycleStatusRequest request,

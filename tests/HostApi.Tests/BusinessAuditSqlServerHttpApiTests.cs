@@ -563,6 +563,51 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         Assert.True(restored.GetProperty("isEnabled").GetBoolean());
         Assert.Equal("Disabled", restored.GetProperty("account").GetProperty("status").GetString());
         Assert.False(restored.GetProperty("account").GetProperty("personnelDisableHold").GetBoolean());
+
+        using var rejectedAccountResponse = await FeatureHttpTestRequests.SendAsync(
+            client,
+            http.Identity("create"),
+            HttpMethod.Post,
+            "/api/identity/accounts",
+            new { ECODE = "person-disabled-bind", ENAME = "停用人员候选账号" });
+        Assert.Equal(HttpStatusCode.Created, rejectedAccountResponse.StatusCode);
+        var rejectedAccount = (await rejectedAccountResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("account");
+        var disabledPerson = await FeatureHttpTestRequests.CreateAsync(
+            client,
+            http.Organization("persons", "create", "list.pageActions"),
+            "/api/organization/persons",
+            new { PersonNo = "DISABLED-BIND", ENAME = "停用后拒绝绑定", EmploymentStatus = "Active", IsEnabled = true });
+        var disabledPersonId = Id(disabledPerson);
+        using var disabledPersonResponse = await FeatureHttpTestRequests.SendAsync(
+            client,
+            http.Organization("persons", "disable", "list.rowActions"),
+            HttpMethod.Put,
+            $"/api/organization/persons/{disabledPersonId}/status/disable",
+            new { isEnabled = false, reason = "验证正式拒绝契约" });
+        Assert.Equal(HttpStatusCode.OK, disabledPersonResponse.StatusCode);
+
+        using var rejectedBinding = await FeatureHttpTestRequests.SendAsync(
+            client,
+            http.Organization("persons", "linkUser", "detail.custom"),
+            HttpMethod.Put,
+            $"/api/organization/persons/{disabledPersonId}/user-binding",
+            new
+            {
+                accountEid = rejectedAccount.GetProperty("eid").GetString(),
+                expectedRevision = rejectedAccount.GetProperty("revision").GetInt64(),
+                reason = "停用人员不得绑定"
+            });
+        Assert.Equal(HttpStatusCode.Conflict, rejectedBinding.StatusCode);
+        var rejection = await rejectedBinding.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(PersonUserBindingFailureCodes.PersonDisabled, rejection.GetProperty("code").GetString());
+        var rejectedPersonStored = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Person"))
+            .AsNoTracking()
+            .SingleAsync(row => EF.Property<string>(row, "EID") == disabledPersonId);
+        var rejectedAccountStored = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Identity/IdentityAccount"))
+            .AsNoTracking()
+            .SingleAsync(row => EF.Property<string>(row, "EID") == rejectedAccount.GetProperty("eid").GetString());
+        Assert.Null(rejectedPersonStored["AccountEID"]);
+        Assert.False((bool)rejectedAccountStored["IsPersonnelBound"]!);
     }
 
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "人员服务端更新和别名删除共用对象行为、审计与实际EID缓存登记")]

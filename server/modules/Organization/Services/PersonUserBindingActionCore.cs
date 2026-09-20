@@ -10,7 +10,7 @@ using ICP.Platform.Persistence.Transactions;
 
 namespace ICP.Platform.Modules.Organization.Services;
 
-// 人员专用动作核心仅组合业务与持久化依赖，正式写入由对象行为调用。
+// 人员永久绑定核心组合业务与持久化依赖，由专用业务服务调用。
 internal sealed class PersonUserBindingActionCore(
     IPersonUserBindingRepository repository,
     IIdentityAccountDirectory accountDirectory,
@@ -63,7 +63,7 @@ internal sealed class PersonUserBindingActionCore(
             .ToArray();
     }
 
-    /// <summary>在对象行为核心中校验最终输入并登记永久 Person/Identity 绑定事实。</summary>
+    /// <summary>校验最终输入并登记永久 Person/Identity 绑定事实。</summary>
     internal async ValueTask<PersonUserBindingActionResult> ExecuteAsync(
         string personEid,
         BindPersonUserRequest request,

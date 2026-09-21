@@ -77,7 +77,7 @@ public class RoleServiceTests
         await _roleService.CreateRoleAsync(request);
 
         // Act & Assert
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        await Assert.ThrowsAsync<RoleValidationException>(
             () => _roleService.CreateRoleAsync(request)
         );
     }
@@ -125,7 +125,7 @@ public class RoleServiceTests
         await _roleRepository.CreateAsync(role);
 
         // Act & Assert
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        await Assert.ThrowsAsync<RoleValidationException>(
             () => _roleService.DeleteRoleAsync(role.Id)
         );
     }
@@ -141,7 +141,7 @@ public class RoleServiceTests
         };
         await _roleRepository.CreateAsync(role);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<RoleValidationException>(() =>
             _roleService.UpdateRoleAsync(role.Id, new RoleDto { Name = "不可修改", IsEnabled = false }));
     }
 
@@ -153,7 +153,7 @@ public class RoleServiceTests
     [InlineData("Ordinary", true)]
     public async Task CreateRole_ReservedIdentityRejectsEvenSystemActor(string code, bool builtIn)
     {
-        await Assert.ThrowsAsync<InvalidOperationException>(() => _roleService.CreateRoleAsync(
+        await Assert.ThrowsAsync<RoleValidationException>(() => _roleService.CreateRoleAsync(
             new RoleDto { Code = code, Name = "冒充", IsBuiltIn = builtIn }, "system"));
     }
 

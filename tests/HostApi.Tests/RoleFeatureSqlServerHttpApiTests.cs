@@ -37,6 +37,9 @@ public sealed class RoleFeatureSqlServerHttpApiTests
         using var protectedRole = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post,
             "/api/authorization/roles", new { Code = "LocalAdmin", Name = "不可创建" });
         Assert.Equal(HttpStatusCode.BadRequest, protectedRole.StatusCode);
+        var problem = await protectedRole.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(400, problem.GetProperty("status").GetInt32());
+        Assert.Equal("受保护的角色身份不能通过普通管理创建。", problem.GetProperty("title").GetString());
     }
 
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "普通成员管理员全局分配、角色来源并集与在途完成")]

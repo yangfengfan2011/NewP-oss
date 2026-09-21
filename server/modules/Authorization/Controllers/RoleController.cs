@@ -48,7 +48,7 @@ public class RoleController : ControllerBase
         return Ok(role);
     }
 
-    /// <summary>创建普通角色，校验失败保持请求失败。</summary>
+    /// <summary>创建普通角色，只翻译确定性业务拒绝，依赖异常继续传播。</summary>
     [HttpPost]
     [RequireFeature("authorization.role.create")]
     public async Task<ActionResult<RoleDto>> CreateRole([FromBody] RoleDto dto, CancellationToken cancellationToken)
@@ -58,13 +58,13 @@ public class RoleController : ControllerBase
             var role = await _roleService.CreateRoleAsync(dto, User.Identity?.Name, cancellationToken);
             return CreatedAtAction(nameof(GetRoleById), new { roleId = role.Id }, role);
         }
-        catch (InvalidOperationException ex)
+        catch (RoleValidationException ex)
         {
             return BadRequest(new ProblemDetails { Title = ex.Message, Status = 400 });
         }
     }
 
-    /// <summary>保留旧更新协议和管理员保护，客户端不能改写角色身份。</summary>
+    /// <summary>保留旧更新协议和管理员保护，只将确定性业务拒绝翻译为请求错误。</summary>
     [HttpPut("{roleId}")]
     [RequireFeature("authorization.role.update")]
     public async Task<ActionResult<RoleDto>> UpdateRole(string roleId, [FromBody] RoleDto dto, CancellationToken cancellationToken)
@@ -74,13 +74,13 @@ public class RoleController : ControllerBase
             var role = await _roleService.UpdateRoleAsync(roleId, dto, User.Identity?.Name, cancellationToken);
             return Ok(role);
         }
-        catch (InvalidOperationException ex)
+        catch (RoleValidationException ex)
         {
             return BadRequest(new ProblemDetails { Title = ex.Message, Status = 400 });
         }
     }
 
-    /// <summary>保留旧协议；当前没有声明删除入口，HTTP 明确拒绝。</summary>
+    /// <summary>保留旧协议及业务拒绝翻译；当前没有声明删除入口，HTTP 仍明确拒绝。</summary>
     [HttpDelete("{roleId}")]
     [DenyAll("Role deletion has no declared user entry position.")]
     public async Task<ActionResult> DeleteRole(string roleId, CancellationToken cancellationToken)
@@ -90,7 +90,7 @@ public class RoleController : ControllerBase
             await _roleService.DeleteRoleAsync(roleId, cancellationToken);
             return NoContent();
         }
-        catch (InvalidOperationException ex)
+        catch (RoleValidationException ex)
         {
             return BadRequest(new ProblemDetails { Title = ex.Message, Status = 400 });
         }

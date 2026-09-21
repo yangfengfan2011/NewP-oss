@@ -1,3 +1,4 @@
+using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.DTOs.Requests;
 using ICP.Platform.Persistence.Abstractions;
@@ -11,7 +12,7 @@ public sealed class PersonLifecycleService : IPersonLifecycleService
     private readonly PersonLifecycleActionCore _core;
     private readonly IPlatformTransactionExecutor _transactionExecutor;
 
-    // 服务入口负责事务协调，核心保持生命周期规则与跨模块编排的唯一来源。
+    // 服务入口统一事务协调和失败映射，内部核心只登记生命周期规则与跨模块变化。
     internal PersonLifecycleService(
         PersonLifecycleActionCore core,
         IPlatformTransactionExecutor transactionExecutor)
@@ -33,16 +34,21 @@ public sealed class PersonLifecycleService : IPersonLifecycleService
         {
             return await _transactionExecutor.ExecuteAsync(
                 ["Person"],
-                async token => (await _core.ExecuteAsync(personEid, request, actor, token)).Dto,
+                token => _core.ExecuteAsync(personEid, request, actor, token),
                 cancellationToken);
         }
         catch (PlatformCacheUnavailableException)
         {
+            // 保留提交已完成或结果未知的事实，不能引导调用者重放。
             throw;
         }
         catch (PersonLifecycleException)
         {
             throw;
+        }
+        catch (IdentityLifecycleException exception) when (exception.FailureCode == IdentityLifecycleFailureCodes.RevisionConflict)
+        {
+            throw new PersonLifecycleException(PersonLifecycleFailureCodes.Conflict, exception.LatestAccount, exception);
         }
         catch (OperationCanceledException)
         {

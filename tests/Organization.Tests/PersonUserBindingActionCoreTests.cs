@@ -5,6 +5,7 @@ using ICP.Platform.Modules.Organization.Repositories;
 using ICP.Platform.Modules.Organization.Services;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.Auditing;
+using ICP.Platform.Persistence.Transactions;
 using Xunit;
 
 namespace ICP.Platform.Modules.Organization.Tests;
@@ -18,18 +19,18 @@ public sealed class PersonUserBindingActionCoreTests
     {
         var fixture = Fixture();
         fixture.Directory.Aliases["user_1"] = "User_1";
-        var result = (await fixture.Core.ExecuteAsync("Person_1", new BindPersonUserRequest("user_1", 7, "首次绑定"),
-            new PersonUserBindingActor("User_Admin", "canonical"))).Dto;
+        var result = await fixture.Service.BindAsync("Person_1", new BindPersonUserRequest("user_1", 7, "首次绑定"),
+            new PersonUserBindingActor("User_Admin", "canonical"));
         Assert.Equal("User_1", result.AccountEid);
         Assert.Equal("User_1", result.Account!.AccountEid);
         Assert.Equal("User_1", fixture.Repository.Current.AccountEid);
         Assert.Equal("User_1", fixture.Identity.LastBinding!.AccountEid);
 
-        var repeated = (await fixture.Core.ExecuteAsync("Person_1", new BindPersonUserRequest("user_1", 0, "不覆盖"),
-            new PersonUserBindingActor("User_Admin", "retry-alias"))).Dto;
+        var repeated = await fixture.Service.BindAsync("Person_1", new BindPersonUserRequest("user_1", 0, "不覆盖"),
+            new PersonUserBindingActor("User_Admin", "retry-alias"));
         Assert.Equal("User_1", repeated.AccountEid);
         Assert.Equal("首次绑定", repeated.Reason);
-        Assert.Equal(1, fixture.Transaction.ExecutionCount);
+        Assert.Equal(2, fixture.Transaction.ExecutionCount);
         Assert.Single(fixture.Identity.Events);
     }
 
@@ -38,11 +39,11 @@ public sealed class PersonUserBindingActionCoreTests
     {
         var fixture = Fixture(person: Person(accountEid: "User_1"), accounts: [Account("User_1"), Account("User_2")]);
         fixture.Directory.Aliases["user_2"] = "User_2";
-        var error = await Assert.ThrowsAsync<PersonUserBindingException>(() => fixture.Core.ExecuteAsync("Person_1",
+        var error = await Assert.ThrowsAsync<PersonUserBindingException>(() => fixture.Service.BindAsync("Person_1",
             new BindPersonUserRequest("user_2", 7, "拒绝改绑"), new PersonUserBindingActor("User_Admin", "conflict-alias")).AsTask());
         Assert.Equal(PersonUserBindingFailureCodes.PersonAlreadyBound, error.FailureCode);
         Assert.Equal("User_1", fixture.Repository.Current.AccountEid);
-        Assert.Equal(0, fixture.Transaction.ExecutionCount);
+        Assert.Equal(1, fixture.Transaction.ExecutionCount);
     }
 
     [Fact]
@@ -57,7 +58,7 @@ public sealed class PersonUserBindingActionCoreTests
             .ToArray();
         var fixture = Fixture(accounts: accounts);
 
-        var result = await fixture.Core.SearchCandidatesAsync("Person_1", " user ");
+        var result = await fixture.Service.SearchCandidatesAsync("Person_1", " user ");
 
         Assert.Equal(20, result.Count);
         Assert.All(result, candidate => Assert.Contains(candidate.Status, new[] { "Enabled", "Disabled" }));
@@ -72,10 +73,10 @@ public sealed class PersonUserBindingActionCoreTests
     {
         var fixture = Fixture();
 
-        var result = (await fixture.Core.ExecuteAsync(
+        var result = await fixture.Service.BindAsync(
             "Person_1",
             new BindPersonUserRequest("User_1", 7, "  入职账号绑定  "),
-            new PersonUserBindingActor("User_Admin", "trace-39"))).Dto;
+            new PersonUserBindingActor("User_Admin", "trace-39"));
 
         Assert.Equal("User_1", result.AccountEid);
         Assert.Equal(BoundAt, result.BoundAt);
@@ -93,17 +94,17 @@ public sealed class PersonUserBindingActionCoreTests
     {
         var fixture = Fixture(person: Person(accountEid: "User_1"));
 
-        var idempotent = (await fixture.Core.ExecuteAsync(
+        var idempotent = await fixture.Service.BindAsync(
             "Person_1",
             new BindPersonUserRequest("User_1", 0, "不会覆盖既有原因"),
-            new PersonUserBindingActor("User_Admin", "trace-repeat"))).Dto;
+            new PersonUserBindingActor("User_Admin", "trace-repeat"));
 
         Assert.Equal("首次绑定", idempotent.Reason);
-        Assert.Equal(0, fixture.Transaction.ExecutionCount);
+        Assert.Equal(1, fixture.Transaction.ExecutionCount);
         Assert.Equal(7, fixture.Identity.Account.Revision);
 
         var conflict = await Assert.ThrowsAsync<PersonUserBindingException>(async () =>
-            await fixture.Core.ExecuteAsync(
+            await fixture.Service.BindAsync(
                 "Person_1",
                 new BindPersonUserRequest("User_2", 7, "改绑"),
                 new PersonUserBindingActor("User_Admin", "trace-conflict")));
@@ -115,13 +116,13 @@ public sealed class PersonUserBindingActionCoreTests
     {
         var fixture = Fixture(person: Person(accountEid: "User_1"));
 
-        var exception = await Assert.ThrowsAsync<PersonUserBindingException>(() => fixture.Core.ExecuteAsync(
+        var exception = await Assert.ThrowsAsync<PersonUserBindingException>(() => fixture.Service.BindAsync(
             "Person_1",
             new BindPersonUserRequest("User_1", 0, "重复绑定"),
             new PersonUserBindingActor("Other_User", "trace-untrusted")).AsTask());
 
         Assert.Equal(PersonUserBindingFailureCodes.InvalidActor, exception.FailureCode);
-        Assert.Equal(0, fixture.Transaction.ExecutionCount);
+        Assert.Equal(1, fixture.Transaction.ExecutionCount);
     }
 
     [Fact]
@@ -130,7 +131,7 @@ public sealed class PersonUserBindingActionCoreTests
         var fixture = Fixture(person: Person(isEnabled: false));
 
         var exception = await Assert.ThrowsAsync<PersonUserBindingException>(async () =>
-            await fixture.Core.ExecuteAsync(
+            await fixture.Service.BindAsync(
                 "Person_1",
                 new BindPersonUserRequest("User_1", 7, "停用人员绑定"),
                 new PersonUserBindingActor("User_Admin", "trace-disabled")));
@@ -146,7 +147,7 @@ public sealed class PersonUserBindingActionCoreTests
         var fixture = Fixture(failureStage: BindingFailureStage.IdentityRevisionConflict);
 
         var exception = await Assert.ThrowsAsync<PersonUserBindingException>(async () =>
-            await fixture.Core.ExecuteAsync(
+            await fixture.Service.BindAsync(
                 "Person_1",
                 new BindPersonUserRequest("User_1", 7, "并发绑定"),
                 new PersonUserBindingActor("User_Admin", "trace-contract-conflict")));
@@ -166,7 +167,7 @@ public sealed class PersonUserBindingActionCoreTests
         var accountBefore = fixture.Identity.Account with { };
 
         await Assert.ThrowsAnyAsync<Exception>(async () =>
-            await fixture.Core.ExecuteAsync(
+            await fixture.Service.BindAsync(
                 "Person_1",
                 new BindPersonUserRequest("User_1", 7, "故障回滚"),
                 new PersonUserBindingActor("User_Admin", "trace-rollback")));
@@ -180,7 +181,7 @@ public sealed class PersonUserBindingActionCoreTests
     public async Task PublicService_SearchCandidatesDelegatesToBindingRulesWithoutExecutingMutation()
     {
         var fixture = Fixture();
-        var service = new PersonUserBindingService(fixture.Core, fixture.Transaction);
+        var service = fixture.Service;
 
         var candidates = await service.SearchCandidatesAsync("Person_1", " user ");
 
@@ -195,16 +196,60 @@ public sealed class PersonUserBindingActionCoreTests
         var fixture = Fixture();
         var actor = new PersonUserBindingActor("User_Admin", "adapter-trace");
         using var cancellation = new CancellationTokenSource();
-        var service = new PersonUserBindingService(fixture.Core, fixture.Transaction);
+        var service = fixture.Service;
+
+        fixture.Repository.OnRead = () =>
+        {
+            Assert.True(fixture.Transaction.IsActive);
+            Assert.Equal(["Person"], fixture.Transaction.CoordinationModels);
+        };
 
         var result = await service.BindAsync(
             "Person_1", new BindPersonUserRequest("User_1", 7, "入口原因"), actor, cancellation.Token);
 
         Assert.Equal("User_1", result.AccountEid);
         Assert.Equal(1, fixture.Transaction.ExecutionCount);
+        Assert.Equal(2, fixture.Repository.ReadCount);
     }
 
-    // 内部核心的隔离门缝保留事务 fallback 与幂等计数；公开入口另由正式模块集成测试覆盖。
+    [Fact]
+    public async Task PublicService_CancellationBeforeCommitRollsBackAndPropagatesToken()
+    {
+        var fixture = Fixture();
+        var personBefore = fixture.Repository.Current with { };
+        var accountBefore = fixture.Identity.Account with { };
+        using var cancellation = new CancellationTokenSource();
+        var failure = new OperationCanceledException(cancellation.Token);
+        fixture.Transaction.BeforeCommitFailure = failure;
+
+        var actual = await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            fixture.Service.BindAsync("Person_1", new BindPersonUserRequest("User_1", 7, "失败验证"), new PersonUserBindingActor("User_Admin", "failure"), cancellation.Token).AsTask());
+
+        Assert.Same(failure, actual);
+        Assert.Equal(cancellation.Token, actual.CancellationToken);
+        Assert.Equal(personBefore, fixture.Repository.Current);
+        Assert.Equal(accountBefore, fixture.Identity.Account);
+        Assert.Empty(fixture.Identity.Events);
+    }
+
+    [Fact]
+    public async Task PublicService_CommittedCacheFailureKeepsCommittedFactsAndFailureIdentity()
+    {
+        var fixture = Fixture();
+        var failure = new PlatformCacheUnavailableException("Organization", databaseCommitted: true);
+        fixture.Transaction.AfterCommitFailure = failure;
+
+        var actual = await Assert.ThrowsAsync<PlatformCacheUnavailableException>(() =>
+            fixture.Service.BindAsync("Person_1", new BindPersonUserRequest("User_1", 7, "失败验证"), new PersonUserBindingActor("User_Admin", "failure")).AsTask());
+
+        Assert.Same(failure, actual);
+        Assert.True(actual.DatabaseCommitted);
+        Assert.Equal("User_1", fixture.Repository.Current.AccountEid);
+        Assert.True(fixture.Identity.Account.IsPersonnelBound);
+        Assert.Single(fixture.Identity.Events);
+    }
+
+    // 行为矩阵经正式服务入口取得协调权，内部协作者仅用于组合依赖。
     private static TestFixture Fixture(
         PersonUserBindingState? person = null,
         IReadOnlyList<IdentityAccountSnapshot>? accounts = null,
@@ -218,9 +263,8 @@ public sealed class PersonUserBindingActionCoreTests
             repository,
             directory,
             identity,
-            transaction,
             new EntityAuditValueProvider(new FixedAuditStampProvider("User_Admin", BoundAt)));
-        return new TestFixture(core, repository, directory, identity, transaction);
+        return new TestFixture(new PersonUserBindingService(core, transaction), repository, directory, identity, transaction);
     }
 
     private static PersonUserBindingState Person(bool isEnabled = true, string? accountEid = null) => new()
@@ -262,7 +306,7 @@ public sealed class PersonUserBindingActionCoreTests
     }
 
     private sealed record TestFixture(
-        PersonUserBindingActionCore Core,
+        IPersonUserBindingService Service,
         InMemoryPersonUserBindingRepository Repository,
         RecordingAccountDirectory Directory,
         RecordingIdentityParticipant Identity,
@@ -338,8 +382,15 @@ public sealed class PersonUserBindingActionCoreTests
     {
         public PersonUserBindingState Current { get; set; } = person;
 
-        public ValueTask<PersonUserBindingState?> FindAsync(string personEid, CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult<PersonUserBindingState?>(Current.PersonEid == personEid ? Current with { } : null);
+        public int ReadCount { get; private set; }
+        public Action? OnRead { get; set; }
+
+        public ValueTask<PersonUserBindingState?> FindAsync(string personEid, CancellationToken cancellationToken = default)
+        {
+            OnRead?.Invoke();
+            ReadCount++;
+            return ValueTask.FromResult<PersonUserBindingState?>(Current.PersonEid == personEid ? Current with { } : null);
+        }
 
         public ValueTask<bool> TryBindAsync(
             string personEid,
@@ -384,6 +435,16 @@ public sealed class PersonUserBindingActionCoreTests
     {
         public int ExecutionCount { get; private set; }
         public bool IsActive { get; private set; }
+        public Exception? BeforeCommitFailure { get; set; }
+        public Exception? AfterCommitFailure { get; set; }
+        public IReadOnlyCollection<string> CoordinationModels { get; private set; } = [];
+
+        public ValueTask<TResult> ExecuteAsync<TResult>(IReadOnlyCollection<string> modelKeys,
+            Func<CancellationToken, ValueTask<TResult>> registerChanges, CancellationToken cancellationToken = default)
+        {
+            CoordinationModels = modelKeys;
+            return ExecuteAsync(registerChanges, cancellationToken);
+        }
 
         public async ValueTask<TResult> ExecuteAsync<TResult>(
             Func<CancellationToken, ValueTask<TResult>> registerChanges,
@@ -394,17 +455,21 @@ public sealed class PersonUserBindingActionCoreTests
             var person = repository.Current with { };
             var account = identity.Account with { };
             var events = identity.Events.ToArray();
+            var committed = false;
             try
             {
                 var result = await registerChanges(cancellationToken);
+                if (BeforeCommitFailure is not null) throw BeforeCommitFailure;
                 if (failureStage == BindingFailureStage.Commit)
                 {
                     throw new InvalidOperationException("commit-failed");
                 }
 
+                committed = true;
+                if (AfterCommitFailure is not null) throw AfterCommitFailure;
                 return result;
             }
-            catch
+            catch when (!committed)
             {
                 repository.Current = person;
                 identity.Account = account;

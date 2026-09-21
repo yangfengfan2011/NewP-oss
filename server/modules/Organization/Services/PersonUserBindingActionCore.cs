@@ -4,9 +4,7 @@ using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.DTOs.Requests;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Repositories;
-using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.Auditing;
-using ICP.Platform.Persistence.Transactions;
 
 namespace ICP.Platform.Modules.Organization.Services;
 
@@ -15,7 +13,6 @@ internal sealed class PersonUserBindingActionCore(
     IPersonUserBindingRepository repository,
     IIdentityAccountDirectory accountDirectory,
     IIdentityLifecycleParticipant identityParticipant,
-    IPlatformTransactionExecutor transactionExecutor,
     IEntityAuditValueProvider auditValues)
 {
     // 候选读取与绑定写入复用同一人员可绑定规则。
@@ -63,8 +60,8 @@ internal sealed class PersonUserBindingActionCore(
             .ToArray();
     }
 
-    /// <summary>校验最终输入并登记永久 Person/Identity 绑定事实。</summary>
-    internal async ValueTask<PersonUserBindingActionResult> ExecuteAsync(
+    /// <summary>在服务已取得协调权的事务内校验输入并登记永久人员账号绑定；不自行提交。</summary>
+    internal async ValueTask<PersonUserBindingDto> ExecuteAsync(
         string personEid,
         BindPersonUserRequest request,
         PersonUserBindingActor actor,
@@ -79,99 +76,80 @@ internal sealed class PersonUserBindingActionCore(
         }
 
         var reason = NormalizeReason(request.Reason);
-        var initialPerson = await GetRequiredPersonAsync(personEid, cancellationToken);
-        if (initialPerson.AccountEid is not null)
+        var person = await GetRequiredPersonAsync(personEid, cancellationToken);
+        if (person.AccountEid is not null)
         {
-            return new(
-                await EnsureExistingBindingAsync(initialPerson, request.AccountEid, cancellationToken),
-                initialPerson);
+            return await EnsureExistingBindingAsync(person, request.AccountEid, cancellationToken);
         }
 
-        EnsurePersonCanStartBinding(initialPerson);
+        EnsurePersonCanStartBinding(person);
         var account = await FindAccountAsync(request.AccountEid, cancellationToken);
         EnsureCandidate(account, request.ExpectedRevision);
-        // 原子登记人员与账号事实；事务外隔离调用仍保留既有独立事务 fallback。
-        async ValueTask<PersonUserBindingActionResult> ExecuteAsync(CancellationToken transactionCancellationToken)
+        var audit = ResolveAuditValues(person, actor.ActorId);
+        var bound = await repository.TryBindAsync(
+            personEid,
+            account.AccountEid,
+            reason,
+            audit,
+            cancellationToken);
+        if (!bound)
         {
-            var person = await GetRequiredPersonAsync(personEid, transactionCancellationToken);
-            if (person.AccountEid is not null)
+            var latest = await GetRequiredPersonAsync(personEid, cancellationToken);
+            if (latest.AccountEid is not null)
             {
-                return new(EnsureSameBindingOrThrow(person, account.AccountEid), person);
+                return EnsureSameBindingOrThrow(latest, account.AccountEid);
             }
 
-            EnsurePersonCanStartBinding(person);
-            var audit = ResolveAuditValues(person, actor.ActorId);
-            var bound = await repository.TryBindAsync(
-                personEid,
-                account.AccountEid,
-                reason,
-                audit,
-                transactionCancellationToken);
-            if (!bound)
-            {
-                var latest = await GetRequiredPersonAsync(personEid, transactionCancellationToken);
-                if (latest.AccountEid is not null)
-                {
-                    return new(EnsureSameBindingOrThrow(latest, account.AccountEid), latest);
-                }
-
-                EnsurePersonCanStartBinding(latest);
-                throw new PersonUserBindingException(PersonUserBindingFailureCodes.PersonAlreadyBound);
-            }
-
-            IdentityLifecycleRegistrationResult identityResult;
-            try
-            {
-                identityResult = await identityParticipant.RegisterPersonnelBindingAsync(
-                    new PersonnelBindingRegistration
-                    {
-                        PersonEid = personEid,
-                        AccountEid = account.AccountEid,
-                        ExpectedRevision = request.ExpectedRevision,
-                        Reason = reason,
-                        ActorId = actor.ActorId,
-                        TraceId = actor.TraceId
-                    },
-                    transactionCancellationToken);
-            }
-            catch (IdentityLifecycleException exception)
-            {
-                throw MapIdentityFailure(exception);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception exception)
-            {
-                throw new PersonUserBindingException(
-                    PersonUserBindingFailureCodes.IdentityUnavailable,
-                    innerException: exception);
-            }
-
-            // Person 此前尚未绑定，因此 Identity 的无变化只能表示账号已被其他人员抢先绑定。
-            if (!identityResult.Changed)
-            {
-                throw new PersonUserBindingException(
-                    PersonUserBindingFailureCodes.UserAlreadyBound,
-                    identityResult.Account);
-            }
-
-            var changedPerson = await GetRequiredPersonAsync(personEid, transactionCancellationToken);
-            return new(
-                new PersonUserBindingDto(
-                    changedPerson.PersonEid,
-                    changedPerson.AccountEid!,
-                    changedPerson.BoundAt!.Value,
-                    changedPerson.BoundBy!,
-                    changedPerson.BindingReason!,
-                    ToAccount(identityResult.Account)),
-                changedPerson);
+            EnsurePersonCanStartBinding(latest);
+            throw new PersonUserBindingException(PersonUserBindingFailureCodes.PersonAlreadyBound);
         }
 
-        return transactionExecutor.IsActive
-            ? await ExecuteAsync(cancellationToken)
-            : await transactionExecutor.ExecuteAsync(["Person"], ExecuteAsync, cancellationToken);
+        IdentityLifecycleRegistrationResult identityResult;
+        try
+        {
+            identityResult = await identityParticipant.RegisterPersonnelBindingAsync(
+                new PersonnelBindingRegistration
+                {
+                    PersonEid = personEid,
+                    AccountEid = account.AccountEid,
+                    ExpectedRevision = request.ExpectedRevision,
+                    Reason = reason,
+                    ActorId = actor.ActorId,
+                    TraceId = actor.TraceId
+                },
+                cancellationToken);
+        }
+        catch (IdentityLifecycleException exception)
+        {
+            throw MapIdentityFailure(exception);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            throw new PersonUserBindingException(
+                PersonUserBindingFailureCodes.IdentityUnavailable,
+                innerException: exception);
+        }
+
+        // Person 此前尚未绑定，因此 Identity 的无变化只能表示账号已被其他人员抢先绑定。
+        if (!identityResult.Changed)
+        {
+            throw new PersonUserBindingException(
+                PersonUserBindingFailureCodes.UserAlreadyBound,
+                identityResult.Account);
+        }
+
+        var changedPerson = await GetRequiredPersonAsync(personEid, cancellationToken);
+        return new PersonUserBindingDto(
+            changedPerson.PersonEid,
+            changedPerson.AccountEid!,
+            changedPerson.BoundAt!.Value,
+            changedPerson.BoundBy!,
+            changedPerson.BindingReason!,
+            ToAccount(identityResult.Account));
     }
 
     // 已知相同标识仍可直接幂等返回；其他输入先经 Identity 解析，再按实际标识判断永久绑定目标。
@@ -361,7 +339,3 @@ internal sealed class PersonUserBindingActionCore(
     }
 
 }
-
-internal sealed record PersonUserBindingActionResult(
-    PersonUserBindingDto Dto,
-    PersonUserBindingState Person);

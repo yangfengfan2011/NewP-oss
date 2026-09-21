@@ -35,7 +35,7 @@ public sealed class PersonUserBindingService : IPersonUserBindingService
     {
         return await _transactionExecutor.ExecuteAsync(
             ["Person"],
-            async token => (await _core.ExecuteAsync(personEid, request, actor, token)).Dto,
+            token => _core.ExecuteAsync(personEid, request, actor, token),
             cancellationToken);
     }
 }

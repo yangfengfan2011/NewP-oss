@@ -6,6 +6,7 @@ using ICP.Platform.Modules.Organization.Repositories;
 using ICP.Platform.Modules.Organization.Services;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.Auditing;
+using ICP.Platform.Persistence.Transactions;
 using Xunit;
 
 namespace ICP.Platform.Modules.Organization.Tests;
@@ -19,10 +20,10 @@ public sealed class PersonLifecycleActionCoreTests
     {
         var fixture = Fixture();
 
-        var result = (await fixture.Core.ExecuteAsync(
+        var result = await fixture.Service.SetStatusAsync(
             "Person_1",
             new SetPersonLifecycleStatusRequest(false, "  人员离职  "),
-            new PersonLifecycleActor("User_Admin", "trace-40"))).Dto;
+            new PersonLifecycleActor("User_Admin", "trace-40"));
 
         Assert.False(result.IsEnabled);
         Assert.Equal(8, result.Account?.Revision);
@@ -51,10 +52,10 @@ public sealed class PersonLifecycleActionCoreTests
             },
             existingSessionRevocations: 2);
 
-        var result = (await fixture.Core.ExecuteAsync(
+        var result = await fixture.Service.SetStatusAsync(
             "Person_1",
             new SetPersonLifecycleStatusRequest(true, "人员返岗"),
-            new PersonLifecycleActor("User_Admin", "trace-restore"))).Dto;
+            new PersonLifecycleActor("User_Admin", "trace-restore"));
 
         Assert.True(result.IsEnabled);
         Assert.Equal("Disabled", result.Account?.Status);
@@ -69,10 +70,10 @@ public sealed class PersonLifecycleActionCoreTests
     {
         var fixture = Fixture(person: Person() with { AccountEid = null }, directoryUnavailable: true);
 
-        var result = (await fixture.Core.ExecuteAsync(
+        var result = await fixture.Service.SetStatusAsync(
             "Person_1",
             new SetPersonLifecycleStatusRequest(false, "人员停用"),
-            new PersonLifecycleActor("User_Admin", "trace-unbound"))).Dto;
+            new PersonLifecycleActor("User_Admin", "trace-unbound"));
 
         Assert.False(result.IsEnabled);
         Assert.Null(result.Account);
@@ -94,13 +95,13 @@ public sealed class PersonLifecycleActionCoreTests
             existingSessionRevocations: 1,
             existingEvents: ["人员离职"]);
 
-        var result = (await fixture.Core.ExecuteAsync(
+        var result = await fixture.Service.SetStatusAsync(
             "Person_1",
             new SetPersonLifecycleStatusRequest(false, "重复停用"),
-            new PersonLifecycleActor("User_Admin", "trace-retry"))).Dto;
+            new PersonLifecycleActor("User_Admin", "trace-retry"));
 
         Assert.Equal(8, result.Account?.Revision);
-        Assert.Equal(0, fixture.Transaction.ExecutionCount);
+        Assert.Equal(1, fixture.Transaction.ExecutionCount);
         Assert.Equal(1, fixture.Identity.SessionRevocations);
         Assert.Single(fixture.Identity.Events, "人员离职");
     }
@@ -117,13 +118,13 @@ public sealed class PersonLifecycleActionCoreTests
                 Revision = 8
             });
 
-        var exception = await Assert.ThrowsAsync<PersonLifecycleException>(() => fixture.Core.ExecuteAsync(
+        var exception = await Assert.ThrowsAsync<PersonLifecycleException>(() => fixture.Service.SetStatusAsync(
             "Person_1",
             new SetPersonLifecycleStatusRequest(false, "重复停用"),
             new PersonLifecycleActor("Other_User", "trace-untrusted")).AsTask());
 
         Assert.Equal(PersonLifecycleFailureCodes.InvalidActor, exception.FailureCode);
-        Assert.Equal(0, fixture.Transaction.ExecutionCount);
+        Assert.Equal(1, fixture.Transaction.ExecutionCount);
     }
 
     [Fact]
@@ -132,7 +133,7 @@ public sealed class PersonLifecycleActionCoreTests
         var fixture = Fixture(failureStage: LifecycleFailureStage.IdentityRevisionConflict);
 
         var exception = await Assert.ThrowsAsync<PersonLifecycleException>(async () =>
-            await fixture.Core.ExecuteAsync(
+            await fixture.Service.SetStatusAsync(
                 "Person_1",
                 new SetPersonLifecycleStatusRequest(false, "账号并发"),
                 new PersonLifecycleActor("User_Admin", "trace-user-conflict")));
@@ -148,14 +149,14 @@ public sealed class PersonLifecycleActionCoreTests
         var fixture = Fixture(directoryUnavailable: true);
 
         var exception = await Assert.ThrowsAsync<PersonLifecycleException>(async () =>
-            await fixture.Core.ExecuteAsync(
+            await fixture.Service.SetStatusAsync(
                 "Person_1",
                 new SetPersonLifecycleStatusRequest(false, "依赖故障"),
                 new PersonLifecycleActor("User_Admin", "trace-outage")));
 
         Assert.Equal(PersonLifecycleFailureCodes.DependencyUnavailable, exception.FailureCode);
         Assert.True(fixture.Repository.Current.IsEnabled);
-        Assert.Equal(0, fixture.Transaction.ExecutionCount);
+        Assert.Equal(1, fixture.Transaction.ExecutionCount);
     }
 
     [Theory]
@@ -172,7 +173,7 @@ public sealed class PersonLifecycleActionCoreTests
         var accountBefore = fixture.Identity.Account with { };
 
         await Assert.ThrowsAsync<PersonLifecycleException>(async () =>
-            await fixture.Core.ExecuteAsync(
+            await fixture.Service.SetStatusAsync(
                 "Person_1",
                 new SetPersonLifecycleStatusRequest(false, "逐阶段故障"),
                 new PersonLifecycleActor("User_Admin", $"trace-{stage}")));
@@ -189,16 +190,60 @@ public sealed class PersonLifecycleActionCoreTests
         var fixture = Fixture();
         var actor = new PersonLifecycleActor("User_Admin", "adapter-trace");
         using var cancellation = new CancellationTokenSource();
-        var service = new PersonLifecycleService(fixture.Core, fixture.Transaction);
+        var service = fixture.Service;
+
+        fixture.Repository.OnRead = () =>
+        {
+            Assert.True(fixture.Transaction.IsActive);
+            Assert.Equal(["Person"], fixture.Transaction.CoordinationModels);
+        };
 
         var result = await service.SetStatusAsync(
             "Person_1", new SetPersonLifecycleStatusRequest(false, "入口原因"), actor, cancellation.Token);
 
         Assert.False(result.IsEnabled);
         Assert.Equal(1, fixture.Transaction.ExecutionCount);
+        Assert.Equal(2, fixture.Repository.ReadCount);
     }
 
-    // 内部核心的隔离门缝保留事务 fallback 与幂等计数；公开入口另由正式模块集成测试覆盖。
+    [Fact]
+    public async Task PublicService_CancellationBeforeCommitRollsBackAndPropagatesToken()
+    {
+        var fixture = Fixture();
+        var personBefore = fixture.Repository.Current with { };
+        var accountBefore = fixture.Identity.Account with { };
+        using var cancellation = new CancellationTokenSource();
+        var failure = new OperationCanceledException(cancellation.Token);
+        fixture.Transaction.BeforeCommitFailure = failure;
+
+        var actual = await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            fixture.Service.SetStatusAsync("Person_1", new SetPersonLifecycleStatusRequest(false, "失败验证"), new PersonLifecycleActor("User_Admin", "failure"), cancellation.Token).AsTask());
+
+        Assert.Same(failure, actual);
+        Assert.Equal(cancellation.Token, actual.CancellationToken);
+        Assert.Equal(personBefore, fixture.Repository.Current);
+        Assert.Equal(accountBefore, fixture.Identity.Account);
+        Assert.Empty(fixture.Identity.Events);
+    }
+
+    [Fact]
+    public async Task PublicService_CommittedCacheFailureKeepsCommittedFactsAndFailureIdentity()
+    {
+        var fixture = Fixture();
+        var failure = new PlatformCacheUnavailableException("Organization", databaseCommitted: true);
+        fixture.Transaction.AfterCommitFailure = failure;
+
+        var actual = await Assert.ThrowsAsync<PlatformCacheUnavailableException>(() =>
+            fixture.Service.SetStatusAsync("Person_1", new SetPersonLifecycleStatusRequest(false, "失败验证"), new PersonLifecycleActor("User_Admin", "failure")).AsTask());
+
+        Assert.Same(failure, actual);
+        Assert.True(actual.DatabaseCommitted);
+        Assert.False(fixture.Repository.Current.IsEnabled);
+        Assert.Equal(1, fixture.Identity.SessionRevocations);
+        Assert.Single(fixture.Identity.Events);
+    }
+
+    // 行为矩阵经正式服务入口取得协调权，内部协作者仅用于组合依赖。
     private static TestFixture Fixture(
         PersonUserBindingState? person = null,
         IdentityAccountSnapshot? account = null,
@@ -220,9 +265,8 @@ public sealed class PersonLifecycleActionCoreTests
             new RecordingAccountDirectory(identity, directoryUnavailable),
             identity,
             identity,
-            transaction,
             new EntityAuditValueProvider(new FixedAuditStampProvider("User_Admin", ChangedAt)));
-        return new TestFixture(core, repository, identity, transaction, stages);
+        return new TestFixture(new PersonLifecycleService(core, transaction), repository, identity, transaction, stages);
     }
 
     public enum LifecycleFailureStage
@@ -263,7 +307,7 @@ public sealed class PersonLifecycleActionCoreTests
     };
 
     private sealed record TestFixture(
-        PersonLifecycleActionCore Core,
+        IPersonLifecycleService Service,
         RecordingRepository Repository,
         RecordingIdentityParticipant Identity,
         SnapshotTransactionExecutor Transaction,
@@ -273,8 +317,15 @@ public sealed class PersonLifecycleActionCoreTests
     {
         public PersonUserBindingState Current { get; set; } = initial;
 
-        public ValueTask<PersonUserBindingState?> FindAsync(string personEid, CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult<PersonUserBindingState?>(Current.PersonEid == personEid ? Current with { } : null);
+        public int ReadCount { get; private set; }
+        public Action? OnRead { get; set; }
+
+        public ValueTask<PersonUserBindingState?> FindAsync(string personEid, CancellationToken cancellationToken = default)
+        {
+            OnRead?.Invoke();
+            ReadCount++;
+            return ValueTask.FromResult<PersonUserBindingState?>(Current.PersonEid == personEid ? Current with { } : null);
+        }
 
         public ValueTask<bool> TryBindAsync(string personEid, string accountEid, string reason, EntityAuditValues auditValues, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
@@ -418,6 +469,16 @@ public sealed class PersonLifecycleActionCoreTests
         public int ExecutionCount { get; private set; }
         public int SaveCount { get; private set; }
         public bool IsActive { get; private set; }
+        public Exception? BeforeCommitFailure { get; set; }
+        public Exception? AfterCommitFailure { get; set; }
+        public IReadOnlyCollection<string> CoordinationModels { get; private set; } = [];
+
+        public ValueTask<TResult> ExecuteAsync<TResult>(IReadOnlyCollection<string> modelKeys,
+            Func<CancellationToken, ValueTask<TResult>> registerChanges, CancellationToken cancellationToken = default)
+        {
+            CoordinationModels = modelKeys;
+            return ExecuteAsync(registerChanges, cancellationToken);
+        }
 
         public async ValueTask<TResult> ExecuteAsync<TResult>(Func<CancellationToken, ValueTask<TResult>> registerChanges, CancellationToken cancellationToken = default)
         {
@@ -427,9 +488,11 @@ public sealed class PersonLifecycleActionCoreTests
             var account = identity.Account with { };
             var revocations = identity.SessionRevocations;
             var events = identity.Events.ToArray();
+            var committed = false;
             try
             {
                 var result = await registerChanges(cancellationToken);
+                if (BeforeCommitFailure is not null) throw BeforeCommitFailure;
                 if (failureStage == LifecycleFailureStage.SaveChanges)
                 {
                     throw new InvalidOperationException("save-changes-stage-failed");
@@ -437,9 +500,11 @@ public sealed class PersonLifecycleActionCoreTests
 
                 SaveCount++;
                 identity.StagesForCommit();
+                committed = true;
+                if (AfterCommitFailure is not null) throw AfterCommitFailure;
                 return result;
             }
-            catch
+            catch when (!committed)
             {
                 repository.Current = person;
                 identity.Account = account;

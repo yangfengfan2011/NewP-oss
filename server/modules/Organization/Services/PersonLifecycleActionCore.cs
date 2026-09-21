@@ -5,9 +5,7 @@ using ICP.Platform.Modules.Organization.DTOs;
 using ICP.Platform.Modules.Organization.DTOs.Requests;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Repositories;
-using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.Auditing;
-using ICP.Platform.Persistence.Transactions;
 
 namespace ICP.Platform.Modules.Organization.Services;
 
@@ -17,11 +15,10 @@ internal sealed class PersonLifecycleActionCore(
     IIdentityAccountDirectory accountDirectory,
     IIdentityLifecycleParticipant identityParticipant,
     IAuthenticationSessionRegistry sessionRegistry,
-    IPlatformTransactionExecutor transactionExecutor,
     IEntityAuditValueProvider auditValues)
 {
-    /// <summary>校验最终输入并同步 Person、Identity 与 Authentication 事实。</summary>
-    internal async ValueTask<PersonLifecycleActionResult> ExecuteAsync(
+    /// <summary>在服务已取得协调权的事务内校验输入并同步人员、账号与会话事实；不自行提交。</summary>
+    internal async ValueTask<PersonLifecycleDto> ExecuteAsync(
         string personEid,
         SetPersonLifecycleStatusRequest request,
         PersonLifecycleActor actor,
@@ -36,109 +33,68 @@ internal sealed class PersonLifecycleActionCore(
         }
 
         var reason = NormalizeReason(request.Reason);
-        var initialPerson = await GetRequiredPersonAsync(personEid, cancellationToken);
-        var initialAccount = await FindBoundAccountAsync(initialPerson, cancellationToken);
-        if (IsConverged(initialPerson, initialAccount, request.IsEnabled))
+        var person = await GetRequiredPersonAsync(personEid, cancellationToken);
+        var account = await FindBoundAccountAsync(person, cancellationToken);
+        if (IsConverged(person, account, request.IsEnabled))
         {
-            return new(ToDto(initialPerson, initialAccount), initialPerson);
+            return ToDto(person, account);
         }
 
-        try
+        var audit = ResolveAuditValues(person, actor.ActorId);
+        await repository.SetEnablementAsync(
+            personEid,
+            request.IsEnabled,
+            audit,
+            cancellationToken);
+
+        IdentityAccountSnapshot? changedAccount = account;
+        if (person.AccountEid is not null)
         {
-            // Organization 负责人员生命周期编排；Person、Identity 与 Authentication 都只在此共享事务内登记变化，禁止参与者自行 SaveChanges。
-            async ValueTask<PersonLifecycleActionResult> ExecuteAsync(CancellationToken transactionCancellationToken)
+            if (request.IsEnabled)
             {
-                var person = await GetRequiredPersonAsync(personEid, transactionCancellationToken);
-                var account = await FindBoundAccountAsync(person, transactionCancellationToken);
-                if (IsConverged(person, account, request.IsEnabled))
-                {
-                    return new(ToDto(person, account), person);
-                }
-
-                var audit = ResolveAuditValues(person, actor.ActorId);
-                await repository.SetEnablementAsync(
-                    personEid,
-                    request.IsEnabled,
-                    audit,
-                    transactionCancellationToken);
-
-                IdentityAccountSnapshot? changedAccount = account;
-                if (person.AccountEid is not null)
-                {
-                    if (request.IsEnabled)
+                changedAccount = (await identityParticipant.RegisterPersonnelDisableHoldReleaseAsync(
+                    new PersonnelDisableHoldReleaseRegistration
                     {
-                        changedAccount = (await identityParticipant.RegisterPersonnelDisableHoldReleaseAsync(
-                            new PersonnelDisableHoldReleaseRegistration
-                            {
-                                AccountEid = person.AccountEid,
-                                ExpectedRevision = account!.Revision,
-                                ActorId = actor.ActorId,
-                                TraceId = actor.TraceId
-                            },
-                            transactionCancellationToken)).Account;
-                    }
-                    else
-                    {
-                        var identityResult = await identityParticipant.RegisterPersonnelDisableAsync(
-                            new PersonnelAccountDisableRegistration
-                            {
-                                AccountEid = person.AccountEid,
-                                ExpectedRevision = account!.Revision,
-                                Reason = reason,
-                                ActorId = actor.ActorId,
-                                TraceId = actor.TraceId
-                            },
-                            transactionCancellationToken);
-                        changedAccount = identityResult.Account;
-                        if (identityResult.Changed)
-                        {
-                            _ = await sessionRegistry.RevokeAllAsync(
-                                new AccountAuthenticationSessionsRevocation
-                                {
-                                    AccountEid = person.AccountEid,
-                                    Reason = reason,
-                                    ActorId = actor.ActorId
-                                },
-                                transactionCancellationToken);
-                        }
-                    }
-                }
-
-                var changedPerson = await GetRequiredPersonAsync(personEid, transactionCancellationToken);
-                return new(
-                    new PersonLifecycleDto(
-                        changedPerson.PersonEid,
-                        request.IsEnabled,
-                        changedPerson.AccountEid,
-                        ToAccount(changedAccount)),
-                    changedPerson);
+                        AccountEid = person.AccountEid,
+                        ExpectedRevision = account!.Revision,
+                        ActorId = actor.ActorId,
+                        TraceId = actor.TraceId
+                    },
+                    cancellationToken)).Account;
             }
+            else
+            {
+                var identityResult = await identityParticipant.RegisterPersonnelDisableAsync(
+                    new PersonnelAccountDisableRegistration
+                    {
+                        AccountEid = person.AccountEid,
+                        ExpectedRevision = account!.Revision,
+                        Reason = reason,
+                        ActorId = actor.ActorId,
+                        TraceId = actor.TraceId
+                    },
+                    cancellationToken);
+                changedAccount = identityResult.Account;
+                if (identityResult.Changed)
+                {
+                    _ = await sessionRegistry.RevokeAllAsync(
+                        new AccountAuthenticationSessionsRevocation
+                        {
+                            AccountEid = person.AccountEid,
+                            Reason = reason,
+                            ActorId = actor.ActorId
+                        },
+                        cancellationToken);
+                }
+            }
+        }
 
-            return transactionExecutor.IsActive
-                ? await ExecuteAsync(cancellationToken)
-                : await transactionExecutor.ExecuteAsync(["Person"], ExecuteAsync, cancellationToken);
-        }
-        catch (PersonLifecycleException)
-        {
-            throw;
-        }
-        catch (IdentityLifecycleException exception) when (exception.FailureCode == IdentityLifecycleFailureCodes.RevisionConflict)
-        {
-            throw new PersonLifecycleException(PersonLifecycleFailureCodes.Conflict, exception.LatestAccount, exception);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (PlatformCacheUnavailableException)
-        {
-            // 已提交后的发布失败不能降格为可重试的依赖失败，HTTP 边界保留确定提交事实。
-            throw;
-        }
-        catch (Exception exception)
-        {
-            throw new PersonLifecycleException(PersonLifecycleFailureCodes.DependencyUnavailable, innerException: exception);
-        }
+        var changedPerson = await GetRequiredPersonAsync(personEid, cancellationToken);
+        return new PersonLifecycleDto(
+            changedPerson.PersonEid,
+            request.IsEnabled,
+            changedPerson.AccountEid,
+            ToAccount(changedAccount));
     }
 
     // 读取当前人员事实，不存在时返回稳定领域失败。
@@ -247,7 +203,3 @@ internal sealed class PersonLifecycleActionCore(
     }
 
 }
-
-internal sealed record PersonLifecycleActionResult(
-    PersonLifecycleDto Dto,
-    PersonUserBindingState Person);

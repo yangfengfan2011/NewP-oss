@@ -21,7 +21,7 @@ _Avoid_: 前端路由 guard、Controller 内手写 if、默认登录即可
 _Avoid_: bool 默认 true、前端可见性、异常即放行
 
 **本地管理员（Local Administrator）**：
-沿既有初始化机制建立的受保护角色及其主体。角色获得当前完整功能目录的显式授权，仍执行正常判权；普通管理入口不能修改其受保护定义或分配。
+沿既有初始化机制建立的受保护角色及其主体。角色获得当前完整功能目录的显式授权，仍执行正常功能判权；普通管理入口不能修改其受保护定义或分配。
 _Avoid_: root、权限通配符、角色名硬编码放行
 
 **当前主体功能投影（Current Subject Feature Projection）**：
@@ -66,6 +66,58 @@ _Avoid_: 角色详情授权弹窗、角色基础信息编辑、用户角色分�
 
 功能位置的身份、入口依赖和切换边界见 [ADR-0048](../../adr/0048-functional-authorization-uses-entry-positions.md)。
 
+### 数据范围授权（已确认目标，尚未实施）
+
+以下术语属于 [正式规格 #227](https://github.com/yangfengfan2011/NewP/issues/227) 的已确认目标，来源讨论 [#226](https://github.com/yangfengfan2011/NewP/issues/226) 已关闭；职责边界见 [ADR-0052](../../adr/0052-data-scope-authorization-keeps-management-and-action-boundaries.md)。
+
+**数据范围授权（Data Scope Authorization）**：
+决定某主体的某个动作可以作用于哪些资源对象的授权，不替代认证、功能授权、系统强制隔离或业务必需约束。
+_Avoid_: 功能入口授权、列表筛选、字段授权
+
+**数据授权动作（Data Authorization Action）**：
+数据范围裁决所针对的独立动作定义，可被多个功能入口引用，与功能授权点的声明位置分别表达对象操作含义和入口资格。其启用状态只决定是否执行该动作自身的数据范围裁决，不表示业务动作或功能入口停用。
+_Avoid_: 按钮位置、对象操作扩展点、资源名称、功能入口启停
+
+**规则授权（Rule Authorization）**：
+以条件及其层级限定适用对象，并由匹配主体授权项表达动作意见的授权配置。
+_Avoid_: 主体基础资料、对象 ID 清单、展示顺序
+
+**对象授权（Object Authorization）**：
+针对明确资源类型及对象身份配置的主体动作授权，其明确结果优先于同一对象、同一动作的规则授权结果。
+_Avoid_: 功能授权点、只有裸 ID 的授权、每个对象一棵规则树
+
+**对象授权管理资格（Object Authorization Management Eligibility）**：
+管理某个对象整份授权配置的独立资格，要求相应功能资格及该对象的最终读取和授权动作允许；可管理自身及他人的授权项、调整优先级和转授授权动作，不以操作者自身已有业务动作权限为上限。
+_Avoid_: 对象编辑资格、授权项创建者所有权、只能授予自身已有权限、整类规则管理资格
+
+**规则管理资格（Rule Management Eligibility）**：
+由独立功能授权授予的规则维护资格，LocalAdmin 具备，普通用户也可获授；它与具体对象上的授权管理资格分别授予。
+_Avoid_: LocalAdmin 专属身份、对象编辑资格、对象授权的自动附带资格
+
+**数据范围豁免（Data Scope Exemption）**：
+LocalAdmin 不受规则授权及对象授权限制，且无需执行该层条件的特定资格；它不豁免其他访问与业务约束，也不豁免授权配置的有效性校验。
+_Avoid_: 普通授权管理员资格、功能权限绕过、任意故障放行
+
+**授权主体目录（Authorization Subject Directory）**：
+在相应授权管理资格与系统强制隔离约束下，提供配置所需主体身份、名称和必要层级的最小目录；它允许识别业务页面不可读的主体，不授予主体业务记录的读取权。
+_Avoid_: 业务 Lookup、完整主体档案、对象读取授权
+
+**读取条件（Read Condition）**：
+授权条件中明确用于读取范围裁决的部分；未提供读取条件不等于授权条件执行故障。
+_Avoid_: 完整业务判断、缺失即恒真、故障即未配置
+
+**读取依赖（Read Dependency）**：
+某个动作要求目标对象的最终读取权限同时允许的前置关系；动作同意不自动补授读取权限。
+_Avoid_: 自动补权、入口依赖、所有动作的隐含共同前提
+
+**公司主体（Company Subject）**：
+按人员当前公司归属匹配该公司全部人员的授权主体，不另外区分公司本级与下级部门人员。
+_Avoid_: 直属公司人员、租户、公司节点可见性
+
+**部门主体（Department Subject）**：
+按人员当前部门归属匹配的授权主体；授权项选择仅本部门或同时包含其下级部门，默认仅本部门。
+_Avoid_: 部门资源的数据条件、公司全体人员、组织准入
+
 ## 角色管理与事务性功能配置
 
 角色维护的确定性业务拒绝由 `RoleValidationException` 表达，HTTP 只将此类拒绝翻译为既有 400 Problem Details，保留原文案；持久化、审计来源等依赖故障及取消继续传播，不伪装成请求校验失败。角色删除的 HTTP 禁用规则保持不变。
@@ -73,7 +125,7 @@ _Avoid_: 角色详情授权弹窗、角色基础信息编辑、用户角色分�
 - 角色列表与详情普通字段复用 Standard CRUD 的查询与显示计划，但 Authorization 不映射通用写入端点。角色创建和编辑仍须保护 LocalAdmin、角色代码与系统字段，遗留内部删除还承担历史引用测试，因此普通写入由 RoleService 直接持有，不为形式统一注册对象行为或纯转发类；角色删除 HTTP 继续明确拒绝。
 - 角色功能授权和普通账号角色分配是 Authorization 拥有的两个完整业务用例。Controller 分别直接调用 RoleFeatureAssignments 与 IUserRoleAssignments；它们不经 RoleService 转发，也不拆成关系逐行 CRUD。两者继续复用平台事务、可信审计和同一授权模块持久化边界。
 - 角色读取、创建、编辑、角色功能配置和用户角色分配分别按声明位置判权。普通主体可以显式获得这些管理动作，获授动作在全局范围生效，不以操作者自己的功能集裁剪可配置目录。拥有一个管理动作不自动获得其他动作。
-- LocalAdministratorCatalog 收敛受保护角色定义及模块内存中的规范身份比较；共享 Contracts 只公开 Host 与模块共同使用的稳定角色代码。FeatureCatalogSynchronizer 在完整候选准备后同步功能点与 LocalAdmin 全集。管理员不通过角色名绕过正常判权，也不重建旧 Permission 目录。
+- LocalAdministratorCatalog 收敛受保护角色定义及模块内存中的规范身份比较；共享 Contracts 只公开 Host 与模块共同使用的稳定角色代码。FeatureCatalogSynchronizer 在完整候选准备后同步功能点与 LocalAdmin 全集。管理员不通过角色名绕过正常功能判权，也不重建旧 Permission 目录。
 - FeatureCatalogSynchronizer 在事务成功后发布不可变活动目录。历史或失效功能行不能成为授权源；停用角色可以配置，但不进入有效授权。
 - RoleFeatureAssignments 统一读取目标角色的当前活动功能集合，并在角色主键写锁内读取实际旧集合、校验完整新集合及本分支入口依赖，通过平台事务统一保存关系和 role.features.changed 审计。相同集合或排列变化不产生分配记录，不引入 Revision 或自动重放。
 - Authorization 只引用 Audit.Contracts，由 Audit 登记稳定 authorization.role 目标和字段差异；不形成反向模块加载依赖。缺少 recorder 或登记、写入、保存、确定未提交的提交失败都不会返回成功。当前角色名称由 Authorization 批量提供，删除目标后记录保留 ID。

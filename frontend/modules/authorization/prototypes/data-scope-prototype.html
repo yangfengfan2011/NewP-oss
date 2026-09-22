@@ -1,0 +1,632 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>数据范围授权 · 交互原型</title>
+<style>
+:root{--blue:#2563eb;--blue-soft:#eff5ff;--ink:#172b4d;--muted:#64748b;--line:#dde5ef;--bg:#f3f6fa;--green:#18794e;--green-bg:#eef9f2;--red:#bc3745;--red-bg:#fff0f1;--amber:#9a6410;--radius:9px}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 "Segoe UI","Microsoft YaHei",sans-serif}button,input,select{font:inherit}button,select{cursor:pointer}button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 12px;color:var(--ink)}button:hover{border-color:#8db3fc;background:var(--blue-soft)}button:disabled{opacity:.42;cursor:not-allowed}button.primary{background:var(--blue);border-color:var(--blue);color:white}button.danger{color:var(--red)}button.link{border:0;background:none;color:var(--blue);padding:3px 6px}button.small{font-size:12px;padding:3px 8px}input,select{border:1px solid #cbd5e1;border-radius:5px;padding:6px 8px;background:white;color:var(--ink);min-width:0}input:focus,select:focus,button:focus-visible{outline:2px solid #93baff;outline-offset:2px}input[type=checkbox]{accent-color:var(--blue)}h1,h2,h3,p{margin:0}h1{font-size:23px;letter-spacing:.02em}h2{font-size:17px}h3{font-size:14px}a{color:var(--blue)}.muted{color:var(--muted)}.tiny{font-size:12px}.mono{font-family:Consolas,monospace;font-size:12px}.flex{display:flex;align-items:center;gap:10px}.between{justify-content:space-between}.wrap{flex-wrap:wrap}.grow{flex:1}.stack{display:grid;gap:12px}.pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;background:#edf1f6;border-radius:5px;padding:2px 7px;color:var(--muted);white-space:nowrap}.pill.blue{color:var(--blue);background:var(--blue-soft)}.pill.green{color:var(--green);background:var(--green-bg)}.pill.red{color:var(--red);background:var(--red-bg)}.pill.amber{color:var(--amber);background:#fff7e6}.app{display:grid;grid-template-columns:176px minmax(0,1fr);min-height:100vh}.nav{background:#172b4d;color:#b7c7df;padding:25px 13px;display:flex;flex-direction:column;gap:6px}.brand{font-size:19px;font-weight:700;color:#fff;padding:0 10px 28px;letter-spacing:1px}.brand small{display:block;font-size:10px;color:#91a9cc;font-weight:400;letter-spacing:1.6px;margin-top:3px}.nav button{text-align:left;background:transparent;color:#bfcee3;border:0;padding:11px 12px}.nav button.active{background:#2b4570;color:white;box-shadow:inset 3px 0 #75a7ff}.nav .bottom{margin-top:auto;padding:28px 10px 0;font-size:11px;color:#91a9cc}.main{min-width:0;padding:25px 28px}.top{margin-bottom:17px}.subtitle{color:var(--muted);margin-top:5px;font-size:13px}.intro{padding:11px 15px;background:#eaf1fc;border:1px solid #d6e4fa;border-left:3px solid var(--blue);border-radius:5px;margin-bottom:18px;font-size:12px;color:#49627f}.workspace{display:grid;grid-template-columns:220px minmax(0,1fr) 290px;gap:16px;align-items:start}.panel{background:white;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}.panel-head{padding:14px 16px;border-bottom:1px solid var(--line)}.panel-body{padding:16px}.tree{padding:9px}.tree-row{display:flex;gap:6px;padding:10px 8px;border-radius:6px;cursor:pointer;margin:3px 0;align-items:flex-start;border:1px solid transparent}.tree-row:hover{background:#f5f8fc}.tree-row.selected{background:var(--blue-soft);border-color:#d9e6ff;color:var(--blue)}.tree-row.off{opacity:.5}.tree-label{font-size:12px;font-weight:600;line-height:1.5}.tree-label small{display:block;font-size:10px;font-weight:400;color:var(--muted);margin-top:3px}.tree-dot{margin-top:4px;color:#8ca1bd}.rule-detail .section{padding:18px;border-bottom:1px solid var(--line)}.section:last-child{border:0}.section-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:13px;gap:10px}.field-label{font-size:12px;color:var(--muted);display:block;margin-bottom:5px}.name-input{width:100%;font-size:17px;font-weight:600}.note{font-size:12px;color:var(--muted);padding-top:8px}.condition-group{border-left:3px solid #d1e0f6;padding:10px 0 2px 10px;margin:6px 0}.group-bar{display:flex;gap:6px;align-items:center;margin-bottom:9px;flex-wrap:wrap}.group-bar select{font-size:12px;background:#f3f7ff;color:var(--blue);border-color:#dce7fa}.condition{border:1px solid var(--line);border-radius:6px;padding:10px;margin:8px 0;background:#fbfcfe}.condition-main{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.condition-main select{font-size:12px;max-width:150px}.condition-main input{font-size:12px;flex:1;min-width:90px;width:100px}.condition-extra{font-size:11px;color:var(--muted);margin-top:7px}.scroll{overflow:auto}.grant-table{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap}.grant-table th{text-align:left;font-weight:500;color:var(--muted);padding:8px 6px;background:#f7f9fc;border-bottom:1px solid var(--line)}.grant-table td{padding:9px 5px;border-bottom:1px solid #edf1f6;vertical-align:top}.grant-table input[type=number]{width:61px;font-family:Consolas,monospace}.grant-table select{font-size:12px;padding:5px 4px}.subject-cell{min-width:138px}.subject-cell>select{max-width:142px}.subject-detail{display:flex;gap:4px;margin-top:5px}.subject-detail select{width:138px}.opinion{width:65px}.opinion.allow{color:var(--green);background:var(--green-bg);border-color:#c7e6d5}.opinion.deny{color:var(--red);background:var(--red-bg);border-color:#efd1d6}.opinion.none{color:#718096;background:#f7f9fc}.inherit-note{padding:10px 12px;background:#f8fafc;font-size:12px;border:1px dashed #d6dfeb;border-radius:6px;margin-top:10px}.preview{position:sticky;top:15px}.preview .panel-body{padding:13px}.preview label{display:block;margin-bottom:10px}.preview select{width:100%;margin-top:4px}.facts{display:grid;grid-template-columns:1fr 1fr;gap:7px;background:#f7f9fc;border-radius:6px;padding:10px;margin-bottom:12px}.facts strong{display:block;font-size:12px;font-weight:500}.result{border:1px solid var(--line);border-radius:6px;margin:7px 0;padding:9px 10px}.result summary{cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:7px;font-size:12px}.result p{font-size:11px;color:var(--muted);margin-top:7px;white-space:normal}.result .source{font-size:11px;margin-top:4px;color:#718096}.steps{margin:8px 0 0;padding-left:17px;font-size:11px;color:var(--muted)}.actions-toolbar{display:flex;gap:8px;justify-content:flex-end;padding:13px 18px;background:#fcfdff}.empty{padding:26px 12px;text-align:center;color:var(--muted);font-size:12px}.catalog{max-width:1060px}.data-table{width:100%;border-collapse:collapse;font-size:13px}.data-table th{text-align:left;background:#f7f9fc;color:var(--muted);font-weight:500;padding:12px 15px;border-bottom:1px solid var(--line)}.data-table td{padding:14px 15px;border-bottom:1px solid #edf1f6}.data-table tr:last-child td{border:0}.hint-row{padding:12px 16px;background:#f8fafc;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}.object-layout{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:16px}.summary-strip{display:flex;gap:20px;align-items:center;margin-bottom:15px;padding:14px 18px;border:1px solid var(--line);background:white;border-radius:8px}.summary-strip b{font-size:19px;font-weight:600}.backdrop{position:fixed;inset:0;background:rgba(15,31,55,.45);display:flex;align-items:center;justify-content:center;z-index:30;padding:28px}.modal{width:min(1100px,100%);max-height:90vh;overflow:auto;background:white;border-radius:11px;box-shadow:0 24px 75px #12274740}.modal-head{padding:20px 24px;border-bottom:1px solid var(--line);position:sticky;top:0;background:white;z-index:1}.modal-body{padding:20px 24px}.modal-foot{padding:14px 24px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;position:sticky;bottom:0;background:white}.object-banner{padding:13px 16px;background:#f5f8fd;border:1px solid var(--line);border-radius:7px;margin-bottom:17px}.override{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;margin-top:14px}.override>div{border:1px solid var(--line);padding:10px;border-radius:6px;font-size:12px}.override p{font-size:11px;color:var(--muted);margin-top:5px}.toast{position:fixed;bottom:25px;left:50%;transform:translateX(-50%);padding:11px 20px;background:#17375d;color:#fff;border-radius:7px;box-shadow:0 6px 20px #172b4d30;z-index:100;font-size:13px}.tour-tabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:16px}.tour-tabs button.active{color:var(--blue);background:var(--blue-soft);border-color:#9ebffc}.tour-steps{display:grid;gap:10px}.tour-step{display:flex;gap:14px;align-items:center;border:1px solid var(--line);padding:15px;border-radius:8px;background:#fff}.tour-step .number{width:30px;height:30px;border-radius:50%;background:#eef3fa;color:#567297;display:grid;place-items:center;font-weight:600;flex:none}.tour-step.done .number{color:var(--green);background:var(--green-bg)}.tour-step p{font-size:12px;color:var(--muted);margin-top:4px}.footer-note{margin-top:18px;font-size:11px;color:#8391a4}.mobile-nav{display:none}.flex-field{display:flex;gap:8px;flex-wrap:wrap}.raw-state{max-height:250px;overflow:auto;font-size:12px}.state-item{padding:8px 0;border-bottom:1px solid var(--line)}.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
+@media(min-width:1650px){.main{padding:28px 38px}.workspace{grid-template-columns:235px minmax(0,1fr) 310px}}
+@media(max-width:1350px){.app{grid-template-columns:150px minmax(0,1fr)}.main{padding:20px}.workspace{grid-template-columns:200px minmax(0,1fr)}.workspace>.preview{grid-column:1/-1;position:static}.workspace>.preview .panel-body{display:grid;grid-template-columns:230px 1fr;gap:15px}.workspace>.preview .result-set{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.workspace>.preview .result{margin:0}}
+@media(max-width:850px){.app{display:block}.nav{padding:10px;flex-direction:row;overflow:auto;gap:3px}.brand{padding:4px 10px;font-size:15px;white-space:nowrap}.brand small,.nav .bottom{display:none}.nav button{white-space:nowrap;padding:7px 9px}.main{padding:15px}.workspace,.object-layout{display:block}.workspace>.panel,.object-layout>.panel{margin-bottom:14px}.tree{display:flex;overflow:auto}.tree-row{min-width:160px;padding-left:8px!important}.preview{position:static}.workspace>.preview .panel-body{display:block}.workspace>.preview .result-set{display:block}.workspace>.preview .result{margin:7px 0}.override{grid-template-columns:repeat(2,1fr)}.backdrop{padding:8px}.modal-body{padding:15px}.top{align-items:flex-start}.top h1{font-size:20px}.top .flex{flex-wrap:wrap}.tour-step{flex-wrap:wrap}}
+:root{--nav-width:176px;--page-pad:28px}
+.main{padding-bottom:120px}
+.workspace.preview-collapsed{grid-template-columns:220px minmax(0,1fr)}
+.object-layout.preview-collapsed{grid-template-columns:minmax(0,1fr)}
+.tree-tools{margin-top:10px;gap:6px;flex-wrap:wrap}
+.tree-toggle{padding:0 3px;border:0;background:transparent;min-width:18px;line-height:22px;color:var(--muted)}
+.tree-spacer{display:inline-block;min-width:18px;line-height:22px;color:#8ca1bd}
+.dirty-dot{margin-left:6px;color:var(--amber);font-size:9px}
+.root-scope{font-size:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.breadcrumb{font-size:12px;color:var(--muted);margin:8px 0 15px;overflow-wrap:anywhere}
+.ancestor-summary{background:#f8fafc;border:1px dashed var(--line);padding:9px 12px;border-radius:6px;font-size:12px;margin-bottom:12px}
+.ancestor-summary summary,.simulation-tools summary{cursor:pointer;color:#385f97;font-weight:600}
+.ancestor-summary ol{margin:8px 0 0;padding-left:20px;color:var(--muted)}
+.ancestor-summary li{margin:4px 0}
+.condition-main select{max-width:100%}
+.condition-main>select{max-width:190px}
+.collection-label{display:flex;flex-direction:column;gap:4px;font-size:11px;min-width:150px}
+.collection-label select{min-width:170px}
+textarea{font:inherit;border:1px solid #cbd5e1;border-radius:5px;padding:6px 8px;resize:vertical;color:var(--ink);min-height:62px}
+textarea:focus{outline:2px solid #93baff;outline-offset:2px}
+.field-error{font-size:12px;color:var(--red);margin-top:7px}
+.invalid{border-color:#cf6c75!important}
+.validation-summary{padding:13px 16px;color:var(--red);background:#fff3f4;font-size:12px;border-left:3px solid var(--red)}
+.validation-summary ul{padding-left:15px;margin:5px 0}
+.validation-summary .link{color:var(--red);text-align:left}
+.department-option{display:block;margin-top:5px}
+.action-off,.action-dependency{display:block;font-size:10px;font-weight:400;margin-top:2px}
+.action-off{color:var(--amber)}
+.inactive-action{background:#faf8f3}
+.node-tools{padding:12px 18px;border-top:1px solid var(--line);background:#fcfdff}
+.save-dock{position:fixed;z-index:15;bottom:16px;left:calc(var(--nav-width) + var(--page-pad));right:var(--page-pad);display:flex;align-items:center;gap:10px;padding:12px 16px;border:1px solid #cfdbea;border-radius:8px;background:#fffffffa;box-shadow:0 5px 20px #172b4d15}
+.save-scope{min-width:0;max-width:45%;display:grid}
+.save-scope strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}
+.preview .panel-head>select{margin-top:9px;width:100%}
+.preview-disclaimer{margin-top:10px;grid-column:1/-1}
+.object-preview-heading{margin-top:20px}
+.deletion-title{margin-top:18px;color:var(--red)}
+.guard-backdrop{z-index:60}
+.guard-dialog{width:min(490px,100%);background:white;border-radius:10px;padding:24px;box-shadow:0 20px 80px #172b4d35}
+.guard-dialog p{margin:12px 0 22px;color:var(--muted);font-size:13px}
+.guard-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.simulation-tools{padding:14px;border:1px dashed #a8bfdc;border-radius:7px;background:#f8fbff}
+.simulation-actions{display:flex;flex-wrap:wrap;gap:12px 22px;padding-top:12px;font-size:13px}
+@media(min-width:1650px){:root{--page-pad:38px}.workspace.preview-collapsed{grid-template-columns:235px minmax(0,1fr)}}
+@media(max-width:1350px){:root{--nav-width:150px;--page-pad:20px}.workspace.preview-collapsed{grid-template-columns:200px minmax(0,1fr)}}
+@media(max-width:850px){:root{--nav-width:0px;--page-pad:15px}.workspace.preview-collapsed,.object-layout.preview-collapsed{display:block}.main{padding-bottom:160px}.tree{display:block;max-height:260px;overflow:auto}.tree-row{min-width:0}.save-dock{bottom:8px;flex-wrap:wrap;padding:10px}.save-scope{max-width:65%;flex:1}.save-dock>.grow{display:none}.save-dock button{flex:1}.top{gap:12px;flex-wrap:wrap}.modal-foot{flex-wrap:wrap}.guard-dialog{padding:20px}}
+
+</style>
+</head>
+<body>
+<div id="app"></div><div id="modal"></div><div id="guard"></div><div id="toast" aria-live="polite"></div>
+<script>
+/* PROTOTYPE: 只演示已确认裁决，不连接服务端，不替代数据库比较语义。 */
+const Policy = (function () {
+  const parents={sales:null,sales1:'sales',finance:null};
+  function member(g,u) {
+    if(g.type==='everyone')return true;
+    if(g.type==='user')return g.subject===u.id;
+    if(g.type==='role')return u.roles.includes(g.subject);
+    if(g.type==='company')return g.subject===u.company;
+    if(g.type==='project')return u.projects.includes(g.subject);
+    if(g.type==='org'){
+      let current=u.org;
+      while(current){if(current===g.subject)return true;if(!g.descendants)break;current=parents[current];}
+    }
+    return false;
+  }
+  function subjectDecision(grants,u,action){
+    const matching=grants.filter(g=>member(g,u)&&g.actions[action]&&g.actions[action]!=='none');
+    if(!matching.length)return {value:'none',names:[],priority:null};
+    const priority=Math.max(...matching.map(g=>Number(g.priority)));
+    const top=matching.filter(g=>Number(g.priority)===priority);
+    return {value:top.some(g=>g.actions[action]==='deny')?'deny':'allow',priority,names:top.map(g=>g.label||g.subject||'所有用户')};
+  }
+  function valueOf(c,u){
+    const context={'@user.id':u.id,'@user.person':u.person,'@user.company':u.company,'@user.org':u.org};
+    return typeof c.value==='string'&&Object.hasOwn(context,c.value)?context[c.value]:c.value;
+  }
+  function condition(c,o,u,action){
+    if(c.kind==='all')return !c.model||c.model===o.model;
+    if(c.kind==='group'){
+      if(!c.children.length)return null;
+      const parts=c.children.map(x=>condition(x,o,u,action)).filter(x=>x!==null);
+      if(!parts.length)return null;
+      return c.mode==='or'?parts.some(Boolean):parts.every(Boolean);
+    }
+    if(c.kind==='business'){
+      const definition=businessTypes[c.business];
+      if(!definition)throw new Error('业务条件未登记');
+      if(action==='read'&&!definition.read)return null;
+      if(c.business==='error')throw new Error('业务条件暂时无法完成判断');
+      if(c.business==='workflow'||c.business==='workflow-readable')return o.workflow;
+      if(c.business==='project')return u.projects.includes(o.project);
+      return false;
+    }
+    if(c.model!==o.model)return false;
+    const a=o[c.field],b=valueOf(c,u);
+    if(c.op==='empty')return a==null;
+    if(c.op==='notempty')return a!=null;
+    if(a==null||b==null)return false;
+    switch(c.op){
+      case'eq':return String(a)===String(b);
+      case'ne':return String(a)!==String(b);
+      case'gt':return a>b;
+      case'gte':return a>=b;
+      case'lt':return a<b;
+      case'lte':return a<=b;
+      case'contains':return String(a).includes(String(b));
+      case'starts':return String(a).startsWith(String(b));
+      case'ends':return String(a).endsWith(String(b));
+      case'in':return (Array.isArray(b)?b:String(b).split(',')).some(x=>String(x)===String(a));
+      case'notin':return !(Array.isArray(b)?b:String(b).split(',')).some(x=>String(x)===String(a));
+      default:throw new Error('比较方式未登记');
+    }
+  }
+  function evaluate(rules,objectGrants,u,o,actions){
+    const raw={};
+    for(const action of actions){
+      if(u.localAdmin||action.enabled===false){
+        const source=u.localAdmin?'LocalAdmin · 数据范围豁免':'动作未参与数据范围判定';
+        raw[action.id]={value:'allow',source,rule:'none',object:'none',log:[source+'；功能资格和业务约束仍须满足。']};
+        continue;
+      }
+      const log=[];
+      try{
+        function relevant(rule){
+          return rule.enabled&&(rule.grants.some(g=>member(g,u)&&g.actions[action.id]&&g.actions[action.id]!=='none')||rule.children.some(relevant));
+        }
+        function visit(rule){
+          if(!rule.enabled){log.push(rule.name+'：已停用，整个子树不参与');return [];}
+          if(!relevant(rule)){log.push(rule.name+'：当前主体在此子树中未设置该动作');return [];}
+          const match=condition(rule.condition,o,u,action.id);
+          if(match===false){log.push(rule.name+'：条件未命中');return [];}
+          const own=match===null?{value:'none',names:[],priority:null}:subjectDecision(rule.grants,u,action.id);
+          log.push(rule.name+'：'+(match===null?'没有读取贡献':own.value==='none'?'命中，未表态':(own.value==='allow'?'同意':'拒绝')+'，优先级 '+own.priority+'（'+own.names.join('、')+'）'));
+          const child=rule.children.flatMap(visit);
+          if(child.length)return child;
+          return own.value==='none'?[]:[{value:own.value,source:rule.name}];
+        }
+        const votes=rules.flatMap(visit),denies=votes.filter(v=>v.value==='deny');
+        const ruleValue=denies.length?'deny':votes.length?'allow':'none';
+        const direct=subjectDecision(objectGrants[o.id]||[],u,action.id);
+        const value=direct.value!=='none'?direct.value:ruleValue!=='none'?ruleValue:'allow';
+        const source=direct.value!=='none'?'对象授权 · 优先级 '+direct.priority:ruleValue!=='none'?'规则授权 · '+(denies.length?denies:votes).map(v=>v.source).join('、'):'默认允许';
+        raw[action.id]={value,source,rule:ruleValue,object:direct.value,log};
+      }catch(e){raw[action.id]={value:'error',source:'授权判断异常',rule:'error',object:'none',log:log.concat(e.message)};}
+    }
+    const output=JSON.parse(JSON.stringify(raw));
+    for(const action of actions){
+      if(!u.localAdmin&&action.requiresRead&&raw[action.id].value==='allow'&&raw.read.value!=='allow'){
+        output[action.id].value=raw.read.value==='error'?'error':'deny';
+        output[action.id].source=raw.read.value==='error'?'读取判断异常':'读取权限不允许';
+        output[action.id].log.push('动作自身允许，仍须满足独立的读取依赖。');
+      }
+    }
+    return {actions:output,raw};
+  }
+  return {member,evaluate};
+})();
+
+</script>
+<script>
+const clone=x=>JSON.parse(JSON.stringify(x));
+const E=x=>String(x??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])).replace(/'/g,'&#39;');
+let serial=20;
+const uid=p=>p+(++serial);
+const actionsSeed=[
+  {id:'read',name:'读取',enabled:true,requiresRead:false},
+  {id:'create',name:'新建',enabled:true,requiresRead:false},
+  {id:'edit',name:'编辑',enabled:true,requiresRead:true},
+  {id:'delete',name:'删除',enabled:true,requiresRead:true},
+  {id:'grant',name:'授权',enabled:true,requiresRead:true}
+];
+const users=[
+  {id:'u1',name:'张三',person:'p1',company:'co1',org:'sales',roles:['sales-role'],projects:['green']},
+  {id:'u2',name:'李四',person:'p2',company:'co2',org:'finance',roles:['audit-role'],projects:['green']},
+  {id:'u3',name:'王敏',person:'p3',company:'co1',org:'sales1',roles:['sales-role'],projects:['blue']},
+  {id:'admin',name:'LocalAdmin',person:null,company:null,org:null,roles:[],projects:[],localAdmin:true}
+];
+const labels={u1:'张三',u2:'李四',u3:'王敏',admin:'LocalAdmin',p1:'张三（人员）',p2:'李四（人员）',p3:'王敏（人员）',co1:'华东公司',co2:'华南公司',sales:'销售部',sales1:'销售一组',finance:'财务部','sales-role':'销售角色','audit-role':'审查角色',green:'青禾项目组',blue:'远山项目组'};
+const modelFields={
+  title:{name:'名称',type:'text'},amount:{name:'金额',type:'number'},
+  status:{name:'状态',type:'enum'},owner:{name:'负责人账号',type:'user'},
+  requester:{name:'申请人员',type:'person'},company:{name:'所属公司',type:'company'},
+  org:{name:'所属部门',type:'department'},created:{name:'日期',type:'date'}
+};
+const models={
+  order:{name:'订单',fields:modelFields,statuses:['草稿','待处理','已归档']},
+  contract:{name:'合同',fields:modelFields,statuses:['草稿','执行中','已归档']}
+};
+const businessTypes={
+  workflow:{name:'对象正在流程中',read:false,description:'约束编辑等动作，不参与读取范围。'},
+  'workflow-readable':{name:'对象正在流程中（含读取）',read:true,description:'此演示扩展同时提供读取条件。'},
+  project:{name:'当前用户参与的项目',read:true,description:'按项目成员关系判断，并参与读取范围。'},
+  error:{name:'条件执行异常（演示）',read:true,description:'仅用于体验执行失败，与正常拒绝不同。'}
+};
+const contexts=[
+  ['@user.id','当前账号','user'],['@user.person','当前人员','person'],
+  ['@user.company','当前公司','company'],['@user.org','当前部门','department']
+];
+const objects=[
+  {id:'ORD-2026-001',model:'order',title:'青禾设备采购订单',amount:6000,status:'草稿',owner:'u1',requester:'p1',company:'co1',org:'sales',created:'2026-09-12',workflow:false,project:'green'},
+  {id:'ORD-2026-002',model:'order',title:'远山项目追加订单',amount:12000,status:'待处理',owner:'u2',requester:'p2',company:'co2',org:'finance',created:'2026-09-15',workflow:false,project:'blue'},
+  {id:'ORD-2026-003',model:'order',title:'年度维保订单',amount:4500,status:'已归档',owner:'u3',requester:'p3',company:'co1',org:'sales1',created:'2026-09-01',workflow:true,project:'green'},
+  {id:'CON-2026-018',model:'contract',title:'青禾项目服务合同',amount:42000,status:'执行中',owner:'u1',requester:'p1',company:'co1',org:'sales',created:'2026-09-17',workflow:true,project:'green'}
+];
+const attr=(field,op,value,model='order')=>({id:uid('c'),kind:'attribute',model,field,op,value});
+const group=(children=[],mode='and')=>({id:uid('c'),kind:'group',mode,children});
+const grant=(type='everyone',subject='',priority=0,ops={})=>({id:uid('g'),type,subject,priority,descendants:false,actions:ops,label:type==='everyone'?'所有用户':labels[subject]||subject});
+function seed(){
+  return {actions:clone(actionsSeed),rules:[
+    {id:'r1',name:'订单的编辑范围',enabled:true,condition:group([attr('amount','gte',0)]),grants:[grant('everyone','',0,{edit:'deny'})],children:[
+      {id:'r2',name:'本人负责的订单',enabled:true,condition:group([attr('owner','eq','@user.id')]),grants:[grant('everyone','',0,{edit:'allow'})],children:[]},
+      {id:'r3',name:'一万元以下的订单',enabled:true,condition:group([attr('amount','lt',10000)]),grants:[grant()],children:[]}
+    ]},
+    {id:'r4',name:'归档对象只读',enabled:true,condition:group([attr('status','eq','已归档'),attr('status','eq','已归档','contract')],'or'),grants:[grant('everyone','',0,{edit:'deny',delete:'deny',grant:'deny'})],children:[]},
+    {id:'r5',name:'流程中的对象',enabled:false,condition:group([{id:uid('c'),kind:'business',business:'workflow'}]),grants:[grant('everyone','',0,{edit:'deny'})],children:[]}
+  ],objectGrants:{'ORD-2026-002':[grant('user','u1',10,{edit:'allow'})]}};
+}
+let saved=seed(),draft=clone(saved),page='rules',selected='r2',userId='u1',objectId=objects[0].id;
+let dirty=false,dirtyRootId=null,pendingRootDeletion=null,modal=null,guard=null;
+let previewMode='draft',previewOpen=false,simulationOpen=false,validationErrors=[],collapsed=new Set();
+let tourId='tree',tourStep=-1,lastChange='载入示例配置';
+const findRule=(id,list=draft.rules)=>{for(const r of list){if(r.id===id)return r;const child=findRule(id,r.children);if(child)return child;}return null;};
+const pathToRule=(id,list=draft.rules,path=[])=>{for(const r of list){if(r.id===id)return path.concat(r);const found=pathToRule(id,r.children,path.concat(r));if(found.length)return found;}return [];};
+const currentRoot=()=>pathToRule(selected)[0]||findRule(dirtyRootId);
+const findCondition=(id,c)=>{if(c.id===id)return c;if(c.kind==='group')for(const ch of c.children){const found=findCondition(id,ch);if(found)return found;}return null;};
+const user=()=>users.find(x=>x.id===userId);
+const object=()=>objects.find(x=>x.id===objectId);
+const result=(o=object(),cfg=saved)=>Policy.evaluate(cfg.rules,cfg.objectGrants,user(),o,cfg.actions);
+const statusText=x=>({allow:'同意',deny:'拒绝',none:'不选',error:'异常'}[x]);
+const statusClass=x=>({allow:'green',deny:'red',none:'',error:'amber'}[x]);
+const tag=(text,cls='')=>'<span class="pill '+cls+'">'+E(text)+'</span>';
+const opts=(list,value)=>list.map(x=>'<option value="'+E(x[0])+'" '+(String(value)===String(x[0])?'selected':'')+'>'+E(x[1])+'</option>').join('');
+const button=(text,event,cls='',disabled=false)=>'<button type="button" class="'+cls+'" '+(disabled?'disabled ':'')+'onclick="'+E(event)+'">'+E(text)+'</button>';
+const call=(name,...args)=>name+'('+args.map(x=>JSON.stringify(x)).join(',')+')';
+const candidates=type=>type==='user'?users.map(u=>[u.id,u.name]):type==='person'?users.filter(u=>u.person).map(u=>[u.person,labels[u.person]]):type==='role'?[['sales-role','销售角色'],['audit-role','审查角色']]:type==='company'?[['co1','华东公司'],['co2','华南公司']]:type==='org'||type==='department'?[['sales','华东公司 / 销售部'],['sales1','华东公司 / 销售部 / 销售一组'],['finance','华南公司 / 财务部']]:type==='project'?[['green','青禾项目组'],['blue','远山项目组']]:[['','所有用户']];
+const operators=[['eq','等于'],['ne','不等于'],['gt','大于'],['gte','大于等于'],['lt','小于'],['lte','小于等于'],['contains','包含'],['starts','开头是'],['ends','结尾是'],['in','属于'],['notin','不属于'],['empty','为空'],['notempty','不为空']];
+const fieldInfo=c=>models[c.model]?.fields[c.field];
+const availableOperators=c=>operators.filter(([id])=>['eq','ne','in','notin','empty','notempty'].includes(id)||(['number','date'].includes(fieldInfo(c)?.type)&&['gt','gte','lt','lte'].includes(id))||(fieldInfo(c)?.type==='text'&&['contains','starts','ends'].includes(id)));
+const choicesFor=c=>fieldInfo(c)?.type==='enum'?models[c.model].statuses.map(x=>[x,x]):candidates(fieldInfo(c)?.type);
+const literalDefault=c=>fieldInfo(c)?.type==='number'?0:fieldInfo(c)?.type==='date'?'2026-09-01':['enum','user','person','company','department'].includes(fieldInfo(c)?.type)?choicesFor(c)[0][0]:'';
+function notice(text){
+  document.getElementById('toast').innerHTML='<div class="toast">'+E(text)+'</div>';
+  clearTimeout(window.toastTimer);window.toastTimer=setTimeout(()=>document.getElementById('toast').innerHTML='',3500);
+}
+function changed(message='规则草稿已修改',redraw=true){
+  dirtyRootId=dirtyRootId||currentRoot()?.id;dirty=true;validationErrors=[];lastChange=message;
+  if(redraw)render();else refreshDraftChrome();
+}
+function showGuard(options){guard=options;renderGuard();}
+function resolveGuard(choice){
+  const action=guard;guard=null;document.getElementById('guard').innerHTML='';
+  if(choice==='save')action.onSave?.();
+  if(choice==='discard')action.onDiscard?.();
+  if(choice==='confirm')action.onConfirm?.();
+}
+function leaveRuleDraft(perform){
+  if(!dirty){perform();return;}
+  showGuard({title:'当前规则树有未保存修改',detail:'“'+(findRule(dirtyRootId)?.name||'当前规则树')+'”及其子规则作为一个整体保存。',onSave:()=>{if(saveRules())perform();},onDiscard:()=>{discard(true);perform();}});
+}
+function nav(to){if(to===page)return;leaveRuleDraft(()=>{page=to;validationErrors=[];render();});}
+function selectRule(id){
+  const nextRoot=pathToRule(id)[0];
+  const select=()=>{selected=id;validationErrors=[];render();};
+  if(dirty&&nextRoot?.id!==dirtyRootId)leaveRuleDraft(select);else select();
+}
+function toggleCollapsed(id){collapsed.has(id)?collapsed.delete(id):collapsed.add(id);render();}
+function addRule(child){
+  const add=()=>{
+    const r={id:uid('r'),name:child?'新子规则':'新规则树',enabled:true,condition:group(),grants:[],children:[]};
+    if(child&&findRule(selected)){findRule(selected).children.push(r);collapsed.delete(selected);}else draft.rules.push(r);
+    selected=r.id;changed('已添加草稿；请完成条件或明确选择全部对象');
+  };
+  if(child&&pendingRootDeletion)return notice('请先撤销或保存整树删除');
+  if(!child&&dirty)leaveRuleDraft(add);else add();
+}
+function removeRule(){
+  const path=pathToRule(selected),r=path.at(-1);
+  if(!r)return;
+  showGuard({title:'删除“'+r.name+'”？',detail:'该节点及 '+countRules(r.children)+' 个子节点将从当前规则树草稿移除，保存后才生效。',confirmLabel:'从草稿删除',onConfirm:()=>{
+    if(path.length===1){pendingRootDeletion=r.id;changed('整棵规则树待删除，尚未保存');}
+    else{const parent=path.at(-2);parent.children=parent.children.filter(x=>x.id!==r.id);selected=parent.id;changed('子树已从草稿移除，尚未保存');}
+  }});
+}
+const countRules=list=>list.reduce((total,r)=>total+1+countRules(r.children),0);
+function cancelRootDeletion(){pendingRootDeletion=null;changed('已撤销整树删除');}
+function updateRule(field,value){findRule(selected)[field]=value;changed(field==='enabled'?'规则启停状态待保存':'规则名称待保存',field!=='name');}
+function rulePreviewConfig(){
+  const cfg=clone(saved);
+  if(dirtyRootId){
+    const index=cfg.rules.findIndex(r=>r.id===dirtyRootId);
+    if(pendingRootDeletion===dirtyRootId){if(index>=0)cfg.rules.splice(index,1);}
+    else{const r=clone(findRule(dirtyRootId));if(index>=0)cfg.rules[index]=r;else cfg.rules.push(r);}
+  }
+  return cfg;
+}
+function validateGrants(grants,nodeId){
+  const errors=[];
+  for(const g of grants){
+    if(!Number.isInteger(g.priority))errors.push({nodeId,message:'主体优先级须为整数。'});
+    if(g.type!=='everyone'&&!candidates(g.type).some(([id])=>id===g.subject))errors.push({nodeId,message:'请选择有效主体。'});
+  }
+  return errors;
+}
+function validateTree(root){
+  const errors=[];
+  function checkCondition(c,nodeId){
+    const invalid=message=>errors.push({nodeId,conditionId:c.id,message});
+    if(c.kind==='group'){
+      if(!c.children.length)invalid('条件组尚未完成；添加条件，或明确选择“全部对象”。');
+      c.children.forEach(x=>checkCondition(x,nodeId));return;
+    }
+    if(c.kind==='all')return;
+    if(c.kind==='business'){if(!businessTypes[c.business])invalid('请选择已登记的业务条件。');return;}
+    const info=fieldInfo(c);
+    if(!info){invalid('请选择有效 Model 和属性。');return;}
+    if(!availableOperators(c).some(([id])=>id===c.op))invalid('比较方式与属性类型不相容。');
+    if(['empty','notempty'].includes(c.op))return;
+    if(typeof c.value==='string'&&c.value.startsWith('@')){
+      if(!contexts.some(([id,,type])=>id===c.value&&type===info.type))invalid('上下文值与属性类型不相容。');return;
+    }
+    const values=['in','notin'].includes(c.op)?(Array.isArray(c.value)?c.value:null):[c.value];
+    if(!values){invalid('集合须使用多选或每行一个值。');return;}
+    for(const value of values){
+      if(value==null||(info.type==='number'&&(value===''||!Number.isFinite(Number(value)))))invalid('请填写有效数值。');
+      else if(info.type==='date'&&(!/^\d{4}-\d{2}-\d{2}$/.test(String(value))||(!Number.isFinite(Date.parse(String(value)+'T00:00:00Z'))||new Date(String(value)+'T00:00:00Z').toISOString().slice(0,10)!==value)))invalid('请填写有效日历日期。');
+      else if(['enum','user','person','company','department'].includes(info.type)&&!choicesFor(c).some(([id])=>id===value))invalid('比较值不在此属性的候选目录中。');
+    }
+  }
+  function visit(r){
+    if(!r.name.trim())errors.push({nodeId:r.id,message:'请填写规则名称。'});
+    errors.push(...validateGrants(r.grants,r.id));checkCondition(r.condition,r.id);r.children.forEach(visit);
+  }
+  visit(root);return errors;
+}
+function saveRules(){
+  if(!dirty)return true;
+  const root=findRule(dirtyRootId),rootName=root?.name||'规则树';
+  validationErrors=pendingRootDeletion?[]:validateTree(root);
+  if(validationErrors.length){selected=validationErrors[0].nodeId;render();document.getElementById('validation-errors')?.scrollIntoView({block:'center'});return false;}
+  const index=saved.rules.findIndex(r=>r.id===dirtyRootId);
+  // 只提交当前根树，绝不把其他根树一起写回。
+  if(pendingRootDeletion){if(index>=0)saved.rules.splice(index,1);}
+  else if(index>=0)saved.rules[index]=clone(root);else saved.rules.push(clone(root));
+  draft=clone(saved);dirty=false;dirtyRootId=null;pendingRootDeletion=null;
+  selected=findRule(selected)?selected:draft.rules[0]?.id||'';
+  lastChange='已保存规则树“'+rootName+'”，其他根规则未改动';render();notice('当前规则树已保存 · 仅本次页面会话');return true;
+}
+function discard(force=false){
+  if(!force&&dirty){showGuard({title:'放弃当前规则树的修改？',detail:'将恢复该树最近一次保存的配置。',confirmLabel:'放弃修改',onConfirm:()=>discard(true)});return;}
+  draft=clone(saved);dirty=false;dirtyRootId=null;pendingRootDeletion=null;validationErrors=[];
+  selected=findRule(selected)?selected:draft.rules[0]?.id||'';lastChange='已放弃当前规则树的未保存修改';render();
+}
+function changeCondition(id,field,value,redraw=true){
+  const c=findCondition(id,findRule(selected).condition);
+  c[field]=value;
+  if(c.kind==='attribute'&&(field==='model'||field==='field')){
+    if(!fieldInfo(c))c.field='title';
+    c.op='eq';c.value=literalDefault(c);
+  }
+  if(field==='op'&&!['empty','notempty'].includes(value))c.value=['in','notin'].includes(value)?[]:literalDefault(c);
+  if(field==='value'&&fieldInfo(c)?.type==='number'&&!Array.isArray(value)&&value!=='')c.value=Number(value);
+  changed('条件草稿已修改',redraw);
+}
+function changeValueSource(id,value){
+  const c=findCondition(id,findRule(selected).condition);c.value=value==='fixed'?literalDefault(c):value;changed('比较值来源已修改');
+}
+function changeCollection(id,text){
+  const c=findCondition(id,findRule(selected).condition);
+  c.value=text===''?[]:text.split(/\r?\n/).map(x=>fieldInfo(c)?.type==='number'?(x.trim()===''?'':Number(x)):x);
+  changed('比较集合已修改',false);
+}
+function addCondition(id,kind){
+  const c=findCondition(id,findRule(selected).condition);
+  c.children.push(kind==='group'?group():kind==='business'?{id:uid('c'),kind:'business',business:'workflow'}:kind==='all'?{id:uid('c'),kind:'all',model:''}:attr('amount','lt',10000));
+  changed('已添加条件');
+}
+function removeCondition(id){
+  const trim=c=>{if(c.kind==='group'){c.children=c.children.filter(x=>x.id!==id);c.children.forEach(trim);}};
+  trim(findRule(selected).condition);changed('已移除条件');
+}
+const grantList=context=>context==='object'?modal.grants:findRule(selected).grants;
+function addGrant(context){
+  grantList(context).push(grant('user','u1',0,{}));
+  if(context==='object'){modal.dirty=true;renderModal();}else changed('已添加主体，动作保持不选');
+}
+function changeGrant(context,id,field,value,action=false,redraw=true){
+  const g=grantList(context).find(x=>x.id===id);
+  if(action)g.actions[field]=value;else g[field]=value;
+  if(field==='type'){g.subject=candidates(value)[0][0];g.descendants=false;}
+  g.label=g.type==='everyone'?'所有用户':labels[g.subject]||g.subject;
+  if(context==='object'){modal.dirty=true;if(redraw)renderModal();else refreshObjectPreview();}
+  else changed('主体授权草稿已修改',redraw);
+}
+function removeGrant(context,id){
+  const list=grantList(context);list.splice(list.findIndex(x=>x.id===id),1);
+  if(context==='object'){modal.dirty=true;renderModal();}else changed('已移除主体授权项');
+}
+function openObject(id){
+  const o=objects.find(x=>x.id===id),r=result(o);
+  if(r.actions.grant.value!=='allow')return notice('当前用户不能管理此对象的授权');
+  objectId=id;modal={id,grants:clone(saved.objectGrants[id]||[]),dirty:false};renderModal();
+}
+function closeModal(force=false){
+  if(modal?.dirty&&!force){showGuard({title:'对象授权有未保存修改',detail:'可以保存当前对象的整份授权，或放弃本次修改。',onSave:saveObject,onDiscard:()=>closeModal(true)});return;}
+  modal=null;document.getElementById('modal').innerHTML='';render();
+}
+function saveObject(){
+  const o=objects.find(x=>x.id===modal.id),permission=result(o).actions.grant;
+  if(permission.value==='error')return notice('授权判断异常，未保存。');
+  if(permission.value!=='allow')return notice('保存被拒绝：当前授权资格已变化。');
+  const errors=validateGrants(modal.grants,null);
+  if(errors.length)return notice(errors[0].message);
+  saved.objectGrants[o.id]=clone(modal.grants);draft.objectGrants=clone(saved.objectGrants);
+  lastChange='已保存 '+o.id+' 的整份对象授权';closeModal(true);notice('对象授权已保存 · 后续判断使用新配置');return true;
+}
+function simulateAction(id,enabled){
+  saved.actions.find(a=>a.id===id).enabled=enabled;draft.actions=clone(saved.actions);
+  lastChange='仅模拟：'+saved.actions.find(a=>a.id===id).name+(enabled?'参与':'不参与')+'数据范围判定';render();
+}
+function togglePreview(){previewOpen=!previewOpen;render();}
+function resetAll(){
+  leaveRuleDraft(()=>{saved=seed();draft=clone(saved);selected='r2';userId='u1';objectId=objects[0].id;dirty=false;dirtyRootId=null;pendingRootDeletion=null;validationErrors=[];collapsed.clear();tourStep=-1;lastChange='已重置示例';render();notice('示例已重置，未写入任何真实配置');});
+}
+
+function describeCondition(c){
+  if(c.kind==='all')return c.model?models[c.model].name+'的全部对象':'全部示例对象';
+  if(c.kind==='business')return businessTypes[c.business]?.name||'未知业务条件';
+  if(c.kind==='group')return c.children.length?'（'+c.children.map(describeCondition).join(c.mode==='and'?' 且 ':' 或 ')+'）':'未完成的条件组';
+  const field=fieldInfo(c),operator=operators.find(([id])=>id===c.op)?.[1]||c.op;
+  const context=contexts.find(([id])=>id===c.value)?.[1];
+  const value=context|| (Array.isArray(c.value)?c.value.map(v=>labels[v]||v).join('、'):labels[c.value]||String(c.value??''));
+  return models[c.model].name+' / '+(field?.name||c.field)+' '+operator+(['empty','notempty'].includes(c.op)?'':' '+(value||'空字符串'));
+}
+function renderTree(list,depth=0,off=false){
+  return list.map(r=>{
+    const root=pathToRule(r.id)[0],rootDirty=dirty&&root?.id===dirtyRootId,deleted=pendingRootDeletion===root?.id;
+    const summary=deleted?'整树待删除':off?'上级已停用':!r.enabled?'已停用':r.grants.length+' 个主体'+(r.children.length?' · '+r.children.length+' 个子规则':'');
+    const choose=call('selectRule',r.id);
+    const toggle=r.children.length?button(collapsed.has(r.id)?'▸':'▾','event.stopPropagation();'+call('toggleCollapsed',r.id),'tree-toggle'):'<span class="tree-spacer">'+(depth?'└':'◇')+'</span>';
+    return '<div role="treeitem" tabindex="0" aria-selected="'+(selected===r.id)+'" class="tree-row '+(selected===r.id?'selected ':'')+(!r.enabled||off||deleted?'off ':'')+'" style="padding-left:'+(8+depth*13)+'px" onclick="'+E(choose)+'" onkeydown="'+E("if(event.key==='Enter'){"+choose+"}")+'">'+toggle+'<div class="tree-label">'+E(r.name||'未命名规则')+(depth===0&&rootDirty?'<span class="dirty-dot" title="此根规则树有未保存修改">●</span>':'')+'<small>'+E(summary)+'</small></div></div>'+(!collapsed.has(r.id)?renderTree(r.children,depth+1,off||!r.enabled):'');
+  }).join('');
+}
+function valueHTML(c){
+  const info=fieldInfo(c),collection=['in','notin'].includes(c.op),isChoice=['enum','user','person','company','department'].includes(info.type);
+  const source=typeof c.value==='string'&&c.value.startsWith('@')?c.value:'fixed';
+  const inputChange='changeCondition('+JSON.stringify(c.id)+',"value",this.value,false)';
+  if(collection){
+    if(isChoice){
+      const values=Array.isArray(c.value)?c.value:[];
+      return '<label class="collection-label">比较集合（可多选）<select multiple size="3" aria-label="比较集合" onchange="'+E('changeCondition('+JSON.stringify(c.id)+',"value",Array.from(this.selectedOptions).map(o=>o.value))')+'">'+choicesFor(c).map(([id,name])=>'<option value="'+E(id)+'" '+(values.includes(id)?'selected':'')+'>'+E(name)+'</option>').join('')+'</select></label>';
+    }
+    return '<label class="collection-label">比较集合（每行一个值）<textarea rows="2" aria-label="比较集合" oninput="'+E('changeCollection('+JSON.stringify(c.id)+',this.value)')+'" placeholder="'+(info.type==='date'?'2026-09-01':'每行一个值')+'">'+E((Array.isArray(c.value)?c.value:[]).join('\n'))+'</textarea></label>';
+  }
+  const available=[['fixed','固定值'],...contexts.filter(([, ,type])=>type===info.type).map(([id,name])=>[id,name])];
+  const sourceSelect='<select aria-label="比较值来源" onchange="'+E('changeValueSource('+JSON.stringify(c.id)+',this.value)')+'">'+opts(available,source)+'</select>';
+  if(source!=='fixed')return sourceSelect;
+  if(isChoice)return sourceSelect+'<select aria-label="比较值" onchange="'+E('changeCondition('+JSON.stringify(c.id)+',"value",this.value)')+'">'+opts(choicesFor(c),c.value)+'</select>';
+  return sourceSelect+'<input aria-label="比较值" type="'+(info.type==='number'?'number':info.type==='date'?'date':'text')+'" '+(info.type==='number'?'step="any" ':'')+'value="'+E(c.value)+'" oninput="'+E(inputChange)+'" placeholder="'+(info.type==='text'?'文本，可为空字符串':'填写比较值')+'">';
+}
+function conditionHTML(c,root=false){
+  const error=validationErrors.find(x=>x.conditionId===c.id);
+  const errorHtml=error?'<p class="field-error">'+E(error.message)+'</p>':'';
+  if(c.kind==='group')return '<div id="condition-'+c.id+'" class="condition-group '+(error?'invalid':'')+'"><div class="group-bar"><select aria-label="条件组合" onchange="'+E('changeCondition('+JSON.stringify(c.id)+',"mode",this.value)')+'">'+opts([['and','全部满足 · AND'],['or','任一满足 · OR']],c.mode)+'</select>'+button('＋ 属性',call('addCondition',c.id,'attribute'),'small')+button('＋ 业务',call('addCondition',c.id,'business'),'small')+button('＋ 条件组',call('addCondition',c.id,'group'),'small')+button('＋ 全部对象',call('addCondition',c.id,'all'),'small')+(!root?button('移除组',call('removeCondition',c.id),'small danger'):'')+'</div>'+(c.children.length?c.children.map(x=>conditionHTML(x)).join(''):'<div class="note">条件组尚未完成。添加条件，或明确选择“全部对象”；空组不能保存。</div>')+errorHtml+'</div>';
+  if(c.kind==='all')return '<div id="condition-'+c.id+'" class="condition"><div class="condition-main">'+tag('全部对象','amber')+'<select aria-label="全部对象的适用范围" onchange="'+E('changeCondition('+JSON.stringify(c.id)+',"model",this.value)')+'">'+opts([['','全部示例对象'],...Object.entries(models).map(([id,m])=>[id,m.name+'的全部对象'])],c.model)+'</select><span class="grow"></span>'+button('×',call('removeCondition',c.id),'small')+'</div><p class="condition-extra">这是明确的全部对象条件，与“没有读取贡献”不同。</p></div>';
+  if(c.kind==='business'){
+    const definition=businessTypes[c.business];
+    return '<div id="condition-'+c.id+'" class="condition"><div class="condition-main">'+tag('业务条件','blue')+'<select aria-label="业务条件" onchange="'+E('changeCondition('+JSON.stringify(c.id)+',"business",this.value)')+'">'+opts(Object.entries(businessTypes).map(([id,d])=>[id,d.name]),c.business)+'</select><span class="grow"></span>'+button('×',call('removeCondition',c.id),'small')+'</div><div class="condition-extra">'+tag(definition?.read?'参与读取':'不参与读取',definition?.read?'green':'')+' '+E(definition?.description)+'<div>读取能力由条件定义提供，不在此处任意勾选。</div></div>'+errorHtml+'</div>';
+  }
+  const typeLabels={text:'文本',number:'数值',enum:'枚举',user:'账号引用',person:'人员引用',company:'公司引用',department:'部门引用',date:'日历日期'};
+  return '<div id="condition-'+c.id+'" class="condition '+(error?'invalid':'')+'"><div class="condition-main"><select aria-label="条件 Model" onchange="'+E('changeCondition('+JSON.stringify(c.id)+',"model",this.value)')+'">'+opts(Object.entries(models).map(([id,m])=>[id,m.name+' Model']),c.model)+'</select><select aria-label="对象属性" onchange="'+E('changeCondition('+JSON.stringify(c.id)+',"field",this.value)')+'">'+opts(Object.entries(models[c.model].fields).map(([id,f])=>[id,f.name]),c.field)+'</select><select aria-label="比较方式" onchange="'+E('changeCondition('+JSON.stringify(c.id)+',"op",this.value)')+'">'+opts(availableOperators(c),c.op)+'</select>'+(!['empty','notempty'].includes(c.op)?valueHTML(c):'')+button('×',call('removeCondition',c.id),'small')+'</div><div class="condition-extra">'+E(typeLabels[fieldInfo(c).type])+' · '+(['empty','notempty'].includes(c.op)?'只判断空值，不需要比较值':'仅提供类型相容的运算符与比较值')+'</div>'+errorHtml+'</div>';
+}
+function grantsHTML(grants,context){
+  return '<div class="scroll"><table class="grant-table"><thead><tr><th>授权主体</th><th>优先级</th>'+saved.actions.map(a=>'<th>'+E(a.name)+(a.enabled===false?'<small class="action-off">判定未启用</small>':a.requiresRead?'<small class="action-dependency">依赖读取</small>':'')+'</th>').join('')+'<th></th></tr></thead><tbody>'+grants.map(g=>{
+    const change=(field,valueExpression,action=false,redraw=true)=>'changeGrant('+JSON.stringify(context)+','+JSON.stringify(g.id)+','+JSON.stringify(field)+','+valueExpression+','+action+','+redraw+')';
+    return '<tr><td class="subject-cell"><select aria-label="主体类型" onchange="'+E(change('type','this.value'))+'">'+opts([['everyone','所有用户'],['user','用户'],['role','角色'],['company','公司'],['org','部门'],['project','项目组 · 扩展']],g.type)+'</select>'+(g.type!=='everyone'?'<div class="subject-detail"><select aria-label="具体主体" onchange="'+E(change('subject','this.value'))+'">'+opts(candidates(g.type),g.subject)+'</select></div>':'')+(g.type==='org'?'<label class="tiny muted department-option"><input type="checkbox" '+(g.descendants?'checked':'')+' onchange="'+E(change('descendants','this.checked'))+'"> 包含下级部门</label>':g.type==='company'?'<div class="tiny muted department-option">匹配该公司全部人员</div>':'')+'</td><td><input aria-label="主体优先级" type="number" step="1" value="'+E(g.priority??'')+'" oninput="'+E(change('priority',"this.value===''?null:Number(this.value)",false,false))+'"></td>'+saved.actions.map(a=>'<td class="'+(a.enabled===false?'inactive-action':'')+'"><select aria-label="'+E(a.id==='grant'?'授权管理意见':a.name+'授权')+'" class="opinion '+(g.actions[a.id]||'none')+'" onchange="'+E(change(a.id,'this.value',true))+'">'+opts([['none','不选'],['allow','同意'],['deny','拒绝']],g.actions[a.id]||'none')+'</select></td>').join('')+'<td>'+button('×',call('removeGrant',context,g.id),'small danger')+'</td></tr>';
+  }).join('')+'</tbody></table></div>'+(grants.length?'':'<div class="empty">暂无主体授权项。添加主体后，配置优先级与动作。</div>')+'<p class="note">主体目录仅用于授权配置。动作判定未启用时，既有意见保留且仍可配置。</p>';
+}
+function rootPathHTML(){
+  const path=pathToRule(selected);
+  return '<div class="root-scope"><span class="tiny muted">保存范围</span> <strong>'+E(path[0]?.name||'未选择规则树')+'</strong> '+tag('整棵根规则树','blue')+'</div><div class="breadcrumb">'+path.map(r=>E(r.name||'未命名规则')).join(' › ')+'</div>';
+}
+function validationHTML(){
+  return validationErrors.length?'<div id="validation-errors" class="validation-summary" role="alert"><strong>尚有 '+validationErrors.length+' 处需要完成</strong><ul>'+validationErrors.map((e,i)=>'<li>'+button((findRule(e.nodeId)?.name||'规则')+'：'+e.message,call('focusValidation',i),'link')+'</li>').join('')+'</ul></div>':'';
+}
+function focusValidation(index){
+  const error=validationErrors[index];selected=error.nodeId;pathToRule(selected).forEach(r=>collapsed.delete(r.id));render();
+  const target=document.getElementById(error.conditionId?'condition-'+error.conditionId:'rule-path');
+  target?.scrollIntoView({block:'center'});target?.querySelector('input,select,button')?.focus();
+}
+function ruleEditor(){
+  const r=findRule(selected),path=pathToRule(selected);
+  if(!r)return '<section class="panel"><div class="empty">添加一棵根规则树，开始配置。</div></section>';
+  if(pendingRootDeletion)return '<section class="panel rule-detail"><div class="section"><div id="rule-path">'+rootPathHTML()+'</div><h2 class="deletion-title">这棵规则树将被删除</h2><p class="note">包含全部 '+countRules([currentRoot()])+' 个节点，当前仍未保存。其他根规则不会被删除。</p>'+button('撤销删除','cancelRootDeletion()','small')+'</div></section>';
+  const ancestors=path.slice(0,-1);
+  return '<section class="panel rule-detail"><div class="section"><div id="rule-path">'+rootPathHTML()+'</div><div class="section-title"><h3>当前节点</h3><div class="flex"><span data-dirty-state class="pill '+(dirty?'amber':'green')+'">'+(dirty?'此树待保存':'此树已保存')+'</span><label class="tiny"><input type="checkbox" '+(r.enabled?'checked':'')+' onchange="updateRule(\'enabled\',this.checked)"> 启用规则</label></div></div><input class="name-input" aria-label="规则名称" value="'+E(r.name)+'" oninput="updateRule(\'name\',this.value)"><div class="note">节点修改随所属根规则树一起保存。停用父规则后，整个子树不参与裁决。</div></div>'+validationHTML()+'<div class="section"><div class="section-title"><h3>本节点条件</h3>'+tag('先定范围，再授权')+'</div>'+(ancestors.length?'<details class="ancestor-summary" open><summary>同时受 '+ancestors.length+' 个祖先条件约束</summary><ol>'+ancestors.map(a=>'<li><strong>'+E(a.name)+'</strong><div>'+E(describeCondition(a.condition))+'</div></li>').join('')+'</ol></details>':'')+conditionHTML(r.condition,true)+'<div class="inherit-note">本节点条件与所有祖先条件共同生效。Model 仅在需要的条件中选择。</div></div><div class="section"><div class="section-title"><h3>主体与动作</h3>'+button('＋ 添加主体',call('addGrant','rule'),'small')+'</div><div class="legend"><span>同意：明确允许</span><span>拒绝：明确禁止</span><span>不选：不表态</span></div>'+grantsHTML(r.grants,'rule')+'<div class="note">同节点内，每个动作采用最高优先级的明确设置；同级冲突拒绝优先。</div></div><div class="node-tools">'+button('删除当前节点及子树','removeRule()','small danger')+'</div></section>';
+}
+function ruleSaveBar(){
+  if(page!=='rules'||!currentRoot())return '';
+  return '<div id="save-dock" class="save-dock"><div class="save-scope"><strong>'+E(currentRoot().name||'未命名规则树')+'</strong><span class="tiny muted">'+(pendingRootDeletion?'整树删除待保存':dirty?'仅保存此根规则及全部子规则':'当前根规则树没有未保存修改')+'</span></div>'+tag(dirty?'未保存':'已保存',dirty?'amber':'green')+'<span class="grow"></span>'+button('放弃此树修改','discard()','',!dirty)+button(pendingRootDeletion?'保存整树删除':'保存当前规则树','saveRules()','primary',!dirty)+'</div>';
+}
+function refreshDraftChrome(){
+  const tree=document.getElementById('tree-content');if(tree)tree.innerHTML=renderTree(draft.rules);
+  const path=document.getElementById('rule-path');if(path)path.innerHTML=rootPathHTML();
+  document.querySelectorAll('[data-dirty-state]').forEach(el=>{el.textContent='此树待保存';el.className='pill amber';});
+  document.getElementById('validation-errors')?.remove();
+  document.querySelectorAll('.field-error').forEach(el=>el.remove());
+  document.querySelectorAll('.invalid').forEach(el=>el.classList.remove('invalid'));
+  const dock=document.getElementById('save-dock');if(dock)dock.outerHTML=ruleSaveBar();
+  const preview=document.getElementById('preview-panel');if(preview)preview.outerHTML=previewHTML();
+  const footer=document.getElementById('last-change');if(footer)footer.textContent='最近操作：'+lastChange+' · 当前根规则树有未保存修改。';
+}
+function previewHTML(force=false){
+  if(!previewOpen&&!force)return '';
+  const usesDraft=page==='rules'&&previewMode==='draft';
+  const cfg=usesDraft?rulePreviewConfig():saved;
+  const errors=usesDraft?cfg.rules.flatMap(validateTree):[];
+  const o=object(),r=errors.length?null:result(o,cfg);
+  const modeSelector=page==='rules'?'<select aria-label="预览配置来源" onchange="previewMode=this.value;render()">'+opts([['draft','草稿模拟'],['saved','当前生效（模拟）']],previewMode)+'</select>':tag('当前生效（模拟）','blue');
+  return '<aside id="preview-panel" class="panel preview"><div class="panel-head"><div class="flex between"><h3>裁决预览 · 仅演示</h3></div>'+modeSelector+'</div><div class="panel-body"><div><label class="tiny muted">模拟用户<select aria-label="模拟用户" onchange="userId=this.value;render()">'+opts(users.map(u=>[u.id,u.name+(u.localAdmin?' · 数据范围豁免':' · '+labels[u.org])]),userId)+'</select></label><label class="tiny muted">目标对象<select aria-label="预览对象" onchange="objectId=this.value;render()">'+opts(objects.map(o=>[o.id,o.title]),objectId)+'</select></label><div class="facts"><div><span class="tiny muted">金额</span><strong>¥ '+o.amount.toLocaleString()+'</strong></div><div><span class="tiny muted">状态</span><strong>'+E(o.status)+'</strong></div><div><span class="tiny muted">负责人</span><strong>'+E(labels[o.owner])+'</strong></div><div><span class="tiny muted">流程中</span><strong>'+(o.workflow?'是':'否')+'</strong></div></div><p class="tiny muted">'+(usesDraft?'只将当前根树草稿替换到模拟配置；其他根树和对象授权使用已保存值。':'包含全部已保存规则和对象授权。')+'</p></div><div class="result-set">'+(errors.length?'<div class="validation-summary">草稿有 '+errors.length+' 处未完成，暂不计算结果。保存时可定位具体条件。</div>':saved.actions.map(a=>{const x=r.actions[a.id];return '<details class="result"><summary><span>'+E(a.name)+'</span>'+tag(statusText(x.value),statusClass(x.value))+'</summary><p>'+E(x.source)+'</p><p>规则：'+statusText(x.rule)+' · 对象：'+statusText(x.object)+'</p><ol class="steps">'+x.log.map(l=>'<li>'+E(l)+'</li>').join('')+'</ol></details>';}).join(''))+'<p class="tiny muted preview-disclaimer">这是内存演示，假定功能资格满足。样本文本区分大小写；正式比较以字段查询规则为准。</p></div></div></aside>';
+}
+function objectPage(){
+  const rows=objects.map(o=>({o,r:result(o)})),visible=rows.filter(x=>x.r.actions.read.value==='allow'),errors=rows.filter(x=>x.r.actions.read.value==='error');
+  return '<div class="object-layout '+(!previewOpen?'preview-collapsed':'')+'"><div><div class="summary-strip"><div class="grow"><h3>业务对象</h3><p class="tiny muted">从对象的“授权”入口打开；可展开预览切换模拟用户。</p></div><div><b>'+visible.length+'</b><span class="tiny muted"> / '+objects.length+' 条可读取</span></div></div><div class="panel"><div class="panel-head flex between"><h3>对象列表</h3>'+tag('以 '+user().name+' 身份访问','blue')+'</div>'+(errors.length?'<div class="empty field-error">读取授权判断异常，当前查询失败。</div>':'<div class="scroll"><table class="data-table"><thead><tr><th>对象</th><th>Model</th><th>金额</th><th>状态</th><th>操作</th></tr></thead><tbody>'+visible.map(({o,r})=>'<tr><td><strong>'+E(o.title)+'</strong><div class="mono muted">'+E(o.id)+'</div></td><td>'+models[o.model].name+'</td><td>'+o.amount.toLocaleString()+'</td><td>'+tag(o.status)+'</td><td>'+button('授权',call('openObject',o.id),'small',r.actions.grant.value!=='allow')+'</td></tr>').join('')+'</tbody></table></div>'+(!visible.length?'<div class="empty">当前用户没有可读取的对象。</div>':''))+'<div class="hint-row">固定样本，不代表真实数据库查询已实现。</div></div></div>'+previewHTML()+'</div>';
+}
+function objectPreviewHTML(){
+  const errors=validateGrants(modal.grants,null);
+  if(errors.length)return '<div class="validation-summary">请先填写有效的主体与整数优先级。</div>';
+  const o=objects.find(x=>x.id===modal.id),cfg=clone(saved);cfg.objectGrants[o.id]=clone(modal.grants);
+  const res=result(o,cfg),losesAccess=res.actions.read.value!=='allow'||res.actions.grant.value!=='allow';
+  return (losesAccess?'<div class="inherit-note">此草稿保存后，你可能失去读取或授权资格。只要保存前具备资格，仍可完成此次保存。</div>':'')+'<div class="override">'+saved.actions.map(a=>{const x=res.actions[a.id];return '<div><div class="flex between"><span>'+E(a.name)+'</span>'+tag(statusText(x.value),statusClass(x.value))+'</div><p>'+E(x.source)+'</p></div>';}).join('')+'</div>';
+}
+function refreshObjectPreview(){
+  const preview=document.getElementById('object-draft-preview');if(preview)preview.innerHTML=objectPreviewHTML();
+  const status=document.getElementById('object-dirty-status');if(status){status.textContent='当前对象有未保存修改';status.className='pill amber';}
+}
+function renderModal(){
+  if(!modal)return;
+  const o=objects.find(x=>x.id===modal.id);
+  document.getElementById('modal').innerHTML='<div class="backdrop" onclick="if(event.target===this)closeModal()"><section class="modal" role="dialog" aria-modal="true" aria-label="对象授权"><div class="modal-head flex between"><div><h2>对象授权</h2><p class="subtitle">整份保存当前对象的授权，不修改规则树。</p></div>'+button('✕','closeModal()')+'</div><div class="modal-body"><div class="object-banner flex between"><div><strong>'+E(o.title)+'</strong><div class="tiny muted">'+models[o.model].name+' Model · '+E(o.id)+'</div></div>'+tag('仅此对象','blue')+'</div><div class="section-title"><h3>主体授权</h3>'+button('＋ 添加主体',call('addGrant','object'),'small')+'</div>'+grantsHTML(modal.grants,'object')+'<div class="inherit-note">对象的明确意见优先于规则；未表态沿用规则。授权管理可修改本人或他人配置项。</div><div class="section-title object-preview-heading"><h3>草稿模拟 · 保存后效果</h3><span id="object-dirty-status" class="pill '+(modal.dirty?'amber':'')+'">'+(modal.dirty?'当前对象有未保存修改':'尚未修改')+'</span></div><div id="object-draft-preview">'+objectPreviewHTML()+'</div></div><div class="modal-foot"><span class="tiny muted">按保存前资格判定。仅保存到本次页面会话。</span><div class="flex">'+button('取消','closeModal()')+button('保存对象授权','saveObject()','primary')+'</div></div></section></div>';
+}
+function renderGuard(){
+  if(!guard){document.getElementById('guard').innerHTML='';return;}
+  const unsaved=!!guard.onSave;
+  document.getElementById('guard').innerHTML='<div class="backdrop guard-backdrop"><section class="guard-dialog" role="dialog" aria-modal="true" aria-label="'+E(guard.title)+'"><h2>'+E(guard.title)+'</h2><p>'+E(guard.detail)+'</p><div class="guard-actions">'+button(unsaved?'继续编辑':'取消',call('resolveGuard','cancel'))+(unsaved?button('放弃并继续',call('resolveGuard','discard'),'danger')+button('保存并继续',call('resolveGuard','save'),'primary'):button(guard.confirmLabel||'确定',call('resolveGuard','confirm'),'primary'))+'</div></section></div>';
+  document.querySelector('#guard button')?.focus();
+}
+function catalogPage(){
+  return '<div class="catalog panel"><div class="panel-head"><h2>动作目录</h2><p class="subtitle">同一动作由全部引用资源共享；目录由模块配置和正式装配发布。</p></div><div class="scroll"><table class="data-table"><thead><tr><th>动作</th><th>标识</th><th>数据范围判定</th><th>读取依赖</th></tr></thead><tbody>'+saved.actions.map(a=>'<tr><td>'+E(a.name)+'</td><td class="mono">'+E(a.id)+'</td><td>'+tag(a.enabled?'已启用':'未启用',a.enabled?'green':'amber')+'</td><td>'+(a.requiresRead?'要求最终读取允许':'无')+'</td></tr>').join('')+'</tbody></table></div><div class="panel-body"><details class="simulation-tools" '+(simulationOpen?'open':'')+' ontoggle="if(this.isConnected) simulationOpen=this.open"><summary>演示动作开关（仅本页模拟）</summary><p class="note">以下操作只模拟目录生效后的状态，不是正式后台即时开关。关闭只跳过动作自身判定，已有意见保留，读取依赖仍独立组合。</p><div class="simulation-actions">'+saved.actions.map(a=>'<label><input type="checkbox" aria-label="模拟'+E(a.name)+'动作开关" '+(a.enabled?'checked':'')+' onchange="'+E('simulateAction('+JSON.stringify(a.id)+',this.checked)')+'"> '+E(a.name)+'参与数据范围判定</label>').join('')+'</div></details><p class="note">新增或扩展动作通过模块定义接入。此原型不提供运行时创建动作的管理入口。</p></div></div>';
+}
+function stateHTML(rules,depth=0){
+  return rules.map(r=>'<div class="state-item" style="padding-left:'+(depth*16)+'px"><strong>'+E(r.name)+'</strong> '+tag(r.enabled?'启用':'停用',r.enabled?'green':'')+'<div class="tiny muted">'+E(describeCondition(r.condition))+'</div><div class="tiny muted">'+r.grants.map(g=>E(g.label)+'（优先级 '+g.priority+'）：'+saved.actions.filter(a=>g.actions[a.id]&&g.actions[a.id]!=='none').map(a=>E(a.name)+' '+statusText(g.actions[a.id])).join('、')).join('；')+'</div></div>'+stateHTML(r.children,depth+1)).join('');
+}
+function render(){
+  const titles={rules:['规则授权','按一棵根规则树编辑、检查并保存。'],objects:['对象授权','在具体对象上维护整份授权，明确结果优先于规则。'],actions:['动作目录','查看独立动作、数据范围启用状态与读取依赖。'],tour:['裁决场景','使用示例检查已确认的裁决边界。']};
+  const previewButton=['rules','objects'].includes(page)?button(previewOpen?'收起结果预览':'展开结果预览','togglePreview()'):'';
+  const treePanel='<aside class="panel tree-panel"><div class="panel-head"><div class="flex between"><h3>规则树</h3>'+tag(draft.rules.length+' 棵根树')+'</div><div class="flex tree-tools">'+button('＋ 根规则','addRule(false)','small')+button('＋ 子规则','addRule(true)','small',!selected||!!pendingRootDeletion)+'</div></div><div id="tree-content" class="tree" role="tree" aria-label="规则树">'+renderTree(draft.rules)+'</div><div class="hint-row">同树节点共享一份草稿；跨根切换时处理未保存修改。</div></aside>';
+  const content=page==='rules'?'<div class="workspace '+(!previewOpen?'preview-collapsed':'')+'">'+treePanel+ruleEditor()+previewHTML()+'</div>':page==='objects'?objectPage():page==='actions'?catalogPage():tourPage();
+  document.getElementById('app').innerHTML='<div class="app"><nav class="nav"><div class="brand">NewP<small>AUTHORIZATION LAB</small></div>'+[['rules','◇　规则授权'],['objects','▦　对象授权'],['actions','≡　动作目录'],['tour','▷　裁决场景']].map(([id,label])=>button(label,call('nav',id),page===id?'active':'')).join('')+'<div class="bottom">交互原型 · 非生产<br>示例数据，刷新即重置<br><a href="https://github.com/yangfengfan2011/NewP/issues/227" target="_blank" rel="noopener" style="color:#bfd4f8">查看当前规格 ↗</a></div></nav><main class="main"><header class="top flex between"><div><div class="flex"><h1>'+titles[page][0]+'</h1>'+tag('交互原型','blue')+'</div><p class="subtitle">'+titles[page][1]+'</p></div><div class="flex wrap">'+previewButton+button('重置示例','resetAll()')+'</div></header><div class="intro"><strong>本原型验证：</strong>根规则树草稿与保存、类型化条件、主体授权和动作状态是否易于理解。仅使用内存示例，不连接后端或写入真实配置。</div>'+content+'<div id="last-change" class="footer-note">最近操作：'+E(lastChange)+' · '+(dirty?'当前根规则树有未保存修改。':'示例仅保留在本次页面会话。')+'</div>'+ruleSaveBar()+'</main></div>';
+  if(modal)renderModal();if(guard)renderGuard();
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(guard)resolveGuard('cancel');else if(modal)closeModal();}});
+window.addEventListener('beforeunload',e=>{if(dirty||modal?.dirty){e.preventDefault();e.returnValue='';}});
+
+const tours={
+tree:{name:'父子与分支',intro:'看“不选”的子分支是否会把父级拒绝重新带回来。',steps:[
+ ['载入父子场景','父拒绝编辑，本人负责的子规则同意，另一子规则不选。预期：编辑同意。',()=>{saved=seed();saved.objectGrants={};}],
+ ['让另一子分支明确拒绝','两个子分支都命中，一同意一拒绝。预期：编辑拒绝。',()=>{saved.rules[0].children[1].grants[0].actions.edit='deny';}],
+ ['停用拒绝的子分支','保留配置但退出裁决。预期：编辑重新同意。',()=>{saved.rules[0].children[1].enabled=false;}],
+ ['停用整个父规则','子规则也不参与。当前对象没有其他编辑限制，预期：默认允许。',()=>{saved.rules[0].enabled=false;}]
+ ]},
+priority:{name:'主体优先级',intro:'“所有用户拒绝，部门 A 同意”不靠主体类型特判，使用显式优先级。',steps:[
+ ['载入主体场景','所有用户优先级 0 拒绝读取，销售部优先级 10 同意。预期：张三读取同意。',()=>{saved=seed();saved.rules=[{id:'p1',name:'主体优先级示例',enabled:true,condition:group([{id:uid('c'),kind:'all',model:''}]),children:[],grants:[grant('everyone','',0,{read:'deny'}),grant('org','sales',10,{read:'allow'})]}];saved.objectGrants={};}],
+ ['把部门优先级改成 0','最高优先级相同，同意与拒绝冲突。预期：读取拒绝，编辑也受读取限制。',()=>{saved.rules[0].grants[1].priority=0;}],
+ ['让高优先级主体不选','部门优先级 10，但读取不选。仍采用公共拒绝。',()=>{saved.rules[0].grants[1].priority=10;saved.rules[0].grants[1].actions.read='none';}],
+ ['恢复部门同意，并包含下级','模拟销售一组的王敏；部门包含下级后命中。预期：读取同意。',()=>{saved.rules[0].grants[1].actions.read='allow';saved.rules[0].grants[1].descendants=true;userId='u3';}]
+ ]},
+object:{name:'对象覆盖规则',intro:'同一个动作，对象的明确授权优先；撤销对象设置后重新使用规则。',steps:[
+ ['载入规则拒绝','该订单编辑被规则拒绝，读取默认允许。',()=>{saved=seed();saved.rules[0].children=[];saved.objectGrants={};}],
+ ['显式添加对象同意','为订单 001 给张三配置编辑同意。预期：对象授权覆盖规则拒绝。',()=>{saved.objectGrants[objects[0].id]=[grant('user','u1',10,{edit:'allow'})];}],
+ ['改为对象拒绝','预期：编辑拒绝。对象授权两种明确意见都具有优先性。',()=>{saved.objectGrants[objects[0].id][0].actions.edit='deny';}],
+ ['撤销对象授权项','预期：重新沿用规则拒绝，不自动补授其他动作。',()=>{delete saved.objectGrants[objects[0].id];}]
+ ]},
+read:{name:'读取的特殊性',intro:'未提供读取条件与条件执行失败不同；允许编辑也不能补授读取。',steps:[
+ ['载入可选读取条件','仅业务条件“流程中”，未提供读取部分，配置读取拒绝。预期：规则不参与读取，默认允许。',()=>{saved=seed();saved.rules=[{id:'b1',name:'流程业务条件',enabled:true,condition:group([{id:uid('c'),kind:'business',business:'workflow',read:false}]),grants:[grant('everyone','',0,{read:'deny',edit:'deny'})],children:[]}];saved.objectGrants={};objectId=objects[3].id;}],
+ ['使用提供读取能力的条件','换为已登记的“流程中（含读取）”条件，合同正在流程中。预期：读取拒绝，编辑/删除/授权均不能执行。',()=>{saved.rules[0].condition.children[0].business='workflow-readable';}],
+ ['只给对象编辑同意','预期：编辑自身同意，但最终仍因读取被拒绝而不可编辑。',()=>{saved.objectGrants[objects[3].id]=[grant('user','u1',10,{edit:'allow'})];}],
+ ['再明确给予对象读取同意','预期：读取与编辑允许；对象授权覆盖读取规则。',()=>{saved.objectGrants[objects[3].id][0].actions.read='allow';}],
+ ['模拟条件执行失败','预期：报告异常，不把故障当作没有配置。',()=>{saved.rules[0].condition.children[0].business='error';saved.objectGrants={};}]
+ ]}
+};
+
+tours.actions={name:'动作开关与豁免',intro:'动作自身与读取依赖独立组合；以下开关仅模拟目录生效后的状态。',steps:[
+  ['载入读取和编辑拒绝','两个动作均启用且明确拒绝，预期均不可执行。',()=>{saved=seed();saved.rules=[{id:'switch-root',name:'动作开关示例',enabled:true,condition:group([{id:uid('c'),kind:'all',model:''}]),grants:[grant('everyone','',0,{read:'deny',edit:'deny'})],children:[]}];saved.objectGrants={};}],
+  ['仅停用编辑判定','编辑自身不再判定，但读取仍拒绝，因此仍不能编辑。',()=>{saved.actions.find(a=>a.id==='edit').enabled=false;}],
+  ['停用读取判定','读取不再限制；编辑自身也已停用，预期两者均允许。',()=>{saved.actions.find(a=>a.id==='read').enabled=false;}],
+  ['重新启用编辑','保留的编辑拒绝重新参与，读取仍不限制，编辑再次拒绝。',()=>{saved.actions.find(a=>a.id==='edit').enabled=true;}],
+  ['切换为 LocalAdmin','LocalAdmin 跳过数据范围层。功能资格和业务约束仍须满足。',()=>{userId='admin';}]
+]};
+function chooseTour(id){tourId=id;tourStep=-1;render();}
+function runStep(index){
+  leaveRuleDraft(()=>{
+    userId='u1';objectId=objects[0].id;
+    for(let i=0;i<=index;i++)tours[tourId].steps[i][2]();
+    draft=clone(saved);selected=draft.rules[0]?.id||'';dirty=false;dirtyRootId=null;pendingRootDeletion=null;
+    validationErrors=[];tourStep=index;lastChange='场景操作：'+tours[tourId].steps[index][0];render();
+  });
+}
+
+function tourPage(){
+ const t=tours[tourId];
+ return '<div class="object-layout"><div><div class="tour-tabs">'+Object.entries(tours).map(([id,t])=>button(t.name,"chooseTour('"+id+"')",tourId===id?'active':'')).join('')+'</div><div class="panel panel-body" style="margin-bottom:14px"><h2>'+t.name+'</h2><p class="subtitle">'+t.intro+'</p><p class="note">每个步骤都是实际状态变更。切换场景后点击第一步会载入独立示例；可随时去规则页面自由修改。</p></div><div class="tour-steps">'+t.steps.map((s,i)=>'<div class="tour-step '+(i<=tourStep?'done':'')+'"><span class="number">'+(i+1)+'</span><div class="grow"><h3>'+s[0]+'</h3><p>'+s[1]+'</p></div>'+button(i===tourStep?'已执行 · 再运行':'执行这一步','runStep('+i+')',i===tourStep?'':'primary')+'</div>').join('')+'</div><div class="panel" style="margin-top:18px"><div class="panel-head"><h3>当前示例配置</h3></div><div class="panel-body raw-state">'+stateHTML(saved.rules)+'</div></div></div>'+previewHTML(true)+'</div>';
+}
+
+render();
+</script>
+</body>
+</html>

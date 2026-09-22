@@ -2,11 +2,14 @@ using Microsoft.Playwright;
 
 namespace ICP.Platform.Acceptance;
 
+internal sealed record DataScopeDepartmentSelection(string SearchText, string DisplayName);
+
 /// <summary>规则管理的真实操作路径；过滤和权限数值由低层 API 测试证明。</summary>
 internal sealed class DataScopeRulesPageDriver(IPage page)
 {
     /// <summary>在同一根中选择真实角色主体、显式优先级与当前账号条件，等待服务端保存和页面恢复。</summary>
-    internal async Task CreatePersonRuleAsync(string name, string roleName)
+    internal async Task CreatePersonRuleAsync(string name, string roleName,
+        DataScopeDepartmentSelection? department = null, Func<Task>? captureDepartmentCandidates = null)
     {
         await page.Locator(".np-sidebar-menu").GetByRole(AriaRole.Link, new() { Name = "数据范围规则", Exact = true }).ClickAsync();
         await page.GetByRole(AriaRole.Button, new() { Name = "新增规则", Exact = true }).ClickAsync();
@@ -25,6 +28,15 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
         await priority.FillAsync("10");
         await priority.PressAsync("Tab");
         await SelectAsync("读取意见", "同意", role);
+        if (department is not null)
+        {
+            await page.GetByRole(AriaRole.Button, new() { Name = "添加主体项", Exact = true }).ClickAsync();
+            var organization = page.GetByRole(AriaRole.Group, new() { Name = "主体授权项 3", Exact = true });
+            await SelectAsync("主体类型", "部门", organization);
+            await SelectAsync("主体选择", department.DisplayName, organization, search: true,
+                searchText: department.SearchText, candidatesReady: captureDepartmentCandidates);
+            await SelectAsync("读取意见", "同意", organization);
+        }
         var response = await page.RunAndWaitForResponseAsync(
             () => page.GetByRole(AriaRole.Button, new() { Name = "保存根规则", Exact = true }).ClickAsync(),
             response => response.Request.Method == "PUT" && response.Url.Contains("/api/authorization/data-scope/rules/", StringComparison.Ordinal));
@@ -33,8 +45,19 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
         await Assertions.Expect(page.GetByLabel("规则名称", new() { Exact = true })).ToBeEnabledAsync();
     }
 
+    /// <summary>重新装载已保存根并等待最小目录解析完成；只确认用户可识别并继续编辑已有主体。</summary>
+    internal async Task ReloadRuleAsync(string name, string roleName, DataScopeDepartmentSelection department)
+    {
+        await page.ReloadAsync();
+        await page.Locator(".ant-tree-title").Filter(new() { HasText = name }).ClickAsync();
+        await page.GetByTitle(roleName, new() { Exact = true }).WaitForAsync();
+        await page.GetByTitle(department.DisplayName, new() { Exact = true }).WaitForAsync();
+        await Assertions.Expect(page.GetByLabel("规则名称", new() { Exact = true })).ToBeEnabledAsync();
+    }
+
     // 使用可访问名称操作 Ant Design 选项，不依赖模拟 DOM 或内存保存。
-    private async Task SelectAsync(string label, string option, ILocator? group = null, bool search = false)
+    private async Task SelectAsync(string label, string option, ILocator? group = null, bool search = false,
+        string? searchText = null, Func<Task>? candidatesReady = null)
     {
         var scope = group ?? page.Locator("body");
         var input = scope.GetByRole(AriaRole.Combobox, new() { Name = label, Exact = true });
@@ -46,7 +69,7 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
         var target = page.Locator(".ant-select-dropdown:visible .ant-select-item-option").Filter(new() { HasText = option });
         if (search)
         {
-            await input.FillAsync(option);
+            await input.FillAsync(searchText ?? option);
             await target.WaitForAsync(new() { State = WaitForSelectorState.Visible });
         }
         var navigation = System.Diagnostics.Stopwatch.StartNew();
@@ -56,6 +79,7 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
                 throw new InvalidOperationException($"Select '{label}' has no reachable option '{option}'.");
             await input.PressAsync("ArrowDown");
         }
+        if (candidatesReady is not null) await candidatesReady();
         await target.ClickAsync();
     }
 }

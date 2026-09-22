@@ -80,13 +80,14 @@ internal sealed class AuthorizationAcceptanceRunner(string repositoryRoot, strin
             request => request.Headers.Add("X-NewP-Feature", roleCreate.Position));
         var roleId = role.RootElement.GetProperty("id").GetString()
             ?? throw new InvalidOperationException("Role creation omitted id.");
+        var department = await PrepareDepartmentSubjectsAsync(client, features, token);
         var shellPort = state.RootElement.GetProperty("ports").GetProperty("shell").GetInt32();
-        await RunScenarioAsync("authorization.browser", _ => RunBrowserAsync(shellPort, password, roleId, roleName), token);
+        await RunScenarioAsync("authorization.browser", _ => RunBrowserAsync(shellPort, password, roleId, roleName, department), token);
         await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "startup-read.json"), new { catalog = _catalog, devRun = _devRun, formalMigration = true, workbenchRead = true }, token);
     }
 
     // 唯一浏览器旅程只观察进入、读取、提交和用户可见结果；授权值和错误边界在 API 层验证。
-    private async Task RunBrowserAsync(int port, string password, string roleId, string roleName)
+    private async Task RunBrowserAsync(int port, string password, string roleId, string roleName, DataScopeDepartmentSelection department)
     {
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync(new()
@@ -121,7 +122,10 @@ internal sealed class AuthorizationAcceptanceRunner(string repositoryRoot, strin
             await page.SetViewportSizeAsync(900, 1000);
             await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "workbench-narrow.png"), FullPage = true });
             await page.SetViewportSizeAsync(1440, 1000);
-            await new DataScopeRulesPageDriver(page).CreatePersonRuleAsync("人员读取规则", roleName);
+            var rules = new DataScopeRulesPageDriver(page);
+            await rules.CreatePersonRuleAsync("人员读取规则", roleName, department,
+                () => page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "department-subject-candidates.png"), FullPage = true }));
+            await rules.ReloadRuleAsync("人员读取规则", roleName, department);
             await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "data-scope-rules.png"), FullPage = true });
             await page.SetViewportSizeAsync(900, 1000);
             await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "data-scope-rules-narrow.png"), FullPage = true });
@@ -142,6 +146,30 @@ internal sealed class AuthorizationAcceptanceRunner(string repositoryRoot, strin
             catch (Exception) { /* 诊断采集不得覆盖原始浏览器失败。 */ }
             throw;
         }
+    }
+
+    // 用正式 API 创建同名组织主体，目录展示只使用其最小路径；不直接写库或新建语义旅程。
+    private async Task<DataScopeDepartmentSelection> PrepareDepartmentSubjectsAsync(HttpClient client,
+        AcceptanceFeatureCatalog features, CancellationToken token)
+    {
+        var createCompany = features.Action(features.OrganizationTab("companies"), "create", "list.pageActions");
+        var createDepartment = features.Action(features.OrganizationTab("departments"), "create", "list.pageActions");
+        var firstCompanyName = $"甲公司{_runId[..6]}";
+        foreach (var (key, name) in new[] { ("A", firstCompanyName), ("B", $"乙公司{_runId[..6]}") })
+        {
+            using var company = await PostAsync(client, "/api/organization/companies",
+                new { ECODE = $"AUTH-{key}-{_runId[..8]}", ENAME = name, SortOrder = "0100", IsEnabled = true }, token,
+                request => request.Headers.Add("X-NewP-Feature", createCompany.Position));
+            var companyId = company.RootElement.GetProperty("fields").GetProperty("EID").GetString();
+            using var root = await PostAsync(client, "/api/organization/departments",
+                new { ECODE = "ROOT", ENAME = "总部", CompanyId = companyId, SortOrder = "0100", IsEnabled = true }, token,
+                request => request.Headers.Add("X-NewP-Feature", createDepartment.Position));
+            var rootId = root.RootElement.GetProperty("fields").GetProperty("EID").GetString();
+            using var leaf = await PostAsync(client, "/api/organization/departments",
+                new { ECODE = "TEAM", ENAME = "研发部", CompanyId = companyId, ParentDepartmentId = rootId, SortOrder = "0100", IsEnabled = true }, token,
+                request => request.Headers.Add("X-NewP-Feature", createDepartment.Position));
+        }
+        return new("研发部", $"{firstCompanyName} / 总部 / 研发部");
     }
 
     // 同一会话获取防伪令牌；secure loopback cookie 仅由验收客户端显式回放。

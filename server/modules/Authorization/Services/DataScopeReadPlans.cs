@@ -6,9 +6,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Modules.Authorization.Services;
 
-/// <summary>首片裁决所有用户的读取意见，并把最终拒绝范围变为数据库谓词。</summary>
+/// <summary>按可信当前主体合并明确优先级意见，再把拒绝范围编译为数据库谓词。</summary>
 public sealed class DataScopeReadPlans(DataScopeRules rules, DataScopeCatalog catalog,
-    IHttpContextAccessor context, ILocalAdministratorRoleAssignment administrators) : IDataScopeReadPlanProvider
+    IHttpContextAccessor context, ILocalAdministratorRoleAssignment administrators, DataScopeIdentities identities) : IDataScopeReadPlanProvider
 {
     /// <inheritdoc/>
     public async Task<DataScopeReadPlan> GetReadPlanAsync(string resourceKey, CancellationToken cancellationToken = default)
@@ -20,16 +20,26 @@ public sealed class DataScopeReadPlans(DataScopeRules rules, DataScopeCatalog ca
             ?? throw new InvalidOperationException("DATA_SCOPE_TRUSTED_SUBJECT_REQUIRED");
         if (await administrators.InspectAsync(id, cancellationToken) == LocalAdministratorAssignmentState.Assigned) return new(null);
         var applicable = await rules.ForResourceAsync(resourceKey, cancellationToken);
+        var enabled = applicable.Where(rule => rule.Enabled).ToArray();
+        foreach (var rule in enabled) catalog.Validate(rule);
+        var facts = await identities.ResolveAsync(id, enabled.SelectMany(rule => rule.Subjects).Select(subject => subject.Type),
+            enabled.Where(rule => rule.Condition.ContextKey is not null).Select(rule => rule.Condition.ContextKey!), cancellationToken);
         var row = Expression.Parameter(typeof(Dictionary<string, object?>), "row");
         Expression? permitted = null;
-        foreach (var rule in applicable.Where(rule => rule.Enabled))
+        foreach (var rule in enabled)
         {
-            catalog.Validate(rule);
-            var opinions = rule.Subjects.Where(subject => subject.Actions.TryGetValue("read", out var opinion) && opinion != "unset").ToArray();
+            var opinions = rule.Subjects.Where(subject => subject.Actions.TryGetValue("read", out var opinion) && opinion != "unset"
+                && facts.Matches(subject.Type, subject.SubjectId, subject.MatchOptions)).ToArray();
             if (opinions.Length == 0) continue;
             var priority = opinions.Max(subject => subject.Priority);
             if (!opinions.Any(subject => subject.Priority == priority && subject.Actions["read"] == "deny")) continue;
             var (property, value) = catalog.ParseValue(resourceKey, rule.Condition);
+            if (rule.Condition.ContextKey is not null)
+            {
+                var current = facts.ContextValue(rule.Condition.ContextKey);
+                if (current is null) continue;
+                value = current;
+            }
             var access = Expression.Call(typeof(EF), nameof(EF.Property), [property.ClrType], row, Expression.Constant(property.Name));
             var constant = Expression.Convert(Expression.Constant(value), property.ClrType);
             var match = Expression.Equal(access, constant);

@@ -25,7 +25,7 @@ public sealed class DataScopeResourceIdentityTests
             [.. models, person with { OwnerModuleId = "Other", TableName = "OtherPerson", ForeignKeys = [] }]);
         Assert.Throws<InvalidOperationException>(() => db.ResolveModelKey("Person"));
         var resources = new StandardCrudResourceRegistry([PersonCrudDescriptorFactory.Create() with { ModelName = modelName }]);
-        var catalog = new DataScopeCatalog(resources, new CanonicalModulePlan("test", "1.0", "", "", [], []), db);
+        var catalog = new DataScopeCatalog(resources, new CanonicalModulePlan("test", "1.0", "", "", [], []), db, new DataScopeIdentities([]));
         Assert.Contains(catalog.Fields("organization.person"), field => field.Name == "ENAME");
         Assert.Equal("Organization/Person", catalog.Resolve("organization.person").ModelKey);
     }

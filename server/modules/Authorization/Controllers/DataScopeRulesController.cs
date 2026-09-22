@@ -7,7 +7,7 @@ namespace ICP.Platform.Modules.Authorization.Controllers;
 
 /// <summary>独立规则管理资格由正式功能流水线验证，Controller 不拥有规则语义。</summary>
 [ApiController, Route("api/authorization/data-scope"), EndpointModule("Authorization")]
-public sealed class DataScopeRulesController(DataScopeCatalog catalog, DataScopeRules rules,
+public sealed class DataScopeRulesController(DataScopeCatalog catalog, DataScopeRules rules, DataScopeIdentities identities,
     ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan plan) : ControllerBase
 {
     /// <summary>管理目录包含显式资源身份和动作开关；停用动作仍可配置。</summary>
@@ -15,10 +15,23 @@ public sealed class DataScopeRulesController(DataScopeCatalog catalog, DataScope
     public IActionResult Catalog() => Ok(new
     {
         actions = catalog.Actions,
+        subjectTypes = identities.SubjectTypes,
+        contextValues = identities.ContextValues,
+        contextBindings = identities.ContextBindings,
         features = plan.FeatureCatalog.Where(point => point.BehaviorKey is "authorization.dataScope.read" or "authorization.dataScope.save"),
         resources = catalog.Resources.Select(resource => new { resource, fields = catalog.Fields(resource.ResourceKey).Select(field =>
             new { name = field.Name, type = (Nullable.GetUnderlyingType(field.ClrType) ?? field.ClrType).Name }) })
     });
+
+    /// <summary>独立管理资格下读取最小主体目录，已有名称与候选使用同一个 owner。</summary>
+    [HttpGet("subjects/{type}"), RequireFeature("authorization.dataScope.read")]
+    public async Task<IActionResult> Subjects(string type, [FromQuery] string? query, [FromQuery] int page = 1,
+        [FromQuery] string[]? currentIds = null, CancellationToken cancellationToken = default)
+    {
+        try { return Ok(await identities.SearchAsync(type, query, page, currentIds ?? [], cancellationToken)); }
+        catch (RolePermissionValidationException exception)
+        { return BadRequest(new ProblemDetails { Status = 400, Title = exception.Message, Extensions = { ["code"] = "DataScope.InvalidConfiguration" } }); }
+    }
 
     /// <summary>规则根列表使用管理分页。</summary>
     [HttpGet("rules"), RequireFeature("authorization.dataScope.read")]

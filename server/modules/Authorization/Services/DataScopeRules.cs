@@ -9,7 +9,7 @@ namespace ICP.Platform.Modules.Authorization.Services;
 
 /// <summary>规则根拥有完整配置的保存和实际差异审计；读取不跨请求缓存。</summary>
 public sealed class DataScopeRules(EfPlatformDbContext db, IPlatformTransactionExecutor transactions,
-    DataScopeCatalog catalog, IBusinessAuditRecorder audit)
+    DataScopeCatalog catalog, IBusinessAuditRecorder audit, DataScopeIdentities identities)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private DbSet<Dictionary<string, object?>> Nodes => db.Set<Dictionary<string, object?>>(db.ResolveModelKey("DataScopeRuleNode"));
@@ -33,6 +33,15 @@ public sealed class DataScopeRules(EfPlatformDbContext db, IPlatformTransactionE
     {
         catalog.Validate(rule);
         rule = catalog.NormalizeForSave(rule);
+        foreach (var group in rule.Subjects.Where(subject => subject.SubjectId is not null).GroupBy(subject => subject.Type))
+        {
+            foreach (var ids in group.Select(subject => subject.SubjectId!).Distinct(StringComparer.Ordinal).Chunk(100))
+            {
+                var names = await identities.SearchAsync(group.Key, null, 1, ids, cancellationToken);
+                if (ids.Except(names.CurrentValues.Select(item => item.Id), StringComparer.Ordinal).Any())
+                    throw new RolePermissionValidationException("所选授权主体不存在。");
+            }
+        }
         await transactions.ExecuteAsync(async token =>
         {
             var target = "Authorization.DataScopeRule:" + rule.Id;
@@ -57,6 +66,7 @@ public sealed class DataScopeRules(EfPlatformDbContext db, IPlatformTransactionE
             {
                 var row = rows.SingleOrDefault(row => (string)row["EID"]! == subject.Id);
                 if (row is null) { row = new() { ["EID"] = subject.Id, ["NodeId"] = rule.Id }; Subjects.Add(row); }
+                row["MatchOptionsJson"] = subject.MatchOptions is null ? null : JsonSerializer.Serialize(subject.MatchOptions, Json);
                 row["SubjectType"] = subject.Type; row["SubjectId"] = subject.SubjectId; row["Priority"] = subject.Priority;
                 row["ActionsJson"] = JsonSerializer.Serialize(subject.Actions.OrderBy(action => action.Key).ToDictionary(), Json);
             }
@@ -85,6 +95,7 @@ public sealed class DataScopeRules(EfPlatformDbContext db, IPlatformTransactionE
             JsonSerializer.Deserialize<DataScopeConditionDto>((string)row["ConditionJson"]!, Json) ?? throw new InvalidOperationException("DATA_SCOPE_CONDITION_INVALID"),
             grouped[(string)row["EID"]!].Select(subject => new DataScopeSubjectDto((string)subject["EID"]!, (string)subject["SubjectType"]!,
                 (string?)subject["SubjectId"], (long)subject["Priority"]!,
-                JsonSerializer.Deserialize<Dictionary<string, string>>((string)subject["ActionsJson"]!, Json) ?? throw new InvalidOperationException("DATA_SCOPE_SUBJECT_INVALID"))).ToArray(), [])).ToArray();
+                JsonSerializer.Deserialize<Dictionary<string, string>>((string)subject["ActionsJson"]!, Json) ?? throw new InvalidOperationException("DATA_SCOPE_SUBJECT_INVALID"),
+                subject["MatchOptionsJson"] is string options ? JsonSerializer.Deserialize<ICP.Platform.Authorization.Contracts.DataScopeMatchOptions>(options, Json) : null)).ToArray(), [])).ToArray();
     }
 }

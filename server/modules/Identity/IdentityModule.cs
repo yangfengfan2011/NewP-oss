@@ -31,6 +31,7 @@ public sealed class IdentityModule : ModuleCapsuleBindingBase
     public override void ConfigureServices(IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
+        services.AddScoped<IDataScopeIdentityProvider, IdentityDataScopeIdentities>();
         services.AddPlatformObjectIdGeneration();
         services.AddPlatformQueryKernel();
         services.AddStandardCrudKernel();

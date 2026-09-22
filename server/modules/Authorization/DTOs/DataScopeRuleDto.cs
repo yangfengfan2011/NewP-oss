@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ICP.Platform.Authorization.Contracts;
 using System.Text.Json.Serialization;
 
 namespace ICP.Platform.Modules.Authorization.DTOs;
@@ -9,11 +10,11 @@ public sealed record DataScopeRuleDto(string Id, string RootId, string? ParentId
     bool Enabled, string ResourceKey, DataScopeConditionDto Condition,
     IReadOnlyList<DataScopeSubjectDto> Subjects, IReadOnlyList<DataScopeRuleDto> Children);
 
-/// <summary>属性条件只指向原始直接属性；本切片只接受 equal 和固定非空值。</summary>
+/// <summary>直接属性等值使用非空固定值或已登记且身份域相容的当前值。</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record DataScopeConditionDto(string Type, string Field, string Operator, JsonElement Value);
+public sealed record DataScopeConditionDto(string Type, string Field, string Operator, JsonElement Value, string? ContextKey = null);
 
 /// <summary>动作意见使用 allow、deny、unset；目录停用不是第四态。</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record DataScopeSubjectDto(string Id, string Type, string? SubjectId, long Priority,
-    IReadOnlyDictionary<string, string> Actions);
+    IReadOnlyDictionary<string, string> Actions, DataScopeMatchOptions? MatchOptions = null);

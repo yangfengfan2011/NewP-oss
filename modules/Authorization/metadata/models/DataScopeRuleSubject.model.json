@@ -4,6 +4,7 @@
   "DataScopeRuleSubject": {
     "kind": "Entity",
     "fields": [
+      { "name": "MatchOptionsJson", "storage": { "type": "text", "nullable": true } },
       {
         "name": "NodeId",
         "storage": {

@@ -205,6 +205,10 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("CreatedBy");
 
+                    b.Property<string>("MatchOptionsJson")
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("MatchOptionsJson");
+
                     b.Property<string>("NodeId")
                         .IsRequired()
                         .HasMaxLength(256)

@@ -156,11 +156,15 @@ _Avoid_: 部门资源的数据条件、公司全体人员、组织准入
 回退须同步恢复目录、前后端授权消费和模块接入。代码回退不能恢复已清空的旧授权，恢复旧机制后仍须重新配置；不改写业务数据、审计或迁移历史。
 
 
-## 数据范围读取首片（#228）
+## 数据范围读取与主体（#228、#229）
 
 - 独立 `dataActions` 由 Capsule 声明并经正式候选编译，开关属于动作目录；默认启用、停用保留配置，启动装配后生效。规则保存后的下一次请求直接读取已提交配置，不建立权限版本或跨请求缓存。
 - `DataScopeResource` 从全部显式 Standard CRUD 描述符取得资源键、模块、模型和 ID 字段，包含 Identity 账号资源，不从页面或裸模型名猜测身份。Authorization.Contracts 暴露可组合读取计划；公共查询在 Count、排序、分页前应用谓词，详情在同一数据库比较规则下核对可读性，拒绝返回 404。LocalAdmin 跳过该层配置和条件执行；认证与功能资格保持原流水线。
-- 固定 Instant 条件在保存时按既有可信时区规范为 UTC，读取只解释已存规范值；CalendarDate 不作时区转换。当前管理入口 `/authorization/data-scope` 支持单根、单个原始属性固定值等值、所有已认证用户与读取三态；未开放子树、条件类型、操作符或主体类型明确拒绝保存。节点和主体项身份稳定。整根保存复用平台事务及事务级目标锁，实际旧配置与 `dataScope.rule.changed` 审计共同提交，无变化不登记。
+- 固定 Instant 条件在保存时按既有可信时区规范为 UTC，读取只解释已存规范值；CalendarDate 不作时区转换。当前管理入口 `/authorization/data-scope` 支持单根、单个原始属性等值、固定值或有类型当前身份值、多主体显式优先级与读取三态；未开放子树、组合条件和其他操作符明确拒绝保存。节点和主体项身份稳定。整根保存复用平台事务及事务级目标锁，实际旧配置与 `dataScope.rule.changed` 审计共同提交，无变化不登记。
 - `DataScopeRuleNode`、`DataScopeRuleSubject` 的模型 owner 是 Authorization；物理迁移沿现有 `platform.foundation` 载体追加 `20260922094146_AddDataScopeRules`，不改写旧 migration、业务数据或历史。将来独立 bundle 的迁移不属于本片。
+- `IDataScopeIdentityProvider` 是主体、最小管理目录与当前身份值的稳定扩展契约；Identity 注册用户/当前账号，Authorization 注册所有已认证用户与当前有效角色，Organization 注册公司、部门及当前人员/公司/部门。模块通过既有 `ConfigureServices` 接入，核心不识别模块业务字段。资源 owner 用 `DataScopeContextBinding` 显式绑定直接字段的规范身份域；CLR 类型相同不能使账号、公司、部门身份混用。
+- 可信账号来自服务端认证主体；每次读取计划为实际引用的 provider 解析一次事实，各规则及 SQL 业务行复用结果。Organization 读取 `IOrganizationQuery` 已发布当前关系，角色读取当前启用角色和用户角色关系，不写入登录快照。合法缺失不命中/不贡献当前值条件，事实源故障继续传播，不能伪装为正常拒绝。
+- 同节点只比较命中且明确表态的主体项，最高显式优先级生效，同级拒绝优先；不为主体类型排序，也不按操作者自身权限限制优先级。公司覆盖公司全部人员，部门默认本级，`MatchOptions.IncludeDescendants` 显式包含祖先匹配。可空 `MatchOptionsJson` 沿 foundation 追加 `20260922105706_AddDataScopeSubjectOptions`，旧项缺失选项等价于本级，不改旧迁移。
+- `/subjects/{type}` 使用独立规则读取管理功能，按搜索/页码返回最多20个候选、是否有下一页及请求身份的当前值；当前值SQL和整根主体校验均按100串行分批，不给请求当前值或授权项总数增加容量限制。provider 在数据库搜索分页并窄投影身份、名称和必要父级，已有名称沿同一目录回显。业务功能缺失或数据范围拒绝不裁掉该管理目录，也不授予业务读取或 LocalAdmin 豁免；对象管理入口的资格接入仍归后续 child。
 - 本片只完成通用列表/计数/分页和详情的读取接入，真实 Person 已验证。规则树、对象授权、其他动作、Lookup、组织树、Display 与导出完整行为仍按父 #227 后续 child 交付，不能据此宣称所有自定义出口受控。
 - 回退需同时撤销管理绑定和通用读取接入，保留配置表、审计与 migration 历史；撤销读取接入会扩大到原有仅功能授权的范围，不是权限等价回退。

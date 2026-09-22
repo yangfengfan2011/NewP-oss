@@ -13,6 +13,7 @@ public sealed class DataScopeRuleSubjectDto
     public string? UpdatedBy_DisplayValue { get; init; }
     public DateTime UpdatedAt { get; init; }
     public string? UpdatedAt_DisplayValue { get; init; }
+    public string? MatchOptionsJson { get; init; }
     public string NodeId { get; init; }
     public string SubjectType { get; init; }
     public string? SubjectId { get; init; }

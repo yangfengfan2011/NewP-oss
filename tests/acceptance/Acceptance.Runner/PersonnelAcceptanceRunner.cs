@@ -440,8 +440,6 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         try
         {
             await new ShellPageDriver(page, $"http://127.0.0.1:{_shellPort}").LoginAsync("admin", adminPassword);
-            if (phase == "initial")
-                await new DataScopeRulesPageDriver(page).CreatePersonRuleAsync("人员旅程读取规则");
 
             var browserAssertions = new List<string>();
 
@@ -453,6 +451,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 _readerRoleId = await CreateRoleFromBrowserAndConfigureUsingApiAsync(driver, "R", false, cancellationToken);
                 await AssignAccountRoleFromBrowserAsync(driver, _roleId, "M", maintainer);
                 await AssignAccountRoleFromBrowserAsync(driver, _readerRoleId, "R", reader);
+                await new DataScopeRulesPageDriver(page).CreatePersonRuleAsync(
+                    "人员旅程读取规则", $"Personnel Gate Role M {_runId[..8]}");
             }
             await OpenAuditDetailFromBrowserAsync(driver, maintainer.Id, "user.roles.changed", $"maintainer-{phase}");
             await OpenAuditDetailFromBrowserAsync(driver, reader.Id, "user.roles.changed", $"reader-{phase}");

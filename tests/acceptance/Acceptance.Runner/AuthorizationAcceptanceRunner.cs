@@ -121,7 +121,7 @@ internal sealed class AuthorizationAcceptanceRunner(string repositoryRoot, strin
             await page.SetViewportSizeAsync(900, 1000);
             await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "workbench-narrow.png"), FullPage = true });
             await page.SetViewportSizeAsync(1440, 1000);
-            await new DataScopeRulesPageDriver(page).CreatePersonRuleAsync("人员读取规则");
+            await new DataScopeRulesPageDriver(page).CreatePersonRuleAsync("人员读取规则", roleName);
             await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "data-scope-rules.png"), FullPage = true });
             await page.SetViewportSizeAsync(900, 1000);
             await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "data-scope-rules-narrow.png"), FullPage = true });

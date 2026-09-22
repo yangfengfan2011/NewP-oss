@@ -27,6 +27,15 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
     {
         var input = page.GetByRole(AriaRole.Combobox, new() { Name = label, Exact = true });
         await page.Locator(".ant-select").Filter(new() { Has = input }).Locator(".ant-select-selector").ClickAsync();
-        await page.Locator(".ant-select-item-option").Filter(new() { HasText = option }).ClickAsync();
+        // rc-select 的虚拟项只有进入窗口才挂载；用真实键盘导航触发其 scrollIntoView。
+        var target = page.Locator(".ant-select-dropdown:visible .ant-select-item-option").Filter(new() { HasText = option });
+        var navigation = System.Diagnostics.Stopwatch.StartNew();
+        while (!await target.IsVisibleAsync())
+        {
+            if (navigation.Elapsed > TimeSpan.FromSeconds(10))
+                throw new InvalidOperationException($"Select '{label}' has no reachable option '{option}'.");
+            await input.PressAsync("ArrowDown");
+        }
+        await target.ClickAsync();
     }
 }

@@ -32,11 +32,14 @@ public sealed class DataScopeRules(EfPlatformDbContext db, IPlatformTransactionE
     public async Task SaveAsync(DataScopeRuleDto rule, CancellationToken cancellationToken)
     {
         catalog.Validate(rule);
+        rule = catalog.NormalizeForSave(rule);
         await transactions.ExecuteAsync(async token =>
         {
             var target = "Authorization.DataScopeRule:" + rule.Id;
             await db.Database.ExecuteSqlInterpolatedAsync($"DECLARE @result int; EXEC @result = sys.sp_getapplock @Resource={target}, @LockMode='Exclusive', @LockOwner='Transaction'; IF @result < 0 THROW 51000, 'Data scope rule lock failed.', 1;", token);
             var node = await Nodes.SingleOrDefaultAsync(row => EF.Property<string>(row, "EID") == rule.Id, token);
+            if (node is not null && !string.Equals((string)node["EID"]!, rule.Id, StringComparison.Ordinal))
+                throw new RolePermissionValidationException("规则身份必须与已保存的规范身份一致。");
             var old = node is null ? null : (await MaterializeAsync([node], token)).Single();
             var canonical = Canonical(rule);
             var previous = old is null ? null : Canonical(old);

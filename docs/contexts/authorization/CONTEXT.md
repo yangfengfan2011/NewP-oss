@@ -160,7 +160,7 @@ _Avoid_: 部门资源的数据条件、公司全体人员、组织准入
 
 - 独立 `dataActions` 由 Capsule 声明并经正式候选编译，开关属于动作目录；默认启用、停用保留配置，启动装配后生效。规则保存后的下一次请求直接读取已提交配置，不建立权限版本或跨请求缓存。
 - `DataScopeResource` 从全部显式 Standard CRUD 描述符取得资源键、模块、模型和 ID 字段，包含 Identity 账号资源，不从页面或裸模型名猜测身份。Authorization.Contracts 暴露可组合读取计划；公共查询在 Count、排序、分页前应用谓词，详情在同一数据库比较规则下核对可读性，拒绝返回 404。LocalAdmin 跳过该层配置和条件执行；认证与功能资格保持原流水线。
-- 当前管理入口 `/authorization/data-scope` 支持单根、单个原始属性固定值等值、所有已认证用户与读取三态；未开放子树、条件类型、操作符或主体类型明确拒绝保存。节点和主体项身份稳定。整根保存复用平台事务及事务级目标锁，实际旧配置与 `dataScope.rule.changed` 审计共同提交，无变化不登记。
+- 固定 Instant 条件在保存时按既有可信时区规范为 UTC，读取只解释已存规范值；CalendarDate 不作时区转换。当前管理入口 `/authorization/data-scope` 支持单根、单个原始属性固定值等值、所有已认证用户与读取三态；未开放子树、条件类型、操作符或主体类型明确拒绝保存。节点和主体项身份稳定。整根保存复用平台事务及事务级目标锁，实际旧配置与 `dataScope.rule.changed` 审计共同提交，无变化不登记。
 - `DataScopeRuleNode`、`DataScopeRuleSubject` 的模型 owner 是 Authorization；物理迁移沿现有 `platform.foundation` 载体追加 `20260922094146_AddDataScopeRules`，不改写旧 migration、业务数据或历史。将来独立 bundle 的迁移不属于本片。
 - 本片只完成通用列表/计数/分页和详情的读取接入，真实 Person 已验证。规则树、对象授权、其他动作、Lookup、组织树、Display 与导出完整行为仍按父 #227 后续 child 交付，不能据此宣称所有自定义出口受控。
 - 回退需同时撤销管理绑定和通用读取接入，保留配置表、审计与 migration 历史；撤销读取接入会扩大到原有仅功能授权的范围，不是权限等价回退。

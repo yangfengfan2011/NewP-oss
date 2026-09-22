@@ -5,12 +5,14 @@ using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using ICP.Platform.Modeling;
+using ICP.Platform.Presentation;
 
 namespace ICP.Platform.Modules.Authorization.Services;
 
 /// <summary>规范资源映射来自全部显式描述符，动作来自正式候选；不按模块名硬编码资源。</summary>
 public sealed class DataScopeCatalog(IStandardCrudResourceRegistry resources, CanonicalModulePlan plan,
-    EfPlatformDbContext db)
+    EfPlatformDbContext db, ITemporalInputNormalizer? temporalInputNormalizer = null)
 {
     public IReadOnlyList<DataActionDeclaration> Actions => plan.DataActionCatalog;
     public IReadOnlyList<DataScopeResource> Resources => resources.GetAll().Select(resource =>
@@ -49,7 +51,20 @@ public sealed class DataScopeCatalog(IStandardCrudResourceRegistry resources, Ca
         }
     }
 
-    /// <summary>比较值按真实模型 CLR 类型解析；空值不能冒充属性等值条件。</summary>
+    /// <summary>已校验配置中的日期值只在保存时规范化；固定 Instant 不随后续查看者重新解释。</summary>
+    public DataScopeRuleDto NormalizeForSave(DataScopeRuleDto rule)
+    {
+        var resource = Resolve(rule.ResourceKey);
+        var field = db.PersistencePlan.Models.Single(model => model.LogicalKey == resource.ModelKey)
+            .Fields.Single(field => field.Name == rule.Condition.Field);
+        if (field.ValueType is not (FieldValueType.Instant or FieldValueType.CalendarDate)) return rule;
+        if (temporalInputNormalizer is null) throw new InvalidOperationException("DATA_SCOPE_TEMPORAL_NORMALIZER_REQUIRED");
+        var normalized = temporalInputNormalizer.Normalize(field.ValueType, rule.Condition.Value);
+        if (!normalized.IsSuccess) throw new RolePermissionValidationException(normalized.Message ?? "日期比较值无效。");
+        return rule with { Condition = rule.Condition with { Value = JsonSerializer.SerializeToElement(normalized.Value) } };
+    }
+
+    /// <summary>按真实模型 CLR 类型解析规范比较值，不应用当前查看者的时区。</summary>
     public (IProperty Property, object Value) ParseValue(string resourceKey, DataScopeConditionDto condition)
     {
         if (condition is null || condition.Type != "attribute" || condition.Operator != "equal"

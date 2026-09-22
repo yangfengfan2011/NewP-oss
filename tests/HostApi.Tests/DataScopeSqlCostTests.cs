@@ -82,9 +82,17 @@ public sealed class DataScopeSqlCostTests(ITestOutputHelper output)
         return new { query.Sql, operators = plan.Descendants().Where(element => element.Name.LocalName == "RelOp").Select(element => new
         {
             physical = (string?)element.Attribute("PhysicalOp"),
-            actualRows = element.Elements().Where(child => child.Name.LocalName == "RunTimeInformation").SelectMany(child => child.Elements())
-                .Sum(child => (long?)child.Attribute("ActualRows") ?? 0)
+            actualRows = Counter(element, "ActualRows"),
+            actualRowsRead = Counter(element, "ActualRowsRead"),
+            logicalReads = Counter(element, "ActualLogicalReads")
         }).ToArray() };
+    }
+
+    private static long? Counter(XElement operation, string name)
+    {
+        var values = operation.Elements().Where(child => child.Name.LocalName == "RunTimeInformation").SelectMany(child => child.Elements())
+            .Select(child => (long?)child.Attribute(name)).ToArray();
+        return values.Any(value => value.HasValue) ? values.Sum() : null;
     }
 
     private sealed record Captured(string Sql, SqlParameter[] Parameters);
@@ -95,8 +103,18 @@ public sealed class DataScopeSqlCostTests(ITestOutputHelper output)
         public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData,
             InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
         {
-            if (Enabled) Captured.Add(new(command.CommandText, command.Parameters.Cast<SqlParameter>().Select(parameter => (SqlParameter)((ICloneable)parameter).Clone()).ToArray()));
+            Record(command);
             return ValueTask.FromResult(result);
+        }
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        { Record(command); return ValueTask.FromResult(result); }
+        public override ValueTask<InterceptionResult<object>> ScalarExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<object> result, CancellationToken cancellationToken = default)
+        { Record(command); return ValueTask.FromResult(result); }
+        private void Record(DbCommand command)
+        {
+            if (Enabled) Captured.Add(new(command.CommandText, command.Parameters.Cast<SqlParameter>().Select(parameter => (SqlParameter)((ICloneable)parameter).Clone()).ToArray()));
         }
     }
 }

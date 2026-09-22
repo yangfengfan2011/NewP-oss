@@ -87,6 +87,10 @@ public sealed class DataScopeSqlServerHttpApiTests
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         var audit = await FeatureHttpTestRequests.ReadAsync(admin, http.Audit(), $"/api/audit/business-changes?TargetId={id}&EventType=dataScope.rule.changed");
         Assert.Single(audit.GetProperty("items").EnumerateArray());
+        // SQL Server 默认排序规则可能把大小写变体解析到同一行，不能因此写坏根身份。
+        var alias = rule with { Id = id.ToLowerInvariant(), RootId = id.ToLowerInvariant() };
+        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put, $"/api/authorization/data-scope/rules/{alias.Id}", alias))
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var after = await FeatureHttpTestRequests.ReadAsync(ordinary, people, "/api/organization/persons?page=1&pageSize=1");
         Assert.Equal(before.GetProperty("total").GetInt32() - 1, after.GetProperty("total").GetInt32());
         Assert.Single(after.GetProperty("items").EnumerateArray());

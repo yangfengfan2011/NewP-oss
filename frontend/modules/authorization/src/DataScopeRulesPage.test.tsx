@@ -27,7 +27,9 @@ it('loads minimal names for multiple subjects and preserves identity context and
   fetcher.mockImplementation((url: string, init?: RequestInit) => {
     if (init?.method === 'PUT') return Promise.resolve(new Response(null, { status: 204 }));
     const result = url.endsWith('/catalog') ? catalog : url.includes('/subjects/') ? {
-      items: [], hasMore: false, currentValues: [{ id: url.includes('/company?') ? 'company-id' : 'department-id', name: '最小目录名称' }],
+      items: url.includes('/department?') ? [{ id: 'other-department', name: '最小目录名称', path: [{ type: 'company', id: 'other-company', name: '乙公司' }] }] : [],
+      hasMore: false, currentValues: [{ id: url.includes('/company?') ? 'company-id' : 'department-id', name: '最小目录名称',
+        path: url.includes('/department?') ? [{ type: 'company', id: 'company-id', name: '甲公司' }, { type: 'department', id: 'parent-id', name: '总部' }] : null }],
     } : [rule];
     return Promise.resolve(new Response(JSON.stringify(result)));
   });
@@ -39,6 +41,10 @@ it('loads minimal names for multiple subjects and preserves identity context and
     expect(container.querySelectorAll('[role="group"]')).toHaveLength(2);
     expect(container.querySelectorAll('[aria-label="包含下级部门"]')).toHaveLength(1);
     expect(container.textContent).toContain('最小目录名称');
+    expect(container.querySelector('[aria-label="主体授权项 2"]')?.textContent).toContain('甲公司 / 总部 / 最小目录名称');
+    const subjectSelector = container.querySelector('[aria-label="主体授权项 2"] [aria-label="主体选择"]')?.closest('.ant-select')?.querySelector('.ant-select-selector');
+    await act(async () => { subjectSelector!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); });
+    expect([...document.querySelectorAll('.ant-select-item-option-content')].map(item => item.textContent)).toContain('乙公司 / 最小目录名称');
     expect(container.textContent).toContain('当前身份值');
     await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '添加主体项')!.click());
     expect(lifecycle[0].dirty).toBe(true);

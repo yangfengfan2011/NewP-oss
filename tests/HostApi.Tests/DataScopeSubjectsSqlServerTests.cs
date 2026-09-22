@@ -18,6 +18,57 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class DataScopeSubjectsSqlServerTests(Xunit.Abstractions.ITestOutputHelper output)
 {
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "最小目录以公司与祖先路径区分合法同名部门，候选和已有值一致")]
+    public async Task DepartmentDirectory_IdentifiesSameNamesByMinimalHierarchy()
+    {
+        var commands = new DirectoryCommands();
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
+            services.AddDbContext<EfPlatformDbContext>((_, options) => options.AddInterceptors(commands)));
+        var http = new FeatureHttpTestRequests(fixture);
+        using var admin = await fixture.LoginAdministratorAsync();
+        var entry = fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.read");
+        var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "HierarchyDirectory", "主体目录管理", "hierarchy-directory", "目录管理员", entry);
+        using var manager = actor.Client;
+        var expected = new Dictionary<string, string[]>();
+        foreach (var companyName in new[] { "甲公司", "乙公司" })
+        {
+            var company = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+                http.Organization("companies", "create", "list.pageActions"), "/api/organization/companies",
+                new { ECODE = "HIER-" + expected.Count, ENAME = companyName, SortOrder = "0010" }));
+            var root = await Department(company, "总部", null);
+            expected[root] = [companyName];
+            foreach (var branch in new[] { "第一分部", "第二分部" })
+            {
+                var parent = await Department(company, branch, root);
+                var leaf = await Department(company, "研发部", parent);
+                expected[leaf] = [companyName, "总部", branch];
+            }
+        }
+        commands.Queries.Clear();
+        var candidate = await FeatureHttpTestRequests.ReadAsync(manager, entry, "/api/authorization/data-scope/subjects/department");
+        var current = await FeatureHttpTestRequests.ReadAsync(manager, entry, "/api/authorization/data-scope/subjects/department?query=no-match&"
+            + string.Join("&", expected.Keys.Select(id => "currentIds=" + Uri.EscapeDataString(id))));
+        Assert.Equal(3, commands.Queries.Count); // 两个候选页及一次当前值批量SQL，祖先沿发布视图索引解析。
+        foreach (var (id, path) in expected)
+        {
+            var item = candidate.GetProperty("items").EnumerateArray().Single(row => row.GetProperty("id").GetString() == id);
+            var selected = current.GetProperty("currentValues").EnumerateArray().Single(row => row.GetProperty("id").GetString() == id);
+            Assert.Equal(path, item.GetProperty("path").EnumerateArray().Select(segment => segment.GetProperty("name").GetString()).ToArray());
+            Assert.Equal(item.GetRawText(), selected.GetRawText());
+            Assert.All(item.GetProperty("path").EnumerateArray(), segment =>
+                Assert.Equal(new[] { "type", "id", "name" }, segment.EnumerateObject().Select(property => property.Name).ToArray()));
+            Assert.Equal(new[] { "id", "name", "parentId", "path" }, item.EnumerateObject().Select(property => property.Name).ToArray());
+        }
+        using var business = await FeatureHttpTestRequests.SendAsync(manager, http.Organization("departments"), HttpMethod.Get,
+            "/api/organization/departments/" + expected.Keys.First());
+        Assert.Equal(HttpStatusCode.Forbidden, business.StatusCode);
+
+        async Task<string> Department(string company, string name, string? parent) =>
+            BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+                http.Organization("departments", "create", "list.pageActions"), "/api/organization/departments",
+                new { ECODE = Guid.NewGuid().ToString("N"), ENAME = name, CompanyId = company, ParentDepartmentId = parent, SortOrder = "0010" }));
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "最小主体目录在SQL中搜索分页，当前值仅窄投影")]
     public async Task SubjectDirectory_PagesAndProjectsAtDatabase()
     {
@@ -62,7 +113,8 @@ public sealed class DataScopeSubjectsSqlServerTests(Xunit.Abstractions.ITestOutp
         public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData,
             InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
         {
-            if (command.CommandText.Contains("FROM [dbo].[Company]", StringComparison.Ordinal)) Queries.Add(command.CommandText);
+            if (command.CommandText.Contains("FROM [dbo].[Company]", StringComparison.Ordinal)
+                || command.CommandText.Contains("FROM [dbo].[Department]", StringComparison.Ordinal)) Queries.Add(command.CommandText);
             return ValueTask.FromResult(result);
         }
     }
@@ -203,7 +255,7 @@ public sealed class DataScopeSubjectsSqlServerTests(Xunit.Abstractions.ITestOutp
             Assert.Empty(directory.GetProperty("items").EnumerateArray());
             var current = Assert.Single(directory.GetProperty("currentValues").EnumerateArray());
             Assert.Equal(id, current.GetProperty("id").GetString());
-            Assert.Equal(new[] { "id", "name", "parentId" }, current.EnumerateObject().Select(property => property.Name).ToArray());
+            Assert.Equal(new[] { "id", "name", "parentId", "path" }, current.EnumerateObject().Select(property => property.Name).ToArray());
         }
         var outsider = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "ScopeOutsider", "无管理资格", "scope-outsider", "无管理用户", people);
         using (outsider.Client)

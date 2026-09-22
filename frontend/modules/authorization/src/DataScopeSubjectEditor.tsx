@@ -4,7 +4,7 @@ import { Alert, Button, Form, InputNumber, Select, Space, Switch, Typography } f
 export interface DataScopeSubject { id: string; type: string; subjectId: string | null; priority: number;
   actions: Record<string, string>; matchOptions?: { includeDescendants: boolean } }
 export interface SubjectType { key: string; title: string; requiresId: boolean; supportsDescendants?: boolean }
-interface SubjectName { id: string; name: string; parentId?: string }
+interface SubjectName { id: string; name: string; parentId?: string; path?: { type: string; id: string; name: string }[] | null }
 interface DirectoryPage { items: SubjectName[]; hasMore: boolean; currentValues: SubjectName[] }
 
 /** 主体候选独立于业务页面读取；切换类型取消旧请求，已选名称由同一最小目录解析。 */
@@ -42,7 +42,7 @@ export default function DataScopeSubjectEditor({ subject, index, types, read, on
         }} /></Form.Item>
       {type?.requiresId && <Form.Item label="主体选择">
         <Select aria-label="主体选择" style={{ minWidth: 220, maxWidth: '100%' }} showSearch filterOption={false} loading={loading}
-          value={subject.subjectId} options={options.map(item => ({ value: item.id, label: item.name }))}
+          value={subject.subjectId} options={options.map(item => ({ value: item.id, label: [...(item.path?.map(segment => segment.name) ?? []), item.name].join(' / ') }))}
           onSearch={value => { setQuery(value); setPage(1); }} onChange={subjectId => onChange({ subjectId })} />
         <Space><Button size="small" disabled={page === 1 || loading} onClick={() => setPage(page - 1)}>上一页主体</Button>
           <Button size="small" disabled={!directory.hasMore || loading} onClick={() => setPage(page + 1)}>下一页主体</Button></Space>

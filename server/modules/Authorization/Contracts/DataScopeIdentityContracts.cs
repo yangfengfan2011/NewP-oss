@@ -12,7 +12,13 @@ public sealed record DataScopeContextValue(string Key, string Title, string Valu
 /// <summary>资源 owner 声明直接字段与规范身份域的绑定，不从 CLR string 推测引用语义。</summary>
 public sealed record DataScopeContextBinding(string ModelKey, string Field, string ContextKey);
 /// <summary>管理目录只公开身份、名称及必要层级；不携带业务档案。</summary>
-public sealed record DataScopeSubjectName(string Id, string Name, string? ParentId = null);
+public sealed record DataScopeSubjectName(string Id, string Name, string? ParentId = null)
+{
+    /// <summary>从最外层组织到直接父级的最小身份路径；不含主体自身或业务档案。</summary>
+    public IReadOnlyList<DataScopeSubjectPathSegment>? Path { get; init; }
+}
+/// <summary>最小层级段只标识类型、身份与名称，供同名主体辨认。</summary>
+public sealed record DataScopeSubjectPathSegment(string Type, string Id, string Name);
 /// <summary>分页目录及已有授权项的当前名称来自同一 owner。</summary>
 public sealed record DataScopeSubjectPage(IReadOnlyList<DataScopeSubjectName> Items, bool HasMore,
     IReadOnlyList<DataScopeSubjectName> CurrentValues);

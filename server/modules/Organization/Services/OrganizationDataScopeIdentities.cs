@@ -33,13 +33,65 @@ public sealed class OrganizationDataScopeIdentities(IOrganizationQuery organizat
         var current = new List<DataScopeSubjectName>();
         foreach (var ids in currentIds.Distinct(StringComparer.Ordinal).Chunk(100))
             current.AddRange(await Project(rows.Where(row => ids.Contains(EF.Property<string>(row, "EID"))), type).ToListAsync(token));
-        return new(items.Take(20).ToArray(), items.Count > 20, current);
+        var pageItems = items.Take(20).ToArray();
+        if (type == "company" || pageItems.Length + current.Count == 0) return new(pageItems, items.Count > 20, current);
+        // 已发布视图按身份索引读取祖先，不逐候选访问数据库；同一次目录请求共享已解析路径。
+        var paths = new DepartmentPaths(await organizations.ReadAsync(token));
+        return new(pageItems.Select(paths.Describe).Where(item => item is not null).Cast<DataScopeSubjectName>().ToArray(), items.Count > 20,
+            current.Select(paths.Describe).Where(item => item is not null).Cast<DataScopeSubjectName>().ToArray());
     }
 
     // 条件投影在构造查询时选择，避免公司模型访问不存在的部门字段。
     private static IQueryable<DataScopeSubjectName> Project(IQueryable<Dictionary<string, object?>> rows, string type) => type == "company"
         ? rows.Select(row => new DataScopeSubjectName(EF.Property<string>(row, "EID"), EF.Property<string>(row, "ENAME"), null))
         : rows.Select(row => new DataScopeSubjectName(EF.Property<string>(row, "EID"), EF.Property<string>(row, "ENAME"), EF.Property<string?>(row, "ParentDepartmentId")));
+
+    private sealed class DepartmentPaths(IOrganizationReadView view)
+    {
+        private readonly Dictionary<string, PathNode> paths = new(StringComparer.Ordinal);
+        private sealed record PathNode(DataScopeSubjectPathSegment Segment, PathNode? Parent);
+
+        // SQL分页后若记录已被并发删除则省略；仍存在的主体在同一发布视图中解析名称与完整路径。
+        internal DataScopeSubjectName? Describe(DataScopeSubjectName subject)
+        {
+            var department = view.Find(OrganizationRecordKind.Department, subject.Id);
+            if (department is null) return null;
+            var path = FullPath(subject.Id);
+            return new(subject.Id, path[^1].Name, department["ParentDepartmentId"] as string)
+                { Path = path.Take(path.Count - 1).ToArray() };
+        }
+
+        // 迭代遍历避免深层组织耗尽调用栈；路径记忆只存在于本次目录投影，不新增跨请求缓存。
+        private IReadOnlyList<DataScopeSubjectPathSegment> FullPath(string id)
+        {
+            var pending = new List<DataScopeSubjectPathSegment>();
+            var visited = new HashSet<string>(StringComparer.Ordinal);
+            var current = id;
+            PathNode prefix;
+            while (!paths.TryGetValue(current, out prefix!))
+            {
+                if (!visited.Add(current)) throw new InvalidOperationException("DATA_SCOPE_ORGANIZATION_PATH_CYCLE");
+                var department = view.Find(OrganizationRecordKind.Department, current)
+                    ?? throw new InvalidOperationException("DATA_SCOPE_ORGANIZATION_PATH_UNAVAILABLE");
+                pending.Add(new("department", current, (string)department["ENAME"]!));
+                if (department["ParentDepartmentId"] is string parent) { current = parent; continue; }
+                var companyId = (string)department["CompanyId"]!;
+                var company = view.Find(OrganizationRecordKind.Company, companyId)
+                    ?? throw new InvalidOperationException("DATA_SCOPE_ORGANIZATION_PATH_UNAVAILABLE");
+                prefix = new(new("company", companyId, (string)company["ENAME"]!), null);
+                break;
+            }
+            for (var index = pending.Count - 1; index >= 0; index--)
+            {
+                prefix = new(pending[index], prefix);
+                paths[pending[index].Id] = prefix;
+            }
+            var result = new List<DataScopeSubjectPathSegment>();
+            for (PathNode? node = paths[id]; node is not null; node = node.Parent) result.Add(node.Segment);
+            result.Reverse();
+            return result;
+        }
+    }
 
     private sealed class Facts(CurrentOrganization? organization) : IDataScopeIdentityFacts
     {

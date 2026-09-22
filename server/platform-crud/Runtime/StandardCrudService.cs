@@ -24,6 +24,7 @@ public sealed class StandardCrudService : IStandardCrudService
     private readonly ILogger<StandardCrudService>? _logger;
     private readonly IObjectOperationExecutor? _objectOperations;
     private readonly StandardCrudDefaultWriter _defaultWriter;
+    private readonly ICP.Platform.Authorization.Contracts.IDataScopeReadPlanProvider? _dataScope;
 
     /// <summary>组合查询与展示依赖；写入只路由到对象执行器或公共默认写入模块。</summary>
     public StandardCrudService(
@@ -37,7 +38,8 @@ public sealed class StandardCrudService : IStandardCrudService
         IUserDisplayNameDirectory? userDisplayNameDirectory = null,
         IRequestPresentationContextAccessor? presentationContextAccessor = null,
         ILogger<StandardCrudService>? logger = null,
-        IObjectOperationExecutor? objectOperations = null)
+        IObjectOperationExecutor? objectOperations = null,
+        ICP.Platform.Authorization.Contracts.IDataScopeReadPlanProvider? dataScope = null)
     {
         _repository = repository;
         _queryExecutor = queryExecutor;
@@ -50,6 +52,7 @@ public sealed class StandardCrudService : IStandardCrudService
         _presentationContextAccessor = presentationContextAccessor;
         _logger = logger;
         _objectOperations = objectOperations;
+        _dataScope = dataScope;
     }
 
     /// <summary>
@@ -76,6 +79,8 @@ public sealed class StandardCrudService : IStandardCrudService
                 condition.GroupKey,
                 condition.GroupOperator)).ToList());
 
+        if (_dataScope is not null)
+            platformRequest = platformRequest with { ScopePredicate = (await _dataScope.GetReadPlanAsync(descriptor.ResourceKey, cancellationToken)).Predicate };
         var result = await _queryExecutor.QueryAsync(queryDescriptor, platformRequest, cancellationToken);
         var rows = await ApplyDisplayValuesAsync(descriptor, result.Items, result.RequestedDisplayFields, cancellationToken);
         var projectedRows = rows.Select(row => Project(row, result.ResponseFields)).ToList();
@@ -144,6 +149,17 @@ public sealed class StandardCrudService : IStandardCrudService
         CancellationToken cancellationToken = default)
     {
         StandardCrudDescriptorValidator.Validate(descriptor);
+        if (_dataScope is not null)
+        {
+            var scope = await _dataScope.GetReadPlanAsync(descriptor.ResourceKey, cancellationToken);
+            if (scope.Predicate is not null)
+            {
+                var visible = await _queryExecutor.QueryAsync(StandardCrudQueryDescriptorAdapter.ToQueryDescriptor(descriptor),
+                    new PlatformQueryRequest([descriptor.IdField], PageSize: 1, Conditions: [new(descriptor.IdField, "=", id)])
+                    { ScopePredicate = scope.Predicate }, cancellationToken);
+                if (visible.Total == 0) return null;
+            }
+        }
         var row = await _repository.GetByIdAsync(descriptor, id, cancellationToken);
         if (row is null)
         {

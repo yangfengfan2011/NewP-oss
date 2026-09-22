@@ -109,6 +109,148 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                     b.ToTable("ConfigItem", (string)null);
                 });
 
+            modelBuilder.Entity("DataScopeRuleNode", b =>
+                {
+                    b.Property<string>("EID")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("EID");
+
+                    b.Property<string>("ConditionJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("ConditionJson");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CreatedAt");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("CreatedBy");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("bit")
+                        .HasColumnName("Enabled");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("Name");
+
+                    b.Property<string>("ParentId")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("ParentId");
+
+                    b.Property<string>("ResourceKey")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("ResourceKey");
+
+                    b.Property<string>("RootId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("RootId");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("UpdatedAt");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("UpdatedBy");
+
+                    b.HasKey("EID");
+
+                    b.HasIndex("EID")
+                        .IsUnique()
+                        .HasDatabaseName("UX_DataScopeRuleNode_EID");
+
+                    b.HasIndex("ResourceKey")
+                        .HasDatabaseName("IX_DataScopeRuleNode_1");
+
+                    b.HasIndex("RootId", "ParentId")
+                        .HasDatabaseName("IX_DataScopeRuleNode_0");
+
+                    b.ToTable("DataScopeRuleNode", (string)null);
+                });
+
+            modelBuilder.Entity("DataScopeRuleSubject", b =>
+                {
+                    b.Property<string>("EID")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("EID");
+
+                    b.Property<string>("ActionsJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("ActionsJson");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CreatedAt");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("CreatedBy");
+
+                    b.Property<string>("NodeId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("NodeId");
+
+                    b.Property<long>("Priority")
+                        .HasColumnType("bigint")
+                        .HasColumnName("Priority");
+
+                    b.Property<string>("SubjectId")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("SubjectId");
+
+                    b.Property<string>("SubjectType")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("SubjectType");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("UpdatedAt");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("UpdatedBy");
+
+                    b.HasKey("EID");
+
+                    b.HasIndex("EID")
+                        .IsUnique()
+                        .HasDatabaseName("UX_DataScopeRuleSubject_EID");
+
+                    b.HasIndex("NodeId")
+                        .HasDatabaseName("IX_DataScopeRuleSubject_0");
+
+                    b.HasIndex("SubjectType", "SubjectId")
+                        .HasDatabaseName("IX_DataScopeRuleSubject_1");
+
+                    b.ToTable("DataScopeRuleSubject", (string)null);
+                });
+
             modelBuilder.Entity("FunctionPoint", b =>
                 {
                     b.Property<string>("EID")

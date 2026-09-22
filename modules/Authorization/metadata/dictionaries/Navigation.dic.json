@@ -2,10 +2,17 @@
   "schemaVersion": "1.0",
   "type": "dic",
   "Navigation": {
-    "Workbench": { "zhs": "功能授权", "en": "Functional Authorization" },
+    "Workbench": {
+      "zhs": "功能授权",
+      "en": "Functional Authorization"
+    },
     "Roles": {
       "zhs": "角色管理",
       "en": "Roles"
+    },
+    "DataScope": {
+      "zhs": "数据范围规则",
+      "en": "Data scope rules"
     }
   }
 }

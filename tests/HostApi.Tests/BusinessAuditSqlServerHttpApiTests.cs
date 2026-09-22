@@ -1371,7 +1371,13 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         }
         catch { await fixture.DisposeAsync(); throw; }
     }
-    private async Task StartAsync(Action<IServiceCollection>? configureServices)
+    internal async Task RestartWithReadActionAsync(bool enabled)
+    {
+        await _app.StopAsync();
+        await _app.DisposeAsync();
+        await StartAsync(null, enabled);
+    }
+    private async Task StartAsync(Action<IServiceCollection>? configureServices, bool readEnabled = true)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
         builder.WebHost.UseTestServer();
@@ -1404,9 +1410,20 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         var trust = TrustedBuiltInModuleSource.CreateForHost(hostRoot, Path.Combine(hostRoot, "modules"));
         var candidates = new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(trust)
             .Where(candidate => productionModuleIds.Contains(candidate.ModuleId, StringComparer.Ordinal)).ToArray();
+        // 下一次启动的正式声明候选；不在活动目录中原位切换开关。
+        var owner = Array.FindIndex(candidates, candidate => candidate.ModuleId == "Authorization");
+        var authoring = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(hostRoot, "modules", "Authorization", "plugin.json")))!;
+        foreach (var action in authoring["dataActions"]!.AsArray())
+            if (action!["key"]!.GetValue<string>() == "read") action["enabled"] = readEnabled;
+        candidates[owner] = candidates[owner] with
+        {
+            DataActions = DataActionCatalogCompiler.Read(JsonSerializer.SerializeToElement(authoring), "Authorization"),
+            Provenance = new ModulePlanProvenance("fixture-authoring", "Authorization/plugin.json", "/")
+        };
         var modulePlan = new CanonicalModulePlanCompiler().Compile("personnel-authorization", candidates).Plan
             ?? throw new InvalidOperationException("Formal module plan did not compile.");
         FeatureCatalog = modulePlan.FeatureCatalog;
+        builder.Services.AddSingleton(modulePlan);
         builder.Services.AddRelationTrees(modulePlan);
         builder.Services.AddPlatformAuthorization();
         builder.Services.AddAuthorization(options => { options.AddPolicy("AdminOnly", p => p.RequireRole("LocalAdmin")); options.AddPolicy(ICP.Platform.Authorization.Http.DenyAllAttribute.PolicyName, p => p.RequireAssertion(_ => false)); });

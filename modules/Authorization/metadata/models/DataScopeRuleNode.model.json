@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "DataScopeRuleNode": {
+    "kind": "Entity",
+    "fields": [
+      {
+        "name": "RootId",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "ParentId",
+        "storage": {
+          "type": "string",
+          "nullable": true
+        }
+      },
+      {
+        "name": "Name",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "Enabled",
+        "storage": {
+          "type": "bool"
+        }
+      },
+      {
+        "name": "ResourceKey",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "ConditionJson",
+        "storage": {
+          "type": "text"
+        }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "IX_DataScopeRuleNode_0",
+        "fields": [
+          "RootId",
+          "ParentId"
+        ],
+        "unique": false
+      },
+      {
+        "name": "IX_DataScopeRuleNode_1",
+        "fields": [
+          "ResourceKey"
+        ],
+        "unique": false
+      }
+    ]
+  }
+}

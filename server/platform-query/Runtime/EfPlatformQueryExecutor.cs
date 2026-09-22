@@ -59,6 +59,7 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
             .AsNoTracking();
 
         query = ApplyConditions(query, descriptor, entityType, request.Conditions ?? []);
+        if (request.ScopePredicate is not null) query = query.Where(request.ScopePredicate);
         var total = await query.CountAsync(cancellationToken);
 
         query = ApplySort(query, descriptor, entityType, sort.Field, sort.Direction);

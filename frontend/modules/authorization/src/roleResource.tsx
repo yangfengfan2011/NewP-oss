@@ -19,18 +19,18 @@ function mapRole(value: unknown) {
     UpdatedBy_DisplayValue: value.updatedBy_DisplayValue, UpdatedAt_DisplayValue: value.updatedAt_DisplayValue };
 }
 // 复用平台认证、防伪及请求错误；写入不重试，网络不确定时先核对实际结果。
-export async function requestRole(fetcher: typeof fetch, url: string, init?: RequestInit): Promise<unknown> {
+export async function requestRole(fetcher: typeof fetch, url: string, init?: RequestInit, subject = '角色'): Promise<unknown> {
   try {
     const response = await fetcher(url, init);
     if (!response.ok) {
       const problem: unknown = await response.json().catch(() => null);
-      throw new StandardCrudRequestError(isStandardCrudRecord(problem) && typeof problem.title === 'string' ? problem.title : '角色操作失败', response.status);
+      throw new StandardCrudRequestError(isStandardCrudRecord(problem) && typeof problem.title === 'string' ? problem.title : `${subject}操作失败`, response.status);
     }
     return response.status === 204 ? undefined : await response.json();
   } catch (error) {
     if (error instanceof StandardCrudRequestError || init?.signal?.aborted) throw error;
     const isRead = ['GET', 'HEAD', 'OPTIONS'].includes((init?.method ?? 'GET').toUpperCase());
-    throw new Error(isRead ? '角色读取失败，请重试。' : '操作结果未知，请刷新后核对；系统不会自动重试。');
+    throw new Error(isRead ? `${subject}读取失败，请重试。` : '操作结果未知，请刷新后核对；系统不会自动重试。');
   }
 }
 export function createRoleResource(fetcher: typeof fetch = platformFetch as typeof fetch): StandardCrudResourceRegistration {

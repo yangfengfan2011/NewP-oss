@@ -9,7 +9,19 @@
         "path": "/authorization/workbench",
         "featureKey": "authorization.workbench",
         "order": 5,
-        "page": { "pageKey": "authorization.workbench" }
+        "page": {
+          "pageKey": "authorization.workbench"
+        }
+      },
+      {
+        "key": "authorization.dataScope",
+        "titleKey": "Navigation.DataScope",
+        "path": "/authorization/data-scope",
+        "featureKey": "authorization.dataScope",
+        "order": 7,
+        "page": {
+          "pageKey": "authorization.dataScope"
+        }
       },
       {
         "key": "authorization.roles",

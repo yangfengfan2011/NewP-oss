@@ -35,6 +35,7 @@ public sealed class CanonicalModulePlanCompiler
             .Concat(ValidateBindings(candidateId, candidateArray))
             .Concat(ValidateRouteOwners(candidateId, candidateArray))
             .Concat(ValidateModelOwners(candidateId, candidateArray)).Concat(ValidateFeatures(candidateId, candidateArray))
+            .Concat(ValidateDataActions(candidateId, candidateArray))
             .OrderBy(static diagnostic => diagnostic.Stage, StringComparer.Ordinal)
             .ThenBy(static diagnostic => diagnostic.Code, StringComparer.Ordinal)
             .ThenBy(static diagnostic => diagnostic.ModuleId, StringComparer.Ordinal)
@@ -332,6 +333,9 @@ public sealed class CanonicalModulePlanCompiler
                 if (candidate.Features.Any(node => node.ModuleId != candidate.ModuleId))
                     throw new InvalidOperationException("功能声明不能跨模块冒领归属。");
                 FeatureCatalogCompiler.Compile(candidate.Features);
+                if (candidate.DataActions.Any(action => action.ModuleId != candidate.ModuleId))
+                    throw new InvalidOperationException("数据动作声明不能跨模块冒领归属。");
+                DataActionCatalogCompiler.Compile(candidate.DataActions);
             }
             catch (InvalidOperationException exception)
             {
@@ -342,6 +346,15 @@ public sealed class CanonicalModulePlanCompiler
         return diagnostics;
     }
 
+    // 动作身份跨模块唯一，候选冲突必须作为编译诊断拒绝，不能延迟到发布后。
+    private static IReadOnlyList<ModulePlanDiagnostic> ValidateDataActions(string candidateId, IReadOnlyList<ModuleCapsuleCandidate> candidates)
+    {
+        try { DataActionCatalogCompiler.Compile(candidates.SelectMany(candidate => candidate.DataActions)); return []; }
+        catch (InvalidOperationException exception)
+        { return [new(candidateId, "*", "", "dataActions", "", "/dataActions", "data-actions", "MODULE_DATA_ACTION_INVALID", exception.Message)]; }
+    }
+
+    // 保留动作声明与开关的规范排序，将其纳入候选内容身份。
     private static CanonicalModulePlanModule Normalize(ModuleCapsuleCandidate candidate)
     {
         ArgumentNullException.ThrowIfNull(candidate);
@@ -364,7 +377,7 @@ public sealed class CanonicalModulePlanCompiler
             Sort(candidate.FrontendBindingReferences),
             Sort(candidate.ModelKeys),
             provenance,
-            NormalizePersistence(candidate.Persistence)) { Features = candidate.Features.OrderBy(node => node.Key, StringComparer.Ordinal).ToArray() };
+            NormalizePersistence(candidate.Persistence)) { Features = candidate.Features.OrderBy(node => node.Key, StringComparer.Ordinal).ToArray(), DataActions = candidate.DataActions.OrderBy(action => action.Key, StringComparer.Ordinal).ToArray() };
     }
 
     private static ModulePersistenceContribution? NormalizePersistence(ModulePersistenceContribution? persistence)

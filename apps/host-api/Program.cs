@@ -169,6 +169,7 @@ var activationGate = new PluginActivationGate(
     new HostPluginRuntimeProjection(materializer, pluginInstallRoot));
 using var activationSession = activationGate.Prepare(pluginInventory);
 var canonicalModulePlan = activationSession.ModulePlan;
+builder.Services.AddSingleton(canonicalModulePlan);
 builder.Services.AddRelationTrees(canonicalModulePlan);
 
 // Build 前所有持久化服务都绑定到激活会话编译出的同一个计划实例。

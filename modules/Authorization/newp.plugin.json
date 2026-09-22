@@ -16,7 +16,8 @@
     "bindings": [
       "authorization.workbench",
       "authorization.role.list",
-      "authorization.role.detail"
+      "authorization.role.detail",
+      "authorization.dataScope"
     ]
   },
   "persistence": {
@@ -26,7 +27,9 @@
       "metadata/models/RoleFunctionGrant.model.json",
       "metadata/models/Role.model.json",
       "metadata/models/RolePermission.model.json",
-      "metadata/models/UserRole.model.json"
+      "metadata/models/UserRole.model.json",
+      "metadata/models/DataScopeRuleNode.model.json",
+      "metadata/models/DataScopeRuleSubject.model.json"
     ]
   },
   "schemaVersion": "1.0",
@@ -34,7 +37,39 @@
     "behaviorKey": "authorization.backend"
   },
   "features": [
-    { "key": "authorization.workbench", "kind": "navigation", "title": "功能授权", "behaviorKey": "authorization.workbench.read" },
-    { "key": "save", "kind": "action", "title": "保存授权", "parentKey": "authorization.workbench", "behaviorKey": "authorization.workbench.save" }
+    {
+      "key": "authorization.workbench",
+      "kind": "navigation",
+      "title": "功能授权",
+      "behaviorKey": "authorization.workbench.read"
+    },
+    {
+      "key": "save",
+      "kind": "action",
+      "title": "保存授权",
+      "parentKey": "authorization.workbench",
+      "behaviorKey": "authorization.workbench.save"
+    },
+    {
+      "key": "authorization.dataScope",
+      "kind": "navigation",
+      "title": "数据范围规则",
+      "behaviorKey": "authorization.dataScope.read"
+    },
+    {
+      "key": "dataScope.save",
+      "kind": "action",
+      "title": "保存规则",
+      "parentKey": "authorization.dataScope",
+      "behaviorKey": "authorization.dataScope.save"
+    }
+  ],
+  "dataActions": [
+    {
+      "key": "read",
+      "title": "读取",
+      "behaviorKey": "data.read",
+      "requiresRead": false
+    }
   ]
 }

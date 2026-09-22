@@ -26,6 +26,7 @@ public sealed record ModuleCapsuleCandidate(
     ModulePersistenceContribution? Persistence = null)
 {
     public IReadOnlyList<FeatureDeclaration> Features { get; init; } = [];
+    public IReadOnlyList<DataActionDeclaration> DataActions { get; init; } = [];
 }
 
 /// <summary>
@@ -176,6 +177,7 @@ public sealed class ModulePlanProvenance
             artifactDigest
         })));
 
+    // 信任指纹覆盖动作目录与开关，避免保留旧身份却替换授权声明。
     private static string ComputeCanonicalFingerprint(ModuleCapsuleCandidate candidate) =>
         ComputeCanonicalFingerprint(
             candidate.ModuleId,
@@ -193,8 +195,9 @@ public sealed class ModulePlanProvenance
             candidate.FrontendBindings,
             candidate.FrontendBindingReferences,
             candidate.ModelKeys,
-            candidate.Persistence, candidate.Features);
+            candidate.Persistence, candidate.Features, candidate.DataActions);
 
+    // 信任指纹覆盖动作目录与开关，避免保留旧身份却替换授权声明。
     private static string ComputeCanonicalFingerprint(CanonicalModulePlanModule module) =>
         ComputeCanonicalFingerprint(
             module.ModuleId,
@@ -212,8 +215,9 @@ public sealed class ModulePlanProvenance
             module.FrontendBindings,
             module.FrontendBindingReferences,
             module.ModelKeys,
-            module.Persistence, module.Features);
+            module.Persistence, module.Features, module.DataActions);
 
+    // 信任指纹覆盖动作目录与开关，避免保留旧身份却替换授权声明。
     private static string ComputeCanonicalFingerprint(
         string moduleId,
         string version,
@@ -230,7 +234,7 @@ public sealed class ModulePlanProvenance
         IReadOnlyList<string> frontendBindings,
         IReadOnlyList<string> frontendBindingReferences,
         IReadOnlyList<string> modelKeys,
-        ModulePersistenceContribution? persistence, IReadOnlyList<FeatureDeclaration> features)
+        ModulePersistenceContribution? persistence, IReadOnlyList<FeatureDeclaration> features, IReadOnlyList<DataActionDeclaration> dataActions)
     {
         var bytes = JsonSerializer.SerializeToUtf8Bytes(new
         {
@@ -249,6 +253,7 @@ public sealed class ModulePlanProvenance
             frontendBindings = Sort(frontendBindings),
             frontendBindingReferences = Sort(frontendBindingReferences),
             modelKeys = Sort(modelKeys),
+            dataActions = dataActions.OrderBy(action => action.Key, StringComparer.Ordinal).ToArray(),
             features = features.OrderBy(node => node.Key, StringComparer.Ordinal).ToArray(),
             persistence = persistence is null
                 ? null
@@ -325,6 +330,7 @@ public sealed record CanonicalModulePlanModule(
     ModulePersistenceContribution? Persistence = null)
 {
     public IReadOnlyList<FeatureDeclaration> Features { get; init; } = [];
+    public IReadOnlyList<DataActionDeclaration> DataActions { get; init; } = [];
 }
 
 /// <summary>
@@ -339,6 +345,7 @@ public sealed record CanonicalModulePlan(
     IReadOnlyList<CanonicalModulePlanModule> Modules)
 {
     /// <summary>由已验证声明一次派生的完整目录，所有运行时投影共享该结果。</summary>
+    public IReadOnlyList<DataActionDeclaration> DataActionCatalog { get; } = DataActionCatalogCompiler.Compile(Modules.SelectMany(module => module.DataActions));
     public IReadOnlyList<FeaturePoint> FeatureCatalog { get; } = FeatureCatalogCompiler.Compile(Modules.SelectMany(module => module.Features));
 }
 

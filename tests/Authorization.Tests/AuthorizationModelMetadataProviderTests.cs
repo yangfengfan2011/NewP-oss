@@ -56,6 +56,22 @@ public class AuthorizationModelMetadataProviderTests
                 Assert.Contains(role.Indexes, static index => index.Name == "UX_Role_ECODE");
                 validator.Validate(role);
             },
+            node =>
+            {
+                Assert.Equal("DataScopeRuleNode", node.Name);
+                Assert.Contains(node.Fields, field => field.Name == "RootId");
+                Assert.Contains(node.Fields, field => field.Name == "ParentId");
+                Assert.Empty(node.ForeignKeys);
+                validator.Validate(node);
+            },
+            subject =>
+            {
+                Assert.Equal("DataScopeRuleSubject", subject.Name);
+                Assert.Contains(subject.Fields, field => field.Name == "Priority");
+                Assert.Contains(subject.Indexes, index => index.Fields.SequenceEqual(new[] { "NodeId" }));
+                Assert.Empty(subject.ForeignKeys);
+                validator.Validate(subject);
+            },
             point =>
             {
                 Assert.Equal("FunctionPoint", point.Name);

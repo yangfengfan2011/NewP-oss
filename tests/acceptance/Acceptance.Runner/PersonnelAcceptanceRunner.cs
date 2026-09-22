@@ -440,6 +440,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         try
         {
             await new ShellPageDriver(page, $"http://127.0.0.1:{_shellPort}").LoginAsync("admin", adminPassword);
+            if (phase == "initial")
+                await new DataScopeRulesPageDriver(page).CreatePersonRuleAsync("人员旅程读取规则");
 
             var browserAssertions = new List<string>();
 

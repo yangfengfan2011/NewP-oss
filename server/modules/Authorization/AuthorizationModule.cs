@@ -14,6 +14,9 @@ public class AuthorizationModule : ModuleCapsuleBindingBase
     public override void ConfigureServices(IServiceCollection services)
     {
         services.AddPlatformObjectIdGeneration();
+        services.AddScoped<DataScopeCatalog>();
+        services.AddScoped<DataScopeRules>();
+        services.AddScoped<IDataScopeReadPlanProvider, DataScopeReadPlans>();
 
         services.AddStandardCrudKernel();
         services.AddStandardCrudResource(RoleReadResource.Create());

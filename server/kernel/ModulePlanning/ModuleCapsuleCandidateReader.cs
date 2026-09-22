@@ -146,9 +146,10 @@ public sealed class ModuleCapsuleCandidateReader
                     "built-in",
                     Path.GetFullPath(manifestPath),
                     "/"),
-            ReadPersistence(root, manifestPath)) { Features = ReadFeatures(root, moduleId, Path.Combine(moduleRoot, "metadata"), snapshot) };
+            ReadPersistence(root, manifestPath)) { Features = ReadFeatures(root, moduleId, Path.Combine(moduleRoot, "metadata"), snapshot), DataActions = DataActionCatalogCompiler.Read(root, moduleId) };
     }
 
+    // 外部包动作与内建动作经过相同读取、规范编译和启动装配。
     private static ModuleCapsuleCandidate ReadInstalledModule(InstalledPluginRecord record)
     {
         var packageRoot = Path.GetFullPath(record.PackageRoot);
@@ -191,7 +192,7 @@ public sealed class ModuleCapsuleCandidateReader
             metadata.FrontendBindingReferences,
             metadata.ModelKeys,
             new ModulePlanProvenance("installed-package", manifestPath, "/"),
-            ReadPersistence(root, manifestPath)) { Features = ReadFeatures(root, moduleId, Path.Combine(packageRoot, "modules", moduleId, "metadata"), null) };
+            ReadPersistence(root, manifestPath)) { Features = ReadFeatures(root, moduleId, Path.Combine(packageRoot, "modules", moduleId, "metadata"), null), DataActions = DataActionCatalogCompiler.Read(root, moduleId) };
     }
 
     // 功能声明与已校验 metadata 来自同一候选快照，不能旁读变化中的 authoring 文件。

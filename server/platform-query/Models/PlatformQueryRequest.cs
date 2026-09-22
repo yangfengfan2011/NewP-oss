@@ -16,4 +16,8 @@ public sealed record PlatformQueryRequest(
     int PageSize = 20,
     string? SortBy = null,
     string? SortDirection = null,
-    IReadOnlyList<PlatformQueryCondition>? Conditions = null);
+    IReadOnlyList<PlatformQueryCondition>? Conditions = null)
+{
+    /// <summary>仅可信服务端消费者提供的范围计划，在数据库计数与分页前组合。</summary>
+    public System.Linq.Expressions.Expression<Func<Dictionary<string, object?>, bool>>? ScopePredicate { get; init; }
+}

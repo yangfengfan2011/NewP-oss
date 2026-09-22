@@ -80,6 +80,11 @@ public class HostPersistenceBootstrapTests
             options.Assemblies.Add(typeof(AuthorizationModule).Assembly);
         });
         services.AddScoped<AuthorizationCatalogInitializer>();
+        services.AddHttpContextAccessor();
+        var moduleRoot = Path.Combine(Path.GetDirectoryName(typeof(AuthorizationCatalogInitializer).Assembly.Location)!, "modules");
+        var modulePlan = new ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlanCompiler().Compile("authorization-di",
+            new ICP.Platform.Kernel.ModulePlanning.ModuleCapsuleCandidateReader().ReadBuiltIn(moduleRoot)).Plan!;
+        services.AddSingleton(modulePlan);
 
         using var provider = services.BuildServiceProvider(new ServiceProviderOptions
         {

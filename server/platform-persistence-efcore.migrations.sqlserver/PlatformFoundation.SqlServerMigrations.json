@@ -2,8 +2,8 @@
   "schemaVersion": "1.0",
   "provider": "SqlServer",
   "moduleId": "platform.foundation",
-  "modelDigest": "4de84f39bb8325d13ec34bd2d3c8db1ddfc58aa109d365328f8c34c20f94f08c",
-  "bundleChecksum": "74581e6d6afbf4bf1c1cea4a9769fb5ffd59c90b24855b1a0efea7dc9919b8e3",
+  "modelDigest": "933caa5b7c4905be81b8d500b54974923ce83f50666ef4cd4af806bc3291ed4c",
+  "bundleChecksum": "480805fa33914f8c2f21f5eddff8cd320e5b3c376b179500712e71395b7bcdc5",
   "migrations": [
     {
       "sequence": "000001",
@@ -21,6 +21,15 @@
       "contentDigest": "ad9b3c6ff3992f256ce40fd3677c0e950511ba2c90c2cad768f5c78e41663dec",
       "fromModelDigest": "038748ee556ade48658e64abc43230578eec7d4b9a7aab3429034bc53d7cf666",
       "toModelDigest": "4de84f39bb8325d13ec34bd2d3c8db1ddfc58aa109d365328f8c34c20f94f08c",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000003",
+      "migrationId": "20260922094146_AddDataScopeRules",
+      "previousContentDigest": "ad9b3c6ff3992f256ce40fd3677c0e950511ba2c90c2cad768f5c78e41663dec",
+      "contentDigest": "b7e2cc3b4fa40ed4d6b51d60b6ca2d6d779234b99392e4bff5cdad7251532884",
+      "fromModelDigest": "4de84f39bb8325d13ec34bd2d3c8db1ddfc58aa109d365328f8c34c20f94f08c",
+      "toModelDigest": "933caa5b7c4905be81b8d500b54974923ce83f50666ef4cd4af806bc3291ed4c",
       "compatibility": "safe-expand"
     }
   ]

@@ -54,17 +54,17 @@ public sealed class IdentityFoundationMigrationTests
             .ToArray();
 
         Assert.Equal(
-            "4de84f39bb8325d13ec34bd2d3c8db1ddfc58aa109d365328f8c34c20f94f08c",
+            "933caa5b7c4905be81b8d500b54974923ce83f50666ef4cd4af806bc3291ed4c",
             PersistenceModelDigest.Compute(definitions));
         Assert.Equal("038748ee556ade48658e64abc43230578eec7d4b9a7aab3429034bc53d7cf666",
-            PersistenceModelDigest.Compute(definitions.Where(model => model.Name is not ("FunctionPoint" or "RoleFunctionGrant"))));
+            PersistenceModelDigest.Compute(FrozenFoundation()));
     }
 
     [Fact]
     public void SqlServerPlatformFoundationFrontier_IsCurrentEmptyDatabaseMigration()
     {
         Assert.Equal(
-            "20260914114935_AddFunctionalAuthorization",
+            "20260922094146_AddDataScopeRules",
             PlatformCoreMigrationFrontiers.SqlServerPlatformFoundation);
     }
 
@@ -105,7 +105,7 @@ public sealed class IdentityFoundationMigrationTests
         var definitions = PlatformFoundationModelSource.GetDefinitions();
 
         Assert.Equal(
-            ["ConfigItem", "FunctionPoint", "Permission", "Role", "RoleFunctionGrant", "RolePermission", "UserRole", "ValueListItem"],
+            ["ConfigItem", "DataScopeRuleNode", "DataScopeRuleSubject", "FunctionPoint", "Permission", "Role", "RoleFunctionGrant", "RolePermission", "UserRole", "ValueListItem"],
             definitions.Select(static model => model.Name).Order(StringComparer.Ordinal));
 
         var adapted = PlatformPersistenceModelCatalog.AdaptPlatformCore(definitions);
@@ -640,7 +640,7 @@ public sealed class IdentityFoundationMigrationTests
         using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
         var root = document.RootElement;
         var migrations = root.GetProperty("migrations").EnumerateArray().ToArray();
-        Assert.Equal(2, migrations.Length);
+        Assert.Equal(3, migrations.Length);
         var migration = migrations[0];
         var sourcePath = Path.Combine(
             repositoryRoot,
@@ -739,6 +739,19 @@ public sealed class IdentityFoundationMigrationTests
         }
 
         return count;
+    }
+
+    private static IEnumerable<ICP.Platform.Modeling.Definitions.ModelDefinition> FrozenFoundation()
+    {
+        var root = FindRepositoryRoot();
+        var map = new ICP.Platform.Modeling.Metadata.JsonStorageTypeMapLoader().LoadFromFile(Path.Combine(root, "server", "platform-modeling", "metadata", "storage-types.json"));
+        foreach (var owner in new[] { "Authorization", "ConfigCenter" })
+        foreach (var path in Directory.GetFiles(Path.Combine(root, "tests", "Acceptance.HistoricalMigrations", "Authoring", "Platform.Foundation", owner), "*.model.json"))
+        {
+            var document = new ICP.Platform.Modeling.Metadata.JsonModelMetadataDocumentLoader().Load(File.ReadAllBytes(path), Path.Combine(root, "modules", owner, "metadata", "models", Path.GetFileName(path)));
+            new ICP.Platform.Modeling.Validation.ModelMetadataValidator().Validate(document, map);
+            yield return new ICP.Platform.Modeling.Projection.ModelMetadataProjector().Project(document, map, "SqlServer") with { OwnerModuleId = owner, SchemaName = "dbo" };
+        }
     }
 
     private static string FindRepositoryRoot()

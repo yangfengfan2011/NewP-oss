@@ -55,6 +55,8 @@ public sealed class AuthorizationModelMetadataProvider : IModelDefinitionProvide
         return new[]
         {
             LoadModel("Role.model.json", storageTypeMap),
+            LoadModel("DataScopeRuleNode.model.json", storageTypeMap),
+            LoadModel("DataScopeRuleSubject.model.json", storageTypeMap),
             LoadModel("FunctionPoint.model.json", storageTypeMap),
             LoadModel("RoleFunctionGrant.model.json", storageTypeMap),
             LoadModel("Permission.model.json", storageTypeMap),

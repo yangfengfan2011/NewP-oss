@@ -115,8 +115,8 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
                   onChange={read => changeSubject({ actions: { ...subject?.actions, read } })} />
               </Form.Item>
             </Space>
-            <Space wrap><Button type="primary" loading={saving} disabled={!dirty || readOnly} onClick={() => void save()}>保存根规则</Button>
-              <Button disabled={!dirty || saving} onClick={reset}>放弃修改</Button>{dirty && <Typography.Text type="warning">有未保存的草稿</Typography.Text>}</Space>
+            <Flex gap="small" wrap align="center"><Button type="primary" loading={saving} disabled={!dirty || readOnly} onClick={() => void save()}>保存根规则</Button>
+              <Button disabled={!dirty || saving} onClick={reset}>放弃修改</Button>{dirty && <Typography.Text type="warning">有未保存的草稿</Typography.Text>}</Flex>
           </Form>}
         </Card>
       </Flex>

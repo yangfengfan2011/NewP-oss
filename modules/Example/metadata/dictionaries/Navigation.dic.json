@@ -6,6 +6,10 @@
       "zhs": "功能示例",
       "en": "功能示例"
     },
+    "RuntimeWorkload": {
+      "zhs": "未来两周工作量预览",
+      "en": "Two-week Workload Preview"
+    },
     "ExampleRecords": {
       "zhs": "持久化记录示例",
       "en": "Persisted Record Example"

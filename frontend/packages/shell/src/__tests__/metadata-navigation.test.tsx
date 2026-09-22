@@ -6,6 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { Sidebar } from '../components/Sidebar';
 import { buildMenusFromNavDocuments } from '../metadata/navigationAdapter';
+import exampleNavigationDocument from '../../../../../modules/Example/metadata/navigation/Example.nav.json';
 
 vi.mock('../contexts/PlatformContext', () => ({
   usePlatform: () => ({ shellView: 'business' }),
@@ -30,6 +31,23 @@ describe('metadata navigation', () => {
     if (container) {
       container.remove();
     }
+  });
+
+  it('groups both Example capabilities under one feature examples parent', () => {
+    const menus = buildMenusFromNavDocuments(
+      [exampleNavigationDocument],
+      (titleKey) => titleKey ?? '',
+    );
+
+    expect(menus).toHaveLength(1);
+    expect(menus[0]).toMatchObject({
+      id: 'example.group',
+      label: 'Navigation.Example',
+      children: [
+        { id: 'example', path: '/examples/standard-crud/runtime-columns' },
+        { id: 'example.records', path: '/examples/standard-crud/persistent-records' },
+      ],
+    });
   });
 
   it('renders person center from nav metadata', async () => {

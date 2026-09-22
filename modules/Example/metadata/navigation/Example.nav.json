@@ -4,11 +4,18 @@
   "navigation": {
     "items": [
       {
-        "key": "example",
+        "key": "example.group",
         "titleKey": "Navigation.Example",
         "icon": "module",
+        "order": 999
+      },
+      {
+        "key": "example",
+        "titleKey": "Navigation.RuntimeWorkload",
+        "icon": "module",
+        "parentKey": "example.group",
         "path": "/examples/standard-crud/runtime-columns",
-        "order": 999,
+        "order": 10,
         "entryType": "standard-list",
         "targetKey": "example.runtime-workload.list",
         "featureAuthorization": true
@@ -17,8 +24,9 @@
         "key": "example.records",
         "titleKey": "Navigation.ExampleRecords",
         "icon": "module",
+        "parentKey": "example.group",
         "path": "/examples/standard-crud/persistent-records",
-        "order": 998,
+        "order": 20,
         "entryType": "standard-list",
         "targetKey": "example.record.list",
         "featureAuthorization": true

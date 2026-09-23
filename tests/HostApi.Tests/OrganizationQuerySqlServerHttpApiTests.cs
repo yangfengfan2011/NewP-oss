@@ -1,6 +1,7 @@
 using System.Data.Common;
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Claims;
 using System.Text.Json;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Modules.Organization.Caching;
@@ -9,6 +10,7 @@ using ICP.Platform.Organization.Contracts;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Persistence.Transactions;
 using ICP.Platform.Testing;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -107,6 +109,17 @@ public sealed class OrganizationQuerySqlServerHttpApiTests
             }
         }
 
+        // 候选沿可信主体的正式入口执行固定 SQL；完整业务事实已由上面的快照逐字段断言。
+        counter.Commands.Clear();
+        using (var candidates = await SendAsync(admin, http.Organization("persons"), HttpMethod.Get,
+            "/api/organization/person-lookups/companies?page=1&pageSize=1"))
+        {
+            Assert.Equal(HttpStatusCode.OK, candidates.StatusCode);
+            var page = await candidates.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Single(page.GetProperty("items").EnumerateArray());
+        }
+        Assert.NotEmpty(counter.Commands);
+
         // 固定管理SQL读取不豁免端点可用性；暂停恢复使503断言不与后台成功恢复竞争。
         ((PausedRecoveryCache)fixture.Services.GetRequiredService<OrganizationCache>()).HoldRecovery = true;
         await using (var write = await fixture.Services.GetRequiredService<OrganizationCache>().BeginAsync(default)) write.MarkUnavailable();
@@ -116,9 +129,33 @@ public sealed class OrganizationQuerySqlServerHttpApiTests
         counter.Commands.Clear();
         using (var management = await SendAsync(admin, http.Organization("companies"), HttpMethod.Get, $"/api/organization/companies/{company}"))
             Assert.Equal(HttpStatusCode.ServiceUnavailable, management.StatusCode);
+        using (var unavailableCandidates = await SendAsync(admin, http.Organization("persons"), HttpMethod.Get,
+            "/api/organization/person-lookups/companies?page=1&pageSize=1"))
+        {
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, unavailableCandidates.StatusCode);
+            var problem = await unavailableCandidates.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal("Authorization.DecisionUnavailable", problem.GetProperty("code").GetString());
+        }
         await using var scope = fixture.Services.CreateAsyncScope();
-        Assert.Single((await scope.ServiceProvider.GetRequiredService<ICompanyDirectory>().LookupAsync(new(Keyword: null, Page: 1, PageSize: 1))).Items);
+        var accessor = scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>();
+        var previousContext = accessor.HttpContext;
+        // 已登录的 fixture 管理员使用真实 bootstrap AccountEid；只在本作用域恢复内部候选调用所需的可信主体。
+        accessor.HttpContext = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity(
+                [new Claim(ClaimTypes.NameIdentifier, fixture.ActorId)], "FixtureAdministrator"))
+        };
+        try
+        {
+            Assert.Single((await scope.ServiceProvider.GetRequiredService<ICompanyDirectory>()
+                .LookupAsync(new(Keyword: null, Page: 1, PageSize: 1))).Items);
+        }
+        finally
+        {
+            accessor.HttpContext = previousContext;
+        }
         Assert.NotEmpty(counter.Commands);
+        Assert.Contains(counter.Commands, sql => sql.Contains("[Company]") && sql.Contains("OFFSET"));
 
         async Task<string> Create(string resource, object values) => BusinessAuditSqlServerHttpApiTests.Id(
             await CreateAsync(admin, http.Organization(resource, "create", "list.pageActions"), "/api/organization/" + resource, values));

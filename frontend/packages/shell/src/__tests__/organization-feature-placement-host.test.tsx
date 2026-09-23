@@ -376,6 +376,7 @@ function personDetailResponse() {
           reason: null,
           account: null,
           isAccountAvailable: true,
+          isAccountReadable: true,
         },
       },
       authorizationSummary: { status: 'ready', data: [] },

@@ -220,6 +220,7 @@ describe('organization person center detail layout', () => {
                   revision: 3,
                 },
                 isAccountAvailable: true,
+                isAccountReadable: true,
               },
             },
             authorizationSummary: { status: 'ready', data: ['Organization.Person.View'] },

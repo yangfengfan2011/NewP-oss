@@ -621,6 +621,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
 
                 page = administratorPage;
                 driver = administratorDriver;
+                await ConfigurePersonObjectAuthorizationAsync(page, person);
+                browserAssertions.Add("administrator-opened-person-object-authorization-and-saved-the-whole-configuration");
                 await page.GotoAsync($"http://127.0.0.1:{_shellPort}/authorization/roles/{_roleId}");
                 await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "配置权限", Exact = true }).ClickAsync();
                 var workbench = new AuthorizationWorkbenchPageDriver(page);
@@ -1005,6 +1007,57 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             drawer,
             new ApiExpectation("POST", "/api/organization/persons", 201, "maintainer create"));
         return ReadPerson(await created.TextAsync(), number, name);
+    }
+
+    // 管理员沿真实人员详情动作保存整份对象授权；动作值及资格变化在 SQL/API 层断言。
+    private async Task ConfigurePersonObjectAuthorizationAsync(IPage page, PersonData person)
+    {
+        await page.GotoAsync($"http://127.0.0.1:{_shellPort}/organization/persons/{person.Id}");
+        await page.GetByText("基础信息", new PageGetByTextOptions { Exact = true }).WaitForAsync();
+        var action = page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "人员对象授权", Exact = true });
+        await action.WaitForAsync();
+        await action.ClickAsync();
+        var dialog = page.GetByRole(AriaRole.Dialog, new PageGetByRoleOptions { Name = "人员对象授权", Exact = true });
+        var target = dialog.Locator("[aria-label='授权目标']");
+        await target.GetByText($"目标人员：{person.Name}", new LocatorGetByTextOptions { Exact = true }).WaitForAsync();
+        await target.GetByText($"人员标识：{person.Id}", new LocatorGetByTextOptions { Exact = true }).WaitForAsync();
+        await Assertions.Expect(dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "保存授权", Exact = true }))
+            .ToBeEnabledAsync();
+        await dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "添加主体项", Exact = true }).ClickAsync();
+        await dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "取消", Exact = true }).ClickAsync();
+        var discard = page.GetByRole(AriaRole.Dialog, new PageGetByRoleOptions { Name = "放弃未保存的草稿？", Exact = true });
+        await discard.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "放弃修改", Exact = true }).ClickAsync();
+        await Assertions.Expect(dialog).ToHaveCountAsync(0);
+
+        await action.ClickAsync();
+        await Assertions.Expect(dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "保存授权", Exact = true }))
+            .ToBeEnabledAsync();
+        var select = new DataScopeRulesPageDriver(page);
+        await dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "添加主体项", Exact = true }).ClickAsync();
+        var everyone = dialog.GetByRole(AriaRole.Group, new LocatorGetByRoleOptions { Name = "主体授权项 1", Exact = true });
+        await select.SelectAsync("读取意见", "同意", everyone);
+        await select.SelectAsync("授权意见", "同意", everyone);
+        await dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "添加主体项", Exact = true }).ClickAsync();
+        var role = dialog.GetByRole(AriaRole.Group, new LocatorGetByRoleOptions { Name = "主体授权项 2", Exact = true });
+        await select.SelectAsync("主体类型", "角色", role);
+        await select.SelectAsync("主体选择", $"Personnel Gate Role M {_runId[..8]}", role, search: true);
+        await select.SelectAsync("编辑意见", "同意", role);
+        var wide = Path.Combine(_runDirectory, "personnel", "person-object-authorization-wide.png");
+        await page.ScreenshotAsync(new PageScreenshotOptions { Path = wide, FullPage = true });
+        _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, wide));
+        await page.SetViewportSizeAsync(900, 1000);
+        var narrow = Path.Combine(_runDirectory, "personnel", "person-object-authorization-narrow.png");
+        await page.ScreenshotAsync(new PageScreenshotOptions { Path = narrow, FullPage = true });
+        _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, narrow));
+        await page.SetViewportSizeAsync(1440, 1000);
+
+        var response = await page.RunAndWaitForResponseAsync(
+            () => dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "保存授权", Exact = true }).ClickAsync(),
+            item => item.Request.Method == "PUT" && new Uri(item.Url).AbsolutePath ==
+                $"/api/authorization/data-scope/objects/organization.person/{person.Id}");
+        if (response.Status != 204) throw new InvalidOperationException($"Object authorization save returned {response.Status}.");
+        await Assertions.Expect(dialog).ToHaveCountAsync(0);
+        await page.GetByText("授权已保存；后续访问按新配置判定。", new PageGetByTextOptions { Exact = true }).WaitForAsync();
     }
 
     private static async Task<ILocator> OpenPersonEditDrawerAsync(StandardCrudPageDriver driver, PersonData person)

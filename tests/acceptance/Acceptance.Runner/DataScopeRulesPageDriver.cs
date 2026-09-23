@@ -120,7 +120,7 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
     }
 
     // rc-select 的零高辅助节点也会包含选项；沿真实列表的键盘活动项选择，避免误点辅助节点。
-    private async Task SelectAsync(string label, string option, ILocator? group = null, bool search = false,
+    internal async Task SelectAsync(string label, string option, ILocator? group = null, bool search = false,
         string? searchText = null, Func<Task>? candidatesReady = null)
     {
         var scope = group ?? page.Locator("body");

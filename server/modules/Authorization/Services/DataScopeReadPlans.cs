@@ -56,9 +56,30 @@ public sealed class DataScopeReadPlans(DataScopeRules rules, DataScopeCatalog ca
     public async Task<bool> IsAllowedAsync(string resourceKey, string objectId, string actionKey,
         CancellationToken cancellationToken = default)
     {
+        return await DecideActionAsync(resourceKey, objectId, actionKey, null, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> IsCandidateAllowedAsync(string resourceKey, IReadOnlyDictionary<string, object?> candidate,
+        string actionKey, CancellationToken cancellationToken = default)
+    {
+        var resource = catalog.Resolve(resourceKey);
+        var objectId = candidate.TryGetValue(resource.IdField, out var value) ? value as string : null;
+        if (string.IsNullOrWhiteSpace(objectId)) throw new InvalidOperationException("DATA_SCOPE_CANDIDATE_ID_REQUIRED");
+        return await DecideActionAsync(resourceKey, objectId, actionKey, candidate, cancellationToken);
+    }
+
+    // 对象与候选共用意见合并；新建只改变条件事实来源，不引入另一套裁决算法。
+    private async Task<bool> DecideActionAsync(string resourceKey, string objectId, string actionKey,
+        IReadOnlyDictionary<string, object?>? candidate, CancellationToken cancellationToken)
+    {
         var resource = catalog.Resolve(resourceKey);
         var action = catalog.Actions.Single(item => item.Key == actionKey);
-        if (actionKey == "read") return await CanReadAsync(resource, objectId, cancellationToken);
+        if (actionKey == "read")
+        {
+            if (candidate is not null) throw new InvalidOperationException("DATA_SCOPE_CANDIDATE_READ_UNSUPPORTED");
+            return await CanReadAsync(resource, objectId, cancellationToken);
+        }
         if (action.RequiresRead && !await CanReadAsync(resource, objectId, cancellationToken)) return false;
         if (!action.Enabled) return true;
         var subject = context.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -82,8 +103,9 @@ public sealed class DataScopeReadPlans(DataScopeRules rules, DataScopeCatalog ca
                 .Select(item => item.Type).Distinct(StringComparer.Ordinal),
             active.SelectMany(rule => catalog.ContextKeys(rule.Condition)), cancellationToken);
         return !await DataScopeRuleTree.IsDeniedAsync(applicable,
-            rule => !relevant.Contains(rule.Id) ? Task.FromResult(false)
-                : catalog.MatchesAsync(resourceKey, objectId, rule.Condition, facts, cancellationToken),
+            rule => !relevant.Contains(rule.Id) ? Task.FromResult(false) : candidate is null
+                ? catalog.MatchesAsync(resourceKey, objectId, rule.Condition, facts, cancellationToken)
+                : catalog.MatchesCandidateAsync(resourceKey, candidate, rule.Condition, facts, cancellationToken),
             rule =>
             {
                 if (!relevant.Contains(rule.Id)) return null;

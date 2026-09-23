@@ -188,6 +188,36 @@ public sealed class DataScopeConditions(DataScopeCatalog catalog, EfPlatformDbCo
         return await query.AnyAsync(Expression.Lambda<Func<Dictionary<string, object?>, bool>>(Expression.AndAlso(id, predicate), row), token);
     }
 
+    /// <summary>用参数化的单行 SQL 候选复用数据库属性比较规则；业务叶子直接消费待写事实。</summary>
+    public async Task<bool> MatchesCandidateAsync(string resourceKey, IReadOnlyDictionary<string, object?> candidate,
+        DataScopeConditionDto condition, DataScopeResolvedIdentities facts, CancellationToken token)
+    {
+        Validate(resourceKey, condition);
+        var resource = catalog.Resolve(resourceKey);
+        var decisions = new Dictionary<DataScopeConditionDto, bool>(ReferenceEqualityComparer.Instance);
+        await ResolveBusinessCandidateAsync(condition, resource, candidate, decisions, token);
+        var row = Expression.Parameter(typeof(Dictionary<string, object?>), "row");
+        var predicate = Build(resourceKey, condition, row, facts, decisions)
+            ?? throw new InvalidOperationException("DATA_SCOPE_FULL_CONDITION_UNAVAILABLE");
+        var model = db.Model.FindEntityType(db.ResolveModelKey(resource.ModelKey))
+            ?? throw new InvalidOperationException("DATA_SCOPE_MODEL_UNAVAILABLE");
+        var columns = model.GetProperties().ToArray();
+        var parameters = new object[columns.Length];
+        var selections = new string[columns.Length];
+        for (var index = 0; index < columns.Length; index++)
+        {
+            var property = columns[index];
+            candidate.TryGetValue(property.Name, out var value);
+            parameters[index] = value ?? DBNull.Value;
+            var column = property.GetColumnName()!.Replace("]", "]]", StringComparison.Ordinal);
+            selections[index] = $"CAST({{{index}}} AS {property.GetColumnType() ?? property.GetRelationalTypeMapping().StoreType}) AS [{column}]";
+        }
+        var sql = "SELECT " + string.Join(", ", selections);
+        var query = db.Set<Dictionary<string, object?>>(db.ResolveModelKey(resource.ModelKey))
+            .FromSqlRaw(sql, parameters).AsNoTracking();
+        return await query.AnyAsync(Expression.Lambda<Func<Dictionary<string, object?>, bool>>(predicate, row), token);
+    }
+
     /// <summary>当前值解析只选择实际引用键，组合树的每个叶子仍共用一次主体事实。</summary>
     public IEnumerable<string> ContextKeys(DataScopeConditionDto condition) => condition.Type == "group"
         ? condition.Children!.SelectMany(ContextKeys) : condition.ContextKey is null ? [] : [condition.ContextKey];
@@ -204,6 +234,22 @@ public sealed class DataScopeConditions(DataScopeCatalog catalog, EfPlatformDbCo
         {
             var (provider, definition) = Business(condition.Key, resource.ResourceKey);
             decisions[condition] = await provider.MatchesAsync(definition.Key, resource, objectId, condition.Value, token);
+        }
+    }
+
+    // 新建尚无目标行，业务条件只能读取候选及其所属模块的既有事实。
+    private async Task ResolveBusinessCandidateAsync(DataScopeConditionDto condition, DataScopeResource resource,
+        IReadOnlyDictionary<string, object?> candidate, Dictionary<DataScopeConditionDto, bool> decisions, CancellationToken token)
+    {
+        if (condition.Type == "group")
+        {
+            foreach (var child in condition.Children!)
+                await ResolveBusinessCandidateAsync(child, resource, candidate, decisions, token);
+        }
+        else if (condition.Type == "business")
+        {
+            var (provider, definition) = Business(condition.Key, resource.ResourceKey);
+            decisions[condition] = await provider.MatchesCandidateAsync(definition.Key, resource, candidate, condition.Value, token);
         }
     }
 

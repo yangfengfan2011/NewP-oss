@@ -31,6 +31,17 @@ public sealed class OrganizationDataScopeConditions(IOrganizationQuery organizat
     }
 
     /// <inheritdoc/>
+    public async Task<bool> MatchesCandidateAsync(string key, DataScopeResource resource,
+        IReadOnlyDictionary<string, object?> candidate, JsonElement value, CancellationToken cancellationToken)
+    {
+        Validate(key, value);
+        if (resource.ModelKey != "Organization/Person") throw new InvalidOperationException("DATA_SCOPE_BUSINESS_TARGET_MISMATCH");
+        if (!candidate.TryGetValue("DepartmentId", out var raw) || raw is not string departmentId) return false;
+        var view = await organizations.ReadAsync(cancellationToken);
+        return view.Find(OrganizationRecordKind.Department, departmentId)?["IsEnabled"] is true;
+    }
+
+    /// <inheritdoc/>
     public Expression BuildReadExpression(string key, DataScopeResource resource, ParameterExpression row, JsonElement value) =>
         throw new InvalidOperationException("DATA_SCOPE_READ_CONTRIBUTION_UNAVAILABLE");
 }

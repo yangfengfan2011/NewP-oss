@@ -1353,7 +1353,8 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         _admin = admin; _catalog = catalog;
         _connection = new SqlConnectionStringBuilder(admin) { InitialCatalog = catalog }.ConnectionString;
     }
-    internal static async Task<BusinessAuditHostFixture> CreateAsync(Action<IServiceCollection>? configureServices = null)
+    internal static async Task<BusinessAuditHostFixture> CreateAsync(Action<IServiceCollection>? configureServices = null,
+        IReadOnlyDictionary<string, bool>? actionStates = null)
     {
         var admin = new SqlConnectionStringBuilder(Environment.GetEnvironmentVariable("NEWP_ORGANIZATION_SQLSERVER_ADMIN_CONNECTION")
             ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true") { InitialCatalog = "master" }.ConnectionString;
@@ -1361,7 +1362,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         await fixture.ExecuteAdminAsync($"CREATE DATABASE [{fixture._catalog}]");
         try
         {
-            await fixture.StartAsync(configureServices);
+            await fixture.StartAsync(configureServices, actionStates: actionStates);
             using var scope = fixture._app.Services.CreateScope();
             var result = await scope.ServiceProvider.GetRequiredService<IIdentityLocalAdministratorMaintenanceService>().BootstrapAsync(new(
                 "admin", "审计管理员", "审计集成准备", new(IdentityMaintenanceActors.LocalMaintenance, IdentitySecurityActorKind.LocalMaintenance, Guid.NewGuid().ToString("N"))));
@@ -1379,9 +1380,13 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
     }
     internal async Task RestartWithActionAsync(string actionKey, bool enabled)
     {
+        await RestartWithActionsAsync(new Dictionary<string, bool> { [actionKey] = enabled });
+    }
+    internal async Task RestartWithActionsAsync(IReadOnlyDictionary<string, bool> actionStates)
+    {
         await _app.StopAsync();
         await _app.DisposeAsync();
-        await StartAsync(null, actionStates: new Dictionary<string, bool> { [actionKey] = enabled });
+        await StartAsync(null, actionStates: actionStates);
     }
     private async Task StartAsync(Action<IServiceCollection>? configureServices, bool readEnabled = true,
         IReadOnlyDictionary<string, bool>? actionStates = null)

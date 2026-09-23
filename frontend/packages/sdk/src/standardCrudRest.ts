@@ -1,5 +1,6 @@
 import type {
   StandardCrudDetail,
+  StandardCrudMutationReceipt,
   StandardCrudFeatureRequestContext,
   StandardCrudOperationResult,
   StandardCrudOption,
@@ -144,6 +145,14 @@ function featureHeaders(context?: StandardCrudFeatureRequestContext): Record<str
   return context?.featurePosition ? { 'X-NewP-Feature': context.featurePosition } : {};
 }
 
+// 写入已提交而后续读取不可用时只接受明确的无详情成功回执。
+function normalizeMutationResponse(value: unknown): StandardCrudDetail | StandardCrudMutationReceipt {
+  if (isStandardCrudRecord(value) && Object.keys(value).length === 1 && value.succeeded === true) {
+    return { succeeded: true };
+  }
+  return normalizeStandardCrudDetail(value);
+}
+
 export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch): StandardCrudClient {
   return {
     list: (query, readContext) => requestJson<unknown>(
@@ -181,7 +190,7 @@ export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch
         ),
       ),
     create: async (values, context) =>
-      normalizeStandardCrudDetail(
+      normalizeMutationResponse(
         await requestJson<unknown>(
           fetcher,
           apiRoute,
@@ -194,7 +203,7 @@ export function createStandardCrudClient(apiRoute: string, fetcher: typeof fetch
         ),
       ),
     update: async (id, values, context) =>
-      normalizeStandardCrudDetail(
+      normalizeMutationResponse(
         await requestJson<unknown>(
           fetcher,
           `${apiRoute}/${encodeURIComponent(id)}`,
@@ -244,7 +253,10 @@ export function createStandardCrudRestDataAdapter<TRow, TDetail = StandardCrudDe
       ? (await client.getDetail(id, context)).fields : before;
 
   // HTTP 成功后的业务映射也属于同步阶段；失败保留成功事实，以 unknown 位置进行只读恢复。
-  const mutationResult = (operation: 'create' | 'update', detail: StandardCrudDetail, before?: Record<string, unknown>, previousId = ''): StandardCrudOperationResult => {
+  const mutationResult = (operation: 'create' | 'update', detail: StandardCrudDetail | StandardCrudMutationReceipt, before?: Record<string, unknown>, previousId = ''): StandardCrudOperationResult => {
+    if ('succeeded' in detail) {
+      return { operation, payload: undefined, change: { operation, id: previousId, before } };
+    }
     try {
       const id = options.getRowId(options.mapListItem(detail.fields));
       return { operation, payload: detail, change: { operation, id, before, after: detail.fields } };

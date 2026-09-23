@@ -340,6 +340,9 @@ export interface StandardCrudResourceRegistration<
   columnProvider?: StandardCrudListColumnProvider<TFilter>;
 }
 
+/** 写入成功后的无详情回执；不得从中推断对象 ID 或读取资格。 */
+export interface StandardCrudMutationReceipt { succeeded: true }
+
 /** 标准 CRUD 客户端最小方法集，供 Shell Host 复用统一路径、错误和详情规范化行为。 */
 export interface StandardCrudListQueryRequest {
   [key: string]: string | number | boolean | null | undefined;
@@ -368,8 +371,8 @@ export interface StandardCrudClient {
   list: (query?: StandardCrudListQueryRequest, readContext?: StandardCrudListReadContext) => Promise<unknown>;
   exportList: (request: StandardCrudExportRequest, context?: StandardCrudFeatureRequestContext) => Promise<StandardCrudExportResponse>;
   getDetail: (id: string, readContext?: StandardCrudDetailReadContext) => Promise<StandardCrudDetail>;
-  create: (values: StandardCrudMutationValues, context?: StandardCrudFeatureRequestContext) => Promise<StandardCrudDetail>;
-  update: (id: string, values: StandardCrudMutationValues, context?: StandardCrudFeatureRequestContext) => Promise<StandardCrudDetail>;
+  create: (values: StandardCrudMutationValues, context?: StandardCrudFeatureRequestContext) => Promise<StandardCrudDetail | StandardCrudMutationReceipt>;
+  update: (id: string, values: StandardCrudMutationValues, context?: StandardCrudFeatureRequestContext) => Promise<StandardCrudDetail | StandardCrudMutationReceipt>;
   delete: (id: string, context?: StandardCrudFeatureRequestContext) => Promise<void>;
   enable: (id: string, context?: StandardCrudFeatureRequestContext) => Promise<StandardCrudDetail>;
   disable: (id: string, context?: StandardCrudFeatureRequestContext) => Promise<StandardCrudDetail>;

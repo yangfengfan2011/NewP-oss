@@ -155,7 +155,8 @@ public static class StandardCrudEndpointRouteBuilderExtensions
         {
             var values = await ReadValuesAsync(context, cancellationToken);
             var result = await endpoint.CreateAsync(descriptor, values, cancellationToken);
-            return ToMutationResult(result, detail => Results.Created(BuildCreatedLocation(route, descriptor, detail), detail));
+            return ToMutationResult(result, detail => Results.Created(BuildCreatedLocation(route, descriptor, detail), detail),
+                () => Results.Json(new StandardCrudMutationReceipt(true), statusCode: StatusCodes.Status201Created));
         }).WithMetadata(new EndpointModuleAttribute(descriptor.ModuleId))
             .RequireCrudOperation(authorization, StandardCrudOperation.Create);
 
@@ -370,9 +371,11 @@ public static class StandardCrudEndpointRouteBuilderExtensions
         };
     }
 
+    // 成功后可读时保留详情协议；不可读只给不含对象身份的明确回执。
     private static IResult ToMutationResult(
         StandardCrudMutationResult result,
-        Func<StandardCrudDetail, IResult> success)
+        Func<StandardCrudDetail, IResult> success,
+        Func<IResult>? receipt = null)
     {
         if (!result.Succeeded)
         {
@@ -381,13 +384,7 @@ public static class StandardCrudEndpointRouteBuilderExtensions
 
         if (result.Detail is null)
         {
-            return ToErrorResult(new StandardCrudError
-            {
-                StatusCode = StatusCodes.Status500InternalServerError,
-                Code = "StandardCrud.MutationDetailMissing",
-                Message = "标准 CRUD 写入成功但未返回详情。",
-                ReasonKey = "standardCrud.mutationDetailMissing"
-            });
+            return receipt?.Invoke() ?? Results.Ok(new StandardCrudMutationReceipt(true));
         }
 
         return success(result.Detail);

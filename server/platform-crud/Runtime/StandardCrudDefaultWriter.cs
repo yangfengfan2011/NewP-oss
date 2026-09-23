@@ -1,6 +1,8 @@
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
+using ICP.Platform.Crud.ObjectIds;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.Auditing;
 using ICP.Platform.Presentation;
@@ -20,6 +22,8 @@ public sealed class StandardCrudDefaultWriter
     private readonly IReadOnlyDictionary<string, IStandardCrudUpdateRecorder> _updateRecorders;
     private readonly IPlatformTransactionExecutor? _transactionExecutor;
     private readonly StandardCrudWriteRules _rules;
+    private readonly IDataScopeObjectDecisionProvider? _dataScope;
+    private readonly IPlatformObjectIdGenerator? _objectIds;
 
     /// <summary>组合默认写入依赖；事务与审计仍复用平台已有 owner，不依赖查询或展示服务。</summary>
     public StandardCrudDefaultWriter(
@@ -31,7 +35,9 @@ public sealed class StandardCrudDefaultWriter
         ITemporalInputNormalizer? temporalInputNormalizer = null,
         IEnumerable<IStandardCrudCreationRecorder>? creationRecorders = null,
         IPlatformTransactionExecutor? transactionExecutor = null,
-        IEnumerable<IStandardCrudUpdateRecorder>? updateRecorders = null)
+        IEnumerable<IStandardCrudUpdateRecorder>? updateRecorders = null,
+        IDataScopeObjectDecisionProvider? dataScope = null,
+        IPlatformObjectIdGenerator? objectIds = null)
     {
         _repository = repository;
         _deleteGuards = deleteGuards.ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
@@ -41,6 +47,8 @@ public sealed class StandardCrudDefaultWriter
         _updateRecorders = (updateRecorders ?? []).ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
         _transactionExecutor = transactionExecutor;
         _rules = new StandardCrudWriteRules(repository, validators, temporalInputNormalizer, auditValueProvider);
+        _dataScope = dataScope;
+        _objectIds = objectIds;
     }
 
     // 默认创建核心可由统一对象行为复用；已处于对象事务时只登记变化，不再取得第二次事务所有权。
@@ -57,7 +65,18 @@ public sealed class StandardCrudDefaultWriter
         var preparation = await _rules.PrepareCreateAsync(descriptor, values, cancellationToken);
         if (!preparation.Succeeded)
             return StandardCrudMutationResult.Failure(preparation.Error!);
-        var allowed = preparation.Values!;
+        IReadOnlyDictionary<string, object?> allowed = preparation.Values!;
+        if (_dataScope is not null)
+        {
+            if (_objectIds is null) throw new InvalidOperationException("DATA_SCOPE_OBJECT_ID_GENERATOR_REQUIRED");
+            var candidate = new Dictionary<string, object?>(allowed, StringComparer.Ordinal)
+            {
+                [descriptor.IdField] = _objectIds.NewId(descriptor.ModelName)
+            };
+            if (!await _dataScope.IsCandidateAllowedAsync(descriptor.ResourceKey, candidate, "create", cancellationToken))
+                return StandardCrudMutationResult.Failure(ScopeDenied(descriptor));
+            allowed = candidate;
+        }
 
         IReadOnlyDictionary<string, object?> created;
         try
@@ -150,6 +169,9 @@ public sealed class StandardCrudDefaultWriter
             return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
         }
 
+        var scopeError = await CheckExistingScopeAsync(descriptor, id, "edit", cancellationToken);
+        if (scopeError is not null) return StandardCrudMutationResult.Failure(scopeError);
+
         long? expectedRevision = null;
         if (!string.IsNullOrWhiteSpace(descriptor.ConcurrencyRevisionField))
         {
@@ -215,6 +237,13 @@ public sealed class StandardCrudDefaultWriter
                 token => DeleteAsync(descriptor, id, token).AsTask(),
                 cancellationToken);
         StandardCrudDescriptorValidator.Validate(descriptor);
+        if (_dataScope is not null)
+        {
+            var existing = await _repository.GetByIdAsync(descriptor, id, cancellationToken);
+            if (existing is null) return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
+            var scopeError = await CheckExistingScopeAsync(descriptor, id, "delete", cancellationToken);
+            if (scopeError is not null) return StandardCrudMutationResult.Failure(scopeError);
+        }
         if (descriptor.DeletePolicy == StandardCrudDeletePolicy.None)
         {
             return StandardCrudMutationResult.Failure(new StandardCrudError
@@ -306,6 +335,25 @@ public sealed class StandardCrudDefaultWriter
     {
         public StandardCrudMutationResult Result { get; } = result;
     }
+
+    // 已存在目标先判最终读取，再判动作；关闭动作不能吞掉仍启用的读取依赖。
+    private async Task<StandardCrudError?> CheckExistingScopeAsync(StandardCrudDescriptor descriptor, string id,
+        string action, CancellationToken token)
+    {
+        if (_dataScope is null) return null;
+        if (!await _dataScope.IsAllowedAsync(descriptor.ResourceKey, id, "read", token)) return NotFound(descriptor, id);
+        return await _dataScope.IsAllowedAsync(descriptor.ResourceKey, id, action, token)
+            ? null : ScopeDenied(descriptor);
+    }
+
+    // 功能入口资格由端点独立检查；这里仅报告数据动作明确拒绝。
+    private static StandardCrudError ScopeDenied(StandardCrudDescriptor descriptor) => new()
+    {
+        StatusCode = 403,
+        Code = "DataScope.ActionDenied",
+        Message = $"标准 CRUD 资源 {descriptor.ResourceKey} 的数据动作未获允许。",
+        ReasonKey = "dataScope.actionDenied"
+    };
 
     // revision 可能来自 EF long、测试数值或 System.Text.Json；这里只接受可无损转换的非负整数。
     private static bool TryReadRevision(

@@ -113,6 +113,7 @@ export {
 
 export type {
   StandardCrudClient,
+  StandardCrudMutationReceipt,
   StandardCrudColumnContext,
   StandardCrudColumnSet,
   StandardCrudDataAdapter,

@@ -55,6 +55,9 @@ public sealed class DataScopeResourceIdentityTests
         public void Validate(string key, JsonElement value) { }
         public Task<bool> MatchesAsync(string key, DataScopeResource resource, string objectId, JsonElement value,
             CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task<bool> MatchesCandidateAsync(string key, DataScopeResource resource,
+            IReadOnlyDictionary<string, object?> candidate, JsonElement value,
+            CancellationToken cancellationToken) => Task.FromResult(true);
         public Expression BuildReadExpression(string key, DataScopeResource resource, ParameterExpression row, JsonElement value) => Expression.Constant(true);
     }
 }

@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mapPersonDetailView, mapPersonListItem } from '../services/organizationService';
 import { personStandardCrudResource } from '../standard-crud/personStandardCrudResource';
 
+vi.mock('@icp-platform/core', () => ({ platformFetch: (...args: unknown[]) => fetch(...args as Parameters<typeof fetch>) }));
+
 const lookupRequest = (
   fieldKey: string,
   values: Record<string, unknown> = {},
@@ -11,6 +13,19 @@ const lookupRequest = (
 describe('personnel center first vertical slice', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('accepts a successful Person write receipt without treating it as readable detail', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ succeeded: true }), { status: 201 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ succeeded: true }), { status: 200 }));
+    const created = await personStandardCrudResource.dataAdapter.create!({ PersonNo: 'P-1', ENAME: '代录' });
+    const updated = await personStandardCrudResource.dataAdapter.update!('person-1', { ENAME: '移出范围' }, { EID: 'person-1' });
+    expect(created).toEqual({ operation: 'create', payload: undefined,
+      change: { operation: 'create', id: '', before: undefined } });
+    expect(updated).toEqual({ operation: 'update', payload: undefined,
+      change: { operation: 'update', id: 'person-1', before: { EID: 'person-1' } } });
+    expect(fetchSpy.mock.calls.map(([, init]) => init?.method)).toEqual(['POST', 'PUT']);
   });
 
   it('leaves route authorization to the runtime metadata projection', () => {

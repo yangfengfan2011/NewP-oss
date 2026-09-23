@@ -25,6 +25,10 @@ public interface IDataScopeObjectDecisionProvider
 {
     /// <summary>按当前可信主体与当前对象事实判断动作；读取拒绝和动作拒绝由调用方区分响应。</summary>
     Task<bool> IsAllowedAsync(string resourceKey, string objectId, string actionKey, CancellationToken cancellationToken = default);
+
+    /// <summary>按规范化且包含服务端字段的完整待写候选判断新建，不要求对象已持久化。</summary>
+    Task<bool> IsCandidateAllowedAsync(string resourceKey, IReadOnlyDictionary<string, object?> candidate,
+        string actionKey, CancellationToken cancellationToken = default);
 }
 
 /// <summary>业务条件的适用 Model 和读取翻译能力由贡献模块明确登记。</summary>
@@ -40,6 +44,10 @@ public interface IDataScopeBusinessConditionProvider
 
     /// <summary>按真实对象身份执行完整判断；事实源故障须传播。</summary>
     Task<bool> MatchesAsync(string key, DataScopeResource resource, string objectId, JsonElement value, CancellationToken cancellationToken);
+
+    /// <summary>新建候选的完整业务判断直接使用待写事实，不读取尚不存在的目标对象。</summary>
+    Task<bool> MatchesCandidateAsync(string key, DataScopeResource resource, IReadOnlyDictionary<string, object?> candidate,
+        JsonElement value, CancellationToken cancellationToken);
 
     /// <summary>构造可由数据库执行的读取贡献；未声明时不得调用。</summary>
     Expression BuildReadExpression(string key, DataScopeResource resource, ParameterExpression row, JsonElement value);

@@ -102,6 +102,11 @@ public sealed class DataScopeCatalog(IStandardCrudResourceRegistry resources, Ca
         return Conditions.MatchesAsync(resourceKey, objectId, condition, facts, token);
     }
 
+    /// <summary>创建前用完整候选判定条件，属性比较仍交正式数据库排序规则。</summary>
+    public Task<bool> MatchesCandidateAsync(string resourceKey, IReadOnlyDictionary<string, object?> candidate,
+        DataScopeConditionDto condition, DataScopeResolvedIdentities facts, CancellationToken token) =>
+        Conditions.MatchesCandidateAsync(resourceKey, candidate, condition, facts, token);
+
     /// <summary>枚举组合树实际引用的可信当前身份值。</summary>
     public IEnumerable<string> ContextKeys(DataScopeConditionDto condition) => Conditions.ContextKeys(condition);
 }

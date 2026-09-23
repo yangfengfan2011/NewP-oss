@@ -25,6 +25,7 @@ public sealed class StandardCrudService : IStandardCrudService
     private readonly IObjectOperationExecutor? _objectOperations;
     private readonly StandardCrudDefaultWriter _defaultWriter;
     private readonly ICP.Platform.Authorization.Contracts.IDataScopeReadPlanProvider? _dataScope;
+    private readonly ICP.Platform.Authorization.Contracts.IDataScopeObjectDecisionProvider? _objectScope;
 
     /// <summary>组合查询与展示依赖；写入只路由到对象执行器或公共默认写入模块。</summary>
     public StandardCrudService(
@@ -39,7 +40,8 @@ public sealed class StandardCrudService : IStandardCrudService
         IRequestPresentationContextAccessor? presentationContextAccessor = null,
         ILogger<StandardCrudService>? logger = null,
         IObjectOperationExecutor? objectOperations = null,
-        ICP.Platform.Authorization.Contracts.IDataScopeReadPlanProvider? dataScope = null)
+        ICP.Platform.Authorization.Contracts.IDataScopeReadPlanProvider? dataScope = null,
+        ICP.Platform.Authorization.Contracts.IDataScopeObjectDecisionProvider? objectScope = null)
     {
         _repository = repository;
         _queryExecutor = queryExecutor;
@@ -53,6 +55,7 @@ public sealed class StandardCrudService : IStandardCrudService
         _logger = logger;
         _objectOperations = objectOperations;
         _dataScope = dataScope;
+        _objectScope = objectScope;
     }
 
     /// <summary>
@@ -206,7 +209,7 @@ public sealed class StandardCrudService : IStandardCrudService
 
     /// <summary>
     /// 按 descriptor 校验并创建资源；canonical display companion 只允许输出，写入前过滤业务白名单字段，
-    /// 并将校验后发生的数据库约束竞争投影为稳定公共冲突后返回带详情的创建结果。
+    /// 并将校验后发生的数据库约束竞争投影为稳定公共冲突；写后读取资格独立决定详情或回执。
     /// </summary>
     public async Task<StandardCrudMutationResult> CreateAsync(
         StandardCrudDescriptor descriptor,
@@ -566,7 +569,7 @@ public sealed class StandardCrudService : IStandardCrudService
         return new StandardCrudDetail { Fields = fields, Summaries = summaries };
     }
 
-    // 对象行为只返回实际持久化字段；正式 CRUD 响应在边界统一补齐 display 与 summary。
+    // 对象行为只返回实际持久化字段；提交后有读取资格才补齐 display 与 summary，否则只交成功回执。
     private async Task<StandardCrudMutationResult> BuildMutationDetailAsync(
         StandardCrudDescriptor descriptor,
         StandardCrudMutationResult result,
@@ -580,8 +583,32 @@ public sealed class StandardCrudService : IStandardCrudService
 
         var row = result.Detail?.Fields
             ?? throw new InvalidOperationException(missingRowMessage);
-        return StandardCrudMutationResult.Success(
-            await BuildDetailFromRowAsync(descriptor, row, cancellationToken));
+        if (_objectScope is not null)
+        {
+            var id = Convert.ToString(row.GetValueOrDefault(descriptor.IdField))
+                ?? throw new InvalidOperationException("STANDARD_CRUD_MUTATION_ID_MISSING");
+            try
+            {
+                if (!await _objectScope.IsAllowedAsync(descriptor.ResourceKey, id, "read", cancellationToken))
+                    return StandardCrudMutationResult.Success();
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                // 提交后的读取只是呈现；故障不能倒转已提交的业务成功。
+                _logger?.LogWarning("STANDARD_CRUD_POST_WRITE_READ_UNAVAILABLE: {FailureType}", exception.GetType().Name);
+                return StandardCrudMutationResult.Success();
+            }
+        }
+        try
+        {
+            return StandardCrudMutationResult.Success(
+                await BuildDetailFromRowAsync(descriptor, row, cancellationToken));
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _logger?.LogWarning("STANDARD_CRUD_POST_WRITE_DETAIL_UNAVAILABLE: {FailureType}", exception.GetType().Name);
+            return StandardCrudMutationResult.Success();
+        }
     }
 
     // 普通附属摘要可降级；关键缓存不可用及请求取消必须上抛，不能伪装成业务数据缺失。

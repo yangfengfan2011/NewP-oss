@@ -70,7 +70,7 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
         {
             await page.Locator(".ant-tree-title").Filter(new() { HasText = ChildRuleName }).ClickAsync();
             await page.GetByText($"当前节点：{ChildRuleName}", new() { Exact = true }).WaitForAsync();
-            await page.GetByText("完整条件还包含祖先：", new() { Exact = true }).WaitForAsync();
+            await page.GetByText("完整条件还包含 1 个祖先条件", new() { Exact = true }).WaitForAsync();
             await page.GetByText($"当前根树：{name}", new() { Exact = true }).WaitForAsync();
             await page.Locator(".ant-tree-title").Filter(new() { HasText = SiblingRuleName }).WaitForAsync();
         }
@@ -94,7 +94,7 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
         await SelectAsync("条件项 1 比较", "不为空");
         await page.Locator(".ant-tree-title").Filter(new() { HasText = ChildRuleName }).ClickAsync();
         await page.GetByText($"当前节点：{ChildRuleName}", new() { Exact = true }).WaitForAsync();
-        await page.GetByText("完整条件还包含祖先：", new() { Exact = true }).WaitForAsync();
+        await page.GetByText("完整条件还包含 1 个祖先条件", new() { Exact = true }).WaitForAsync();
         await page.GetByText($"当前根树：{rootName}", new() { Exact = true }).WaitForAsync();
 
         await page.GetByRole(AriaRole.Button, new() { Name = "新增规则", Exact = true }).ClickAsync();

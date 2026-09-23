@@ -15,6 +15,7 @@ using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Example.Crud;
 using ICP.Platform.Modules.Example.Controllers;
 using ICP.Platform.Modules.Example.Services;
+using ICP.Platform.Modules.Authorization.Controllers;
 using ICP.Platform.HostApi.Authorization;
 using Microsoft.AspNetCore.Routing;
 using ICP.Platform.Persistence.Auditing;
@@ -23,6 +24,8 @@ using ICP.Platform.Query.Models;
 using ICP.Platform.Query.Runtime;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.ApplicationParts;
+using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -256,7 +259,11 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         builder.Services.AddPlatformAuthorization();
         builder.Services.AddAuthorization(options => options.AddPolicy(DenyAllAttribute.PolicyName, policy => policy.RequireAssertion(_ => false)));
         builder.Services.AddSingleton<IFeatureDecisionSource, DeclaredFeatureDecisionSource>();
-        builder.Services.AddControllers().AddApplicationPart(typeof(RuntimeWorkloadController).Assembly);
+        builder.Services.AddControllers()
+            .AddApplicationPart(typeof(RuntimeWorkloadController).Assembly)
+            .AddApplicationPart(typeof(DataScopeObjectsController).Assembly)
+            .ConfigureApplicationPartManager(manager =>
+                manager.FeatureProviders.Add(new ObjectAuthorizationControllerFeatureProvider()));
         builder.Services.AddSingleton<IRuntimeWorkloadService>(new RuntimeWorkloadService(TimeProvider.System));
         builder.Services.AddStandardCrudKernel();
         builder.Services.AddSingleton<IStandardCrudRepository>(repository);
@@ -281,8 +288,24 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         app.UseAuthorization();
         app.MapStandardCrudResources();
         app.MapControllers();
-        FeatureEndpointBindings.Validate(((IEndpointRouteBuilder)app).DataSources, Points.Where(point => point.ModuleId == "Example").ToArray());
+        FeatureEndpointBindings.Validate(((IEndpointRouteBuilder)app).DataSources,
+            Points.Where(point => point.ModuleId == "Example").ToArray(),
+            app.Services.GetRequiredService<IStandardCrudResourceRegistry>());
         return app;
+    }
+
+    private sealed class ObjectAuthorizationControllerFeatureProvider : IApplicationFeatureProvider<ControllerFeature>
+    {
+        public void PopulateFeature(IEnumerable<ApplicationPart> parts, ControllerFeature feature)
+        {
+            // 此小型 Host 只装配 Example 与通用对象执行端；其他授权页面各有独立模块夹具。
+            foreach (var controller in feature.Controllers.Where(controller =>
+                controller.Assembly == typeof(DataScopeObjectsController).Assembly
+                && controller.AsType() != typeof(DataScopeObjectsController)).ToArray())
+            {
+                feature.Controllers.Remove(controller);
+            }
+        }
     }
 
     private sealed class DeclaredFeatureDecisionSource : IFeatureDecisionSource

@@ -54,7 +54,7 @@ public sealed class IdentityFoundationMigrationTests
             .ToArray();
 
         Assert.Equal(
-            "933caa5b7c4905be81b8d500b54974923ce83f50666ef4cd4af806bc3291ed4c",
+            "56554470f57d6620d947482f760982f3f6c2473739c2c66696019fefc5aa21a1",
             PersistenceModelDigest.Compute(definitions));
         Assert.Equal("038748ee556ade48658e64abc43230578eec7d4b9a7aab3429034bc53d7cf666",
             PersistenceModelDigest.Compute(FrozenFoundation()));
@@ -64,7 +64,7 @@ public sealed class IdentityFoundationMigrationTests
     public void SqlServerPlatformFoundationFrontier_IsCurrentEmptyDatabaseMigration()
     {
         Assert.Equal(
-            "20260922094146_AddDataScopeRules",
+            "20260923033732_AddDataScopeObjectGrants",
             PlatformCoreMigrationFrontiers.SqlServerPlatformFoundation);
     }
 
@@ -105,7 +105,7 @@ public sealed class IdentityFoundationMigrationTests
         var definitions = PlatformFoundationModelSource.GetDefinitions();
 
         Assert.Equal(
-            ["ConfigItem", "DataScopeRuleNode", "DataScopeRuleSubject", "FunctionPoint", "Permission", "Role", "RoleFunctionGrant", "RolePermission", "UserRole", "ValueListItem"],
+            ["ConfigItem", "DataScopeObjectAction", "DataScopeObjectSubject", "DataScopeRuleNode", "DataScopeRuleSubject", "FunctionPoint", "Permission", "Role", "RoleFunctionGrant", "RolePermission", "UserRole", "ValueListItem"],
             definitions.Select(static model => model.Name).Order(StringComparer.Ordinal));
 
         var adapted = PlatformPersistenceModelCatalog.AdaptPlatformCore(definitions);
@@ -640,26 +640,36 @@ public sealed class IdentityFoundationMigrationTests
         using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
         var root = document.RootElement;
         var migrations = root.GetProperty("migrations").EnumerateArray().ToArray();
-        Assert.Equal(3, migrations.Length);
-        var migration = migrations[0];
-        var sourcePath = Path.Combine(
-            repositoryRoot,
-            "server",
-            "platform-persistence-efcore.migrations.sqlserver",
-            "Migrations",
-            "20260812144154_PlatformFoundation.cs");
+        Assert.Equal(
+            ["20260812144154_PlatformFoundation", "20260914114935_AddFunctionalAuthorization",
+                "20260922094146_AddDataScopeRules", "20260922105706_AddDataScopeSubjectOptions",
+                "20260923033732_AddDataScopeObjectGrants"],
+            migrations.Select(static migration => migration.GetProperty("migrationId").GetString()));
 
         Assert.Equal("platform.foundation", root.GetProperty("moduleId").GetString());
-        Assert.Equal(new string('0', 64), migration.GetProperty("fromModelDigest").GetString());
+        Assert.Equal(new string('0', 64), migrations[0].GetProperty("fromModelDigest").GetString());
         Assert.Equal(root.GetProperty("modelDigest").GetString(), migrations[^1].GetProperty("toModelDigest").GetString());
-        Assert.Equal(migration.GetProperty("toModelDigest").GetString(), migrations[1].GetProperty("fromModelDigest").GetString());
+        for (var index = 0; index < migrations.Length; index++)
+        {
+            var migration = migrations[index];
+            if (index > 0)
+            {
+                Assert.Equal(migrations[index - 1].GetProperty("toModelDigest").GetString(),
+                    migration.GetProperty("fromModelDigest").GetString());
+                Assert.Equal(migrations[index - 1].GetProperty("contentDigest").GetString(),
+                    migration.GetProperty("previousContentDigest").GetString());
+            }
+
+            var sourcePath = Path.Combine(repositoryRoot, "server",
+                "platform-persistence-efcore.migrations.sqlserver", "Migrations",
+                migration.GetProperty("migrationId").GetString() + ".cs");
+            Assert.Equal(migration.GetProperty("contentDigest").GetString(),
+                MigrationManifestIntegrity.ComputeCanonicalContentDigest(File.ReadAllText(sourcePath)));
+        }
         Assert.Equal(
             root.GetProperty("bundleChecksum").GetString(),
             MigrationManifestIntegrity.ComputeBundleChecksum(File.ReadAllBytes(
                 typeof(ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations.PlatformFoundation).Assembly.Location)));
-        Assert.Equal(
-            migration.GetProperty("contentDigest").GetString(),
-            MigrationManifestIntegrity.ComputeCanonicalContentDigest(File.ReadAllText(sourcePath)));
     }
 
     private static void AssertManifest(

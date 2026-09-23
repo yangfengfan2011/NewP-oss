@@ -7,11 +7,13 @@ internal sealed class RecordingOrganizationQuery : IOrganizationQuery, IOrganiza
     private readonly Dictionary<OrganizationRecordKind, Dictionary<string, IReadOnlyDictionary<string, object?>>> _rows = [];
     public int Reads { get; private set; }
     public Dictionary<OrganizationRecordKind, IReadOnlyCollection<string>> Batches { get; } = [];
-    public RecordingOrganizationQuery(IEnumerable<Company>? companies = null, IEnumerable<Department>? departments = null, IEnumerable<Position>? positions = null)
+    public RecordingOrganizationQuery(IEnumerable<Company>? companies = null, IEnumerable<Department>? departments = null,
+        IEnumerable<Position>? positions = null, IEnumerable<IReadOnlyDictionary<string, object?>>? persons = null)
     {
         _rows[OrganizationRecordKind.Company] = (companies ?? []).ToDictionary(r => r.Id, r => Row(r.Id, r.Name, r.IsEnabled));
         _rows[OrganizationRecordKind.Department] = (departments ?? []).ToDictionary(r => r.Id, r => DepartmentRow(r));
         _rows[OrganizationRecordKind.Position] = (positions ?? []).ToDictionary(r => r.Id, r => Row(r.Id, r.Name, r.IsEnabled));
+        _rows[OrganizationRecordKind.Person] = (persons ?? []).ToDictionary(r => (string)r["EID"]!, r => r);
     }
     private static IReadOnlyDictionary<string, object?> DepartmentRow(Department department) =>
         new Dictionary<string, object?> { ["EID"] = department.Id, ["ENAME"] = department.Name, ["IsEnabled"] = department.IsEnabled,

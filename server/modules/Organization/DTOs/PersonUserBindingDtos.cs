@@ -31,4 +31,5 @@ public sealed record PersonUserBindingSummaryDto(
     string? BoundBy,
     string? Reason,
     PersonUserBindingAccountDto? Account,
-    bool IsAccountAvailable);
+    bool IsAccountAvailable,
+    bool IsAccountReadable);

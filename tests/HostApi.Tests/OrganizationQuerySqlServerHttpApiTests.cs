@@ -66,7 +66,13 @@ public sealed class OrganizationQuerySqlServerHttpApiTests
         Assert.Equal("查询公司", row.GetProperty("CompanyId_DisplayValue").GetString());
         Assert.Equal("当前部门", row.GetProperty("DepartmentName").GetString());
         Assert.Equal("岗位", row.GetProperty("PositionName").GetString());
-        Assert.DoesNotContain(counter.Commands, sql => sql.Contains("[Company]") || sql.Contains("[Department]") || sql.Contains("[Position]"));
+        // Display 只额外查询每种目标的可读 EID；名称仍从完整组织快照批量解析。
+        foreach (var target in new[] { "Company", "Department", "Position" })
+        {
+            var authorizationQuery = Assert.Single(counter.Commands, sql => sql.Contains("[" + target + "]"));
+            Assert.Contains("[EID]", authorizationQuery);
+            Assert.DoesNotContain("[ENAME]", authorizationQuery);
+        }
         Assert.Contains(counter.Commands, sql => sql.Contains("COUNT(*)"));
         Assert.Contains(counter.Commands, sql => sql.Contains("OFFSET") && sql.Contains("FETCH NEXT"));
         counter.Commands.Clear();
@@ -75,8 +81,9 @@ public sealed class OrganizationQuerySqlServerHttpApiTests
         Assert.Equal("ready", binding.GetProperty("status").GetString());
         Assert.Equal(accountId, binding.GetProperty("data").GetProperty("accountEid").GetString());
         Assert.Equal("账号名称", binding.GetProperty("data").GetProperty("account").GetProperty("ename").GetString());
-        Assert.Single(counter.Commands);
-        Assert.Contains("[Person]", counter.Commands[0]);
+        Assert.InRange(counter.Commands.Count(sql => sql.Contains("[Person]")), 1, 3);
+        Assert.All(new[] { "Company", "Department", "Position" }, target =>
+            Assert.Single(counter.Commands, sql => sql.Contains("[" + target + "]")));
         var descriptor = fixture.Services.GetRequiredService<IStandardCrudResourceRegistry>().FindByResourceKey("organization.person")!;
         Assert.All(detail.GetProperty("fields").EnumerateObject(), field => Assert.Contains(field.Name, descriptor.FieldSet.DetailFields.Concat(descriptor.DisplayValueFields.Select(f => f.Field)).Concat(descriptor.DisplayProjectionPlan?.Fields.Select(f => f.CompanionField) ?? [])));
         using (var forbidden = await SendAsync(reader, http.Organization("companies"), HttpMethod.Get, "/api/organization/companies"))

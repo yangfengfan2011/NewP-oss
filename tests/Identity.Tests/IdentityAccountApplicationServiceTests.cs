@@ -562,7 +562,7 @@ public sealed class IdentityAccountApplicationServiceTests
         Assert.Equal("Alice", snapshots[alice.Account.AccountEid].ENAME);
         Assert.Equal("Bob", snapshots[bob.Account.AccountEid].ENAME);
 
-        var adapter = new IdentityUserDisplayNameDirectory(directory);
+        var adapter = new IdentityUserDisplayNameDirectory(directory, new AllowAllReadableIds());
         var renamed = await fixture.Service.UpdateNameAsync(new UpdateIdentityAccountNameCommand(
             alice.Account.AccountEid, "Current ENAME", alice.Account.Revision, fixture.Actor));
         await fixture.Service.SetStatusAsync(new SetIdentityAccountStatusCommand(
@@ -571,6 +571,12 @@ public sealed class IdentityAccountApplicationServiceTests
         Assert.Equal("Current ENAME", names[alice.Account.AccountEid]);
         Assert.DoesNotContain(deleted.Account.AccountEid, names.Keys);
         Assert.DoesNotContain("User_Missing", names.Keys);
+
+        var filtered = await new IdentityUserDisplayNameDirectory(directory, new DenyAccountRead(alice.Account.AccountEid))
+            .FindManyAsync([alice.Account.AccountEid, bob.Account.AccountEid, "User_Missing"]);
+        Assert.Equal("***", filtered[alice.Account.AccountEid]);
+        Assert.Equal("Bob", filtered[bob.Account.AccountEid]);
+        Assert.DoesNotContain("User_Missing", filtered.Keys);
     }
 
     [Fact]
@@ -651,6 +657,18 @@ public sealed class IdentityAccountApplicationServiceTests
         Assert.Equal(IdentityAccountStatus.Disabled, released.Account.Status);
         Assert.False(released.Account.PersonnelDisableHold);
         Assert.Equal(3, released.Account.Revision);
+    }
+
+    private sealed class DenyAccountRead(string blockedId) : ICP.Platform.Authorization.Contracts.IDataScopeReadableIds
+    {
+        /// <inheritdoc/>
+        public Task<IReadOnlySet<string>> GetReadableIdsAsync(string resourceKey, IReadOnlyCollection<string> objectIds,
+            CancellationToken cancellationToken = default)
+        {
+            Assert.Equal("identity.account", resourceKey);
+            return Task.FromResult<IReadOnlySet<string>>(objectIds.Where(id => id != blockedId)
+                .ToHashSet(StringComparer.Ordinal));
+        }
     }
 
     private sealed class Fixture

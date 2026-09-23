@@ -20,6 +20,20 @@ public interface IDataScopeReadPlanProvider
     Task<DataScopeReadPlan> GetReadPlanAsync(string resourceKey, CancellationToken cancellationToken = default);
 }
 
+/// <summary>为引用显示批量裁决既有对象 ID；结果只包含最终可读的目标，不携带业务事实。</summary>
+public interface IDataScopeReadableIds
+{
+    /// <summary>按显式资源身份在数据库应用最终读取计划；执行故障必须传播。</summary>
+    Task<IReadOnlySet<string>> GetReadableIdsAsync(string resourceKey, IReadOnlyCollection<string> objectIds,
+        CancellationToken cancellationToken = default);
+}
+
+/// <summary>数据范围批量读取执行失败，不能按普通名称目录或摘要不可用降级。</summary>
+/// <param name="resourceKey">发生故障的规范资源身份。</param>
+/// <param name="innerException">原始授权或数据库执行故障。</param>
+public sealed class DataScopeReadExecutionException(string resourceKey, Exception innerException)
+    : InvalidOperationException($"DATA_SCOPE_READ_EXECUTION_FAILED: {resourceKey}", innerException);
+
 /// <summary>普通对象动作复用读取依赖、规则树和对象覆盖的最终裁决。</summary>
 public interface IDataScopeObjectDecisionProvider
 {

@@ -1,12 +1,13 @@
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Organization.Contracts;
 using ICP.Platform.Query.Descriptors;
 
 namespace ICP.Platform.Modules.Organization.Crud;
 
 /// <summary>在同一组织结果中批量解析请求字段，保留原始值及既有 canonical companion 约束。</summary>
-public sealed class DepartmentCrudDisplayValueResolver(IOrganizationQuery query) : IStandardCrudDisplayValueResolver
+public sealed class DepartmentCrudDisplayValueResolver(IOrganizationQuery query, IDataScopeReadableIds readableIds) : IStandardCrudDisplayValueResolver
 {
     public string ResourceKey => "organization.department";
 
@@ -31,9 +32,19 @@ public sealed class DepartmentCrudDisplayValueResolver(IOrganizationQuery query)
             var ids = rows.Select(row => row.GetValueOrDefault(source) as string)
                 .Where(id => !string.IsNullOrWhiteSpace(id)).Select(id => id!).Distinct(StringComparer.Ordinal).ToArray();
             var names = view.ResolveNames(kind, ids);
+            var readable = await readableIds.GetReadableIdsAsync(OrganizationDisplayReadResources.For(kind), ids, cancellationToken);
             for (var index = 0; index < rows.Count; index++)
-                result[index][display] = rows[index].GetValueOrDefault(source) is string id && names.TryGetValue(id, out var name)
-                    ? name.IsEnabled ? name.Name : $"{name.Name}（已停用）" : string.Empty;
+            {
+                var id = rows[index].GetValueOrDefault(source) as string;
+                if (id is null || !names.TryGetValue(id, out var name))
+                {
+                    result[index][display] = string.Empty;
+                    continue;
+                }
+                result[index][display] = readable.Contains(id)
+                    ? name.IsEnabled ? name.Name : $"{name.Name}（已停用）"
+                    : "***";
+            }
         }
         return result;
     }

@@ -55,7 +55,9 @@ public sealed class IdentityModule : ModuleCapsuleBindingBase
                 serviceProvider.GetRequiredService<IWebHostEnvironment>().EnvironmentName));
         services.AddScoped<IIdentityRepository, EfIdentityRepository>();
         services.AddScoped<IIdentityAccountDirectory, IdentityAccountDirectory>();
-        services.AddScoped<ICP.Platform.Presentation.IUserDisplayNameDirectory, IdentityUserDisplayNameDirectory>();
+        services.AddScoped<ICP.Platform.Presentation.IUserDisplayNameDirectory>(provider => new IdentityUserDisplayNameDirectory(
+            provider.GetRequiredService<IIdentityAccountDirectory>(),
+            provider.GetRequiredService<ICP.Platform.Authorization.Contracts.IDataScopeReadableIds>()));
         services.AddScoped<IIdentityManagementQueryService, IdentityManagementQueryService>();
         services.AddScoped<IPasswordHasher<IdentityAccount>, PasswordHasher<IdentityAccount>>();
         services.AddScoped<ILocalCredentialAuthenticator, LocalCredentialAuthenticator>();

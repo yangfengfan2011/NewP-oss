@@ -321,10 +321,55 @@ public sealed class PersonStandardCrudResourceTests
     }
 
     [Fact]
+    public async Task PersonCrudDisplayValueResolver_MasksUnreadableExistingTargetsWithoutDroppingRelations()
+    {
+        var query = new RecordingOrganizationQuery(
+            companies: [new Company { Id = "Company_1", Name = "私有公司" }],
+            departments: [new Department { Id = "Department_1", Name = "可见部门" }],
+            positions: [new Position { Id = "Position_1", Name = "私有岗位" }]);
+        var readable = new RecordingReadableIds("Department_1");
+        var resolver = new PersonCrudDisplayValueResolver(query, readable);
+        var rows = new IReadOnlyDictionary<string, object?>[]
+        {
+            new Dictionary<string, object?>
+            {
+                ["CompanyId"] = "Company_1", ["DepartmentId"] = "Department_1", ["PositionId"] = "Position_1"
+            },
+            new Dictionary<string, object?> { ["CompanyId"] = "Company_missing" }
+        };
+
+        var result = await resolver.ResolveListAsync(
+            OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create()), rows,
+            OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create()).DisplayValueFields);
+
+        Assert.Equal("***", result[0]["CompanyId_DisplayValue"]);
+        Assert.Equal("可见部门", result[0]["DepartmentName"]);
+        Assert.Equal("***", result[0]["PositionName"]);
+        Assert.Equal(string.Empty, result[1]["CompanyId_DisplayValue"]);
+        Assert.Equal(3, readable.Calls.Count);
+        Assert.Contains(readable.Calls, call => call.ResourceKey == "organization.company" && call.Ids.SequenceEqual(["Company_1", "Company_missing"]));
+        Assert.Contains(readable.Calls, call => call.ResourceKey == "organization.department" && call.Ids.SequenceEqual(["Department_1"]));
+        Assert.Contains(readable.Calls, call => call.ResourceKey == "organization.position" && call.Ids.SequenceEqual(["Position_1"]));
+    }
+
+    private sealed class RecordingReadableIds(params string[] readableIds) : ICP.Platform.Authorization.Contracts.IDataScopeReadableIds
+    {
+        public List<(string ResourceKey, string[] Ids)> Calls { get; } = [];
+
+        /// <inheritdoc/>
+        public Task<IReadOnlySet<string>> GetReadableIdsAsync(string resourceKey, IReadOnlyCollection<string> objectIds,
+            CancellationToken cancellationToken = default)
+        {
+            Calls.Add((resourceKey, objectIds.ToArray()));
+            return Task.FromResult<IReadOnlySet<string>>(readableIds.ToHashSet(StringComparer.Ordinal));
+        }
+    }
+
+    [Fact]
     public async Task PersonCrudDisplayValueResolver_ReturnsOnlyRequestedCompanyCompanionAndBatchesDistinctIds()
     {
         var query = new RecordingOrganizationQuery(companies: [new Company { Id = "Company_1", Name = "总公司" }]);
-        var resolver = new PersonCrudDisplayValueResolver(query);
+        var resolver = new PersonCrudDisplayValueResolver(query, new AllowAllReadableIds());
         var descriptor = OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create());
         var companyDisplayField = Assert.Single(
             descriptor.DisplayValueFields,
@@ -362,7 +407,7 @@ public sealed class PersonStandardCrudResourceTests
             companies: [new Company { Id = "Company_1", Name = "总公司" }],
             departments: [new Department { Id = "Department_1", Name = "研发部" }],
             positions: [new Position { Id = "Position_1", Name = "工程师" }, new Position { Id = "Position_2", Name = "旧岗位", IsEnabled = false }]);
-        var resolver = new PersonCrudDisplayValueResolver(query);
+        var resolver = new PersonCrudDisplayValueResolver(query, new AllowAllReadableIds());
 
         var descriptor = OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create());
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows =
@@ -392,7 +437,7 @@ public sealed class PersonStandardCrudResourceTests
     {
         var resolver = new PersonCrudDisplayValueResolver(new RecordingOrganizationQuery(
             companies: [new Company { Id = "Company_1", Name = "旧公司", IsEnabled = false }],
-            departments: [new Department { Id = "Department_1", Name = "旧部门", IsEnabled = false }]));
+            departments: [new Department { Id = "Department_1", Name = "旧部门", IsEnabled = false }]), new AllowAllReadableIds());
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows =
         [
             new Dictionary<string, object?>

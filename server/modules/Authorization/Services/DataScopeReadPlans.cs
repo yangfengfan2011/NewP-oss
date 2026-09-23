@@ -10,8 +10,45 @@ namespace ICP.Platform.Modules.Authorization.Services;
 /// <summary>按可信当前主体合并明确优先级意见，再把拒绝范围编译为数据库谓词。</summary>
 public sealed class DataScopeReadPlans(DataScopeRules rules, DataScopeCatalog catalog,
     IHttpContextAccessor context, ILocalAdministratorRoleAssignment administrators, DataScopeIdentities identities,
-    DataScopeObjectGrants objects, EfPlatformDbContext db) : IDataScopeReadPlanProvider, IDataScopeObjectDecisionProvider
+    DataScopeObjectGrants objects, EfPlatformDbContext db) : IDataScopeReadPlanProvider, IDataScopeObjectDecisionProvider, IDataScopeReadableIds
 {
+    /// <inheritdoc/>
+    public async Task<IReadOnlySet<string>> GetReadableIdsAsync(string resourceKey, IReadOnlyCollection<string> objectIds,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(objectIds);
+        var ids = objectIds.Where(static id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal).ToArray();
+        if (ids.Length == 0) return new HashSet<string>(StringComparer.Ordinal);
+
+        try
+        {
+            var resource = catalog.Resolve(resourceKey);
+            var plan = await GetReadPlanAsync(resourceKey, cancellationToken);
+            if (plan.Predicate is null) return ids.ToHashSet(StringComparer.Ordinal);
+
+            var readable = new HashSet<string>(StringComparer.Ordinal);
+            var model = db.Set<Dictionary<string, object?>>(db.ResolveModelKey(resource.ModelKey)).AsNoTracking();
+            // 一批目标只投影主键，分块保持 SQL 参数数目有界；不读取整份业务目录。
+            foreach (var batch in ids.Chunk(500))
+            {
+                var found = await model.Where(plan.Predicate)
+                    .Where(row => batch.Contains(EF.Property<string>(row, resource.IdField)))
+                    .Select(row => EF.Property<string>(row, resource.IdField))
+                    .ToArrayAsync(cancellationToken);
+                readable.UnionWith(found.Where(ids.Contains));
+            }
+            return readable;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            throw new DataScopeReadExecutionException(resourceKey, exception);
+        }
+    }
+
     /// <inheritdoc/>
     public async Task<DataScopeReadPlan> GetReadPlanAsync(string resourceKey, CancellationToken cancellationToken = default)
     {

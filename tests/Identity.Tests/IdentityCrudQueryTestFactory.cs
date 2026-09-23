@@ -32,7 +32,7 @@ internal static class IdentityCrudQueryTestFactory
             [],
             [],
             temporalDisplayProjectionExecutor: temporal,
-            userDisplayNameDirectory: new IdentityUserDisplayNameDirectory(new IdentityAccountDirectory(repository)));
+            userDisplayNameDirectory: new IdentityUserDisplayNameDirectory(new IdentityAccountDirectory(repository), new AllowAllReadableIds()));
         return new IdentityManagementQueryService(repository, crud, temporal, registry);
     }
 

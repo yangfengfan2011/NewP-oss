@@ -113,6 +113,10 @@ public sealed class StandardCrudServiceReadTests
         await Assert.ThrowsAsync<OperationCanceledException>(() => service.ListAsync(descriptor, new StandardCrudListQuery()));
         directory.Failure = new UserDisplayNameDirectoryContractException();
         await Assert.ThrowsAsync<UserDisplayNameDirectoryContractException>(() => service.ListAsync(descriptor, new StandardCrudListQuery()));
+        directory.Failure = new ICP.Platform.Authorization.Contracts.DataScopeReadExecutionException(
+            "identity.account", new IOException("authorization unavailable"));
+        await Assert.ThrowsAsync<ICP.Platform.Authorization.Contracts.DataScopeReadExecutionException>(
+            () => service.ListAsync(descriptor, new StandardCrudListQuery()));
         directory.Failure = null;
         directory.Names = new Dictionary<string, string> { ["unrequested-id"] = "Wrong record" };
         await Assert.ThrowsAsync<UserDisplayNameDirectoryContractException>(() => service.ListAsync(descriptor, new StandardCrudListQuery()));
@@ -340,6 +344,20 @@ public sealed class StandardCrudServiceReadTests
 
         Assert.NotNull(detail);
         Assert.Equal("dependencyUnavailable", detail!.Summaries["userLink"].Status);
+    }
+
+    [Fact]
+    public async Task GetDetailAsync_WhenSummaryAuthorizationFails_PropagatesFailure()
+    {
+        var repository = new InMemoryStandardCrudRepository(
+            [new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三" }]);
+        var service = new StandardCrudService(repository, EmptyQueryExecutor(),
+            new StandardCrudDefaultWriter(repository, [], []), [], [new PersonDisplayResolver()],
+            [new FailingSummaryProvider(new ICP.Platform.Authorization.Contracts.DataScopeReadExecutionException(
+                "identity.account", new IOException("authorization unavailable")))]);
+
+        await Assert.ThrowsAsync<ICP.Platform.Authorization.Contracts.DataScopeReadExecutionException>(
+            () => service.GetDetailAsync(Descriptor(summaryKeys: ["userLink"]), "person-1"));
     }
 
     [Fact]
@@ -791,7 +809,7 @@ public sealed class StandardCrudServiceReadTests
         ["CompanyId", "CompanyId_DisplayValue"],
         [new PlatformDisplayValueField("CompanyId_DisplayValue", "CompanyId", "Company", "EID", "ENAME")]));
 
-    private sealed class FailingSummaryProvider : IStandardCrudSummaryProvider
+    private sealed class FailingSummaryProvider(Exception? failure = null) : IStandardCrudSummaryProvider
     {
         public string ResourceKey => "organization.person";
         public string Key => "userLink";
@@ -801,7 +819,7 @@ public sealed class StandardCrudServiceReadTests
             IReadOnlyDictionary<string, object?> detail,
             CancellationToken cancellationToken = default)
         {
-            throw new InvalidOperationException("summary dependency unavailable");
+            throw failure ?? new InvalidOperationException("summary dependency unavailable");
         }
     }
 

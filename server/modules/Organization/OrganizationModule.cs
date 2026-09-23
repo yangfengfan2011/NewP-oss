@@ -85,9 +85,16 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         services.AddScoped<IStandardCrudQueryCustomizer, PositionCrudQueryCustomizer>();
         services.AddScoped<IStandardCrudQueryCustomizer, CompanyCrudQueryCustomizer>();
         services.AddScoped<IStandardCrudQueryCustomizer, DepartmentCrudQueryCustomizer>();
-        services.AddScoped<IStandardCrudDisplayValueResolver, PersonCrudDisplayValueResolver>();
-        services.AddScoped<IStandardCrudDisplayValueResolver, DepartmentCrudDisplayValueResolver>();
-        services.AddScoped<IStandardCrudSummaryProvider, PersonUserBindingSummaryProvider>();
+        services.AddScoped<IStandardCrudDisplayValueResolver>(provider => new PersonCrudDisplayValueResolver(
+            provider.GetRequiredService<IOrganizationQuery>(),
+            provider.GetRequiredService<ICP.Platform.Authorization.Contracts.IDataScopeReadableIds>()));
+        services.AddScoped<IStandardCrudDisplayValueResolver>(provider => new DepartmentCrudDisplayValueResolver(
+            provider.GetRequiredService<IOrganizationQuery>(),
+            provider.GetRequiredService<ICP.Platform.Authorization.Contracts.IDataScopeReadableIds>()));
+        services.AddScoped<IStandardCrudSummaryProvider>(provider => new PersonUserBindingSummaryProvider(
+            provider.GetRequiredService<IOrganizationQuery>(),
+            provider.GetRequiredService<ICP.Platform.Identity.Contracts.IIdentityAccountDirectory>(),
+            provider.GetRequiredService<ICP.Platform.Authorization.Contracts.IDataScopeReadableIds>()));
         services.AddScoped<IStandardCrudSummaryProvider, PersonAuthorizationSummaryProvider>();
         services.AddScoped<IStandardCrudValidator>(serviceProvider => new PersonCrudValidator(
             serviceProvider.GetRequiredService<ICompanyDirectory>(),

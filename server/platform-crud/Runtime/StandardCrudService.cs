@@ -503,7 +503,8 @@ public sealed class StandardCrudService : IStandardCrudService
         {
             throw;
         }
-        catch (Exception exception) when (exception is not UserDisplayNameDirectoryContractException)
+        catch (Exception exception) when (exception is not UserDisplayNameDirectoryContractException
+            and not ICP.Platform.Authorization.Contracts.DataScopeReadExecutionException)
         {
             _logger?.LogWarning("AUDIT_NAME_DIRECTORY_UNAVAILABLE: {FailureType}", exception.GetType().Name);
             return null;
@@ -628,6 +629,7 @@ public sealed class StandardCrudService : IStandardCrudService
             return await provider.BuildAsync(descriptor, row, cancellationToken);
         }
         catch (Exception exception) when (exception is not ICP.Platform.Persistence.Transactions.PlatformCacheUnavailableException
+            and not ICP.Platform.Authorization.Contracts.DataScopeReadExecutionException
             and not OperationCanceledException)
         {
             return new StandardCrudSummaryBlock { Status = "dependencyUnavailable" };

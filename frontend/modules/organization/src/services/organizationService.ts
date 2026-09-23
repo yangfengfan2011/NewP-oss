@@ -57,6 +57,7 @@ export interface PersonUserBindingSummaryData {
   reason: string | null;
   account: PersonUserBindingAccountDto | null;
   isAccountAvailable: boolean;
+  isAccountReadable: boolean;
 }
 
 export interface PersonListRow {
@@ -292,6 +293,7 @@ export function mapPersonDetailView(value: StandardCrudDetail | unknown): Person
           revision: Number(rawAccount.Revision ?? rawAccount.revision ?? 0),
         } : null,
         isAccountAvailable: readStandardCrudBoolean(binding, ['IsAccountAvailable', 'isAccountAvailable'], false),
+        isAccountReadable: readStandardCrudBoolean(binding, ['IsAccountReadable', 'isAccountReadable'], true),
       };
     }),
     authorizationSummary: normalizeStandardCrudSummaryBlock(summaries['authorizationSummary'], (data) => {

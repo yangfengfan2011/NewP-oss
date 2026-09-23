@@ -71,6 +71,7 @@ export default function PersonUserBindingCard({ summary, title = '账号绑定',
         reason: result.reason,
         account: result.account ?? selected,
         isAccountAvailable: true,
+        isAccountReadable: true,
       });
       close();
     } catch (failure) {
@@ -106,9 +107,9 @@ export default function PersonUserBindingCard({ summary, title = '账号绑定',
             <dl className="sh-meta-block">
               <Fact label="人员姓名" value={binding.personName} />
               <Fact label="User EID" value={binding.accountEid ?? ''} code />
-              <Fact label="ECODE" value={binding.account?.ecode ?? (binding.isAccountAvailable ? '—' : 'Identity 暂不可用')} code />
-              <Fact label="ENAME" value={binding.account?.ename ?? (binding.isAccountAvailable ? '—' : 'Identity 暂不可用')} />
-              <Fact label="账号状态" value={binding.account?.status ?? '暂不可用'} />
+              <Fact label="ECODE" value={binding.isAccountReadable ? binding.account?.ecode ?? (binding.isAccountAvailable ? '—' : 'Identity 暂不可用') : '***'} code />
+              <Fact label="ENAME" value={binding.isAccountReadable ? binding.account?.ename ?? (binding.isAccountAvailable ? '—' : 'Identity 暂不可用') : '***'} />
+              <Fact label="账号状态" value={binding.isAccountReadable ? binding.account?.status ?? '暂不可用' : '***'} />
               <Fact label="绑定时间" value={binding.boundAt ? new Date(binding.boundAt).toLocaleString() : '—'} />
               <Fact label="绑定操作者" value={binding.boundBy ?? '—'} code />
               <Fact label="绑定原因" value={binding.reason ?? '—'} />

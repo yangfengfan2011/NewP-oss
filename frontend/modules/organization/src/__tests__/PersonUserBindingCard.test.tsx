@@ -35,6 +35,29 @@ describe('PersonUserBindingCard', () => {
     expect(searchMock).not.toHaveBeenCalled();
   });
 
+  it('shows masked account details while preserving the permanent binding state', async () => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    container = document.createElement('div');
+    document.body.append(container);
+    await act(async () => {
+      root = createRoot(container!);
+      root.render(<PersonUserBindingCard featureAction={{ position: 'declared-link-user', allowed: true }} summary={{
+        status: 'ready',
+        data: {
+          personEid: 'Person_1', personName: '张三', isPersonEnabled: true,
+          accountEid: 'User_1', boundAt: '2026-08-10T10:30:00Z', boundBy: 'Admin', reason: '入职',
+          account: null, isAccountAvailable: true, isAccountReadable: false,
+        },
+      }} />);
+    });
+
+    expect(document.body.textContent).toContain('已永久绑定');
+    expect(document.body.textContent).toContain('User_1');
+    expect(document.body.textContent).toContain('***');
+    expect(document.body.textContent).not.toContain('建立永久绑定');
+    expect(searchMock).not.toHaveBeenCalled();
+  });
+
   it('searches scoped candidates and submits an irreversible binding confirmation', async () => {
     searchMock.mockResolvedValue([{
       accountEid: 'User_1', ecode: 'alice', ename: 'Alice', status: 'Disabled', revision: 7,
@@ -77,7 +100,7 @@ describe('PersonUserBindingCard', () => {
         status: 'ready',
         data: {
           personEid: 'Person_1', personName: '张三', isPersonEnabled, accountEid: null,
-          boundAt: null, boundBy: null, reason: null, account: null, isAccountAvailable: true,
+          boundAt: null, boundBy: null, reason: null, account: null, isAccountAvailable: true, isAccountReadable: true,
         },
       }} />);
     });

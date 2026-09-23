@@ -40,7 +40,7 @@ public sealed class DepartmentCrudDisplayValueResolverTests
             executor,
             new StandardCrudDefaultWriter(null!, [], []),
             [],
-            [new DepartmentCrudDisplayValueResolver(query)],
+            [new DepartmentCrudDisplayValueResolver(query, new AllowAllReadableIds())],
             []);
 
         var result = await service.ListAsync(

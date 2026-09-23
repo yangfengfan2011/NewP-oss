@@ -32,6 +32,7 @@ public sealed class IdentityModule : ModuleCapsuleBindingBase
     {
         ArgumentNullException.ThrowIfNull(services);
         services.AddScoped<IDataScopeIdentityProvider, IdentityDataScopeIdentities>();
+        services.AddScoped<IDataScopeEnumFieldProvider, IdentityDataScopeEnums>();
         services.AddPlatformObjectIdGeneration();
         services.AddPlatformQueryKernel();
         services.AddStandardCrudKernel();

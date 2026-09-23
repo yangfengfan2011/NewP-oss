@@ -22,6 +22,8 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
     public override void ConfigureServices(IServiceCollection services)
     {
         services.AddScoped<ICP.Platform.Authorization.Contracts.IDataScopeIdentityProvider, OrganizationDataScopeIdentities>();
+        services.AddScoped<ICP.Platform.Authorization.Contracts.IDataScopeBusinessConditionProvider, OrganizationDataScopeConditions>();
+        services.AddScoped<ICP.Platform.Authorization.Contracts.IDataScopeEnumFieldProvider, OrganizationDataScopeEnums>();
         services.AddStandardCrudKernel();
         services.AddSingleton<OrganizationCache>();
         services.AddSingleton<IPlatformCacheStatus>(sp => sp.GetRequiredService<OrganizationCache>());

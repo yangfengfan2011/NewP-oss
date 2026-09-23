@@ -18,9 +18,11 @@ public sealed class DataScopeRulesController(DataScopeCatalog catalog, DataScope
         subjectTypes = identities.SubjectTypes,
         contextValues = identities.ContextValues,
         contextBindings = identities.ContextBindings,
+        businessConditions = catalog.BusinessConditions,
         features = plan.FeatureCatalog.Where(point => point.BehaviorKey is "authorization.dataScope.read" or "authorization.dataScope.save"),
         resources = catalog.Resources.Select(resource => new { resource, fields = catalog.Fields(resource.ResourceKey).Select(field =>
-            new { name = field.Name, type = (Nullable.GetUnderlyingType(field.ClrType) ?? field.ClrType).Name }) })
+            new { name = field.Name, type = (Nullable.GetUnderlyingType(field.ClrType) ?? field.ClrType).Name,
+                enumValues = catalog.EnumValues(resource.ResourceKey, field.Name) }) })
     });
 
     /// <summary>独立管理资格下读取最小主体目录，已有名称与候选使用同一个 owner。</summary>

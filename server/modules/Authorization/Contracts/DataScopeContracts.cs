@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Text.Json;
 
 namespace ICP.Platform.Authorization.Contracts;
 
@@ -17,4 +18,31 @@ public interface IDataScopeReadPlanProvider
 {
     /// <summary>按可信当前主体与有效配置编译目标资源的读取计划；依赖故障必须传播。</summary>
     Task<DataScopeReadPlan> GetReadPlanAsync(string resourceKey, CancellationToken cancellationToken = default);
+}
+
+/// <summary>业务条件的适用 Model 和读取翻译能力由贡献模块明确登记。</summary>
+public sealed record DataScopeBusinessConditionDefinition(string Key, string Title, IReadOnlyList<string> ModelKeys, bool HasReadContribution);
+
+/// <summary>业务模块提供完整对象判断；只有显式声明时才提供数据库读取表达式。</summary>
+public interface IDataScopeBusinessConditionProvider
+{
+    IReadOnlyList<DataScopeBusinessConditionDefinition> Definitions { get; }
+
+    /// <summary>验证业务参数；无效引用须拒绝保存。</summary>
+    void Validate(string key, JsonElement value);
+
+    /// <summary>按真实对象身份执行完整判断；事实源故障须传播。</summary>
+    Task<bool> MatchesAsync(string key, DataScopeResource resource, string objectId, JsonElement value, CancellationToken cancellationToken);
+
+    /// <summary>构造可由数据库执行的读取贡献；未声明时不得调用。</summary>
+    Expression BuildReadExpression(string key, DataScopeResource resource, ParameterExpression row, JsonElement value);
+}
+
+/// <summary>枚举字段的合法持久化值由字段所属模块提供。</summary>
+public sealed record DataScopeEnumField(string ModelKey, string Field, IReadOnlyList<string> Values);
+
+/// <summary>模块登记直接字段的合法枚举值，保存校验不得接受任意字符串。</summary>
+public interface IDataScopeEnumFieldProvider
+{
+    IReadOnlyList<DataScopeEnumField> Fields { get; }
 }

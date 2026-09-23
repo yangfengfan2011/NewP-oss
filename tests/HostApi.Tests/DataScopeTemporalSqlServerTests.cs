@@ -43,6 +43,20 @@ public sealed class DataScopeTemporalSqlServerTests
         await SaveAsync(rule with { Condition = rule.Condition with { Value = JsonSerializer.SerializeToElement("2000-02-30") } }, HttpStatusCode.BadRequest);
         stored = await FeatureHttpTestRequests.ReadAsync(admin, entry, "/api/authorization/data-scope/rules");
         Assert.Equal("2000-02-29", stored[0].GetProperty("condition").GetProperty("value").GetString());
+        var empty = JsonSerializer.SerializeToElement((object?)null);
+        var compound = new DataScopeConditionDto("group", "", "and", empty, Children:
+        [
+            new("attribute", "EmploymentStartedAt", "greaterThanOrEqual", JsonSerializer.SerializeToElement("2030-01-01T20:02:03")),
+            new("attribute", "BirthDate", "lessThanOrEqual", JsonSerializer.SerializeToElement("2000-02-29"))
+        ]);
+        await SaveAsync(rule with { Condition = compound }, HttpStatusCode.NoContent);
+        stored = await FeatureHttpTestRequests.ReadAsync(admin, entry, "/api/authorization/data-scope/rules");
+        Assert.Equal("2030-01-02T01:02:03Z", stored[0].GetProperty("condition").GetProperty("children")[0].GetProperty("value").GetString());
+        await AssertDeniedAsync();
+        await SaveAsync(rule with { Condition = compound with { Children =
+            [compound.Children![0], compound.Children[1] with { Value = JsonSerializer.SerializeToElement("2000-02-30") }] } }, HttpStatusCode.BadRequest);
+        stored = await FeatureHttpTestRequests.ReadAsync(admin, entry, "/api/authorization/data-scope/rules");
+        Assert.Equal("2000-02-29", stored[0].GetProperty("condition").GetProperty("children")[1].GetProperty("value").GetString());
 
         async Task SaveAsync(DataScopeRuleDto value, HttpStatusCode expected)
         {

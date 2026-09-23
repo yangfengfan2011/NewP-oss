@@ -10,9 +10,10 @@ public sealed record DataScopeRuleDto(string Id, string RootId, string? ParentId
     bool Enabled, string ResourceKey, DataScopeConditionDto Condition,
     IReadOnlyList<DataScopeSubjectDto> Subjects, IReadOnlyList<DataScopeRuleDto> Children);
 
-/// <summary>直接属性等值使用非空固定值或已登记且身份域相容的当前值。</summary>
+/// <summary>属性、业务叶子及 AND/OR 组合共享一棵结构化条件树。</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record DataScopeConditionDto(string Type, string Field, string Operator, JsonElement Value, string? ContextKey = null);
+public sealed record DataScopeConditionDto(string Type, string Field, string Operator, JsonElement Value, string? ContextKey = null,
+    IReadOnlyList<DataScopeConditionDto>? Children = null, string? Key = null);
 
 /// <summary>动作意见使用 allow、deny、unset；目录停用不是第四态。</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]

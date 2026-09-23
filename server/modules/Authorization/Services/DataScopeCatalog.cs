@@ -1,20 +1,26 @@
-using System.Text.Json;
 using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore.Metadata;
-using ICP.Platform.Modeling;
 using ICP.Platform.Presentation;
 
 namespace ICP.Platform.Modules.Authorization.Services;
 
 /// <summary>规范资源映射来自全部显式描述符，动作来自正式候选；不按模块名硬编码资源。</summary>
 public sealed class DataScopeCatalog(IStandardCrudResourceRegistry resources, CanonicalModulePlan plan,
-    EfPlatformDbContext db, DataScopeIdentities identities, ITemporalInputNormalizer? temporalInputNormalizer = null)
+    EfPlatformDbContext db, DataScopeIdentities identities, ITemporalInputNormalizer? temporalInputNormalizer = null,
+    IEnumerable<IDataScopeBusinessConditionProvider>? conditionProviders = null,
+    IEnumerable<IDataScopeEnumFieldProvider>? enumProviders = null)
 {
+    private DataScopeConditions Conditions => new(this, db, identities, temporalInputNormalizer, conditionProviders ?? [], enumProviders ?? []);
     public IReadOnlyList<DataActionDeclaration> Actions => plan.DataActionCatalog;
+    public IReadOnlyList<DataScopeBusinessConditionDefinition> BusinessConditions
+    {
+        get { Conditions.ValidateRegistration(); return Conditions.BusinessTypes; }
+    }
+    public IReadOnlyList<string>? EnumValues(string resourceKey, string field) => Conditions.EnumValues(resourceKey, field);
     public IReadOnlyList<DataScopeResource> Resources => resources.GetAll().Select(resource =>
         new DataScopeResource(resource.ResourceKey, resource.ModuleId, resource.ModelName, resource.IdField)).ToArray();
 
@@ -41,7 +47,8 @@ public sealed class DataScopeCatalog(IStandardCrudResourceRegistry resources, Ca
             || string.IsNullOrWhiteSpace(rule.Name) || rule.Name.Length > 256 || rule.Children is null || rule.Children.Count != 0
             || rule.Subjects is null || rule.Subjects.Select(subject => subject.Id).Distinct(StringComparer.Ordinal).Count() != rule.Subjects.Count)
             throw new RolePermissionValidationException("本阶段只接受具有稳定身份的单根规则。");
-        _ = ParseValue(rule.ResourceKey, rule.Condition);
+        Conditions.ValidateRegistration();
+        Conditions.Validate(rule.ResourceKey, rule.Condition);
         foreach (var subject in rule.Subjects)
         {
             if (string.IsNullOrWhiteSpace(subject.Id) || subject.Id.Length > 128
@@ -52,50 +59,30 @@ public sealed class DataScopeCatalog(IStandardCrudResourceRegistry resources, Ca
         }
     }
 
-    /// <summary>保存时规范化默认匹配选项和日期；固定 Instant 不随后续查看者重新解释。</summary>
+    /// <summary>保存时规范化默认匹配选项和全部日期叶子；固定 Instant 不随后续查看者重新解释。</summary>
     public DataScopeRuleDto NormalizeForSave(DataScopeRuleDto rule)
     {
         rule = rule with { Subjects = rule.Subjects.Select(subject => subject.MatchOptions?.IncludeDescendants == false
             ? subject with { MatchOptions = null } : subject).ToArray() };
-        if (rule.Condition.ContextKey is not null) return rule;
-        var resource = Resolve(rule.ResourceKey);
-        var field = db.PersistencePlan.Models.Single(model => model.LogicalKey == resource.ModelKey)
-            .Fields.Single(field => field.Name == rule.Condition.Field);
-        if (field.ValueType is not (FieldValueType.Instant or FieldValueType.CalendarDate)) return rule;
-        if (temporalInputNormalizer is null) throw new InvalidOperationException("DATA_SCOPE_TEMPORAL_NORMALIZER_REQUIRED");
-        var normalized = temporalInputNormalizer.Normalize(field.ValueType, rule.Condition.Value);
-        if (!normalized.IsSuccess) throw new RolePermissionValidationException(normalized.Message ?? "日期比较值无效。");
-        return rule with { Condition = rule.Condition with { Value = JsonSerializer.SerializeToElement(normalized.Value) } };
+        return rule with { Condition = Conditions.Normalize(rule.ResourceKey, rule.Condition) };
     }
 
-    /// <summary>按真实模型 CLR 类型解析规范比较值，不应用当前查看者的时区。</summary>
-    public (IProperty Property, object Value) ParseValue(string resourceKey, DataScopeConditionDto condition)
+    /// <summary>读取条件只投影有读取贡献的叶子。</summary>
+    public System.Linq.Expressions.Expression? BuildReadCondition(string resourceKey, DataScopeConditionDto condition,
+        System.Linq.Expressions.ParameterExpression row, DataScopeResolvedIdentities facts) =>
+        Conditions.BuildRead(resourceKey, condition, row, facts);
+
+    /// <summary>无读取贡献的整节点不应解析主体或产生读取意见。</summary>
+    public bool HasReadContribution(string resourceKey, DataScopeConditionDto condition) => Conditions.HasReadContribution(resourceKey, condition);
+
+    /// <summary>完整判断为后续普通写入提供同一扩展语义；文本属性交数据库比较。</summary>
+    public Task<bool> MatchesAsync(string resourceKey, string objectId, DataScopeConditionDto condition,
+        DataScopeResolvedIdentities facts, CancellationToken token)
     {
-        if (condition is null || condition.Type != "attribute" || condition.Operator != "equal"
-            || condition.ContextKey is null && condition.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
-            throw new RolePermissionValidationException("本阶段只支持直接属性的非空固定值或当前身份值等值条件。");
-        var property = Fields(resourceKey).SingleOrDefault(field => field.Name == condition.Field)
-            ?? throw new RolePermissionValidationException("条件属性不存在。");
-        if (condition.ContextKey is not null)
-        {
-            var context = identities.ContextValues.SingleOrDefault(value => value.Key == condition.ContextKey)
-                ?? throw new RolePermissionValidationException("当前值未登记。");
-            if (context.ValueType != (Nullable.GetUnderlyingType(property.ClrType) ?? property.ClrType).Name)
-                throw new RolePermissionValidationException("当前值与属性类型不相容。");
-            if (!identities.ContextBindings.Any(binding => binding.ModelKey == Resolve(resourceKey).ModelKey
-                && binding.Field == property.Name && binding.ContextKey == context.Key))
-                throw new RolePermissionValidationException("当前值与属性的规范身份域不相容。");
-            if (condition.Value.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined))
-                throw new RolePermissionValidationException("当前值条件不能同时包含固定值。");
-            return (property, condition.ContextKey);
-        }
-        try
-        {
-            var type = Nullable.GetUnderlyingType(property.ClrType) ?? property.ClrType;
-            var value = condition.Value.Deserialize(type) ?? throw new JsonException();
-            return (property, value);
-        }
-        catch (Exception exception) when (exception is JsonException or NotSupportedException or FormatException)
-        { throw new RolePermissionValidationException("比较值与属性类型不相容。"); }
+        Conditions.Validate(resourceKey, condition);
+        return Conditions.MatchesAsync(resourceKey, objectId, condition, facts, token);
     }
+
+    /// <summary>枚举组合树实际引用的可信当前身份值。</summary>
+    public IEnumerable<string> ContextKeys(DataScopeConditionDto condition) => Conditions.ContextKeys(condition);
 }

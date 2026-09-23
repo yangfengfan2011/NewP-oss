@@ -38,7 +38,8 @@ it('loads minimal names for multiple subjects and preserves identity context and
   try {
     await act(async () => root.render(<DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }} reportState={(...value) => { lifecycle = value; }} />));
     await act(async () => (container.querySelector('.ant-tree-title') as HTMLElement).click());
-    expect(container.querySelectorAll('[role="group"]')).toHaveLength(2);
+    expect(container.querySelectorAll('[aria-label^="主体授权项 "]')).toHaveLength(2);
+    expect(container.querySelector('[aria-label="条件项 1"]')).not.toBeNull();
     expect(container.querySelectorAll('[aria-label="包含下级部门"]')).toHaveLength(1);
     expect(container.textContent).toContain('最小目录名称');
     expect(container.querySelector('[aria-label="主体授权项 2"]')?.textContent).toContain('甲公司 / 总部 / 最小目录名称');
@@ -91,5 +92,31 @@ it('keeps stable root and subject identities after failed save and distinguishes
     const attempts = fetcher.mock.calls.filter(call => call[1]?.method === 'PUT');
     expect(JSON.parse(String(attempts[1][1].body))).toEqual(first);
     await act(async () => { fail(); await pending; });
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});
+
+it('keeps the draft and places a server error at the nested condition named in Problem Details', async () => {
+  const rule = { id: 'nested', rootId: 'nested', parentId: null, name: '嵌套', enabled: true, resourceKey: 'organization.person',
+    condition: { type: 'group', field: '', operator: 'and', value: null,
+      children: [{ type: 'attribute', field: 'ENAME', operator: 'equal', value: '甲' }] },
+    subjects: [], children: [] };
+  fetcher.mockImplementation((url: string, init?: RequestInit) => Promise.resolve(init?.method === 'PUT'
+    ? new Response(JSON.stringify({ title: '条件 1.2：比较值与属性类型不相容。', code: 'DataScope.InvalidConfiguration' }), { status: 400 })
+    : new Response(JSON.stringify(url.endsWith('/catalog') ? {
+      actions: [{ key: 'read', enabled: true }], features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
+      resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Organization/Person' },
+        fields: [{ name: 'ENAME', type: 'String' }] }],
+    } : [rule]))));
+  let lifecycle!: Parameters<PageProps['reportState']>;
+  const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+  try {
+    await act(async () => root.render(<DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }}
+      reportState={(...value) => { lifecycle = value; }} />));
+    await act(async () => (container.querySelector('.ant-tree-title') as HTMLElement).click());
+    await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '添加属性条件')!.click());
+    await act(async () => { expect(await lifecycle[2]!()).toBe(false); });
+    expect(lifecycle[0].dirty).toBe(true);
+    expect(container.querySelector('[aria-label="条件项 1.2"] .ant-alert')?.textContent).toContain('条件 1.2');
+    expect(container.querySelector('[aria-label="条件项 1.1"] .ant-alert')).toBeNull();
   } finally { await act(async () => root.unmount()); container.remove(); }
 });

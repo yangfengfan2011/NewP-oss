@@ -5,14 +5,16 @@ import { platformFetch, useAuthorization } from '@icp-platform/core';
 import type { PageProps } from '@icp-platform/sdk';
 import { requestRole } from './roleResource';
 import DataScopeSubjectEditor, { type DataScopeSubject, type SubjectType } from './DataScopeSubjectEditor';
+import DataScopeConditionEditor, { type DataScopeBusinessType, type DataScopeCondition, type DataScopeResourceField } from './DataScopeConditionEditor';
 
 type Subject = DataScopeSubject;
 interface Rule { id: string; rootId: string; parentId: null; name: string; enabled: boolean; resourceKey: string;
-  condition: { type: string; field: string; operator: string; value: unknown; contextKey?: string | null }; subjects: Subject[]; children: Rule[] }
+  condition: DataScopeCondition; subjects: Subject[]; children: Rule[] }
 interface Catalog { subjectTypes?: SubjectType[]; contextValues?: { key: string; title: string; valueType: string }[];
   contextBindings?: { modelKey: string; field: string; contextKey: string }[]; actions: { key: string; title: string; enabled: boolean }[];
+  businessConditions?: DataScopeBusinessType[];
   features: { behaviorKey: string; position: string }[];
-  resources: { resource: { resourceKey: string; modelName: string; modelKey: string }; fields: { name: string; type: string }[] }[] }
+  resources: { resource: { resourceKey: string; modelName: string; modelKey: string }; fields: DataScopeResourceField[] }[] }
 const endpoint = '/api/authorization/data-scope';
 const errorText = (error: unknown) => error instanceof Error ? error.message : '规则操作失败';
 
@@ -27,6 +29,7 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [conditionErrorPath, setConditionErrorPath] = useState('');
   const [pendingRule, setPendingRule] = useState<Rule>();
   const pending = useRef(false);
   const [message, messageHolder] = useMessage();
@@ -48,7 +51,7 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
   const reset = useCallback(() => setDraft(saved), [saved]);
   const save = useCallback(async () => {
     if (!draft || !savePosition || readOnly || pending.current) return false;
-    pending.current = true; setSaving(true); setError('');
+    pending.current = true; setSaving(true); setError(''); setConditionErrorPath('');
     try {
       await requestRole(platformFetch as typeof fetch, `${endpoint}/rules/${encodeURIComponent(draft.id)}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-NewP-Feature': savePosition }, body: JSON.stringify(draft),
@@ -57,7 +60,12 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
       setRules(current => current.some(rule => rule.id === draft.id) ? current.map(rule => rule.id === draft.id ? draft : rule) : [...current, draft]);
       void message.success('规则已保存');
       return true;
-    } catch (failure) { setError(errorText(failure)); return false; }
+    } catch (failure) {
+      const message = errorText(failure);
+      setError(message);
+      setConditionErrorPath(/^条件 (\d+(?:\.\d+)*)：/.exec(message)?.[1] ?? '');
+      return false;
+    }
     finally { pending.current = false; setSaving(false); }
   }, [draft, savePosition, readOnly, message]);
   useEffect(() => { reportState({ dirty, submitting: saving }, reset, save); }, [dirty, saving, reset, save, reportState]);
@@ -74,9 +82,8 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
       subjects: [{ id: `DataScopeSubject_${crypto.randomUUID()}`, type: 'all', subjectId: null, priority: 0, actions: { read: 'unset' } }], children: [] });
   };
   const fields = catalog?.resources.find(resource => resource.resource.resourceKey === draft?.resourceKey)?.fields ?? [];
-  const contextValues = catalog?.contextValues?.filter(value => catalog.contextBindings?.some(binding =>
-    binding.contextKey === value.key && binding.field === draft?.condition.field
-    && binding.modelKey === catalog.resources.find(item => item.resource.resourceKey === draft?.resourceKey)?.resource.modelKey)) ?? [];
+  const modelKey = catalog?.resources.find(item => item.resource.resourceKey === draft?.resourceKey)?.resource.modelKey ?? '';
+  const businessTypes = catalog?.businessConditions?.filter(type => type.modelKeys.includes(modelKey)) ?? [];
   return <div style={{ padding: 24 }}>
     <Typography.Title level={3}>数据范围规则</Typography.Title>
     <Typography.Paragraph type="secondary">按根规则整体保存。支持多主体显式优先级、当前身份值和读取三态。</Typography.Paragraph>
@@ -96,24 +103,13 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
             <Form.Item label="规则名称"><Input aria-label="规则名称" value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} /></Form.Item>
             <Form.Item label="启用规则"><Switch aria-label="启用规则" checked={draft.enabled} onChange={enabled => setDraft({ ...draft, enabled })} /></Form.Item>
             <Form.Item label="资源"><Select aria-label="资源" value={draft.resourceKey} options={catalog?.resources.map(({ resource }) => ({ value: resource.resourceKey, label: `${resource.modelName} · ${resource.resourceKey}` }))}
-              onChange={resourceKey => setDraft({ ...draft, resourceKey, condition: { ...draft.condition, field: '', value: '', contextKey: null } })} /></Form.Item>
-            <Space wrap align="start">
-              <Form.Item label="直接属性"><Select aria-label="直接属性" style={{ minWidth: 180 }} value={draft.condition.field} options={fields.map(field => ({ value: field.name, label: field.name }))}
-                onChange={field => setDraft({ ...draft, condition: { ...draft.condition, field, value: '', contextKey: null } })} /></Form.Item>
-              <Form.Item label="比较"><Input value="等于" readOnly style={{ width: 80 }} /></Form.Item>
-              <Form.Item label="值来源"><Select aria-label="值来源" style={{ width: 150 }} value={draft.condition.contextKey ? 'context' : 'fixed'}
-                options={[{ value: 'fixed', label: '固定值' }, { value: 'context', label: '当前身份值', disabled: contextValues.length === 0 }]}
-                onChange={source => setDraft({ ...draft, condition: { ...draft.condition, value: source === 'context' ? null : '', contextKey: source === 'context' ? contextValues[0]?.key : null } })} /></Form.Item>
-              {draft.condition.contextKey ? <Form.Item label="当前身份值"><Select aria-label="当前身份值" style={{ width: 160 }} value={draft.condition.contextKey}
-                options={contextValues.map(value => ({ value: value.key, label: value.title }))} onChange={contextKey => setDraft({ ...draft, condition: { ...draft.condition, contextKey } })} /></Form.Item>
-              : <Form.Item label="固定值"><Input aria-label="固定值" value={String(draft.condition.value ?? '')} onChange={event => {
-                const type = fields.find(field => field.name === draft.condition.field)?.type;
-                const raw = event.target.value;
-                const value = type === 'Boolean' ? raw === 'true' ? true : raw === 'false' ? false : raw
-                  : ['Int32', 'Int64', 'Decimal', 'Double', 'Single'].includes(type ?? '') && raw !== '' && Number.isFinite(Number(raw)) ? Number(raw) : raw;
-                setDraft({ ...draft, condition: { ...draft.condition, value } });
-              }} /></Form.Item>}
-            </Space>
+              onChange={resourceKey => setDraft({ ...draft, resourceKey, condition: { type: 'attribute', field: '', operator: 'equal', value: '' } })} /></Form.Item>
+            <Typography.Title level={5}>适用条件</Typography.Title>
+            <DataScopeConditionEditor condition={draft.condition} path="1" fields={fields} modelKey={modelKey}
+              contexts={catalog?.contextValues ?? []} bindings={catalog?.contextBindings ?? []} businessTypes={businessTypes}
+              errorPath={conditionErrorPath} errorMessage={error} onChange={condition => {
+                setConditionErrorPath(''); setDraft({ ...draft, condition });
+              }} />
             <Typography.Title level={5}>主体授权项</Typography.Title>
             <Tag>{catalog?.actions.find(action => action.key === 'read')?.enabled ? '读取目录已启用' : '读取目录已停用'}</Tag>
             {draft.subjects.map((subject, index) => <DataScopeSubjectEditor key={subject.id} subject={subject} index={index}

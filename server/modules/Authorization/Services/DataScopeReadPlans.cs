@@ -2,7 +2,6 @@ using System.Linq.Expressions;
 using System.Security.Claims;
 using ICP.Platform.Authorization.Contracts;
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Modules.Authorization.Services;
 
@@ -22,30 +21,21 @@ public sealed class DataScopeReadPlans(DataScopeRules rules, DataScopeCatalog ca
         var applicable = await rules.ForResourceAsync(resourceKey, cancellationToken);
         var enabled = applicable.Where(rule => rule.Enabled).ToArray();
         foreach (var rule in enabled) catalog.Validate(rule);
-        var facts = await identities.ResolveAsync(id, enabled.SelectMany(rule => rule.Subjects).Select(subject => subject.Type),
-            enabled.Where(rule => rule.Condition.ContextKey is not null).Select(rule => rule.Condition.ContextKey!), cancellationToken);
+        var readable = enabled.Where(rule => catalog.HasReadContribution(resourceKey, rule.Condition)).ToArray();
+        var facts = await identities.ResolveAsync(id, readable.SelectMany(rule => rule.Subjects).Select(subject => subject.Type),
+            readable.SelectMany(rule => catalog.ContextKeys(rule.Condition)), cancellationToken);
         var row = Expression.Parameter(typeof(Dictionary<string, object?>), "row");
         Expression? permitted = null;
-        foreach (var rule in enabled)
+        foreach (var rule in readable)
         {
             var opinions = rule.Subjects.Where(subject => subject.Actions.TryGetValue("read", out var opinion) && opinion != "unset"
                 && facts.Matches(subject.Type, subject.SubjectId, subject.MatchOptions)).ToArray();
             if (opinions.Length == 0) continue;
             var priority = opinions.Max(subject => subject.Priority);
             if (!opinions.Any(subject => subject.Priority == priority && subject.Actions["read"] == "deny")) continue;
-            var (property, value) = catalog.ParseValue(resourceKey, rule.Condition);
-            if (rule.Condition.ContextKey is not null)
-            {
-                var current = facts.ContextValue(rule.Condition.ContextKey);
-                if (current is null) continue;
-                value = current;
-            }
-            var access = Expression.Call(typeof(EF), nameof(EF.Property), [property.ClrType], row, Expression.Constant(property.Name));
-            var constant = Expression.Convert(Expression.Constant(value), property.ClrType);
-            var match = Expression.Equal(access, constant);
+            var match = catalog.BuildReadCondition(resourceKey, rule.Condition, row, facts);
+            if (match is null) continue;
             Expression allow = Expression.Not(match);
-            // null 不命中等值拒绝；显式补齐可空字段使 SQL 三值逻辑与完整裁决一致。
-            if (property.IsNullable) allow = Expression.OrElse(Expression.Equal(access, Expression.Constant(null, property.ClrType)), allow);
             permitted = permitted is null ? allow : Expression.AndAlso(permitted, allow);
         }
         return new(permitted is null ? null : Expression.Lambda<Func<Dictionary<string, object?>, bool>>(permitted, row));

@@ -119,7 +119,7 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
             .GetByText("无读取贡献；完整判断仍生效", new() { Exact = true }).WaitForAsync();
     }
 
-    // rc-select 的零高辅助节点也会包含选项；键盘只用于滚动虚拟列表，最终点击真实目标项。
+    // rc-select 的辅助列表零高，虚拟项可能已挂载却在裁剪区外；只点击当前弹层内实际命中的目标。
     internal async Task SelectAsync(string label, string option, ILocator? group = null, bool search = false,
         string? searchText = null, Func<Task>? candidatesReady = null)
     {
@@ -130,7 +130,17 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
             Has = page.GetByRole(AriaRole.Combobox, new() { Name = label, Exact = true })
         });
         await selector.Locator(".ant-select-selector").ClickAsync();
-        var dropdown = page.Locator(".ant-select-dropdown:visible .rc-virtual-list-holder");
+        var listId = await input.GetAttributeAsync("aria-controls")
+            ?? throw new InvalidOperationException($"Select '{label}' has no popup identity.");
+        var dropdown = page.Locator(".ant-select-dropdown")
+            .Filter(new() { Has = page.Locator($"#{listId}") }).Locator(".rc-virtual-list-holder");
+        await page.WaitForFunctionAsync("""
+            id => {
+              const holder = document.getElementById(id)?.closest('.ant-select-dropdown')?.querySelector('.rc-virtual-list-holder');
+              const rect = holder?.getBoundingClientRect();
+              return !!rect && rect.width > 0 && rect.height > 0;
+            }
+            """, listId);
         if (search)
         {
             await input.FillAsync(searchText ?? option);
@@ -139,15 +149,30 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
         }
         if (candidatesReady is not null) await candidatesReady();
         var navigation = System.Diagnostics.Stopwatch.StartNew();
-        var target = dropdown.Locator(".ant-select-item-option:not(.ant-select-item-option-disabled)")
-            .Filter(new() { HasText = option });
-        while (!await target.IsVisibleAsync())
+        var hitPoint = await FindHitPointAsync();
+        while (hitPoint is null)
         {
             if (navigation.Elapsed > TimeSpan.FromSeconds(10))
                 throw new InvalidOperationException($"Select '{label}' has no reachable option '{option}'.");
             await input.PressAsync("ArrowDown");
+            hitPoint = await FindHitPointAsync();
         }
-        await target.ClickAsync();
+        await page.Mouse.ClickAsync((float)hitPoint[0], (float)hitPoint[1]);
         await Assertions.Expect(selector.Locator(".ant-select-selection-item")).ToContainTextAsync(option);
+
+        // 每次按当前布局重算裁剪交集和命中目标；不缓存虚拟项或过渡动画前的坐标。
+        Task<double[]?> FindHitPointAsync() => page.EvaluateAsync<double[]?>("""
+            ([id, text]) => {
+              const holder = document.getElementById(id)?.closest('.ant-select-dropdown')?.querySelector('.rc-virtual-list-holder');
+              const item = [...holder?.querySelectorAll('.ant-select-item-option:not(.ant-select-item-option-disabled)') ?? []]
+                .find(value => value.textContent?.includes(text));
+              if (!holder || !item) return null;
+              const h = holder.getBoundingClientRect(), r = item.getBoundingClientRect();
+              const x = (Math.max(h.left, r.left) + Math.min(h.right, r.right)) / 2;
+              const y = (Math.max(h.top, r.top) + Math.min(h.bottom, r.bottom)) / 2;
+              return x > h.left && x < h.right && y > h.top && y < h.bottom
+                && item.contains(document.elementFromPoint(x, y)) ? [x, y] : null;
+            }
+            """, new[] { listId, option });
     }
 }

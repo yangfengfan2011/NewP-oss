@@ -59,7 +59,8 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         });
         services.AddScoped<ICompanyDirectory>(serviceProvider => new EfCompanyDirectory(
             serviceProvider.GetRequiredService<ICP.Platform.Persistence.EfCore.EfPlatformDbContext>(),
-            serviceProvider.GetRequiredService<OrganizationEffectiveFacts>()));
+            serviceProvider.GetRequiredService<OrganizationEffectiveFacts>(),
+            serviceProvider.GetService<ICP.Platform.Authorization.Contracts.IDataScopeReadPlanProvider>()));
         services.AddScoped<EfDepartmentDirectory>();
         services.AddScoped<IDepartmentDirectory>(serviceProvider =>
             serviceProvider.GetRequiredService<EfDepartmentDirectory>());

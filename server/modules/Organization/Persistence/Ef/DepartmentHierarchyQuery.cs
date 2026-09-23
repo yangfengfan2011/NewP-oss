@@ -1,5 +1,6 @@
 using System.Data;
 using System.Data.Common;
+using System.Linq.Expressions;
 using ICP.Platform.Modules.Organization.Directories;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Persistence.EfCore;
@@ -44,6 +45,7 @@ internal interface IDepartmentHierarchyQuery
         int page,
         int pageSize,
         bool includeDisabled,
+        Expression<Func<Dictionary<string, object?>, bool>>? readPredicate,
         CancellationToken cancellationToken);
 }
 
@@ -107,13 +109,15 @@ internal sealed class SqlServerDepartmentHierarchyQuery(EfPlatformDbContext dbCo
         OPTION (MAXRECURSION 0);
         """;
 
-    private const string LookupParentCandidatesSql = """
+    private const string CreateDescendantsTableSql = """
         CREATE TABLE #DepartmentDescendants
         (
             [EID] nvarchar(450) NOT NULL,
             [IsCycle] bit NOT NULL
         );
+        """;
 
+    private const string PopulateDescendantsSql = """
         ;WITH [Descendants] AS
         (
             SELECT [department].[EID],
@@ -140,7 +144,11 @@ internal sealed class SqlServerDepartmentHierarchyQuery(EfPlatformDbContext dbCo
         SELECT [EID], [IsCycle]
         FROM [Descendants]
         OPTION (MAXRECURSION 0);
+        """;
 
+    private const string DescendantsSetupSql = CreateDescendantsTableSql + PopulateDescendantsSql;
+
+    private const string LookupParentCandidatesSql = DescendantsSetupSql + """
         SELECT CASE WHEN EXISTS (
             SELECT 1 FROM #DepartmentDescendants WHERE [IsCycle] = 1)
             THEN 1 ELSE 0 END AS [IsCorrupted];
@@ -262,7 +270,7 @@ internal sealed class SqlServerDepartmentHierarchyQuery(EfPlatformDbContext dbCo
         },
         cancellationToken);
 
-    // CTE 与分页在同一数据库命令内完成；应用层最多保留 pageSize + 1 行。
+    // 无读取限制时沿原命令分页；有限制时保留递归排除并让 EF 在数据库侧组合谓词与分页。
     public Task<DepartmentHierarchyCandidatePage> LookupParentCandidatesAsync(
         string companyId,
         string currentDepartmentId,
@@ -270,7 +278,11 @@ internal sealed class SqlServerDepartmentHierarchyQuery(EfPlatformDbContext dbCo
         int page,
         int pageSize,
         bool includeDisabled,
-        CancellationToken cancellationToken) => ExecuteAsync(
+        Expression<Func<Dictionary<string, object?>, bool>>? readPredicate,
+        CancellationToken cancellationToken) => readPredicate is not null
+        ? LookupScopedParentCandidatesAsync(companyId, currentDepartmentId, keyword, page, pageSize,
+            includeDisabled, readPredicate, cancellationToken)
+        : ExecuteAsync(
         LookupParentCandidatesSql,
         new Dictionary<string, object?>
         {
@@ -318,6 +330,80 @@ internal sealed class SqlServerDepartmentHierarchyQuery(EfPlatformDbContext dbCo
                 items.Count > pageSize);
         },
         cancellationToken);
+
+    // 临时后代集合只保留层级排除事实；EF 在同一连接把完整读取谓词组合进分页 SQL。
+    private async Task<DepartmentHierarchyCandidatePage> LookupScopedParentCandidatesAsync(
+        string companyId,
+        string currentDepartmentId,
+        string? keyword,
+        int page,
+        int pageSize,
+        bool includeDisabled,
+        Expression<Func<Dictionary<string, object?>, bool>> readPredicate,
+        CancellationToken cancellationToken)
+    {
+        if (!string.Equals(dbContext.Database.ProviderName, SqlServerProviderName, StringComparison.Ordinal))
+            throw new InvalidOperationException("Organization department hierarchy queries require SQL Server.");
+        var connection = dbContext.Database.GetDbConnection();
+        var shouldClose = connection.State != ConnectionState.Open;
+        if (shouldClose) await connection.OpenAsync(cancellationToken);
+        try
+        {
+            // CREATE 独立执行于连接作用域；带参数的 RPC 只负责填充，避免临时表随 RPC 退出。
+            await using (var create = connection.CreateCommand())
+            {
+                create.CommandText = CreateDescendantsTableSql;
+                if (dbContext.Database.CurrentTransaction is { } transaction)
+                    create.Transaction = transaction.GetDbTransaction();
+                await create.ExecuteNonQueryAsync(cancellationToken);
+            }
+            await using (var setup = connection.CreateCommand())
+            {
+                setup.CommandText = PopulateDescendantsSql;
+                if (dbContext.Database.CurrentTransaction is { } transaction)
+                    setup.Transaction = transaction.GetDbTransaction();
+                AddParameter(setup, "@companyId", companyId);
+                AddParameter(setup, "@currentDepartmentId", currentDepartmentId);
+                await setup.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            await using (var check = connection.CreateCommand())
+            {
+                check.CommandText = "SELECT CASE WHEN EXISTS (SELECT 1 FROM #DepartmentDescendants WHERE [IsCycle] = 1) THEN 1 ELSE 0 END";
+                if (dbContext.Database.CurrentTransaction is { } transaction)
+                    check.Transaction = transaction.GetDbTransaction();
+                if (Convert.ToInt32(await check.ExecuteScalarAsync(cancellationToken)) == 1)
+                    throw new DepartmentHierarchyCorruptedException();
+            }
+
+            var rows = dbContext.Set<Dictionary<string, object?>>(dbContext.ResolveModelKey("Department"))
+                .FromSqlRaw("SELECT [department].* FROM [Department] AS [department] WHERE NOT EXISTS (SELECT 1 FROM #DepartmentDescendants AS [descendant] WHERE [descendant].[EID] = [department].[EID])")
+                .AsNoTracking()
+                .Where(row => EF.Property<string>(row, "CompanyId") == companyId)
+                .Where(readPredicate);
+            if (!includeDisabled) rows = rows.Where(row => EF.Property<bool>(row, "IsEnabled"));
+            if (!string.IsNullOrWhiteSpace(keyword))
+            {
+                var search = keyword.Trim();
+                rows = rows.Where(row => EF.Property<string>(row, "ECODE").Contains(search)
+                    || EF.Property<string>(row, "ENAME").Contains(search));
+            }
+            var pageRows = await rows.OrderBy(row => EF.Property<string>(row, "ENAME"))
+                .ThenBy(row => EF.Property<string>(row, "EID"))
+                .Skip((page - 1) * pageSize).Take(pageSize + 1).ToListAsync(cancellationToken);
+            return new DepartmentHierarchyCandidatePage(
+                pageRows.Take(pageSize).Select(EfDepartmentDirectory.Map).ToArray(), pageRows.Count > pageSize);
+        }
+        finally
+        {
+            await using var cleanup = connection.CreateCommand();
+            cleanup.CommandText = "DROP TABLE IF EXISTS #DepartmentDescendants";
+            if (dbContext.Database.CurrentTransaction is { } transaction)
+                cleanup.Transaction = transaction.GetDbTransaction();
+            try { await cleanup.ExecuteNonQueryAsync(CancellationToken.None); }
+            finally { if (shouldClose) await connection.CloseAsync(); }
+        }
+    }
 
     // Organization 当前唯一迁移流与受支持 profile 均为 SQL Server；其他 provider 不走隐式降级路径。
     private async Task<T> ExecuteAsync<T>(

@@ -68,6 +68,20 @@ describe('standard CRUD phase 2 SDK helpers', () => {
     });
   });
 
+  it('keeps hidden relationship IDs in the formal edit payload while their labels are unresolved', () => {
+    const fields: StandardCrudFieldDefinition[] = [
+      { key: 'companyId', labelKey: '公司', modelField: 'CompanyId', kind: 'lookup', lookup: { providerKey: 'organization.companies' } },
+      { key: 'departmentId', labelKey: '部门', modelField: 'DepartmentId', kind: 'lookup', lookup: { providerKey: 'organization.departments' } },
+      { key: 'positionId', labelKey: '岗位', modelField: 'PositionId', kind: 'lookup', lookup: { providerKey: 'organization.positions' } },
+    ];
+
+    expect(normalizeStandardCrudSubmitValues(fields, {
+      companyId: 'Company_Hidden', departmentId: 'Department_Hidden', positionId: 'Position_Hidden',
+    })).toEqual({
+      CompanyId: 'Company_Hidden', DepartmentId: 'Department_Hidden', PositionId: 'Position_Hidden',
+    });
+  });
+
   it('preserves the current option before provider results when missing', () => {
     const current: StandardCrudOption = { value: 'current', label: '当前值' };
     const options: StandardCrudOption[] = [{ value: 'next', label: '新值' }];
@@ -98,7 +112,10 @@ describe('standard CRUD phase 2 SDK helpers', () => {
         values: { companyId: '', departmentId: 'Dept_1' },
         detailFields: { DepartmentName: '一部' },
       }),
-    ).resolves.toEqual({ options: [], error: null });
+    ).resolves.toEqual({
+      options: [{ value: 'Dept_1', label: '当前值不可用', disabled: true }],
+      error: '缺少关联条件，无法验证当前值',
+    });
     expect(load).not.toHaveBeenCalled();
 
     await expect(
@@ -110,7 +127,7 @@ describe('standard CRUD phase 2 SDK helpers', () => {
       }),
     ).resolves.toEqual({
       options: [
-        { value: 'Dept_1', label: '一部' },
+        { value: 'Dept_1', label: '当前值不可用', disabled: true },
         { value: 'Dept_2', label: '二部' },
       ],
       error: null,

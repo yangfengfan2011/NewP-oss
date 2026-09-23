@@ -4,11 +4,13 @@ import { act, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import { PlatformQueryProvider } from '@icp-platform/core';
+import { StandardCrudForm } from '@icp-platform/ui/crud-form';
 import {
   createStandardCrudRestLookupProvider,
   loadStandardCrudLookupPage,
   type StandardCrudFieldDefinition,
   type StandardCrudLookupProvider,
+  type StandardCrudLookupPage,
   type StandardCrudOption,
 } from '@icp-platform/sdk';
 import {
@@ -650,7 +652,7 @@ describe('standard CRUD lookup runtime', () => {
 
     expect(result).toEqual({
       options: [
-        { value: 'existing', label: '既有部门' },
+        { value: 'existing', label: '当前值不可用', disabled: true },
         { value: 'finance', label: '财务部' },
       ],
       error: null,
@@ -726,9 +728,135 @@ describe('standard CRUD lookup runtime', () => {
     });
 
     expect(result).toEqual({
-      options: [{ value: 'existing', label: '既有部门' }],
+      options: [{ value: 'existing', label: '当前值不可用', disabled: true }],
       error: '部门加载失败',
     });
+  });
+
+  it('keeps the old detail name and raw ID out of the rendered lookup while authorization is pending', async () => {
+    let resolveLookup!: (page: StandardCrudLookupPage) => void;
+    const pending = new Promise<StandardCrudLookupPage>((resolve) => { resolveLookup = resolve; });
+    const departments: StandardCrudLookupProvider = { key: 'departments', load: vi.fn(() => pending) };
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    function Probe() {
+      const values = { tenantId: 'tenant-a', departmentId: 'existing' };
+      const state = useStandardCrudLookupRuntime({
+        resourceKey: 'organization.person',
+        fields: [lookupField()], providers: [departments],
+        values,
+        detailFields: { departmentName: '私有原名' },
+      });
+      return <StandardCrudForm formId="person-lookup" mode="edit" fields={[lookupField()]}
+        sections={[]} values={values} lookupOptions={state.lookupOptions}
+        lookupLoading={state.lookupLoading} lookupErrors={state.lookupErrors}
+        onChange={() => {}} onSubmit={() => {}} saving={false}
+        showSubmitAction={false} titleForSection={(key) => key} />;
+    }
+    try {
+      await act(async () => root.render(<PlatformQueryProvider scopeKey="pending-lookup"><Probe /></PlatformQueryProvider>));
+      expect(container.querySelector('.ant-select-selection-item')?.textContent).toBe('正在读取当前值');
+      expect(container.textContent).not.toContain('existing');
+      expect(container.textContent).not.toContain('私有原名');
+      await act(async () => resolveLookup({
+        options: [], currentOptions: [{ value: 'existing', label: '***', disabled: true }],
+        page: 1, pageSize: 20, hasMore: false,
+      }));
+      expect(container.querySelector('.ant-select-selection-item')?.textContent).toBe('***');
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('keeps an unresolved ID in state and displays an explicit lookup error after failure', async () => {
+    let rejectLookup!: (error: Error) => void;
+    const pending = new Promise<StandardCrudLookupPage>((_resolve, reject) => { rejectLookup = reject; });
+    const departments: StandardCrudLookupProvider = { key: 'departments', load: vi.fn(() => pending) };
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    function Probe() {
+      const state = useStandardCrudLookupRuntime({
+        resourceKey: 'organization.person',
+        fields: [lookupField()], providers: [departments],
+        values: { tenantId: 'tenant-a', departmentId: 'existing' },
+        detailFields: { departmentName: '私有原名' },
+      });
+      return <span>{state.lookupOptions.departmentId?.[0]?.label}|{state.lookupErrors.departmentId}</span>;
+    }
+    try {
+      await act(async () => root.render(<PlatformQueryProvider scopeKey="failed-lookup"><Probe /></PlatformQueryProvider>));
+      expect(container.textContent).toContain('正在读取当前值');
+      await act(async () => rejectLookup(new Error('读取计划故障')));
+      expect(container.textContent).toBe('当前值不可用|读取计划故障');
+      expect(container.textContent).not.toContain('existing');
+      expect(container.textContent).not.toContain('私有原名');
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('does not show a prior authorization scope name while the next scope is loading', async () => {
+    let resolveNext!: (page: StandardCrudLookupPage) => void;
+    const next = new Promise<StandardCrudLookupPage>((resolve) => { resolveNext = resolve; });
+    const firstPage: StandardCrudLookupPage = {
+      options: [], currentOptions: [{ value: 'existing', label: '旧主体可读名称' }],
+      page: 1, pageSize: 20, hasMore: false,
+    };
+    const departments: StandardCrudLookupProvider = {
+      key: 'departments',
+      load: vi.fn().mockResolvedValueOnce(firstPage).mockImplementationOnce(() => next),
+    };
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    function Probe() {
+      const state = useStandardCrudLookupRuntime({
+        resourceKey: 'organization.person', fields: [lookupField()], providers: [departments],
+        values: { tenantId: 'tenant-a', departmentId: 'existing' },
+        detailFields: { departmentName: '旧主体可读名称' },
+      });
+      return <span>{state.lookupOptions.departmentId?.[0]?.label}</span>;
+    }
+    try {
+      await act(async () => root.render(<PlatformQueryProvider scopeKey="old-scope"><Probe /></PlatformQueryProvider>));
+      expect(container.textContent).toBe('旧主体可读名称');
+      await act(async () => root.render(<PlatformQueryProvider scopeKey="new-scope"><Probe /></PlatformQueryProvider>));
+      expect(container.textContent).toBe('正在读取当前值');
+      await act(async () => resolveNext({
+        options: [], currentOptions: [{ value: 'existing', label: '***', disabled: true }],
+        page: 1, pageSize: 20, hasMore: false,
+      }));
+      expect(container.textContent).toBe('***');
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
+
+  it('uses the authorized current value mask even when detail fields contain an older name', async () => {
+    const departments: StandardCrudLookupProvider = {
+      key: 'departments',
+      load: vi.fn(async (request) => ({
+        options: [],
+        currentOptions: [{ value: request.currentValueIds[0] ?? '', label: '***', disabled: true }],
+        page: request.page,
+        pageSize: request.pageSize,
+        hasMore: false,
+      })),
+    };
+
+    const result = await loadStandardCrudLookupPage({
+      field: lookupField(),
+      providers: [departments],
+      values: { tenantId: 'tenant-a', departmentId: 'existing' },
+      detailFields: { departmentName: '私有原名' },
+    });
+
+    expect(result.currentOptions).toEqual([{ value: 'existing', label: '***', disabled: true }]);
+    expect(result.options).toEqual(result.currentOptions);
+    expect(JSON.stringify(result)).not.toContain('私有原名');
   });
 
   it('returns field options for non lookup fields', async () => {

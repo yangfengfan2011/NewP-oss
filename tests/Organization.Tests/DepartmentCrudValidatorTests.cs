@@ -410,6 +410,7 @@ public sealed class DepartmentCrudValidatorTests
             int page,
             int pageSize,
             bool includeDisabled,
+            System.Linq.Expressions.Expression<Func<Dictionary<string, object?>, bool>>? readPredicate,
             CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

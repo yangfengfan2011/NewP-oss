@@ -153,21 +153,18 @@ function isEmptyStandardCrudLookupDependency(value: unknown): boolean {
   return value == null || (typeof value === 'string' && value.trim().length === 0);
 }
 
-/** 读取 lookup 当前值；只从表单快照生成显示选项，避免 provider 分页丢失编辑态旧值。 */
+/** 当前值先用稳定 ID 占位；名称仅由受控 currentValueIds 响应提供。 */
 function readStandardCrudCurrentLookupOption(
   field: StandardCrudFieldDefinition,
   values: Record<string, unknown>,
-  detailFields: Record<string, unknown>,
+  _detailFields: Record<string, unknown>,
 ): StandardCrudOption | null {
   const value = values[field.key];
   if (typeof value !== 'string' || value.trim().length === 0) {
     return null;
   }
 
-  const labelField = field.lookup?.currentValueLabelField;
-  const label = labelField && typeof detailFields[labelField] === 'string' ? detailFields[labelField] : value;
-
-  return { value, label };
+  return { value, label: '正在读取当前值', disabled: true };
 }
 
 /**
@@ -205,12 +202,13 @@ export async function loadStandardCrudLookupPage(
   }
 
   const current = readStandardCrudCurrentLookupOption(field, values, detailFields);
+  const unavailable = current ? { ...current, label: '当前值不可用' } : null;
   const providerKey = field.lookup?.providerKey ?? '';
   const provider = providers.find((candidate) => candidate.key === providerKey);
   if (!provider) {
     return {
-      options: preserveStandardCrudCurrentOption([], current),
-      currentOptions: current ? [current] : [],
+      options: preserveStandardCrudCurrentOption([], unavailable),
+      currentOptions: unavailable ? [unavailable] : [],
       page,
       pageSize,
       hasMore: false,
@@ -222,7 +220,14 @@ export async function loadStandardCrudLookupPage(
   for (const dependency of field.lookup?.dependsOn ?? []) {
     const dependencyValue = values[dependency];
     if (isEmptyStandardCrudLookupDependency(dependencyValue)) {
-      return { options: [], currentOptions: [], page, pageSize, hasMore: false, error: null };
+      return {
+        options: preserveStandardCrudCurrentOption([], unavailable),
+        currentOptions: unavailable ? [unavailable] : [],
+        page,
+        pageSize,
+        hasMore: false,
+        error: current ? '缺少关联条件，无法验证当前值' : null,
+      };
     }
 
     dependencyValues[dependency] = dependencyValue;
@@ -245,7 +250,7 @@ export async function loadStandardCrudLookupPage(
       : loaded;
     const currentOptions = mergeStandardCrudLookupOptions(
       loadedPage.currentOptions,
-      current ? [current] : [],
+      unavailable ? [unavailable] : [],
     );
 
     return {
@@ -258,8 +263,8 @@ export async function loadStandardCrudLookupPage(
     };
   } catch (error) {
     return {
-      options: preserveStandardCrudCurrentOption([], current),
-      currentOptions: current ? [current] : [],
+      options: preserveStandardCrudCurrentOption([], unavailable),
+      currentOptions: unavailable ? [unavailable] : [],
       page,
       pageSize,
       hasMore: false,

@@ -292,6 +292,43 @@ public sealed class OrganizationPermissionPipelineTests
     }
 
     [Fact]
+    public async Task PersonOrganizationLookup_ReturnsOnlyMaskedCurrentIdWhenNameIsUnreadable()
+    {
+        var source = new MutableFeatureDecisionSource(PermissionDecision.Granted);
+        await using var scenario = await Scenario.StartAsync(source);
+        scenario.CompanyDirectory.Result = new OrganizationDirectoryPage<Company>([],
+            [new Company { Id = "Company_Hidden", IsEnabled = false }], 1, 20, false,
+            MaskedCurrentIds: ["Company_Hidden"]);
+        using var request = Request(HttpMethod.Get,
+            "/api/organization/person-lookups/companies?currentValueIds=Company_Hidden", "subject");
+
+        using var response = await scenario.Client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+        using var document = JsonDocument.Parse(body);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var current = Assert.Single(document.RootElement.GetProperty("currentItems").EnumerateArray());
+        Assert.Equal("Company_Hidden", current.GetProperty("value").GetString());
+        Assert.Equal("***", current.GetProperty("label").GetString());
+        Assert.True(current.GetProperty("disabled").GetBoolean());
+        Assert.Equal(3, current.EnumerateObject().Count());
+    }
+
+    [Fact]
+    public async Task PersonOrganizationLookup_PropagatesDirectoryFailureInsteadOfReturningEmptyCandidates()
+    {
+        var source = new MutableFeatureDecisionSource(PermissionDecision.Granted);
+        await using var scenario = await Scenario.StartAsync(source);
+        scenario.CompanyDirectory.Failure = new InvalidOperationException("DATA_SCOPE_READ_PLAN_UNAVAILABLE");
+        using var request = Request(HttpMethod.Get,
+            "/api/organization/person-lookups/companies?currentValueIds=Company_Hidden", "subject");
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => scenario.Client.SendAsync(request));
+
+        Assert.Contains("DATA_SCOPE_READ_PLAN_UNAVAILABLE", error.ToString());
+    }
+
+    [Fact]
     public async Task PersonOrganizationLookup_AllowsDisabledDirectoryItemsOnlyForExplicitListFiltering()
     {
         var source = new MutableFeatureDecisionSource(PermissionDecision.Granted);
@@ -622,6 +659,8 @@ public sealed class OrganizationPermissionPipelineTests
 
         public OrganizationDirectoryPage<Company> Result { get; set; } = new([], [], 1, 20, false);
 
+        public Exception? Failure { get; set; }
+
         public Task<Company?> GetByIdAsync(string companyId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
@@ -639,6 +678,7 @@ public sealed class OrganizationPermissionPipelineTests
         {
             Interlocked.Increment(ref _lookupCallCount);
             Request = request;
+            if (Failure is not null) return Task.FromException<OrganizationDirectoryPage<Company>>(Failure);
             return Task.FromResult(Result);
         }
     }

@@ -1,4 +1,5 @@
 using ICP.Platform.Persistence.Abstractions;
+using ICP.Platform.Authorization.Contracts;
 using System.Globalization;
 using System.Linq.Expressions;
 using ICP.Platform.Crud.Abstractions;
@@ -15,16 +16,19 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository, IStandar
     private readonly EfPlatformDbContext _dbContext;
     private readonly IPlatformTransactionExecutor? _transactions;
     private readonly IPlatformObjectIdGenerator _objectIdGenerator;
+    private readonly IDataScopeReadPlanProvider? _readPlans;
 
     // 自保存仓储也进入统一提交，调用方不需要额外维护缓存。
     public EfStandardCrudRepository(
         EfPlatformDbContext dbContext,
         IPlatformObjectIdGenerator objectIdGenerator,
-        IPlatformTransactionExecutor? transactions = null)
+        IPlatformTransactionExecutor? transactions = null,
+        IDataScopeReadPlanProvider? readPlans = null)
     {
         _dbContext = dbContext;
         _transactions = transactions;
         _objectIdGenerator = objectIdGenerator;
+        _readPlans = readPlans;
     }
 
     /// <summary>
@@ -72,6 +76,10 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository, IStandar
         var rows = _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName))
             .AsNoTracking()
             .AsQueryable();
+        var readPredicate = _readPlans is null
+            ? null
+            : (await _readPlans.GetReadPlanAsync(descriptor.ResourceKey, cancellationToken)).Predicate;
+        if (readPredicate is not null) rows = rows.Where(readPredicate);
         if (!string.IsNullOrWhiteSpace(descriptor.EnabledField))
         {
             rows = rows.Where(row => EF.Property<bool>(row, descriptor.EnabledField) == true);
@@ -93,18 +101,25 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository, IStandar
         var currentValueIds = (request.CurrentValueIds ?? [])
             .Where(static id => !string.IsNullOrWhiteSpace(id))
             .Distinct(StringComparer.Ordinal)
-            .Take(100)
             .ToList();
-        var currentItems = currentValueIds.Count == 0
-            ? []
-            : (await ApplyOptionOrder(
-                    _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName))
-                        .AsNoTracking()
-                        .Where(row => currentValueIds.Contains(EF.Property<string>(row, descriptor.IdField))),
-                    descriptor)
-                .ToListAsync(cancellationToken))
-                .Select(row => ToOption(descriptor, row))
-                .ToList();
+        var currentItems = new List<StandardCrudOptionItem>();
+        foreach (var batch in currentValueIds.Chunk(100))
+        {
+            var currentRows = _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName))
+                .AsNoTracking()
+                .Where(row => batch.Contains(EF.Property<string>(row, descriptor.IdField)));
+            var existingIds = await currentRows.Select(row => EF.Property<string>(row, descriptor.IdField))
+                .ToListAsync(cancellationToken);
+            if (readPredicate is not null) currentRows = currentRows.Where(readPredicate);
+            var readable = await currentRows.ToListAsync(cancellationToken);
+            var byId = readable.ToDictionary(row => ReadString(row, descriptor.IdField), StringComparer.Ordinal);
+            foreach (var id in existingIds)
+            {
+                currentItems.Add(byId.TryGetValue(id, out var row)
+                    ? ToOption(descriptor, row)
+                    : new StandardCrudOptionItem { Value = id, Label = "***", Disabled = true });
+            }
+        }
 
         return new StandardCrudLookupResult(items, currentItems, page, pageSize, hasMore);
     }

@@ -23,9 +23,11 @@ public sealed record OrganizationDirectoryLookupRequest(
 /// <param name="Page">规范化后的页码。</param>
 /// <param name="PageSize">规范化后的单页大小。</param>
 /// <param name="HasMore">是否还有后续候选页。</param>
+/// <param name="MaskedCurrentIds">名称不可读但需保留标识的当前值；与可读名称字面量无关。</param>
 public sealed record OrganizationDirectoryPage<T>(
     IReadOnlyList<T> Items,
     IReadOnlyList<T> CurrentItems,
     int Page,
     int PageSize,
-    bool HasMore);
+    bool HasMore,
+    IReadOnlyCollection<string>? MaskedCurrentIds = null);

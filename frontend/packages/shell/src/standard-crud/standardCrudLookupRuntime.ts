@@ -66,9 +66,11 @@ export function useStandardCrudLookupRuntime({
   const lookupFields = fields.filter((field) => field.kind === 'lookup');
   const [requests, setRequests] = useState<Record<string, StandardCrudLookupRequestState>>({});
   const [lookupOptions, setLookupOptions] = useState<Record<string, StandardCrudOption[]>>({});
+  const [appliedKey, setAppliedKey] = useState('');
   const [lookupErrors, setLookupErrors] = useState<Record<string, string | null>>({});
   const [lookupHasMore, setLookupHasMore] = useState<Record<string, boolean>>({});
   const queryScope = usePlatformQueryActions();
+  const [appliedScope, setAppliedScope] = useState<typeof queryScope | null>(null);
   const previous = useRef<{ scope: typeof queryScope; key: string; data: StandardCrudLookupQueryData }>();
   const queryKey = createStandardCrudLookupQueryKey({
     resourceKey,
@@ -132,12 +134,48 @@ export function useStandardCrudLookupRuntime({
       });
       return next;
     });
+    setAppliedKey(serializedKey);
+    setAppliedScope(queryScope);
   }, [queryData, queryScope, serializedKey]);
 
+  // 表单首帧、重新加载及失败期间仅显示状态标签，避免旧页候选或详情中的名称先于本次读取裁决闪现。
+  const presentedOptions: Record<string, StandardCrudOption[]> = {};
+  const presentedErrors: Record<string, string | null> = {};
+  const queryErrorMessage = query.error
+    ? query.error instanceof Error ? query.error.message : '加载选项失败'
+    : null;
+  const hasAppliedCurrentScope = appliedKey === serializedKey && appliedScope === queryScope;
+  for (const field of lookupFields) {
+    const currentValue = values[field.key];
+    const page = queryData?.lookupPages[field.key];
+    const inputKey = JSON.stringify(createStandardCrudLookupQueryKey({
+      resourceKey, featurePosition, fields: [field], providers, values, detailFields, requests,
+    }));
+    const validPage = !query.isFetching && page?.inputKey === inputKey ? page : undefined;
+    presentedErrors[field.key] = validPage?.error
+      ?? (queryErrorMessage ?? (hasAppliedCurrentScope ? lookupErrors[field.key] ?? null : null));
+    const options = query.isFetching ? [] : query.error
+      ? validPage?.options ?? [] : hasAppliedCurrentScope
+        ? lookupOptions[field.key] ?? [] : validPage?.options ?? [];
+    if (typeof currentValue !== 'string' || currentValue.length === 0) {
+      presentedOptions[field.key] = options;
+      continue;
+    }
+    const resolved = validPage && !validPage.error
+      ? validPage.currentOptions.find((option) => option.value === currentValue)
+      : undefined;
+    const currentOption = resolved ?? {
+      value: currentValue,
+      label: query.isFetching || (!validPage && !query.error) ? '正在读取当前值' : '当前值不可用',
+      disabled: true,
+    };
+    presentedOptions[field.key] = [currentOption, ...options.filter((option) => option.value !== currentValue)];
+  }
+
   return {
-    lookupOptions,
+    lookupOptions: presentedOptions,
     lookupLoading,
-    lookupErrors,
+    lookupErrors: presentedErrors,
     lookupHasMore,
     search: (fieldKey, keyword) => {
       setRequests((current) => ({

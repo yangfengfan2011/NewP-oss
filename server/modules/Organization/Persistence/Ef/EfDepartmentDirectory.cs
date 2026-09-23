@@ -1,4 +1,5 @@
 using ICP.Platform.Modules.Organization.Directories;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore;
@@ -12,22 +13,25 @@ public sealed class EfDepartmentDirectory : IDepartmentDirectory, IDepartmentHie
 {
     private readonly EfPlatformDbContext _dbContext;
     private readonly IDepartmentHierarchyQuery _hierarchyQuery;
+    private readonly IDataScopeReadPlanProvider? _readPlans;
 
     /// <summary>
     /// 使用 Organization 当前 SQL Server 层级查询构造部门目录。
     /// </summary>
-    public EfDepartmentDirectory(EfPlatformDbContext dbContext)
-        : this(dbContext, new SqlServerDepartmentHierarchyQuery(dbContext))
+    public EfDepartmentDirectory(EfPlatformDbContext dbContext, IDataScopeReadPlanProvider? readPlans = null)
+        : this(dbContext, new SqlServerDepartmentHierarchyQuery(dbContext), readPlans)
     {
     }
 
     // 测试可替换内部层级查询，普通目录读取仍使用同一动态 EF 上下文。
     internal EfDepartmentDirectory(
         EfPlatformDbContext dbContext,
-        IDepartmentHierarchyQuery hierarchyQuery)
+        IDepartmentHierarchyQuery hierarchyQuery,
+        IDataScopeReadPlanProvider? readPlans = null)
     {
         _dbContext = dbContext;
         _hierarchyQuery = hierarchyQuery;
+        _readPlans = readPlans;
     }
 
     /// <inheritdoc/>
@@ -86,6 +90,8 @@ public sealed class EfDepartmentDirectory : IDepartmentDirectory, IDepartmentHie
         var rows = Entities
             .AsNoTracking()
             .Where(row => EF.Property<string>(row, "CompanyId") == companyId);
+        var readPredicate = await GetReadPredicateAsync(cancellationToken);
+        if (readPredicate is not null) rows = rows.Where(readPredicate);
         if (!request.IncludeDisabled)
         {
             rows = rows.Where(row => EF.Property<bool>(row, "IsEnabled"));
@@ -103,13 +109,14 @@ public sealed class EfDepartmentDirectory : IDepartmentDirectory, IDepartmentHie
             .Skip((page - 1) * pageSize)
             .Take(pageSize + 1)
             .ToListAsync(cancellationToken);
-        var currentRows = await ReadCurrentRowsAsync(companyId, request.CurrentValueIds, cancellationToken);
+        var currentRows = await ReadCurrentRowsAsync(companyId, request.CurrentValueIds, readPredicate, cancellationToken);
         return new OrganizationDirectoryPage<Department>(
             pageRows.Take(pageSize).Select(Map).ToList(),
-            currentRows.Select(Map).ToList(),
+            currentRows.Items,
             page,
             pageSize,
-            pageRows.Count > pageSize);
+            pageRows.Count > pageSize,
+            currentRows.MaskedIds);
     }
 
     /// <inheritdoc/>
@@ -126,6 +133,7 @@ public sealed class EfDepartmentDirectory : IDepartmentDirectory, IDepartmentHie
         }
 
         var (page, pageSize) = NormalizePage(request);
+        var readPredicate = await GetReadPredicateAsync(cancellationToken);
         var hierarchyPage = await _hierarchyQuery.LookupParentCandidatesAsync(
             companyId,
             currentDepartmentId,
@@ -133,36 +141,59 @@ public sealed class EfDepartmentDirectory : IDepartmentDirectory, IDepartmentHie
             page,
             pageSize,
             request.IncludeDisabled,
+            readPredicate,
             cancellationToken);
         var currentRows = await ReadCurrentRowsAsync(
             companyId,
             request.CurrentValueIds,
+            readPredicate,
             cancellationToken);
         return new OrganizationDirectoryPage<Department>(
             hierarchyPage.Items,
-            currentRows.Select(Map).ToList(),
+            currentRows.Items,
             page,
             pageSize,
-            hierarchyPage.HasMore);
+            hierarchyPage.HasMore,
+            currentRows.MaskedIds);
     }
 
     private DbSet<Dictionary<string, object?>> Entities =>
         _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("Department"));
 
-    // 当前值仍受 CompanyId 约束，避免依赖切换后解析出另一公司的旧部门。
-    private async Task<List<Dictionary<string, object?>>> ReadCurrentRowsAsync(
+    // 当前值仍受 CompanyId 约束；分批解析并单列遮蔽身份，避免跨公司或误判字面名称。
+    private async Task<(List<Department> Items, List<string> MaskedIds)> ReadCurrentRowsAsync(
         string companyId,
         IReadOnlyCollection<string>? currentValueIds,
+        System.Linq.Expressions.Expression<Func<Dictionary<string, object?>, bool>>? readPredicate,
         CancellationToken cancellationToken)
     {
-        var ids = NormalizeIds(currentValueIds ?? []).Take(100).ToArray();
-        return ids.Length == 0
-            ? []
-            : await Order(Entities.AsNoTracking()
-                    .Where(row => EF.Property<string>(row, "CompanyId") == companyId
-                        && ids.Contains(EF.Property<string>(row, "EID"))))
-                .ToListAsync(cancellationToken);
+        var result = new List<Department>();
+        var maskedIds = new List<string>();
+        foreach (var ids in NormalizeIds(currentValueIds ?? []).Chunk(100))
+        {
+            var rows = Entities.AsNoTracking().Where(row => EF.Property<string>(row, "CompanyId") == companyId
+                && ids.Contains(EF.Property<string>(row, "EID")));
+            var existing = await rows.Select(row => EF.Property<string>(row, "EID")).ToListAsync(cancellationToken);
+            if (readPredicate is not null) rows = rows.Where(readPredicate);
+            var readable = (await rows.ToListAsync(cancellationToken))
+                .ToDictionary(row => ReadString(row, "EID"), Map, StringComparer.Ordinal);
+            foreach (var id in existing)
+            {
+                if (readable.TryGetValue(id, out var department)) result.Add(department);
+                else
+                {
+                    result.Add(new Department { Id = id, IsEnabled = false });
+                    maskedIds.Add(id);
+                }
+            }
+        }
+        return (result, maskedIds);
     }
+
+    // 模块候选始终消费规范部门资源的完整读取计划；未启用时返回无附加过滤。
+    private async Task<System.Linq.Expressions.Expression<Func<Dictionary<string, object?>, bool>>?> GetReadPredicateAsync(
+        CancellationToken cancellationToken) => _readPlans is null ? null
+        : (await _readPlans.GetReadPlanAsync("organization.department", cancellationToken)).Predicate;
 
     // 目录排序必须在 Skip/Take 前落到数据源，并用 EID 消除同名项的不稳定顺序。
     private static IOrderedQueryable<Dictionary<string, object?>> Order(
@@ -184,7 +215,7 @@ public sealed class EfDepartmentDirectory : IDepartmentDirectory, IDepartmentHie
             .ToArray();
 
     // 目录只投影人员校验、显示和 Lookup 所需字段，不泄漏动态 EF 行。
-    private static Department Map(IReadOnlyDictionary<string, object?> row) => new()
+    internal static Department Map(IReadOnlyDictionary<string, object?> row) => new()
     {
         Id = ReadString(row, "EID"),
         CompanyId = ReadString(row, "CompanyId"),

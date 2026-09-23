@@ -1,4 +1,6 @@
 using ICP.Platform.Crud.Descriptors;
+using ICP.Platform.Authorization.Contracts;
+using System.Linq.Expressions;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Crud.Persistence;
@@ -77,6 +79,69 @@ public sealed class StandardCrudEfRepositoryTests
 
         Assert.Equal(["person-1"], result.Items.Select(item => item.Value));
         Assert.True(result.HasMore);
+    }
+
+    [Fact]
+    public async Task LookupAsync_FiltersBeforePagingAndMasksUnreadableCurrentValue()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var dbContext = BuildSqliteDbContext(connection);
+        await dbContext.Database.EnsureCreatedAsync();
+        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").AddRange(
+            Row("person-1", "P001", "Hidden name", true),
+            Row("person-2", "P002", "Visible name", true));
+        await dbContext.SaveChangesAsync();
+        var plan = new TestReadPlan(row => EF.Property<string>(row, "EID") != "person-1");
+        var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator(), readPlans: plan);
+
+        var result = await repository.LookupAsync(Descriptor(),
+            new StandardCrudLookupRequest(PageSize: 1, CurrentValueIds: ["person-1", "person-2"]));
+
+        Assert.Equal("organization.person", plan.ResourceKey);
+        Assert.Equal("person-2", Assert.Single(result.Items).Value);
+        Assert.False(result.HasMore);
+        Assert.Equal("***", result.CurrentItems.Single(item => item.Value == "person-1").Label);
+        Assert.Equal("P002 Visible name", result.CurrentItems.Single(item => item.Value == "person-2").Label);
+        plan.ReadDisabled = true;
+        var unfiltered = await repository.LookupAsync(Descriptor(),
+            new StandardCrudLookupRequest(PageSize: 1, CurrentValueIds: ["person-1"]));
+        Assert.Equal("person-1", Assert.Single(unfiltered.Items).Value);
+        Assert.Equal("P001 Hidden name", Assert.Single(unfiltered.CurrentItems).Label);
+        plan.Failure = true;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => repository.LookupAsync(Descriptor(),
+            new StandardCrudLookupRequest(CurrentValueIds: ["person-1"])));
+    }
+
+    private sealed class TestReadPlan(Expression<Func<Dictionary<string, object?>, bool>> predicate)
+        : IDataScopeReadPlanProvider
+    {
+        public string? ResourceKey { get; private set; }
+        public bool ReadDisabled { get; set; }
+        public bool Failure { get; set; }
+        public Task<DataScopeReadPlan> GetReadPlanAsync(string resourceKey, CancellationToken cancellationToken = default)
+        {
+            ResourceKey = resourceKey;
+            if (Failure) throw new InvalidOperationException("read plan unavailable");
+            return Task.FromResult(new DataScopeReadPlan(ReadDisabled ? null : predicate));
+        }
+    }
+
+    [Fact]
+    public async Task LookupAsync_BatchesAllRequestedCurrentIdsWithoutTruncation()
+    {
+        await using var dbContext = BuildDbContext();
+        var ids = Enumerable.Range(0, 105).Select(index => $"person-{index:D3}").ToArray();
+        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").AddRange(ids.Select(id =>
+            Row(id, id, id, true)));
+        await dbContext.SaveChangesAsync();
+        var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
+
+        var result = await repository.LookupAsync(Descriptor(),
+            new StandardCrudLookupRequest(PageSize: 1, CurrentValueIds: ids));
+
+        Assert.Equal(ids.Length, result.CurrentItems.Count);
+        Assert.Equal(ids, result.CurrentItems.Select(item => item.Value).Order(StringComparer.Ordinal));
     }
 
     [Fact]

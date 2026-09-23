@@ -1,4 +1,5 @@
 using ICP.Platform.Modules.Organization.Directories;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore;
@@ -12,12 +13,15 @@ public sealed class EfCompanyDirectory : ICompanyDirectory
 {
     private readonly EfPlatformDbContext _dbContext;
     private readonly OrganizationEffectiveFacts _facts;
+    private readonly IDataScopeReadPlanProvider? _readPlans;
 
     // Lookup 保留固定 SQL 入口，公司业务事实统一委托模块内部的来源选择者。
-    internal EfCompanyDirectory(EfPlatformDbContext dbContext, OrganizationEffectiveFacts facts)
+    internal EfCompanyDirectory(EfPlatformDbContext dbContext, OrganizationEffectiveFacts facts,
+        IDataScopeReadPlanProvider? readPlans = null)
     {
         _dbContext = dbContext;
         _facts = facts;
+        _readPlans = readPlans;
     }
 
     /// <inheritdoc/>
@@ -47,6 +51,9 @@ public sealed class EfCompanyDirectory : ICompanyDirectory
     {
         var (page, pageSize) = NormalizePage(request);
         var rows = Entities.AsNoTracking().AsQueryable();
+        var readPredicate = _readPlans is null ? null
+            : (await _readPlans.GetReadPlanAsync("organization.company", cancellationToken)).Predicate;
+        if (readPredicate is not null) rows = rows.Where(readPredicate);
         if (!request.IncludeDisabled)
         {
             rows = rows.Where(row => EF.Property<bool>(row, "IsEnabled"));
@@ -64,29 +71,45 @@ public sealed class EfCompanyDirectory : ICompanyDirectory
             .Skip((page - 1) * pageSize)
             .Take(pageSize + 1)
             .ToListAsync(cancellationToken);
-        var currentRows = await ReadCurrentRowsAsync(request.CurrentValueIds, cancellationToken);
+        var currentRows = await ReadCurrentRowsAsync(request.CurrentValueIds, readPredicate, cancellationToken);
         return new OrganizationDirectoryPage<Company>(
             pageRows.Take(pageSize).Select(Map).ToList(),
-            currentRows.Select(Map).ToList(),
+            currentRows.Items,
             page,
             pageSize,
-            pageRows.Count > pageSize);
+            pageRows.Count > pageSize,
+            currentRows.MaskedIds);
     }
 
     private DbSet<Dictionary<string, object?>> Entities =>
         _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("Company"));
 
-    // 当前值独立读取且不套用启用和关键词条件，保证停用归属仍可解析。
-    private async Task<List<Dictionary<string, object?>>> ReadCurrentRowsAsync(
+    // 当前值独立分批读取且不套用启用和关键词条件；遮蔽身份与名称文本分别返回。
+    private async Task<(List<Company> Items, List<string> MaskedIds)> ReadCurrentRowsAsync(
         IReadOnlyCollection<string>? currentValueIds,
+        System.Linq.Expressions.Expression<Func<Dictionary<string, object?>, bool>>? readPredicate,
         CancellationToken cancellationToken)
     {
-        var ids = NormalizeIds(currentValueIds ?? []).Take(100).ToArray();
-        return ids.Length == 0
-            ? []
-            : await Order(Entities.AsNoTracking()
-                    .Where(row => ids.Contains(EF.Property<string>(row, "EID"))))
-                .ToListAsync(cancellationToken);
+        var result = new List<Company>();
+        var maskedIds = new List<string>();
+        foreach (var ids in NormalizeIds(currentValueIds ?? []).Chunk(100))
+        {
+            var rows = Entities.AsNoTracking().Where(row => ids.Contains(EF.Property<string>(row, "EID")));
+            var existing = await rows.Select(row => EF.Property<string>(row, "EID")).ToListAsync(cancellationToken);
+            if (readPredicate is not null) rows = rows.Where(readPredicate);
+            var readable = (await rows.ToListAsync(cancellationToken))
+                .ToDictionary(row => ReadString(row, "EID"), Map, StringComparer.Ordinal);
+            foreach (var id in existing)
+            {
+                if (readable.TryGetValue(id, out var company)) result.Add(company);
+                else
+                {
+                    result.Add(new Company { Id = id, IsEnabled = false });
+                    maskedIds.Add(id);
+                }
+            }
+        }
+        return (result, maskedIds);
     }
 
     // 目录排序必须在 Skip/Take 前落到数据源，并用 EID 消除同名项的不稳定顺序。

@@ -1,4 +1,7 @@
 using ICP.Platform.Modules.Organization.Directories;
+using ICP.Platform.Modules.Organization.Controllers;
+using ICP.Platform.Authorization.Contracts;
+using System.Linq.Expressions;
 using ICP.Platform.Modules.Organization.Caching;
 using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Persistence.Descriptors;
@@ -106,6 +109,84 @@ public sealed class OrganizationDirectoryTests
         Assert.Equal("Department_1", Assert.Single(page.Items).Id);
         Assert.Equal("Department_2", Assert.Single(page.CurrentItems).Id);
         Assert.False(page.HasMore);
+    }
+
+    [Fact]
+    public async Task LookupDirectories_FilterCandidatesAndMaskOnlyUnreadableCurrentNames()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedCompaniesAsync(dbContext, [
+            Company("Company_1", "C001", "Secret company", true),
+            Company("Company_2", "C002", "***", true)]);
+        await SeedDepartmentsAsync(dbContext, [
+            Department("Department_1", "Company_2", "D001", "Secret department", true),
+            Department("Department_2", "Company_2", "D002", "***", true)]);
+        var plans = new TestReadPlans();
+        var companies = new EfCompanyDirectory(dbContext,
+            OrganizationFactsTestServices.Published(new RecordingOrganizationQuery()), plans);
+        var departments = new EfDepartmentDirectory(dbContext, new StubHierarchyQuery(
+            new DepartmentHierarchyCandidatePage([], false)), plans);
+
+        var companyPage = await companies.LookupAsync(new OrganizationDirectoryLookupRequest(null, 1, 1,
+            ["Company_1", "Company_2"]));
+        var departmentPage = await departments.LookupAsync("Company_2",
+            new OrganizationDirectoryLookupRequest(null, 1, 1, ["Department_1", "Department_2"]));
+
+        Assert.Equal("Company_2", Assert.Single(companyPage.Items).Id);
+        Assert.Equal("Department_2", Assert.Single(departmentPage.Items).Id);
+        Assert.Contains("Company_1", companyPage.MaskedCurrentIds!);
+        Assert.Contains("Department_1", departmentPage.MaskedCurrentIds!);
+        Assert.Equal("***", OrganizationLookupHttpProjection.Map(companyPage, false)
+            .CurrentItems.Single(item => item.Value == "Company_1").Label);
+        Assert.Equal("***", OrganizationLookupHttpProjection.Map(departmentPage, false)
+            .CurrentItems.Single(item => item.Value == "Department_1").Label);
+        Assert.Equal("***", companyPage.CurrentItems.Single(item => item.Id == "Company_2").Name);
+        Assert.Equal("***", departmentPage.CurrentItems.Single(item => item.Id == "Department_2").Name);
+        Assert.False(Assert.Single(OrganizationLookupHttpProjection.Map(companyPage, false).Items).Disabled);
+        Assert.False(Assert.Single(OrganizationLookupHttpProjection.Map(departmentPage, false).Items).Disabled);
+        plans.ReadDisabled = true;
+        Assert.Equal("Secret company", (await companies.LookupAsync(new OrganizationDirectoryLookupRequest(null, 1, 2,
+            ["Company_1"]))).CurrentItems.Single().Name);
+        Assert.Equal("Secret department", (await departments.LookupAsync("Company_2",
+            new OrganizationDirectoryLookupRequest(null, 1, 2, ["Department_1"]))).CurrentItems.Single().Name);
+        plans.Failure = true;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => companies.LookupAsync(
+            new OrganizationDirectoryLookupRequest(null, 1, 2)));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => departments.LookupAsync("Company_2",
+            new OrganizationDirectoryLookupRequest(null, 1, 2)));
+    }
+
+    private sealed class TestReadPlans : IDataScopeReadPlanProvider
+    {
+        public bool ReadDisabled { get; set; }
+        public bool Failure { get; set; }
+        public Task<DataScopeReadPlan> GetReadPlanAsync(string resourceKey, CancellationToken cancellationToken = default)
+        {
+            if (Failure) throw new InvalidOperationException("read plan unavailable");
+            if (ReadDisabled) return Task.FromResult(new DataScopeReadPlan(null));
+            Expression<Func<Dictionary<string, object?>, bool>> predicate = resourceKey switch
+            {
+                "organization.company" => row => EF.Property<string>(row, "EID") != "Company_1",
+                "organization.department" => row => EF.Property<string>(row, "EID") != "Department_1",
+                _ => throw new InvalidOperationException("Unexpected resource")
+            };
+            return Task.FromResult(new DataScopeReadPlan(predicate));
+        }
+    }
+
+    [Fact]
+    public async Task CompanyLookup_BatchesMoreThanOneHundredCurrentIds()
+    {
+        await using var dbContext = CreateDbContext();
+        var ids = Enumerable.Range(0, 105).Select(index => $"Company_{index:D3}").ToArray();
+        await SeedCompaniesAsync(dbContext, ids.Select(id => Company(id, id, id, true)).ToArray());
+        var directory = new EfCompanyDirectory(dbContext,
+            OrganizationFactsTestServices.Published(new RecordingOrganizationQuery()));
+
+        var page = await directory.LookupAsync(new OrganizationDirectoryLookupRequest(null, 1, 1, ids));
+
+        Assert.Equal(ids.Length, page.CurrentItems.Count);
+        Assert.Equal(ids, page.CurrentItems.Select(item => item.Id).Order(StringComparer.Ordinal));
     }
 
     [Fact]
@@ -307,6 +388,7 @@ public sealed class OrganizationDirectoryTests
             int page,
             int pageSize,
             bool includeDisabled,
+            System.Linq.Expressions.Expression<Func<Dictionary<string, object?>, bool>>? readPredicate,
             CancellationToken cancellationToken)
         {
             LookupCallCount++;

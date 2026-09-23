@@ -1,4 +1,6 @@
 using ICP.Platform.Modules.Organization.Crud;
+using ICP.Platform.Authorization.Contracts;
+using System.Linq.Expressions;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Kernel.ModulePlanning;
 using System.Text.Json;
@@ -20,6 +22,93 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
 {
     private const string RunEnvironmentVariable = "NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION";
     private const string AdminConnectionEnvironmentVariable = "NEWP_ORGANIZATION_SQLSERVER_ADMIN_CONNECTION";
+
+    [EnvironmentGatedFact(RunEnvironmentVariable, "受控上级候选在 SQL 分页前过滤并清理临时层级集合")]
+    [Trait("Category", "SqlServerSmoke")]
+    public async Task ScopedParentLookup_FiltersBeforePagingMasksCurrentAndCleansUpAfterFailure()
+    {
+        await using var fixture = await SqlFixture.CreateAsync();
+        await using var context = CreateContext(fixture.ConnectionString);
+        await context.Database.EnsureCreatedAsync();
+        AddCompany(context, "Company_1");
+        AddDepartment(context, "Department_000", "Company_1", null);
+        AddDepartment(context, "Department_001", "Company_1", "Department_000");
+        for (var index = 2; index < 1002; index++)
+            AddDepartment(context, $"Department_{index:D3}", "Company_1", null);
+        AddCompany(context, "Company_2");
+        AddDepartment(context, "Department_Other", "Company_2", null);
+        await context.SaveChangesAsync();
+
+        var plans = new TestReadPlans();
+        var directory = new EfDepartmentDirectory(context, new SqlServerDepartmentHierarchyQuery(context), plans);
+        var connection = Assert.IsType<SqlConnection>(context.Database.GetDbConnection());
+        await connection.OpenAsync();
+        connection.StatisticsEnabled = true;
+        var ioMessages = new List<string>();
+        connection.InfoMessage += (_, message) => ioMessages.Add(message.Message);
+        await using (var enableIo = connection.CreateCommand())
+        {
+            enableIo.CommandText = "SET STATISTICS IO ON";
+            await enableIo.ExecuteNonQueryAsync();
+        }
+        await using var observer = new SqlConnection(fixture.ConnectionString);
+        await observer.OpenAsync();
+        connection.ResetStatistics();
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var first = await directory.LookupParentCandidatesAsync("Company_1", "Department_000",
+            new OrganizationDirectoryLookupRequest(null, 1, 1, ["Department_002"]));
+        watch.Stop();
+        var statistics = connection.RetrieveStatistics();
+        await using (var disableIo = connection.CreateCommand())
+        {
+            disableIo.CommandText = "SET STATISTICS IO OFF";
+            await disableIo.ExecuteNonQueryAsync();
+        }
+        await using var planCommand = observer.CreateCommand();
+        planCommand.CommandText = """
+            SELECT TOP (1) CONVERT(nvarchar(max), [plan].[query_plan])
+            FROM sys.dm_exec_query_stats AS [stats]
+            CROSS APPLY sys.dm_exec_sql_text([stats].[sql_handle]) AS [text]
+            CROSS APPLY sys.dm_exec_query_plan([stats].[plan_handle]) AS [plan]
+            WHERE [text].[text] LIKE N'%#DepartmentDescendants%'
+              AND [text].[text] LIKE N'%ORDER BY%'
+              AND [text].[text] NOT LIKE N'%sys.dm_exec_query_stats%'
+            ORDER BY [stats].[last_execution_time] DESC
+            """;
+        var planXml = await planCommand.ExecuteScalarAsync() as string;
+        string?[] operators = planXml is null ? [] : System.Xml.Linq.XDocument.Parse(planXml).Descendants()
+            .Where(node => node.Name.LocalName == "RelOp")
+            .Select(node => (string?)node.Attribute("PhysicalOp"))
+            .Where(value => value is not null).Distinct().ToArray();
+        output.WriteLine(JsonSerializer.Serialize(new {
+            operation = "scoped-parent-page", rows = 1002, elapsedMs = watch.Elapsed.TotalMilliseconds,
+            roundTrips = statistics["ServerRoundtrips"], selectedRows = statistics["SelectRows"],
+            bytesReceived = statistics["BytesReceived"], ioMessages, operators }));
+        Assert.Equal("Department_003", Assert.Single(first.Items).Id);
+        Assert.True(first.HasMore);
+        Assert.Equal("Department_002", Assert.Single(first.MaskedCurrentIds!));
+
+        plans.BadField = true;
+        await Assert.ThrowsAnyAsync<Exception>(() => directory.LookupParentCandidatesAsync("Company_1", "Department_000",
+            new OrganizationDirectoryLookupRequest(null, 1, 1)));
+        plans.BadField = false;
+        var second = await directory.LookupParentCandidatesAsync("Company_1", "Department_000",
+            new OrganizationDirectoryLookupRequest(null, 2, 1));
+        Assert.Equal("Department_004", Assert.Single(second.Items).Id);
+    }
+
+    private sealed class TestReadPlans : IDataScopeReadPlanProvider
+    {
+        public bool BadField { get; set; }
+        public Task<DataScopeReadPlan> GetReadPlanAsync(string resourceKey, CancellationToken cancellationToken = default)
+        {
+            Assert.Equal("organization.department", resourceKey);
+            Expression<Func<Dictionary<string, object?>, bool>> predicate = BadField
+                ? row => EF.Property<string>(row, "UnknownField") == "x"
+                : row => EF.Property<string>(row, "EID") != "Department_002";
+            return Task.FromResult(new DataScopeReadPlan(predicate));
+        }
+    }
 
     [EnvironmentGatedFact(RunEnvironmentVariable, "真实组织树代表性规模、数据库成本与稳定分页")]
     public async Task OrganizationTreeRepresentativeScaleRecordsActualSqlCost()

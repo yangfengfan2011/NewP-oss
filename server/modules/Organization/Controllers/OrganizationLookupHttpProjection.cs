@@ -48,31 +48,24 @@ internal static class OrganizationLookupHttpProjection
         Func<T, string> valueSelector,
         Func<T, string> labelSelector,
         Func<T, bool> enabledSelector,
-        bool allowDisabledSelection) => new(
-        page.Items.Select(item => ToOption(
-            item,
-            valueSelector,
-            labelSelector,
-            enabledSelector,
-            allowDisabledSelection)).ToList(),
-        page.CurrentItems.Select(item => ToOption(
-            item,
-            valueSelector,
-            labelSelector,
-            enabledSelector,
-            allowDisabledSelection: false)).ToList(),
-        page.Page,
-        page.PageSize,
-        page.HasMore);
+        bool allowDisabledSelection)
+    {
+        var masked = new HashSet<string>(page.MaskedCurrentIds ?? [], StringComparer.Ordinal);
+        return new(
+            page.Items.Select(item => ToOption(item, valueSelector, labelSelector, enabledSelector,
+                allowDisabledSelection, maskedCurrent: false)).ToList(),
+            page.CurrentItems.Select(item => ToOption(item, valueSelector, labelSelector, enabledSelector,
+                allowDisabledSelection: false, maskedCurrent: masked.Contains(valueSelector(item)))).ToList(),
+            page.Page, page.PageSize, page.HasMore);
+    }
 
-    // 当前值标识去空白、去重并限制到目录契约的一百个上限。
+    // 当前值标识去空白、去重；目录按批查询，不把请求的已有关系静默截断。
     private static IReadOnlyCollection<string> ParseCurrentValueIds(string? value) =>
         string.IsNullOrWhiteSpace(value)
             ? []
             : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Where(static id => id.Length > 0)
                 .Distinct(StringComparer.Ordinal)
-                .Take(100)
                 .ToArray();
 
     // 将领域目录项映射为共享 Lookup option，不把选择规则下沉到领域模型。
@@ -81,8 +74,11 @@ internal static class OrganizationLookupHttpProjection
         Func<T, string> valueSelector,
         Func<T, string> labelSelector,
         Func<T, bool> enabledSelector,
-        bool allowDisabledSelection)
+        bool allowDisabledSelection,
+        bool maskedCurrent)
     {
+        if (maskedCurrent)
+            return new StandardCrudOptionItem { Value = valueSelector(item), Label = "***", Disabled = true };
         var isEnabled = enabledSelector(item);
         var label = labelSelector(item);
         return new StandardCrudOptionItem

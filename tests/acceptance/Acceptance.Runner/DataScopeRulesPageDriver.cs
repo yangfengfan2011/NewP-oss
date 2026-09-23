@@ -119,7 +119,7 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
             .GetByText("无读取贡献；完整判断仍生效", new() { Exact = true }).WaitForAsync();
     }
 
-    // rc-select 的零高辅助节点也会包含选项；键盘滚动后点击真实列表活动项。
+    // rc-select 的零高辅助节点也会包含选项；键盘只用于滚动虚拟列表，最终点击真实目标项。
     internal async Task SelectAsync(string label, string option, ILocator? group = null, bool search = false,
         string? searchText = null, Func<Task>? candidatesReady = null)
     {
@@ -139,15 +139,15 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
         }
         if (candidatesReady is not null) await candidatesReady();
         var navigation = System.Diagnostics.Stopwatch.StartNew();
-        var active = dropdown.Locator(".ant-select-item-option-active:not(.ant-select-item-option-disabled)")
+        var target = dropdown.Locator(".ant-select-item-option:not(.ant-select-item-option-disabled)")
             .Filter(new() { HasText = option });
-        while (!await active.IsVisibleAsync())
+        while (!await target.IsVisibleAsync())
         {
             if (navigation.Elapsed > TimeSpan.FromSeconds(10))
                 throw new InvalidOperationException($"Select '{label}' has no reachable option '{option}'.");
             await input.PressAsync("ArrowDown");
         }
-        await active.ClickAsync();
+        await target.ClickAsync();
         await Assertions.Expect(selector.Locator(".ant-select-selection-item")).ToContainTextAsync(option);
     }
 }

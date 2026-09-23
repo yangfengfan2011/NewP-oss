@@ -18,6 +18,57 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class DataScopeConditionsSqlServerTests(ITestOutputHelper output)
 {
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "非nullable布尔字段的普通比较及显式空值比较保持有效SQL读取")]
+    public async Task PersonRead_NonNullableBooleanSupportsComparisonAndNullOperators()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        var http = new FeatureHttpTestRequests(fixture);
+        using var admin = await fixture.LoginAdministratorAsync();
+        var read = http.Organization("persons");
+        using var ordinary = (await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "BoolScope", "布尔条件", "scope-bool", "布尔读取者", read)).Client;
+        var person = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
+            http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons",
+            new { PersonNo = "SCOPE-BOOL", ENAME = "布尔条件目标", EmploymentStatus = "FullTime", IsEnabled = true }));
+        using (var scope = fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+            Assert.Equal(typeof(bool), db.Model.FindEntityType(db.ResolveModelKey("Organization/Person"))!
+                .FindProperty("IsEnabled")!.ClrType);
+            Assert.Equal(typeof(DateTime), db.Model.FindEntityType(db.ResolveModelKey("Organization/Person"))!
+                .FindProperty("CreatedAt")!.ClrType);
+        }
+        var save = fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save");
+        var empty = JsonSerializer.SerializeToElement((object?)null);
+        var rule = new DataScopeRuleDto("Scope_Bool", "Scope_Bool", null, "非空布尔条件", true, "organization.person",
+            new("attribute", "IsEnabled", "equal", JsonSerializer.SerializeToElement(true)),
+            [new("Subject_Bool", "all", null, 0, new Dictionary<string, string> { ["read"] = "deny" })], []);
+        await SaveAsync(rule.Condition);
+        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, "/api/organization/persons?page=1&pageSize=1"))
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await StatusAsync(HttpStatusCode.NotFound);
+        await SaveAsync(new("attribute", "IsEnabled", "isNull", empty));
+        await StatusAsync(HttpStatusCode.OK);
+        await SaveAsync(new("attribute", "IsEnabled", "notNull", empty));
+        await StatusAsync(HttpStatusCode.NotFound);
+        await SaveAsync(new("attribute", "CreatedAt", "isNull", empty));
+        await StatusAsync(HttpStatusCode.OK);
+        await SaveAsync(new("attribute", "CreatedAt", "notNull", empty));
+        await StatusAsync(HttpStatusCode.NotFound);
+
+        async Task SaveAsync(DataScopeConditionDto condition)
+        {
+            using var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+                "/api/authorization/data-scope/rules/Scope_Bool", rule with { Condition = condition });
+            Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        }
+        async Task StatusAsync(HttpStatusCode expected)
+        {
+            using var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get,
+                $"/api/organization/persons/{person}");
+            Assert.Equal(expected, response.StatusCode);
+        }
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "空值、集合、日期和错误配置在正式保存及单对象读取上保持约定语义")]
     public async Task PersonRead_OperatorsAndInvalidSavePreserveConfiguration()
     {

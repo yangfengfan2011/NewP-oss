@@ -231,9 +231,10 @@ public sealed class DataScopeConditions(DataScopeCatalog catalog, EfPlatformDbCo
         var property = Property(resourceKey, condition.Field);
         var field = Field(resourceKey, condition.Field);
         var access = Expression.Call(typeof(EF), nameof(EF.Property), [property.ClrType], row, Expression.Constant(property.Name));
-        var nullValue = Expression.Constant(null, property.ClrType);
-        if (condition.Operator == "isNull") return Expression.Equal(access, nullValue);
-        if (condition.Operator == "notNull") return Expression.NotEqual(access, nullValue);
+        // EF 的非空值类型不能创建 null 常量；显式空值操作符在此直接得到确定结果。
+        var nullValue = property.IsNullable ? Expression.Constant(null, property.ClrType) : null;
+        if (condition.Operator == "isNull") return nullValue is null ? Expression.Constant(false) : Expression.Equal(access, nullValue);
+        if (condition.Operator == "notNull") return nullValue is null ? Expression.Constant(true) : Expression.NotEqual(access, nullValue);
         object? value = condition.ContextKey is null ? null : facts.ContextValue(condition.ContextKey);
         if (condition.ContextKey is not null && value is null) return Expression.Constant(false);
         var valueType = Nullable.GetUnderlyingType(property.ClrType) ?? property.ClrType;
@@ -265,7 +266,7 @@ public sealed class DataScopeConditions(DataScopeCatalog catalog, EfPlatformDbCo
             };
         }
         // SQL 三值逻辑下，所有非 null 专用操作符均要求实际字段非空。
-        return property.IsNullable ? Expression.AndAlso(Expression.NotEqual(access, nullValue), comparison) : comparison;
+        return nullValue is not null ? Expression.AndAlso(Expression.NotEqual(access, nullValue), comparison) : comparison;
     }
 
     // 标识与当前目标须同时匹配，不能凭业务条件键猜测适用对象。

@@ -15,7 +15,7 @@ public sealed record RelationTreeContextColumn(string Column, Type ClrType);
 /// <summary>配置编译结果；上下文在代码层组装，父关系条件直接比较物理外键。</summary>
 public sealed record RelationTreeQuery(string Sql, Dictionary<string, object?> Parameters,
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, RelationTreeContextColumn>> ContextColumns,
-    string ParentMatch, string ResultColumns, IReadOnlySet<string> CompositeParentTypes);
+    string ParentMatch, string ResultColumns, IReadOnlySet<string> CompositeParentTypes, bool HasReadScope);
 
 /// <summary>从已注册资源和 EF 模型编译关系树 SQL；请求不能提供 SQL 标识符。</summary>
 public sealed class RelationTreeSql(EfPlatformDbContext db, IStandardCrudResourceRegistry resources,
@@ -24,7 +24,9 @@ public sealed class RelationTreeSql(EfPlatformDbContext db, IStandardCrudResourc
     /// <summary>在数据库端构建统一节点投影，同时保留资源查询约束。</summary>
     /// <param name="definition">来自活动模块快照的静态树配置。</param>
     /// <param name="applyResourceConditions">启动静态验证时为 false；真实读取必须为 true，以保留请求主体的数据约束。</param>
-    public RelationTreeQuery Build(RelationTreeDefinition definition, bool applyResourceConditions = true)
+    /// <param name="readFilters">按节点规范资源键取得的参数化读取 SQL；空值仅用于无需数据范围的读取。</param>
+    public RelationTreeQuery Build(RelationTreeDefinition definition, bool applyResourceConditions = true,
+        IReadOnlyDictionary<string, string>? readFilters = null)
     {
         if (!db.Database.IsSqlServer()) throw new NotSupportedException("标准关系树当前使用 SQL Server 执行器。");
         var parameters = new Dictionary<string, object?>();
@@ -51,9 +53,13 @@ public sealed class RelationTreeSql(EfPlatformDbContext db, IStandardCrudResourc
             + " AND " + string.Join(" AND ", relation.ForeignKey.Properties.Select((property, index) =>
                 "a." + Slot(relation.Child, property.Name) + "=n." + Slot(relation.Parent, relation.ForeignKey.PrincipalKey.Properties[index].Name))
                 .Concat(relation.Child.Parents.Take(relation.Index).Select(parent => "a." + Slot(relation.Child, parent.Field) + " IS NULL"))) + ")"));
-        return new RelationTreeQuery("WITH Nodes AS (" + string.Join(" UNION ALL ", projections) + ")", parameters,
+        var scoped = readFilters is { Count: > 0 };
+        // 从业务真树的根开始递归，只让自身可读且祖先可达的节点进入用户树；原 Nodes 留作断链/环判别。
+        var reachable = scoped ? ", Reachable AS (SELECT n.* FROM Nodes n WHERE n.ParentKey IS NULL AND n.AllowsRoot=1 AND n.CanRead=1 "
+            + "UNION ALL SELECT a.* FROM Reachable n JOIN Nodes a ON a.ParentKey=n.NodeKey AND (" + parentMatch + ") WHERE a.CanRead=1)" : "";
+        return new RelationTreeQuery("WITH Nodes AS (" + string.Join(" UNION ALL ", projections) + ")" + reachable, parameters,
             contexts, parentMatch, "NodeKey,ParentKey,NodeType,DisplayName,Code,IsEnabled,HasChildren,AllowsRoot" + string.Concat(slots.Select(slot => "," + slot.Alias)),
-            relations.Where(relation => relation.ForeignKey.Properties.Count > 1).Select(relation => relation.Parent.Key).ToHashSet(StringComparer.Ordinal));
+            relations.Where(relation => relation.ForeignKey.Properties.Count > 1).Select(relation => relation.Parent.Key).ToHashSet(StringComparer.Ordinal), scoped);
 
         // 先确认资源和模型归属，再使用其 EF 元数据构造查询结构。
         IEntityType ResolveEntity(RelationTreeNodeSource node)
@@ -117,6 +123,11 @@ public sealed class RelationTreeSql(EfPlatformDbContext db, IStandardCrudResourc
             return filters.Count == 0 ? "1=1" : string.Join(" AND ", filters);
         }
 
+        // 子查询来自该节点显式资源的统一读取计划，资源同模型时仍不得借用另一资源的裁决。
+        string ReadFilter(RelationTreeNodeSource node, string alias) =>
+            readFilters is not null && readFilters.TryGetValue(node.ResourceKey, out var sql)
+                ? ColumnFor(node, alias, node.IdField) + " IN (" + sql + ")" : "1=1";
+
         // 资源字段白名单和物理映射都来自服务器；所有值通过参数进入命令。
         string Project(RelationTreeNodeSource node)
         {
@@ -144,7 +155,7 @@ public sealed class RelationTreeSql(EfPlatformDbContext db, IStandardCrudResourc
                     + "=" + Column(relation.ForeignKey.PrincipalKey.Properties[index].Name));
                 var preceding = child.Parents.Take(relation.Index).Select(parent => ColumnFor(child, "ch", parent.Field) + " IS NULL");
                 return "EXISTS(SELECT 1 FROM " + Quote(childEntity.GetSchema() ?? "dbo") + "." + Quote(childEntity.GetTableName()!)
-                    + " ch WHERE " + string.Join(" AND ", matches.Concat(preceding).Append(Filter(child, "ch"))) + ")";
+                    + " ch WHERE " + string.Join(" AND ", matches.Concat(preceding).Append(Filter(child, "ch")).Append(ReadFilter(child, "ch"))) + ")";
             }).ToArray();
             var values = slots.Select(slot => (fields[node.Key].Contains(slot.Field) && entity.FindProperty(slot.Field)?.GetColumnType() == slot.Type
                 ? Column(slot.Field) : "CAST(NULL AS " + slot.Type + ")") + " AS " + slot.Alias);
@@ -153,7 +164,8 @@ public sealed class RelationTreeSql(EfPlatformDbContext db, IStandardCrudResourc
                 + $"{Column(node.LabelField)} AS DisplayName, {Column(node.CodeField)} AS Code, {Column(node.SortField)} AS SortOrder, "
                 + $"{(node.EnabledField is null ? "CAST(1 AS bit)" : Column(node.EnabledField))} AS IsEnabled, "
                 + "CAST(" + (children.Length == 0 ? "0" : "CASE WHEN " + string.Join(" OR ", children) + " THEN 1 ELSE 0 END") + " AS bit) AS HasChildren, "
-                + $"CAST({(node.Parents.Count == 0 ? "1" : node.RootWhenParentNull ? "CASE WHEN " + string.Join(" AND ", node.Parents.Select(parent => Column(parent.Field) + " IS NULL")) + " THEN 1 ELSE 0 END" : "0")} AS bit) AS AllowsRoot"
+                + $"CAST({(node.Parents.Count == 0 ? "1" : node.RootWhenParentNull ? "CASE WHEN " + string.Join(" AND ", node.Parents.Select(parent => Column(parent.Field) + " IS NULL")) + " THEN 1 ELSE 0 END" : "0")} AS bit) AS AllowsRoot, "
+                + $"CAST(CASE WHEN {ReadFilter(node, "e")} THEN 1 ELSE 0 END AS bit) AS CanRead"
                 + (slots.Length == 0 ? "" : ", " + string.Join(", ", values))
                 + $" FROM {Quote(entity.GetSchema() ?? "dbo")}.{Quote(entity.GetTableName()!)} e WHERE " + Filter(node, "e");
         }

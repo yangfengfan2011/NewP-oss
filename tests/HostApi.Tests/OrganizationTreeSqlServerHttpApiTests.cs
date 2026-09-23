@@ -6,10 +6,12 @@ using System.Text.Json.Nodes;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Authorization;
 using ICP.Platform.Authorization.Extensions;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Modules.Organization.Directories;
+using ICP.Platform.Modules.Organization.Caching;
 using ICP.Platform.Modules.Organization.Persistence.Ef;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using System.Data.Common;
@@ -53,12 +55,14 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
             var plan = new CompiledPersistencePlan("candidate", "snapshot", "hash", default, "digest", [], models, []);
             var stamp = new Stamp();
             var recorder = new QueryRecorder();
+            var readPlans = new TreeReadPlans();
             var builder = WebApplication.CreateBuilder();
             builder.WebHost.UseTestServer();
             builder.Services.AddAuthentication("Test").AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, TestAuthentication>("Test", _ => { });
             builder.Services.AddPlatformAuthorization();
             builder.Services.AddSingleton<ICP.Platform.Authorization.Http.IFeatureDecisionSource, GrantedPermissions>();
             builder.Services.AddStandardCrudKernel();
+            builder.Services.AddSingleton<IDataScopeReadPlanProvider>(readPlans);
             builder.Services.AddSingleton<ICP.Platform.Modules.Organization.Caching.OrganizationCache>();
             builder.Services.AddSingleton<ICP.Platform.Organization.Contracts.IOrganizationQuery, ICP.Platform.Modules.Organization.Caching.OrganizationQuery>();
             builder.Services.AddScoped<ICP.Platform.Persistence.Abstractions.IPlatformTransactionExecutor, ICP.Platform.Persistence.EfCore.Transactions.EfPlatformTransactionExecutor>();
@@ -71,7 +75,18 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
             var treePlan = ReadTreePlan(treeArtifacts.FullName);
             builder.Services.AddRelationTrees(treePlan);
             builder.Services.AddScoped<IStandardCrudValidator, CompanyCrudValidator>();
-            builder.Services.AddScoped<IStandardCrudValidator, DepartmentCrudValidator>();
+            builder.Services.AddScoped<OrganizationEffectiveFacts>(sp =>
+            {
+                var db = sp.GetRequiredService<EfPlatformDbContext>();
+                return new OrganizationEffectiveFacts(
+                    sp.GetRequiredService<ICP.Platform.Persistence.Abstractions.IPlatformTransactionExecutor>(),
+                    new PublishedOrganizationFacts(sp.GetRequiredService<ICP.Platform.Organization.Contracts.IOrganizationQuery>()),
+                    new SqlOrganizationFacts(db, new SqlServerDepartmentHierarchyQuery(db)));
+            });
+            builder.Services.AddScoped<IStandardCrudValidator>(sp => new DepartmentCrudValidator(
+                sp.GetRequiredService<EfPlatformDbContext>(),
+                new SqlServerDepartmentHierarchyQuery(sp.GetRequiredService<EfPlatformDbContext>()),
+                sp.GetRequiredService<OrganizationEffectiveFacts>()));
             builder.Services.AddScoped<IStandardCrudQueryCustomizer, DepartmentCrudQueryCustomizer>();
             builder.Services.AddScoped<IStandardCrudDisplayValueResolver, DepartmentCrudDisplayValueResolver>();
             builder.Services.AddScoped<ICompanyDirectory, EfCompanyDirectory>();
@@ -241,6 +256,40 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
                 await transaction.RollbackAsync();
             }
 
+            // 树可达性与平面对象读取独立：可读后代不可从不可读祖先下暴露。
+            readPlans.Hide("organization.company", company);
+            Assert.Single((await client.GetFromJsonAsync<JsonElement>(standard + "roots?scope=global")).EnumerateArray());
+            using (var hiddenChildren = await client.GetAsync(standard + "children?scope=global&nodeKey=" + Uri.EscapeDataString("company:" + company)))
+                Assert.Equal(HttpStatusCode.NotFound, hiddenChildren.StatusCode);
+            Assert.Equal(0, (await client.GetFromJsonAsync<JsonElement>(standard + "search?scope=global&keyword=Child&page=1&pageSize=20"))
+                .GetProperty("total").GetInt32());
+            using (var hiddenPath = await client.GetAsync(standard + "path?scope=global&nodeKey=" + Uri.EscapeDataString("department:" + first)))
+                Assert.Equal(HttpStatusCode.NotFound, hiddenPath.StatusCode);
+            var flatChild = await client.GetFromJsonAsync<JsonElement>(globalRoute.Replace("pageSize=1&pageIndex=2", "pageSize=20&pageIndex=1").Replace("fields=EID", "fields=EID,ECODE"));
+            Assert.Contains(flatChild.GetProperty("items").EnumerateArray(), item => item.GetProperty("ECODE").GetString() == "CH");
+            readPlans.Clear();
+            readPlans.Hide("organization.department", first);
+            using (var hiddenGrandchildren = await client.GetAsync(standard + "children?scope=global&nodeKey=" + Uri.EscapeDataString("department:" + first)))
+                Assert.Equal(HttpStatusCode.NotFound, hiddenGrandchildren.StatusCode);
+            Assert.Equal(0, (await client.GetFromJsonAsync<JsonElement>(standard + "search?scope=global&keyword=Child&page=1&pageSize=20"))
+                .GetProperty("total").GetInt32());
+            await using (var corruptScope = app.Services.CreateAsyncScope())
+            {
+                var db = corruptScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+                await using var transaction = await db.Database.BeginTransactionAsync();
+                await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE Department SET ParentDepartmentId={second} WHERE EID={first}");
+                await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE Department SET ParentDepartmentId={first} WHERE EID={second}");
+                var definition = Assert.Single(RelationTreeMetadata.Project(treePlan));
+                await Assert.ThrowsAsync<InvalidOperationException>(() => corruptScope.ServiceProvider
+                    .GetRequiredService<RelationTreeReader>().PathAsync(definition, "department:" + first, default));
+                await transaction.RollbackAsync();
+            }
+            readPlans.Clear();
+            Assert.Equal(2, (await client.GetFromJsonAsync<JsonElement>(standard + "roots?scope=global")).GetArrayLength());
+            readPlans.Fail = true;
+            var readFailure = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetAsync(standard + "roots?scope=global"));
+            Assert.Equal("DATA_SCOPE_READ_PLAN_UNAVAILABLE", readFailure.Message);
+
         }
         finally
         {
@@ -272,6 +321,25 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
         // 签发后改动磁盘不能改变本次启动消费的树定义。
         File.WriteAllText(Path.Combine(module, "metadata/views/OrganizationStructure.view.json"), "{}");
         return plan;
+    }
+
+    private sealed class TreeReadPlans : IDataScopeReadPlanProvider
+    {
+        private readonly Dictionary<string, string> _hidden = new(StringComparer.Ordinal);
+        public bool Fail { get; set; }
+
+        public void Hide(string resourceKey, string id) => _hidden[resourceKey] = id;
+
+        public void Clear() => _hidden.Clear();
+
+        public Task<DataScopeReadPlan> GetReadPlanAsync(string resourceKey, CancellationToken cancellationToken = default)
+        {
+            if (Fail) throw new InvalidOperationException("DATA_SCOPE_READ_PLAN_UNAVAILABLE");
+            if (!_hidden.TryGetValue(resourceKey, out var hidden)) return Task.FromResult(new DataScopeReadPlan(null));
+            System.Linq.Expressions.Expression<Func<Dictionary<string, object?>, bool>> predicate =
+                row => EF.Property<string>(row, "EID") != hidden;
+            return Task.FromResult(new DataScopeReadPlan(predicate));
+        }
     }
 
     private sealed class NarrowDepartmentQuery : IStandardCrudQueryCustomizer

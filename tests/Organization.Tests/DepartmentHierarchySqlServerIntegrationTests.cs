@@ -110,6 +110,90 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
         }
     }
 
+    [EnvironmentGatedFact(RunEnvironmentVariable, "授权截断关系树的代表性规模、往返、读取量、耗时及缓存计划")]
+    public async Task ScopedOrganizationTree_RecordsRepresentativeSqlCost()
+    {
+        foreach (var size in new[] { 128, 1024 })
+        {
+            await using var fixture = await SqlFixture.CreateAsync();
+            await using var context = CreateContext(fixture.ConnectionString);
+            await context.Database.EnsureCreatedAsync();
+            AddCompany(context, "Company_1");
+            for (var index = 0; index < size; index++)
+                AddDepartment(context, $"Department_{index:D5}", "Company_1",
+                    index > 0 && index < 10 ? $"Department_{index - 1:D5}" : null);
+            await context.SaveChangesAsync();
+            var connection = Assert.IsType<SqlConnection>(context.Database.GetDbConnection());
+            await connection.OpenAsync();
+            connection.StatisticsEnabled = true;
+            var io = new List<string>();
+            connection.InfoMessage += (_, message) => io.Add(message.Message);
+            await using (var enable = connection.CreateCommand())
+            {
+                enable.CommandText = "SET STATISTICS IO ON";
+                await enable.ExecuteNonQueryAsync();
+            }
+            var registry = new StandardCrudResourceRegistry([CompanyCrudDescriptorFactory.Create(),
+                DepartmentCrudDescriptorFactory.Create(), PersonCrudDescriptorFactory.Create()]);
+            var reader = new RelationTreeReader(context,
+                new RelationTreeSql(context, registry, [new CompanyCrudQueryCustomizer(), new DepartmentCrudQueryCustomizer()]),
+                new ScopedTreePlans());
+            var definition = ReadRelationDefinition();
+            async Task<T> Measure<T>(string operation, Func<Task<T>> run)
+            {
+                io.Clear();
+                connection.ResetStatistics();
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                var result = await run();
+                watch.Stop();
+                var stats = connection.RetrieveStatistics();
+                output.WriteLine(JsonSerializer.Serialize(new { size, operation, elapsedMs = watch.Elapsed.TotalMilliseconds,
+                    roundTrips = stats["ServerRoundtrips"], selectedRows = stats["SelectRows"],
+                    bytesReceived = stats["BytesReceived"], io = io.ToArray() }));
+                return result;
+            }
+            Assert.Single(await Measure("roots", () => reader.RootsAsync(definition, default)));
+            Assert.Equal(size - 10, (await Measure("children", () => reader.ChildrenAsync(definition, "company:Company_1", default)))!.Count);
+            Assert.Null(await Measure("hidden-path", () => reader.PathAsync(definition, "department:Department_00009", default)));
+            var search = await Measure("search-page", () => reader.SearchAsync(definition, "Department", 1, 20, default));
+            Assert.Equal(size - 10, search.Total);
+            Assert.Equal(20, search.Items.Count);
+            await using var observer = new SqlConnection(fixture.ConnectionString);
+            await observer.OpenAsync();
+            await using var plan = observer.CreateCommand();
+            plan.CommandText = """
+                SELECT TOP (1) CONVERT(nvarchar(max), p.query_plan)
+                FROM sys.dm_exec_query_stats s
+                CROSS APPLY sys.dm_exec_sql_text(s.sql_handle) t
+                CROSS APPLY sys.dm_exec_query_plan(s.plan_handle) p
+                WHERE t.text LIKE N'%Reachable AS%' AND t.text LIKE N'%OFFSET%'
+                  AND t.text NOT LIKE N'%sys.dm_exec_query_stats%'
+                ORDER BY s.last_execution_time DESC
+                """;
+            var xml = await plan.ExecuteScalarAsync() as string;
+            Assert.NotNull(xml);
+            var operators = System.Xml.Linq.XDocument.Parse(xml).Descendants()
+                .Where(node => node.Name.LocalName == "RelOp")
+                .Select(node => (string?)node.Attribute("PhysicalOp")).Where(value => value is not null)
+                .Distinct().ToArray();
+            output.WriteLine(JsonSerializer.Serialize(new { size, plan = "cached", operators }));
+        }
+    }
+
+    private sealed class ScopedTreePlans : IDataScopeReadPlanProvider
+    {
+        public Task<DataScopeReadPlan> GetReadPlanAsync(string resourceKey, CancellationToken cancellationToken = default)
+        {
+            Expression<Func<Dictionary<string, object?>, bool>>? predicate = resourceKey switch
+            {
+                "organization.company" => row => EF.Property<string>(row, "EID") != "Company_Hidden",
+                "organization.department" => row => EF.Property<string>(row, "EID") != "Department_00000",
+                _ => null
+            };
+            return Task.FromResult(new DataScopeReadPlan(predicate));
+        }
+    }
+
     [EnvironmentGatedFact(RunEnvironmentVariable, "真实组织树代表性规模、数据库成本与稳定分页")]
     public async Task OrganizationTreeRepresentativeScaleRecordsActualSqlCost()
     {

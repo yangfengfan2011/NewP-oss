@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, onTestFinished, vi } from 'vitest';
-import type { TreeNodeDescriptor, TreeProviderBinding } from '@icp-platform/sdk';
+import { TreeNodeNotFoundError, type TreeNodeDescriptor, type TreeProviderBinding } from '@icp-platform/sdk';
 import type { CompositionChange } from '../composition/pageCompositionRuntime';
 import { useTreeReadLifecycle } from '../composition/useTreeReadLifecycle';
 
@@ -77,6 +77,21 @@ it('changes selection and opens its presentation only after the composition allo
   expect(tree.navigation.locate).toHaveBeenLastCalledWith('b', null);
   expect(tree.onSelectAccepted).toHaveBeenCalledOnce();
   expect(openEditor).toHaveBeenCalledOnce();
+});
+
+it('treats an unreachable location as missing while keeping read failures visible', async () => {
+  const provider = providerWith([node('root')]);
+  provider.path = async () => { throw new TreeNodeNotFoundError('unreachable'); };
+  const tree = await renderLifecycle(provider);
+  await act(async () => tree.read().locate('hidden-child'));
+  expect(tree.read().snapshot.selected?.nodeKey).toBe('root');
+  expect(tree.read().locationNotice).toBe('目标节点已不存在');
+  expect(tree.read().locationError).toBeNull();
+
+  provider.path = async () => { throw new Error('read plan failed'); };
+  await act(async () => tree.read().locate('hidden-child'));
+  expect(tree.read().locationError).toContain('read plan failed');
+  expect(tree.read().snapshot.selected?.nodeKey).toBe('root');
 });
 
 it('cancels synchronization reads when their scope is replaced and does not continue the old path', async () => {

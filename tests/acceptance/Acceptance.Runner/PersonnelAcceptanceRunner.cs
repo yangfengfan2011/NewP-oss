@@ -1087,6 +1087,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             null, position.Name, position.Id, save: false);
     }
 
+    // 每行等当前对象资格后打开共享输入；固定目标取创建响应ID与此时列表名称，部门代表整份保存。
     private async Task OpenOrganizationObjectAuthorizationAsync(StandardCrudPageDriver driver,
         string title, string tab, string resourceKey, string? code, string name, string id, bool save)
     {

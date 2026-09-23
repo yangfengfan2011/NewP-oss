@@ -136,9 +136,14 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
             .Filter(new() { Has = page.Locator($"#{listId}") }).Locator(".rc-virtual-list-holder");
         await page.WaitForFunctionAsync("""
             id => {
-              const holder = document.getElementById(id)?.closest('.ant-select-dropdown')?.querySelector('.rc-virtual-list-holder');
+              const popup = document.getElementById(id)?.closest('.ant-select-dropdown');
+              const holder = popup?.querySelector('.rc-virtual-list-holder');
               const rect = holder?.getBoundingClientRect();
-              return !!rect && rect.width > 0 && rect.height > 0;
+              const motion = [...(popup?.classList ?? [])].some(name =>
+                /-(?:appear|enter|leave)(?:-(?:prepare|start|active))?$/.test(name));
+              const expanded = document.querySelector(`[role="combobox"][aria-controls="${id}"]`)?.getAttribute('aria-expanded');
+              return expanded === 'true' && !!rect && rect.width > 0 && rect.height > 0 && !motion
+                && [...popup.getAnimations()].every(animation => animation.playState === 'finished');
             }
             """, listId);
         if (search)

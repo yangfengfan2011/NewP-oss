@@ -623,6 +623,11 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 driver = administratorDriver;
                 await ConfigurePersonObjectAuthorizationAsync(page, person);
                 browserAssertions.Add("administrator-opened-person-object-authorization-and-saved-the-whole-configuration");
+                await ExerciseOrganizationObjectAuthorizationAsync(driver,
+                    _company ?? throw new InvalidOperationException("Browser company was not created."),
+                    _department ?? throw new InvalidOperationException("Browser department was not created."),
+                    _position ?? throw new InvalidOperationException("Browser position was not created."));
+                browserAssertions.Add("administrator-opened-three-organization-object-authorizations-and-saved-department");
                 await page.GotoAsync($"http://127.0.0.1:{_shellPort}/authorization/roles/{_roleId}");
                 await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "配置权限", Exact = true }).ClickAsync();
                 var workbench = new AuthorizationWorkbenchPageDriver(page);
@@ -704,9 +709,13 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await StandardCrudPageDriver.FillDrawerFieldAsync(drawer, "公司编码", company.Code);
         await StandardCrudPageDriver.FillDrawerFieldAsync(drawer, "公司名称", company.Name);
         await StandardCrudPageDriver.FillDrawerFieldAsync(drawer, "排序码", "0100");
-        await driver.SaveAndCloseAsync(
+        var created = await driver.SaveAndCloseAsync(
             drawer,
             new ApiExpectation("POST", "/api/organization/companies", (int)HttpStatusCode.Created, "company create"));
+        using (var payload = JsonDocument.Parse(await created.TextAsync()))
+        {
+            company = company with { Id = ReadString(ReadObject(payload.RootElement, "fields"), "EID") };
+        }
         await tree.GetByText(company.Name, new LocatorGetByTextOptions { Exact = true })
             .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         await driver.OpenOrganizationTabAsync("公司", "companies");
@@ -756,9 +765,13 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await StandardCrudPageDriver.FillDrawerFieldAsync(drawer, "部门编码", department.Code);
         await StandardCrudPageDriver.FillDrawerFieldAsync(drawer, "部门名称", department.Name);
         await StandardCrudPageDriver.FillDrawerFieldAsync(drawer, "排序码", "0100");
-        await driver.SaveAndCloseAsync(
+        var created = await driver.SaveAndCloseAsync(
             drawer,
             new ApiExpectation("POST", "/api/organization/departments", (int)HttpStatusCode.Created, "department create"));
+        using (var payload = JsonDocument.Parse(await created.TextAsync()))
+        {
+            department = department with { Id = ReadString(ReadObject(payload.RootElement, "fields"), "EID") };
+        }
         var node = tree.GetByText(department.Name, new LocatorGetByTextOptions { Exact = true });
         await node.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         await content.GetByRole(AriaRole.Tab, new LocatorGetByRoleOptions { Name = "基本信息", Selected = true })
@@ -873,12 +886,14 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         var drawer = await driver.OpenCreateDrawerAsync("新建岗位");
         await StandardCrudPageDriver.FillDrawerFieldAsync(drawer, "岗位名称", name);
         await StandardCrudPageDriver.FillDrawerFieldAsync(drawer, "岗位描述", description);
-        await driver.SaveAndCloseAsync(
+        var created = await driver.SaveAndCloseAsync(
             drawer,
             new ApiExpectation("POST", "/api/organization/positions", (int)HttpStatusCode.Created, "position create"));
+        using var payload = JsonDocument.Parse(await created.TextAsync());
+        var id = ReadString(ReadObject(payload.RootElement, "fields"), "EID");
         await driver.WaitForRowAsync(name, description);
         await OpenAndCloseDirectoryDetailAsync(driver, name);
-        return new PositionData(name);
+        return new PositionData(name, id);
     }
 
     // 沿已创建对象的同一旅程打开只读详情；字段语义与审计排序由下层测试验证。
@@ -1056,6 +1071,66 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             item => item.Request.Method == "PUT" && new Uri(item.Url).AbsolutePath ==
                 $"/api/authorization/data-scope/objects/organization.person/{person.Id}");
         if (response.Status != 204) throw new InvalidOperationException($"Object authorization save returned {response.Status}.");
+        await Assertions.Expect(dialog).ToHaveCountAsync(0);
+        await page.GetByText("授权已保存；后续访问按新配置判定。", new PageGetByTextOptions { Exact = true }).WaitForAsync();
+    }
+
+    // 沿同一人员旅程已有的三个标准目录行核对对象入口，部门只保存一次；动作语义留在 SQL/API 层。
+    private async Task ExerciseOrganizationObjectAuthorizationAsync(StandardCrudPageDriver driver,
+        CompanyData company, DepartmentData department, PositionData position)
+    {
+        await OpenOrganizationObjectAuthorizationAsync(driver, "公司", "companies", "organization.company",
+            company.Code, company.Name, company.Id, save: false);
+        await OpenOrganizationObjectAuthorizationAsync(driver, "部门", "departments", "organization.department",
+            department.Code, department.Name, department.Id, save: true);
+        await OpenOrganizationObjectAuthorizationAsync(driver, "岗位", "positions", "organization.position",
+            null, position.Name, position.Id, save: false);
+    }
+
+    private async Task OpenOrganizationObjectAuthorizationAsync(StandardCrudPageDriver driver,
+        string title, string tab, string resourceKey, string? code, string name, string id, bool save)
+    {
+        if (string.IsNullOrWhiteSpace(id)) throw new InvalidOperationException($"{title}创建响应未返回标识。");
+        await driver.OpenOrganizationTabAsync(title, tab);
+        var page = driver.Page;
+        var row = code is null ? await driver.WaitForRowAsync(name) : await driver.WaitForRowAsync(code, name);
+        var endpoint = $"/api/authorization/data-scope/objects/{resourceKey}/{id}";
+        var eligibility = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath == endpoint + "/eligibility");
+        await row.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "更多", Exact = true }).ClickAsync();
+        var qualified = await eligibility;
+        if (qualified.Status != 200) throw new InvalidOperationException($"{title}对象授权资格返回 {qualified.Status}。");
+        await page.GetByRole(AriaRole.Menuitem, new PageGetByRoleOptions { Name = "对象授权", Exact = true }).ClickAsync();
+        var dialog = page.GetByRole(AriaRole.Dialog, new PageGetByRoleOptions { Name = "对象授权", Exact = true });
+        var target = dialog.Locator("[aria-label='授权目标']");
+        await target.GetByText($"目标{title}：{name}", new LocatorGetByTextOptions { Exact = true }).WaitForAsync();
+        await target.GetByText($"{title}标识：{id}", new LocatorGetByTextOptions { Exact = true }).WaitForAsync();
+        await Assertions.Expect(dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "保存授权", Exact = true }))
+            .ToBeEnabledAsync();
+        if (!save)
+        {
+            await dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { NameRegex = new Regex(@"^取\s*消$") }).ClickAsync();
+            await Assertions.Expect(dialog).ToHaveCountAsync(0);
+            return;
+        }
+
+        await dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "添加主体项", Exact = true }).ClickAsync();
+        var subject = dialog.GetByRole(AriaRole.Group, new LocatorGetByRoleOptions { Name = "主体授权项 1", Exact = true });
+        await new DataScopeRulesPageDriver(page).SelectAsync("读取意见", "同意", subject);
+        await page.WaitForFunctionAsync("() => [...document.querySelectorAll('.ant-select-dropdown')].every(item => item.getClientRects().length === 0)");
+        var wide = Path.Combine(_runDirectory, "personnel", "department-object-authorization-wide.png");
+        await page.ScreenshotAsync(new PageScreenshotOptions { Path = wide, FullPage = true });
+        _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, wide));
+        await page.SetViewportSizeAsync(900, 1000);
+        var narrow = Path.Combine(_runDirectory, "personnel", "department-object-authorization-narrow.png");
+        await page.ScreenshotAsync(new PageScreenshotOptions { Path = narrow, FullPage = true });
+        _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, narrow));
+        await page.SetViewportSizeAsync(1440, 1000);
+
+        var response = await page.RunAndWaitForResponseAsync(
+            () => dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "保存授权", Exact = true }).ClickAsync(),
+            item => item.Request.Method == "PUT" && new Uri(item.Url).AbsolutePath == endpoint);
+        if (response.Status != 204) throw new InvalidOperationException($"{title}对象授权保存返回 {response.Status}。");
         await Assertions.Expect(dialog).ToHaveCountAsync(0);
         await page.GetByText("授权已保存；后续访问按新配置判定。", new PageGetByTextOptions { Exact = true }).WaitForAsync();
     }
@@ -1922,9 +1997,9 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         string Id,
         string PersonNo,
         string Name);
-    private sealed record CompanyData(string Code, string Name);
-    private sealed record DepartmentData(string Code, string Name);
-    private sealed record PositionData(string Name);
+    private sealed record CompanyData(string Code, string Name, string Id = "");
+    private sealed record DepartmentData(string Code, string Name, string Id = "");
+    private sealed record PositionData(string Name, string Id);
     private sealed record DatabaseOwnershipSnapshot(
         int Version,
         string RepositoryId,

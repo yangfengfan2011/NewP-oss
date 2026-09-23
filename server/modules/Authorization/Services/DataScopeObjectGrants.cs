@@ -117,11 +117,24 @@ public sealed class DataScopeObjectGrants(EfPlatformDbContext db, IPlatformTrans
         return opinions.Any(subject => subject.Priority == priority && subject.Actions[action] == "deny") ? "deny" : "allow";
     }
 
+    /// <summary>只窄取当前资源或当前对象对动作有明确意见的主体类型，不读取对象身份全集。</summary>
+    public Task<string[]> SubjectTypesAsync(string resourceKey, string action, string? objectId, CancellationToken token)
+    {
+        var subjects = Subjects.AsNoTracking().Where(row => EF.Property<string>(row, "ResourceKey") == resourceKey);
+        if (objectId is not null)
+            subjects = subjects.Where(row => EF.Property<string>(row, "ObjectId") == objectId);
+        return (from subject in subjects
+            join opinion in Actions.AsNoTracking() on EF.Property<string>(subject, "EID") equals EF.Property<string>(opinion, "EntryId")
+            where EF.Property<string>(opinion, "ActionKey") == action
+            select EF.Property<string>(subject, "SubjectType")).Distinct().ToArrayAsync(token);
+    }
+
     /// <summary>对象读取覆盖以相关 EXISTS 和最高优先级比较留在 SQL，行数随分页而非授权全集增长。</summary>
     public (Expression Allow, Expression Deny) ReadOverrides(string resourceKey, ParameterExpression row,
-        DataScopeResolvedIdentities facts)
+        DataScopeResolvedIdentities facts, IReadOnlyList<string> subjectTypes)
     {
-        var membership = MembershipPredicate(facts);
+        if (subjectTypes.Count == 0) return (Expression.Constant(false), Expression.Constant(false));
+        var membership = MembershipPredicate(facts, subjectTypes);
         var entries = Subjects.AsNoTracking().Where(membership)
             .Where(subject => EF.Property<string>(subject, "ResourceKey") == resourceKey);
         var votes = from subject in entries
@@ -146,11 +159,12 @@ public sealed class DataScopeObjectGrants(EfPlatformDbContext db, IPlatformTrans
     }
 
     // 当前事实仅扩展为 SQL 对关系行的筛选，不读取对象 ID；无匹配主体时返回恒假。
-    private Expression<Func<Dictionary<string, object?>, bool>> MembershipPredicate(DataScopeResolvedIdentities facts)
+    private Expression<Func<Dictionary<string, object?>, bool>> MembershipPredicate(DataScopeResolvedIdentities facts,
+        IReadOnlyList<string> subjectTypes)
     {
         var row = Expression.Parameter(typeof(Dictionary<string, object?>), "subject");
         Expression expression = Expression.Constant(false);
-        foreach (var membership in identities.SubjectTypes.SelectMany(type => facts.Memberships(type.Key)))
+        foreach (var membership in subjectTypes.SelectMany(facts.Memberships))
         {
             var type = Equal("SubjectType", membership.Type);
             var id = membership.Id is null

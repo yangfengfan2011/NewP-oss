@@ -180,7 +180,8 @@ public sealed class DataScopeConditionsSqlServerTests(ITestOutputHelper output)
         var http = new FeatureHttpTestRequests(fixture);
         using var admin = await fixture.LoginAdministratorAsync();
         var read = http.Organization("persons");
-        using var ordinary = (await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "Business", "业务条件", "scope-business", "业务读取者", read)).Client;
+        var manage = fixture.FeatureCatalog.First(point => point.BehaviorKey == "organization.person.authorize");
+        using var ordinary = (await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "Business", "业务条件", "scope-business", "业务读取者", read, manage)).Client;
         var company = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(admin,
             http.Organization("companies", "create", "list.pageActions"), "/api/organization/companies",
             new { ECODE = "SCOPE-COMPANY", ENAME = "条件公司", SortOrder = "0010" }));
@@ -213,6 +214,70 @@ public sealed class DataScopeConditionsSqlServerTests(ITestOutputHelper output)
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{person}"))
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var objectEndpoint = $"/api/authorization/data-scope/objects/organization.person/{person}";
+        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, objectEndpoint))
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var unset = rule with
+        {
+            Condition = new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(person)),
+            Subjects = [rule.Subjects[0] with { Actions = new Dictionary<string, string> { ["read"] = "unset" } }]
+        };
+        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+            "/api/authorization/data-scope/rules/Scope_Business", unset))
+            Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{person}"))
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+            "/api/authorization/data-scope/rules/Scope_Business", unset with { Subjects = rule.Subjects }))
+            Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{person}"))
+            Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        var objectRead = new DataScopeObjectDto("organization.person", person,
+            [new("Unused_Object_Read", "unused.read.facts", null, 0,
+                new Dictionary<string, string> { ["read"] = "deny" })]);
+        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, objectEndpoint, objectRead))
+            Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+            "/api/authorization/data-scope/rules/Scope_Business", unset))
+            Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{person}"))
+            Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, objectEndpoint,
+            new DataScopeObjectDto("organization.person", person, [])))
+            Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{person}"))
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var objectAuthorize = new DataScopeObjectDto("organization.person", person,
+            [new("Unused_Object_Authorize", "unused.read.facts", null, 0,
+                new Dictionary<string, string> { ["authorize"] = "deny" })]);
+        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, objectEndpoint, objectAuthorize))
+            Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, objectEndpoint))
+            Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, objectEndpoint,
+            new DataScopeObjectDto("organization.person", person, [])))
+            Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, objectEndpoint))
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var ruleAuthorize = unset with
+        {
+            Subjects = [rule.Subjects[0] with { Actions = new Dictionary<string, string> { ["authorize"] = "deny" } }]
+        };
+        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+            "/api/authorization/data-scope/rules/Scope_Business", ruleAuthorize))
+            Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, objectEndpoint,
+            new DataScopeObjectDto("organization.person", person,
+                [new("Object_Explicit_Authorize", "all", null, 1,
+                    new Dictionary<string, string> { ["authorize"] = "allow" })])))
+            Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, objectEndpoint))
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, objectEndpoint,
+            new DataScopeObjectDto("organization.person", person, [])))
+            Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, objectEndpoint))
+            Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         var absentGroup = new DataScopeConditionDto("group", "", "and", empty, Children:
             [new("group", "", "or", empty, Children: [business, business])]);
         using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/Scope_Business",

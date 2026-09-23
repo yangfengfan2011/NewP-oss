@@ -23,25 +23,30 @@ public sealed class DataScopeReadPlans(DataScopeRules rules, DataScopeCatalog ca
         if (await administrators.InspectAsync(id, cancellationToken) == LocalAdministratorAssignmentState.Assigned) return new(null);
         var applicable = await rules.ForResourceAsync(resourceKey, cancellationToken);
         foreach (var rule in applicable) catalog.Validate(rule);
-        var readable = applicable.SelectMany(ActiveNodes).Where(rule => catalog.HasReadContribution(resourceKey, rule.Condition)).ToArray();
-        var facts = await identities.ResolveAsync(id, readable.SelectMany(rule => rule.Subjects).Select(subject => subject.Type)
-            .Concat(identities.SubjectTypes.Select(type => type.Key)),
+        var relevant = RelevantNodes(resourceKey, applicable, "read", true);
+        var readable = applicable.SelectMany(ActiveNodes).Where(rule => relevant.Contains(rule.Id)).ToArray();
+        var objectTypes = await objects.SubjectTypesAsync(resourceKey, "read", null, cancellationToken);
+        var types = readable.SelectMany(rule => rule.Subjects)
+            .Where(subject => subject.Actions.TryGetValue("read", out var opinion) && opinion != "unset")
+            .Select(subject => subject.Type).Concat(objectTypes).Distinct(StringComparer.Ordinal).ToArray();
+        var facts = await identities.ResolveAsync(id, types,
             readable.SelectMany(rule => catalog.ContextKeys(rule.Condition)), cancellationToken);
         var row = Expression.Parameter(typeof(Dictionary<string, object?>), "row");
         var denied = DataScopeRuleTree.BuildDenied(applicable, node =>
         {
-            if (!catalog.HasReadContribution(resourceKey, node.Condition)) return null;
+            if (!relevant.Contains(node.Id)) return null;
             return catalog.BuildReadCondition(resourceKey, node.Condition, row, facts)
                 ?? throw new InvalidOperationException("DATA_SCOPE_READ_CONTRIBUTION_MISSING");
         }, node =>
         {
+            if (!relevant.Contains(node.Id)) return null;
             var opinions = node.Subjects.Where(subject => subject.Actions.TryGetValue("read", out var opinion) && opinion != "unset"
                 && facts.Matches(subject.Type, subject.SubjectId, subject.MatchOptions)).ToArray();
             if (opinions.Length == 0) return null;
             var priority = opinions.Max(subject => subject.Priority);
             return opinions.Any(subject => subject.Priority == priority && subject.Actions["read"] == "deny") ? "deny" : "allow";
         });
-        var (allow, deny) = objects.ReadOverrides(resourceKey, row, facts);
+        var (allow, deny) = objects.ReadOverrides(resourceKey, row, facts, objectTypes);
         var permitted = Expression.OrElse(allow, Expression.AndAlso(Expression.Not(deny),
             denied is null ? Expression.Constant(true) : Expression.Not(denied)));
         return new(Expression.Lambda<Func<Dictionary<string, object?>, bool>>(permitted, row));
@@ -61,22 +66,55 @@ public sealed class DataScopeReadPlans(DataScopeRules rules, DataScopeCatalog ca
         if (await administrators.InspectAsync(subject, cancellationToken) == LocalAdministratorAssignmentState.Assigned) return true;
         var applicable = await rules.ForResourceAsync(resourceKey, cancellationToken);
         foreach (var rule in applicable) catalog.Validate(rule);
-        var active = applicable.SelectMany(ActiveNodes).ToArray();
+        // 对象明确意见覆盖规则；校验配置后先只解析当前对象的主体，避免无关规则事实阻断覆盖。
+        var objectTypes = await objects.SubjectTypesAsync(resourceKey, actionKey, objectId, cancellationToken);
+        if (objectTypes.Length > 0)
+        {
+            var objectFacts = await identities.ResolveAsync(subject, objectTypes, [], cancellationToken);
+            var opinion = await objects.OpinionAsync(resourceKey, objectId, actionKey, objectFacts, cancellationToken);
+            if (opinion is not null) return opinion == "allow";
+        }
+        var relevant = RelevantNodes(resourceKey, applicable, actionKey, false);
+        var active = applicable.SelectMany(ActiveNodes).Where(rule => relevant.Contains(rule.Id)).ToArray();
         var facts = await identities.ResolveAsync(subject,
-            active.SelectMany(rule => rule.Subjects).Select(item => item.Type).Concat(identities.SubjectTypes.Select(type => type.Key)),
+            active.SelectMany(rule => rule.Subjects)
+                .Where(item => item.Actions.TryGetValue(actionKey, out var vote) && vote != "unset")
+                .Select(item => item.Type).Distinct(StringComparer.Ordinal),
             active.SelectMany(rule => catalog.ContextKeys(rule.Condition)), cancellationToken);
-        var opinion = await objects.OpinionAsync(resourceKey, objectId, actionKey, facts, cancellationToken);
-        if (opinion is not null) return opinion == "allow";
         return !await DataScopeRuleTree.IsDeniedAsync(applicable,
-            rule => catalog.MatchesAsync(resourceKey, objectId, rule.Condition, facts, cancellationToken),
+            rule => !relevant.Contains(rule.Id) ? Task.FromResult(false)
+                : catalog.MatchesAsync(resourceKey, objectId, rule.Condition, facts, cancellationToken),
             rule =>
             {
+                if (!relevant.Contains(rule.Id)) return null;
                 var selected = rule.Subjects.Where(item => item.Actions.TryGetValue(actionKey, out var vote) && vote != "unset"
                     && facts.Matches(item.Type, item.SubjectId, item.MatchOptions)).ToArray();
                 if (selected.Length == 0) return null;
                 var priority = selected.Max(item => item.Priority);
                 return selected.Any(item => item.Priority == priority && item.Actions[actionKey] == "deny") ? "deny" : "allow";
             });
+    }
+
+    // 仅保留实际明确表态节点及通往它们的祖先；读取祖先无贡献时不解析条件。
+    private HashSet<string> RelevantNodes(string resourceKey,
+        IEnumerable<ICP.Platform.Modules.Authorization.DTOs.DataScopeRuleDto> roots, string actionKey, bool read)
+    {
+        var relevant = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var root in roots) Visit(root);
+        return relevant;
+
+        // 全部子分支都要访问，不能因首个有意见分支而跳过兄弟的拒绝票。
+        bool Visit(ICP.Platform.Modules.Authorization.DTOs.DataScopeRuleDto node)
+        {
+            if (!node.Enabled) return false;
+            var descendant = false;
+            foreach (var child in node.Children) descendant |= Visit(child);
+            var contributes = !read || catalog.HasReadContribution(resourceKey, node.Condition);
+            var own = contributes && node.Subjects.Any(subject =>
+                subject.Actions.TryGetValue(actionKey, out var vote) && vote != "unset");
+            if (contributes && (own || descendant)) relevant.Add(node.Id);
+            return own || descendant;
+        }
     }
 
     // 单对象读取沿列表的同一数据库谓词，另以实际主键阻止排序规则把大小写别名当成规范对象身份。

@@ -125,10 +125,11 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
     {
         var scope = group ?? page.Locator("body");
         var input = scope.GetByRole(AriaRole.Combobox, new() { Name = label, Exact = true });
-        await scope.Locator(".ant-select").Filter(new()
+        var selector = scope.Locator(".ant-select").Filter(new()
         {
             Has = page.GetByRole(AriaRole.Combobox, new() { Name = label, Exact = true })
-        }).Locator(".ant-select-selector").ClickAsync();
+        });
+        await selector.Locator(".ant-select-selector").ClickAsync();
         var dropdown = page.Locator(".ant-select-dropdown:visible .rc-virtual-list-holder");
         if (search)
         {
@@ -138,7 +139,8 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
         }
         if (candidatesReady is not null) await candidatesReady();
         var navigation = System.Diagnostics.Stopwatch.StartNew();
-        var active = dropdown.Locator(".ant-select-item-option-active").Filter(new() { HasText = option });
+        var active = dropdown.Locator(".ant-select-item-option-active:not(.ant-select-item-option-disabled)")
+            .Filter(new() { HasText = option });
         while (!await active.IsVisibleAsync())
         {
             if (navigation.Elapsed > TimeSpan.FromSeconds(10))
@@ -146,5 +148,6 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
             await input.PressAsync("ArrowDown");
         }
         await input.PressAsync("Enter");
+        await Assertions.Expect(selector.Locator(".ant-select-selection-item")).ToContainTextAsync(option);
     }
 }

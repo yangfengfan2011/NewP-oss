@@ -30,7 +30,10 @@ public sealed class DataScopeSqlCostTests(ITestOutputHelper output)
         var save = fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save");
         var rule = new DataScopeRuleDto("Scope_Cost", "Scope_Cost", null, "成本规则", true, "organization.person",
             new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement("Blocked")),
-            [new("Scope_Cost_Subject", "all", null, 0, new Dictionary<string, string> { ["read"] = "deny" })], []);
+            [new("Scope_Cost_Subject", "all", null, 100, new Dictionary<string, string> { ["read"] = "deny" })],
+            [new("Scope_Cost_Allow", "Scope_Cost", "Scope_Cost", "子例外", true, "organization.person",
+                new("attribute", "PersonNo", "equal", JsonSerializer.SerializeToElement("SCOPE-COST-0")),
+                [new("Scope_Cost_Allow_Subject", "all", null, 0, new Dictionary<string, string> { ["read"] = "allow" })], [])]);
         using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/Scope_Cost", rule))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         var created = 0;
@@ -45,20 +48,29 @@ public sealed class DataScopeSqlCostTests(ITestOutputHelper output)
             try { result = await FeatureHttpTestRequests.ReadAsync(ordinary, read, "/api/organization/persons?page=2&pageSize=7"); }
             finally { commands.Enabled = false; }
             watch.Stop();
-            Assert.Equal(size / 2 + 1, result.GetProperty("total").GetInt32());
+            Assert.Equal(size / 2 + 2, result.GetProperty("total").GetInt32());
             Assert.Equal(7, result.GetProperty("items").GetArrayLength());
-            Assert.DoesNotContain(result.GetProperty("items").EnumerateArray(), row => row.GetProperty("ENAME").GetString() == "Blocked");
+            Assert.DoesNotContain(result.GetProperty("items").EnumerateArray(), row => row.GetProperty("ENAME").GetString() == "Blocked"
+                && row.GetProperty("PersonNo").GetString() != "SCOPE-COST-0");
             var queries = commands.Captured.Where(command => command.Sql.Contains("[Person]", StringComparison.Ordinal)).ToArray();
             Assert.Equal(2, queries.Length);
-            Assert.All(queries, command => Assert.Contains("[ENAME]", command.Sql));
+            Assert.All(queries, command => { Assert.Contains("[ENAME]", command.Sql); Assert.Contains("[PersonNo]", command.Sql); });
             Assert.Single(queries, command => command.Sql.Contains("OFFSET", StringComparison.Ordinal));
             using var scope = fixture.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
             var plans = new List<object>();
             foreach (var query in queries) plans.Add(await ActualPlanAsync(db.Database.GetConnectionString()!, query));
-            output.WriteLine(JsonSerializer.Serialize(new { personRows = size + 1, endpointMilliseconds = watch.Elapsed.TotalMilliseconds,
-                databaseRoundTrips = commands.Captured.Count, businessQueries = queries.Length, applicationPersonRows = 7,
-                applicableRuleRows = 1, applicableSubjectRows = 1, plans }));
+            output.WriteLine(JsonSerializer.Serialize(new
+            {
+                personRows = size + 1,
+                endpointMilliseconds = watch.Elapsed.TotalMilliseconds,
+                databaseRoundTrips = commands.Captured.Count,
+                businessQueries = queries.Length,
+                applicationPersonRows = 7,
+                applicableRuleRows = 2,
+                applicableSubjectRows = 2,
+                plans
+            }));
         }
     }
 
@@ -79,13 +91,17 @@ public sealed class DataScopeSqlCostTests(ITestOutputHelper output)
         } while (await reader.NextResultAsync());
         Assert.NotNull(xml);
         var plan = XDocument.Parse(xml);
-        return new { query.Sql, operators = plan.Descendants().Where(element => element.Name.LocalName == "RelOp").Select(element => new
+        return new
         {
-            physical = (string?)element.Attribute("PhysicalOp"),
-            actualRows = Counter(element, "ActualRows"),
-            actualRowsRead = Counter(element, "ActualRowsRead"),
-            logicalReads = Counter(element, "ActualLogicalReads")
-        }).ToArray() };
+            query.Sql,
+            operators = plan.Descendants().Where(element => element.Name.LocalName == "RelOp").Select(element => new
+            {
+                physical = (string?)element.Attribute("PhysicalOp"),
+                actualRows = Counter(element, "ActualRows"),
+                actualRowsRead = Counter(element, "ActualRowsRead"),
+                logicalReads = Counter(element, "ActualLogicalReads")
+            }).ToArray()
+        };
     }
 
     private static long? Counter(XElement operation, string name)

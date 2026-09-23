@@ -39,32 +39,49 @@ public sealed class DataScopeCatalog(IStandardCrudResourceRegistry resources, Ca
         return model.GetProperties().Where(property => !property.Name.StartsWith("__", StringComparison.Ordinal)).ToArray();
     }
 
-    /// <summary>验证当前单根读取结构与已注册主体、上下文；未知类型、子树和非读取动作拒绝。</summary>
+    /// <summary>验证完整根树的身份、层级和已注册主体、条件。</summary>
     public void Validate(DataScopeRuleDto rule)
     {
         Resolve(rule.ResourceKey);
-        if (string.IsNullOrWhiteSpace(rule.Id) || rule.Id.Length > 128 || rule.RootId != rule.Id || rule.ParentId is not null
-            || string.IsNullOrWhiteSpace(rule.Name) || rule.Name.Length > 256 || rule.Children is null || rule.Children.Count != 0
-            || rule.Subjects is null || rule.Subjects.Select(subject => subject.Id).Distinct(StringComparer.Ordinal).Count() != rule.Subjects.Count)
-            throw new RolePermissionValidationException("本阶段只接受具有稳定身份的单根规则。");
         Conditions.ValidateRegistration();
-        Conditions.Validate(rule.ResourceKey, rule.Condition);
-        foreach (var subject in rule.Subjects)
+        var nodeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var subjectIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        ValidateNode(rule, null);
+
+        void ValidateNode(DataScopeRuleDto node, string? parentId)
         {
-            if (string.IsNullOrWhiteSpace(subject.Id) || subject.Id.Length > 128
-                || subject.Actions is null || subject.Actions.Any(action => action.Key != "read"
-                    || !Actions.Any(defined => defined.Key == action.Key) || action.Value is not ("allow" or "deny" or "unset")))
-                throw new RolePermissionValidationException("主体授权项身份或读取三态无效。");
-            identities.Validate(subject.Type, subject.SubjectId, subject.MatchOptions);
+            if (string.IsNullOrWhiteSpace(node.Id) || node.Id.Length > 128 || !nodeIds.Add(node.Id)
+                || node.RootId != rule.Id || node.ParentId != parentId || node.ResourceKey != rule.ResourceKey
+                || string.IsNullOrWhiteSpace(node.Name) || node.Name.Length > 256
+                || node.Children is null || node.Subjects is null)
+                throw new RolePermissionValidationException("规则树身份、父子关系或资源无效。");
+            try { Conditions.Validate(node.ResourceKey, node.Condition); }
+            catch (RolePermissionValidationException exception) when (parentId is not null && exception.Message.StartsWith("条件 ", StringComparison.Ordinal))
+            { throw new RolePermissionValidationException($"节点 {node.Id}：{exception.Message}"); }
+            foreach (var subject in node.Subjects)
+            {
+                if (string.IsNullOrWhiteSpace(subject.Id) || subject.Id.Length > 128 || !subjectIds.Add(subject.Id)
+                    || subject.Actions is null || subject.Actions.Any(action => action.Key != "read"
+                        || !Actions.Any(defined => defined.Key == action.Key) || action.Value is not ("allow" or "deny" or "unset")))
+                    throw new RolePermissionValidationException("主体授权项身份或读取三态无效。");
+                identities.Validate(subject.Type, subject.SubjectId, subject.MatchOptions);
+            }
+            foreach (var child in node.Children) ValidateNode(child, node.Id);
         }
     }
 
     /// <summary>保存时规范化默认匹配选项和全部日期叶子；固定 Instant 不随后续查看者重新解释。</summary>
     public DataScopeRuleDto NormalizeForSave(DataScopeRuleDto rule)
     {
-        rule = rule with { Subjects = rule.Subjects.Select(subject => subject.MatchOptions?.IncludeDescendants == false
-            ? subject with { MatchOptions = null } : subject).ToArray() };
-        return rule with { Condition = Conditions.Normalize(rule.ResourceKey, rule.Condition) };
+        return NormalizeNode(rule);
+
+        DataScopeRuleDto NormalizeNode(DataScopeRuleDto node) => node with
+        {
+            Subjects = node.Subjects.Select(subject => subject.MatchOptions?.IncludeDescendants == false
+                ? subject with { MatchOptions = null } : subject).ToArray(),
+            Condition = Conditions.Normalize(node.ResourceKey, node.Condition),
+            Children = node.Children.Select(NormalizeNode).ToArray()
+        };
     }
 
     /// <summary>读取条件只投影有读取贡献的叶子。</summary>

@@ -120,3 +120,72 @@ it('keeps the draft and places a server error at the nested condition named in P
     expect(container.querySelector('[aria-label="条件项 1.1"] .ant-alert')).toBeNull();
   } finally { await act(async () => root.unmount()); container.remove(); }
 });
+
+it('edits nested nodes in one root draft and sends the complete tree on save', async () => {
+  const rule = { id: 'tree', rootId: 'tree', parentId: null, name: '父规则', enabled: true, resourceKey: 'organization.person',
+    condition: { type: 'attribute', field: 'ENAME', operator: 'equal', value: '父' },
+    subjects: [], children: [] };
+  fetcher.mockImplementation((url: string, init?: RequestInit) => Promise.resolve(init?.method === 'PUT'
+    ? new Response(null, { status: 204 }) : new Response(JSON.stringify(url.endsWith('/catalog') ? {
+      actions: [{ key: 'read', enabled: true }], features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
+      resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Organization/Person' },
+        fields: [{ name: 'ENAME', type: 'String' }] }],
+    } : [rule, { ...rule, id: 'other', rootId: 'other', name: '另一根' }]))));
+  let lifecycle!: Parameters<PageProps['reportState']>;
+  const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+  const button = (label: string) => [...container.querySelectorAll('button')].find(item => item.textContent === label)!;
+  try {
+    await act(async () => root.render(<DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }}
+      reportState={(...value) => { lifecycle = value; }} />));
+    await act(async () => (container.querySelector('.ant-tree-title') as HTMLElement).click());
+    await act(async () => button('添加子规则').click());
+    expect(container.textContent).toContain('完整条件还包含祖先');
+    expect(container.textContent).toContain('父规则');
+    const childName = container.querySelector('[aria-label="规则名称"]') as HTMLInputElement;
+    await act(async () => { childName.value = '例外节点'; childName.dispatchEvent(new Event('input', { bubbles: true })); });
+    await act(async () => button('添加主体项').click());
+    await act(async () => { expect(await lifecycle[2]!()).toBe(true); });
+    const saved = JSON.parse(String(fetcher.mock.calls.find(call => call[1]?.method === 'PUT')![1].body));
+    expect(saved.id).toBe('tree');
+    expect(saved.children).toHaveLength(1);
+    expect(saved.children[0].rootId).toBe('tree');
+    expect(saved.children[0].parentId).toBe('tree');
+    expect(saved.children[0].subjects).toHaveLength(1);
+    expect(lifecycle[0].dirty).toBe(false);
+    await act(async () => button('添加同级规则').click());
+    expect(lifecycle[0].dirty).toBe(true);
+    await act(async () => ([...container.querySelectorAll('.ant-tree-title')].find(item => item.textContent === '另一根') as HTMLElement).click());
+    expect(document.body.textContent).toContain('放弃未保存的草稿？');
+    await act(async () => ([...document.querySelectorAll('.ant-modal button')].find(item => item.textContent === '继续编辑') as HTMLElement).click());
+    await act(async () => button('删除节点').click());
+    expect(lifecycle[0].dirty).toBe(false);
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});
+
+it('selects the failing child and keeps its condition error inline', async () => {
+  const child = { id: 'child', rootId: 'tree', parentId: 'tree', name: '子节点', enabled: true,
+    resourceKey: 'organization.person', condition: { type: 'group', field: '', operator: 'and', value: null,
+      children: [{ type: 'attribute', field: 'ENAME', operator: 'equal', value: '甲' }] }, subjects: [], children: [] };
+  const rootRule = { ...child, id: 'tree', parentId: null, name: '根节点',
+    condition: { type: 'attribute', field: 'ENAME', operator: 'equal', value: '根' }, children: [child] };
+  fetcher.mockImplementation((url: string, init?: RequestInit) => Promise.resolve(init?.method === 'PUT'
+    ? new Response(JSON.stringify({ title: '节点 child：条件 1.2：比较值与属性类型不相容。', code: 'DataScope.InvalidConfiguration' }), { status: 400 })
+    : new Response(JSON.stringify(url.endsWith('/catalog') ? {
+      actions: [{ key: 'read', enabled: true }], features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
+      resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Organization/Person' },
+        fields: [{ name: 'ENAME', type: 'String' }] }],
+    } : [rootRule]))));
+  let lifecycle!: Parameters<PageProps['reportState']>;
+  const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+  try {
+    await act(async () => root.render(<DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }}
+      reportState={(...value) => { lifecycle = value; }} />));
+    await act(async () => (container.querySelectorAll('.ant-tree-title')[0] as HTMLElement).click());
+    await act(async () => (container.querySelectorAll('.ant-tree-title')[1] as HTMLElement).click());
+    await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '添加属性条件')!.click());
+    await act(async () => (container.querySelectorAll('.ant-tree-title')[0] as HTMLElement).click());
+    await act(async () => { expect(await lifecycle[2]!()).toBe(false); });
+    expect(container.textContent).toContain('当前节点：子节点');
+    expect(container.querySelector('[aria-label="条件项 1.2"] .ant-alert')?.textContent).toContain('条件 1.2');
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});

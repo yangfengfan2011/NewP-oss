@@ -19,25 +19,33 @@ public sealed class DataScopeReadPlans(DataScopeRules rules, DataScopeCatalog ca
             ?? throw new InvalidOperationException("DATA_SCOPE_TRUSTED_SUBJECT_REQUIRED");
         if (await administrators.InspectAsync(id, cancellationToken) == LocalAdministratorAssignmentState.Assigned) return new(null);
         var applicable = await rules.ForResourceAsync(resourceKey, cancellationToken);
-        var enabled = applicable.Where(rule => rule.Enabled).ToArray();
-        foreach (var rule in enabled) catalog.Validate(rule);
-        var readable = enabled.Where(rule => catalog.HasReadContribution(resourceKey, rule.Condition)).ToArray();
+        foreach (var rule in applicable) catalog.Validate(rule);
+        var readable = applicable.SelectMany(ActiveNodes).Where(rule => catalog.HasReadContribution(resourceKey, rule.Condition)).ToArray();
         var facts = await identities.ResolveAsync(id, readable.SelectMany(rule => rule.Subjects).Select(subject => subject.Type),
             readable.SelectMany(rule => catalog.ContextKeys(rule.Condition)), cancellationToken);
         var row = Expression.Parameter(typeof(Dictionary<string, object?>), "row");
-        Expression? permitted = null;
-        foreach (var rule in readable)
+        var denied = DataScopeRuleTree.BuildDenied(applicable, node =>
         {
-            var opinions = rule.Subjects.Where(subject => subject.Actions.TryGetValue("read", out var opinion) && opinion != "unset"
+            if (!catalog.HasReadContribution(resourceKey, node.Condition)) return null;
+            return catalog.BuildReadCondition(resourceKey, node.Condition, row, facts)
+                ?? throw new InvalidOperationException("DATA_SCOPE_READ_CONTRIBUTION_MISSING");
+        }, node =>
+        {
+            var opinions = node.Subjects.Where(subject => subject.Actions.TryGetValue("read", out var opinion) && opinion != "unset"
                 && facts.Matches(subject.Type, subject.SubjectId, subject.MatchOptions)).ToArray();
-            if (opinions.Length == 0) continue;
+            if (opinions.Length == 0) return null;
             var priority = opinions.Max(subject => subject.Priority);
-            if (!opinions.Any(subject => subject.Priority == priority && subject.Actions["read"] == "deny")) continue;
-            var match = catalog.BuildReadCondition(resourceKey, rule.Condition, row, facts);
-            if (match is null) continue;
-            Expression allow = Expression.Not(match);
-            permitted = permitted is null ? allow : Expression.AndAlso(permitted, allow);
-        }
-        return new(permitted is null ? null : Expression.Lambda<Func<Dictionary<string, object?>, bool>>(permitted, row));
+            return opinions.Any(subject => subject.Priority == priority && subject.Actions["read"] == "deny") ? "deny" : "allow";
+        });
+        return new(denied is null ? null : Expression.Lambda<Func<Dictionary<string, object?>, bool>>(Expression.Not(denied), row));
+    }
+
+    private static IEnumerable<ICP.Platform.Modules.Authorization.DTOs.DataScopeRuleDto> ActiveNodes(
+        ICP.Platform.Modules.Authorization.DTOs.DataScopeRuleDto node)
+    {
+        if (!node.Enabled) yield break;
+        yield return node;
+        foreach (var child in node.Children)
+            foreach (var descendant in ActiveNodes(child)) yield return descendant;
     }
 }

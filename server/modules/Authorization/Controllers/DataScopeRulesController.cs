@@ -20,9 +20,17 @@ public sealed class DataScopeRulesController(DataScopeCatalog catalog, DataScope
         contextBindings = identities.ContextBindings,
         businessConditions = catalog.BusinessConditions,
         features = plan.FeatureCatalog.Where(point => point.BehaviorKey is "authorization.dataScope.read" or "authorization.dataScope.save"),
-        resources = catalog.Resources.Select(resource => new { resource, fields = catalog.Fields(resource.ResourceKey).Select(field =>
-            new { name = field.Name, type = (Nullable.GetUnderlyingType(field.ClrType) ?? field.ClrType).Name,
-                enumValues = catalog.EnumValues(resource.ResourceKey, field.Name) }) })
+        resources = catalog.Resources.Select(resource => new
+        {
+            resource,
+            fields = catalog.Fields(resource.ResourceKey).Select(field =>
+            new
+            {
+                name = field.Name,
+                type = (Nullable.GetUnderlyingType(field.ClrType) ?? field.ClrType).Name,
+                enumValues = catalog.EnumValues(resource.ResourceKey, field.Name)
+            })
+        })
     });
 
     /// <summary>独立管理资格下读取最小主体目录，已有名称与候选使用同一个 owner。</summary>
@@ -50,6 +58,15 @@ public sealed class DataScopeRulesController(DataScopeCatalog catalog, DataScope
             await rules.SaveAsync(rule, cancellationToken);
             return NoContent();
         }
+        catch (RolePermissionValidationException exception)
+        { return BadRequest(new ProblemDetails { Status = 400, Title = exception.Message, Extensions = { ["code"] = "DataScope.InvalidConfiguration" } }); }
+    }
+
+    /// <summary>删除根规则及完整子树，配置和实际旧值审计共用一次事务。</summary>
+    [HttpDelete("rules/{id}"), RequireFeature("authorization.dataScope.save")]
+    public async Task<IActionResult> Delete(string id, CancellationToken cancellationToken)
+    {
+        try { await rules.DeleteAsync(id, cancellationToken); return NoContent(); }
         catch (RolePermissionValidationException exception)
         { return BadRequest(new ProblemDetails { Status = 400, Title = exception.Message, Extensions = { ["code"] = "DataScope.InvalidConfiguration" } }); }
     }

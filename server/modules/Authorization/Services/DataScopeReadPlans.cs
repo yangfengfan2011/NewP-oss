@@ -40,6 +40,7 @@ public sealed class DataScopeReadPlans(DataScopeRules rules, DataScopeCatalog ca
         return new(denied is null ? null : Expression.Lambda<Func<Dictionary<string, object?>, bool>>(Expression.Not(denied), row));
     }
 
+    // 停用节点截断子树，避免解析不参与本次读取的主体与上下文事实。
     private static IEnumerable<ICP.Platform.Modules.Authorization.DTOs.DataScopeRuleDto> ActiveNodes(
         ICP.Platform.Modules.Authorization.DTOs.DataScopeRuleDto node)
     {

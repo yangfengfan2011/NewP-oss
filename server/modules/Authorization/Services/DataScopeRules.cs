@@ -101,6 +101,7 @@ public sealed class DataScopeRules(EfPlatformDbContext db, IPlatformTransactionE
         }, cancellationToken);
     }
 
+    /// <summary>在根目标锁内删除完整子树及主体项，并以实际旧配置登记撤销审计。</summary>
     public async Task DeleteAsync(string rootId, CancellationToken cancellationToken)
     {
         await transactions.ExecuteAsync(async token =>
@@ -124,6 +125,7 @@ public sealed class DataScopeRules(EfPlatformDbContext db, IPlatformTransactionE
     // 稳定身份排序使集合次序变化不制造审计，也不影响显式优先级。
     private static string Canonical(DataScopeRuleDto rule) => JsonSerializer.Serialize(CanonicalNode(rule), Json);
 
+    // 子节点和主体项分别按稳定身份排序，保留层级与显式优先级。
     private static DataScopeRuleDto CanonicalNode(DataScopeRuleDto node) => node with
     {
         Subjects = node.Subjects.OrderBy(subject => subject.Id, StringComparer.Ordinal).Select(subject => subject with
@@ -131,6 +133,7 @@ public sealed class DataScopeRules(EfPlatformDbContext db, IPlatformTransactionE
         Children = node.Children.OrderBy(child => child.Id, StringComparer.Ordinal).Select(CanonicalNode).ToArray()
     };
 
+    // 整根事务逐节点保存，输入次序不改变父子身份。
     private static IEnumerable<DataScopeRuleDto> Flatten(DataScopeRuleDto node)
     {
         yield return node;

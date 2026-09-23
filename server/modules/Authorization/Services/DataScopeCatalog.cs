@@ -48,6 +48,7 @@ public sealed class DataScopeCatalog(IStandardCrudResourceRegistry resources, Ca
         var subjectIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         ValidateNode(rule, null);
 
+        // 输入树的嵌套位置决定真实父身份，不能相信节点自报的 ParentId。
         void ValidateNode(DataScopeRuleDto node, string? parentId)
         {
             if (string.IsNullOrWhiteSpace(node.Id) || node.Id.Length > 128 || !nodeIds.Add(node.Id)
@@ -75,6 +76,7 @@ public sealed class DataScopeCatalog(IStandardCrudResourceRegistry resources, Ca
     {
         return NormalizeNode(rule);
 
+        // 日期和主体选项逐节点规范化，保存审计只记录最终配置。
         DataScopeRuleDto NormalizeNode(DataScopeRuleDto node) => node with
         {
             Subjects = node.Subjects.Select(subject => subject.MatchOptions?.IncludeDescendants == false

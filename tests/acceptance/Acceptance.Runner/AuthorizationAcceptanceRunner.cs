@@ -158,15 +158,15 @@ internal sealed class AuthorizationAcceptanceRunner(string repositoryRoot, strin
         foreach (var (key, name) in new[] { ("A", firstCompanyName), ("B", $"乙公司{_runId[..6]}") })
         {
             using var company = await PostAsync(client, "/api/organization/companies",
-                new { ECODE = $"AUTH-{key}-{_runId[..8]}", ENAME = name, SortOrder = "0100", IsEnabled = true }, token,
+                new { ECODE = $"AUTH-{key}-{_runId[..8]}", ENAME = name, SortOrder = "0100" }, token,
                 request => request.Headers.Add("X-NewP-Feature", createCompany.Position));
             var companyId = company.RootElement.GetProperty("fields").GetProperty("EID").GetString();
             using var root = await PostAsync(client, "/api/organization/departments",
-                new { ECODE = "ROOT", ENAME = "总部", CompanyId = companyId, SortOrder = "0100", IsEnabled = true }, token,
+                new { ECODE = "ROOT", ENAME = "总部", CompanyId = companyId, SortOrder = "0100" }, token,
                 request => request.Headers.Add("X-NewP-Feature", createDepartment.Position));
             var rootId = root.RootElement.GetProperty("fields").GetProperty("EID").GetString();
             using var leaf = await PostAsync(client, "/api/organization/departments",
-                new { ECODE = "TEAM", ENAME = "研发部", CompanyId = companyId, ParentDepartmentId = rootId, SortOrder = "0100", IsEnabled = true }, token,
+                new { ECODE = "TEAM", ENAME = "研发部", CompanyId = companyId, ParentDepartmentId = rootId, SortOrder = "0100" }, token,
                 request => request.Headers.Add("X-NewP-Feature", createDepartment.Position));
         }
         return new("研发部", $"{firstCompanyName} / 总部 / 研发部");

@@ -125,8 +125,10 @@ internal sealed class AuthorizationAcceptanceRunner(string repositoryRoot, strin
             var rules = new DataScopeRulesPageDriver(page);
             await rules.CreatePersonRuleAsync("人员读取规则", roleName, department,
                 () => page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "department-subject-candidates.png"), FullPage = true }),
-                includeCompositeCondition: true);
-            await rules.ReloadRuleAsync("人员读取规则", roleName, department, expectCompositeCondition: true);
+                includeCompositeCondition: true, includeRuleTree: true,
+                captureDraftGuard: () => page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "data-scope-tree-draft-guard.png"), FullPage = true }));
+            await rules.ReloadRuleAsync("人员读取规则", roleName, department,
+                expectCompositeCondition: true, expectRuleTree: true);
             await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "data-scope-rules.png"), FullPage = true });
             await page.SetViewportSizeAsync(900, 1000);
             await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "data-scope-rules-narrow.png"), FullPage = true });

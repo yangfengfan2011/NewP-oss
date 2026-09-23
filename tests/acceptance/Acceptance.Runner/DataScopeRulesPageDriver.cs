@@ -9,7 +9,8 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
 {
     /// <summary>在同一根中选择真实角色主体、显式优先级与当前账号条件，等待服务端保存和页面恢复。</summary>
     internal async Task CreatePersonRuleAsync(string name, string roleName,
-        DataScopeDepartmentSelection? department = null, Func<Task>? captureDepartmentCandidates = null)
+        DataScopeDepartmentSelection? department = null, Func<Task>? captureDepartmentCandidates = null,
+        bool includeCompositeCondition = false)
     {
         await page.Locator(".np-sidebar-menu").GetByRole(AriaRole.Link, new() { Name = "数据范围规则", Exact = true }).ClickAsync();
         await page.GetByRole(AriaRole.Button, new() { Name = "新增规则", Exact = true }).ClickAsync();
@@ -18,6 +19,7 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
         await SelectAsync("直接属性", "AccountEID");
         await SelectAsync("值来源", "当前身份值");
         await SelectAsync("当前身份值", "当前账号");
+        if (includeCompositeCondition) await AddCompositeConditionAsync();
         var everyone = page.GetByRole(AriaRole.Group, new() { Name = "主体授权项 1", Exact = true });
         await SelectAsync("读取意见", "同意", everyone);
         await page.GetByRole(AriaRole.Button, new() { Name = "添加主体项", Exact = true }).ClickAsync();
@@ -46,13 +48,35 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
     }
 
     /// <summary>重新装载已保存根并等待最小目录解析完成；只确认用户可识别并继续编辑已有主体。</summary>
-    internal async Task ReloadRuleAsync(string name, string roleName, DataScopeDepartmentSelection department)
+    internal async Task ReloadRuleAsync(string name, string roleName, DataScopeDepartmentSelection department,
+        bool expectCompositeCondition = false)
     {
         await page.ReloadAsync();
         await page.Locator(".ant-tree-title").Filter(new() { HasText = name }).ClickAsync();
         await page.GetByTitle(roleName, new() { Exact = true }).WaitForAsync();
         await page.GetByTitle(department.DisplayName, new() { Exact = true }).WaitForAsync();
+        if (expectCompositeCondition)
+        {
+            await page.GetByRole(AriaRole.Group, new() { Name = "条件项 1.2.1", Exact = true }).WaitForAsync();
+            await page.GetByRole(AriaRole.Group, new() { Name = "条件项 1.2.2", Exact = true })
+                .GetByText("无读取贡献；完整判断仍生效", new() { Exact = true }).WaitForAsync();
+        }
         await Assertions.Expect(page.GetByLabel("规则名称", new() { Exact = true })).ToBeEnabledAsync();
+    }
+
+    // 沿现有保存旅程操作嵌套条件，值比较与读取投影留给 SQL/API 测试。
+    private async Task AddCompositeConditionAsync()
+    {
+        var root = page.GetByRole(AriaRole.Group, new() { Name = "条件项 1", Exact = true });
+        await root.GetByRole(AriaRole.Button, new() { Name = "转换为 AND 组合", Exact = true }).ClickAsync();
+        await root.GetByRole(AriaRole.Button, new() { Name = "添加 OR 组合", Exact = true }).ClickAsync();
+        var branch = page.GetByRole(AriaRole.Group, new() { Name = "条件项 1.2", Exact = true });
+        var leaf = page.GetByRole(AriaRole.Group, new() { Name = "条件项 1.2.1", Exact = true });
+        await SelectAsync("条件项 1.2.1 直接属性", "ENAME", leaf);
+        await SelectAsync("条件项 1.2.1 比较", "不为空", leaf);
+        await branch.GetByRole(AriaRole.Button, new() { Name = "添加业务条件", Exact = true }).ClickAsync();
+        await page.GetByRole(AriaRole.Group, new() { Name = "条件项 1.2.2", Exact = true })
+            .GetByText("无读取贡献；完整判断仍生效", new() { Exact = true }).WaitForAsync();
     }
 
     // 使用可访问名称操作 Ant Design 选项，不依赖模拟 DOM 或内存保存。

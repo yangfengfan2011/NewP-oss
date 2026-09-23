@@ -172,11 +172,11 @@ internal sealed class AuthorizationAcceptanceRunner(string repositoryRoot, strin
         return new("研发部", $"{firstCompanyName} / 总部 / 研发部");
     }
 
-    // 同一会话获取防伪令牌；secure loopback cookie 仅由验收客户端显式回放。
+    // 保留标准 CRUD 规范字段名并获取同会话防伪令牌；secure loopback cookie 仅由验收客户端回放。
     private static async Task<JsonDocument> PostAsync(HttpClient client, string path, object body, CancellationToken token, Action<HttpRequestMessage>? configure = null)
     {
         using var antiforgery = await client.GetFromJsonAsync<JsonDocument>("/api/auth/antiforgery-token", token);
-        using var request = new HttpRequestMessage(HttpMethod.Post, path) { Content = JsonContent.Create(body) };
+        using var request = new HttpRequestMessage(HttpMethod.Post, path) { Content = JsonContent.Create(body, options: new JsonSerializerOptions()) };
         request.Headers.Add("X-CSRF-TOKEN", antiforgery!.RootElement.GetProperty("requestToken").GetString());
         configure?.Invoke(request);
         using var response = await client.SendAsync(request, token);

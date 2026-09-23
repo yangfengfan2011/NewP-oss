@@ -119,7 +119,7 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
             .GetByText("无读取贡献；完整判断仍生效", new() { Exact = true }).WaitForAsync();
     }
 
-    // 使用可访问名称操作 Ant Design 选项，不依赖模拟 DOM 或内存保存。
+    // rc-select 的零高辅助节点也会包含选项；沿真实列表的键盘活动项选择，避免误点辅助节点。
     private async Task SelectAsync(string label, string option, ILocator? group = null, bool search = false,
         string? searchText = null, Func<Task>? candidatesReady = null)
     {
@@ -129,21 +129,22 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
         {
             Has = page.GetByRole(AriaRole.Combobox, new() { Name = label, Exact = true })
         }).Locator(".ant-select-selector").ClickAsync();
-        // rc-select 的虚拟项只有进入窗口才挂载；用真实键盘导航触发其 scrollIntoView。
-        var target = page.Locator(".ant-select-dropdown:visible .ant-select-item-option").Filter(new() { HasText = option });
+        var dropdown = page.Locator(".ant-select-dropdown:visible .rc-virtual-list-holder");
         if (search)
         {
             await input.FillAsync(searchText ?? option);
-            await target.WaitForAsync(new() { State = WaitForSelectorState.Visible });
+            await dropdown.Locator(".ant-select-item-option").Filter(new() { HasText = option })
+                .WaitForAsync(new() { State = WaitForSelectorState.Visible });
         }
+        if (candidatesReady is not null) await candidatesReady();
         var navigation = System.Diagnostics.Stopwatch.StartNew();
-        while (!await target.IsVisibleAsync())
+        var active = dropdown.Locator(".ant-select-item-option-active").Filter(new() { HasText = option });
+        while (!await active.IsVisibleAsync())
         {
             if (navigation.Elapsed > TimeSpan.FromSeconds(10))
                 throw new InvalidOperationException($"Select '{label}' has no reachable option '{option}'.");
             await input.PressAsync("ArrowDown");
         }
-        if (candidatesReady is not null) await candidatesReady();
-        await target.ClickAsync();
+        await input.PressAsync("Enter");
     }
 }

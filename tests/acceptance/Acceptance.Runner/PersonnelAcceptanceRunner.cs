@@ -1024,7 +1024,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await Assertions.Expect(dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "保存授权", Exact = true }))
             .ToBeEnabledAsync();
         await dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "添加主体项", Exact = true }).ClickAsync();
-        await dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "取消", Exact = true }).ClickAsync();
+        await dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { NameRegex = new Regex(@"^取\s*消$") }).ClickAsync();
         var discard = page.GetByRole(AriaRole.Dialog, new PageGetByRoleOptions { Name = "放弃未保存的草稿？", Exact = true });
         await discard.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "放弃修改", Exact = true }).ClickAsync();
         await Assertions.Expect(dialog).ToHaveCountAsync(0);

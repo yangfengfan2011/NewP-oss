@@ -19,6 +19,7 @@ import type {
   StandardCrudOperationResult,
   StandardCrudResourceRegistration,
   StandardCrudRuntimeColumn,
+  StandardCrudActionState,
 } from '@icp-platform/sdk';
 import AntdButton from 'antd/es/button';
 import Dropdown from 'antd/es/dropdown';
@@ -131,6 +132,12 @@ interface RowActionItem {
   confirmMessage?: string;
   inline?: boolean;
   onClick: () => void | boolean | Promise<void | boolean>;
+  eligibility?: {
+    resourceKey: string;
+    objectId: string;
+    featurePosition: string;
+    resolve: (signal: AbortSignal) => Promise<StandardCrudActionState>;
+  };
 }
 
 interface ResolvedStandardCrudListColumn {
@@ -505,8 +512,28 @@ function renderMetadataTableCell<TRow extends Record<string, unknown>>(
 function RowActionButtonGroup({ actions, requested = false, active = true, close }: { actions: RowActionItem[]; requested?: boolean; active?: boolean; close?: () => void }) {
   const requestedOnce = useRef(false);
   const [confirmAction, setConfirmAction] = useState<RowActionItem | null>(null);
-  const inlineActions = actions.filter((action) => action.inline).slice(0, 1);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [eligibilityEpoch, setEligibilityEpoch] = useState(0);
+  const inlineActions = actions.filter((action) => action.inline && !action.eligibility).slice(0, 1);
   const overflowActions = actions.filter((action) => !inlineActions.includes(action));
+  const qualifiedActions = actions.filter((action) => action.eligibility);
+  const eligibility = usePlatformQuery<Record<string, StandardCrudActionState>>({
+    key: ['standard-crud-row-action-eligibility',
+      JSON.stringify(qualifiedActions.map((item) => [item.eligibility?.resourceKey,
+        item.eligibility?.objectId, item.key, item.eligibility?.featurePosition])), eligibilityEpoch],
+    enabled: (menuOpen || (requested && active)) && qualifiedActions.length > 0,
+    load: async ({ signal }) => {
+      const states: Record<string, StandardCrudActionState> = {};
+      // 只检查用户展开的一行；关闭菜单或行卸载后由查询生命周期取消未完成请求。
+      for (const item of qualifiedActions) {
+        const qualification = item.eligibility!;
+        states[item.key] = await qualification.resolve(signal);
+      }
+      return states;
+    },
+  });
+  const visibleOverflowActions = overflowActions.filter((action) => !action.eligibility
+    || (eligibility.status === 'success' && eligibility.data?.[action.key]?.visible));
   const renderActionButton = (action: RowActionItem, className: string) => {
     const button = (
       <AntdButton
@@ -528,6 +555,8 @@ function RowActionButtonGroup({ actions, requested = false, active = true, close
   };
 
   const runOverflowAction = (action: RowActionItem) => {
+    if (action.eligibility && (eligibility.status !== 'success'
+      || !eligibility.data?.[action.key]?.visible || !eligibility.data[action.key]?.available)) return;
     if (!action.confirmMessage) {
       void action.onClick();
       return;
@@ -536,32 +565,52 @@ function RowActionButtonGroup({ actions, requested = false, active = true, close
   };
 
   useEffect(() => {
-    if (!requested || requestedOnce.current || !actions[0]) return;
+    if (!requested || !active || requestedOnce.current || !actions[0]) return;
+    if (actions[0].eligibility && eligibility.status !== 'success' && eligibility.status !== 'error') return;
     requestedOnce.current = true;
-    if (!actions[0].disabled) runOverflowAction(actions[0]);
+    if (!actions[0].disabled && (!actions[0].eligibility
+      || (eligibility.status === 'success' && eligibility.data?.[actions[0].key]?.visible
+        && eligibility.data[actions[0].key]?.available))) {
+      if (actions[0].confirmMessage) setConfirmAction(actions[0]);
+      else void actions[0].onClick();
+    }
     // 一个内嵌动作实例只请求一次；后续 pending/错误渲染不能重放写入。
-  }, [requested, actions]);
+  }, [requested, active, actions, eligibility.status, eligibility.data]);
 
   return (
     <div className="np-row-actions">
-      {requested && (!actions[0] || (actions[0].disabled && !actions[0].loading)) && <div role="alert">{actions[0]?.disabledReason ?? '当前操作不可用。'}<AntdButton onClick={close}>关闭</AntdButton></div>}
+      {requested && (!actions[0] || (actions[0].disabled && !actions[0].loading)
+        || (actions[0].eligibility && (eligibility.status === 'error'
+          || (eligibility.status === 'success' && !eligibility.data?.[actions[0].key]?.available))))
+        && <div role="alert">{eligibility.status === 'error' ? '对象动作资格暂时无法判定。'
+          : actions[0]?.disabledReason ?? '当前操作不可用。'}<AntdButton onClick={close}>关闭</AntdButton></div>}
       {!requested && inlineActions.map((action) => renderActionButton(action, 'np-row-action-button'))}
       {!requested && overflowActions.length > 0 ? (
         <Dropdown
           trigger={['click']}
+          open={menuOpen}
+          onOpenChange={(open) => {
+            if (open && !menuOpen) setEligibilityEpoch((current) => current + 1);
+            setMenuOpen(open);
+          }}
           menu={{
-            items: overflowActions.map((action) => ({
+            items: [...visibleOverflowActions.map((action) => ({
               key: action.key,
               label: action.loading
                 ? '处理中...'
-                : action.disabledReason
-                  ? `${String(action.label)}（${action.disabledReason}）`
+                : (action.eligibility && eligibility.data?.[action.key]?.reason) || action.disabledReason
+                  ? `${String(action.label)}（${eligibility.data?.[action.key]?.reason ?? action.disabledReason}）`
                   : action.label,
               danger: action.danger,
-              disabled: action.disabled || action.loading,
-            })),
+              disabled: action.disabled || action.loading
+                || (action.eligibility && eligibility.data?.[action.key]?.available === false),
+            })), ...(qualifiedActions.length > 0 && eligibility.status === 'pending'
+              ? [{ key: '__eligibility_pending', label: '正在检查对象操作资格…', disabled: true }]
+              : []), ...(qualifiedActions.length > 0 && eligibility.status === 'error'
+              ? [{ key: '__eligibility_error', label: '对象动作资格暂时无法判定。', disabled: true }]
+              : [])],
             onClick: ({ key }) => {
-              const action = overflowActions.find((item) => item.key === key);
+              const action = visibleOverflowActions.find((item) => item.key === key);
               if (action) runOverflowAction(action);
             },
           }}
@@ -1741,6 +1790,17 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             return outcome.status === 'succeeded';
           },
         };
+      })
+      .map((item) => {
+        const action = definitions.find((definition) => definition.key === item.key);
+        const resolver = action && registration.actionEligibilityResolvers?.[action.key];
+        const position = action && resolvedFeaturePosition(resolveActionFeature(action));
+        return action && resolver && position ? {
+          ...item,
+          eligibility: { resourceKey: registration.resourceKey, objectId: rowId,
+            featurePosition: position,
+            resolve: (signal: AbortSignal) => resolver({ id: rowId, row, action, featurePosition: position, signal }) },
+        } : item;
       });
   }
   const metadataColumns = resolvedColumns.map((column) => {
@@ -2201,7 +2261,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         <Suspense fallback={<div className="sh-loading-state" role="status">正在加载操作确认…</div>}>
           <StandardCrudActionReviewDialog
             open={host.lifecycle.active}
-            action={rowInputAction.action}
+            action={{ ...rowInputAction.action,
+              confirmLabel: rowInputAction.action.confirmLabelKey
+                ? t(`${schema.dicKey}.${rowInputAction.action.confirmLabelKey}`, rowInputAction.action.confirmLabelKey)
+                : undefined }}
             title={rowInputAction.label}
             confirmMessage={rowInputAction.action.confirmMessageKey
               ? t(

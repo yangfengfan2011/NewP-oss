@@ -49,10 +49,11 @@ it.each(['standard', 'stable', 'handler', 'input', 'denied', 'disabled', 'create
   const capabilities = organizationBindings.standardCrudCapabilities!.map(binding => binding.targetKey !== 'organization.department.list' ? binding : { ...binding, load: async () => {
     const loaded = await binding.load();
     return { default: { ...loaded.default,
-      actionHandlers: { delete: async (context: StandardCrudActionContext) => {
+      actionHandlers: { ...loaded.default.actionHandlers, delete: async (context: StandardCrudActionContext) => {
         handler(context); return loaded.default.dataAdapter.remove!(context.id!, context.row as Record<string, unknown>);
       } },
-      actionInputRenderers: { review: ({ onChange }: { onChange: (value: unknown) => void }) => <button onClick={() => onChange({ reason: 'confirmed' })}>Existing action input</button> },
+      actionInputRenderers: { ...loaded.default.actionInputRenderers,
+        review: ({ onChange }: { onChange: (value: unknown) => void }) => <button onClick={() => onChange({ reason: 'confirmed' })}>Existing action input</button> },
       ...(scenario === 'disabled' ? { actionStateResolver: () => ({ visible: true, available: false, reason: 'Unavailable' }) } : {}),
     } };
   } });

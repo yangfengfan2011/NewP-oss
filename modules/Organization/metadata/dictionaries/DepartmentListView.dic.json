@@ -30,6 +30,8 @@
     "Column_SortOrder": { "zhs": "排序码", "en": "Sort Order Code" },
     "Column_UpdatedAt": { "zhs": "最后更新时间", "en": "Last Updated" },
     "Action_Create": { "zhs": "新建部门", "en": "Create Department" },
+    "Action_Authorize": { "zhs": "对象授权", "en": "Object Authorization" },
+    "Action_SaveAuthorization": { "zhs": "保存授权", "en": "Save Authorization" },
     "Action_Edit": { "zhs": "编辑", "en": "Edit" },
     "Action_Delete": { "zhs": "删除", "en": "Delete" },
     "Action_Delete_Confirm": { "zhs": "确认删除该部门吗？", "en": "Delete this department?" },

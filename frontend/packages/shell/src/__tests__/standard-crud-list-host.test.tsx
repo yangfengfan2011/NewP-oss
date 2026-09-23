@@ -16,6 +16,9 @@ import exampleRecordListViewDocument from '../../../../../modules/Example/metada
 import exampleRecordDetailViewDocument from '../../../../../modules/Example/metadata/views/ExampleRecordDetail.view.json';
 import exampleRecordModelDocument from '../../../../../modules/Example/metadata/models/ExampleRecord.model.json';
 import exampleRecordListDictionary from '../../../../../modules/Example/metadata/dictionaries/ExampleRecordListView.dic.json';
+import companyListViewDocument from '../../../../../modules/Organization/metadata/views/CompanyList.view.json';
+import companyModelDocument from '../../../../../modules/Organization/metadata/models/Company.model.json';
+import { companyStandardCrudResource } from '../../../../modules/organization/src/standard-crud/companyStandardCrudResource';
 
 const platformFetchMock = vi.hoisted(() => vi.fn((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init)));
 
@@ -294,7 +297,7 @@ describe('StandardCrudListPageHost', () => {
                   viewDocuments: [viewDocument, personDetailViewDocument],
                 }}
               >
-                <StandardCrudHostEnvironmentContext.Provider value={options.embedded ?? null}><StandardCrudListPageHost viewKey="organization.person.list" /></StandardCrudHostEnvironmentContext.Provider>
+                <StandardCrudHostEnvironmentContext.Provider value={options.embedded ?? null}><StandardCrudListPageHost viewKey={viewDocument.view.key} /></StandardCrudHostEnvironmentContext.Provider>
               </RuntimeMetadataProvider>
             </PlatformQueryProvider>
           </LocalizationProvider>
@@ -1577,6 +1580,135 @@ describe('StandardCrudListPageHost', () => {
     await act(async () => confirm?.click());
 
     expect(review).not.toHaveBeenCalled();
+  });
+
+  it('checks the real company row before showing its object authorization action', async () => {
+    const entry = 'organization.company.entry';
+    const authorize = 'organization.company.action.authorize';
+    const list = vi.fn(async () => ({
+      items: [{ id: 'Company_1', EID: 'Company_1', ECODE: 'ICP', ENAME: '平台公司',
+        IsEnabled: true, SortOrder: '0100', UpdatedAt: '2026-09-01T00:00:00Z' }], total: 1,
+    }));
+    mockStandardCrudModule({ ...companyStandardCrudResource,
+      dataAdapter: { ...companyStandardCrudResource.dataAdapter, list } });
+    let allowed = false;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/eligibility')) return new Response(null, { status: allowed ? 200 : 403 });
+      if (url.endsWith('/catalog')) return new Response(JSON.stringify({ actions: [], subjectTypes: [] }), { status: 200 });
+      if (init?.method === 'PUT') return new Response(null, { status: 204 });
+      return new Response(JSON.stringify({ resourceKey: 'organization.company', objectId: 'Company_1', subjects: [] }), { status: 200 });
+    });
+    await renderHost({ 'CompanyListView.Action_Authorize': '对象授权',
+      'CompanyListView.Action_SaveAuthorization': '保存授权' },
+      companyListViewDocument as unknown as typeof personListViewDocument, '/organization/companies', {
+        modelDocument: { ...companyModelDocument, Company: { ...companyModelDocument.Company,
+          fields: [...companyModelDocument.Company.fields,
+            { name: 'UpdatedAt', uiType: 'datetime', form: { create: { mode: 'hidden' }, edit: { mode: 'hidden' } } }],
+        } } as unknown as typeof personModelDocument,
+        feature: { entry, positions: [entry, authorize], points: [{
+          key: 'authorize', kind: 'action', position: authorize, parentPosition: entry,
+          actionScope: 'list.rowActions',
+        }] },
+      });
+    await flushProTableRequest();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    const more = () => [...container.querySelectorAll('button')].find(button => button.textContent?.trim() === '更多');
+    await act(async () => { more()?.click(); });
+    await flushProTableRequest();
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/authorization/data-scope/objects/organization.company/Company_1/eligibility',
+      expect.objectContaining({ headers: { 'X-NewP-Feature': authorize } }),
+    );
+    expect(document.body.textContent).not.toContain('对象授权');
+    await act(async () => { more()?.click(); });
+    allowed = true;
+    await act(async () => { more()?.click(); });
+    await flushProTableRequest();
+    const action = [...document.querySelectorAll<HTMLElement>('.ant-dropdown-menu-item')]
+      .find(item => item.textContent?.trim() === '对象授权');
+    expect(action).toBeDefined();
+    await act(async () => { action?.click(); });
+    await waitForBodyText('目标公司：平台公司');
+    expect(document.body.textContent).toContain('公司标识：Company_1');
+    const save = [...document.body.querySelectorAll('button')].find(button => button.textContent?.trim() === '保存授权');
+    expect(save).toBeDefined();
+    expect(save?.disabled).toBe(false);
+    await act(async () => { save?.click(); });
+    await flushProTableRequest();
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/authorization/data-scope/objects/organization.company/Company_1',
+      expect.objectContaining({ method: 'PUT', headers: expect.objectContaining({ 'X-NewP-Feature': authorize }) }),
+    );
+  });
+
+  it('does not open a requested company action drawer when object eligibility is denied', async () => {
+    const entry = 'organization.company.entry';
+    const authorize = 'organization.company.action.authorize';
+    const get = vi.fn(async () => ({ normalized: { fields: { EID: 'Company_1', ENAME: '平台公司' }, summaries: {} },
+      value: { fields: { EID: 'Company_1', ENAME: '平台公司' }, summaries: {} } }));
+    mockStandardCrudModule({ ...companyStandardCrudResource,
+      dataAdapter: { ...companyStandardCrudResource.dataAdapter, get } });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 403 }));
+    await renderHost({ 'CompanyListView.Action_Authorize': '对象授权' },
+      companyListViewDocument as unknown as typeof personListViewDocument, '/organization/companies', {
+        modelDocument: { ...companyModelDocument, Company: { ...companyModelDocument.Company,
+          fields: [...companyModelDocument.Company.fields,
+            { name: 'UpdatedAt', uiType: 'datetime', form: { create: { mode: 'hidden' }, edit: { mode: 'hidden' } } }],
+        } } as unknown as typeof personModelDocument,
+        feature: { entry, positions: [entry, authorize], points: [{ key: 'authorize', kind: 'action',
+          position: authorize, parentPosition: entry, actionScope: 'list.rowActions' }] },
+        embedded: createEmbeddedHostEnvironment({
+          presentation: { kind: 'action-drawer', actionKey: 'authorize' },
+          input: { recordId: 'Company_1' },
+          lifecycle: { reportState: vi.fn(), close: vi.fn() },
+        }),
+      });
+    await waitForBodyText('当前操作不可用。');
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/authorization/data-scope/objects/organization.company/Company_1/eligibility',
+      expect.objectContaining({ headers: { 'X-NewP-Feature': authorize } }),
+    );
+    expect(document.body.textContent).not.toContain('目标公司：平台公司');
+  });
+
+  it('cancels pending row eligibility when switching company menus', async () => {
+    const entry = 'organization.company.entry';
+    const authorize = 'organization.company.action.authorize';
+    const list = vi.fn(async () => ({ items: [
+      { id: 'Company_1', EID: 'Company_1', ECODE: 'C1', ENAME: '第一公司', IsEnabled: true, SortOrder: '0100' },
+      { id: 'Company_2', EID: 'Company_2', ECODE: 'C2', ENAME: '第二公司', IsEnabled: true, SortOrder: '0200' },
+    ], total: 2 }));
+    mockStandardCrudModule({ ...companyStandardCrudResource,
+      dataAdapter: { ...companyStandardCrudResource.dataAdapter, list } });
+    let finishFirst: ((response: Response) => void) | undefined;
+    const first = new Promise<Response>(resolve => { finishFirst = resolve; });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async input =>
+      String(input).includes('Company_1') ? first : new Response(null, { status: 403 }));
+    await renderHost({ 'CompanyListView.Action_Authorize': '对象授权' },
+      companyListViewDocument as unknown as typeof personListViewDocument, '/organization/companies', {
+        modelDocument: { ...companyModelDocument, Company: { ...companyModelDocument.Company,
+          fields: [...companyModelDocument.Company.fields,
+            { name: 'UpdatedAt', uiType: 'datetime', form: { create: { mode: 'hidden' }, edit: { mode: 'hidden' } } }],
+        } } as unknown as typeof personModelDocument,
+        feature: { entry, positions: [entry, authorize], points: [{ key: 'authorize', kind: 'action',
+          position: authorize, parentPosition: entry, actionScope: 'list.rowActions' }] },
+      });
+    await flushProTableRequest();
+    const more = () => [...container.querySelectorAll('button')].filter(button => button.textContent?.trim() === '更多');
+    expect(more()).toHaveLength(2);
+    await act(async () => { more()[0]?.click(); });
+    await flushProTableRequest();
+    const firstSignal = (fetchSpy.mock.calls[0]?.[1] as RequestInit | undefined)?.signal;
+    expect(fetchSpy.mock.calls[0]?.[0]).toContain('Company_1');
+    await act(async () => { more()[0]?.click(); });
+    await vi.waitFor(() => expect(firstSignal?.aborted).toBe(true));
+    await act(async () => { more()[1]?.click(); });
+    await flushProTableRequest();
+    expect(fetchSpy.mock.calls[1]?.[0]).toContain('Company_2');
+    await act(async () => { finishFirst?.(new Response(null, { status: 200 })); });
+    expect(document.body.textContent).not.toContain('对象授权');
   });
 
   it.each([

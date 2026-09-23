@@ -8,6 +8,7 @@ import {
   type StandardCrudLookupProvider,
   type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
+import { createOrganizationObjectAuthorizationActions } from './organizationObjectAuthorizationActions';
 import {
   getDepartmentCompanyLookup,
   getDepartmentParentLookup,
@@ -101,4 +102,5 @@ export const departmentStandardCrudResource: StandardCrudResourceRegistration<Re
     departmentParentLookupProvider,
     departmentParentFilterLookupProvider,
   ],
+  ...createOrganizationObjectAuthorizationActions('organization.department', '部门'),
 };

@@ -30,7 +30,7 @@ describe('department standard CRUD resource', () => {
       'organization.department.parents',
       'organization.department.parent-filter',
     ]);
-    expect(departmentStandardCrudResource.actionHandlers).toBeUndefined();
+    expect(departmentStandardCrudResource.actionHandlers?.authorize).toBeTypeOf('function');
     expect(departmentStandardCrudResource.concurrencyRevisionField).toBeUndefined();
   });
 

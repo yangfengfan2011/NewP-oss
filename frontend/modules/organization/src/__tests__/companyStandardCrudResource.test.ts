@@ -8,7 +8,7 @@ describe('company standard CRUD resource', () => {
   it('binds the company list to the standard mutation lifecycle without handlers or revision', () => {
     expect(companyStandardCrudResource.resourceKey).toBe('organization.company');
     expect(companyStandardCrudResource.listViewKey).toBe('organization.company.list');
-    expect(companyStandardCrudResource.actionHandlers).toBeUndefined();
+    expect(companyStandardCrudResource.actionHandlers?.authorize).toBeTypeOf('function');
     expect(companyStandardCrudResource.buildMutationValues).toBeUndefined();
     expect(companyStandardCrudResource.concurrencyRevisionField).toBeUndefined();
   });

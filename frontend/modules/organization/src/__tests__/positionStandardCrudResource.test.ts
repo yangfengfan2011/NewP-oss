@@ -8,7 +8,7 @@ describe('position standard CRUD resource', () => {
   it('binds the metadata list view to the standard mutation lifecycle without handlers or revision', () => {
     expect(positionStandardCrudResource.resourceKey).toBe('organization.position');
     expect(positionStandardCrudResource.listViewKey).toBe('organization.position.list');
-    expect(positionStandardCrudResource.actionHandlers).toBeUndefined();
+    expect(positionStandardCrudResource.actionHandlers?.authorize).toBeTypeOf('function');
     expect(positionStandardCrudResource.buildMutationValues).toBeUndefined();
     expect(positionStandardCrudResource.concurrencyRevisionField).toBeUndefined();
   });

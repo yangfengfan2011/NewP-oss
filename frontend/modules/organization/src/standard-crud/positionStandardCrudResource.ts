@@ -7,6 +7,7 @@ import {
   readStandardCrudString,
   type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
+import { createOrganizationObjectAuthorizationActions } from './organizationObjectAuthorizationActions';
 
 export interface PositionListRow {
   id: string;
@@ -41,4 +42,5 @@ export const positionStandardCrudResource: StandardCrudResourceRegistration<Reco
   dataAdapter: positionStandardCrudDataAdapter,
   listViewKey: 'organization.position.list',
   detailViewKey: 'organization.position.detail',
+  ...createOrganizationObjectAuthorizationActions('organization.position', '岗位'),
 };

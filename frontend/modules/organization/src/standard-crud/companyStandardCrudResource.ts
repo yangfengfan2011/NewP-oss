@@ -6,6 +6,7 @@ import {
   readStandardCrudString,
   type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
+import { createOrganizationObjectAuthorizationActions } from './organizationObjectAuthorizationActions';
 
 export interface CompanyListRow {
   id: string;
@@ -45,4 +46,5 @@ export const companyStandardCrudResource: StandardCrudResourceRegistration<Recor
   dataAdapter: companyStandardCrudDataAdapter,
   listViewKey: 'organization.company.list',
   detailViewKey: 'organization.company.detail',
+  ...createOrganizationObjectAuthorizationActions('organization.company', '公司'),
 };

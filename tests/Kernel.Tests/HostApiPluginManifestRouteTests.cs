@@ -162,6 +162,7 @@ public class HostApiPluginManifestRouteTests : IDisposable
         {
             "audit.change.detail",
             "audit.change.list",
+            "authorization.dataScope",
             "authorization.role.detail",
             "authorization.role.list",
             "authorization.workbench",

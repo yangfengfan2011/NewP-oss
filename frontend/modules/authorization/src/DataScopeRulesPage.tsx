@@ -5,7 +5,7 @@ import { platformFetch, useAuthorization } from '@icp-platform/core';
 import type { PageProps } from '@icp-platform/sdk';
 import { requestRole } from './roleResource';
 import DataScopeSubjectEditor, { type DataScopeSubject, type SubjectType } from './DataScopeSubjectEditor';
-import DataScopeConditionEditor, { type DataScopeBusinessType, type DataScopeCondition, type DataScopeResourceField } from './DataScopeConditionEditor';
+import DataScopeConditionEditor, { describeDataScopeCondition, type DataScopeBusinessType, type DataScopeCondition, type DataScopeResourceField } from './DataScopeConditionEditor';
 
 type Subject = DataScopeSubject;
 interface Rule { id: string; rootId: string; parentId: string | null; name: string; enabled: boolean; resourceKey: string;
@@ -179,8 +179,13 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
         <Card title={selected?.name ?? '选择或新增规则'} style={{ flex: '1 1 460px', minWidth: 0 }}>
           {selected && <Form layout="vertical" disabled={readOnly || saving}>
             <Typography.Text type="secondary">当前节点：{selected.name}</Typography.Text>
-            {ancestors.length > 0 && <div style={{ margin: '12px 0' }}><Typography.Text type="secondary">完整条件还包含祖先：</Typography.Text>
-              <Space wrap>{ancestors.map(node => <Tag key={node.id}>{node.name}{node.enabled ? '' : '（已停用）'}</Tag>)}</Space></div>}
+            {ancestors.length > 0 && <details open style={{ margin: '12px 0', padding: 12, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 6 }}>
+              <summary>完整条件还包含 {ancestors.length} 个祖先条件</summary>
+              <ol style={{ marginBottom: 0, paddingLeft: 24 }}>{ancestors.map(node => <li key={node.id} style={{ marginTop: 8 }}>
+                <Space wrap><Typography.Text strong>{node.name}</Typography.Text>{!node.enabled && <Tag>已停用</Tag>}</Space>
+                <div><Typography.Text type="secondary">{describeDataScopeCondition(node.condition, catalog?.contextValues ?? [], businessTypes)}</Typography.Text></div>
+              </li>)}</ol>
+            </details>}
             <Form.Item label="规则名称"><Input aria-label="规则名称" value={selected.name} onChange={event => edit(node => ({ ...node, name: event.target.value }))} /></Form.Item>
             <Form.Item label="启用规则"><Switch aria-label="启用规则" checked={selected.enabled} onChange={enabled => edit(node => ({ ...node, enabled }))} /></Form.Item>
             <Form.Item label="资源"><Select aria-label="资源" value={draft?.resourceKey} disabled={!!selected.parentId}

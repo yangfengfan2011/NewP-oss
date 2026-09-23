@@ -139,8 +139,9 @@ it('edits nested nodes in one root draft and sends the complete tree on save', a
       reportState={(...value) => { lifecycle = value; }} />));
     await act(async () => (container.querySelector('.ant-tree-title') as HTMLElement).click());
     await act(async () => button('添加子规则').click());
-    expect(container.textContent).toContain('完整条件还包含祖先');
+    expect(container.textContent).toContain('完整条件还包含 1 个祖先条件');
     expect(container.textContent).toContain('父规则');
+    expect(container.textContent).toContain('ENAME 等于 父');
     const childName = container.querySelector('[aria-label="规则名称"]') as HTMLInputElement;
     await act(async () => { childName.value = '例外节点'; childName.dispatchEvent(new Event('input', { bubbles: true })); });
     await act(async () => button('添加主体项').click());
@@ -167,13 +168,19 @@ it('selects the failing child and keeps its condition error inline', async () =>
     resourceKey: 'organization.person', condition: { type: 'group', field: '', operator: 'and', value: null,
       children: [{ type: 'attribute', field: 'ENAME', operator: 'equal', value: '甲' }] }, subjects: [], children: [] };
   const rootRule = { ...child, id: 'tree', parentId: null, name: '根节点',
-    condition: { type: 'attribute', field: 'ENAME', operator: 'equal', value: '根' }, children: [child] };
+    condition: { type: 'group', field: '', operator: 'and', value: null, children: [
+      { type: 'attribute', field: 'EID', operator: 'equal', value: null, contextKey: 'current.person' },
+      { type: 'business', field: '', operator: '', value: null, key: 'organization.person.departmentEnabled' },
+    ] }, children: [child] };
   fetcher.mockImplementation((url: string, init?: RequestInit) => Promise.resolve(init?.method === 'PUT'
     ? new Response(JSON.stringify({ title: '节点 child：条件 1.2：比较值与属性类型不相容。', code: 'DataScope.InvalidConfiguration' }), { status: 400 })
     : new Response(JSON.stringify(url.endsWith('/catalog') ? {
       actions: [{ key: 'read', enabled: true }], features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
+      contextValues: [{ key: 'current.person', title: '当前人员', valueType: 'String' }],
+      businessConditions: [{ key: 'organization.person.departmentEnabled', title: '人员所属部门已启用',
+        modelKeys: ['Organization/Person'], hasReadContribution: false }],
       resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Organization/Person' },
-        fields: [{ name: 'ENAME', type: 'String' }] }],
+        fields: [{ name: 'ENAME', type: 'String' }, { name: 'EID', type: 'String' }] }],
     } : [rootRule]))));
   let lifecycle!: Parameters<PageProps['reportState']>;
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
@@ -186,6 +193,9 @@ it('selects the failing child and keeps its condition error inline', async () =>
     await act(async () => (container.querySelectorAll('.ant-tree-title')[0] as HTMLElement).click());
     await act(async () => { expect(await lifecycle[2]!()).toBe(false); });
     expect(container.textContent).toContain('当前节点：子节点');
+    expect(container.textContent).toContain('EID 等于 当前身份值：当前人员');
+    expect(container.textContent).toContain('人员所属部门已启用（无读取贡献）');
+    expect(container.textContent).toContain('且 AND');
     expect(container.querySelector('[aria-label="条件项 1.2"] .ant-alert')?.textContent).toContain('条件 1.2');
   } finally { await act(async () => root.unmount()); container.remove(); }
 });

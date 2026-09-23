@@ -19,6 +19,33 @@ const orderedOperations = new Set(['greaterThan', 'greaterThanOrEqual', 'lessTha
 const textOperations = new Set(['contains', 'startsWith', 'endsWith']);
 const orderedTypes = new Set(['Int32', 'Int64', 'Decimal', 'Double', 'Single', 'DateOnly', 'DateTime']);
 const numberTypes = new Set(['Int32', 'Int64', 'Decimal', 'Double', 'Single']);
+const fixedValue = (value: unknown): string => {
+  if (value === null) return '空值';
+  if (value === '') return '空文本';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) return value.length ? value.map(fixedValue).join('、') : '空集合';
+  return '已配置值';
+};
+
+/** 只描述既有条件配置；祖先摘要不重复运行裁决或解释服务器事实。 */
+export const describeDataScopeCondition = (condition: DataScopeCondition, contexts: DataScopeContextValue[],
+  businessTypes: DataScopeBusinessType[]): string => {
+  if (condition.type === 'group') {
+    const joined = (condition.children ?? []).map(child => describeDataScopeCondition(child, contexts, businessTypes))
+      .join(condition.operator === 'or' ? ' 或 OR ' : ' 且 AND ');
+    return `（${joined}）`;
+  }
+  if (condition.type === 'business') {
+    const business = businessTypes.find(item => item.key === condition.key);
+    return `${business?.title ?? condition.key ?? '未选业务条件'}${business?.hasReadContribution === false ? '（无读取贡献）' : ''}`;
+  }
+  const operation = operations.find(([key]) => key === condition.operator)?.[1] ?? condition.operator;
+  if (nullOperations.has(condition.operator)) return `${condition.field} ${operation}`;
+  const value = condition.contextKey
+    ? `当前身份值：${contexts.find(item => item.key === condition.contextKey)?.title ?? condition.contextKey}`
+    : fixedValue(condition.value);
+  return `${condition.field} ${operation} ${value}`;
+};
 const attribute = (field = ''): DataScopeCondition => ({ type: 'attribute', field, operator: 'equal', value: '' });
 const group = (operator: 'and' | 'or', child: DataScopeCondition): DataScopeCondition =>
   ({ type: 'group', field: '', operator, value: null, children: [child] });

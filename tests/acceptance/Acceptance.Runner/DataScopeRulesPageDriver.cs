@@ -119,7 +119,7 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
             .GetByText("无读取贡献；完整判断仍生效", new() { Exact = true }).WaitForAsync();
     }
 
-    // rc-select 的零高辅助节点也会包含选项；沿真实列表的键盘活动项选择，避免误点辅助节点。
+    // rc-select 的零高辅助节点也会包含选项；键盘滚动后点击真实列表活动项。
     internal async Task SelectAsync(string label, string option, ILocator? group = null, bool search = false,
         string? searchText = null, Func<Task>? candidatesReady = null)
     {
@@ -147,7 +147,7 @@ internal sealed class DataScopeRulesPageDriver(IPage page)
                 throw new InvalidOperationException($"Select '{label}' has no reachable option '{option}'.");
             await input.PressAsync("ArrowDown");
         }
-        await input.PressAsync("Enter");
+        await active.ClickAsync();
         await Assertions.Expect(selector.Locator(".ant-select-selection-item")).ToContainTextAsync(option);
     }
 }

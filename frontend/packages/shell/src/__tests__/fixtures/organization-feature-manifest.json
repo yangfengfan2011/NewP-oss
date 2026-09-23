@@ -86,6 +86,27 @@
           "container": false
         },
         {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:companies/surface:list.custom/action:authorize",
+          "moduleId": "Organization",
+          "key": "authorize",
+          "kind": "action",
+          "title": "\u5BF9\u8C61\u6388\u6743",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:companies",
+          "behaviorKey": "organization.company.authorize",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:companies"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:companies/surface:list.custom/action:authorize",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.custom",
+          "readBehaviors": [],
+          "container": false
+        },
+        {
           "position": "Organization/navigation:organization/navigation:organization.structure/tab:companies/surface:list.pageActions/action:create",
           "moduleId": "Organization",
           "key": "create",
@@ -103,6 +124,29 @@
           "staticScope": null,
           "staticScopeTitle": null,
           "actionScope": "list.pageActions",
+          "readBehaviors": [
+            "organization.company.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:companies/surface:list.rowActions/action:authorize",
+          "moduleId": "Organization",
+          "key": "authorize",
+          "kind": "action",
+          "title": "\u5BF9\u8C61\u6388\u6743",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:companies",
+          "behaviorKey": "organization.company.authorize",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:companies"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:companies/surface:list.rowActions/action:authorize",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.rowActions",
           "readBehaviors": [
             "organization.company.read"
           ],
@@ -179,6 +223,27 @@
           "container": false
         },
         {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:departments/surface:list.custom/action:authorize",
+          "moduleId": "Organization",
+          "key": "authorize",
+          "kind": "action",
+          "title": "\u5BF9\u8C61\u6388\u6743",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:departments",
+          "behaviorKey": "organization.department.authorize",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:departments"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:departments/surface:list.custom/action:authorize",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.custom",
+          "readBehaviors": [],
+          "container": false
+        },
+        {
           "position": "Organization/navigation:organization/navigation:organization.structure/tab:departments/surface:list.pageActions/action:create",
           "moduleId": "Organization",
           "key": "create",
@@ -199,6 +264,29 @@
           "readBehaviors": [
             "organization.department.company.lookup",
             "organization.department.parent.lookup",
+            "organization.department.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:departments/surface:list.rowActions/action:authorize",
+          "moduleId": "Organization",
+          "key": "authorize",
+          "kind": "action",
+          "title": "\u5BF9\u8C61\u6388\u6743",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:departments",
+          "behaviorKey": "organization.department.authorize",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:departments"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:departments/surface:list.rowActions/action:authorize",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.rowActions",
+          "readBehaviors": [
             "organization.department.read"
           ],
           "container": false
@@ -296,6 +384,29 @@
           "actionScope": "detail.custom",
           "readBehaviors": [
             "organization.person.linkUser.lookup"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:detail.pageActions/action:authorize",
+          "moduleId": "Organization",
+          "key": "authorize",
+          "kind": "action",
+          "title": "\u4EBA\u5458\u5BF9\u8C61\u6388\u6743",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:persons",
+          "behaviorKey": "organization.person.authorize",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:persons"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:persons/surface:detail.pageActions/action:authorize",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "detail.pageActions",
+          "readBehaviors": [
+            "organization.person.read"
           ],
           "container": false
         },
@@ -513,6 +624,27 @@
           "container": false
         },
         {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:positions/surface:list.custom/action:authorize",
+          "moduleId": "Organization",
+          "key": "authorize",
+          "kind": "action",
+          "title": "\u5BF9\u8C61\u6388\u6743",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:positions",
+          "behaviorKey": "organization.position.authorize",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:positions"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:positions/surface:list.custom/action:authorize",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.custom",
+          "readBehaviors": [],
+          "container": false
+        },
+        {
           "position": "Organization/navigation:organization/navigation:organization.structure/tab:positions/surface:list.pageActions/action:create",
           "moduleId": "Organization",
           "key": "create",
@@ -530,6 +662,29 @@
           "staticScope": null,
           "staticScopeTitle": null,
           "actionScope": "list.pageActions",
+          "readBehaviors": [
+            "organization.position.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:positions/surface:list.rowActions/action:authorize",
+          "moduleId": "Organization",
+          "key": "authorize",
+          "kind": "action",
+          "title": "\u5BF9\u8C61\u6388\u6743",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:positions",
+          "behaviorKey": "organization.position.authorize",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:positions"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:positions/surface:list.rowActions/action:authorize",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.rowActions",
           "readBehaviors": [
             "organization.position.read"
           ],
@@ -676,6 +831,28 @@
           "container": false
         },
         {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct/surface:list.custom/action:authorize",
+          "moduleId": "Organization",
+          "key": "authorize",
+          "kind": "action",
+          "title": "\u5BF9\u8C61\u6388\u6743",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct",
+          "behaviorKey": "organization.department.authorize",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:company/tab:direct/surface:list.custom/action:authorize",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.custom",
+          "readBehaviors": [],
+          "container": false
+        },
+        {
           "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct/surface:list.pageActions/action:create",
           "moduleId": "Organization",
           "key": "create",
@@ -697,6 +874,30 @@
           "readBehaviors": [
             "organization.department.company.lookup",
             "organization.department.parent.lookup",
+            "organization.department.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct/surface:list.rowActions/action:authorize",
+          "moduleId": "Organization",
+          "key": "authorize",
+          "kind": "action",
+          "title": "\u5BF9\u8C61\u6388\u6743",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct",
+          "behaviorKey": "organization.department.authorize",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:company/tab:direct/surface:list.rowActions/action:authorize",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.rowActions",
+          "readBehaviors": [
             "organization.department.read"
           ],
           "container": false
@@ -848,6 +1049,28 @@
           "container": false
         },
         {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct/surface:list.custom/action:authorize",
+          "moduleId": "Organization",
+          "key": "authorize",
+          "kind": "action",
+          "title": "\u5BF9\u8C61\u6388\u6743",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct",
+          "behaviorKey": "organization.department.authorize",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:department/tab:direct/surface:list.custom/action:authorize",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.custom",
+          "readBehaviors": [],
+          "container": false
+        },
+        {
           "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct/surface:list.pageActions/action:create",
           "moduleId": "Organization",
           "key": "create",
@@ -869,6 +1092,30 @@
           "readBehaviors": [
             "organization.department.company.lookup",
             "organization.department.parent.lookup",
+            "organization.department.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct/surface:list.rowActions/action:authorize",
+          "moduleId": "Organization",
+          "key": "authorize",
+          "kind": "action",
+          "title": "\u5BF9\u8C61\u6388\u6743",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct",
+          "behaviorKey": "organization.department.authorize",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:department/tab:direct/surface:list.rowActions/action:authorize",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "actionScope": "list.rowActions",
+          "readBehaviors": [
             "organization.department.read"
           ],
           "container": false
@@ -1015,6 +1262,29 @@
           "actionScope": "detail.custom",
           "readBehaviors": [
             "organization.person.linkUser.lookup"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:person/surface:detail.pageActions/action:authorize",
+          "moduleId": "Organization",
+          "key": "authorize",
+          "kind": "action",
+          "title": "\u4EBA\u5458\u5BF9\u8C61\u6388\u6743",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+          "behaviorKey": "organization.person.authorize",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:structure"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:structure/node-type:person/surface:detail.pageActions/action:authorize",
+          "staticScope": "person",
+          "staticScopeTitle": "\u4EBA\u5458",
+          "actionScope": "detail.pageActions",
+          "readBehaviors": [
+            "organization.person.read"
           ],
           "container": false
         },

@@ -145,17 +145,34 @@ public sealed class DataScopePersonMutationSqlServerTests
         var read = http.Organization("persons");
         var create = http.Organization("persons", "create", "list.pageActions");
         var edit = http.Organization("persons", "edit", "detail.pageActions");
+        var delete = http.Organization("persons", "delete", "list.rowActions");
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "PersonSwitchScope", "人员开关范围",
-            "person-switch-scope", "人员开关范围用户", read, create, edit);
+            "person-switch-scope", "人员开关范围用户", read, create, edit, delete);
         actor.Client.Dispose();
         var person = await FeatureHttpTestRequests.CreateAsync(admin, create, "/api/organization/persons",
             new { PersonNo = "WRITE-SWITCH", ENAME = "开关目标", EmploymentStatus = "Active", IsEnabled = true });
         var id = BusinessAuditSqlServerHttpApiTests.Id(person);
+        using var accountResponse = await FeatureHttpTestRequests.SendAsync(admin, http.Identity("create"),
+            HttpMethod.Post, "/api/identity/accounts", new { ECODE = "person-switch-bound", ENAME = "绑定守卫账号" });
+        Assert.Equal(HttpStatusCode.Created, accountResponse.StatusCode);
+        var account = (await accountResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("account");
+        var bound = await FeatureHttpTestRequests.CreateAsync(admin, create, "/api/organization/persons",
+            new { PersonNo = "WRITE-SWITCH-BOUND", ENAME = "绑定守卫人员", EmploymentStatus = "Active", IsEnabled = true });
+        var boundId = BusinessAuditSqlServerHttpApiTests.Id(bound);
+        using (var response = await FeatureHttpTestRequests.SendAsync(admin,
+            http.Organization("persons", "linkUser", "detail.custom"), HttpMethod.Put,
+            $"/api/organization/persons/{boundId}/user-binding", new
+            {
+                accountEid = account.GetProperty("eid").GetString(),
+                expectedRevision = account.GetProperty("revision").GetInt64(),
+                reason = "验证删除守卫"
+            }))
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var save = fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save");
         var rule = new DataScopeRuleDto("PersonSwitchRule", "PersonSwitchRule", null, "开关规则", true,
             "organization.person", new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(id)),
             [new("PersonSwitchSubject", "all", null, 0, new Dictionary<string, string>
-                { ["read"] = "deny", ["edit"] = "deny" })], []);
+                { ["read"] = "deny", ["edit"] = "deny", ["delete"] = "deny" })], []);
         using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonSwitchRule", rule))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
@@ -196,6 +213,31 @@ public sealed class DataScopePersonMutationSqlServerTests
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post,
             "/api/organization/persons", createPayload))
             Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        await fixture.RestartWithActionAsync("delete", false);
+        using (var ordinary = await LoginCurrentAsync())
+        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, delete, HttpMethod.Delete,
+            $"/api/organization/persons/{id}"))
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        await fixture.RestartWithActionAsync("read", false);
+        using (var ordinary = await LoginCurrentAsync())
+        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, delete, HttpMethod.Delete,
+            $"/api/organization/persons/{id}"))
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        await fixture.RestartWithActionsAsync(new Dictionary<string, bool> { ["read"] = false, ["delete"] = false });
+        using (var ordinary = await LoginCurrentAsync())
+        {
+            using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, delete, HttpMethod.Delete,
+                $"/api/organization/persons/{boundId}"))
+            {
+                Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+                var error = await response.Content.ReadFromJsonAsync<JsonElement>();
+                Assert.Equal("Organization.Person.DeleteBlockedByUserBinding", error.GetProperty("code").GetString());
+            }
+            using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, delete, HttpMethod.Delete,
+                $"/api/organization/persons/{id}"))
+                Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        }
 
         async Task<HttpClient> LoginCurrentAsync(string code = "person-switch-scope")
         {

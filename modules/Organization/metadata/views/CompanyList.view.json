@@ -91,6 +91,9 @@
         "variant": "primary"
       }
     ],
+    "featureActions": [
+      { "key": "authorize", "titleKey": "对象授权", "behaviorKey": "organization.company.authorize" }
+    ],
     "rowActions": [
       {
         "key": "edit",

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "DataScopeObjectSubject": {
+    "kind": "Entity",
+    "fields": [
+      { "name": "ResourceKey", "storage": { "type": "string" } },
+      { "name": "ObjectId", "storage": { "type": "string" } },
+      { "name": "SubjectType", "storage": { "type": "string" } },
+      { "name": "SubjectId", "storage": { "type": "string", "nullable": true } },
+      { "name": "IncludeDescendants", "storage": { "type": "bool" } },
+      { "name": "Priority", "storage": { "type": "int" } }
+    ],
+    "indexes": [
+      { "name": "IX_DataScopeObjectSubject_0", "fields": ["ResourceKey", "ObjectId"], "unique": false },
+      { "name": "IX_DataScopeObjectSubject_1", "fields": ["SubjectType", "SubjectId"], "unique": false }
+    ]
+  }
+}

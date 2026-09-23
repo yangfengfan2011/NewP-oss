@@ -20,6 +20,13 @@ public interface IDataScopeReadPlanProvider
     Task<DataScopeReadPlan> GetReadPlanAsync(string resourceKey, CancellationToken cancellationToken = default);
 }
 
+/// <summary>普通对象动作复用读取依赖、规则树和对象覆盖的最终裁决。</summary>
+public interface IDataScopeObjectDecisionProvider
+{
+    /// <summary>按当前可信主体与当前对象事实判断动作；读取拒绝和动作拒绝由调用方区分响应。</summary>
+    Task<bool> IsAllowedAsync(string resourceKey, string objectId, string actionKey, CancellationToken cancellationToken = default);
+}
+
 /// <summary>业务条件的适用 Model 和读取翻译能力由贡献模块明确登记。</summary>
 public sealed record DataScopeBusinessConditionDefinition(string Key, string Title, IReadOnlyList<string> ModelKeys, bool HasReadContribution);
 

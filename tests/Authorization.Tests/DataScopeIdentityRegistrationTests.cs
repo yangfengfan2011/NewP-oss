@@ -50,6 +50,7 @@ public sealed class DataScopeIdentityRegistrationTests
     private sealed class Facts(string account) : IDataScopeIdentityFacts
     {
         public bool Matches(string type, string? id, DataScopeMatchOptions options) => id == account;
+        public IReadOnlyList<DataScopeSubjectMembership> Memberships(string type) => [new(type, account)];
         public string? ContextValue(string key) => account;
     }
 }

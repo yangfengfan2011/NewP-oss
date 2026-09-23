@@ -68,6 +68,9 @@
         "variant": "primary"
       }
     ],
+    "featureActions": [
+      { "key": "authorize", "titleKey": "对象授权", "behaviorKey": "example.record.authorize" }
+    ],
     "rowActions": [
       {
         "key": "edit",

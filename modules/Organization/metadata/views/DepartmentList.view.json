@@ -39,6 +39,9 @@
     "pageActions": [
       { "key": "create", "labelKey": "Action_Create", "standardAction": "create", "variant": "primary" }
     ],
+    "featureActions": [
+      { "key": "authorize", "titleKey": "对象授权", "behaviorKey": "organization.department.authorize" }
+    ],
     "rowActions": [
       { "key": "edit", "labelKey": "Action_Edit", "standardAction": "edit" },
       { "key": "delete", "labelKey": "Action_Delete", "standardAction": "delete", "variant": "danger", "confirmMessageKey": "Action_Delete_Confirm" }

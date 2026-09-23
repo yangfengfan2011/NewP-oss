@@ -109,6 +109,136 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                     b.ToTable("ConfigItem", (string)null);
                 });
 
+            modelBuilder.Entity("DataScopeObjectAction", b =>
+                {
+                    b.Property<string>("EID")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("EID");
+
+                    b.Property<string>("ActionKey")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("ActionKey");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CreatedAt");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("CreatedBy");
+
+                    b.Property<string>("EntryId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("EntryId");
+
+                    b.Property<string>("Opinion")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("Opinion");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("UpdatedAt");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("UpdatedBy");
+
+                    b.HasKey("EID");
+
+                    b.HasIndex("EID")
+                        .IsUnique()
+                        .HasDatabaseName("UX_DataScopeObjectAction_EID");
+
+                    b.HasIndex("EntryId", "ActionKey")
+                        .HasDatabaseName("IX_DataScopeObjectAction_0");
+
+                    b.ToTable("DataScopeObjectAction", (string)null);
+                });
+
+            modelBuilder.Entity("DataScopeObjectSubject", b =>
+                {
+                    b.Property<string>("EID")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("EID");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CreatedAt");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("CreatedBy");
+
+                    b.Property<bool>("IncludeDescendants")
+                        .HasColumnType("bit")
+                        .HasColumnName("IncludeDescendants");
+
+                    b.Property<string>("ObjectId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("ObjectId");
+
+                    b.Property<long>("Priority")
+                        .HasColumnType("bigint")
+                        .HasColumnName("Priority");
+
+                    b.Property<string>("ResourceKey")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("ResourceKey");
+
+                    b.Property<string>("SubjectId")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("SubjectId");
+
+                    b.Property<string>("SubjectType")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("SubjectType");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("UpdatedAt");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("UpdatedBy");
+
+                    b.HasKey("EID");
+
+                    b.HasIndex("EID")
+                        .IsUnique()
+                        .HasDatabaseName("UX_DataScopeObjectSubject_EID");
+
+                    b.HasIndex("ResourceKey", "ObjectId")
+                        .HasDatabaseName("IX_DataScopeObjectSubject_0");
+
+                    b.HasIndex("SubjectType", "SubjectId")
+                        .HasDatabaseName("IX_DataScopeObjectSubject_1");
+
+                    b.ToTable("DataScopeObjectSubject", (string)null);
+                });
+
             modelBuilder.Entity("DataScopeRuleNode", b =>
                 {
                     b.Property<string>("EID")

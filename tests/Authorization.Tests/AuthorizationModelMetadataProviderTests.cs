@@ -72,6 +72,21 @@ public class AuthorizationModelMetadataProviderTests
                 Assert.Empty(subject.ForeignKeys);
                 validator.Validate(subject);
             },
+            objectSubject =>
+            {
+                Assert.Equal("DataScopeObjectSubject", objectSubject.Name);
+                Assert.Contains(objectSubject.Fields, field => field.Name == "ResourceKey");
+                Assert.Contains(objectSubject.Fields, field => field.Name == "ObjectId");
+                Assert.Contains(objectSubject.Indexes, index => index.Fields.SequenceEqual(new[] { "ResourceKey", "ObjectId" }));
+                validator.Validate(objectSubject);
+            },
+            objectAction =>
+            {
+                Assert.Equal("DataScopeObjectAction", objectAction.Name);
+                Assert.Contains(objectAction.Fields, field => field.Name == "ActionKey");
+                Assert.Contains(objectAction.Indexes, index => index.Fields.SequenceEqual(new[] { "EntryId", "ActionKey" }));
+                validator.Validate(objectAction);
+            },
             point =>
             {
                 Assert.Equal("FunctionPoint", point.Name);

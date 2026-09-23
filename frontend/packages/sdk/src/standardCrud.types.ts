@@ -202,6 +202,8 @@ export interface StandardCrudActionDefinition {
   standardAction?: 'create' | 'view' | 'edit' | 'refresh' | 'delete' | 'disable' | 'enable' | 'submit';
   confirmMessage?: string;
   confirmMessageKey?: string;
+  confirmLabel?: string;
+  confirmLabelKey?: string;
   /** 快捷跳转使用目标导航资格，不声明独立业务动作。 */
   navigationTargetKey?: string;
   handlerKey?: string;
@@ -228,6 +230,12 @@ export type StandardCrudActionStateResolver<TDetail = unknown, TRow = unknown> =
   context: Pick<StandardCrudActionContext<TDetail, TRow>, 'detail' | 'row'> & { action: StandardCrudActionDefinition },
 ) => StandardCrudActionState;
 
+/** 异步对象资格由资源 owner 按正式功能位置读取；明确拒绝可隐藏动作，依赖故障必须传播。 */
+export type StandardCrudActionEligibilityResolver<TDetail = unknown, TRow = unknown> = (
+  context: Pick<StandardCrudActionContext<TDetail, TRow>, 'id' | 'detail' | 'row'> &
+    { action: StandardCrudActionDefinition; featurePosition: string; signal: AbortSignal },
+) => Promise<StandardCrudActionState>;
+
 /** 模块动作输入渲染上下文；值由 Shell 持有，模块只渲染业务输入并报告变化。 */
 export interface StandardCrudActionInputRenderContext extends StandardCrudFeatureRequestContext {
   action: StandardCrudActionDefinition;
@@ -235,6 +243,8 @@ export interface StandardCrudActionInputRenderContext extends StandardCrudFeatur
   onChange: (value: unknown) => void;
   detail?: unknown;
   row?: unknown;
+  /** 共享弹窗据此保护未保存草稿并阻止尚未加载的输入提交。 */
+  onDraftStateChange?: (state: { dirty: boolean; ready: boolean }) => void;
 }
 
 /** 模块动作输入渲染器；弹层、权限、pending、错误、刷新和关闭生命周期仍归 Shell。 */
@@ -321,6 +331,7 @@ export interface StandardCrudResourceRegistration<
   enumOptions?: Record<string, StandardCrudOption[]>;
   actionHandlers?: Record<string, StandardCrudActionHandler<TDetail, TRow>>;
   actionStateResolver?: StandardCrudActionStateResolver<TDetail, TRow>;
+  actionEligibilityResolvers?: Partial<Record<string, StandardCrudActionEligibilityResolver<TDetail, TRow>>>;
   actionInputRenderers?: Record<string, StandardCrudActionInputRenderer>;
   detailFieldRenderers?: Record<string, StandardCrudDetailFieldRenderer>;
   summaryRenderers?: Record<string, StandardCrudSummaryRenderer>;

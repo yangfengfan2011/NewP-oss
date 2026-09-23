@@ -35,6 +35,9 @@ public sealed class IdentityDataScopeIdentities(EfPlatformDbContext db) : IDataS
         /// <inheritdoc/>
         public bool Matches(string type, string? id, DataScopeMatchOptions options) => type == "user" && id == accountId;
         /// <inheritdoc/>
+        public IReadOnlyList<DataScopeSubjectMembership> Memberships(string type) =>
+            type == "user" ? [new(type, accountId)] : [];
+        /// <inheritdoc/>
         public string? ContextValue(string key) => key == "current.account" ? accountId : throw new InvalidOperationException("DATA_SCOPE_CONTEXT_UNKNOWN");
     }
 }

@@ -40,6 +40,9 @@ public sealed class AuthorizationDataScopeIdentities(EfPlatformDbContext db) : I
         /// <inheritdoc/>
         public bool Matches(string type, string? id, DataScopeMatchOptions options) => type == "role" && id is not null && roles.Contains(id);
         /// <inheritdoc/>
+        public IReadOnlyList<DataScopeSubjectMembership> Memberships(string type) =>
+            type == "role" ? roles.Select(id => new DataScopeSubjectMembership(type, id)).ToArray() : [];
+        /// <inheritdoc/>
         public string? ContextValue(string key) => throw new InvalidOperationException("DATA_SCOPE_CONTEXT_UNKNOWN");
     }
 }
@@ -56,6 +59,9 @@ public sealed class AllAuthenticatedDataScopeIdentities : IDataScopeIdentityProv
         Task.FromResult(new DataScopeSubjectPage([], false, []));
     /// <inheritdoc/>
     public bool Matches(string type, string? id, DataScopeMatchOptions options) => type == "all";
+    /// <inheritdoc/>
+    public IReadOnlyList<DataScopeSubjectMembership> Memberships(string type) =>
+        type == "all" ? [new(type, null)] : [];
     /// <inheritdoc/>
     public string? ContextValue(string key) => throw new InvalidOperationException("DATA_SCOPE_CONTEXT_UNKNOWN");
 }

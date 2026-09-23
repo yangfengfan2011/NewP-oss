@@ -74,6 +74,13 @@
         "standardAction": "edit"
       },
       {
+        "key": "authorize",
+        "labelKey": "Action_Authorize",
+        "handlerKey": "authorize",
+        "inputKey": "objectAuthorization",
+        "confirmLabelKey": "Action_SaveAuthorization"
+      },
+      {
         "key": "disable",
         "labelKey": "Action_Disable",
         "standardAction": "disable",

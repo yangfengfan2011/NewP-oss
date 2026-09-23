@@ -123,6 +123,7 @@ export type {
   StandardCrudActionInputRenderContext,
   StandardCrudActionState,
   StandardCrudActionStateResolver,
+  StandardCrudActionEligibilityResolver,
   StandardCrudDetail,
   StandardCrudDetailReadContext,
   StandardCrudFeatureRequestContext,

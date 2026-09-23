@@ -62,8 +62,8 @@ public sealed class DataScopeCatalog(IStandardCrudResourceRegistry resources, Ca
             foreach (var subject in node.Subjects)
             {
                 if (string.IsNullOrWhiteSpace(subject.Id) || subject.Id.Length > 128 || !subjectIds.Add(subject.Id)
-                    || subject.Actions is null || subject.Actions.Any(action => action.Key != "read"
-                        || !Actions.Any(defined => defined.Key == action.Key) || action.Value is not ("allow" or "deny" or "unset")))
+                    || subject.Actions is null || subject.Actions.Any(action =>
+                        !Actions.Any(defined => defined.Key == action.Key) || action.Value is not ("allow" or "deny" or "unset")))
                     throw new RolePermissionValidationException("主体授权项身份或读取三态无效。");
                 identities.Validate(subject.Type, subject.SubjectId, subject.MatchOptions);
             }

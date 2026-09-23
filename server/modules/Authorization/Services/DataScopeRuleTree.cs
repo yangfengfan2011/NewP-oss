@@ -6,6 +6,31 @@ namespace ICP.Platform.Modules.Authorization.Services;
 /// <summary>编译规则层级的明确拒绝范围；同层分支独立投票，后代只遮蔽自己的祖先。</summary>
 internal static class DataScopeRuleTree
 {
+    // 单对象动作使用与 SQL 读取树相同的路径遮蔽和独立分支拒绝语义。
+    internal static async Task<bool> IsDeniedAsync(IEnumerable<DataScopeRuleDto> roots,
+        Func<DataScopeRuleDto, Task<bool>> condition, Func<DataScopeRuleDto, string?> opinion)
+    {
+        foreach (var root in roots)
+            if ((await DecideAsync(root)).Denied) return true;
+        return false;
+
+        // 后代只有在自己有明确意见时才占用祖先意见，其他根和兄弟仍可拒绝。
+        async Task<(bool Occupied, bool Denied)> DecideAsync(DataScopeRuleDto node)
+        {
+            if (!node.Enabled || !await condition(node)) return (false, false);
+            var occupied = false;
+            var denied = false;
+            foreach (var child in node.Children)
+            {
+                var result = await DecideAsync(child);
+                occupied |= result.Occupied;
+                denied |= result.Denied;
+            }
+            var vote = opinion(node);
+            return (occupied || vote is not null, denied || !occupied && vote == "deny");
+        }
+    }
+
     // 只返回明确拒绝的范围；无意见时由调用方保持默认允许。
     internal static Expression? BuildDenied(IEnumerable<DataScopeRuleDto> roots,
         Func<DataScopeRuleDto, Expression?> condition, Func<DataScopeRuleDto, string?> opinion)

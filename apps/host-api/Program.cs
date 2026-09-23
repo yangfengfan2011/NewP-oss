@@ -270,7 +270,8 @@ if (app.Services.GetService<IStandardCrudResourceRegistry>() is not null)
 
 var registry = app.Services.GetRequiredService<ModuleRegistry>();
 var featureCatalog = activationSession.ModulePlan.FeatureCatalog;
-FeatureEndpointBindings.Validate(((IEndpointRouteBuilder)app).DataSources, featureCatalog);
+FeatureEndpointBindings.Validate(((IEndpointRouteBuilder)app).DataSources, featureCatalog,
+    app.Services.GetRequiredService<IStandardCrudResourceRegistry>());
 EndpointAccessPlanCompiler.Compile(
     ((IEndpointRouteBuilder)app).DataSources);
 

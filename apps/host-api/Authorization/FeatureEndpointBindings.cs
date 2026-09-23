@@ -1,5 +1,6 @@
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Kernel.ModulePlanning;
+using ICP.Platform.Crud.Abstractions;
 using Microsoft.AspNetCore.Routing;
 namespace ICP.Platform.HostApi.Authorization;
 
@@ -7,13 +8,32 @@ namespace ICP.Platform.HostApi.Authorization;
 public static class FeatureEndpointBindings
 {
     /// <summary>每个声明必须有本模块执行端，每个执行端必须对应活动声明。</summary>
-    public static void Validate(IEnumerable<EndpointDataSource> sources, IReadOnlyList<FeaturePoint> points)
+    public static void Validate(IEnumerable<EndpointDataSource> sources, IReadOnlyList<FeaturePoint> points,
+        IStandardCrudResourceRegistry? resources = null)
     {
         var reads = points.SelectMany(point => point.ReadBehaviors.Select(behavior => (point.ModuleId, BehaviorKey: behavior))).ToHashSet();
         var declared = points.Where(point => !point.Container).Select(point => (point.ModuleId, point.BehaviorKey)).Concat(reads).ToHashSet();
         var consumed = new HashSet<(string ModuleId, string BehaviorKey)>();
         foreach (var endpoint in sources.SelectMany(source => source.Endpoints))
         {
+            var dynamic = endpoint.Metadata.GetOrderedMetadata<ResourceFeatureBindingAttribute>();
+            if (dynamic.Count > 0)
+            {
+                if (dynamic.Count != 1 || resources is null || endpoint is not RouteEndpoint route
+                    || route.RoutePattern.RawText is not { } path || !path.Contains("{resourceKey}", StringComparison.Ordinal)
+                    || !path.Contains("{objectId}", StringComparison.Ordinal)
+                    || endpoint.Metadata.GetOrderedMetadata<AuthenticatedOnlyAttribute>().Count != 1
+                    || endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>().Count != 0)
+                    throw new InvalidOperationException("通用资源功能执行端缺少规范路由、认证或资源目录。");
+                foreach (var resource in resources.GetAll())
+                {
+                    var binding = (resource.ModuleId, BehaviorKey: resource.ResourceKey + "." + dynamic[0].ActionKey);
+                    if (!declared.Contains(binding))
+                        throw new InvalidOperationException($"资源 {resource.ResourceKey} 缺少对应授权功能声明。");
+                    consumed.Add(binding);
+                }
+                continue;
+            }
             var bindings = endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>();
             if (bindings.Count == 0) continue;
             var owners = endpoint.Metadata.GetOrderedMetadata<EndpointModuleAttribute>();

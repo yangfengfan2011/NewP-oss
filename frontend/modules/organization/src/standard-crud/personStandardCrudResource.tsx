@@ -8,6 +8,7 @@ import {
   type StandardCrudSummaryBlock,
 } from '@icp-platform/sdk';
 import { lazy, Suspense } from 'react';
+import message from 'antd/es/message';
 import {
   deletePerson,
   employmentStatusOptions,
@@ -33,6 +34,9 @@ const LazyPersonUserBindingSummary = lazy(async () => {
   const module = await import('./personStandardCrudRenderers');
   return { default: module.PersonUserBindingSummary };
 });
+const LazyPersonObjectAuthorizationInput = lazy(async () => ({
+  default: (await import('../components/PersonObjectAuthorizationInput')).default,
+}));
 
 export const organizationCompanyLookupProvider: StandardCrudLookupProvider = {
   key: 'organization.companies',
@@ -133,13 +137,39 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Record
   },
   summaryRenderers: personSummaryRenderers,
   actionInputRenderers: {
+    objectAuthorization: context => (
+      <Suspense fallback={null}><LazyPersonObjectAuthorizationInput {...context} /></Suspense>
+    ),
     disableReason: ({ value, onChange }) => (
       <Suspense fallback={null}>
         <LazyDisableReasonInput value={value} onChange={onChange} />
       </Suspense>
     ),
   },
+  actionEligibilityResolvers: {
+    authorize: async ({ id, featurePosition, signal }) => {
+      if (!id) return { visible: false, available: false };
+      const response = await platformFetch(
+        `/api/authorization/data-scope/objects/organization.person/${encodeURIComponent(id)}/eligibility`,
+        { headers: { 'X-NewP-Feature': featurePosition }, signal },
+      );
+      if (response.status === 403 || response.status === 404) return { visible: false, available: false };
+      if (!response.ok) throw new Error('对象授权资格读取失败。');
+      return { visible: true, available: true };
+    },
+  },
   actionHandlers: {
+    authorize: async ({ id, input, featurePosition }) => {
+      if (!id || !featurePosition || !input || typeof input !== 'object') throw new Error('对象授权尚未加载，无法保存。');
+      const response = await platformFetch(`/api/authorization/data-scope/objects/organization.person/${encodeURIComponent(id)}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-NewP-Feature': featurePosition },
+        body: JSON.stringify(input),
+      });
+      if (!response.ok) throw new Error(response.status === 403 ? '当前没有对象授权资格。'
+        : response.status === 404 ? '人员已不存在或不可读取。' : '保存对象授权失败。');
+      void message.success('授权已保存；后续访问按新配置判定。');
+      return undefined;
+    },
     delete: async ({ id, featurePosition }) => {
       if (!id) {
         throw new Error('缺少人员标识，无法删除。');

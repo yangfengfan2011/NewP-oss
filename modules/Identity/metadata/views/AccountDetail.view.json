@@ -96,6 +96,9 @@
           "reasonKey": "Action_DependencyUnavailable"
         }
       }
+    ],
+    "featureActions": [
+      { "key": "authorize", "titleKey": "对象授权", "behaviorKey": "identity.account.authorize" }
     ]
   }
 }

@@ -44,6 +44,7 @@ export interface StandardCrudRuntimeActionSchema {
   standardAction?: StandardCrudActionDefinition['standardAction'];
   variant?: StandardCrudActionDefinition['variant'];
   confirmMessageKey?: string;
+  confirmLabelKey?: string;
   navigationTargetKey?: string;
   handlerKey?: string;
   inputKey?: string;
@@ -176,6 +177,7 @@ function readAction(value: MetadataRecord): StandardCrudRuntimeActionSchema {
   const standardAction = readString(value.standardAction);
   const variant = readString(value.variant);
   const confirmMessageKey = readString(value.confirmMessageKey);
+  const confirmLabelKey = readString(value.confirmLabelKey);
   const handlerKey = readString(value.handlerKey);
   const inputKey = readString(value.inputKey);
   const visibleWhen = Object.prototype.hasOwnProperty.call(value, 'visibleWhen')
@@ -200,6 +202,7 @@ function readAction(value: MetadataRecord): StandardCrudRuntimeActionSchema {
     ...(standardAction.length > 0 ? { standardAction: standardAction as StandardCrudRuntimeActionSchema['standardAction'] } : {}),
     ...(variant.length > 0 ? { variant: variant as StandardCrudRuntimeActionSchema['variant'] } : {}),
     ...(confirmMessageKey.length > 0 ? { confirmMessageKey } : {}),
+    ...(confirmLabelKey.length > 0 ? { confirmLabelKey } : {}),
     ...(handlerKey.length > 0 ? { handlerKey } : {}),
     ...(readString(value.navigationTargetKey) ? { navigationTargetKey: readString(value.navigationTargetKey) } : {}),
     ...(inputKey.length > 0 ? { inputKey } : {}),

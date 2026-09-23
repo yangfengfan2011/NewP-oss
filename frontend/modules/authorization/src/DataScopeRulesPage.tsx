@@ -205,7 +205,7 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
             <Typography.Title level={5}>主体授权项</Typography.Title>
             <Tag>{catalog?.actions.find(action => action.key === 'read')?.enabled ? '读取目录已启用' : '读取目录已停用'}</Tag>
             {selected.subjects.map((subject, index) => <DataScopeSubjectEditor key={subject.id} subject={subject} index={index}
-              types={catalog?.subjectTypes ?? [{ key: 'all', title: '所有已认证用户', requiresId: false }]} read={read}
+              types={catalog?.subjectTypes ?? [{ key: 'all', title: '所有已认证用户', requiresId: false }]} actions={catalog?.actions} read={read}
               onChange={change => edit(node => ({ ...node, subjects: node.subjects.map(item => item.id === subject.id ? { ...item, ...change } : item) }))}
               onRemove={() => edit(node => ({ ...node, subjects: node.subjects.filter(item => item.id !== subject.id) }))} />)}
             <Button style={{ marginBottom: 16 }} onClick={() => edit(node => ({ ...node, subjects: [...node.subjects,

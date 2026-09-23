@@ -94,6 +94,14 @@
       "zhs": "编辑",
       "en": "Edit"
     },
+    "Action_Authorize": {
+      "zhs": "人员对象授权",
+      "en": "Person access"
+    },
+    "Action_SaveAuthorization": {
+      "zhs": "保存授权",
+      "en": "Save access"
+    },
     "Action_Disable": {
       "zhs": "停用",
       "en": "Disable"

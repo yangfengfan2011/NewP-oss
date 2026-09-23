@@ -37,24 +37,40 @@ public sealed class DataScopeSqlCostTests(ITestOutputHelper output)
         using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/Scope_Cost", rule))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         var created = 0;
+        string? objectAllowed = null;
         foreach (var size in new[] { 32, 128 })
         {
             for (; created < size; created++)
-                await FeatureHttpTestRequests.CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons",
+            {
+                var person = await FeatureHttpTestRequests.CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons",
                     new { PersonNo = "SCOPE-COST-" + created, ENAME = created % 2 == 0 ? "Blocked" : "Visible", EmploymentStatus = "Active", IsEnabled = true });
+                if (created == 2) objectAllowed = BusinessAuditSqlServerHttpApiTests.Id(person);
+            }
+            if (size == 32)
+            {
+                var manage = fixture.FeatureCatalog.First(point => point.BehaviorKey == "organization.person.authorize");
+                var config = new DataScopeObjectDto("organization.person", objectAllowed!,
+                    [new("Scope_Cost_Object", "all", null, 1, new Dictionary<string, string> { ["read"] = "allow" })]);
+                using var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put,
+                    $"/api/authorization/data-scope/objects/organization.person/{objectAllowed}", config);
+                Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+            }
             commands.Captured.Clear(); commands.Enabled = true;
             var watch = Stopwatch.StartNew();
             JsonElement result;
             try { result = await FeatureHttpTestRequests.ReadAsync(ordinary, read, "/api/organization/persons?page=2&pageSize=7"); }
             finally { commands.Enabled = false; }
             watch.Stop();
-            Assert.Equal(size / 2 + 2, result.GetProperty("total").GetInt32());
+            Assert.Equal(size / 2 + 3, result.GetProperty("total").GetInt32());
             Assert.Equal(7, result.GetProperty("items").GetArrayLength());
             Assert.DoesNotContain(result.GetProperty("items").EnumerateArray(), row => row.GetProperty("ENAME").GetString() == "Blocked"
-                && row.GetProperty("PersonNo").GetString() != "SCOPE-COST-0");
+                && row.GetProperty("PersonNo").GetString() is not ("SCOPE-COST-0" or "SCOPE-COST-2"));
             var queries = commands.Captured.Where(command => command.Sql.Contains("[Person]", StringComparison.Ordinal)).ToArray();
             Assert.Equal(2, queries.Length);
-            Assert.All(queries, command => { Assert.Contains("[ENAME]", command.Sql); Assert.Contains("[PersonNo]", command.Sql); });
+            Assert.All(queries, command => {
+                Assert.Contains("[ENAME]", command.Sql); Assert.Contains("[PersonNo]", command.Sql);
+                Assert.Contains("[DataScopeObjectSubject]", command.Sql); Assert.Contains("[DataScopeObjectAction]", command.Sql);
+            });
             Assert.Single(queries, command => command.Sql.Contains("OFFSET", StringComparison.Ordinal));
             using var scope = fixture.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
@@ -69,6 +85,8 @@ public sealed class DataScopeSqlCostTests(ITestOutputHelper output)
                 applicationPersonRows = 7,
                 applicableRuleRows = 2,
                 applicableSubjectRows = 2,
+                objectSubjectRows = 1,
+                objectActionRows = 1,
                 plans
             }));
         }

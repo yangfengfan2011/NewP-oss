@@ -103,6 +103,16 @@ public sealed class OrganizationDataScopeIdentities(IOrganizationQuery organizat
             _ => false
         };
         /// <inheritdoc/>
+        public IReadOnlyList<DataScopeSubjectMembership> Memberships(string type) => type switch
+        {
+            "company" when Id(organization?.Company) is { } company => [new(type, company)],
+            "department" => (Id(organization?.Department) is { } department
+                ? new[] { new DataScopeSubjectMembership(type, department) }
+                : []).Concat(organization?.Ancestors.Select(row => new DataScopeSubjectMembership(type, Id(row), true))
+                    ?? []).Where(item => item.Id is not null).ToArray(),
+            _ => []
+        };
+        /// <inheritdoc/>
         public string? ContextValue(string key) => key switch
         {
             "current.person" => Id(organization?.Person), "current.company" => Id(organization?.Company), "current.department" => Id(organization?.Department),

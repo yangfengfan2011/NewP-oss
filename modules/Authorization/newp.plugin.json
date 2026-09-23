@@ -29,7 +29,9 @@
       "metadata/models/RolePermission.model.json",
       "metadata/models/UserRole.model.json",
       "metadata/models/DataScopeRuleNode.model.json",
-      "metadata/models/DataScopeRuleSubject.model.json"
+      "metadata/models/DataScopeRuleSubject.model.json",
+      "metadata/models/DataScopeObjectSubject.model.json",
+      "metadata/models/DataScopeObjectAction.model.json"
     ]
   },
   "schemaVersion": "1.0",
@@ -70,6 +72,30 @@
       "title": "读取",
       "behaviorKey": "data.read",
       "requiresRead": false
+    },
+    {
+      "key": "create",
+      "title": "新建",
+      "behaviorKey": "data.create",
+      "requiresRead": false
+    },
+    {
+      "key": "edit",
+      "title": "编辑",
+      "behaviorKey": "data.edit",
+      "requiresRead": true
+    },
+    {
+      "key": "delete",
+      "title": "删除",
+      "behaviorKey": "data.delete",
+      "requiresRead": true
+    },
+    {
+      "key": "authorize",
+      "title": "授权",
+      "behaviorKey": "data.authorize",
+      "requiresRead": true
     }
   ]
 }

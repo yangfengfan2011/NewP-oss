@@ -145,7 +145,27 @@ public sealed class DataScopeTreeSqlServerTests
         };
         await SaveAsync(conflicting);
         await StatusAsync(allowedId, HttpStatusCode.NotFound);
+        var manage = fixture.FeatureCatalog.First(point => point.BehaviorKey == "organization.person.authorize");
+        var objectEndpoint = $"/api/authorization/data-scope/objects/organization.person/{allowedId}";
+        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, objectEndpoint,
+            new DataScopeObjectDto("organization.person", allowedId,
+                [new("Tree_Object", "all", null, 0, new Dictionary<string, string> { ["read"] = "allow" })])))
+            Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        await StatusAsync(allowedId, HttpStatusCode.OK);
+        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, objectEndpoint,
+            new DataScopeObjectDto("organization.person", allowedId, [])))
+            Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        await StatusAsync(allowedId, HttpStatusCode.NotFound);
         await SaveAsync(conflicting with { Children = [root.Children[0], root.Children[1]] });
+        await StatusAsync(allowedId, HttpStatusCode.OK);
+        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, objectEndpoint,
+            new DataScopeObjectDto("organization.person", allowedId,
+                [new("Tree_Object", "all", null, 0, new Dictionary<string, string> { ["read"] = "deny" })])))
+            Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        await StatusAsync(allowedId, HttpStatusCode.NotFound);
+        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, objectEndpoint,
+            new DataScopeObjectDto("organization.person", allowedId, [])))
+            Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         await StatusAsync(allowedId, HttpStatusCode.OK);
 
         var independent = root with

@@ -1,10 +1,13 @@
 import { useState, type ReactElement } from 'react';
+import { usePlatformQuery } from '@icp-platform/core';
 import { Button } from '@icp-platform/ui/core';
 import { CrudDangerAction } from '@icp-platform/ui/crud-detail';
 import type {
   StandardCrudActionContext,
   StandardCrudActionDefinition,
   StandardCrudActionHandler,
+  StandardCrudActionEligibilityResolver,
+  StandardCrudActionState,
   StandardCrudActionInputRenderer,
   StandardCrudActionStateResolver,
   StandardCrudOperationResult,
@@ -19,6 +22,7 @@ export interface StandardCrudActionsProps<TDetail = unknown, TRow = unknown> {
   handlers?: Record<string, StandardCrudActionHandler<TDetail, TRow>>;
   actionInputs?: Record<string, StandardCrudActionInputRenderer>;
   actionStateResolver?: StandardCrudActionStateResolver<TDetail, TRow>;
+  actionEligibilityResolvers?: Partial<Record<string, StandardCrudActionEligibilityResolver<TDetail, TRow>>>;
   onResult?: (result: StandardCrudOperationResult) => void;
   resourceKey?: string;
   onCommitted?: (change: import("@icp-platform/sdk").ResourceChange) => Promise<void>;
@@ -46,12 +50,14 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
   handlers = {},
   actionInputs = {},
   actionStateResolver,
+  actionEligibilityResolvers = {},
   onResult, resourceKey, onCommitted,
   refresh,
   context,
 }: StandardCrudActionsProps<TDetail, TRow>): ReactElement {
   const [inputAction, setInputAction] = useState<StandardCrudActionDefinition | null>(null);
   const [inputValue, setInputValue] = useState<unknown>(undefined);
+  const [eligibilityEpoch, setEligibilityEpoch] = useState(0);
   const actionExecution = useStandardCrudActionExecution<TDetail, TRow>({ refresh, onResult, resourceKey, onCommitted });
   const resolvedActions = actions.map((action) => {
     const state = actionStateResolver?.({ action, detail: context.detail, row: context.row });
@@ -90,6 +96,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
     if (outcome.status === 'failed' && outcome.conflict) {
       setInputAction(null);
     }
+    if (outcome.status !== 'ignored') setEligibilityEpoch(current => current + 1);
     return outcome.status === 'succeeded';
   }
 
@@ -105,47 +112,53 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
     void runAction(action, action.featureResolution);
   }
 
+  function renderAction(action: typeof resolvedActions[number]) {
+    const isDangerAction = action.variant === 'danger' || action.standardAction === 'delete';
+    const hasActionInput = Boolean(action.inputKey && actionInputs[action.inputKey]);
+    const disabled = actionExecution.pendingKey !== null || !resolveActionHandler(action, handlers) || action.runtimeDisabled === true;
+
+    if (isDangerAction && action.confirmMessage && !hasActionInput) {
+      return (
+        <div key={action.key} data-action-key={action.key}>
+          <CrudDangerAction
+            confirmMessage={action.confirmMessage}
+            loading={actionExecution.pendingKey === action.key}
+            disabled={disabled}
+            onConfirm={() => requestAction(action)}
+          >
+            {actionExecution.pendingKey === action.key ? '处理中...' : action.labelKey}
+          </CrudDangerAction>
+          {action.runtimeDisabled && action.disabledReason ? (
+            <span role="status" data-action-disabled-reason={action.key}>{action.disabledReason}</span>
+          ) : null}
+        </div>
+      );
+    }
+
+    return (
+      <div key={action.key} data-action-key={action.key}>
+        <Button size="sm" variant={action.variant} disabled={disabled} onClick={() => requestAction(action)}>
+          {actionExecution.pendingKey === action.key ? '处理中...' : action.labelKey}
+        </Button>
+        {action.runtimeDisabled && action.disabledReason ? (
+          <span role="status" data-action-disabled-reason={action.key}>{action.disabledReason}</span>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'grid', gap: 6 }}>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         {visibleActions.map((action) => {
-          const isDangerAction = action.variant === 'danger' || action.standardAction === 'delete';
-          const hasActionInput = Boolean(action.inputKey && actionInputs[action.inputKey]);
-          const disabled = actionExecution.pendingKey !== null || !resolveActionHandler(action, handlers) || action.runtimeDisabled === true;
-
-          if (isDangerAction && action.confirmMessage && !hasActionInput) {
-            return (
-              <div key={action.key} data-action-key={action.key}>
-                <CrudDangerAction
-                  confirmMessage={action.confirmMessage}
-                  loading={actionExecution.pendingKey === action.key}
-                  disabled={disabled}
-                  onConfirm={() => requestAction(action)}
-                >
-                  {actionExecution.pendingKey === action.key ? '处理中...' : action.labelKey}
-                </CrudDangerAction>
-                {action.runtimeDisabled && action.disabledReason ? (
-                  <span role="status" data-action-disabled-reason={action.key}>{action.disabledReason}</span>
-                ) : null}
-              </div>
-            );
-          }
-
-          return (
-            <div key={action.key} data-action-key={action.key}>
-              <Button
-                size="sm"
-                variant={action.variant}
-                disabled={disabled}
-                onClick={() => requestAction(action)}
-              >
-                {actionExecution.pendingKey === action.key ? '处理中...' : action.labelKey}
-              </Button>
-              {action.runtimeDisabled && action.disabledReason ? (
-                <span role="status" data-action-disabled-reason={action.key}>{action.disabledReason}</span>
-              ) : null}
-            </div>
-          );
+          const resolver = actionEligibilityResolvers[action.key];
+          const position = resolvedFeaturePosition(action.featureResolution);
+          return resolver && position ? <QualifiedAction key={action.key} action={action} context={context}
+            featurePosition={position} resourceKey={resourceKey} epoch={eligibilityEpoch} resolver={resolver}>
+            {state => state.visible ? renderAction({ ...action,
+              runtimeDisabled: action.runtimeDisabled || !state.available,
+              disabledReason: state.reason ?? action.disabledReason }) : null}
+          </QualifiedAction> : renderAction(action);
         })}
       </div>
       {actionExecution.synchronizationError && <span role="alert">{actionExecution.synchronizationError}</span>}
@@ -178,4 +191,24 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
       ) : null}
     </div>
   );
+}
+
+/** 异步对象资格只影响已获得功能位置的单个动作，故障显示明确状态而不放行按钮。 */
+function QualifiedAction<TDetail, TRow>({ action, context, featurePosition, resourceKey, epoch, resolver, children }: {
+  action: StandardCrudActionDefinition;
+  context: StandardCrudActionContext<TDetail, TRow>;
+  featurePosition: string;
+  resourceKey?: string;
+  epoch: number;
+  resolver: StandardCrudActionEligibilityResolver<TDetail, TRow>;
+  children: (state: StandardCrudActionState) => ReactElement | null;
+}) {
+  const query = usePlatformQuery({
+    key: ['standard-crud-action-eligibility', resourceKey ?? '', context.id ?? '', action.key, featurePosition, epoch],
+    load: ({ signal }) => resolver({ id: context.id, detail: context.detail, row: context.row,
+      action, featurePosition, signal }),
+  });
+  if (query.status === 'error') return <span role="alert">对象动作资格暂时无法判定。</span>;
+  if (query.status !== 'success' || !query.data) return null;
+  return children(query.data);
 }

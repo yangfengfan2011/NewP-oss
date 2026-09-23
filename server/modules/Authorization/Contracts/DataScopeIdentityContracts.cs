@@ -23,11 +23,16 @@ public sealed record DataScopeSubjectPathSegment(string Type, string Id, string 
 public sealed record DataScopeSubjectPage(IReadOnlyList<DataScopeSubjectName> Items, bool HasMore,
     IReadOnlyList<DataScopeSubjectName> CurrentValues);
 
+/// <summary>当前主体可匹配的规范身份；祖先部门仅命中显式包含下级的授权项。</summary>
+public sealed record DataScopeSubjectMembership(string Type, string? Id, bool RequiresDescendants = false);
+
 /// <summary>每次裁决解析一次可信当前事实；关系缺失返回不匹配，事实源故障抛出。</summary>
 public interface IDataScopeIdentityFacts
 {
     /// <summary>只匹配该 provider 声明的类型及已校验选项。</summary>
     bool Matches(string type, string? id, DataScopeMatchOptions options);
+    /// <summary>供关系型对象授权查询构造数据库匹配条件；身份由事实 owner 提供。</summary>
+    IReadOnlyList<DataScopeSubjectMembership> Memberships(string type);
     /// <summary>返回规范身份值；合法缺失为 null，不表示故障。</summary>
     string? ContextValue(string key);
 }

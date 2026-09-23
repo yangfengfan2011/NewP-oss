@@ -51,6 +51,9 @@
         "inputKey": "userRoles",
         "confirmMessageKey": "ConfirmUserRoles"
       }
+    ],
+    "featureActions": [
+      { "key": "authorize", "titleKey": "对象授权", "behaviorKey": "authorization.role.authorize" }
     ]
   }
 }

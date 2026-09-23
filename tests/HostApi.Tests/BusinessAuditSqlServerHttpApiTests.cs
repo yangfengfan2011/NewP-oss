@@ -1377,7 +1377,14 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         await _app.DisposeAsync();
         await StartAsync(null, enabled);
     }
-    private async Task StartAsync(Action<IServiceCollection>? configureServices, bool readEnabled = true)
+    internal async Task RestartWithActionAsync(string actionKey, bool enabled)
+    {
+        await _app.StopAsync();
+        await _app.DisposeAsync();
+        await StartAsync(null, actionStates: new Dictionary<string, bool> { [actionKey] = enabled });
+    }
+    private async Task StartAsync(Action<IServiceCollection>? configureServices, bool readEnabled = true,
+        IReadOnlyDictionary<string, bool>? actionStates = null)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
         builder.WebHost.UseTestServer();
@@ -1414,7 +1421,11 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         var owner = Array.FindIndex(candidates, candidate => candidate.ModuleId == "Authorization");
         var authoring = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(hostRoot, "modules", "Authorization", "plugin.json")))!;
         foreach (var action in authoring["dataActions"]!.AsArray())
-            if (action!["key"]!.GetValue<string>() == "read") action["enabled"] = readEnabled;
+        {
+            var key = action!["key"]!.GetValue<string>();
+            if (key == "read") action["enabled"] = readEnabled;
+            if (actionStates?.TryGetValue(key, out var enabled) == true) action["enabled"] = enabled;
+        }
         candidates[owner] = candidates[owner] with
         {
             DataActions = DataActionCatalogCompiler.Read(JsonSerializer.SerializeToElement(authoring), "Authorization"),
@@ -1466,7 +1477,8 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         _app.MapControllers();
         _app.MapStandardCrudResources();
         _app.MapRelationTrees();
-        ICP.Platform.HostApi.Authorization.FeatureEndpointBindings.Validate(((Microsoft.AspNetCore.Routing.IEndpointRouteBuilder)_app).DataSources, modulePlan.FeatureCatalog);
+        ICP.Platform.HostApi.Authorization.FeatureEndpointBindings.Validate(((Microsoft.AspNetCore.Routing.IEndpointRouteBuilder)_app).DataSources,
+            modulePlan.FeatureCatalog, _app.Services.GetRequiredService<IStandardCrudResourceRegistry>());
         using (var scope = _app.Services.CreateScope())
         {
             await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Database.EnsureCreatedAsync();

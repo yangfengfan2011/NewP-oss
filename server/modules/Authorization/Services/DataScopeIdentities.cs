@@ -62,6 +62,8 @@ public sealed class DataScopeResolvedIdentities(DataScopeIdentities catalog, IRe
 {
     // 主体匹配不再访问数据库或当前请求外的缓存。
     public bool Matches(string type, string? id, DataScopeMatchOptions? options) => facts[catalog.ProviderForSubject(type)].Matches(type, id, options ?? new());
+    // 对象授权的 SQL 关系筛选只使用事实 owner 列出的当前身份，不加载对象授权全集。
+    public IReadOnlyList<DataScopeSubjectMembership> Memberships(string type) => facts[catalog.ProviderForSubject(type)].Memberships(type);
     // null 仅表示 owner 的合法关系缺失。
     public string? ContextValue(string key) => facts[catalog.ProviderForContext(key)].ContextValue(key);
 }

@@ -252,6 +252,9 @@ function StandardCrudDetailPageContent<TDetail>({
             confirmMessage: action.confirmMessageKey
               ? t(`${schema.dicKey}.${action.confirmMessageKey}`, action.confirmMessageKey)
               : undefined,
+            confirmLabel: action.confirmLabelKey
+              ? t(`${schema.dicKey}.${action.confirmLabelKey}`, action.confirmLabelKey)
+              : undefined,
           }))}
           featureResolutionForAction={(action) => action.navigationTargetKey
             ? features.navigation(action.navigationTargetKey)
@@ -259,6 +262,7 @@ function StandardCrudDetailPageContent<TDetail>({
           handlers={detailActionHandlers}
           actionInputs={registration.actionInputRenderers}
           actionStateResolver={registration.actionStateResolver}
+          actionEligibilityResolvers={registration.actionEligibilityResolvers}
           onResult={(result) => {
             if (operationResultPresenterRegistry.resolve(result)) setPresentedOperationResult(result);
           }}

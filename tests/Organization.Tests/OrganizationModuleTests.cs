@@ -305,7 +305,8 @@ public class OrganizationModuleTests
             Path.Combine(root, @"modules\Organization\metadata\views\PositionList.view.json"),
             Encoding.UTF8));
         var actions = listView.RootElement.GetProperty("view").GetProperty("rowActions").EnumerateArray().ToArray();
-        Assert.Equal(2, actions.Length);
+        Assert.Equal(["authorize", "edit", "delete"], actions.Select(action => action.GetProperty("key").GetString()));
+        AssertAuthorizationAction(actions);
         var edit = actions.Single(action => action.GetProperty("key").GetString() == "edit");
         Assert.Equal("edit", edit.GetProperty("standardAction").GetString());
         Assert.Equal("edit", StandardAction(actions, "edit"));
@@ -343,7 +344,10 @@ public class OrganizationModuleTests
             view.GetProperty("columns").EnumerateArray().Select(column => column.GetProperty("field").GetString()));
         Assert.Equal("create", Assert.Single(view.GetProperty("pageActions").EnumerateArray()).GetProperty("standardAction").GetString());
         var rowActions = view.GetProperty("rowActions").EnumerateArray().ToArray();
-        Assert.Equal(["edit", "delete"], rowActions.Select(action => action.GetProperty("standardAction").GetString()));
+        Assert.Equal(["authorize", "edit", "delete"], rowActions.Select(action => action.GetProperty("key").GetString()));
+        Assert.Equal(["edit", "delete"], rowActions.Where(action => action.TryGetProperty("standardAction", out _))
+            .Select(action => action.GetProperty("standardAction").GetString()));
+        AssertAuthorizationAction(rowActions);
         Assert.Equal("edit", StandardAction(rowActions, "edit"));
         Assert.Equal("delete", StandardAction(rowActions, "delete"));
         Assert.Equal("organization.company.detail", view.GetProperty("detailViewKey").GetString());
@@ -388,7 +392,10 @@ public class OrganizationModuleTests
                 .Select(query => query.GetProperty("key").GetString()));
         Assert.Equal("create", Assert.Single(view.GetProperty("pageActions").EnumerateArray()).GetProperty("standardAction").GetString());
         var rowActions = view.GetProperty("rowActions").EnumerateArray().ToArray();
-        Assert.Equal(["edit", "delete"], rowActions.Select(action => action.GetProperty("standardAction").GetString()));
+        Assert.Equal(["authorize", "edit", "delete"], rowActions.Select(action => action.GetProperty("key").GetString()));
+        Assert.Equal(["edit", "delete"], rowActions.Where(action => action.TryGetProperty("standardAction", out _))
+            .Select(action => action.GetProperty("standardAction").GetString()));
+        AssertAuthorizationAction(rowActions);
         Assert.Equal("edit", StandardAction(rowActions, "edit"));
         Assert.Equal("delete", StandardAction(rowActions, "delete"));
         Assert.Equal("organization.department.detail", view.GetProperty("detailViewKey").GetString());
@@ -414,7 +421,8 @@ public class OrganizationModuleTests
             .Single(column => column.GetProperty("field").GetString() == "ENAME");
         Assert.Equal("view", nameColumn.GetProperty("standardAction").GetString());
         Assert.DoesNotContain(list.GetProperty("rowActions").EnumerateArray(),
-            action => action.GetProperty("standardAction").GetString() == "view");
+            action => action.TryGetProperty("standardAction", out var standard)
+                && standard.GetString() == "view");
         var sections = view.GetProperty("sections").EnumerateArray().ToArray();
         Assert.Equal("audit", sections[^1].GetProperty("key").GetString());
         Assert.Equal(
@@ -460,6 +468,15 @@ public class OrganizationModuleTests
         actions.Single(action => action.GetProperty("key").GetString() == actionKey)
             .GetProperty("standardAction")
             .GetString();
+
+    private static void AssertAuthorizationAction(JsonElement[] actions)
+    {
+        var authorize = actions.Single(action => action.GetProperty("key").GetString() == "authorize");
+        Assert.False(authorize.TryGetProperty("standardAction", out _));
+        Assert.Equal("authorize", authorize.GetProperty("handlerKey").GetString());
+        Assert.Equal("objectAuthorization", authorize.GetProperty("inputKey").GetString());
+        Assert.Equal("Action_SaveAuthorization", authorize.GetProperty("confirmLabelKey").GetString());
+    }
 
     private static string FindRepositoryRoot()
     {

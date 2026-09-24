@@ -103,13 +103,22 @@ importers:
       '@icp-platform/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
+      '@icp-platform/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
     devDependencies:
       '@types/react':
         specifier: ^18.3.1
         version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.1
+        version: 18.3.7(@types/react@18.3.28)
       react:
         specifier: ^18.3.1
         version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
       typescript:
         specifier: ^5.4.2
         version: 5.9.3
@@ -273,6 +282,9 @@ importers:
       '@ant-design/pro-descriptions':
         specifier: ^2.6.10
         version: 2.6.10(patch_hash=c10773237bd5bfcae2fc7191303e8cf2020c42ace42d667ab89d9c88f3e41f8a)(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@icp-platform/core':
+        specifier: workspace:*
+        version: link:../core
       '@icp-platform/sdk':
         specifier: workspace:*
         version: link:../sdk

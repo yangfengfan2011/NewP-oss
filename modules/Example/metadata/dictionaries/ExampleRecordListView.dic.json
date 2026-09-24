@@ -46,6 +46,10 @@
       "zhs": "编辑",
       "en": "Edit"
     },
+    "Action_Authorize": { "zhs": "授权", "en": "Authorize" },
+    "Action_ViewAuthorization": { "zhs": "查看授权", "en": "View Permissions" },
+    "Action_SaveAuthorization": { "zhs": "保存授权", "en": "Save Permissions" },
+    "Action_Close": { "zhs": "关闭", "en": "Close" },
     "Action_Delete": {
       "zhs": "删除",
       "en": "Delete"

@@ -1,4 +1,5 @@
 import { platformFetch } from '@icp-platform/core';
+import { createObjectAuthorizationActions } from '@icp-platform/ui';
 import {
   createStandardCrudRestDataAdapter,
   isStandardCrudRecord,
@@ -49,6 +50,10 @@ export function createExampleRecordStandardCrudResource(
     }),
     listViewKey: 'example.record.list',
     detailViewKey: 'example.record.detail',
+    ...createObjectAuthorizationActions('example.record', context => {
+      const row = context.row as ExampleRecordListRow;
+      return { title: '记录', id: row.id, name: row.ENAME };
+    }, fetcher),
   };
 }
 

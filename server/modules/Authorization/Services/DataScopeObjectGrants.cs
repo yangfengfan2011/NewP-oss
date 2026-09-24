@@ -107,14 +107,17 @@ public sealed class DataScopeObjectGrants(EfPlatformDbContext db, IPlatformTrans
 
     /// <summary>单对象完整动作裁决只读取该对象关系，匹配语义仍交已解析的主体事实 owner。</summary>
     public async Task<string?> OpinionAsync(string resourceKey, string objectId, string action,
-        DataScopeResolvedIdentities facts, CancellationToken token)
+        DataScopeResolvedIdentities facts, CancellationToken token,
+        Action<string, IReadOnlyList<DataScopeSubjectDto>>? observe = null)
     {
         var config = await GetAsync(resourceKey, objectId, token);
         var opinions = config.Subjects.Where(subject => subject.Actions.TryGetValue(action, out var vote) && vote != "unset"
             && facts.Matches(subject.Type, subject.SubjectId, subject.MatchOptions)).ToArray();
         if (opinions.Length == 0) return null;
         var priority = opinions.Max(subject => subject.Priority);
-        return opinions.Any(subject => subject.Priority == priority && subject.Actions[action] == "deny") ? "deny" : "allow";
+        var result = opinions.Any(subject => subject.Priority == priority && subject.Actions[action] == "deny") ? "deny" : "allow";
+        observe?.Invoke(result, opinions.Where(subject => subject.Priority == priority).ToArray());
+        return result;
     }
 
     /// <summary>只窄取当前资源或当前对象对动作有明确意见的主体类型，不读取对象身份全集。</summary>

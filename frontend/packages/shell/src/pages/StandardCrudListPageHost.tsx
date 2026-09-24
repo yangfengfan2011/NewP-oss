@@ -1269,6 +1269,11 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       }
     },
   });
+  // 动作失败统一弹出提示，避免在操作列撑高行；稳定 key 防止重渲染叠加相同消息。
+  useEffect(() => {
+    if (actionExecution.error) void messageApi.error({ key: 'standard-crud-action-error',
+      content: actionExecution.error.message, duration: 5 });
+  }, [actionExecution.error, messageApi]);
   const mutationExecution = useStandardCrudMutationExecution({
     registration,
     fixedCreateValues: host.input.fixedCreateValues,
@@ -1853,9 +1858,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         runtimeValueKind: undefined,
         render: (row: TRow) => {
           const rowId = dataAdapter.getRowId(row);
-          const rowExecutionError = rowActionDefinitions.some((action) => actionExecution.error?.key === `${action.key}:${rowId}`)
-            ? actionExecution.error
-            : null;
           const rowActions = buildRowActions(row, rowActionDefinitions, rowId);
 
           return (
@@ -1863,11 +1865,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
                 <RowActionButtonGroup actions={rowActions} />
               </div>
-              {rowExecutionError ? (
-                <span role="alert" style={{ color: 'var(--sh-color-danger, #dc2626)', fontSize: 12 }}>
-                  {rowExecutionError.message}
-                </span>
-              ) : null}
             </div>
           );
         },
@@ -2124,7 +2121,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       {embeddedActionError && <div role="alert">{embeddedActionError}<AntdButton onClick={host.lifecycle.close}>关闭</AntdButton></div>}
       {embeddedAction && <RowActionButtonGroup requested active={host.lifecycle.active} close={host.lifecycle.close}
         actions={buildRowActions(embeddedAction.row, [embeddedAction.action], embeddedAction.id)} />}
-      {embeddedAction && actionExecution.error && <div role="alert">{actionExecution.error.message}</div>}
       {presentedOperationResult
         ? operationResultPresenterRegistry.resolve(presentedOperationResult)?.render({
             result: presentedOperationResult,

@@ -41,6 +41,16 @@ public sealed class DataScopeObjectManagement(DataScopeCatalog catalog, Canonica
     /// <summary>资格仅在保存前验证；提交后失去自身资格仍返回成功。</summary>
     public Task SaveAsync(DataScopeObjectDto input, CancellationToken token) => grants.SaveAsync(input, token);
 
+    /// <summary>被分析账号必须存在；复用正式裁决实现，不改变操作者的管理资格或请求身份。</summary>
+    public async Task<DataScopeExplanationDto?> ExplainAsync(string resourceKey, string objectId, string accountId, CancellationToken token)
+    {
+        var directory = await identities.SearchAsync("user", null, 1, [accountId], token);
+        var account = directory.CurrentValues.SingleOrDefault(item => item.Id == accountId);
+        if (account is null) return null;
+        var actions = await ((DataScopeReadPlans)decisions).ExplainAsync(resourceKey, objectId, accountId, token);
+        return new(resourceKey, objectId, accountId, account.Name, actions);
+    }
+
     /// <summary>最小主体目录只在对象管理资格下开放，不调用业务 Lookup。</summary>
     public Task<DataScopeSubjectPage> SubjectsAsync(string type, string? query, int page, IReadOnlyList<string> currentIds, CancellationToken token) =>
         identities.SearchAsync(type, query, page, currentIds, token);

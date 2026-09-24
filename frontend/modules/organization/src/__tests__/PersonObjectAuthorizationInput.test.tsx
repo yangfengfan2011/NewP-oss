@@ -30,7 +30,7 @@ it('pins the real person, keeps a draft locally and reloads saved configuration 
     ok: true,
     json: async () => input.endsWith('/catalog')
       ? { actions: [{ key: 'read', title: '读取', enabled: true }, { key: 'authorize', title: '授权', enabled: true }],
-        subjectTypes: [{ key: 'all', title: '所有已认证用户', requiresId: false }] }
+        subjectTypes: [{ key: 'all', title: '所有用户', requiresId: false }] }
       : { resourceKey: 'organization.person', objectId: 'Person_1', subjects: [] },
   }));
   const container = document.createElement('div');
@@ -46,20 +46,23 @@ it('pins the real person, keeps a draft locally and reloads saved configuration 
   await act(async () => { root!.render(<Harness />); });
   await act(async () => { await Promise.resolve(); });
   expect(document.body.textContent).toContain('目标人员：张三');
-  expect(document.body.textContent).toContain('人员标识：Person_1');
+  expect(document.body.textContent).not.toContain('人员标识：');
   expect(fetchMock).toHaveBeenCalledWith('/api/authorization/data-scope/objects/organization.person/Person_1',
     expect.objectContaining({ headers: { 'X-NewP-Feature': 'person-authorize' } }));
   const add = [...document.querySelectorAll('button')].find(button => button.textContent?.includes('添加主体项'));
   expect(add).toBeDefined();
   await act(async () => { add!.click(); });
+  expect(draftState).toHaveBeenLastCalledWith({ ready: false, dirty: true });
+  const confirm = [...document.querySelectorAll('.ant-drawer button')].find(button => button.textContent?.replace(/\s/g, '') === '确定') as HTMLElement;
+  await act(async () => confirm.click());
   expect(draftState).toHaveBeenLastCalledWith({ ready: true, dirty: true });
-  expect(document.querySelector('[role="group"][aria-label="主体授权项 1"]')).not.toBeNull();
-  expect(document.body.textContent).toContain('授权意见');
+  expect(document.querySelector('tr[aria-label="主体授权项 1"]')).not.toBeNull();
+  expect(document.querySelector('[aria-label^="授权"]')).not.toBeNull();
   await act(async () => { root!.unmount(); });
   root = createRoot(container);
   await act(async () => { root!.render(<Harness />); });
   await act(async () => { await Promise.resolve(); });
-  expect(document.querySelector('[role="group"][aria-label="主体授权项 1"]')).toBeNull();
+  expect(document.querySelector('tr[aria-label="主体授权项 1"]')).toBeNull();
   expect(draftState).toHaveBeenLastCalledWith({ ready: true, dirty: false });
   expect(fetchMock.mock.calls.filter(([path]) => path === '/api/authorization/data-scope/objects/organization.person/Person_1')).toHaveLength(2);
 });

@@ -55,15 +55,15 @@ it('saves row order as unique priorities and restores it from an unordered respo
   };
   try {
     await mount();
-    expect(container.querySelector('[aria-label="主体授权项 1"] [aria-label="读取意见：同意"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="主体授权项 1"] [aria-label="读取：同意"]')).not.toBeNull();
     await clickText('下移', '[aria-label="主体授权项 1"] button');
     expect(lifecycle[0].dirty).toBe(true);
     await act(async () => { expect(await lifecycle[2]!()).toBe(true); });
     expect(persisted.subjects.map(subject => [subject.id, subject.priority])).toEqual([['low', 1], ['high', 0]]);
     await act(async () => root.unmount()); root = createRoot(container);
     await mount();
-    expect(container.querySelector('[aria-label="主体授权项 1"] [aria-label="读取意见：拒绝"]')).not.toBeNull();
-    expect(container.querySelector('[aria-label="主体授权项 2"] [aria-label="读取意见：同意"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="主体授权项 1"] [aria-label="读取：拒绝"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="主体授权项 2"] [aria-label="读取：同意"]')).not.toBeNull();
     expect(lifecycle[0].dirty).toBe(false);
   } finally { await act(async () => root.unmount()); container.remove(); }
 });
@@ -102,13 +102,13 @@ it('cycles each opinion independently, preserves it across tabs and only persist
     await act(async () => (container.querySelector('.ant-tree-title') as HTMLElement).click());
     await subjectsTab();
     for (const [before, after] of [['不选', '同意'], ['同意', '拒绝'], ['拒绝', '不选'], ['不选', '同意']]) {
-      await act(async () => (container.querySelector(`[aria-label="读取意见：${before}"]`) as HTMLElement).click());
-      expect(container.querySelector(`[aria-label="读取意见：${after}"]`)).not.toBeNull();
-      expect(container.querySelector('[aria-label="编辑意见：拒绝"]')).not.toBeNull();
+      await act(async () => (container.querySelector(`[aria-label="读取：${before}"]`) as HTMLElement).click());
+      expect(container.querySelector(`[aria-label="读取：${after}"]`)).not.toBeNull();
+      expect(container.querySelector('[aria-label="编辑：拒绝"]')).not.toBeNull();
     }
     await clickText('规则条件', '[role="tab"]');
     await subjectsTab();
-    expect(container.querySelector('[aria-label="读取意见：同意"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="读取：同意"]')).not.toBeNull();
     expect(fetcher.mock.calls.filter(call => call[1]?.method === 'PUT')).toHaveLength(0);
     await act(async () => { expect(await lifecycle[2]!()).toBe(true); });
     expect(JSON.parse(String(fetcher.mock.calls.find(call => call[1]?.method === 'PUT')![1].body)).subjects[0])

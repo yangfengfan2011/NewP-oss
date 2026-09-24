@@ -73,6 +73,20 @@
     ],
     "rowActions": [
       {
+        "key": "authorize",
+        "labelKey": "Action_Authorize",
+        "handlerKey": "authorize",
+        "inputKey": "objectAuthorization",
+        "confirmLabelKey": "Action_SaveAuthorization"
+      },
+      {
+        "key": "viewAuthorization",
+        "labelKey": "Action_ViewAuthorization",
+        "handlerKey": "authorize",
+        "inputKey": "objectAuthorizationDetails",
+        "confirmLabelKey": "Action_Close"
+      },
+      {
         "key": "edit",
         "labelKey": "Action_Edit",
         "standardAction": "edit"

@@ -68,6 +68,16 @@ Shell 会导入并校验整份目录，全部成功后通过 `ModuleRegistry.rep
 
 详情摘要 renderer 通过 `featureActions` 接收本 View 声明的专用动作映射，形状为 `Record<key, { position, allowed }>`。模块以 `allowed` 控制呈现、以 `position` 发起该动作请求，例如 Organization 的账号绑定；不要导入 Shell 的内部位置 Context，也不要把其他动作或入口资格用作写入授权。输入、确认、pending、错误及刷新仍沿用既有动作生命周期。摘要的内容读取使用所属详情的读取上下文；例如 Identity 安全事件由模块自己的 summary data 传递 `readContext.featurePosition`，查询缓存同时区分位置，不能借用写动作或其他页面的读取资格。
 
+## 通用对象授权界面
+
+已登记的数据范围资源可复用 `@icp-platform/ui` 的 `createObjectAuthorizationActions(resourceKey, getTarget)`。`getTarget` 从动作的当前 `row` 或 `detail` 返回 `{ id, name, title }`，不缓存跨对象目标。将返回的 `actionInputRenderers`、`actionEligibilityResolvers` 和 `actionHandlers` 合并进标准资源注册；Example 的 `exampleRecordStandardCrudResource` 是列表接入实例，Organization 同样消费这套通用界面。
+
+View 的两个动作分别配置 `key: authorize` / `viewAuthorization`，共同使用 `handlerKey: authorize`，输入键分别为 `objectAuthorization` / `objectAuthorizationDetails`。两者都要求对象授权管理资格，分别派生功能位置并绑定 `<resourceKey>.authorize`；查看界面的只读设置是呈现约束，不另行授予较低权限的审计身份。模块只声明按钮和目标，完整授权保存、最小主体目录、用户选择及权限来源解释均由通用组件和 Authorization 端点负责。
+
+不使用标准动作注册时，也可在已有宿主中渲染 `ObjectAuthorizationInput`，传入 SDK 动作输入上下文及 `target: { resourceKey, id, name, title }`；`action.inputKey` 决定编辑或查看模式。权限解释默认当前用户，可以选择用户，展示已保存配置的最终数据范围结果及规则路径，不替代功能位置判权或业务校验。
+
+`StandardCrudActionInputRenderer` 可附带 `dialogWidth` 和 `readOnly` 呈现提示。宽度由共享 ReviewDialog 应用并保持窄屏约束；只读输入仅关闭，不执行 handler、写入或触发写入后的刷新。没有提示的现有输入保持原行为。
+
 ## 声明式标准插件的动作
 
 `standard-data.v1` 生成页面消费同一候选目录和运行时 metadata，功能位置沿标准 CRUD client 传递；插件 SDK 与运行时投影不再提供旧 `permissionCodes`。刷新跟随所属读取入口，不登记独立业务动作。

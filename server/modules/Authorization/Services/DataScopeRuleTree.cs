@@ -8,11 +8,16 @@ internal static class DataScopeRuleTree
 {
     // 单对象动作使用与 SQL 读取树相同的路径遮蔽和独立分支拒绝语义。
     internal static async Task<bool> IsDeniedAsync(IEnumerable<DataScopeRuleDto> roots,
-        Func<DataScopeRuleDto, Task<bool>> condition, Func<DataScopeRuleDto, string?> opinion)
+        Func<DataScopeRuleDto, Task<bool>> condition, Func<DataScopeRuleDto, string?> opinion,
+        Action<DataScopeRuleDto, string?, bool>? observe = null)
     {
+        var result = false;
         foreach (var root in roots)
-            if ((await DecideAsync(root)).Denied) return true;
-        return false;
+        {
+            result |= (await DecideAsync(root)).Denied;
+            if (result && observe is null) return true;
+        }
+        return result;
 
         // 后代只有在自己有明确意见时才占用祖先意见，其他根和兄弟仍可拒绝。
         async Task<(bool Occupied, bool Denied)> DecideAsync(DataScopeRuleDto node)
@@ -27,13 +32,15 @@ internal static class DataScopeRuleTree
                 denied |= result.Denied;
             }
             var vote = opinion(node);
+            observe?.Invoke(node, vote, !occupied);
             return (occupied || vote is not null, denied || !occupied && vote == "deny");
         }
     }
 
     // 只返回明确拒绝的范围；无意见时由调用方保持默认允许。
     internal static Expression? BuildDenied(IEnumerable<DataScopeRuleDto> roots,
-        Func<DataScopeRuleDto, Expression?> condition, Func<DataScopeRuleDto, string?> opinion)
+        Func<DataScopeRuleDto, Expression?> condition, Func<DataScopeRuleDto, string?> opinion,
+        Action<DataScopeRuleDto, string, Expression, Expression>? observe = null)
     {
         Expression? denied = null;
         foreach (var root in roots) denied = Or(denied, Decide(root, null).Denied);
@@ -57,6 +64,7 @@ internal static class DataScopeRuleTree
             if (vote is null) return (childOccupied, childDenied);
             var own = path ?? Expression.Constant(true);
             var effective = childOccupied is null ? own : Expression.AndAlso(own, Expression.Not(childOccupied));
+            observe?.Invoke(node, vote, own, effective);
             return (Or(own, childOccupied), Or(childDenied, vote == "deny" ? effective : null));
         }
     }

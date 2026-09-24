@@ -1,5 +1,6 @@
 import { useState, type ReactElement, type ReactNode } from 'react';
 import Modal from 'antd/es/modal';
+import Button from 'antd/es/button';
 import type {
   StandardCrudActionDefinition,
   StandardCrudActionInputRenderer,
@@ -44,13 +45,15 @@ export function StandardCrudActionReviewDialog({
       <Modal
         open={open}
         title={title}
+        width={inputRenderer.dialogWidth}
+        footer={inputRenderer.readOnly ? <Button onClick={onCancel}>关闭</Button> : undefined}
         okText={action.confirmLabel ?? '确认'}
         cancelText="取消"
         destroyOnHidden
         confirmLoading={pending}
         okButtonProps={{ disabled: !draftState.ready }}
         onCancel={() => { if (!pending) { if (draftState.dirty) setConfirmDiscard(true); else onCancel(); } }}
-        onOk={onConfirm}
+        onOk={inputRenderer.readOnly ? onCancel : onConfirm}
       >
         {confirmMessage ? <p>{confirmMessage}</p> : null}
         {inputRenderer({

@@ -2,6 +2,7 @@ using ICP.Platform.Authorization.Http;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Modules.Authorization.Services;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace ICP.Platform.Modules.Authorization.Controllers;
 
@@ -11,6 +12,19 @@ namespace ICP.Platform.Modules.Authorization.Controllers;
 public sealed class DataScopeObjectsController(DataScopeObjectManagement management, DataScopeCatalog catalog,
     DataScopeIdentities identities) : ControllerBase
 {
+    /// <summary>只允许具备对象管理资格的操作者分析用户；被分析用户不替换请求的可信身份。</summary>
+    [HttpGet("explanation")]
+    public async Task<IActionResult> Explanation(string resourceKey, string objectId, [FromQuery] string? accountId,
+        CancellationToken cancellationToken)
+    {
+        var eligibility = await management.CheckAsync(resourceKey, objectId, cancellationToken);
+        if (eligibility != DataScopeObjectEligibility.Allowed) return Failure(eligibility);
+        var target = accountId ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(target) || target.Length > 128) return BadRequest();
+        var result = await management.ExplainAsync(resourceKey, objectId, target, cancellationToken);
+        return result is null ? NotFound() : Ok(result);
+    }
+
     /// <summary>按钮在发起编辑前取得真实服务端资格；响应不公开整份配置。</summary>
     [HttpGet("eligibility")]
     public async Task<IActionResult> Eligibility(string resourceKey, string objectId, CancellationToken cancellationToken)

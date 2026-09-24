@@ -3,6 +3,7 @@ import {
   createStandardCrudRestDataAdapter,
   createStandardCrudRestLookupProvider,
   type StandardCrudDetailFieldRendererContext,
+  type StandardCrudActionInputRenderContext,
   type StandardCrudLookupProvider,
   type StandardCrudResourceRegistration,
   type StandardCrudSummaryBlock,
@@ -137,9 +138,9 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Record
   },
   summaryRenderers: personSummaryRenderers,
   actionInputRenderers: {
-    objectAuthorization: context => (
+    objectAuthorization: Object.assign((context: StandardCrudActionInputRenderContext) => (
       <Suspense fallback={null}><LazyPersonObjectAuthorizationInput {...context} /></Suspense>
-    ),
+    ), { dialogWidth: 960 }),
     disableReason: ({ value, onChange }) => (
       <Suspense fallback={null}>
         <LazyDisableReasonInput value={value} onChange={onChange} />

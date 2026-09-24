@@ -49,6 +49,7 @@
     "@ant-design/pro-components": "^2.8.10",
     "@ant-design/pro-descriptions": "^2.6.10",
     "@icp-platform/sdk": "workspace:*",
+    "@icp-platform/core": "workspace:*",
     "antd": "^5.29.3"
   },
   "devDependencies": {

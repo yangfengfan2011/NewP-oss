@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Http;
 namespace ICP.Platform.Modules.Authorization.Services;
 
 /// <summary>按可信当前主体合并明确优先级意见，再把拒绝范围编译为数据库谓词。</summary>
-public sealed class DataScopeReadPlans(DataScopeRules rules, DataScopeCatalog catalog,
+public sealed partial class DataScopeReadPlans(DataScopeRules rules, DataScopeCatalog catalog,
     IHttpContextAccessor context, ILocalAdministratorRoleAssignment administrators, DataScopeIdentities identities,
     DataScopeObjectGrants objects, EfPlatformDbContext db) : IDataScopeReadPlanProvider, IDataScopeObjectDecisionProvider, IDataScopeReadableIds
 {
@@ -51,15 +51,21 @@ public sealed class DataScopeReadPlans(DataScopeRules rules, DataScopeCatalog ca
 
     /// <inheritdoc/>
     public async Task<DataScopeReadPlan> GetReadPlanAsync(string resourceKey, CancellationToken cancellationToken = default)
+        => await GetReadPlanForSubjectAsync(resourceKey, null, cancellationToken);
+
+    // 诊断显式传入被分析身份，不修改请求主体；正常请求仍从可信上下文取身份。
+    private async Task<DataScopeReadPlan> GetReadPlanForSubjectAsync(string resourceKey, string? accountId,
+        CancellationToken cancellationToken, DataScopeDecisionTrace? trace = null)
     {
         catalog.Resolve(resourceKey);
         var action = catalog.Actions.Single(action => action.Key == "read");
-        if (!action.Enabled) return new(null);
-        var id = context.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? throw new InvalidOperationException("DATA_SCOPE_TRUSTED_SUBJECT_REQUIRED");
-        if (await administrators.InspectAsync(id, cancellationToken) == LocalAdministratorAssignmentState.Assigned) return new(null);
+        if (!action.Enabled) { trace?.SetReason("disabled"); return new(null); }
+        var id = accountId ?? CurrentSubject();
+        if (await administrators.InspectAsync(id, cancellationToken) == LocalAdministratorAssignmentState.Assigned)
+        { trace?.SetReason("administrator"); return new(null); }
         var applicable = await rules.ForResourceAsync(resourceKey, cancellationToken);
         foreach (var rule in applicable) catalog.Validate(rule);
+        trace?.SetRules(applicable);
         var relevant = RelevantNodes(resourceKey, applicable, "read", true);
         var readable = applicable.SelectMany(ActiveNodes).Where(rule => relevant.Contains(rule.Id)).ToArray();
         var objectTypes = await objects.SubjectTypesAsync(resourceKey, "read", null, cancellationToken);
@@ -81,11 +87,15 @@ public sealed class DataScopeReadPlans(DataScopeRules rules, DataScopeCatalog ca
                 && facts.Matches(subject.Type, subject.SubjectId, subject.MatchOptions)).ToArray();
             if (opinions.Length == 0) return null;
             var priority = opinions.Max(subject => subject.Priority);
+            trace?.SetSubjects(node.Id, opinions.Where(subject => subject.Priority == priority).ToArray());
             return opinions.Any(subject => subject.Priority == priority && subject.Actions["read"] == "deny") ? "deny" : "allow";
-        });
+        }, trace is null ? null : trace.ObserveReadRule);
         var (allow, deny) = objects.ReadOverrides(resourceKey, row, facts, objectTypes);
         var permitted = Expression.OrElse(allow, Expression.AndAlso(Expression.Not(deny),
             denied is null ? Expression.Constant(true) : Expression.Not(denied)));
+        if (trace is not null) await trace.ReadSourcesAsync(db, catalog.Resolve(resourceKey), row, cancellationToken);
+        if (trace is not null && objectTypes.Length > 0)
+            await objects.OpinionAsync(resourceKey, trace.ObjectId, "read", facts, cancellationToken, trace.ObserveObject);
         return new(Expression.Lambda<Func<Dictionary<string, object?>, bool>>(permitted, row));
     }
 
@@ -108,28 +118,32 @@ public sealed class DataScopeReadPlans(DataScopeRules rules, DataScopeCatalog ca
 
     // 对象与候选共用意见合并；新建只改变条件事实来源，不引入另一套裁决算法。
     private async Task<bool> DecideActionAsync(string resourceKey, string objectId, string actionKey,
-        IReadOnlyDictionary<string, object?>? candidate, CancellationToken cancellationToken)
+        IReadOnlyDictionary<string, object?>? candidate, CancellationToken cancellationToken,
+        string? accountId = null, DataScopeDecisionTrace? trace = null)
     {
         var resource = catalog.Resolve(resourceKey);
         var action = catalog.Actions.Single(item => item.Key == actionKey);
         if (actionKey == "read")
         {
             if (candidate is not null) throw new InvalidOperationException("DATA_SCOPE_CANDIDATE_READ_UNSUPPORTED");
-            return await CanReadAsync(resource, objectId, cancellationToken);
+            return await CanReadAsync(resource, objectId, cancellationToken, accountId, trace);
         }
-        if (action.RequiresRead && !await CanReadAsync(resource, objectId, cancellationToken)) return false;
-        if (!action.Enabled) return true;
-        var subject = context.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? throw new InvalidOperationException("DATA_SCOPE_TRUSTED_SUBJECT_REQUIRED");
-        if (await administrators.InspectAsync(subject, cancellationToken) == LocalAdministratorAssignmentState.Assigned) return true;
+        if (action.RequiresRead && !await CanReadAsync(resource, objectId, cancellationToken, accountId))
+        { trace?.SetReason("readRequired"); return false; }
+        if (!action.Enabled) { trace?.SetReason("disabled"); return true; }
+        var subject = accountId ?? CurrentSubject();
+        if (await administrators.InspectAsync(subject, cancellationToken) == LocalAdministratorAssignmentState.Assigned)
+        { trace?.SetReason("administrator"); return true; }
         var applicable = await rules.ForResourceAsync(resourceKey, cancellationToken);
         foreach (var rule in applicable) catalog.Validate(rule);
+        trace?.SetRules(applicable);
         // 对象明确意见覆盖规则；校验配置后先只解析当前对象的主体，避免无关规则事实阻断覆盖。
         var objectTypes = await objects.SubjectTypesAsync(resourceKey, actionKey, objectId, cancellationToken);
         if (objectTypes.Length > 0)
         {
             var objectFacts = await identities.ResolveAsync(subject, objectTypes, [], cancellationToken);
-            var opinion = await objects.OpinionAsync(resourceKey, objectId, actionKey, objectFacts, cancellationToken);
+            var opinion = await objects.OpinionAsync(resourceKey, objectId, actionKey, objectFacts, cancellationToken,
+                trace is null ? null : trace.ObserveObject);
             if (opinion is not null) return opinion == "allow";
         }
         var relevant = RelevantNodes(resourceKey, applicable, actionKey, false);
@@ -150,8 +164,9 @@ public sealed class DataScopeReadPlans(DataScopeRules rules, DataScopeCatalog ca
                     && facts.Matches(item.Type, item.SubjectId, item.MatchOptions)).ToArray();
                 if (selected.Length == 0) return null;
                 var priority = selected.Max(item => item.Priority);
+                trace?.SetSubjects(rule.Id, selected.Where(item => item.Priority == priority).ToArray());
                 return selected.Any(item => item.Priority == priority && item.Actions[actionKey] == "deny") ? "deny" : "allow";
-            });
+            }, trace is null ? null : trace.ObserveRule);
     }
 
     // 仅保留实际明确表态节点及通往它们的祖先；读取祖先无贡献时不解析条件。
@@ -177,15 +192,20 @@ public sealed class DataScopeReadPlans(DataScopeRules rules, DataScopeCatalog ca
     }
 
     // 单对象读取沿列表的同一数据库谓词，另以实际主键阻止排序规则把大小写别名当成规范对象身份。
-    private async Task<bool> CanReadAsync(DataScopeResource resource, string objectId, CancellationToken token)
+    private async Task<bool> CanReadAsync(DataScopeResource resource, string objectId, CancellationToken token,
+        string? accountId = null, DataScopeDecisionTrace? trace = null)
     {
-        var plan = await GetReadPlanAsync(resource.ResourceKey, token);
+        var plan = await GetReadPlanForSubjectAsync(resource.ResourceKey, accountId, token, trace);
         var rows = db.Set<Dictionary<string, object?>>(db.ResolveModelKey(resource.ModelKey)).AsNoTracking();
         if (plan.Predicate is not null) rows = rows.Where(plan.Predicate);
         var actual = await rows.Where(row => EF.Property<string>(row, resource.IdField) == objectId)
             .Select(row => EF.Property<string>(row, resource.IdField)).SingleOrDefaultAsync(token);
         return string.Equals(actual, objectId, StringComparison.Ordinal);
     }
+
+    // 仅正式请求入口使用当前身份；诊断的被分析身份必须由管理入口校验后显式传入。
+    private string CurrentSubject() => context.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier)
+        ?? throw new InvalidOperationException("DATA_SCOPE_TRUSTED_SUBJECT_REQUIRED");
 
     // 停用节点截断子树，避免解析不参与本次读取的主体与上下文事实。
     private static IEnumerable<ICP.Platform.Modules.Authorization.DTOs.DataScopeRuleDto> ActiveNodes(

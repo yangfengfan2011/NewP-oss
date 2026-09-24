@@ -19,6 +19,7 @@ import exampleRecordListDictionary from '../../../../../modules/Example/metadata
 import companyListViewDocument from '../../../../../modules/Organization/metadata/views/CompanyList.view.json';
 import companyModelDocument from '../../../../../modules/Organization/metadata/models/Company.model.json';
 import { companyStandardCrudResource } from '../../../../modules/organization/src/standard-crud/companyStandardCrudResource';
+import { createExampleRecordStandardCrudResource } from '../../../../modules/example/src/standard-crud/exampleRecordStandardCrudResource';
 
 const platformFetchMock = vi.hoisted(() => vi.fn((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init)));
 
@@ -1401,6 +1402,34 @@ describe('StandardCrudListPageHost', () => {
     );
   });
 
+  it('presents a rejected row action as one popup instead of an inline table error', async () => {
+    const failure = '当前操作已被拒绝，请核对当前权限。';
+    const blocked = vi.fn().mockRejectedValue(new Error(failure));
+    mockStandardCrudModule({
+      dataAdapter: { list: async () => ({ items: [{ id: 'Person_1', ENAME: '张三' }], total: 1 }),
+        getRowId: (row: { id: string }) => row.id },
+      actionHandlers: { blocked },
+    });
+    const view = { ...personListViewDocument, view: { ...personListViewDocument.view,
+      rowActions: [{ key: 'blocked', labelKey: '执行操作', handlerKey: 'blocked' }] } } as unknown as typeof personListViewDocument;
+    await renderHost({}, view);
+    await flushProTableRequest();
+    await act(async () => {
+      const more = [...container.querySelectorAll('button')].find(button => button.textContent === '更多');
+      more!.click();
+    });
+    await flushProTableRequest();
+    await act(async () => {
+      const item = [...document.querySelectorAll('.ant-dropdown-menu-item')].find(node => node.textContent === '执行操作');
+      (item as HTMLElement).click();
+    });
+    await waitForBodyText(failure);
+    expect(blocked).toHaveBeenCalledOnce();
+    expect(document.querySelectorAll('.ant-message-notice')).toHaveLength(1);
+    expect(document.querySelector('.ant-message-notice')?.textContent).toContain(failure);
+    expect(container.querySelector('tbody')?.textContent).not.toContain(failure);
+  });
+
   it('omits the page heading while retaining create actions in the table toolbar', async () => {
     mockStandardCrudModule();
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
@@ -1630,7 +1659,7 @@ describe('StandardCrudListPageHost', () => {
     expect(action).toBeDefined();
     await act(async () => { action?.click(); });
     await waitForBodyText('目标公司：平台公司');
-    expect(document.body.textContent).toContain('公司标识：Company_1');
+    expect(document.body.textContent).not.toContain('公司标识：');
     const save = [...document.body.querySelectorAll('button')].find(button => button.textContent?.trim() === '保存授权');
     expect(save).toBeDefined();
     expect(save?.disabled).toBe(false);
@@ -1805,7 +1834,7 @@ describe('StandardCrudListPageHost', () => {
         metadata: { moduleId: 'example', displayName: 'Example', version: '1.0.0' },
         standardCrudResources: [
           {
-            resourceKey: 'example.record',
+            ...createExampleRecordStandardCrudResource((input, init) => globalThis.fetch(input, init)),
             dataAdapter: createStandardCrudRestDataAdapter({
               apiRoute: '/api/example/records',
               fetcher: (input, init) => globalThis.fetch(input, init),

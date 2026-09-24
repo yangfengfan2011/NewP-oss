@@ -108,7 +108,7 @@ it('makes opinions and mutation controls unavailable in read-only mode', async (
       read={vi.fn()} disabled onChange={onChange} onEditingChange={() => {}} />));
     const opinion = container.querySelector('[role="checkbox"]') as HTMLButtonElement;
     expect(opinion.disabled).toBe(true);
-    expect(opinion.getAttribute('aria-label')).toBe('读取意见：拒绝');
+    expect(opinion.getAttribute('aria-label')).toBe('读取：拒绝');
     await act(async () => opinion.click());
     expect(onChange).not.toHaveBeenCalled();
     expect([...container.querySelectorAll('button')].every(button => button.disabled)).toBe(true);

@@ -89,6 +89,10 @@
     "ConfirmUserRoles": {
       "en": "Save complete account role set",
       "zhs": "完整保存此账号角色集合"
+    },
+    "Field_EID": {
+      "zhs": "唯一标识",
+      "en": "Unique ID"
     }
   }
 }

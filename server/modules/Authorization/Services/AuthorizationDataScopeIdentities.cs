@@ -50,7 +50,7 @@ public sealed class AuthorizationDataScopeIdentities(EfPlatformDbContext db) : I
 /// <summary>所有已认证用户无需角色或组织事实源，不引入不相关的依赖查询。</summary>
 public sealed class AllAuthenticatedDataScopeIdentities : IDataScopeIdentityProvider, IDataScopeIdentityFacts
 {
-    public IReadOnlyList<DataScopeSubjectType> SubjectTypes { get; } = [new("all", "所有已认证用户", false)];
+    public IReadOnlyList<DataScopeSubjectType> SubjectTypes { get; } = [new("all", "所有用户", false)];
     public IReadOnlyList<DataScopeContextValue> ContextValues => [];
     /// <inheritdoc/>
     public Task<IDataScopeIdentityFacts> ResolveAsync(string accountId, CancellationToken token) => Task.FromResult<IDataScopeIdentityFacts>(this);

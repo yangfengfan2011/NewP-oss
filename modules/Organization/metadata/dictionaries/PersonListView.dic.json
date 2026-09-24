@@ -309,6 +309,26 @@
     "Pagination_Next": {
       "zhs": "下一页",
       "en": "Next"
+    },
+    "Field_EID": {
+      "zhs": "唯一标识",
+      "en": "Unique ID"
+    },
+    "Field_AccountEID": {
+      "zhs": "绑定账号标识",
+      "en": "Linked Account ID"
+    },
+    "Field_AccountBoundAt": {
+      "zhs": "账号绑定时间",
+      "en": "Account Linked At"
+    },
+    "Field_AccountBoundBy": {
+      "zhs": "账号绑定人",
+      "en": "Account Linked By"
+    },
+    "Field_AccountBindingReason": {
+      "zhs": "账号绑定原因",
+      "en": "Account Link Reason"
     }
   }
 }

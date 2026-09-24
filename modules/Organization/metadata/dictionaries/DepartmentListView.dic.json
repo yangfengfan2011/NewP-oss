@@ -38,6 +38,10 @@
     "Drawer_Create": { "zhs": "新建部门", "en": "Create Department" },
     "Drawer_Edit": { "zhs": "编辑部门", "en": "Edit Department" },
     "Pagination_Prev": { "zhs": "上一页", "en": "Previous" },
-    "Pagination_Next": { "zhs": "下一页", "en": "Next" }
+    "Pagination_Next": { "zhs": "下一页", "en": "Next" },
+    "Field_EID": {
+      "zhs": "唯一标识",
+      "en": "Unique ID"
+    }
   }
 }

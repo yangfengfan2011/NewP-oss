@@ -73,6 +73,10 @@
     "Field_RecordSource": {
       "zhs": "记录来源",
       "en": "Record Source"
+    },
+    "Field_EID": {
+      "zhs": "唯一标识",
+      "en": "Unique ID"
     }
   }
 }

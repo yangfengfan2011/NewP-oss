@@ -23,7 +23,8 @@ export function PageEntry({ page }: { page: PageRef }) {
   const { navigation, treeNavigation } = createAddressNavigation(location.search, (search, replace) => {
     navigate({ pathname: location.pathname, search }, { replace });
   });
-  return <PageComposition><div className="sh-page np-composed-page" style={{
+  // 导航入口切换必须释放旧页面的 dirty/submitting 登记；同一路径的查询参数变化保留组合状态。
+  return <PageComposition key={location.pathname}><div className="sh-page np-composed-page" style={{
     '--np-composition-surface': token.colorBgContainer,
     '--np-composition-border': token.colorBorderSecondary,
     '--np-composition-secondary': token.colorTextSecondary,

@@ -3,3 +3,4 @@ export * from './core';
 export * from './crud';
 export { default as DataScopeSubjectEditor } from './DataScopeSubjectEditor';
 export type { DataScopeSubject, SubjectType } from './DataScopeSubjectEditor';
+export { default as OpinionCheckbox } from './OpinionCheckbox';

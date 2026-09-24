@@ -4,7 +4,7 @@ export interface DataScopeCondition {
   type: string; field: string; operator: string; value: unknown; contextKey?: string | null;
   children?: DataScopeCondition[] | null; key?: string | null;
 }
-export interface DataScopeResourceField { name: string; type: string; enumValues?: string[] | null }
+export interface DataScopeResourceField { name: string; type: string; title?: string; enumValues?: string[] | null }
 export interface DataScopeContextValue { key: string; title: string; valueType: string }
 export interface DataScopeBusinessType { key: string; title: string; modelKeys: string[]; hasReadContribution: boolean }
 
@@ -29,9 +29,9 @@ const fixedValue = (value: unknown): string => {
 
 /** 只描述既有条件配置；祖先摘要不重复运行裁决或解释服务器事实。 */
 export const describeDataScopeCondition = (condition: DataScopeCondition, contexts: DataScopeContextValue[],
-  businessTypes: DataScopeBusinessType[]): string => {
+  businessTypes: DataScopeBusinessType[], fields: DataScopeResourceField[] = []): string => {
   if (condition.type === 'group') {
-    const joined = (condition.children ?? []).map(child => describeDataScopeCondition(child, contexts, businessTypes))
+    const joined = (condition.children ?? []).map(child => describeDataScopeCondition(child, contexts, businessTypes, fields))
       .join(condition.operator === 'or' ? ' 或 OR ' : ' 且 AND ');
     return `（${joined}）`;
   }
@@ -39,12 +39,13 @@ export const describeDataScopeCondition = (condition: DataScopeCondition, contex
     const business = businessTypes.find(item => item.key === condition.key);
     return `${business?.title ?? condition.key ?? '未选业务条件'}${business?.hasReadContribution === false ? '（无读取贡献）' : ''}`;
   }
+  const title = fields.find(field => field.name === condition.field)?.title ?? condition.field;
   const operation = operations.find(([key]) => key === condition.operator)?.[1] ?? condition.operator;
-  if (nullOperations.has(condition.operator)) return `${condition.field} ${operation}`;
+  if (nullOperations.has(condition.operator)) return `${title} ${operation}`;
   const value = condition.contextKey
     ? `当前身份值：${contexts.find(item => item.key === condition.contextKey)?.title ?? condition.contextKey}`
     : fixedValue(condition.value);
-  return `${condition.field} ${operation} ${value}`;
+  return `${title} ${operation} ${value}`;
 };
 const attribute = (field = ''): DataScopeCondition => ({ type: 'attribute', field, operator: 'equal', value: '' });
 const group = (operator: 'and' | 'or', child: DataScopeCondition): DataScopeCondition =>
@@ -52,11 +53,11 @@ const group = (operator: 'and' | 'or', child: DataScopeCondition): DataScopeCond
 
 /** 编辑节点只修改当前草稿；服务端仍是类型、目标与可信当前值的最终校验者。 */
 export default function DataScopeConditionEditor({ condition, path, fields, modelKey, contexts, bindings, businessTypes,
-  onChange, onRemove, errorPath, errorMessage }: {
+  onChange, onRemove, errorPath, errorMessage, leafOnly = false }: {
   condition: DataScopeCondition; path: string; fields: DataScopeResourceField[]; modelKey: string;
   contexts: DataScopeContextValue[]; bindings: { modelKey: string; field: string; contextKey: string }[];
   businessTypes: DataScopeBusinessType[]; onChange: (value: DataScopeCondition) => void; onRemove?: () => void;
-  errorPath?: string; errorMessage?: string;
+  errorPath?: string; errorMessage?: string; leafOnly?: boolean;
 }) {
   const selected = fields.find(field => field.name === condition.field);
   const availableContexts = contexts.filter(value => bindings.some(binding => binding.modelKey === modelKey
@@ -74,8 +75,8 @@ export default function DataScopeConditionEditor({ condition, path, fields, mode
     {errorPath === path && errorMessage && <Alert type="error" showIcon message={errorMessage} style={{ marginBottom: 8 }} />}
     <Space wrap align="start" style={{ marginBottom: 8 }}>
       <Typography.Text strong>条件 {path}</Typography.Text>
-      {condition.type !== 'group' && <Button size="small" onClick={() => onChange(group('and', condition))}>转换为 AND 组合</Button>}
-      {condition.type !== 'group' && <Button size="small" onClick={() => onChange(group('or', condition))}>转换为 OR 组合</Button>}
+      {!leafOnly && condition.type !== 'group' && <Button size="small" onClick={() => onChange(group('and', condition))}>转换为 AND 组合</Button>}
+      {!leafOnly && condition.type !== 'group' && <Button size="small" onClick={() => onChange(group('or', condition))}>转换为 OR 组合</Button>}
       {onRemove && <Button size="small" danger onClick={onRemove}>删除条件</Button>}
     </Space>
     {condition.type === 'group' ? <>
@@ -99,7 +100,7 @@ export default function DataScopeConditionEditor({ condition, path, fields, mode
       <Typography.Text type="secondary">{business?.hasReadContribution ? '提供读取贡献' : '无读取贡献；完整判断仍生效'}</Typography.Text>
     </Space> : <Space wrap align="start">
       <Form.Item label="直接属性"><Select aria-label={path === '1' ? '直接属性' : `条件项 ${path} 直接属性`} style={{ minWidth: 180 }} value={condition.field || undefined}
-        options={fields.map(field => ({ value: field.name, label: field.name }))}
+        options={fields.map(field => ({ value: field.name, label: field.title ?? field.name }))}
         onChange={field => onChange({ ...condition, field, operator: 'equal', value: '', contextKey: null })} /></Form.Item>
       <Form.Item label="比较"><Select aria-label={`条件项 ${path} 比较`} style={{ minWidth: 130 }} value={condition.operator}
         options={availableOperations.map(([key, label]) => ({ value: key, label }))}

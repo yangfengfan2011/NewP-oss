@@ -85,6 +85,18 @@
     "Field_ENAME": {
       "zhs": "显示名称",
       "en": "Display Name"
+    },
+    "Field_EID": {
+      "zhs": "唯一标识",
+      "en": "Unique ID"
+    },
+    "Field_NormalizedECODE": {
+      "zhs": "规范化账号",
+      "en": "Normalized Account"
+    },
+    "Field_Revision": {
+      "zhs": "修订号",
+      "en": "Revision"
     }
   }
 }

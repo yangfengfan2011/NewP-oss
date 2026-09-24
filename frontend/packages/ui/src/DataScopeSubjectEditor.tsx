@@ -9,11 +9,12 @@ interface SubjectName { id: string; name: string; parentId?: string; path?: { ty
 interface DirectoryPage { items: SubjectName[]; hasMore: boolean; currentValues: SubjectName[] }
 
 /** 主体候选独立于业务页面读取；切换类型取消旧请求，已选名称由同一最小目录解析。 */
-export default function DataScopeSubjectEditor({ subject, index, types, actions, read, onChange, onRemove }: {
+export default function DataScopeSubjectEditor({ subject, index, types, actions, read, onChange, onRemove, showPriority = true }: {
   subject: DataScopeSubject; index: number; types: SubjectType[];
   actions?: DataScopeAction[];
+  showPriority?: boolean;
   read: (path: string, signal?: AbortSignal) => Promise<unknown>;
-  onChange: (change: Partial<DataScopeSubject>) => void; onRemove: () => void;
+  onChange: (change: Partial<DataScopeSubject>) => void; onRemove?: () => void;
 }) {
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
@@ -51,13 +52,13 @@ export default function DataScopeSubjectEditor({ subject, index, types, actions,
       </Form.Item>}
       {type?.supportsDescendants && <Form.Item label="包含下级部门"><Switch aria-label="包含下级部门" checked={subject.matchOptions?.includeDescendants ?? false}
         onChange={includeDescendants => onChange({ matchOptions: { includeDescendants } })} /></Form.Item>}
-      <Form.Item label="优先级"><InputNumber aria-label="优先级" precision={0} value={subject.priority} onChange={priority => onChange({ priority: priority ?? 0 })} /></Form.Item>
+      {showPriority && <Form.Item label="优先级"><InputNumber aria-label="优先级" precision={0} value={subject.priority} onChange={priority => onChange({ priority: priority ?? 0 })} /></Form.Item>}
       {(actions ?? [{ key: 'read', title: '读取', enabled: true }]).map(action =>
         <Form.Item key={action.key} label={`${action.title}意见`}><Select aria-label={`${action.title}意见`} style={{ width: 130 }}
           value={subject.actions[action.key] ?? 'unset'}
           options={[{ value: 'unset', label: '不选' }, { value: 'allow', label: '同意' }, { value: 'deny', label: '拒绝' }]}
           onChange={opinion => onChange({ actions: { ...subject.actions, [action.key]: opinion } })} /></Form.Item>)}
-      <Form.Item label="操作"><Button danger onClick={onRemove}>删除主体项</Button></Form.Item>
+      {onRemove && <Form.Item label="操作"><Button danger onClick={onRemove}>删除主体项</Button></Form.Item>}
     </Space>
     {type?.supportsDescendants && <Typography.Paragraph type="secondary">默认仅匹配本部门人员。</Typography.Paragraph>}
   </div>;

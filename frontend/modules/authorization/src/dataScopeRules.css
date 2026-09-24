@@ -1,0 +1,32 @@
+.data-scope-page { min-width: 0; }
+.data-scope-workspace {
+  display: grid;
+  grid-template-columns: clamp(260px, 24vw, 300px) minmax(0, 1fr);
+  align-items: stretch;
+  gap: 16px;
+}
+.data-scope-workspace > aside, .data-scope-detail { min-width: 0; }
+.data-scope-sidebar { height: 100%; min-height: 440px; }
+.data-scope-detail > .ant-card-body { padding: 16px; }
+.data-scope-title { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; min-width: 0; padding-block: 4px; }
+.data-scope-title > .ant-typography { white-space: normal; overflow-wrap: anywhere; }
+.data-scope-title > .ant-input { width: 220px; max-width: 100%; padding-inline: 4px; font-weight: 600; }
+.data-scope-basics {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(180px, 1.5fr) auto;
+  gap: 12px 20px;
+  align-items: start;
+}
+.data-scope-basics .ant-form-item { margin-bottom: 4px; }
+.data-scope-basics .ant-select { width: 100%; }
+.data-scope-ancestors { margin-bottom: 16px; }
+.data-scope-ancestors summary { cursor: pointer; }
+.data-scope-ancestors li { margin-top: 8px; }
+.data-scope-savebar { margin-top: 24px; padding-top: 16px; }
+@media (max-width: 900px) {
+  .data-scope-workspace { grid-template-columns: minmax(0, 1fr); }
+  .data-scope-sidebar { min-height: 0; }
+}
+@media (max-width: 600px) {
+  .data-scope-basics { grid-template-columns: minmax(0, 1fr); }
+}

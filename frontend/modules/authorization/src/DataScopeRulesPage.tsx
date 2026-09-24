@@ -234,7 +234,7 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
     <Spin spinning={loading}>
       <div className="data-scope-workspace">
         <aside aria-label="规则树面板">
-          <Card size="small" className="data-scope-sidebar" styles={{ header: { minHeight: token.controlHeightLG, padding: `${token.paddingXXS}px ${token.paddingSM}px` }, body: { padding: token.paddingSM } }}
+          <Card size="small" className="data-scope-sidebar" styles={{ header: { minHeight: 'var(--np-workspace-header-height)', padding: `${token.paddingXXS}px ${token.paddingSM}px` }, body: { padding: token.paddingSM } }}
             title={<Space size={token.marginXS} wrap><Button size="small" disabled={disabled} onClick={create}>＋ 新增规则</Button>
               <Dropdown menu={nodeMenu} trigger={['click']}><Button size="small" disabled={!selected || disabled}>节点操作 ▾</Button></Dropdown></Space>}>
             <ConfigProvider theme={{ components: { Tree: { titleHeight: token.controlHeight, nodeSelectedBg: token.colorPrimaryBg, nodeSelectedColor: token.colorPrimaryText } } }}>
@@ -250,7 +250,7 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
             {shownRules.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无规则" />}
           </Card>
         </aside>
-        <Card size="small" className="data-scope-detail" title={selected ? <div className="data-scope-title" aria-label="规则路径">
+        <Card size="small" className="data-scope-detail" styles={{ header: { minHeight: 'var(--np-workspace-header-height)' } }} title={selected ? <div className="data-scope-title" aria-label="规则路径">
             {ancestors.length > 0 && <Typography.Text type="secondary">{ancestors.map(node => node.name).join(' / ')} /</Typography.Text>}
             {nameEditingId === selected.id && !disabled
               ? <Input ref={nameInput} aria-label="规则名称" title="规则名称" maxLength={256} value={selected.name}

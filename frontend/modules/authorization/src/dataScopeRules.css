@@ -1,5 +1,6 @@
 .data-scope-page { min-width: 0; }
 .data-scope-workspace {
+  --np-workspace-header-height: 48px;
   display: grid;
   grid-template-columns: clamp(260px, 24vw, 300px) minmax(0, 1fr);
   align-items: stretch;

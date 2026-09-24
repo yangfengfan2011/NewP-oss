@@ -55,7 +55,7 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
   return <TreeInstanceContext.Provider value={instanceId}><div className="np-tree-workspace">
     <aside aria-label="结构树" style={{ minWidth: 0 }}>
       <Card size="small" className="np-tree-sidebar-card"
-        styles={{ header: { minHeight: token.controlHeightLG, padding: `${token.paddingXXS}px ${token.paddingSM}px` }, body: { padding: token.paddingSM } }}
+        styles={{ header: { minHeight: 'var(--np-workspace-header-height)', padding: `${token.paddingXXS}px ${token.paddingSM}px` }, body: { padding: token.paddingSM } }}
         title={view.treeActions?.length ? <Space role="toolbar" aria-label="树操作" size={token.marginXS} style={{ width: '100%' }} wrap>
           {view.treeActions.map(action => ({ action, resolution: features.action(action.key, 'treeActions') })).filter(({ resolution }) => !features.placement || resolution.kind === 'allowed').map(({ action, resolution }) => <Button key={action.key} size="small" icon={action.standardAction === 'create' ? <PlusOutlined aria-hidden="true" /> : undefined}
             onClick={() => runtime.leave(() => { setEditContext(undefined); setEditFeature(features.placement ? { ...features.placement, actionPosition: resolvedFeaturePosition(resolution), actionKey: action.actionKey ?? action.standardAction } : undefined); setEditPage({ pageKey: 'platform.list', parameters: { viewKey: action.viewKey, presentation: 'drawer', standardAction: action.standardAction, actionKey: action.actionKey }, inputResolverKey: action.inputResolverKey }); })}>{t(`${view.dicKey}.${action.labelKey}`, action.labelKey)}</Button>)}

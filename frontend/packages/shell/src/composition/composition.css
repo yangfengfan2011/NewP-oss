@@ -13,6 +13,7 @@
 }
 
 .np-tree-workspace {
+  --np-workspace-header-height: 48px;
   display: grid;
   grid-template-columns: clamp(260px, 24vw, 300px) minmax(0, 1fr);
   align-items: stretch;
@@ -36,7 +37,9 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 8px 12px;
-  padding: 12px 16px;
+  min-height: var(--np-workspace-header-height);
+  box-sizing: border-box;
+  padding: 8px 16px;
   border-bottom: 1px solid var(--np-composition-border);
 }
 

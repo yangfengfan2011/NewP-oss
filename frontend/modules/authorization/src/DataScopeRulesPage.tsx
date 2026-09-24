@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Button, Card, ConfigProvider, Dropdown, Empty, Flex, Form, Input, Modal, Select, Space, Spin, Switch, Tabs, Tag, Tree, Typography, theme } from 'antd';
 import useMessage from 'antd/es/message/useMessage';
+import DownOutlined from '@ant-design/icons/DownOutlined';
+import EditOutlined from '@ant-design/icons/EditOutlined';
+import type { InputRef } from 'antd';
+import { nextRuleName, trimRuleNames, validateRuleNames } from './dataScopeRuleNames';
 import { platformFetch, useAuthorization, useLocalization } from '@icp-platform/core';
 import type { PageProps } from '@icp-platform/sdk';
 import { requestRole } from './roleResource';
@@ -50,6 +54,8 @@ const orderRuleSubjects = (node: Rule, rank = false): Rule => ({ ...node,
 
 /** 根树草稿与正式保存分离；页面离开使用既有 Page 生命周期。 */
 export default function DataScopeRulesPage({ input, reportState }: PageProps) {
+  const nameInput = useRef<InputRef>(null);
+  const [nameEditingId, setNameEditingId] = useState<string>();
   const { hasFeature } = useAuthorization();
   const { token } = theme.useToken();
   const { t } = useLocalization();
@@ -75,6 +81,9 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
   const entry = String(input.parameters.featurePosition ?? '');
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
   const selected = draft && findNode(draft, selectedId ?? draft.id);
+  useEffect(() => {
+    if (selected?.id === nameEditingId) nameInput.current?.focus({ cursor: 'all' });
+  }, [selected?.id, nameEditingId]);
   const ancestors = draft && selected ? pathTo(draft, selected.id).slice(0, -1) : [];
   const shownRules = draft ? rules.some(rule => rule.id === draft.id)
     ? rules.map(rule => rule.id === draft.id ? draft : rule) : [...rules, draft] : rules;
@@ -112,11 +121,13 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
     if (!draft || !savePosition || readOnly || pending.current) return false;
     pending.current = true; setSaving(true); setError(''); setConditionErrorPath('');
     try {
-      const candidate = orderRuleSubjects(draft, true);
+      validateRuleNames(draft, rules);
+      const candidate = trimRuleNames(orderRuleSubjects(draft, true));
       await requestRole(platformFetch as typeof fetch, `${endpoint}/rules/${encodeURIComponent(draft.id)}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-NewP-Feature': savePosition }, body: JSON.stringify(candidate),
       }, '规则');
       setDraft(candidate); setSaved(candidate);
+      setNameEditingId(undefined);
       setRules(current => current.some(rule => rule.id === candidate.id) ? current.map(rule => rule.id === candidate.id ? candidate : rule) : [...current, candidate]);
       void message.success('规则已保存');
       return true;
@@ -134,7 +145,7 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
       return false;
     }
     finally { pending.current = false; setSaving(false); }
-  }, [draft, savePosition, readOnly, message, editing]);
+  }, [draft, rules, savePosition, readOnly, message, editing]);
   useEffect(() => { reportState({ dirty: dirty || editing, submitting: saving }, reset, save); }, [dirty, editing, saving, reset, save, reportState]);
   const choose = (rule: Rule, nodeId = rule.id) => {
     if (dirty) { setPendingRule(rule); setPendingSelection(nodeId); }
@@ -147,14 +158,16 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
     const resource = catalog?.resources[0];
     if (!resource) return;
     const id = `DataScopeRule_${crypto.randomUUID()}`;
-    choose({ id, rootId: id, parentId: null, name: '新规则', enabled: true, resourceKey: resource.resource.resourceKey,
+    setNameEditingId(id);
+    choose({ id, rootId: id, parentId: null, name: nextRuleName('新规则', shownRules), enabled: true, resourceKey: resource.resource.resourceKey,
       condition: initialCondition(resource.resource.resourceKey),
       subjects: [{ id: `DataScopeSubject_${crypto.randomUUID()}`, type: 'all', subjectId: null, priority: 0, actions: { read: 'unset' } }], children: [] });
   };
   const addChild = () => {
     if (!draft || !selected) return;
     const id = `DataScopeRule_${crypto.randomUUID()}`;
-    const child: Rule = { id, rootId: draft.id, parentId: selected.id, name: '新子规则', enabled: true,
+    setNameEditingId(id);
+    const child: Rule = { id, rootId: draft.id, parentId: selected.id, name: nextRuleName('新子规则', selected.children), enabled: true,
       resourceKey: draft.resourceKey, condition: initialCondition(draft.resourceKey), subjects: [], children: [] };
     edit(node => ({ ...node, children: [...node.children, child] }));
     setSelectedId(id);
@@ -166,7 +179,8 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
     if (!draft || !selected?.parentId) return;
     const parentId = selected.parentId;
     const id = `DataScopeRule_${crypto.randomUUID()}`;
-    const sibling: Rule = { id, rootId: draft.id, parentId, name: '新同级规则', enabled: true,
+    setNameEditingId(id);
+    const sibling: Rule = { id, rootId: draft.id, parentId, name: nextRuleName('新同级规则', findNode(draft, parentId)?.children ?? []), enabled: true,
       resourceKey: draft.resourceKey, condition: initialCondition(draft.resourceKey), subjects: [], children: [] };
     setDraft(updateNode(draft, parentId, parent => ({ ...parent, children: [...parent.children, sibling] })));
     setSelectedId(id);
@@ -224,7 +238,7 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
             title={<Space size={token.marginXS} wrap><Button size="small" disabled={disabled} onClick={create}>＋ 新增规则</Button>
               <Dropdown menu={nodeMenu} trigger={['click']}><Button size="small" disabled={!selected || disabled}>节点操作 ▾</Button></Dropdown></Space>}>
             <ConfigProvider theme={{ components: { Tree: { titleHeight: token.controlHeight, nodeSelectedBg: token.colorPrimaryBg, nodeSelectedColor: token.colorPrimaryText } } }}>
-              <Tree aria-label="规则树" blockNode showLine={{ showLeafIcon: false }} switcherIcon={<span aria-hidden="true">⌄</span>}
+              <Tree aria-label="规则树" blockNode showLine={{ showLeafIcon: false }} switcherIcon={<DownOutlined aria-hidden="true" />}
                 selectedKeys={selectedId ? [selectedId] : []} expandedKeys={shownRules.flatMap(treeIds).filter(id => !collapsedKeys.includes(id))}
                 onExpand={keys => setCollapsedKeys(shownRules.flatMap(treeIds).filter(id => !keys.includes(id)))}
                 treeData={shownRules.map(treeNode)} onSelect={keys => selectNode(String(keys[0] ?? ''))}
@@ -238,8 +252,14 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
         </aside>
         <Card size="small" className="data-scope-detail" title={selected ? <div className="data-scope-title" aria-label="规则路径">
             {ancestors.length > 0 && <Typography.Text type="secondary">{ancestors.map(node => node.name).join(' / ')} /</Typography.Text>}
-            <Input aria-label="规则名称" title="规则名称，可直接编辑" variant="borderless" disabled={disabled} value={selected.name}
-              onChange={event => edit(node => ({ ...node, name: event.target.value }))} />
+            {nameEditingId === selected.id && !disabled
+              ? <Input ref={nameInput} aria-label="规则名称" title="规则名称" maxLength={256} value={selected.name}
+                onChange={event => edit(node => ({ ...node, name: event.target.value }))}
+                onPressEnter={() => setNameEditingId(undefined)} onBlur={() => setNameEditingId(undefined)} />
+              : <Button type="text" className="data-scope-name" aria-label="编辑规则名称" disabled={disabled}
+                onClick={() => setNameEditingId(selected.id)}>
+                <span>{selected.name || '未命名规则'}</span><EditOutlined aria-hidden="true" />
+              </Button>}
           </div> : '规则详情'}
           extra={selected && <Switch aria-label="启用规则" checkedChildren="启用" unCheckedChildren="停用" disabled={disabled}
             checked={selected.enabled} onChange={enabled => edit(node => ({ ...node, enabled }))} />}>

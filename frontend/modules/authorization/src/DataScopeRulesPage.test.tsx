@@ -68,6 +68,51 @@ it('saves row order as unique priorities and restores it from an unordered respo
   } finally { await act(async () => root.unmount()); container.remove(); }
 });
 
+it('offers explicit rename, allocates unused names and blocks duplicate saves', async () => {
+  const saved = { id: 'existing', rootId: 'existing', parentId: null, name: '新规则', enabled: true,
+    resourceKey: 'organization.person', condition: { type: 'attribute', field: 'ENAME', operator: 'equal', value: '' }, subjects: [], children: [] };
+  fetcher.mockImplementation((url: string, init?: RequestInit) => Promise.resolve(init?.method === 'PUT'
+    ? new Response(null, { status: 204 }) : new Response(JSON.stringify(url.endsWith('/catalog')
+      ? { features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }], resources: [
+        { resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Organization/Person' }, fields: [{ name: 'ENAME', type: 'String' }] }] }
+      : [saved]))));
+  const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+  let lifecycle!: Parameters<PageProps['reportState']>;
+  try {
+    await act(async () => root.render(<DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }} reportState={(...value) => { lifecycle = value; }} />));
+    await act(async () => (container.querySelector('.ant-tree-title') as HTMLElement).click());
+    expect(container.querySelector('[aria-label="规则名称"]')).toBeNull();
+    expect(container.querySelector('[aria-label="编辑规则名称"]')?.textContent).toBe('新规则');
+    await clickText('＋ 新增规则');
+    let input = container.querySelector('[aria-label="规则名称"]') as HTMLInputElement;
+    expect(input.value).toBe('新规则2');
+    expect(document.activeElement).toBe(input);
+    expect(input.selectionEnd! - input.selectionStart!).toBe(input.value.length);
+    await act(async () => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true })));
+    expect(container.querySelector('[aria-label="规则名称"]')).toBeNull();
+    await act(async () => (container.querySelector('[aria-label="编辑规则名称"]') as HTMLElement).click());
+    input = container.querySelector('[aria-label="规则名称"]') as HTMLInputElement;
+    expect(document.activeElement).toBe(input);
+    const rename = async (name: string) => act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, name);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await rename(' 新规则 ');
+    await act(async () => { expect(await lifecycle[2]!()).toBe(false); });
+    expect(fetcher.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false);
+    expect(container.textContent).toContain('同级规则名称');
+    await rename(' 修改名称 ');
+    await act(async () => { expect(await lifecycle[2]!()).toBe(true); });
+    const write = fetcher.mock.calls.find(([, init]) => init?.method === 'PUT');
+    expect(JSON.parse(write![1].body).name).toBe('修改名称');
+    expect(container.querySelector('[aria-label="规则名称"]')).toBeNull();
+    await act(async () => (container.querySelector('[aria-label="编辑规则名称"]') as HTMLElement).click());
+    input = container.querySelector('[aria-label="规则名称"]') as HTMLInputElement;
+    await act(async () => input.blur());
+    expect(container.querySelector('[aria-label="规则名称"]')).toBeNull();
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});
+
 it('shows every root in one tree without pagination controls', async () => {
   const rules = Array.from({ length: 21 }, (_, index) => ({ id: `root-${index}`, rootId: `root-${index}`, parentId: null, name: `规则${index}`,
     enabled: true, resourceKey: 'organization.person', condition: { type: 'attribute', field: 'ENAME', operator: 'equal', value: '甲' }, subjects: [], children: [] }));
@@ -311,7 +356,7 @@ it('selects the failing child and keeps its condition error inline', async () =>
     await act(async () => (container.querySelectorAll('.ant-tree-title')[0] as HTMLElement).click());
     await act(async () => { expect(await lifecycle[2]!()).toBe(false); });
     expect(container.querySelector('[aria-label="规则路径"]')?.textContent).toContain('根节点 /');
-    expect((container.querySelector('[aria-label="规则名称"]') as HTMLInputElement).value).toBe('子节点');
+    expect(container.querySelector('[aria-label="编辑规则名称"]')?.textContent).toBe('子节点');
     expect(container.textContent).toContain('EID 等于 当前身份值：当前人员');
     expect(container.textContent).toContain('人员所属部门已启用（无读取贡献）');
     expect(container.textContent).toContain('且 AND');

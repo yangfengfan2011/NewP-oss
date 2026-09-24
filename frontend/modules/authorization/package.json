@@ -9,6 +9,7 @@
     "test": "vitest --run"
   },
   "dependencies": {
+    "@ant-design/icons": "^6.2.3",
     "@icp-platform/core": "workspace:*",
     "@icp-platform/sdk": "workspace:*",
     "antd": "^5.29.3",

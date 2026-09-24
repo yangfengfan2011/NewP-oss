@@ -66,6 +66,9 @@ importers:
 
   modules/authorization:
     dependencies:
+      '@ant-design/icons':
+        specifier: ^6.2.3
+        version: 6.2.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@icp-platform/core':
         specifier: workspace:*
         version: link:../../packages/core

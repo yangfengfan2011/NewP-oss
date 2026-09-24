@@ -42,6 +42,7 @@ public sealed class DataScopeRules(EfPlatformDbContext db, IPlatformTransactionE
     {
         catalog.Validate(rule);
         rule = catalog.NormalizeForSave(rule);
+        rule = NormalizeNames(rule);
         var incoming = Flatten(rule).ToArray();
         foreach (var group in incoming.SelectMany(node => node.Subjects).Where(subject => subject.SubjectId is not null).GroupBy(subject => subject.Type))
         {
@@ -54,6 +55,12 @@ public sealed class DataScopeRules(EfPlatformDbContext db, IPlatformTransactionE
         }
         await transactions.ExecuteAsync(async token =>
         {
+            // 所有根同属一层；跨根保存先串行核对名称，避免两个并发新建同时通过检查。
+            await db.Database.ExecuteSqlInterpolatedAsync($"DECLARE @result int; EXEC @result = sys.sp_getapplock @Resource='Authorization.DataScopeRuleNames', @LockMode='Exclusive', @LockOwner='Transaction'; IF @result < 0 THROW 51000, 'Data scope rule name lock failed.', 1;", token);
+            if (await Nodes.AsNoTracking().AnyAsync(row => EF.Property<string?>(row, "ParentId") == null
+                && EF.Property<string>(row, "EID") != rule.Id
+                && EF.Functions.Collate(EF.Property<string>(row, "Name").Trim(), "Latin1_General_100_BIN2") == rule.Name, token))
+                throw new RolePermissionValidationException($"同级规则名称“{rule.Name}”已存在。");
             var target = "Authorization.DataScopeRule:" + rule.Id;
             await db.Database.ExecuteSqlInterpolatedAsync($"DECLARE @result int; EXEC @result = sys.sp_getapplock @Resource={target}, @LockMode='Exclusive', @LockOwner='Transaction'; IF @result < 0 THROW 51000, 'Data scope rule lock failed.', 1;", token);
             var existing = await Nodes.Where(row => EF.Property<string>(row, "RootId") == rule.Id).ToListAsync(token);
@@ -99,6 +106,17 @@ public sealed class DataScopeRules(EfPlatformDbContext db, IPlatformTransactionE
                 [new("Configuration", previous is null ? null : BusinessAuditValue.Text(previous), BusinessAuditValue.Text(canonical))]), token);
             return true;
         }, cancellationToken);
+    }
+
+    // 名称去除首尾空白后按原文判重；只约束兄弟，不禁止不同父节点下使用同名。
+    private static DataScopeRuleDto NormalizeNames(DataScopeRuleDto node)
+    {
+        var children = node.Children.Select(NormalizeNames).ToArray();
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var child in children)
+            if (!names.Add(child.Name))
+                throw new RolePermissionValidationException($"同级规则名称“{child.Name}”已存在。");
+        return node with { Name = node.Name.Trim(), Children = children };
     }
 
     /// <summary>在根目标锁内删除完整子树及主体项，并以实际旧配置登记撤销审计。</summary>

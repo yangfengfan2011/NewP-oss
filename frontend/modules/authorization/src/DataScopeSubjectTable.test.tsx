@@ -114,3 +114,22 @@ it('makes opinions and mutation controls unavailable in read-only mode', async (
     expect([...container.querySelectorAll('button')].every(button => button.disabled)).toBe(true);
   } finally { await act(async () => root.unmount()); container.remove(); }
 });
+
+it('replaces names when the qualified transport changes and ignores its late response', async () => {
+  let finish!: (value: unknown) => void;
+  let signal: AbortSignal | undefined;
+  const oldRead = (_path: string, nextSignal?: AbortSignal) => new Promise(resolve => { finish = resolve; signal = nextSignal; });
+  const newRead = vi.fn(async () => ({ currentValues: [{ id: 'same', name: '新资格名称', path: [{ type: 'company', id: 'c', name: '公司' }] }] }));
+  const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+  const render = (read: typeof oldRead) => <DataScopeSubjectTable subjects={[{ id: 's', type: 'department', subjectId: 'same', priority: 0, actions: {} }]}
+    types={[{ key: 'department', title: '部门', requiresId: true }]} actions={[]} read={read} disabled={false} onChange={() => {}} onEditingChange={() => {}} />;
+  try {
+    await act(async () => root.render(render(oldRead)));
+    await act(async () => root.render(render(newRead)));
+    expect(signal?.aborted).toBe(true);
+    await act(async () => finish({ currentValues: [{ id: 'same', name: '旧资格名称' }] }));
+    expect(container.textContent).toContain('公司 / 新资格名称');
+    expect(container.textContent).not.toContain('旧资格名称');
+    expect(newRead).toHaveBeenCalledTimes(1);
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});

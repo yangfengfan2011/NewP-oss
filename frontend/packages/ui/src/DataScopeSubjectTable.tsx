@@ -4,19 +4,17 @@ import OpinionCheckbox from './OpinionCheckbox';
 import DataScopeSubjectEditor, { type DataScopeSubject, type SubjectType } from './DataScopeSubjectEditor';
 
 import { orderDataScopeSubjects, rankDataScopeSubjects } from './dataScopeSubjectOrder';
+import { resolveDataScopeSubjects, type DataScopeSubjectDirectoryRead, type DataScopeSubjectNames } from './dataScopeSubjectDirectory';
 
 interface Action { key: string; title: string; enabled: boolean }
-interface SubjectName { id: string; name: string; path?: { name: string }[] | null }
-interface DirectoryPage { currentValues: SubjectName[] }
-const nameBatchSize = 10;
 
 /** 主体完整展示，名称按类型分批读取；抽屉确认前不改根规则草稿。 */
 export default function DataScopeSubjectTable({ subjects, types, actions, read, disabled, onChange, onEditingChange }: {
   subjects: DataScopeSubject[]; types: SubjectType[]; actions: Action[]; disabled: boolean;
-  read: (path: string, signal?: AbortSignal) => Promise<unknown>;
+  read: DataScopeSubjectDirectoryRead;
   onChange: (subjects: DataScopeSubject[]) => void; onEditingChange: (editing: boolean) => void;
 }) {
-  const [names, setNames] = useState<Record<string, string>>({});
+  const [names, setNames] = useState<DataScopeSubjectNames>(new Map());
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState<DataScopeSubject>();
@@ -24,27 +22,14 @@ export default function DataScopeSubjectTable({ subjects, types, actions, read, 
   const ordered = orderDataScopeSubjects(subjects);
   const commit = (next: DataScopeSubject[]) => onChange(rankDataScopeSubjects(next));
   const nameRequest = JSON.stringify(ordered.filter(subject => types.find(type => type.key === subject.type)?.requiresId && subject.subjectId)
-    .map(subject => [subject.type, subject.subjectId]));
+    .map(subject => ({ type: subject.type, subjectId: subject.subjectId })));
   useEffect(() => {
     const controller = new AbortController();
-    const entries = JSON.parse(nameRequest) as [string, string][];
-    setLoading(entries.length > 0); setError(''); setNames({});
-    const load = async () => {
-      const next: Record<string, string> = {};
-      // 列表不分页；目录请求仍限定每批身份数量，并串行发送，避免大 URL 和无界并发。
-      for (const type of new Set(entries.map(([type]) => type))) {
-        const ids = [...new Set(entries.filter(([key]) => key === type).map(([, id]) => id))];
-        for (let offset = 0; offset < ids.length; offset += nameBatchSize) {
-          if (controller.signal.aborted) return;
-          const parameters = new URLSearchParams({ page: '1' });
-          for (const id of ids.slice(offset, offset + nameBatchSize)) parameters.append('currentIds', id);
-          const result = await read(`/subjects/${encodeURIComponent(type)}?${parameters}`, controller.signal) as DirectoryPage;
-          for (const item of result.currentValues) next[`${type}:${item.id}`] = [...(item.path?.map(part => part.name) ?? []), item.name].join(' / ');
-        }
-      }
+    const entries = JSON.parse(nameRequest) as Pick<DataScopeSubject, 'type' | 'subjectId'>[];
+    setLoading(entries.length > 0); setError(''); setNames(new Map());
+    void resolveDataScopeSubjects(read, entries, controller.signal).then(next => {
       if (!controller.signal.aborted) setNames(next);
-    };
-    void load().catch(failure => { if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : '主体名称读取失败'); })
+    }).catch(failure => { if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : '主体名称读取失败'); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [nameRequest, read]);
@@ -80,8 +65,9 @@ export default function DataScopeSubjectTable({ subjects, types, actions, read, 
       columns={[
         { title: '授权主体', key: 'subject', width: 240, render: (_, subject) => {
           const type = types.find(type => type.key === subject.type);
+          const name = subject.subjectId ? names.get(subject.type)?.get(subject.subjectId) : undefined;
           return subject.subjectId ? <Space size={6} wrap><Tag>{type?.title ?? subject.type}</Tag>
-            <span>{names[`${subject.type}:${subject.subjectId}`] ?? (loading ? '读取中…' : `无法解析（${subject.subjectId}）`)}</span>
+            <span>{name ? [...(name.path?.map(part => part.name) ?? []), name.name].join(' / ') : (loading ? '读取中…' : `无法解析（${subject.subjectId}）`)}</span>
           </Space> : type?.title ?? subject.type;
         } },
         { title: '包含下级', key: 'descendants', width: 75, render: (_, subject) => types.find(type => type.key === subject.type)?.supportsDescendants

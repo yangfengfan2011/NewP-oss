@@ -107,8 +107,8 @@
       "en": "Disable"
     },
     "Action_Disable_Confirm": {
-      "zhs": "确认停用当前人员吗？",
-      "en": "Disable this person?"
+      "zhs": "停用会同时停用绑定账号并终止其会话，请填写停用原因。",
+      "en": "Disabling this person also disables the linked account and terminates its sessions. Enter a reason."
     },
     "Action_DataUnavailable": {
       "zhs": "动作所需数据不可用，请刷新详情后重试。",
@@ -117,6 +117,10 @@
     "Detail_Info": {
       "zhs": "详情信息",
       "en": "Details"
+    },
+    "Action_LinkUser": {
+      "zhs": "绑定用户账号",
+      "en": "Bind user account"
     }
   }
 }

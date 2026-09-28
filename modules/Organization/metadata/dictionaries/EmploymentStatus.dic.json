@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "EmploymentStatus": {
+    "FullTime": {
+      "zhs": "正式",
+      "en": "Full-time"
+    },
+    "PartTime": {
+      "zhs": "兼职",
+      "en": "Part-time"
+    },
+    "Contractor": {
+      "zhs": "外包",
+      "en": "Contractor"
+    },
+    "Intern": {
+      "zhs": "实习",
+      "en": "Intern"
+    }
+  }
+}

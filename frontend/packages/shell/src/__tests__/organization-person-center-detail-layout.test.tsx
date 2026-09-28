@@ -1,3 +1,4 @@
+import personMessages from '../../../../../modules/Organization/metadata/dictionaries/Organization.Person.dic.json';
 import './authorizedFeatureUiFixture';
 // @vitest-environment jsdom
 
@@ -99,7 +100,7 @@ describe('organization person center detail layout', () => {
         <LocalizationProvider
           defaultLanguage="zhs"
           supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
-          catalogs={{ zhs: personDetailCatalog }}
+          catalogs={{ zhs: { ...personDetailCatalog, ...Object.fromEntries(Object.entries(personMessages['Organization.Person']).map(([key, value]) => [`Organization.Person.${key}`, value.zhs])) } }}
         >
           <PlatformQueryProvider scopeKey="user-1">
             <AuthorizationProvider permissions={['Organization.Person.View', 'Organization.Person.Update']}>

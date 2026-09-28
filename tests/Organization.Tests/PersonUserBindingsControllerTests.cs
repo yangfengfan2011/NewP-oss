@@ -41,6 +41,7 @@ public sealed class PersonUserBindingsControllerTests
         Assert.Contains("application/problem+json", conflict.ContentTypes);
         var problem = Assert.IsType<ProblemDetails>(conflict.Value);
         Assert.Equal(PersonUserBindingFailureCodes.PersonAlreadyBound, problem.Extensions["code"]);
+        Assert.Equal("Organization.Person.ORGANIZATION_PERSON_ALREADY_BOUND", problem.Extensions["reasonKey"]);
         Assert.Equal("trace-controller", problem.Extensions["traceId"]);
     }
 

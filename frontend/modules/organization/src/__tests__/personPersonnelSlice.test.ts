@@ -171,7 +171,7 @@ describe('personnel center first vertical slice', () => {
     );
     const request = lookupRequest('CompanyId');
 
-    await expect(provider?.load(request)).rejects.toThrow('temporarily unavailable');
+    await expect(provider?.load(request)).rejects.toMatchObject({ name: 'StandardCrudRequestError', status: 503 });
     await expect(provider?.load(request)).resolves.toMatchObject({
       options: [{ value: 'company-1', label: '总部', disabled: false }],
     });

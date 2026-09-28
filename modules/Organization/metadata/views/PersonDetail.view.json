@@ -61,7 +61,7 @@
       }
     ],
     "featureActions": [
-      { "key": "linkUser", "titleKey": "绑定用户账号", "behaviorKey": "organization.person.linkUser", "readBehaviors": ["organization.person.linkUser.lookup"] }
+      { "key": "linkUser", "titleKey": "Action_LinkUser", "behaviorKey": "organization.person.linkUser", "readBehaviors": ["organization.person.linkUser.lookup"] }
     ],
     "summaryBlocks": [
       "userBinding",

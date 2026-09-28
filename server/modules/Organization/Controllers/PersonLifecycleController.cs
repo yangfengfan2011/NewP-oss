@@ -73,11 +73,13 @@ public sealed class PersonLifecycleController(IPersonLifecycleService lifecycleS
         result.ContentTypes.Add("application/problem+json");
         return result;
     }
+    // 保留稳定业务错误码，并补所属模块的呈现词条。
     private ObjectResult LifecycleProblem(PersonLifecycleException exception)
     {
         var status = exception.StatusCode;
         var problem = new ProblemDetails { Status = status, Title = exception.FailureCode };
         problem.Extensions["code"] = exception.FailureCode;
+        problem.Extensions["reasonKey"] = $"Organization.Person.{exception.FailureCode}";
         problem.Extensions["traceId"] = HttpContext.TraceIdentifier;
         if (exception.Current is not null)
         {

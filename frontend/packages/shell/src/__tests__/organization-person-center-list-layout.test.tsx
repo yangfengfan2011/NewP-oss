@@ -1,3 +1,4 @@
+import personMessages from '../../../../../modules/Organization/metadata/dictionaries/Organization.Person.dic.json';
 import './authorizedFeatureUiFixture';
 // @vitest-environment jsdom
 
@@ -94,6 +95,7 @@ const standardCrudListViewMetadata = {
 };
 
 const personListCatalog = {
+  ...Object.fromEntries(Object.entries(personMessages['Organization.Person']).map(([key, value]) => [`Organization.Person.${key}`, value.zhs])),
   ...flattenZhsCatalog(personListDictionary, 'PersonListView'),
   ...flattenZhsCatalog(personDetailDictionary, 'PersonDetailView'),
 };

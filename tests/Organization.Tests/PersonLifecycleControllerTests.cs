@@ -35,6 +35,7 @@ public sealed class PersonLifecycleControllerTests
         Assert.Contains("application/problem+json", conflict.ContentTypes);
         var problem = Assert.IsType<ProblemDetails>(conflict.Value);
         Assert.Equal(PersonLifecycleFailureCodes.Conflict, problem.Extensions["code"]);
+        Assert.Equal("Organization.Person.LIFECYCLE_CONFLICT", problem.Extensions["reasonKey"]);
         Assert.Equal("trace-lifecycle-controller", problem.Extensions["traceId"]);
         Assert.NotNull(problem.Extensions["current"]);
     }

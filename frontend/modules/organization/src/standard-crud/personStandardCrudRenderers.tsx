@@ -1,3 +1,4 @@
+import { useLocalization } from '@icp-platform/core';
 import type { StandardCrudSummaryBlock } from '@icp-platform/sdk';
 import TextArea from 'antd/es/input/TextArea';
 import AuthorizationSummaryCard from '../components/AuthorizationSummaryCard';
@@ -33,13 +34,14 @@ export function DisableReasonInput({
   value: unknown;
   onChange: (value: unknown) => void;
 }) {
+  const { t } = useLocalization();
   return (
     <TextArea
-      aria-label="停用原因"
+      aria-label={t('Organization.Person.DisableReason')}
       autoSize={{ minRows: 3, maxRows: 6 }}
       maxLength={500}
       showCount
-      placeholder="请输入停用原因（必填）"
+      placeholder={t('Organization.Person.DisableReasonPlaceholder')}
       value={typeof value === 'string' ? value : ''}
       onChange={(event) => onChange(event.target.value)}
     />

@@ -240,7 +240,7 @@
     },
     "Action_Disable_Confirm": {
       "zhs": "停用会同时停用绑定账号并终止其会话，请填写停用原因。",
-      "en": "Disable this person?"
+      "en": "Disabling this person also disables the linked account and terminates its sessions. Enter a reason."
     },
     "Action_Enable": {
       "zhs": "启用",
@@ -248,7 +248,7 @@
     },
     "Action_Enable_Confirm": {
       "zhs": "启用人员不会自动恢复绑定账号或已终止会话，确认继续？",
-      "en": "Enable this person?"
+      "en": "Enabling this person will not restore the linked account or terminated sessions. Continue?"
     },
     "Action_Processing": {
       "zhs": "处理中...",

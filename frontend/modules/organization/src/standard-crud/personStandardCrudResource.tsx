@@ -1,6 +1,7 @@
 import { platformFetch } from '@icp-platform/core';
 import {
   createStandardCrudRestDataAdapter,
+  StandardCrudRequestError,
   createStandardCrudRestLookupProvider,
   type StandardCrudDetailFieldRendererContext,
   type StandardCrudActionInputRenderContext,
@@ -173,19 +174,19 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Record
     },
     delete: async ({ id, featurePosition }) => {
       if (!id) {
-        throw new Error('缺少人员标识，无法删除。');
+        throw new StandardCrudRequestError('缺少人员标识，无法删除。', 400, {}, { code: 'Organization.Person.InvalidId' });
       }
 
       await deletePerson(id, featurePosition);
     },
     disable: async ({ id, input, featurePosition }) => {
       if (!id) {
-        throw new Error('缺少人员标识，无法停用。');
+        throw new StandardCrudRequestError('缺少人员标识，无法停用。', 400, {}, { code: 'Organization.Person.InvalidId' });
       }
 
       const reason = typeof input === 'string' ? input.trim() : '';
       if (reason.length === 0) {
-        throw new Error('请填写停用原因。');
+        throw new StandardCrudRequestError('请填写停用原因。', 400, {}, { reasonKey: 'Organization.Person.ORGANIZATION_PERSON_LIFECYCLE_REASON_INVALID' });
       }
 
       await setPersonLifecycleStatus(id, {
@@ -195,7 +196,7 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Record
     },
     enable: async ({ id, featurePosition }) => {
       if (!id) {
-        throw new Error('缺少人员标识，无法启用。');
+        throw new StandardCrudRequestError('缺少人员标识，无法启用。', 400, {}, { code: 'Organization.Person.InvalidId' });
       }
 
       await setPersonLifecycleStatus(id, {

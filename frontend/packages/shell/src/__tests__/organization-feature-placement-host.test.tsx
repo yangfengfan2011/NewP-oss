@@ -11,6 +11,7 @@ import organizationBindings from '../../../../modules/organization/src';
 import companyDictionary from '../../../../../modules/Organization/metadata/dictionaries/CompanyListView.dic.json';
 import compositionDictionary from '../../../../../modules/Organization/metadata/dictionaries/OrganizationComposition.dic.json';
 import personDictionary from '../../../../../modules/Organization/metadata/dictionaries/PersonDetailView.dic.json';
+import personMessages from '../../../../../modules/Organization/metadata/dictionaries/Organization.Person.dic.json';
 import companyDetail from '../../../../../modules/Organization/metadata/views/CompanyDetail.view.json';
 import companyList from '../../../../../modules/Organization/metadata/views/CompanyList.view.json';
 import organizationTree from '../../../../../modules/Organization/metadata/views/OrganizationStructure.view.json';
@@ -37,6 +38,7 @@ const personsPosition = featurePoint('tab', 'persons').position;
 const createCompanyPosition = featurePoint('action', 'createCompany', 'treeActions').position;
 const catalog = Object.fromEntries(
   [
+    ...Object.entries(personMessages['Organization.Person']).map(([key, text]) => [`Organization.Person.${key}`, text.zhs]),
     ...Object.entries(companyDictionary.CompanyListView).map(([key, text]) => [
       `CompanyListView.${key}`,
       text.zhs,

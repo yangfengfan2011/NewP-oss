@@ -4,10 +4,23 @@ import { StandardCrudRequestError } from '@icp-platform/sdk';
 const platformFetchMock = vi.hoisted(() => vi.fn());
 vi.mock('@icp-platform/core', () => ({ platformFetch: platformFetchMock }));
 
-import { setPersonLifecycleStatus } from '../services/organizationService';
+import { bindPersonUser, searchPersonUserBindingCandidates, setPersonLifecycleStatus } from '../services/organizationService';
 
 describe('person lifecycle client', () => {
   beforeEach(() => platformFetchMock.mockReset());
+
+  it.each(['search', 'bind'])('preserves structured binding error facts for %s', async (operation) => {
+    const problem = { code: 'ORGANIZATION_PERSON_BINDING_REASON_INVALID',
+      reasonKey: 'Organization.Person.ORGANIZATION_PERSON_BINDING_REASON_INVALID', args: { maxLength: 500 },
+      title: 'private diagnostic', current: { accountEid: 'account-current' } };
+    platformFetchMock.mockResolvedValue(new Response(JSON.stringify(problem), {
+      status: 400, headers: { 'Content-Type': 'application/problem+json' },
+    }));
+    const request = operation === 'search' ? searchPersonUserBindingCandidates('person', '', 'binding.lookup')
+      : bindPersonUser('person', { accountEid: 'account', expectedRevision: 1, reason: '' }, 'binding.write');
+    await expect(request).rejects.toMatchObject({ code: problem.code, reasonKey: problem.reasonKey,
+      args: { maxLength: 500 }, responseProblem: problem });
+  });
 
   it.each([false, true])('uses the matching lifecycle command and request position for enabled=%s without a person revision', async (isEnabled) => {
     platformFetchMock.mockResolvedValue(new Response('{}', {
@@ -54,7 +67,7 @@ describe('person lifecycle client', () => {
       () => expect.fail('请求应失败'),
       (error: unknown) => {
         expect(error).toBeInstanceOf(StandardCrudRequestError);
-        expect(error).toMatchObject({ message: code, status });
+        expect(error).toMatchObject({ message: code, status, code });
       },
     );
   });

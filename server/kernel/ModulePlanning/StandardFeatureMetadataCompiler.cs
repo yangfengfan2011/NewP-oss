@@ -15,7 +15,7 @@ public static class StandardFeatureMetadataCompiler
             .SelectMany(document => document.GetProperty("navigation").GetProperty("items").EnumerateArray())
             .ToDictionary(item => Text(item, "key"), StringComparer.Ordinal);
         var result = new List<FeatureDeclaration>();
-        var scopeTitles = new Dictionary<(string Owner, string Scope), string>();
+        var scopeTitles = new Dictionary<(string Owner, string Scope), (string Title, string? TitleKey)>();
         var entered = new HashSet<string>(StringComparer.Ordinal);
         foreach (var item in navigation.Values)
             if (item.TryGetProperty("featureAuthorization", out var enabled) && enabled.ValueKind == JsonValueKind.True)
@@ -39,7 +39,7 @@ public static class StandardFeatureMetadataCompiler
             if (item.TryGetProperty("redirectTo", out _)) throw new InvalidOperationException("重定向别名不能创建授权点。");
             var reference = "navigation:" + key;
             var node = new FeatureDeclaration(moduleId, key, "navigation", Title(Optional(item, "titleKey") ?? key),
-                parent is null ? null : "navigation:" + parent, "") { ReferenceKey = reference, Container = true };
+                parent is null ? null : "navigation:" + parent, "") { ReferenceKey = reference, TitleKey = FullTitleKey(Optional(item, "titleKey")), Container = true };
             result.Add(node);
             if (item.TryGetProperty("page", out var page)) Page(page, reference, null, []);
             else if (item.TryGetProperty("targetKey", out var target)) View(target.GetString()!, reference, null, []);
@@ -65,7 +65,7 @@ public static class StandardFeatureMetadataCompiler
                     var tabKey = Text(tab, "key");
                     var reference = owner + "/" + (scope is null ? "" : "node-type:" + Uri.EscapeDataString(scope) + "/") + "tab:" + Uri.EscapeDataString(tabKey);
                     result.Add(new(moduleId, tabKey, "tab", Title(Text(tab, "titleKey"), Optional(view, "dicKey")), owner, "")
-                    { ReferenceKey = reference, StaticScope = scope, StaticScopeTitle = ScopeTitle(owner, scope), Container = true });
+                    { ReferenceKey = reference, TitleKey = FullTitleKey(Text(tab, "titleKey"), Optional(view, "dicKey")), StaticScope = scope, StaticScopeTitle = ScopeTitle(owner, scope), StaticScopeTitleKey = ScopeTitleKey(owner, scope), Container = true });
                     Page(tab.GetProperty("pageRef"), reference, null, new(chain, StringComparer.Ordinal));
                 }
             }
@@ -76,7 +76,7 @@ public static class StandardFeatureMetadataCompiler
                 foreach (var type in view.GetProperty("nodeTypes").EnumerateArray())
                 {
                     var nodeType = Text(type, "key");
-                    scopeTitles[(owner, nodeType)] = Title(Text(type, "titleKey"), Optional(view, "dicKey"));
+                    scopeTitles[(owner, nodeType)] = (Title(Text(type, "titleKey"), Optional(view, "dicKey")), FullTitleKey(Text(type, "titleKey"), Optional(view, "dicKey")));
                     TreeActions(type, "contextMenu", owner, nodeType, Optional(view, "dicKey"));
                     Page(type.GetProperty("pageRef"), owner, nodeType, new(chain, StringComparer.Ordinal));
                 }
@@ -91,9 +91,9 @@ public static class StandardFeatureMetadataCompiler
                 if (view.TryGetProperty("featureActions", out var customActions))
                     foreach (var action in customActions.EnumerateArray())
                         Action(owner, scope, Text(action, "key"), Title(Text(action, "titleKey"), Optional(view, "dicKey")), Text(action, "behaviorKey"), mode + ".custom",
-                            action.TryGetProperty("readBehaviors", out var reads) ? reads.EnumerateArray().Select(read => read.GetString()!).ToArray() : []);
+                            action.TryGetProperty("readBehaviors", out var reads) ? reads.EnumerateArray().Select(read => read.GetString()!).ToArray() : [], FullTitleKey(Text(action, "titleKey"), Optional(view, "dicKey")));
                 if (mode == "list" && view.TryGetProperty("export", out var export) && (!export.TryGetProperty("enabled", out var enabled) || enabled.ValueKind != JsonValueKind.False))
-                    Action(owner, scope, "export", "导出", resource + ".export", "list");
+                    Action(owner, scope, "export", "导出", resource + ".export", "list", titleKey: "Platform.Export");
             }
             else throw new InvalidOperationException("不支持的标准授权 View 类型。");
         }
@@ -128,7 +128,8 @@ public static class StandardFeatureMetadataCompiler
                 Action(owner, scope, Text(action, "key"), Title(Optional(action, "labelKey") ?? Text(action, "key"), Optional(view, "dicKey")),
                     resource + "." + (operation == "edit" ? "update" : operation), Text(view, "mode") + "." + property,
                     (operation is "create" or "edit" ? LookupBehaviors(view, true).Append(resource + ".read") : [resource + ".read"])
-                        .Concat(action.TryGetProperty("readBehaviors", out var reads) ? reads.EnumerateArray().Select(read => read.GetString()!) : []).ToArray());
+                        .Concat(action.TryGetProperty("readBehaviors", out var reads) ? reads.EnumerateArray().Select(read => read.GetString()!) : []).ToArray(),
+                    FullTitleKey(Optional(action, "labelKey") ?? Text(action, "key"), Optional(view, "dicKey")));
             }
         }
 
@@ -142,7 +143,8 @@ public static class StandardFeatureMetadataCompiler
                 var operation = Optional(action, "standardAction") ?? Text(action, "actionKey");
                 Action(owner, scope, Text(action, "key"), Title(Text(action, "labelKey"), dictionary),
                     Text(target, "resourceKey") + "." + (operation == "edit" ? "update" : operation), property,
-                    operation is "create" or "edit" ? LookupBehaviors(target, true).Append(Text(target, "resourceKey") + ".read").ToArray() : [Text(target, "resourceKey") + ".read"]);
+                    operation is "create" or "edit" ? LookupBehaviors(target, true).Append(Text(target, "resourceKey") + ".read").ToArray() : [Text(target, "resourceKey") + ".read"],
+                    FullTitleKey(Text(action, "labelKey"), dictionary));
             }
         }
 
@@ -185,12 +187,19 @@ public static class StandardFeatureMetadataCompiler
             }
         }
         // 声明引用不替代位置身份；重复的静态位置由统一目录编译器拒绝。
-        void Action(string owner, string? scope, string key, string title, string behavior, string surface, IReadOnlyList<string>? reads = null) =>
+        void Action(string owner, string? scope, string key, string title, string behavior, string surface, IReadOnlyList<string>? reads = null, string? titleKey = null) =>
             result.Add(new(moduleId, key, "action", title, owner, behavior)
-            { ReferenceKey = owner + "/" + (scope is null ? "" : "node-type:" + Uri.EscapeDataString(scope) + "/") + "surface:" + Uri.EscapeDataString(surface) + "/action:" + Uri.EscapeDataString(key), StaticScope = scope, StaticScopeTitle = ScopeTitle(owner, scope), ActionScope = surface, ReadBehaviors = reads ?? [] });
+            { ReferenceKey = owner + "/" + (scope is null ? "" : "node-type:" + Uri.EscapeDataString(scope) + "/") + "surface:" + Uri.EscapeDataString(surface) + "/action:" + Uri.EscapeDataString(key), TitleKey = titleKey, StaticScope = scope, StaticScopeTitle = ScopeTitle(owner, scope), StaticScopeTitleKey = ScopeTitleKey(owner, scope), ActionScope = surface, ReadBehaviors = reads ?? [] });
 
         // 展示组复用树类型的字典标题，不向可授权集合增加节点。
-        string? ScopeTitle(string owner, string? scope) => scope is not null && scopeTitles.TryGetValue((owner, scope), out var title) ? title : null;
+        string? ScopeTitle(string owner, string? scope) => scope is not null && scopeTitles.TryGetValue((owner, scope), out var title) ? title.Title : null;
+
+        // 作用域译文键与原展示组标题来自同一个节点类型声明。
+        string? ScopeTitleKey(string owner, string? scope) => scope is not null && scopeTitles.TryGetValue((owner, scope), out var title) ? title.TitleKey : null;
+
+        // 只保留确切字典引用；无字典的旧字面标题继续使用原 Title。
+        string? FullTitleKey(string? key, string? dictionary = null) => key is null ? null
+            : dictionary is not null ? dictionary + "." + key : key.Contains('.') ? key : null;
 
         // 当前目录默认中文名称来自同一 authoring 字典，身份始终使用稳定键。
         string Title(string key, string? dictionary = null)

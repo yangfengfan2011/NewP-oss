@@ -9,6 +9,8 @@ public sealed record FeatureDeclaration(string ModuleId, string Key, string Kind
     public string? ReferenceKey { get; init; }
     public string? StaticScope { get; init; }
     public string? StaticScopeTitle { get; init; }
+    public string? TitleKey { get; init; }
+    public string? StaticScopeTitleKey { get; init; }
     public string? ActionScope { get; init; }
     public IReadOnlyList<string> ReadBehaviors { get; init; } = [];
     public bool Container { get; init; }
@@ -21,6 +23,8 @@ public sealed record FeaturePoint(string Position, string ModuleId, string Key, 
     public string ReferenceKey { get; init; } = Key;
     public string? StaticScope { get; init; }
     public string? StaticScopeTitle { get; init; }
+    public string? TitleKey { get; init; }
+    public string? StaticScopeTitleKey { get; init; }
     public string? ActionScope { get; init; }
     public IReadOnlyList<string> ReadBehaviors { get; init; } = [];
     public bool Container { get; init; }
@@ -39,7 +43,8 @@ public static class FeatureCatalogCompiler
             node.GetProperty("title").GetString()!,
             node.TryGetProperty("parentKey", out var parent) ? parent.GetString() : null,
             node.GetProperty("behaviorKey").GetString()!,
-            node.TryGetProperty("order", out var order) ? order.GetInt32() : 0)).ToArray();
+            node.TryGetProperty("order", out var order) ? order.GetInt32() : 0)
+            { TitleKey = node.TryGetProperty("titleKey", out var titleKey) ? titleKey.GetString() : null }).ToArray();
     }
 
     /// <summary>拒绝重复、循环、缺少入口及必需行为声明；按位置输出确定快照。</summary>
@@ -76,6 +81,7 @@ public static class FeatureCatalogCompiler
             {
                 ReferenceKey = node.ReferenceKey ?? node.Key,
                 Container = node.Container,
+                TitleKey = node.TitleKey, StaticScopeTitleKey = node.StaticScopeTitleKey,
                 StaticScope = node.StaticScope, StaticScopeTitle = node.StaticScopeTitle, ActionScope = node.ActionScope,
                 ReadBehaviors = node.ReadBehaviors.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray()
             };
@@ -94,9 +100,10 @@ public static class FeatureCatalogCompiler
         var known = catalog.ToDictionary(point => point.Position, StringComparer.Ordinal);
         foreach (var position in selected)
         {
-            if (string.IsNullOrWhiteSpace(position) || !known.TryGetValue(position, out var point)) throw new InvalidOperationException("授权集合包含未知或失效功能。");
-            if (point.EntryDependencies.Any(dependency => !selected.Contains(dependency)))
-                throw new InvalidOperationException($"功能 {point.Title} 缺少本分支入口授权。");
+            if (string.IsNullOrWhiteSpace(position) || !known.TryGetValue(position, out var point)) throw new FeatureSelectionException("FeatureSelection.UnknownPosition", "授权集合包含未知或失效功能。", position);
+            foreach (var dependency in point.EntryDependencies)
+                if (!selected.Contains(dependency))
+                    throw new FeatureSelectionException("FeatureSelection.EntryDependencyMissing", $"功能 {point.Title} 缺少本分支入口授权。", position, dependency);
         }
     }
 }

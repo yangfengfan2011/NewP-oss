@@ -4,6 +4,38 @@ namespace ICP.Platform.Kernel.Tests;
 public sealed class FeatureCatalogCompilerTests
 {
     [Theory]
+    [InlineData("missing")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void Selection_UnknownPositionPreservesStructuredFacts(string? position)
+    {
+        var error = Assert.Throws<FeatureSelectionException>(() => FeatureCatalogCompiler.ValidateSelection([], [position!]));
+        Assert.Equal("授权集合包含未知或失效功能。", error.Message);
+        Assert.Equal("FeatureSelection.UnknownPosition", error.Code);
+        var args = Assert.IsAssignableFrom<IReadOnlyDictionary<string, object?>>(error.Args);
+        Assert.Equal(position, args["position"]);
+    }
+
+    [Fact]
+    public void Selection_MissingEntryPreservesOriginalPositionAndFirstMissingDependency()
+    {
+        var catalog = FeatureCatalogCompiler.Compile([
+            new("A", "root", "navigation", "入口", null, "read"),
+            new("A", "tab", "tab", "子入口", "root", "read"),
+            new("A", "save", "action", "保存", "tab", "save")]);
+        var action = catalog.Single(point => point.Key == "save");
+        foreach (var selected in new[] { new[] { action.Position }, new[] { action.Position, action.EntryDependencies[0] } })
+        {
+            var error = Assert.Throws<FeatureSelectionException>(() => FeatureCatalogCompiler.ValidateSelection(catalog, selected));
+            Assert.Equal("功能 保存 缺少本分支入口授权。", error.Message);
+            Assert.Equal("FeatureSelection.EntryDependencyMissing", error.Code);
+            var args = Assert.IsAssignableFrom<IReadOnlyDictionary<string, object?>>(error.Args);
+            Assert.Equal(action.Position, args["position"]);
+            Assert.Equal(action.EntryDependencies[selected.Length - 1], args["dependencyPosition"]);
+        }
+        FeatureCatalogCompiler.ValidateSelection(catalog, catalog.Select(point => point.Position).ToArray());
+    }
+    [Theory]
     [InlineData("{}")]
     [InlineData("{\"featureAuthorization\":false}")]
     [InlineData("{\"featureKey\":\"\"}")]
@@ -49,9 +81,27 @@ public sealed class FeatureCatalogCompilerTests
             new("Authorization", "save", "action", "保存", "workbench", "authorization.workbench.save")]);
         Assert.Equal("Authorization/navigation:workbench/action:save", catalog[1].Position);
         Assert.Equal(["Authorization/navigation:workbench"], catalog[1].EntryDependencies);
-        Assert.Throws<InvalidOperationException>(() => FeatureCatalogCompiler.ValidateSelection(catalog, [catalog[1].Position]));
+        Assert.ThrowsAny<InvalidOperationException>(() => FeatureCatalogCompiler.ValidateSelection(catalog, [catalog[1].Position]));
         FeatureCatalogCompiler.ValidateSelection(catalog, catalog.Select(p => p.Position).ToArray());
     }
+    [Fact]
+    public void CustomAuthoring_OptionalTitleKeyPreservesTheLegacyCatalogIdentity()
+    {
+        var repository = new DirectoryInfo(AppContext.BaseDirectory);
+        while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "modules", "Authorization", "newp.plugin.json"))) repository = repository.Parent;
+        Assert.NotNull(repository);
+        var capsule = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(repository.FullName, "modules", "Authorization", "newp.plugin.json")))!;
+        var legacy = FeatureCatalogCompiler.Compile(FeatureCatalogCompiler.Read(System.Text.Json.JsonSerializer.SerializeToElement(capsule), "Authorization"));
+        capsule["features"]![0]!["titleKey"] = "Navigation.Workbench";
+        var translated = FeatureCatalogCompiler.Compile(FeatureCatalogCompiler.Read(System.Text.Json.JsonSerializer.SerializeToElement(capsule), "Authorization"));
+        Assert.Equal(legacy.Select(point => (point.Position, point.BehaviorKey, point.Title, point.Order, string.Join(",", point.EntryDependencies))),
+            translated.Select(point => (point.Position, point.BehaviorKey, point.Title, point.Order, string.Join(",", point.EntryDependencies))));
+        var options = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
+        var custom = System.Text.Json.JsonSerializer.SerializeToElement(translated.Single(point => point.Key == "authorization.workbench"), options);
+        Assert.Equal("Navigation.Workbench", custom.GetProperty("titleKey").GetString());
+        Assert.Null(System.Text.Json.JsonSerializer.SerializeToElement(legacy[0], options).GetProperty("titleKey").GetString());
+    }
+
     [Fact]
     public void CanonicalPlan_ContainsFeaturesInItsHashAndRejectsBrokenCandidate()
     {
@@ -83,7 +133,7 @@ public sealed class FeatureCatalogCompilerTests
     }
     [Fact]
     public void Selection_RejectsNullPositionAsValidationFailure() =>
-        Assert.Throws<InvalidOperationException>(() => FeatureCatalogCompiler.ValidateSelection([], [null!]));
+        Assert.ThrowsAny<InvalidOperationException>(() => FeatureCatalogCompiler.ValidateSelection([], [null!]));
     [Fact]
     public void Compile_SeparatesDeclarationReferencesFromBranchLocalKeys()
     {
@@ -98,7 +148,7 @@ public sealed class FeatureCatalogCompilerTests
         Assert.Equal(5, catalog.Count);
         var treeEdit = catalog.Single(point => point.ReferenceKey == "tree.edit");
         Assert.Equal(["Organization/navigation:management", "Organization/navigation:management/tab:structure"], treeEdit.EntryDependencies);
-        Assert.Throws<InvalidOperationException>(() => FeatureCatalogCompiler.ValidateSelection(catalog,
+        Assert.ThrowsAny<InvalidOperationException>(() => FeatureCatalogCompiler.ValidateSelection(catalog,
             [treeEdit.Position, "Organization/navigation:management", "Organization/navigation:management/tab:persons"]));
     }
     [Fact]
@@ -118,6 +168,24 @@ public sealed class FeatureCatalogCompilerTests
         Assert.Equal("organization.person.read", entry.BehaviorKey);
         Assert.Equal("organization.person.create", catalog.Single(point => point.Key == "create").BehaviorKey);
     }
+    [Fact]
+    public void StandardExport_PreservesItsExistingBehaviorAndPublicTitleKey()
+    {
+        var documents = new[]
+        {
+            """{"navigation":{"items":[{"key":"records","featureAuthorization":true,"targetKey":"records"}]}}""",
+            """{"view":{"key":"records","mode":"list","resourceKey":"record","export":{"enabled":true}}}"""
+        }.Select(value => System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(value));
+        var catalog = FeatureCatalogCompiler.Compile(StandardFeatureMetadataCompiler.Read("A", documents));
+        var entry = catalog.Single(point => point.Key == "records");
+        Assert.Null(entry.TitleKey);
+        var export = catalog.Single(point => point.Key == "export");
+        Assert.Equal("导出", export.Title);
+        Assert.Equal("record.export", export.BehaviorKey);
+        Assert.Equal("Platform.Export", export.TitleKey);
+        Assert.Equal([entry.Position], export.EntryDependencies);
+    }
+
     [Fact]
     public void RealOrganizationAuthoring_CompilesSeparateListTreeAndDetailActions()
     {
@@ -139,12 +207,33 @@ public sealed class FeatureCatalogCompilerTests
             }
             var candidate = Assert.Single(new ModuleCapsuleCandidateReader().ReadBuiltIn(root));
             var points = FeatureCatalogCompiler.Compile(candidate.Features);
+            var legacy = FeatureCatalogCompiler.Compile(candidate.Features.Select(node => node with { TitleKey = null, StaticScopeTitleKey = null }));
+            Assert.Equal(legacy.Select(point => (point.Position, point.BehaviorKey, point.Title, point.StaticScopeTitle, point.Order, string.Join(",", point.EntryDependencies), string.Join(",", point.ReadBehaviors))),
+                points.Select(point => (point.Position, point.BehaviorKey, point.Title, point.StaticScopeTitle, point.Order, string.Join(",", point.EntryDependencies), string.Join(",", point.ReadBehaviors))));
             Assert.Contains(points, point => point.Position == "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:list.rowActions/action:edit");
             Assert.Contains(points, point => point.Position == "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:person/surface:contextMenu/action:edit");
             Assert.Contains(points, point => point.Position == "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:person/surface:detail.pageActions/action:edit");
             Assert.DoesNotContain(points, point => point.Kind is "page" or "group");
             Assert.All(points.Where(point => point.Key == "edit"), point => Assert.Equal("编辑", point.Title));
             Assert.DoesNotContain(points, point => point.Title.StartsWith("Navigation.", StringComparison.Ordinal));
+            var options = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
+            var projected = System.Text.Json.JsonSerializer.SerializeToElement(points, options);
+            var navigation = projected.EnumerateArray().Single(point => point.GetProperty("key").GetString() == "organization");
+            Assert.Equal("Navigation.Organization", navigation.GetProperty("titleKey").GetString());
+            var persons = projected.EnumerateArray().Single(point => point.GetProperty("key").GetString() == "persons");
+            Assert.Equal("OrganizationComposition.Person", persons.GetProperty("titleKey").GetString());
+            var treeEdit = projected.EnumerateArray().Single(point => point.GetProperty("position").GetString() == "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:person/surface:contextMenu/action:edit");
+            Assert.Equal("OrganizationComposition.Edit", treeEdit.GetProperty("titleKey").GetString());
+            Assert.Equal("OrganizationComposition.Person", treeEdit.GetProperty("staticScopeTitleKey").GetString());
+            Assert.Equal("人员", treeEdit.GetProperty("staticScopeTitle").GetString());
+            var listEdit = projected.EnumerateArray().Single(point => point.GetProperty("position").GetString() == "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:list.rowActions/action:edit");
+            Assert.Equal("PersonListView.Action_Edit", listEdit.GetProperty("titleKey").GetString());
+            var linkUser = projected.EnumerateArray().First(point => point.GetProperty("key").GetString() == "linkUser");
+            Assert.Equal("PersonDetailView.Action_LinkUser", linkUser.GetProperty("titleKey").GetString());
+            using var runtime = System.Text.Json.JsonDocument.Parse(new ICP.Platform.Kernel.PluginPackages.MetadataRuntimeManifestBuilder().Build(repository.FullName, ["Organization"], ["Organization"], points));
+            var active = runtime.RootElement.GetProperty("modules")[0].GetProperty("features");
+            Assert.Equal(projected.GetArrayLength(), active.GetArrayLength());
+            Assert.Equal(treeEdit.GetProperty("titleKey").GetString(), active.EnumerateArray().Single(point => point.GetProperty("position").GetString() == treeEdit.GetProperty("position").GetString()).GetProperty("titleKey").GetString());
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }

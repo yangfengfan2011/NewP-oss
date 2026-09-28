@@ -1,6 +1,7 @@
 import { useLocalization } from '@icp-platform/core';
 import { StandardCrudDialogTitle } from './StandardCrudDialogTitle';
-import { useState, type ReactElement, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { useOptionalAuth } from '../contexts/AuthContext';
 import Modal from 'antd/es/modal';
 import Button from 'antd/es/button';
 import type {
@@ -39,10 +40,28 @@ export function StandardCrudActionReviewDialog({
   onChange,
   onCancel,
   onConfirm,
-}: StandardCrudActionReviewDialogProps): ReactElement {
+}: StandardCrudActionReviewDialogProps): ReactElement | null {
   const { t } = useLocalization();
+  const auth = useOptionalAuth();
+  const authority = JSON.stringify([auth?.user?.id, auth?.isAuthenticated, auth?.isInitialized,
+    auth?.permissionEpoch, auth?.user?.isLocalAdministrator, auth?.user?.mustChangePassword,
+    [...(auth?.user?.featurePositions ?? [])].sort(), featurePosition, action.key]);
+  const [openedAuthority] = useState(authority);
+  const [invalidated, setInvalidated] = useState(false);
+  const cancelReported = useRef(false);
+  const authorityChanged = invalidated || authority !== openedAuthority;
+  // 语言不属于授权边界。边界变化立即卸载旧输入且不复活，已发写入仍由原执行器完成。
+  useEffect(() => {
+    if (!authorityChanged) return;
+    setInvalidated(true);
+    if (!pending && !cancelReported.current) {
+      cancelReported.current = true;
+      onCancel();
+    }
+  }, [authorityChanged, pending, onCancel]);
   const [draftState, setDraftState] = useState({ dirty: false, ready: true });
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  if (authorityChanged) return null;
   return (
     <>
       <Modal

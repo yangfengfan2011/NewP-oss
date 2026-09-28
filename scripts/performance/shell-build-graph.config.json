@@ -130,7 +130,7 @@
     },
     {
       "id": "retired-frontend-module",
-      "sourceRegex": "(?:^|/)modules/(?:audit|authorization|config-center|demo|files|metadata-config-center|module-template-sample|plugin-ops)/src/",
+      "sourceRegex": "(?:^|/)modules/(?:config-center|demo|files|metadata-config-center|module-template-sample|plugin-ops)/src/",
       "scenarios": ["moduleBindingEager"],
       "attribution": "retired-frontend"
     },

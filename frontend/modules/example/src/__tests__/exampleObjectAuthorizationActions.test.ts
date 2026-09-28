@@ -30,5 +30,5 @@ it('hides denied object actions and surfaces eligibility failures', async () => 
     action: { key: 'authorize', labelKey: '授权' } };
   expect(await resource.actionEligibilityResolvers?.authorize?.(context)).toEqual({ visible: false, available: false });
   fetcher.mockResolvedValue(new Response(null, { status: 500 }));
-  await expect(resource.actionEligibilityResolvers?.authorize?.(context)).rejects.toThrow('资格读取失败');
+  await expect(resource.actionEligibilityResolvers?.authorize?.(context)).rejects.toMatchObject({ name: 'StandardCrudRequestError', status: 500 });
 });

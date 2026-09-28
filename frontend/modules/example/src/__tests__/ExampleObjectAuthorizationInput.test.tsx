@@ -1,9 +1,11 @@
+/// <reference types="vite/client" />
 // @vitest-environment jsdom
 import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
-import { PlatformQueryProvider } from '@icp-platform/core';
+import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ObjectAuthorizationInput } from '@icp-platform/ui';
+import dictionaryText from '../../../../../modules/Authorization/metadata/dictionaries/DataScope.dic.json?raw';
 
 const fetcher = vi.hoisted(() => vi.fn());
 vi.mock('@icp-platform/core', async original => ({ ...await original<typeof import('@icp-platform/core')>(), platformFetch: fetcher }));
@@ -17,6 +19,9 @@ const catalog = { actions: [{ key: 'read', title: '读取', enabled: true }, { k
   subjectTypes: [{ key: 'all', title: '所有用户', requiresId: false }] };
 const row = { id: 'Record_1', ENAME: '测试记录' };
 const draft = vi.fn();
+const dictionary = JSON.parse(dictionaryText)
+  .DataScope as Record<string, { zhs: string; en: string }>;
+const catalogs = { zhs: Object.fromEntries(Object.entries(dictionary).map(([key, value]) => [`DataScope.${key}`, value.zhs])) };
 async function mount(inspect: boolean) {
   const container = document.createElement('div'); document.body.append(container); root = createRoot(container);
   function Harness() {
@@ -26,7 +31,8 @@ async function mount(inspect: boolean) {
       action={{ key: inspect ? 'viewAuthorization' : 'authorize', labelKey: '授权', inputKey: inspect ? 'objectAuthorizationDetails' : 'objectAuthorization' }}
       featurePosition="record-authorize" value={value} onChange={onChange} onDraftStateChange={draft} /></PlatformQueryProvider>;
   }
-  await act(async () => root.render(<Harness />));
+  await act(async () => root.render(<LocalizationProvider initialLanguage="zhs" defaultLanguage="zhs" catalogs={catalogs}
+    supportedLanguages={[{ code: 'zhs', displayName: '简体中文', locale: 'zh-CN' }]}><Harness /></LocalizationProvider>));
 }
 
 it('loads saved subjects, keeps tri-state changes in the draft and reports nested editor readiness', async () => {
@@ -78,7 +84,7 @@ it('shows an analysis failure instead of a permission result', async () => {
   fetcher.mockImplementation(async (path: string) => path.endsWith('/explanation') ? { ok: false, status: 500 }
     : { ok: true, json: async () => path.endsWith('/catalog') ? catalog : { items: [], hasMore: false, currentValues: [] } });
   await mount(true);
-  expect(document.body.textContent).toContain('对象权限读取失败');
+  expect(document.body.textContent).toContain('操作失败，请稍后重试。');
   expect(document.querySelector('.ant-collapse')).toBeNull();
   expect(draft).toHaveBeenLastCalledWith({ ready: true, dirty: false });
 });

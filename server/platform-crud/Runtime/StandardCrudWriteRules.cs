@@ -194,7 +194,8 @@ internal sealed class StandardCrudWriteRules
                     policy.Field,
                     "StandardCrud.ShortTextNotNormalized",
                     $"字段 {policy.Field} 必须使用去除首尾空白后的规范短文本，空值请提交 null。",
-                    "standardCrud.shortTextNotNormalized");
+                    "standardCrud.shortTextNotNormalized",
+                    new Dictionary<string, object?>(StringComparer.Ordinal));
             }
 
             if (policy.MaxLength is { } maxLength && text.Length > maxLength)
@@ -203,7 +204,8 @@ internal sealed class StandardCrudWriteRules
                     policy.Field,
                     "StandardCrud.ShortTextTooLong",
                     $"字段 {policy.Field} 不能超过 {maxLength} 个字符。",
-                    "standardCrud.shortTextTooLong");
+                    "standardCrud.shortTextTooLong",
+                    new Dictionary<string, object?>(StringComparer.Ordinal) { ["maxLength"] = maxLength });
             }
         }
 
@@ -215,13 +217,15 @@ internal sealed class StandardCrudWriteRules
         string field,
         string code,
         string message,
-        string reasonKey) => new()
+        string reasonKey,
+        IReadOnlyDictionary<string, object?> args) => new()
         {
             StatusCode = 400,
             Code = code,
             Message = message,
             ReasonKey = reasonKey,
-            FieldErrors = [new StandardCrudFieldError(field, code, message)]
+            Args = args,
+            FieldErrors = [new StandardCrudFieldError(field, code, message) { ReasonKey = reasonKey, Args = args }]
         };
 
     // Modeling 标记的固定审计字段与规范字段策略共同保持服务端所有权，在过滤未知字段前拒绝越权输入。

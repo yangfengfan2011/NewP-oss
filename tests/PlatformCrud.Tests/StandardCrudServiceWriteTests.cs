@@ -896,6 +896,21 @@ public sealed class StandardCrudServiceWriteTests
         var fieldError = Assert.Single(result.Error.FieldErrors);
         Assert.Equal(field, fieldError.Field);
         Assert.Equal(expectedCode, fieldError.Code);
+        Assert.Equal(400, result.Error.StatusCode);
+        Assert.Equal(result.Error.ReasonKey, fieldError.ReasonKey);
+        if (expectedCode == "StandardCrud.ShortTextTooLong")
+        {
+            Assert.Equal("standardCrud.shortTextTooLong", result.Error.ReasonKey);
+            Assert.Equal(256, result.Error.Args["maxLength"]);
+            Assert.Equal(256, fieldError.Args["maxLength"]);
+            Assert.Equal($"字段 {fieldError.Field} 不能超过 256 个字符。", fieldError.Message);
+        }
+        else
+        {
+            Assert.Equal("standardCrud.shortTextNotNormalized", result.Error.ReasonKey);
+            Assert.Empty(result.Error.Args);
+            Assert.Empty(fieldError.Args);
+        }
     }
 
     [Fact]
@@ -937,6 +952,21 @@ public sealed class StandardCrudServiceWriteTests
         var fieldError = Assert.Single(result.Error.FieldErrors);
         Assert.Equal("ENAME", fieldError.Field);
         Assert.Equal(expectedCode, fieldError.Code);
+        Assert.Equal(400, result.Error.StatusCode);
+        Assert.Equal(result.Error.ReasonKey, fieldError.ReasonKey);
+        if (expectedCode == "StandardCrud.ShortTextTooLong")
+        {
+            Assert.Equal("standardCrud.shortTextTooLong", result.Error.ReasonKey);
+            Assert.Equal(256, result.Error.Args["maxLength"]);
+            Assert.Equal(256, fieldError.Args["maxLength"]);
+            Assert.Equal($"字段 {fieldError.Field} 不能超过 256 个字符。", fieldError.Message);
+        }
+        else
+        {
+            Assert.Equal("standardCrud.shortTextNotNormalized", result.Error.ReasonKey);
+            Assert.Empty(result.Error.Args);
+            Assert.Empty(fieldError.Args);
+        }
         Assert.Equal(0, repository.CreateCallCount);
     }
 

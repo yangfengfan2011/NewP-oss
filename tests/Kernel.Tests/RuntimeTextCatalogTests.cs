@@ -46,6 +46,10 @@ public sealed class RuntimeTextCatalogTests
             Assert.Equal("Birth date cannot be later than 2026-09-28.", catalog.GetText("Organization.Person.BirthDateInFuture", "en-US", args));
             Assert.Equal(frontend.RootElement.GetProperty("catalogs").GetProperty("en").GetProperty("Platform.SystemActor").GetString(), catalog.GetText("Platform.SystemActor", "en-US"));
             Assert.Equal("系统", catalog.GetText("Platform.SystemActor"));
+            var lengthArgs = new Dictionary<string, object?> { ["maxLength"] = 256 };
+            Assert.Equal("文本不能超过 256 个字符。", catalog.GetText("StandardCrud.ShortTextTooLong", "zh-CN", lengthArgs));
+            Assert.Equal("Text cannot exceed 256 characters.", catalog.GetText("StandardCrud.ShortTextTooLong", "en-US", lengthArgs));
+            Assert.Equal("Trim leading and trailing whitespace; submit null for an empty value.", catalog.GetText("StandardCrud.ShortTextNotNormalized", "en-US"));
             Assert.Throws<InvalidOperationException>(() => catalog.GetText("Platform.SystemActor", "fr-FR"));
             Assert.Throws<InvalidOperationException>(() => catalog.GetText("Missing.Entry", "en-US"));
         }

@@ -76,6 +76,8 @@ it('uses real personnel metadata, preserves a failed creation draft, retranslate
     root.render(<MemoryRouter initialEntries={['/organization/persons?drawer=create']}><LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文', locale: 'zh-CN' }, { code: 'en', displayName: 'English', locale: 'en-US' }]} catalogs={catalogs}><PlatformRequestLocaleBridge><AuthorizationProvider featurePositions={[]}><LanguageSelect /><PersonnelQueryScope /></AuthorizationProvider></PlatformRequestLocaleBridge></LocalizationProvider></MemoryRouter>);
   });
   await vi.waitFor(() => expect(document.querySelector('input#ENAME')).not.toBeNull());
+  expect(document.querySelector('.ant-drawer select[aria-label="语言"]')).toBeNull();
+  expect(document.querySelectorAll('select[aria-label="语言"]')).toHaveLength(1);
   await act(async () => document.querySelector('form.np-standard-crud-form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   await vi.waitFor(() => expect(document.body.textContent).toContain('请填写此字段'));
   await act(async () => setProviderLanguage('en'));
@@ -101,7 +103,8 @@ it('uses real personnel metadata, preserves a failed creation draft, retranslate
   expect(name.placeholder).toBe('Enter name');
   expect(document.querySelector<HTMLInputElement>('input#BirthDate')?.placeholder).toBe('Select birth date');
   expect(document.querySelector('label[for="ENAME"]')?.textContent).toBe('Name');
-  expect(document.querySelector('select[aria-label="Language"]')).not.toBeNull();
+  expect(document.querySelectorAll('select[aria-label="Language"]')).toHaveLength(1);
+  expect(document.querySelector('.ant-drawer select[aria-label="Language"]')).toBeNull();
   expect(document.body.textContent).toContain('Save and close');
   expect(document.querySelector('button[aria-label="Refresh"]')).not.toBeNull();
   expect(document.body.textContent).toContain('Page 1 / 1, 1 items');

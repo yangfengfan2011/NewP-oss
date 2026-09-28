@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { StandardCrudRequestError } from '@icp-platform/sdk';
 import {
   installPlatformRequestLocaleProvider,
   invalidatePlatformAntiforgeryToken,
@@ -91,14 +92,43 @@ describe('platformFetch', () => {
   });
 
   it('never replays a write when the result is unknown after a network failure', async () => {
+    const cause = new TypeError('network unavailable');
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(tokenResponse('token-1'))
-      .mockRejectedValueOnce(new TypeError('network unavailable'));
+      .mockRejectedValueOnce(cause);
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(platformFetch('/api/test', { method: 'DELETE' }))
-      .rejects.toThrow('请先查询实际结果，再决定是否重试');
+    const error = await platformFetch('/api/test', { method: 'DELETE' }).catch(value => value);
+    expect(error).toBeInstanceOf(StandardCrudRequestError);
+    expect(error).toMatchObject({ status: 0, code: 'Platform.MutationOutcomeUnknown', reasonKey: 'Platform.MutationOutcomeUnknown', cause });
+    expect(error.message).toContain('请先查询实际结果，再决定是否重试');
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves a read network failure without labelling it an unknown write outcome', async () => {
+    const cause = new TypeError('read unavailable');
+    const fetchMock = vi.fn().mockRejectedValue(cause);
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(platformFetch('/api/test')).rejects.toBe(cause);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves an antiforgery network failure before the business write is sent', async () => {
+    const cause = new TypeError('token unavailable');
+    const fetchMock = vi.fn().mockRejectedValue(cause);
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(platformFetch('/api/test', { method: 'POST' })).rejects.toBe(cause);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/auth/antiforgery-token');
+  });
+
+  it('does not mark a rejected antiforgery token request as an unknown business outcome', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 503 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const error = await platformFetch('/api/test', { method: 'POST' }).catch(value => value);
+    expect(error).not.toBeInstanceOf(StandardCrudRequestError);
+    expect(error.message).toBe('Unable to obtain antiforgery token (503).');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('does not retry other HTTP failures', async () => {

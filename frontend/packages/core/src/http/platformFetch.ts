@@ -1,4 +1,7 @@
+import { StandardCrudRequestError } from '@icp-platform/sdk';
+
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+const MUTATION_OUTCOME_UNKNOWN_CODE = 'Platform.MutationOutcomeUnknown';
 const ANTIFORGERY_ENDPOINT = '/api/auth/antiforgery-token';
 const ANTIFORGERY_HEADER = 'X-CSRF-TOKEN';
 const ANTIFORGERY_FAILURE_CODE = 'ANTIFORGERY_TOKEN_INVALID';
@@ -171,7 +174,11 @@ export async function platformFetch(
         headers,
       }));
     } catch (cause) {
-      throw Object.assign(new Error('操作结果尚未确认，请先查询实际结果，再决定是否重试。'), { cause });
+      // 已进入业务发送边界；未收到响应不能判定失败或自动重放，原因只保留供诊断。
+      throw new StandardCrudRequestError('操作结果尚未确认，请先查询实际结果，再决定是否重试。', 0, {}, {
+        code: MUTATION_OUTCOME_UNKNOWN_CODE,
+        reasonKey: MUTATION_OUTCOME_UNKNOWN_CODE,
+      }, undefined, cause);
     }
     return observeAccessResponse(response, new URL(source.url).pathname, true);
   };

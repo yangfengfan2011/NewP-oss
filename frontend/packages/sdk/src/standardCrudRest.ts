@@ -41,6 +41,7 @@ export class StandardCrudRequestError extends Error {
     public readonly fieldErrors: Record<string, string> = {},
     public readonly problem: StandardCrudProblemFact = {},
     public readonly responseProblem: unknown = problem,
+    public readonly cause?: unknown,
   ) {
     super(message);
     this.name = 'StandardCrudRequestError';

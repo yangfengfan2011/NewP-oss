@@ -71,6 +71,7 @@ import { StandardCrudActionReviewDialog } from '../standard-crud/StandardCrudAct
 import { StandardCrudDialogTitle } from '../standard-crud/StandardCrudDialogTitle';
 import { useLocalizedStandardCrudRegistration } from '../standard-crud/useLocalizedStandardCrudRegistration';
 import { useStandardCrudActionExecution } from '../standard-crud/useStandardCrudActionExecution';
+import { formatStandardCrudActionReason } from '../standard-crud/standardCrudActionReason';
 import { useStandardCrudMutationExecution } from '../standard-crud/useStandardCrudMutationExecution';
 import { useStandardCrudHostEnvironment, type StandardCrudHostAddress } from '../standard-crud/standardCrudHostEnvironment';
 
@@ -538,6 +539,9 @@ function RowActionButtonGroup({ actions, onConfirmRequested, requested = false, 
   });
   const visibleOverflowActions = overflowActions.filter((action) => !action.eligibility
     || (eligibility.status === 'success' && eligibility.data?.[action.key]?.visible));
+  const actionReason = (action: RowActionItem | undefined) => action
+    ? formatStandardCrudActionReason(action.eligibility ? eligibility.data?.[action.key] : undefined, t) ?? action.disabledReason
+    : undefined;
   const renderActionButton = (action: RowActionItem, className: string) => {
     const button = (
       <AntdButton
@@ -587,7 +591,7 @@ function RowActionButtonGroup({ actions, onConfirmRequested, requested = false, 
         || (actions[0].eligibility && (eligibility.status === 'error'
           || (eligibility.status === 'success' && !eligibility.data?.[actions[0].key]?.available))))
         && <div role="alert">{eligibility.status === 'error' ? t('Platform.EligibilityUnavailable', '对象动作资格暂时无法判定。')
-          : actions[0]?.disabledReason ?? t('Platform.ActionUnavailable', '当前操作不可用。')}<AntdButton onClick={close}>{t('Platform.Close', '关闭')}</AntdButton></div>}
+          : actionReason(actions[0]) ?? t('Platform.ActionUnavailable', '当前操作不可用。')}<AntdButton onClick={close}>{t('Platform.Close', '关闭')}</AntdButton></div>}
       {!requested && inlineActions.map((action) => renderActionButton(action, 'np-row-action-button'))}
       {!requested && overflowActions.length > 0 ? (
         <Dropdown
@@ -598,17 +602,20 @@ function RowActionButtonGroup({ actions, onConfirmRequested, requested = false, 
             setMenuOpen(open);
           }}
           menu={{
-            items: [...visibleOverflowActions.map((action) => ({
-              key: action.key,
-              label: action.loading
-                ? t('Platform.Processing', '处理中...')
-                : (action.eligibility && eligibility.data?.[action.key]?.reason) || action.disabledReason
-                  ? `${String(action.label)}（${eligibility.data?.[action.key]?.reason ?? action.disabledReason}）`
-                  : action.label,
-              danger: action.danger,
-              disabled: action.disabled || action.loading
-                || (action.eligibility && eligibility.data?.[action.key]?.available === false),
-            })), ...(qualifiedActions.length > 0 && eligibility.status === 'pending'
+            items: [...visibleOverflowActions.map((action) => {
+              const reason = actionReason(action);
+              return {
+                key: action.key,
+                label: action.loading
+                  ? t('Platform.Processing', '处理中...')
+                  : reason
+                    ? `${String(action.label)}（${reason}）`
+                    : action.label,
+                danger: action.danger,
+                disabled: action.disabled || action.loading
+                  || (action.eligibility && eligibility.data?.[action.key]?.available === false),
+              };
+            }), ...(qualifiedActions.length > 0 && eligibility.status === 'pending'
               ? [{ key: '__eligibility_pending', label: t('Platform.CheckingEligibility', '正在检查对象操作资格…'), disabled: true }]
               : []), ...(qualifiedActions.length > 0 && eligibility.status === 'error'
               ? [{ key: '__eligibility_error', label: t('Platform.EligibilityUnavailable', '对象动作资格暂时无法判定。'), disabled: true }]
@@ -1685,7 +1692,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           (key) => t(`${schema.dicKey}.${key}`, key),
         );
         const disabledReason = actionState?.available === false
-          ? actionState.reason ?? t('Platform.ActionStateUnavailable', '当前状态不允许执行该操作。')
+          ? formatStandardCrudActionReason(actionState, t) ?? t('Platform.ActionStateUnavailable', '当前状态不允许执行该操作。')
           : metadataDisabledReason;
         const confirmMessage = action.confirmMessageKey
           ? t(`${schema.dicKey}.${action.confirmMessageKey}`, action.confirmMessageKey)

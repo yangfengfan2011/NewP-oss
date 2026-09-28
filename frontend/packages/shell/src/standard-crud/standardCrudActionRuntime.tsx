@@ -14,6 +14,7 @@ import type {
 } from '@icp-platform/sdk';
 import { StandardCrudActionReviewDialog } from './StandardCrudActionReviewDialog';
 import { useStandardCrudActionExecution } from './useStandardCrudActionExecution';
+import { formatStandardCrudActionReason } from './standardCrudActionReason';
 import { resolvedFeaturePosition, type FeatureResolution } from '../authorization/featurePlacementResolver';
 
 export interface StandardCrudActionsProps<TDetail = unknown, TRow = unknown> {
@@ -66,7 +67,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
       ...action,
       featureResolution: featureResolutionForAction(action),
       runtimeDisabled: action.runtimeDisabled === true || state?.available === false,
-      disabledReason: action.disabledReason ?? state?.reason,
+      disabledReason: action.disabledReason ?? formatStandardCrudActionReason(state, t),
       runtimeVisible: state?.visible !== false,
     };
   });
@@ -158,7 +159,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
             featurePosition={position} resourceKey={resourceKey} epoch={eligibilityEpoch} resolver={resolver}>
             {state => state.visible ? renderAction({ ...action,
               runtimeDisabled: action.runtimeDisabled || !state.available,
-              disabledReason: state.reason ?? action.disabledReason }) : null}
+              disabledReason: formatStandardCrudActionReason(state, t) ?? action.disabledReason }) : null}
           </QualifiedAction> : renderAction(action);
         })}
       </div>

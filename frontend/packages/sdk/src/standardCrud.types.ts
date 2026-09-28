@@ -228,7 +228,10 @@ export interface StandardCrudActionContext<TDetail = unknown, TRow = unknown> ex
 export interface StandardCrudActionState {
   visible: boolean;
   available: boolean;
+  /** 旧调用方的说明；提供 reasonKey 后仅保留作诊断，不作为译文兜底。 */
   reason?: string;
+  reasonKey?: string;
+  args?: Record<string, unknown>;
 }
 
 /** 动作状态 resolver 只接收动作声明和当前数据快照，不把模块字段或表达式引入公共契约。 */

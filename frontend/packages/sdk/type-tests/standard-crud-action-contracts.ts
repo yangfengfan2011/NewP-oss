@@ -19,6 +19,14 @@ const genericAction: StandardCrudActionDefinition = {
   visibleWhen: { Status: 'Enabled' },
 };
 
+const localizedState: StandardCrudActionState = {
+  visible: true,
+  available: false,
+  reason: 'Owner guard diagnostic',
+  reasonKey: 'Example.OwnerProtected',
+  args: { owner: 'Admin', count: 1 },
+};
+
 const moduleActionHandler: StandardCrudActionHandler = async (context) => {
   // @ts-expect-error 页面刷新属于 Shell 动作生命周期，不暴露给模块 handler。
   context.refresh();
@@ -26,4 +34,5 @@ const moduleActionHandler: StandardCrudActionHandler = async (context) => {
 
 void genericState;
 void genericAction;
+void localizedState;
 void moduleActionHandler;

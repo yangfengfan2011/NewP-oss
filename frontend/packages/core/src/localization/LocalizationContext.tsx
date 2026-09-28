@@ -81,6 +81,7 @@ export interface LocalizationProviderProps {
   initialLanguage?: string;
   storageKey?: string;
   enumerationDefinitions?: EnumerationDefinitions;
+  /** 未显式提供时复用活动 catalogs；显式源保留原有枚举查词和回退语义。 */
   enumerationCatalogs?: EnumerationCatalogs;
 }
 
@@ -124,7 +125,7 @@ export function LocalizationProvider({
   initialLanguage,
   storageKey,
   enumerationDefinitions = {},
-  enumerationCatalogs = {},
+  enumerationCatalogs = catalogs,
 }: LocalizationProviderProps) {
   const supportedLanguageCodes = useMemo(
     () => new Set(supportedLanguages.map((language) => language.code)),

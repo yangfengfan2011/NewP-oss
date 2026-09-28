@@ -77,7 +77,7 @@ describe('Enumeration localization sample', () => {
     }
   });
 
-  it('resolves current-language labels, default-language labels, and item-name fallbacks', async () => {
+  it.each(['explicit', 'default'] as const)('resolves current-language labels, default-language labels, and item-name fallbacks from the %s catalog source', async (source) => {
     container = document.createElement('div');
     document.body.appendChild(container);
 
@@ -91,9 +91,12 @@ describe('Enumeration localization sample', () => {
             { code: 'zhs', displayName: '简体中文' },
             { code: 'en', displayName: 'English' },
           ]}
-          catalogs={{ zhs: {}, en: {} }}
+          catalogs={source === 'default' ? flatEnumerationCatalogs : {
+            zhs: { 'Gender.Female': '主词典内容', 'Mood.Happy': '主词典内容' },
+            en: { 'Gender.Female': 'Main catalog text' },
+          }}
           enumerationDefinitions={enumerationDefinitions}
-          enumerationCatalogs={flatEnumerationCatalogs}
+          {...(source === 'explicit' ? { enumerationCatalogs: flatEnumerationCatalogs } : {})}
         >
           <EnumerationProbe />
         </LocalizationProvider>,
@@ -108,6 +111,23 @@ describe('Enumeration localization sample', () => {
     expect(
       getEnumerationLabel(legacyNestedEnumerationCatalogs, 'en', 'zhs', 'Gender', 'Female', 'Female'),
     ).toBe('Female');
+  });
+
+  it('keeps an explicit empty enumeration catalog isolated and preserves the caller fallback', async () => {
+    function FallbackProbe() {
+      const { getEnumerationLabel: label } = useLocalization();
+      return <span>{label('Gender', 'Female', 'Caller fallback')}|{label('Mood', 'Happy')}</span>;
+    }
+    container = document.createElement('div'); document.body.appendChild(container);
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<LocalizationProvider defaultLanguage="zhs" initialLanguage="en"
+        supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }, { code: 'en', displayName: 'English' }]}
+        catalogs={flatEnumerationCatalogs} enumerationCatalogs={{}}>
+        <FallbackProbe />
+      </LocalizationProvider>);
+    });
+    expect(container.textContent).toBe('Caller fallback|Happy');
   });
 
   it('reconciles current language when provider props remove the selected language', async () => {

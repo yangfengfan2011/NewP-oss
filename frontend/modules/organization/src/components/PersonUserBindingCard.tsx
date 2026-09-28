@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { formatRequestError, LanguageSelect, useLocalization } from '@icp-platform/core';
+import { formatRequestError, useLocalization } from '@icp-platform/core';
 import Modal from 'antd/es/modal';
 import { Button, EmptyState, ErrorState, LoadingState, Panel, StatusBadge } from '@icp-platform/ui/core';
 import type { StandardCrudSummaryBlock } from '@icp-platform/sdk';
@@ -134,7 +134,7 @@ export default function PersonUserBindingCard({ summary, title, featureAction }:
         </div>
       </Panel>
 
-      <Modal destroyOnHidden open={open && maySubmit} onCancel={close} closable={{ 'aria-label': text('Close') }} title={<div className="sh-form-inline"><span>{text('BindingDialogTitle')}</span><LanguageSelect /></div>} width={800} footer={(
+      <Modal destroyOnHidden open={open && maySubmit} onCancel={close} closable={{ 'aria-label': text('Close') }} title={text('BindingDialogTitle')} width={800} footer={(
         <><Button onClick={close} disabled={submitting}>{text('Cancel')}</Button><Button variant="primary" type="submit" form="person-user-binding-form" disabled={submitting || !selected || reason.trim().length === 0 || !confirmed}>{submitting ? text('Submitting') : text('ConfirmBinding')}</Button></>
       )}>
         <form id="person-user-binding-form" onSubmit={(event) => void submit(event)} className="sh-page-stack">

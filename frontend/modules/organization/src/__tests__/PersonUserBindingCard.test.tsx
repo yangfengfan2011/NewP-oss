@@ -125,8 +125,9 @@ describe('PersonUserBindingCard', () => {
     await click(document.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
     await click(button('确认永久绑定'));
     expect(document.body.textContent).toContain('候选账号已发生变化，请重新搜索并核对后提交。');
+    expect(document.querySelector('[role="dialog"] select')).toBeNull();
     await act(async () => {
-      const select = document.querySelector<HTMLSelectElement>('[role="dialog"] select')!;
+      const select = container!.querySelector<HTMLSelectElement>('select')!;
       expect(select).not.toBeNull();
       select.value = 'en'; select.dispatchEvent(new Event('change', { bubbles: true }));
     });

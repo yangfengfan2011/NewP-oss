@@ -16,7 +16,8 @@ public sealed class BusinessChangesController(BusinessAuditQuery query, ILocalAd
     {
         if (!await IsAdministratorAsync(cancellationToken)) return Forbid();
         if (filter.From is { Kind: not DateTimeKind.Utc } || filter.To is { Kind: not DateTimeKind.Utc }
-            || filter.From > filter.To) return BadRequest(new ProblemDetails { Title = "时间范围必须为有序 UTC 时间点。", Status = 400 });
+            || filter.From > filter.To) return BadRequest(new ProblemDetails { Title = "时间范围必须为有序 UTC 时间点。", Status = 400,
+                Extensions = { ["code"] = "Audit.InvalidTimeRange", ["reasonKey"] = "BusinessChangeView.InvalidTimeRange" } });
         try { return Ok(await query.ListAsync(filter, cancellationToken)); }
         catch (PlatformCacheUnavailableException exception) { return CacheUnavailable(exception); }
     }
@@ -28,7 +29,8 @@ public sealed class BusinessChangesController(BusinessAuditQuery query, ILocalAd
         try
         {
             var row = await query.GetAsync(id, cancellationToken);
-            return row is null ? NotFound() : Ok(new { fields = row, summaries = new { changes = new { status = "ready", data = row["Changes"] } } });
+            return row is null ? NotFound(new ProblemDetails { Status = 404, Title = "Business change record was not found.",
+                Extensions = { ["code"] = "Audit.RecordNotFound", ["reasonKey"] = "BusinessChangeView.RecordNotFound" } }) : Ok(new { fields = row, summaries = new { changes = new { status = "ready", data = row["Changes"] } } });
         }
         catch (PlatformCacheUnavailableException exception) { return CacheUnavailable(exception); }
     }

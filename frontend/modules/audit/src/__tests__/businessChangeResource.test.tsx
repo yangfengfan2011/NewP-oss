@@ -1,3 +1,4 @@
+import { AuditLocalization } from './auditLocalization';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { changesRenderer, createBusinessChangeResource, referenceRenderer } from '../businessChangeResource';
@@ -31,23 +32,31 @@ describe('业务变更记录只读资源', () => {
   });
 
   it('人员编辑按前后两列呈现真实文本、当前引用名称和显式清空', () => {
-    const html = renderToStaticMarkup(changesRenderer({ blockKey: 'changes', title: '变化明细', block: { status: 'ready', data: [
+    const html = renderToStaticMarkup(<AuditLocalization>{changesRenderer({ blockKey: 'changes', title: '变化明细', block: { status: 'ready', data: [
       { field: 'ENAME', before: { kind: 'text', value: '旧姓名' }, after: { kind: 'text', value: '新姓名' }, beforeDisplay: '旧姓名', afterDisplay: '新姓名' },
       { field: 'DepartmentId', before: { kind: 'department', value: 'dept-a' }, after: { kind: 'department', value: 'dept-b' }, beforeDisplay: '部门A', afterDisplay: '部门B' },
       { field: 'BirthDate', before: { kind: 'calendarDate', value: '2000-02-29' }, after: { kind: 'calendarDate', value: null }, beforeDisplay: '2000/2/29' },
-    ] } }));
+    ] } })}</AuditLocalization>);
     for (const text of ['原值', '新值', '旧姓名', '新姓名', '部门A（dept-a）', '部门B（dept-b）', '2000/2/29（2000-02-29）', '空值']) expect(html).toContain(text);
     expect(html.indexOf('旧姓名')).toBeLessThan(html.indexOf('新姓名'));
     expect(html.indexOf('部门A（dept-a）')).toBeLessThan(html.indexOf('部门B（dept-b）'));
   });
 
   it('明细保留空值、原始日历日期、UTC时间及引用标识', () => {
-    const html = renderToStaticMarkup(changesRenderer({ blockKey: 'changes', title: '变化明细', block: { status: 'ready', data: [
+    const html = renderToStaticMarkup(<AuditLocalization>{changesRenderer({ blockKey: 'changes', title: '变化明细', block: { status: 'ready', data: [
       { field: 'PositionId', before: null, after: { kind: 'position', value: null } },
       { field: 'BirthDate', before: null, after: { kind: 'calendarDate', value: '2000-02-29' }, afterDisplay: '2000/2/29' },
       { field: 'EmploymentStartedAt', before: null, after: { kind: 'instant', value: '2026-09-10T00:00:00Z' }, afterDisplay: '2026/9/10 08:00' },
       { field: 'CompanyId', before: null, after: { kind: 'company', value: 'company-1' }, afterDisplay: '当前公司' },
-    ] } }));
+    ] } })}</AuditLocalization>);
     for (const text of ['空值', '2000-02-29', '2000/2/29', '2026-09-10T00:00:00Z', '2026/9/10 08:00', '当前公司（company-1）']) expect(html).toContain(text);
   });
+});
+
+it('renders English change labels while preserving historical values and absent versus null facts', () => {
+  const html = renderToStaticMarkup(<AuditLocalization language="en">{changesRenderer({ blockKey: 'changes', title: 'Changes', block: { status: 'ready', data: [
+    { field: 'ENAME', before: null, after: { kind: 'text', value: '历史中文姓名' } },
+    { field: 'BirthDate', before: { kind: 'calendarDate', value: '2000-02-29' }, after: { kind: 'calendarDate', value: null } },
+  ] } })}</AuditLocalization>);
+  for (const text of ['Field', 'Previous value', 'New value', 'Name', 'Date of birth', 'No value', 'Not available', '历史中文姓名', '2000-02-29']) expect(html).toContain(text);
 });

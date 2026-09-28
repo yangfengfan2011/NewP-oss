@@ -4,43 +4,43 @@
   "BusinessChangeView": {
     "EID": {
       "zhs": "记录标识",
-      "en": "EID"
+      "en": "Record ID"
     },
     "OccurredAt": {
       "zhs": "发生时间",
-      "en": "OccurredAt"
+      "en": "Occurred at"
     },
     "EventType": {
       "zhs": "事件类型",
-      "en": "EventType"
+      "en": "Event type"
     },
     "Resource": {
       "zhs": "业务对象",
-      "en": "Resource"
+      "en": "Business object"
     },
     "TargetId": {
       "zhs": "目标标识",
-      "en": "TargetId"
+      "en": "Target ID"
     },
     "ActorId": {
       "zhs": "操作者",
-      "en": "ActorId"
+      "en": "Actor"
     },
     "TraceId": {
       "zhs": "TraceId",
-      "en": "TraceId"
+      "en": "Trace ID"
     },
     "FieldsJson": {
       "zhs": "变化内容",
-      "en": "FieldsJson"
+      "en": "Changes"
     },
     "Title": {
       "zhs": "业务变更记录",
-      "en": "Title"
+      "en": "Business changes"
     },
     "Basic": {
       "zhs": "基本事实",
-      "en": "Basic"
+      "en": "Basic facts"
     },
     "From": {
       "zhs": "起始时间（UTC）",
@@ -60,71 +60,155 @@
     },
     "Audit": {
       "zhs": "记录信息",
-      "en": "Audit"
+      "en": "Record information"
     },
     "CreatedBy": {
       "zhs": "创建人",
-      "en": "CreatedBy"
+      "en": "Created by"
     },
     "CreatedAt": {
       "zhs": "创建时间",
-      "en": "CreatedAt"
+      "en": "Created at"
     },
     "UpdatedBy": {
       "zhs": "更新人",
-      "en": "UpdatedBy"
+      "en": "Updated by"
     },
     "UpdatedAt": {
       "zhs": "更新时间",
-      "en": "UpdatedAt"
+      "en": "Updated at"
     },
     "Field_EID": {
       "zhs": "记录标识",
-      "en": "EID"
+      "en": "Record ID"
     },
     "Field_OccurredAt": {
       "zhs": "发生时间",
-      "en": "OccurredAt"
+      "en": "Occurred at"
     },
     "Field_EventType": {
       "zhs": "事件类型",
-      "en": "EventType"
+      "en": "Event type"
     },
     "Field_Resource": {
       "zhs": "业务对象",
-      "en": "Resource"
+      "en": "Business object"
     },
     "Field_TargetId": {
       "zhs": "目标标识",
-      "en": "TargetId"
+      "en": "Target ID"
     },
     "Field_ActorId": {
       "zhs": "操作者",
-      "en": "ActorId"
+      "en": "Actor"
     },
     "Field_TraceId": {
       "zhs": "TraceId",
-      "en": "TraceId"
+      "en": "Trace ID"
     },
     "Field_CreatedBy": {
       "zhs": "创建人",
-      "en": "CreatedBy"
+      "en": "Created by"
     },
     "Field_CreatedAt": {
       "zhs": "创建时间",
-      "en": "CreatedAt"
+      "en": "Created at"
     },
     "Field_UpdatedBy": {
       "zhs": "更新人",
-      "en": "UpdatedBy"
+      "en": "Updated by"
     },
     "Field_UpdatedAt": {
       "zhs": "更新时间",
-      "en": "UpdatedAt"
+      "en": "Updated at"
     },
     "Block_Changes": {
       "zhs": "变化明细",
-      "en": "changes"
+      "en": "Changes"
+    },
+    "ChangeField_EmploymentEndedAt": {
+      "zhs": "离职时间",
+      "en": "Employment end"
+    },
+    "NotAvailable": {
+      "zhs": "不可用",
+      "en": "Not available"
+    },
+    "ChangeField_EmploymentStatus": {
+      "zhs": "任职状态",
+      "en": "Employment status"
+    },
+    "ChangeField_DepartmentId": {
+      "zhs": "部门",
+      "en": "Department"
+    },
+    "ChangeField_IsEnabled": {
+      "zhs": "初始启用状态",
+      "en": "Initially enabled"
+    },
+    "ChangeField_ENAME": {
+      "zhs": "姓名",
+      "en": "Name"
+    },
+    "EmptyValue": {
+      "zhs": "空值",
+      "en": "No value"
+    },
+    "ChangeField_EmploymentStartedAt": {
+      "zhs": "入职时间",
+      "en": "Employment start"
+    },
+    "ChangeField_CompanyId": {
+      "zhs": "公司",
+      "en": "Company"
+    },
+    "PreviousValue": {
+      "zhs": "原值",
+      "en": "Previous value"
+    },
+    "NewValue": {
+      "zhs": "新值",
+      "en": "New value"
+    },
+    "ChangesUnavailable": {
+      "zhs": "变化明细读取失败",
+      "en": "Changes could not be loaded"
+    },
+    "ChangeField_BirthDate": {
+      "zhs": "出生日期",
+      "en": "Date of birth"
+    },
+    "ChangeField_PositionId": {
+      "zhs": "岗位",
+      "en": "Position"
+    },
+    "ChangeField_PersonNo": {
+      "zhs": "工号",
+      "en": "Personnel number"
+    },
+    "ChangeField": {
+      "zhs": "字段",
+      "en": "Field"
+    },
+    "InvalidTimeRange": {
+      "zhs": "起始和结束时间必须为 UTC 时间点，且起始时间不得晚于结束时间。",
+      "en": "Enter UTC timestamps with the start at or before the end."
+    },
+    "ChangeField_Configuration": {
+      "zhs": "配置",
+      "en": "Configuration"
+    },
+    "RecordNotFound": {
+      "zhs": "未找到该业务变更记录。",
+      "en": "The business change record was not found."
+    },
+    "Drawer_View": {
+      "zhs": "查看业务变更记录",
+      "en": "View business change"
+    },
+    "Action_ViewFullDetail": {
+      "zhs": "查看完整详情",
+      "en": "View full details"
     }
   }
 }

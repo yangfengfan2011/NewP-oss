@@ -13,8 +13,8 @@ const reasons: Record<string, string> = { administrator: '管理员豁免', disa
 const statuses: Record<string, string> = { effective: '参与最终裁决', descendantOverride: '被子规则覆盖', objectOverride: '被对象授权覆盖' };
 
 /** 只消费服务端解释，选择用户不修改授权草稿或当前登录身份。 */
-export default function ObjectAuthorizationDetails({ read, catalog }: {
-  read: DataScopeSubjectDirectoryRead; catalog: ObjectCatalog;
+export default function ObjectAuthorizationDetails({ read, catalog, unavailable = false }: {
+  read: DataScopeSubjectDirectoryRead; catalog: ObjectCatalog; unavailable?: boolean;
 }) {
   const { t } = useLocalization();
   const instance = useRef(crypto.randomUUID());
@@ -22,6 +22,7 @@ export default function ObjectAuthorizationDetails({ read, catalog }: {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [revision, setRevision] = useState(0);
+  const [expanded, setExpanded] = useState<string[]>([]);
   const directory = usePlatformQuery({ key: ['object-explanation-users', instance.current, search, page],
     load: ({ signal }) => searchDataScopeSubjects(read, { type: 'user', query: search, page }, signal) });
   const explanation = usePlatformQuery({ key: ['object-explanation', instance.current, accountId ?? '', revision],
@@ -38,20 +39,20 @@ export default function ObjectAuthorizationDetails({ read, catalog }: {
     else if (explanation.status === 'error') setSnapshot(undefined);
   }, [explanation.status, explanation.data, identity]);
   // 仅保留同一分析请求的显示与 Collapse 实例；新结果更新名称，拒绝不展示旧裁决。
-  const data = explanation.status === 'error' ? undefined : explanation.data
+  const data = unavailable || explanation.status === 'error' ? undefined : explanation.data
     ?? (snapshot?.identity === identity ? snapshot.data : undefined);
   const options = [...new Map([{ value: '', label: t('DataScope.CurrentUser', '当前用户') }, ...(directory.data?.items ?? []).map(user => ({ value: user.id, label: user.name })),
     ...(data ? [{ value: data.accountId, label: data.accountName }] : [])].map(option => [option.value, option])).values()];
   return <>
     <Space wrap style={{ marginBottom: 12 }}>
-      <span>{t('DataScope.AnalyzeUser', '分析用户')}</span><Select aria-label={t('DataScope.AnalyzeUser', '分析用户')} showSearch filterOption={false} value={accountId ?? ''} options={options}
+      <span>{t('DataScope.AnalyzeUser', '分析用户')}</span><Select aria-label={t('DataScope.AnalyzeUser', '分析用户')} disabled={unavailable} showSearch filterOption={false} value={accountId ?? ''} options={options}
         style={{ width: 220 }} onSearch={value => { setSearch(value); setPage(1); }}
         onChange={value => setAccountId(value || undefined)} loading={directory.isFetching} />
       {(page > 1 || directory.data?.hasMore) && <>
-        <Button disabled={page === 1 || directory.isFetching} onClick={() => setPage(page - 1)}>{t('DataScope.PreviousUsers', '上一页用户')}</Button>
-        <Button disabled={!directory.data?.hasMore || directory.isFetching} onClick={() => setPage(page + 1)}>{t('DataScope.NextUsers', '下一页用户')}</Button>
+        <Button disabled={unavailable || page === 1 || directory.isFetching} onClick={() => setPage(page - 1)}>{t('DataScope.PreviousUsers', '上一页用户')}</Button>
+        <Button disabled={unavailable || !directory.data?.hasMore || directory.isFetching} onClick={() => setPage(page + 1)}>{t('DataScope.NextUsers', '下一页用户')}</Button>
       </>}
-      <Button onClick={() => setRevision(value => value + 1)}>{t('DataScope.Reanalyze', '重新分析')}</Button>
+      <Button disabled={unavailable} onClick={() => setRevision(value => value + 1)}>{t('DataScope.Reanalyze', '重新分析')}</Button>
     </Space>
     <Typography.Paragraph type="secondary">{t('DataScope.ExplanationHelp', '展示已保存配置下的数据权限。页面功能授权和业务校验仍独立生效。新建权限需按新对象内容判定。')}</Typography.Paragraph>
     {directory.status === 'error' && <Alert type="error" showIcon message={t('DataScope.DirectoryReadFailed', '用户目录读取失败。')} />}
@@ -59,7 +60,7 @@ export default function ObjectAuthorizationDetails({ read, catalog }: {
     <Spin spinning={explanation.isFetching}>
       {data && <>
         <Typography.Paragraph>{t('DataScope.AnalyzeUser', '分析用户')}：<strong>{data.accountName}</strong></Typography.Paragraph>
-        <Collapse items={data.actions.map(action => ({ key: action.key,
+        <Collapse activeKey={expanded} onChange={keys => setExpanded(typeof keys === 'string' ? [keys] : keys)} items={data.actions.map(action => ({ key: action.key,
           label: <Space><strong>{t(`DataScope.Action_${action.key}`, action.title)}</strong><Tag color={action.allowed ? 'success' : 'error'}>{action.allowed ? t('DataScope.Allowed', '允许') : t('DataScope.Deny', '拒绝')}</Tag></Space>,
           children: <>
             <Typography.Paragraph>{t(`DataScope.Reason_${action.reason}`, reasons[action.reason] ?? action.reason)}</Typography.Paragraph>

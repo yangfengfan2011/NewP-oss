@@ -5,8 +5,8 @@ import DownOutlined from '@ant-design/icons/DownOutlined';
 import EditOutlined from '@ant-design/icons/EditOutlined';
 import type { InputRef } from 'antd';
 import { nextRuleName, trimRuleNames, validateRuleNames } from './dataScopeRuleNames';
-import { platformFetch, useAuthorization, useLocalization } from '@icp-platform/core';
-import type { PageProps } from '@icp-platform/sdk';
+import { formatRequestError, platformFetch, useAuthorization, useLocalization } from '@icp-platform/core';
+import { StandardCrudRequestError, type PageProps } from '@icp-platform/sdk';
 import { requestRole } from './roleResource';
 import { type DataScopeSubject, type SubjectType } from './DataScopeSubjectEditor';
 import { describeDataScopeCondition, type DataScopeBusinessType, type DataScopeCondition, type DataScopeResourceField } from './DataScopeConditionEditor';
@@ -26,7 +26,6 @@ interface Catalog { subjectTypes?: SubjectType[]; contextValues?: { key: string;
   features: { behaviorKey: string; position: string }[];
   resources: { resource: { resourceKey: string; modelName: string; modelKey: string }; fields: DataScopeResourceField[] }[] }
 const endpoint = '/api/authorization/data-scope';
-const errorText = (error: unknown) => error instanceof Error ? error.message : '规则操作失败';
 const findNode = (node: Rule, id: string): Rule | undefined => node.id === id ? node
   : node.children.map(child => findNode(child, id)).find(Boolean);
 const updateNode = (node: Rule, id: string, update: (current: Rule) => Rule): Rule => node.id === id ? update(node)
@@ -43,8 +42,8 @@ const pathTo = (node: Rule, id: string, path: Rule[] = []): Rule[] => {
   return [];
 };
 interface RuleTreeNode { key: string; title: string; children: RuleTreeNode[] }
-const treeNode = (node: Rule): RuleTreeNode =>
-  ({ key: node.id, title: node.enabled ? node.name : `${node.name}（已停用）`, children: node.children.map(treeNode) });
+const treeNode = (node: Rule, t: ReturnType<typeof useLocalization>['t']): RuleTreeNode =>
+  ({ key: node.id, title: node.enabled ? node.name : t('DataScope.DisabledRule', '{name}（已停用）', { name: node.name }), children: node.children.map(child => treeNode(child, t)) });
 const treeIds = (node: Rule): string[] => [node.id, ...node.children.flatMap(treeIds)];
 // 整树保存覆盖各节点；回显按优先级排序，保存时由当前顺序生成数值。
 const orderRuleSubjects = (node: Rule, rank = false): Rule => ({ ...node,
@@ -52,13 +51,15 @@ const orderRuleSubjects = (node: Rule, rank = false): Rule => ({ ...node,
   children: node.children.map(child => orderRuleSubjects(child, rank)),
 });
 
+function DataScopeMessage({ messageKey }: { messageKey: string }) { const { t } = useLocalization(); return <>{t(`DataScope.${messageKey}`)}</>; }
+
 /** 根树草稿与正式保存分离；页面离开使用既有 Page 生命周期。 */
 export default function DataScopeRulesPage({ input, reportState }: PageProps) {
   const nameInput = useRef<InputRef>(null);
   const [nameEditingId, setNameEditingId] = useState<string>();
   const { hasFeature } = useAuthorization();
   const { token } = theme.useToken();
-  const { t } = useLocalization();
+  const { t, getEnumerationLabel } = useLocalization();
   const [viewLabels, setViewLabels] = useState<DataScopeViewLabels[]>([]);
   const [activeTab, setActiveTab] = useState('conditions');
   const [collapsedKeys, setCollapsedKeys] = useState<string[]>([]);
@@ -72,7 +73,8 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
   const [selectedId, setSelectedId] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<unknown>();
+  const errorMessage = formatRequestError(error, t);
   const [conditionErrorPath, setConditionErrorPath] = useState('');
   const [pendingRule, setPendingRule] = useState<Rule>();
   const [deleteRoot, setDeleteRoot] = useState(false);
@@ -108,7 +110,7 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
       }
       if (!controller.signal.aborted) { setCatalog(nextCatalog); setViewLabels(nextLabels); setRules(allRules); }
     };
-    void load().catch(failure => { if (!controller.signal.aborted) setError(errorText(failure)); })
+    void load().catch(failure => { if (!controller.signal.aborted) setError(failure); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [read]);
@@ -117,7 +119,7 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
     if (draft && selected) setDraft(updateNode(draft, selected.id, change));
   };
   const save = useCallback(async () => {
-    if (editing) { void message.warning('请先确定或取消抽屉中的编辑。'); return false; }
+    if (editing) { void message.warning(<DataScopeMessage messageKey="FinishEditor" />); return false; }
     if (!draft || !savePosition || readOnly || pending.current) return false;
     pending.current = true; setSaving(true); setError(''); setConditionErrorPath('');
     try {
@@ -129,19 +131,19 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
       setDraft(candidate); setSaved(candidate);
       setNameEditingId(undefined);
       setRules(current => current.some(rule => rule.id === candidate.id) ? current.map(rule => rule.id === candidate.id ? candidate : rule) : [...current, candidate]);
-      void message.success('规则已保存');
+      void message.success(<DataScopeMessage messageKey="RuleSaved" />);
       return true;
     } catch (failure) {
-      const message = errorText(failure);
-      setError(message);
-      const nested = /^节点 ([^：]+)：条件 (\d+(?:\.\d+)*)：/.exec(message);
-      if (nested) {
-        setSelectedId(nested[1]);
-        const path = pathTo(draft, nested[1]).map(node => node.id);
+      setError(failure);
+      const args = failure instanceof StandardCrudRequestError ? failure.args : undefined;
+      const nodeId = typeof args?.nodeId === 'string' ? args.nodeId : undefined;
+      if (nodeId && findNode(draft, nodeId)) {
+        setSelectedId(nodeId);
+        const path = pathTo(draft, nodeId).map(node => node.id);
         setCollapsedKeys(current => current.filter(id => !path.includes(id)));
       }
       setActiveTab('conditions');
-      setConditionErrorPath(nested?.[2] ?? /^条件 (\d+(?:\.\d+)*)：/.exec(message)?.[1] ?? '');
+      setConditionErrorPath(typeof args?.conditionPath === 'string' ? args.conditionPath : '');
       return false;
     }
     finally { pending.current = false; setSaving(false); }
@@ -159,7 +161,7 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
     if (!resource) return;
     const id = `DataScopeRule_${crypto.randomUUID()}`;
     setNameEditingId(id);
-    choose({ id, rootId: id, parentId: null, name: nextRuleName('新规则', shownRules), enabled: true, resourceKey: resource.resource.resourceKey,
+    choose({ id, rootId: id, parentId: null, name: nextRuleName(t('DataScope.NewRule', '新规则'), shownRules), enabled: true, resourceKey: resource.resource.resourceKey,
       condition: initialCondition(resource.resource.resourceKey),
       subjects: [{ id: `DataScopeSubject_${crypto.randomUUID()}`, type: 'all', subjectId: null, priority: 0, actions: { read: 'unset' } }], children: [] });
   };
@@ -167,7 +169,7 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
     if (!draft || !selected) return;
     const id = `DataScopeRule_${crypto.randomUUID()}`;
     setNameEditingId(id);
-    const child: Rule = { id, rootId: draft.id, parentId: selected.id, name: nextRuleName('新子规则', selected.children), enabled: true,
+    const child: Rule = { id, rootId: draft.id, parentId: selected.id, name: nextRuleName(t('DataScope.NewChild', '新子规则'), selected.children), enabled: true,
       resourceKey: draft.resourceKey, condition: initialCondition(draft.resourceKey), subjects: [], children: [] };
     edit(node => ({ ...node, children: [...node.children, child] }));
     setSelectedId(id);
@@ -180,7 +182,7 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
     const parentId = selected.parentId;
     const id = `DataScopeRule_${crypto.randomUUID()}`;
     setNameEditingId(id);
-    const sibling: Rule = { id, rootId: draft.id, parentId, name: nextRuleName('新同级规则', findNode(draft, parentId)?.children ?? []), enabled: true,
+    const sibling: Rule = { id, rootId: draft.id, parentId, name: nextRuleName(t('DataScope.NewSibling', '新同级规则'), findNode(draft, parentId)?.children ?? []), enabled: true,
       resourceKey: draft.resourceKey, condition: initialCondition(draft.resourceKey), subjects: [], children: [] };
     setDraft(updateNode(draft, parentId, parent => ({ ...parent, children: [...parent.children, sibling] })));
     setSelectedId(id);
@@ -203,13 +205,13 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
       }, '规则');
       setRules(current => current.filter(rule => rule.id !== draft.id));
       setDraft(undefined); setSaved(undefined); setSelectedId(undefined); setDeleteRoot(false);
-      void message.success('根规则已删除');
-    } catch (failure) { setError(errorText(failure)); }
+      void message.success(<DataScopeMessage messageKey="RootDeleted" />);
+    } catch (failure) { setError(failure); }
     finally { pending.current = false; setSaving(false); }
   };
   const labels = dataScopeLabels(viewLabels, selected?.resourceKey ?? '', t);
   const fields = (catalog?.resources.find(resource => resource.resource.resourceKey === selected?.resourceKey)?.fields ?? [])
-    .map(field => ({ ...field, title: labels.field(field.name) }));
+    .map(field => ({ ...field, title: labels.field(field.name), enumName: labels.enumeration(field.name) }));
   const modelKey = catalog?.resources.find(item => item.resource.resourceKey === selected?.resourceKey)?.resource.modelKey ?? '';
   const businessTypes = catalog?.businessConditions?.filter(type => type.modelKeys.includes(modelKey)) ?? [];
   const disabled = readOnly || saving;
@@ -220,9 +222,9 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
     if (root) choose(root, id);
   };
   const nodeMenu = { items: [
-    { key: 'child', label: '添加子规则', disabled: !selected || disabled },
-    { key: 'sibling', label: '添加同级规则', disabled: !selected?.parentId || disabled },
-    { key: 'delete', label: selected?.parentId ? '删除节点' : '删除根树', danger: true, disabled: !selected || disabled },
+    { key: 'child', label: t('DataScope.AddChild', '添加子规则'), disabled: !selected || disabled },
+    { key: 'sibling', label: t('DataScope.AddSibling', '添加同级规则'), disabled: !selected?.parentId || disabled },
+    { key: 'delete', label: selected?.parentId ? t('DataScope.DeleteNode', '删除节点') : t('DataScope.DeleteTree', '删除根树'), danger: true, disabled: !selected || disabled },
   ], onClick: ({ key }: { key: string }) => {
     if (key === 'child') addChild();
     if (key === 'sibling') addSibling();
@@ -230,43 +232,43 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
   } };
   return <div className="data-scope-page">
     {messageHolder}
-    {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />}
+    {!!error && <Alert type="error" showIcon message={errorMessage} style={{ marginBottom: 16 }} />}
     <Spin spinning={loading}>
       <div className="data-scope-workspace">
-        <aside aria-label="规则树面板">
+        <aside aria-label={t('DataScope.TreePanel', '规则树面板')}>
           <Card size="small" className="data-scope-sidebar" styles={{ header: { minHeight: 'var(--np-workspace-header-height)', padding: `${token.paddingXXS}px ${token.paddingSM}px` }, body: { padding: token.paddingSM } }}
-            title={<Space size={token.marginXS} wrap><Button size="small" disabled={disabled} onClick={create}>＋ 新增规则</Button>
-              <Dropdown menu={nodeMenu} trigger={['click']}><Button size="small" disabled={!selected || disabled}>节点操作 ▾</Button></Dropdown></Space>}>
+            title={<Space size={token.marginXS} wrap><Button size="small" disabled={disabled} onClick={create}>{t('DataScope.AddRule', '＋ 新增规则')}</Button>
+              <Dropdown menu={nodeMenu} trigger={['click']}><Button size="small" disabled={!selected || disabled}>{t('DataScope.NodeActions', '节点操作 ▾')}</Button></Dropdown></Space>}>
             <ConfigProvider theme={{ components: { Tree: { titleHeight: token.controlHeight, nodeSelectedBg: token.colorPrimaryBg, nodeSelectedColor: token.colorPrimaryText } } }}>
-              <Tree aria-label="规则树" blockNode showLine={{ showLeafIcon: false }} switcherIcon={<DownOutlined aria-hidden="true" />}
+              <Tree aria-label={t('DataScope.Tree', '规则树')} blockNode showLine={{ showLeafIcon: false }} switcherIcon={<DownOutlined aria-hidden="true" />}
                 selectedKeys={selectedId ? [selectedId] : []} expandedKeys={shownRules.flatMap(treeIds).filter(id => !collapsedKeys.includes(id))}
                 onExpand={keys => setCollapsedKeys(shownRules.flatMap(treeIds).filter(id => !keys.includes(id)))}
-                treeData={shownRules.map(treeNode)} onSelect={keys => selectNode(String(keys[0] ?? ''))}
+                treeData={shownRules.map(node => treeNode(node, t))} onSelect={keys => selectNode(String(keys[0] ?? ''))}
                 onRightClick={({ node }) => selectNode(String(node.key))}
                 titleRender={node => <Dropdown trigger={['contextMenu']} menu={{ ...nodeMenu, items: nodeMenu.items.map(item => ({ ...item, disabled: item.disabled || selectedId !== node.key })) }} disabled={disabled}>
                   <span style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{node.title}</span>
                 </Dropdown>} disabled={saving} />
             </ConfigProvider>
-            {shownRules.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无规则" />}
+            {shownRules.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('DataScope.NoRules', '暂无规则')} />}
           </Card>
         </aside>
-        <Card size="small" className="data-scope-detail" styles={{ header: { minHeight: 'var(--np-workspace-header-height)' } }} title={selected ? <div className="data-scope-title" aria-label="规则路径">
+        <Card size="small" className="data-scope-detail" styles={{ header: { minHeight: 'var(--np-workspace-header-height)' } }} title={selected ? <div className="data-scope-title" aria-label={t('DataScope.RulePath', '规则路径')}>
             {ancestors.length > 0 && <Typography.Text type="secondary">{ancestors.map(node => node.name).join(' / ')} /</Typography.Text>}
             {nameEditingId === selected.id && !disabled
-              ? <Input ref={nameInput} aria-label="规则名称" title="规则名称" maxLength={256} value={selected.name}
+              ? <Input ref={nameInput} aria-label={t('DataScope.RuleName', '规则名称')} title={t('DataScope.RuleName', '规则名称')} maxLength={256} value={selected.name}
                 onChange={event => edit(node => ({ ...node, name: event.target.value }))}
                 onPressEnter={() => setNameEditingId(undefined)} onBlur={() => setNameEditingId(undefined)} />
-              : <Button type="text" className="data-scope-name" aria-label="编辑规则名称" disabled={disabled}
+              : <Button type="text" className="data-scope-name" aria-label={t('DataScope.EditRuleName', '编辑规则名称')} disabled={disabled}
                 onClick={() => setNameEditingId(selected.id)}>
-                <span>{selected.name || '未命名规则'}</span><EditOutlined aria-hidden="true" />
+                <span>{selected.name || t('DataScope.Unnamed', '未命名规则')}</span><EditOutlined aria-hidden="true" />
               </Button>}
-          </div> : '规则详情'}
-          extra={selected && <Switch aria-label="启用规则" checkedChildren="启用" unCheckedChildren="停用" disabled={disabled}
+          </div> : t('DataScope.RuleDetails', '规则详情')}
+          extra={selected && <Switch aria-label={t('DataScope.EnableRule', '启用规则')} checkedChildren={t('DataScope.Enabled', '启用')} unCheckedChildren={t('DataScope.Disabled', '停用')} disabled={disabled}
             checked={selected.enabled} onChange={enabled => edit(node => ({ ...node, enabled }))} />}>
           {selected ? <>
             <Form layout="vertical" disabled={disabled}>
               <div className="data-scope-basics">
-                <Form.Item label="资源"><Select aria-label="资源" value={draft?.resourceKey} disabled={!!selected.parentId || disabled}
+                <Form.Item label={t('DataScope.Resource', '资源')}><Select aria-label={t('DataScope.Resource', '资源')} value={draft?.resourceKey} disabled={!!selected.parentId || disabled}
                   options={catalog?.resources.map(({ resource }) => ({ value: resource.resourceKey, label: dataScopeLabels(viewLabels, resource.resourceKey, t).resource(resource.modelName) }))}
                   onChange={resourceKey => {
                     if (!draft) return;
@@ -277,43 +279,43 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
               </div>
             </Form>
             <Tabs activeKey={activeTab} onChange={setActiveTab} items={[
-              { key: 'conditions', label: '规则条件', children: <>
+              { key: 'conditions', label: t('DataScope.RuleConditions', '规则条件'), children: <>
                 {ancestors.length > 0 && <details className="data-scope-ancestors">
-                  <summary>完整条件还包含 {ancestors.length} 个祖先条件</summary>
+                  <summary>{t('DataScope.Ancestors', '完整条件还包含 {count} 个祖先条件', { count: ancestors.length })}</summary>
                   <ol>{ancestors.map(node => <li key={node.id}>
-                    <Space><Typography.Text strong>{node.name}</Typography.Text>{!node.enabled && <Tag>已停用</Tag>}</Space>
-                    <div><Typography.Text type="secondary">{describeDataScopeCondition(node.condition, catalog?.contextValues ?? [], businessTypes, fields)}</Typography.Text></div>
+                    <Space><Typography.Text strong>{node.name}</Typography.Text>{!node.enabled && <Tag>{t('DataScope.DisabledState', '已停用')}</Tag>}</Space>
+                    <div><Typography.Text type="secondary">{describeDataScopeCondition(node.condition, catalog?.contextValues ?? [], businessTypes, fields, t, getEnumerationLabel)}</Typography.Text></div>
                   </li>)}</ol>
                 </details>}
                 <DataScopeConditionTable key={`${selected.id}:${editorEpoch}`} condition={selected.condition} fields={fields} modelKey={modelKey}
                   contexts={catalog?.contextValues ?? []} bindings={catalog?.contextBindings ?? []} businessTypes={businessTypes}
-                  disabled={disabled} onEditingChange={setEditing} errorPath={conditionErrorPath} errorMessage={error}
+                  disabled={disabled} onEditingChange={setEditing} errorPath={conditionErrorPath} errorMessage={errorMessage}
                   onChange={condition => { setConditionErrorPath(''); edit(node => ({ ...node, condition })); }} />
               </> },
-              { key: 'subjects', label: `授权主体（${selected.subjects.length}）`, children: <DataScopeSubjectTable key={`${selected.id}:${editorEpoch}`}
+              { key: 'subjects', label: t('DataScope.Subjects', '授权主体（{count}）', { count: selected.subjects.length }), children: <DataScopeSubjectTable key={`${selected.id}:${editorEpoch}`}
                 subjects={selected.subjects} types={catalog?.subjectTypes ?? [{ key: 'all', title: '所有用户', requiresId: false }]}
                 actions={catalog?.actions ?? []} read={read} disabled={disabled} onEditingChange={setEditing}
                 onChange={subjects => edit(node => ({ ...node, subjects }))} /> },
             ]} />
-          </> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="从左侧选择规则，或新增规则" />}
+          </> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('DataScope.SelectRule', '从左侧选择规则，或新增规则')} />}
           {draft && <Flex className="data-scope-savebar" style={{ borderTop: `1px solid ${token.colorBorderSecondary}` }} gap={12} justify="space-between" align="center" wrap>
-            <div><Typography.Text>根规则：{draft.name}</Typography.Text><br />
-              <Typography.Text type="secondary">保存包含该根规则下的全部修改</Typography.Text></div>
-            <Space wrap>{dirty && <Typography.Text type="warning">未保存</Typography.Text>}
-              <Button disabled={!dirty || saving || editing} onClick={reset}>放弃修改</Button>
-              <Button type="primary" loading={saving} disabled={!dirty || readOnly || editing} onClick={() => void save()}>保存根规则</Button>
+            <div><Typography.Text>{t('DataScope.RootName', '根规则：{name}', { name: draft.name })}</Typography.Text><br />
+              <Typography.Text type="secondary">{t('DataScope.SaveHelp', '保存包含该根规则下的全部修改')}</Typography.Text></div>
+            <Space wrap>{dirty && <Typography.Text type="warning">{t('DataScope.Unsaved', '未保存')}</Typography.Text>}
+              <Button disabled={!dirty || saving || editing} onClick={reset}>{t('DataScope.Discard', '放弃修改')}</Button>
+              <Button type="primary" loading={saving} disabled={!dirty || readOnly || editing} onClick={() => void save()}>{t('DataScope.SaveRoot', '保存根规则')}</Button>
             </Space>
           </Flex>}
         </Card>
       </div>
     </Spin>
-    <Modal title="放弃未保存的草稿？" open={!!pendingRule} onCancel={() => setPendingRule(undefined)} onOk={() => {
+    <Modal title={t('DataScope.DiscardConfirm', '放弃未保存的草稿？')} open={!!pendingRule} onCancel={() => setPendingRule(undefined)} onOk={() => {
       setDraft(pendingRule); setSaved(rules.find(rule => rule.id === pendingRule?.id)); setSelectedId(pendingSelection ?? pendingRule?.id); setPendingRule(undefined); setConditionErrorPath('');
-    }} okText="放弃并切换" cancelText="继续编辑">当前根规则的修改尚未保存。</Modal>
-    <Modal title={selected?.parentId ? '删除当前节点及其子规则？' : '删除整棵根规则？'} open={deleteRoot} onCancel={() => setDeleteRoot(false)} onOk={() => {
+    }} okText={t('DataScope.DiscardSwitch', '放弃并切换')} cancelText={t('DataScope.KeepEditing', '继续编辑')}>{t('DataScope.UnsavedRoot', '当前根规则的修改尚未保存。')}</Modal>
+    <Modal title={selected?.parentId ? t('DataScope.DeleteNodeConfirm', '删除当前节点及其子规则？') : t('DataScope.DeleteRootConfirm', '删除整棵根规则？')} open={deleteRoot} onCancel={() => setDeleteRoot(false)} onOk={() => {
       if (selected?.parentId) { deleteSelected(); setDeleteRoot(false); } else void deleteSavedRoot();
-    }} okText={selected?.parentId ? '删除节点' : '删除整棵根树'} okButtonProps={{ danger: true, loading: saving }} cancelText="取消">
-      {selected?.parentId ? '当前节点及全部子规则将从草稿中删除，保存根规则后生效。' : '根规则及全部子节点会立即删除并记录审计。'}
+    }} okText={selected?.parentId ? t('DataScope.DeleteNode', '删除节点') : t('DataScope.DeleteRoot', '删除整棵根树')} okButtonProps={{ danger: true, loading: saving }} cancelText={t('DataScope.Cancel', '取消')}>
+      {selected?.parentId ? t('DataScope.DeleteNodeHelp', '当前节点及全部子规则将从草稿中删除，保存根规则后生效。') : t('DataScope.DeleteRootHelp', '根规则及全部子节点会立即删除并记录审计。')}
     </Modal>
   </div>;
 }

@@ -1,3 +1,4 @@
+import { useLocalization } from '@icp-platform/core';
 import { Panel, StatusBadge } from '@icp-platform/ui/core';
 import type { StandardCrudSummaryBlock } from '@icp-platform/sdk';
 
@@ -6,7 +7,8 @@ interface AuthorizationSummaryCardProps {
   title?: string;
 }
 
-export default function AuthorizationSummaryCard({ summary, title = '授权摘要' }: AuthorizationSummaryCardProps) {
+export default function AuthorizationSummaryCard({ summary, title }: AuthorizationSummaryCardProps) {
+  const { t } = useLocalization();
   if (summary.status !== 'ready' || !summary.data) {
     return null;
   }
@@ -15,17 +17,17 @@ export default function AuthorizationSummaryCard({ summary, title = '授权摘�
 
   return (
     <Panel
-      title={title}
-      meta="首轮只保留状态化块位和只读降级，不把授权编辑链路拉回人员中心"
+      title={title ?? t('Organization.Person.AuthorizationSummaryTitle', '授权摘要')}
+      meta={t('Organization.Person.AuthorizationSummaryHelp')}
     >
       <div style={{ display: 'grid', gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <StatusBadge
             variant="success"
-            label="已加载"
+            label={t('Organization.Person.AuthorizationLoaded', '已加载')}
           />
           <span style={{ color: '#64748b', fontSize: 12 }}>
-            授权摘要可以只读展示。
+            {t('Organization.Person.AuthorizationReadOnly', '授权摘要仅供查看。')}
           </span>
         </div>
 

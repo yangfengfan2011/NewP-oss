@@ -58,12 +58,14 @@
       "key": "authorization.dataScope",
       "kind": "navigation",
       "title": "数据范围规则",
+      "titleKey": "Navigation.DataScope",
       "behaviorKey": "authorization.dataScope.read"
     },
     {
       "key": "dataScope.save",
       "kind": "action",
       "title": "保存规则",
+      "titleKey": "DataScope.SaveRoot",
       "parentKey": "authorization.dataScope",
       "behaviorKey": "authorization.dataScope.save"
     }

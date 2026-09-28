@@ -81,6 +81,10 @@
     "InvalidId": {
       "zhs": "部门标识无效。",
       "en": "The department ID is invalid."
+    },
+    "ObjectTitle": {
+      "zhs": "部门",
+      "en": "Department"
     }
   }
 }

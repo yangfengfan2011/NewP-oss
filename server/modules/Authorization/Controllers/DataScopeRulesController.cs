@@ -40,7 +40,7 @@ public sealed class DataScopeRulesController(DataScopeCatalog catalog, DataScope
     {
         try { return Ok(await identities.SearchAsync(type, query, page, currentIds ?? [], cancellationToken)); }
         catch (RolePermissionValidationException exception)
-        { return BadRequest(new ProblemDetails { Status = 400, Title = exception.Message, Extensions = { ["code"] = "DataScope.InvalidConfiguration" } }); }
+        { return BadRequest(AuthorizationProblem.From(exception, "DataScope.InvalidConfiguration")); }
     }
 
     /// <summary>规则根列表使用管理分页。</summary>
@@ -54,12 +54,12 @@ public sealed class DataScopeRulesController(DataScopeCatalog catalog, DataScope
     {
         try
         {
-            if (id != rule.Id) throw new RolePermissionValidationException("规则身份与目标不一致。");
+            if (id != rule.Id) throw new RolePermissionValidationException("规则身份与目标不一致。", "DATA_SCOPE_RULE_TARGET_MISMATCH", field: "id");
             await rules.SaveAsync(rule, cancellationToken);
             return NoContent();
         }
         catch (RolePermissionValidationException exception)
-        { return BadRequest(new ProblemDetails { Status = 400, Title = exception.Message, Extensions = { ["code"] = "DataScope.InvalidConfiguration" } }); }
+        { return BadRequest(AuthorizationProblem.From(exception, "DataScope.InvalidConfiguration")); }
     }
 
     /// <summary>删除根规则及完整子树，配置和实际旧值审计共用一次事务。</summary>
@@ -68,6 +68,6 @@ public sealed class DataScopeRulesController(DataScopeCatalog catalog, DataScope
     {
         try { await rules.DeleteAsync(id, cancellationToken); return NoContent(); }
         catch (RolePermissionValidationException exception)
-        { return BadRequest(new ProblemDetails { Status = 400, Title = exception.Message, Extensions = { ["code"] = "DataScope.InvalidConfiguration" } }); }
+        { return BadRequest(AuthorizationProblem.From(exception, "DataScope.InvalidConfiguration")); }
     }
 }

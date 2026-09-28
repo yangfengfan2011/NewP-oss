@@ -2,6 +2,9 @@
   "schemaVersion": "1.0",
   "type": "dic",
   "AuthorizationErrors": {
+    "DATA_SCOPE_TEMPORAL_INPUT_INVALID": { "zhs": "日期或时间格式无效。日期使用 yyyy-MM-dd，时间点使用 yyyy-MM-ddTHH:mm:ss。", "en": "Invalid date or time format. Use yyyy-MM-dd for dates and yyyy-MM-ddTHH:mm:ss for timestamps." },
+    "DATA_SCOPE_TEMPORAL_LOCAL_TIME_INVALID": { "zhs": "本地时间落在夏令时跳变的无效区间，请重新选择时间。", "en": "This local time falls in a daylight-saving gap. Choose another time." },
+    "DATA_SCOPE_TEMPORAL_LOCAL_TIME_AMBIGUOUS": { "zhs": "本地时间因夏令时回拨存在歧义，请重新选择时间。", "en": "This local time is ambiguous due to a daylight-saving transition. Choose another time." },
     "AUTHORIZATION_ROLE_PROTECTED_CREATE": {
       "zhs": "受保护的角色身份不能通过普通管理创建。",
       "en": "Protected role identities cannot be created through regular management."
@@ -61,6 +64,158 @@
     "AUTHORIZATION_FEATURE_PROTECTED": {
       "zhs": "本地管理员的完整功能授权由初始化维护，不能修改。",
       "en": "Local administrator feature authorization is maintained during initialization and cannot be modified."
+    },
+    "DATA_SCOPE_RESOURCE_UNKNOWN": {
+      "zhs": "数据资源未登记。",
+      "en": "The data resource is not registered."
+    },
+    "DATA_SCOPE_RULE_TREE_INVALID": {
+      "zhs": "规则树身份、父子关系或资源无效。",
+      "en": "The rule tree identity, parent relationship, name, or resource is invalid."
+    },
+    "DATA_SCOPE_SUBJECT_ENTRY_INVALID": {
+      "zhs": "主体授权项身份或读取三态无效。",
+      "en": "The subject entry identity or action opinion is invalid."
+    },
+    "DATA_SCOPE_SUBJECT_TYPE_UNKNOWN": {
+      "zhs": "主体类型未登记。",
+      "en": "The subject type is not registered."
+    },
+    "DATA_SCOPE_SUBJECT_ID_INVALID": {
+      "zhs": "主体身份无效。",
+      "en": "The subject identity is invalid."
+    },
+    "DATA_SCOPE_DESCENDANTS_UNSUPPORTED": {
+      "zhs": "该主体类型不支持包含下级。",
+      "en": "This subject type does not support descendants."
+    },
+    "DATA_SCOPE_SUBJECT_PAGE_INVALID": {
+      "zhs": "主体目录页码无效。",
+      "en": "The subject directory page must be at least 1."
+    },
+    "DATA_SCOPE_CONTEXT_UNKNOWN": {
+      "zhs": "当前值未登记。",
+      "en": "The current identity value is not registered."
+    },
+    "DATA_SCOPE_OBJECT_TARGET_INVALID": {
+      "zhs": "对象授权目标无效。",
+      "en": "The object authorization target is invalid."
+    },
+    "DATA_SCOPE_OBJECT_SUBJECT_INVALID": {
+      "zhs": "对象主体授权项或动作意见无效。",
+      "en": "The object subject entry or action opinion is invalid."
+    },
+    "DATA_SCOPE_SUBJECT_NOT_FOUND": {
+      "zhs": "所选授权主体不存在。",
+      "en": "The selected authorization subject does not exist."
+    },
+    "DATA_SCOPE_OBJECT_CANONICAL_REQUIRED": {
+      "zhs": "对象授权目标必须使用规范身份。",
+      "en": "Use the canonical identity for the object authorization target."
+    },
+    "DATA_SCOPE_OBJECT_SUBJECT_OCCUPIED": {
+      "zhs": "对象主体授权项身份已被占用。",
+      "en": "The object subject entry identity is already in use."
+    },
+    "DATA_SCOPE_RULE_CANONICAL_REQUIRED": {
+      "zhs": "规则身份必须与已保存的规范身份一致。",
+      "en": "The rule identity must match the saved canonical identity."
+    },
+    "DATA_SCOPE_RULE_NODE_OCCUPIED": {
+      "zhs": "规则节点身份已属于另一根规则。",
+      "en": "The rule node identity belongs to another root rule."
+    },
+    "DATA_SCOPE_RULE_SUBJECT_OCCUPIED": {
+      "zhs": "主体授权项身份已属于另一规则。",
+      "en": "The subject entry identity belongs to another rule."
+    },
+    "DATA_SCOPE_OBJECT_TARGET_MISMATCH": {
+      "zhs": "对象授权目标与请求不一致。",
+      "en": "The object authorization target does not match the request."
+    },
+    "DATA_SCOPE_RULE_TARGET_MISMATCH": {
+      "zhs": "规则身份与目标不一致。",
+      "en": "The rule identity does not match the target."
+    },
+    "DATA_SCOPE_RULE_NAME_DUPLICATE": {
+      "zhs": "同级规则名称“{name}”已存在。",
+      "en": "A sibling rule named “{name}” already exists."
+    },
+    "DATA_SCOPE_CONDITION_REQUIRED": {
+      "zhs": "条件不能为空。",
+      "en": "A condition is required."
+    },
+    "DATA_SCOPE_GROUP_INVALID": {
+      "zhs": "AND／OR 组合结构无效。",
+      "en": "The AND/OR group structure is invalid."
+    },
+    "DATA_SCOPE_BUSINESS_STRUCTURE_INVALID": {
+      "zhs": "业务条件结构无效。",
+      "en": "The business condition structure is invalid."
+    },
+    "DATA_SCOPE_ATTRIBUTE_STRUCTURE_INVALID": {
+      "zhs": "属性条件结构无效。",
+      "en": "The attribute condition structure is invalid."
+    },
+    "DATA_SCOPE_NULL_COMPARISON_VALUE": {
+      "zhs": "空值操作符不接受比较值。",
+      "en": "Null operators do not accept a comparison value."
+    },
+    "DATA_SCOPE_OPERATOR_UNKNOWN": {
+      "zhs": "条件操作符不支持。",
+      "en": "The condition operator is not supported."
+    },
+    "DATA_SCOPE_OPERATOR_TYPE_MISMATCH": {
+      "zhs": "操作符与属性类型不相容。",
+      "en": "The operator is incompatible with the attribute type."
+    },
+    "DATA_SCOPE_CONTEXT_STRUCTURE_INVALID": {
+      "zhs": "当前值条件结构无效。",
+      "en": "The current identity value condition structure is invalid."
+    },
+    "DATA_SCOPE_CONTEXT_TYPE_MISMATCH": {
+      "zhs": "当前值与属性的规范身份域不相容。",
+      "en": "The current value is incompatible with the attribute identity domain."
+    },
+    "DATA_SCOPE_ARRAY_REQUIRED": {
+      "zhs": "集合比较需要数组值。",
+      "en": "Set comparisons require an array value."
+    },
+    "DATA_SCOPE_CONDITION_TYPE_UNKNOWN": {
+      "zhs": "条件类型未登记。",
+      "en": "The condition type is not registered."
+    },
+    "DATA_SCOPE_BUSINESS_TARGET_INVALID": {
+      "zhs": "业务条件未登记或目标不相容。",
+      "en": "The business condition is not registered or is incompatible with the target."
+    },
+    "DATA_SCOPE_FIELD_UNKNOWN": {
+      "zhs": "条件属性不存在。",
+      "en": "The condition attribute does not exist."
+    },
+    "DATA_SCOPE_ENUM_UNKNOWN": {
+      "zhs": "枚举比较值未登记。",
+      "en": "The enumeration comparison value is not registered."
+    },
+    "DATA_SCOPE_VALUE_REQUIRED": {
+      "zhs": "比较值不能为空；空值请使用专门操作符。",
+      "en": "A comparison value is required. Use a null operator for null values."
+    },
+    "DATA_SCOPE_VALUE_TYPE_MISMATCH": {
+      "zhs": "比较值与属性类型不相容。",
+      "en": "The comparison value is incompatible with the attribute type."
+    },
+    "DATA_SCOPE_BUSINESS_VALUE_INVALID": {
+      "zhs": "业务条件参数无效。",
+      "en": "The business condition parameters are invalid."
+    },
+    "DATA_SCOPE_TEMPORAL_VALUE_INVALID": {
+      "zhs": "日期比较值无效。",
+      "en": "The date or time comparison value is invalid."
+    },
+    "DATA_SCOPE_RULE_NAME_INVALID": {
+      "zhs": "规则名称不能为空，且不能超过256个字符。",
+      "en": "Enter a rule name of no more than 256 characters."
     }
   }
 }

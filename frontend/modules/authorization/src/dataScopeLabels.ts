@@ -1,27 +1,42 @@
+import { requestAuthorization } from './authorizationRequest';
+
 export interface DataScopeViewLabels {
   resourceKey: string; dicKey: string; titleKey: string; mode: string;
   fields: Record<string, string>;
+  enumerations?: Record<string, string>;
 }
 interface ViewDocument {
   view: { model?: string; resourceKey?: string; dicKey?: string; titleKey?: string; mode?: string;
     columns?: { field?: string; labelKey?: string }[];
     sections?: { fields?: (string | { field: string; labelKey?: string })[] }[] };
 }
-interface MetadataManifest { modules: { moduleId: string; metadataBasePath: string; viewFiles: string[] }[] }
+interface MetadataManifest { modules: { moduleId: string; metadataBasePath: string; viewFiles: string[]; modelFiles?: string[] }[] }
 type Translate = (key: string, fallback?: string) => string;
 
 /** 从公开 runtime 视图声明定位词典，不依赖 Shell 私有上下文，也不推测模型与词典的命名关系。 */
 export async function loadDataScopeViewLabels(fetcher: typeof fetch, resources: { resourceKey: string; modelKey: string }[], signal: AbortSignal): Promise<DataScopeViewLabels[]> {
   const read = async <T,>(url: string): Promise<T> => {
-    const response = await fetcher(url, { credentials: 'same-origin', signal });
-    if (!response.ok) throw new Error('资源与属性名称读取失败，请刷新重试。');
-    return response.json() as Promise<T>;
+    return requestAuthorization(fetcher, url, { credentials: 'same-origin', signal }) as Promise<T>;
   };
   const manifest = await read<MetadataManifest>('/plugins/metadata-runtime-manifest.json');
   const owners = new Set(resources.map(resource => resource.modelKey.split('/')[0]));
   const labels: DataScopeViewLabels[] = [];
   // 按涉及的模块串行读取视图；已取消的页面不再发起下一次读取。
   for (const module of manifest.modules.filter(module => owners.has(module.moduleId))) {
+    // 与 View 共用本轮 manifest；只取显式 dataSource 身份，合法值仍由数据范围目录决定。
+    for (const file of module.modelFiles ?? []) {
+      signal.throwIfAborted();
+      const document = await read<Record<string, unknown>>(`${module.metadataBasePath}/${file}`);
+      for (const resource of resources.filter(resource => resource.modelKey.startsWith(`${module.moduleId}/`))) {
+        const model = document[resource.modelKey.slice(module.moduleId.length + 1)] as {
+          fields?: { name: string; dataSource?: { type: string; key?: string } }[];
+        } | undefined;
+        if (!model?.fields) continue;
+        const enumerations = Object.fromEntries(model.fields.filter(field => field.dataSource?.type === 'enum' && field.dataSource.key)
+          .map(field => [field.name, field.dataSource!.key!]));
+        labels.push({ resourceKey: resource.resourceKey, dicKey: '', titleKey: '', mode: 'model', fields: {}, enumerations });
+      }
+    }
     for (const file of module.viewFiles) {
       signal.throwIfAborted();
       const { view } = await read<ViewDocument>(`${module.metadataBasePath}/${file}`);
@@ -49,9 +64,10 @@ export function dataScopeLabels(views: DataScopeViewLabels[], resourceKey: strin
     return fallback;
   };
   return {
-    resource: (fallback: string) => firstTranslation(matching.map(view => `${view.dicKey}.${view.titleKey}`), fallback),
-    field: (name: string) => firstTranslation(matching.flatMap(view => [
+    resource: (fallback: string) => firstTranslation(matching.filter(view => view.dicKey).map(view => `${view.dicKey}.${view.titleKey}`), fallback),
+    field: (name: string) => firstTranslation(matching.filter(view => view.dicKey).flatMap(view => [
       `${view.dicKey}.Field_${name}`, ...(view.fields[name] ? [`${view.dicKey}.${view.fields[name]}`] : []),
     ]), name),
+    enumeration: (name: string) => matching.find(view => view.enumerations?.[name])?.enumerations?.[name],
   };
 }

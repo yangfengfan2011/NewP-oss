@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "DataScope.Context_current": {
+    "account": {
+      "zhs": "当前账号",
+      "en": "Current account"
+    }
+  }
+}

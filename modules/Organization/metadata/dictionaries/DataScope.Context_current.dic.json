@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "DataScope.Context_current": {
+    "person": {
+      "zhs": "当前人员",
+      "en": "Current person"
+    },
+    "company": {
+      "zhs": "当前公司",
+      "en": "Current company"
+    },
+    "department": {
+      "zhs": "当前部门",
+      "en": "Current department"
+    }
+  }
+}

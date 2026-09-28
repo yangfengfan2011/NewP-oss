@@ -74,7 +74,7 @@
       }
     ],
     "featureActions": [
-      { "key": "authorize", "titleKey": "对象授权", "behaviorKey": "organization.position.authorize" }
+      { "key": "authorize", "titleKey": "Action_Authorize", "behaviorKey": "organization.position.authorize" }
     ],
     "rowActions": [
       { "key": "authorize", "labelKey": "Action_Authorize", "handlerKey": "authorize", "inputKey": "objectAuthorization", "confirmLabelKey": "Action_SaveAuthorization" },

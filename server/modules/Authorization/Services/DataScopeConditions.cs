@@ -45,7 +45,7 @@ public sealed class DataScopeConditions(DataScopeCatalog catalog, EfPlatformDbCo
     /// <summary>保存前递归校验结构、直接字段、操作符、值和业务目标。</summary>
     public void Validate(string resourceKey, DataScopeConditionDto condition, string path = "1")
     {
-        if (condition is null) throw Invalid("条件不能为空。");
+        if (condition is null) throw Invalid("条件不能为空。", "DATA_SCOPE_CONDITION_REQUIRED");
         try
         {
             switch (condition.Type)
@@ -53,46 +53,46 @@ public sealed class DataScopeConditions(DataScopeCatalog catalog, EfPlatformDbCo
                 case "group":
                     if (condition.Operator is not ("and" or "or") || condition.Children is null || condition.Children.Count == 0 ||
                         condition.Field != "" || condition.Key is not null || condition.ContextKey is not null || HasValue(condition.Value))
-                        throw Invalid("AND／OR 组合结构无效。");
+                        throw Invalid("AND／OR 组合结构无效。", "DATA_SCOPE_GROUP_INVALID");
                     for (var index = 0; index < condition.Children.Count; index++) Validate(resourceKey, condition.Children[index], $"{path}.{index + 1}");
                     return;
                 case "business":
                     if (condition.Children is not null || condition.ContextKey is not null || condition.Field != "" || condition.Operator != "")
-                        throw Invalid("业务条件结构无效。");
+                        throw Invalid("业务条件结构无效。", "DATA_SCOPE_BUSINESS_STRUCTURE_INVALID");
                     var (provider, definition) = Business(condition.Key, resourceKey);
                     try { provider.Validate(definition.Key, condition.Value); }
-                    catch (ArgumentException exception) { throw Invalid(exception.Message); }
+                    catch (ArgumentException exception) { throw Invalid(exception.Message, "DATA_SCOPE_BUSINESS_VALUE_INVALID"); }
                     return;
                 case "attribute":
-                    if (condition.Children is not null || condition.Key is not null) throw Invalid("属性条件结构无效。");
+                    if (condition.Children is not null || condition.Key is not null) throw Invalid("属性条件结构无效。", "DATA_SCOPE_ATTRIBUTE_STRUCTURE_INVALID");
                     var property = Property(resourceKey, condition.Field);
                     var valueType = Nullable.GetUnderlyingType(property.ClrType) ?? property.ClrType;
                     var field = Field(resourceKey, condition.Field);
                     var operation = condition.Operator;
                     if (operation is "isNull" or "notNull")
                     {
-                        if (condition.ContextKey is not null || HasValue(condition.Value)) throw Invalid("空值操作符不接受比较值。");
+                        if (condition.ContextKey is not null || HasValue(condition.Value)) throw Invalid("空值操作符不接受比较值。", "DATA_SCOPE_NULL_COMPARISON_VALUE");
                         return;
                     }
                     if (operation is not ("equal" or "notEqual" or "greaterThan" or "greaterThanOrEqual" or "lessThan" or "lessThanOrEqual"
-                        or "contains" or "startsWith" or "endsWith" or "in" or "notIn")) throw Invalid("条件操作符不支持。");
+                        or "contains" or "startsWith" or "endsWith" or "in" or "notIn")) throw Invalid("条件操作符不支持。", "DATA_SCOPE_OPERATOR_UNKNOWN");
                     if (operation is "contains" or "startsWith" or "endsWith" && (valueType != typeof(string) || field.ValueType == FieldValueType.Enum) ||
                         operation is "greaterThan" or "greaterThanOrEqual" or "lessThan" or "lessThanOrEqual"
                             && valueType != typeof(long) && valueType != typeof(DateOnly) && valueType != typeof(DateTime))
-                        throw Invalid("操作符与属性类型不相容。");
+                        throw Invalid("操作符与属性类型不相容。", "DATA_SCOPE_OPERATOR_TYPE_MISMATCH");
                     if (condition.ContextKey is not null)
                     {
-                        if (operation is "in" or "notIn" || HasValue(condition.Value)) throw Invalid("当前值条件结构无效。");
+                        if (operation is "in" or "notIn" || HasValue(condition.Value)) throw Invalid("当前值条件结构无效。", "DATA_SCOPE_CONTEXT_STRUCTURE_INVALID");
                         var context = identities.ContextValues.SingleOrDefault(value => value.Key == condition.ContextKey)
-                            ?? throw Invalid("当前值未登记。");
+                            ?? throw Invalid("当前值未登记。", "DATA_SCOPE_CONTEXT_UNKNOWN");
                         if (context.ValueType != valueType.Name || !identities.ContextBindings.Any(binding =>
                             binding.ModelKey == catalog.Resolve(resourceKey).ModelKey && binding.Field == property.Name && binding.ContextKey == context.Key))
-                            throw Invalid("当前值与属性的规范身份域不相容。");
+                            throw Invalid("当前值与属性的规范身份域不相容。", "DATA_SCOPE_CONTEXT_TYPE_MISMATCH");
                         return;
                     }
                     if (operation is "in" or "notIn")
                     {
-                        if (condition.Value.ValueKind != JsonValueKind.Array) throw Invalid("集合比较需要数组值。");
+                        if (condition.Value.ValueKind != JsonValueKind.Array) throw Invalid("集合比较需要数组值。", "DATA_SCOPE_ARRAY_REQUIRED");
                         foreach (var item in condition.Value.EnumerateArray())
                         {
                             _ = Parse(item, valueType, field.ValueType);
@@ -105,11 +105,12 @@ public sealed class DataScopeConditions(DataScopeCatalog catalog, EfPlatformDbCo
                         ValidateEnum(resourceKey, condition.Field, field.ValueType, condition.Value);
                     }
                     return;
-                default: throw Invalid("条件类型未登记。");
+                default: throw Invalid("条件类型未登记。", "DATA_SCOPE_CONDITION_TYPE_UNKNOWN");
             }
         }
-        catch (RolePermissionValidationException exception) when (!exception.Message.StartsWith("条件 ", StringComparison.Ordinal))
-        { throw Invalid($"条件 {path}：{exception.Message}"); }
+        catch (RolePermissionValidationException exception) when (!exception.Args.ContainsKey("conditionPath"))
+        { throw new RolePermissionValidationException($"条件 {path}：{exception.Message}", exception.Code,
+            new Dictionary<string, object?>(exception.Args) { ["conditionPath"] = path, ["field"] = condition.Field, ["operator"] = condition.Operator }, "condition"); }
     }
 
     /// <summary>只对固定日期叶子调用正式规范器；已保存 UTC 再保存仍保持原时点。</summary>
@@ -145,7 +146,7 @@ public sealed class DataScopeConditions(DataScopeCatalog catalog, EfPlatformDbCo
             JsonElement NormalizeValue(JsonElement value)
             {
                 var result = temporal.Normalize(field.ValueType, value);
-                if (!result.IsSuccess) throw Invalid(result.Message ?? "日期比较值无效。");
+                if (!result.IsSuccess) throw Invalid(result.Message ?? "日期比较值无效。", "DATA_SCOPE_" + result.ErrorCode);
                 return JsonSerializer.SerializeToElement(result.Value);
             }
             return condition with
@@ -155,8 +156,9 @@ public sealed class DataScopeConditions(DataScopeCatalog catalog, EfPlatformDbCo
                 : NormalizeValue(condition.Value)
             };
         }
-        catch (RolePermissionValidationException exception) when (!exception.Message.StartsWith("条件 ", StringComparison.Ordinal))
-        { throw Invalid($"条件 {path}：{exception.Message}"); }
+        catch (RolePermissionValidationException exception) when (!exception.Args.ContainsKey("conditionPath"))
+        { throw new RolePermissionValidationException($"条件 {path}：{exception.Message}", exception.Code,
+            new Dictionary<string, object?>(exception.Args) { ["conditionPath"] = path, ["field"] = condition.Field, ["operator"] = condition.Operator }, "condition"); }
     }
 
     /// <summary>缺失读取叶子被移除，AND／OR 仅组合剩余贡献；null 表示整节点缺失。</summary>
@@ -321,13 +323,13 @@ public sealed class DataScopeConditions(DataScopeCatalog catalog, EfPlatformDbCo
         var matches = providers.SelectMany(provider => provider.Definitions.Select(definition => (Provider: provider, Definition: definition)))
             .Where(item => item.Definition.Key == key).ToArray();
         if (matches.Length != 1 || !matches[0].Definition.ModelKeys.Contains(catalog.Resolve(resourceKey).ModelKey, StringComparer.Ordinal))
-            throw Invalid("业务条件未登记或目标不相容。");
+            throw Invalid("业务条件未登记或目标不相容。", "DATA_SCOPE_BUSINESS_TARGET_INVALID");
         return matches[0];
     }
 
     // 仅从正式资源所指模型选择直接原始字段。
     private IProperty Property(string resourceKey, string field) => catalog.Fields(resourceKey).SingleOrDefault(item => item.Name == field)
-        ?? throw Invalid("条件属性不存在。");
+        ?? throw Invalid("条件属性不存在。", "DATA_SCOPE_FIELD_UNKNOWN");
 
     // 逻辑值类型来自同一持久化模型定义，而非界面猜测。
     private ICP.Platform.Modeling.Definitions.FieldDefinition Field(string resourceKey, string field) => db.PersistencePlan.Models
@@ -338,13 +340,13 @@ public sealed class DataScopeConditions(DataScopeCatalog catalog, EfPlatformDbCo
     {
         if (kind != FieldValueType.Enum) return;
         var values = EnumValues(resourceKey, field);
-        if (values is null || !values.Contains(value.GetString()!, StringComparer.Ordinal)) throw Invalid("枚举比较值未登记。");
+        if (values is null || !values.Contains(value.GetString()!, StringComparer.Ordinal)) throw Invalid("枚举比较值未登记。", "DATA_SCOPE_ENUM_UNKNOWN");
     }
 
     // 标量和值集合共用严格解析；UI 的大整数文本在保存时转换为精确 long。
     private static object Parse(JsonElement value, Type type, FieldValueType kind)
     {
-        if (!HasValue(value)) throw Invalid("比较值不能为空；空值请使用专门操作符。");
+        if (!HasValue(value)) throw Invalid("比较值不能为空；空值请使用专门操作符。", "DATA_SCOPE_VALUE_REQUIRED");
         try
         {
             if (kind == FieldValueType.Enum && value.ValueKind != JsonValueKind.String) throw new JsonException();
@@ -353,11 +355,11 @@ public sealed class DataScopeConditions(DataScopeCatalog catalog, EfPlatformDbCo
             return value.Deserialize(type) ?? throw new JsonException();
         }
         catch (Exception exception) when (exception is JsonException or NotSupportedException or FormatException or OverflowException)
-        { throw Invalid("比较值与属性类型不相容。"); }
+        { throw Invalid("比较值与属性类型不相容。", "DATA_SCOPE_VALUE_TYPE_MISMATCH"); }
     }
 
     // null 与缺少值都不是普通比较值。
     private static bool HasValue(JsonElement value) => value.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined);
     // 保存边界将配置错误映射为现有 Problem Details。
-    private static RolePermissionValidationException Invalid(string message) => new(message);
+    private static RolePermissionValidationException Invalid(string message, string code) => new(message, code, field: "condition");
 }

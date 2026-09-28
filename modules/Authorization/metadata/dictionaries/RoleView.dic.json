@@ -2,6 +2,7 @@
   "schemaVersion": "1.0",
   "type": "dic",
   "RoleView": {
+    "Action_Authorize": { "zhs": "对象授权", "en": "Object authorization" },
     "Title": {
       "zhs": "角色管理",
       "en": "Role management"

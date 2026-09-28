@@ -1,3 +1,4 @@
+import { localizeDataScope } from './__tests__/dataScopeLocalization';
 // @vitest-environment jsdom
 import { act, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -29,7 +30,7 @@ it('uses saved priority order, moves rows, appends at the bottom and hides numer
     expect(button, text).toBeDefined(); await act(async () => button.click());
   };
   try {
-    await act(async () => root.render(<Harness />));
+    await act(async () => root.render(localizeDataScope(<Harness />)));
     expect(container.querySelector('[aria-label="主体授权项 1"]')?.textContent).toContain('甲用户');
     expect(container.querySelectorAll('th')[0].textContent).toBe('授权主体');
     expect(container.textContent).not.toContain('主体类型');
@@ -63,7 +64,7 @@ it('shows all subjects without pagination and moves within the complete order', 
   }
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
   try {
-    await act(async () => root.render(<Harness />));
+    await act(async () => root.render(localizeDataScope(<Harness />)));
     await act(async () => ([...container.querySelectorAll('[aria-label="主体授权项 10"] button')].find(button => button.textContent === '下移') as HTMLElement).click());
     expect(current.slice(9).map(subject => subject.id)).toEqual(['item-10', 'item-9']);
     expect(current.map(subject => subject.priority)).toEqual([10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]);
@@ -80,7 +81,7 @@ it('renders all subjects while batching name reads and cancels obsolete requests
   const render = (items: DataScopeSubject[]) => <DataScopeSubjectTable subjects={items} types={[{ key: 'person', title: '人员', requiresId: true }]}
     actions={[]} read={read} disabled={false} onChange={() => {}} onEditingChange={() => {}} />;
   try {
-    await act(async () => root.render(render(subjects)));
+    await act(async () => root.render(localizeDataScope(render(subjects))));
     expect(container.querySelectorAll('tbody tr[data-row-key]')).toHaveLength(21);
     expect(container.querySelector('.ant-pagination')).toBeNull();
     expect(pending).toHaveLength(1);
@@ -88,7 +89,7 @@ it('renders all subjects while batching name reads and cancels obsolete requests
     await act(async () => pending[0].resolve({ currentValues: [] }));
     expect(pending).toHaveLength(2);
     expect(new URLSearchParams(pending[1].path.split('?')[1]).getAll('currentIds')).toEqual(subjects.slice(10, 20).map(subject => subject.subjectId));
-    await act(async () => root.render(render([{ ...subjects[0], subjectId: 'new-person' }])));
+    await act(async () => root.render(localizeDataScope(render([{ ...subjects[0], subjectId: 'new-person' }]))));
     expect(pending[1].signal?.aborted).toBe(true);
     await act(async () => pending[2].resolve({ currentValues: [{ id: 'new-person', name: '当前人员' }] }));
     await act(async () => pending[1].resolve({ currentValues: [{ id: 'person-10', name: '过期人员' }] }));
@@ -103,9 +104,9 @@ it('makes opinions and mutation controls unavailable in read-only mode', async (
   const onChange = vi.fn();
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
   try {
-    await act(async () => root.render(<DataScopeSubjectTable subjects={[{ id: 'all', type: 'all', subjectId: null, priority: 0, actions: { read: 'deny' } }]}
+    await act(async () => root.render(localizeDataScope(<DataScopeSubjectTable subjects={[{ id: 'all', type: 'all', subjectId: null, priority: 0, actions: { read: 'deny' } }]}
       types={[{ key: 'all', title: '所有用户', requiresId: false }]} actions={[{ key: 'read', title: '读取', enabled: true }]}
-      read={vi.fn()} disabled onChange={onChange} onEditingChange={() => {}} />));
+      read={vi.fn()} disabled onChange={onChange} onEditingChange={() => {}} />)));
     const opinion = container.querySelector('[role="checkbox"]') as HTMLButtonElement;
     expect(opinion.disabled).toBe(true);
     expect(opinion.getAttribute('aria-label')).toBe('读取：拒绝');
@@ -124,8 +125,8 @@ it('replaces names when the qualified transport changes and ignores its late res
   const render = (read: typeof oldRead) => <DataScopeSubjectTable subjects={[{ id: 's', type: 'department', subjectId: 'same', priority: 0, actions: {} }]}
     types={[{ key: 'department', title: '部门', requiresId: true }]} actions={[]} read={read} disabled={false} onChange={() => {}} onEditingChange={() => {}} />;
   try {
-    await act(async () => root.render(render(oldRead)));
-    await act(async () => root.render(render(newRead)));
+    await act(async () => root.render(localizeDataScope(render(oldRead))));
+    await act(async () => root.render(localizeDataScope(render(newRead))));
     expect(signal?.aborted).toBe(true);
     await act(async () => finish({ currentValues: [{ id: 'same', name: '旧资格名称' }] }));
     expect(container.textContent).toContain('公司 / 新资格名称');

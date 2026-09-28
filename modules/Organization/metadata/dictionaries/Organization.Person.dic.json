@@ -309,6 +309,26 @@
     "DisableReasonPlaceholder": {
       "zhs": "请输入停用原因（必填）",
       "en": "Enter a reason for disabling (required)"
+    },
+    "Title": {
+      "zhs": "人员",
+      "en": "Person"
+    },
+    "AuthorizationSummaryTitle": {
+      "zhs": "授权摘要",
+      "en": "Authorization summary"
+    },
+    "AuthorizationSummaryHelp": {
+      "zhs": "此处显示已保存的授权摘要；使用对象授权操作查看或调整权限。",
+      "en": "This summary shows saved authorization. Use the object authorization action to inspect or change permissions."
+    },
+    "AuthorizationLoaded": {
+      "zhs": "已加载",
+      "en": "Loaded"
+    },
+    "AuthorizationReadOnly": {
+      "zhs": "授权摘要仅供查看。",
+      "en": "This authorization summary is read-only."
     }
   }
 }

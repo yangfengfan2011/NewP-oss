@@ -102,5 +102,5 @@ export const departmentStandardCrudResource: StandardCrudResourceRegistration<Re
     departmentParentLookupProvider,
     departmentParentFilterLookupProvider,
   ],
-  ...createOrganizationObjectAuthorizationActions('organization.department', '部门'),
+  ...createOrganizationObjectAuthorizationActions('organization.department', '部门', 'Organization.Department.ObjectTitle'),
 };

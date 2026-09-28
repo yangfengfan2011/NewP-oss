@@ -1,7 +1,8 @@
+import { fetchObjectAuthorization, objectAuthorizationError } from './objectAuthorizationRequest';
 import { lazy, Suspense } from 'react';
 import { platformFetch } from '@icp-platform/core';
 import type { ObjectAuthorizationTarget } from './ObjectAuthorizationInput';
-import type { StandardCrudActionContext, StandardCrudActionEligibilityResolver, StandardCrudActionInputRenderContext } from '@icp-platform/sdk';
+import { StandardCrudRequestError, type StandardCrudActionContext, StandardCrudActionEligibilityResolver, StandardCrudActionInputRenderContext } from '@icp-platform/sdk';
 
 const Input = lazy(() => import('./ObjectAuthorizationInput'));
 
@@ -13,10 +14,10 @@ export function createObjectAuthorizationActions(
 ) {
   const eligibility: StandardCrudActionEligibilityResolver = async ({ id, featurePosition, signal }) => {
     if (!id) return { visible: false, available: false };
-    const response = await fetcher(`/api/authorization/data-scope/objects/${encodeURIComponent(resourceKey)}/${encodeURIComponent(id)}/eligibility`,
+    const response = await fetchObjectAuthorization(fetcher, `/api/authorization/data-scope/objects/${encodeURIComponent(resourceKey)}/${encodeURIComponent(id)}/eligibility`,
       { headers: { 'X-NewP-Feature': featurePosition }, signal });
     if (response.status === 403 || response.status === 404) return { visible: false, available: false };
-    if (!response.ok) throw new Error('对象授权资格读取失败。');
+    if (!response.ok) throw await objectAuthorizationError(response);
     return { visible: true, available: true };
   };
   const render = Object.assign((context: StandardCrudActionInputRenderContext) =>
@@ -27,16 +28,15 @@ export function createObjectAuthorizationActions(
     actionEligibilityResolvers: { authorize: eligibility, viewAuthorization: eligibility },
     actionHandlers: {
       authorize: async ({ id, input, featurePosition }: StandardCrudActionContext) => {
-        if (!id || !featurePosition || !input || typeof input !== 'object') throw new Error('对象授权尚未加载。');
+        if (!id || !featurePosition || !input || typeof input !== 'object') throw new StandardCrudRequestError('对象授权尚未加载。', 0, {}, { reasonKey: 'DataScope.ObjectNotLoaded' });
         const config = input as { resourceKey: string; objectId: string; subjects: unknown[] };
         if (config.resourceKey !== resourceKey || config.objectId !== id || !Array.isArray(config.subjects))
-          throw new Error('对象授权目标已变化，请重新打开。');
-        const response = await fetcher(`/api/authorization/data-scope/objects/${encodeURIComponent(resourceKey)}/${encodeURIComponent(id)}`, {
+          throw new StandardCrudRequestError('对象授权目标已变化，请重新打开。', 0, {}, { reasonKey: 'DataScope.ObjectChanged' });
+        const response = await fetchObjectAuthorization(fetcher, `/api/authorization/data-scope/objects/${encodeURIComponent(resourceKey)}/${encodeURIComponent(id)}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-NewP-Feature': featurePosition },
           body: JSON.stringify(config),
         });
-        if (!response.ok) throw new Error(response.status === 403 ? '当前没有对象授权资格。'
-          : response.status === 404 ? '记录已不存在或不可读取。' : '保存对象授权失败。');
+        if (!response.ok) throw await objectAuthorizationError(response);
       },
     },
   };

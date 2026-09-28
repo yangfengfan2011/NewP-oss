@@ -46,5 +46,5 @@ export const companyStandardCrudResource: StandardCrudResourceRegistration<Recor
   dataAdapter: companyStandardCrudDataAdapter,
   listViewKey: 'organization.company.list',
   detailViewKey: 'organization.company.detail',
-  ...createOrganizationObjectAuthorizationActions('organization.company', '公司'),
+  ...createOrganizationObjectAuthorizationActions('organization.company', '公司', 'Organization.Company.ObjectTitle'),
 };

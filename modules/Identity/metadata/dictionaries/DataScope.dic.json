@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "DataScope": {
+    "SubjectType_user": {
+      "zhs": "用户",
+      "en": "User"
+    }
+  }
+}

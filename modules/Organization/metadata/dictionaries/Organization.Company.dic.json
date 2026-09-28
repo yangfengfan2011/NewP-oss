@@ -33,6 +33,10 @@
     "InvalidId": {
       "zhs": "公司标识无效。",
       "en": "The company ID is invalid."
+    },
+    "ObjectTitle": {
+      "zhs": "公司",
+      "en": "Company"
     }
   }
 }

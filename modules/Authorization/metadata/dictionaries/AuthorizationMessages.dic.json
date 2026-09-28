@@ -2,7 +2,7 @@
   "schemaVersion": "1.0",
   "type": "dic",
   "AuthorizationMessages": {
-    "ReadFailed": { "zhs": "角色读取失败，请重试。", "en": "Unable to load authorization data. Please try again." },
+    "ReadFailed": { "zhs": "授权数据读取失败，请重试。", "en": "Unable to load authorization data. Please try again." },
     "OperationUnknown": { "zhs": "操作结果未知，请刷新后核对；系统不会自动重试。", "en": "The operation result is unknown. Refresh and check the result; it will not be retried automatically." },
     "AccountRequired": { "zhs": "请选择账号并等待角色读取成功。", "en": "Select an account and wait for its roles to load." },
     "RoleRequired": { "zhs": "请选择一个角色。", "en": "Select a role." },

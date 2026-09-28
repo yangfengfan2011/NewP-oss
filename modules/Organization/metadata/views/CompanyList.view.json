@@ -92,7 +92,7 @@
       }
     ],
     "featureActions": [
-      { "key": "authorize", "titleKey": "对象授权", "behaviorKey": "organization.company.authorize" }
+      { "key": "authorize", "titleKey": "Action_Authorize", "behaviorKey": "organization.company.authorize" }
     ],
     "rowActions": [
       {

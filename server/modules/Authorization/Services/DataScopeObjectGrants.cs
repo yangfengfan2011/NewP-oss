@@ -30,14 +30,14 @@ public sealed class DataScopeObjectGrants(EfPlatformDbContext db, IPlatformTrans
     {
         catalog.Resolve(input.ResourceKey);
         if (string.IsNullOrWhiteSpace(input.ObjectId) || input.ObjectId.Length > 128 || input.Subjects is null)
-            throw new RolePermissionValidationException("对象授权目标无效。");
+            throw new RolePermissionValidationException("对象授权目标无效。", "DATA_SCOPE_OBJECT_TARGET_INVALID", field: "objectId");
         var subjectIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var subject in input.Subjects)
         {
             if (string.IsNullOrWhiteSpace(subject.Id) || subject.Id.Length > 128 || !subjectIds.Add(subject.Id)
                 || subject.Actions is null || subject.Actions.Any(action =>
                     !catalog.Actions.Any(defined => defined.Key == action.Key) || action.Value is not ("allow" or "deny" or "unset")))
-                throw new RolePermissionValidationException("对象主体授权项或动作意见无效。");
+                throw new RolePermissionValidationException("对象主体授权项或动作意见无效。", "DATA_SCOPE_OBJECT_SUBJECT_INVALID", field: "subjects");
             identities.Validate(subject.Type, subject.SubjectId, subject.MatchOptions);
         }
         foreach (var group in input.Subjects.Where(subject => subject.SubjectId is not null).GroupBy(subject => subject.Type))
@@ -45,7 +45,7 @@ public sealed class DataScopeObjectGrants(EfPlatformDbContext db, IPlatformTrans
             {
                 var names = await identities.SearchAsync(group.Key, null, 1, batch, token);
                 if (batch.Except(names.CurrentValues.Select(value => value.Id), StringComparer.Ordinal).Any())
-                    throw new RolePermissionValidationException("所选授权主体不存在。");
+                    throw new RolePermissionValidationException("所选授权主体不存在。", "DATA_SCOPE_SUBJECT_NOT_FOUND", field: "subjects");
             }
         var normalized = input with { Subjects = input.Subjects.Select(subject => subject.MatchOptions?.IncludeDescendants == false
             ? subject with { MatchOptions = null } : subject).ToArray() };
@@ -58,7 +58,7 @@ public sealed class DataScopeObjectGrants(EfPlatformDbContext db, IPlatformTrans
             var existing = await Subjects.Where(row => EF.Property<string>(row, "ResourceKey") == normalized.ResourceKey
                 && EF.Property<string>(row, "ObjectId") == normalized.ObjectId).ToListAsync(cancellationToken);
             if (existing.Any(row => (string)row["ResourceKey"]! != normalized.ResourceKey || (string)row["ObjectId"]! != normalized.ObjectId))
-                throw new RolePermissionValidationException("对象授权目标必须使用规范身份。");
+                throw new RolePermissionValidationException("对象授权目标必须使用规范身份。", "DATA_SCOPE_OBJECT_CANONICAL_REQUIRED", field: "objectId");
             var old = await MaterializeAsync(normalized.ResourceKey, normalized.ObjectId, existing, cancellationToken);
             var previous = Canonical(old);
             var current = Canonical(normalized);
@@ -69,7 +69,7 @@ public sealed class DataScopeObjectGrants(EfPlatformDbContext db, IPlatformTrans
                     Object = EF.Property<string>(row, "ObjectId") }).ToListAsync(cancellationToken);
             if (occupied.Any(row => row.Resource != normalized.ResourceKey || row.Object != normalized.ObjectId
                 || !requestedIds.Contains(row.Id, StringComparer.Ordinal)))
-                throw new RolePermissionValidationException("对象主体授权项身份已被占用。");
+                throw new RolePermissionValidationException("对象主体授权项身份已被占用。", "DATA_SCOPE_OBJECT_SUBJECT_OCCUPIED", field: "subjects");
             var oldIds = existing.Select(row => (string)row["EID"]!).ToArray();
             var oldActions = await Actions.Where(row => oldIds.Contains(EF.Property<string>(row, "EntryId"))).ToListAsync(cancellationToken);
             Actions.RemoveRange(oldActions.Where(row => !requestedIds.Contains((string)row["EntryId"]!, StringComparer.Ordinal)

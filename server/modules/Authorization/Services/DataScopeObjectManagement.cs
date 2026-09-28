@@ -51,12 +51,12 @@ public sealed class DataScopeObjectManagement(DataScopeCatalog catalog, Canonica
         try
         {
             if (input.ResourceKey != resourceKey || input.ObjectId != objectId)
-                throw new RolePermissionValidationException("对象授权目标与请求不一致。");
+                throw new RolePermissionValidationException("对象授权目标与请求不一致。", "DATA_SCOPE_OBJECT_TARGET_MISMATCH", field: "objectId");
             await grants.SaveAsync(input, token);
             return new(DataScopeObjectStatus.Succeeded);
         }
         catch (RolePermissionValidationException exception)
-        { return new(DataScopeObjectStatus.InvalidInput, exception.Message); }
+        { return new(DataScopeObjectStatus.InvalidInput, exception.Message, exception); }
     }
 
     /// <summary>被分析账号必须存在；复用正式裁决实现，不改变操作者的管理资格或请求身份。</summary>
@@ -89,7 +89,7 @@ public sealed class DataScopeObjectManagement(DataScopeCatalog catalog, Canonica
         if (eligibility != DataScopeObjectEligibility.Allowed) return new(DeniedStatus(eligibility));
         try { return new(DataScopeObjectStatus.Succeeded, await identities.SearchAsync(type, query, page, currentIds, token)); }
         catch (RolePermissionValidationException exception)
-        { return new(DataScopeObjectStatus.InvalidInput, ValidationMessage: exception.Message); }
+        { return new(DataScopeObjectStatus.InvalidInput, ValidationMessage: exception.Message, ValidationError: exception); }
     }
 
     // 资格拒绝属于完整操作的正常结果；事实源故障仍由原异常传播。
@@ -106,11 +106,11 @@ public enum DataScopeObjectEligibility { Allowed, Forbidden, NotFound }
 public enum DataScopeObjectStatus { Succeeded, Forbidden, NotFound, InvalidInput }
 
 /// <summary>模块内完整操作结果；校验文案仅用于配置错误，缺省表示不公开细节的无效输入。</summary>
-public record DataScopeObjectResult(DataScopeObjectStatus Status, string? ValidationMessage = null);
+public record DataScopeObjectResult(DataScopeObjectStatus Status, string? ValidationMessage = null, AuthorizationValidationException? ValidationError = null);
 
 /// <summary>读取成功时携带已有响应数据，拒绝时不携带目录或对象内容。</summary>
-public sealed record DataScopeObjectResult<T>(DataScopeObjectStatus Status, T? Value = default, string? ValidationMessage = null)
-    : DataScopeObjectResult(Status, ValidationMessage);
+public sealed record DataScopeObjectResult<T>(DataScopeObjectStatus Status, T? Value = default, string? ValidationMessage = null, AuthorizationValidationException? ValidationError = null)
+    : DataScopeObjectResult(Status, ValidationMessage, ValidationError);
 
 /// <summary>对象管理可配置目录，不裁掉已关闭动作或操作者不可读的主体类型。</summary>
 public sealed record DataScopeObjectCatalog(IReadOnlyList<DataActionDeclaration> Actions, IReadOnlyList<DataScopeSubjectType> SubjectTypes);

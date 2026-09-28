@@ -60,6 +60,7 @@ public sealed class DataScopeObjectsController(DataScopeObjectManagement managem
         DataScopeObjectStatus.NotFound => NotFound(),
         DataScopeObjectStatus.Forbidden => Forbid(),
         DataScopeObjectStatus.InvalidInput when result.ValidationMessage is null => BadRequest(),
+        DataScopeObjectStatus.InvalidInput when result.ValidationError is not null => BadRequest(AuthorizationProblem.From(result.ValidationError, "DataScope.InvalidConfiguration")),
         DataScopeObjectStatus.InvalidInput => BadRequest(new ProblemDetails
         {
             Status = 400, Title = result.ValidationMessage, Extensions = { ["code"] = "DataScope.InvalidConfiguration" }

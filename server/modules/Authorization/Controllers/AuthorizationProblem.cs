@@ -7,11 +7,11 @@ namespace ICP.Platform.Modules.Authorization.Controllers;
 internal static class AuthorizationProblem
 {
     // 保持既有状态及诊断，并附上当前语言呈现所需的稳定事实。
-    public static ProblemDetails From(AuthorizationValidationException error)
+    public static ProblemDetails From(AuthorizationValidationException error, string? publicCode = null)
     {
         var key = "AuthorizationErrors." + error.Code;
         var problem = new ProblemDetails { Title = error.Message, Status = 400 };
-        problem.Extensions["code"] = error.Code;
+        problem.Extensions["code"] = publicCode ?? error.Code;
         problem.Extensions["reasonKey"] = key;
         problem.Extensions["args"] = error.Args;
         if (error.Field is not null)

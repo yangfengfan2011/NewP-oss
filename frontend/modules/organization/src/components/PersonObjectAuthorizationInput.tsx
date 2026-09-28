@@ -6,5 +6,5 @@ import OrganizationObjectAuthorizationInput from './OrganizationObjectAuthorizat
 export default function PersonObjectAuthorizationInput(context: StandardCrudActionInputRenderContext) {
   const person = context.detail as PersonDetailView | undefined;
   return <OrganizationObjectAuthorizationInput {...context}
-    target={{ resourceKey: 'organization.person', title: '人员', id: person?.id, name: person?.name }} />;
+    target={{ resourceKey: 'organization.person', title: '人员', titleKey: 'Organization.Person.Title', id: person?.id, name: person?.name }} />;
 }

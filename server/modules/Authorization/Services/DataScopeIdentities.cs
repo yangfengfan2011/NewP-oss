@@ -26,17 +26,17 @@ public sealed class DataScopeIdentities
     public void Validate(string type, string? id, DataScopeMatchOptions? options)
     {
         var definition = SubjectTypes.SingleOrDefault(item => item.Key == type)
-            ?? throw new RolePermissionValidationException("主体类型未登记。");
+            ?? throw new RolePermissionValidationException("主体类型未登记。", "DATA_SCOPE_SUBJECT_TYPE_UNKNOWN", field: "type");
         if (definition.RequiresId ? string.IsNullOrWhiteSpace(id) || id.Length > 128 : id is not null)
-            throw new RolePermissionValidationException("主体身份无效。");
+            throw new RolePermissionValidationException("主体身份无效。", "DATA_SCOPE_SUBJECT_ID_INVALID", field: "subjectId");
         if (options?.IncludeDescendants == true && !definition.SupportsDescendants)
-            throw new RolePermissionValidationException("该主体类型不支持包含下级。");
+            throw new RolePermissionValidationException("该主体类型不支持包含下级。", "DATA_SCOPE_DESCENDANTS_UNSUPPORTED", field: "matchOptions");
     }
 
     // 管理功能流水线负责调用资格；目录只返回经过 owner 投影的身份字段。
     public Task<DataScopeSubjectPage> SearchAsync(string type, string? query, int page, IReadOnlyList<string> currentIds, CancellationToken token)
     {
-        if (page < 1) throw new RolePermissionValidationException("主体目录页码无效。");
+        if (page < 1) throw new RolePermissionValidationException("主体目录页码无效。", "DATA_SCOPE_SUBJECT_PAGE_INVALID", field: "page");
         return ProviderForSubject(type).SearchAsync(type, query, page, currentIds, token);
     }
 
@@ -51,10 +51,10 @@ public sealed class DataScopeIdentities
 
     // 目录缺失是配置故障，不能当成主体不匹配。
     internal IDataScopeIdentityProvider ProviderForSubject(string type) => providers.SingleOrDefault(provider => provider.SubjectTypes.Any(item => item.Key == type))
-        ?? throw new RolePermissionValidationException("主体类型未登记。");
+        ?? throw new RolePermissionValidationException("主体类型未登记。", "DATA_SCOPE_SUBJECT_TYPE_UNKNOWN", field: "type");
     // 上下文必须引用已登记的有类型值。
     internal IDataScopeIdentityProvider ProviderForContext(string key) => providers.SingleOrDefault(provider => provider.ContextValues.Any(item => item.Key == key))
-        ?? throw new RolePermissionValidationException("当前值未登记。");
+        ?? throw new RolePermissionValidationException("当前值未登记。", "DATA_SCOPE_CONTEXT_UNKNOWN", field: "contextKey");
 }
 
 /// <summary>一次裁决中的解析结果，多个规则和 SQL 中的业务行共享它。</summary>

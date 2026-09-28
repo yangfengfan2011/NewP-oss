@@ -3,7 +3,7 @@
 import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
-import { PlatformQueryProvider } from '@icp-platform/core';
+import { LocalizationProvider, useLocalization, PlatformQueryProvider } from '@icp-platform/core';
 
 const fetchMock = vi.hoisted(() => vi.fn());
 vi.mock('@icp-platform/core', async importOriginal => ({
@@ -38,12 +38,13 @@ it('pins the real person, keeps a draft locally and reloads saved configuration 
   root = createRoot(container);
   const draftState = vi.fn();
   function Harness() {
+    const { setLanguage } = useLocalization();
     const [value, onChange] = useState<unknown>();
-    return <PlatformQueryProvider scopeKey="person-object-test"><PersonObjectAuthorizationInput action={{ key: 'authorize', labelKey: '人员对象授权' }}
+    return <PlatformQueryProvider scopeKey="person-object-test"><button onClick={() => setLanguage('en')}>English</button><PersonObjectAuthorizationInput action={{ key: 'authorize', labelKey: '人员对象授权' }}
       featurePosition="person-authorize" detail={{ id: 'Person_1', name: '张三' }}
       value={value} onChange={onChange} onDraftStateChange={draftState} /></PlatformQueryProvider>;
   }
-  await act(async () => { root!.render(<Harness />); });
+  await act(async () => { root!.render(<LocalizationProvider catalogs={{ zhs: {}, en: { 'DataScope.Target': 'Target {title}: {name}', 'Organization.Person.Title': 'Person' } }} defaultLanguage="zhs" initialLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }, { code: 'en', displayName: 'English' }]}><Harness /></LocalizationProvider>); });
   await act(async () => { await Promise.resolve(); });
   expect(document.body.textContent).toContain('目标人员：张三');
   expect(document.body.textContent).not.toContain('人员标识：');
@@ -57,10 +58,13 @@ it('pins the real person, keeps a draft locally and reloads saved configuration 
   await act(async () => confirm.click());
   expect(draftState).toHaveBeenLastCalledWith({ ready: true, dirty: true });
   expect(document.querySelector('tr[aria-label="主体授权项 1"]')).not.toBeNull();
+  await act(async () => [...document.querySelectorAll('button')].find(button => button.textContent === 'English')!.click());
+  expect(document.body.textContent).toContain('Target Person: 张三');
+  expect(draftState).toHaveBeenLastCalledWith({ ready: true, dirty: true });
   expect(document.querySelector('[aria-label^="授权"]')).not.toBeNull();
   await act(async () => { root!.unmount(); });
   root = createRoot(container);
-  await act(async () => { root!.render(<Harness />); });
+  await act(async () => { root!.render(<LocalizationProvider catalogs={{ zhs: {}, en: { 'DataScope.Target': 'Target {title}: {name}', 'Organization.Person.Title': 'Person' } }} defaultLanguage="zhs" initialLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }, { code: 'en', displayName: 'English' }]}><Harness /></LocalizationProvider>); });
   await act(async () => { await Promise.resolve(); });
   expect(document.querySelector('tr[aria-label="主体授权项 1"]')).toBeNull();
   expect(draftState).toHaveBeenLastCalledWith({ ready: true, dirty: false });

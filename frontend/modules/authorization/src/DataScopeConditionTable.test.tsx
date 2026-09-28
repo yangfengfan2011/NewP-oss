@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { localizeDataScope } from './__tests__/dataScopeLocalization';
 import { act, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
@@ -32,7 +33,7 @@ async function render(initial: DataScopeCondition) {
       onChange={next => { current = next; setCondition(next); }} />;
   }
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
-  await act(async () => root.render(<Harness />));
+  await act(async () => root.render(localizeDataScope(<Harness />)));
   return { container, value: () => current, onEditingChange, close: async () => { await act(async () => root.unmount()); container.remove(); } };
 }
 

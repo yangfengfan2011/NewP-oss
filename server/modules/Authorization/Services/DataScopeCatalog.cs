@@ -26,7 +26,7 @@ public sealed class DataScopeCatalog(IStandardCrudResourceRegistry resources, Ca
 
     /// <summary>定位明确登记的资源；不从模型名或页面猜测身份。</summary>
     public DataScopeResource Resolve(string key) => Resources.SingleOrDefault(resource => resource.ResourceKey == key)
-        ?? throw new RolePermissionValidationException("数据资源未登记。");
+        ?? throw new RolePermissionValidationException("数据资源未登记。", "DATA_SCOPE_RESOURCE_UNKNOWN", field: "resourceKey");
 
     /// <summary>返回正式模型的原始规范字段，不包含 Display companion。</summary>
     public IReadOnlyList<IProperty> Fields(string key)
@@ -55,16 +55,17 @@ public sealed class DataScopeCatalog(IStandardCrudResourceRegistry resources, Ca
                 || node.RootId != rule.Id || node.ParentId != parentId || node.ResourceKey != rule.ResourceKey
                 || string.IsNullOrWhiteSpace(node.Name) || node.Name.Length > 256
                 || node.Children is null || node.Subjects is null)
-                throw new RolePermissionValidationException("规则树身份、父子关系或资源无效。");
+                throw new RolePermissionValidationException("规则树身份、父子关系或资源无效。", "DATA_SCOPE_RULE_TREE_INVALID", field: "rule");
             try { Conditions.Validate(node.ResourceKey, node.Condition); }
-            catch (RolePermissionValidationException exception) when (parentId is not null && exception.Message.StartsWith("条件 ", StringComparison.Ordinal))
-            { throw new RolePermissionValidationException($"节点 {node.Id}：{exception.Message}"); }
+            catch (RolePermissionValidationException exception) when (exception.Args.ContainsKey("conditionPath"))
+            { throw new RolePermissionValidationException(parentId is null ? exception.Message : $"节点 {node.Id}：{exception.Message}",
+                exception.Code, new Dictionary<string, object?>(exception.Args) { ["nodeId"] = node.Id }, exception.Field); }
             foreach (var subject in node.Subjects)
             {
                 if (string.IsNullOrWhiteSpace(subject.Id) || subject.Id.Length > 128 || !subjectIds.Add(subject.Id)
                     || subject.Actions is null || subject.Actions.Any(action =>
                         !Actions.Any(defined => defined.Key == action.Key) || action.Value is not ("allow" or "deny" or "unset")))
-                    throw new RolePermissionValidationException("主体授权项身份或读取三态无效。");
+                    throw new RolePermissionValidationException("主体授权项身份或读取三态无效。", "DATA_SCOPE_SUBJECT_ENTRY_INVALID", field: "subjects");
                 identities.Validate(subject.Type, subject.SubjectId, subject.MatchOptions);
             }
             foreach (var child in node.Children) ValidateNode(child, node.Id);
@@ -77,13 +78,24 @@ public sealed class DataScopeCatalog(IStandardCrudResourceRegistry resources, Ca
         return NormalizeNode(rule);
 
         // 日期和主体选项逐节点规范化，保存审计只记录最终配置。
-        DataScopeRuleDto NormalizeNode(DataScopeRuleDto node) => node with
+        DataScopeRuleDto NormalizeNode(DataScopeRuleDto node)
         {
-            Subjects = node.Subjects.Select(subject => subject.MatchOptions?.IncludeDescendants == false
-                ? subject with { MatchOptions = null } : subject).ToArray(),
-            Condition = Conditions.Normalize(node.ResourceKey, node.Condition),
-            Children = node.Children.Select(NormalizeNode).ToArray()
-        };
+            try
+            {
+                return node with
+                {
+                    Subjects = node.Subjects.Select(subject => subject.MatchOptions?.IncludeDescendants == false
+                        ? subject with { MatchOptions = null } : subject).ToArray(),
+                    Condition = Conditions.Normalize(node.ResourceKey, node.Condition),
+                    Children = node.Children.Select(NormalizeNode).ToArray()
+                };
+            }
+            catch (RolePermissionValidationException exception) when (!exception.Args.ContainsKey("nodeId"))
+            {
+                throw new RolePermissionValidationException(exception.Message, exception.Code,
+                    new Dictionary<string, object?>(exception.Args) { ["nodeId"] = node.Id }, exception.Field);
+            }
+        }
     }
 
     /// <summary>读取条件只投影有读取贡献的叶子。</summary>

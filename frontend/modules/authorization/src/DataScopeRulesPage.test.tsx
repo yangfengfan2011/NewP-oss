@@ -1,3 +1,4 @@
+import { localizeDataScope } from './__tests__/dataScopeLocalization';
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -6,11 +7,11 @@ import type { PageProps } from '@icp-platform/sdk';
 import DataScopeRulesPage from './DataScopeRulesPage';
 
 const fetcher = vi.hoisted(() => vi.fn());
-vi.mock('@icp-platform/core', () => ({
+vi.mock('@icp-platform/core', async importOriginal => ({
+  ...await importOriginal<typeof import('@icp-platform/core')>(),
   platformFetch: (url: string, init?: RequestInit) => url.startsWith('/plugins/')
     ? Promise.resolve(new Response(JSON.stringify({ modules: [] }))) : fetcher(url, init),
   useAuthorization: () => ({ hasFeature: () => true }),
-  useLocalization: () => ({ t: (key: string, fallback?: string) => fallback ?? key }),
 }));
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 Object.defineProperty(window, 'matchMedia', { value: () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} }) });
@@ -49,7 +50,7 @@ it('saves row order as unique priorities and restores it from an unordered respo
   let lifecycle!: Parameters<PageProps['reportState']>;
   const container = document.createElement('div'); document.body.append(container); let root = createRoot(container);
   const mount = async () => {
-    await act(async () => root.render(<DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }} reportState={(...value) => { lifecycle = value; }} />));
+    await act(async () => root.render(localizeDataScope(<DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }} reportState={(...value) => { lifecycle = value; }} />)));
     await act(async () => (container.querySelector('.ant-tree-title') as HTMLElement).click());
     await subjectsTab();
   };
@@ -79,7 +80,7 @@ it('offers explicit rename, allocates unused names and blocks duplicate saves', 
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
   let lifecycle!: Parameters<PageProps['reportState']>;
   try {
-    await act(async () => root.render(<DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }} reportState={(...value) => { lifecycle = value; }} />));
+    await act(async () => root.render(localizeDataScope(<DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }} reportState={(...value) => { lifecycle = value; }} />)));
     await act(async () => (container.querySelector('.ant-tree-title') as HTMLElement).click());
     expect(container.querySelector('[aria-label="规则名称"]')).toBeNull();
     expect(container.querySelector('[aria-label="编辑规则名称"]')?.textContent).toBe('新规则');
@@ -121,7 +122,7 @@ it('shows every root in one tree without pagination controls', async () => {
   } : url.endsWith('page=1') ? rules.slice(0, 20) : rules.slice(20)))));
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
   try {
-    await act(async () => root.render(<DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }} reportState={() => {}} />));
+    await act(async () => root.render(localizeDataScope(<DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }} reportState={() => {}} />)));
     expect(container.querySelectorAll('.ant-tree-title')).toHaveLength(21);
     expect(container.textContent).toContain('规则20');
     expect(container.textContent).not.toContain('上一页');
@@ -143,7 +144,7 @@ it('cycles each opinion independently, preserves it across tabs and only persist
   let lifecycle!: Parameters<PageProps['reportState']>;
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
   try {
-    await act(async () => root.render(<DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }} reportState={(...value) => { lifecycle = value; }} />));
+    await act(async () => root.render(localizeDataScope(<DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }} reportState={(...value) => { lifecycle = value; }} />)));
     await act(async () => (container.querySelector('.ant-tree-title') as HTMLElement).click());
     await subjectsTab();
     for (const [before, after] of [['不选', '同意'], ['同意', '拒绝'], ['拒绝', '不选'], ['不选', '同意']]) {
@@ -194,7 +195,7 @@ it('loads minimal names for multiple subjects and preserves identity context and
   let lifecycle!: Parameters<PageProps['reportState']>;
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
   try {
-    await act(async () => root.render(<DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }} reportState={(...value) => { lifecycle = value; }} />));
+    await act(async () => root.render(localizeDataScope(<DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }} reportState={(...value) => { lifecycle = value; }} />)));
     await act(async () => (container.querySelector('.ant-tree-title') as HTMLElement).click());
     expect(container.querySelector('[aria-label="条件项 1"]')).not.toBeNull();
     expect(container.textContent).toContain('当前身份值');
@@ -235,7 +236,7 @@ it('keeps stable root and subject identities after failed save and distinguishes
   const reportState: PageProps['reportState'] = (...value) => { lifecycle = value; };
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
   try {
-    await act(async () => root.render(<DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }} reportState={reportState} />));
+    await act(async () => root.render(localizeDataScope(<DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }} reportState={reportState} />)));
     await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent?.includes('新增规则'))!.click());
     await subjectsTab();
     expect(container.textContent).toContain('目录已停用');
@@ -264,7 +265,7 @@ it('keeps the draft and places a server error at the nested condition named in P
       children: [{ type: 'attribute', field: 'ENAME', operator: 'equal', value: '甲' }] },
     subjects: [], children: [] };
   fetcher.mockImplementation((url: string, init?: RequestInit) => Promise.resolve(init?.method === 'PUT'
-    ? new Response(JSON.stringify({ title: '条件 1.2：比较值与属性类型不相容。', code: 'DataScope.InvalidConfiguration' }), { status: 400 })
+    ? new Response(JSON.stringify({ title: 'diagnostic only', code: 'DataScope.InvalidConfiguration', reasonKey: 'AuthorizationErrors.DATA_SCOPE_VALUE_TYPE_MISMATCH', args: { conditionPath: '1.2' } }), { status: 400 })
     : new Response(JSON.stringify(url.endsWith('/catalog') ? {
       actions: [{ key: 'read', enabled: true }], features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
       resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Organization/Person' },
@@ -273,13 +274,13 @@ it('keeps the draft and places a server error at the nested condition named in P
   let lifecycle!: Parameters<PageProps['reportState']>;
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
   try {
-    await act(async () => root.render(<DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }}
-      reportState={(...value) => { lifecycle = value; }} />));
+    await act(async () => root.render(localizeDataScope(<DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }}
+      reportState={(...value) => { lifecycle = value; }} />)));
     await act(async () => (container.querySelector('.ant-tree-title') as HTMLElement).click());
     await addCondition();
     await act(async () => { expect(await lifecycle[2]!()).toBe(false); });
     expect(lifecycle[0].dirty).toBe(true);
-    expect(container.querySelector('[aria-label="条件项 1.2"] .ant-alert')?.textContent).toContain('条件 1.2');
+    expect(container.querySelector('[aria-label="条件项 1.2"] .ant-alert')).not.toBeNull();
     expect(container.querySelector('[aria-label="条件项 1.1"] .ant-alert')).toBeNull();
   } finally { await act(async () => root.unmount()); container.remove(); }
 });
@@ -297,8 +298,8 @@ it('edits nested nodes in one root draft and sends the complete tree on save', a
   let lifecycle!: Parameters<PageProps['reportState']>;
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
   try {
-    await act(async () => root.render(<DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }}
-      reportState={(...value) => { lifecycle = value; }} />));
+    await act(async () => root.render(localizeDataScope(<DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }}
+      reportState={(...value) => { lifecycle = value; }} />)));
     await act(async () => (container.querySelector('.ant-tree-title') as HTMLElement).click());
     await nodeAction('添加子规则');
     expect(container.textContent).toContain('完整条件还包含 1 个祖先条件');
@@ -336,7 +337,7 @@ it('selects the failing child and keeps its condition error inline', async () =>
       { type: 'business', field: '', operator: '', value: null, key: 'organization.person.departmentEnabled' },
     ] }, children: [child] };
   fetcher.mockImplementation((url: string, init?: RequestInit) => Promise.resolve(init?.method === 'PUT'
-    ? new Response(JSON.stringify({ title: '节点 child：条件 1.2：比较值与属性类型不相容。', code: 'DataScope.InvalidConfiguration' }), { status: 400 })
+    ? new Response(JSON.stringify({ title: 'diagnostic only', code: 'DataScope.InvalidConfiguration', reasonKey: 'AuthorizationErrors.DATA_SCOPE_VALUE_TYPE_MISMATCH', args: { nodeId: 'child', conditionPath: '1.2' } }), { status: 400 })
     : new Response(JSON.stringify(url.endsWith('/catalog') ? {
       actions: [{ key: 'read', enabled: true }], features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
       contextValues: [{ key: 'current.person', title: '当前人员', valueType: 'String' }],
@@ -348,8 +349,8 @@ it('selects the failing child and keeps its condition error inline', async () =>
   let lifecycle!: Parameters<PageProps['reportState']>;
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
   try {
-    await act(async () => root.render(<DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }}
-      reportState={(...value) => { lifecycle = value; }} />));
+    await act(async () => root.render(localizeDataScope(<DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }}
+      reportState={(...value) => { lifecycle = value; }} />)));
     await act(async () => (container.querySelectorAll('.ant-tree-title')[0] as HTMLElement).click());
     await act(async () => (container.querySelectorAll('.ant-tree-title')[1] as HTMLElement).click());
     await addCondition();
@@ -360,6 +361,6 @@ it('selects the failing child and keeps its condition error inline', async () =>
     expect(container.textContent).toContain('EID 等于 当前身份值：当前人员');
     expect(container.textContent).toContain('人员所属部门已启用（无读取贡献）');
     expect(container.textContent).toContain('且 AND');
-    expect(container.querySelector('[aria-label="条件项 1.2"] .ant-alert')?.textContent).toContain('条件 1.2');
+    expect(container.querySelector('[aria-label="条件项 1.2"] .ant-alert')).not.toBeNull();
   } finally { await act(async () => root.unmount()); container.remove(); }
 });

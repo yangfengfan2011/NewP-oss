@@ -1,0 +1,786 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "DataScope": {
+    "Equal": {
+      "zhs": "等于",
+      "en": "equals"
+    },
+    "NotEqual": {
+      "zhs": "不等于",
+      "en": "does not equal"
+    },
+    "Greater": {
+      "zhs": "大于",
+      "en": "is greater than"
+    },
+    "GreaterEqual": {
+      "zhs": "大于等于",
+      "en": "is at least"
+    },
+    "Less": {
+      "zhs": "小于",
+      "en": "is less than"
+    },
+    "LessEqual": {
+      "zhs": "小于等于",
+      "en": "is at most"
+    },
+    "Contains": {
+      "zhs": "包含",
+      "en": "contains"
+    },
+    "Starts": {
+      "zhs": "开头是",
+      "en": "starts with"
+    },
+    "Ends": {
+      "zhs": "结尾是",
+      "en": "ends with"
+    },
+    "In": {
+      "zhs": "属于",
+      "en": "is in"
+    },
+    "NotIn": {
+      "zhs": "不属于",
+      "en": "is not in"
+    },
+    "IsNull": {
+      "zhs": "为空",
+      "en": "is null"
+    },
+    "NotNull": {
+      "zhs": "不为空",
+      "en": "is not null"
+    },
+    "Null": {
+      "zhs": "空值",
+      "en": "null"
+    },
+    "EmptyText": {
+      "zhs": "空文本",
+      "en": "empty text"
+    },
+    "EmptySet": {
+      "zhs": "空集合",
+      "en": "empty set"
+    },
+    "Configured": {
+      "zhs": "已配置值",
+      "en": "configured value"
+    },
+    "NoBusiness": {
+      "zhs": "未选业务条件",
+      "en": "No business condition selected"
+    },
+    "And": {
+      "zhs": "且 AND",
+      "en": "AND"
+    },
+    "Or": {
+      "zhs": "或 OR",
+      "en": "OR"
+    },
+    "ToAnd": {
+      "zhs": "转换为 AND 组合",
+      "en": "Convert to AND group"
+    },
+    "ToOr": {
+      "zhs": "转换为 OR 组合",
+      "en": "Convert to OR group"
+    },
+    "RemoveCondition": {
+      "zhs": "删除条件",
+      "en": "Delete condition"
+    },
+    "Combination": {
+      "zhs": "组合方式",
+      "en": "Combination"
+    },
+    "GroupRequired": {
+      "zhs": "组合中至少添加一个条件。",
+      "en": "Add at least one condition to the group."
+    },
+    "AddAttribute": {
+      "zhs": "添加属性条件",
+      "en": "Add attribute condition"
+    },
+    "AddBusiness": {
+      "zhs": "添加业务条件",
+      "en": "Add business condition"
+    },
+    "AddAnd": {
+      "zhs": "添加 AND 组合",
+      "en": "Add AND group"
+    },
+    "AddOr": {
+      "zhs": "添加 OR 组合",
+      "en": "Add OR group"
+    },
+    "Business": {
+      "zhs": "业务条件",
+      "en": "Business condition"
+    },
+    "ReadContribution": {
+      "zhs": "提供读取贡献",
+      "en": "Contributes to reads"
+    },
+    "NoReadContribution": {
+      "zhs": "无读取贡献；完整判断仍生效",
+      "en": "No read contribution; full evaluation still applies"
+    },
+    "Attribute": {
+      "zhs": "直接属性",
+      "en": "Attribute"
+    },
+    "Comparison": {
+      "zhs": "比较",
+      "en": "Comparison"
+    },
+    "ValueSource": {
+      "zhs": "值来源",
+      "en": "Value source"
+    },
+    "Fixed": {
+      "zhs": "固定值",
+      "en": "Fixed value"
+    },
+    "Context": {
+      "zhs": "当前身份值",
+      "en": "Current identity value"
+    },
+    "ValueSet": {
+      "zhs": "比较集合",
+      "en": "Comparison set"
+    },
+    "Yes": {
+      "zhs": "是",
+      "en": "Yes"
+    },
+    "No": {
+      "zhs": "否",
+      "en": "No"
+    },
+    "Integer": {
+      "zhs": "输入整数",
+      "en": "Enter an integer"
+    },
+    "NoReadSuffix": {
+      "zhs": "（无读取贡献）",
+      "en": " (no read contribution)"
+    },
+    "ConditionItem": {
+      "zhs": "条件项 {path}",
+      "en": "Condition {path}"
+    },
+    "ConditionPath": {
+      "zhs": "条件 {path}",
+      "en": "Condition {path}"
+    },
+    "AllConditions": {
+      "zhs": "全部条件 AND",
+      "en": "All conditions (AND)"
+    },
+    "AnyConditions": {
+      "zhs": "任一条件 OR",
+      "en": "Any condition (OR)"
+    },
+    "MoveOut": {
+      "zhs": "移出此组",
+      "en": "Move out of group"
+    },
+    "MoveOutHelp": {
+      "zhs": "所选项将与原父组并列，条件之间的逻辑关系可能改变。",
+      "en": "The selected item will become a sibling of its parent group. This may change the condition logic."
+    },
+    "Ungroup": {
+      "zhs": "解除分组",
+      "en": "Ungroup"
+    },
+    "UngroupHelp": {
+      "zhs": "组内条件将保留并移到父层，随后采用父层的组合方式。",
+      "en": "Conditions will move to the parent level and use its combination logic."
+    },
+    "DeleteGroup": {
+      "zhs": "删除整组",
+      "en": "Delete group"
+    },
+    "DeleteGroupHelp": {
+      "zhs": "本组及其内部全部条件都会从草稿中删除。",
+      "en": "This group and all its conditions will be removed from the draft."
+    },
+    "Match": {
+      "zhs": "符合以下",
+      "en": "Match"
+    },
+    "Overall": {
+      "zhs": "整体组合方式",
+      "en": "Overall combination"
+    },
+    "NewCondition": {
+      "zhs": "新建条件",
+      "en": "New condition"
+    },
+    "GroupAnd": {
+      "zhs": "组合为全部满足",
+      "en": "Group with AND"
+    },
+    "GroupOr": {
+      "zhs": "组合为任一满足",
+      "en": "Group with OR"
+    },
+    "ClearSelection": {
+      "zhs": "取消选择",
+      "en": "Clear selection"
+    },
+    "NoConditions": {
+      "zhs": "暂无条件，点击“新建条件”开始配置。",
+      "en": "No conditions. Select New condition to start."
+    },
+    "Condition": {
+      "zhs": "条件",
+      "en": "Condition"
+    },
+    "ConditionGroup": {
+      "zhs": "条件组",
+      "en": "Condition group"
+    },
+    "AttributeCondition": {
+      "zhs": "属性条件",
+      "en": "Attribute condition"
+    },
+    "ConditionContent": {
+      "zhs": "条件内容",
+      "en": "Condition content"
+    },
+    "Operations": {
+      "zhs": "操作",
+      "en": "Actions"
+    },
+    "AddCondition": {
+      "zhs": "添加条件",
+      "en": "Add condition"
+    },
+    "Edit": {
+      "zhs": "编辑",
+      "en": "Edit"
+    },
+    "DeleteConditionConfirm": {
+      "zhs": "从草稿中删除此条件？",
+      "en": "Delete this condition from the draft?"
+    },
+    "Delete": {
+      "zhs": "删除",
+      "en": "Delete"
+    },
+    "Cancel": {
+      "zhs": "取消",
+      "en": "Cancel"
+    },
+    "More": {
+      "zhs": "更多 ▾",
+      "en": "More ▾"
+    },
+    "Preview": {
+      "zhs": "完整条件预览",
+      "en": "Full condition preview"
+    },
+    "EditCondition": {
+      "zhs": "编辑条件",
+      "en": "Edit condition"
+    },
+    "Confirm": {
+      "zhs": "确定",
+      "en": "Confirm"
+    },
+    "ConditionType": {
+      "zhs": "条件类型",
+      "en": "Condition type"
+    },
+    "ConditionHelp": {
+      "zhs": "确定后更新草稿，保存根规则后生效。需要分组时，在列表中勾选同层条件进行组合。",
+      "en": "Confirm to update the draft, then save the root rule to apply. To group conditions, select siblings in the list."
+    },
+    "ConfirmChange": {
+      "zhs": "确认修改",
+      "en": "Confirm change"
+    },
+    "Before": {
+      "zhs": "修改前",
+      "en": "Before"
+    },
+    "After": {
+      "zhs": "修改后",
+      "en": "After"
+    },
+    "NoConditionSave": {
+      "zhs": "无条件（保存前需要添加条件）",
+      "en": "No conditions (add a condition before saving)"
+    },
+    "Selected": {
+      "zhs": "已选 {count} 项（同层）",
+      "en": "Selected: {count} siblings"
+    },
+    "ConditionCount": {
+      "zhs": "{count} 项条件",
+      "en": "{count} conditions"
+    },
+    "SelectCondition": {
+      "zhs": "选择条件 {path}",
+      "en": "Select condition {path}"
+    },
+    "GroupCombination": {
+      "zhs": "条件组 {path} 组合方式",
+      "en": "Condition group {path} combination"
+    },
+    "MoreCondition": {
+      "zhs": "条件 {path} 更多操作",
+      "en": "Condition {path} more actions"
+    },
+    "NewRule": {
+      "zhs": "新规则",
+      "en": "New rule"
+    },
+    "NewChild": {
+      "zhs": "新子规则",
+      "en": "New child rule"
+    },
+    "NewSibling": {
+      "zhs": "新同级规则",
+      "en": "New sibling rule"
+    },
+    "AddChild": {
+      "zhs": "添加子规则",
+      "en": "Add child rule"
+    },
+    "AddSibling": {
+      "zhs": "添加同级规则",
+      "en": "Add sibling rule"
+    },
+    "DeleteNode": {
+      "zhs": "删除节点",
+      "en": "Delete node"
+    },
+    "DeleteTree": {
+      "zhs": "删除根树",
+      "en": "Delete root tree"
+    },
+    "TreePanel": {
+      "zhs": "规则树面板",
+      "en": "Rule tree panel"
+    },
+    "AddRule": {
+      "zhs": "＋ 新增规则",
+      "en": "＋ New rule"
+    },
+    "NodeActions": {
+      "zhs": "节点操作 ▾",
+      "en": "Node actions ▾"
+    },
+    "Tree": {
+      "zhs": "规则树",
+      "en": "Rule tree"
+    },
+    "NoRules": {
+      "zhs": "暂无规则",
+      "en": "No rules"
+    },
+    "RulePath": {
+      "zhs": "规则路径",
+      "en": "Rule path"
+    },
+    "RuleName": {
+      "zhs": "规则名称",
+      "en": "Rule name"
+    },
+    "EditRuleName": {
+      "zhs": "编辑规则名称",
+      "en": "Edit rule name"
+    },
+    "Unnamed": {
+      "zhs": "未命名规则",
+      "en": "Unnamed rule"
+    },
+    "RuleDetails": {
+      "zhs": "规则详情",
+      "en": "Rule details"
+    },
+    "EnableRule": {
+      "zhs": "启用规则",
+      "en": "Enable rule"
+    },
+    "Enabled": {
+      "zhs": "启用",
+      "en": "Enabled"
+    },
+    "Disabled": {
+      "zhs": "停用",
+      "en": "Disabled"
+    },
+    "Resource": {
+      "zhs": "资源",
+      "en": "Resource"
+    },
+    "RuleConditions": {
+      "zhs": "规则条件",
+      "en": "Rule conditions"
+    },
+    "DisabledState": {
+      "zhs": "已停用",
+      "en": "Disabled"
+    },
+    "SelectRule": {
+      "zhs": "从左侧选择规则，或新增规则",
+      "en": "Select a rule on the left or create one"
+    },
+    "SaveHelp": {
+      "zhs": "保存包含该根规则下的全部修改",
+      "en": "Saving includes all changes under this root rule"
+    },
+    "Unsaved": {
+      "zhs": "未保存",
+      "en": "Unsaved"
+    },
+    "Discard": {
+      "zhs": "放弃修改",
+      "en": "Discard changes"
+    },
+    "SaveRoot": {
+      "zhs": "保存根规则",
+      "en": "Save root rule"
+    },
+    "DiscardConfirm": {
+      "zhs": "放弃未保存的草稿？",
+      "en": "Discard the unsaved draft?"
+    },
+    "DiscardSwitch": {
+      "zhs": "放弃并切换",
+      "en": "Discard and switch"
+    },
+    "KeepEditing": {
+      "zhs": "继续编辑",
+      "en": "Keep editing"
+    },
+    "UnsavedRoot": {
+      "zhs": "当前根规则的修改尚未保存。",
+      "en": "Changes to this root rule have not been saved."
+    },
+    "DeleteNodeConfirm": {
+      "zhs": "删除当前节点及其子规则？",
+      "en": "Delete this node and its child rules?"
+    },
+    "DeleteRootConfirm": {
+      "zhs": "删除整棵根规则？",
+      "en": "Delete the entire root rule?"
+    },
+    "DeleteRoot": {
+      "zhs": "删除整棵根树",
+      "en": "Delete root tree"
+    },
+    "DeleteNodeHelp": {
+      "zhs": "当前节点及全部子规则将从草稿中删除，保存根规则后生效。",
+      "en": "This node and all child rules will be removed from the draft. Save the root rule to apply."
+    },
+    "DeleteRootHelp": {
+      "zhs": "根规则及全部子节点会立即删除并记录审计。",
+      "en": "The root rule and all child nodes will be deleted immediately and audited."
+    },
+    "DisabledRule": {
+      "zhs": "{name}（已停用）",
+      "en": "{name} (disabled)"
+    },
+    "FinishEditor": {
+      "zhs": "请先确定或取消抽屉中的编辑。",
+      "en": "Confirm or cancel the drawer edits first."
+    },
+    "RuleSaved": {
+      "zhs": "规则已保存",
+      "en": "Rule saved"
+    },
+    "RootDeleted": {
+      "zhs": "根规则已删除",
+      "en": "Root rule deleted"
+    },
+    "Ancestors": {
+      "zhs": "完整条件还包含 {count} 个祖先条件",
+      "en": "The full condition also includes {count} ancestor conditions"
+    },
+    "Subjects": {
+      "zhs": "授权主体（{count}）",
+      "en": "Authorization subjects ({count})"
+    },
+    "RootName": {
+      "zhs": "根规则：{name}",
+      "en": "Root rule: {name}"
+    },
+    "SubjectType": {
+      "zhs": "主体类型",
+      "en": "Subject type"
+    },
+    "SubjectSelect": {
+      "zhs": "主体选择",
+      "en": "Subject"
+    },
+    "PreviousSubjects": {
+      "zhs": "上一页主体",
+      "en": "Previous subjects"
+    },
+    "NextSubjects": {
+      "zhs": "下一页主体",
+      "en": "Next subjects"
+    },
+    "IncludeDepartments": {
+      "zhs": "包含下级部门",
+      "en": "Include descendant departments"
+    },
+    "Priority": {
+      "zhs": "优先级",
+      "en": "Priority"
+    },
+    "Unset": {
+      "zhs": "不选",
+      "en": "Unset"
+    },
+    "Allow": {
+      "zhs": "同意",
+      "en": "Allow"
+    },
+    "Deny": {
+      "zhs": "拒绝",
+      "en": "Deny"
+    },
+    "DeleteSubject": {
+      "zhs": "删除主体项",
+      "en": "Delete subject"
+    },
+    "DepartmentHelp": {
+      "zhs": "默认仅匹配本部门人员。",
+      "en": "By default, only people in this department match."
+    },
+    "AddSubject": {
+      "zhs": "添加主体项",
+      "en": "Add subject"
+    },
+    "OpinionHelp": {
+      "zhs": "□ 不选  ✓ 同意  ✕ 拒绝 · 点击循环切换",
+      "en": "□ Unset  ✓ Allow  ✕ Deny · Click to cycle"
+    },
+    "PriorityHelp": {
+      "zhs": "从上到下优先；每个动作分别匹配，“不选”时继续查看下一项。",
+      "en": "Priority runs from top to bottom for each action. Unset continues to the next item."
+    },
+    "NoSubjects": {
+      "zhs": "暂无授权主体，点击“添加主体项”配置。",
+      "en": "No subjects. Select Add subject to configure."
+    },
+    "Subject": {
+      "zhs": "授权主体",
+      "en": "Authorization subject"
+    },
+    "Loading": {
+      "zhs": "读取中…",
+      "en": "Loading…"
+    },
+    "IncludeDescendants": {
+      "zhs": "包含下级",
+      "en": "Include descendants"
+    },
+    "CatalogDisabled": {
+      "zhs": "（目录已停用）",
+      "en": " (disabled in catalog)"
+    },
+    "MoveUp": {
+      "zhs": "上移",
+      "en": "Move up"
+    },
+    "MoveDown": {
+      "zhs": "下移",
+      "en": "Move down"
+    },
+    "DeleteSubjectConfirm": {
+      "zhs": "从草稿中删除此主体项？",
+      "en": "Delete this subject from the draft?"
+    },
+    "EditSubject": {
+      "zhs": "编辑授权主体",
+      "en": "Edit authorization subject"
+    },
+    "AddSubjectTitle": {
+      "zhs": "添加授权主体",
+      "en": "Add authorization subject"
+    },
+    "SubjectHelp": {
+      "zhs": "□ 不选  ✓ 同意  ✕ 拒绝。确定后加入草稿，保存后生效。",
+      "en": "□ Unset  ✓ Allow  ✕ Deny. Confirm to update the draft, then save to apply."
+    },
+    "SubjectItem": {
+      "zhs": "主体授权项 {index}",
+      "en": "Authorization subject {index}"
+    },
+    "ActionOpinion": {
+      "zhs": "{action}意见",
+      "en": "{action} opinion"
+    },
+    "SubjectRequired": {
+      "zhs": "请选择授权主体。",
+      "en": "Select an authorization subject."
+    },
+    "Unresolved": {
+      "zhs": "无法解析（{id}）",
+      "en": "Unresolved ({id})"
+    },
+    "OpinionCycle": {
+      "zhs": "{current}；点击切换为{next}",
+      "en": "{current}; click to switch to {next}"
+    },
+    "OpinionLabel": {
+      "zhs": "{action}：{opinion}",
+      "en": "{action}: {opinion}"
+    },
+    "SubjectType_all": {
+      "zhs": "所有用户",
+      "en": "All users"
+    },
+    "SubjectType_role": {
+      "zhs": "角色",
+      "en": "Role"
+    },
+    "Action_read": {
+      "zhs": "读取",
+      "en": "Read"
+    },
+    "Action_create": {
+      "zhs": "新建",
+      "en": "Create"
+    },
+    "Action_delete": {
+      "zhs": "删除",
+      "en": "Delete"
+    },
+    "Action_authorize": {
+      "zhs": "授权",
+      "en": "Authorize"
+    },
+    "Target": {
+      "zhs": "目标{title}：{name}",
+      "en": "Target {title}: {name}"
+    },
+    "TargetRequired": {
+      "zhs": "缺少对象标识或授权入口身份。",
+      "en": "The object identifier or authorization entry is missing."
+    },
+    "ObjectHelp": {
+      "zhs": "对象的明确意见优先于规则；不选则沿用规则。保存后生效。",
+      "en": "Explicit object opinions take precedence over rules. Unset follows the rules. Save to apply."
+    },
+    "CurrentUser": {
+      "zhs": "当前用户",
+      "en": "Current user"
+    },
+    "AnalyzeUser": {
+      "zhs": "分析用户",
+      "en": "Analyze user"
+    },
+    "PreviousUsers": {
+      "zhs": "上一页用户",
+      "en": "Previous users"
+    },
+    "NextUsers": {
+      "zhs": "下一页用户",
+      "en": "Next users"
+    },
+    "Reanalyze": {
+      "zhs": "重新分析",
+      "en": "Analyze again"
+    },
+    "ExplanationHelp": {
+      "zhs": "展示已保存配置下的数据权限。页面功能授权和业务校验仍独立生效。新建权限需按新对象内容判定。",
+      "en": "Shows data permissions from saved configuration. Feature authorization and business validation still apply independently. Create permission is evaluated against the new object."
+    },
+    "DirectoryReadFailed": {
+      "zhs": "用户目录读取失败。",
+      "en": "Unable to load the user directory."
+    },
+    "Allowed": {
+      "zhs": "允许",
+      "en": "Allowed"
+    },
+    "ObjectAuthorization": {
+      "zhs": "对象授权",
+      "en": "Object authorization"
+    },
+    "Rule": {
+      "zhs": "规则",
+      "en": "Rule"
+    },
+    "DescendantsSuffix": {
+      "zhs": "（包含下级）",
+      "en": " (includes descendants)"
+    },
+    "Reason_administrator": {
+      "zhs": "管理员豁免",
+      "en": "Administrator exemption"
+    },
+    "Reason_disabled": {
+      "zhs": "该动作的数据权限检查已停用",
+      "en": "Data permission checks are disabled for this action"
+    },
+    "Reason_readRequired": {
+      "zhs": "没有读取权限，因此不能执行此动作",
+      "en": "Read permission is required for this action"
+    },
+    "Reason_object": {
+      "zhs": "由对象授权决定",
+      "en": "Determined by object authorization"
+    },
+    "Reason_rule": {
+      "zhs": "由命中规则决定；独立分支拒绝优先",
+      "en": "Determined by matching rules; denial takes precedence across independent branches"
+    },
+    "Reason_default": {
+      "zhs": "没有明确意见，默认允许",
+      "en": "No explicit opinion; allowed by default"
+    },
+    "Status_effective": {
+      "zhs": "参与最终裁决",
+      "en": "Contributes to the final decision"
+    },
+    "Status_descendantOverride": {
+      "zhs": "被子规则覆盖",
+      "en": "Overridden by a child rule"
+    },
+    "Status_objectOverride": {
+      "zhs": "被对象授权覆盖",
+      "en": "Overridden by object authorization"
+    },
+    "PriorityValue": {
+      "zhs": " · 优先级 {priority} · {opinion}",
+      "en": " · Priority {priority} · {opinion}"
+    },
+    "ObjectForbidden": {
+      "zhs": "当前没有对象授权资格。",
+      "en": "You are not eligible to manage authorization for this object."
+    },
+    "ObjectNotFound": {
+      "zhs": "记录或分析用户不存在，或记录不可读取。",
+      "en": "The record or analyzed user does not exist, or the record is not readable."
+    },
+    "ObjectReadFailed": {
+      "zhs": "对象权限读取失败。",
+      "en": "Unable to load object permissions."
+    },
+    "ObjectNotLoaded": {
+      "zhs": "对象授权尚未加载。",
+      "en": "Object authorization has not loaded."
+    },
+    "ObjectChanged": {
+      "zhs": "对象授权目标已变化，请重新打开。",
+      "en": "The authorization target has changed. Open it again."
+    },
+    "Action_edit": {
+      "zhs": "编辑",
+      "en": "Edit"
+    }
+  }
+}

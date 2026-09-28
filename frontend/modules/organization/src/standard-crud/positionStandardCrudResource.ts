@@ -42,5 +42,5 @@ export const positionStandardCrudResource: StandardCrudResourceRegistration<Reco
   dataAdapter: positionStandardCrudDataAdapter,
   listViewKey: 'organization.position.list',
   detailViewKey: 'organization.position.detail',
-  ...createOrganizationObjectAuthorizationActions('organization.position', '岗位'),
+  ...createOrganizationObjectAuthorizationActions('organization.position', '岗位', 'Organization.Position.ObjectTitle'),
 };

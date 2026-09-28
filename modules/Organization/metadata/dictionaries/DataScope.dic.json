@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "DataScope": {
+    "SubjectType_company": {
+      "zhs": "公司",
+      "en": "Company"
+    },
+    "SubjectType_department": {
+      "zhs": "部门",
+      "en": "Department"
+    }
+  }
+}

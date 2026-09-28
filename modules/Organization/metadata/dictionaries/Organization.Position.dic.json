@@ -17,6 +17,10 @@
     "InvalidId": {
       "zhs": "岗位标识无效。",
       "en": "The position ID is invalid."
+    },
+    "ObjectTitle": {
+      "zhs": "岗位",
+      "en": "Position"
     }
   }
 }

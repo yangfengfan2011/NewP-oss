@@ -50,7 +50,7 @@ public sealed class DataScopeRules(EfPlatformDbContext db, IPlatformTransactionE
             {
                 var names = await identities.SearchAsync(group.Key, null, 1, ids, cancellationToken);
                 if (ids.Except(names.CurrentValues.Select(item => item.Id), StringComparer.Ordinal).Any())
-                    throw new RolePermissionValidationException("所选授权主体不存在。");
+                    throw new RolePermissionValidationException("所选授权主体不存在。", "DATA_SCOPE_SUBJECT_NOT_FOUND", field: "subjects");
             }
         }
         await transactions.ExecuteAsync(async token =>
@@ -60,12 +60,12 @@ public sealed class DataScopeRules(EfPlatformDbContext db, IPlatformTransactionE
             if (await Nodes.AsNoTracking().AnyAsync(row => EF.Property<string?>(row, "ParentId") == null
                 && EF.Property<string>(row, "EID") != rule.Id
                 && EF.Functions.Collate(EF.Property<string>(row, "Name").Trim(), "Latin1_General_100_BIN2") == rule.Name, token))
-                throw new RolePermissionValidationException($"同级规则名称“{rule.Name}”已存在。");
+                throw new RolePermissionValidationException($"同级规则名称“{rule.Name}”已存在。", "DATA_SCOPE_RULE_NAME_DUPLICATE", new Dictionary<string, object?> { ["name"] = rule.Name }, "name");
             var target = "Authorization.DataScopeRule:" + rule.Id;
             await db.Database.ExecuteSqlInterpolatedAsync($"DECLARE @result int; EXEC @result = sys.sp_getapplock @Resource={target}, @LockMode='Exclusive', @LockOwner='Transaction'; IF @result < 0 THROW 51000, 'Data scope rule lock failed.', 1;", token);
             var existing = await Nodes.Where(row => EF.Property<string>(row, "RootId") == rule.Id).ToListAsync(token);
             if (existing.Any(node => !string.Equals((string)node["RootId"]!, rule.Id, StringComparison.Ordinal)))
-                throw new RolePermissionValidationException("规则身份必须与已保存的规范身份一致。");
+                throw new RolePermissionValidationException("规则身份必须与已保存的规范身份一致。", "DATA_SCOPE_RULE_CANONICAL_REQUIRED", field: "id");
             var old = existing.Count == 0 ? null : (await MaterializeAsync(existing, token)).Single();
             var canonical = Canonical(rule);
             var previous = old is null ? null : Canonical(old);
@@ -74,14 +74,14 @@ public sealed class DataScopeRules(EfPlatformDbContext db, IPlatformTransactionE
             var occupiedNodes = await Nodes.AsNoTracking().Where(row => nodeIds.Contains(EF.Property<string>(row, "EID")))
                 .Select(row => new { Id = EF.Property<string>(row, "EID"), RootId = EF.Property<string>(row, "RootId") }).ToListAsync(token);
             if (occupiedNodes.Any(node => node.RootId != rule.Id || !nodeIds.Contains(node.Id, StringComparer.Ordinal)))
-                throw new RolePermissionValidationException("规则节点身份已属于另一根规则。");
+                throw new RolePermissionValidationException("规则节点身份已属于另一根规则。", "DATA_SCOPE_RULE_NODE_OCCUPIED", field: "id");
             var subjectIds = incoming.SelectMany(node => node.Subjects).Select(subject => subject.Id).ToArray();
             var oldNodeIds = existing.Select(node => (string)node["EID"]!).ToArray();
             var occupiedSubjects = await Subjects.AsNoTracking().Where(row => subjectIds.Contains(EF.Property<string>(row, "EID")))
                 .Select(row => new { Id = EF.Property<string>(row, "EID"), NodeId = EF.Property<string>(row, "NodeId") }).ToListAsync(token);
             if (occupiedSubjects.Any(subject => !oldNodeIds.Contains(subject.NodeId, StringComparer.Ordinal)
                 || !subjectIds.Contains(subject.Id, StringComparer.Ordinal)))
-                throw new RolePermissionValidationException("主体授权项身份已属于另一规则。");
+                throw new RolePermissionValidationException("主体授权项身份已属于另一规则。", "DATA_SCOPE_RULE_SUBJECT_OCCUPIED", field: "subjects");
             var rows = await Subjects.Where(row => oldNodeIds.Contains(EF.Property<string>(row, "NodeId"))).ToListAsync(token);
             Subjects.RemoveRange(rows.Where(row => !subjectIds.Contains((string)row["EID"]!, StringComparer.Ordinal)));
             Nodes.RemoveRange(existing.Where(node => !nodeIds.Contains((string)node["EID"]!, StringComparer.Ordinal)));
@@ -115,7 +115,7 @@ public sealed class DataScopeRules(EfPlatformDbContext db, IPlatformTransactionE
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var child in children)
             if (!names.Add(child.Name))
-                throw new RolePermissionValidationException($"同级规则名称“{child.Name}”已存在。");
+                throw new RolePermissionValidationException($"同级规则名称“{child.Name}”已存在。", "DATA_SCOPE_RULE_NAME_DUPLICATE", new Dictionary<string, object?> { ["name"] = child.Name }, "name");
         return node with { Name = node.Name.Trim(), Children = children };
     }
 
@@ -129,7 +129,7 @@ public sealed class DataScopeRules(EfPlatformDbContext db, IPlatformTransactionE
             var nodes = await Nodes.Where(row => EF.Property<string>(row, "RootId") == rootId).ToListAsync(token);
             if (nodes.Count == 0) return true;
             if (nodes.Any(node => !string.Equals((string)node["RootId"]!, rootId, StringComparison.Ordinal)))
-                throw new RolePermissionValidationException("规则身份必须与已保存的规范身份一致。");
+                throw new RolePermissionValidationException("规则身份必须与已保存的规范身份一致。", "DATA_SCOPE_RULE_CANONICAL_REQUIRED", field: "id");
             var previous = Canonical((await MaterializeAsync(nodes, token)).Single());
             var ids = nodes.Select(node => (string)node["EID"]!).ToArray();
             Subjects.RemoveRange(await Subjects.Where(row => ids.Contains(EF.Property<string>(row, "NodeId"))).ToListAsync(token));

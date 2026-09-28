@@ -101,7 +101,15 @@ public sealed class DataScopeObjectManagementTests
 
         Assert.Equal(DataScopeObjectStatus.InvalidInput, result.Status);
         Assert.Equal("对象授权目标与请求不一致。", result.ValidationMessage);
-        Assert.Equal(new[] { ("authorization.role", "target", "read"), ("authorization.role", "target", "authorize") }, fixture.Decisions.Calls);
+        var controller = new ICP.Platform.Modules.Authorization.Controllers.DataScopeObjectsController(fixture.Management);
+        var response = Assert.IsType<Microsoft.AspNetCore.Mvc.BadRequestObjectResult>(
+            await controller.Save("authorization.role", "target", new(resource, id, []), default));
+        var problem = Assert.IsType<Microsoft.AspNetCore.Mvc.ProblemDetails>(response.Value);
+        Assert.Equal("DataScope.InvalidConfiguration", problem.Extensions["code"]);
+        Assert.True(problem.Extensions.TryGetValue("reasonKey", out var reason));
+        Assert.Equal("AuthorizationErrors.DATA_SCOPE_OBJECT_TARGET_MISMATCH", reason);
+        Assert.True(problem.Extensions.ContainsKey("fieldErrors"));
+        Assert.Equal(new[] { ("authorization.role", "target", "read"), ("authorization.role", "target", "authorize") }, fixture.Decisions.Calls.Take(2));
         Assert.Empty(fixture.Directory.Searches);
     }
 

@@ -159,6 +159,7 @@ export default defineConfig({
         new URL('../ui/src/styles/index.css', import.meta.url),
       ),
       '@icp-platform/ui/button': fileURLToPath(new URL('../ui/src/components/Button.tsx', import.meta.url)),
+      '@icp-platform/ui/locale': fileURLToPath(new URL('../ui/src/locale.tsx', import.meta.url)),
       '@icp-platform/ui/core': fileURLToPath(new URL('../ui/src/core.ts', import.meta.url)),
       '@icp-platform/ui/crud-detail': fileURLToPath(new URL('../ui/src/crud-detail.ts', import.meta.url)),
       '@icp-platform/ui/crud-form': fileURLToPath(new URL('../ui/src/crud-form.ts', import.meta.url)),

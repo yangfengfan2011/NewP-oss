@@ -10,6 +10,8 @@ import roleDictionary from '../../../../modules/Authorization/metadata/dictionar
 
 const fetcher = vi.hoisted(() => vi.fn());
 const access = vi.hoisted(() => ({ positions: ['read', 'save'] }));
+// 使用浏览器构建同源的实装 ESM，避免 CJS 与 Provider 分别持有一套 Context。
+vi.mock('antd', async () => await import('antd/es'));
 vi.mock('@icp-platform/core', async original => ({ ...await original<object>(), platformFetch: fetcher, useAuthorization: () => ({ hasFeature: (position: string) => access.positions.includes(position) }) }));
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 Object.defineProperty(window, 'matchMedia', { value: () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} }) });
@@ -31,10 +33,21 @@ it('当前语言重译目录、草稿及已成功提示而不重放保存', asyn
   let lifecycle!: Parameters<PageProps['reportState']>;
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
   try {
-    await act(async () => root.render(<LocalizationProvider catalogs={catalogs} defaultLanguage="zhs" initialLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }, { code: 'en', displayName: 'English' }]}><Driver /><FeatureWorkbench input={{ parameters: { featurePosition: 'read', roleId: 'one' } }} reportState={(...state) => { lifecycle = state; }} /></LocalizationProvider>));
+    await act(async () => root.render(<LocalizationProvider catalogs={catalogs} defaultLanguage="zhs" initialLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文', locale: 'zh-CN' }, { code: 'en', displayName: 'English', locale: 'en-US' }]}><Driver /><FeatureWorkbench input={{ parameters: { featurePosition: 'read', roleId: 'one' } }} reportState={(...state) => { lifecycle = state; }} /></LocalizationProvider>));
+    expect(container.querySelector('.ant-empty-description')?.textContent).toBe('暂无数据');
+    expect(container.querySelector('.ant-pagination-prev')?.getAttribute('title')).toBe('上一页');
     await act(async () => container.querySelector<HTMLElement>('.ant-tree-checkbox')!.click());
+    const roleSearch = container.querySelector<HTMLInputElement>('[aria-label="搜索角色"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(roleSearch, 'empty search');
+      roleSearch.dispatchEvent(new Event('input', { bubbles: true }));
+    });
     await act(async () => container.querySelector<HTMLButtonElement>('button')!.click());
     expect(container.querySelector('.ant-tree-title')?.textContent).toBe('Feature authorization');
+    expect(container.querySelector('.ant-empty-description')?.textContent).toBe('No data');
+    expect(container.querySelector('.ant-pagination-prev')?.getAttribute('title')).toBe('Previous Page');
+    expect(container.querySelector('[aria-label="Search roles"]')).toBe(roleSearch);
+    expect(roleSearch.value).toBe('empty search');
     expect(container.textContent).toContain('Granted 1 / 2');
     expect(container.textContent).toContain('业务角色');
     expect(lifecycle[0].dirty).toBe(true);
@@ -151,5 +164,5 @@ it('shows distinct codes for same-name roles before selection', async () => {
 function TestWorkbench(props: PageProps) {
   const entries = { ...Object.fromEntries(Object.entries(JSON.parse(roleDictionary).RoleView).map(([key, value]) => ['RoleView.' + key, value])), ...Object.fromEntries(Object.entries(JSON.parse(messageDictionary).AuthorizationMessages).map(([key, value]) => ['AuthorizationMessages.' + key, value])) } as Record<string, Record<string, string>>;
   const catalogs = Object.fromEntries(['zhs', 'en'].map(language => [language, Object.fromEntries(Object.entries(entries).map(([key, value]) => [key, value[language]]))]));
-  return <LocalizationProvider catalogs={catalogs} initialLanguage='zhs' defaultLanguage='zhs' supportedLanguages={[{ code: 'zhs', displayName: '中文' }, { code: 'en', displayName: 'English' }]}><FeatureWorkbench {...props} /></LocalizationProvider>;
+  return <LocalizationProvider catalogs={catalogs} initialLanguage='zhs' defaultLanguage='zhs' supportedLanguages={[{ code: 'zhs', displayName: '中文', locale: 'zh-CN' }, { code: 'en', displayName: 'English', locale: 'en-US' }]}><FeatureWorkbench {...props} /></LocalizationProvider>;
 }

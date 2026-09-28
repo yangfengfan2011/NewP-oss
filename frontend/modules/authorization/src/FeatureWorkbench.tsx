@@ -3,6 +3,7 @@ import { Alert, Button, Card, Checkbox, Flex, Input, List, Modal, Pagination, Sp
 import useMessage from "antd/es/message/useMessage";
 import { formatRequestError, platformFetch, useAuthorization, useLocalization } from "@icp-platform/core";
 import { StandardCrudRequestError, type PageProps } from "@icp-platform/sdk";
+import { AntdLocaleProvider } from '@icp-platform/ui/locale';
 import { requestRole } from "./roleResource";
 import { buildFeatureTree, changeBranch, featureDiff, featureTreeKeys, type FeaturePoint } from "./featureTree";
 
@@ -115,7 +116,7 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
     if (dirty) setSwitchTarget(id); else void loadRole(id);
   };
 
-  return <div style={{ padding: 24 }}>
+  return <AntdLocaleProvider><div style={{ padding: 24 }}>
     <Typography.Title level={3}>{t('RoleView.WorkbenchTitle', '功能授权')}</Typography.Title>
     <Typography.Paragraph type="secondary">{t('RoleView.WorkbenchHelp', '选择角色，按入口位置配置功能。保存一次提交该角色的完整授权集合。')}</Typography.Paragraph>
     {!!error && <Alert type="error" message={formatRequestError(error, t)} showIcon style={{ marginBottom: 16 }} />}
@@ -164,5 +165,5 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
       <Button key="discard" disabled={saving} onClick={() => { const target = switchTarget!; setSwitchTarget(undefined); void loadRole(target); }}>{t('RoleView.DiscardSwitch', '放弃并切换')}</Button>,
       <Button key="save" type="primary" disabled={missingEntries.length > 0} loading={saving} onClick={async () => { if (await save()) { const target = switchTarget!; setSwitchTarget(undefined); await loadRole(target); } }}>{t('RoleView.SaveSwitch', '保存并切换')}</Button>,
     ]}>{t('RoleView.SaveFailureHelp', '保存失败会保留当前角色及草稿。')}</Modal>
-  </div>;
+  </div></AntdLocaleProvider>;
 }

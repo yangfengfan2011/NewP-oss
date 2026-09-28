@@ -2,6 +2,7 @@ import { expect, it } from 'vitest';
 import { formatFieldError, formatRequestError, formatTextTemplate } from '@icp-platform/core';
 import { readStandardCrudRequestError, StandardCrudRequestError } from '@icp-platform/sdk';
 import sharedErrors from '../../../../../modules/Platform/metadata/dictionaries/StandardCrud.dic.json';
+import platformDictionary from '../../../../../modules/Platform/metadata/dictionaries/Platform.dic.json';
 
 const catalog: Record<string, string> = {
   'Platform.UnexpectedError': 'Please try again.',
@@ -9,6 +10,7 @@ const catalog: Record<string, string> = {
   'Platform.Forbidden': 'Permission denied.',
   'Platform.MutationConflict': 'The record has changed.',
   'Platform.ValidationFailed': 'Check the fields.',
+  'Platform.Diagnostics': 'Diagnostic details',
   'Authentication.AdmissionDenied': 'Sign-in denied: {reason}.',
   AUTH_ADMISSION_DENIED: 'Account cannot sign in: {reason}.',
   CREDENTIAL_CONFLICT: 'Credential conflict: {reason}.',
@@ -47,7 +49,7 @@ it.each([
   const error = new StandardCrudRequestError('raw diagnostic', Number(status), {}, {
     code: 'Unregistered.Code', reasonKey: 'Unregistered.Reason', args: { reason: 'raw detail' },
   });
-  expect(formatRequestError(error, t)).toBe(expected);
+  expect(formatRequestError(error, t)).toBe(`${expected} Diagnostic details: code=Unregistered.Code`);
 });
 
 it('keeps unknown field errors on the field-validation fallback', () => {
@@ -99,4 +101,61 @@ it.each([
   const translate = (key: string, fallback?: string) =>
     key === code ? sharedErrors.StandardCrud.ShortTextNotNormalized[locale] : fallback ?? '';
   expect(formatRequestError(error, translate)).toBe(expected);
+});
+
+it('presents existing public identifiers from a real unknown response without exposing or changing diagnostic facts', async () => {
+  const problem = {
+    code: 'UNREGISTERED_FAILURE', reasonKey: 'Unregistered.Reason', traceId: 'trace-public-123',
+    message: 'private message', detail: 'private detail', stack: 'private stack',
+    args: { private: 'private argument' }, fieldErrors: [{ field: 'ENAME', code: 'Unknown.Field', message: 'private field message' }],
+  };
+  const error = await readStandardCrudRequestError(new Response(JSON.stringify(problem), { status: 500 }));
+  const originalProblem = error.responseProblem;
+  const originalArgs = error.args;
+  const originalFields = error.fieldErrorDetails;
+  expect(formatRequestError(error, t)).toBe('Check the fields. Diagnostic details: code=UNREGISTERED_FAILURE; traceId=trace-public-123');
+  expect(error.code).toBe(problem.code);
+  expect(error.status).toBe(500);
+  expect(error.message).toBe(problem.message);
+  expect(error.responseProblem).toBe(originalProblem);
+  expect(error.args).toBe(originalArgs);
+  expect(error.fieldErrorDetails).toBe(originalFields);
+});
+
+it.each([
+  [{ traceId: 'trace-only' }, 'Please try again. Diagnostic details: traceId=trace-only'],
+  [{ traceId: 123, message: 'private message' }, 'Please try again.'],
+  [{ traceId: {}, detail: 'private detail' }, 'Please try again.'],
+  [{ traceId: '   ', stack: 'private stack' }, 'Please try again.'],
+  [null, 'Please try again.'],
+  [[{ traceId: 'nested trace' }], 'Please try again.'],
+])('uses only a nonempty string traceId from a structured problem: %j', (problem, expected) => {
+  const error = new StandardCrudRequestError('private diagnostic', 500, {}, {}, problem);
+  expect(formatRequestError(error, t)).toBe(expected);
+});
+
+it('keeps registered prompts unchanged even when public identifiers are present', () => {
+  const error = new StandardCrudRequestError('private diagnostic', 401, {}, {
+    code: 'AUTH_ADMISSION_DENIED', reasonKey: 'Authentication.AdmissionDenied', args: { reason: 'inactive personnel' },
+  }, { traceId: 'known-trace' });
+  expect(formatRequestError(error, t)).toBe('Sign-in denied: inactive personnel.');
+});
+
+it.each(['zhs', 'en'] as const)('uses the current-language authoring prompt and diagnostic label while retaining technical IDs in %s', locale => {
+  const translate = (key: string, fallback?: string, args?: Record<string, unknown>) => {
+    const catalog = Object.fromEntries(Object.entries(platformDictionary.Platform).map(([name, values]) => [`Platform.${name}`, values[locale]]));
+    return formatTextTemplate(catalog[key] ?? fallback ?? '', args);
+  };
+  const problem = { traceId: 'public-trace', detail: 'private detail' };
+  const error = new StandardCrudRequestError('private message', 500, {}, { code: 'UNKNOWN_CODE' }, problem);
+  expect(formatRequestError(error, translate)).toBe(`${platformDictionary.Platform.UnexpectedError[locale]} ${platformDictionary.Platform.Diagnostics[locale]}: code=UNKNOWN_CODE; traceId=public-trace`);
+});
+
+it('rejects malformed or empty public code fields without falling back to private diagnostic content', async () => {
+  for (const code of [42, {}, [], '   ']) {
+    const problem = { code, traceId: null, message: 'private message', detail: 'private detail', stack: 'private stack' };
+    const error = await readStandardCrudRequestError(new Response(JSON.stringify(problem), { status: 500 }));
+    expect(formatRequestError(error, t)).toBe('Please try again.');
+    expect(error.responseProblem).toEqual(problem);
+  }
 });

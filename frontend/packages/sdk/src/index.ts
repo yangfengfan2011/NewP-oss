@@ -200,6 +200,7 @@ export {
   createStandardCrudRestDataAdapter,
   createStandardCrudRestLookupProvider,
   StandardCrudRequestError,
+  readStandardCrudRequestError,
 } from './standardCrudRest';
 export type { StandardCrudFieldErrorFact, StandardCrudProblemFact } from './standardCrudRest';
 

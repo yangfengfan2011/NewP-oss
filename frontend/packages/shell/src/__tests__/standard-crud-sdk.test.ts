@@ -9,9 +9,40 @@ import {
   readStandardCrudBoolean,
   readStandardCrudString,
   StandardCrudRequestError,
+  readStandardCrudRequestError,
 } from '@icp-platform/sdk';
 
 describe('standard CRUD SDK helpers', () => {
+  it('shares the real Response parser with authentication without consuming the response body', async () => {
+    const problem = {
+      code: 'AUTH_ADMISSION_DENIED', reasonKey: 'Authentication.AdmissionDenied', args: { reason: 'inactive' },
+      message: 'server diagnostic', errors: { NewPassword: ['CREDENTIAL_CONFLICT', 'PASSWORD_INVALID'] },
+      fieldErrors: [{ field: 'CurrentPassword', code: 'CREDENTIAL_INVALID', reasonKey: 'Authentication.InvalidCredential', args: { attempts: 2 }, message: 'field diagnostic' }],
+    };
+    const response = new Response(JSON.stringify(problem), { status: 401, headers: { 'Content-Type': 'application/problem+json' } });
+    const error = await readStandardCrudRequestError(response, 'fallback diagnostic');
+    expect(error).toBeInstanceOf(StandardCrudRequestError);
+    expect(error).toMatchObject({ status: 401, code: problem.code, reasonKey: problem.reasonKey,
+      args: problem.args, fieldErrorDetails: problem.fieldErrors, responseProblem: problem,
+      fieldErrors: { CurrentPassword: 'field diagnostic', NewPassword: 'CREDENTIAL_CONFLICT' }, message: problem.message });
+    expect(response.bodyUsed).toBe(false);
+    expect(await response.json()).toEqual(problem);
+  });
+
+  it('preserves Identity field error codes through the same response parser', async () => {
+    const problem = { code: 'CREDENTIAL_INVALID', errors: { CurrentPassword: ['CREDENTIAL_INVALID'] } };
+    const error = await readStandardCrudRequestError(new Response(JSON.stringify(problem), { status: 409 }));
+    expect(error).toMatchObject({ status: 409, code: problem.code,
+      fieldErrorDetails: [{ field: 'CurrentPassword', code: 'CREDENTIAL_INVALID', message: 'CREDENTIAL_INVALID' }], responseProblem: problem });
+  });
+
+  it('uses only the diagnostic fallback for an unreadable response body', async () => {
+    const response = new Response('upstream unavailable', { status: 503 });
+    const error = await readStandardCrudRequestError(response, 'request diagnostic');
+    expect(error).toMatchObject({ status: 503, message: 'request diagnostic', fieldErrors: {}, fieldErrorDetails: [] });
+    expect(response.bodyUsed).toBe(false);
+  });
+
   it('passes an explicit feature position per standard request without contaminating concurrent reads', async () => {
     const calls: Array<RequestInit | undefined> = [];
     const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {

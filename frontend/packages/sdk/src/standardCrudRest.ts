@@ -71,51 +71,59 @@ export function buildStandardCrudPath(
   return suffix.length > 0 ? `${apiRoute}?${suffix}` : apiRoute;
 }
 
+/** 从真实响应提取现有错误事实；保留原响应正文供诊断，不在传输层翻译。 */
+export async function readStandardCrudRequestError(
+  response: Response,
+  fallbackDiagnostic = 'Request failed',
+): Promise<StandardCrudRequestError> {
+  let problem: { message?: unknown; title?: unknown; errors?: unknown; fieldErrors?: unknown; code?: unknown; reasonKey?: unknown; args?: unknown } = {};
+  try {
+    problem = await response.clone().json() as typeof problem;
+  } catch {
+    problem = {};
+  }
+  const legacyFieldErrors = typeof problem.errors === 'object' && problem.errors !== null && !Array.isArray(problem.errors)
+    ? Object.fromEntries(Object.entries(problem.errors).flatMap(([key, value]) => {
+      if (typeof value === 'string') return [[key, value]];
+      if (Array.isArray(value) && typeof value[0] === 'string') return [[key, value[0]]];
+      return [];
+    }))
+    : {};
+  const standardFieldErrors = Array.isArray(problem.fieldErrors)
+    ? Object.fromEntries(problem.fieldErrors.flatMap((value) => {
+      if (!isStandardCrudRecord(value)) return [];
+      return typeof value.field === 'string' && typeof value.message === 'string'
+        ? [[value.field, value.message]]
+        : [];
+    }))
+    : {};
+  const fieldErrors = { ...legacyFieldErrors, ...standardFieldErrors };
+  const backendMessage = typeof problem.message === 'string' && problem.message.trim().length > 0
+      ? problem.message
+      : typeof problem.title === 'string' && problem.title.trim().length > 0
+        ? problem.title
+        : fallbackDiagnostic;
+  const fieldErrorDetails: StandardCrudFieldErrorFact[] = Array.isArray(problem.fieldErrors)
+    ? problem.fieldErrors.flatMap(value => isStandardCrudRecord(value) && typeof value.field === 'string'
+      ? [{ field: value.field,
+          ...(typeof value.code === 'string' ? { code: value.code } : {}),
+          ...(typeof value.reasonKey === 'string' ? { reasonKey: value.reasonKey } : {}),
+          ...(isStandardCrudRecord(value.args) ? { args: value.args } : {}),
+          ...(typeof value.message === 'string' ? { message: value.message } : {}) }]
+      : [])
+    : Object.entries(legacyFieldErrors).map(([field, code]) => ({ field, code, message: code }));
+  return new StandardCrudRequestError(backendMessage, response.status, fieldErrors, {
+    ...(typeof problem.code === 'string' ? { code: problem.code } : {}),
+    ...(typeof problem.reasonKey === 'string' ? { reasonKey: problem.reasonKey } : {}),
+    ...(isStandardCrudRecord(problem.args) ? { args: problem.args } : {}),
+    fieldErrors: fieldErrorDetails,
+  }, problem);
+}
+
 async function requestJson<T>(fetcher: typeof fetch, path: string, init: RequestInit, errorMessage: string): Promise<T> {
   const response = await fetcher(path, init);
   if (!response.ok) {
-    let problem: { message?: unknown; title?: unknown; errors?: unknown; fieldErrors?: unknown; code?: unknown; reasonKey?: unknown; args?: unknown } = {};
-    try {
-      problem = await response.clone().json() as typeof problem;
-    } catch {
-      problem = {};
-    }
-    const legacyFieldErrors = typeof problem.errors === 'object' && problem.errors !== null && !Array.isArray(problem.errors)
-      ? Object.fromEntries(Object.entries(problem.errors).flatMap(([key, value]) => {
-        if (typeof value === 'string') return [[key, value]];
-        if (Array.isArray(value) && typeof value[0] === 'string') return [[key, value[0]]];
-        return [];
-      }))
-      : {};
-    const standardFieldErrors = Array.isArray(problem.fieldErrors)
-      ? Object.fromEntries(problem.fieldErrors.flatMap((value) => {
-        if (!isStandardCrudRecord(value)) return [];
-        return typeof value.field === 'string' && typeof value.message === 'string'
-          ? [[value.field, value.message]]
-          : [];
-      }))
-      : {};
-    const fieldErrors = { ...legacyFieldErrors, ...standardFieldErrors };
-    const backendMessage = typeof problem.message === 'string' && problem.message.trim().length > 0
-        ? problem.message
-        : typeof problem.title === 'string' && problem.title.trim().length > 0
-          ? problem.title
-          : errorMessage;
-    const fieldErrorDetails: StandardCrudFieldErrorFact[] = Array.isArray(problem.fieldErrors)
-      ? problem.fieldErrors.flatMap(value => isStandardCrudRecord(value) && typeof value.field === 'string'
-        ? [{ field: value.field,
-            ...(typeof value.code === 'string' ? { code: value.code } : {}),
-            ...(typeof value.reasonKey === 'string' ? { reasonKey: value.reasonKey } : {}),
-            ...(isStandardCrudRecord(value.args) ? { args: value.args } : {}),
-            ...(typeof value.message === 'string' ? { message: value.message } : {}) }]
-        : [])
-      : Object.entries(legacyFieldErrors).map(([field, code]) => ({ field, code, message: code }));
-    throw new StandardCrudRequestError(backendMessage, response.status, fieldErrors, {
-      ...(typeof problem.code === 'string' ? { code: problem.code } : {}),
-      ...(typeof problem.reasonKey === 'string' ? { reasonKey: problem.reasonKey } : {}),
-      ...(isStandardCrudRecord(problem.args) ? { args: problem.args } : {}),
-      fieldErrors: fieldErrorDetails,
-    }, problem);
+    throw await readStandardCrudRequestError(response, errorMessage);
   }
 
   if (response.status === 204) {

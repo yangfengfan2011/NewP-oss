@@ -16,6 +16,7 @@ import DataScopeSubjectTable from './DataScopeSubjectTable';
 import './dataScopeRules.css';
 import { orderDataScopeSubjects, rankDataScopeSubjects } from './dataScopeSubjectOrder';
 import { dataScopeLabels, loadDataScopeViewLabels, type DataScopeViewLabels } from './dataScopeLabels';
+import { AntdLocaleProvider } from '@icp-platform/ui/locale';
 
 type Subject = DataScopeSubject;
 interface Rule { id: string; rootId: string; parentId: string | null; name: string; enabled: boolean; resourceKey: string;
@@ -230,7 +231,7 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
     if (key === 'sibling') addSibling();
     if (key === 'delete') setDeleteRoot(true);
   } };
-  return <div className="data-scope-page">
+  return <AntdLocaleProvider><div className="data-scope-page">
     {messageHolder}
     {!!error && <Alert type="error" showIcon message={errorMessage} style={{ marginBottom: 16 }} />}
     <Spin spinning={loading}>
@@ -317,5 +318,5 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
     }} okText={selected?.parentId ? t('DataScope.DeleteNode', '删除节点') : t('DataScope.DeleteRoot', '删除整棵根树')} okButtonProps={{ danger: true, loading: saving }} cancelText={t('DataScope.Cancel', '取消')}>
       {selected?.parentId ? t('DataScope.DeleteNodeHelp', '当前节点及全部子规则将从草稿中删除，保存根规则后生效。') : t('DataScope.DeleteRootHelp', '根规则及全部子节点会立即删除并记录审计。')}
     </Modal>
-  </div>;
+  </div></AntdLocaleProvider>;
 }

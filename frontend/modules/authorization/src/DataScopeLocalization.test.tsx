@@ -13,6 +13,8 @@ import DataScopeRulesPage from './DataScopeRulesPage';
 import { dataScopeLabels, loadDataScopeViewLabels } from './dataScopeLabels';
 
 const fetcher = vi.hoisted(() => vi.fn());
+// 与 Vite 使用同一 AntD ESM Context，检查实装内建空状态。
+vi.mock('antd', async () => await import('antd/es'));
 vi.mock('@icp-platform/core', async importOriginal => ({ ...await importOriginal<object>(),
   platformFetch: fetcher, useAuthorization: () => ({ hasFeature: () => true }) }));
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -23,6 +25,40 @@ const dictionary = JSON.parse(personDictionary).PersonListView as Record<string,
 const catalogs = Object.fromEntries(['zhs', 'en'].map(language => [language,
   Object.fromEntries(Object.entries({ ...Object.fromEntries(Object.entries(dictionary).map(([k,v]) => [`PersonListView.${k}`, v])), ...Object.fromEntries(Object.entries(JSON.parse(dataScopeDictionary).DataScope).map(([k,v]) => [`DataScope.${k}`, v])) }).map(([key, values]) => [key, (values as Record<string,string>)[language]])),
 ]));
+
+it('switches the real Select empty state inside the open condition drawer without losing the rule draft', async () => {
+  const rule = { id: 'rule', rootId: 'rule', parentId: null, name: '业务规则', enabled: true, resourceKey: 'custom.record',
+    condition: { type: 'attribute', field: 'RawField', operator: 'equal', value: 'draft-value' }, subjects: [], children: [] };
+  fetcher.mockImplementation(async (url: string) => new Response(JSON.stringify(url.includes('/plugins/') ? { modules: [] }
+    : url.endsWith('/catalog') ? { actions: [], features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
+      resources: [{ resource: { resourceKey: 'custom.record', modelKey: 'Custom/Record', modelName: 'Record' }, fields: [] }] } : [rule])));
+  let setLanguage!: (language: string) => void;
+  function Driver() { setLanguage = useLocalization().setLanguage; return null; }
+  const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+  try {
+    await act(async () => root.render(<LocalizationProvider initialLanguage="zhs" defaultLanguage="zhs" catalogs={catalogs}
+      supportedLanguages={[{ code: 'zhs', displayName: '中文', locale: 'zh-CN' }, { code: 'en', displayName: 'English', locale: 'en-US' }]}>
+      <Driver /><DataScopeRulesPage input={{ parameters: { featurePosition: 'read' } }} reportState={() => {}} /></LocalizationProvider>));
+    await act(async () => container.querySelector<HTMLElement>('.ant-tree-title')!.click());
+    await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '编辑')!.click());
+    const drawer = document.querySelector('.ant-drawer');
+    const input = drawer!.querySelector<HTMLInputElement>('[aria-label="固定值"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'unconfirmed');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => drawer!.querySelector('[aria-label="直接属性"]')!.closest('.ant-select')!.querySelector('.ant-select-selector')!
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true })));
+    expect(document.querySelector('.ant-select-dropdown .ant-empty-description')?.textContent).toBe('暂无数据');
+    await act(async () => setLanguage('en'));
+    expect(document.querySelector('.ant-select-dropdown .ant-empty-description')?.textContent).toBe('No data');
+    expect(document.querySelector('.ant-drawer')).toBe(drawer);
+    expect(drawer!.querySelector('[aria-label="Fixed value"]')).toBe(input);
+    expect(input.value).toBe('unconfirmed');
+    expect(container.textContent).toContain('业务规则');
+    expect(fetcher.mock.calls.some(call => call[1]?.method === 'PUT')).toBe(false);
+  } finally { await act(async () => root.unmount()); container.remove(); localStorage.clear(); vi.clearAllMocks(); }
+});
 
 it('uses real dic labels in resources, fields and ancestor summaries, switches language and saves raw field keys', async () => {
   let finishSave!: (response: Response) => void;

@@ -12,11 +12,28 @@ public sealed class DataActionCatalogTests
         using var document = JsonDocument.Parse("""{"dataActions":[{"key":"read","title":"读取","requiresRead":false,"behaviorKey":"data.read"},{"key":"edit","title":"编辑","enabled":false,"requiresRead":true,"behaviorKey":"data.edit"}]}""");
         var declarations = DataActionCatalogCompiler.Read(document.RootElement, "Authorization");
         var catalog = DataActionCatalogCompiler.Compile(declarations);
+        Assert.Equal(new[] { "read", "edit" }, catalog.Select(action => action.Key));
         Assert.True(catalog.Single(action => action.Key == "read").Enabled);
         Assert.False(catalog.Single(action => action.Key == "edit").Enabled);
         Assert.Throws<InvalidOperationException>(() => DataActionCatalogCompiler.Compile(declarations.Concat(declarations)));
     }
 
+    [Fact]
+    public void FormalPlan_PreservesRealActionOrderAndTracksReordering()
+    {
+        var candidates = new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")).ToArray();
+        var compiler = new CanonicalModulePlanCompiler();
+        var original = compiler.Compile("order", candidates);
+        Assert.True(original.IsSuccess);
+        Assert.Equal(new[] { "read", "create", "edit", "delete", "authorize" },
+            original.Plan!.DataActionCatalog.Select(action => action.Key));
+        var reversed = compiler.Compile("order", candidates.Select(candidate =>
+            candidate with { DataActions = candidate.DataActions.Reverse().ToArray() }));
+        Assert.True(reversed.IsSuccess);
+        Assert.Equal(original.Plan.DataActionCatalog.Select(action => action.Key).Reverse(),
+            reversed.Plan!.DataActionCatalog.Select(action => action.Key));
+        Assert.NotEqual(original.Plan.PlanHash, reversed.Plan.PlanHash);
+    }
     [Fact]
     public void FormalPlan_UsesAuthoringSwitchAndIncludesItInCandidateIdentity()
     {

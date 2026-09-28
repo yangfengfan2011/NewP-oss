@@ -23,7 +23,7 @@ public static class DataActionCatalogCompiler
     /// <summary>校验全局身份和执行绑定；禁用动作仍保留在结果中。</summary>
     public static IReadOnlyList<DataActionDeclaration> Compile(IEnumerable<DataActionDeclaration> declarations)
     {
-        var actions = declarations.OrderBy(action => action.Key, StringComparer.Ordinal).ToArray();
+        var actions = declarations.ToArray();
         if (actions.Any(action => string.IsNullOrWhiteSpace(action.ModuleId) || string.IsNullOrWhiteSpace(action.Key)
             || string.IsNullOrWhiteSpace(action.Title) || string.IsNullOrWhiteSpace(action.BehaviorKey))
             || actions.GroupBy(action => action.Key, StringComparer.Ordinal).Any(group => group.Count() > 1)

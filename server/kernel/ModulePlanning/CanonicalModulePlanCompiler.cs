@@ -377,7 +377,7 @@ public sealed class CanonicalModulePlanCompiler
             Sort(candidate.FrontendBindingReferences),
             Sort(candidate.ModelKeys),
             provenance,
-            NormalizePersistence(candidate.Persistence)) { Features = candidate.Features.OrderBy(node => node.Key, StringComparer.Ordinal).ToArray(), DataActions = candidate.DataActions.OrderBy(action => action.Key, StringComparer.Ordinal).ToArray() };
+            NormalizePersistence(candidate.Persistence)) { Features = candidate.Features.OrderBy(node => node.Key, StringComparer.Ordinal).ToArray(), DataActions = candidate.DataActions.ToArray() };
     }
 
     private static ModulePersistenceContribution? NormalizePersistence(ModulePersistenceContribution? persistence)

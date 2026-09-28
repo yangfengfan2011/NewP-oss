@@ -253,7 +253,7 @@ public sealed class ModulePlanProvenance
             frontendBindings = Sort(frontendBindings),
             frontendBindingReferences = Sort(frontendBindingReferences),
             modelKeys = Sort(modelKeys),
-            dataActions = dataActions.OrderBy(action => action.Key, StringComparer.Ordinal).ToArray(),
+            dataActions = dataActions.ToArray(),
             features = features.OrderBy(node => node.Key, StringComparer.Ordinal).ToArray(),
             persistence = persistence is null
                 ? null

@@ -778,6 +778,6 @@ describe('organization person center list layout', () => {
       isEnabled: false,
       reason: '人员中心停用人员',
     }, 'ui-fixture:list.rowActions:disable');
-    expect(container.textContent).toContain('停用人员失败');
+    expect(document.querySelector('.ant-message')?.textContent).toContain('停用人员失败');
   });
 });

@@ -986,7 +986,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     expect(listRequestCount).toBe(2);
   });
 
-  it('删除失败只在对应行展示错误，不刷新列表，且保留当前行详情抽屉', async () => {
+  it('删除失败只显示一次全局提示，不刷新列表，且保留当前行详情抽屉', async () => {
     const resource = organizationModule.standardCrudResources?.[0];
     if (!resource) {
       throw new Error('未找到人员标准 CRUD 资源。');
@@ -1057,9 +1057,9 @@ describe('人员中心 CRUD Pro 样板', () => {
 
     const firstRow = findTableRowByText(container, '张三');
     const secondRow = findTableRowByText(container, '李四');
-    expect(firstRow?.textContent).toContain('删除张三失败');
+    expect(firstRow?.textContent).not.toContain('删除张三失败');
     expect(secondRow?.textContent).not.toContain('删除张三失败');
-    expect(Array.from(container.querySelectorAll('[role="alert"]')).filter((item) => item.textContent?.includes('删除张三失败'))).toHaveLength(1);
+    expect(Array.from(document.querySelectorAll('.ant-message-notice-content')).filter((item) => item.textContent?.includes('删除张三失败'))).toHaveLength(1);
     expect(listRequestCount).toBe(1);
     expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('查看人员');
     expect(document.body.textContent).toContain('查看人员');
@@ -1107,7 +1107,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     await clickPopconfirmButton('确认');
     await flushAsync();
 
-    expect(container.textContent).toContain('当前人员已绑定账号，不能删除。');
+    expect(document.querySelector('.ant-message')?.textContent).toContain('当前人员已绑定账号，不能删除。');
   });
 
   it('删除等待期间打开其他记录详情后，成功回调不会误关新抽屉', async () => {

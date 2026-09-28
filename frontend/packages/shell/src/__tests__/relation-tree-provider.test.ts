@@ -18,7 +18,7 @@ it.each(['roots', 'children', 'path', 'search'] as const)('preserves missing/err
   fetchMock.mockResolvedValueOnce({ ok: false, status: 404 });
   await expect(request()).rejects.toBeInstanceOf(TreeNodeNotFoundError);
   fetchMock.mockResolvedValueOnce({ ok: false, status: 500 });
-  await expect(request()).rejects.toThrow('500');
+  await expect(request()).rejects.toMatchObject({ status: 500 });
   const cancelled = new DOMException('Cancelled', 'AbortError'); fetchMock.mockRejectedValueOnce(cancelled);
   await expect(request()).rejects.toBe(cancelled);
 });
@@ -67,7 +67,7 @@ it('rejects missing scope before network I/O and distinguishes missing nodes fro
   fetchMock.mockResolvedValueOnce({ status: 404, ok: false });
   await expect(provider.path(scope, 'missing')).rejects.toBeInstanceOf(TreeNodeNotFoundError);
   fetchMock.mockResolvedValueOnce({ status: 403, ok: false });
-  await expect(provider.path(scope, 'forbidden')).rejects.toThrow('403');
+  await expect(provider.path(scope, 'forbidden')).rejects.toMatchObject({ status: 403 });
 });
 
 it('reconciles filtered trees through server reads rather than guessing database membership', async () => {

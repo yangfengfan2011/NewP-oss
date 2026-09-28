@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { createRoot } from 'react-dom/client';
+import { createLocalizedRoot as createRoot } from './localizedTestRoot';
 import { createMemoryRouter, Outlet, RouterProvider } from 'react-router-dom';
 import { expect, it, vi } from 'vitest';
 import { ModuleRegistry } from '@icp-platform/sdk';

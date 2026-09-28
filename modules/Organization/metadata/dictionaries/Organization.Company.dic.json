@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "Organization.Company": {
+    "CodeRequired": {
+      "zhs": "请填写公司编码。",
+      "en": "Enter a company code."
+    },
+    "NameRequired": {
+      "zhs": "请填写公司名称。",
+      "en": "Enter a company name."
+    },
+    "SortOrderRequired": {
+      "zhs": "请填写排序码。",
+      "en": "Enter a sort order code."
+    },
+    "CodeDuplicated": {
+      "zhs": "公司编码必须全局唯一。",
+      "en": "Company codes must be unique across the organization."
+    },
+    "NameDuplicated": {
+      "zhs": "公司名称必须全局唯一。",
+      "en": "Company names must be unique across the organization."
+    },
+    "SortOrderInvalid": {
+      "zhs": "排序码必须为 1 至 32 位 ASCII 数字。",
+      "en": "The sort order code must contain 1 to 32 ASCII digits."
+    },
+    "DeleteBlockedByReference": {
+      "zhs": "该公司仍被部门或人员引用，不能删除。",
+      "en": "This company is referenced by a department or person and cannot be deleted."
+    },
+    "InvalidId": {
+      "zhs": "公司标识无效。",
+      "en": "The company ID is invalid."
+    }
+  }
+}

@@ -27,7 +27,7 @@ it.each(['restore', 'offline', 'missing', 'search-moved', 'search-deleted', 'sta
     await act(async () => root.render(<RouterProvider router={router} />));
     for (let i = 0; i < 50 && !container.querySelector('aside'); i++) await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
     if (scenario === 'empty') { expect(container.textContent).toContain('暂无节点'); expect(provider.children).not.toHaveBeenCalled(); return; }
-    if (scenario === 'root-retry') { expect(container.textContent).toContain('roots offline'); expect(container.textContent).not.toContain('暂无节点'); failRoot = false; await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent?.replace(/\s/g, '') === '重试')!.click()); expect(container.querySelector('.ant-tree-node-selected')?.textContent).toBe('c'); return; }
+    if (scenario === 'root-retry') { expect(container.textContent).toContain('树读取失败：操作失败，请稍后重试。'); expect(container.textContent).not.toContain('roots offline'); expect(container.textContent).not.toContain('暂无节点'); failRoot = false; await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent?.replace(/\s/g, '') === '重试')!.click()); expect(container.querySelector('.ant-tree-node-selected')?.textContent).toBe('c'); return; }
     if (scenario === 'branch-retry') { await act(async () => container.querySelector<HTMLElement>('.ant-tree-switcher')!.click()); expect(container.textContent).toContain('分支读取失败'); failBranch = false; await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '重试分支')!.click()); expect(container.textContent).not.toContain('分支读取失败'); expect(container.textContent).toContain('d'); return; }
     if (scenario.startsWith('search') || scenario === 'stale') {
       await act(async () => { const input = container.querySelector('input')!; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'd'); input.dispatchEvent(new Event('input', { bubbles: true })); });
@@ -40,7 +40,7 @@ it.each(['restore', 'offline', 'missing', 'search-moved', 'search-deleted', 'sta
       if (scenario === 'search-moved') expect(provider.children).toHaveBeenCalledWith(expect.anything(), 'other', expect.any(AbortSignal));
       return;
     }
-    if (scenario === 'offline') { expect(container.textContent).toContain('offline'); expect(container.querySelector('.ant-tree-node-selected')).toBeNull(); offline = false; await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '重试定位')!.click()); }
+    if (scenario === 'offline') { expect(container.textContent).toContain('定位读取失败：操作失败，请稍后重试。'); expect(container.textContent).not.toContain('offline'); expect(container.querySelector('.ant-tree-node-selected')).toBeNull(); offline = false; await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '重试定位')!.click()); }
     expect(container.querySelector('.ant-tree-node-selected')?.textContent).toBe(scenario === 'missing' ? 'c' : 'd');
     if (scenario === 'missing') expect(container.textContent).toContain('目标节点已不存在');
     for (let i = 0; i < 50 && !container.textContent?.includes('d:children'); i++) await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });

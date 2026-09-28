@@ -25,10 +25,10 @@ export interface TreeReadLifecycle {
     readonly selected: TreeNodeDescriptor | null;
     readonly expanded: readonly string[];
   };
-  error: string | null;
-  locationError: string | null;
+  error: { failure: unknown; saved: boolean } | null;
+  locationError: unknown;
   locationNotice: string | null;
-  branchErrors: Readonly<Record<string, string>>;
+  branchErrors: Readonly<Record<string, unknown>>;
   /** 树内创建后重建右侧页面实例的身份。 */
   contentEpoch: number;
   select: (nodeKey: string, after?: () => void) => void;
@@ -50,10 +50,10 @@ export function useTreeReadLifecycle({
   const [branches, setBranches] = useState<Record<string, TreeNodeDescriptor[]>>({});
   const [selected, setSelected] = useState<TreeNodeDescriptor | null>(null);
   const [expanded, setExpanded] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [locationError, setLocationError] = useState<string | null>(null);
+  const [error, setError] = useState<TreeReadLifecycle['error']>(null);
+  const [locationError, setLocationError] = useState<unknown>(null);
   const [locationNotice, setLocationNotice] = useState<string | null>(null);
-  const [branchErrors, setBranchErrors] = useState<Record<string, string>>({});
+  const [branchErrors, setBranchErrors] = useState<Record<string, unknown>>({});
   const scopeController = useRef(new AbortController());
   const rootsController = useRef<AbortController>();
   const branchControllers = useRef(new Map<string, AbortController>());
@@ -111,7 +111,7 @@ export function useTreeReadLifecycle({
     } catch (failure) {
       if (signal.aborted) return;
       if (failure instanceof TreeNodeNotFoundError) {
-        setLocationNotice('目标节点已不存在');
+        setLocationNotice('Platform.TreeNodeMissing');
         runtime.leave(() => {
           if (signal.aborted || !activeRef.current) return;
           selectedRef.current = currentRoots[0] ?? null;
@@ -120,7 +120,7 @@ export function useTreeReadLifecycle({
           navigationRef.current?.locate(currentRoots[0]?.nodeKey ?? null, null);
         });
       } else {
-        setLocationError(String(failure));
+        setLocationError(failure);
       }
     }
   }, [provider, runtime, treeScope]);
@@ -148,7 +148,7 @@ export function useTreeReadLifecycle({
       if (target) await readLocation(target, nodes);
       else setSelected(current => current ?? nodes[0] ?? null);
     } catch (failure) {
-      if (!signal?.aborted && !controller.signal.aborted) setError(String(failure));
+      if (!signal?.aborted && !controller.signal.aborted) setError({ failure, saved: false });
     }
   }, [readLocation, provider, treeScope]);
 
@@ -231,7 +231,7 @@ export function useTreeReadLifecycle({
       } catch (failure) {
         if (!scopeSignal.aborted) {
           if (!activeRef.current) return;
-          setError(`已保存，刷新失败：${String(failure)}`);
+          setError({ failure, saved: true });
           throw failure;
         }
       } finally {
@@ -251,7 +251,7 @@ export function useTreeReadLifecycle({
         if (scopeSignal.aborted) return;
         pendingChanges.current.set(unknownChangeKey, { impact: { kind: 'unknown' }, selectCreated: false });
         if (!activeRef.current) return;
-        setError(`已保存，刷新失败：${String(failure)}`);
+        setError({ failure, saved: true });
         throw failure;
       }
       if (scopeSignal.aborted) return;
@@ -266,7 +266,7 @@ export function useTreeReadLifecycle({
       pendingChanges.current.set(key, { impact, affectedParents: [...affectedParents], selectCreated: change.originTreeId === instanceId });
       // 隐藏树只记录失效；激活后的读取负责恢复，不向当前列表报告待同步错误。
       if (impact.kind === 'unknown' && activeRef.current) {
-        setError('已保存，刷新失败：影响范围待确认。');
+        setError({ failure: new Error('树影响范围待确认'), saved: true });
         throw new Error('树影响范围待确认');
       }
     }
@@ -312,7 +312,7 @@ export function useTreeReadLifecycle({
         return next;
       });
     } catch (failure) {
-      if (!signal.aborted) setBranchErrors(current => ({ ...current, [key]: String(failure) }));
+      if (!signal.aborted) setBranchErrors(current => ({ ...current, [key]: failure }));
     }
   };
 

@@ -1,3 +1,4 @@
+import { formatRequestError, useLocalization } from '@icp-platform/core';
 import { lazy, Suspense, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ComponentType, type CSSProperties } from 'react';
 import theme from 'antd/es/theme';
 import { ModuleRegistry, type PageInput, type PageLifecycleState, type PageProps, type PageRef, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
@@ -34,6 +35,7 @@ export function PageEntry({ page }: { page: PageRef }) {
   </div></PageComposition>;
 }
 export function PageOutlet({ page, context, close, navigation, treeNavigation, active = true, featurePlacement }: { featurePlacement?: FeaturePlacement; page: PageRef; context?: PageInput['context']; close?: () => void; navigation?: React.ContextType<typeof PageNavigationContext>; treeNavigation?: TreeNavigation | null; active?: boolean }) {
+  const { t } = useLocalization();
   const runtime = useContext(CompositionContext);
   const parentActive = useContext(PageActivityContext);
   const inheritedPlacement = useContext(FeaturePlacementContext);
@@ -45,9 +47,9 @@ export function PageOutlet({ page, context, close, navigation, treeNavigation, a
     try { return { input: resolvePageInput(page, ModuleRegistry.getAllModules(), context) }; }
     catch (error) { return { error: error instanceof Error ? error.message : String(error) }; }
   }, [context, page]);
-  if (!resolved.input) return <div role="alert">页面配置／上下文错误：{resolved.error}</div>;
+  if (!resolved.input) return <div role="alert">{t('Platform.PageContextInvalid', '页面配置或上下文无效。')}</div>;
   const props: PageProps = { input: resolved.input, reportState, active: parentActive && active };
-  return <FeaturePlacementContext.Provider value={placement}><PageActivityContext.Provider value={props.active!}><TreeNavigationContext.Provider value={treeNavigation ?? null}><PageNavigationContext.Provider value={navigation ?? null}><Suspense fallback={<div role="status">正在加载页面…</div>}>
+  return <FeaturePlacementContext.Provider value={placement}><PageActivityContext.Provider value={props.active!}><TreeNavigationContext.Provider value={treeNavigation ?? null}><PageNavigationContext.Provider value={navigation ?? null}><Suspense fallback={<div role="status">{t('Platform.LoadingPage', '正在加载页面…')}</div>}>
     {page.pageKey === 'platform.tree' ? <TreePage {...props} />
       : page.pageKey === 'platform.tabs' ? <TabPage {...props} />
         : page.pageKey === 'platform.list' || page.pageKey === 'platform.detail'
@@ -56,18 +58,20 @@ export function PageOutlet({ page, context, close, navigation, treeNavigation, a
   </Suspense></PageNavigationContext.Provider></TreeNavigationContext.Provider></PageActivityContext.Provider></FeaturePlacementContext.Provider>;
 }
 function CustomPage({ pageKey, ...props }: PageProps & { pageKey: string }) {
+  const { t } = useLocalization();
   const [component, setComponent] = useState<ComponentType<PageProps> | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   useEffect(() => {
     let active = true;
     const binding = ModuleRegistry.getAllModules().flatMap(module => module.pages ?? []).find(page => page.pageKey === pageKey)!;
-    void binding.load().then(loaded => { if (active) setComponent(() => loaded.default); }, failure => { if (active) setError(String(failure)); });
+    void binding.load().then(loaded => { if (active) setComponent(() => loaded.default); }, failure => { if (active) setError(failure); });
     return () => { active = false; };
   }, [pageKey]);
   const Content = component;
-  return error ? <div role="alert">{error}</div> : Content ? <Content {...props} /> : <div role="status">正在加载页面…</div>;
+  return error != null ? <div role="alert">{formatRequestError(error, t)}</div> : Content ? <Content {...props} /> : <div role="status">{t('Platform.LoadingPage', '正在加载页面…')}</div>;
 }
 function StandardPage({ pageKey, input, reportState, close, active }: PageProps & { pageKey: string; close?: () => void }) {
+  const { t } = useLocalization();
   const metadata = useRuntimeMetadata();
   const runtime = useContext(CompositionContext)!;
   const viewKey = String(input.parameters.viewKey);
@@ -81,7 +85,7 @@ function StandardPage({ pageKey, input, reportState, close, active }: PageProps 
     reportState(state, discard);
   }, [reportState]);
   const [registration, setRegistration] = useState<StandardCrudResourceRegistration | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   useEffect(() => {
     let active = true;
     setRegistration(null); setError(null);
@@ -91,8 +95,8 @@ function StandardPage({ pageKey, input, reportState, close, active }: PageProps 
     const registered = modules.flatMap(module => module.standardCrudResources ?? []).find(resource => resource.listViewKey === listKey);
     const binding = modules.flatMap(module => module.standardCrudCapabilities ?? []).find(item => item.kind === 'standard-list' && item.targetKey === listKey);
     const load = registered ? Promise.resolve({ default: registered }) : binding?.load();
-    if (!load) setError('未找到标准页面资源绑定');
-    else void load.then(result => { if (active) setRegistration(result.default); }, failure => { if (active) setError(String(failure)); });
+    if (!load) setError(new Error('未找到标准页面资源绑定'));
+    else void load.then(result => { if (active) setRegistration(result.default); }, failure => { if (active) setError(failure); });
     return () => { active = false; };
   }, [metadata, pageKey, viewKey]);
   useEffect(() => runtime.subscribe(instanceId, async change => {
@@ -114,8 +118,8 @@ function StandardPage({ pageKey, input, reportState, close, active }: PageProps 
     input: { instanceId, queryScope: input.queryScope, fixedCreateValues: input.fixedCreateValues, recordId: input.recordId },
     presentation: resolveComposedHostPresentation(input.parameters),
   }), [active, close, committed, input, instanceId, refreshVersion, report]);
-  if (error) return <div role="alert">{error}</div>;
-  if (!registration) return <div role="status">正在加载标准资源…</div>;
+  if (error != null) return <div role="alert">{formatRequestError(error, t)}</div>;
+  if (!registration) return <div role="status">{t('Platform.LoadingResource', '正在加载标准资源…')}</div>;
   return <StandardCrudHostEnvironmentContext.Provider value={environment}>
     {pageKey === 'platform.list' ? <ListPage viewKey={viewKey} registration={registration} />
       : <DetailPage viewKey={viewKey} id={input.recordId ?? null} registration={registration} />}

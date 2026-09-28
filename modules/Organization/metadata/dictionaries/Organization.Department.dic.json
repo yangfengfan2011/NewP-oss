@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "Organization.Department": {
+    "CompanyRequired": {
+      "zhs": "请选择所属公司。",
+      "en": "Select a company."
+    },
+    "CodeRequired": {
+      "zhs": "请填写部门编码。",
+      "en": "Enter a department code."
+    },
+    "NameRequired": {
+      "zhs": "请填写部门名称。",
+      "en": "Enter a department name."
+    },
+    "SortOrderRequired": {
+      "zhs": "请填写排序码。",
+      "en": "Enter a sort order code."
+    },
+    "CodeDuplicated": {
+      "zhs": "部门编码在所属公司内必须唯一。",
+      "en": "Department codes must be unique within the company."
+    },
+    "NameDuplicated": {
+      "zhs": "同一上级下的部门名称必须唯一。",
+      "en": "Department names must be unique under the same parent."
+    },
+    "SortOrderInvalid": {
+      "zhs": "排序码必须为 1 至 32 位 ASCII 数字。",
+      "en": "The sort order code must contain 1 to 32 ASCII digits."
+    },
+    "CompanyNotFound": {
+      "zhs": "所属公司不存在。",
+      "en": "The company does not exist."
+    },
+    "CompanyDisabled": {
+      "zhs": "所属公司已停用，不能创建或调整部门归属。",
+      "en": "The company is disabled. A department cannot be created or moved into it."
+    },
+    "ParentNotFound": {
+      "zhs": "上级部门不存在。",
+      "en": "The parent department does not exist."
+    },
+    "ParentCompanyMismatch": {
+      "zhs": "上级部门必须属于同一公司。",
+      "en": "The parent department must belong to the same company."
+    },
+    "ParentDisabled": {
+      "zhs": "上级部门已停用，不能作为新的上级。",
+      "en": "The parent department is disabled and cannot be selected as a new parent."
+    },
+    "ParentChainDisabled": {
+      "zhs": "上级部门或其上级链已停用，不能作为新的上级。",
+      "en": "The parent department or one of its ancestors is disabled and cannot be selected as a new parent."
+    },
+    "ParentSelfReference": {
+      "zhs": "部门不能把自身设为上级。",
+      "en": "A department cannot be its own parent."
+    },
+    "ParentCycle": {
+      "zhs": "上级部门不能是当前部门的后代。",
+      "en": "The parent department cannot be a descendant of this department."
+    },
+    "HierarchyCorrupted": {
+      "zhs": "现有部门层级包含环或断链，不能调整上级。",
+      "en": "The department hierarchy contains a cycle or broken link. Its parent cannot be changed."
+    },
+    "DeleteBlockedByPerson": {
+      "zhs": "该部门仍被人员引用，不能删除。",
+      "en": "This department is referenced by a person and cannot be deleted."
+    },
+    "DeleteBlockedByChild": {
+      "zhs": "该部门仍有子部门，不能删除。",
+      "en": "This department has child departments and cannot be deleted."
+    },
+    "DeleteBlockedByReference": {
+      "zhs": "该部门仍被引用，不能删除。",
+      "en": "This department is still referenced and cannot be deleted."
+    },
+    "InvalidId": {
+      "zhs": "部门标识无效。",
+      "en": "The department ID is invalid."
+    }
+  }
+}

@@ -57,7 +57,7 @@ it.each(['rename', 'exclude', 'retry'])('automatically refreshes a configured fi
     await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === 'Save')!.click());
     if (scenario === 'retry') {
       expect(container.textContent).toContain('已保存，刷新失败');
-      expect(container.textContent).toContain('500');
+      expect(container.textContent).not.toContain('树读取失败 (500)');
       await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent?.replace(/\s/g, '') === '重试读取')!.click());
     } else expect(handoffError).toBeUndefined();
     expect(container.textContent).not.toContain('已保存，刷新失败');

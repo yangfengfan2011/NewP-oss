@@ -1,5 +1,5 @@
 import { platformFetch } from '@icp-platform/core';
-import { TreeNodeNotFoundError } from '@icp-platform/sdk';
+import { readStandardCrudRequestError, TreeNodeNotFoundError } from '@icp-platform/sdk';
 import type { TreeNodeLocation, TreeProviderBinding, TreeView } from '@icp-platform/sdk';
 
 export const relationTreeProviderKey = 'platform.relations';
@@ -16,7 +16,7 @@ export function createRelationTreeProvider(view: TreeView, featurePosition?: str
     const query = new URLSearchParams({ scope: 'global', ...Object.fromEntries(Object.entries(parameters).map(([key, value]) => [key, String(value)])) });
     const response = await platformFetch(`/api/trees/${encodeURIComponent(view.key)}/${operation}?${query}`, { signal, ...(featurePosition ? { headers: { 'X-NewP-Feature': featurePosition } } : {}) });
     if (response.status === 404) throw new TreeNodeNotFoundError('树节点已不存在');
-    if (!response.ok) throw new Error(`树读取失败 (${response.status})`);
+    if (!response.ok) throw await readStandardCrudRequestError(response);
     return response.json() as Promise<T>;
   };
   return {

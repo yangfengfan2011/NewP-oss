@@ -85,12 +85,12 @@ it('treats an unreachable location as missing while keeping read failures visibl
   const tree = await renderLifecycle(provider);
   await act(async () => tree.read().locate('hidden-child'));
   expect(tree.read().snapshot.selected?.nodeKey).toBe('root');
-  expect(tree.read().locationNotice).toBe('目标节点已不存在');
+  expect(tree.read().locationNotice).toBe('Platform.TreeNodeMissing');
   expect(tree.read().locationError).toBeNull();
 
   provider.path = async () => { throw new Error('read plan failed'); };
   await act(async () => tree.read().locate('hidden-child'));
-  expect(tree.read().locationError).toContain('read plan failed');
+  expect(tree.read().locationError).toBeInstanceOf(Error);
   expect(tree.read().snapshot.selected?.nodeKey).toBe('root');
 });
 
@@ -209,7 +209,7 @@ it('keeps activation read failure local to the tree and retries without another 
   expect(tree.read().error).toBeNull();
   provider.roots = vi.fn().mockRejectedValueOnce(new Error('read failed')).mockResolvedValue([node('a')]);
   await tree.rerender({ active: true });
-  expect(tree.read().error).toContain('read failed');
+  expect(tree.read().error).toMatchObject({ saved: true, failure: expect.any(Error) });
   await act(async () => tree.read().retry({ kind: 'tree' }));
   expect(tree.read().error).toBeNull();
   expect(provider.roots).toHaveBeenCalledTimes(2);

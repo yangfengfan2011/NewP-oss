@@ -10,7 +10,7 @@ import Space from 'antd/es/space';
 import PlusOutlined from '@ant-design/icons/PlusOutlined';
 import DownOutlined from '@ant-design/icons/DownOutlined';
 import theme from 'antd/es/theme';
-import { useLocalization } from '@icp-platform/core';
+import { formatRequestError, useLocalization } from '@icp-platform/core';
 import { ModuleRegistry, type PageProps, type PageRef, type TreeNodeDescriptor, type TreeView } from '@icp-platform/sdk';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { CompositionContext, TreeInstanceContext, TreeNavigationContext } from './pageCompositionRuntime';
@@ -45,7 +45,7 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
   const { roots, branches, selected, expanded } = tree.snapshot;
   const data = (nodes: readonly TreeNodeDescriptor[]): DataNode[] => nodes.map(node => {
     const type = view.nodeTypes.find(item => item.key === node.nodeType);
-    const title = <span style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }} title={type ? t(`${view.dicKey}.${type.titleKey}`, type.titleKey) : ''}>{node.label}{node.isEnabled === false ? '（停用）' : ''}</span>;
+    const title = <span style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }} title={type ? t(`${view.dicKey}.${type.titleKey}`, type.titleKey) : ''}>{node.label}{node.isEnabled === false ? t('Platform.TreeDisabledSuffix', '（停用）') : ''}</span>;
     return { key: node.nodeKey, isLeaf: branches[node.nodeKey] ? branches[node.nodeKey].length === 0 : !node.hasChildren,
       title: <Dropdown trigger={['contextMenu']} open={menuNode === node.nodeKey} menu={{ items: (type?.contextMenu ?? []).map(menu => ({ menu, resolution: features.action(menu.key, 'contextMenu', node.nodeType) })).filter(({ resolution }) => !features.placement || resolution.kind === 'allowed').map(({ menu, resolution }) => ({ key: menu.key, label: t(`${view.dicKey}.${menu.labelKey}`, menu.labelKey), onClick: () => tree.select(node.nodeKey, () => { setMenuNode(null); setEditFeature(features.placement ? { ...features.placement, staticScope: node.nodeType, actionPosition: resolvedFeaturePosition(resolution), actionKey: menu.actionKey ?? menu.standardAction } : undefined); setEditContext(node); setEditPage({ pageKey: 'platform.list', parameters: { viewKey: menu.viewKey, presentation: 'drawer', standardAction: menu.standardAction, actionKey: menu.actionKey }, inputResolverKey: menu.inputResolverKey }); }) })) }}
         onOpenChange={open => { if (open) tree.select(node.nodeKey, () => setMenuNode(node.nodeKey)); else setMenuNode(null); }}>{title}</Dropdown>,
@@ -53,34 +53,34 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
   });
   const selectedType = view.nodeTypes.find(type => type.key === selected?.nodeType);
   return <TreeInstanceContext.Provider value={instanceId}><div className="np-tree-workspace">
-    <aside aria-label="结构树" style={{ minWidth: 0 }}>
+    <aside aria-label={t('Platform.TreeStructure', '结构树')} style={{ minWidth: 0 }}>
       <Card size="small" className="np-tree-sidebar-card"
         styles={{ header: { minHeight: 'var(--np-workspace-header-height)', padding: `${token.paddingXXS}px ${token.paddingSM}px` }, body: { padding: token.paddingSM } }}
-        title={view.treeActions?.length ? <Space role="toolbar" aria-label="树操作" size={token.marginXS} style={{ width: '100%' }} wrap>
+        title={view.treeActions?.length ? <Space role="toolbar" aria-label={t('Platform.TreeActions', '树操作')} size={token.marginXS} style={{ width: '100%' }} wrap>
           {view.treeActions.map(action => ({ action, resolution: features.action(action.key, 'treeActions') })).filter(({ resolution }) => !features.placement || resolution.kind === 'allowed').map(({ action, resolution }) => <Button key={action.key} size="small" icon={action.standardAction === 'create' ? <PlusOutlined aria-hidden="true" /> : undefined}
             onClick={() => runtime.leave(() => { setEditContext(undefined); setEditFeature(features.placement ? { ...features.placement, actionPosition: resolvedFeaturePosition(resolution), actionKey: action.actionKey ?? action.standardAction } : undefined); setEditPage({ pageKey: 'platform.list', parameters: { viewKey: action.viewKey, presentation: 'drawer', standardAction: action.standardAction, actionKey: action.actionKey }, inputResolverKey: action.inputResolverKey }); })}>{t(`${view.dicKey}.${action.labelKey}`, action.labelKey)}</Button>)}
         </Space> : undefined}>
       <TreeSearch provider={provider} scope={treeScope} view={view} choose={tree.locate} />
-      {tree.error && <div role="alert">树读取失败：{tree.error}<Button onClick={() => tree.retry({ kind: 'tree' })}>重试</Button></div>}
-      {tree.locationError && <div role="alert">定位读取失败：{tree.locationError}<Button onClick={() => tree.retry({ kind: 'location' })}>重试定位</Button></div>}
-      {tree.locationNotice && <div role="status">{tree.locationNotice}</div>}
-      {Object.entries(tree.branchErrors).map(([key, message]) => <div key={key} role="alert">分支读取失败：{message}<Button onClick={() => tree.retry({ kind: 'branch', nodeKey: key })}>重试分支</Button></div>)}
+      {tree.error && <div role="alert">{tree.error.saved ? t('Platform.SavedRefreshFailed', '已保存，刷新失败。请重新加载。') : t('Platform.TreeReadFailed', '树读取失败：{message}', { message: formatRequestError(tree.error.failure, t) })}<Button onClick={() => tree.retry({ kind: 'tree' })}>{t('Platform.Retry', '重试')}</Button></div>}
+      {tree.locationError != null && <div role="alert">{t('Platform.TreeLocationFailed', '定位读取失败：{message}', { message: formatRequestError(tree.locationError, t) })}<Button onClick={() => tree.retry({ kind: 'location' })}>{t('Platform.TreeRetryLocation', '重试定位')}</Button></div>}
+      {tree.locationNotice && <div role="status">{t(tree.locationNotice, '目标节点已不存在')}</div>}
+      {Object.entries(tree.branchErrors).map(([key, message]) => <div key={key} role="alert">{t('Platform.TreeBranchFailed', '分支读取失败：{message}', { message: formatRequestError(message, t) })}<Button onClick={() => tree.retry({ kind: 'branch', nodeKey: key })}>{t('Platform.TreeRetryBranch', '重试分支')}</Button></div>)}
       <ConfigProvider theme={{ components: { Tree: { titleHeight: token.controlHeight, nodeSelectedBg: token.colorPrimaryBg, nodeSelectedColor: token.colorPrimaryText } } }}>
       <Tree blockNode showLine={{ showLeafIcon: false }} switcherIcon={<DownOutlined aria-hidden="true" />} treeData={data(roots)} selectedKeys={selected ? [selected.nodeKey] : []} expandedKeys={[...expanded]}
         onExpand={keys => tree.expand(keys.map(String))}
         onSelect={keys => { if (keys.length) tree.select(String(keys[0])); }}
         loadData={node => tree.loadBranch(String(node.key))} />
       </ConfigProvider>
-      {!roots.length && !tree.error && <p>暂无节点</p>}
+      {!roots.length && !tree.error && <p>{t('Platform.TreeEmpty', '暂无节点')}</p>}
       </Card>
     </aside>
-    <section aria-label="节点内容" className="np-tree-content">
+    <section aria-label={t('Platform.TreeContent', '节点内容')} className="np-tree-content">
       {selected && <header className="np-tree-context-header">
         <h2>{selected.label}</h2>
         {selectedType && <span>{t(`${view.dicKey}.${selectedType.titleKey}`, selectedType.titleKey)}</span>}
       </header>}
       <div className="np-tree-content-body">
-      {selected && selectedType ? <PageOutlet key={`${selectedType.key}:${tree.contentEpoch}`} page={selectedType.pageRef} featurePlacement={features.placement ? { ...features.placement, staticScope: selectedType.key } : undefined} context={selected} navigation={navigation ? { tabKey: navigation.nodeTab, selectTab: key => runtime.leave(() => navigation.locate(selected.nodeKey, key)) } : null} /> : <p>请选择节点</p>}
+      {selected && selectedType ? <PageOutlet key={`${selectedType.key}:${tree.contentEpoch}`} page={selectedType.pageRef} featurePlacement={features.placement ? { ...features.placement, staticScope: selectedType.key } : undefined} context={selected} navigation={navigation ? { tabKey: navigation.nodeTab, selectTab: key => runtime.leave(() => navigation.locate(selected.nodeKey, key)) } : null} /> : <p>{t('Platform.TreeSelectNode', '请选择节点')}</p>}
       {editPage && <PageOutlet key={`editor:${editContext?.nodeKey ?? "root"}:${String(editPage.parameters?.actionKey ?? editPage.parameters?.standardAction)}`} page={editPage} featurePlacement={editFeature} context={editContext} close={() => setEditPage(null)} />}
       </div>
     </section>

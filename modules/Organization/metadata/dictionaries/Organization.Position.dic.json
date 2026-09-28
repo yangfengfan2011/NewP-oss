@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "Organization.Position": {
+    "NameRequired": {
+      "zhs": "请填写岗位名称。",
+      "en": "Enter a position name."
+    },
+    "NameDuplicated": {
+      "zhs": "岗位名称必须全局唯一。",
+      "en": "Position names must be unique across the organization."
+    },
+    "DeleteBlockedByPersonReference": {
+      "zhs": "该岗位仍被人员引用，不能删除。",
+      "en": "This position is assigned to a person and cannot be deleted."
+    },
+    "InvalidId": {
+      "zhs": "岗位标识无效。",
+      "en": "The position ID is invalid."
+    }
+  }
+}

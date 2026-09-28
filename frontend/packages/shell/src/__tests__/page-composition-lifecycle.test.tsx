@@ -3,13 +3,16 @@ import { act, StrictMode, useEffect, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { createMemoryRouter, Link, RouterProvider, Route, Routes, useNavigate } from 'react-router-dom';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { LocalizationProvider } from '@icp-platform/core';
+import { LocalizationProvider, useLocalization } from '@icp-platform/core';
 import { ModuleRegistry, type PageProps } from '@icp-platform/sdk';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { ShellRouter } from '../navigation/ShellRouter';
 import { PageEntry } from '../composition/PageOutlet';
 
+import { platformTestCatalogs } from './localizationTestCatalogs';
+
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+function SwitchLanguage() { const { setLanguage } = useLocalization(); return <button onClick={() => setLanguage('en')}>English</button>; }
 // 生命周期断言从真实页面模块就绪后开始，不把首次lazy转换耗时计入交互等待。
 beforeAll(async () => {
   await Promise.all([import('../composition/StandardTreePage'), import('../composition/StandardTabPage')]);
@@ -42,7 +45,7 @@ async function render(browser = false, search = '', tree = false) {
   }], 'forms');
   container = document.createElement('div'); document.body.append(container);
   const view = { key: 'tabs', mode: 'tab', dicKey: 'Tabs', defaultTabKey: 'a', tabs: ['a', 'b'].map(key => ({ key, titleKey: key, pageRef: { pageKey: 'form', parameters: { name: key } } })) };
-  const element = <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]} catalogs={{ zhs: {} }}>
+  const element = <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }, { code: 'en', displayName: 'English' }]} catalogs={{ zhs: platformTestCatalogs.zhs, en: { ...platformTestCatalogs.en, 'Tabs.a': 'Information', 'Tabs.b': 'Children', 'Tabs.node': 'Company' } }}><SwitchLanguage />
     <RuntimeMetadataProvider value={{ manifest: { modules: [] }, navDocuments: [], modelDocuments: [], viewDocuments: [{ type: 'view', view },
       { type: 'view', view: { ...view, key: 'other-tabs' } },
       { type: 'view', view: { key: 'tree', mode: 'tree', dicKey: 'Tabs', providerKey: 'tree', nodeTypes: ['node', 'other'].map(key => ({ key, titleKey: key, contextMenu: [{ key: 'edit', labelKey: 'Edit', standardAction: 'edit', viewKey: 'list', inputResolverKey: 'node' }], pageRef: { pageKey: 'platform.tabs', parameters: { viewKey: key === 'node' ? 'tabs' : 'other-tabs' } } })) } },
@@ -172,4 +175,21 @@ describe('whole composition lifecycle', () => {
     window.history.replaceState(null, '', '/');
   });
 
+});
+
+it('retranslates an open tree composition leave dialog while retaining the selected object, tab and draft', async () => {
+  await render(false, '?nodeTab=b', true);
+  await vi.waitFor(async () => { await act(async () => undefined); expect(container.textContent).toContain('b:clean'); });
+  await click('change b');
+  await click('a');
+  expect(document.querySelector('.ant-modal')?.textContent).toContain('放弃未保存的修改');
+  await act(async () => { const language = document.querySelector<HTMLSelectElement>('.ant-modal select')!; language.value = 'en'; language.dispatchEvent(new Event('change', { bubbles: true })); });
+  expect(document.querySelector('.ant-modal')?.textContent).toContain('Discard unsaved changes?');
+  expect(document.querySelector('.ant-modal')?.textContent).toContain('Keep editing');
+  expect(container.querySelector('[role=tab][aria-selected=true]')?.textContent).toBe('Children');
+  expect(container.querySelector('.ant-tree-node-selected')?.textContent).toBe('one');
+  expect(container.querySelector('[aria-label="Structure tree"]')).not.toBeNull();
+  expect(container.textContent).toContain('b:dirty');
+  await click('Keep editing');
+  expect(container.textContent).toContain('b:dirty');
 });

@@ -183,7 +183,9 @@ it('retranslates an open tree composition leave dialog while retaining the selec
   await click('change b');
   await click('a');
   expect(document.querySelector('.ant-modal')?.textContent).toContain('放弃未保存的修改');
-  await act(async () => { const language = document.querySelector<HTMLSelectElement>('.ant-modal select')!; language.value = 'en'; language.dispatchEvent(new Event('change', { bubbles: true })); });
+  expect(document.querySelector('.ant-modal select, .ant-modal [role=combobox]')).toBeNull();
+  await click('English');
+  expect(document.querySelector('.ant-modal select, .ant-modal [role=combobox]')).toBeNull();
   expect(document.querySelector('.ant-modal')?.textContent).toContain('Discard unsaved changes?');
   expect(document.querySelector('.ant-modal')?.textContent).toContain('Keep editing');
   expect(container.querySelector('[role=tab][aria-selected=true]')?.textContent).toBe('Children');

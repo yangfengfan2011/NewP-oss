@@ -5,7 +5,6 @@ import { EntryNavigationProvider } from './navigation/EntryNavigationContext';
 import {
   AuthorizationProvider,
   FirstPasswordChangePage,
-  LocalizationProvider,
   resolveAuthenticationDestination,
 } from '@icp-platform/core';
 import { ModuleRegistry, ShellView, type AuthUser } from '@icp-platform/sdk';
@@ -18,12 +17,7 @@ import { shellAntdTheme } from './config/antdTheme';
 import { shellUiConfig } from './config/uiConfig';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { PlatformProvider } from './contexts/PlatformContext';
-import {
-  getFallbackRuntimeLocalizationManifest,
-  loadRuntimeLocalizationManifest,
-  type RuntimeLocalizationManifest,
-} from './localization/runtimeLocalizationManifest';
-import { PlatformRequestLocaleBridge } from './localization/PlatformRequestLocaleBridge';
+import { AuthenticationFrame, LocalizedBusinessBoundary, RuntimeLocalizationProvider } from './localization/RuntimeLocalizationProvider';
 import { RuntimeMetadataProvider } from './metadata/runtimeMetadataContext';
 import {
   getPreloadedRuntimeMetadata,
@@ -66,7 +60,7 @@ function PasswordChangeRoute() {
   if (!auth.isAuthenticated || !auth.user) return <Navigate to="/login" replace />;
   const destination = resolveAuthenticationDestination(auth.user.mustChangePassword, '/account/change-password');
   return destination === '/account/change-password'
-    ? <FirstPasswordChangePage auth={auth} />
+    ? <AuthenticationFrame><FirstPasswordChangePage auth={auth} /></AuthenticationFrame>
     : <Navigate to={destination} replace />;
 }
 
@@ -135,18 +129,18 @@ function AppRoutes() {
   }, [runtimeMetadata]);
 
   if (!auth.isInitialized || auth.sessionError) {
-    return <AuthenticationSessionBoundary authentication={auth}>{null}</AuthenticationSessionBoundary>;
+    return <AuthenticationFrame><AuthenticationSessionBoundary authentication={auth}>{null}</AuthenticationSessionBoundary></AuthenticationFrame>;
   }
 
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
+      <Route path="/login" element={<AuthenticationFrame><Login /></AuthenticationFrame>} />
       <Route path="/account/change-password" element={<PasswordChangeRoute />} />
       <Route
         path="/"
         element={(
           <ProtectedRoute>
-            <Layout />
+            <LocalizedBusinessBoundary><Layout /></LocalizedBusinessBoundary>
           </ProtectedRoute>
         )}
       >
@@ -217,7 +211,6 @@ function getDefaultShellView(): ShellView {
 
 function App({ initialUser }: { initialUser?: AuthUser }) {
   const [shellViewState, setShellViewState] = useState<ShellView>(getDefaultShellView);
-  const [localizationManifest, setLocalizationManifest] = useState<RuntimeLocalizationManifest | null>(null);
   const [runtimeMetadata, setRuntimeMetadata] = useState<RuntimeMetadataState | null>(
     getPreloadedRuntimeMetadata,
   );
@@ -243,36 +236,6 @@ function App({ initialUser }: { initialUser?: AuthUser }) {
 
     setShellViewState(view);
   };
-
-  useEffect(() => {
-    let disposed = false;
-
-    void loadRuntimeLocalizationManifest()
-      .then((manifest) => {
-        if (disposed) {
-          return;
-        }
-
-        setLocalizationManifest(manifest);
-      })
-      .catch((error) => {
-        if (disposed) {
-          return;
-        }
-
-        // 登录页不能因为运行时本地化清单缺失而整页白屏；
-        // 这里回退到最小语言清单，同时保留告警，方便继续追宿主或运行时投影视图问题。
-        console.warn(
-          'Failed to load runtime localization manifest, falling back to the built-in minimal manifest.',
-          error,
-        );
-        setLocalizationManifest(getFallbackRuntimeLocalizationManifest());
-      });
-
-    return () => {
-      disposed = true;
-    };
-  }, []);
 
   useEffect(() => {
     if (runtimeMetadata) {
@@ -306,22 +269,17 @@ function App({ initialUser }: { initialUser?: AuthUser }) {
     };
   }, [runtimeMetadata]);
 
-  if (!localizationManifest || !runtimeMetadata) {
+  if (!runtimeMetadata) {
     return null;
   }
 
   return (
-    <ShellThemeProvider theme={shellAntdTheme}>
-      <ShellRouter>
-        <LocalizationProvider
-          defaultLanguage={localizationManifest.defaultLanguage}
-          supportedLanguages={localizationManifest.supportedLanguages}
-          catalogs={localizationManifest.catalogs}
-        >
-          <PlatformRequestLocaleBridge>
-            <AuthProvider initialUser={initialUser}>
-              <CurrentPermissionScope>
-                <PlatformProvider
+    <RuntimeLocalizationProvider>
+      <ShellThemeProvider theme={shellAntdTheme}>
+        <ShellRouter>
+          <AuthProvider initialUser={initialUser}>
+            <CurrentPermissionScope>
+              <PlatformProvider
                   uiConfig={shellUiConfig}
                   shellView={shellView}
                   setShellView={setShellView}
@@ -333,12 +291,11 @@ function App({ initialUser }: { initialUser?: AuthUser }) {
                     </AuthorizationGate>
                   </RuntimeMetadataProvider>
                 </PlatformProvider>
-              </CurrentPermissionScope>
-            </AuthProvider>
-          </PlatformRequestLocaleBridge>
-        </LocalizationProvider>
-      </ShellRouter>
-    </ShellThemeProvider>
+            </CurrentPermissionScope>
+          </AuthProvider>
+        </ShellRouter>
+      </ShellThemeProvider>
+    </RuntimeLocalizationProvider>
   );
 }
 

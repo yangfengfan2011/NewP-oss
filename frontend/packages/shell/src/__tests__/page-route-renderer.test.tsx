@@ -1,3 +1,4 @@
+import { TestLocalization } from './TestLocalization';
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -56,11 +57,11 @@ describe('pageRouteRenderer', () => {
 
     await act(async () => {
       root = createRoot(container);
-      root.render(renderPageEntry({
+      root.render(<TestLocalization>{renderPageEntry({
         path: '/x',
         entryType: 'custom',
         targetKey: 'same.page',
-      }));
+      })}</TestLocalization>);
       await Promise.resolve();
     });
 

@@ -1,3 +1,4 @@
+import { useLocalization } from '@icp-platform/core';
 import { Component, ErrorInfo, ReactNode } from 'react';
 
 interface Props {
@@ -30,20 +31,18 @@ export class ErrorBoundary extends Component<Props, State> {
         return this.props.fallback;
       }
 
-      return (
-        <div className="sh-error-boundary">
-          <h2>页面出现错误</h2>
-          <p>{this.state.error?.message}</p>
-          <button
-            className="sh-btn sh-btn-primary"
-            onClick={() => this.setState({ hasError: false })}
-          >
-            重试
-          </button>
-        </div>
-      );
+      return <PageError onRetry={() => this.setState({ hasError: false })} />;
     }
 
     return this.props.children;
   }
+}
+
+export function PageError({ onRetry }: { onRetry: () => void }) {
+  const { t } = useLocalization();
+  return <div className="sh-error-boundary" role="alert">
+    <h2>{t('PlatformShell.PageError', '页面出现错误')}</h2>
+    <p>{t('Platform.UnexpectedError', '操作失败，请稍后重试。')}</p>
+    <button className="sh-btn sh-btn-primary" onClick={onRetry}>{t('PlatformAuthentication.Retry', '重试')}</button>
+  </div>;
 }

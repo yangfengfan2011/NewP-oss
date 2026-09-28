@@ -41,7 +41,8 @@ describe('active module registry commit', () => {
       }),
       setPreloadedRuntimeMetadata: vi.fn(),
     }));
-    vi.doMock('@icp-platform/sdk', () => ({
+    vi.doMock('@icp-platform/sdk', async (importOriginal) => ({
+      ...(await importOriginal<typeof import('@icp-platform/sdk')>()),
       ModuleRegistry: { replaceAll },
     }));
 
@@ -68,7 +69,8 @@ describe('active module registry commit', () => {
       }),
       setPreloadedRuntimeMetadata: vi.fn(),
     }));
-    vi.doMock('@icp-platform/sdk', () => ({
+    vi.doMock('@icp-platform/sdk', async (importOriginal) => ({
+      ...(await importOriginal<typeof import('@icp-platform/sdk')>()),
       ModuleRegistry: { replaceAll },
     }));
 
@@ -111,7 +113,8 @@ describe('active module registry commit', () => {
       }),
       setPreloadedRuntimeMetadata: vi.fn(),
     }));
-    vi.doMock('@icp-platform/sdk', () => ({
+    vi.doMock('@icp-platform/sdk', async (importOriginal) => ({
+      ...(await importOriginal<typeof import('@icp-platform/sdk')>()),
       ModuleRegistry: { replaceAll },
     }));
 
@@ -193,7 +196,8 @@ describe('active module registry commit', () => {
       }),
       setPreloadedRuntimeMetadata: vi.fn(),
     }));
-    vi.doMock('@icp-platform/sdk', () => ({
+    vi.doMock('@icp-platform/sdk', async (importOriginal) => ({
+      ...(await importOriginal<typeof import('@icp-platform/sdk')>()),
       ModuleRegistry: { replaceAll },
     }));
 

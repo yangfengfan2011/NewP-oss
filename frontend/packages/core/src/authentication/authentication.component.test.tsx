@@ -10,6 +10,7 @@ import {
   type AuthenticationBootstrapSnapshot,
   type AuthenticationState,
 } from './index';
+import { LocalizationProvider } from '../localization/LocalizationContext';
 import { invalidatePlatformAntiforgeryToken, platformFetch } from '../http';
 
 const authenticatedUser = {
@@ -265,7 +266,7 @@ describe('authentication components', () => {
     document.body.append(container);
     await act(async () => {
       root = createRoot(container!);
-      root.render(<FirstPasswordChangePage auth={auth} />);
+      root.render(<LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: "zhs", displayName: "简体中文" }]} catalogs={{}}><FirstPasswordChangePage auth={auth} /></LocalizationProvider>);
     });
     expect(container.textContent).toContain('设置正式密码');
     expect(container.querySelector('#current-password')).not.toBeNull();

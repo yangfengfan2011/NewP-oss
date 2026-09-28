@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import type { FrontendModule, TreeProviderBinding } from '@icp-platform/sdk';
 import { resolvePageInput, validateCompositionCandidate } from '../composition/compositionRegistry';
 import type { RuntimeMetadataState } from '../metadata/runtimeMetadataManifest';
@@ -17,6 +17,11 @@ const modules: FrontendModule[] = [{ metadata: { moduleId: 'Organization', displ
   pageInputResolvers: ['organization.department.global', 'organization.node.detail', 'organization.company.direct', 'organization.department.direct', 'organization.tree.global'].map(key => ({ key, pageKeys: ['platform.tree', 'platform.list', 'platform.detail'], resolve: parameters => ({ parameters }) })),
 }];
 describe('formal page configuration references', () => {
+  // 真实 capability 的模块装载属于夹具准备；断言仍经正式编译入口验证绑定。
+  beforeAll(async () => {
+    const list = authoring().viewDocuments.find(item => item.view.key === 'organization.department.list')!.view;
+    await organization.standardCrudCapabilities!.find(item => item.targetKey === list.key)!.load();
+  });
   it('accepts configured trees without a module Provider and still accepts a custom Provider', () => {
     expect(() => validateCompositionCandidate([{ ...modules[0], treeProviders: [] }], authoring())).not.toThrow();
     const metadata = authoring();

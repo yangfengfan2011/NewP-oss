@@ -24,7 +24,7 @@ export default function Layout() {
   );
   // 先让 metadata 菜单接管；等运行时清单覆盖完整后，再逐步收紧到模块注册回退。
   const menus = metadataMenus.length > 0 ? metadataMenus : ModuleRegistry.getMenus();
-  const chrome = useMemo(() => resolvePageChrome(menus, location.pathname), [menus, location.pathname]);
+  const chrome = useMemo(() => resolvePageChrome(menus, location.pathname, t('PlatformShell.Workspace', '工作台')), [menus, location.pathname, t]);
 
   return (
     <div className="np-app-layout">

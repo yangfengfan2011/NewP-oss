@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useContext, useMemo, useState } from 'react';
 import { formatTextTemplate } from './userMessage';
 
 export interface LocalizationLanguage {
@@ -79,6 +79,7 @@ export interface LocalizationProviderProps {
   supportedLanguages: LocalizationLanguage[];
   catalogs: LocalizationCatalogs;
   initialLanguage?: string;
+  storageKey?: string;
   enumerationDefinitions?: EnumerationDefinitions;
   enumerationCatalogs?: EnumerationCatalogs;
 }
@@ -121,6 +122,7 @@ export function LocalizationProvider({
   supportedLanguages,
   catalogs,
   initialLanguage,
+  storageKey,
   enumerationDefinitions = {},
   enumerationCatalogs = {},
 }: LocalizationProviderProps) {
@@ -128,25 +130,23 @@ export function LocalizationProvider({
     () => new Set(supportedLanguages.map((language) => language.code)),
     [supportedLanguages],
   );
-  const normalizedInitialLanguage = initialLanguage && supportedLanguageCodes.has(initialLanguage)
-    ? initialLanguage
-    : defaultLanguage;
-  const [currentLanguage, setCurrentLanguage] = useState(normalizedInitialLanguage);
-
-  useEffect(() => {
-    // 受支持语言集合变化后，当前语言若已失效则回退到规范化初始语言，
-    // 避免 provider 外部热更新语言配置时把上下文留在无效语言代码上。
-    if (!supportedLanguageCodes.has(currentLanguage)) {
-      setCurrentLanguage(normalizedInitialLanguage);
-    }
-  }, [currentLanguage, normalizedInitialLanguage, supportedLanguageCodes]);
+  // 保存显式选择而非默认值，正式词典恢复后仍能采用平台更新后的默认语言。
+  const [selectedLanguage, setSelectedLanguage] = useState<string | undefined>(() => {
+    if (initialLanguage) return initialLanguage;
+    try { return storageKey ? localStorage.getItem(storageKey) ?? undefined : undefined; }
+    catch { return undefined; }
+  });
+  const currentLanguage = selectedLanguage && supportedLanguageCodes.has(selectedLanguage)
+    ? selectedLanguage : defaultLanguage;
 
   const setLanguage = (languageCode: string) => {
     if (!supportedLanguageCodes.has(languageCode)) {
       return;
     }
 
-    setCurrentLanguage(languageCode);
+    setSelectedLanguage(languageCode);
+    try { if (storageKey) localStorage.setItem(storageKey, languageCode); }
+    catch { /* 浏览器禁止持久化时仍保留当前页面的选择。 */ }
   };
 
   const t = (key: string, fallback?: string, args?: Record<string, unknown>) => {

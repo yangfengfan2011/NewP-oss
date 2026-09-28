@@ -38,13 +38,6 @@ vi.mock('@icp-platform/core', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@icp-platform/core')>()),
   AuthorizationProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   FirstPasswordChangePage: () => <div>change password</div>,
-  LocalizationProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  useLocalization: () => ({
-    currentLanguage: 'zhs',
-    supportedLanguages: [
-      { code: 'zhs', displayName: '简体中文', locale: 'zh-CN' },
-    ],
-  }),
   resolveAuthenticationDestination: (mustChangePassword: boolean, destination: string) => (
     mustChangePassword ? '/account/change-password' : destination
   ),
@@ -95,7 +88,7 @@ vi.mock('../pages/StandardCrudDetailPageHost', () => ({
 }));
 
 vi.mock('../localization/runtimeLocalizationManifest', () => ({
-  getFallbackRuntimeLocalizationManifest: vi.fn(),
+  getFallbackRuntimeLocalizationManifest: () => ({ defaultLanguage: 'zhs', supportedLanguages: [{ code: 'zhs', displayName: '简体中文', locale: 'zh-CN' }], catalogs: { zhs: {} } }),
   loadRuntimeLocalizationManifest: vi.fn().mockResolvedValue({
     defaultLanguage: 'zhs',
     supportedLanguages: [{ code: 'zhs', displayName: '简体中文', locale: 'zh-CN' }],

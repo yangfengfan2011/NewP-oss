@@ -1,3 +1,4 @@
+import { TestLocalization } from './TestLocalization';
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -40,11 +41,9 @@ describe('production navigation inventory', () => {
 
     await act(async () => {
       root = createRoot(container);
-      root.render(
-        <MemoryRouter>
+      root.render(<TestLocalization>{<MemoryRouter>
           <Sidebar menus={[]} collapsed={false} onCollapse={() => undefined} />
-        </MemoryRouter>,
-      );
+        </MemoryRouter>}</TestLocalization>);
     });
 
     expect(container.textContent).not.toContain('控件展示');

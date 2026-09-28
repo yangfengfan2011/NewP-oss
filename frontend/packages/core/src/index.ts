@@ -29,3 +29,5 @@ export type {
   LocalizationContextValue,
   LocalizationProviderProps,
 } from './localization';
+
+export { formatAuthenticationError } from './authentication/messages';

@@ -1,3 +1,4 @@
+import { TestLocalization } from './TestLocalization';
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -51,8 +52,7 @@ describe('shell chrome', () => {
 
     await act(async () => {
       root = createRoot(container);
-      root.render(
-        <MemoryRouter initialEntries={['/organization/persons']}>
+      root.render(<TestLocalization>{<MemoryRouter initialEntries={['/organization/persons']}>
           <Sidebar
             menus={[
               {
@@ -72,8 +72,7 @@ describe('shell chrome', () => {
             collapsed={false}
             onCollapse={vi.fn()}
           />
-        </MemoryRouter>,
-      );
+        </MemoryRouter>}</TestLocalization>);
     });
 
     expect(container.textContent).toContain('导航');
@@ -92,7 +91,7 @@ describe('shell chrome', () => {
 
     await act(async () => {
       root = createRoot(container);
-      root.render(<LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]} catalogs={{ zhs: {} }}><Header /></LocalizationProvider>);
+      root.render(<TestLocalization>{<LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]} catalogs={{ zhs: {} }}><Header /></LocalizationProvider>}</TestLocalization>);
     });
 
     expect(container.querySelector('.np-header-logo')?.textContent).toBe('ICP');
@@ -113,8 +112,7 @@ describe('shell chrome', () => {
 
     await act(async () => {
       root = createRoot(container);
-      root.render(
-        <MemoryRouter>
+      root.render(<TestLocalization>{<MemoryRouter>
           <PageContainer
             title="人员中心"
             breadcrumbItems={[
@@ -125,8 +123,7 @@ describe('shell chrome', () => {
           >
             <div>人员中心内容</div>
           </PageContainer>
-        </MemoryRouter>,
-      );
+        </MemoryRouter>}</TestLocalization>);
     });
 
     expect(container.textContent).toContain('工作台');

@@ -56,7 +56,8 @@ vi.mock('../pages/Login', () => ({
   default: () => <div>login</div>,
 }));
 
-vi.mock('@icp-platform/sdk', () => ({
+vi.mock('@icp-platform/sdk', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@icp-platform/sdk')>()),
   ModuleRegistry: {
     getAllModules: () => [],
     getRoutes: () => [],
@@ -82,14 +83,14 @@ describe('Home localization sample', () => {
   });
 
   it('does not render legacy localization sample panels after runtime manifest migration', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(
       new Response(JSON.stringify(runtimeLocalizationManifest), {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
         },
       }),
-    );
+    ));
     vi.stubGlobal('fetch', fetchMock);
 
     container = document.createElement('div');
@@ -104,7 +105,7 @@ describe('Home localization sample', () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith('/plugins/localization-manifest.json', {
-      credentials: 'same-origin',
+      credentials: 'omit',
     });
     expect(container.textContent).toContain('业务门户');
     expect(container.textContent).toContain('平台门户');

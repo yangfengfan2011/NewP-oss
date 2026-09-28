@@ -157,3 +157,7 @@ if ($validationErrors.Count -gt 0) {
 }
 
 Write-Host ("dic localization validation passed for {0} file(s)." -f $dictionaryFiles.Count) -ForegroundColor Green
+
+# 最小认证词典与正式 authoring 同源，静态检查拒绝未重新生成的产物。
+& node (Join-Path $resolvedRoot "frontend/scripts/generate-bootstrap-localization.mjs") --check
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

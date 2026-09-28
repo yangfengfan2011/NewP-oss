@@ -1,9 +1,11 @@
+import { useLocalization } from '@icp-platform/core';
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { Button } from '@icp-platform/ui/button';
 import { RouteCapabilityError, type RouteCapabilityErrorCode } from './RouteCapabilityRuntime';
 
 export function RouteCapabilityLoading() {
-  return <div className="sh-loading-state" role="status">正在加载页面…</div>;
+  const { t } = useLocalization();
+  return <div className="sh-loading-state" role="status">{t('PlatformShell.PageLoading', '正在加载页面…')}</div>;
 }
 
 function resolveFailureCode(error: unknown): RouteCapabilityErrorCode {
@@ -14,11 +16,12 @@ function resolveFailureCode(error: unknown): RouteCapabilityErrorCode {
 
 function RouteCapabilityFailure({ error, retry }: { error: unknown; retry: () => void }) {
   const code = resolveFailureCode(error);
+  const { t } = useLocalization();
   return (
     <div className="sh-error-state" role="alert" data-route-capability-error={code}>
       <div>{code}</div>
-      <div>当前页面无法加载，其他页面仍可继续使用。</div>
-      <Button onClick={retry}>重试当前页面</Button>
+      <div>{t('PlatformShell.PageUnavailable', '当前页面无法加载，其他页面仍可继续使用。')}</div>
+      <Button onClick={retry}>{t('PlatformShell.RetryPage', '重试当前页面')}</Button>
     </div>
   );
 }

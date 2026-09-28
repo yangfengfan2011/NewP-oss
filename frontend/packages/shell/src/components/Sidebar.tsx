@@ -1,3 +1,4 @@
+import { useLocalization } from '@icp-platform/core';
 import { MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import Button from 'antd/es/button';
 import Sider from 'antd/es/layout/Sider';
@@ -18,6 +19,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ menus, collapsed, onCollapse }: SidebarProps) {
+  const { t } = useLocalization();
   const location = useLocation();
   const auth = useAuth();
   const features = useFeaturePlacement();
@@ -43,10 +45,10 @@ export function Sidebar({ menus, collapsed, onCollapse }: SidebarProps) {
       className="np-app-sider"
     >
       <div className="np-sider-toolbar">
-        {!collapsed ? <span className="np-sider-toolbar-label">导航</span> : <span />}
+        {!collapsed ? <span className="np-sider-toolbar-label">{t('PlatformShell.Navigation', '导航')}</span> : <span />}
         <Button
           type="text"
-          aria-label={collapsed ? '展开菜单' : '折叠菜单'}
+          aria-label={collapsed ? t('PlatformShell.ExpandMenu', '展开菜单') : t('PlatformShell.CollapseMenu', '折叠菜单')}
           aria-expanded={!collapsed}
           icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
           onClick={() => onCollapse(!collapsed)}

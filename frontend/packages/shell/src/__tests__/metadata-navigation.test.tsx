@@ -1,3 +1,4 @@
+import { TestLocalization } from './TestLocalization';
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -75,11 +76,9 @@ describe('metadata navigation', () => {
 
     await act(async () => {
       root = createRoot(container);
-      root.render(
-        <MemoryRouter>
+      root.render(<TestLocalization>{<MemoryRouter>
           <Sidebar menus={menus} collapsed={false} onCollapse={() => undefined} />
-        </MemoryRouter>,
-      );
+        </MemoryRouter>}</TestLocalization>);
     });
 
     expect(container.textContent).toContain('人员中心');
@@ -114,11 +113,9 @@ describe('metadata navigation', () => {
 
     await act(async () => {
       root = createRoot(container);
-      root.render(
-        <MemoryRouter>
+      root.render(<TestLocalization>{<MemoryRouter>
           <Sidebar menus={menus} collapsed={false} onCollapse={() => undefined} />
-        </MemoryRouter>,
-      );
+        </MemoryRouter>}</TestLocalization>);
     });
 
     expect(container.textContent).toContain('人员中心');
@@ -164,7 +161,7 @@ describe('metadata navigation', () => {
 
     await act(async () => {
       root = createRoot(container);
-      root.render(<MemoryRouter><Sidebar menus={menus} collapsed={false} onCollapse={() => undefined} /></MemoryRouter>);
+      root.render(<TestLocalization>{<MemoryRouter><Sidebar menus={menus} collapsed={false} onCollapse={() => undefined} /></MemoryRouter>}</TestLocalization>);
     });
 
     expect(container.textContent).not.toContain('账号管理');

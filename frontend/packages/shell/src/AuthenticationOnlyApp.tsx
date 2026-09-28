@@ -9,6 +9,7 @@ import { ShellThemeProvider } from './components/ShellThemeProvider';
 import { shellAntdTheme } from './config/antdTheme';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './pages/Login';
+import { AuthenticationFrame, RuntimeLocalizationProvider } from './localization/RuntimeLocalizationProvider';
 
 function PasswordChangeRoute() {
   const auth = useAuth();
@@ -48,12 +49,14 @@ function AuthenticationOnlyRoutes() {
 /** 匿名与受限会话只装配认证所需依赖，业务 Shell 由 bootstrap 在鉴权后另行导入。 */
 export function AuthenticationOnlyApp({ initialUser }: { initialUser?: AuthUser }) {
   return (
-    <ShellThemeProvider theme={shellAntdTheme}>
-      <BrowserRouter>
-        <AuthProvider initialUser={initialUser}>
-          <AuthenticationOnlyRoutes />
-        </AuthProvider>
-      </BrowserRouter>
-    </ShellThemeProvider>
+    <RuntimeLocalizationProvider>
+      <ShellThemeProvider theme={shellAntdTheme}>
+        <BrowserRouter>
+          <AuthProvider initialUser={initialUser}>
+            <AuthenticationFrame><AuthenticationOnlyRoutes /></AuthenticationFrame>
+          </AuthProvider>
+        </BrowserRouter>
+      </ShellThemeProvider>
+    </RuntimeLocalizationProvider>
   );
 }

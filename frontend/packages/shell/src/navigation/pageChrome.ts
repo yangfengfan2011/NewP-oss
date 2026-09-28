@@ -7,14 +7,14 @@ export interface PageChrome {
   openKeys: string[];
 }
 
-export function resolvePageChrome(menus: MenuConfig[], pathname: string): PageChrome {
+export function resolvePageChrome(menus: MenuConfig[], pathname: string, workspaceTitle = '工作台'): PageChrome {
   const trail = findTrail(menus, pathname) ?? [];
   const last = trail[trail.length - 1];
 
   return {
-    title: last?.label ?? '工作台',
+    title: last?.label ?? workspaceTitle,
     breadcrumbItems: [
-      { title: '工作台', path: '/' },
+      { title: workspaceTitle, path: '/' },
       ...trail.map((item) => ({ title: item.label, path: item.path })),
     ],
     selectedKeys: last ? [last.path ?? last.id] : [],

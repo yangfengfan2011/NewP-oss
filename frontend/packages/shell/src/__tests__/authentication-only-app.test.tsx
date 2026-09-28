@@ -34,6 +34,8 @@ describe('AuthenticationOnlyApp authenticated transition', () => {
     window.history.replaceState({}, '', '/login');
     container = document.createElement('div');
     document.body.appendChild(container);
+    localStorage.clear();
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('offline')));
   });
 
   afterEach(async () => {
@@ -42,6 +44,31 @@ describe('AuthenticationOnlyApp authenticated transition', () => {
     }
     container.remove();
     globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    vi.unstubAllGlobals();
+  });
+
+  it('offers both languages while offline and preserves login input when switching', async () => {
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<AuthenticationOnlyApp />);
+    });
+    const account = container.querySelector<HTMLInputElement>('#ecode')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(account, 'draft-account');
+      account.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const language = container.querySelector<HTMLSelectElement>('select[aria-label="语言"]');
+    expect(language).not.toBeNull();
+    expect(Array.from(language!.options).map(option => option.value)).toEqual(['zhs', 'en']);
+    await act(async () => {
+      language!.value = 'en';
+      language!.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(container.querySelector('h2')?.textContent).toBe('Sign in to the platform');
+    expect(container.querySelector('#ecode')).toBe(account);
+    expect(account.value).toBe('draft-account');
+    expect(localStorage.getItem('icp.language')).toBe('en');
+    expect(container.textContent).toContain('Retry');
   });
 
   it('does not redirect a regular authenticated user inside the authentication-only router', async () => {

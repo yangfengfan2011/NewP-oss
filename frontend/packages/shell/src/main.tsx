@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import { AuthenticationOnlyApp } from './AuthenticationOnlyApp';
 import { bootstrapShell } from './bootstrap';
+import { RuntimeLocalizationProvider, AuthenticationFrame } from './localization/RuntimeLocalizationProvider';
 import { ModuleRuntimeFatal } from './components/ModuleRuntimeFatal';
 import { registerShellModules } from './registerModules';
 import { readCurrentUser } from '@icp-platform/core';
@@ -33,6 +34,8 @@ void bootstrapShell({
     );
   },
   renderFatal: (error, retry) => root.render(
-    <ModuleRuntimeFatal error={error} onRetry={() => void retry()} />,
+    <RuntimeLocalizationProvider><AuthenticationFrame>
+      <ModuleRuntimeFatal error={error} onRetry={() => void retry()} />
+    </AuthenticationFrame></RuntimeLocalizationProvider>,
   ),
 });

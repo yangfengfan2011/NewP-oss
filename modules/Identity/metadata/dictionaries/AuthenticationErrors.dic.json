@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "AuthenticationErrors": {
+    "CREDENTIAL_PASSWORD_INVALID": {
+      "zhs": "密码长度为 8–64 个字符，不能全部为空白，也不能与当前密码相同。",
+      "en": "Use 8–64 characters. The password cannot be entirely whitespace or the same as your current password."
+    },
+    "CREDENTIAL_CURRENT_INVALID": {
+      "zhs": "当前密码不正确。",
+      "en": "The current password is incorrect."
+    },
+    "CREDENTIAL_UNCHANGED": {
+      "zhs": "新密码不能与当前密码相同。",
+      "en": "The new password must differ from the current password."
+    },
+    "IDENTITY_REVISION_CONFLICT": {
+      "zhs": "账号已发生变化，请重新登录后重试。",
+      "en": "Your account has changed. Sign in again before retrying."
+    },
+    "IDENTITY_ACCOUNT_NOT_FOUND": {
+      "zhs": "账号不存在，请重新登录。",
+      "en": "The account no longer exists. Sign in again."
+    },
+    "IDENTITY_ACCOUNT_DELETED": {
+      "zhs": "账号已删除，无法修改密码。",
+      "en": "This account was deleted and its password cannot be changed."
+    }
+  }
+}

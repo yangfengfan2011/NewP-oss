@@ -1,3 +1,4 @@
+import { useLocalization } from '@icp-platform/core';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -16,12 +17,13 @@ export function PageContainer({
   actions,
   children,
 }: PageContainerProps) {
+  const { t } = useLocalization();
   const shouldRenderHeader = Boolean(title || subtitle || actions);
 
   return (
     <section className="np-page-container">
       {breadcrumbItems.length > 0 ? (
-        <nav className="np-page-breadcrumb" aria-label="面包屑">
+        <nav className="np-page-breadcrumb" aria-label={t('PlatformShell.Breadcrumb', '面包屑')}>
           <ol className="np-page-breadcrumb-list">
             {breadcrumbItems.map((item, index) => (
               <li key={`${item.path ?? item.title}-${index}`}>

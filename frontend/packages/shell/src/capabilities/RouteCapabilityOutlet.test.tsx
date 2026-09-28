@@ -1,3 +1,4 @@
+import { TestLocalization } from '../__tests__/TestLocalization';
 // @vitest-environment jsdom
 
 import { act } from 'react';
@@ -43,7 +44,7 @@ describe('RouteCapabilityOutlet', () => {
 
     await act(async () => {
       root = createRoot(container);
-      root.render(<RouteCapabilityOutlet capability={{ kind: 'custom', targetKey: 'outlet.page' }} />);
+      root.render(<TestLocalization>{<RouteCapabilityOutlet capability={{ kind: 'custom', targetKey: 'outlet.page' }} />}</TestLocalization>);
     });
 
     expect(container.querySelector('[role="status"]')?.textContent).toContain('正在加载页面');
@@ -74,9 +75,7 @@ describe('RouteCapabilityOutlet', () => {
 
     await act(async () => {
       root = createRoot(container);
-      root.render(
-        <RouteCapabilityOutlet capability={{ kind: 'custom', targetKey: 'retry-outlet.page' }} />,
-      );
+      root.render(<TestLocalization>{<RouteCapabilityOutlet capability={{ kind: 'custom', targetKey: 'retry-outlet.page' }} />}</TestLocalization>);
       await Promise.resolve();
     });
 
@@ -111,9 +110,7 @@ describe('RouteCapabilityOutlet', () => {
 
     await act(async () => {
       root = createRoot(container);
-      root.render(
-        <RouteCapabilityOutlet capability={{ kind: 'custom', targetKey: 'render-outlet.page' }} />,
-      );
+      root.render(<TestLocalization>{<RouteCapabilityOutlet capability={{ kind: 'custom', targetKey: 'render-outlet.page' }} />}</TestLocalization>);
       await Promise.resolve();
     });
 

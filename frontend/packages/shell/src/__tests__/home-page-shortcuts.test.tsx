@@ -1,18 +1,17 @@
+import { shellTestCatalogs } from './localizationTestCatalogs';
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
-import { LocalizationProvider } from '@icp-platform/core';
+import { LanguageSelect, LocalizationProvider } from '@icp-platform/core';
 import Home from '../pages/Home';
 
 const localizationProps = {
   defaultLanguage: 'zhs',
   supportedLanguages: [{ code: 'zhs', displayName: '简体中文' }],
-  catalogs: {
-    zhs: {},
-  },
+  catalogs: shellTestCatalogs,
 };
 
 vi.mock('../contexts/PlatformContext', () => ({
@@ -27,6 +26,25 @@ vi.mock('../contexts/PlatformContext', () => ({
 describe('Home shortcuts', () => {
   let container: HTMLDivElement;
   let root: Root;
+
+  it('renders public home labels and shortcuts in English from authoring', async () => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<LocalizationProvider {...localizationProps} supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }, { code: 'en', displayName: 'English' }]}>
+        <MemoryRouter><LanguageSelect /><Home /></MemoryRouter>
+      </LocalizationProvider>);
+    });
+    await act(async () => {
+      container.querySelector('select')!.value = 'en';
+      container.querySelector('select')!.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(container.textContent).toContain('Business portal');
+    expect(container.textContent).toContain('Value lists');
+    expect(container.textContent).toContain('2 portal entries available');
+    expect(container.textContent).not.toContain('PlatformShell.');
+  });
 
   afterEach(async () => {
     if (root) {

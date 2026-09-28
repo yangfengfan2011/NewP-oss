@@ -1,3 +1,4 @@
+import { LocalizationProvider } from '@icp-platform/core';
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -20,6 +21,7 @@ describe('Shell authentication session boundary', () => {
     await act(async () => {
       root = createRoot(container!);
       root.render(
+        <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: "zhs", displayName: "简体中文" }]} catalogs={{}}>
         <AuthenticationSessionBoundary
           authentication={{
             isInitialized: true,
@@ -28,7 +30,7 @@ describe('Shell authentication session boundary', () => {
           }}
         >
           <span>anonymous-login</span>
-        </AuthenticationSessionBoundary>,
+        </AuthenticationSessionBoundary></LocalizationProvider>,
       );
     });
 

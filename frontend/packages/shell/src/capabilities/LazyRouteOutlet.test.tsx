@@ -4,6 +4,7 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { LazyRouteOutlet } from './LazyRouteOutlet';
+import { LocalizationProvider } from '@icp-platform/core';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -37,7 +38,7 @@ describe('LazyRouteOutlet', () => {
 
     await act(async () => {
       root = createRoot(container);
-      root.render(<LazyRouteOutlet load={load} />);
+      root.render(<LocalizationProvider defaultLanguage="zhs" supportedLanguages={[]} catalogs={{}}><LazyRouteOutlet load={load} /></LocalizationProvider>);
     });
     expect(container.querySelector('[role="status"]')?.textContent).toContain('正在加载页面');
 
@@ -60,7 +61,7 @@ describe('LazyRouteOutlet', () => {
 
     await act(async () => {
       root = createRoot(container);
-      root.render(<LazyRouteOutlet load={load} />);
+      root.render(<LocalizationProvider defaultLanguage="zhs" supportedLanguages={[]} catalogs={{}}><LazyRouteOutlet load={load} /></LocalizationProvider>);
       await Promise.resolve();
     });
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('ROUTE_CAPABILITY_LOAD_FAILED');

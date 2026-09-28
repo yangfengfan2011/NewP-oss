@@ -1,4 +1,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { readStandardCrudRequestError, StandardCrudRequestError } from '@icp-platform/sdk';
+import { useLocalization } from '../localization/LocalizationContext';
+import { formatAuthenticationError } from './messages';
 import type { AuthUser } from '@icp-platform/sdk';
 import { installPlatformAccessRejectionHandler, invalidatePlatformAntiforgeryToken, platformFetch } from '../http';
 
@@ -51,9 +54,9 @@ export async function readCurrentUser(): Promise<AuthUser | undefined> {
   return await response.json() as AuthUser;
 }
 
-export class AuthenticationSessionError extends Error {
+export class AuthenticationSessionError extends StandardCrudRequestError {
   constructor(code: string) {
-    super(code);
+    super(code, 503, {}, { code });
     this.name = 'AuthenticationSessionError';
   }
 }
@@ -145,7 +148,7 @@ export function useAuthenticationState(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ecode, password, timeZoneId: timeZoneId || undefined }),
     });
-    if (!response.ok) throw new Error(await readProblemCode(response));
+    if (!response.ok) throw await readStandardCrudRequestError(response);
     refreshGeneration.current += 1;
     invalidatePlatformAntiforgeryToken();
     const authenticatedUser = await response.json() as AuthUser;
@@ -181,16 +184,16 @@ export function useAuthenticationState(
   }, [refresh]);
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
-    if (!user) throw new Error('AUTH_SESSION_INVALID');
+    if (!user) throw new StandardCrudRequestError('AUTH_SESSION_INVALID', 401, {}, { code: 'AUTH_SESSION_INVALID' });
     const response = await platformFetch('/api/identity/me/password-change', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ currentPassword, newPassword, expectedRevision: user.revision }),
     });
-    if (!response.ok) throw new Error(await readProblemCode(response));
+    if (!response.ok) throw await readStandardCrudRequestError(response);
     invalidatePlatformAntiforgeryToken();
     const current = await refresh();
-    if (!current || current.mustChangePassword) throw new Error('AUTH_SESSION_ROTATION_FAILED');
+    if (!current || current.mustChangePassword) throw new StandardCrudRequestError('AUTH_SESSION_ROTATION_FAILED', 401, {}, { code: 'AUTH_SESSION_ROTATION_FAILED' });
   }, [refresh, user]);
 
   return {
@@ -223,16 +226,25 @@ export function FirstPasswordChangePage({ auth }: { auth: AuthenticationState })
   const [newPassword, setNewPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<unknown>();
+  const [missingField, setMissingField] = useState<string>();
+  const [mismatch, setMismatch] = useState(false);
+  const { t } = useLocalization();
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    setMissingField(undefined);
+    setMismatch(false);
+    setError(undefined);
+    if (!currentPassword || !newPassword || !confirmation) {
+      setMissingField(!currentPassword ? 'CurrentPassword' : !newPassword ? 'NewPassword' : 'ConfirmPassword');
+      return;
+    }
     if (newPassword !== confirmation) {
-      setError('两次输入的新密码不一致。');
+      setMismatch(true);
       return;
     }
     setSubmitting(true);
-    setError('');
     try {
       await auth.changePassword(currentPassword, newPassword);
       setCurrentPassword('');
@@ -240,7 +252,7 @@ export function FirstPasswordChangePage({ auth }: { auth: AuthenticationState })
       setConfirmation('');
       window.location.assign('/');
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '密码修改失败。');
+      setError(cause);
     } finally {
       setSubmitting(false);
     }
@@ -249,24 +261,25 @@ export function FirstPasswordChangePage({ auth }: { auth: AuthenticationState })
   return (
     <main className="sh-login-page" aria-labelledby="password-change-title">
       <section className="sh-login-brand">
-        <span className="sh-login-brand-badge">安全步骤</span>
-        <h1>先完成首次改密</h1>
-        <p>当前临时会话只允许修改密码、查看当前账号或退出。完成后会自动建立普通会话。</p>
+        <span className="sh-login-brand-badge">{t('PlatformAuthentication.SecurityStep', '安全步骤')}</span>
+        <h1>{t('PlatformAuthentication.FirstPasswordTitle', '先完成首次改密')}</h1>
+        <p>{t('PlatformAuthentication.RestrictedDescription', '当前临时会话只允许修改密码、查看当前账号或退出。完成后会自动建立普通会话。')}</p>
       </section>
       <section className="sh-login-panel">
         <div className="sh-login-card">
-          <h2 id="password-change-title">设置正式密码</h2>
-          <p>密码长度 8–64 个字符，不能包含空白字符，也不能与当前密码相同。</p>
-          <form onSubmit={submit}>
-            <PasswordField id="current-password" label="当前临时密码" value={currentPassword} onChange={setCurrentPassword} autoComplete="current-password" />
-            <PasswordField id="new-password" label="新密码" value={newPassword} onChange={setNewPassword} autoComplete="new-password" />
-            <PasswordField id="confirm-password" label="确认新密码" value={confirmation} onChange={setConfirmation} autoComplete="new-password" />
-            {error && <div className="sh-form-error" role="alert">{error}</div>}
+          <h2 id="password-change-title">{t('PlatformAuthentication.SetPassword', '设置正式密码')}</h2>
+          <p>{t('PlatformAuthentication.PasswordRules', '密码长度为 8–64 个字符，不能全部为空白，也不能与当前密码相同。')}</p>
+          <form onSubmit={submit} noValidate>
+            <PasswordField id="current-password" label={t('PlatformAuthentication.CurrentPassword', '当前临时密码')} value={currentPassword} onChange={setCurrentPassword} autoComplete="current-password" />
+            <PasswordField id="new-password" label={t('PlatformAuthentication.NewPassword', '新密码')} value={newPassword} onChange={setNewPassword} autoComplete="new-password" />
+            <PasswordField id="confirm-password" label={t('PlatformAuthentication.ConfirmPassword', '确认新密码')} value={confirmation} onChange={setConfirmation} autoComplete="new-password" />
+            {missingField && <div className="sh-form-error" role="alert">{t('PlatformAuthentication.RequiredField', undefined, { field: t(`PlatformAuthentication.${missingField}`) })}</div>}
+            {(error != null || mismatch) && <div className="sh-form-error" role="alert">{mismatch ? t('PlatformAuthentication.PasswordMismatch', '两次输入的新密码不一致。') : formatAuthenticationError(error, t)}</div>}
             <button className="sh-btn sh-btn-primary sh-form-submit" type="submit" disabled={submitting}>
-              {submitting ? '正在更新…' : '完成改密'}
+              {submitting ? t('PlatformAuthentication.UpdatingPassword', '正在更新…') : t('PlatformAuthentication.CompletePassword', '完成改密')}
             </button>
             <button className="sh-btn sh-form-submit" type="button" onClick={() => void auth.logout().catch(() => undefined)} disabled={submitting}>
-              退出登录
+              {t('PlatformAuthentication.SignOut', '退出登录')}
             </button>
           </form>
         </div>

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "Persistence": {
+    "CommitOutcomeUnknown": {
+      "zhs": "提交结果未能确认，请查询后再操作。",
+      "en": "The commit result could not be confirmed. Check the result before trying again."
+    },
+    "CacheUnavailable": {
+      "zhs": "服务暂时不可用，请稍后重试。",
+      "en": "The service is temporarily unavailable. Please try again later."
+    },
+    "CommittedCacheUnavailable": {
+      "zhs": "操作已提交，但服务暂时不可用，请恢复后查询结果。",
+      "en": "The operation was committed, but the service is unavailable. Check the result after recovery."
+    }
+  }
+}

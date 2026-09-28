@@ -24,7 +24,7 @@ describe('runtime localization manifest loader', () => {
     vi.unstubAllGlobals();
   });
 
-  it('loads runtime localization manifest from the host route', async () => {
+  it('loads the public dictionary without session cookies so restricted sessions can use it', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(runtimeLocalizationManifest), {
         status: 200,
@@ -38,7 +38,7 @@ describe('runtime localization manifest loader', () => {
     const manifest = await loadRuntimeLocalizationManifest();
 
     expect(fetchMock).toHaveBeenCalledWith('/plugins/localization-manifest.json', {
-      credentials: 'same-origin',
+      credentials: 'omit',
     });
     expect(manifest.catalogs.zhs['Pages.ListTitle']).toBe('配置中心');
     expect(manifest.catalogs.en['Pages.ListTitle']).toBe('Config Center');

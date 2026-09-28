@@ -1,3 +1,5 @@
+import bootstrapLocalization from './bootstrapLocalization.generated.json';
+
 export type RuntimeLocalizationManifest = {
   defaultLanguage: string;
   supportedLanguages: Array<{
@@ -11,19 +13,7 @@ export type RuntimeLocalizationManifest = {
 const inFlightLoads = new WeakMap<typeof fetch, Promise<RuntimeLocalizationManifest>>();
 
 export function getFallbackRuntimeLocalizationManifest(): RuntimeLocalizationManifest {
-  return {
-    defaultLanguage: 'zhs',
-    supportedLanguages: [
-      {
-        code: 'zhs',
-        displayName: '简体中文',
-        locale: 'zh-CN',
-      },
-    ],
-    catalogs: {
-      zhs: {},
-    },
-  };
+  return bootstrapLocalization;
 }
 
 export function loadRuntimeLocalizationManifest(
@@ -50,7 +40,8 @@ async function loadRuntimeLocalizationManifestOnce(
   fetcher: typeof fetch,
 ): Promise<RuntimeLocalizationManifest> {
   const response = await fetcher('/plugins/localization-manifest.json', {
-    credentials: 'same-origin',
+    // Host 明确 AllowAnonymous 的公共词典不携会话 Cookie，避免受限会话挡住首次改密文案。
+    credentials: 'omit',
   });
 
   if (!response.ok) {

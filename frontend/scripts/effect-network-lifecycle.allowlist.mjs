@@ -22,9 +22,9 @@ export const effectNetworkLifecycleAllowlist = [
     exitCondition: '通过独立的 versioned public-contract 决策删除 deprecated Hook。',
   },
   {
-    id: 'packages/shell/src/App.tsx::App::useEffect::loadRuntimeLocalizationManifest',
-    file: 'packages/shell/src/App.tsx',
-    enclosingFunction: 'App',
+    id: 'packages/shell/src/localization/RuntimeLocalizationProvider.tsx::RuntimeLocalizationProvider::useEffect::loadRuntimeLocalizationManifest',
+    file: 'packages/shell/src/localization/RuntimeLocalizationProvider.tsx',
+    enclosingFunction: 'RuntimeLocalizationProvider',
     hook: 'useEffect',
     triggerChain: 'loadRuntimeLocalizationManifest',
     classification: 'read-query',

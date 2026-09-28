@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "AuthenticationErrors": {
+    "AUTH_INVALID_CREDENTIALS": {
+      "zhs": "登录失败，请检查用户名和密码。",
+      "en": "Sign-in failed. Check your account and password."
+    },
+    "AUTH_ADMISSION_DENIED": {
+      "zhs": "账号当前不满足登录条件，请联系管理员确认账号和业务身份。",
+      "en": "This account is not eligible to sign in. Contact your administrator to check your account and business identity."
+    },
+    "AUTH_SESSION_TIME_ZONE_INVALID": {
+      "zhs": "当前时区无效，请检查设备时区设置后重试。",
+      "en": "Your time zone is invalid. Check your device time-zone settings and try again."
+    },
+    "AUTH_PASSWORD_VERIFICATION_BUSY": {
+      "zhs": "登录请求较多，请稍后重试。",
+      "en": "Sign-in is busy. Please try again shortly."
+    },
+    "AUTH_SESSION_INVALID": {
+      "zhs": "登录状态已失效，请重新登录后重试。",
+      "en": "Your session has expired. Sign in and try again."
+    },
+    "AUTH_SESSION_ROTATION_FAILED": {
+      "zhs": "密码已修改，但新会话无法确认，请重新登录。",
+      "en": "Your password changed, but the new session could not be confirmed. Sign in again."
+    },
+    "AUTH_NETWORK_UNAVAILABLE": {
+      "zhs": "网络暂时不可用，请检查连接后重试。",
+      "en": "The network is unavailable. Check your connection and retry."
+    },
+    "AUTH_SESSION_STORE_UNAVAILABLE": {
+      "zhs": "登录服务暂时不可用，请稍后重试。",
+      "en": "Authentication is temporarily unavailable. Please try again later."
+    },
+    "AUTH_ADMISSION_UNAVAILABLE": {
+      "zhs": "登录服务暂时不可用，请稍后重试。",
+      "en": "Authentication is temporarily unavailable. Please try again later."
+    },
+    "AUTH_IDENTITY_STORE_UNAVAILABLE": {
+      "zhs": "登录服务暂时不可用，请稍后重试。",
+      "en": "Authentication is temporarily unavailable. Please try again later."
+    },
+    "AUTHORIZATION_DECISION_UNAVAILABLE": {
+      "zhs": "登录服务暂时不可用，请稍后重试。",
+      "en": "Authentication is temporarily unavailable. Please try again later."
+    },
+    "AUTH_CREDENTIAL_STORE_UNAVAILABLE": {
+      "zhs": "登录服务暂时不可用，请稍后重试。",
+      "en": "Authentication is temporarily unavailable. Please try again later."
+    }
+  }
+}

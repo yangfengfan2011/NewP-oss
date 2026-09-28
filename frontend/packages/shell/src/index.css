@@ -1115,3 +1115,12 @@ a:hover {
     justify-content: flex-start;
   }
 }
+
+.sh-authentication-frame { min-height: 100vh; }
+.sh-authentication-toolbar { display: flex; justify-content: flex-end; padding: 12px 24px; }
+.sh-authentication-frame .sh-login-page { min-height: calc(100vh - 58px); height: auto; }
+.sh-localization-recovery { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 12px 24px; flex-wrap: wrap; }
+@media (max-width: 768px) {
+  .sh-authentication-toolbar { padding: 12px 16px; }
+  .sh-authentication-frame .sh-login-brand { flex: none; }
+}

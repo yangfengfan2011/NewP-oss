@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Collapse, Select, Space, Spin, Tag, Typography } from 'antd';
 import { formatRequestError, useLocalization, usePlatformQuery } from '@icp-platform/core';
 import type { DataScopeSubject } from './DataScopeSubjectEditor';
@@ -31,7 +31,15 @@ export default function ObjectAuthorizationDetails({ read, catalog }: {
       const names = await resolveDataScopeSubjects(read, entries, signal);
       return { ...result, names };
     } });
-  const data = explanation.status === 'success' ? explanation.data : undefined;
+  const identity = JSON.stringify([accountId, revision]);
+  const [snapshot, setSnapshot] = useState<{ identity: string; data: typeof explanation.data }>();
+  useEffect(() => {
+    if (explanation.status === 'success') setSnapshot({ identity, data: explanation.data });
+    else if (explanation.status === 'error') setSnapshot(undefined);
+  }, [explanation.status, explanation.data, identity]);
+  // 仅保留同一分析请求的显示与 Collapse 实例；新结果更新名称，拒绝不展示旧裁决。
+  const data = explanation.status === 'error' ? undefined : explanation.data
+    ?? (snapshot?.identity === identity ? snapshot.data : undefined);
   const options = [...new Map([{ value: '', label: t('DataScope.CurrentUser', '当前用户') }, ...(directory.data?.items ?? []).map(user => ({ value: user.id, label: user.name })),
     ...(data ? [{ value: data.accountId, label: data.accountName }] : [])].map(option => [option.value, option])).values()];
   return <>

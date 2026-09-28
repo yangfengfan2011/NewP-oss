@@ -40,6 +40,8 @@
           "referenceKey": "navigation:organization",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "Navigation.Organization",
+          "staticScopeTitleKey": null,
           "actionScope": null,
           "readBehaviors": [],
           "container": true
@@ -59,6 +61,8 @@
           "referenceKey": "navigation:organization.structure",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "Navigation.OrganizationManagement",
+          "staticScopeTitleKey": null,
           "actionScope": null,
           "readBehaviors": [],
           "container": true
@@ -79,6 +83,8 @@
           "referenceKey": "navigation:organization.structure/tab:companies",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "OrganizationComposition.Company",
+          "staticScopeTitleKey": null,
           "actionScope": null,
           "readBehaviors": [
             "organization.company.read"
@@ -102,6 +108,8 @@
           "referenceKey": "navigation:organization.structure/tab:companies/surface:list.custom/action:authorize",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "CompanyListView.Action_Authorize",
+          "staticScopeTitleKey": null,
           "actionScope": "list.custom",
           "readBehaviors": [],
           "container": false
@@ -123,6 +131,8 @@
           "referenceKey": "navigation:organization.structure/tab:companies/surface:list.pageActions/action:create",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "CompanyListView.Action_Create",
+          "staticScopeTitleKey": null,
           "actionScope": "list.pageActions",
           "readBehaviors": [
             "organization.company.read"
@@ -146,6 +156,8 @@
           "referenceKey": "navigation:organization.structure/tab:companies/surface:list.rowActions/action:authorize",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "CompanyListView.Action_Authorize",
+          "staticScopeTitleKey": null,
           "actionScope": "list.rowActions",
           "readBehaviors": [
             "organization.company.read"
@@ -169,6 +181,8 @@
           "referenceKey": "navigation:organization.structure/tab:companies/surface:list.rowActions/action:delete",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "CompanyListView.Action_Delete",
+          "staticScopeTitleKey": null,
           "actionScope": "list.rowActions",
           "readBehaviors": [
             "organization.company.read"
@@ -192,6 +206,8 @@
           "referenceKey": "navigation:organization.structure/tab:companies/surface:list.rowActions/action:edit",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "CompanyListView.Action_Edit",
+          "staticScopeTitleKey": null,
           "actionScope": "list.rowActions",
           "readBehaviors": [
             "organization.company.read"
@@ -214,6 +230,8 @@
           "referenceKey": "navigation:organization.structure/tab:departments",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "OrganizationComposition.Department",
+          "staticScopeTitleKey": null,
           "actionScope": null,
           "readBehaviors": [
             "organization.department.company.lookup",
@@ -239,6 +257,8 @@
           "referenceKey": "navigation:organization.structure/tab:departments/surface:list.custom/action:authorize",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "DepartmentListView.Action_Authorize",
+          "staticScopeTitleKey": null,
           "actionScope": "list.custom",
           "readBehaviors": [],
           "container": false
@@ -260,6 +280,8 @@
           "referenceKey": "navigation:organization.structure/tab:departments/surface:list.pageActions/action:create",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "DepartmentListView.Action_Create",
+          "staticScopeTitleKey": null,
           "actionScope": "list.pageActions",
           "readBehaviors": [
             "organization.department.company.lookup",
@@ -285,6 +307,8 @@
           "referenceKey": "navigation:organization.structure/tab:departments/surface:list.rowActions/action:authorize",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "DepartmentListView.Action_Authorize",
+          "staticScopeTitleKey": null,
           "actionScope": "list.rowActions",
           "readBehaviors": [
             "organization.department.read"
@@ -308,6 +332,8 @@
           "referenceKey": "navigation:organization.structure/tab:departments/surface:list.rowActions/action:delete",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "DepartmentListView.Action_Delete",
+          "staticScopeTitleKey": null,
           "actionScope": "list.rowActions",
           "readBehaviors": [
             "organization.department.read"
@@ -331,6 +357,8 @@
           "referenceKey": "navigation:organization.structure/tab:departments/surface:list.rowActions/action:edit",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "DepartmentListView.Action_Edit",
+          "staticScopeTitleKey": null,
           "actionScope": "list.rowActions",
           "readBehaviors": [
             "organization.department.company.lookup",
@@ -355,6 +383,8 @@
           "referenceKey": "navigation:organization.structure/tab:persons",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "OrganizationComposition.Person",
+          "staticScopeTitleKey": null,
           "actionScope": null,
           "readBehaviors": [
             "organization.person.company.lookup",
@@ -381,6 +411,8 @@
           "referenceKey": "navigation:organization.structure/tab:persons/surface:detail.custom/action:linkUser",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "PersonDetailView.Action_LinkUser",
+          "staticScopeTitleKey": null,
           "actionScope": "detail.custom",
           "readBehaviors": [
             "organization.person.linkUser.lookup"
@@ -404,6 +436,8 @@
           "referenceKey": "navigation:organization.structure/tab:persons/surface:detail.pageActions/action:authorize",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "PersonDetailView.Action_Authorize",
+          "staticScopeTitleKey": null,
           "actionScope": "detail.pageActions",
           "readBehaviors": [
             "organization.person.read"
@@ -427,6 +461,8 @@
           "referenceKey": "navigation:organization.structure/tab:persons/surface:detail.pageActions/action:disable",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "PersonDetailView.Action_Disable",
+          "staticScopeTitleKey": null,
           "actionScope": "detail.pageActions",
           "readBehaviors": [
             "organization.person.read"
@@ -450,6 +486,8 @@
           "referenceKey": "navigation:organization.structure/tab:persons/surface:detail.pageActions/action:edit",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "PersonDetailView.Action_Edit",
+          "staticScopeTitleKey": null,
           "actionScope": "detail.pageActions",
           "readBehaviors": [
             "organization.person.company.lookup",
@@ -476,6 +514,8 @@
           "referenceKey": "navigation:organization.structure/tab:persons/surface:list.pageActions/action:create",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "PersonListView.Action_Create",
+          "staticScopeTitleKey": null,
           "actionScope": "list.pageActions",
           "readBehaviors": [
             "organization.person.company.lookup",
@@ -502,6 +542,8 @@
           "referenceKey": "navigation:organization.structure/tab:persons/surface:list.rowActions/action:delete",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "PersonListView.Action_Delete",
+          "staticScopeTitleKey": null,
           "actionScope": "list.rowActions",
           "readBehaviors": [
             "organization.person.read"
@@ -525,6 +567,8 @@
           "referenceKey": "navigation:organization.structure/tab:persons/surface:list.rowActions/action:disable",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "PersonListView.Action_Disable",
+          "staticScopeTitleKey": null,
           "actionScope": "list.rowActions",
           "readBehaviors": [
             "organization.person.read"
@@ -548,6 +592,8 @@
           "referenceKey": "navigation:organization.structure/tab:persons/surface:list.rowActions/action:edit",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "PersonListView.Action_Edit",
+          "staticScopeTitleKey": null,
           "actionScope": "list.rowActions",
           "readBehaviors": [
             "organization.person.company.lookup",
@@ -574,6 +620,8 @@
           "referenceKey": "navigation:organization.structure/tab:persons/surface:list.rowActions/action:enable",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "PersonListView.Action_Enable",
+          "staticScopeTitleKey": null,
           "actionScope": "list.rowActions",
           "readBehaviors": [
             "organization.person.read"
@@ -597,6 +645,8 @@
           "referenceKey": "navigation:organization.structure/tab:persons/surface:list/action:export",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "Platform.Export",
+          "staticScopeTitleKey": null,
           "actionScope": "list",
           "readBehaviors": [],
           "container": false
@@ -617,6 +667,8 @@
           "referenceKey": "navigation:organization.structure/tab:positions",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "OrganizationComposition.Position",
+          "staticScopeTitleKey": null,
           "actionScope": null,
           "readBehaviors": [
             "organization.position.read"
@@ -640,6 +692,8 @@
           "referenceKey": "navigation:organization.structure/tab:positions/surface:list.custom/action:authorize",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "PositionListView.Action_Authorize",
+          "staticScopeTitleKey": null,
           "actionScope": "list.custom",
           "readBehaviors": [],
           "container": false
@@ -661,6 +715,8 @@
           "referenceKey": "navigation:organization.structure/tab:positions/surface:list.pageActions/action:create",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "PositionListView.Action_Create",
+          "staticScopeTitleKey": null,
           "actionScope": "list.pageActions",
           "readBehaviors": [
             "organization.position.read"
@@ -684,6 +740,8 @@
           "referenceKey": "navigation:organization.structure/tab:positions/surface:list.rowActions/action:authorize",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "PositionListView.Action_Authorize",
+          "staticScopeTitleKey": null,
           "actionScope": "list.rowActions",
           "readBehaviors": [
             "organization.position.read"
@@ -707,6 +765,8 @@
           "referenceKey": "navigation:organization.structure/tab:positions/surface:list.rowActions/action:delete",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "PositionListView.Action_Delete",
+          "staticScopeTitleKey": null,
           "actionScope": "list.rowActions",
           "readBehaviors": [
             "organization.position.read"
@@ -730,6 +790,8 @@
           "referenceKey": "navigation:organization.structure/tab:positions/surface:list.rowActions/action:edit",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "PositionListView.Action_Edit",
+          "staticScopeTitleKey": null,
           "actionScope": "list.rowActions",
           "readBehaviors": [
             "organization.position.read"
@@ -752,6 +814,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "OrganizationComposition.Structure",
+          "staticScopeTitleKey": null,
           "actionScope": null,
           "readBehaviors": [
             "organization.person.read",
@@ -776,6 +840,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:company/surface:contextMenu/action:delete",
           "staticScope": "company",
           "staticScopeTitle": "\u516C\u53F8",
+          "titleKey": "OrganizationComposition.Delete",
+          "staticScopeTitleKey": "OrganizationComposition.Company",
           "actionScope": "contextMenu",
           "readBehaviors": [
             "organization.company.read"
@@ -799,6 +865,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:company/surface:contextMenu/action:edit",
           "staticScope": "company",
           "staticScopeTitle": "\u516C\u53F8",
+          "titleKey": "OrganizationComposition.Edit",
+          "staticScopeTitleKey": "OrganizationComposition.Company",
           "actionScope": "contextMenu",
           "readBehaviors": [
             "organization.company.read"
@@ -822,6 +890,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:company/tab:direct",
           "staticScope": "company",
           "staticScopeTitle": "\u516C\u53F8",
+          "titleKey": "OrganizationComposition.DirectDepartments",
+          "staticScopeTitleKey": "OrganizationComposition.Company",
           "actionScope": null,
           "readBehaviors": [
             "organization.department.company.lookup",
@@ -848,6 +918,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:company/tab:direct/surface:list.custom/action:authorize",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "DepartmentListView.Action_Authorize",
+          "staticScopeTitleKey": null,
           "actionScope": "list.custom",
           "readBehaviors": [],
           "container": false
@@ -870,6 +942,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:company/tab:direct/surface:list.pageActions/action:create",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "DepartmentListView.Action_Create",
+          "staticScopeTitleKey": null,
           "actionScope": "list.pageActions",
           "readBehaviors": [
             "organization.department.company.lookup",
@@ -896,6 +970,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:company/tab:direct/surface:list.rowActions/action:authorize",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "DepartmentListView.Action_Authorize",
+          "staticScopeTitleKey": null,
           "actionScope": "list.rowActions",
           "readBehaviors": [
             "organization.department.read"
@@ -920,6 +996,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:company/tab:direct/surface:list.rowActions/action:delete",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "DepartmentListView.Action_Delete",
+          "staticScopeTitleKey": null,
           "actionScope": "list.rowActions",
           "readBehaviors": [
             "organization.department.read"
@@ -944,6 +1022,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:company/tab:direct/surface:list.rowActions/action:edit",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "DepartmentListView.Action_Edit",
+          "staticScopeTitleKey": null,
           "actionScope": "list.rowActions",
           "readBehaviors": [
             "organization.department.company.lookup",
@@ -969,6 +1049,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:company/tab:information",
           "staticScope": "company",
           "staticScopeTitle": "\u516C\u53F8",
+          "titleKey": "OrganizationComposition.Information",
+          "staticScopeTitleKey": "OrganizationComposition.Company",
           "actionScope": null,
           "readBehaviors": [
             "organization.company.read"
@@ -992,6 +1074,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:department/surface:contextMenu/action:delete",
           "staticScope": "department",
           "staticScopeTitle": "\u90E8\u95E8",
+          "titleKey": "OrganizationComposition.Delete",
+          "staticScopeTitleKey": "OrganizationComposition.Department",
           "actionScope": "contextMenu",
           "readBehaviors": [
             "organization.department.read"
@@ -1015,6 +1099,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:department/surface:contextMenu/action:edit",
           "staticScope": "department",
           "staticScopeTitle": "\u90E8\u95E8",
+          "titleKey": "OrganizationComposition.Edit",
+          "staticScopeTitleKey": "OrganizationComposition.Department",
           "actionScope": "contextMenu",
           "readBehaviors": [
             "organization.department.company.lookup",
@@ -1040,6 +1126,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:department/tab:direct",
           "staticScope": "department",
           "staticScopeTitle": "\u90E8\u95E8",
+          "titleKey": "OrganizationComposition.DirectChildren",
+          "staticScopeTitleKey": "OrganizationComposition.Department",
           "actionScope": null,
           "readBehaviors": [
             "organization.department.company.lookup",
@@ -1066,6 +1154,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:department/tab:direct/surface:list.custom/action:authorize",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "DepartmentListView.Action_Authorize",
+          "staticScopeTitleKey": null,
           "actionScope": "list.custom",
           "readBehaviors": [],
           "container": false
@@ -1088,6 +1178,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:department/tab:direct/surface:list.pageActions/action:create",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "DepartmentListView.Action_Create",
+          "staticScopeTitleKey": null,
           "actionScope": "list.pageActions",
           "readBehaviors": [
             "organization.department.company.lookup",
@@ -1114,6 +1206,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:department/tab:direct/surface:list.rowActions/action:authorize",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "DepartmentListView.Action_Authorize",
+          "staticScopeTitleKey": null,
           "actionScope": "list.rowActions",
           "readBehaviors": [
             "organization.department.read"
@@ -1138,6 +1232,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:department/tab:direct/surface:list.rowActions/action:delete",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "DepartmentListView.Action_Delete",
+          "staticScopeTitleKey": null,
           "actionScope": "list.rowActions",
           "readBehaviors": [
             "organization.department.read"
@@ -1162,6 +1258,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:department/tab:direct/surface:list.rowActions/action:edit",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "DepartmentListView.Action_Edit",
+          "staticScopeTitleKey": null,
           "actionScope": "list.rowActions",
           "readBehaviors": [
             "organization.department.company.lookup",
@@ -1187,6 +1285,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:department/tab:information",
           "staticScope": "department",
           "staticScopeTitle": "\u90E8\u95E8",
+          "titleKey": "OrganizationComposition.Information",
+          "staticScopeTitleKey": "OrganizationComposition.Department",
           "actionScope": null,
           "readBehaviors": [
             "organization.department.read"
@@ -1210,6 +1310,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:person/surface:contextMenu/action:delete",
           "staticScope": "person",
           "staticScopeTitle": "\u4EBA\u5458",
+          "titleKey": "OrganizationComposition.Delete",
+          "staticScopeTitleKey": "OrganizationComposition.Person",
           "actionScope": "contextMenu",
           "readBehaviors": [
             "organization.person.read"
@@ -1233,6 +1335,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:person/surface:contextMenu/action:edit",
           "staticScope": "person",
           "staticScopeTitle": "\u4EBA\u5458",
+          "titleKey": "OrganizationComposition.Edit",
+          "staticScopeTitleKey": "OrganizationComposition.Person",
           "actionScope": "contextMenu",
           "readBehaviors": [
             "organization.person.company.lookup",
@@ -1259,6 +1363,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:person/surface:detail.custom/action:linkUser",
           "staticScope": "person",
           "staticScopeTitle": "\u4EBA\u5458",
+          "titleKey": "PersonDetailView.Action_LinkUser",
+          "staticScopeTitleKey": "OrganizationComposition.Person",
           "actionScope": "detail.custom",
           "readBehaviors": [
             "organization.person.linkUser.lookup"
@@ -1282,6 +1388,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:person/surface:detail.pageActions/action:authorize",
           "staticScope": "person",
           "staticScopeTitle": "\u4EBA\u5458",
+          "titleKey": "PersonDetailView.Action_Authorize",
+          "staticScopeTitleKey": "OrganizationComposition.Person",
           "actionScope": "detail.pageActions",
           "readBehaviors": [
             "organization.person.read"
@@ -1305,6 +1413,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:person/surface:detail.pageActions/action:disable",
           "staticScope": "person",
           "staticScopeTitle": "\u4EBA\u5458",
+          "titleKey": "PersonDetailView.Action_Disable",
+          "staticScopeTitleKey": "OrganizationComposition.Person",
           "actionScope": "detail.pageActions",
           "readBehaviors": [
             "organization.person.read"
@@ -1328,6 +1438,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/node-type:person/surface:detail.pageActions/action:edit",
           "staticScope": "person",
           "staticScopeTitle": "\u4EBA\u5458",
+          "titleKey": "PersonDetailView.Action_Edit",
+          "staticScopeTitleKey": "OrganizationComposition.Person",
           "actionScope": "detail.pageActions",
           "readBehaviors": [
             "organization.person.company.lookup",
@@ -1354,6 +1466,8 @@
           "referenceKey": "navigation:organization.structure/tab:structure/surface:treeActions/action:createCompany",
           "staticScope": null,
           "staticScopeTitle": null,
+          "titleKey": "OrganizationComposition.CreateCompany",
+          "staticScopeTitleKey": null,
           "actionScope": "treeActions",
           "readBehaviors": [
             "organization.company.read"

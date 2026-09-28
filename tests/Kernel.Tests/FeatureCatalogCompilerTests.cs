@@ -91,15 +91,18 @@ public sealed class FeatureCatalogCompilerTests
         while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "modules", "Authorization", "newp.plugin.json"))) repository = repository.Parent;
         Assert.NotNull(repository);
         var capsule = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(repository.FullName, "modules", "Authorization", "newp.plugin.json")))!;
-        var legacy = FeatureCatalogCompiler.Compile(FeatureCatalogCompiler.Read(System.Text.Json.JsonSerializer.SerializeToElement(capsule), "Authorization"));
-        capsule["features"]![0]!["titleKey"] = "Navigation.Workbench";
+        var legacyCapsule = capsule.DeepClone();
+        foreach (var feature in legacyCapsule["features"]!.AsArray()) feature!.AsObject().Remove("titleKey");
+        var legacy = FeatureCatalogCompiler.Compile(FeatureCatalogCompiler.Read(System.Text.Json.JsonSerializer.SerializeToElement(legacyCapsule), "Authorization"));
+        var workbench = capsule["features"]!.AsArray().Single(feature => feature!["key"]!.GetValue<string>() == "authorization.workbench")!;
+        workbench["titleKey"] = "Navigation.Workbench";
         var translated = FeatureCatalogCompiler.Compile(FeatureCatalogCompiler.Read(System.Text.Json.JsonSerializer.SerializeToElement(capsule), "Authorization"));
         Assert.Equal(legacy.Select(point => (point.Position, point.BehaviorKey, point.Title, point.Order, string.Join(",", point.EntryDependencies))),
             translated.Select(point => (point.Position, point.BehaviorKey, point.Title, point.Order, string.Join(",", point.EntryDependencies))));
         var options = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
         var custom = System.Text.Json.JsonSerializer.SerializeToElement(translated.Single(point => point.Key == "authorization.workbench"), options);
         Assert.Equal("Navigation.Workbench", custom.GetProperty("titleKey").GetString());
-        Assert.Null(System.Text.Json.JsonSerializer.SerializeToElement(legacy[0], options).GetProperty("titleKey").GetString());
+        Assert.Null(System.Text.Json.JsonSerializer.SerializeToElement(legacy.Single(point => point.Key == "authorization.workbench"), options).GetProperty("titleKey").GetString());
     }
 
     [Fact]

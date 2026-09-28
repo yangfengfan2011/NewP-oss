@@ -127,9 +127,9 @@ function classifyImportedCallable(imported) {
   return 'unknown-network';
 }
 
-function classifyTransportCall(call) {
-  const input = call.arguments[0];
-  const init = call.arguments[1];
+function classifyTransportCall(call, inputIndex = 0, initIndex = 1) {
+  const input = call.arguments[inputIndex];
+  const init = call.arguments[initIndex];
   if (!init) {
     return input && (ts.isStringLiteralLike(input) || ts.isNoSubstitutionTemplateLiteral(input))
       ? 'read-query'
@@ -150,6 +150,14 @@ function classifyTransportCall(call) {
   if (method === 'GET' || method === 'HEAD') return 'read-query';
   if (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE') return 'write-command';
   return 'unknown-network';
+}
+
+// 已确认的传输 wrapper 保留真实 URL/init 位置；不能按 fetch 前缀把可写传输当成只读 API。
+function classifyImportedTransportCall(call, imported, file) {
+  if (imported?.importedName !== 'fetchObjectAuthorization' || !imported.source.startsWith('.')) return undefined;
+  const target = path.posix.normalize(path.posix.join(path.posix.dirname(file), imported.source)).replace(/\.(?:ts|tsx|js)$/, '');
+  if (target !== 'packages/ui/src/objectAuthorizationRequest') return undefined;
+  return classifyTransportCall(call, 1, 2);
 }
 
 function classifyMemberName(receiver, method) {
@@ -331,7 +339,8 @@ export function analyzeEffectNetworkLifecycleSource({ file, source }) {
           ? 'read-query'
           : importedCallables.get(node.expression.text)?.importedName === 'platformFetch'
             ? classifyTransportCall(node)
-            : classifyImportedCallable(importedCallables.get(node.expression.text))
+            : classifyImportedTransportCall(node, importedCallables.get(node.expression.text), file)
+            ?? classifyImportedCallable(importedCallables.get(node.expression.text))
       : undefined;
     const memberClassification = ts.isCallExpression(node)
       ? ts.isPropertyAccessExpression(node.expression)

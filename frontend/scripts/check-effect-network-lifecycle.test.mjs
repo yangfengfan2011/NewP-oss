@@ -233,6 +233,66 @@ test('classifies literal HTTP methods and fails closed for a computed method', (
   ]);
 });
 
+test('classifies the real object-authorization transport signature and its import alias without trusting unknown init', () => {
+  const findings = analyzeEffectNetworkLifecycleSource({
+    file: 'packages/ui/src/WrapperProbe.tsx',
+    source: `import { useEffect } from 'react';
+      import { platformFetch } from '@icp-platform/core';
+      import { fetchObjectAuthorization, fetchObjectAuthorization as requestObject } from './objectAuthorizationRequest';
+      export function ReadProbe() { useEffect(() => { void fetchObjectAuthorization(platformFetch, '/catalog', { signal: undefined, headers: {} }); }, []); }
+      export function HeadProbe() { useEffect(() => { void fetchObjectAuthorization(platformFetch, '/catalog', { method: 'HEAD' }); }, []); }
+      export function WriteProbe() { useEffect(() => { void fetchObjectAuthorization(platformFetch, '/objects/id', { method: 'POST', body: '{}' }); }, []); }
+      export function AliasProbe() { useEffect(() => { void requestObject(platformFetch, '/catalog', { method: 'GET' }); }, []); }
+      export function UnknownProbe({ method }) { useEffect(() => { void requestObject(platformFetch, '/objects/id', { method }); }, [method]); }
+      export function OpaqueProbe({ init }) { useEffect(() => { void requestObject(platformFetch, '/objects/id', init); }, [init]); }
+      export function SpreadProbe({ init }) { useEffect(() => { void requestObject(platformFetch, '/objects/id', { ...init }); }, [init]); }
+    `,
+  });
+  assert.deepEqual(findings.map(({ enclosingFunction, classification }) => ({ enclosingFunction, classification })), [
+    { enclosingFunction: 'ReadProbe', classification: 'read-query' },
+    { enclosingFunction: 'HeadProbe', classification: 'read-query' },
+    { enclosingFunction: 'WriteProbe', classification: 'write-command' },
+    { enclosingFunction: 'AliasProbe', classification: 'read-query' },
+    { enclosingFunction: 'UnknownProbe', classification: 'unknown-network' },
+    { enclosingFunction: 'OpaqueProbe', classification: 'unknown-network' },
+    { enclosingFunction: 'SpreadProbe', classification: 'unknown-network' },
+  ]);
+});
+
+test('does not treat a same-named callable from another source as the reviewed transport wrapper', () => {
+  const findings = analyzeEffectNetworkLifecycleSource({
+    file: 'modules/example/src/Probe.tsx',
+    source: `import { useEffect } from 'react';
+      import { fetchObjectAuthorization } from './objectAuthorizationRequest';
+      export function Probe() { useEffect(() => { void fetchObjectAuthorization(fetch, '/items', { method: 'GET' }); }, []); }
+    `,
+  });
+  assert.deepEqual(findings, []);
+});
+
+test('rejects object-authorization wrapper writes and unknown methods in platform query loads', () => {
+  const findings = analyzeEffectNetworkLifecycleSource({
+    file: 'packages/ui/src/WrapperQueryProbe.tsx',
+    source: `import { platformFetch, usePlatformQuery } from '@icp-platform/core';
+      import { fetchObjectAuthorization as requestObject } from './objectAuthorizationRequest';
+      export function Probe({ method }) {
+        const read = usePlatformQuery({ key: ['read'], load: () => requestObject(platformFetch, '/catalog', { method: 'GET' }) });
+        const write = usePlatformQuery({ key: ['write'], load: () => requestObject(platformFetch, '/objects/id', { method: 'POST' }) });
+        const unknown = usePlatformQuery({ key: ['unknown'], load: () => requestObject(platformFetch, '/objects/id', { method }) });
+        return null;
+      }
+    `,
+  });
+  assert.deepEqual(findings.map(({ enclosingFunction, hook, classification }) => ({ enclosingFunction, hook, classification })), [
+    { enclosingFunction: 'read', hook: 'usePlatformQuery.load', classification: 'read-query' },
+    { enclosingFunction: 'write', hook: 'usePlatformQuery.load', classification: 'write-command' },
+    { enclosingFunction: 'unknown', hook: 'usePlatformQuery.load', classification: 'unknown-network' },
+  ]);
+  assert.equal(evaluateEffectNetworkLifecycle({ findings: [findings[0]], allowlist: [] }).ok, true);
+  assert.equal(evaluateEffectNetworkLifecycle({ findings: [findings[1]], allowlist: [] }).ok, false);
+  assert.equal(evaluateEffectNetworkLifecycle({ findings: [findings[2]], allowlist: [] }).ok, false);
+});
+
 test('classifies explicit data adapter, client, service, and provider member sinks', () => {
   const findings = analyzeEffectNetworkLifecycleSource({
     file: 'modules/example/src/MemberProbe.tsx',
@@ -935,14 +995,10 @@ test('matches the reviewed current-tree baseline with no effect write commands',
   const queryLoadFindings = findings.filter(({ hook }) => hook === 'usePlatformQuery.load');
 
   assert.equal(findings.filter(({ classification }) => classification === 'write-command').length, 0);
-  assert.deepEqual(effectFindings.map(({ id }) => id), effectNetworkLifecycleAllowlist.map(({ id }) => id));
+  assert.deepEqual(effectFindings.map(({ id }) => id).sort(), effectNetworkLifecycleAllowlist.map(({ id }) => id).sort());
   assert.deepEqual(queryLoadFindings.map(({ id, classification }) => ({ id, classification })), [
     {
       id: 'modules/identity/src/standard-crud/IdentityAccountSecurityEventsSummary.tsx::query::usePlatformQuery.load::listAccountSecurityEvents',
-      classification: 'read-query',
-    },
-    {
-      id: 'modules/organization/src/components/OrganizationObjectAuthorizationInput.tsx::query::usePlatformQuery.load::read>platformFetch',
       classification: 'read-query',
     },
     {
@@ -963,6 +1019,10 @@ test('matches the reviewed current-tree baseline with no effect write commands',
     },
     {
       id: 'packages/shell/src/standard-crud/standardCrudLookupRuntime.ts::query::usePlatformQuery.load::loadLookupQuery>loadStandardCrudLookupPage',
+      classification: 'read-query',
+    },
+    {
+      id: 'packages/ui/src/ObjectAuthorizationInput.tsx::query::usePlatformQuery.load::read>fetchObjectAuthorization',
       classification: 'read-query',
     },
   ]);

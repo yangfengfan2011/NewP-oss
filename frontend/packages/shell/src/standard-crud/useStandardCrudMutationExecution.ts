@@ -27,6 +27,7 @@ export interface StandardCrudMutationExecution {
   fieldErrors: Record<string, string>;
   conflict: boolean;
   synchronizationError: string | null;
+  synchronizationFailure: unknown;
   execute: (request: StandardCrudMutationExecutionRequest) => Promise<boolean>;
   clearError: () => void;
 }
@@ -74,7 +75,7 @@ export function useStandardCrudMutationExecution({
   const [requestError, setRequestError] = useState<unknown>(null);
   const [fieldErrorFacts, setFieldErrorFacts] = useState<Record<string, StandardCrudFieldErrorFact>>({});
   const [conflict, setConflict] = useState(false);
-  const [synchronizationError, setSynchronizationError] = useState<string | null>(null);
+  const [synchronizationFailure, setSynchronizationFailure] = useState<{ error: unknown } | null>(null);
 
   const clearError = useCallback(() => {
     setError(null);
@@ -139,11 +140,11 @@ export function useStandardCrudMutationExecution({
       }
 
       // 写入已经提交；后置呈现或读取失败不能进入写入错误分支，也不能重放写入。
-      setSynchronizationError(null);
+      setSynchronizationFailure(null);
       await handoffStandardCrudSuccess({
         owner: { kind: 'mutation', resourceKey: registration.resourceKey },
         result, onResult, onCommitted, refresh,
-        onSynchronizationError: readError => setSynchronizationError(`已保存，刷新失败：${readError instanceof Error ? readError.message : String(readError)}`),
+        onSynchronizationError: readError => setSynchronizationFailure({ error: readError }),
       });
 
       return true;
@@ -173,7 +174,8 @@ export function useStandardCrudMutationExecution({
     error: error ? formatRequestError(requestError, t) : null,
     fieldErrors: Object.fromEntries(Object.keys(fieldErrors).map(field => [field, formatFieldError(fieldErrorFacts[field] ?? { field }, t)])),
     conflict,
-    synchronizationError,
+    synchronizationFailure: synchronizationFailure?.error,
+    synchronizationError: synchronizationFailure ? t('Platform.SavedRefreshFailed', '已保存，刷新失败。请重新加载。') : null,
     execute,
     clearError,
   };

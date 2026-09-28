@@ -54,3 +54,14 @@ void loadStandardCrudLookupPage({
 void legacyProvider;
 void contextAwareProvider;
 void pagedProvider;
+
+void loadStandardCrudLookupPage(lookupInput).then(result => {
+  const originalFailure: unknown = result.failure;
+  const legacyError: string | null = result.error;
+  void originalFailure;
+  void legacyError;
+});
+void loadStandardCrudLookupOptions(lookupInput).then(result => {
+  const originalFailure: unknown = result.failure;
+  void originalFailure;
+});

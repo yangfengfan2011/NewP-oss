@@ -163,16 +163,7 @@ async function requestBlob(
 ): Promise<StandardCrudExportResponse> {
   const response = await fetcher(path, init);
   if (!response.ok) {
-    let backendMessage: string | undefined;
-    try {
-      const problem = await response.json() as { message?: unknown };
-      backendMessage = typeof problem.message === 'string' && problem.message.trim().length > 0
-        ? problem.message
-        : undefined;
-    } catch {
-      backendMessage = undefined;
-    }
-    throw new Error(backendMessage ?? errorMessage);
+    throw await readStandardCrudRequestError(response, errorMessage);
   }
 
   return {

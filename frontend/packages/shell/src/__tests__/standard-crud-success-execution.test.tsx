@@ -69,7 +69,7 @@ describe.each(['action', 'mutation'] as const)('%s success execution wiring', (k
     expect(onResult.mock.calls[0][0]).toBe(result);
     expect(onCommitted).toHaveBeenCalledTimes(hasCommitted ? 1 : 0);
     expect(refresh).toHaveBeenCalledTimes(hasCommitted ? 0 : 1);
-    expect(execution().synchronizationError).toBe(`已保存，刷新失败：${kind === 'action' ? 'Error: last' : 'last'}`);
+    expect(execution().synchronizationError).toBe(kind === 'action' ? '已保存，刷新失败：Error: last' : '已保存，刷新失败。请重新加载。');
     expect(execution().error).toBeNull();
     expect(execution().pending).toBe(false);
   });

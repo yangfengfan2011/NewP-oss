@@ -3,7 +3,7 @@
 import { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { LocalizationProvider } from '@icp-platform/core';
+import { LanguageSelect, LocalizationProvider } from '@icp-platform/core';
 import platformDictionary from '../../../../../modules/Platform/metadata/dictionaries/Platform.dic.json';
 import {
   StandardCrudRequestError,
@@ -34,12 +34,13 @@ describe('standard CRUD mutation execution', () => {
     registration: StandardCrudResourceRegistration,
     refresh: () => void,
     onResult: (result: StandardCrudOperationResult) => void,
-    options: { fixedCreateValues?: Record<string, unknown>; onCommitted?: (change: import("@icp-platform/sdk").ResourceChange) => Promise<void> } = {},
+    options: { fixedCreateValues?: Record<string, unknown>; onCommitted?: (change: import("@icp-platform/sdk").ResourceChange) => Promise<void>; bilingual?: boolean } = {},
   ): Promise<() => StandardCrudMutationExecution> {
     let currentExecution: StandardCrudMutationExecution | undefined;
+    const { bilingual = false, ...executionOptions } = options;
 
     function Harness() {
-      const execution = useStandardCrudMutationExecution({ registration, refresh, onResult, ...options });
+      const execution = useStandardCrudMutationExecution({ registration, refresh, onResult, ...executionOptions });
       useEffect(() => {
         currentExecution = execution;
       }, [execution]);
@@ -50,8 +51,11 @@ describe('standard CRUD mutation execution', () => {
     document.body.appendChild(container);
     await act(async () => {
       root = createRoot(container);
-      const catalogs = { zhs: Object.fromEntries(Object.entries(platformDictionary.Platform).map(([key, value]) => [`Platform.${key}`, value.zhs])) };
-      root.render(<LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]} catalogs={catalogs}><Harness /></LocalizationProvider>);
+      const catalogs = {
+        zhs: { ...Object.fromEntries(Object.entries(platformDictionary.Platform).map(([key, value]) => [`Platform.${key}`, value.zhs])), 'Platform.SavedRefreshFailed': '已保存，刷新失败。请重新加载。' },
+        en: { 'Platform.Language': 'Language', 'Platform.SavedRefreshFailed': 'Saved, but refreshing failed. Reload the data.' },
+      };
+      root.render(<LocalizationProvider initialLanguage="zhs" defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }, ...(bilingual ? [{ code: 'en', displayName: 'English' }] : [])]} catalogs={catalogs}>{bilingual ? <LanguageSelect /> : null}<Harness /></LocalizationProvider>);
     });
 
     return () => {
@@ -59,6 +63,31 @@ describe('standard CRUD mutation execution', () => {
       return currentExecution;
     };
   }
+
+  it('retains a committed synchronization failure and retranslates its warning without exposing diagnostics or replaying the write', async () => {
+    const failure = new StandardCrudRequestError('raw synchronization diagnostic', 503, {}, { code: 'READ_UNAVAILABLE', args: { source: 'diagnostic-only' } });
+    const result: StandardCrudOperationResult = { operation: 'create', payload: { receipt: 'saved' }, change: { operation: 'create', id: '1' } };
+    const create = vi.fn().mockResolvedValue(result);
+    const committed = vi.fn().mockRejectedValue(failure);
+    const refresh = vi.fn();
+    const onResult = vi.fn();
+    const registration: StandardCrudResourceRegistration = { resourceKey: 'record', listViewKey: 'record.list', dataAdapter: { list: vi.fn(), get: vi.fn(), getRowId: () => '1', create } };
+    const execution = await renderExecution(registration, refresh, onResult, { onCommitted: committed, bilingual: true });
+    let succeeded = false;
+    await act(async () => { succeeded = await execution().execute({ mode: 'create', fields: [], values: {}, detailFields: {} }); });
+    expect(succeeded).toBe(true);
+    expect(execution().error).toBeNull();
+    expect(execution().synchronizationFailure).toBe(failure);
+    expect(execution().synchronizationError).toBe('已保存，刷新失败。请重新加载。');
+    await act(async () => { const select = container.querySelector('select')!; select.value = 'en'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+    expect(execution().synchronizationError).toBe('Saved, but refreshing failed. Reload the data.');
+    expect(execution().synchronizationError).not.toContain(failure.message);
+    expect(execution().synchronizationFailure).toBe(failure);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(committed).toHaveBeenCalledTimes(1);
+    expect(onResult).toHaveBeenCalledWith(result);
+    expect(refresh).not.toHaveBeenCalled();
+  });
 
   it('retains fixed creation context and publishes once even if subsequent reads fail', async () => {
     const create = vi.fn().mockResolvedValue({ operation: 'create', payload: {}, change: { operation: 'create', id: 'd1', after: { CompanyId: 'current', ParentDepartmentId: null } } });

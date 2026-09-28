@@ -3,11 +3,12 @@
 import { act, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
-import { PlatformQueryProvider } from '@icp-platform/core';
+import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { StandardCrudForm } from '@icp-platform/ui/crud-form';
 import {
   createStandardCrudRestLookupProvider,
   loadStandardCrudLookupPage,
+  StandardCrudRequestError,
   type StandardCrudFieldDefinition,
   type StandardCrudLookupProvider,
   type StandardCrudLookupPage,
@@ -710,10 +711,13 @@ describe('standard CRUD lookup runtime', () => {
   });
 
   it('returns stable error and preserves current value when provider fails', async () => {
+    const failure = new StandardCrudRequestError('部门加载失败', 403, {}, {
+      code: 'AUTH_FORBIDDEN', reasonKey: 'Platform.Forbidden', args: { field: 'DepartmentId' },
+    });
     const departments: StandardCrudLookupProvider = {
       key: 'departments',
       load: vi.fn(async () => {
-        throw new Error('部门加载失败');
+        throw failure;
       }),
     };
 
@@ -730,7 +734,19 @@ describe('standard CRUD lookup runtime', () => {
     expect(result).toEqual({
       options: [{ value: 'existing', label: '当前值不可用', disabled: true }],
       error: '部门加载失败',
+      failure,
     });
+  });
+
+  it('retains the original provider failure and lookup page/current-value contract', async () => {
+    const failure = new StandardCrudRequestError('raw lookup diagnostic', 403, {}, { code: 'AUTH_FORBIDDEN', args: { field: 'DepartmentId' } });
+    const departments: StandardCrudLookupProvider = { key: 'departments', load: vi.fn().mockRejectedValue(failure) };
+    const page = await loadStandardCrudLookupPage({ field: lookupField(), providers: [departments],
+      values: { tenantId: 'tenant-a', departmentId: 'existing' }, page: 3, pageSize: 7 });
+    expect(page.failure).toBe(failure);
+    expect(page).toMatchObject({ page: 3, pageSize: 7, hasMore: false, error: failure.message,
+      options: [{ value: 'existing', label: '当前值不可用', disabled: true }],
+      currentOptions: [{ value: 'existing', label: '当前值不可用', disabled: true }] });
   });
 
   it('keeps the old detail name and raw ID out of the rendered lookup while authorization is pending', async () => {
@@ -755,7 +771,7 @@ describe('standard CRUD lookup runtime', () => {
         showSubmitAction={false} titleForSection={(key) => key} />;
     }
     try {
-      await act(async () => root.render(<PlatformQueryProvider scopeKey="pending-lookup"><Probe /></PlatformQueryProvider>));
+      await act(async () => root.render(<LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]} catalogs={{}}><PlatformQueryProvider scopeKey="pending-lookup"><Probe /></PlatformQueryProvider></LocalizationProvider>));
       expect(container.querySelector('.ant-select-selection-item')?.textContent).toBe('正在读取当前值');
       expect(container.textContent).not.toContain('existing');
       expect(container.textContent).not.toContain('私有原名');

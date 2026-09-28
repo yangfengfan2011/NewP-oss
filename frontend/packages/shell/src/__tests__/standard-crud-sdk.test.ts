@@ -394,10 +394,13 @@ describe('standard CRUD SDK helpers', () => {
   });
 
   it('surfaces the backend export limit message', async () => {
-    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    const problem = {
       code: 'StandardCrud.Export.LimitExceeded',
+      reasonKey: 'StandardCrud.ExportLimit', args: { limit: 10000 },
+      fieldErrors: [{ field: 'Count', code: 'StandardCrud.Export.LimitExceeded', args: { limit: 10000 }, message: 'export diagnostic' }],
       message: '筛选结果超过同步导出上限 10000 行，请缩小筛选范围后重试。',
-    }), {
+    };
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(problem), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
     }));
@@ -407,7 +410,8 @@ describe('standard CRUD SDK helpers', () => {
       mode: 'all',
       columns: [{ key: 'name', field: 'ENAME', title: '名称' }],
       query: { pageIndex: 1, pageSize: 20, filters: {} },
-    })).rejects.toThrow('筛选结果超过同步导出上限 10000 行');
+    })).rejects.toMatchObject({ status: 400, code: problem.code, reasonKey: problem.reasonKey,
+      args: problem.args, fieldErrorDetails: problem.fieldErrors, responseProblem: problem, message: problem.message });
   });
 
   it('preserves conflict status and field errors from standard CRUD problem details', async () => {

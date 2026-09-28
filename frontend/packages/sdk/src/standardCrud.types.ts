@@ -131,6 +131,8 @@ export interface LoadStandardCrudLookupOptionsInput {
 export interface LoadStandardCrudLookupOptionsResult {
   options: StandardCrudOption[];
   error: string | null;
+  /** 原始 provider 失败事实；调用方在当前语言下呈现，诊断不作为用户正文。 */
+  failure?: unknown;
 }
 
 export interface LoadStandardCrudLookupPageInput extends LoadStandardCrudLookupOptionsInput {
@@ -141,6 +143,8 @@ export interface LoadStandardCrudLookupPageInput extends LoadStandardCrudLookupO
 
 export interface LoadStandardCrudLookupPageResult extends StandardCrudLookupPage {
   error: string | null;
+  /** 原始 provider 失败事实，不改变候选分页与当前值保留规则。 */
+  failure?: unknown;
 }
 
 export interface UseStandardCrudLookupRuntimeInput {

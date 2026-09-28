@@ -178,7 +178,8 @@ export async function loadStandardCrudLookupOptions(
   context?: StandardCrudLookupExecutionContext,
 ): Promise<LoadStandardCrudLookupOptionsResult> {
   const result = await loadStandardCrudLookupPage(input, context);
-  return { options: result.options, error: result.error };
+  return { options: result.options, error: result.error,
+    ...(Object.prototype.hasOwnProperty.call(result, 'failure') ? { failure: result.failure } : {}) };
 }
 
 /** 加载一页 lookup 候选，并将 legacy 数组 Provider 规范化为无后续页的分页结果。 */
@@ -269,6 +270,7 @@ export async function loadStandardCrudLookupPage(
       pageSize,
       hasMore: false,
       error: error instanceof Error && error.message.length > 0 ? error.message : '加载选项失败',
+      failure: error,
     };
   }
 }

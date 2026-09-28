@@ -78,6 +78,8 @@ export interface StandardCrudOption {
   value: string;
   label: string;
   disabled?: boolean;
+  /** 仅 SDK 合成的缺失当前值项使用此标记；业务 label 和 disabled 不构成不可用事实。 */
+  unavailable?: true;
 }
 
 /** lookup 请求上下文；依赖字段值由 Shell 收集，Provider 只接收可序列化输入。 */

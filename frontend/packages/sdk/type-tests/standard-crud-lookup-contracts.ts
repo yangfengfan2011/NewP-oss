@@ -2,6 +2,7 @@ import type {
   StandardCrudLookupExecutionContext,
   StandardCrudLookupPage,
   StandardCrudLookupProvider,
+  StandardCrudOption,
 } from '../src/index';
 import { loadStandardCrudLookupOptions, loadStandardCrudLookupPage } from '../src/index';
 
@@ -54,6 +55,13 @@ void loadStandardCrudLookupPage({
 void legacyProvider;
 void contextAwareProvider;
 void pagedProvider;
+
+const synthesizedCurrent: StandardCrudOption = { value: 'current', label: 'fallback', unavailable: true };
+const marker: true | undefined = synthesizedCurrent.unavailable;
+void marker;
+// @ts-expect-error 合成标记只有 true 或缺省，不用 false 表达另一个状态协议。
+const invalidMarker: StandardCrudOption = { value: 'business', label: 'Business', unavailable: false };
+void invalidMarker;
 
 void loadStandardCrudLookupPage(lookupInput).then(result => {
   const originalFailure: unknown = result.failure;

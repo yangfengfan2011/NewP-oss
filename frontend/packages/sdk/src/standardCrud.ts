@@ -203,7 +203,7 @@ export async function loadStandardCrudLookupPage(
   }
 
   const current = readStandardCrudCurrentLookupOption(field, values, detailFields);
-  const unavailable = current ? { ...current, label: '当前值不可用' } : null;
+  const unavailable: StandardCrudOption | null = current ? { ...current, label: '当前值不可用', unavailable: true } : null;
   const providerKey = field.lookup?.providerKey ?? '';
   const provider = providers.find((candidate) => candidate.key === providerKey);
   if (!provider) {

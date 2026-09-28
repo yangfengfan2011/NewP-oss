@@ -52,7 +52,7 @@ it('refreshes buttons and drops cached data after an explicit rejected write wit
   await render();
   expect(container.textContent).toContain('旧结果');
   expect(container.textContent).toContain('编辑');
-  await act(async () => { await expect(createStandardCrudClient('/api/resource', platformFetch).update('1', {})).rejects.toThrow('当前操作已被拒绝'); });
+  await act(async () => { await expect(createStandardCrudClient('/api/resource', platformFetch).update('1', {})).rejects.toMatchObject({ status: 403, code: 'AUTH_FORBIDDEN' }); });
   expect(container.textContent).not.toContain('编辑');
   expect(container.textContent).toContain('当前结果');
   expect(fetcher.mock.calls.filter(([request]) => request instanceof Request && request.method === 'PUT')).toHaveLength(1);

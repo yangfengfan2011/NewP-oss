@@ -6,6 +6,7 @@ import { LoadingBlock } from './LoadingBlock';
 export interface CrudFormDrawerProps {
   open: boolean;
   title: ReactNode;
+  headerActions?: ReactNode;
   loading?: boolean;
   saving?: boolean;
   error?: string | null;
@@ -26,6 +27,7 @@ export interface CrudFormDrawerProps {
 export function CrudFormDrawer({
   open,
   title,
+  headerActions,
   loading = false,
   saving = false,
   error = null,
@@ -66,6 +68,7 @@ export function CrudFormDrawer({
     <Drawer
       open={open}
       title={title}
+      extra={headerActions}
       width="min(720px, calc(100vw - 16px))"
       onClose={onClose}
       afterOpenChange={afterOpenChange}
@@ -87,7 +90,7 @@ export function CrudFormDrawer({
           {errorActions}
         </div>
       ) : null}
-      {!loading ? children : null}
+      <div hidden={loading}>{children}</div>
     </Drawer>
   );
 }

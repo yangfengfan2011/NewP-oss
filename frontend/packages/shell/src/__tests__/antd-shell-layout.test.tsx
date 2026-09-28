@@ -7,6 +7,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { Header } from '../components/Header';
 import { Sidebar } from '../components/Sidebar';
 import { PageContainer } from '../components/PageContainer';
+import { LocalizationProvider } from '@icp-platform/core';
 
 const logout = vi.fn(() => Promise.resolve());
 
@@ -91,7 +92,7 @@ describe('shell chrome', () => {
 
     await act(async () => {
       root = createRoot(container);
-      root.render(<Header />);
+      root.render(<LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]} catalogs={{ zhs: {} }}><Header /></LocalizationProvider>);
     });
 
     expect(container.querySelector('.np-header-logo')?.textContent).toBe('ICP');

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   applyStandardCrudLookupValueChange,
   type StandardCrudFieldDefinition,
@@ -20,6 +20,7 @@ interface StandardCrudDetailEditorProps {
   resourceKey: string;
   featurePosition?: string;
   detail: { fields: Record<string, unknown> };
+  reading?: boolean;
   fields: StandardCrudFieldDefinition[];
   sections: StandardCrudFormSection[];
   registration: StandardCrudMutationRegistration & {
@@ -36,6 +37,7 @@ export default function StandardCrudDetailEditor({
   resourceKey,
   featurePosition,
   detail,
+  reading = false,
   fields,
   sections,
   registration,
@@ -47,6 +49,8 @@ export default function StandardCrudDetailEditor({
   const [formValues, setFormValues] = useState<Record<string, unknown>>(
     () => buildStandardCrudDetailFormValues(detail.fields, fields),
   );
+  const resetRequested = useRef(false);
+  const previousDetail = useRef(detail);
   const lookupRuntime = useStandardCrudLookupRuntime({
     resourceKey,
   featurePosition,
@@ -62,10 +66,16 @@ export default function StandardCrudDetailEditor({
   });
 
   useEffect(() => {
-    setFormValues(buildStandardCrudDetailFormValues(detail.fields, fields));
+    // 译文与只读快照更新不拥有草稿；只有用户明确 reload 才重建当前实体输入。
+    if (resetRequested.current && previousDetail.current !== detail) {
+      setFormValues(buildStandardCrudDetailFormValues(detail.fields, fields));
+      resetRequested.current = false;
+    }
+    previousDetail.current = detail;
   }, [detail, fields]);
 
   const handleSave = async () => {
+    if (reading) return;
     const succeeded = await mutationExecution.execute({
       mode: 'edit',
       featurePosition,
@@ -92,6 +102,7 @@ export default function StandardCrudDetailEditor({
             type="default"
             onClick={() => {
               mutationExecution.clearError();
+              resetRequested.current = true;
               onRefresh();
             }}
             disabled={mutationExecution.pending}
@@ -121,7 +132,7 @@ export default function StandardCrudDetailEditor({
           }
         }}
         onSubmit={handleSave}
-        saving={mutationExecution.pending}
+        saving={mutationExecution.pending || reading}
         error={mutationExecution.error}
         titleForSection={titleForSection}
       />

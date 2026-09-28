@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, useEffect } from 'react';
+import { act, useEffect, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LocalizationProvider, useLocalization } from '@icp-platform/core';
@@ -11,10 +11,11 @@ import { PlatformRequestLocaleBridge } from '../localization/PlatformRequestLoca
 
 function Probe() {
   const { currentLanguage, setLanguage } = useLocalization();
+  const [draft, setDraft] = useState('');
   useEffect(() => {
     void platformFetch(`/api/probe/${currentLanguage}`);
   }, [currentLanguage]);
-  return <button type="button" onClick={() => setLanguage('en')}>English</button>;
+  return <><input aria-label="draft" value={draft} onChange={(event) => setDraft(event.target.value)} /><button type="button" onClick={() => setLanguage('en')}>English</button></>;
 }
 
 describe('PlatformRequestLocaleBridge', () => {
@@ -53,9 +54,16 @@ describe('PlatformRequestLocaleBridge', () => {
 
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(requestLocale(fetchMock.mock.calls[0])).toBe('zh-CN');
+    const input = container.querySelector('input')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'unsaved');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
     await act(async () => container.querySelector('button')?.click());
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(requestLocale(fetchMock.mock.calls[1])).toBe('en-US');
+    expect(container.querySelector('input')).toBe(input);
+    expect(input.value).toBe('unsaved');
   });
 });
 

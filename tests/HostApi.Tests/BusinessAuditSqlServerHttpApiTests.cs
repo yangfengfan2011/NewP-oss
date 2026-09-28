@@ -1348,17 +1348,19 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
     private string _temporaryCredential = "";
     internal string ActorId { get; private set; } = "";
     internal IReadOnlyList<FeaturePoint> FeatureCatalog { get; private set; } = [];
+    private bool _useRequestPresentation;
     private BusinessAuditHostFixture(string admin, string catalog)
     {
         _admin = admin; _catalog = catalog;
         _connection = new SqlConnectionStringBuilder(admin) { InitialCatalog = catalog }.ConnectionString;
     }
     internal static async Task<BusinessAuditHostFixture> CreateAsync(Action<IServiceCollection>? configureServices = null,
-        IReadOnlyDictionary<string, bool>? actionStates = null)
+        IReadOnlyDictionary<string, bool>? actionStates = null, bool useRequestPresentation = false)
     {
         var admin = new SqlConnectionStringBuilder(Environment.GetEnvironmentVariable("NEWP_ORGANIZATION_SQLSERVER_ADMIN_CONNECTION")
             ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true") { InitialCatalog = "master" }.ConnectionString;
         var fixture = new BusinessAuditHostFixture(admin, "NewPBusinessAudit_" + Guid.NewGuid().ToString("N"));
+        fixture._useRequestPresentation = useRequestPresentation;
         await fixture.ExecuteAdminAsync($"CREATE DATABASE [{fixture._catalog}]");
         try
         {
@@ -1454,6 +1456,13 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         builder.Services.AddScoped<ITemporalDisplayFormatter, TemporalDisplayFormatter>();
         builder.Services.AddScoped<ITemporalDisplayProjectionExecutor, TemporalDisplayProjectionExecutor>();
         builder.Services.AddSingleton<IRequestPresentationContextAccessor, TestPresentation>();
+        if (_useRequestPresentation)
+        {
+            var localization = new ICP.Platform.Kernel.PluginPackages.LocalizationRuntimeManifestBuilder().Build(hostRoot);
+            builder.Services.AddSingleton(ICP.Platform.HostApi.Presentation.ActiveLocalizationManifest.Parse(localization));
+            builder.Services.AddSingleton<IRuntimeTextCatalog>(RuntimeTextCatalog.Parse(localization));
+            builder.Services.Replace(ServiceDescriptor.Scoped<IRequestPresentationContextAccessor, ICP.Platform.HostApi.Presentation.HttpRequestPresentationContextAccessor>());
+        }
         builder.Services.AddScoped<ITemporalInputNormalizer>(sp => new TemporalInputNormalizer(sp.GetRequiredService<IRequestPresentationContextAccessor>(), "Asia/Shanghai", TimeProvider.System));
         var models = IdentityModelDefinitions.All.Select(m => m with { OwnerModuleId = "Identity" })
             .Concat(AuthenticationModelDefinitions.All.Select(m => m with { OwnerModuleId = "Authentication" }))
@@ -1476,6 +1485,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         _app.UseRouting();
         _app.UseRateLimiter();
         _app.UseAuthentication();
+        if (_useRequestPresentation) _app.UseMiddleware<ICP.Platform.HostApi.Presentation.RequestPresentationContextMiddleware>();
         _app.UseHostAntiforgery();
         _app.UseMiddleware<RestrictedAuthenticationSessionMiddleware>();
         _app.UseAuthorization();

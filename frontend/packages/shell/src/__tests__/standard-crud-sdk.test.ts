@@ -428,13 +428,26 @@ describe('standard CRUD SDK helpers', () => {
   });
 
   it.each([
-    [401, '登录状态已失效'],
-    [403, '当前操作已被拒绝'],
-  ])('keeps %s authentication feedback explicit', async (status, expectedMessage) => {
+    [401, 'AUTH_SESSION_INVALID'],
+    [403, 'AUTH_FORBIDDEN'],
+  ])('keeps %s authentication facts explicit without translating in transport', async (status, code) => {
     const client = createStandardCrudClient('/api/sample-items', vi.fn().mockResolvedValue(
-      new Response(null, { status }),
+      new Response(JSON.stringify({ code, message: 'server diagnostic' }), { status }),
     ) as unknown as typeof fetch);
 
-    await expect(client.update('item-1', {})).rejects.toThrow(expectedMessage);
+    await expect(client.update('item-1', {})).rejects.toMatchObject({ status, code, message: 'server diagnostic' });
+  });
+
+  it('retains complete structured personnel field facts and original problem diagnostics', async () => {
+    const problem = {
+      code: 'Organization.Person.BirthDateInFuture', reasonKey: 'organization.person.birthDateInFuture',
+      args: { date: '2026-09-28' }, message: '出生日期不能晚于当前日期。', detail: 'Diagnostic only',
+      fieldErrors: [{ field: 'BirthDate', code: 'Organization.Person.BirthDateInFuture', reasonKey: 'Organization.Person.BirthDateInFuture', args: { date: '2026-09-28' }, message: '出生日期不能晚于当前日期。' }],
+    };
+    const client = createStandardCrudClient('/api/organization/persons', vi.fn().mockResolvedValue(new Response(JSON.stringify(problem), { status: 400 })));
+    await expect(client.create({ BirthDate: '2999-01-01' })).rejects.toMatchObject({
+      code: problem.code, reasonKey: problem.reasonKey, args: problem.args,
+      fieldErrorDetails: problem.fieldErrors, responseProblem: problem,
+    });
   });
 });

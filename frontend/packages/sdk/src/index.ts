@@ -201,6 +201,7 @@ export {
   createStandardCrudRestLookupProvider,
   StandardCrudRequestError,
 } from './standardCrudRest';
+export type { StandardCrudFieldErrorFact, StandardCrudProblemFact } from './standardCrudRest';
 
 export interface I18nResource {
   locale: string;

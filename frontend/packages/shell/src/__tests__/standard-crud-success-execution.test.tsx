@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
+import { LocalizationProvider } from '@icp-platform/core';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ResourceChange, StandardCrudOperationResult } from '@icp-platform/sdk';
@@ -43,7 +44,7 @@ describe.each(['action', 'mutation'] as const)('%s success execution wiring', (k
       return null;
     }
     root = createRoot(document.createElement('div'));
-    await act(async () => root?.render(kind === 'action' ? <ActionHarness /> : <MutationHarness />));
+    await act(async () => root?.render(<LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]} catalogs={{ zhs: {} }}>{kind === 'action' ? <ActionHarness /> : <MutationHarness />}</LocalizationProvider>));
     return () => current;
   }
 

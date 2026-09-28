@@ -14,4 +14,9 @@ public sealed record StandardCrudError
 public sealed record StandardCrudFieldError(
     string Field,
     string Code,
-    string Message);
+    string Message)
+{
+    public string? ReasonKey { get; init; }
+    public IReadOnlyDictionary<string, object?> Args { get; init; }
+        = new Dictionary<string, object?>(StringComparer.Ordinal);
+}

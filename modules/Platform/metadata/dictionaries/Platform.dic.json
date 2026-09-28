@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "Platform": {
+    "Language": { "zhs": "语言", "en": "Language" },
+    "SystemActor": { "zhs": "系统", "en": "System" },
+    "UnexpectedError": { "zhs": "操作失败，请稍后重试。", "en": "The operation failed. Please try again later." },
+    "ValidationFailed": { "zhs": "请检查输入的字段。", "en": "Please check the entered fields." },
+    "Forbidden": { "zhs": "当前操作已被拒绝，请核对当前权限。", "en": "This operation was denied. Check your permissions." },
+    "Unauthorized": { "zhs": "登录状态已失效，请重新登录后重试。", "en": "Your session has expired. Sign in and try again." },
+    "MutationConflict": { "zhs": "记录已发生变化，未覆盖服务器上的最新数据。请重新加载后再编辑。", "en": "The record has changed. Your changes did not overwrite the latest data. Reload before editing." }
+  }
+}

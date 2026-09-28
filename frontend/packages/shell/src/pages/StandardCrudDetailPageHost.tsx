@@ -171,6 +171,7 @@ function StandardCrudDetailPageContent<TDetail>({
     [formSchema.fields, dicKey, t],
   );
   const [editing, setEditing] = useState(false);
+  const [editorDetail, setEditorDetail] = useState<{ id: string; detail: { fields: Record<string, unknown> } } | null>(null);
   const [presentedOperationResult, setPresentedOperationResult] = useState<StandardCrudOperationResult | null>(null);
   const detailQuery = useStandardCrudDetailQuery({
     resourceKey: registration.resourceKey,
@@ -181,10 +182,15 @@ function StandardCrudDetailPageContent<TDetail>({
 
   useEffect(() => {
     setEditing(false);
+    setEditorDetail(null);
   }, [id]);
 
   const currentDetail = detailQuery.detail?.value ?? null;
   const currentNormalizedDetail = detailQuery.detail?.normalized ?? null;
+  // 编辑草稿拥有独立子树；locale 读取换代只更新可信快照，不卸载编辑或重建输入。
+  useEffect(() => {
+    if (editing && currentNormalizedDetail) setEditorDetail({ id, detail: currentNormalizedDetail });
+  }, [currentNormalizedDetail, editing, id]);
   const schema = useMemo(
     () => resolveStandardCrudDetailSchema(viewDocuments, registration, { modelDocuments }),
     [modelDocuments, registration, viewDocuments],
@@ -232,8 +238,11 @@ function StandardCrudDetailPageContent<TDetail>({
   }, [embeddedRefreshVersion, refresh]);
   const detailActionHandlers = useMemo(() => ({
     ...registration.actionHandlers,
-    edit: () => setEditing(true),
-  }), [registration.actionHandlers]);
+    edit: () => {
+      setEditorDetail(currentNormalizedDetail ? { id, detail: currentNormalizedDetail } : null);
+      setEditing(true);
+    },
+  }), [currentNormalizedDetail, id, registration.actionHandlers]);
   const showLoading = detailQuery.loading;
   // 背景刷新保留 Action Execution 子树及其冲突反馈，同时禁用旧快照上的再次操作。
   const detailHeaderActions = currentDetail && readyPresentation
@@ -284,6 +293,7 @@ function StandardCrudDetailPageContent<TDetail>({
       <div className={composed ? undefined : "sh-page"}>
       {!composed && detailHeaderActions && <div className="sh-page-actions">{detailHeaderActions}</div>}
 
+      <div className="sh-page-stack">
       {showLoading ? (
         <LoadingState message="正在加载详情..." />
       ) : detailQuery.error ? (
@@ -303,14 +313,20 @@ function StandardCrudDetailPageContent<TDetail>({
             titleForBlock={(key) => t(`${schema.dicKey}.${toDictionaryBlockKey(key)}`, key)}
           />
           {detailSectionPages}
-          {editing && editFields.length > 0 && (!features.placement || editResolution.kind === 'allowed') ? (
+
+        </div>
+      ) : (
+        <ErrorState message="未找到详情。" />
+      )}
+          {editing && editorDetail?.id === id && editFields.length > 0 && (!features.placement || editResolution.kind === 'allowed') ? (
             <Suspense fallback={<div className="sh-loading-state" role="status">正在加载编辑表单…</div>}>
               <StandardCrudDetailEditor
                 key={id}
                 id={id}
                 resourceKey={schema.resourceKey}
                 featurePosition={resolvedFeaturePosition(editResolution)}
-                detail={currentNormalizedDetail}
+                detail={editorDetail.detail}
+                reading={detailQuery.loading || detailQuery.refreshing}
                 fields={editFields}
                 sections={formSchema.sections}
                 registration={registration}
@@ -327,10 +343,7 @@ function StandardCrudDetailPageContent<TDetail>({
               />
             </Suspense>
           ) : null}
-        </div>
-      ) : (
-        <ErrorState message="未找到详情。" />
-      )}
+      </div>
       </div>
     </>
   );

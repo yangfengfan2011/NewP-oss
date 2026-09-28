@@ -92,7 +92,7 @@ public sealed class StandardCrudServiceReadTests
             [],
             [],
             userDisplayNameDirectory: directory,
-            presentationContextAccessor: new FixedPresentationContextAccessor(new RequestPresentationContext("zh-CN", "Asia/Taipei")));
+            presentationContextAccessor: new FixedPresentationContextAccessor(new RequestPresentationContext("zh-CN", "Asia/Taipei")), textCatalog: TextCatalog());
 
         var result = await service.ListAsync(descriptor, new StandardCrudListQuery());
         Assert.Equal(1, directory.Calls);
@@ -146,7 +146,7 @@ public sealed class StandardCrudServiceReadTests
             [],
             [],
             userDisplayNameDirectory: directory,
-            presentationContextAccessor: new FixedPresentationContextAccessor(new RequestPresentationContext(locale, "Asia/Taipei")));
+            presentationContextAccessor: new FixedPresentationContextAccessor(new RequestPresentationContext(locale, "Asia/Taipei")), textCatalog: TextCatalog());
 
         var detail = await service.GetDetailAsync(descriptor, "1");
         Assert.Equal(expected, detail!.Fields["CreatedBy_DisplayValue"]);
@@ -654,6 +654,12 @@ public sealed class StandardCrudServiceReadTests
 
         Assert.Equal("标准 CRUD 资源 organization.person 请求了显示值字段，但未注册显示值解析器。", ex.Message);
     }
+
+    private static RuntimeTextCatalog TextCatalog() => RuntimeTextCatalog.Parse("""
+        { "defaultLanguage": "zhs", "supportedLanguages": [
+            { "code": "zhs", "locale": "zh-CN" }, { "code": "en", "locale": "en-US" } ],
+          "catalogs": { "zhs": { "Platform.SystemActor": "系统" }, "en": { "Platform.SystemActor": "System" } } }
+        """);
 
     private static StandardCrudDescriptor Descriptor(
         IReadOnlyList<string>? summaryKeys = null,

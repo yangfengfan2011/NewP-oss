@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
+import { useInsertionEffect, useMemo, type ReactNode } from 'react';
 import {
   installPlatformRequestLocaleProvider,
   useLocalization,
@@ -13,13 +13,7 @@ export function PlatformRequestLocaleBridge({ children }: { children: ReactNode 
     }
     return current.locale;
   }, [currentLanguage, supportedLanguages]);
-  const [installedLocale, setInstalledLocale] = useState<string | null>(null);
-
-  useLayoutEffect(() => {
-    const uninstall = installPlatformRequestLocaleProvider(() => locale);
-    setInstalledLocale(locale);
-    return uninstall;
-  }, [locale]);
-
-  return installedLocale === locale ? children : null;
+  // 在查询订阅的 layout effect 前安装新 locale；切换保留编辑区与写入状态。
+  useInsertionEffect(() => installPlatformRequestLocaleProvider(() => locale), [locale]);
+  return children;
 }

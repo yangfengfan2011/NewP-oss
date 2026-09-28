@@ -179,6 +179,7 @@ public sealed class PersonCrudValidator : IStandardCrudValidator
         return null;
     }
 
+    // 依照可信会话的今天校验出生日期，并保留该上界作为可重译的标量参数。
     private StandardCrudError? ValidateTemporalFields(IReadOnlyDictionary<string, object?> values)
     {
         if (values.TryGetValue("BirthDate", out var birthValue)
@@ -192,7 +193,8 @@ public sealed class PersonCrudValidator : IStandardCrudValidator
                     "BirthDate",
                     "Organization.Person.BirthDateInFuture",
                     "出生日期不能晚于当前日期。",
-                    "organization.person.birthDateInFuture");
+                    "organization.person.birthDateInFuture",
+                    new Dictionary<string, object?> { ["date"] = today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) });
             }
         }
 
@@ -215,12 +217,15 @@ public sealed class PersonCrudValidator : IStandardCrudValidator
     private static DateTime? ReadOptionalInstant(IReadOnlyDictionary<string, object?> values, string field) =>
         values.TryGetValue(field, out var value) && value is DateTime instant ? instant : null;
 
-    private static StandardCrudError FieldError(string field, string code, string message, string reasonKey) => new()
+    // 字段位置与原因保持结构化，呈现层按当前语言解释，不反向解析诊断文本。
+    private static StandardCrudError FieldError(string field, string code, string message, string reasonKey,
+        IReadOnlyDictionary<string, object?>? args = null) => new()
     {
         StatusCode = 400,
         Code = code,
         Message = message,
         ReasonKey = reasonKey,
-        FieldErrors = [new StandardCrudFieldError(field, code, message)]
+        Args = args ?? new Dictionary<string, object?>(),
+        FieldErrors = [new StandardCrudFieldError(field, code, message) { ReasonKey = code, Args = args ?? new Dictionary<string, object?>() }]
     };
 }

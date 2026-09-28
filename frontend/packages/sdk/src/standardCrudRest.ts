@@ -19,15 +19,37 @@ import {
 } from './standardCrud';
 
 /** 标准 CRUD 请求错误保留 HTTP 状态与字段错误，供 Shell 做冲突、鉴权和 Form.Item 反馈。 */
+export interface StandardCrudFieldErrorFact {
+  field: string;
+  code?: string;
+  reasonKey?: string;
+  args?: Record<string, unknown>;
+  message?: string;
+}
+
+export interface StandardCrudProblemFact {
+  code?: string;
+  reasonKey?: string;
+  args?: Record<string, unknown>;
+  fieldErrors?: StandardCrudFieldErrorFact[];
+}
+
 export class StandardCrudRequestError extends Error {
   constructor(
     message: string,
     public readonly status: number,
     public readonly fieldErrors: Record<string, string> = {},
+    public readonly problem: StandardCrudProblemFact = {},
+    public readonly responseProblem: unknown = problem,
   ) {
     super(message);
     this.name = 'StandardCrudRequestError';
   }
+
+  get code(): string | undefined { return this.problem.code; }
+  get reasonKey(): string | undefined { return this.problem.reasonKey; }
+  get args(): Record<string, unknown> { return this.problem.args ?? {}; }
+  get fieldErrorDetails(): StandardCrudFieldErrorFact[] { return this.problem.fieldErrors ?? []; }
 }
 
 /** 构建标准 CRUD API 路径；`fields` 等逗号分隔参数统一交给 URLSearchParams 编码，空字符串和空值不会进入查询串。 */
@@ -52,7 +74,7 @@ export function buildStandardCrudPath(
 async function requestJson<T>(fetcher: typeof fetch, path: string, init: RequestInit, errorMessage: string): Promise<T> {
   const response = await fetcher(path, init);
   if (!response.ok) {
-    let problem: { message?: unknown; title?: unknown; errors?: unknown; fieldErrors?: unknown } = {};
+    let problem: { message?: unknown; title?: unknown; errors?: unknown; fieldErrors?: unknown; code?: unknown; reasonKey?: unknown; args?: unknown } = {};
     try {
       problem = await response.clone().json() as typeof problem;
     } catch {
@@ -74,16 +96,26 @@ async function requestJson<T>(fetcher: typeof fetch, path: string, init: Request
       }))
       : {};
     const fieldErrors = { ...legacyFieldErrors, ...standardFieldErrors };
-    const backendMessage = response.status === 403
-      ? '当前操作已被拒绝，请核对当前权限。'
-      : typeof problem.message === 'string' && problem.message.trim().length > 0
+    const backendMessage = typeof problem.message === 'string' && problem.message.trim().length > 0
         ? problem.message
         : typeof problem.title === 'string' && problem.title.trim().length > 0
           ? problem.title
-          : response.status === 401
-            ? '登录状态已失效，请重新登录后重试'
-            : errorMessage;
-    throw new StandardCrudRequestError(backendMessage, response.status, fieldErrors);
+          : errorMessage;
+    const fieldErrorDetails: StandardCrudFieldErrorFact[] = Array.isArray(problem.fieldErrors)
+      ? problem.fieldErrors.flatMap(value => isStandardCrudRecord(value) && typeof value.field === 'string'
+        ? [{ field: value.field,
+            ...(typeof value.code === 'string' ? { code: value.code } : {}),
+            ...(typeof value.reasonKey === 'string' ? { reasonKey: value.reasonKey } : {}),
+            ...(isStandardCrudRecord(value.args) ? { args: value.args } : {}),
+            ...(typeof value.message === 'string' ? { message: value.message } : {}) }]
+        : [])
+      : Object.entries(legacyFieldErrors).map(([field, code]) => ({ field, code, message: code }));
+    throw new StandardCrudRequestError(backendMessage, response.status, fieldErrors, {
+      ...(typeof problem.code === 'string' ? { code: problem.code } : {}),
+      ...(typeof problem.reasonKey === 'string' ? { reasonKey: problem.reasonKey } : {}),
+      ...(isStandardCrudRecord(problem.args) ? { args: problem.args } : {}),
+      fieldErrors: fieldErrorDetails,
+    }, problem);
   }
 
   if (response.status === 204) {

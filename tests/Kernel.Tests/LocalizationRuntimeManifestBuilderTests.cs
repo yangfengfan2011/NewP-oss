@@ -152,6 +152,56 @@ public sealed class LocalizationRuntimeManifestBuilderTests : IDisposable
         }
     }
 
+    [Fact]
+    public void Build_ComplementarySharedRootPreservesBothContributions()
+    {
+        var root = CreateRuntimeRoot();
+        WriteLanguages(root);
+        WriteDictionary(root, "Identity", "Account", "账号", "Account");
+        WriteDictionary(root, "Organization", "Person", "人员", "Person");
+        using var manifest = JsonDocument.Parse(new LocalizationRuntimeManifestBuilder().Build(root));
+        var catalog = manifest.RootElement.GetProperty("catalogs").GetProperty("en");
+        Assert.Equal("Account", catalog.GetProperty("Navigation.Account").GetString());
+        Assert.Equal("Person", catalog.GetProperty("Navigation.Person").GetString());
+    }
+
+    [Fact]
+    public void Build_DuplicateCompleteKeyReportsBothSources()
+    {
+        var root = CreateRuntimeRoot();
+        WriteLanguages(root);
+        WriteDictionary(root, "Identity", "Account", "账号", "Account");
+        WriteDictionary(root, "Organization", "Account", "其他账号", "Other account");
+        var error = Assert.Throws<JsonException>(() => new LocalizationRuntimeManifestBuilder().Build(root));
+        Assert.Contains("Navigation.Account", error.Message);
+        Assert.Contains("Identity", error.Message);
+        Assert.Contains("Organization", error.Message);
+    }
+
+    [Theory]
+    [InlineData("{count} 条", "{limit} items", "parameters")]
+    [InlineData("条目", null, "missing supported language 'en'")]
+    public void Build_InvalidTranslationReportsSourceAndCompleteKey(string chinese, string? english, string diagnostic)
+    {
+        var root = CreateRuntimeRoot();
+        WriteLanguages(root);
+        WriteDictionary(root, "Organization", "Person", chinese, english);
+        var error = Assert.Throws<JsonException>(() => new LocalizationRuntimeManifestBuilder().Build(root));
+        Assert.Contains("Navigation.Person", error.Message);
+        Assert.Contains("Organization", error.Message);
+        Assert.Contains(diagnostic, error.Message);
+    }
+
+    private static void WriteDictionary(string root, string module, string key, string chinese, string? english)
+    {
+        var translations = new Dictionary<string, string> { ["zhs"] = chinese };
+        if (english is not null) translations["en"] = english;
+        WriteMetadataFile(root, module, "Navigation.dic.json", JsonSerializer.Serialize(new
+        {
+            type = "dic", Navigation = new Dictionary<string, object> { [key] = translations }
+        }));
+    }
+
     private string CreateRuntimeRoot()
     {
         var runtimeRoot = Path.Combine(Path.GetTempPath(), $"localization-builder-{Guid.NewGuid():N}");

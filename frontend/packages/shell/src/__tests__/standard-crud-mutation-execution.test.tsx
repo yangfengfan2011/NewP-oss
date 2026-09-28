@@ -3,6 +3,8 @@
 import { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { LocalizationProvider } from '@icp-platform/core';
+import platformDictionary from '../../../../../modules/Platform/metadata/dictionaries/Platform.dic.json';
 import {
   StandardCrudRequestError,
   type StandardCrudOperationResult,
@@ -48,7 +50,8 @@ describe('standard CRUD mutation execution', () => {
     document.body.appendChild(container);
     await act(async () => {
       root = createRoot(container);
-      root.render(<Harness />);
+      const catalogs = { zhs: Object.fromEntries(Object.entries(platformDictionary.Platform).map(([key, value]) => [`Platform.${key}`, value.zhs])) };
+      root.render(<LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]} catalogs={catalogs}><Harness /></LocalizationProvider>);
     });
 
     return () => {
@@ -193,8 +196,8 @@ describe('standard CRUD mutation execution', () => {
     expect(succeeded).toBe(false);
     expect(refresh).not.toHaveBeenCalled();
     expect(onResult).not.toHaveBeenCalled();
-    expect(execution().error).toBe('名称不能为空');
-    expect(execution().fieldErrors).toEqual({ name: '名称不能为空' });
+    expect(execution().error).toBe('操作失败，请稍后重试。');
+    expect(execution().fieldErrors).toEqual({ name: '请检查输入的字段。' });
     expect(execution().conflict).toBe(false);
   });
 
@@ -229,7 +232,7 @@ describe('standard CRUD mutation execution', () => {
     expect(update).toHaveBeenCalledWith('record-1', { Name: 'Alice', Revision: 4 }, { Revision: 4 });
     expect(refresh).not.toHaveBeenCalled();
     expect(execution().conflict).toBe(true);
-    expect(execution().fieldErrors).toEqual({ name: '请重新确认名称' });
+    expect(execution().fieldErrors).toEqual({ name: '请检查输入的字段。' });
     expect(execution().error).toBe('记录已发生变化，未覆盖服务器上的最新数据。请重新加载后再编辑。');
   });
 

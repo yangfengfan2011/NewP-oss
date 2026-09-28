@@ -20,6 +20,7 @@ import companyListViewDocument from '../../../../../modules/Organization/metadat
 import companyModelDocument from '../../../../../modules/Organization/metadata/models/Company.model.json';
 import { companyStandardCrudResource } from '../../../../modules/organization/src/standard-crud/companyStandardCrudResource';
 import { createExampleRecordStandardCrudResource } from '../../../../modules/example/src/standard-crud/exampleRecordStandardCrudResource';
+import platformDictionary from '../../../../../modules/Platform/metadata/dictionaries/Platform.dic.json';
 
 const platformFetchMock = vi.hoisted(() => vi.fn((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init)));
 
@@ -285,6 +286,8 @@ describe('StandardCrudListPageHost', () => {
             catalogs={{
               zhs: {
                 ...personListCatalog,
+                ...Object.fromEntries(Object.entries(platformDictionary.Platform).map(([key, translation]) => [`Platform.${key}`, translation.zhs])),
+                'Test.NameConflict': '姓名已被其他人修改',
                 ...catalogOverrides,
               },
             }}
@@ -2633,7 +2636,7 @@ describe('StandardCrudListPageHost', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({
         code: 'StandardCrud.ConcurrencyConflict',
         message: '记录已经变化',
-        fieldErrors: [{ field: 'ENAME', code: 'Organization.Person.NameChanged', message: '姓名已被其他人修改' }],
+        fieldErrors: [{ field: 'ENAME', code: 'Organization.Person.NameChanged', reasonKey: 'Test.NameConflict', message: '姓名已被其他人修改' }],
       }), { status: 409, headers: { 'Content-Type': 'application/problem+json' } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '王五', Revision: 5 }, summaries: {},

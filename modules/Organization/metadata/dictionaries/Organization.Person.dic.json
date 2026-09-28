@@ -1,0 +1,7 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "Organization.Person": {
+    "BirthDateInFuture": { "zhs": "出生日期不能晚于 {date}。", "en": "Birth date cannot be later than {date}." }
+  }
+}

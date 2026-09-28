@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { LanguageSelect } from '@icp-platform/core';
 import type {
   StandardCrudFieldDefinition,
   StandardCrudFormSection,
@@ -92,6 +93,7 @@ export default function StandardCrudListDrawerRuntime({
       <CrudFormDrawer
         open
         title={viewTitle}
+        headerActions={<LanguageSelect />}
         loading={detailLoading}
         error={detailError ?? (fatalDiagnostic ? `详情数据契约失败：${fatalDiagnostic.code}` : null)}
         errorActions={detailError ? detailErrorActions : undefined}
@@ -119,6 +121,7 @@ export default function StandardCrudListDrawerRuntime({
     <CrudFormDrawer
       open
       title={mutationTitle}
+      headerActions={<LanguageSelect />}
       loading={mode === 'edit' && detailLoading}
       saving={saving}
       error={mode === 'edit' ? detailError ?? saveError : saveError}

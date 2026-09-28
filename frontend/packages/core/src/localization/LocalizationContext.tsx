@@ -1,4 +1,5 @@
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { formatTextTemplate } from './userMessage';
 
 export interface LocalizationLanguage {
   code: string;
@@ -67,7 +68,7 @@ export interface LocalizationContextValue {
   defaultLanguage: string;
   supportedLanguages: LocalizationLanguage[];
   setLanguage: (languageCode: string) => void;
-  t: (key: string, fallback?: string) => string;
+  t: (key: string, fallback?: string, args?: Record<string, unknown>) => string;
   getEnumerationItems: (enumerationName: string) => EnumerationDefinitionItem[];
   getEnumerationLabel: (enumerationName: string, itemName: string, fallback?: string) => string;
 }
@@ -148,20 +149,20 @@ export function LocalizationProvider({
     setCurrentLanguage(languageCode);
   };
 
-  const t = (key: string, fallback?: string) => {
+  const t = (key: string, fallback?: string, args?: Record<string, unknown>) => {
     // 文案解析只在当前语言和默认语言之间回退；
     // 这里故意不做多级链式猜测，避免 catalog 问题被过度隐藏。
     const currentCatalog = catalogs[currentLanguage] ?? {};
     if (currentCatalog[key] !== undefined) {
-      return currentCatalog[key];
+      return formatTextTemplate(currentCatalog[key], args);
     }
 
     const defaultCatalog = catalogs[defaultLanguage] ?? {};
     if (defaultCatalog[key] !== undefined) {
-      return defaultCatalog[key];
+      return formatTextTemplate(defaultCatalog[key], args);
     }
 
-    return fallback ?? key;
+    return formatTextTemplate(fallback ?? key, args);
   };
 
   return (

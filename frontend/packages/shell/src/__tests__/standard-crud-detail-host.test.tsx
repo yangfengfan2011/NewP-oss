@@ -1,10 +1,10 @@
 import './authorizedFeatureUiFixture';
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
+import { LanguageSelect, LocalizationProvider, PlatformQueryProvider, useLocalization } from '@icp-platform/core';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import {
   ModuleRegistry,
@@ -18,6 +18,12 @@ import { createEmbeddedHostEnvironment } from './standardCrudHostEnvironmentTest
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+beforeAll(async () => { await import('../pages/StandardCrudDetailEditor'); });
+
+function DetailTestQueryScope({ children, bilingual }: { children: React.ReactNode; bilingual: boolean }) {
+  const { currentLanguage } = useLocalization();
+  return <PlatformQueryProvider scopeKey={bilingual ? currentLanguage : 'user-1'}>{children}</PlatformQueryProvider>;
+}
 
 const personDetailModelDocument = {
   type: 'model' as const,
@@ -114,6 +120,7 @@ const personDetailCatalog = {
   'PersonDetailView.Field_PersonNo': '人员编号',
   'PersonDetailView.Field_ENAME': '姓名',
   'PersonDetailView.Field_DepartmentId': '部门',
+  'Test.NameConflict': '姓名已被其他人修改',
 };
 
 const referenceDetailFieldRenderers = {
@@ -163,13 +170,14 @@ describe('StandardCrudDetailPageHost', () => {
     registration?: StandardCrudResourceRegistration,
     detailViewDocument = personDetailViewDocument,
     strictMode = false,
+    bilingual = false,
   ) {
     container = document.createElement('div');
     document.body.appendChild(container);
 
     await act(async () => {
       root = createRoot(container);
-      renderHostWithId(id, registration, detailViewDocument, strictMode);
+      renderHostWithId(id, registration, detailViewDocument, strictMode, undefined, bilingual);
     });
   }
 
@@ -179,16 +187,19 @@ describe('StandardCrudDetailPageHost', () => {
     detailViewDocument = personDetailViewDocument,
     strictMode = false,
     refreshVersion?: number,
+    bilingual = false,
   ) {
     const host = (
       <LocalizationProvider
         defaultLanguage="zhs"
-        supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
+        supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }, ...(bilingual ? [{ code: 'en', displayName: 'English' }] : [])]}
         catalogs={{
           zhs: personDetailCatalog,
+          en: { ...personDetailCatalog, 'Platform.Language': 'Language', 'PersonDetailView.Field_ENAME': 'Name' },
         }}
       >
-        <PlatformQueryProvider scopeKey="user-1">
+        {bilingual ? <LanguageSelect /> : null}
+        <DetailTestQueryScope bilingual={bilingual}>
           <RuntimeMetadataProvider
             value={{
               manifest: { modules: [] },
@@ -207,11 +218,41 @@ describe('StandardCrudDetailPageHost', () => {
             />
             </StandardCrudHostEnvironmentContext.Provider>
           </RuntimeMetadataProvider>
-        </PlatformQueryProvider>
+        </DetailTestQueryScope>
       </LocalizationProvider>
     );
     root.render(strictMode ? <StrictMode>{host}</StrictMode> : host);
   }
+
+  it('preserves the real detail editor while a language read is pending and after it arrives without replaying writes', async () => {
+    const initial = { fields: { EID: 'Person_1', PersonNo: 'P001', ENAME: '服务器原值', DepartmentId: null }, summaries: {} };
+    let resolveEnglish!: (value: { normalized: typeof initial; value: typeof initial }) => void;
+    const get = vi.fn().mockResolvedValueOnce({ normalized: initial, value: initial })
+      .mockImplementationOnce(() => new Promise(resolve => { resolveEnglish = resolve; }));
+    const update = vi.fn();
+    await renderHost('Person_1', { ...createPersonRegistration(), dataAdapter: { ...createPersonDataAdapter(), get, update } }, personDetailViewDocument, false, true);
+    await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === '编辑')!.click());
+    await vi.waitFor(() => expect(document.querySelector('input#ENAME')).not.toBeNull());
+    const input = document.querySelector<HTMLInputElement>('input#ENAME')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '未提交编辑草稿');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      const select = container.querySelector('select')!;
+      select.value = 'en';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('input#ENAME')).toBe(input);
+    expect(input.value).toBe('未提交编辑草稿');
+    const english = { ...initial, fields: { ...initial.fields, CreatedBy_DisplayValue: 'System' } };
+    await act(async () => resolveEnglish({ normalized: english, value: english }));
+    expect(document.querySelector('input#ENAME')).toBe(input);
+    expect(input.value).toBe('未提交编辑草稿');
+    expect(document.querySelector('label[for="ENAME"]')?.textContent).toBe('Name');
+    expect(update).not.toHaveBeenCalled();
+  });
 
   it('consumes each embedded refresh version once across success, failure and rerenders, with explicit read retry', async () => {
     let failNext = false;
@@ -819,7 +860,9 @@ describe('StandardCrudDetailPageHost', () => {
       .mockResolvedValueOnce({ normalized: latestDetail, value: latestDetail })
       .mockResolvedValueOnce({ normalized: refreshedDetail, value: refreshedDetail });
     const update = vi.fn()
-      .mockRejectedValueOnce(new StandardCrudRequestError('记录已经变化', 409, { ENAME: '姓名已被其他人修改' }))
+      .mockRejectedValueOnce(new StandardCrudRequestError('记录已经变化', 409, { ENAME: '姓名已被其他人修改' }, {
+        fieldErrors: [{ field: 'ENAME', reasonKey: 'Test.NameConflict' }],
+      }))
       .mockResolvedValueOnce({ operation: 'update', payload: { receipt: 'opaque-update-result' } });
     const registration: StandardCrudResourceRegistration = {
       ...createPersonRegistration(),

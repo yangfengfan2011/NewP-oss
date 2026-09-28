@@ -1,6 +1,6 @@
 import { isUserMessageDto, type UserMessageDto } from '@icp-platform/sdk';
 
-function replaceTemplateArgs(template: string, messageArgs: Record<string, unknown> | undefined): string {
+export function formatTextTemplate(template: string, messageArgs: Record<string, unknown> | undefined): string {
   if (!messageArgs) {
     return template;
   }
@@ -11,7 +11,9 @@ function replaceTemplateArgs(template: string, messageArgs: Record<string, unkno
     }
 
     const value = messageArgs[argName];
-    return value === null || value === undefined ? '' : String(value);
+    if (value === null || value === undefined) return '';
+    if (!['string', 'number', 'boolean'].includes(typeof value)) throw new TypeError('LOCALIZATION_ARGUMENT_MUST_BE_SCALAR');
+    return String(value);
   });
 }
 
@@ -24,5 +26,5 @@ export function formatUserMessage(
   }
 
   const template = t(message.messageKey, message.fallbackMessage ?? message.messageKey);
-  return replaceTemplateArgs(template, message.messageArgs);
+  return formatTextTemplate(template, message.messageArgs);
 }

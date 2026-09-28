@@ -207,6 +207,8 @@ builder.Services.AddHostAuthentication(builder.Configuration, builder.Environmen
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton(_ => ActiveLocalizationManifest.Load(
     Path.Combine(pluginInstallRoot, "runtime", "localization-manifest.json")));
+builder.Services.AddSingleton<IRuntimeTextCatalog>(_ => RuntimeTextCatalog.Load(
+    Path.Combine(pluginInstallRoot, "runtime", "localization-manifest.json")));
 builder.Services.AddScoped<IRequestPresentationContextAccessor, HttpRequestPresentationContextAccessor>();
 builder.Services.AddScoped<ITemporalDisplayFormatter, TemporalDisplayFormatter>();
 builder.Services.AddScoped<ITemporalDisplayProjectionExecutor, TemporalDisplayProjectionExecutor>();

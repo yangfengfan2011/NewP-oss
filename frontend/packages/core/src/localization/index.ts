@@ -8,7 +8,10 @@ export {
 
 export {
   formatUserMessage,
+  formatTextTemplate,
 } from './userMessage';
+export { LanguageSelect } from './LanguageSelect';
+export { formatRequestError, formatFieldError } from './requestError';
 
 export type {
   LocalizationLanguage,

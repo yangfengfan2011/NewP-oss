@@ -21,6 +21,7 @@ public sealed class StandardCrudService : IStandardCrudService
     private readonly ITemporalDisplayProjectionExecutor? _temporalDisplayProjectionExecutor;
     private readonly IUserDisplayNameDirectory? _userDisplayNameDirectory;
     private readonly IRequestPresentationContextAccessor? _presentationContextAccessor;
+    private readonly IRuntimeTextCatalog? _textCatalog;
     private readonly ILogger<StandardCrudService>? _logger;
     private readonly IObjectOperationExecutor? _objectOperations;
     private readonly StandardCrudDefaultWriter _defaultWriter;
@@ -41,9 +42,11 @@ public sealed class StandardCrudService : IStandardCrudService
         ILogger<StandardCrudService>? logger = null,
         IObjectOperationExecutor? objectOperations = null,
         ICP.Platform.Authorization.Contracts.IDataScopeReadPlanProvider? dataScope = null,
-        ICP.Platform.Authorization.Contracts.IDataScopeObjectDecisionProvider? objectScope = null)
+        ICP.Platform.Authorization.Contracts.IDataScopeObjectDecisionProvider? objectScope = null,
+        IRuntimeTextCatalog? textCatalog = null)
     {
         _repository = repository;
+        _textCatalog = textCatalog;
         _queryExecutor = queryExecutor;
         _defaultWriter = defaultWriter;
         _queryCustomizers = queryCustomizers.ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
@@ -466,7 +469,7 @@ public sealed class StandardCrudService : IStandardCrudService
             {
                 var raw = ReadAuditActor(rows[index], plan.SourceField);
                 var display = raw == SystemEntityAuditStampProvider.SystemActorId
-                    ? (_presentationContextAccessor?.Current?.Locale.StartsWith("zh", StringComparison.OrdinalIgnoreCase) == true ? "系统" : "System")
+                    ? _textCatalog?.GetText("Platform.SystemActor", _presentationContextAccessor?.Current?.Locale)
                     : raw is null || auditNames is null ? null
                     : auditNames.TryGetValue(raw, out var name) ? name : raw;
                 ((Dictionary<string, object?>)values[index])[plan.CompanionField] = display;

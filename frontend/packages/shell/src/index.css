@@ -201,7 +201,25 @@ a:hover {
 }
 
 .np-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
   flex-shrink: 0;
+}
+
+.np-language-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.np-language-select select {
+  padding: 3px 6px;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
 }
 
 .np-header-session {

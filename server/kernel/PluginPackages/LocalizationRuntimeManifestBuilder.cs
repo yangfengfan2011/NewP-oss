@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using ICP.Platform.Kernel.Localization;
 
 namespace ICP.Platform.Kernel.PluginPackages;
 
@@ -54,6 +55,7 @@ public class LocalizationRuntimeManifestBuilder
             _ => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
             StringComparer.OrdinalIgnoreCase);
 
+        var sources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var moduleId in moduleOrder)
         {
             foreach (var metadataFile in EnumerateMetadataJsonFiles(runtimeRoot, moduleId))
@@ -64,7 +66,7 @@ public class LocalizationRuntimeManifestBuilder
                     continue;
                 }
 
-                MaterializeDictionary(metadataFile, document.RootElement, supportedLanguages, catalogs);
+                MaterializeDictionary(metadataFile, document.RootElement, supportedLanguages, catalogs, sources);
             }
         }
 
@@ -102,11 +104,13 @@ public class LocalizationRuntimeManifestBuilder
         }
     }
 
+    // 逐完整词条验证译文、参数与来源，允许不同 owner 对同一根作互补贡献。
     private static void MaterializeDictionary(
         string dicPath,
         JsonElement root,
         IReadOnlyDictionary<string, LocalizationLanguage> supportedLanguages,
-        IDictionary<string, Dictionary<string, string>> catalogs)
+        IDictionary<string, Dictionary<string, string>> catalogs,
+        IDictionary<string, string> sources)
     {
         var dicRoot = GetSingleBusinessRoot(root, dicPath);
         var dicKey = dicRoot.Name;
@@ -147,6 +151,11 @@ public class LocalizationRuntimeManifestBuilder
                 throw new JsonException($"Dictionary '{dicPath}' entry key '{entry.Name}' must not contain '.'.");
             }
 
+            var catalogKey = ProjectCatalogKey(dicKey, entry.Name);
+            if (sources.TryGetValue(catalogKey, out var previousSource))
+            {
+                throw new JsonException($"Dictionary complete key '{catalogKey}' conflicts between '{previousSource}' and '{dicPath}'.");
+            }
             var translations = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var translation in entry.Value.EnumerateObject())
             {
@@ -170,11 +179,19 @@ public class LocalizationRuntimeManifestBuilder
                 if (!translations.ContainsKey(supportedLanguage.Code))
                 {
                     throw new JsonException(
-                    $"Dictionary '{dicPath}' entry '{entry.Name}' is missing supported language '{supportedLanguage.Code}'.");
+                    $"Dictionary '{dicPath}' entry '{catalogKey}' is missing supported language '{supportedLanguage.Code}'.");
                 }
             }
 
-            var catalogKey = ProjectCatalogKey(dicKey, entry.Name);
+            var parameters = LocalizationTextTemplate.Parameters(translations.Values.First());
+            foreach (var translation in translations)
+            {
+                if (!parameters.SetEquals(LocalizationTextTemplate.Parameters(translation.Value)))
+                {
+                    throw new JsonException($"Dictionary '{dicPath}' entry '{catalogKey}' language '{translation.Key}' has inconsistent template parameters.");
+                }
+            }
+            sources.Add(catalogKey, dicPath);
 
             foreach (var translation in translations)
             {

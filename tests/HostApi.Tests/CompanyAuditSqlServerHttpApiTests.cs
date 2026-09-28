@@ -52,6 +52,9 @@ public sealed class CompanyAuditSqlServerHttpApiTests
             builder.Services.AddSingleton(plan);
             builder.Services.AddSingleton<IEntityAuditStampProvider>(stamp);
             builder.Services.AddSingleton<IRequestPresentationContextAccessor, Presentation>();
+            builder.Services.AddSingleton<IRuntimeTextCatalog>(RuntimeTextCatalog.Parse(
+                new ICP.Platform.Kernel.PluginPackages.LocalizationRuntimeManifestBuilder().Build(
+                    Path.GetDirectoryName(typeof(ICP.Platform.HostApi.Controllers.AuthController).Assembly.Location)!)));
             builder.Services.AddSingleton<ITemporalDisplayFormatter, TemporalDisplayFormatter>();
             builder.Services.AddSingleton<ITemporalDisplayProjectionExecutor, TemporalDisplayProjectionExecutor>();
             var database = new SqlConnectionStringBuilder(admin.ConnectionString) { InitialCatalog = catalog }.ConnectionString;

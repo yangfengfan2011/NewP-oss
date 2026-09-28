@@ -1,4 +1,5 @@
 import { useAuth } from '../contexts/AuthContext';
+import { LanguageSelect } from '@icp-platform/core';
 
 export function Header() {
   const auth = useAuth();
@@ -9,6 +10,7 @@ export function Header() {
         <span className="np-header-logo">ICP</span>
       </div>
       <div className="np-header-actions">
+        <LanguageSelect />
         {auth.isAuthenticated && auth.user && (
           <div className="np-header-session">
             <span className="np-header-avatar" aria-hidden="true">{auth.user.ename.slice(0, 1)}</span>

@@ -1,10 +1,12 @@
 import { useCallback, useRef, useState } from 'react';
+import { formatFieldError, formatRequestError, useLocalization } from '@icp-platform/core';
 import {
   StandardCrudRequestError,
   normalizeStandardCrudSubmitValues,
   type StandardCrudDataAdapter,
   type StandardCrudFieldDefinition,
   type StandardCrudOperationResult,
+  type StandardCrudFieldErrorFact,
 } from '@icp-platform/sdk';
 import { handoffStandardCrudSuccess } from './standardCrudSuccessHandoff';
 
@@ -64,15 +66,20 @@ export function useStandardCrudMutationExecution({
   onCommitted,
   fixedCreateValues,
 }: UseStandardCrudMutationExecutionOptions): StandardCrudMutationExecution {
+  const { t } = useLocalization();
   const pendingRef = useRef(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [requestError, setRequestError] = useState<unknown>(null);
+  const [fieldErrorFacts, setFieldErrorFacts] = useState<Record<string, StandardCrudFieldErrorFact>>({});
   const [conflict, setConflict] = useState(false);
   const [synchronizationError, setSynchronizationError] = useState<string | null>(null);
 
   const clearError = useCallback(() => {
     setError(null);
+    setRequestError(null);
+    setFieldErrorFacts({});
     setFieldErrors({});
     setConflict(false);
   }, []);
@@ -141,8 +148,11 @@ export function useStandardCrudMutationExecution({
 
       return true;
     } catch (mutationError) {
+      setRequestError(mutationError);
       if (mutationError instanceof StandardCrudRequestError) {
         setFieldErrors(mapMutationFieldErrors(fields, mutationError.fieldErrors));
+        const fieldByModel = new Map(fields.map(field => [field.modelField, field.key]));
+        setFieldErrorFacts(Object.fromEntries(mutationError.fieldErrorDetails.map(fact => [fieldByModel.get(fact.field) ?? fact.field, fact])));
         setConflict(mutationError.status === 409);
         setError(mutationError.status === 409
           ? STANDARD_CRUD_MUTATION_CONFLICT_MESSAGE
@@ -160,8 +170,8 @@ export function useStandardCrudMutationExecution({
 
   return {
     pending,
-    error,
-    fieldErrors,
+    error: error ? formatRequestError(requestError, t) : null,
+    fieldErrors: Object.fromEntries(Object.keys(fieldErrors).map(field => [field, formatFieldError(fieldErrorFacts[field] ?? { field }, t)])),
     conflict,
     synchronizationError,
     execute,

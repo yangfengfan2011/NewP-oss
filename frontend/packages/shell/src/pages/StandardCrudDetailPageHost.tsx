@@ -156,7 +156,8 @@ function StandardCrudDetailPageContent<TDetail>({
   const readPosition = features.placement ? resolvedFeaturePosition(readResolution) : undefined;
   const editResolution = features.action('edit', 'detail.pageActions');
   const composed = host.presentation.kind !== 'workspace' || host.presentation.composed;
-  const sessionTimeZoneId = useOptionalAuth()?.user?.timeZoneId;
+  const auth = useOptionalAuth();
+  const sessionTimeZoneId = auth?.user?.timeZoneId;
   const dicKey = readMetadataString(view.dicKey, registration.resourceKey);
   const dataAdapter = registration.dataAdapter;
   const operationResultPresenterRegistry = useMemo(
@@ -189,7 +190,6 @@ function StandardCrudDetailPageContent<TDetail>({
     setEditorDetail(null);
   }, [id]);
 
-  const currentDetail = detailQuery.detail?.value ?? null;
   const currentNormalizedDetail = detailQuery.detail?.normalized ?? null;
   // 编辑草稿拥有独立子树；locale 读取换代只更新可信快照，不卸载编辑或重建输入。
   useEffect(() => {
@@ -215,6 +215,30 @@ function StandardCrudDetailPageContent<TDetail>({
     ? resolveStandardCrudDetailPresentation({ schema, fields: currentNormalizedDetail.fields, expectedId: id })
     : null, [currentNormalizedDetail, id, schema]);
   const readyPresentation = presentation?.kind === 'ready' ? presentation : null;
+  const interactionIdentity = JSON.stringify([registration.resourceKey, view.key, id, readPosition,
+    auth?.user?.id, auth?.isAuthenticated, auth?.permissionEpoch,
+    [...(auth?.user?.featurePositions ?? [])].sort(), detailFeatureActions]);
+  const [interactionSnapshot, setInteractionSnapshot] = useState<{
+    identity: string;
+    detail: NonNullable<typeof detailQuery.detail>;
+    presentation: NonNullable<typeof readyPresentation>;
+  } | null>(null);
+  const mayPresentInteraction = (!auth || auth.isAuthenticated)
+    && (!features.placement || readResolution.kind === 'allowed')
+    && !detailQuery.error && presentation?.kind !== 'fatal';
+  const currentInteraction = useMemo(() => mayPresentInteraction && readyPresentation && detailQuery.detail
+    ? { detail: detailQuery.detail, presentation: readyPresentation } : null,
+  [mayPresentInteraction, readyPresentation, detailQuery.detail]);
+  // 摘要与动作包含模块拥有的交互草稿。只在同一记录和权限边界的重读期间保留实例；
+  // 新成功结果仍原样交给 renderer，拒绝、不可用及身份变化不能沿用旧授权数据。
+  useEffect(() => {
+    if (currentInteraction) setInteractionSnapshot({ identity: interactionIdentity, ...currentInteraction });
+    else if (!mayPresentInteraction || !detailQuery.loading) setInteractionSnapshot(null);
+  }, [currentInteraction, interactionIdentity, mayPresentInteraction, detailQuery.loading]);
+  const presentedInteraction = currentInteraction
+    ?? (mayPresentInteraction && detailQuery.loading && interactionSnapshot?.identity === interactionIdentity
+      ? interactionSnapshot : null);
+  const presentedSummaries = presentedInteraction?.detail.normalized.summaries;
 
   useEffect(() => {
     if (!presentation) return;
@@ -249,16 +273,17 @@ function StandardCrudDetailPageContent<TDetail>({
   }), [currentNormalizedDetail, id, registration.actionHandlers]);
   const showLoading = detailQuery.loading;
   // 背景刷新保留 Action Execution 子树及其冲突反馈，同时禁用旧快照上的再次操作。
-  const detailHeaderActions = currentDetail && readyPresentation
-    ? readyPresentation.pageActions.length > 0
+  const detailHeaderActions = presentedInteraction
+    ? presentedInteraction.presentation.pageActions.length > 0
       ? (
         <StandardCrudActions
+          key={interactionIdentity}
           resourceKey={registration.resourceKey}
           onCommitted={host.sync.committed}
-          actions={readyPresentation.pageActions.map((action) => ({
+          actions={presentedInteraction.presentation.pageActions.map((action) => ({
             ...action,
             labelKey: t(`${schema.dicKey}.${action.labelKey}`, action.labelKey),
-            runtimeDisabled: detailQuery.refreshing || action.disabled,
+            runtimeDisabled: detailQuery.loading || detailQuery.refreshing || action.disabled,
             disabledReason: action.disabledReasonKey
               ? t(`${schema.dicKey}.${action.disabledReasonKey}`, action.disabledReasonKey)
               : undefined,
@@ -280,7 +305,7 @@ function StandardCrudDetailPageContent<TDetail>({
             if (operationResultPresenterRegistry.resolve(result)) setPresentedOperationResult(result);
           }}
           refresh={refresh}
-          context={{ id, detail: currentDetail as TDetail }}
+          context={{ id, detail: presentedInteraction.detail.value as TDetail }}
         />
       )
       : undefined
@@ -298,6 +323,14 @@ function StandardCrudDetailPageContent<TDetail>({
       {!composed && detailHeaderActions && <div className="sh-page-actions">{detailHeaderActions}</div>}
 
       <div className="sh-page-stack">
+      {presentedSummaries && <StandardCrudSummaryBlocks
+        key={interactionIdentity}
+        blocks={schema.summaryBlocks}
+        summaries={presentedSummaries}
+        renderers={registration.summaryRenderers}
+        featureActions={detailFeatureActions}
+        titleForBlock={(key) => t(`${schema.dicKey}.${toDictionaryBlockKey(key)}`, key)}
+      />}
       {showLoading ? (
         <LoadingState message={t('Platform.LoadingDetail', '正在加载详情...')} />
       ) : detailQuery.error ? (
@@ -309,13 +342,6 @@ function StandardCrudDetailPageContent<TDetail>({
         <ErrorState message={t('Platform.DetailContractFailed', '详情数据契约失败：{code}', { code: presentation.diagnostic.code })} />
       ) : currentNormalizedDetail && readyPresentation ? (
         <div className="sh-page-stack">
-          <StandardCrudSummaryBlocks
-            blocks={schema.summaryBlocks}
-            summaries={currentNormalizedDetail.summaries}
-            renderers={registration.summaryRenderers}
-            featureActions={detailFeatureActions}
-            titleForBlock={(key) => t(`${schema.dicKey}.${toDictionaryBlockKey(key)}`, key)}
-          />
           {detailSectionPages}
 
         </div>

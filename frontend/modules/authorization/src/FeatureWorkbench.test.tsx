@@ -85,7 +85,7 @@ it('preserves draft after unknown save and failed role load, and does not refetc
     await click('two·two'); await click('取消');
     expect(lifecycle[0].dirty).toBe(true);
     await click('two·two'); await click('放弃并切换');
-    expect(container.textContent).toContain('角色读取失败');
+    expect(container.textContent).toContain('授权数据读取失败');
     expect(lifecycle[0].dirty).toBe(true);
     expect(container.textContent).toContain('one · one');
     expect(fetcher.mock.calls.filter(call => String(call[0]).endsWith('/catalog'))).toHaveLength(1);

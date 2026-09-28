@@ -50,12 +50,17 @@ internal static class OrganizationLookupHttpProjection
         Func<T, bool> enabledSelector,
         bool allowDisabledSelection)
     {
-        var masked = new HashSet<string>(page.MaskedCurrentIds ?? [], StringComparer.Ordinal);
         return new(
             page.Items.Select(item => ToOption(item, valueSelector, labelSelector, enabledSelector,
-                allowDisabledSelection, maskedCurrent: false)).ToList(),
-            page.CurrentItems.Select(item => ToOption(item, valueSelector, labelSelector, enabledSelector,
-                allowDisabledSelection: false, maskedCurrent: masked.Contains(valueSelector(item)))).ToList(),
+                allowDisabledSelection)).ToList(),
+            page.CurrentItems.Select(item => item switch
+            {
+                OrganizationDirectoryCurrentItem<T>.Readable readable => ToOption(readable.Item,
+                    valueSelector, labelSelector, enabledSelector, allowDisabledSelection: false),
+                OrganizationDirectoryCurrentItem<T>.Masked masked => new StandardCrudOptionItem
+                    { Value = masked.Id, Label = "***", Disabled = true },
+                _ => throw new InvalidOperationException("Unknown organization lookup current item.")
+            }).ToList(),
             page.Page, page.PageSize, page.HasMore);
     }
 
@@ -74,11 +79,8 @@ internal static class OrganizationLookupHttpProjection
         Func<T, string> valueSelector,
         Func<T, string> labelSelector,
         Func<T, bool> enabledSelector,
-        bool allowDisabledSelection,
-        bool maskedCurrent)
+        bool allowDisabledSelection)
     {
-        if (maskedCurrent)
-            return new StandardCrudOptionItem { Value = valueSelector(item), Label = "***", Disabled = true };
         var isEnabled = enabledSelector(item);
         var label = labelSelector(item);
         return new StandardCrudOptionItem

@@ -198,7 +198,8 @@ public sealed class OrganizationPermissionPipelineTests
         await using var scenario = await Scenario.StartAsync(source);
         scenario.CompanyDirectory.Result = new OrganizationDirectoryPage<Company>(
             [new Company { Id = "Company_1", Name = "总部", IsEnabled = true }],
-            [new Company { Id = "Company_2", Name = "旧公司", IsEnabled = false }],
+            [new OrganizationDirectoryCurrentItem<Company>.Readable(
+                new Company { Id = "Company_2", Name = "旧公司", IsEnabled = false })],
             2,
             10,
             true);
@@ -236,7 +237,8 @@ public sealed class OrganizationPermissionPipelineTests
         };
         scenario.DepartmentDirectory.ParentResult = new OrganizationDirectoryPage<Department>(
             [new Department { Id = "Department_2", CompanyId = "Company_1", Name = "停用上级", IsEnabled = false }],
-            [new Department { Id = "Department_3", CompanyId = "Company_1", Name = "旧上级", IsEnabled = false }],
+            [new OrganizationDirectoryCurrentItem<Department>.Readable(
+                new Department { Id = "Department_3", CompanyId = "Company_1", Name = "旧上级", IsEnabled = false })],
             2,
             10,
             true);
@@ -269,7 +271,8 @@ public sealed class OrganizationPermissionPipelineTests
         await using var scenario = await Scenario.StartAsync(source);
         scenario.CompanyDirectory.Result = new OrganizationDirectoryPage<Company>(
             [new Company { Id = "Company_1", Name = "总部", IsEnabled = true }],
-            [new Company { Id = "Company_2", Name = "旧公司", IsEnabled = false }],
+            [new OrganizationDirectoryCurrentItem<Company>.Readable(
+                new Company { Id = "Company_2", Name = "旧公司", IsEnabled = false })],
             2,
             10,
             true);
@@ -297,8 +300,7 @@ public sealed class OrganizationPermissionPipelineTests
         var source = new MutableFeatureDecisionSource(PermissionDecision.Granted);
         await using var scenario = await Scenario.StartAsync(source);
         scenario.CompanyDirectory.Result = new OrganizationDirectoryPage<Company>([],
-            [new Company { Id = "Company_Hidden", IsEnabled = false }], 1, 20, false,
-            MaskedCurrentIds: ["Company_Hidden"]);
+            [new OrganizationDirectoryCurrentItem<Company>.Masked("Company_Hidden")], 1, 20, false);
         using var request = Request(HttpMethod.Get,
             "/api/organization/person-lookups/companies?currentValueIds=Company_Hidden", "subject");
 

@@ -71,46 +71,18 @@ public sealed class EfCompanyDirectory : ICompanyDirectory
             .Skip((page - 1) * pageSize)
             .Take(pageSize + 1)
             .ToListAsync(cancellationToken);
-        var currentRows = await ReadCurrentRowsAsync(request.CurrentValueIds, readPredicate, cancellationToken);
+        var currentRows = await OrganizationLookupCurrentValueReader.ReadAsync(
+            Entities, request.CurrentValueIds, readPredicate, Map, cancellationToken);
         return new OrganizationDirectoryPage<Company>(
             pageRows.Take(pageSize).Select(Map).ToList(),
-            currentRows.Items,
+            currentRows,
             page,
             pageSize,
-            pageRows.Count > pageSize,
-            currentRows.MaskedIds);
+            pageRows.Count > pageSize);
     }
 
     private DbSet<Dictionary<string, object?>> Entities =>
         _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("Company"));
-
-    // 当前值独立分批读取且不套用启用和关键词条件；遮蔽身份与名称文本分别返回。
-    private async Task<(List<Company> Items, List<string> MaskedIds)> ReadCurrentRowsAsync(
-        IReadOnlyCollection<string>? currentValueIds,
-        System.Linq.Expressions.Expression<Func<Dictionary<string, object?>, bool>>? readPredicate,
-        CancellationToken cancellationToken)
-    {
-        var result = new List<Company>();
-        var maskedIds = new List<string>();
-        foreach (var ids in NormalizeIds(currentValueIds ?? []).Chunk(100))
-        {
-            var rows = Entities.AsNoTracking().Where(row => ids.Contains(EF.Property<string>(row, "EID")));
-            var existing = await rows.Select(row => EF.Property<string>(row, "EID")).ToListAsync(cancellationToken);
-            if (readPredicate is not null) rows = rows.Where(readPredicate);
-            var readable = (await rows.ToListAsync(cancellationToken))
-                .ToDictionary(row => ReadString(row, "EID"), Map, StringComparer.Ordinal);
-            foreach (var id in existing)
-            {
-                if (readable.TryGetValue(id, out var company)) result.Add(company);
-                else
-                {
-                    result.Add(new Company { Id = id, IsEnabled = false });
-                    maskedIds.Add(id);
-                }
-            }
-        }
-        return (result, maskedIds);
-    }
 
     // 目录排序必须在 Skip/Take 前落到数据源，并用 EID 消除同名项的不稳定顺序。
     private static IOrderedQueryable<Dictionary<string, object?>> Order(
@@ -124,12 +96,6 @@ public sealed class EfCompanyDirectory : ICompanyDirectory
         var pageSize = Math.Clamp(request.PageSize, 1, 100);
         return (Math.Clamp(request.Page, 1, int.MaxValue / pageSize), pageSize);
     }
-
-    // 批量标识先去空白和重复，避免扩大查询参数与结果索引冲突。
-    private static IReadOnlyCollection<string> NormalizeIds(IEnumerable<string> ids) =>
-        ids.Where(static id => !string.IsNullOrWhiteSpace(id))
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
 
     // 目录只投影人员校验、显示和 Lookup 所需字段，不泄漏动态 EF 行。
     private static Company Map(IReadOnlyDictionary<string, object?> row) => new()

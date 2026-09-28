@@ -5,6 +5,7 @@ using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Kernel.ModulePlanning;
 using System.Text.Json;
 using ICP.Platform.Modules.Organization.Directories;
+using ICP.Platform.Modules.Organization.Models;
 using ICP.Platform.Modules.Organization.Caching;
 using ICP.Platform.Modules.Organization.Persistence.Descriptors;
 using ICP.Platform.Modules.Organization.Persistence.Ef;
@@ -56,7 +57,8 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
         connection.ResetStatistics();
         var watch = System.Diagnostics.Stopwatch.StartNew();
         var first = await directory.LookupParentCandidatesAsync("Company_1", "Department_000",
-            new OrganizationDirectoryLookupRequest(null, 1, 1, ["Department_002"]));
+            new OrganizationDirectoryLookupRequest(null, 1, 1,
+                ["Department_000", "Department_001", "Department_002", "Department_Other", "missing"]));
         watch.Stop();
         var statistics = connection.RetrieveStatistics();
         await using (var disableIo = connection.CreateCommand())
@@ -86,7 +88,10 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
             bytesReceived = statistics["BytesReceived"], ioMessages, operators }));
         Assert.Equal("Department_003", Assert.Single(first.Items).Id);
         Assert.True(first.HasMore);
-        Assert.Equal("Department_002", Assert.Single(first.MaskedCurrentIds!));
+        Assert.Equal("Department_002", Assert.Single(first.CurrentItems.OfType<OrganizationDirectoryCurrentItem<Department>.Masked>()).Id);
+        Assert.Equal(new[] { "Department_000", "Department_001" }, first.CurrentItems
+            .OfType<OrganizationDirectoryCurrentItem<Department>.Readable>().Select(item => item.Item.Id).Order(StringComparer.Ordinal));
+        Assert.Equal(3, first.CurrentItems.Count);
 
         plans.BadField = true;
         await Assert.ThrowsAnyAsync<Exception>(() => directory.LookupParentCandidatesAsync("Company_1", "Department_000",
@@ -95,6 +100,46 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
         var second = await directory.LookupParentCandidatesAsync("Company_1", "Department_000",
             new OrganizationDirectoryLookupRequest(null, 2, 1));
         Assert.Equal("Department_004", Assert.Single(second.Items).Id);
+    }
+
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL 当前值分批读取保留全部关联且只投影可读行")]
+    [Trait("Category", "SqlServerSmoke")]
+    public async Task DepartmentCurrentValues_BatchSqlReadsAndNeverProjectMaskedRows()
+    {
+        await using var fixture = await SqlFixture.CreateAsync();
+        await using var context = CreateContext(fixture.ConnectionString);
+        await context.Database.EnsureCreatedAsync();
+        AddCompany(context, "Company_1");
+        var ids = Enumerable.Range(0, 105).Select(index => $"Department_{index:D3}").ToArray();
+        foreach (var id in ids) AddDepartment(context, id, "Company_1", null, enabled: false);
+        await context.SaveChangesAsync();
+        var connection = Assert.IsType<SqlConnection>(context.Database.GetDbConnection());
+        await connection.OpenAsync();
+        connection.StatisticsEnabled = true;
+        connection.ResetStatistics();
+        var mappedIds = new List<string>();
+        var rows = context.Set<Dictionary<string, object?>>(context.ResolveModelKey("Department"))
+            .Where(row => EF.Property<string>(row, "CompanyId") == "Company_1");
+        Expression<Func<Dictionary<string, object?>, bool>> readable = row => EF.Property<string>(row, "EID") != "Department_002";
+
+        var current = await OrganizationLookupCurrentValueReader.ReadAsync(rows,
+            [.. ids, ids[0], " ", "missing"], readable, row =>
+            {
+                mappedIds.Add((string)row["EID"]!);
+                return EfDepartmentDirectory.Map(row);
+            }, default);
+        var statistics = connection.RetrieveStatistics();
+
+        Assert.Equal(105, current.Count);
+        Assert.Equal("Department_002", Assert.Single(current.OfType<OrganizationDirectoryCurrentItem<Department>.Masked>()).Id);
+        Assert.Equal(104, mappedIds.Count);
+        Assert.DoesNotContain("Department_002", mappedIds);
+        Assert.Equal(4L, statistics["SelectCount"]);
+        Assert.Equal(209L, statistics["SelectRows"]);
+        output.WriteLine(JsonSerializer.Serialize(new {
+            operation = "current-value-batches", requested = ids.Length, batches = 2,
+            selects = statistics["SelectCount"], selectedRows = statistics["SelectRows"],
+            roundTrips = statistics["ServerRoundtrips"] }));
     }
 
     private sealed class TestReadPlans : IDataScopeReadPlanProvider
@@ -551,8 +596,8 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
             Assert.Null(error);
             Assert.Equal(5, page.Items.Count);
             Assert.True(page.HasMore);
-            Assert.Equal("Department_0000", Assert.Single(page.CurrentItems).Id);
-            Assert.False(page.CurrentItems[0].IsEnabled);
+            Assert.Equal("Department_0000", Assert.IsType<OrganizationDirectoryCurrentItem<Department>.Readable>(Assert.Single(page.CurrentItems)).Item.Id);
+            Assert.False(Assert.IsType<OrganizationDirectoryCurrentItem<Department>.Readable>(page.CurrentItems[0]).Item.IsEnabled);
         }
     }
 

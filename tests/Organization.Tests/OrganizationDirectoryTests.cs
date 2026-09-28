@@ -80,7 +80,7 @@ public sealed class OrganizationDirectoryTests
             CurrentValueIds: ["Company_3"]));
 
         Assert.Equal("Company_1", Assert.Single(page.Items).Id);
-        Assert.Equal("Company_3", Assert.Single(page.CurrentItems).Id);
+        Assert.Equal("Company_3", Assert.IsType<OrganizationDirectoryCurrentItem<Company>.Readable>(Assert.Single(page.CurrentItems)).Item.Id);
         Assert.True(page.HasMore);
         Assert.Equal(1, page.Page);
         Assert.Equal(1, page.PageSize);
@@ -107,7 +107,7 @@ public sealed class OrganizationDirectoryTests
                 CurrentValueIds: ["Department_2", "Department_3"]));
 
         Assert.Equal("Department_1", Assert.Single(page.Items).Id);
-        Assert.Equal("Department_2", Assert.Single(page.CurrentItems).Id);
+        Assert.Equal("Department_2", Assert.IsType<OrganizationDirectoryCurrentItem<Department>.Readable>(Assert.Single(page.CurrentItems)).Item.Id);
         Assert.False(page.HasMore);
     }
 
@@ -128,27 +128,35 @@ public sealed class OrganizationDirectoryTests
             new DepartmentHierarchyCandidatePage([], false)), plans);
 
         var companyPage = await companies.LookupAsync(new OrganizationDirectoryLookupRequest(null, 1, 1,
-            ["Company_1", "Company_2"]));
+            ["Company_1", "Company_2", "Company_1", " ", "missing"]));
         var departmentPage = await departments.LookupAsync("Company_2",
-            new OrganizationDirectoryLookupRequest(null, 1, 1, ["Department_1", "Department_2"]));
+            new OrganizationDirectoryLookupRequest(null, 1, 1, ["Department_1", "Department_2", "Department_1", " ", "missing"]));
 
+        Assert.Equal(2, companyPage.CurrentItems.Count);
+        Assert.Equal(2, departmentPage.CurrentItems.Count);
         Assert.Equal("Company_2", Assert.Single(companyPage.Items).Id);
         Assert.Equal("Department_2", Assert.Single(departmentPage.Items).Id);
-        Assert.Contains("Company_1", companyPage.MaskedCurrentIds!);
-        Assert.Contains("Department_1", departmentPage.MaskedCurrentIds!);
+        Assert.Equal("Company_1", Assert.Single(companyPage.CurrentItems.OfType<OrganizationDirectoryCurrentItem<Company>.Masked>()).Id);
+        Assert.Equal("Department_1", Assert.Single(departmentPage.CurrentItems.OfType<OrganizationDirectoryCurrentItem<Department>.Masked>()).Id);
         Assert.Equal("***", OrganizationLookupHttpProjection.Map(companyPage, false)
             .CurrentItems.Single(item => item.Value == "Company_1").Label);
         Assert.Equal("***", OrganizationLookupHttpProjection.Map(departmentPage, false)
             .CurrentItems.Single(item => item.Value == "Department_1").Label);
-        Assert.Equal("***", companyPage.CurrentItems.Single(item => item.Id == "Company_2").Name);
-        Assert.Equal("***", departmentPage.CurrentItems.Single(item => item.Id == "Department_2").Name);
+        Assert.Equal("***", Assert.Single(companyPage.CurrentItems.OfType<OrganizationDirectoryCurrentItem<Company>.Readable>()).Item.Name);
+        Assert.Equal("***", Assert.Single(departmentPage.CurrentItems.OfType<OrganizationDirectoryCurrentItem<Department>.Readable>()).Item.Name);
         Assert.False(Assert.Single(OrganizationLookupHttpProjection.Map(companyPage, false).Items).Disabled);
+        Assert.False(OrganizationLookupHttpProjection.Map(companyPage, false).CurrentItems.Single(item => item.Value == "Company_2").Disabled);
+        Assert.True(OrganizationLookupHttpProjection.Map(companyPage, true).CurrentItems.Single(item => item.Value == "Company_1").Disabled);
+        Assert.False(OrganizationLookupHttpProjection.Map(departmentPage, false).CurrentItems.Single(item => item.Value == "Department_2").Disabled);
+        Assert.True(OrganizationLookupHttpProjection.Map(departmentPage, true).CurrentItems.Single(item => item.Value == "Department_1").Disabled);
         Assert.False(Assert.Single(OrganizationLookupHttpProjection.Map(departmentPage, false).Items).Disabled);
         plans.ReadDisabled = true;
-        Assert.Equal("Secret company", (await companies.LookupAsync(new OrganizationDirectoryLookupRequest(null, 1, 2,
-            ["Company_1"]))).CurrentItems.Single().Name);
-        Assert.Equal("Secret department", (await departments.LookupAsync("Company_2",
-            new OrganizationDirectoryLookupRequest(null, 1, 2, ["Department_1"]))).CurrentItems.Single().Name);
+        Assert.Equal("Secret company", Assert.IsType<OrganizationDirectoryCurrentItem<Company>.Readable>(
+            Assert.Single((await companies.LookupAsync(new OrganizationDirectoryLookupRequest(null, 1, 2,
+                ["Company_1"]))).CurrentItems)).Item.Name);
+        Assert.Equal("Secret department", Assert.IsType<OrganizationDirectoryCurrentItem<Department>.Readable>(
+            Assert.Single((await departments.LookupAsync("Company_2",
+                new OrganizationDirectoryLookupRequest(null, 1, 2, ["Department_1"]))).CurrentItems)).Item.Name);
         plans.Failure = true;
         await Assert.ThrowsAsync<InvalidOperationException>(() => companies.LookupAsync(
             new OrganizationDirectoryLookupRequest(null, 1, 2)));
@@ -186,7 +194,48 @@ public sealed class OrganizationDirectoryTests
         var page = await directory.LookupAsync(new OrganizationDirectoryLookupRequest(null, 1, 1, ids));
 
         Assert.Equal(ids.Length, page.CurrentItems.Count);
-        Assert.Equal(ids, page.CurrentItems.Select(item => item.Id).Order(StringComparer.Ordinal));
+        Assert.Equal(ids, page.CurrentItems.Select(item => Assert.IsType<OrganizationDirectoryCurrentItem<Company>.Readable>(item).Item.Id).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task DepartmentCurrentValues_KeepAllBatchesOutsideCandidateConditionsAndRespectCompany()
+    {
+        await using var dbContext = CreateDbContext();
+        var ids = Enumerable.Range(0, 105).Select(index => $"Department_{index:D3}").ToArray();
+        await SeedDepartmentsAsync(dbContext, ids.Select(id => Department(id, "Company_1", id, id, false))
+            .Append(Department("other", "Company_2", "other", "other", true)));
+        var directory = new EfDepartmentDirectory(dbContext,
+            new StubHierarchyQuery(new DepartmentHierarchyCandidatePage([], false)));
+        var request = new OrganizationDirectoryLookupRequest("does-not-match", 1, 1,
+            [.. ids, ids[0], " ", "missing", "other"]);
+
+        var ordinary = await directory.LookupAsync("Company_1", request);
+        var parent = await directory.LookupParentCandidatesAsync("Company_1", ids[0], request);
+
+        foreach (var page in new[] { ordinary, parent })
+        {
+            Assert.Empty(page.Items);
+            Assert.Equal(ids, page.CurrentItems.Select(item =>
+                Assert.IsType<OrganizationDirectoryCurrentItem<Department>.Readable>(item).Item.Id).Order(StringComparer.Ordinal));
+            Assert.All(OrganizationLookupHttpProjection.Map(page, true).CurrentItems, item => Assert.True(item.Disabled));
+        }
+    }
+
+    [Fact]
+    public async Task CurrentValueReader_PropagatesCancellationAndMappingFailure()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedCompaniesAsync(dbContext, [Company("company", "company", "company", true)]);
+        var rows = dbContext.Set<Dictionary<string, object?>>(dbContext.ResolveModelKey("Company"));
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => OrganizationLookupCurrentValueReader.ReadAsync(
+            rows, ["company"], null, static row => row, cancellation.Token));
+        var expected = new InvalidOperationException("projection failed");
+        var actual = await Assert.ThrowsAsync<InvalidOperationException>(() => OrganizationLookupCurrentValueReader.ReadAsync<Company>(
+            rows, ["company"], null, _ => throw expected, default));
+        Assert.Same(expected, actual);
     }
 
     [Fact]
@@ -215,7 +264,7 @@ public sealed class OrganizationDirectoryTests
             new OrganizationDirectoryLookupRequest(null, 1, 1, ["Department_Disabled"]));
 
         Assert.Equal("Department_Peer", Assert.Single(page.Items).Id);
-        Assert.Equal("Department_Disabled", Assert.Single(page.CurrentItems).Id);
+        Assert.Equal("Department_Disabled", Assert.IsType<OrganizationDirectoryCurrentItem<Department>.Readable>(Assert.Single(page.CurrentItems)).Item.Id);
         Assert.False(page.HasMore);
     }
 
@@ -243,8 +292,8 @@ public sealed class OrganizationDirectoryTests
 
         Assert.Equal(ordinary.Items.Select(static item => item.Id), parent.Items.Select(static item => item.Id));
         Assert.Equal(
-            ordinary.CurrentItems.Select(static item => item.Id),
-            parent.CurrentItems.Select(static item => item.Id));
+            ordinary.CurrentItems.Select(item => Assert.IsType<OrganizationDirectoryCurrentItem<Department>.Readable>(item).Item.Id),
+            parent.CurrentItems.Select(item => Assert.IsType<OrganizationDirectoryCurrentItem<Department>.Readable>(item).Item.Id));
         Assert.Equal(ordinary.Page, parent.Page);
         Assert.Equal(ordinary.PageSize, parent.PageSize);
         Assert.Equal(ordinary.HasMore, parent.HasMore);

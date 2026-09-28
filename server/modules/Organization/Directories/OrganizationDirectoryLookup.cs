@@ -23,11 +23,24 @@ public sealed record OrganizationDirectoryLookupRequest(
 /// <param name="Page">规范化后的页码。</param>
 /// <param name="PageSize">规范化后的单页大小。</param>
 /// <param name="HasMore">是否还有后续候选页。</param>
-/// <param name="MaskedCurrentIds">名称不可读但需保留标识的当前值；与可读名称字面量无关。</param>
 public sealed record OrganizationDirectoryPage<T>(
     IReadOnlyList<T> Items,
-    IReadOnlyList<T> CurrentItems,
+    IReadOnlyList<OrganizationDirectoryCurrentItem<T>> CurrentItems,
     int Page,
     int PageSize,
-    bool HasMore,
-    IReadOnlyCollection<string>? MaskedCurrentIds = null);
+    bool HasMore);
+
+/// <summary>
+/// 已存在的目录当前值；可读项携带真实档案，遮蔽项只保留关联标识，缺失项不返回。
+/// </summary>
+public abstract record OrganizationDirectoryCurrentItem<T>
+{
+    // 由嵌套状态构造当前值，遮蔽分支不持有组织档案。
+    private OrganizationDirectoryCurrentItem() { }
+
+    /// <summary>可读取的真实目录档案，其启用状态不被候选条件改写。</summary>
+    public sealed record Readable(T Item) : OrganizationDirectoryCurrentItem<T>;
+
+    /// <summary>存在但不可读取的当前关联，只携带稳定标识。</summary>
+    public sealed record Masked(string Id) : OrganizationDirectoryCurrentItem<T>;
+}

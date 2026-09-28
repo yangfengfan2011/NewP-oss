@@ -112,11 +112,10 @@ public sealed class EfDepartmentDirectory : IDepartmentDirectory, IDepartmentHie
         var currentRows = await ReadCurrentRowsAsync(companyId, request.CurrentValueIds, readPredicate, cancellationToken);
         return new OrganizationDirectoryPage<Department>(
             pageRows.Take(pageSize).Select(Map).ToList(),
-            currentRows.Items,
+            currentRows,
             page,
             pageSize,
-            pageRows.Count > pageSize,
-            currentRows.MaskedIds);
+            pageRows.Count > pageSize);
     }
 
     /// <inheritdoc/>
@@ -150,45 +149,23 @@ public sealed class EfDepartmentDirectory : IDepartmentDirectory, IDepartmentHie
             cancellationToken);
         return new OrganizationDirectoryPage<Department>(
             hierarchyPage.Items,
-            currentRows.Items,
+            currentRows,
             page,
             pageSize,
-            hierarchyPage.HasMore,
-            currentRows.MaskedIds);
+            hierarchyPage.HasMore);
     }
 
     private DbSet<Dictionary<string, object?>> Entities =>
         _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("Department"));
 
-    // 当前值仍受 CompanyId 约束；分批解析并单列遮蔽身份，避免跨公司或误判字面名称。
-    private async Task<(List<Department> Items, List<string> MaskedIds)> ReadCurrentRowsAsync(
+    // 当前值仅受同公司约束，不继承候选的启用、关键词、防环与后代排除条件。
+    private Task<IReadOnlyList<OrganizationDirectoryCurrentItem<Department>>> ReadCurrentRowsAsync(
         string companyId,
         IReadOnlyCollection<string>? currentValueIds,
         System.Linq.Expressions.Expression<Func<Dictionary<string, object?>, bool>>? readPredicate,
-        CancellationToken cancellationToken)
-    {
-        var result = new List<Department>();
-        var maskedIds = new List<string>();
-        foreach (var ids in NormalizeIds(currentValueIds ?? []).Chunk(100))
-        {
-            var rows = Entities.AsNoTracking().Where(row => EF.Property<string>(row, "CompanyId") == companyId
-                && ids.Contains(EF.Property<string>(row, "EID")));
-            var existing = await rows.Select(row => EF.Property<string>(row, "EID")).ToListAsync(cancellationToken);
-            if (readPredicate is not null) rows = rows.Where(readPredicate);
-            var readable = (await rows.ToListAsync(cancellationToken))
-                .ToDictionary(row => ReadString(row, "EID"), Map, StringComparer.Ordinal);
-            foreach (var id in existing)
-            {
-                if (readable.TryGetValue(id, out var department)) result.Add(department);
-                else
-                {
-                    result.Add(new Department { Id = id, IsEnabled = false });
-                    maskedIds.Add(id);
-                }
-            }
-        }
-        return (result, maskedIds);
-    }
+        CancellationToken cancellationToken) => OrganizationLookupCurrentValueReader.ReadAsync(
+            Entities.Where(row => EF.Property<string>(row, "CompanyId") == companyId),
+            currentValueIds, readPredicate, Map, cancellationToken);
 
     // 模块候选始终消费规范部门资源的完整读取计划；未启用时返回无附加过滤。
     private async Task<System.Linq.Expressions.Expression<Func<Dictionary<string, object?>, bool>>?> GetReadPredicateAsync(

@@ -4,10 +4,11 @@ using ICP.Platform.Authorization.Http;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Authorization.DTOs;
 using Microsoft.AspNetCore.Http;
+using System.Security.Claims;
 
 namespace ICP.Platform.Modules.Authorization.Services;
 
-/// <summary>管理资格同时绑定目标资源的功能位置、最终读取与授权动作。</summary>
+/// <summary>完整对象管理操作拥有目标资格、输入校验与执行顺序，调用方无需预先取得资格。</summary>
 public sealed class DataScopeObjectManagement(DataScopeCatalog catalog, CanonicalModulePlan plan,
     IFeatureDecisionSource features, IDataScopeObjectDecisionProvider decisions, DataScopeObjectGrants grants,
     DataScopeIdentities identities, IHttpContextAccessor context)
@@ -34,26 +35,82 @@ public sealed class DataScopeObjectManagement(DataScopeCatalog catalog, Canonica
         return DataScopeObjectEligibility.Allowed;
     }
 
-    /// <summary>已获资格的调用方读取完整对象配置，包含自身或其他主体项。</summary>
-    public Task<DataScopeObjectDto> GetAsync(string resourceKey, string objectId, CancellationToken token) =>
-        grants.GetAsync(resourceKey, objectId, token);
+    /// <summary>取得目标管理资格后读取完整对象配置，包含自身或其他主体项。</summary>
+    public async Task<DataScopeObjectResult<DataScopeObjectDto>> GetAsync(string resourceKey, string objectId, CancellationToken token)
+    {
+        var eligibility = await CheckAsync(resourceKey, objectId, token);
+        if (eligibility != DataScopeObjectEligibility.Allowed) return new(DeniedStatus(eligibility));
+        return new(DataScopeObjectStatus.Succeeded, await grants.GetAsync(resourceKey, objectId, token));
+    }
 
     /// <summary>资格仅在保存前验证；提交后失去自身资格仍返回成功。</summary>
-    public Task SaveAsync(DataScopeObjectDto input, CancellationToken token) => grants.SaveAsync(input, token);
+    public async Task<DataScopeObjectResult> SaveAsync(string resourceKey, string objectId, DataScopeObjectDto input, CancellationToken token)
+    {
+        var eligibility = await CheckAsync(resourceKey, objectId, token);
+        if (eligibility != DataScopeObjectEligibility.Allowed) return new(DeniedStatus(eligibility));
+        try
+        {
+            if (input.ResourceKey != resourceKey || input.ObjectId != objectId)
+                throw new RolePermissionValidationException("对象授权目标与请求不一致。");
+            await grants.SaveAsync(input, token);
+            return new(DataScopeObjectStatus.Succeeded);
+        }
+        catch (RolePermissionValidationException exception)
+        { return new(DataScopeObjectStatus.InvalidInput, exception.Message); }
+    }
 
     /// <summary>被分析账号必须存在；复用正式裁决实现，不改变操作者的管理资格或请求身份。</summary>
-    public async Task<DataScopeExplanationDto?> ExplainAsync(string resourceKey, string objectId, string accountId, CancellationToken token)
+    public async Task<DataScopeObjectResult<DataScopeExplanationDto>> ExplainAsync(string resourceKey, string objectId, string? accountId, CancellationToken token)
     {
-        var directory = await identities.SearchAsync("user", null, 1, [accountId], token);
-        var account = directory.CurrentValues.SingleOrDefault(item => item.Id == accountId);
-        if (account is null) return null;
-        var actions = await ((DataScopeReadPlans)decisions).ExplainAsync(resourceKey, objectId, accountId, token);
-        return new(resourceKey, objectId, accountId, account.Name, actions);
+        var eligibility = await CheckAsync(resourceKey, objectId, token);
+        if (eligibility != DataScopeObjectEligibility.Allowed) return new(DeniedStatus(eligibility));
+        var target = accountId ?? context.HttpContext!.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(target) || target.Length > 128) return new(DataScopeObjectStatus.InvalidInput);
+        var directory = await identities.SearchAsync("user", null, 1, [target], token);
+        var account = directory.CurrentValues.SingleOrDefault(item => item.Id == target);
+        if (account is null) return new(DataScopeObjectStatus.NotFound);
+        var actions = await ((DataScopeReadPlans)decisions).ExplainAsync(resourceKey, objectId, target, token);
+        return new(DataScopeObjectStatus.Succeeded, new(resourceKey, objectId, target, account.Name, actions));
+    }
+
+    /// <summary>对象资格通过后公开完整动作及主体类型目录，关闭动作仍可用于配置。</summary>
+    public async Task<DataScopeObjectResult<DataScopeObjectCatalog>> CatalogAsync(string resourceKey, string objectId, CancellationToken token)
+    {
+        var eligibility = await CheckAsync(resourceKey, objectId, token);
+        if (eligibility != DataScopeObjectEligibility.Allowed) return new(DeniedStatus(eligibility));
+        return new(DataScopeObjectStatus.Succeeded, new(catalog.Actions, identities.SubjectTypes));
     }
 
     /// <summary>最小主体目录只在对象管理资格下开放，不调用业务 Lookup。</summary>
-    public Task<DataScopeSubjectPage> SubjectsAsync(string type, string? query, int page, IReadOnlyList<string> currentIds, CancellationToken token) =>
-        identities.SearchAsync(type, query, page, currentIds, token);
+    public async Task<DataScopeObjectResult<DataScopeSubjectPage>> SubjectsAsync(string resourceKey, string objectId,
+        string type, string? query, int page, IReadOnlyList<string> currentIds, CancellationToken token)
+    {
+        var eligibility = await CheckAsync(resourceKey, objectId, token);
+        if (eligibility != DataScopeObjectEligibility.Allowed) return new(DeniedStatus(eligibility));
+        try { return new(DataScopeObjectStatus.Succeeded, await identities.SearchAsync(type, query, page, currentIds, token)); }
+        catch (RolePermissionValidationException exception)
+        { return new(DataScopeObjectStatus.InvalidInput, ValidationMessage: exception.Message); }
+    }
+
+    // 资格拒绝属于完整操作的正常结果；事实源故障仍由原异常传播。
+    private static DataScopeObjectStatus DeniedStatus(DataScopeObjectEligibility eligibility) => eligibility switch
+    {
+        DataScopeObjectEligibility.Forbidden => DataScopeObjectStatus.Forbidden,
+        DataScopeObjectEligibility.NotFound => DataScopeObjectStatus.NotFound,
+        _ => throw new ArgumentOutOfRangeException(nameof(eligibility))
+    };
 }
 
 public enum DataScopeObjectEligibility { Allowed, Forbidden, NotFound }
+
+public enum DataScopeObjectStatus { Succeeded, Forbidden, NotFound, InvalidInput }
+
+/// <summary>模块内完整操作结果；校验文案仅用于配置错误，缺省表示不公开细节的无效输入。</summary>
+public record DataScopeObjectResult(DataScopeObjectStatus Status, string? ValidationMessage = null);
+
+/// <summary>读取成功时携带已有响应数据，拒绝时不携带目录或对象内容。</summary>
+public sealed record DataScopeObjectResult<T>(DataScopeObjectStatus Status, T? Value = default, string? ValidationMessage = null)
+    : DataScopeObjectResult(Status, ValidationMessage);
+
+/// <summary>对象管理可配置目录，不裁掉已关闭动作或操作者不可读的主体类型。</summary>
+public sealed record DataScopeObjectCatalog(IReadOnlyList<DataActionDeclaration> Actions, IReadOnlyList<DataScopeSubjectType> SubjectTypes);

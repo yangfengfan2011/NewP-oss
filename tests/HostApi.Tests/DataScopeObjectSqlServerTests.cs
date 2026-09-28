@@ -18,7 +18,7 @@ public sealed class DataScopeObjectSqlServerTests
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
         var actions = fixture.Services.GetRequiredService<CanonicalModulePlan>().DataActionCatalog;
-        Assert.Equal(new[] { "authorize", "create", "delete", "edit", "read" }, actions.Select(action => action.Key));
+        Assert.Equal(new[] { "read", "create", "edit", "delete", "authorize" }, actions.Select(action => action.Key));
         Assert.All(actions.Where(action => action.Key is "authorize" or "delete" or "edit"), action => Assert.True(action.RequiresRead));
         Assert.All(actions.Where(action => action.Key is "create" or "read"), action => Assert.False(action.RequiresRead));
         var http = new FeatureHttpTestRequests(fixture);
@@ -124,6 +124,7 @@ public sealed class DataScopeObjectSqlServerTests
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(readerOnly, read, HttpMethod.Get, endpoint + "/subjects/user"))
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        await AssertManagementDeniedAsync(readerOnly, HttpStatusCode.Forbidden);
         var rule = new DataScopeRuleDto("ObjectScopeRule", "ObjectScopeRule", null, "拒绝读取", true, "organization.person",
             new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(id)),
             [new("ObjectScopeRuleSubject", "all", null, 0, new Dictionary<string, string> { ["read"] = "deny" })], []);
@@ -197,6 +198,26 @@ public sealed class DataScopeObjectSqlServerTests
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, endpoint + "/eligibility"))
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, endpoint + "/catalog"))
+        {
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var catalog = await response.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Contains(catalog.GetProperty("actions").EnumerateArray(), item => item.GetProperty("key").GetString() == "authorize");
+            Assert.Contains(catalog.GetProperty("subjectTypes").EnumerateArray(), item => item.GetProperty("key").GetString() == "user");
+            Assert.False(catalog.TryGetProperty("status", out _));
+        }
+        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get,
+            endpoint + "/subjects/user?currentIds=" + actor.AccountId))
+        {
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var subjects = await response.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Contains(subjects.GetProperty("currentValues").EnumerateArray(), item => item.GetProperty("id").GetString() == actor.AccountId);
+        }
+        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, endpoint + "/subjects/user?page=0"))
+            await AssertInvalidConfigurationAsync(response, "主体目录页码无效。");
+        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Put, endpoint,
+            allow with { ObjectId = "different-target" }))
+            await AssertInvalidConfigurationAsync(response, "对象授权目标与请求不一致。");
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Put, endpoint,
             allow with { Subjects = [allow.Subjects[0] with
             { Actions = new Dictionary<string, string> { ["read"] = "deny", ["authorize"] = "deny",
@@ -206,6 +227,7 @@ public sealed class DataScopeObjectSqlServerTests
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Get, endpoint + "/eligibility"))
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        await AssertManagementDeniedAsync(ordinary, HttpStatusCode.NotFound);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{id}"))
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, endpoint, allow))
@@ -249,5 +271,26 @@ public sealed class DataScopeObjectSqlServerTests
         }
         using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Get, endpoint))
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+
+        async Task AssertManagementDeniedAsync(HttpClient client, HttpStatusCode expected)
+        {
+            foreach (var suffix in new[] { "", "/catalog", "/subjects/user?page=0", "/explanation?accountId=" + new string('a', 129) })
+            {
+                using var response = await FeatureHttpTestRequests.SendAsync(client, manage, HttpMethod.Get, endpoint + suffix);
+                Assert.Equal(expected, response.StatusCode);
+            }
+            using var save = await FeatureHttpTestRequests.SendAsync(client, manage, HttpMethod.Put, endpoint,
+                new DataScopeObjectDto("organization.person", "different-target", []));
+            Assert.Equal(expected, save.StatusCode);
+        }
+
+        static async Task AssertInvalidConfigurationAsync(HttpResponseMessage response, string title)
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(400, problem.GetProperty("status").GetInt32());
+            Assert.Equal(title, problem.GetProperty("title").GetString());
+            Assert.Equal("DataScope.InvalidConfiguration", problem.GetProperty("code").GetString());
+        }
     }
 }

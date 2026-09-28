@@ -70,6 +70,13 @@ public sealed class DataScopeExplanationSqlServerTests
         }
         using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Get, endpoint + "/explanation?accountId=missing"))
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Get,
+            endpoint + "/explanation?accountId=" + new string('a', 129)))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.False(problem.TryGetProperty("code", out _));
+        }
 
         async Task<DataScopeExplanationDto> Explain()
         {

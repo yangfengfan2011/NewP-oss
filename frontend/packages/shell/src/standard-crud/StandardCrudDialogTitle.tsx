@@ -1,9 +1,8 @@
 import type { ReactNode } from 'react';
-import { LanguageSelect } from '@icp-platform/core';
 
-/** 遮罩内保留同一语言入口，使打开的交互无需关闭即可切换语言。 */
+/** 弹窗标题继承外层语言，语言选择由主界面全局栏持有。 */
 export function StandardCrudDialogTitle({ children }: { children: ReactNode }) {
   return <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', paddingRight: 24 }}>
-    <span>{children}</span><LanguageSelect />
+    <span>{children}</span>
   </div>;
 }

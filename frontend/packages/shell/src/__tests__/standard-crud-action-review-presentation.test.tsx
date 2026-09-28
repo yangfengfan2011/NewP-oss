@@ -12,6 +12,7 @@ it('honors reusable input width and closes read-only details without executing a
     value: undefined, pending: false, onChange: vi.fn(), onCancel: close, onConfirm: confirm };
   try {
     await act(async () => root.render(<StandardCrudActionReviewDialog {...props} />));
+    expect(document.querySelector('.ant-modal select')).toBeNull();
     expect((document.querySelector('.ant-modal') as HTMLElement).style.width).toBe('960px');
     expect(document.querySelector('.ant-modal-footer')?.textContent?.replace(/\s/g, '')).toBe('关闭');
     await act(async () => (document.querySelector('.ant-modal-footer button') as HTMLElement).click());

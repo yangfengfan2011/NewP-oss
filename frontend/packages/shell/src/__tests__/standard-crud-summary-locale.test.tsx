@@ -31,8 +31,10 @@ const catalogs = Object.fromEntries(['zhs', 'en'].map(language => [language, Obj
 const summaryRenderer = vi.fn(personStandardCrudResource.summaryRenderers!.userBinding);
 const registration = { ...personStandardCrudResource, summaryRenderers: { ...personStandardCrudResource.summaryRenderers, userBinding: summaryRenderer } };
 
+let setProviderLanguage: ReturnType<typeof useLocalization>['setLanguage'];
 function QueryScope({ children }: { children: ReactNode }) {
-  const { currentLanguage } = useLocalization();
+  const { currentLanguage, setLanguage } = useLocalization();
+  setProviderLanguage = setLanguage;
   return <PlatformQueryProvider scopeKey={currentLanguage}>{children}</PlatformQueryProvider>;
 }
 function Harness({ id = 'person-1', canBind = true, onDisable }: { id?: string; canBind?: boolean; onDisable?: () => Promise<void> }) {
@@ -92,10 +94,8 @@ async function openDraft() {
 }
 function button(label: string) { return [...document.querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent?.replace(/\s/g, '') === label.replace(/\s/g, '')); }
 async function switchLanguage(code = 'en') {
-  await act(async () => {
-    const language = document.querySelector<HTMLSelectElement>('.ant-modal select')!;
-    language.value = code; language.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  // 只验证外层真实 Provider 状态继承，不模拟穿透遮罩操作背景控件。
+  await act(async () => setProviderLanguage(code));
 }
 
 it('keeps the real binding dialog, selection and draft while locale detail reads replace the snapshot', async () => {
@@ -122,6 +122,7 @@ it('keeps the real detail action confirmation and reason during locale re-readin
   await mountDetail();
   await act(async () => button(detailMessages.PersonDetailView.Action_Disable.zhs)!.click());
   await vi.waitFor(() => expect(document.querySelector('.ant-modal textarea')).not.toBeNull());
+  expect(document.querySelector('.ant-modal select')).toBeNull();
   const textarea = document.querySelector<HTMLTextAreaElement>('.ant-modal textarea')!;
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, '保留停用原因');
@@ -143,6 +144,7 @@ it('does not replay an already submitting detail action when its locale snapshot
   await mountDetail(action);
   await act(async () => button(detailMessages.PersonDetailView.Action_Disable.zhs)!.click());
   await vi.waitFor(() => expect(document.querySelector('.ant-modal textarea')).not.toBeNull());
+  expect(document.querySelector('.ant-modal select')).toBeNull();
   await act(async () => button('确认')!.click());
   expect(action).toHaveBeenCalledTimes(1);
   await switchLanguage();

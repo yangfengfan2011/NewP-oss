@@ -36,8 +36,11 @@ const catalogs = Object.fromEntries(['zhs', 'en'].map(language => [language, Obj
   ...Object.entries(platformDictionary.Platform).map(([key, translations]) => [`Platform.${key}`, translations[language as 'zhs' | 'en']]),
 ]) ]));
 
+// 测试驱动外层 Provider 状态，不表示遮罩允许操作背景语言入口。
+let setProviderLanguage: ReturnType<typeof useLocalization>['setLanguage'];
 function PersonnelQueryScope({ registration = personStandardCrudResource }: { registration?: typeof personStandardCrudResource }) {
-  const { currentLanguage } = useLocalization();
+  const { currentLanguage, setLanguage } = useLocalization();
+  setProviderLanguage = setLanguage;
   return <PlatformQueryProvider scopeKey={currentLanguage}><RuntimeMetadataProvider value={{ manifest: { modules: [] }, navDocuments: [], viewDocuments: [personList, personDetail], modelDocuments: [personModel] }}>
     <StandardCrudListPageHost viewKey="organization.person.list" registration={registration} />
   </RuntimeMetadataProvider></PlatformQueryProvider>;
@@ -75,18 +78,10 @@ it('uses real personnel metadata, preserves a failed creation draft, retranslate
   await vi.waitFor(() => expect(document.querySelector('input#ENAME')).not.toBeNull());
   await act(async () => document.querySelector('form.np-standard-crud-form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   await vi.waitFor(() => expect(document.body.textContent).toContain('请填写此字段'));
-  await act(async () => {
-    const select = document.querySelector<HTMLSelectElement>('select[aria-label="语言"]')!;
-    select.value = 'en';
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  await act(async () => setProviderLanguage('en'));
   expect(document.body.textContent).toContain('Please fill in this field');
   expect(document.querySelector('button[aria-label="Search"]')).not.toBeNull();
-  await act(async () => {
-    const select = document.querySelector<HTMLSelectElement>('select[aria-label="Language"]')!;
-    select.value = 'zhs';
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  await act(async () => setProviderLanguage('zhs'));
   const name = document.querySelector<HTMLInputElement>('input#ENAME')!;
   expect(name.placeholder).toBe('请输入姓名');
   expect(document.querySelector('label[for="ENAME"]')?.textContent).toBe('姓名');
@@ -99,11 +94,7 @@ it('uses real personnel metadata, preserves a failed creation draft, retranslate
     document.querySelector('form.np-standard-crud-form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
   });
   await vi.waitFor(() => expect(document.body.textContent).toContain('出生日期不能晚于 2026-09-28。'));
-  await act(async () => {
-    const select = document.querySelector<HTMLSelectElement>('select[aria-label="语言"]')!;
-    select.value = 'en';
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  await act(async () => setProviderLanguage('en'));
   await vi.waitFor(() => expect(document.body.textContent).toContain('Birth date cannot be later than 2026-09-28.'));
   expect(document.querySelector('input#ENAME')).toBe(name);
   expect(name.value).toBe('用户草稿');
@@ -131,11 +122,8 @@ it('uses real personnel metadata, preserves a failed creation draft, retranslate
   expect(writes).toBe(1);
   await act(async () => Array.from(document.querySelectorAll<HTMLButtonElement>('.ant-drawer-footer button')).find(button => button.textContent === 'Cancel')!.click());
   await vi.waitFor(() => expect(document.body.textContent).toContain('Discard unsaved changes?'));
-  await act(async () => {
-    const select = document.querySelector<HTMLSelectElement>('.ant-modal select[aria-label="Language"]')!;
-    select.value = 'zhs';
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  expect(document.querySelector('.ant-modal select')).toBeNull();
+  await act(async () => setProviderLanguage('zhs'));
   expect(document.querySelector('.ant-modal-title')?.textContent).toContain('放弃未保存的更改？');
   expect(document.querySelector('.ant-modal-close')?.getAttribute('aria-label')).toBe('关闭');
   expect(name.value).toBe('用户草稿');
@@ -166,10 +154,8 @@ it('keeps a personnel row confirmation through a locale read generation and exec
   await act(async () => container.querySelector<HTMLButtonElement>('.np-row-actions-more')!.click());
   await act(async () => (Array.from(document.querySelectorAll('.ant-dropdown-menu-item')).find(item => item.textContent === '删除') as HTMLElement).click());
   await vi.waitFor(() => expect(document.querySelector('.ant-modal')).not.toBeNull());
-  await act(async () => {
-    const select = document.querySelector<HTMLSelectElement>('.ant-modal select')!;
-    select.value = 'en'; select.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  expect(document.querySelector('.ant-modal select')).toBeNull();
+  await act(async () => setProviderLanguage('en'));
   expect(delayed).toBe(true);
   expect(document.querySelector('.ant-modal-title')?.textContent).toContain(personDictionary.PersonListView.Action_Delete_Confirm.en);
   expect(remove).not.toHaveBeenCalled();

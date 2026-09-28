@@ -32,8 +32,20 @@ internal static class IdentityCrudQueryTestFactory
             [],
             [],
             temporalDisplayProjectionExecutor: temporal,
-            userDisplayNameDirectory: new IdentityUserDisplayNameDirectory(new IdentityAccountDirectory(repository), new AllowAllReadableIds()));
+            userDisplayNameDirectory: new IdentityUserDisplayNameDirectory(new IdentityAccountDirectory(repository), new AllowAllReadableIds()),
+            presentationContextAccessor: new TestPresentationContext(),
+            textCatalog: RuntimeTextCatalog.Parse("""
+                { "defaultLanguage": "zhs", "supportedLanguages": [
+                    { "code": "zhs", "locale": "zh-CN" }, { "code": "en", "locale": "en-US" } ],
+                  "catalogs": { "zhs": { "Platform.SystemActor": "系统" }, "en": { "Platform.SystemActor": "System" } } }
+                """));
         return new IdentityManagementQueryService(repository, crud, temporal, registry);
+    }
+
+    // 查询夹具显式沿用英文请求语境；系统操作者仍经正式运行时词典解析。
+    private sealed class TestPresentationContext : IRequestPresentationContextAccessor
+    {
+        public RequestPresentationContext Current { get; } = new("en-US", "Asia/Taipei");
     }
 
     private sealed class AccountReadRepository(IIdentityRepository repository) : IStandardCrudRepository

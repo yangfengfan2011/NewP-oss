@@ -31,16 +31,16 @@ public sealed class UserRoleAssignments(EfPlatformDbContext db, IIdentityAccount
             .Select(r => EF.Property<string>(r, "RoleId")).ToListAsync(cancellationToken);
         var codes = await Roles().AsNoTracking().Where(r => assignedIds.Contains(EF.Property<string>(r, "EID")))
             .Select(r => EF.Property<string>(r, "ECODE")).ToListAsync(cancellationToken);
-        if (codes.Any(IsAdministrator)) throw new UserRoleValidationException("本地管理员成员不进入普通账号角色管理。");
+        if (codes.Any(IsAdministrator)) throw new UserRoleValidationException("本地管理员成员不进入普通账号角色管理。", "AUTHORIZATION_MEMBER_PROTECTED");
         return new() { UserId = userId, RoleCodes = codes };
     }
 
     /// <inheritdoc/>
     public async Task ReplaceAsync(string userId, IReadOnlyCollection<string> codes, CancellationToken cancellationToken = default)
     {
-        if (codes is null || codes.Any(string.IsNullOrWhiteSpace)) throw new UserRoleValidationException("必须提供完整有效角色集合。");
+        if (codes is null || codes.Any(string.IsNullOrWhiteSpace)) throw new UserRoleValidationException("必须提供完整有效角色集合。", "AUTHORIZATION_ROLE_SET_REQUIRED");
         var requested = codes.ToHashSet(StringComparer.Ordinal);
-        if (requested.Any(IsAdministrator)) throw new UserRoleValidationException("本地管理员成员不能通过普通管理修改。");
+        if (requested.Any(IsAdministrator)) throw new UserRoleValidationException("本地管理员成员不能通过普通管理修改。", "AUTHORIZATION_MEMBER_PROTECTED_WRITE");
         await transactions.ExecuteAsync(async token =>
         {
             // 账号可能尚无任何角色行，事务级应用锁仍能串行化空集合的首次分配。
@@ -50,11 +50,11 @@ public sealed class UserRoleAssignments(EfPlatformDbContext db, IIdentityAccount
             await ValidateAccountAsync(userId, token);
             var selected = await Roles().AsNoTracking().Where(r => requested.Contains(EF.Property<string>(r, "ECODE")))
                 .Select(r => new { Id = EF.Property<string>(r, "EID"), Code = EF.Property<string>(r, "ECODE") }).ToListAsync(token);
-            if (!requested.SetEquals(selected.Select(r => r.Code))) throw new UserRoleValidationException("角色集合包含未知角色。");
+            if (!requested.SetEquals(selected.Select(r => r.Code))) throw new UserRoleValidationException("角色集合包含未知角色。", "AUTHORIZATION_ROLE_SET_UNKNOWN");
             var old = await Links().Where(r => EF.Property<string>(r, "UserId") == userId).ToListAsync(token);
             var oldIds = old.Select(r => (string)r["RoleId"]!).ToHashSet(StringComparer.Ordinal);
             if (await Roles().AsNoTracking().AnyAsync(r => oldIds.Contains(EF.Property<string>(r, "EID")) && EF.Property<string>(r, "ECODE") == LocalAdministratorRole.Code, token))
-                throw new UserRoleValidationException("本地管理员成员不能通过普通管理修改。");
+                throw new UserRoleValidationException("本地管理员成员不能通过普通管理修改。", "AUTHORIZATION_MEMBER_PROTECTED_WRITE");
             var newIds = selected.Select(r => r.Id).ToHashSet(StringComparer.Ordinal);
             if (oldIds.SetEquals(newIds)) return true;
             var changes = oldIds.Union(newIds).Order(StringComparer.Ordinal).Where(id => oldIds.Contains(id) != newIds.Contains(id))
@@ -73,8 +73,8 @@ public sealed class UserRoleAssignments(EfPlatformDbContext db, IIdentityAccount
     private async Task ValidateAccountAsync(string userId, CancellationToken token)
     {
         var account = await accounts.FindAsync(userId, token);
-        if (account is null || account.Status == IdentityAccountStatus.Deleted) throw new UserRoleValidationException("账号不存在或已删除。");
-        if (account.IsLocalAdministrator) throw new UserRoleValidationException("受保护账号不进入普通角色管理。");
+        if (account is null || account.Status == IdentityAccountStatus.Deleted) throw new UserRoleValidationException("账号不存在或已删除。", "AUTHORIZATION_ACCOUNT_NOT_FOUND");
+        if (account.IsLocalAdministrator) throw new UserRoleValidationException("受保护账号不进入普通角色管理。", "AUTHORIZATION_ACCOUNT_PROTECTED");
     }
     // 只访问本模块拥有的运行时关系。
     private DbSet<Dictionary<string, object?>> Links() => db.Set<Dictionary<string, object?>>(db.ResolveModelKey("UserRole"));
@@ -85,7 +85,7 @@ public sealed class UserRoleAssignments(EfPlatformDbContext db, IIdentityAccount
 }
 
 /// <summary>普通成员管理的确定性输入错误。</summary>
-public sealed class UserRoleValidationException(string message) : InvalidOperationException(message);
+public sealed class UserRoleValidationException(string message, string code = "AUTHORIZATION_INVALID", IReadOnlyDictionary<string, object?>? args = null) : AuthorizationValidationException(message, code, args);
 
 /// <summary>账号名称经 Identity 稳定目录批量解析，已删除账号保留历史 ID。</summary>
 public sealed class BusinessAuditAccountNames(IIdentityAccountDirectory accounts) : IBusinessAuditNameDirectory

@@ -43,12 +43,14 @@
       "key": "authorization.workbench",
       "kind": "navigation",
       "title": "功能授权",
+      "titleKey": "RoleView.WorkbenchTitle",
       "behaviorKey": "authorization.workbench.read"
     },
     {
       "key": "save",
       "kind": "action",
       "title": "保存授权",
+      "titleKey": "RoleView.Save",
       "parentKey": "authorization.workbench",
       "behaviorKey": "authorization.workbench.save"
     },

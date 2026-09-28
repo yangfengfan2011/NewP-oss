@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Button, Card, Checkbox, Flex, Input, List, Modal, Pagination, Space, Spin, Tag, Tree, Typography } from "antd";
 import useMessage from "antd/es/message/useMessage";
-import { platformFetch, useAuthorization } from "@icp-platform/core";
-import type { PageProps } from "@icp-platform/sdk";
+import { formatRequestError, platformFetch, useAuthorization, useLocalization } from "@icp-platform/core";
+import { StandardCrudRequestError, type PageProps } from "@icp-platform/sdk";
 import { requestRole } from "./roleResource";
 import { buildFeatureTree, changeBranch, featureDiff, featureTreeKeys, type FeaturePoint } from "./featureTree";
 
@@ -11,11 +11,12 @@ interface RoleState { role: RoleSummary; positions: string[] }
 interface RolePage { items: { EID: string; ECODE: string; ENAME: string; IsEnabled: boolean }[]; total: number }
 interface Catalog { points: FeaturePoint[] }
 const endpoint = "/api/authorization/workbench";
-const message = (error: unknown) => error instanceof Error ? error.message : "功能授权操作失败";
+function SavedMessage() { const { t } = useLocalization(); return <>{t('RoleView.Saved', '授权已保存')}</>; }
 
 /** 功能授权的局部草稿 owner；所有写入由正式 API 判权，不在浏览器推断管理员放行。 */
 export default function FeatureWorkbench({ input, reportState }: PageProps) {
   const { hasFeature } = useAuthorization();
+  const { t } = useLocalization();
   const [catalog, setCatalog] = useState<Catalog>();
   const [roles, setRoles] = useState<RolePage>();
   const [roleQuery, setRoleQuery] = useState("");
@@ -26,7 +27,7 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
   const [grantedOnly, setGrantedOnly] = useState(false);
   const [expanded, setExpanded] = useState<React.Key[]>([]);
   const [branch, setBranch] = useState<string>();
-  const [error, setError] = useState("");
+  const [error, setError] = useState<unknown>();
   const [messageApi, messageContextHolder] = useMessage();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -44,7 +45,11 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
   }, [catalog, draft]);
   const savePoint = catalog?.points.find(point => point.behaviorKey === "authorization.workbench.save");
   const readOnly = !savePoint || !hasFeature(savePoint.position) || current?.role.code.toLowerCase() === "localadmin";
-  const tree = useMemo(() => buildFeatureTree(catalog?.points ?? [], query, draft, grantedOnly), [catalog, query, draft, grantedOnly]);
+  const localizedPoints = useMemo(() => (catalog?.points ?? []).map(point => ({ ...point,
+    title: point.titleKey ? t(point.titleKey, point.title) : point.title,
+    staticScopeTitle: point.staticScopeTitleKey ? t(point.staticScopeTitleKey, point.staticScopeTitle) : point.staticScopeTitle,
+  })), [catalog, t]);
+  const tree = useMemo(() => buildFeatureTree(localizedPoints, query, draft, grantedOnly, t), [localizedPoints, query, draft, grantedOnly, t]);
   const read = useCallback((path: string, signal?: AbortSignal) => requestRole(platformFetch as typeof fetch, endpoint + path,
     { signal, headers: { "X-NewP-Feature": entryPosition } }), [entryPosition]);
 
@@ -53,14 +58,14 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
     const controller = new AbortController();
     void read("/catalog", controller.signal).then(value => {
       if (!controller.signal.aborted) setCatalog(value as Catalog);
-    }).catch(failure => { if (!controller.signal.aborted) setError(message(failure)); });
+    }).catch(failure => { if (!controller.signal.aborted) setError(failure); });
     return () => controller.abort();
   }, [read]);
   useEffect(() => {
     const controller = new AbortController();
     void read(`/roles?query=${encodeURIComponent(roleQuery)}&pageIndex=${page}&pageSize=20`, controller.signal)
       .then(value => { if (!controller.signal.aborted) setRoles(value as RolePage); })
-      .catch(failure => { if (!controller.signal.aborted) setError(message(failure)); });
+      .catch(failure => { if (!controller.signal.aborted) setError(failure); });
     return () => controller.abort();
   }, [read, roleQuery, page]);
 
@@ -75,7 +80,7 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
     try {
       const value = await read(`/roles/${encodeURIComponent(id)}`, controller.signal) as RoleState;
       if (!controller.signal.aborted) { setCurrent(value); setDraft(new Set(value.positions)); }
-    } catch (failure) { if (!controller.signal.aborted) setError(message(failure)); }
+    } catch (failure) { if (!controller.signal.aborted) setError(failure); }
     finally { if (!controller.signal.aborted) setLoading(false); }
   }, [read]);
   useEffect(() => {
@@ -89,7 +94,7 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
   const save = useCallback(async (): Promise<boolean> => {
     if (pending.current || readOnly || !current || !catalog || missingEntries.length > 0) return false;
     const action = catalog.points.find(point => point.behaviorKey === "authorization.workbench.save");
-    if (!action) { setError("保存功能声明不可用"); return false; }
+    if (!action) { setError(new StandardCrudRequestError('保存功能声明不可用', 0, {}, { reasonKey: 'AuthorizationMessages.SaveUnavailable' })); return false; }
     pending.current = true;
     setSaving(true);
     setError("");
@@ -99,9 +104,9 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
         body: JSON.stringify({ positions: [...draft] }),
       });
       setCurrent({ ...current, positions: [...draft] });
-      void messageApi.success({ content: "授权已保存", duration: 3, key: "authorization-saved" });
+      void messageApi.success({ content: <SavedMessage />, duration: 3, key: "authorization-saved" });
       return true;
-    } catch (failure) { setError(message(failure)); return false; }
+    } catch (failure) { setError(failure); return false; }
     finally { pending.current = false; setSaving(false); }
   }, [catalog, current, draft, readOnly, missingEntries, messageApi]);
   useEffect(() => { reportState({ dirty, submitting: saving || loading }, reset, save); }, [dirty, saving, loading, reset, save, reportState]);
@@ -111,53 +116,53 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
   };
 
   return <div style={{ padding: 24 }}>
-    <Typography.Title level={3}>功能授权</Typography.Title>
-    <Typography.Paragraph type="secondary">选择角色，按入口位置配置功能。保存一次提交该角色的完整授权集合。</Typography.Paragraph>
-    {error && <Alert type="error" message={error} showIcon style={{ marginBottom: 16 }} />}
+    <Typography.Title level={3}>{t('RoleView.WorkbenchTitle', '功能授权')}</Typography.Title>
+    <Typography.Paragraph type="secondary">{t('RoleView.WorkbenchHelp', '选择角色，按入口位置配置功能。保存一次提交该角色的完整授权集合。')}</Typography.Paragraph>
+    {!!error && <Alert type="error" message={formatRequestError(error, t)} showIcon style={{ marginBottom: 16 }} />}
     {messageContextHolder}
     <Flex gap={20} align="stretch" wrap>
-      <Card title="角色" style={{ width: 280, flexShrink: 0 }}>
-        <Input.Search aria-label="搜索角色" placeholder="名称或代码" onSearch={value => { setRoleQuery(value); setPage(1); }} disabled={saving} />
+      <Card title={t('RoleView.Roles', '角色')} style={{ width: 280, flexShrink: 0 }}>
+        <Input.Search aria-label={t('RoleView.SearchRoles', '搜索角色')} placeholder={t('RoleView.RoleSearchPlaceholder', '名称或代码')} onSearch={value => { setRoleQuery(value); setPage(1); }} disabled={saving} />
         <List dataSource={roles?.items ?? []} loading={!roles} renderItem={role => <List.Item>
           <Button type={current?.role.id === role.EID ? "primary" : "text"} block disabled={saving} onClick={() => chooseRole(role.EID)}
             style={{ display: "block", height: "auto", minHeight: 32, whiteSpace: "normal", overflowWrap: "anywhere", textAlign: "left" }}>
-            {role.ENAME} · {role.ECODE} {!role.IsEnabled && <Tag>停用</Tag>}
+            {role.ENAME} · {role.ECODE} {!role.IsEnabled && <Tag>{t('RoleView.Disabled', '停用')}</Tag>}
           </Button>
         </List.Item>} />
         <Pagination simple current={page} pageSize={20} total={roles?.total ?? 0} onChange={setPage} disabled={saving} />
       </Card>
-      <Card style={{ flex: "1 1 460px", minWidth: 0 }} title={current ? `${current.role.displayName} · ${current.role.code}` : "选择一个角色"}>
-        {!catalog ? <Spin /> : !current ? <Typography.Text type="secondary">从左侧选择角色以查看授权。</Typography.Text> : <Spin spinning={loading}>
-          {!current.role.isEnabled && <Alert type="warning" message="此角色已停用，保留的授权当前不生效。" style={{ marginBottom: 16 }} />}
-          {readOnly && <Alert type="info" message={current.role.code.toLowerCase() === "localadmin" ? "本地管理员授权由活动目录维护，只读。" : "当前账号可查看，未获保存授权。"} style={{ marginBottom: 16 }} />}
+      <Card style={{ flex: "1 1 460px", minWidth: 0 }} title={current ? `${current.role.displayName} · ${current.role.code}` : t('RoleView.ChooseRole', '选择一个角色')}>
+        {!catalog ? <Spin /> : !current ? <Typography.Text type="secondary">{t('RoleView.ChooseRoleHelp', '从左侧选择角色以查看授权。')}</Typography.Text> : <Spin spinning={loading}>
+          {!current.role.isEnabled && <Alert type="warning" message={t('RoleView.DisabledHelp', '此角色已停用，保留的授权当前不生效。')} style={{ marginBottom: 16 }} />}
+          {readOnly && <Alert type="info" message={current.role.code.toLowerCase() === "localadmin" ? t('RoleView.AdminReadOnly', '本地管理员授权由活动目录维护，只读。') : t('RoleView.NoSavePermission', '当前账号可查看，未获保存授权。')} style={{ marginBottom: 16 }} />}
           <Space wrap style={{ marginBottom: 12 }}>
-            <Input.Search aria-label="搜索功能" placeholder="功能名称或位置" value={query} onChange={event => setQuery(event.target.value)} />
-            <Checkbox checked={grantedOnly} onChange={event => setGrantedOnly(event.target.checked)}>仅已授权</Checkbox>
-            <Button onClick={() => setExpanded(featureTreeKeys(tree))}>展开全部</Button>
-            <Button onClick={() => setExpanded([])}>收起全部</Button>
+            <Input.Search aria-label={t('RoleView.SearchFeatures', '搜索功能')} placeholder={t('RoleView.FeatureSearchPlaceholder', '功能名称或位置')} value={query} onChange={event => setQuery(event.target.value)} />
+            <Checkbox checked={grantedOnly} onChange={event => setGrantedOnly(event.target.checked)}>{t('RoleView.GrantedOnly', '仅已授权')}</Checkbox>
+            <Button onClick={() => setExpanded(featureTreeKeys(tree))}>{t('RoleView.ExpandAll', '展开全部')}</Button>
+            <Button onClick={() => setExpanded([])}>{t('RoleView.CollapseAll', '收起全部')}</Button>
           </Space>
           <Space wrap style={{ marginBottom: 12 }}>
-            <Button disabled={!branch || readOnly || saving} onClick={() => setDraft(changeBranch(catalog.points, draft, branch!, true))}>全选此分支</Button>
-            <Button disabled={!branch || readOnly || saving} onClick={() => setDraft(changeBranch(catalog.points, draft, branch!, false))}>清除此分支</Button>
-            <Typography.Text type="secondary">勾选独立生效；点击名称选定批量操作分支。</Typography.Text>
+            <Button disabled={!branch || readOnly || saving} onClick={() => setDraft(changeBranch(catalog.points, draft, branch!, true))}>{t('RoleView.SelectBranch', '全选此分支')}</Button>
+            <Button disabled={!branch || readOnly || saving} onClick={() => setDraft(changeBranch(catalog.points, draft, branch!, false))}>{t('RoleView.ClearBranch', '清除此分支')}</Button>
+            <Typography.Text type="secondary">{t('RoleView.SelectionHelp', '勾选独立生效；点击名称选定批量操作分支。')}</Typography.Text>
           </Space>
           <Tree checkable checkStrictly virtual height={420} treeData={tree} checkedKeys={[...draft]} expandedKeys={expanded}
             onExpand={setExpanded} onSelect={keys => setBranch(keys[0]?.toString())} disabled={readOnly || saving}
             onCheck={(_keys, info) => setDraft(previous => { const next = new Set(previous); if (info.checked) next.add(String(info.node.key)); else next.delete(String(info.node.key)); return next; })} />
-          {missingEntries.length > 0 && <Alert type="warning" showIcon message={`请先补选入口：${missingEntries.map(point => point.title).join("、")}`} />}
+          {missingEntries.length > 0 && <Alert type="warning" showIcon message={t('RoleView.MissingEntries', '请先补选入口：{entries}', { entries: missingEntries.map(point => point.titleKey ? t(point.titleKey, point.title) : point.title).join('、') })} />}
           <Space wrap style={{ marginTop: 16 }}>
-            <Typography.Text>已授权 {draft.size} / {catalog.points.length}</Typography.Text>
-            <Tag color="green">新增 {diff.added.length}</Tag><Tag color="red">移除 {diff.removed.length}</Tag>
-            <Button type="primary" disabled={!dirty || readOnly || loading || missingEntries.length > 0} loading={saving} onClick={() => void save()}>保存授权</Button>
-            <Button disabled={!dirty || saving || loading} onClick={reset}>重置</Button>
+            <Typography.Text>{t('RoleView.GrantedCount', '已授权 {count} / {total}', { count: draft.size, total: catalog.points.length })}</Typography.Text>
+            <Tag color="green">{t('RoleView.AddedCount', '新增 {count}', { count: diff.added.length })}</Tag><Tag color="red">{t('RoleView.RemovedCount', '移除 {count}', { count: diff.removed.length })}</Tag>
+            <Button type="primary" disabled={!dirty || readOnly || loading || missingEntries.length > 0} loading={saving} onClick={() => void save()}>{t('RoleView.Save', '保存授权')}</Button>
+            <Button disabled={!dirty || saving || loading} onClick={reset}>{t('RoleView.Reset', '重置')}</Button>
           </Space>
         </Spin>}
       </Card>
     </Flex>
-    <Modal open={!!switchTarget} title="当前角色有未保存的授权" closable={!saving} onCancel={() => setSwitchTarget(undefined)} footer={[
-      <Button key="cancel" disabled={saving} onClick={() => setSwitchTarget(undefined)}>取消</Button>,
-      <Button key="discard" disabled={saving} onClick={() => { const target = switchTarget!; setSwitchTarget(undefined); void loadRole(target); }}>放弃并切换</Button>,
-      <Button key="save" type="primary" disabled={missingEntries.length > 0} loading={saving} onClick={async () => { if (await save()) { const target = switchTarget!; setSwitchTarget(undefined); await loadRole(target); } }}>保存并切换</Button>,
-    ]}>保存失败会保留当前角色及草稿。</Modal>
+    <Modal open={!!switchTarget} title={t('RoleView.UnsavedTitle', '当前角色有未保存的授权')} closable={!saving} onCancel={() => setSwitchTarget(undefined)} footer={[
+      <Button key="cancel" disabled={saving} onClick={() => setSwitchTarget(undefined)}>{t('RoleView.Cancel', '取消')}</Button>,
+      <Button key="discard" disabled={saving} onClick={() => { const target = switchTarget!; setSwitchTarget(undefined); void loadRole(target); }}>{t('RoleView.DiscardSwitch', '放弃并切换')}</Button>,
+      <Button key="save" type="primary" disabled={missingEntries.length > 0} loading={saving} onClick={async () => { if (await save()) { const target = switchTarget!; setSwitchTarget(undefined); await loadRole(target); } }}>{t('RoleView.SaveSwitch', '保存并切换')}</Button>,
+    ]}>{t('RoleView.SaveFailureHelp', '保存失败会保留当前角色及草稿。')}</Modal>
   </div>;
 }

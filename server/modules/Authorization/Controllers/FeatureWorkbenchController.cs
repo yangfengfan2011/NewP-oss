@@ -33,13 +33,13 @@ public sealed class FeatureWorkbenchController(RoleManagementQuery roles, Active
     {
         try
         {
-            if (request.Positions is null) throw new RolePermissionValidationException("必须提供完整功能集合。");
+            if (request.Positions is null) throw new RolePermissionValidationException("必须提供完整功能集合。", "AUTHORIZATION_FEATURE_SET_REQUIRED");
             await assignments.ReplaceAsync(roleId, request.Positions, cancellationToken);
             return NoContent();
         }
         catch (RolePermissionValidationException exception)
         {
-            return BadRequest(new ProblemDetails { Status = 400, Title = exception.Message });
+            return BadRequest(AuthorizationProblem.From(exception));
         }
     }
 }

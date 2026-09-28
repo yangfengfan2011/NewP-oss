@@ -35,7 +35,7 @@ public class UserRoleController : ControllerBase
     public async Task<ActionResult<UserRoleAssignmentsDto>> GetUserRoles(string userId, CancellationToken cancellationToken)
     {
         try { return Ok(await _assignments.GetAsync(userId, cancellationToken)); }
-        catch (UserRoleValidationException ex) { return BadRequest(new ProblemDetails { Title = ex.Message, Status = 400 }); }
+        catch (UserRoleValidationException ex) { return BadRequest(AuthorizationProblem.From(ex)); }
     }
 
     /// <summary>完整替换普通角色，登记及提交异常继续传播。</summary>
@@ -48,7 +48,7 @@ public class UserRoleController : ControllerBase
             await _assignments.ReplaceAsync(userId, request.RoleCodes, cancellationToken);
             return NoContent();
         }
-        catch (UserRoleValidationException ex) { return BadRequest(new ProblemDetails { Title = ex.Message, Status = 400 }); }
+        catch (UserRoleValidationException ex) { return BadRequest(AuthorizationProblem.From(ex)); }
     }
 
 }

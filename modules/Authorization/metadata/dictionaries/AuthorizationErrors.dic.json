@@ -1,0 +1,66 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "AuthorizationErrors": {
+    "AUTHORIZATION_ROLE_PROTECTED_CREATE": {
+      "zhs": "受保护的角色身份不能通过普通管理创建。",
+      "en": "Protected role identities cannot be created through regular management."
+    },
+    "AUTHORIZATION_ROLE_CODE_EXISTS": {
+      "zhs": "角色代码“{code}”已存在。",
+      "en": "Role code \"{code}\" already exists."
+    },
+    "AUTHORIZATION_ROLE_NOT_FOUND": {
+      "zhs": "角色“{roleId}”不存在。",
+      "en": "Role \"{roleId}\" does not exist."
+    },
+    "AUTHORIZATION_ROLE_PROTECTED_UPDATE": {
+      "zhs": "系统内置角色不允许修改。",
+      "en": "Built-in roles cannot be modified."
+    },
+    "AUTHORIZATION_ROLE_PROTECTED_DELETE": {
+      "zhs": "系统内置角色不允许删除。",
+      "en": "Built-in roles cannot be deleted."
+    },
+    "AUTHORIZATION_MEMBER_PROTECTED": {
+      "zhs": "本地管理员成员不进入普通账号角色管理。",
+      "en": "Local administrator members are excluded from regular account role management."
+    },
+    "AUTHORIZATION_ROLE_SET_REQUIRED": {
+      "zhs": "必须提供完整有效角色集合。",
+      "en": "Provide a complete, valid role set."
+    },
+    "AUTHORIZATION_MEMBER_PROTECTED_WRITE": {
+      "zhs": "本地管理员成员不能通过普通管理修改。",
+      "en": "Local administrator membership cannot be changed through regular management."
+    },
+    "AUTHORIZATION_ROLE_SET_UNKNOWN": {
+      "zhs": "角色集合包含未知角色。",
+      "en": "The role set contains unknown roles."
+    },
+    "AUTHORIZATION_ACCOUNT_NOT_FOUND": {
+      "zhs": "账号不存在或已删除。",
+      "en": "The account does not exist or has been deleted."
+    },
+    "AUTHORIZATION_ACCOUNT_PROTECTED": {
+      "zhs": "受保护账号不进入普通角色管理。",
+      "en": "Protected accounts are excluded from regular role management."
+    },
+    "AUTHORIZATION_FEATURE_SET_REQUIRED": {
+      "zhs": "必须提供完整功能集合。",
+      "en": "Provide the complete feature set."
+    },
+    "AUTHORIZATION_FEATURE_UNKNOWN": {
+      "zhs": "授权集合包含未知或失效功能：{position}。",
+      "en": "The authorization set contains an unknown or inactive feature: {position}."
+    },
+    "AUTHORIZATION_FEATURE_ENTRY_REQUIRED": {
+      "zhs": "功能 {position} 缺少本分支入口授权：{dependencyPosition}。",
+      "en": "Feature {position} requires its branch entry: {dependencyPosition}."
+    },
+    "AUTHORIZATION_FEATURE_PROTECTED": {
+      "zhs": "本地管理员的完整功能授权由初始化维护，不能修改。",
+      "en": "Local administrator feature authorization is maintained during initialization and cannot be modified."
+    }
+  }
+}

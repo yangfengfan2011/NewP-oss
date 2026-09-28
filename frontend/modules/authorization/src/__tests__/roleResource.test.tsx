@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createRoleResource, requestRole } from '../roleResource';
 describe('普通角色正式适配器', () => {
+  it('保留模块拒绝码、参数和字段事实供当前语言呈现', async () => {
+    const problem = { title: '角色代码已存在', code: 'AUTHORIZATION_ROLE_CODE_EXISTS', reasonKey: 'AuthorizationErrors.AUTHORIZATION_ROLE_CODE_EXISTS', args: { code: '业务原值' }, fieldErrors: [{ field: 'ECODE', code: 'AUTHORIZATION_ROLE_CODE_EXISTS', reasonKey: 'AuthorizationErrors.AUTHORIZATION_ROLE_CODE_EXISTS', args: { code: '业务原值' } }] };
+    const fetcher = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>().mockResolvedValue(new Response(JSON.stringify(problem), { status: 400 }));
+    await expect(requestRole(fetcher, '/api/authorization/roles', { method: 'POST' })).rejects.toMatchObject({ status: 400, code: problem.code, reasonKey: problem.reasonKey, args: problem.args, responseProblem: problem, fieldErrorDetails: problem.fieldErrors });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
   it('创建仅发送允许的字段，编辑保留停用状态且不回写保留身份', async () => {
     const fetcher = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>().mockResolvedValue(new Response('{}'));
     const resource = createRoleResource(fetcher);

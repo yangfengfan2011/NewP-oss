@@ -60,7 +60,7 @@ public class RoleController : ControllerBase
         }
         catch (RoleValidationException ex)
         {
-            return BadRequest(new ProblemDetails { Title = ex.Message, Status = 400 });
+            return BadRequest(AuthorizationProblem.From(ex));
         }
     }
 
@@ -76,7 +76,7 @@ public class RoleController : ControllerBase
         }
         catch (RoleValidationException ex)
         {
-            return BadRequest(new ProblemDetails { Title = ex.Message, Status = 400 });
+            return BadRequest(AuthorizationProblem.From(ex));
         }
     }
 
@@ -92,7 +92,7 @@ public class RoleController : ControllerBase
         }
         catch (RoleValidationException ex)
         {
-            return BadRequest(new ProblemDetails { Title = ex.Message, Status = 400 });
+            return BadRequest(AuthorizationProblem.From(ex));
         }
     }
 

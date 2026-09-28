@@ -2,11 +2,12 @@ export interface FeaturePoint {
   position: string; parentPosition: string | null; moduleId: string; key: string;
   kind: string; title: string; behaviorKey: string; entryDependencies: string[]; order: number;
   staticScope?: string; staticScopeTitle?: string; actionScope?: string;
+  titleKey?: string; staticScopeTitleKey?: string;
 }
 export interface FeatureTreeNode { key: string; title: string; children?: FeatureTreeNode[]; checkable?: boolean; selectable?: boolean }
 
 // 搜索与授权筛选只改变可见节点，完整勾选集合始终由页面草稿持有。
-export function buildFeatureTree(points: FeaturePoint[], query: string, selected: Set<string>, grantedOnly: boolean): FeatureTreeNode[] {
+export function buildFeatureTree(points: FeaturePoint[], query: string, selected: Set<string>, grantedOnly: boolean, t: (key: string, fallback: string) => string = (_key, fallback) => fallback): FeatureTreeNode[] {
   const byKey = new Map(points.map(point => [point.position, point]));
   const visible = new Set<string>();
   const needle = query.trim().toLocaleLowerCase();
@@ -25,7 +26,7 @@ export function buildFeatureTree(points: FeaturePoint[], query: string, selected
     if (!node) continue;
     let parent = point.parentPosition ? nodes.get(point.parentPosition) : undefined;
     if (parent && point.staticScope) parent = group(parent, `type:${point.staticScope}`, point.staticScopeTitle ?? point.staticScope);
-    if (parent && point.actionScope) parent = group(parent, `surface:${point.actionScope}`, surfaceTitle(point.actionScope));
+    if (parent && point.actionScope) parent = group(parent, `surface:${point.actionScope}`, t(`RoleView.Surface_${point.actionScope.replace(/\./g, '_')}`, surfaceTitle(point.actionScope)));
     if (parent) parent.children!.push(node); else roots.push(node);
   }
   return roots;

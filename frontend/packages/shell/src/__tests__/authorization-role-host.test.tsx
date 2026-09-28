@@ -2,7 +2,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeAll, expect, it, onTestFinished, vi } from 'vitest';
-import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
+import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider, useLocalization } from '@icp-platform/core';
 import model from '../../../../../tests/Kernel.Tests/Fixtures/AuthorizationRoleRuntime.contract.json';
 import list from '../../../../../modules/Authorization/metadata/views/RoleList.view.json';
 import detail from '../../../../../modules/Authorization/metadata/views/RoleDetail.view.json';
@@ -24,6 +24,7 @@ const points = [
   ...[['create', 'list.pageActions'], ['edit', 'list.rowActions'], ['userRoles', 'list.rowActions'], ['edit', 'detail.pageActions'], ['userRoles', 'detail.pageActions']]
     .map(([key, surface]) => ({ key, kind: 'action', position: `${entryPosition}/surface:${surface}/action:${key}`, parentPosition: entryPosition, actionScope: surface })),
 ];
+function LanguageDriver() { const { currentLanguage, setLanguage } = useLocalization(); return <button data-language-driver onClick={() => setLanguage(currentLanguage === 'en' ? 'zhs' : 'en')}>switch</button>; }
 const memberPosition = `${entryPosition}/surface:detail.pageActions/action:userRoles`;
 it('角色列表、Drawer表单与独立详情消费正式runtime字段和动作', async () => {
   const container = document.createElement('div'); document.body.append(container);
@@ -42,8 +43,8 @@ it('角色列表、Drawer表单与独立详情消费正式runtime字段和动作
   const openEntry = vi.fn();
   const catalog = Object.fromEntries(Object.entries(dictionary.RoleView).map(([key, value]) => [`RoleView.${key}`, value.zhs]));
   const render = async (isDetail: boolean, canOpenWorkbench = true) => act(async () => root.render(<MemoryRouter>
-    <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]} catalogs={{ zhs: catalog }}>
-      <PlatformQueryProvider scopeKey="role-host"><AuthorizationProvider permissions={[]} featurePositions={points.filter(point => canOpenWorkbench || point.position !== workbenchPosition).map(point => point.position)}>
+    <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }, { code: 'en', displayName: 'English' }]} catalogs={{ zhs: catalog, en: Object.fromEntries(Object.entries(dictionary.RoleView).map(([key, value]) => ['RoleView.' + key, value.en])) }}>
+      <LanguageDriver /><PlatformQueryProvider scopeKey="role-host"><AuthorizationProvider permissions={[]} featurePositions={points.filter(point => canOpenWorkbench || point.position !== workbenchPosition).map(point => point.position)}>
         <RuntimeMetadataProvider value={{ manifest: { modules: [{ moduleId: 'Authorization', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: points }] }, modelDocuments: [model], viewDocuments: [list, detail], navDocuments: [{ type: 'nav', navigation: { items: [{ key: 'authorization.workbench', featurePosition: workbenchPosition }] } }] }}>
           <FeaturePlacementContext.Provider value={{ entryPosition }}><EntryNavigationContext.Provider value={openEntry}>{isDetail ? <StandardCrudDetailPageHost viewKey="authorization.role.detail" id="role-1" registration={resource} /> : <StandardCrudListPageHost viewKey="authorization.role.list" registration={resource} />}</EntryNavigationContext.Provider></FeaturePlacementContext.Provider>
         </RuntimeMetadataProvider>
@@ -79,6 +80,12 @@ it('角色列表、Drawer表单与独立详情消费正式runtime字段和动作
   await act(async () => (document.body.querySelector('.ant-modal .ant-pagination-prev button') as HTMLButtonElement).click());
   await vi.waitFor(async () => { await act(async () => undefined); expect(document.body.textContent).toContain('真实角色 (ordinary)'); });
   expect((document.body.querySelector('.ant-modal input[type="checkbox"]') as HTMLInputElement).checked).toBe(true);
+  await act(async () => container.querySelector<HTMLButtonElement>('[data-language-driver]')!.click());
+  expect(document.body.textContent).toContain('Configured roles: 2');
+  expect(document.body.querySelector('.ant-modal input[aria-label="Account"]')).not.toBeNull();
+  expect((document.body.querySelector('.ant-modal input[type="checkbox"]') as HTMLInputElement).checked).toBe(true);
+  expect(document.body.querySelector('.ant-modal [aria-label="Language"]')).toBeNull();
+  await act(async () => container.querySelector<HTMLButtonElement>('[data-language-driver]')!.click());
   const saveRoles = Array.from(document.body.querySelectorAll('.ant-modal button')).find(b => b.textContent?.replace(/\s/g, '') === '确认');
   await act(async () => (saveRoles as HTMLButtonElement).click());
   await vi.waitFor(() => expect(fetcher.mock.calls.some(([url, init]) => String(url).endsWith('/users/user-1/roles') && init?.method === 'PUT')).toBe(true));
@@ -96,6 +103,14 @@ it('角色列表、Drawer表单与独立详情消费正式runtime字段和动作
   await vi.waitFor(async () => { await act(async () => undefined); expect(document.body.querySelector('.ant-drawer')).not.toBeNull(); });
   expect(document.body.textContent).toContain('角色代码');
   expect(document.body.textContent).toContain('角色名称');
+  const nameInput = [...document.querySelectorAll<HTMLInputElement>('.ant-drawer input')].find(input => input.id.endsWith('ENAME'))!;
+  expect(nameInput).toBeDefined();
+  await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(nameInput, '角色草稿'); nameInput.dispatchEvent(new Event('input', { bubbles: true })); });
+  await act(async () => container.querySelector<HTMLButtonElement>('[data-language-driver]')!.click());
+  expect(document.body.textContent).toContain('Role code');
+  expect(document.body.textContent).toContain('Role name');
+  expect(nameInput.value).toBe('角色草稿');
+  await act(async () => container.querySelector<HTMLButtonElement>('[data-language-driver]')!.click());
   expect(document.body.textContent).not.toContain('Field_');
   await render(true);
   await vi.waitFor(async () => { await act(async () => undefined); expect(container.textContent).toContain('真实角色'); });

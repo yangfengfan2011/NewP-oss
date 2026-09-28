@@ -13,6 +13,16 @@ namespace ICP.Platform.Modules.Authorization.Tests;
 
 public sealed class RoleControllerTests
 {
+    [Fact]
+    public async Task AssignmentInputs_ExposeSpecificFactsWithoutChangingRejectionStatus()
+    {
+        var workbench = new FeatureWorkbenchController(null!, null!, null!);
+        var featureFailure = Assert.IsType<BadRequestObjectResult>(await workbench.Save("role", new FeatureGrantRequest(null), CancellationToken.None));
+        Assert.Equal("AUTHORIZATION_FEATURE_SET_REQUIRED", Assert.IsType<ProblemDetails>(featureFailure.Value).Extensions["code"]);
+        var members = new UserRoleController(new UserRoleAssignments(null!, null!, null!, null!, null!, null!), null!);
+        var memberFailure = Assert.IsType<BadRequestObjectResult>(await members.AssignUserRoles("account", new AssignUserRolesRequest { RoleCodes = null! }, CancellationToken.None));
+        Assert.Equal("AUTHORIZATION_ROLE_SET_REQUIRED", Assert.IsType<ProblemDetails>(memberFailure.Value).Extensions["code"]);
+    }
     [Theory]
     [InlineData("create", "dependency")]
     [InlineData("update", "dependency")]
@@ -59,7 +69,8 @@ public sealed class RoleControllerTests
         Assert.Equal(400, rejected.StatusCode);
         Assert.Equal(400, problem.Status);
         Assert.Equal(title, problem.Title);
-        Assert.Empty(problem.Extensions);
+        Assert.Equal(operation == "create" ? target == "LocalAdmin" ? "AUTHORIZATION_ROLE_PROTECTED_CREATE" : "AUTHORIZATION_ROLE_CODE_EXISTS" : target == "Missing" ? "AUTHORIZATION_ROLE_NOT_FOUND" : operation == "update" ? "AUTHORIZATION_ROLE_PROTECTED_UPDATE" : "AUTHORIZATION_ROLE_PROTECTED_DELETE", problem.Extensions["code"]);
+        Assert.Equal("AuthorizationErrors." + problem.Extensions["code"], problem.Extensions["reasonKey"]);
     }
 
     private static RoleController CreateController(IRoleRepository repository)

@@ -120,7 +120,7 @@ _Avoid_: 部门资源的数据条件、公司全体人员、组织准入
 
 ## 角色管理与事务性功能配置
 
-角色维护的确定性业务拒绝由 `RoleValidationException` 表达，HTTP 只将此类拒绝翻译为既有 400 Problem Details，保留原文案；持久化、审计来源等依赖故障及取消继续传播，不伪装成请求校验失败。角色删除的 HTTP 禁用规则保持不变。
+角色维护的确定性业务拒绝由 `RoleValidationException` 表达，HTTP 只将此类拒绝翻译为既有 400 Problem Details，保留原文案；持久化、审计来源等依赖故障及取消继续传播，不伪装成请求校验失败。角色删除的 HTTP 禁用规则保持不变。角色、成员和功能配置的可预期拒绝共同继承 `AuthorizationValidationException`，由 `AuthorizationProblem` 保留 HTTP 状态与原诊断并附加稳定 `code`、`reasonKey`、原值 `args` 及适用字段事实；词条由 Authorization authoring 拥有。前端 `authorizationRequest` 复用 SDK 错误提取，组件在呈现时按活动语言解析，同一错误及保存成功消息切换语言不重放操作。功能目录消费编译链保留的词典键，角色名称、功能位置和选择集合保持原值。
 
 - 角色列表与详情普通字段复用 Standard CRUD 的查询与显示计划，但 Authorization 不映射通用写入端点。角色创建和编辑仍须保护 LocalAdmin、角色代码与系统字段，遗留内部删除还承担历史引用测试，因此普通写入由 RoleService 直接持有，不为形式统一注册对象行为或纯转发类；角色删除 HTTP 继续明确拒绝。
 - 角色功能授权和普通账号角色分配是 Authorization 拥有的两个完整业务用例。Controller 分别直接调用 RoleFeatureAssignments 与 IUserRoleAssignments；它们不经 RoleService 转发，也不拆成关系逐行 CRUD。两者继续复用平台事务、可信审计和同一授权模块持久化边界。

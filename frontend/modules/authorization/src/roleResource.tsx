@@ -1,3 +1,5 @@
+import { requestAuthorization as requestRole } from './authorizationRequest';
+export { requestAuthorization as requestRole } from './authorizationRequest';
 import { UserRoleInput } from './userRoleInput';
 import { platformFetch } from '@icp-platform/core';
 import { createStandardCrudRestDataAdapter, isStandardCrudRecord, StandardCrudRequestError,
@@ -18,21 +20,6 @@ function mapRole(value: unknown) {
     CreatedBy_DisplayValue: value.createdBy_DisplayValue, CreatedAt_DisplayValue: value.createdAt_DisplayValue,
     UpdatedBy_DisplayValue: value.updatedBy_DisplayValue, UpdatedAt_DisplayValue: value.updatedAt_DisplayValue };
 }
-// 复用平台认证、防伪及请求错误；写入不重试，网络不确定时先核对实际结果。
-export async function requestRole(fetcher: typeof fetch, url: string, init?: RequestInit, subject = '角色'): Promise<unknown> {
-  try {
-    const response = await fetcher(url, init);
-    if (!response.ok) {
-      const problem: unknown = await response.json().catch(() => null);
-      throw new StandardCrudRequestError(isStandardCrudRecord(problem) && typeof problem.title === 'string' ? problem.title : `${subject}操作失败`, response.status);
-    }
-    return response.status === 204 ? undefined : await response.json();
-  } catch (error) {
-    if (error instanceof StandardCrudRequestError || init?.signal?.aborted) throw error;
-    const isRead = ['GET', 'HEAD', 'OPTIONS'].includes((init?.method ?? 'GET').toUpperCase());
-    throw new Error(isRead ? `${subject}读取失败，请重试。` : '操作结果未知，请刷新后核对；系统不会自动重试。');
-  }
-}
 export function createRoleResource(fetcher: typeof fetch = platformFetch as typeof fetch): StandardCrudResourceRegistration {
   const list = createStandardCrudRestDataAdapter<Record<string, unknown>>({ apiRoute: `${route}/query`, fetcher,
     mapListItem: value => { if (!isStandardCrudRecord(value) || typeof value.EID !== 'string') throw new Error('角色列表响应无效'); return { ...value, id: value.EID }; }, getRowId: row => String(row.id) });
@@ -50,10 +37,10 @@ export function createRoleResource(fetcher: typeof fetch = platformFetch as type
       return { visible: !protectedAction, available: !protectedAction };
     },
     actionHandlers: { userRoles: async ({ input, featurePosition }) => {
-      if (!isStandardCrudRecord(input) || typeof input.accountId !== 'string' || !Array.isArray(input.codes)) throw new Error('请选择账号并等待角色读取成功。');
+      if (!isStandardCrudRecord(input) || typeof input.accountId !== 'string' || !Array.isArray(input.codes)) throw new StandardCrudRequestError('请选择账号并等待角色读取成功。', 0, {}, { reasonKey: 'AuthorizationMessages.AccountRequired' });
       await requestRole(fetcher, `/api/authorization/users/${encodeURIComponent(input.accountId)}/roles`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...featureHeaders(featurePosition) }, body: JSON.stringify({ RoleCodes: input.codes }) });
     }, permissions: async ({ id }) => {
-      if (!id) throw new Error('请选择一个角色。');
+      if (!id) throw new StandardCrudRequestError('请选择一个角色。', 0, {}, { reasonKey: 'AuthorizationMessages.RoleRequired' });
       return { operation: 'action', payload: null, navigation: { entryKey: 'authorization.workbench', parameters: { roleId: id } } };    } },
     actionInputRenderers: { userRoles: context => <UserRoleInput {...context} /> },
   };

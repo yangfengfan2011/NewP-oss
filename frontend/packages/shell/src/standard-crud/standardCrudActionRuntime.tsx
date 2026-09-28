@@ -205,12 +205,13 @@ function QualifiedAction<TDetail, TRow>({ action, context, featurePosition, reso
   resolver: StandardCrudActionEligibilityResolver<TDetail, TRow>;
   children: (state: StandardCrudActionState) => ReactElement | null;
 }) {
+  const { t } = useLocalization();
   const query = usePlatformQuery({
     key: ['standard-crud-action-eligibility', resourceKey ?? '', context.id ?? '', action.key, featurePosition, epoch],
     load: ({ signal }) => resolver({ id: context.id, detail: context.detail, row: context.row,
       action, featurePosition, signal }),
   });
-  if (query.status === 'error') return <span role="alert">对象动作资格暂时无法判定。</span>;
+  if (query.status === 'error') return <span role="alert">{t('Platform.EligibilityUnavailable', '对象动作资格暂时无法判定。')}</span>;
   if (query.status !== 'success' || !query.data) return null;
   return children(query.data);
 }

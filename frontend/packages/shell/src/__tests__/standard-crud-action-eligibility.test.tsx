@@ -4,7 +4,9 @@ import { act } from 'react';
 import type { Root } from 'react-dom/client';
 import { createLocalizedRoot as createRoot } from './localizedTestRoot';
 import { afterEach, expect, it, vi } from 'vitest';
-import { PlatformQueryProvider } from '@icp-platform/core';
+import { LanguageSelect, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
+import { companyStandardCrudResource } from '../../../../modules/organization/src/standard-crud/companyStandardCrudResource';
+import { platformTestCatalogs } from './localizationTestCatalogs';
 import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -13,6 +15,39 @@ afterEach(async () => {
   if (root) await act(async () => root?.unmount());
   document.body.innerHTML = '';
   root = undefined;
+  vi.unstubAllGlobals();
+});
+
+it.each(['http', 'network'])('localizes real object action eligibility %s failures without granting or replaying actions', async failure => {
+  const request = vi.fn().mockImplementation(async () => {
+    if (failure === 'network') throw new TypeError('private network diagnostic');
+    return new Response(JSON.stringify({ title: 'private server diagnostic' }), { status: 500 });
+  });
+  vi.stubGlobal('fetch', request);
+  const container = document.createElement('div'); document.body.append(container);
+  root = createRoot(container);
+  const execute = vi.fn();
+  await act(async () => root!.render(<LocalizationProvider defaultLanguage="zhs" catalogs={platformTestCatalogs}
+    supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }, { code: 'en', displayName: 'English' }]}>
+    <LanguageSelect /><PlatformQueryProvider scopeKey="object-errors"><StandardCrudActions
+      actions={['authorize', 'viewAuthorization'].map(key => ({ key, labelKey: key }))}
+      featureResolutionForAction={action => ({ kind: 'allowed', position: `company.detail:${action.key}` })}
+      actionEligibilityResolvers={companyStandardCrudResource.actionEligibilityResolvers}
+      handlers={{ authorize: execute, viewAuthorization: execute }} refresh={vi.fn()} context={{ id: 'Company_1' }}
+    /></PlatformQueryProvider></LocalizationProvider>));
+  await vi.waitFor(() => expect(container.querySelectorAll('[role="alert"]')).toHaveLength(2));
+  expect(container.textContent).toContain('对象动作资格暂时无法判定。');
+  await act(async () => {
+    const select = container.querySelector('select')!; select.value = 'en';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  expect([...container.querySelectorAll('[role="alert"]')].map(item => item.textContent))
+    .toEqual(['Action eligibility is temporarily unavailable.', 'Action eligibility is temporarily unavailable.']);
+  expect(container.querySelector('button')).toBeNull();
+  expect(container.textContent).not.toContain('private');
+  expect(request).toHaveBeenCalledTimes(2);
+  expect(request.mock.calls.every(([url]) => String(url).includes('/organization.company/Company_1/eligibility'))).toBe(true);
+  expect(execute).not.toHaveBeenCalled();
 });
 
 it('hides a functionally granted action after its object eligibility is denied', async () => {

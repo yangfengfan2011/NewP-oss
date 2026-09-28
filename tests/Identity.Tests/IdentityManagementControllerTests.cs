@@ -16,6 +16,22 @@ namespace ICP.Platform.Identity.Tests;
 public sealed class IdentityManagementControllerTests
 {
     [Fact]
+    public async Task StatusDirectionMismatch_PreservesValidationShapeAndProvidesMessageFacts()
+    {
+        var controller = new IdentityAccountsController(new RecordingManagementQueryService(), new UnusedAccountApplicationService())
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
+        var response = await controller.Enable("account", new SetIdentityAccountStatusRequest(IdentityAccountStatus.Disabled, 1, "reason"), CancellationToken.None);
+        var result = Assert.IsType<BadRequestObjectResult>(response.Result);
+        var problem = Assert.IsType<ValidationProblemDetails>(result.Value);
+        Assert.Equal(400, result.StatusCode);
+        Assert.Equal("REQUEST_VALIDATION_FAILED", problem.Extensions["code"]);
+        Assert.Equal("IdentityErrors.StatusDirectionMismatch", problem.Extensions["reasonKey"]);
+        Assert.Equal("目标状态与当前动作不一致。", Assert.Single(problem.Errors["targetStatus"]));
+    }
+
+    [Fact]
     public async Task List_DefaultsToFirstTwentyAndForwardsConfirmedFilters()
     {
         var queries = new RecordingManagementQueryService();

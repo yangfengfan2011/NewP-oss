@@ -1,3 +1,4 @@
+import { IdentityTestLocalization } from './identityLocalization';
 // @vitest-environment jsdom
 
 import { act } from 'react';
@@ -40,14 +41,14 @@ describe('Identity account security action input', () => {
     document.body.appendChild(container);
     root = createRoot(container);
     const renderer = kind === 'delete' ? identityAccountDeleteConfirmationInput : identityAccountSecurityReasonInput;
-    await act(async () => root?.render(renderer({
+    await act(async () => root?.render(<IdentityTestLocalization>{renderer({
       action: { key: kind, labelKey: kind },
       value: { reason: '', confirmation: '' },
       onChange,
       row: {
         EID: 'User_2', ECODE: 'alice', ENAME: 'Alice', Status: 'Disabled', Revision: 7,
       },
-    })));
+    })}</IdentityTestLocalization>));
     return onChange;
   }
 
@@ -56,7 +57,7 @@ describe('Identity account security action input', () => {
 
     expect(document.body.textContent).toContain('alice');
     expect(document.body.textContent).toContain('Alice');
-    expect(document.body.textContent).toContain('Disabled');
+    expect(document.body.textContent).toContain('停用');
     const reason = document.body.querySelector<HTMLTextAreaElement>('textarea[aria-label="操作原因"]');
     expect(reason?.classList.contains('ant-input')).toBe(true);
     await act(async () => {

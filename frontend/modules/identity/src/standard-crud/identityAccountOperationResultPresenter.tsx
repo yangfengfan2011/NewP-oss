@@ -1,3 +1,4 @@
+import { useLocalization } from '@icp-platform/core';
 import { useState } from 'react';
 import { Alert, Button, Modal, Space, Typography } from 'antd';
 import type {
@@ -40,21 +41,22 @@ function IdentityCredentialResult({
   value: string;
   close: () => void;
 }) {
-  const [copyStatus, setCopyStatus] = useState<string | null>(null);
+  const { t } = useLocalization();
+  const [copyStatus, setCopyStatus] = useState<'CopySucceeded' | 'CopyFailed' | null>(null);
 
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(value);
-      setCopyStatus('已复制。关闭后将无法再次查看。');
+      setCopyStatus('CopySucceeded');
     } catch {
-      setCopyStatus('复制失败，请现在手动复制。');
+      setCopyStatus('CopyFailed');
     }
   };
 
   return (
     <Modal
       open
-      title="一次性临时密码"
+      title={t('IdentityMessages.CredentialTitle', '一次性临时密码')}
       closable={false}
       maskClosable={false}
       keyboard={false}
@@ -62,7 +64,7 @@ function IdentityCredentialResult({
       onCancel={close}
       footer={(
         <Button type="primary" onClick={close}>
-          我已安全保存，关闭
+          {t('IdentityMessages.CredentialSaved', '我已安全保存，关闭')}
         </Button>
       )}
     >
@@ -70,11 +72,11 @@ function IdentityCredentialResult({
         <Alert
           type="warning"
           showIcon
-          message="这是唯一一次显示机会。关闭后页面状态会立即销毁该秘密，无法查询或恢复。"
+          message={t('IdentityMessages.CredentialWarning', '这是唯一一次显示机会。关闭后页面状态会立即销毁该秘密，无法查询或恢复。')}
         />
-        <Typography.Text code aria-label="临时密码">{value}</Typography.Text>
-        <Button onClick={() => void copy()}>复制临时密码</Button>
-        {copyStatus ? <Typography.Text role="status">{copyStatus}</Typography.Text> : null}
+        <Typography.Text code aria-label={t('IdentityMessages.Credential', '临时密码')}>{value}</Typography.Text>
+        <Button onClick={() => void copy()}>{t('IdentityMessages.CopyCredential', '复制临时密码')}</Button>
+        {copyStatus ? <Typography.Text role="status">{t(`IdentityMessages.${copyStatus}`, copyStatus === 'CopySucceeded' ? '已复制。关闭后将无法再次查看。' : '复制失败，请现在手动复制。')}</Typography.Text> : null}
       </Space>
     </Modal>
   );

@@ -1,11 +1,14 @@
+import identityMessages from '../../../../../modules/Identity/metadata/dictionaries/IdentityMessages.dic.json';
+import identityErrors from '../../../../../modules/Identity/metadata/dictionaries/IdentityErrors.dic.json';
+import identityStatus from '../../../../../modules/Identity/metadata/dictionaries/IdentityAccountStatus.dic.json';
 import { platformTestCatalogs } from './localizationTestCatalogs';
 import './authorizedFeatureUiFixture';
 // @vitest-environment jsdom
 
-import { act } from 'react';
+import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
+import { LocalizationProvider, PlatformQueryProvider, useLocalization } from '@icp-platform/core';
 import { ModuleRegistry, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import identityModule from '../../../../modules/identity/src/index';
@@ -23,18 +26,22 @@ import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-const accountListCatalog = Object.fromEntries(
-  [
-    ...Object.entries(accountListDictionary.AccountListView).map(([key, value]) => [
-      `AccountListView.${key}`,
-      value.zhs,
-    ]),
-    ...Object.entries(accountDetailDictionary.AccountDetailView).map(([key, value]) => [
-      `AccountDetailView.${key}`,
-      value.zhs,
-    ]),
-  ],
-);
+const accountCatalogs = Object.fromEntries(['zhs', 'en'].map(language => [language, {
+  ...platformTestCatalogs[language],
+  ...Object.fromEntries([accountListDictionary, accountDetailDictionary, identityMessages, identityErrors, identityStatus].flatMap(document =>
+    Object.entries(document).filter(([key]) => !['schemaVersion', 'type'].includes(key)).flatMap(([root, entries]) =>
+      Object.entries(entries).map(([key, value]) => [`${root}.${key}`, (value as Record<string, string>)[language]])))),
+}]));
+const accountListCatalog = accountCatalogs.zhs;
+function SwitchLanguage() {
+  const { setLanguage } = useLocalization();
+  return <><button onClick={() => setLanguage('en')}>English test</button><button onClick={() => setLanguage('zhs')}>Chinese test</button></>;
+}
+
+function LocaleQueries({ children }: { children: ReactNode }) {
+  const { currentLanguage } = useLocalization();
+  return <PlatformQueryProvider scopeKey={`user-1:${currentLanguage}`}>{children}</PlatformQueryProvider>;
+}
 
 const runtimeMetadata = {
   manifest: { modules: [] },
@@ -419,7 +426,7 @@ describe('Identity account Standard CRUD production route', () => {
         </MemoryRouter>,
       );
     });
-    await waitForBodyText('操作失败，请稍后重试。');
+    await waitForBodyText('当前操作已被拒绝，请核对当前权限。');
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/identity/accounts/User_2/snapshot');
@@ -470,6 +477,67 @@ describe('Identity account Standard CRUD production route', () => {
     await waitForBodyText('请填写此字段');
     expect(document.body.textContent?.split('请填写此字段')).toHaveLength(3);
     expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
+  });
+
+  it('retranslates Identity field errors in the real create drawer without losing the draft or retrying', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      if (init?.method === 'POST') {
+        return new Response(JSON.stringify({ code: 'IDENTITY_ECODE_INVALID', errors: { ECODE: ['IDENTITY_ECODE_INVALID'] } }),
+          { status: 400, headers: { 'Content-Type': 'application/problem+json' } });
+      }
+      return new Response(JSON.stringify({
+        items: [], total: 0, totalCount: 0, page: 1, pageSize: 20,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={['/identity/accounts']}>
+          <LocalizationProvider
+            defaultLanguage="zhs"
+            supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }, { code: 'en', displayName: 'English' }]}
+            catalogs={accountCatalogs}
+          >
+            <SwitchLanguage /><RuntimeMetadataProvider value={runtimeMetadata}>
+              <PlatformQueryProvider scopeKey="user-1">
+                <StandardCrudListPageHost viewKey="identity.account.list" registration={registration} />
+              </PlatformQueryProvider>
+            </RuntimeMetadataProvider>
+          </LocalizationProvider>
+        </MemoryRouter>,
+      );
+    });
+    await flushRequests();
+    const createButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.replace(/\s+/g, '') === '创建账号');
+    await act(async () => createButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await waitForBodyText('账号信息');
+
+    const codeInput = document.body.querySelector<HTMLInputElement>('#ECODE');
+    const nameInput = document.body.querySelector<HTMLInputElement>('#ENAME');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(codeInput, 'bad*');
+      codeInput?.dispatchEvent(new Event('input', { bubbles: true }));
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(nameInput, ' Alice ');
+      nameInput?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const saveButton = Array.from(document.body.querySelectorAll('button')).find((button) =>
+      button.textContent?.trim() === '保存并关闭');
+    await act(async () => saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await waitForBodyText('登录账号须为 3–64 个字符');
+    await act(async () => Array.from(document.body.querySelectorAll('button')).find(button => button.textContent === 'English test')?.click());
+    await waitForBodyText('Use 3–64 characters: letters, digits, periods, underscores, hyphens, or @.');
+    expect(document.body.querySelector('#ECODE')).toBe(codeInput);
+    expect(codeInput?.value).toBe('bad*');
+    expect(nameInput?.value).toBe(' Alice ');
+    expect(document.querySelector('[role="dialog"]')?.getAttribute('aria-labelledby')).toBeTruthy();
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Create Account');
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Account Code');
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Display Name');
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
   });
 
   it('creates through the Identity handler and clears the one-time result when its presenter closes', async () => {
@@ -562,13 +630,13 @@ describe('Identity account Standard CRUD production route', () => {
       <MemoryRouter initialEntries={['/identity/accounts']}>
         <LocalizationProvider
           defaultLanguage="zhs"
-          supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
-          catalogs={{ zhs: { ...platformTestCatalogs.zhs, ...accountListCatalog } }}
+          supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }, { code: 'en', displayName: 'English' }]}
+          catalogs={accountCatalogs}
         >
-          <RuntimeMetadataProvider value={runtimeMetadata}>
-            <PlatformQueryProvider scopeKey="user-1">
+          <SwitchLanguage /><RuntimeMetadataProvider value={runtimeMetadata}>
+            <LocaleQueries>
               <StandardCrudListPageHost viewKey="identity.account.list" registration={registration} />
-            </PlatformQueryProvider>
+            </LocaleQueries>
           </RuntimeMetadataProvider>
         </LocalizationProvider>
       </MemoryRouter>,
@@ -586,11 +654,23 @@ describe('Identity account Standard CRUD production route', () => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(reason, '凭据泄露');
       reason?.dispatchEvent(new Event('input', { bubbles: true }));
     });
+    const english = Array.from(document.body.querySelectorAll('button')).find(button => button.textContent === 'English test');
+    await act(async () => english?.click());
+    await waitForBodyText('Operation reason');
+    expect(document.body.querySelector<HTMLTextAreaElement>('textarea[aria-label="Operation reason"]')).toBe(reason);
+    expect(reason?.value).toBe('凭据泄露');
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0);
     const confirm = Array.from(document.body.querySelectorAll('button')).find((button) =>
-      button.textContent?.replace(/\s+/g, '') === '确认');
+      button.textContent?.replace(/\s+/g, '') === 'Confirm');
     await act(async () => confirm?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await waitForBodyText('reset-only-once');
 
+    expect(document.body.textContent).toContain('One-time temporary password');
+    const chinese = Array.from(document.body.querySelectorAll('button')).find(button => button.textContent === 'Chinese test');
+    await act(async () => chinese?.click());
+    await waitForBodyText('一次性临时密码');
+    expect(document.body.textContent).toContain('reset-only-once');
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
     const resetCall = fetchMock.mock.calls.find(([input]) => String(input).endsWith('/User_2/credential-reset'));
     expect(JSON.parse(String(resetCall?.[1]?.body))).toEqual({ expectedRevision: 7, reason: '凭据泄露' });
     const close = Array.from(document.body.querySelectorAll('button')).find((button) =>
@@ -667,7 +747,7 @@ describe('Identity account Standard CRUD production route', () => {
       isLocalAdministrator: false, isPersonnelBound: false, personnelDisableHold: false,
       createdBy: 'User_1', createdAt: '2026-08-01T00:00:00Z', updatedBy: 'User_1', updatedAt: '2026-08-02T00:00:00Z',
     };
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.endsWith('/User_2/credential-reset') && init?.method === 'POST') {
         return new Response(JSON.stringify({
@@ -688,16 +768,16 @@ describe('Identity account Standard CRUD production route', () => {
       <MemoryRouter initialEntries={['/candidate/User_2']}>
         <LocalizationProvider
           defaultLanguage="zhs"
-          supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
-          catalogs={{ zhs: { ...platformTestCatalogs.zhs, ...accountListCatalog } }}
+          supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }, { code: 'en', displayName: 'English' }]}
+          catalogs={accountCatalogs}
         >
-          <PlatformQueryProvider scopeKey="user-1">
+          <SwitchLanguage /><LocaleQueries>
             <RuntimeMetadataProvider value={runtimeMetadata}>
               <Routes>
                 <Route path="/candidate/:id" element={<IdentityAccountDetailCandidate registration={registration} />} />
               </Routes>
             </RuntimeMetadataProvider>
-          </PlatformQueryProvider>
+          </LocaleQueries>
         </LocalizationProvider>
       </MemoryRouter>,
     ));
@@ -709,11 +789,22 @@ describe('Identity account Standard CRUD production route', () => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(reason, '详情重置');
       reason?.dispatchEvent(new Event('input', { bubbles: true }));
     });
+    await act(async () => Array.from(document.body.querySelectorAll('button')).find(button => button.textContent === 'English test')?.click());
+    await waitForBodyText('Operation reason');
+    await flushRequests();
+    expect(document.body.querySelector('textarea[aria-label="Operation reason"]')).toBe(reason);
+    expect(reason?.value).toBe('详情重置');
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0);
     const confirm = Array.from(document.body.querySelectorAll('button')).find((button) =>
-      button.textContent?.replace(/\s+/g, '') === '确认');
+      button.textContent?.replace(/\s+/g, '') === 'Confirm');
     await act(async () => confirm?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await waitForBodyText('detail-reset-only-once');
 
+    await act(async () => Array.from(document.body.querySelectorAll('button')).find(button => button.textContent === 'Chinese test')?.click());
+    await waitForBodyText('一次性临时密码');
+    expect(document.body.textContent).toContain('detail-reset-only-once');
+    expect(document.querySelector('[role="dialog"] [role="combobox"]')).toBeNull();
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
     expect(window.location.href).not.toContain('detail-reset-only-once');
   });
 
@@ -871,7 +962,7 @@ describe('Identity account Standard CRUD production route', () => {
     const confirm = Array.from(document.body.querySelectorAll('button')).find((button) =>
       button.textContent?.replace(/\s+/g, '') === '确认');
     await act(async () => confirm?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    await waitForBodyText('记录已发生变化，未覆盖服务器上的最新数据。请重新加载后再编辑。');
+    await waitForBodyText('账号已发生变化：最新状态 Disabled，Revision 8。请查看最新安全状态并重新确认。');
 
     expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/User_2/status/disable'))).toHaveLength(1);
     expect(document.body.querySelector('textarea[aria-label="操作原因"]')).toBeNull();

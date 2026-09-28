@@ -200,6 +200,11 @@ public sealed class IdentityAccountsController : ControllerBase
         var problem = new ValidationProblemDetails(new Dictionary<string, string[]> { ["targetStatus"] = ["目标状态与当前动作不一致。"] })
         { Status = 400, Title = "REQUEST_VALIDATION_FAILED" };
         problem.Extensions["code"] = "REQUEST_VALIDATION_FAILED";
+        problem.Extensions["reasonKey"] = "IdentityErrors.StatusDirectionMismatch";
+        problem.Extensions["fieldErrors"] = new[]
+        {
+            new { field = "targetStatus", code = "REQUEST_VALIDATION_FAILED", reasonKey = "IdentityErrors.StatusDirectionMismatch" }
+        };
         problem.Extensions["traceId"] = HttpContext.TraceIdentifier;
         var result = BadRequest(problem);
         result.ContentTypes.Add("application/problem+json");

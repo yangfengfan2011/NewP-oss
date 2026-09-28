@@ -66,6 +66,7 @@
       "zhs": "安全事件",
       "en": "Security Events"
     },
+    "Action_Authorize": { "zhs": "对象授权", "en": "Object permissions" },
     "Action_Edit": { "zhs": "编辑", "en": "Edit" },
     "Action_Enable": { "zhs": "启用账号", "en": "Enable Account" },
     "Action_Disable": { "zhs": "停用账号", "en": "Disable Account" },

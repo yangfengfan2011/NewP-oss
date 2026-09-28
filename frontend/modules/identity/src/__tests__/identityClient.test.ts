@@ -38,6 +38,17 @@ describe('identity management client', () => {
     expect(platformFetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('preserves structured management failures and Identity field codes for presentation', async () => {
+    const problem = { code: 'IDENTITY_ENAME_INVALID', reasonKey: 'IdentityErrors.IDENTITY_ENAME_INVALID',
+      errors: { ENAME: ['IDENTITY_ENAME_INVALID'] }, args: { maxLength: 200 }, traceId: 'trace-245' };
+    platformFetchMock.mockResolvedValue(new Response(JSON.stringify(problem), { status: 400 }));
+    await expect(createAccount({ ecode: 'alice', ename: '' })).rejects.toMatchObject({
+      status: 400, code: problem.code, reasonKey: problem.reasonKey, args: problem.args,
+      fieldErrorDetails: [{ field: 'ENAME', code: 'IDENTITY_ENAME_INVALID' }], responseProblem: problem,
+    });
+    expect(platformFetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('loads the account snapshot separately from paged security events', async () => {
     platformFetchMock
       .mockResolvedValueOnce(new Response(JSON.stringify({ eid: 'User_1', ecode: 'alice' }), {

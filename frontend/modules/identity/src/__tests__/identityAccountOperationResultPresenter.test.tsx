@@ -1,3 +1,5 @@
+import { useLocalization } from '@icp-platform/core';
+import { IdentityTestLocalization } from './identityLocalization';
 // @vitest-environment jsdom
 
 import { act, useState } from 'react';
@@ -18,8 +20,10 @@ const issuanceResult: StandardCrudOperationResult = {
 
 function PresenterHarness() {
   const [result, setResult] = useState<StandardCrudOperationResult | null>(issuanceResult);
+  const { setLanguage } = useLocalization();
   if (!result) return null;
-  return identityAccountOperationResultPresenter.render({ result, close: () => setResult(null) });
+  return <><button onClick={() => setLanguage('en')}>English test</button>
+    {identityAccountOperationResultPresenter.render({ result, close: () => setResult(null) })}</>;
 }
 
 describe('Identity account operation result presenter', () => {
@@ -56,7 +60,7 @@ describe('Identity account operation result presenter', () => {
   });
 
   it('copies the secret once and destroys the visible result immediately on close', async () => {
-    await act(async () => root.render(<PresenterHarness />));
+    await act(async () => root.render(<IdentityTestLocalization><PresenterHarness /></IdentityTestLocalization>));
 
     expect(document.body.textContent).toContain('这是唯一一次显示机会');
     expect(document.body.textContent).toContain('only-once');
@@ -65,7 +69,11 @@ describe('Identity account operation result presenter', () => {
     expect(writeText).toHaveBeenCalledTimes(1);
     expect(writeText).toHaveBeenCalledWith('only-once');
 
-    const closeButton = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent?.includes('我已安全保存'));
+    await act(async () => Array.from(document.body.querySelectorAll('button')).find(button => button.textContent === 'English test')?.click());
+    expect(document.querySelector('[role="status"]')?.textContent).toBe('Copied. You cannot view it again after closing.');
+    expect(document.body.textContent).toContain('only-once');
+    expect(writeText).toHaveBeenCalledTimes(1);
+    const closeButton = Array.from(document.body.querySelectorAll('button')).find((button) => button.textContent?.includes('I have saved it securely'));
     await act(async () => closeButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
 
     expect(document.body.textContent).not.toContain('only-once');

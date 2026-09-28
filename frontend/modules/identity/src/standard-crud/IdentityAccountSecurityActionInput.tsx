@@ -1,3 +1,4 @@
+import { useLocalization } from '@icp-platform/core';
 import { Alert, Descriptions, Form, Input, Space, Typography } from 'antd';
 import type { StandardCrudActionInputRenderer } from '@icp-platform/sdk';
 
@@ -32,27 +33,28 @@ function readValue(value: unknown): IdentitySecurityActionInputValue {
 }
 
 function createIdentitySecurityActionInput(includeDeleteConfirmation: boolean): StandardCrudActionInputRenderer {
-  return ({ value, onChange, detail, row }) => {
+  function IdentitySecurityActionInput({ value, onChange, detail, row }: Parameters<StandardCrudActionInputRenderer>[0]) {
+    const { t, getEnumerationLabel } = useLocalization();
     const current = readValue(value);
     const snapshot = readSnapshot(detail, row);
     return (
       <Space direction="vertical" size="middle" style={{ width: '100%' }}>
         <Descriptions size="small" column={1} bordered>
-          <Descriptions.Item label="登录账号">{snapshot.ecode}</Descriptions.Item>
-          <Descriptions.Item label="显示名称">{snapshot.ename}</Descriptions.Item>
-          <Descriptions.Item label="当前状态">{snapshot.status}</Descriptions.Item>
+          <Descriptions.Item label={t('IdentityMessages.AccountCode', '登录账号')}>{snapshot.ecode}</Descriptions.Item>
+          <Descriptions.Item label={t('IdentityMessages.DisplayName', '显示名称')}>{snapshot.ename}</Descriptions.Item>
+          <Descriptions.Item label={t('IdentityMessages.CurrentStatus', '当前状态')}>{getEnumerationLabel('IdentityAccountStatus', snapshot.status, snapshot.status)}</Descriptions.Item>
         </Descriptions>
         {includeDeleteConfirmation ? (
           <Alert
             type="error"
             showIcon
-            message="该操作不可恢复。账号将保留墓碑，凭据会被移除，全部会话会被撤销。"
+            message={t('IdentityMessages.DeleteWarning', '该操作不可恢复。账号将保留墓碑，凭据会被移除，全部会话会被撤销。')}
           />
         ) : null}
         <Form layout="vertical" requiredMark>
-          <Form.Item label="操作原因" required>
+          <Form.Item label={t('IdentityMessages.Reason', '操作原因')} required>
             <Input.TextArea
-              aria-label="操作原因"
+              aria-label={t('IdentityMessages.Reason', '操作原因')}
               value={current.reason}
               maxLength={500}
               showCount
@@ -61,9 +63,9 @@ function createIdentitySecurityActionInput(includeDeleteConfirmation: boolean): 
             />
           </Form.Item>
           {includeDeleteConfirmation ? (
-            <Form.Item label={`完整输入登录账号 ${snapshot.ecode}`} required>
+            <Form.Item label={t('IdentityMessages.DeleteConfirmation', '完整输入登录账号 {accountCode}', { accountCode: snapshot.ecode })} required>
               <Input
-                aria-label="完整登录账号确认"
+                aria-label={t('IdentityMessages.DeleteConfirmationLabel', '完整登录账号确认')}
                 value={current.confirmation}
                 autoComplete="off"
                 onChange={(event) => onChange({ ...current, confirmation: event.target.value })}
@@ -71,10 +73,11 @@ function createIdentitySecurityActionInput(includeDeleteConfirmation: boolean): 
             </Form.Item>
           ) : null}
         </Form>
-        <Typography.Text type="secondary">确认后仍由服务端按最新 Revision 与保护规则重新裁决。</Typography.Text>
+        <Typography.Text type="secondary">{t('IdentityMessages.SecurityRecheck', '确认后仍由服务端按最新 Revision 与保护规则重新裁决。')}</Typography.Text>
       </Space>
     );
-  };
+  }
+  return context => <IdentitySecurityActionInput {...context} />;
 }
 
 // Identity 独占确认文案和业务输入；共享 Host 只持有不透明值并管理弹层生命周期。

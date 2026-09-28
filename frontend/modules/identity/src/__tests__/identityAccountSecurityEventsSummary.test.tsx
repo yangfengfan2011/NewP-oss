@@ -1,3 +1,4 @@
+import { IdentityTestLocalization } from './identityLocalization';
 // @vitest-environment jsdom
 
 import { act, StrictMode } from 'react';
@@ -54,9 +55,9 @@ describe('Identity account security-event summary renderer', () => {
   async function renderSummary(): Promise<void> {
     await act(async () => {
       root.render(
-        <PlatformQueryProvider scopeKey="user-1">
+        <IdentityTestLocalization><PlatformQueryProvider scopeKey="user-1">
           <IdentityAccountSecurityEventsSummary accountEid="User_2" title="安全事件" />
-        </PlatformQueryProvider>,
+        </PlatformQueryProvider></IdentityTestLocalization>,
       );
     });
   }
@@ -70,10 +71,10 @@ describe('Identity account security-event summary renderer', () => {
     await act(async () => {
       root.render(
         <StrictMode>
-          <PlatformQueryProvider scopeKey="user-1">
+          <IdentityTestLocalization><PlatformQueryProvider scopeKey="user-1">
             <IdentityAccountSecurityEventsSummary accountEid="User_2" title="安全事件一" />
             <IdentityAccountSecurityEventsSummary accountEid="User_2" title="安全事件二" />
-          </PlatformQueryProvider>
+          </PlatformQueryProvider></IdentityTestLocalization>
         </StrictMode>,
       );
     });
@@ -87,6 +88,20 @@ describe('Identity account security-event summary renderer', () => {
     expect(container.textContent).toContain('安全事件一');
     expect(container.textContent).toContain('安全事件二');
     expect(container.querySelectorAll('.ant-empty')).toHaveLength(2);
+  });
+
+  it('renders event headings and totals in the selected language without translating event data', async () => {
+    listAccountSecurityEventsMock.mockResolvedValue({ items: [{ eid: 'e1', eventType: 'AccountCreated',
+      reason: '账号创建原因', occurredAt: '2030-01-02T00:00:00Z', occurredAt_DisplayValue: 'server display',
+      actorKind: 'System', traceId: 'trace-1' }], page: 1, pageSize: 20, totalCount: 1 });
+    await act(async () => root.render(<IdentityTestLocalization language="en"><PlatformQueryProvider scopeKey="user-1">
+      <IdentityAccountSecurityEventsSummary accountEid="User_2" title="Security Events" />
+    </PlatformQueryProvider></IdentityTestLocalization>));
+    await vi.waitFor(() => expect(container.textContent).toContain('Events: 1'));
+    expect(container.textContent).toContain('Actor type');
+    expect(container.textContent).toContain('账号创建原因');
+    expect(container.textContent).toContain('AccountCreated');
+    expect(container.textContent).toContain('server display');
   });
 
   it('renders a stable empty state without changing ordinary detail fields', async () => {
@@ -171,18 +186,18 @@ describe('Identity account security-event summary renderer', () => {
 
     await act(async () => {
       root.render(
-        <PlatformQueryProvider scopeKey="user-1:zhs">
+        <IdentityTestLocalization><PlatformQueryProvider scopeKey="user-1:zhs">
           <IdentityAccountSecurityEventsSummary accountEid="User_2" title="安全事件" />
-        </PlatformQueryProvider>,
+        </PlatformQueryProvider></IdentityTestLocalization>,
       );
     });
     await vi.waitFor(() => expect(container.textContent).toContain('2030/1/2 08:04:05'));
 
     await act(async () => {
       root.render(
-        <PlatformQueryProvider scopeKey="user-1:en">
+        <IdentityTestLocalization><PlatformQueryProvider scopeKey="user-1:en">
           <IdentityAccountSecurityEventsSummary accountEid="User_2" title="安全事件" />
-        </PlatformQueryProvider>,
+        </PlatformQueryProvider></IdentityTestLocalization>,
       );
     });
     await vi.waitFor(() => expect(container.textContent).toContain('1/2/2030 8:04:05 AM'));
@@ -240,16 +255,16 @@ describe('Identity account security-event summary renderer', () => {
 
     await act(async () => {
       root.render(
-        <PlatformQueryProvider scopeKey="user-1">
+        <IdentityTestLocalization><PlatformQueryProvider scopeKey="user-1">
           <IdentityAccountSecurityEventsSummary accountEid="User_A" title="安全事件" />
-        </PlatformQueryProvider>,
+        </PlatformQueryProvider></IdentityTestLocalization>,
       );
     });
     await act(async () => {
       root.render(
-        <PlatformQueryProvider scopeKey="user-1">
+        <IdentityTestLocalization><PlatformQueryProvider scopeKey="user-1">
           <IdentityAccountSecurityEventsSummary accountEid="User_B" title="安全事件" />
-        </PlatformQueryProvider>,
+        </PlatformQueryProvider></IdentityTestLocalization>,
       );
     });
 
@@ -363,7 +378,7 @@ describe('Identity account security-event summary renderer', () => {
     expect(signal?.aborted).toBe(false);
 
     await act(async () => {
-      root.render(<PlatformQueryProvider scopeKey="user-1">{null}</PlatformQueryProvider>);
+      root.render(<IdentityTestLocalization><PlatformQueryProvider scopeKey="user-1">{null}</PlatformQueryProvider></IdentityTestLocalization>);
     });
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 60));

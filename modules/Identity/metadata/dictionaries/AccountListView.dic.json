@@ -11,8 +11,8 @@
       "en": "Query account status, personnel binding, and local administrator markers."
     },
     "Query_Keyword": {
-      "zhs": "ECODE / ENAME",
-      "en": "ECODE / ENAME"
+      "zhs": "登录账号或显示名称",
+      "en": "Account code or display name"
     },
     "Query_Status": {
       "zhs": "状态",
@@ -58,6 +58,10 @@
       "zhs": "人员停用阻断",
       "en": "Personnel Disable Hold"
     },
+    "Drawer_Create": { "zhs": "创建账号", "en": "Create Account" },
+    "Drawer_Edit": { "zhs": "编辑账号", "en": "Edit Account" },
+    "Drawer_View": { "zhs": "查看账号", "en": "View Account" },
+    "Action_ViewFullDetail": { "zhs": "查看完整详情", "en": "View Full Details" },
     "Action_Create": {
       "zhs": "创建账号",
       "en": "Create Account"

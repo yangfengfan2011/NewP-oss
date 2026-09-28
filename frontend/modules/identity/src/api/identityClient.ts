@@ -1,5 +1,5 @@
 import { platformFetch } from '@icp-platform/core';
-import type { StandardCrudDetailReadContext, StandardCrudFeatureRequestContext } from '@icp-platform/sdk';
+import { readStandardCrudRequestError, StandardCrudRequestError, type StandardCrudFieldErrorFact, type StandardCrudDetailReadContext, type StandardCrudFeatureRequestContext } from '@icp-platform/sdk';
 
 export type IdentityAccountStatus = 'Enabled' | 'Disabled' | 'Deleted';
 
@@ -54,14 +54,25 @@ interface IdentitySecurityEventsReadContext extends StandardCrudFeatureRequestCo
   readonly signal?: AbortSignal;
 }
 
-export class IdentityApiError extends Error {
+export class IdentityApiError extends StandardCrudRequestError {
   constructor(
-    public readonly code: string,
-    public readonly status: number,
+    code: string,
+    status: number,
     public readonly current?: IdentityAccount,
     public readonly errors?: Record<string, string[]>,
+    source?: StandardCrudRequestError,
   ) {
-    super(code);
+    const fieldErrors = source?.fieldErrors ?? Object.fromEntries(Object.entries(errors ?? {}).map(([field, codes]) => [field, codes[0] ?? '']));
+    const details: StandardCrudFieldErrorFact[] = source?.fieldErrorDetails ?? Object.entries(fieldErrors).map(([field, value]) => ({ field, code: value }));
+    super(source?.message ?? code, status, fieldErrors, {
+      ...source?.problem, code,
+      reasonKey: code === 'IDENTITY_REVISION_CONFLICT' && current ? 'IdentityMessages.RevisionConflictDetails'
+        : source?.reasonKey ?? (code.startsWith('IDENTITY_') ? `IdentityErrors.${code}` : undefined),
+      args: { ...source?.args, ...(code === 'IDENTITY_REVISION_CONFLICT' && current ? { status: current.status, revision: current.revision } : {}) },
+      fieldErrors: details.map(item => ({ ...item,
+        reasonKey: item.reasonKey ?? (item.code?.startsWith('IDENTITY_') ? `IdentityErrors.${item.code}` : undefined),
+      })),
+    }, source?.responseProblem, source?.cause);
     this.name = 'IdentityApiError';
   }
 }
@@ -140,17 +151,9 @@ function featureHeaders(context?: StandardCrudFeatureRequestContext): Record<str
 async function requestJson<T>(url: string, init: RequestInit): Promise<T> {
   const response = await platformFetch(url, init);
   if (!response.ok) {
-    let problem: {
-      code?: string;
-      current?: IdentityAccount;
-      errors?: Record<string, string[]>;
-    } = {};
-    try {
-      problem = await response.json() as typeof problem;
-    } catch {
-      // 非 JSON 失败仍保留稳定 HTTP fallback，不在模块内自行重试。
-    }
-    throw new IdentityApiError(problem.code ?? `HTTP_${response.status}`, response.status, problem.current, problem.errors);
+    const failure = await readStandardCrudRequestError(response);
+    const problem = failure.responseProblem as { current?: IdentityAccount; errors?: Record<string, string[]> };
+    throw new IdentityApiError(failure.code ?? `HTTP_${response.status}`, response.status, problem.current, problem.errors, failure);
   }
   return await response.json() as T;
 }

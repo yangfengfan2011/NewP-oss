@@ -98,7 +98,7 @@
       }
     ],
     "featureActions": [
-      { "key": "authorize", "titleKey": "对象授权", "behaviorKey": "identity.account.authorize" }
+      { "key": "authorize", "titleKey": "Action_Authorize", "behaviorKey": "identity.account.authorize" }
     ]
   }
 }

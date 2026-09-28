@@ -44,6 +44,14 @@ describe('Identity account Standard CRUD resource candidate', () => {
     platformFetchMock.mockReset();
   });
 
+  it('keeps Identity validation facts through the resource adapter', async () => {
+    createAccountMock.mockRejectedValue(new IdentityApiError('IDENTITY_ENAME_INVALID', 400, undefined,
+      { ENAME: ['IDENTITY_ENAME_INVALID'] }));
+    await expect(identityAccountStandardCrudResource.dataAdapter.create?.({ ECODE: 'abc', ENAME: '' }, {}))
+      .rejects.toMatchObject({ code: 'IDENTITY_ENAME_INVALID', reasonKey: 'IdentityErrors.IDENTITY_ENAME_INVALID',
+        fieldErrorDetails: [{ field: 'ENAME', code: 'IDENTITY_ENAME_INVALID', reasonKey: 'IdentityErrors.IDENTITY_ENAME_INVALID' }] });
+  });
+
   it('maps the existing Identity list response into metadata protocol fields', async () => {
     platformFetchMock.mockResolvedValue(new Response(JSON.stringify({
       items: [{
@@ -303,8 +311,8 @@ describe('Identity account Standard CRUD resource candidate', () => {
   });
 
   it.each([
-    [new IdentityApiError('IDENTITY_ACCOUNT_FORBIDDEN', 403), '权限已变化'],
-    [new IdentityApiError('IDENTITY_PERSONNEL_DISABLE_HOLD', 409), '人员停用阻断'],
+    [new IdentityApiError('IDENTITY_ACCOUNT_FORBIDDEN', 403), 'IDENTITY_ACCOUNT_FORBIDDEN'],
+    [new IdentityApiError('IDENTITY_PERSONNEL_DISABLE_HOLD', 409), 'IDENTITY_PERSONNEL_DISABLE_HOLD'],
   ])('maps permission and business guard failures without replaying the command', async (failure, message) => {
     setAccountStatusMock.mockRejectedValue(failure);
 
@@ -330,7 +338,9 @@ describe('Identity account Standard CRUD resource candidate', () => {
       id: 'User_2',
       row: actionRow(),
       input: { reason: '风险处置' },
-    })).rejects.toThrow('最新状态 Disabled，Revision 8');
+    })).rejects.toMatchObject({ code: 'IDENTITY_REVISION_CONFLICT', status: 409,
+      current: { status: 'Disabled', revision: 8 }, args: { status: 'Disabled', revision: 8 },
+      reasonKey: 'IdentityMessages.RevisionConflictDetails' });
     expect(setAccountStatusMock).toHaveBeenCalledTimes(1);
   });
 

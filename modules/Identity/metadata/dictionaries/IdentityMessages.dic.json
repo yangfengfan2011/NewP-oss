@@ -1,0 +1,150 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "IdentityMessages": {
+    "AccountCode": {
+      "zhs": "登录账号",
+      "en": "Account code"
+    },
+    "DisplayName": {
+      "zhs": "显示名称",
+      "en": "Display name"
+    },
+    "CurrentStatus": {
+      "zhs": "当前状态",
+      "en": "Current status"
+    },
+    "Reason": {
+      "zhs": "操作原因",
+      "en": "Operation reason"
+    },
+    "DeleteWarning": {
+      "zhs": "该操作不可恢复。账号将保留墓碑，凭据会被移除，全部会话会被撤销。",
+      "en": "This action cannot be undone. The account record is retained as a tombstone, credentials are removed, and all sessions are revoked."
+    },
+    "DeleteConfirmation": {
+      "zhs": "完整输入登录账号 {accountCode}",
+      "en": "Enter the full account code {accountCode}"
+    },
+    "DeleteConfirmationLabel": {
+      "zhs": "完整登录账号确认",
+      "en": "Full account code confirmation"
+    },
+    "SecurityRecheck": {
+      "zhs": "确认后仍由服务端按最新 Revision 与保护规则重新裁决。",
+      "en": "After confirmation, the server checks the latest revision and protection rules again."
+    },
+    "CredentialTitle": {
+      "zhs": "一次性临时密码",
+      "en": "One-time temporary password"
+    },
+    "CredentialSaved": {
+      "zhs": "我已安全保存，关闭",
+      "en": "I have saved it securely. Close"
+    },
+    "CredentialWarning": {
+      "zhs": "这是唯一一次显示机会。关闭后页面状态会立即销毁该秘密，无法查询或恢复。",
+      "en": "This password is shown only once. Closing this dialog immediately removes it from page state. It cannot be retrieved or recovered."
+    },
+    "Credential": {
+      "zhs": "临时密码",
+      "en": "Temporary password"
+    },
+    "CopyCredential": {
+      "zhs": "复制临时密码",
+      "en": "Copy temporary password"
+    },
+    "CopySucceeded": {
+      "zhs": "已复制。关闭后将无法再次查看。",
+      "en": "Copied. You cannot view it again after closing."
+    },
+    "CopyFailed": {
+      "zhs": "复制失败，请现在手动复制。",
+      "en": "Copy failed. Copy the password manually now."
+    },
+    "EventTime": {
+      "zhs": "时间",
+      "en": "Time"
+    },
+    "EventType": {
+      "zhs": "类型",
+      "en": "Type"
+    },
+    "EventReason": {
+      "zhs": "原因",
+      "en": "Reason"
+    },
+    "EventActorKind": {
+      "zhs": "操作者类型",
+      "en": "Actor type"
+    },
+    "EventCount": {
+      "zhs": "共 {count} 条",
+      "en": "Events: {count}"
+    },
+    "RefreshEvents": {
+      "zhs": "刷新安全事件",
+      "en": "Refresh security events"
+    },
+    "Refresh": {
+      "zhs": "刷新",
+      "en": "Refresh"
+    },
+    "EventsLoading": {
+      "zhs": "安全事件加载中",
+      "en": "Loading security events"
+    },
+    "EventsFailed": {
+      "zhs": "安全事件加载失败，请稍后重试。",
+      "en": "Security events could not be loaded. Try again later."
+    },
+    "RetryEvents": {
+      "zhs": "重试安全事件",
+      "en": "Retry security events"
+    },
+    "Retry": {
+      "zhs": "重试",
+      "en": "Retry"
+    },
+    "EventsEmpty": {
+      "zhs": "暂无安全事件。",
+      "en": "No security events."
+    },
+    "EventsTargetUnavailable": {
+      "zhs": "安全事件目标账号不可用。",
+      "en": "The account for these security events is unavailable."
+    },
+    "LocalAdminCredentialProtected": {
+      "zhs": "本地管理员凭据只能通过本机维护命令重置。",
+      "en": "Local administrator credentials can only be reset using the local maintenance command."
+    },
+    "SnapshotUnavailable": {
+      "zhs": "账号最新安全状态不可用，请刷新后重试。",
+      "en": "The latest account security state is unavailable. Refresh and try again."
+    },
+    "ReasonRequired": {
+      "zhs": "请填写操作原因。",
+      "en": "Enter an operation reason."
+    },
+    "DeleteConfirmationRequired": {
+      "zhs": "请完整输入登录账号 {accountCode} 以确认不可恢复删除。",
+      "en": "Enter the full account code {accountCode} to confirm irreversible deletion."
+    },
+    "OperationUnknown": {
+      "zhs": "操作结果未知。系统不会自动重放，请刷新账号最新安全状态后核对。",
+      "en": "The operation outcome is unknown. It will not be repeated automatically. Refresh the account security state and check the result."
+    },
+    "CreateUnknown": {
+      "zhs": "创建结果未知。系统不会自动重试，请先刷新账号列表并核对结果。",
+      "en": "The creation outcome is unknown. It will not be retried automatically. Refresh the account list and check the result."
+    },
+    "RevisionUnavailable": {
+      "zhs": "账号最新 Revision 不可用，请重新加载后再编辑。",
+      "en": "The latest account revision is unavailable. Reload before editing."
+    },
+    "RevisionConflictDetails": {
+      "zhs": "账号已发生变化：最新状态 {status}，Revision {revision}。请查看最新安全状态并重新确认。",
+      "en": "The account has changed: latest status {status}, revision {revision}. Review the latest security state and confirm again."
+    }
+  }
+}

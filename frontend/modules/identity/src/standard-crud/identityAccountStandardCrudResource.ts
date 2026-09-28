@@ -99,13 +99,6 @@ function readMutationString(values: Record<string, unknown>, field: string): str
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function toSharedRequestError(error: IdentityApiError): StandardCrudRequestError {
-  const fieldErrors = Object.fromEntries(Object.entries(error.errors ?? {}).flatMap(([field, messages]) => (
-    messages[0] ? [[field, messages[0]]] : []
-  )));
-  const message = error.status === 403 ? '权限已变化，当前操作已被拒绝' : error.code;
-  return new StandardCrudRequestError(message, error.status, fieldErrors);
-}
 
 interface IdentitySecurityActionInput {
   reason?: unknown;
@@ -155,7 +148,7 @@ function resolveIdentityAccountActionState({
   const securityAction = ['enable', 'disable', 'delete', 'credentialReset'].includes(action.key);
   if (!snapshot) {
     return securityAction
-      ? { visible: true, available: false, reason: '账号最新安全状态不可用，请刷新后重试。' }
+      ? { visible: true, available: false, reason: '账号最新安全状态不可用，请刷新后重试。', reasonKey: 'IdentityMessages.SnapshotUnavailable' }
       : { visible: true, available: true };
   }
 
@@ -164,19 +157,19 @@ function resolveIdentityAccountActionState({
   }
   if (action.key === 'enable') {
     if (snapshot.status !== 'Disabled') return { visible: false, available: false };
-    if (snapshot.isLocalAdministrator) return { visible: true, available: false, reason: '本地管理员账号受保护。' };
-    if (snapshot.personnelDisableHold) return { visible: true, available: false, reason: '存在人员停用阻断，不能启用账号。' };
+    if (snapshot.isLocalAdministrator) return { visible: true, available: false, reason: '本地管理员账号受保护。', reasonKey: 'IdentityErrors.IDENTITY_LOCAL_ADMIN_PROTECTED' };
+    if (snapshot.personnelDisableHold) return { visible: true, available: false, reason: '存在人员停用阻断，不能启用账号。', reasonKey: 'IdentityErrors.IDENTITY_PERSONNEL_DISABLE_HOLD' };
   }
   if (action.key === 'disable') {
     if (snapshot.status !== 'Enabled') return { visible: false, available: false };
-    if (snapshot.isLocalAdministrator) return { visible: true, available: false, reason: '本地管理员账号受保护。' };
+    if (snapshot.isLocalAdministrator) return { visible: true, available: false, reason: '本地管理员账号受保护。', reasonKey: 'IdentityErrors.IDENTITY_LOCAL_ADMIN_PROTECTED' };
   }
   if (action.key === 'delete') {
-    if (snapshot.isLocalAdministrator) return { visible: true, available: false, reason: '本地管理员账号受保护。' };
-    if (snapshot.isPersonnelBound) return { visible: true, available: false, reason: '账号已绑定人员，只能停用，不能删除。' };
+    if (snapshot.isLocalAdministrator) return { visible: true, available: false, reason: '本地管理员账号受保护。', reasonKey: 'IdentityErrors.IDENTITY_LOCAL_ADMIN_PROTECTED' };
+    if (snapshot.isPersonnelBound) return { visible: true, available: false, reason: '账号已绑定人员，只能停用，不能删除。', reasonKey: 'IdentityErrors.IDENTITY_PERSONNEL_BOUND' };
   }
   if (action.key === 'credentialReset' && snapshot.isLocalAdministrator) {
-    return { visible: true, available: false, reason: '本地管理员凭据只能通过本机维护命令重置。' };
+    return { visible: true, available: false, reason: '本地管理员凭据只能通过本机维护命令重置。', reasonKey: 'IdentityMessages.LocalAdminCredentialProtected' };
   }
 
   return { visible: true, available: true };
@@ -185,7 +178,7 @@ function resolveIdentityAccountActionState({
 function readIdentitySecurityInput(input: unknown): { reason: string; confirmation: string } {
   const value = isStandardCrudRecord(input) ? input as IdentitySecurityActionInput : {};
   const reason = typeof value.reason === 'string' ? value.reason.trim() : '';
-  if (!reason) throw new Error('请填写操作原因。');
+  if (!reason) throw new StandardCrudRequestError('请填写操作原因。', 0, {}, { reasonKey: 'IdentityMessages.ReasonRequired' });
   return {
     reason,
     confirmation: typeof value.confirmation === 'string' ? value.confirmation : '',
@@ -193,25 +186,9 @@ function readIdentitySecurityInput(input: unknown): { reason: string; confirmati
 }
 
 function toIdentitySecurityActionError(error: unknown): Error {
-  if (!(error instanceof IdentityApiError)) {
-    return new Error('操作结果未知。系统不会自动重放，请刷新账号最新安全状态后核对。');
-  }
-  if (error.status === 403) {
-    return new StandardCrudRequestError('权限已变化，当前安全操作已被拒绝。', error.status);
-  }
-  if (error.code === 'IDENTITY_REVISION_CONFLICT' && error.current) {
-    return new StandardCrudRequestError(
-      `账号已发生变化：最新状态 ${error.current.status}，Revision ${error.current.revision}。请查看最新安全状态并重新确认。`,
-      error.status,
-    );
-  }
-  const guardMessages: Record<string, string> = {
-    IDENTITY_LOCAL_ADMIN_PROTECTED: '本地管理员账号受保护，不能执行该操作。',
-    IDENTITY_PERSONNEL_BOUND: '账号已绑定人员，只能停用，不能删除。',
-    IDENTITY_PERSONNEL_DISABLE_HOLD: '存在人员停用阻断，不能启用账号。',
-    IDENTITY_ACCOUNT_DELETED: '已删除账号处于不可恢复终态，不能执行该操作。',
-  };
-  return new StandardCrudRequestError(guardMessages[error.code] ?? error.code, error.status);
+  if (error instanceof StandardCrudRequestError) return error;
+  return new StandardCrudRequestError('操作结果未知。系统不会自动重放，请刷新账号最新安全状态后核对。', 0, {},
+    { reasonKey: 'IdentityMessages.OperationUnknown' }, undefined, error);
 }
 
 async function setIdentityAccountLifecycleStatus(
@@ -220,7 +197,7 @@ async function setIdentityAccountLifecycleStatus(
 ) {
   const snapshot = readIdentityActionSnapshot(context.detail, context.row);
   const input = readIdentitySecurityInput(context.input);
-  if (!context.id || !snapshot) throw new Error('账号最新安全状态不可用，请刷新后重试。');
+  if (!context.id || !snapshot) throw new StandardCrudRequestError('账号最新安全状态不可用，请刷新后重试。', 0, {}, { reasonKey: 'IdentityMessages.SnapshotUnavailable' });
   try {
     await setAccountStatus(context.id, {
       targetStatus,
@@ -237,9 +214,9 @@ async function deleteIdentityAccount(
 ) {
   const snapshot = readIdentityActionSnapshot(context.detail, context.row);
   const input = readIdentitySecurityInput(context.input);
-  if (!context.id || !snapshot) throw new Error('账号最新安全状态不可用，请刷新后重试。');
+  if (!context.id || !snapshot) throw new StandardCrudRequestError('账号最新安全状态不可用，请刷新后重试。', 0, {}, { reasonKey: 'IdentityMessages.SnapshotUnavailable' });
   if (input.confirmation !== snapshot.ecode) {
-    throw new Error(`请完整输入登录账号 ${snapshot.ecode} 以确认不可恢复删除。`);
+    throw new StandardCrudRequestError(`请完整输入登录账号 ${snapshot.ecode} 以确认不可恢复删除。`, 400, {}, { reasonKey: 'IdentityMessages.DeleteConfirmationRequired', args: { accountCode: snapshot.ecode } });
   }
   try {
     await deleteAccount(context.id, { expectedRevision: snapshot.revision, reason: input.reason }, context);
@@ -253,7 +230,7 @@ async function resetIdentityAccountCredential(
 ) {
   const snapshot = readIdentityActionSnapshot(context.detail, context.row);
   const input = readIdentitySecurityInput(context.input);
-  if (!context.id || !snapshot) throw new Error('账号最新安全状态不可用，请刷新后重试。');
+  if (!context.id || !snapshot) throw new StandardCrudRequestError('账号最新安全状态不可用，请刷新后重试。', 0, {}, { reasonKey: 'IdentityMessages.SnapshotUnavailable' });
   try {
     const issuance = await resetCredential(context.id, {
       expectedRevision: snapshot.revision,
@@ -274,10 +251,10 @@ async function createIdentityAccount(values: Record<string, unknown>, context?: 
     }, context);
     return { operation: 'create' as const, payload: issuance };
   } catch (error) {
-    if (error instanceof IdentityApiError) {
-      throw toSharedRequestError(error);
+    if (error instanceof StandardCrudRequestError) {
+      throw error;
     }
-    throw new Error('创建结果未知。系统不会自动重试，请先刷新账号列表并核对结果。');
+    throw new StandardCrudRequestError('创建结果未知。系统不会自动重试，请先刷新账号列表并核对结果。', 0, {}, { reasonKey: 'IdentityMessages.CreateUnknown' });
   }
 }
 
@@ -289,7 +266,7 @@ async function updateIdentityAccount(
 ) {
   const expectedRevision = detailFields.Revision;
   if (!id || typeof expectedRevision !== 'number' || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
-    throw new Error('账号最新 Revision 不可用，请重新加载后再编辑。');
+    throw new StandardCrudRequestError('账号最新 Revision 不可用，请重新加载后再编辑。', 0, {}, { reasonKey: 'IdentityMessages.RevisionUnavailable' });
   }
 
   try {
@@ -299,10 +276,10 @@ async function updateIdentityAccount(
     }, context);
     return { operation: 'update' as const, payload: account };
   } catch (error) {
-    if (error instanceof IdentityApiError) {
-      throw toSharedRequestError(error);
+    if (error instanceof StandardCrudRequestError) {
+      throw error;
     }
-    throw error instanceof Error ? error : new Error('保存账号失败');
+    throw toIdentitySecurityActionError(error);
   }
 }
 
@@ -314,7 +291,15 @@ const identityAccountRestListAdapter = createStandardCrudRestDataAdapter({
 });
 
 const identityAccountDataAdapter: StandardCrudDataAdapter<IdentityAccountListRow> = {
-  list: identityAccountRestListAdapter.list,
+  list: async (...args) => {
+    try { return await identityAccountRestListAdapter.list(...args); }
+    catch (error) {
+      if (error instanceof StandardCrudRequestError) {
+        throw new IdentityApiError(error.code ?? `HTTP_${error.status}`, error.status, undefined, undefined, error);
+      }
+      throw error;
+    }
+  },
   getRowId: identityAccountRestListAdapter.getRowId,
   get: async (id, readContext) => {
     const normalized = mapIdentityAccountDetail(await getAccountSnapshot(id, readContext), readContext);

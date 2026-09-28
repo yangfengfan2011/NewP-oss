@@ -1,3 +1,4 @@
+import { platformTestCatalogs } from './localizationTestCatalogs';
 import './authorizedFeatureUiFixture';
 // @vitest-environment jsdom
 
@@ -194,8 +195,8 @@ describe('StandardCrudDetailPageHost', () => {
         defaultLanguage="zhs"
         supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }, ...(bilingual ? [{ code: 'en', displayName: 'English' }] : [])]}
         catalogs={{
-          zhs: personDetailCatalog,
-          en: { ...personDetailCatalog, 'Platform.Language': 'Language', 'PersonDetailView.Field_ENAME': 'Name' },
+          zhs: { ...platformTestCatalogs.zhs, ...personDetailCatalog },
+          en: { ...platformTestCatalogs.en, ...personDetailCatalog, 'Platform.Language': 'Language', 'PersonDetailView.Field_ENAME': 'Name' },
         }}
       >
         {bilingual ? <LanguageSelect /> : null}
@@ -275,7 +276,7 @@ describe('StandardCrudDetailPageHost', () => {
     failNext = true;
     await renderVersion(2);
     expect(fetcher).toHaveBeenCalledTimes(3);
-    expect(container.textContent).toContain('refresh read failed');
+    expect(container.textContent).toContain('操作失败，请稍后重试。');
     await renderVersion(2);
     expect(fetcher).toHaveBeenCalledTimes(3);
     const retry = [...container.querySelectorAll('button')].find(button => button.textContent === '重试');
@@ -284,7 +285,7 @@ describe('StandardCrudDetailPageHost', () => {
     expect(fetcher).toHaveBeenCalledTimes(4);
     await renderVersion(3);
     expect(fetcher).toHaveBeenCalledTimes(5);
-    expect(container.textContent).not.toContain('refresh read failed');
+    expect(container.textContent).not.toContain('操作失败，请稍后重试。');
   });
 
   it('loads detail through standard CRUD registration', async () => {
@@ -367,7 +368,7 @@ describe('StandardCrudDetailPageHost', () => {
     };
 
     await renderHost('Person_1', registration);
-    await vi.waitFor(() => expect(container.textContent).toContain('DETAIL_READ_FAILED'));
+    await vi.waitFor(() => expect(container.textContent).toContain('操作失败，请稍后重试。'));
     const retry = Array.from(container.querySelectorAll('button'))
       .find((button) => button.textContent === '重试')!;
 
@@ -822,7 +823,7 @@ describe('StandardCrudDetailPageHost', () => {
     await vi.waitFor(() => expect(get).toHaveBeenCalledTimes(2));
     expect(disablePerson).toHaveBeenCalledTimes(1);
     expect(document.body.querySelector('input[aria-label="动作原因"]')).toBeNull();
-    expect(container.textContent).toContain('LIFECYCLE_CONFLICT');
+    expect(container.textContent).toContain('记录已发生变化，未覆盖服务器上的最新数据。请重新加载后再编辑。');
     expect(container.textContent).toContain('张三');
     expect(Array.from(container.querySelectorAll('button'))
       .find((button) => button.textContent === '停用人员')?.disabled).toBe(true);
@@ -834,7 +835,7 @@ describe('StandardCrudDetailPageHost', () => {
     await vi.waitFor(() => expect(container.textContent).toContain('李四'));
     expect(get).toHaveBeenCalledTimes(2);
     expect(disablePerson).toHaveBeenCalledTimes(1);
-    expect(container.textContent).toContain('LIFECYCLE_CONFLICT');
+    expect(container.textContent).toContain('记录已发生变化，未覆盖服务器上的最新数据。请重新加载后再编辑。');
 
     const retry = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '停用人员');
     await act(async () => retry?.dispatchEvent(new MouseEvent('click', { bubbles: true })));

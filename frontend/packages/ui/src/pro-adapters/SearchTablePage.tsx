@@ -7,8 +7,9 @@ import {
   type ReactNode,
 } from 'react';
 import type { ProColumns } from '@ant-design/pro-components';
-import { ProTable } from '@ant-design/pro-components';
+import { ProConfigProvider, ProTable, enUSIntl, zhCNIntl } from '@ant-design/pro-components';
 import { Pagination } from 'antd';
+import { useLocalization } from '@icp-platform/core';
 import type { StandardCrudColumnState } from './StandardCrudColumnPreference';
 import { StandardCrudListState } from './StandardCrudListState';
 
@@ -128,6 +129,8 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
   className,
   controlledResult,
 }: SearchTablePageProps<TRow>) {
+  const { t, currentLanguage, supportedLanguages } = useLocalization();
+  const english = supportedLanguages.find(language => language.code === currentLanguage)?.locale?.startsWith('en') === true;
   const [data, setData] = useState<TRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -229,7 +232,7 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
   const rowNumberStart = (effectiveQuery.current - 1) * effectiveQuery.pageSize;
   const tableColumns = useMemo(() => {
     const rowNumberColumn: ProColumns<TRow> = {
-      title: '序号',
+      title: t('Platform.RowNumber', '序号'),
       key: '__rowNumber',
       width: 64,
       fixed: 'left',
@@ -238,7 +241,7 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
       hideInSetting: true,
       sorter: false,
       className: 'np-table-row-number-cell',
-      onHeaderCell: () => ({ 'aria-label': '序号' }),
+      onHeaderCell: () => ({ 'aria-label': t('Platform.RowNumber', '序号') }),
       render: (_, __, index) => rowNumberStart + index + 1,
     };
 
@@ -257,10 +260,10 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         } as ProColumns<TRow>;
       }),
     ];
-  }, [columns, effectiveQuery.sortBy, effectiveQuery.sortDirection, rowNumberStart, sortKeyAliases]);
+  }, [columns, effectiveQuery.sortBy, effectiveQuery.sortDirection, rowNumberStart, sortKeyAliases, t]);
 
   return (
-    <div className="np-search-table-page">
+    <ProConfigProvider intl={english ? enUSIntl : zhCNIntl}><div className="np-search-table-page">
       <ProTable<TRow>
         key={`${effectiveQuery.sortBy ?? 'none'}:${effectiveQuery.sortDirection ?? 'none'}`}
         className={className}
@@ -326,8 +329,8 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
           total={Math.max(effectiveTotal, 1)}
           showSizeChanger
           pageSizeOptions={[20, 50, 100]}
-          showTotal={() => `第 ${effectiveQuery.current} / ${Math.max(1, Math.ceil(effectiveTotal / effectiveQuery.pageSize))} 页，共 ${effectiveTotal} 条`}
-          locale={{ items_per_page: '条/页' }}
+          showTotal={() => t('Platform.PaginationSummary', '第 {page} / {pages} 页，共 {total} 条', { page: effectiveQuery.current, pages: Math.max(1, Math.ceil(effectiveTotal / effectiveQuery.pageSize)), total: effectiveTotal })}
+          locale={{ items_per_page: t('Platform.ItemsPerPage', '条/页') }}
           onChange={(nextCurrent, nextPageSize) => {
             updateQuery({
               ...effectiveQuery,
@@ -337,6 +340,6 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
           }}
         />
       </div>
-    </div>
+    </div></ProConfigProvider>
   );
 }

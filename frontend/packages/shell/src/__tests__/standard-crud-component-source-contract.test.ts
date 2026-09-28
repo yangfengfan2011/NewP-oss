@@ -59,9 +59,9 @@ describe('standard CRUD component source contract', () => {
       import.meta.url,
     )), 'utf8');
 
-    expect(searchBar).toContain('aria-label="搜索"');
-    expect(searchBar).toContain('aria-label="重置"');
-    expect(tableSection).toContain('aria-label="刷新"');
+    expect(searchBar).toContain("aria-label={t('Platform.Search', '搜索')}");
+    expect(searchBar).toContain("aria-label={t('Platform.Reset', '重置')}");
+    expect(tableSection).toContain("aria-label={t('Platform.Refresh', '刷新')}");
   });
 
   it('keeps drawer and edit-form implementations behind route-local dynamic loaders', () => {

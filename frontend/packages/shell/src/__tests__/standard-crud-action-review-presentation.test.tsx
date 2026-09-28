@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { createRoot } from 'react-dom/client';
+import { createLocalizedRoot as createRoot } from './localizedTestRoot';
 import { expect, it, vi } from 'vitest';
 import { StandardCrudActionReviewDialog } from '../standard-crud/StandardCrudActionReviewDialog';
 

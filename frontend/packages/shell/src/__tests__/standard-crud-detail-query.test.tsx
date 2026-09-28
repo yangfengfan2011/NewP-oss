@@ -2,7 +2,8 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, StrictMode } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
+import { createLocalizedRoot as createRoot } from './localizedTestRoot';
 import { PlatformQueryProvider } from '@icp-platform/core';
 import type { StandardCrudLoadedDetail } from '@icp-platform/sdk';
 import { useStandardCrudDetailQuery } from '../standard-crud/standardCrudDetailQuery';
@@ -181,7 +182,7 @@ describe('Standard CRUD detail query', () => {
         </PlatformQueryProvider>,
       );
     });
-    expect(container.textContent).toContain('详情读取失败');
+    expect(container.textContent).toContain('操作失败，请稍后重试。');
 
     const retryButton = Array.from(container.querySelectorAll('button'))
       .find((button) => button.textContent === 'Retry')!;

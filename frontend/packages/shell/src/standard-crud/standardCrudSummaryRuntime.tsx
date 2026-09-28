@@ -1,6 +1,6 @@
+import { useLocalization } from '@icp-platform/core';
 import type { ReactElement } from 'react';
 import {
-  resolveStandardCrudSummaryMessage,
   type StandardCrudSummaryBlock,
   type StandardCrudSummaryRenderer,
 } from '@icp-platform/sdk';
@@ -25,6 +25,7 @@ export function StandardCrudSummaryBlocks({
   titleForBlock,
   featureActions,
 }: StandardCrudSummaryBlocksProps): ReactElement | null {
+  const { t } = useLocalization();
   if (blocks.length === 0) {
     return null;
   }
@@ -44,7 +45,7 @@ export function StandardCrudSummaryBlocks({
           <SummaryCard
             key={blockKey}
             label={title}
-            value={resolveStandardCrudSummaryMessage(block) || '已就绪'}
+            value={block.status === 'notConfigured' ? t('Platform.NotConfigured', '暂未配置') : block.status === 'dependencyUnavailable' ? t('Platform.DependencyUnavailable', '依赖不可用') : t('Platform.Ready', '已就绪')}
           />
         );
       })}

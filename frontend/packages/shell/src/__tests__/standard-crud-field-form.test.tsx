@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
+import { LocalizationProvider } from '@icp-platform/core';
 import { createRoot, type Root } from 'react-dom/client';
 import { isStandardCrudLookupScrollEnd, StandardCrudField, StandardCrudForm } from '@icp-platform/ui';
 import type { StandardCrudFieldDefinition, StandardCrudFormSection } from '@icp-platform/sdk';
@@ -13,6 +14,10 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 describe('StandardCrudField and StandardCrudForm', () => {
   let container: HTMLDivElement;
   let root: Root;
+
+  function renderLocalized(element: React.ReactElement) {
+    root.render(<LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文', locale: 'zh-CN' }]} catalogs={{}}>{element}</LocalizationProvider>);
+  }
 
   afterEach(async () => {
     if (root) {
@@ -30,7 +35,7 @@ describe('StandardCrudField and StandardCrudForm', () => {
 
     await act(async () => {
       root = createRoot(container);
-      root.render(element);
+      renderLocalized(element);
     });
   }
 
@@ -73,6 +78,7 @@ describe('StandardCrudField and StandardCrudForm', () => {
     expect(container.textContent).toContain('name-value');
     expect(container.textContent).toContain('birthday-value');
     expect(container.textContent).toContain('有效');
+    expect([...container.querySelectorAll('.ant-form-item-label')].map(label => label.textContent)).toEqual(['姓名', '生日', '编码', '启用', '状态']);
   });
 
   it('renders sections, editable controls and edit submit action', async () => {
@@ -266,7 +272,7 @@ describe('StandardCrudField and StandardCrudForm', () => {
     expect(onChange).toHaveBeenCalledWith('positionId', null);
 
     await act(async () => {
-      root.render(
+      renderLocalized(
         <StandardCrudField
           field={{ ...optionalField, required: true }}
           value="position-current"
@@ -510,7 +516,7 @@ describe('StandardCrudField and StandardCrudForm', () => {
     expect(container.textContent).toContain('保存并关闭');
 
     await act(async () => {
-      root.render(
+      renderLocalized(
         <StandardCrudForm
           formId="person-edit-form"
           mode="edit"

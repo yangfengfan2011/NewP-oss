@@ -1,3 +1,4 @@
+import { useLocalization } from '@icp-platform/core';
 import { useMemo, useState, type ReactElement } from 'react';
 import type {
   StandardCrudFieldDefinition,
@@ -80,6 +81,7 @@ export function StandardCrudForm({
   showSubmitAction = true,
   titleForSection,
 }: StandardCrudFormProps): ReactElement {
+  const { t } = useLocalization();
   const resolvedSections = useMemo(() => resolveSections(fields, sections), [fields, sections]);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
@@ -89,7 +91,7 @@ export function StandardCrudForm({
     }
     const nextErrors = fields.reduce<Record<string, string>>((current, field) => {
       if (field.required && field.kind !== 'readonly' && field.readOnly !== true && isEmptyRequiredValue(field, values[field.key])) {
-        current[field.key] = '请填写此字段';
+        current[field.key] = 'required';
       }
       return current;
     }, {});
@@ -114,7 +116,7 @@ export function StandardCrudForm({
       {resolvedSections.map((section, index) => {
         const actions = showSubmitAction && index === 0 ? (
           <Button size="small" type="primary" htmlType="submit" form={formId} loading={saving} disabled={saving}>
-            {saveLabel ?? (mode === 'create' ? '保存并关闭' : '保存修改')}
+            {saveLabel ?? (mode === 'create' ? t('Platform.SaveAndClose', '保存并关闭') : t('Platform.SaveChanges', '保存修改'))}
           </Button>
         ) : undefined;
         return (
@@ -128,7 +130,7 @@ export function StandardCrudForm({
                   mode={mode}
                   options={lookupOptions[field.key]}
                   loading={lookupLoading[field.key]}
-                  error={validationErrors[field.key] ?? fieldErrors[field.key] ?? lookupErrors[field.key]}
+                  error={validationErrors[field.key] ? t('Platform.RequiredField', '请填写此字段') : fieldErrors[field.key] ?? lookupErrors[field.key]}
                   retryableError={Boolean(lookupErrors[field.key])}
                   hasMore={lookupHasMore[field.key]}
                   onSearch={onLookupSearch}

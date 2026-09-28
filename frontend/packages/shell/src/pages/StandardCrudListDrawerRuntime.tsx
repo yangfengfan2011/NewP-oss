@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { LanguageSelect } from '@icp-platform/core';
+import { LanguageSelect, useLocalization } from '@icp-platform/core';
 import type {
   StandardCrudFieldDefinition,
   StandardCrudFormSection,
@@ -79,6 +79,7 @@ export default function StandardCrudListDrawerRuntime({
   titleForSection,
   textForDetail,
 }: StandardCrudListDrawerRuntimeProps) {
+  const { t } = useLocalization();
   if (mode === 'view') {
     const readyPresentation = detailPresentation?.kind === 'ready' ? detailPresentation : null;
     const fatalDiagnostic = detailPresentation?.kind === 'fatal' ? detailPresentation.diagnostic : null;
@@ -95,9 +96,9 @@ export default function StandardCrudListDrawerRuntime({
         title={viewTitle}
         headerActions={<LanguageSelect />}
         loading={detailLoading}
-        error={detailError ?? (fatalDiagnostic ? `详情数据契约失败：${fatalDiagnostic.code}` : null)}
+        error={detailError ?? (fatalDiagnostic ? t('Platform.DetailContractFailed', '详情数据契约失败：{code}', { code: fatalDiagnostic.code }) : null)}
         errorActions={detailError ? detailErrorActions : undefined}
-        primaryLabel="编辑"
+        primaryLabel={t('Platform.Edit', '编辑')}
         secondaryAction={fatalDiagnostic ? undefined : viewSecondaryAction}
         hidePrimary={!canEdit || !editAction || fatalDiagnostic !== null}
         primaryDisabled={editAction?.disabled === true}
@@ -127,7 +128,7 @@ export default function StandardCrudListDrawerRuntime({
       error={mode === 'edit' ? detailError ?? saveError : saveError}
       errorActions={mode === 'edit' && detailError ? detailErrorActions : saveErrorActions}
       submitFormId={formId}
-      primaryLabel={mode === 'create' ? '保存并关闭' : '保存修改'}
+      primaryLabel={mode === 'create' ? t('Platform.SaveAndClose', '保存并关闭') : t('Platform.SaveChanges', '保存修改')}
       onClose={onClose}
       afterOpenChange={afterOpenChange}
     >

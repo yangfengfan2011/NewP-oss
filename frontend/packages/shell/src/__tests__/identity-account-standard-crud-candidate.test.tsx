@@ -1,3 +1,4 @@
+import { platformTestCatalogs } from './localizationTestCatalogs';
 import './authorizedFeatureUiFixture';
 // @vitest-environment jsdom
 
@@ -175,7 +176,7 @@ describe('Identity account Standard CRUD production route', () => {
           <LocalizationProvider
             defaultLanguage="zhs"
             supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
-            catalogs={{ zhs: accountListCatalog }}
+            catalogs={{ zhs: { ...platformTestCatalogs.zhs, ...accountListCatalog } }}
           >
             <RuntimeMetadataProvider value={runtimeMetadata}>
               <PlatformQueryProvider scopeKey="user-1">
@@ -260,7 +261,7 @@ describe('Identity account Standard CRUD production route', () => {
           <LocalizationProvider
             defaultLanguage="zhs"
             supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
-            catalogs={{ zhs: accountListCatalog }}
+            catalogs={{ zhs: { ...platformTestCatalogs.zhs, ...accountListCatalog } }}
           >
             <RuntimeMetadataProvider value={runtimeMetadata}>
               <PlatformQueryProvider scopeKey="user-1">
@@ -332,7 +333,7 @@ describe('Identity account Standard CRUD production route', () => {
       <LocalizationProvider
         defaultLanguage="zhs"
         supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
-        catalogs={{ zhs: accountListCatalog }}
+        catalogs={{ zhs: { ...platformTestCatalogs.zhs, ...accountListCatalog } }}
       >
         <PlatformQueryProvider scopeKey="user-1">
           <RuntimeMetadataProvider value={runtimeMetadata}>
@@ -403,7 +404,7 @@ describe('Identity account Standard CRUD production route', () => {
           <LocalizationProvider
             defaultLanguage="zhs"
             supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
-            catalogs={{ zhs: accountListCatalog }}
+            catalogs={{ zhs: { ...platformTestCatalogs.zhs, ...accountListCatalog } }}
           >
             <PlatformQueryProvider scopeKey="user-1">
               <RuntimeMetadataProvider value={runtimeMetadata}>
@@ -418,7 +419,7 @@ describe('Identity account Standard CRUD production route', () => {
         </MemoryRouter>,
       );
     });
-    await waitForBodyText('IDENTITY_ACCOUNT_FORBIDDEN');
+    await waitForBodyText('操作失败，请稍后重试。');
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/identity/accounts/User_2/snapshot');
@@ -438,7 +439,7 @@ describe('Identity account Standard CRUD production route', () => {
           <LocalizationProvider
             defaultLanguage="zhs"
             supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
-            catalogs={{ zhs: accountListCatalog }}
+            catalogs={{ zhs: { ...platformTestCatalogs.zhs, ...accountListCatalog } }}
           >
             <RuntimeMetadataProvider value={runtimeMetadata}>
               <PlatformQueryProvider scopeKey="user-1">
@@ -493,7 +494,7 @@ describe('Identity account Standard CRUD production route', () => {
           <LocalizationProvider
             defaultLanguage="zhs"
             supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
-            catalogs={{ zhs: accountListCatalog }}
+            catalogs={{ zhs: { ...platformTestCatalogs.zhs, ...accountListCatalog } }}
           >
             <RuntimeMetadataProvider value={runtimeMetadata}>
               <PlatformQueryProvider scopeKey="user-1">
@@ -562,7 +563,7 @@ describe('Identity account Standard CRUD production route', () => {
         <LocalizationProvider
           defaultLanguage="zhs"
           supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
-          catalogs={{ zhs: accountListCatalog }}
+          catalogs={{ zhs: { ...platformTestCatalogs.zhs, ...accountListCatalog } }}
         >
           <RuntimeMetadataProvider value={runtimeMetadata}>
             <PlatformQueryProvider scopeKey="user-1">
@@ -621,7 +622,7 @@ describe('Identity account Standard CRUD production route', () => {
         <LocalizationProvider
           defaultLanguage="zhs"
           supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
-          catalogs={{ zhs: accountListCatalog }}
+          catalogs={{ zhs: { ...platformTestCatalogs.zhs, ...accountListCatalog } }}
         >
           <RuntimeMetadataProvider value={runtimeMetadata}>
             <PlatformQueryProvider scopeKey="user-1">
@@ -688,7 +689,7 @@ describe('Identity account Standard CRUD production route', () => {
         <LocalizationProvider
           defaultLanguage="zhs"
           supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
-          catalogs={{ zhs: accountListCatalog }}
+          catalogs={{ zhs: { ...platformTestCatalogs.zhs, ...accountListCatalog } }}
         >
           <PlatformQueryProvider scopeKey="user-1">
             <RuntimeMetadataProvider value={runtimeMetadata}>
@@ -765,7 +766,7 @@ describe('Identity account Standard CRUD production route', () => {
         <LocalizationProvider
           defaultLanguage="zhs"
           supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
-          catalogs={{ zhs: accountListCatalog }}
+          catalogs={{ zhs: { ...platformTestCatalogs.zhs, ...accountListCatalog } }}
         >
           <PlatformQueryProvider scopeKey="user-1">
             <RuntimeMetadataProvider value={runtimeMetadata}>
@@ -844,7 +845,7 @@ describe('Identity account Standard CRUD production route', () => {
         <LocalizationProvider
           defaultLanguage="zhs"
           supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
-          catalogs={{ zhs: accountListCatalog }}
+          catalogs={{ zhs: { ...platformTestCatalogs.zhs, ...accountListCatalog } }}
         >
           <RuntimeMetadataProvider value={runtimeMetadata}>
             <PlatformQueryProvider scopeKey="user-1">
@@ -870,7 +871,7 @@ describe('Identity account Standard CRUD production route', () => {
     const confirm = Array.from(document.body.querySelectorAll('button')).find((button) =>
       button.textContent?.replace(/\s+/g, '') === '确认');
     await act(async () => confirm?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    await waitForBodyText('最新状态 Disabled，Revision 8');
+    await waitForBodyText('记录已发生变化，未覆盖服务器上的最新数据。请重新加载后再编辑。');
 
     expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/User_2/status/disable'))).toHaveLength(1);
     expect(document.body.querySelector('textarea[aria-label="操作原因"]')).toBeNull();
@@ -907,7 +908,7 @@ describe('Identity account Standard CRUD production route', () => {
           <LocalizationProvider
             defaultLanguage="zhs"
             supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
-            catalogs={{ zhs: accountListCatalog }}
+            catalogs={{ zhs: { ...platformTestCatalogs.zhs, ...accountListCatalog } }}
           >
             <RuntimeMetadataProvider value={runtimeMetadata}>
               <PlatformQueryProvider scopeKey="user-1">

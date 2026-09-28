@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useLocalization } from '@icp-platform/core';
 import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { DetailPage } from '@icp-platform/ui/crud-detail';
 import type { StandardCrudResolvedDetailFieldSchema } from '../metadata/standardCrudSchemaResolver';
@@ -16,6 +17,7 @@ function formatStandardValue(
   field: StandardCrudResolvedDetailFieldSchema,
   value: unknown,
   registration: Pick<StandardCrudResourceRegistration, 'enumOptions'>,
+  localization: ReturnType<typeof useLocalization>,
 ): ReactNode {
   if (value === null) {
     return '—';
@@ -25,11 +27,11 @@ function formatStandardValue(
       ? registration.enumOptions?.[field.enumKey]?.find((item) => item.value === value)
       : undefined;
     if (option) {
-      return option.label;
+      return localization.getEnumerationLabel(field.enumKey!, String(value), option.label);
     }
   }
   if (field.rendererKey === 'standard.boolean') {
-    return value === true ? '是' : value === false ? '否' : String(value);
+    return value === true ? localization.t('Platform.Yes', '是') : value === false ? localization.t('Platform.No', '否') : String(value);
   }
 
   return String(value);
@@ -41,6 +43,7 @@ export default function StandardCrudResolvedDetailSections({
   registration,
   textFor,
 }: StandardCrudResolvedDetailSectionsProps) {
+  const localization = useLocalization();
   return <div className="np-crud-detail-sections">{presentation.sections.map((section) => {
     if (section.state === 'unavailable') {
       return (
@@ -51,7 +54,7 @@ export default function StandardCrudResolvedDetailSections({
           data-section-key={section.key}
         >
           <h3>{textFor(section.titleKey, section.titleKey)}</h3>
-          <div role="status">数据不可用</div>
+          <div role="status">{localization.t('Platform.DataUnavailable', '数据不可用')}</div>
         </section>
       );
     }
@@ -73,7 +76,7 @@ export default function StandardCrudResolvedDetailSections({
                   data-diagnostic-code="STANDARD_CRUD_DETAIL_FIELD_UNAVAILABLE"
                   data-field-key={field.key}
                 >
-                  数据不可用
+                  {localization.t('Platform.DataUnavailable', '数据不可用')}
                 </span>
               );
             }
@@ -90,7 +93,7 @@ export default function StandardCrudResolvedDetailSections({
                   value: field.value,
                   detailFields: presentation.sourceFields,
                 })
-              : formatStandardValue(field, field.value, registration);
+              : formatStandardValue(field, field.value, registration, localization);
           },
         }))}
       />

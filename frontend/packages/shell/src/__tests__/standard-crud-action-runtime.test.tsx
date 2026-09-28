@@ -2,7 +2,8 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
+import { createLocalizedRoot as createRoot } from './localizedTestRoot';
 import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime';
 import { StandardCrudRequestError } from '@icp-platform/sdk';
 import type {
@@ -173,7 +174,7 @@ describe('standard CRUD action runtime', () => {
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(refresh).not.toHaveBeenCalled();
-    expect(container.textContent).toContain('岗位当前被人员引用，不能删除。');
+    expect(container.textContent).toContain('记录已发生变化，未覆盖服务器上的最新数据。请重新加载后再编辑。');
 
     await clickActionButton('删除');
     await clickPopconfirmButton('确认');
@@ -272,7 +273,7 @@ describe('standard CRUD action runtime', () => {
     await clickPopconfirmButton('确认');
 
     expect(confirmSpy).not.toHaveBeenCalled();
-    expect(container.textContent).toContain('停用失败');
+    expect(container.textContent).toContain('操作失败，请稍后重试。');
   });
 
   it('disables actions without a handler', async () => {
@@ -442,6 +443,6 @@ describe('standard CRUD action runtime', () => {
     expect(handler).toHaveBeenCalledTimes(1);
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(document.body.querySelector('input[aria-label="原因"]')).toBeNull();
-    expect(container.textContent).toContain('最新状态 Disabled，Revision 8');
+    expect(container.textContent).toContain('记录已发生变化，未覆盖服务器上的最新数据。请重新加载后再编辑。');
   });
 });

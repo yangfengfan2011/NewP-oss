@@ -10,6 +10,7 @@ import {
   type StandardCrudOperationResult,
 } from '@icp-platform/sdk';
 import { ErrorState, LoadingState } from '@icp-platform/ui/core';
+import { CrudLocaleProvider } from '@icp-platform/ui/crud-detail';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
 import { useOptionalAuth } from '../contexts/AuthContext';
 import { resolveStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';
@@ -26,6 +27,7 @@ import {
 import { StandardCrudSummaryBlocks } from '../standard-crud/standardCrudSummaryRuntime';
 
 import { useStandardCrudHostEnvironment } from '../standard-crud/standardCrudHostEnvironment';
+import { useLocalizedStandardCrudRegistration } from '../standard-crud/useLocalizedStandardCrudRegistration';
 
 type MetadataRecord = Record<string, unknown>;
 
@@ -101,32 +103,33 @@ export default function StandardCrudDetailPageHost({
   id,
   registration: loadedRegistration,
 }: StandardCrudDetailPageHostProps): ReactElement {
+  const { t } = useLocalization();
   const runtimeMetadata = useRuntimeMetadata();
   const viewDocument = resolveDetailViewDocument(runtimeMetadata?.viewDocuments ?? [], viewKey);
   const registration = loadedRegistration
     ?? buildStandardCrudRegistry(ModuleRegistry.getAllModules()).findByDetailViewKey(viewKey);
 
   if (!id) {
-    return <ErrorState message="当前地址中没有有效的资源标识。" />;
+    return <ErrorState message={t('Platform.ResourceIdMissing', '当前地址中没有有效的资源标识。')} />;
   }
 
   if (!viewDocument) {
-    return <div className="sh-error-state">未找到详情视图元数据</div>;
+    return <div className="sh-error-state">{t('Platform.DetailMetadataMissing', '未找到详情视图元数据')}</div>;
   }
 
   if (!registration) {
-    return <div className="sh-error-state">未找到标准 CRUD 前端资源注册项</div>;
+    return <div className="sh-error-state">{t('Platform.CrudRegistrationMissing', '未找到标准 CRUD 前端资源注册项')}</div>;
   }
 
   return (
     <StandardCrudHostErrorBoundary message={`标准 CRUD 详情元数据解析失败（${viewKey}）`}>
-    <StandardCrudDetailPageContent
+    <CrudLocaleProvider><StandardCrudDetailPageContent
       id={id}
       view={viewDocument.view as Record<string, unknown>}
       registration={registration}
       viewDocuments={(runtimeMetadata?.viewDocuments ?? []) as unknown as MetadataRecord[]}
       modelDocuments={runtimeMetadata?.modelDocuments ?? []}
-    />
+    /></CrudLocaleProvider>
     </StandardCrudHostErrorBoundary>
   );
 }
@@ -134,7 +137,7 @@ export default function StandardCrudDetailPageHost({
 function StandardCrudDetailPageContent<TDetail>({
   id,
   view,
-  registration,
+  registration: sourceRegistration,
   viewDocuments,
   modelDocuments,
 }: {
@@ -144,6 +147,7 @@ function StandardCrudDetailPageContent<TDetail>({
   viewDocuments: MetadataRecord[];
   modelDocuments: MetadataRecord[];
 }): ReactElement {
+  const registration = useLocalizedStandardCrudRegistration(sourceRegistration);
   const { t } = useLocalization();
   // 详情宿主从不拥有地址；独立路由下也传 null。
   const host = useStandardCrudHostEnvironment(null);
@@ -295,14 +299,14 @@ function StandardCrudDetailPageContent<TDetail>({
 
       <div className="sh-page-stack">
       {showLoading ? (
-        <LoadingState message="正在加载详情..." />
+        <LoadingState message={t('Platform.LoadingDetail', '正在加载详情...')} />
       ) : detailQuery.error ? (
         <ErrorState>
           <span>{detailQuery.error}</span>
-          <button type="button" className="sh-btn sh-btn-primary" onClick={detailQuery.retry}>重试</button>
+          <button type="button" className="sh-btn sh-btn-primary" onClick={detailQuery.retry}>{t('Platform.Retry', '重试')}</button>
         </ErrorState>
       ) : presentation?.kind === 'fatal' ? (
-        <ErrorState message={`详情数据契约失败：${presentation.diagnostic.code}`} />
+        <ErrorState message={t('Platform.DetailContractFailed', '详情数据契约失败：{code}', { code: presentation.diagnostic.code })} />
       ) : currentNormalizedDetail && readyPresentation ? (
         <div className="sh-page-stack">
           <StandardCrudSummaryBlocks
@@ -316,10 +320,10 @@ function StandardCrudDetailPageContent<TDetail>({
 
         </div>
       ) : (
-        <ErrorState message="未找到详情。" />
+        <ErrorState message={t('Platform.DetailNotFound', '未找到详情。')} />
       )}
           {editing && editorDetail?.id === id && editFields.length > 0 && (!features.placement || editResolution.kind === 'allowed') ? (
-            <Suspense fallback={<div className="sh-loading-state" role="status">正在加载编辑表单…</div>}>
+            <Suspense fallback={<div className="sh-loading-state" role="status">{t('Platform.LoadingEditor', '正在加载编辑表单…')}</div>}>
               <StandardCrudDetailEditor
                 key={id}
                 id={id}

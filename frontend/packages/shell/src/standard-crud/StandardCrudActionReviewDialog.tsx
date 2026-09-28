@@ -1,3 +1,5 @@
+import { useLocalization } from '@icp-platform/core';
+import { StandardCrudDialogTitle } from './StandardCrudDialogTitle';
 import { useState, type ReactElement, type ReactNode } from 'react';
 import Modal from 'antd/es/modal';
 import Button from 'antd/es/button';
@@ -38,17 +40,19 @@ export function StandardCrudActionReviewDialog({
   onCancel,
   onConfirm,
 }: StandardCrudActionReviewDialogProps): ReactElement {
+  const { t } = useLocalization();
   const [draftState, setDraftState] = useState({ dirty: false, ready: true });
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   return (
     <>
       <Modal
+        closable={{ 'aria-label': t('Platform.Close', '关闭') }}
         open={open}
-        title={title}
+        title={<StandardCrudDialogTitle>{title}</StandardCrudDialogTitle>}
         width={inputRenderer.dialogWidth}
-        footer={inputRenderer.readOnly ? <Button onClick={onCancel}>关闭</Button> : undefined}
-        okText={action.confirmLabel ?? '确认'}
-        cancelText="取消"
+        footer={inputRenderer.readOnly ? <Button onClick={onCancel}>{t('Platform.Close', '关闭')}</Button> : undefined}
+        okText={action.confirmLabel ?? t('Platform.Confirm', '确认')}
+        cancelText={t('Platform.Cancel', '取消')}
         destroyOnHidden
         confirmLoading={pending}
         okButtonProps={{ disabled: !draftState.ready }}
@@ -66,9 +70,10 @@ export function StandardCrudActionReviewDialog({
           onDraftStateChange: setDraftState,
         })}
       </Modal>
-      <Modal open={confirmDiscard} title="放弃未保存的草稿？" okText="放弃修改" cancelText="继续编辑"
+      <Modal open={confirmDiscard} title={<StandardCrudDialogTitle>{t('Platform.DiscardDraftTitle', '放弃未保存的草稿？')}</StandardCrudDialogTitle>} okText={t('Platform.DiscardDraft', '放弃修改')} cancelText={t('Platform.KeepEditing', '继续编辑')}
+        closable={{ 'aria-label': t('Platform.Close', '关闭') }}
         onCancel={() => setConfirmDiscard(false)} onOk={() => { setConfirmDiscard(false); onCancel(); }}>
-        当前修改尚未保存。
+        {t('Platform.UnsavedChanges', '当前修改尚未保存。')}
       </Modal>
     </>
   );

@@ -19,3 +19,4 @@ export * from './pro-adapters/CrudTableSection';
 export * from './pro-adapters/CrudDetailDrawer';
 export * from './pro-adapters/CrudFormDrawer';
 export * from './pro-adapters/CrudDangerAction';
+export { CrudLocaleProvider } from './pro-adapters/CrudLocaleProvider';

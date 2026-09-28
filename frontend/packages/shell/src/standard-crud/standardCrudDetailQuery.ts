@@ -1,4 +1,4 @@
-import { usePlatformQuery } from '@icp-platform/core';
+import { formatRequestError, useLocalization, usePlatformQuery } from '@icp-platform/core';
 import type {
   StandardCrudDataAdapter,
   StandardCrudLoadedDetail,
@@ -32,6 +32,7 @@ export function useStandardCrudDetailQuery<TRow extends Record<string, unknown>,
   enabled = true,
   featurePosition,
 }: UseStandardCrudDetailQueryInput<TRow, TDetail>): StandardCrudDetailQueryResult<TDetail> {
+  const { t } = useLocalization();
   const selectedId = id ?? '';
   const active = enabled && selectedId.length > 0;
   const query = usePlatformQuery({
@@ -46,7 +47,7 @@ export function useStandardCrudDetailQuery<TRow extends Record<string, unknown>,
     loading: active && detail === undefined && (query.status === 'idle' || query.isFetching),
     refreshing: active && detail !== undefined && query.isFetching,
     error: active && query.status === 'error'
-      ? query.error instanceof Error ? query.error.message : '加载标准 CRUD 详情失败'
+      ? formatRequestError(query.error, t)
       : null,
     refresh: query.refresh,
     retry: query.retry,

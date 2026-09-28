@@ -113,7 +113,7 @@ describe('standard CRUD phase 2 SDK helpers', () => {
         detailFields: { DepartmentName: '一部' },
       }),
     ).resolves.toEqual({
-      options: [{ value: 'Dept_1', label: '当前值不可用', disabled: true }],
+      options: [{ value: 'Dept_1', label: '当前值不可用', disabled: true, unavailable: true }],
       error: '缺少关联条件，无法验证当前值',
     });
     expect(load).not.toHaveBeenCalled();
@@ -127,7 +127,7 @@ describe('standard CRUD phase 2 SDK helpers', () => {
       }),
     ).resolves.toEqual({
       options: [
-        { value: 'Dept_1', label: '当前值不可用', disabled: true },
+        { value: 'Dept_1', label: '当前值不可用', disabled: true, unavailable: true },
         { value: 'Dept_2', label: '二部' },
       ],
       error: null,

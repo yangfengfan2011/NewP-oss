@@ -837,7 +837,7 @@ describe('StandardCrudListPageHost', () => {
     });
 
     await renderHost({}, createRuntimePersonListViewDocument());
-    await waitForBodyText('runtime column provider returned an empty column set');
+    await waitForBodyText('操作失败，请稍后重试。');
 
     expect(list).not.toHaveBeenCalled();
     expect(Array.from(container.querySelectorAll('button')).some((button) => button.textContent?.replace(/\s/g, '') === '重试')).toBe(true);
@@ -860,7 +860,7 @@ describe('StandardCrudListPageHost', () => {
     });
 
     await renderHost({}, createRuntimePersonListViewDocument());
-    await waitForBodyText('runtime column provider returned an empty context token');
+    await waitForBodyText('操作失败，请稍后重试。');
 
     expect(list).not.toHaveBeenCalled();
   });
@@ -1049,7 +1049,8 @@ describe('StandardCrudListPageHost', () => {
     });
 
     await renderHost({}, createRuntimePersonListViewDocument());
-    await waitForBodyText(message as string);
+    await waitForBodyText('操作失败，请稍后重试。');
+    expect(document.body.textContent).not.toContain(message as string);
 
     expect(list).not.toHaveBeenCalled();
   });
@@ -1077,7 +1078,7 @@ describe('StandardCrudListPageHost', () => {
     });
 
     await renderHost({}, createRuntimePersonListViewDocument());
-    await waitForBodyText('示例行加载失败');
+    await waitForBodyText('操作失败，请稍后重试。');
     const retryButton = Array.from(container.querySelectorAll('button')).find(
       (button) => button.textContent?.replace(/\s/g, '') === '重试',
     );
@@ -1406,7 +1407,7 @@ describe('StandardCrudListPageHost', () => {
   });
 
   it('presents a rejected row action as one popup instead of an inline table error', async () => {
-    const failure = '当前操作已被拒绝，请核对当前权限。';
+    const failure = '操作失败，请稍后重试。';
     const blocked = vi.fn().mockRejectedValue(new Error(failure));
     mockStandardCrudModule({
       dataAdapter: { list: async () => ({ items: [{ id: 'Person_1', ENAME: '张三' }], total: 1 }),
@@ -2021,7 +2022,7 @@ describe('StandardCrudListPageHost', () => {
     await renderHost();
     await flushProTableRequest();
 
-    expect(container.textContent).toContain('列表接口不可用');
+    expect(container.textContent).toContain('操作失败，请稍后重试。');
     expect(container.textContent).not.toContain('暂无符合筛选条件的数据。');
     expect(Array.from(container.querySelectorAll('button')).some((button) => button.textContent?.replace(/\s+/g, '') === '重试')).toBe(true);
   });
@@ -2231,7 +2232,7 @@ describe('StandardCrudListPageHost', () => {
 
     await renderHost({}, personListViewDocument, '/organization/persons?drawer=view&id=Person_1');
     await vi.waitFor(
-      () => expect(document.body.querySelector('.ant-drawer')?.textContent).toContain('DRAWER_DETAIL_READ_FAILED'),
+      () => expect(document.body.querySelector('.ant-drawer')?.textContent).toContain('操作失败，请稍后重试。'),
       { timeout: 3_000 },
     );
     const drawer = document.body.querySelector('.ant-drawer')!;
@@ -2291,7 +2292,7 @@ describe('StandardCrudListPageHost', () => {
       { modelDocument: invalidFormModelDocument },
     );
     await vi.waitFor(
-      () => expect(document.body.querySelector('.ant-drawer')?.textContent).toContain('unsupported uiType'),
+      () => expect(document.body.querySelector('.ant-drawer')?.textContent).toContain('操作失败，请稍后重试。'),
       { timeout: 3_000 },
     );
 
@@ -2757,7 +2758,7 @@ describe('StandardCrudListPageHost', () => {
     expect(queryLookup).not.toHaveBeenCalled();
     expect(remove).toHaveBeenCalledTimes(1); expect(remove).toHaveBeenCalledWith('Person_1', before, { featurePosition: 'ui-fixture:list.rowActions:delete' });
     expect(committed).toHaveBeenCalledTimes(succeeds ? 1 : 0); expect(close).toHaveBeenCalledTimes(succeeds ? 1 : 0);
-    if (!succeeds) expect(document.body.textContent).toContain('引用阻止删除');
+    if (!succeeds) expect(document.body.textContent).toContain('操作失败，请稍后重试。');
   });
 
 });

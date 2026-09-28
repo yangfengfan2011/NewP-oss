@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, StrictMode } from 'react';
-import { createRoot } from 'react-dom/client';
+import { createLocalizedRoot as createRoot } from './localizedTestRoot';
 import { describe, expect, it, vi } from 'vitest';
 import { SearchTablePage, createSearchTableRequest } from '@icp-platform/ui';
 

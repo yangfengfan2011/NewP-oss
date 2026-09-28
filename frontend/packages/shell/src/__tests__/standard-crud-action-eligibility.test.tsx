@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
+import { createLocalizedRoot as createRoot } from './localizedTestRoot';
 import { afterEach, expect, it, vi } from 'vitest';
 import { PlatformQueryProvider } from '@icp-platform/core';
 import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime';

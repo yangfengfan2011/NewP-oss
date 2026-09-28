@@ -2,7 +2,7 @@ import { useFeaturePlacement } from '../authorization/FeaturePlacementContext';
 import { resolvedFeaturePosition, type FeatureResolution } from '../authorization/featurePlacementResolver';
 import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useLocalization, usePlatformQuery } from '@icp-platform/core';
+import { formatRequestError, useLocalization, usePlatformQuery } from '@icp-platform/core';
 import { DownOutlined, DownloadOutlined } from '@ant-design/icons';
 import {
   ModuleRegistry,
@@ -29,7 +29,7 @@ import Select from 'antd/es/select';
 import Space from 'antd/es/space';
 import Tag from 'antd/es/tag';
 import { ErrorState } from '@icp-platform/ui/core';
-import { StandardCrudField } from '@icp-platform/ui/crud';
+import { CrudLocaleProvider, StandardCrudField } from '@icp-platform/ui/crud';
 import {
   CrudSearchBar,
   CrudTableSection,
@@ -68,6 +68,8 @@ import {
 } from '../standard-crud/standardCrudDetailPresentation';
 import { useStandardCrudDetailQuery } from '../standard-crud/standardCrudDetailQuery';
 import { StandardCrudActionReviewDialog } from '../standard-crud/StandardCrudActionReviewDialog';
+import { StandardCrudDialogTitle } from '../standard-crud/StandardCrudDialogTitle';
+import { useLocalizedStandardCrudRegistration } from '../standard-crud/useLocalizedStandardCrudRegistration';
 import { useStandardCrudActionExecution } from '../standard-crud/useStandardCrudActionExecution';
 import { useStandardCrudMutationExecution } from '../standard-crud/useStandardCrudMutationExecution';
 import { useStandardCrudHostEnvironment, type StandardCrudHostAddress } from '../standard-crud/standardCrudHostEnvironment';
@@ -193,10 +195,10 @@ function validateRuntimeColumnSet(
   return { columns, ...(value.contextToken ? { contextToken: value.contextToken } : {}) };
 }
 
-function renderRuntimeTableCell(row: Record<string, unknown>, column: ResolvedStandardCrudListColumn): ReactNode {
+function renderRuntimeTableCell(row: Record<string, unknown>, column: ResolvedStandardCrudListColumn, t: ReturnType<typeof useLocalization>['t']): ReactNode {
   const value = row[column.field];
   if (value === null || value === undefined || value === '') return '-';
-  if (column.valueKind === 'boolean') return value === true ? '是' : value === false ? '否' : String(value);
+  if (column.valueKind === 'boolean') return value === true ? t('Platform.Yes', '是') : value === false ? t('Platform.No', '否') : String(value);
   if (column.valueKind === 'date') {
     const isoDate = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value));
     if (isoDate) {
@@ -374,6 +376,7 @@ function renderMetadataFilterField(
   lookupOptions: Record<string, Array<{ value: string; label: string; disabled?: boolean }>>,
   lookupLoading: Record<string, boolean>,
   lookupErrors: Record<string, string | null>,
+  t: ReturnType<typeof useLocalization>['t'],
 ): ReactElement {
   const fieldLabel = textFor(field.labelKey, field.labelKey);
   const placeholder = textFor(`${field.labelKey}_Placeholder`, '');
@@ -434,8 +437,8 @@ function renderMetadataFilterField(
           allowClear
           placeholder={placeholder}
           options={[
-            { value: 'true', label: '是' },
-            { value: 'false', label: '否' },
+            { value: 'true', label: t('Platform.Yes', '是') },
+            { value: 'false', label: t('Platform.No', '否') },
           ]}
           onChange={(nextValue) => {
             if (nextValue === 'true') {
@@ -466,14 +469,15 @@ function renderMetadataFilterField(
   );
 }
 
-function renderBooleanTableCell(value: unknown): ReactElement | string {
+function BooleanTableCell({ value }: { value: unknown }): ReactElement | string {
+  const { t } = useLocalization();
   if (typeof value !== 'boolean') {
     return value == null ? '' : String(value);
   }
 
   return (
     <Tag color={value ? 'success' : 'default'} bordered={false}>
-      {value ? '启用' : '停用'}
+      {value ? t('Platform.Enabled', '启用') : t('Platform.Disabled', '停用')}
     </Tag>
   );
 }
@@ -503,15 +507,15 @@ function renderMetadataTableCell<TRow extends Record<string, unknown>>(
   }
 
   if (readModelFieldStorageType(modelField) === 'bool') {
-    return renderBooleanTableCell(value);
+    return <BooleanTableCell value={value} />;
   }
 
   return value == null ? '' : String(value);
 }
 
-function RowActionButtonGroup({ actions, requested = false, active = true, close }: { actions: RowActionItem[]; requested?: boolean; active?: boolean; close?: () => void }) {
+function RowActionButtonGroup({ actions, onConfirmRequested, requested = false, active = true, close }: { actions: RowActionItem[]; onConfirmRequested: (key: string) => void; requested?: boolean; active?: boolean; close?: () => void }) {
+  const { t } = useLocalization();
   const requestedOnce = useRef(false);
-  const [confirmAction, setConfirmAction] = useState<RowActionItem | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [eligibilityEpoch, setEligibilityEpoch] = useState(0);
   const inlineActions = actions.filter((action) => action.inline && !action.eligibility).slice(0, 1);
@@ -547,7 +551,7 @@ function RowActionButtonGroup({ actions, requested = false, active = true, close
           void action.onClick();
         }}
       >
-        {action.loading ? '处理中...' : action.label}
+        {action.loading ? t('Platform.Processing', '处理中...') : action.label}
       </AntdButton>
     );
 
@@ -561,7 +565,7 @@ function RowActionButtonGroup({ actions, requested = false, active = true, close
       void action.onClick();
       return;
     }
-    setConfirmAction(action);
+    onConfirmRequested(action.key);
   };
 
   useEffect(() => {
@@ -571,19 +575,19 @@ function RowActionButtonGroup({ actions, requested = false, active = true, close
     if (!actions[0].disabled && (!actions[0].eligibility
       || (eligibility.status === 'success' && eligibility.data?.[actions[0].key]?.visible
         && eligibility.data[actions[0].key]?.available))) {
-      if (actions[0].confirmMessage) setConfirmAction(actions[0]);
+      if (actions[0].confirmMessage) onConfirmRequested(actions[0].key);
       else void actions[0].onClick();
     }
     // 一个内嵌动作实例只请求一次；后续 pending/错误渲染不能重放写入。
-  }, [requested, active, actions, eligibility.status, eligibility.data]);
+  }, [requested, active, actions, eligibility.status, eligibility.data, onConfirmRequested]);
 
   return (
     <div className="np-row-actions">
       {requested && (!actions[0] || (actions[0].disabled && !actions[0].loading)
         || (actions[0].eligibility && (eligibility.status === 'error'
           || (eligibility.status === 'success' && !eligibility.data?.[actions[0].key]?.available))))
-        && <div role="alert">{eligibility.status === 'error' ? '对象动作资格暂时无法判定。'
-          : actions[0]?.disabledReason ?? '当前操作不可用。'}<AntdButton onClick={close}>关闭</AntdButton></div>}
+        && <div role="alert">{eligibility.status === 'error' ? t('Platform.EligibilityUnavailable', '对象动作资格暂时无法判定。')
+          : actions[0]?.disabledReason ?? t('Platform.ActionUnavailable', '当前操作不可用。')}<AntdButton onClick={close}>{t('Platform.Close', '关闭')}</AntdButton></div>}
       {!requested && inlineActions.map((action) => renderActionButton(action, 'np-row-action-button'))}
       {!requested && overflowActions.length > 0 ? (
         <Dropdown
@@ -597,7 +601,7 @@ function RowActionButtonGroup({ actions, requested = false, active = true, close
             items: [...visibleOverflowActions.map((action) => ({
               key: action.key,
               label: action.loading
-                ? '处理中...'
+                ? t('Platform.Processing', '处理中...')
                 : (action.eligibility && eligibility.data?.[action.key]?.reason) || action.disabledReason
                   ? `${String(action.label)}（${eligibility.data?.[action.key]?.reason ?? action.disabledReason}）`
                   : action.label,
@@ -605,9 +609,9 @@ function RowActionButtonGroup({ actions, requested = false, active = true, close
               disabled: action.disabled || action.loading
                 || (action.eligibility && eligibility.data?.[action.key]?.available === false),
             })), ...(qualifiedActions.length > 0 && eligibility.status === 'pending'
-              ? [{ key: '__eligibility_pending', label: '正在检查对象操作资格…', disabled: true }]
+              ? [{ key: '__eligibility_pending', label: t('Platform.CheckingEligibility', '正在检查对象操作资格…'), disabled: true }]
               : []), ...(qualifiedActions.length > 0 && eligibility.status === 'error'
-              ? [{ key: '__eligibility_error', label: '对象动作资格暂时无法判定。', disabled: true }]
+              ? [{ key: '__eligibility_error', label: t('Platform.EligibilityUnavailable', '对象动作资格暂时无法判定。'), disabled: true }]
               : [])],
             onClick: ({ key }) => {
               const action = visibleOverflowActions.find((item) => item.key === key);
@@ -616,28 +620,9 @@ function RowActionButtonGroup({ actions, requested = false, active = true, close
           }}
         >
           <AntdButton className="np-row-actions-more" type="link">
-            更多
+            {t('Platform.More', '更多')}
           </AntdButton>
         </Dropdown>
-      ) : null}
-      {confirmAction ? (
-        <Suspense fallback={<span role="status">正在加载确认框…</span>}>
-          <Modal
-            open={active}
-            title={confirmAction.confirmMessage}
-            okText="确认"
-            cancelText="取消"
-            confirmLoading={actions.find(action => action.key === confirmAction.key)?.loading}
-            okButtonProps={{ danger: confirmAction.danger }}
-            destroyOnHidden
-            onCancel={() => { setConfirmAction(null); close?.(); }}
-            onOk={async () => {
-              const current = actions.find(action => action.key === confirmAction.key);
-              if (!current || current.disabled) return;
-              if (await current.onClick() !== false) setConfirmAction(null);
-            }}
-          />
-        </Suspense>
       ) : null}
     </div>
   );
@@ -756,6 +741,7 @@ export default function StandardCrudListPageHost({
   viewKey,
   registration: loadedRegistration,
 }: StandardCrudListPageHostProps): ReactElement {
+  const { t } = useLocalization();
   const runtimeMetadata = useRuntimeMetadata();
   const viewDocument = resolveListViewDocument(runtimeMetadata?.viewDocuments ?? [], viewKey);
   const registration = loadedRegistration
@@ -763,16 +749,16 @@ export default function StandardCrudListPageHost({
   const listRoute = resolveStandardCrudListRoute(runtimeMetadata?.navDocuments ?? [], viewKey);
 
   if (!viewDocument) {
-    return <div className="sh-error-state">未找到列表视图元数据</div>;
+    return <div className="sh-error-state">{t('Platform.ListMetadataMissing', '未找到列表视图元数据')}</div>;
   }
 
   if (!registration) {
-    return <div className="sh-error-state">未找到标准 CRUD 前端资源注册项</div>;
+    return <div className="sh-error-state">{t('Platform.CrudRegistrationMissing', '未找到标准 CRUD 前端资源注册项')}</div>;
   }
 
   return (
     <StandardCrudHostErrorBoundary message={`标准 CRUD 列表元数据解析失败（${viewKey}）`}>
-    <StandardCrudListPageContent
+    <CrudLocaleProvider><StandardCrudListPageContent
       view={viewDocument.view as Record<string, unknown>}
       registration={registration}
       viewDocuments={(runtimeMetadata?.viewDocuments ?? []) as unknown as MetadataRecord[]}
@@ -782,14 +768,14 @@ export default function StandardCrudListPageHost({
         ? resolveExplicitDetailRoute(runtimeMetadata?.navDocuments ?? [], registration.detailViewKey)?.path
           ?? (listRoute ? `${listRoute.path.replace(/\/$/, '')}/:id` : undefined)
         : undefined}
-    />
+    /></CrudLocaleProvider>
     </StandardCrudHostErrorBoundary>
   );
 }
 
 function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TRow extends Record<string, unknown>>({
   view,
-  registration,
+  registration: sourceRegistration,
   viewDocuments,
   modelDocuments,
   detailRoutePath,
@@ -800,6 +786,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   modelDocuments: MetadataRecord[];
   detailRoutePath?: string;
 }): ReactElement {
+  const registration = useLocalizedStandardCrudRegistration(sourceRegistration);
   // Router hook 无条件调用；是否真正拥有地址由宿主环境决定。
   const routeLocation = useLocation();
   const navigate = useNavigate();
@@ -816,7 +803,11 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   // 不拥有地址时查询串恒为空：列表状态与 Drawer 参数都不进入外层 URL。
   const location = { search: host.address?.search ?? '' };
   const [messageApi, messageContextHolder] = useMessage();
+  const [exportFailure, setExportFailure] = useState<{ failure: unknown } | null>(null);
   const { t } = useLocalization();
+  useEffect(() => {
+    if (exportFailure) void messageApi.error({ key: 'standard-crud-export-error', content: formatRequestError(exportFailure.failure, t), duration: 5, onClose: () => setExportFailure(null) });
+  }, [exportFailure, messageApi, t]);
   const currentSubjectId = useOptionalCurrentSubjectId();
   const sessionTimeZoneId = useOptionalSessionTimeZoneId();
   const resolveActionFeature = (action: StandardCrudRuntimeActionSchema, surface = 'list.rowActions'): FeatureResolution => (
@@ -958,8 +949,11 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     ? { ...embeddedActionRequest, row: (embeddedActionQuery.detail?.normalized.fields ?? {}) as TRow }
     : null;
   const [embeddedActionError, setEmbeddedActionError] = useState<string | null>(null);
-  const [drawerPreparationError, setDrawerPreparationError] = useState<string | null>(null);
-  const detailError = drawerPreparationError ?? drawerDetailQuery.error;
+  // 确认依据属于宿主交互；语言重读可以卸载行，但不能丢失确认框或重放动作。
+  const [rowConfirmation, setRowConfirmation] = useState<{ row: TRow; rowId: string; action: StandardCrudRuntimeActionSchema; closeHost?: boolean } | null>(null);
+  useEffect(() => { setRowConfirmation(null); }, [currentSubjectId, schema.resourceKey, schema.viewKey]);
+  const [drawerPreparationError, setDrawerPreparationError] = useState<{ failure: unknown } | null>(null);
+  const detailError = drawerPreparationError ? formatRequestError(drawerPreparationError.failure, t) : drawerDetailQuery.error;
   const detailLoading = drawerDetailQuery.loading;
   const [formValues, setFormValues] = useState<Record<string, unknown>>({});
   const [clearConflictOnDetailLoad, setClearConflictOnDetailLoad] = useState(false);
@@ -1180,13 +1174,13 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     },
   });
   const metadataListError = metadataListQuery.status === 'error'
-    ? metadataListQuery.error instanceof Error ? metadataListQuery.error.message : '加载列表失败'
+    ? formatRequestError(metadataListQuery.error, t)
     : null;
   const runtimeColumnsError = runtimeColumnsQuery.status === 'error'
-    ? runtimeColumnsQuery.error instanceof Error ? runtimeColumnsQuery.error.message : '加载运行时列失败'
+    ? formatRequestError(runtimeColumnsQuery.error, t)
     : null;
   const runtimeRowsError = runtimeRowsQuery.status === 'error'
-    ? runtimeRowsQuery.error instanceof Error ? runtimeRowsQuery.error.message : '加载列表失败'
+    ? formatRequestError(runtimeRowsQuery.error, t)
     : null;
   const effectiveRows = useMemo(
     () => schema.columnSource === 'runtime' ? runtimeRowsQuery.data?.items ?? [] : metadataListQuery.data?.items ?? [],
@@ -1272,8 +1266,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   // 动作失败统一弹出提示，避免在操作列撑高行；稳定 key 防止重渲染叠加相同消息。
   useEffect(() => {
     if (actionExecution.error) void messageApi.error({ key: 'standard-crud-action-error',
-      content: actionExecution.error.message, duration: 5 });
-  }, [actionExecution.error, messageApi]);
+      content: formatRequestError(actionExecution.error.failure, t), duration: 5, onClose: actionExecution.clearError });
+  }, [actionExecution.error, actionExecution.clearError, messageApi, t]);
   const mutationExecution = useStandardCrudMutationExecution({
     registration,
     fixedCreateValues: host.input.fixedCreateValues,
@@ -1546,7 +1540,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       return true;
     } catch (loadError) {
       setFormValues({});
-      setDrawerPreparationError(loadError instanceof Error ? loadError.message : '加载详情失败');
+      setDrawerPreparationError({ failure: loadError });
       if (options.targetMode === 'edit') {
         setDrawerState({ mode: 'view', id, source });
         syncDrawerRoute('view', id);
@@ -1649,10 +1643,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   useEffect(() => {
     if (presentation.kind !== 'action-drawer') return;
     const action = [...schema.pageActions, ...schema.rowActions].find(item => actionDrawerActionKey ? item.key === actionDrawerActionKey : item.standardAction === actionDrawerStandardAction);
-    if (!action || !allowAction(action)) { setEmbeddedActionError('当前操作不可用。'); return; }
+    if (!action || !allowAction(action)) { setEmbeddedActionError('Platform.ActionUnavailable'); return; }
     if (action.standardAction === 'create') { void openCreateDrawer(); return; }
     const id = host.input.recordId;
-    if (!id && schema.rowActions.includes(action)) { setEmbeddedActionError('当前操作缺少记录上下文。'); return; }
+    if (!id && schema.rowActions.includes(action)) { setEmbeddedActionError('Platform.MissingRecordContext'); return; }
     if (action.standardAction === 'edit' && id) { void openEditDrawer(id); return; }
     if (action.standardAction === 'view' && id) { void openViewDrawer(id); return; }
     setEmbeddedActionRequest({ action, id: id ?? '' });
@@ -1691,11 +1685,11 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           (key) => t(`${schema.dicKey}.${key}`, key),
         );
         const disabledReason = actionState?.available === false
-          ? actionState.reason ?? '当前状态不允许执行该操作。'
+          ? actionState.reason ?? t('Platform.ActionStateUnavailable', '当前状态不允许执行该操作。')
           : metadataDisabledReason;
         const confirmMessage = action.confirmMessageKey
           ? t(`${schema.dicKey}.${action.confirmMessageKey}`, action.confirmMessageKey)
-          : host.presentation.kind === 'action-drawer' && action.standardAction === 'delete' ? '确认删除当前记录？' : undefined;
+          : host.presentation.kind === 'action-drawer' && action.standardAction === 'delete' ? t('Platform.ConfirmDelete', '确认删除当前记录？') : undefined;
         const handler = registration.actionHandlers?.[action.handlerKey ?? action.key]
           ?? (action.standardAction === 'refresh' ? () => refreshList() : undefined);
         const inputRenderer = action.inputKey ? registration.actionInputRenderers?.[action.inputKey] : undefined;
@@ -1848,7 +1842,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       {
         key: 'actions',
         dataIndex: 'actions',
-        title: '操作',
+        title: t('Platform.Actions', '操作'),
         width: STANDARD_CRUD_ACTION_COLUMN_WIDTH,
         fixed: 'right' as const,
         sorter: false,
@@ -1863,7 +1857,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           return (
             <div style={{ display: 'grid', gap: 6 }}>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                <RowActionButtonGroup actions={rowActions} />
+                <RowActionButtonGroup actions={rowActions} onConfirmRequested={key => {
+                  const action = rowActionDefinitions.find(item => item.key === key);
+                  if (action) setRowConfirmation({ row, rowId, action });
+                }} />
               </div>
             </div>
           );
@@ -1888,7 +1885,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             title: String(column.title),
             source: 'runtime',
             valueKind: column.runtimeValueKind,
-          })
+          }, t)
         : renderMetadataTableCell(
           row,
           column,
@@ -1938,7 +1935,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         response.fileName ?? `${pageTitle}-${fallbackModeLabel}-${formatTimestampForFileName()}.xlsx`,
       );
     } catch (exportError) {
-      void messageApi.error(exportError instanceof Error ? exportError.message : '导出标准列表失败');
+      setExportFailure({ failure: exportError });
     } finally {
       exportRequestPendingRef.current = false;
       setExportingMode(null);
@@ -1962,7 +1959,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         loading={exportingMode !== null}
         disabled={exportingMode !== null}
       >
-        导出 <DownOutlined />
+        {t('Platform.Export', '导出')} <DownOutlined />
       </AntdButton>
     </Dropdown>
   ) : undefined;
@@ -2002,6 +1999,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             queryLookupRuntime.lookupOptions,
             queryLookupRuntime.lookupLoading,
             queryLookupRuntime.lookupErrors,
+            t,
           ))}
         </div>
       )}
@@ -2113,14 +2111,31 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const rowInputFeatureResolution: FeatureResolution = rowInputAction
     ? features.action(rowInputAction.action.key, 'list.rowActions')
     : { kind: 'unresolved' };
+  const confirmationAction = rowConfirmation
+    ? buildRowActions(rowConfirmation.row, [rowConfirmation.action], rowConfirmation.rowId)[0]
+    : undefined;
 
   return (
     <>
       {messageContextHolder}
-      {embeddedActionQuery.error && <div role="alert">{embeddedActionQuery.error}<AntdButton onClick={embeddedActionQuery.retry}>重试读取</AntdButton></div>}
-      {embeddedActionError && <div role="alert">{embeddedActionError}<AntdButton onClick={host.lifecycle.close}>关闭</AntdButton></div>}
+      {embeddedActionQuery.error && <div role="alert">{embeddedActionQuery.error}<AntdButton onClick={embeddedActionQuery.retry}>{t('Platform.RetryRead', '重试读取')}</AntdButton></div>}
+      {embeddedActionError && <div role="alert">{t(embeddedActionError, t('Platform.ActionUnavailable', '当前操作不可用。'))}<AntdButton onClick={host.lifecycle.close}>{t('Platform.Close', '关闭')}</AntdButton></div>}
       {embeddedAction && <RowActionButtonGroup requested active={host.lifecycle.active} close={host.lifecycle.close}
+        onConfirmRequested={() => setRowConfirmation({ row: embeddedAction.row, rowId: embeddedAction.id, action: embeddedAction.action, closeHost: true })}
         actions={buildRowActions(embeddedAction.row, [embeddedAction.action], embeddedAction.id)} />}
+      {rowConfirmation && <Suspense fallback={<span role="status">{t('Platform.LoadingConfirmation', '正在加载确认框…')}</span>}>
+        <Modal open={host.lifecycle.active}
+          title={<StandardCrudDialogTitle>{confirmationAction?.confirmMessage ?? t('Platform.ActionUnavailable', '当前操作不可用。')}</StandardCrudDialogTitle>}
+          okText={t('Platform.Confirm', '确认')} cancelText={t('Platform.Cancel', '取消')}
+          confirmLoading={confirmationAction?.loading}
+          okButtonProps={{ danger: confirmationAction?.danger, disabled: !confirmationAction || confirmationAction.disabled }}
+          destroyOnHidden
+          onCancel={() => { setRowConfirmation(null); if (rowConfirmation.closeHost) host.lifecycle.close?.(); }}
+          onOk={async () => {
+            if (!confirmationAction || confirmationAction.disabled) return;
+            if (await confirmationAction.onClick() !== false) setRowConfirmation(null);
+          }} />
+      </Suspense>}
       {presentedOperationResult
         ? operationResultPresenterRegistry.resolve(presentedOperationResult)?.render({
             result: presentedOperationResult,
@@ -2133,13 +2148,13 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       >
         {content}
       </CrudWorkspacePage>}
-      {actionExecution.synchronizationError && <div role="alert">{actionExecution.synchronizationError}</div>}
+      {actionExecution.synchronizationError && <div role="alert">{t('Platform.SavedRefreshFailed', '已保存，刷新失败。请重新加载。')}</div>}
       {mutationExecution.synchronizationError && <div role="alert">{mutationExecution.synchronizationError}</div>}
       {schema.advancedFilter.enabled && advancedFilterOpen && host.lifecycle.active ? (
-        <Suspense fallback={<div className="sh-loading-state" role="status">正在加载高级筛选…</div>}>
+        <Suspense fallback={<div className="sh-loading-state" role="status">{t('Platform.LoadingAdvancedFilter', '正在加载高级筛选…')}</div>}>
           <Drawer
             open
-            title={t(`${schema.dicKey}.${schema.advancedFilter.titleKey}`, schema.advancedFilter.titleKey)}
+            title={<StandardCrudDialogTitle>{t(`${schema.dicKey}.${schema.advancedFilter.titleKey}`, schema.advancedFilter.titleKey)}</StandardCrudDialogTitle>}
             width={420}
             placement="right"
             destroyOnClose
@@ -2187,6 +2202,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                     queryLookupRuntime.lookupOptions,
                     queryLookupRuntime.lookupLoading,
                     queryLookupRuntime.lookupErrors,
+                    t,
                   ))}
                 </div>
               </section>
@@ -2196,7 +2212,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         </Suspense>
       ) : null}
       {drawerState.mode !== 'closed' && host.lifecycle.active ? (
-        <Suspense fallback={<div className="sh-loading-state" role="status">正在加载操作面板…</div>}>
+        <Suspense fallback={<div className="sh-loading-state" role="status">{t('Platform.LoadingActionPanel', '正在加载操作面板…')}</div>}>
           <StandardCrudListDrawerRuntime
             mode={drawerState.mode}
             viewTitle={viewDrawerTitle}
@@ -2231,14 +2247,14 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
               </AntdButton>
             ) : undefined}
             detailErrorActions={drawerDetailQuery.error ? (
-              <AntdButton onClick={drawerDetailQuery.retry}>重试</AntdButton>
+              <AntdButton onClick={drawerDetailQuery.retry}>{t('Platform.Retry', '重试')}</AntdButton>
             ) : undefined}
             saveErrorActions={mutationExecution.conflict ? (
               <AntdButton
                 onClick={reloadConflictedRecord}
                 disabled={mutationExecution.pending || drawerDetailQuery.refreshing}
               >
-                重新加载当前数据
+                {t('Platform.ReloadData', '重新加载当前数据')}
               </AntdButton>
             ) : undefined}
             onChange={handleFormChange}
@@ -2254,14 +2270,14 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         </Suspense>
       ) : null}
       {rowInputAction?.action.inputKey && registration.actionInputRenderers?.[rowInputAction.action.inputKey] ? (
-        <Suspense fallback={<div className="sh-loading-state" role="status">正在加载操作确认…</div>}>
+        <Suspense fallback={<div className="sh-loading-state" role="status">{t('Platform.LoadingActionConfirmation', '正在加载操作确认…')}</div>}>
           <StandardCrudActionReviewDialog
             open={host.lifecycle.active}
             action={{ ...rowInputAction.action,
               confirmLabel: rowInputAction.action.confirmLabelKey
                 ? t(`${schema.dicKey}.${rowInputAction.action.confirmLabelKey}`, rowInputAction.action.confirmLabelKey)
                 : undefined }}
-            title={rowInputAction.label}
+            title={t(`${schema.dicKey}.${rowInputAction.action.labelKey}`, rowInputAction.action.labelKey)}
             confirmMessage={rowInputAction.action.confirmMessageKey
               ? t(
                   `${schema.dicKey}.${rowInputAction.action.confirmMessageKey}`,
@@ -2300,12 +2316,12 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         </Suspense>
       ) : null}
       {discardConfirmOpen ? (
-        <Suspense fallback={<div className="sh-loading-state" role="status">正在加载放弃确认…</div>}>
+        <Suspense fallback={<div className="sh-loading-state" role="status">{t('Platform.LoadingDiscardConfirmation', '正在加载放弃确认…')}</div>}>
           <Modal
             open
-            title="放弃未保存的更改？"
-            okText="放弃更改"
-            cancelText="继续编辑"
+            title={<StandardCrudDialogTitle>{t('Platform.DiscardTitle', '放弃未保存的更改？')}</StandardCrudDialogTitle>}
+            okText={t('Platform.DiscardChanges', '放弃更改')}
+            cancelText={t('Platform.KeepEditing', '继续编辑')}
             okButtonProps={{ danger: true }}
             destroyOnHidden
             onCancel={() => {
@@ -2320,7 +2336,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
               proceed?.();
             }}
           >
-            当前修改尚未保存，继续将丢失这些内容。
+            {t('Platform.DiscardDescription', '当前修改尚未保存，继续将丢失这些内容。')}
           </Modal>
         </Suspense>
       ) : null}

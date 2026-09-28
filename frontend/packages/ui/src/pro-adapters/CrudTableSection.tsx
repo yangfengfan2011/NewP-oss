@@ -1,4 +1,5 @@
 import { ReloadOutlined } from '@ant-design/icons';
+import { useLocalization } from '@icp-platform/core';
 import { Button, Space } from 'antd';
 import type { SearchTablePageProps } from './SearchTablePage';
 import { SearchTablePage } from './SearchTablePage';
@@ -14,14 +15,15 @@ export function CrudTableSection<TRow extends Record<string, unknown>>({
   toolbar,
   ...tableProps
 }: CrudTableSectionProps<TRow>) {
+  const { t } = useLocalization();
   return (
     <div className="np-crud-table-section">
       <SearchTablePage<TRow>
         {...tableProps}
         toolbar={
           <Space>
-            <Button size="small" icon={<ReloadOutlined />} onClick={onRefresh} loading={loading} aria-label="刷新">
-              刷新
+            <Button size="small" icon={<ReloadOutlined />} onClick={onRefresh} loading={loading} aria-label={t('Platform.Refresh', '刷新')}>
+              {t('Platform.Refresh', '刷新')}
             </Button>
             {toolbar}
           </Space>

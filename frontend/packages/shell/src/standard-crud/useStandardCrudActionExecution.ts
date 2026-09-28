@@ -12,6 +12,7 @@ export interface StandardCrudActionExecutionError {
   key: string;
   message: string;
   conflict: boolean;
+  failure: unknown;
 }
 
 export type StandardCrudActionExecutionOutcome =
@@ -44,6 +45,7 @@ export function useStandardCrudActionExecution<TDetail = unknown, TRow = unknown
   onResult, resourceKey, onCommitted,
 }: UseStandardCrudActionExecutionOptions) {
   const [synchronizationError, setSynchronizationError] = useState<string | null>(null);
+  const [synchronizationFailure, setSynchronizationFailure] = useState<{ failure: unknown } | null>(null);
   const navigateEntry = useContext(EntryNavigationContext);
   const pendingRef = useRef(false);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
@@ -73,10 +75,14 @@ export function useStandardCrudActionExecution<TDetail = unknown, TRow = unknown
       }
       // 业务成功已确定；呈现和组合只读失败不能把动作标成失败或重放。
       setSynchronizationError(null);
+      setSynchronizationFailure(null);
       await handoffStandardCrudSuccess({
         owner: { kind: 'action', resourceKey, refreshOnSuccess },
         result, onResult, onCommitted, refresh,
-        onSynchronizationError: failure => setSynchronizationError(`已保存，刷新失败：${String(failure)}`),
+        onSynchronizationError: failure => {
+          setSynchronizationFailure({ failure });
+          setSynchronizationError('已保存，刷新失败。请重新加载。');
+        },
       });
       return { status: 'succeeded', ...(result ? { result } : {}) };
     } catch (actionError) {
@@ -85,6 +91,7 @@ export function useStandardCrudActionExecution<TDetail = unknown, TRow = unknown
         key,
         message: actionError instanceof Error ? actionError.message : fallbackErrorMessage,
         conflict,
+        failure: actionError,
       });
       if (conflict && refreshOnConflict) {
         refresh();
@@ -101,6 +108,7 @@ export function useStandardCrudActionExecution<TDetail = unknown, TRow = unknown
   return {
     pendingKey,
     synchronizationError,
+    synchronizationFailure: synchronizationFailure?.failure,
     error,
     execute,
     clearError,

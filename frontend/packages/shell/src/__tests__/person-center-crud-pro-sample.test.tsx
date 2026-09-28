@@ -682,7 +682,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     await flushAsync();
 
     expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('查看人员');
-    expect(document.body.textContent).toContain('详情加载失败，请稍后重试');
+    expect(document.body.textContent).toContain('操作失败，请稍后重试。');
     expect(document.body.textContent).not.toContain('保存修改');
     expect(findInputByLabel(document.body, '姓名')).toBeNull();
   });
@@ -1059,13 +1059,13 @@ describe('人员中心 CRUD Pro 样板', () => {
     const secondRow = findTableRowByText(container, '李四');
     expect(firstRow?.textContent).not.toContain('删除张三失败');
     expect(secondRow?.textContent).not.toContain('删除张三失败');
-    expect(Array.from(document.querySelectorAll('.ant-message-notice-content')).filter((item) => item.textContent?.includes('删除张三失败'))).toHaveLength(1);
+    expect(Array.from(document.querySelectorAll('.ant-message-notice-content')).filter((item) => item.textContent?.includes('操作失败，请稍后重试。'))).toHaveLength(1);
     expect(listRequestCount).toBe(1);
     expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('查看人员');
     expect(document.body.textContent).toContain('查看人员');
   });
 
-  it('删除失败时展示后端透传的业务错误', async () => {
+  it('删除未知失败时展示公共提示并保留详情', async () => {
     const resource = organizationModule.standardCrudResources?.[0];
     if (!resource) {
       throw new Error('未找到人员标准 CRUD 资源。');
@@ -1107,7 +1107,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     await clickPopconfirmButton('确认');
     await flushAsync();
 
-    expect(document.querySelector('.ant-message')?.textContent).toContain('当前人员已绑定账号，不能删除。');
+    expect(document.querySelector('.ant-message')?.textContent).toContain('操作失败，请稍后重试。');
   });
 
   it('删除等待期间打开其他记录详情后，成功回调不会误关新抽屉', async () => {

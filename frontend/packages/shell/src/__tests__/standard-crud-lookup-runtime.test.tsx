@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, StrictMode } from 'react';
-import { createRoot } from 'react-dom/client';
+import { createLocalizedRoot as createRoot } from './localizedTestRoot';
 import { describe, expect, it, vi } from 'vitest';
 import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { StandardCrudForm } from '@icp-platform/ui/crud-form';
@@ -143,7 +143,7 @@ describe('standard CRUD lookup runtime', () => {
       });
 
       expect(departments.load).toHaveBeenCalledTimes(1);
-      expect(container.textContent).toContain('部门加载失败');
+      expect(container.textContent).toContain('操作失败，请稍后重试。');
 
       await act(async () => {
         root.render(
@@ -653,7 +653,7 @@ describe('standard CRUD lookup runtime', () => {
 
     expect(result).toEqual({
       options: [
-        { value: 'existing', label: '当前值不可用', disabled: true },
+        { value: 'existing', label: '当前值不可用', disabled: true, unavailable: true },
         { value: 'finance', label: '财务部' },
       ],
       error: null,
@@ -732,7 +732,7 @@ describe('standard CRUD lookup runtime', () => {
     });
 
     expect(result).toEqual({
-      options: [{ value: 'existing', label: '当前值不可用', disabled: true }],
+      options: [{ value: 'existing', label: '当前值不可用', disabled: true, unavailable: true }],
       error: '部门加载失败',
       failure,
     });
@@ -745,8 +745,8 @@ describe('standard CRUD lookup runtime', () => {
       values: { tenantId: 'tenant-a', departmentId: 'existing' }, page: 3, pageSize: 7 });
     expect(page.failure).toBe(failure);
     expect(page).toMatchObject({ page: 3, pageSize: 7, hasMore: false, error: failure.message,
-      options: [{ value: 'existing', label: '当前值不可用', disabled: true }],
-      currentOptions: [{ value: 'existing', label: '当前值不可用', disabled: true }] });
+      options: [{ value: 'existing', label: '当前值不可用', disabled: true, unavailable: true }],
+      currentOptions: [{ value: 'existing', label: '当前值不可用', disabled: true, unavailable: true }] });
   });
 
   it('keeps the old detail name and raw ID out of the rendered lookup while authorization is pending', async () => {
@@ -806,7 +806,7 @@ describe('standard CRUD lookup runtime', () => {
       await act(async () => root.render(<PlatformQueryProvider scopeKey="failed-lookup"><Probe /></PlatformQueryProvider>));
       expect(container.textContent).toContain('正在读取当前值');
       await act(async () => rejectLookup(new Error('读取计划故障')));
-      expect(container.textContent).toBe('当前值不可用|读取计划故障');
+      expect(container.textContent).toBe('当前值不可用|操作失败，请稍后重试。');
       expect(container.textContent).not.toContain('existing');
       expect(container.textContent).not.toContain('私有原名');
     } finally {

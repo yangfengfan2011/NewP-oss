@@ -1,5 +1,5 @@
 import { useState, type ReactElement } from 'react';
-import { usePlatformQuery } from '@icp-platform/core';
+import { formatRequestError, useLocalization, usePlatformQuery } from '@icp-platform/core';
 import { Button } from '@icp-platform/ui/core';
 import { CrudDangerAction } from '@icp-platform/ui/crud-detail';
 import type {
@@ -55,6 +55,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
   refresh,
   context,
 }: StandardCrudActionsProps<TDetail, TRow>): ReactElement {
+  const { t } = useLocalization();
   const [inputAction, setInputAction] = useState<StandardCrudActionDefinition | null>(null);
   const [inputValue, setInputValue] = useState<unknown>(undefined);
   const [eligibilityEpoch, setEligibilityEpoch] = useState(0);
@@ -126,7 +127,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
             disabled={disabled}
             onConfirm={() => requestAction(action)}
           >
-            {actionExecution.pendingKey === action.key ? '处理中...' : action.labelKey}
+            {actionExecution.pendingKey === action.key ? t('Platform.Processing', '处理中...') : action.labelKey}
           </CrudDangerAction>
           {action.runtimeDisabled && action.disabledReason ? (
             <span role="status" data-action-disabled-reason={action.key}>{action.disabledReason}</span>
@@ -138,7 +139,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
     return (
       <div key={action.key} data-action-key={action.key}>
         <Button size="sm" variant={action.variant} disabled={disabled} onClick={() => requestAction(action)}>
-          {actionExecution.pendingKey === action.key ? '处理中...' : action.labelKey}
+          {actionExecution.pendingKey === action.key ? t('Platform.Processing', '处理中...') : action.labelKey}
         </Button>
         {action.runtimeDisabled && action.disabledReason ? (
           <span role="status" data-action-disabled-reason={action.key}>{action.disabledReason}</span>
@@ -161,10 +162,10 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
           </QualifiedAction> : renderAction(action);
         })}
       </div>
-      {actionExecution.synchronizationError && <span role="alert">{actionExecution.synchronizationError}</span>}
+      {actionExecution.synchronizationError && <span role="alert">{t('Platform.SavedRefreshFailed', '已保存，刷新失败。请重新加载。')}</span>}
       {actionExecution.error ? (
         <span role="alert" style={{ color: 'var(--sh-color-danger, #dc2626)', fontSize: 12 }}>
-          {actionExecution.error.message}
+          {formatRequestError(actionExecution.error.failure, t)}
         </span>
       ) : null}
       {currentInputAction?.inputKey && actionInputs[currentInputAction.inputKey] ? (

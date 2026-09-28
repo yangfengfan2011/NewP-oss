@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { usePlatformQuery, usePlatformQueryActions } from '@icp-platform/core';
+import { formatRequestError, useLocalization, usePlatformQuery, usePlatformQueryActions } from '@icp-platform/core';
 import {
   loadStandardCrudLookupPage,
   type StandardCrudFieldDefinition,
@@ -41,6 +41,7 @@ interface StandardCrudLookupRequestState {
 
 interface StandardCrudLookupQueryPage extends StandardCrudLookupPage {
   error: string | null;
+  failure?: unknown;
   inputKey: string;
 }
 
@@ -63,6 +64,7 @@ export function useStandardCrudLookupRuntime({
   values,
   detailFields,
 }: UseStandardCrudLookupRuntimeInput): StandardCrudLookupRuntimeState {
+  const { t } = useLocalization();
   const lookupFields = fields.filter((field) => field.kind === 'lookup');
   const [requests, setRequests] = useState<Record<string, StandardCrudLookupRequestState>>({});
   const [lookupOptions, setLookupOptions] = useState<Record<string, StandardCrudOption[]>>({});
@@ -142,7 +144,7 @@ export function useStandardCrudLookupRuntime({
   const presentedOptions: Record<string, StandardCrudOption[]> = {};
   const presentedErrors: Record<string, string | null> = {};
   const queryErrorMessage = query.error
-    ? query.error instanceof Error ? query.error.message : '加载选项失败'
+    ? formatRequestError(query.error, t)
     : null;
   const hasAppliedCurrentScope = appliedKey === serializedKey && appliedScope === queryScope;
   for (const field of lookupFields) {
@@ -153,7 +155,8 @@ export function useStandardCrudLookupRuntime({
     }));
     const validPage = !query.isFetching && page?.inputKey === inputKey ? page : undefined;
     presentedErrors[field.key] = validPage?.error
-      ?? (queryErrorMessage ?? (hasAppliedCurrentScope ? lookupErrors[field.key] ?? null : null));
+      ? formatRequestError(validPage.failure, t)
+      : queryErrorMessage ?? (hasAppliedCurrentScope && lookupErrors[field.key] ? formatRequestError(page?.failure, t) : null);
     const options = query.isFetching ? [] : query.error
       ? validPage?.options ?? [] : hasAppliedCurrentScope
         ? lookupOptions[field.key] ?? [] : validPage?.options ?? [];
@@ -166,14 +169,18 @@ export function useStandardCrudLookupRuntime({
       : undefined;
     const currentOption = resolved ?? {
       value: currentValue,
-      label: query.isFetching || (!validPage && !query.error) ? '正在读取当前值' : '当前值不可用',
+      label: query.isFetching || (!validPage && !query.error) ? t('Platform.ReadingCurrentValue', '正在读取当前值') : t('Platform.CurrentValueUnavailable', '当前值不可用'),
       disabled: true,
     };
     presentedOptions[field.key] = [currentOption, ...options.filter((option) => option.value !== currentValue)];
   }
 
   return {
-    lookupOptions: presentedOptions,
+    lookupOptions: Object.fromEntries(Object.entries(presentedOptions).map(([field, options]) => [field,
+      options.map(option => option.unavailable === true
+        ? { ...option, label: t('Platform.CurrentValueUnavailable', '当前值不可用') }
+        : option),
+    ])),
     lookupLoading,
     lookupErrors: presentedErrors,
     lookupHasMore,

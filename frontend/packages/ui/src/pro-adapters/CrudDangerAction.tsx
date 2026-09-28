@@ -1,3 +1,4 @@
+import { useLocalization } from '@icp-platform/core';
 import type { ReactNode } from 'react';
 import { Button, Popconfirm } from 'antd';
 
@@ -16,11 +17,12 @@ export function CrudDangerAction({
   disabled = false,
   onConfirm,
 }: CrudDangerActionProps) {
+  const { t } = useLocalization();
   return (
     <Popconfirm
       title={confirmMessage}
-      okText="确认"
-      cancelText="取消"
+      okText={t('Platform.Confirm', '确认')}
+      cancelText={t('Platform.Cancel', '取消')}
       okButtonProps={{ danger: true, loading }}
       onConfirm={onConfirm}
     >

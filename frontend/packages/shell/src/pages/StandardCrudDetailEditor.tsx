@@ -1,3 +1,4 @@
+import { useLocalization } from '@icp-platform/core';
 import { useEffect, useRef, useState } from 'react';
 import {
   applyStandardCrudLookupValueChange,
@@ -46,6 +47,7 @@ export default function StandardCrudDetailEditor({
   onResult,
   titleForSection,
 }: StandardCrudDetailEditorProps) {
+  const { t } = useLocalization();
   const [formValues, setFormValues] = useState<Record<string, unknown>>(
     () => buildStandardCrudDetailFormValues(detail.fields, fields),
   );
@@ -107,7 +109,7 @@ export default function StandardCrudDetailEditor({
             }}
             disabled={mutationExecution.pending}
           >
-            重新加载当前数据
+            {t('Platform.ReloadData', '重新加载当前数据')}
           </AntdButton>
         </div>
       ) : null}

@@ -2,6 +2,8 @@ import type { ReactElement } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
 import { Button, Checkbox, DatePicker, Form, Input, InputNumber, Select, Switch, Typography } from 'antd';
 import zhCN from 'antd/es/date-picker/locale/zh_CN';
+import enUS from 'antd/es/date-picker/locale/en_US';
+import { useLocalization } from '@icp-platform/core';
 import type { StandardCrudFieldDefinition, StandardCrudFormMode, StandardCrudOption } from '@icp-platform/sdk';
 
 export interface StandardCrudFieldProps {
@@ -23,13 +25,14 @@ function formatReadonlyValue(
   field: StandardCrudFieldDefinition,
   value: unknown,
   options: StandardCrudOption[],
+  t: ReturnType<typeof useLocalization>['t'],
 ): string {
   if (field.kind === 'boolean' || field.kind === 'switch' || field.kind === 'checkbox') {
-    return value === true ? '是' : '否';
+    return value === true ? t('Platform.Yes', '是') : t('Platform.No', '否');
   }
 
   if (field.kind === 'dateRange' && Array.isArray(value)) {
-    return value.filter((item) => typeof item === 'string' && item.length > 0).join(' 至 ') || '未填写';
+    return value.filter((item) => typeof item === 'string' && item.length > 0).join(t('Platform.RangeSeparator', ' 至 ')) || t('Platform.NotEntered', '未填写');
   }
 
   const matched = options.find((option) => option.value === value);
@@ -38,7 +41,7 @@ function formatReadonlyValue(
   }
 
   if (value === null || value === undefined || value === '') {
-    return '未填写';
+    return t('Platform.NotEntered', '未填写');
   }
 
   return String(value);
@@ -50,9 +53,10 @@ export function StandardCrudReadonlyValue({
   value,
   options = field.options ?? [],
 }: Pick<StandardCrudFieldProps, 'field' | 'value' | 'options'>): ReactElement {
+  const { t } = useLocalization();
   return (
     <Typography.Text className="np-standard-crud-readonly-value">
-      {formatReadonlyValue(field, value, options)}
+      {formatReadonlyValue(field, value, options, t)}
     </Typography.Text>
   );
 }
@@ -105,9 +109,13 @@ export function StandardCrudField({
   onRetry,
   onChange,
 }: StandardCrudFieldProps): ReactElement {
+  const { t, currentLanguage, supportedLanguages } = useLocalization();
+  const dateLocale = supportedLanguages.find(language => language.code === currentLanguage)?.locale?.startsWith('en') ? enUS : zhCN;
   const readOnly = field.readOnly === true || field.kind === 'readonly';
   if (readOnly) {
-    return <StandardCrudReadonlyValue field={field} value={value} options={options} />;
+    return <Form.Item label={field.labelKey} className="np-standard-crud-field">
+      <StandardCrudReadonlyValue field={field} value={value} options={options} />
+    </Form.Item>;
   }
 
   const commonItemProps = {
@@ -120,7 +128,7 @@ export function StandardCrudField({
         <span>
           {error}
           {retryableError && onRetry ? (
-            <Button type="link" size="small" onClick={() => onRetry(field.key)}>重试</Button>
+            <Button type="link" size="small" onClick={() => onRetry(field.key)}>{t('Platform.Retry', '重试')}</Button>
           ) : null}
         </span>
       )
@@ -134,8 +142,8 @@ export function StandardCrudField({
         <Switch
           id={field.key}
           checked={value === true}
-          checkedChildren="启用"
-          unCheckedChildren="停用"
+          checkedChildren={t('Platform.Enabled', '启用')}
+          unCheckedChildren={t('Platform.Disabled', '停用')}
           onChange={(checked) => onChange(field.key, checked)}
         />
       </Form.Item>
@@ -146,14 +154,14 @@ export function StandardCrudField({
     return (
       <Form.Item {...commonItemProps}>
         <Checkbox checked={value === true} onChange={(event) => onChange(field.key, event.target.checked)}>
-          {value === true ? '是' : '否'}
+          {value === true ? t('Platform.Yes', '是') : t('Platform.No', '否')}
         </Checkbox>
       </Form.Item>
     );
   }
 
   if (field.kind === 'enum' || field.kind === 'select' || field.kind === 'lookup') {
-    const placeholder = loading ? '正在加载...' : field.lookup?.placeholder ?? field.placeholder;
+    const placeholder = loading ? t('Platform.Loading', '正在加载...') : field.placeholder ?? field.lookup?.placeholder;
     const fallbackEnumValue = field.kind === 'enum' && !placeholder ? options[0]?.value : undefined;
     const selectValue = typeof value === 'string' && value.length > 0 ? value : fallbackEnumValue;
     return (
@@ -224,7 +232,7 @@ export function StandardCrudField({
       <Form.Item {...commonItemProps}>
         <DatePicker.RangePicker
           id={field.key}
-          locale={zhCN}
+          locale={dateLocale}
           allowEmpty={[true, true]}
           value={[toDayjs(range[0]), toDayjs(range[1])]}
           onChange={(dates) => onChange(field.key, dates
@@ -240,7 +248,8 @@ export function StandardCrudField({
       <Form.Item {...commonItemProps}>
         <DatePicker
           id={field.key}
-          locale={zhCN}
+          placeholder={field.placeholder}
+          locale={dateLocale}
           value={toDayjs(value)}
           onChange={(date) => onChange(field.key, date?.format('YYYY-MM-DD') ?? '')}
         />
@@ -253,7 +262,8 @@ export function StandardCrudField({
       <Form.Item {...commonItemProps}>
         <DatePicker
           id={field.key}
-          locale={zhCN}
+          placeholder={field.placeholder}
+          locale={dateLocale}
           showTime={{ format: 'HH:mm:ss' }}
           format="YYYY-MM-DD HH:mm:ss"
           value={toSessionLocalDateTime(value, field.timeZoneId)}

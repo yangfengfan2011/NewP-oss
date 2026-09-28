@@ -1,3 +1,4 @@
+import { useLocalization } from '@icp-platform/core';
 import type { ReactNode } from 'react';
 import { Button, Drawer, Space } from 'antd';
 import { AlertState } from './AlertState';
@@ -34,7 +35,7 @@ export function CrudFormDrawer({
   errorActions,
   children,
   submitFormId,
-  primaryLabel = '保存',
+  primaryLabel,
   primaryAction,
   hidePrimary = false,
   primaryDisabled = false,
@@ -44,6 +45,7 @@ export function CrudFormDrawer({
   onClose,
   afterOpenChange,
 }: CrudFormDrawerProps) {
+  const { t } = useLocalization();
   const primaryButton = hidePrimary ? null : (
     <Space direction="vertical" size={2} align="end">
       <Button
@@ -54,7 +56,7 @@ export function CrudFormDrawer({
         loading={saving}
         disabled={loading || primaryDisabled}
       >
-        {primaryLabel}
+        {primaryLabel ?? t('Platform.Save', '保存')}
       </Button>
       {primaryDisabled && primaryDisabledReason ? (
         <span role="status" className="np-crud-form-drawer-disabled-reason">
@@ -76,14 +78,14 @@ export function CrudFormDrawer({
       footer={
         <Space className="np-crud-form-drawer-footer">
           <Button onClick={onClose} disabled={saving}>
-            取消
+            {t('Platform.Cancel', '取消')}
           </Button>
           {secondaryAction}
           {primaryButton}
         </Space>
       }
     >
-      {loading ? <LoadingBlock message="正在加载详情..." /> : null}
+      {loading ? <LoadingBlock message={t('Platform.LoadingDetail', '正在加载详情...')} /> : null}
       {error ? (
         <div className="np-crud-form-drawer-error">
           <AlertState type="error" message={error} />

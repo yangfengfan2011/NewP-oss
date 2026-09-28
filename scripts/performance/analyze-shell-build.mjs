@@ -1,5 +1,5 @@
 import { gzipSync } from 'node:zlib'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, resolve } from 'node:path'
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 
 const FAILURE_CODES = {
@@ -63,6 +63,8 @@ function loadChunkMetrics(manifest, assetsRoot) {
     if (!entry || typeof entry.file !== 'string') {
       throw new Error(`Manifest entry '${key}' does not declare a file.`)
     }
+    // Vite 可把纯 CSS 产物放在 .js manifest key 下，资产类型以 file 为准。
+    if (entry.file.toLowerCase().endsWith('.css')) continue
     const filePath = resolveContainedFile(assetsRoot, entry.file)
     let bytes
     try {
@@ -102,10 +104,22 @@ function validateGraphEdges(manifest) {
   }
 }
 
+function cssFilesForEntry(entry) {
+  const references = entry.css === undefined ? [] : entry.css
+  if (!Array.isArray(references)) {
+    throw new Error(`Manifest entry '${entry.file}' css must be an array.`)
+  }
+  const files = entry.file.toLowerCase().endsWith('.css') ? [entry.file, ...references] : references
+  return files.map(file => {
+    if (typeof file !== 'string') throw new Error(`Invalid emitted CSS file path '${file}'.`)
+    return file.replaceAll('\\', '/')
+  })
+}
+
 function loadCssMetrics(manifest, assetsRoot) {
   const metrics = new Map()
   const cssFiles = new Set(
-    Object.values(manifest).flatMap((entry) => Array.isArray(entry.css) ? entry.css : []),
+    Object.values(manifest).flatMap(cssFilesForEntry),
   )
   for (const file of [...cssFiles].sort()) {
     const normalizedFile = file.replaceAll('\\', '/')
@@ -245,7 +259,7 @@ function findStaticPath(manifest, roots, target) {
 }
 
 function summarize(keys, metrics) {
-  const chunks = [...keys].map((key) => metrics.get(key))
+  const chunks = [...keys].filter(key => metrics.has(key)).map((key) => metrics.get(key))
   return {
     minifiedBytes: chunks.reduce((total, chunk) => total + chunk.minifiedBytes, 0),
     gzipBytes: chunks.reduce((total, chunk) => total + chunk.gzipBytes, 0),
@@ -254,7 +268,7 @@ function summarize(keys, metrics) {
 }
 
 function cssKeysForChunks(keys, manifest) {
-  return new Set([...keys].flatMap((key) => manifest[key].css ?? []))
+  return new Set([...keys].flatMap((key) => cssFilesForEntry(manifest[key])))
 }
 
 function summarizeCss(keys, metrics) {
@@ -470,7 +484,9 @@ function analyze(manifest, config, assetsRoot, mode) {
         throw new Error(`Forbidden dependency '${dependency.id}' references unknown scenario '${scenarioName}'.`)
       }
       for (const key of closure) {
-        const matchingSource = metrics.get(key).sources.find((source) =>
+        const chunk = metrics.get(key)
+        if (!chunk) continue
+        const matchingSource = chunk.sources.find((source) =>
           dependency.sourceContains ? source.includes(dependency.sourceContains) : sourcePattern.test(source))
         if (!matchingSource) {
           continue

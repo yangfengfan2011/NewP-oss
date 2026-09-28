@@ -5,11 +5,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
+import { gzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it } from 'vitest'
 
 const repositoryRoot = fileURLToPath(new URL('../../../../../', import.meta.url))
 const analyzerPath = join(repositoryRoot, 'scripts', 'performance', 'analyze-shell-build.mjs')
 const fixtureRoot = join(repositoryRoot, 'scripts', 'performance', 'fixtures', 'build-graph-valid')
+const cssFixtureRoot = join(repositoryRoot, 'scripts', 'performance', 'fixtures', 'build-graph-css')
 const temporaryRoots: string[] = []
 
 interface MutableManifestEntry {
@@ -46,6 +48,58 @@ afterEach(() => {
 })
 
 describe('Shell production build graph CLI', () => {
+  function runCssCase(mutate?: (root: string, manifest: Record<string, MutableManifestEntry>) => void) {
+    const root = mkdtempSync(join(tmpdir(), 'newp-build-graph-css-'))
+    temporaryRoots.push(root)
+    cpSync(fixtureRoot, root, { recursive: true })
+    cpSync(cssFixtureRoot, root, { recursive: true })
+    const manifest = JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8')) as Record<string, MutableManifestEntry>
+    mutate?.(root, manifest)
+    writeFileSync(join(root, 'manifest.json'), JSON.stringify(manifest), 'utf8')
+    const config = JSON.parse(readFileSync(join(root, 'config.json'), 'utf8'))
+    config.forbiddenDependencies = [{ id: 'absent-js-source', sourceContains: '/not-emitted/', scenarios: ['anonymous', 'personnelRoute'] }]
+    writeFileSync(join(root, 'config.json'), JSON.stringify(config), 'utf8')
+    const resultPath = join(root, 'result.json')
+    const execution = spawnSync(process.execPath, [analyzerPath,
+      '--manifest', join(root, 'manifest.json'), '--config', join(root, 'config.json'),
+      '--assets-root', root, '--mode', 'candidate', '--output', resultPath,
+    ], { cwd: repositoryRoot, encoding: 'utf8' })
+    return { root, execution, report: JSON.parse(readFileSync(resultPath, 'utf8')) }
+  }
+
+  it('counts independent CSS nodes and css arrays once in their scenario and route delta without treating them as JS', () => {
+    const { root, execution, report } = runCssCase()
+    expect(execution.status, execution.stderr).toBe(0)
+    const files = ['assets/main.css', 'assets/standalone.css']
+    const bytes = files.map(file => readFileSync(join(root, file)))
+    expect(report.scenarios.anonymous.css).toEqual({ files,
+      minifiedBytes: bytes.reduce((total, value) => total + value.byteLength, 0),
+      gzipBytes: bytes.reduce((total, value) => total + gzipSync(value, { level: 9 }).byteLength, 0),
+    })
+    expect(report.scenarios.authenticatedHome.css.files).toEqual(['assets/main.css', 'assets/module.css', 'assets/standalone.css'])
+    const routeBytes = readFileSync(join(root, 'assets/route.css'))
+    expect(report.scenarios.personnelRoute.delta.css).toEqual({ files: ['assets/route.css'], minifiedBytes: routeBytes.byteLength, gzipBytes: gzipSync(routeBytes, { level: 9 }).byteLength })
+    expect(report.scenarios.anonymous.files).toEqual(['assets/cycle.js', 'assets/main.js', 'assets/shared.js'])
+    expect(report.scenarios.personnelRoute.delta.files).toEqual(['assets/personnel.js'])
+    expect(report.chunks.every((chunk: { file: string }) => chunk.file.endsWith('.js'))).toBe(true)
+    expect(report.emittedCss.map((asset: { file: string }) => asset.file)).toEqual(['assets/main.css', 'assets/module.css', 'assets/route.css', 'assets/standalone.css'])
+  })
+
+  it.each([
+    ['missing CSS', (root: string) => rmSync(join(root, 'assets/standalone.css')), "Emitted CSS file 'assets/standalone.css'"],
+    ['CSS path escape', (_root: string, manifest: Record<string, MutableManifestEntry>) => { manifest['_PageOutlet-!~{01p}~.js'].file = '../outside.css' }, 'escaped the assets root'],
+    ['missing CSS graph edge', (_root: string, manifest: Record<string, MutableManifestEntry>) => { manifest['_PageOutlet-!~{01p}~.js'].imports = ['_missing.css'] }, 'references missing entry'],
+    ['missing JS source map', (root: string) => rmSync(join(root, 'assets/main.js.map')), "Source map for 'assets/main.js'"],
+    ['invalid JS source map', (root: string) => writeFileSync(join(root, 'assets/main.js.map'), '{}'), 'does not declare sources'],
+    ['missing css array asset', (_root: string, manifest: Record<string, MutableManifestEntry>) => { manifest['index.html'].css = ['assets/missing.css'] }, "Emitted CSS file 'assets/missing.css'"],
+    ['malformed css array', (_root: string, manifest: Record<string, MutableManifestEntry>) => { manifest['index.html'].css = 'assets/main.css' }, 'css must be an array'],
+  ] as const)('fails closed for %s alongside valid independent CSS nodes', (_name, mutate, diagnostic) => {
+    const { execution, report } = runCssCase(mutate)
+    expect(execution.status).toBe(2)
+    expect(report.failureCode).toBe('BUILD_GRAPH_INPUT_INVALID')
+    expect(report.diagnostic).toContain(diagnostic)
+  })
+
   it('keeps rc-picker enforced before authentication and report-only in the authenticated shell', () => {
     const config = JSON.parse(readFileSync(
       join(repositoryRoot, 'scripts', 'performance', 'shell-build-graph.config.json'),

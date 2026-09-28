@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, Component, type ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { Outlet, useParams } from 'react-router-dom';
 import { ModuleRegistry, type AuthUser } from '@icp-platform/sdk';
@@ -150,6 +150,11 @@ vi.mock('../metadata/runtimeMetadataLoader', () => ({
 describe('route capability authorization ordering', () => {
   let container: HTMLDivElement;
   let root: Root;
+
+  beforeAll(async () => {
+    // 真实模块转换属于夹具准备；路由仍须经正式 capability loader，拒绝分支仍断言零调用。
+    await import('../../../../modules/organization/src/standard-crud/personStandardCrudResource.primary');
+  });
 
   beforeEach(() => {
     container = document.createElement('div');

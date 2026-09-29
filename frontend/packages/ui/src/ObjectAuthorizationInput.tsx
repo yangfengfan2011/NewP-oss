@@ -9,7 +9,7 @@ import ObjectAuthorizationDetails from './ObjectAuthorizationDetails';
 
 export interface ObjectAuthorizationTarget { resourceKey: string; title: string; titleKey?: string; id?: string; name?: string }
 interface Configuration { resourceKey: string; objectId: string; subjects: DataScopeSubject[] }
-export interface ObjectCatalog { actions: { key: string; title: string; titleKey?: string; enabled: boolean }[]; subjectTypes: SubjectType[] }
+export interface ObjectCatalog { actions: { key: string; title: string; enabled: boolean }[]; subjectTypes: SubjectType[] }
 
 /** 标准动作宿主持有草稿；固定当前行目标，关闭后重新读取已保存配置。 */
 export default function ObjectAuthorizationInput(context: StandardCrudActionInputRenderContext & { target: ObjectAuthorizationTarget }) {

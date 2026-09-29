@@ -1,7 +1,7 @@
 import './authorizedFeatureUiFixture';
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
@@ -28,21 +28,17 @@ function createPersonDataAdapter() {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 async function waitForText(container: HTMLElement, expectedText: string): Promise<void> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    if (container.textContent?.includes(expectedText)) {
-      return;
-    }
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    });
-  }
-
-  throw new Error(`Timed out waiting for text: ${expectedText}`);
+  await vi.waitFor(() => expect(container.textContent).toContain(expectedText));
 }
 
 describe('StandardCrudDetailPageHost editor fallback', () => {
   let container: HTMLDivElement;
   let root: Root;
+
+  // 冷模块转换不属于交互断言；仍由真实 lazy 宿主按编辑动作挂载表单。
+  beforeAll(async () => {
+    await Promise.all([import('@ant-design/pro-descriptions'), import('../pages/StandardCrudDetailEditor')]);
+  });
 
   afterEach(async () => {
     vi.restoreAllMocks();
@@ -303,13 +299,12 @@ async function flushAsyncWork(): Promise<void> {
 }
 
 async function openEditor(container: HTMLDivElement): Promise<void> {
-  const editButton = Array.from(container.querySelectorAll('button')).find(
+  const findEditButton = () => Array.from(container.querySelectorAll('button')).find(
     (button) => button.textContent?.trim() === 'Action_Edit',
   );
-  expect(editButton).toBeDefined();
+  await vi.waitFor(() => expect(findEditButton()).toBeDefined());
   await act(async () => {
-    editButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    findEditButton()!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   });
-  await flushAsyncWork();
   await vi.waitFor(() => expect(container.querySelector('form')).not.toBeNull());
 }

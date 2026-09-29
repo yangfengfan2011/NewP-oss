@@ -1,7 +1,5 @@
 import { useLocalization } from '@icp-platform/core';
-import { useEffect, useRef, useState } from 'react';
 import {
-  applyStandardCrudLookupValueChange,
   type StandardCrudFieldDefinition,
   type StandardCrudFormSection,
   type StandardCrudLookupProvider,
@@ -11,6 +9,8 @@ import AntdButton from 'antd/es/button';
 import { FormPage, StandardCrudForm } from '@icp-platform/ui/crud-form';
 import { buildStandardCrudDetailFormValues } from '../standard-crud/standardCrudDetailFormValues';
 import { useStandardCrudLookupRuntime } from '../standard-crud/standardCrudLookupRuntime';
+import { useStandardCrudEditSession } from '../standard-crud/useStandardCrudEditSession';
+import type { StandardCrudDetailReloadResult } from '../standard-crud/standardCrudDetailQuery';
 import {
   type StandardCrudMutationRegistration,
   useStandardCrudMutationExecution,
@@ -29,6 +29,7 @@ interface StandardCrudDetailEditorProps {
   };
   onSaved: () => void;
   onRefresh: () => void;
+  onReload: () => Promise<StandardCrudDetailReloadResult>;
   onResult: (result: StandardCrudOperationResult) => void;
   titleForSection: (titleKey: string) => string;
 }
@@ -44,17 +45,16 @@ export default function StandardCrudDetailEditor({
   registration,
   onSaved,
   onRefresh,
+  onReload,
   onResult,
   titleForSection,
 }: StandardCrudDetailEditorProps) {
   const { t } = useLocalization();
-  const [formValues, setFormValues] = useState<Record<string, unknown>>(
-    () => buildStandardCrudDetailFormValues(detail.fields, fields),
-  );
-  // 草稿与写入依据共同演进；语言重读的新版本不能替旧草稿确认并发修改。
-  const editBasis = useRef(detail.fields);
-  const resetRequested = useRef(false);
-  const previousDetail = useRef(detail);
+  const editSession = useStandardCrudEditSession({
+    identity: JSON.stringify([resourceKey, id]), snapshot: detail.fields, fields,
+    buildValues: buildStandardCrudDetailFormValues, reload: onReload,
+  });
+  const formValues = editSession.draft?.values ?? {};
   const lookupRuntime = useStandardCrudLookupRuntime({
     resourceKey,
   featurePosition,
@@ -69,31 +69,21 @@ export default function StandardCrudDetailEditor({
     onResult,
   });
 
-  useEffect(() => {
-    // 译文与只读快照更新不拥有草稿；只有用户明确 reload 才重建当前实体输入。
-    if (resetRequested.current && previousDetail.current !== detail) {
-      editBasis.current = detail.fields;
-      setFormValues(buildStandardCrudDetailFormValues(detail.fields, fields));
-      resetRequested.current = false;
-    }
-    previousDetail.current = detail;
-  }, [detail, fields]);
-
   const handleSave = async () => {
-    if (reading) return;
+    if (reading || editSession.reloading || !editSession.draft) return;
     const succeeded = await mutationExecution.execute({
       mode: 'edit',
       featurePosition,
       id,
       fields,
-      values: formValues,
-      detailFields: editBasis.current,
+      ...editSession.draft,
     });
     if (succeeded) {
       onSaved();
     }
   };
 
+  if (!editSession.draft) return null;
   return (
     <FormPage<Record<string, unknown>>
       component="div"
@@ -107,10 +97,9 @@ export default function StandardCrudDetailEditor({
             type="default"
             onClick={() => {
               mutationExecution.clearError();
-              resetRequested.current = true;
-              onRefresh();
+              void editSession.reload();
             }}
-            disabled={mutationExecution.pending}
+            disabled={mutationExecution.pending || reading || editSession.reloading}
           >
             {t('Platform.ReloadData', '重新加载当前数据')}
           </AntdButton>
@@ -131,13 +120,13 @@ export default function StandardCrudDetailEditor({
         onLookupRetry={lookupRuntime.retry}
         fieldErrors={mutationExecution.fieldErrors}
         onChange={(fieldKey, value) => {
-          setFormValues((current) => applyStandardCrudLookupValueChange(current, fieldKey, value, fields));
+          editSession.change(fieldKey, value);
           if (mutationExecution.fieldErrors[fieldKey] || mutationExecution.conflict) {
             mutationExecution.clearError();
           }
         }}
         onSubmit={handleSave}
-        saving={mutationExecution.pending || reading}
+        saving={mutationExecution.pending || reading || editSession.reloading}
         error={mutationExecution.error}
         titleForSection={titleForSection}
       />

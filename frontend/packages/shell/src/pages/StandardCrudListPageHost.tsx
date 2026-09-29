@@ -67,6 +67,7 @@ import {
   resolveStandardCrudDetailPresentation,
 } from '../standard-crud/standardCrudDetailPresentation';
 import { useStandardCrudDetailQuery } from '../standard-crud/standardCrudDetailQuery';
+import { useStandardCrudEditSession } from '../standard-crud/useStandardCrudEditSession';
 import { StandardCrudActionReviewDialog } from '../standard-crud/StandardCrudActionReviewDialog';
 import { StandardCrudDialogTitle } from '../standard-crud/StandardCrudDialogTitle';
 import { useLocalizedStandardCrudRegistration } from '../standard-crud/useLocalizedStandardCrudRegistration';
@@ -962,8 +963,15 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const [drawerPreparationError, setDrawerPreparationError] = useState<{ failure: unknown } | null>(null);
   const detailError = drawerPreparationError ? formatRequestError(drawerPreparationError.failure, t) : drawerDetailQuery.error;
   const detailLoading = drawerDetailQuery.loading;
-  const [formValues, setFormValues] = useState<Record<string, unknown>>({});
-  const [clearConflictOnDetailLoad, setClearConflictOnDetailLoad] = useState(false);
+  const [createFormValues, setCreateFormValues] = useState<Record<string, unknown>>({});
+  const editSession = useStandardCrudEditSession({
+    identity: drawerState.mode === 'edit' ? drawerState : null,
+    snapshot: !detailLoading && !drawerDetailQuery.refreshing && !drawerDetailQuery.error
+      ? drawerDetailQuery.detail?.normalized.fields : undefined,
+    fields: editFields, buildValues: preparedDrawerForms?.buildDetailFormValues,
+    reload: drawerDetailQuery.reload,
+  });
+  const formValues = drawerState.mode === 'create' ? createFormValues : editSession.draft?.values ?? {};
   const [presentedOperationResult, setPresentedOperationResult] = useState<StandardCrudOperationResult | null>(null);
   const [rowInputAction, setRowInputAction] = useState<{
     action: StandardCrudRuntimeActionSchema;
@@ -980,9 +988,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const handledRouteSearchRef = useRef<string | null>(null);
   const handledListRouteSearchRef = useRef<string | null>(null);
   const drawerStateRef = useRef(drawerState);
-  const formValuesRef = useRef(formValues);
-  const initialFormValuesRef = useRef<Record<string, unknown>>({});
-  const appliedDrawerDetailRef = useRef<{ id: string; snapshot: { normalized: { fields: Record<string, unknown> } } } | null>(null);
+  const createValuesRef = useRef(createFormValues);
+  const initialCreateValuesRef = useRef<Record<string, unknown>>({});
   const drawerTriggerRef = useRef<HTMLElement | null>(null);
   const discardProceedRef = useRef<(() => void) | null>(null);
   const committedListStateRef = useRef<StandardCrudListState>({
@@ -993,7 +1000,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     sortDirection: tableQuery.sortDirection,
   });
   drawerStateRef.current = drawerState;
-  formValuesRef.current = formValues;
+  createValuesRef.current = createFormValues;
   committedListStateRef.current = {
     filters: appliedFilters,
     page: tableQuery.current,
@@ -1286,39 +1293,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       }
     },
   });
-  const clearMutationError = mutationExecution.clearError;
-  useEffect(() => {
-    const id = drawerState.id;
-    const loadedDetail = drawerDetailQuery.detail;
-    if (
-      !id
-      || (drawerState.mode !== 'view' && drawerState.mode !== 'edit')
-      || !loadedDetail
-      || drawerDetailQuery.refreshing
-      || !preparedDrawerForms
-    ) {
-      return;
-    }
-
-    const applied = appliedDrawerDetailRef.current;
-    const shouldApply = applied?.id !== id || drawerState.mode === 'view' || clearConflictOnDetailLoad;
-    if (!shouldApply || (applied?.id === id && applied.snapshot === loadedDetail)) {
-      return;
-    }
-
-    const nextFormValues = preparedDrawerForms.buildDetailFormValues(
-      loadedDetail.normalized.fields,
-      editFields,
-    );
-    setFormValues(nextFormValues);
-    initialFormValuesRef.current = nextFormValues;
-    appliedDrawerDetailRef.current = { id, snapshot: loadedDetail };
-    if (clearConflictOnDetailLoad) {
-      clearMutationError();
-      setClearConflictOnDetailLoad(false);
-    }
-  }, [clearConflictOnDetailLoad, drawerDetailQuery.detail, drawerDetailQuery.refreshing,
-    drawerState.id, drawerState.mode, editFields, clearMutationError, preparedDrawerForms]);
   const pageTitle = t(`${schema.dicKey}.${schema.titleKey}`, schema.titleKey);
   const activeFormFields = drawerState.mode === 'create'
     ? createFields
@@ -1406,8 +1380,6 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   };
 
   const closeDrawer = (options: { syncRoute?: boolean } = {}) => {
-    appliedDrawerDetailRef.current = null;
-    setClearConflictOnDetailLoad(false);
     setDrawerPreparationError(null);
     setDrawerState(CLOSED_DRAWER_STATE);
     host.lifecycle.close?.();
@@ -1418,8 +1390,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   };
 
   const isDrawerDirty = () => (
-    (drawerStateRef.current.mode === 'create' || drawerStateRef.current.mode === 'edit')
-    && JSON.stringify(formValuesRef.current) !== JSON.stringify(initialFormValuesRef.current)
+    drawerStateRef.current.mode === 'edit' ? editSession.dirty
+      : drawerStateRef.current.mode === 'create'
+        && JSON.stringify(createValuesRef.current) !== JSON.stringify(initialCreateValuesRef.current)
   );
 
   // 所有离开编辑态的入口共用同一个 Ant Modal，避免关闭、切换记录和浏览器返回出现不同保护语义。
@@ -1512,13 +1485,12 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
 
   const openCreateDrawer = async (source: CrudDrawerState['source'] = 'user-action') => {
     const prepared = await prepareDrawerForms();
-    appliedDrawerDetailRef.current = null;
     const initialValues = Object.fromEntries(prepared.createFields.map((field) => [field.key,
       host.input.fixedCreateValues && Object.prototype.hasOwnProperty.call(host.input.fixedCreateValues, field.modelField)
         ? host.input.fixedCreateValues[field.modelField] : field.defaultValue ?? '']));
     if (source === 'user-action') drawerTriggerRef.current = document.activeElement as HTMLElement | null;
-    setFormValues(initialValues);
-    initialFormValuesRef.current = initialValues;
+    setCreateFormValues(initialValues);
+    initialCreateValuesRef.current = initialValues;
     setDrawerPreparationError(null);
     mutationExecution.clearError();
     setDrawerState({ mode: 'create', source });
@@ -1532,10 +1504,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     source: CrudDrawerState['source'] = 'user-action',
     options: { syncRoute?: boolean; targetMode?: 'view' | 'edit' } = {},
   ): Promise<boolean> => {
-    appliedDrawerDetailRef.current = null;
     setDrawerState({ mode: options.targetMode ?? 'view', id, source });
-    setFormValues({});
-    initialFormValuesRef.current = {};
+    setCreateFormValues({});
+    initialCreateValuesRef.current = {};
     if (source === 'user-action') drawerTriggerRef.current = document.activeElement as HTMLElement | null;
     if (source === 'user-action' && options.syncRoute !== false) {
       syncDrawerRoute('view', id);
@@ -1546,7 +1517,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       await prepareDrawerForms();
       return true;
     } catch (loadError) {
-      setFormValues({});
+      setCreateFormValues({});
       setDrawerPreparationError({ failure: loadError });
       if (options.targetMode === 'edit') {
         setDrawerState({ mode: 'view', id, source });
@@ -1578,17 +1549,14 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     if (features.placement && drawerActionResolution.kind !== 'allowed') {
       return;
     }
-    // 提交使用建立当前草稿的快照；显示重读不能更新其并发依据。
-    const editBasis = appliedDrawerDetailRef.current;
     if (drawerState.mode === 'edit'
-      && (!editBasis || editBasis.id !== drawerState.id || detailLoading || drawerDetailQuery.refreshing)) return;
+      && (!editSession.draft || detailLoading || drawerDetailQuery.refreshing || editSession.reloading)) return;
     const succeeded = await mutationExecution.execute({
       mode: drawerState.mode === 'create' ? 'create' : 'edit',
       featurePosition: resolvedFeaturePosition(drawerActionResolution),
       id: drawerState.id,
       fields: drawerState.mode === 'create' ? createFields : editFields,
-      values: formValues,
-      detailFields: drawerState.mode === 'edit' ? editBasis!.snapshot.normalized.fields : detailFields,
+      ...(drawerState.mode === 'edit' ? editSession.draft! : { values: formValues, detailFields }),
     });
     if (succeeded) {
       closeDrawer();
@@ -1597,7 +1565,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
 
   const handleFormChange = (fieldKey: string, value: unknown) => {
     const fields = drawerState.mode === 'create' ? createFields : editFields;
-    setFormValues((current) => applyStandardCrudLookupValueChange(current, fieldKey, value, fields));
+    if (drawerState.mode === 'edit') editSession.change(fieldKey, value);
+    else setCreateFormValues((current) => applyStandardCrudLookupValueChange(current, fieldKey, value, fields));
     if (mutationExecution.fieldErrors[fieldKey] || mutationExecution.conflict) {
       mutationExecution.clearError();
     }
@@ -2059,10 +2028,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     && drawerEditActionState?.available !== false,
   );
 
-  const reloadConflictedRecord = () => {
+  const reloadConflictedRecord = async () => {
     if (drawerState.mode !== 'edit' || !drawerState.id) return;
-    setClearConflictOnDetailLoad(true);
-    drawerDetailQuery.refresh();
+    if (await editSession.reload()) mutationExecution.clearError();
   };
 
   const handleTableQueryChange = (nextQuery: SearchTableQueryState) => {
@@ -2230,7 +2198,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             mutationTitle={drawerState.mode === 'create' ? createDrawerTitle : editDrawerTitle}
             detailLoading={detailLoading}
             detailError={detailError}
-            saving={mutationExecution.pending || drawerDetailQuery.refreshing}
+            saving={mutationExecution.pending || drawerDetailQuery.refreshing || editSession.reloading}
             saveError={mutationExecution.error}
             saveFieldErrors={mutationExecution.fieldErrors}
             formId={drawerFormId}
@@ -2263,7 +2231,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             saveErrorActions={mutationExecution.conflict ? (
               <AntdButton
                 onClick={reloadConflictedRecord}
-                disabled={mutationExecution.pending || drawerDetailQuery.refreshing}
+                disabled={mutationExecution.pending || drawerDetailQuery.refreshing || editSession.reloading}
               >
                 {t('Platform.ReloadData', '重新加载当前数据')}
               </AntdButton>
@@ -2343,7 +2311,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
               const proceed = discardProceedRef.current;
               discardProceedRef.current = null;
               setDiscardConfirmOpen(false);
-              initialFormValuesRef.current = formValuesRef.current;
+              initialCreateValuesRef.current = createValuesRef.current;
               proceed?.();
             }}
           >

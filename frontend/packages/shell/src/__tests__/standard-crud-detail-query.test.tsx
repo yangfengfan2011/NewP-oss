@@ -6,7 +6,7 @@ import type { Root } from 'react-dom/client';
 import { createLocalizedRoot as createRoot } from './localizedTestRoot';
 import { PlatformQueryProvider } from '@icp-platform/core';
 import type { StandardCrudLoadedDetail } from '@icp-platform/sdk';
-import { useStandardCrudDetailQuery } from '../standard-crud/standardCrudDetailQuery';
+import { useStandardCrudDetailQuery, type StandardCrudDetailQueryResult } from '../standard-crud/standardCrudDetailQuery';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -18,6 +18,60 @@ describe('Standard CRUD detail query', () => {
     if (root) await act(async () => root.unmount());
     container?.remove();
     vi.restoreAllMocks();
+  });
+
+  it('settles one explicit reload even when its loader returns the same detail object', async () => {
+    const detail = { normalized: { fields: { EID: 'Person_1' }, summaries: {} }, value: {} };
+    let complete!: () => void;
+    const get = vi.fn().mockResolvedValueOnce(detail).mockImplementationOnce(() => new Promise(resolve => { complete = () => resolve(detail); }));
+    let current!: StandardCrudDetailQueryResult<unknown>;
+    function Subscriber() {
+      current = useStandardCrudDetailQuery({ resourceKey: 'organization.person', id: 'Person_1', dataAdapter: {
+        get, list: vi.fn(), getRowId: () => 'Person_1',
+      } });
+      return null;
+    }
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    await act(async () => { root = createRoot(container); root.render(<PlatformQueryProvider scopeKey="user-1"><Subscriber /></PlatformQueryProvider>); });
+    let reload!: ReturnType<typeof current.reload>;
+    await act(async () => {
+      reload = current.reload();
+      expect(current.reload()).toBe(reload);
+    });
+    expect(get).toHaveBeenCalledTimes(2);
+    await act(async () => complete());
+    expect(await reload).toEqual({ status: 'success', detail });
+    expect(current.detail).toBe(detail);
+  });
+
+  it.each(['failure', 'scope', 'unmount'] as const)('settles an explicit reload on %s without adopting a later read', async ending => {
+    const original = { normalized: { fields: { EID: 'Person_1' }, summaries: {} }, value: {} };
+    const later = { normalized: { fields: { EID: 'Person_1', ENAME: 'later' }, summaries: {} }, value: {} };
+    let resolve!: (detail: typeof original) => void;
+    let reject!: (error: Error) => void;
+    const get = vi.fn().mockResolvedValueOnce(original)
+      .mockImplementationOnce(() => new Promise((res, rej) => { resolve = res; reject = rej; }))
+      .mockResolvedValue(later);
+    let current!: StandardCrudDetailQueryResult<unknown>;
+    function Subscriber() {
+      current = useStandardCrudDetailQuery({ resourceKey: 'organization.person', id: 'Person_1', dataAdapter: {
+        get, list: vi.fn(), getRowId: () => 'Person_1',
+      } });
+      return null;
+    }
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    await act(async () => { root = createRoot(container); root.render(<PlatformQueryProvider scopeKey="zh"><Subscriber /></PlatformQueryProvider>); });
+    let reload!: ReturnType<typeof current.reload>;
+    await act(async () => { reload = current.reload(); });
+    if (ending === 'failure') await act(async () => reject(new Error('read failed')));
+    else await act(async () => root.render(ending === 'unmount' ? null : <PlatformQueryProvider scopeKey="en"><Subscriber /></PlatformQueryProvider>));
+    expect(await reload).toEqual({ status: ending === 'failure' ? 'failed' : 'cancelled' });
+    await act(async () => resolve(later));
+    if (ending === 'failure') await act(async () => current.retry());
+    if (ending !== 'unmount') expect(current.detail).toBe(later);
+    expect(await reload).toEqual({ status: ending === 'failure' ? 'failed' : 'cancelled' });
   });
 
   it('shares one typed detail generation across StrictMode page and drawer subscribers', async () => {

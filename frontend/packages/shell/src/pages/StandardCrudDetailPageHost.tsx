@@ -364,6 +364,7 @@ function StandardCrudDetailPageContent<TDetail>({
                   setEditing(false);
                 }}
                 onRefresh={refresh}
+                onReload={detailQuery.reload}
                 onResult={(result) => {
                   if (operationResultPresenterRegistry.resolve(result)) {
                     setPresentedOperationResult(result);

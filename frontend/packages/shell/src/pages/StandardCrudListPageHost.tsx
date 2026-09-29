@@ -982,7 +982,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const drawerStateRef = useRef(drawerState);
   const formValuesRef = useRef(formValues);
   const initialFormValuesRef = useRef<Record<string, unknown>>({});
-  const appliedDrawerDetailRef = useRef<{ id: string; snapshot: unknown } | null>(null);
+  const appliedDrawerDetailRef = useRef<{ id: string; snapshot: { normalized: { fields: Record<string, unknown> } } } | null>(null);
   const drawerTriggerRef = useRef<HTMLElement | null>(null);
   const discardProceedRef = useRef<(() => void) | null>(null);
   const committedListStateRef = useRef<StandardCrudListState>({
@@ -1578,13 +1578,17 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     if (features.placement && drawerActionResolution.kind !== 'allowed') {
       return;
     }
+    // 提交使用建立当前草稿的快照；显示重读不能更新其并发依据。
+    const editBasis = appliedDrawerDetailRef.current;
+    if (drawerState.mode === 'edit'
+      && (!editBasis || editBasis.id !== drawerState.id || detailLoading || drawerDetailQuery.refreshing)) return;
     const succeeded = await mutationExecution.execute({
       mode: drawerState.mode === 'create' ? 'create' : 'edit',
       featurePosition: resolvedFeaturePosition(drawerActionResolution),
       id: drawerState.id,
       fields: drawerState.mode === 'create' ? createFields : editFields,
       values: formValues,
-      detailFields,
+      detailFields: drawerState.mode === 'edit' ? editBasis!.snapshot.normalized.fields : detailFields,
     });
     if (succeeded) {
       closeDrawer();

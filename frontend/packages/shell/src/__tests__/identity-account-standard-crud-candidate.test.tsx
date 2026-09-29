@@ -808,6 +808,94 @@ describe('Identity account Standard CRUD production route', () => {
     expect(window.location.href).not.toContain('detail-reset-only-once');
   });
 
+  it.each(['detail', 'drawer'] as const)('keeps the %s edit revision through a locale reread until explicit conflict reload', async presentation => {
+    const stale = {
+      eid: 'User_2', ecode: 'alice', ename: 'Alice', status: 'Enabled', revision: 7,
+      isLocalAdministrator: false, isPersonnelBound: false, personnelDisableHold: false,
+      createdBy: 'User_1', createdAt: '2026-08-01T00:00:00Z', updatedBy: 'User_1', updatedAt: '2026-08-02T00:00:00Z',
+    };
+    const latest = { ...stale, ename: 'Alice Server', revision: 8 };
+    let snapshot = stale;
+    let snapshotLoads = 0;
+    const updateBodies: Record<string, unknown>[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/User_2/snapshot')) {
+        snapshotLoads += 1;
+        return new Response(JSON.stringify(snapshot), { status: 200 });
+      }
+      if (url.includes('/security-events')) {
+        return new Response(JSON.stringify({ items: [], page: 1, pageSize: 20, totalCount: 0 }), { status: 200 });
+      }
+      if (init?.method === 'PUT') {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        updateBodies.push(body);
+        // 模拟正式版本检查，不能按请求次数强制冲突，否则会掩盖新版本号覆盖旧草稿。
+        if (body.expectedRevision !== snapshot.revision) {
+          return new Response(JSON.stringify({ code: 'IDENTITY_REVISION_CONFLICT', current: snapshot }), { status: 409 });
+        }
+        snapshot = { ...snapshot, ename: String(body.ename), revision: snapshot.revision + 1 };
+        return new Response(JSON.stringify(snapshot), { status: 200 });
+      }
+      return new Response(JSON.stringify({ items: [snapshot], total: 1, totalCount: 1, page: 1, pageSize: 20 }), { status: 200 });
+    });
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => root.render(
+      <MemoryRouter initialEntries={[presentation === 'detail' ? '/candidate/User_2' : '/identity/accounts']}>
+        <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }, { code: 'en', displayName: 'English' }]} catalogs={accountCatalogs}>
+          <SwitchLanguage /><LocaleQueries><RuntimeMetadataProvider value={runtimeMetadata}>
+            {presentation === 'detail'
+              ? <Routes><Route path="/candidate/:id" element={<IdentityAccountDetailCandidate registration={registration} />} /></Routes>
+              : <StandardCrudListPageHost viewKey="identity.account.list" registration={registration} />}
+          </RuntimeMetadataProvider></LocaleQueries>
+        </LocalizationProvider>
+      </MemoryRouter>,
+    ));
+    await vi.waitFor(() => expect(Array.from(container.querySelectorAll('button')).some(button => button.textContent?.trim() === '编辑')).toBe(true));
+    const edit = Array.from(container.querySelectorAll('button')).find(button => button.textContent?.trim() === '编辑');
+    await act(async () => edit?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await vi.waitFor(() => expect(document.body.querySelector<HTMLInputElement>('#ENAME')?.value).toBe('Alice'));
+    const changeName = async (value: string) => {
+      await act(async () => {
+        const input = document.body.querySelector<HTMLInputElement>('#ENAME');
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
+        input?.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    };
+    await changeName('Alice Draft');
+    snapshot = latest;
+    const english = Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'English test');
+    await act(async () => english?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await vi.waitFor(() => expect(snapshotLoads).toBe(2));
+    await flushRequests();
+    expect(updateBodies).toHaveLength(0);
+    expect(document.body.querySelector<HTMLInputElement>('#ENAME')?.value).toBe('Alice Draft');
+    const clickSave = async () => {
+      const save = Array.from(document.body.querySelectorAll('button')).find(button => button.textContent?.trim() === accountCatalogs.en['Platform.SaveChanges']);
+      expect(save).toBeDefined();
+      await act(async () => save?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    };
+    await clickSave();
+    expect(updateBodies).toEqual([{ ename: 'Alice Draft', expectedRevision: 7 }]);
+    expect(snapshot).toEqual(latest);
+    expect(snapshotLoads).toBe(2);
+    expect(document.body.querySelector<HTMLInputElement>('#ENAME')?.value).toBe('Alice Draft');
+    const reload = Array.from(document.body.querySelectorAll('button')).find(button => button.textContent?.trim() === accountCatalogs.en['Platform.ReloadData']);
+    expect(reload).toBeDefined();
+    await act(async () => reload?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await vi.waitFor(() => expect(document.body.querySelector<HTMLInputElement>('#ENAME')?.value).toBe('Alice Server'));
+    expect(snapshotLoads).toBe(3);
+    await changeName('Alice Revised');
+    await clickSave();
+    expect(updateBodies).toEqual([
+      { ename: 'Alice Draft', expectedRevision: 7 },
+      { ename: 'Alice Revised', expectedRevision: 8 },
+    ]);
+    await vi.waitFor(() => expect(document.body.querySelector<HTMLInputElement>('#ENAME')).toBeNull());
+  });
+
   it('reloads a conflicted full-detail edit only after an explicit refresh and rebuilds from the latest snapshot', async () => {
     const stale = {
       eid: 'User_2', ecode: 'alice', ename: 'Alice', status: 'Enabled', revision: 7,

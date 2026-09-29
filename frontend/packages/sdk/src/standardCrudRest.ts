@@ -135,7 +135,11 @@ async function requestJson<T>(fetcher: typeof fetch, path: string, init: Request
     return await response.json() as T;
   } catch (cause) {
     if (init.method && !['GET', 'HEAD'].includes(init.method.toUpperCase())) {
-      throw Object.assign(new Error('操作结果尚未确认，请先查询实际结果，再决定是否重试。'), { cause });
+      // 收到成功状态但正文不可读，不能把结果未知降级为可重试的普通失败。
+      throw new StandardCrudRequestError('操作结果尚未确认，请先查询实际结果，再决定是否重试。', response.status, {}, {
+        code: 'Platform.MutationOutcomeUnknown',
+        reasonKey: 'Platform.MutationOutcomeUnknown',
+      }, undefined, cause);
     }
     throw cause;
   }

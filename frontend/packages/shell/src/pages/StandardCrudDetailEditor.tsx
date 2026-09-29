@@ -51,6 +51,8 @@ export default function StandardCrudDetailEditor({
   const [formValues, setFormValues] = useState<Record<string, unknown>>(
     () => buildStandardCrudDetailFormValues(detail.fields, fields),
   );
+  // 草稿与写入依据共同演进；语言重读的新版本不能替旧草稿确认并发修改。
+  const editBasis = useRef(detail.fields);
   const resetRequested = useRef(false);
   const previousDetail = useRef(detail);
   const lookupRuntime = useStandardCrudLookupRuntime({
@@ -70,6 +72,7 @@ export default function StandardCrudDetailEditor({
   useEffect(() => {
     // 译文与只读快照更新不拥有草稿；只有用户明确 reload 才重建当前实体输入。
     if (resetRequested.current && previousDetail.current !== detail) {
+      editBasis.current = detail.fields;
       setFormValues(buildStandardCrudDetailFormValues(detail.fields, fields));
       resetRequested.current = false;
     }
@@ -84,7 +87,7 @@ export default function StandardCrudDetailEditor({
       id,
       fields,
       values: formValues,
-      detailFields: detail.fields,
+      detailFields: editBasis.current,
     });
     if (succeeded) {
       onSaved();

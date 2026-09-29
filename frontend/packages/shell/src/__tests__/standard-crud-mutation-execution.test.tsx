@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LanguageSelect, LocalizationProvider } from '@icp-platform/core';
 import platformDictionary from '../../../../../modules/Platform/metadata/dictionaries/Platform.dic.json';
 import {
+  createStandardCrudRestDataAdapter,
   StandardCrudRequestError,
   type StandardCrudOperationResult,
   type StandardCrudResourceRegistration,
@@ -53,7 +54,7 @@ describe('standard CRUD mutation execution', () => {
       root = createRoot(container);
       const catalogs = {
         zhs: { ...Object.fromEntries(Object.entries(platformDictionary.Platform).map(([key, value]) => [`Platform.${key}`, value.zhs])), 'Platform.SavedRefreshFailed': '已保存，刷新失败。请重新加载。' },
-        en: { 'Platform.Language': 'Language', 'Platform.SavedRefreshFailed': 'Saved, but refreshing failed. Reload the data.' },
+        en: { ...Object.fromEntries(Object.entries(platformDictionary.Platform).map(([key, value]) => [`Platform.${key}`, value.en])), 'Platform.SavedRefreshFailed': 'Saved, but refreshing failed. Reload the data.' },
       };
       root.render(<LocalizationProvider initialLanguage="zhs" defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }, ...(bilingual ? [{ code: 'en', displayName: 'English' }] : [])]} catalogs={catalogs}>{bilingual ? <LanguageSelect /> : null}<Harness /></LocalizationProvider>);
     });
@@ -87,6 +88,33 @@ describe('standard CRUD mutation execution', () => {
     expect(committed).toHaveBeenCalledTimes(1);
     expect(onResult).toHaveBeenCalledWith(result);
     expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it.each(['create', 'edit'] as const)('retains an unknown %s outcome when the successful response body cannot be read', async mode => {
+    const fetcher = vi.fn(async () => new Response('{truncated', { status: mode === 'create' ? 201 : 200 }));
+    const refresh = vi.fn();
+    const onResult = vi.fn();
+    const registration: StandardCrudResourceRegistration = {
+      resourceKey: 'organization.company', listViewKey: 'organization.company.list',
+      dataAdapter: createStandardCrudRestDataAdapter({
+        apiRoute: '/api/organization/companies', fetcher,
+        mapListItem: fields => fields, getRowId: row => String(row.EID),
+      }),
+    };
+    const execution = await renderExecution(registration, refresh, onResult, { bilingual: true });
+    await act(async () => {
+      expect(await execution().execute({ mode, id: 'Company_1', fields: [], values: {}, detailFields: {} })).toBe(false);
+    });
+    expect(execution().error).toBe(platformDictionary.Platform.MutationOutcomeUnknown.zhs);
+    await act(async () => {
+      const select = container.querySelector('select')!;
+      select.value = 'en';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(execution().error).toBe(platformDictionary.Platform.MutationOutcomeUnknown.en);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(refresh).not.toHaveBeenCalled();
+    expect(onResult).not.toHaveBeenCalled();
   });
 
   it('retains fixed creation context and publishes once even if subsequent reads fail', async () => {

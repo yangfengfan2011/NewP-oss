@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 
 import { act, Component, type ReactNode } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { Outlet, useParams } from 'react-router-dom';
 import { ModuleRegistry, type AuthUser } from '@icp-platform/sdk';
 import organizationBindings from '../../../../modules/organization/src';
+// 真实资源装配归测试收集阶段；权限用例仍检查正式 loader 的调用边界，不计模块转换耗时。
+import '../../../../modules/organization/src/standard-crud/personStandardCrudResource.primary';
 import App from '../App';
 import { createStandardCrudTestDataAdapter } from './standardCrudTestDataAdapter';
 
@@ -150,11 +152,6 @@ vi.mock('../metadata/runtimeMetadataLoader', () => ({
 describe('route capability authorization ordering', () => {
   let container: HTMLDivElement;
   let root: Root;
-
-  beforeAll(async () => {
-    // 真实模块转换属于夹具准备；路由仍须经正式 capability loader，拒绝分支仍断言零调用。
-    await import('../../../../modules/organization/src/standard-crud/personStandardCrudResource.primary');
-  });
 
   beforeEach(() => {
     container = document.createElement('div');

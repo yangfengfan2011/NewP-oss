@@ -13,6 +13,7 @@
 
 - 用户点名或任务触发某个 skill 时，读取该 `SKILL.md` 执行。通用 skill 的默认流程由本仓库的任务状态源、验证分工和授权边界约束；其余步骤沿用 skill。用户本次明确指令优先。
 - 实施任务（包括调用 `$implement`）前，读取 [quick-verification.md](docs/verification/quick-verification.md) 的“执行层级”，确定本次承担单任务、child 还是父级收尾。
+- 派发或关闭 child 前，读取该指南的“Child 完成证据”，核对验证范围与完成证据；恢复完整 verify 前，读取“诊断与审查证据”和“父级收尾”，核对失败收敛与恢复条件。
 - 诊断或审查（包括 `$code-review`）时，读取 [quick-verification.md](docs/verification/quick-verification.md) 的“诊断与审查证据”，按当前依赖与实际消费路径判定问题。
 - Skill 配置文件由 `/setup-matt-pocock-skills` 生成并被 skill 运行时读取，不要删除或改名：
   - `docs/agents/issue-tracker.md` — issue 跟踪器约定（GitHub + `gh` CLI）

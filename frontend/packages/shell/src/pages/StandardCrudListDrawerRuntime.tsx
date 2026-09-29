@@ -95,8 +95,8 @@ export default function StandardCrudListDrawerRuntime({
         open
         title={viewTitle}
         loading={detailLoading}
-        error={detailError ?? (fatalDiagnostic ? t('Platform.DetailContractFailed', '详情数据契约失败：{code}', { code: fatalDiagnostic.code }) : null)}
-        errorActions={detailError ? detailErrorActions : undefined}
+        error={detailError ?? (fatalDiagnostic ? t('Platform.DetailContractFailed', '详情数据契约失败：{code}', { code: fatalDiagnostic.code }) : saveError)}
+        errorActions={detailError ? detailErrorActions : !fatalDiagnostic && saveError ? saveErrorActions : undefined}
         primaryLabel={t('Platform.Edit', '编辑')}
         secondaryAction={fatalDiagnostic ? undefined : viewSecondaryAction}
         hidePrimary={!canEdit || !editAction || fatalDiagnostic !== null}

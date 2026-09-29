@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
-import { beforeAll, expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, useLocalization, invalidatePlatformAntiforgeryToken } from '@icp-platform/core';
 import { AuthProvider } from '../contexts/AuthContext';
 import { CurrentPermissionScope } from '../components/CurrentPermissionScope';
@@ -14,9 +14,12 @@ import runtimeModels from '../../../../../tests/Kernel.Tests/Fixtures/Organizati
 import personList from '../../../../../modules/Organization/metadata/views/PersonList.view.json';
 import personDetail from '../../../../../modules/Organization/metadata/views/PersonDetail.view.json';
 import { platformTestCatalogs } from './localizationTestCatalogs';
+// 仅将既有真实预热归入收集阶段，权限刷新及失败结果仍走完整宿主。
+import '../pages/StandardCrudListDrawerRuntime';
+import '@ant-design/pro-table';
+import '@ant-design/pro-descriptions';
 
 vi.unmock('@icp-platform/core');
-beforeAll(async () => { await Promise.all([import('../pages/StandardCrudListDrawerRuntime'), import('@ant-design/pro-table'), import('@ant-design/pro-descriptions')]); });
 
 it('keeps a denied save result through permission-scope refresh, view downgrade and successful detail reread', async () => {
   const fields = { EID: 'Person_1', PersonNo: 'P1', ENAME: 'Person', EmploymentStatus: 'FullTime', IsEnabled: true };

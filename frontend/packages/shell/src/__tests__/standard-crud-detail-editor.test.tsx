@@ -1,13 +1,16 @@
 import './authorizedFeatureUiFixture';
 // @vitest-environment jsdom
 
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry, createStandardCrudRestDataAdapter } from '@icp-platform/sdk';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
+// 真实预热资源属于收集阶段；仍由 lazy 宿主在编辑动作后挂载表单。
+import '@ant-design/pro-descriptions';
+import '../pages/StandardCrudDetailEditor';
 
 const platformFetchMock = vi.hoisted(() => vi.fn((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init)));
 
@@ -34,11 +37,6 @@ async function waitForText(container: HTMLElement, expectedText: string): Promis
 describe('StandardCrudDetailPageHost editor fallback', () => {
   let container: HTMLDivElement;
   let root: Root;
-
-  // 冷模块转换不属于交互断言；仍由真实 lazy 宿主按编辑动作挂载表单。
-  beforeAll(async () => {
-    await Promise.all([import('@ant-design/pro-descriptions'), import('../pages/StandardCrudDetailEditor')]);
-  });
 
   afterEach(async () => {
     vi.restoreAllMocks();

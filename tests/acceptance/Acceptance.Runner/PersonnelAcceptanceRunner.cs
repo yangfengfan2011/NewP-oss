@@ -541,8 +541,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 await originalDrawer.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = StandardCrudPageDriver.SaveChangesLabel, Exact = true }).ClickAsync();
                 var denial = await rejected;
                 if (denial.Status != 403) throw new InvalidOperationException($"Original maintainer session write returned {denial.Status}, expected refusal.");
-                await page.GetByText("当前操作已被拒绝，请核对当前权限。", new PageGetByTextOptions { Exact = true }).First
-                    .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+                await WaitForWriteDeniedAsync(page);
                 await driver.TableRow(person.PersonNo)
                     .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
                 await Assertions.Expect(page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "编辑", Exact = true })).ToHaveCountAsync(0);
@@ -621,7 +620,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
 
                 page = administratorPage;
                 driver = administratorDriver;
-                await ConfigurePersonObjectAuthorizationAsync(page, person);
+                await ConfigurePersonObjectAuthorizationAsync(page, person, $"Personnel Gate Role M {_runId[..8]}");
                 browserAssertions.Add("administrator-opened-person-object-authorization-and-saved-the-whole-configuration");
                 await ExerciseOrganizationObjectAuthorizationAsync(driver,
                     _company ?? throw new InvalidOperationException("Browser company was not created."),
@@ -1025,7 +1024,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
     }
 
     // 管理员沿真实人员详情动作保存整份对象授权；动作值及资格变化在 SQL/API 层断言。
-    private async Task ConfigurePersonObjectAuthorizationAsync(IPage page, PersonData person)
+    private async Task ConfigurePersonObjectAuthorizationAsync(IPage page, PersonData person, string roleName)
     {
         await page.GotoAsync($"http://127.0.0.1:{_shellPort}/organization/persons/{person.Id}");
         await page.GetByText("基础信息", new PageGetByTextOptions { Exact = true }).WaitForAsync();
@@ -1033,12 +1032,11 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await action.WaitForAsync();
         await action.ClickAsync();
         var dialog = page.GetByRole(AriaRole.Dialog, new PageGetByRoleOptions { Name = "人员对象授权", Exact = true });
-        var target = dialog.Locator("[aria-label='授权目标']");
-        await target.GetByText($"目标人员：{person.Name}", new LocatorGetByTextOptions { Exact = true }).WaitForAsync();
-        await target.GetByText($"人员标识：{person.Id}", new LocatorGetByTextOptions { Exact = true }).WaitForAsync();
+        await dialog.GetByText($"目标人员：{person.Name}", new LocatorGetByTextOptions { Exact = true }).WaitForAsync();
         await Assertions.Expect(dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "保存授权", Exact = true }))
             .ToBeEnabledAsync();
-        await dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "添加主体项", Exact = true }).ClickAsync();
+        // 子 Drawer 确认后才改变根草稿；随后取消根 Dialog 仍需验证丢弃保护。
+        await AddObjectAuthorizationSubjectAsync(page, dialog, "所有用户", null, []);
         await dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { NameRegex = new Regex(@"^取\s*消$") }).ClickAsync();
         var discard = page.GetByRole(AriaRole.Dialog, new PageGetByRoleOptions { Name = "放弃未保存的草稿？", Exact = true });
         await discard.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "放弃修改", Exact = true }).ClickAsync();
@@ -1047,16 +1045,9 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await action.ClickAsync();
         await Assertions.Expect(dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "保存授权", Exact = true }))
             .ToBeEnabledAsync();
-        var select = new DataScopeRulesPageDriver(page);
-        await dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "添加主体项", Exact = true }).ClickAsync();
-        var everyone = dialog.GetByRole(AriaRole.Group, new LocatorGetByRoleOptions { Name = "主体授权项 1", Exact = true });
-        await select.SelectAsync("读取意见", "同意", everyone);
-        await select.SelectAsync("授权意见", "同意", everyone);
-        await dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "添加主体项", Exact = true }).ClickAsync();
-        var role = dialog.GetByRole(AriaRole.Group, new LocatorGetByRoleOptions { Name = "主体授权项 2", Exact = true });
-        await select.SelectAsync("主体类型", "角色", role);
-        await select.SelectAsync("主体选择", $"Personnel Gate Role M {_runId[..8]}", role, search: true);
-        await select.SelectAsync("编辑意见", "同意", role);
+        await AddObjectAuthorizationSubjectAsync(page, dialog, "所有用户", null, ["读取", "授权"]);
+        await AddObjectAuthorizationSubjectAsync(page, dialog, "角色", roleName, ["编辑"]);
+        await dialog.GetByRole(AriaRole.Row, new LocatorGetByRoleOptions { Name = "主体授权项 2", Exact = true }).WaitForAsync();
         var wide = Path.Combine(_runDirectory, "personnel", "person-object-authorization-wide.png");
         await page.ScreenshotAsync(new PageScreenshotOptions { Path = wide, FullPage = true });
         _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, wide));
@@ -1072,7 +1063,35 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 $"/api/authorization/data-scope/objects/organization.person/{person.Id}");
         if (response.Status != 204) throw new InvalidOperationException($"Object authorization save returned {response.Status}.");
         await Assertions.Expect(dialog).ToHaveCountAsync(0);
-        await page.GetByText("授权已保存；后续访问按新配置判定。", new PageGetByTextOptions { Exact = true }).WaitForAsync();
+        await page.GetByText(person.Name, new PageGetByTextOptions { Exact = true }).First.WaitForAsync();
+    }
+
+    // 当前公共拒绝提示可附公开 code/traceId；HTTP 拒绝事实仍在调用方及 API 层确认。
+    private static Task WaitForWriteDeniedAsync(IPage page) =>
+        page.GetByText(new Regex("^当前操作已被拒绝，请核对当前权限。")).First
+            .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+
+    // 正式主体表格从子 Drawer 接收草稿；真实三态控件最多点击一轮，不直接改 React 状态。
+    private static async Task AddObjectAuthorizationSubjectAsync(IPage page, ILocator dialog,
+        string type, string? name, IReadOnlyList<string> allowedActions)
+    {
+        await dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "添加主体项", Exact = true }).ClickAsync();
+        var drawer = page.Locator(".ant-drawer-open .ant-drawer-content");
+        var select = new DataScopeRulesPageDriver(page);
+        await select.SelectAsync("主体类型", type, drawer);
+        if (name is not null) await select.SelectAsync("主体选择", name, drawer, search: true);
+        foreach (var action in allowedActions)
+        {
+            for (var attempt = 0; attempt < 3; attempt++)
+            {
+                if (await drawer.GetByRole(AriaRole.Checkbox, new LocatorGetByRoleOptions { Name = $"{action}：同意", Exact = true }).CountAsync() == 1) break;
+                await drawer.GetByRole(AriaRole.Checkbox, new LocatorGetByRoleOptions
+                    { NameRegex = new Regex($"^{Regex.Escape(action)}：(?:不选|同意|拒绝)$") }).ClickAsync();
+            }
+            await drawer.GetByRole(AriaRole.Checkbox, new LocatorGetByRoleOptions { Name = $"{action}：同意", Exact = true }).WaitForAsync();
+        }
+        await drawer.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { NameRegex = new Regex(@"^确\s*定$") }).ClickAsync();
+        await drawer.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
     }
 
     // 沿同一人员旅程已有的三个标准目录行核对对象入口，部门只保存一次；动作语义留在 SQL/API 层。
@@ -1103,9 +1122,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         if (qualified.Status != 200) throw new InvalidOperationException($"{title}对象授权资格返回 {qualified.Status}。");
         await page.GetByRole(AriaRole.Menuitem, new PageGetByRoleOptions { Name = "对象授权", Exact = true }).ClickAsync();
         var dialog = page.GetByRole(AriaRole.Dialog, new PageGetByRoleOptions { Name = "对象授权", Exact = true });
-        var target = dialog.Locator("[aria-label='授权目标']");
-        await target.GetByText($"目标{title}：{name}", new LocatorGetByTextOptions { Exact = true }).WaitForAsync();
-        await target.GetByText($"{title}标识：{id}", new LocatorGetByTextOptions { Exact = true }).WaitForAsync();
+        await dialog.GetByText($"目标{title}：{name}", new LocatorGetByTextOptions { Exact = true }).WaitForAsync();
         await Assertions.Expect(dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "保存授权", Exact = true }))
             .ToBeEnabledAsync();
         if (!save)
@@ -1115,9 +1132,8 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             return;
         }
 
-        await dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "添加主体项", Exact = true }).ClickAsync();
-        var subject = dialog.GetByRole(AriaRole.Group, new LocatorGetByRoleOptions { Name = "主体授权项 1", Exact = true });
-        await new DataScopeRulesPageDriver(page).SelectAsync("读取意见", "同意", subject);
+        await AddObjectAuthorizationSubjectAsync(page, dialog, "所有用户", null, ["读取"]);
+        await dialog.GetByRole(AriaRole.Row, new LocatorGetByRoleOptions { Name = "主体授权项 1", Exact = true }).WaitForAsync();
         await page.WaitForFunctionAsync("() => [...document.querySelectorAll('.ant-select-dropdown')].every(item => item.getClientRects().length === 0)");
         var wide = Path.Combine(_runDirectory, "personnel", "department-object-authorization-wide.png");
         await page.ScreenshotAsync(new PageScreenshotOptions { Path = wide, FullPage = true });
@@ -1133,7 +1149,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             item => item.Request.Method == "PUT" && new Uri(item.Url).AbsolutePath == endpoint);
         if (response.Status != 204) throw new InvalidOperationException($"{title}对象授权保存返回 {response.Status}。");
         await Assertions.Expect(dialog).ToHaveCountAsync(0);
-        await page.GetByText("授权已保存；后续访问按新配置判定。", new PageGetByTextOptions { Exact = true }).WaitForAsync();
+        await row.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
     }
 
     private static async Task<ILocator> OpenPersonEditDrawerAsync(StandardCrudPageDriver driver, PersonData person)

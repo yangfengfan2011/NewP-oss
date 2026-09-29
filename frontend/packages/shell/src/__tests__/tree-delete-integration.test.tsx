@@ -4,10 +4,15 @@ import { FeaturePlacementContext } from '../authorization/FeaturePlacementContex
 import { act, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
-import { beforeAll, expect, it, onTestFinished, vi } from 'vitest';
+import { expect, it, onTestFinished, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry, type StandardCrudActionContext } from '@icp-platform/sdk';
 import organizationBindings from '../../../../modules/organization/src';
+// 真实 Host 与资源装配归测试收集阶段；用例仍经正式 loader 验证动作与权限边界。
+import '../pages/StandardCrudListPageHost';
+import '../pages/StandardCrudListDrawerRuntime';
+import '../pages/StandardCrudListOverlayRuntime';
+import '../../../../modules/organization/src/standard-crud/departmentStandardCrudResource.primary';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { PageEntry } from '../composition/PageOutlet';
 import list from '../../../../../modules/Organization/metadata/views/DepartmentList.view.json';
@@ -16,15 +21,6 @@ import treeContract from '../../../../../tests/Kernel.Tests/Fixtures/Organizatio
 import runtimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
 vi.mock('@icp-platform/core', async original => ({ ...await original<typeof import('@icp-platform/core')>(), platformFetch: (...args: Parameters<typeof fetch>) => fetch(...args) }));
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-// 此测试验证动作生命周期；真实模块冷装载在 setup 完成，生产冷启动由正式 Gate 覆盖。
-beforeAll(async () => {
-  await Promise.all([
-    import('../pages/StandardCrudListPageHost'),
-    import('../pages/StandardCrudListDrawerRuntime'),
-    import('../pages/StandardCrudListOverlayRuntime'),
-    organizationBindings.standardCrudCapabilities!.find(binding => binding.targetKey === 'organization.department.list')!.load(),
-  ]);
-});
 it.each(['standard', 'stable', 'handler', 'input', 'denied', 'disabled', 'create', 'pending-cancel', 'pending-close', 'pending-escape', 'read-cancel'])('consumes compiled tree actions through the real Organization adapter (%s)', async scenario => {
   const fields = { EID: 'd', CompanyId: 'c', CompanyId_DisplayValue: 'Company', ParentDepartmentId: null, ParentDepartmentId_DisplayValue: null, ECODE: 'D', ENAME: 'Department', IsEnabled: true, SortOrder: '001', UpdatedAt: '2026-09-08T00:00:00Z' };
   const requests: string[] = [];

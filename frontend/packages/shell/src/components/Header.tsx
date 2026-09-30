@@ -1,5 +1,6 @@
 import { useAuth } from '../contexts/AuthContext';
-import { LanguageSelect, useLocalization } from '@icp-platform/core';
+import { useLocalization } from '@icp-platform/core';
+import { LanguageSelect } from './LanguageSelect';
 
 export function Header() {
   const auth = useAuth();

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { LanguageSelect, LocalizationProvider, useLocalization } from '@icp-platform/core';
+import { LocalizationProvider, useLocalization } from '@icp-platform/core';
+import { LanguageSelect } from '../components/LanguageSelect';
 import { getFallbackRuntimeLocalizationManifest, loadRuntimeLocalizationManifest } from './runtimeLocalizationManifest';
 import { PlatformRequestLocaleBridge } from './PlatformRequestLocaleBridge';
 

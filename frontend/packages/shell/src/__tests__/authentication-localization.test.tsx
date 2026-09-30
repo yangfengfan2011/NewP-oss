@@ -1,7 +1,8 @@
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LanguageSelect, LocalizationProvider, useLocalization } from '@icp-platform/core';
+import { LocalizationProvider, useLocalization } from '@icp-platform/core';
+import { LanguageSelect } from '../components/LanguageSelect';
 import { platformFetch, invalidatePlatformAntiforgeryToken } from '../../../core/src/http/platformFetch';
 import { AuthenticationOnlyApp } from '../AuthenticationOnlyApp';
 import { AuthenticationFrame, LocalizedBusinessBoundary, RuntimeLocalizationProvider } from '../localization/RuntimeLocalizationProvider';
@@ -26,9 +27,11 @@ afterEach(async () => {
 async function render(node: ReactNode) { await act(async () => root.render(node)); }
 async function selectLanguage(code: string) {
   await act(async () => {
-    const select = container.querySelector('select')!;
-    select.value = code;
-    select.dispatchEvent(new Event('change', { bubbles: true }));
+    container.querySelector('[role="combobox"]')!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+  });
+  await act(async () => {
+    const label = bootstrap.supportedLanguages.find(language => language.code === code)!.displayName;
+    document.querySelector<HTMLElement>(`.ant-select-item-option[title="${label}"]`)!.click();
   });
 }
 async function input(id: string, value: string) {
@@ -51,21 +54,21 @@ describe('browser language preference', () => {
     await selectLanguage('en');
     await render(null);
     await render(provider());
-    expect(container.querySelector('select')?.value).toBe('en');
+    expect(container.querySelector('.ant-select-selection-item')?.textContent).toBe('English');
   });
   it('rejects stale preferences and follows the authoritative default when there is no valid choice', async () => {
     localStorage.setItem('icp.language', 'removed');
     await render(provider());
-    expect(container.querySelector('select')?.value).toBe('zhs');
+    expect(container.querySelector('.ant-select-selection-item')?.textContent).toBe('简体中文');
     await render(provider('en'));
-    expect(container.querySelector('select')?.value).toBe('en');
+    expect(container.querySelector('.ant-select-selection-item')?.textContent).toBe('English');
   });
   it.each(['getItem', 'setItem'] as const)('keeps page-local switching available when storage %s throws', async method => {
     vi.spyOn(Storage.prototype, method).mockImplementation(() => { throw new DOMException('denied', 'SecurityError'); });
     await render(provider());
     await selectLanguage('en');
-    expect(container.querySelector('select')?.value).toBe('en');
-    expect(container.querySelector('select')?.getAttribute('aria-label')).toBe('Language');
+    expect(container.querySelector('.ant-select-selection-item')?.textContent).toBe('English');
+    expect(container.querySelector('[role="combobox"]')?.getAttribute('aria-label')).toBe('Language');
   });
 });
 
@@ -109,7 +112,7 @@ describe('authentication and dictionary recovery', () => {
       await act(async () => Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'Retry')!.click());
       expect(container.querySelector('#ecode')).toBe(account);
       expect(container.querySelector<HTMLInputElement>('#password')?.value).toBe('draft-password');
-      expect(container.querySelector('select')?.value).toBe('en');
+      expect(container.querySelector('.ant-select-selection-item')?.textContent).toBe('English');
     }
     expect(container.querySelector('.sh-localization-recovery')).toBeNull();
     expect(fetcher).toHaveBeenCalledTimes(3);
@@ -165,7 +168,7 @@ describe('authentication and dictionary recovery', () => {
     expect(container.querySelector<HTMLInputElement>('#new-password')?.value).toBe('new-password');
     await act(async () => Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'Sign out')!.click());
     expect(container.querySelector('h2')?.textContent).toBe('Sign in to the platform');
-    expect(container.querySelector('select')?.value).toBe('en');
+    expect(container.querySelector('.ant-select-selection-item')?.textContent).toBe('English');
   });
   it('retranslates the real password-change rejection and keeps the draft without resubmitting', async () => {
     window.history.replaceState({}, '', '/account/change-password');

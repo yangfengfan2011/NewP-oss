@@ -207,6 +207,10 @@ a:hover {
   flex-shrink: 0;
 }
 
+.np-shell-language-select {
+  width: 112px;
+}
+
 .np-language-select {
   display: inline-flex;
   align-items: center;

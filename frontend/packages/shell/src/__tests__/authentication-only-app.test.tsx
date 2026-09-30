@@ -57,12 +57,16 @@ describe('AuthenticationOnlyApp authenticated transition', () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(account, 'draft-account');
       account.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    const language = container.querySelector<HTMLSelectElement>('select[aria-label="语言"]');
+    const language = container.querySelector('[role="combobox"][aria-label="语言"]');
     expect(language).not.toBeNull();
-    expect(Array.from(language!.options).map(option => option.value)).toEqual(['zhs', 'en']);
+    expect(container.querySelector('.sh-authentication-toolbar')?.textContent).not.toContain('语言');
     await act(async () => {
-      language!.value = 'en';
-      language!.dispatchEvent(new Event('change', { bubbles: true }));
+      language!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    });
+    expect(Array.from(document.querySelectorAll('.ant-select-item-option')).map(option => option.textContent))
+      .toEqual(['简体中文', 'English']);
+    await act(async () => {
+      document.querySelector<HTMLElement>('.ant-select-item-option[title="English"]')!.click();
     });
     expect(container.querySelector('h2')?.textContent).toBe('Sign in to the platform');
     expect(container.querySelector('#ecode')).toBe(account);

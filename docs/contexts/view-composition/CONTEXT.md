@@ -75,3 +75,5 @@ _Avoid_: 默认全局查询、页面私有参数猜测
 _Avoid_: View 定义、全局页面状态
 
 PageOutlet 为标准列表与详情页面提供标准宿主环境的嵌入 adapter：不拥有地址，生命周期与成功事实经组合运行时交接，呈现模式由 PageRef 参数解析一次。
+
+资源仅被 Tree/Tab 的 `platform.detail` PageRef 消费时，关联 List View 只提供共享资源装载关系，不要求列表导航、列表查看动作或生成独立路由；实际被导航或 `platform.list` 消费的对象列表仍必须提供唯一导航或明确组合位置及详情入口。

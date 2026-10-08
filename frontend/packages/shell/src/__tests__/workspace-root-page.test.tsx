@@ -14,6 +14,8 @@ import dictionary from '../../../../../modules/Workspace/metadata/dictionaries/W
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { PageEntry } from '../composition/PageOutlet';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';
+import navigation from '../../../../../modules/Workspace/metadata/navigation/Workspace.nav.json';
 
 vi.unmock('@icp-platform/core');
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -49,6 +51,10 @@ it('mounts the real shared root detail, disables search and discards another acc
   });
   vi.stubGlobal('fetch', fetcher);
   ModuleRegistry.replaceAll([{ metadata: { moduleId: 'Workspace', displayName: '工作空间', version: '1' }, ...workspace }], 'workspace-test');
+  // 实际 AppRoutes 先编译所有模块路由，再装载组合；直接挂 PageEntry 不能替代这一步。
+  expect(compileStandardCrudRouteProjection(ModuleRegistry.getAllModules(), [navigation], [tree, list, detail], [])).toEqual({
+    detailEntries: [], drawerRedirects: [], fallbackRoutes: [],
+  });
   function SessionSwitch() {
     const auth = useAuth();
     return <button onClick={() => { account = 'b'; void auth.retrySessionValidation(); }}>切换账号</button>;

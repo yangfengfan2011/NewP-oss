@@ -76,6 +76,10 @@ export function compileStandardCrudRouteProjection(
       .map((binding) => binding.targetKey),
   );
   const consumedLazyDetailTargets = new Set<string>();
+  const composedPages = viewDocuments.flatMap(document => [
+    ...(Array.isArray(document.view.tabs) ? document.view.tabs : []),
+    ...(Array.isArray(document.view.nodeTypes) ? document.view.nodeTypes : []),
+  ]).map(item => item.pageRef);
 
   for (const module of modules) {
     for (const resource of module.standardCrudResources ?? []) {
@@ -87,14 +91,12 @@ export function compileStandardCrudRouteProjection(
     )) {
       const navigationMatches = navDocuments.flatMap(document => document.navigation.items)
         .filter(item => item.entryType === 'standard-list' && item.targetKey === listBinding.targetKey);
-      const composed = viewDocuments.some(document => {
-        const refs = [...(Array.isArray(document.view.tabs) ? document.view.tabs : []),
-          ...(Array.isArray(document.view.nodeTypes) ? document.view.nodeTypes : [])];
-        return refs.some(item => item.pageRef?.pageKey === 'platform.list' && item.pageRef.parameters?.viewKey === listBinding.targetKey);
-      });
-      const nav = navigationMatches.length === 0 && composed ? undefined : requireUniqueListNav(navDocuments, listBinding.targetKey);
       const listView = requireUniqueView(viewDocuments, listBinding.targetKey, 'STANDARD_CRUD_LIST_VIEW_NOT_UNIQUE');
       const detailViewKey = readNonEmptyString(listView.view.detailViewKey);
+      const composedList = composedPages.some(page => page?.pageKey === 'platform.list' && page.parameters?.viewKey === listBinding.targetKey);
+      const composedDetail = detailViewKey && composedPages.some(page => page?.pageKey === 'platform.detail' && page.parameters?.viewKey === detailViewKey);
+      // 仅内嵌详情仍使用同一资源的装载关联，但不因此虚构列表导航或新建/详情地址。
+      const nav = navigationMatches.length === 0 && (composedList || composedDetail) ? undefined : requireUniqueListNav(navDocuments, listBinding.targetKey);
       if (!detailViewKey) {
         if (readNonEmptyString(listView.view.model)) {
           fail('STANDARD_CRUD_DETAIL_VIEW_KEY_MISSING', listBinding.targetKey);
@@ -108,7 +110,7 @@ export function compileStandardCrudRouteProjection(
       }
 
       requireUniqueView(viewDocuments, detailViewKey, 'STANDARD_CRUD_DETAIL_VIEW_NOT_UNIQUE');
-      requireObjectViewAction(listView);
+      if (nav || composedList) requireObjectViewAction(listView);
       const matchingDetailTargets = lazyDetailTargets.filter((targetKey) => targetKey === detailViewKey);
       if (matchingDetailTargets.length > 1) {
         fail('STANDARD_CRUD_DETAIL_CAPABILITY_NOT_UNIQUE', detailViewKey);

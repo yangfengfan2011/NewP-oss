@@ -51,6 +51,20 @@
   overflow-wrap: anywhere;
 }
 
+.np-tree-context-header .ant-breadcrumb {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+}
+
+.np-tree-breadcrumb-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
 .np-tree-context-header > span {
   color: var(--np-composition-secondary);
   font-size: 12px;

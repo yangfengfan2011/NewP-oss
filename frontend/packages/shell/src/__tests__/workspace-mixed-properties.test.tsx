@@ -8,7 +8,6 @@ import { ModuleRegistry } from '@icp-platform/sdk';
 import workspace from '../../../../modules/workspace/src';
 import part from '../../../../modules/part/src';
 import documentModule from '../../../../modules/document/src';
-import resource from '../../../../modules/workspace/src/workspaceRootResource';
 import { partResource } from '../../../../modules/part/src/partResource';
 import { documentResource } from '../../../../modules/document/src/documentResource';
 import folder from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceFolderRuntime.contract.json';
@@ -28,17 +27,16 @@ import documentNavigation from '../../../../../modules/Document/metadata/navigat
 import dictionary from '../../../../../modules/Workspace/metadata/dictionaries/Workspace.dic.json';
 import partDictionary from '../../../../../modules/Part/metadata/dictionaries/Part.dic.json';
 import documentDictionary from '../../../../../modules/Document/metadata/dictionaries/Document.dic.json';
-import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
+import { PageEntry } from '../composition/PageOutlet';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { AuthProvider } from '../contexts/AuthContext';
 import { FeaturePlacementContext } from '../authorization/FeaturePlacementContext';
-import { StandardCrudHostEnvironmentContext, type StandardCrudHostEnvironment } from '../standard-crud/standardCrudHostEnvironment';
 import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';
 
 vi.unmock('@icp-platform/core');
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-beforeAll(async () => { await Promise.all([import('../pages/StandardCrudListDrawerRuntime'), import('@ant-design/pro-descriptions')]); });
+beforeAll(async () => { await Promise.all([import('../composition/StandardTreePage'), import('../pages/StandardCrudListPageHost'), import('../pages/StandardCrudListDrawerRuntime'), import('@ant-design/pro-descriptions')]); });
 
 it.each(['part', 'document'] as const)('opens same EID through the registered %s owning read-only page and target feature', async type => {
   const user = { id: 'actor', ecode: 'actor', ename: '账号', revision: 1, mustChangePassword: false, isLocalAdministrator: false,
@@ -49,6 +47,10 @@ it.each(['part', 'document'] as const)('opens same EID through the registered %s
     const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost');
     if (url.pathname.endsWith('antiforgery-token')) return json({ requestToken: 'token' });
     if (url.pathname.endsWith('current-user')) return json(user);
+    if (url.pathname.endsWith('/personal/ensure')) return json({ succeeded: true });
+    if (url.pathname === '/api/workspace/spaces') return json([{ spaceId: 'public', spaceKind: 'Public', rootFolderId: 'root', name: '公共空间', hasChildren: true }]);
+    if (url.pathname.endsWith('/path')) return json({ folderIds: ['root', 'shared'], names: ['公共空间', '当前共享文件夹'] });
+    if (url.pathname.endsWith('/children')) return json({ items: [{ linkId: 'shared-link', associatedObject: { id: 'shared' }, fields: { Name: '当前共享文件夹' }, hasChildren: false }] });
     if (url.pathname === '/api/workspace/content/references') {
       writes.push(input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body)));
       return json({ succeeded: true });
@@ -81,8 +83,6 @@ it.each(['part', 'document'] as const)('opens same EID through the registered %s
   expect(compileStandardCrudRouteProjection(ModuleRegistry.getAllModules(), [workspaceNavigation, ...navs], views, []).detailEntries).toHaveLength(2);
   const catalogs = { zhs: Object.fromEntries([[dictionary.Workspace, 'Workspace'], [partDictionary.Part, 'Part'], [documentDictionary.Document, 'Document']].flatMap(([dict, key]) =>
     Object.entries(dict).map(([name, value]) => [`${key}.${name}`, (value as { zhs: string }).zhs]))) };
-  const environment: StandardCrudHostEnvironment = { address: null, lifecycle: { active: true, reportState: () => undefined }, sync: { refreshVersion: 0 },
-    input: { queryScope: { spaceId: 'public', rootFolderId: 'root', linkIds: '[]', anchorId: 'root' } }, presentation: { kind: 'workspace', composed: true } };
   function OwnedPage() { const { id } = useParams(); return <FeaturePlacementContext.Provider value={{ entryPosition: type + '-entry' }}>
     <StandardCrudDetailPageHost viewKey={type === 'part' ? partDetail.view.key : documentDetail.view.key} id={id ?? null} registration={type === 'part' ? partResource : documentResource} />
   </FeaturePlacementContext.Provider>; }
@@ -96,8 +96,8 @@ it.each(['part', 'document'] as const)('opens same EID through the registered %s
       </RuntimeMetadataProvider>
     </PlatformQueryProvider></AuthorizationProvider></AuthProvider>
   </LocalizationProvider>;
-  const router = createMemoryRouter([{ path: '/workspace', element: wrap(<FeaturePlacementContext.Provider value={{ entryPosition: 'workspace-entry', staticScope: 'folder' }}><StandardCrudHostEnvironmentContext.Provider value={environment}><StandardCrudListPageHost viewKey={list.view.key} registration={resource} /></StandardCrudHostEnvironmentContext.Provider></FeaturePlacementContext.Provider>) },
-    { path: type === 'part' ? '/parts/:id' : '/documents/:id', element: wrap(<OwnedPage />) }], { initialEntries: ['/workspace'] });
+  const router = createMemoryRouter([{ path: '/workspace', element: wrap(<PageEntry page={{ pageKey: 'platform.tree', parameters: { viewKey: tree.view.key, featurePosition: 'workspace-entry' }, inputResolverKey: 'workspace.tree.current' }} />) },
+    { path: type === 'part' ? '/parts/:id' : '/documents/:id', element: wrap(<OwnedPage />) }], { initialEntries: ['/workspace?node=public%3Aroot%3Ashared-link&other=keep'] });
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
   onTestFinished(async () => { await act(async () => root.unmount()); router.dispose(); container.remove(); vi.unstubAllGlobals(); ModuleRegistry.replaceAll([], 'workspace-mixed-cleanup'); });
   await act(async () => root.render(<RouterProvider router={router} />));
@@ -111,7 +111,7 @@ it.each(['part', 'document'] as const)('opens same EID through the registered %s
   await vi.waitFor(() => expect([...document.querySelectorAll('.ant-select-item-option-content')].some(node => node.textContent === 'SAME-CODE - 无引用候选')).toBe(true));
   await act(async () => [...document.querySelectorAll<HTMLElement>('.ant-select-item-option-content')].find(node => node.textContent === 'SAME-CODE - 无引用候选')!.click());
   await act(async () => document.querySelector<HTMLButtonElement>('.ant-modal-footer .ant-btn-primary')!.click());
-  await vi.waitFor(() => expect(writes).toEqual([{ position: { spaceId: 'public', rootFolderId: 'root', linkIds: [] }, target: { modelKey: type === 'part' ? 'Part/Part' : 'Document/Document', id: 'same-id' } }]));
+  await vi.waitFor(() => expect(writes).toEqual([{ position: { spaceId: 'public', rootFolderId: 'root', linkIds: ['shared-link'] }, target: { modelKey: type === 'part' ? 'Part/Part' : 'Document/Document', id: 'same-id' } }]));
   await vi.waitFor(() => expect(document.querySelector('.ant-modal')).toBeNull());
   const row = container.querySelector(`tr[data-row-key="${type}-relation"]`)!;
   await act(async () => [...row.querySelectorAll<HTMLElement>('*')].find(node => node.children.length === 0 && node.textContent === '更多')!.click());
@@ -122,4 +122,9 @@ it.each(['part', 'document'] as const)('opens same EID through the registered %s
   expect(container.textContent).toContain('审计信息'); expect(container.textContent).toContain('更新账号');
   expect(container.querySelector('input,textarea')).toBeNull();
   expect(fetcher.mock.calls.some(([input]) => String(input instanceof Request ? input.url : input).includes('-relation'))).toBe(false);
+  await act(async () => router.navigate(-1));
+  await vi.waitFor(() => expect(container.querySelector('.np-tree-context-header .ant-breadcrumb')?.textContent).toBe('公共空间/当前共享文件夹'));
+  await vi.waitFor(() => expect(container.querySelector(`tr[data-row-key="${type}-relation"]`)).not.toBeNull());
+  expect(new URLSearchParams(router.state.location.search).get('node')).toBe('public:root:shared-link');
+  expect(new URLSearchParams(router.state.location.search).get('other')).toBe('keep');
 });

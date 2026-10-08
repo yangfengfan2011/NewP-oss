@@ -55,6 +55,7 @@ it.each(['rename', 'exclude', 'retry', 'unknown', 'unknown-retry'])('automatical
     await act(async () => root.render(<RouterProvider router={router} />));
     for (let i = 0; i < 100 && ![...container.querySelectorAll('button')].some(button => button.textContent === 'Save'); i++) await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
     expect(container.querySelector('.ant-tree-node-selected')?.textContent).toBe('Department');
+    expect(container.querySelector('.np-tree-context-header .ant-breadcrumb')?.textContent).toBe('Company/Department');
     fetchMock.mockClear();
     await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === 'Save')!.click());
     if (scenario.includes('retry')) {
@@ -66,7 +67,15 @@ it.each(['rename', 'exclude', 'retry', 'unknown', 'unknown-retry'])('automatical
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/roots?'))).toBe(true);
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/children?'))).toBe(true);
     expect(container.querySelector('.ant-tree-node-selected')?.textContent).toBe(scenario === 'exclude' ? 'Company' : 'Renamed');
+    expect(container.querySelector('.np-tree-context-header .ant-breadcrumb')?.textContent).toBe(scenario === 'exclude' ? 'Company' : 'Company/Renamed');
     if (scenario === 'exclude') expect(container.querySelector('aside')?.textContent).not.toContain('Department');
     expect(write).toHaveBeenCalledTimes(1);
+    if (scenario !== 'exclude') {
+      const reads = fetchMock.mock.calls.length;
+      await act(async () => container.querySelector<HTMLButtonElement>('.ant-breadcrumb button')!.click());
+      expect(container.querySelector('.ant-tree-node-selected')?.textContent).toBe('Company');
+      expect(new URLSearchParams(router.state.location.search).get('node')).toBe('company:c');
+      expect(fetchMock).toHaveBeenCalledTimes(reads);
+    }
   } finally { await act(async () => root.unmount()); router.dispose(); container.remove(); }
 });

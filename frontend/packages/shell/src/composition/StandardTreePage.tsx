@@ -5,6 +5,7 @@ import type { DataNode } from 'antd/es/tree';
 import Dropdown from 'antd/es/dropdown';
 import Button from 'antd/es/button';
 import Card from 'antd/es/card';
+import Breadcrumb from 'antd/es/breadcrumb';
 import ConfigProvider from 'antd/es/config-provider';
 import Space from 'antd/es/space';
 import PlusOutlined from '@ant-design/icons/PlusOutlined';
@@ -43,6 +44,26 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
     onSelectAccepted: () => setEditPage(null),
   });
   const { roots, branches, selected, expanded } = tree.snapshot;
+  // 只沿已加载的出现位置回溯；不解析 opaque nodeKey，也不为面包屑读取未展开的树。
+  const selectedPath = useMemo(() => {
+    if (!selected) return [];
+    const parents = new Map<string, string>();
+    const nodes = new Map(roots.map(node => [node.nodeKey, node]));
+    for (const [parent, children] of Object.entries(branches)) {
+      for (const child of children) { parents.set(child.nodeKey, parent); nodes.set(child.nodeKey, child); }
+    }
+    const path: TreeNodeDescriptor[] = [];
+    const visited = new Set<string>();
+    let key: string | undefined = selected.nodeKey;
+    while (key && !visited.has(key)) {
+      visited.add(key);
+      const node = nodes.get(key);
+      if (!node) break;
+      path.push(node);
+      key = parents.get(key);
+    }
+    return path.reverse();
+  }, [roots, branches, selected]);
   const data = (nodes: readonly TreeNodeDescriptor[]): DataNode[] => nodes.map(node => {
     const type = view.nodeTypes.find(item => item.key === node.nodeType);
     const title = <span style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }} title={type ? t(`${view.dicKey}.${type.titleKey}`, type.titleKey) : ''}>{node.labelKey ? t(node.labelKey, node.label) : node.label}{node.isEnabled === false ? t('Platform.TreeDisabledSuffix', '（停用）') : ''}</span>;
@@ -76,6 +97,10 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
     </aside>
     <section aria-label={t('Platform.TreeContent', '节点内容')} className="np-tree-content">
       {selected && <header className="np-tree-context-header">
+        <Breadcrumb aria-label={t('PlatformShell.Breadcrumb', '面包屑')} items={selectedPath.map((node, index) => ({ key: node.nodeKey,
+          title: index === selectedPath.length - 1 ? <span>{node.labelKey ? t(node.labelKey, node.label) : node.label}</span>
+            : <button type="button" className="np-tree-breadcrumb-link" onClick={() => tree.select(node.nodeKey)}>{node.labelKey ? t(node.labelKey, node.label) : node.label}</button>,
+        }))} />
         <h2>{selected.labelKey ? t(selected.labelKey, selected.label) : selected.label}</h2>
         {selectedType && <span>{t(`${view.dicKey}.${selectedType.titleKey}`, selectedType.titleKey)}</span>}
       </header>}

@@ -42,6 +42,13 @@ public sealed class AcceptanceGateTests
         var (root, runId) = PrepareRun("authorization");
         await new AuthorizationAcceptanceRunner(RepositoryRoot, root, runId).RunAsync(CancellationToken.None);
     }
+
+    [EnvironmentGatedFact(RunEnvironmentVariable, "工作空间双根入口、普通账号与同库真实 Host 进程重启")]
+    public async Task Workspace_CompletesEveryScenario()
+    {
+        var (root, runId) = PrepareRun("workspace");
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId).RunAsync(CancellationToken.None);
+    }
     // run id 参与一次性 catalog 名与资源根命名，必须是固定长度的十六进制。
     private static (string RunDirectory, string RunId) PrepareRun(string gate)
     {

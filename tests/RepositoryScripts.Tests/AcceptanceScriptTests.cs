@@ -11,6 +11,9 @@ public sealed class AcceptanceScriptTests : IDisposable
 
     [Theory]
     [InlineData("Personnel", "passed", 0)]
+    [InlineData("Workspace", "passed", 0)]
+    [InlineData("Workspace", "empty", 1)]
+    [InlineData("Workspace", "skipped", 1)]
     [InlineData("All", "passed", 0)]
     [InlineData("Personnel", "empty", 1)]
     [InlineData("Personnel", "skipped", 1)]
@@ -95,7 +98,7 @@ public sealed class AcceptanceScriptTests : IDisposable
             return;
         }
         XNamespace ns = "http://microsoft.com/schemas/VisualStudio/TeamTest/2010";
-        string[] gates = gate == "All" ? ["Authorization", "IdentityFoundation", "Personnel", "ExampleRequiredField"] : [gate];
+        string[] gates = gate == "All" ? ["Authorization", "IdentityFoundation", "Personnel", "ExampleRequiredField", "Workspace"] : [gate];
         var results = new XElement(ns + "Results");
         foreach (var selected in gates)
         {

@@ -67,8 +67,9 @@ internal static class WorkspaceAcceptanceFixture
             new { Code = roleCode, Name = $"工作空间验收角色 {suffix}" },
             features.Action(roleEntry, "create", "list.pageActions").Position, token);
         var roleId = role.GetProperty("id").GetString()!;
+        var createFolder = features.Action(entry, "create", "list.pageActions", "folder");
         await SendAsync(administrator, HttpMethod.Put, $"/api/authorization/workbench/roles/{roleId}",
-            new { positions = features.GrantSet(entry) }, features.Behavior("Authorization", "authorization.workbench.save").Position, token);
+            new { positions = features.GrantSet(entry, createFolder) }, features.Behavior("Authorization", "authorization.workbench.save").Position, token);
         await SendAsync(administrator, HttpMethod.Put, $"/api/authorization/users/{accountId}/roles",
             new { RoleCodes = new[] { roleCode } }, features.Action(roleEntry, "userRoles", "list.rowActions").Position, token);
         using var ordinary = CreateClient(administrator.BaseAddress!.Port);

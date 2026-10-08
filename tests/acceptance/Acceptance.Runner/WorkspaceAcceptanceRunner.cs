@@ -8,7 +8,7 @@ using Microsoft.Playwright;
 namespace ICP.Platform.Acceptance;
 
 /// <summary>Workspace 的同一正式浏览器旅程及其专用测试库、Host 和凭据生命周期。</summary>
-internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string runDirectory, string runId)
+internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string runDirectory, string runId, bool includeSpaceLifecycle = true)
     : AcceptanceRunner(repositoryRoot, runDirectory, runId)
 {
     private ReusableSqlServerDatabase? _databaseLease;
@@ -25,7 +25,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
     {
         await RunScenarioAsync("workspace.formal-initialization", PrepareAsync, token);
         await RunScenarioAsync("workspace.browser", RunBrowserAsync, token);
-        await RunScenarioAsync("workspace.process-restart", VerifyProcessRestartAsync, token);
+        if (includeSpaceLifecycle) await RunScenarioAsync("workspace.process-restart", VerifyProcessRestartAsync, token);
     }
 
     // 空 schema 只由正式 Host bootstrap/migration 建立，普通 actor 的初次个人初始化留给真实页面入口。
@@ -99,14 +99,25 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             await new ShellPageDriver(page, $"http://127.0.0.1:{_shellPort}").LoginAsync(actor.ECode, actor.Password);
             await driver.OpenAsync();
             await driver.SelectRootAsync("公共空间");
-            await CapturePresentationAsync(page, "public-root.png");
-            await driver.SelectRootAsync("个人空间");
-            await CapturePresentationAsync(page, "personal-root.png");
-            await driver.SelectRootAsync("公共空间");
+            if (includeSpaceLifecycle)
+            {
+                await CapturePresentationAsync(page, "public-root.png");
+                await driver.SelectRootAsync("个人空间");
+                await CapturePresentationAsync(page, "personal-root.png");
+                await driver.SelectRootAsync("公共空间");
+            }
+            var folderName = $"工作空间旅程文件夹 {_runId[..8]}";
+            await driver.CreateFolderAsync(folderName);
+            await driver.ExpandRootToFolderAsync("公共空间", folderName);
+            await CapturePresentationAsync(page, "folder-content.png");
+            var properties = await driver.OpenFolderPropertiesAsync(folderName);
+            await CapturePresentationAsync(page, "folder-properties.png");
             await page.SetViewportSizeAsync(900, 1000);
-            await CapturePresentationAsync(page, "public-root-narrow.png");
+            await CapturePresentationAsync(page, "folder-properties-narrow.png");
+            await driver.ClosePropertiesAsync(properties);
+            await CapturePresentationAsync(page, "folder-content-narrow.png");
             await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "browser.json"),
-                new { url = page.Url, actor = "ordinary", rootSwitching = "public-personal-public" }, token);
+                new { url = page.Url, actor = "ordinary", createdFolder = folderName, includeSpaceLifecycle }, token);
         }
         catch (Exception failure)
         {
@@ -163,8 +174,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             var diagnostics = new List<string>(errors);
             foreach (var response in failedResponses)
             {
-                try { diagnostics.Add($"{response.Request.Method} {response.Url}: {response.Status} {await response.TextAsync()}"); }
-                catch (Exception exception) { diagnostics.Add($"Response body unavailable: {exception.Message}"); }
+                diagnostics.Add(await ReadFailedResponseDiagnosticAsync(response.Request.Method, response.Url, response.Status, response.TextAsync));
             }
             await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "browser-failure.json"), new
             {
@@ -177,6 +187,14 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "browser-failure.png"), FullPage = true, Mask = [page.Locator("input,textarea")] });
         }
         catch (Exception) { /* 诊断采集不得覆盖原始浏览器失败。 */ }
+    }
+
+    // 响应体可能已被浏览器归还；读取失败仍保留请求身份和状态，最终由外层统一脱敏。
+    internal static async Task<string> ReadFailedResponseDiagnosticAsync(string method, string url, int status, Func<Task<string>> readBody)
+    {
+        var request = $"{method} {url}: {status}";
+        try { return $"{request} {await readBody()}"; }
+        catch (Exception exception) { return $"{request}; Response body unavailable: {exception.Message}"; }
     }
 
     // 复用正式 Host ownership marker，只有 marker 与本轮 supervisor 身份一致才归还专用 schema。

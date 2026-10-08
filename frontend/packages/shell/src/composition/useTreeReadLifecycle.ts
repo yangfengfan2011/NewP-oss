@@ -264,11 +264,7 @@ export function useTreeReadLifecycle({
         if (impact.afterLocation) affectedParents.add(impact.afterLocation.parentNodeKey);
       }
       pendingChanges.current.set(key, { impact, affectedParents: [...affectedParents], selectCreated: change.originTreeId === instanceId });
-      // 隐藏树只记录失效；激活后的读取负责恢复，不向当前列表报告待同步错误。
-      if (impact.kind === 'unknown' && activeRef.current) {
-        setError({ failure: new Error('树影响范围待确认'), saved: true });
-        throw new Error('树影响范围待确认');
-      }
+      // 未知范围由 flush 重读全部已加载位置；隐藏树留待激活，真实读取失败仍可只读重试。
     }
     await flush();
   }, [flush, instanceId, provider, treeScope]);

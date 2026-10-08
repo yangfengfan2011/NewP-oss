@@ -51,6 +51,11 @@ it('mounts the real shared content list, disables tree search and discards anoth
     }
     if (method === 'POST') return json(spaces()[1]);
     if (path === '/api/workspace/spaces') return json(spaces());
+    if (path.startsWith('/api/workspace/content/path?')) {
+      const root = new URL(path, 'http://localhost').searchParams.get('rootFolderId')!;
+      return json({ folderId: root, folderIds: [root], names: [root === 'public-root' ? '公共空间' : '个人空间'] });
+    }
+    if (path.startsWith('/api/workspace/content/children?')) return json({ items: [], total: 0, page: 1, pageSize: 0 });
     if (path.startsWith('/api/links/workspace.content?')) {
       const id = new URL(path, 'http://localhost').searchParams.get('anchorId');
       if (id === 'a-root') return new Promise<Response>(resolve => { completeOld = resolve; });
@@ -109,6 +114,7 @@ it('mounts the real shared content list, disables tree search and discards anoth
   await vi.waitFor(() => expect(writes).toHaveLength(1));
   expect(writes[0]).toEqual({ position: { spaceId: 'public', rootFolderId: 'public-root', linkIds: [] }, values: { ENAME: '创建后不可读', Description: null } });
   await vi.waitFor(() => expect(document.querySelector('.ant-drawer-open')).toBeNull());
+  await vi.waitFor(() => expect(container.textContent).not.toContain('已保存，刷新失败'));
   expect(container.querySelector('.ant-table')?.textContent).not.toContain('创建后不可读');
   await act(async () => [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === '刷新')!.click());
   expect(writes).toHaveLength(1);

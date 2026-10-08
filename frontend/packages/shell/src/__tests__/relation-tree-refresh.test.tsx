@@ -14,7 +14,7 @@ const { fetchMock } = vi.hoisted(() => ({ fetchMock: vi.fn() }));
 vi.mock('@icp-platform/core', async importOriginal => ({ ...await importOriginal<object>(), platformFetch: fetchMock }));
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-it.each(['rename', 'exclude', 'retry'])('automatically refreshes a configured filtered tree after %s and retries only reads', async scenario => {
+it.each(['rename', 'exclude', 'retry', 'unknown', 'unknown-retry'])('automatically refreshes a configured filtered tree after %s and retries only reads', async scenario => {
   let saved = false;
   let failed = false;
   let handoffError: unknown;
@@ -23,7 +23,7 @@ it.each(['rename', 'exclude', 'retry'])('automatically refreshes a configured fi
   fetchMock.mockReset();
   fetchMock.mockImplementation(async (address: string) => {
     const url = new URL(address, 'http://localhost');
-    if (saved && scenario === 'retry' && !failed) { failed = true; return { ok: false, status: 500 }; }
+    if (saved && scenario.includes('retry') && !failed) { failed = true; return { ok: false, status: 500 }; }
     if (url.pathname.endsWith('/path') && url.searchParams.get('nodeKey') === 'department:d') {
       return saved && scenario === 'exclude' ? { ok: false, status: 404 } : { ok: true, json: async () => [company, department()] };
     }
@@ -36,8 +36,10 @@ it.each(['rename', 'exclude', 'retry'])('automatically refreshes a configured fi
     return <button onClick={async () => {
       await write();
       try { await runtime.committed({ resourceKey: 'organization.department', operation: 'update', id: 'd',
-        before: { CompanyId: 'c', ParentDepartmentId: null, IsEnabled: true },
-        after: { CompanyId: 'c', ParentDepartmentId: null, IsEnabled: scenario !== 'exclude' } }); }
+        ...(scenario.startsWith('unknown') ? {} : {
+          before: { CompanyId: 'c', ParentDepartmentId: null, IsEnabled: true },
+          after: { CompanyId: 'c', ParentDepartmentId: null, IsEnabled: scenario !== 'exclude' },
+        }) }); }
       catch (error) { handoffError = error; }
     }}>Save</button>;
   }
@@ -55,7 +57,7 @@ it.each(['rename', 'exclude', 'retry'])('automatically refreshes a configured fi
     expect(container.querySelector('.ant-tree-node-selected')?.textContent).toBe('Department');
     fetchMock.mockClear();
     await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent === 'Save')!.click());
-    if (scenario === 'retry') {
+    if (scenario.includes('retry')) {
       expect(container.textContent).toContain('已保存，刷新失败');
       expect(container.textContent).not.toContain('树读取失败 (500)');
       await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent?.replace(/\s/g, '') === '重试读取')!.click());

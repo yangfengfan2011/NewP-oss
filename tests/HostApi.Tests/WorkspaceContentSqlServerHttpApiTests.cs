@@ -277,6 +277,25 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         Assert.True(Assert.Single((await FeatureHttpTestRequests.ReadAsync(admin, entry, ChildrenUrl(root))).GetProperty("items").EnumerateArray()).GetProperty("hasChildren").GetBoolean());
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "创建成功后的真实roots刷新返回可展开根，不把已提交创建改报刷新失败")]
+    public async Task Roots_AfterFolderCreation_ReturnsTheRootAsExpandable()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
+        using var admin = await fixture.LoginAdministratorAsync(); var entry = Entry(fixture); var root = await InitializeAsync(admin, entry);
+        Assert.False(Assert.Single((await FeatureHttpTestRequests.ReadAsync(admin, entry, "/api/workspace/spaces")).EnumerateArray()).GetProperty("hasChildren").GetBoolean());
+        var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "RefreshWriter", "刷新写入", "refresh-writer", "刷新写入账号", entry, Create(fixture));
+        using var ordinary = actor.Client;
+        await CreateAsync(ordinary, Create(fixture), root, "刷新后可展开");
+        Assert.Equal(1, (await ListAsync(ordinary, entry, root, root.RootFolderId)).GetProperty("total").GetInt32());
+        using var refreshed = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, "/api/workspace/spaces");
+        Assert.Equal(HttpStatusCode.OK, refreshed.StatusCode);
+        Assert.True(Assert.Single((await refreshed.Content.ReadFromJsonAsync<JsonElement>()).EnumerateArray()).GetProperty("hasChildren").GetBoolean());
+        using var path = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, PathUrl(root));
+        Assert.Equal(HttpStatusCode.OK, path.StatusCode);
+        var restored = await path.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(root.RootFolderId, Assert.Single(restored.GetProperty("folderIds").EnumerateArray()).GetString());
+    }
+
     private sealed record Position(string SpaceId, string RootFolderId, string[] LinkIds);
     private static FeaturePoint Entry(BusinessAuditHostFixture fixture) => Assert.Single(fixture.FeatureCatalog, p => p.ModuleId == "Workspace" && p.Key == "workspace");
     private static FeaturePoint Create(BusinessAuditHostFixture fixture) => Assert.Single(fixture.FeatureCatalog, p => p.BehaviorKey == "workspace.folder.create");

@@ -185,6 +185,39 @@ it.each(['select', 'locate'] as const)('drops an approved %s request belonging t
   expect(tree.navigation.locate).not.toHaveBeenCalled();
 });
 
+it('refreshes an active unknown change and adopts the root expandability from the provider', async () => {
+  const provider = providerWith([node('root')]);
+  const tree = await renderLifecycle(provider);
+  const expandableRoot = { ...node('root'), hasChildren: true };
+  provider.resolveChange = vi.fn(async () => ({ kind: 'unknown' as const }));
+  provider.roots = vi.fn(async () => [expandableRoot]);
+  provider.path = vi.fn(async () => [expandableRoot]);
+  await act(async () => { await expect(tree.publish({ resourceKey: 'resource', operation: 'create', id: '' })).resolves.toBeUndefined(); });
+  expect(provider.roots).toHaveBeenCalledOnce();
+  expect(provider.path).toHaveBeenCalledOnce();
+  expect(tree.read().snapshot.roots).toEqual([expandableRoot]);
+  expect(tree.read().snapshot.selected).toEqual(expandableRoot);
+  expect(tree.read().error).toBeNull();
+});
+
+it.each(['classification', 'read'])('keeps an active %s failure retryable without replaying the committed change', async failureKind => {
+  const provider = providerWith([node('root')]);
+  const tree = await renderLifecycle(provider);
+  const failure = new Error(`${failureKind} failed`);
+  provider.resolveChange = vi.fn(async () => {
+    if (failureKind === 'classification') throw failure;
+    return { kind: 'unknown' as const };
+  });
+  provider.roots = vi.fn().mockRejectedValueOnce(failure).mockResolvedValue([node('root')]);
+  if (failureKind === 'classification') provider.roots = vi.fn(async () => [node('root')]);
+  await act(async () => { await expect(tree.publish({ resourceKey: 'resource', operation: 'create', id: '' })).rejects.toBe(failure); });
+  expect(tree.read().error).toEqual({ failure, saved: true });
+  await act(async () => tree.read().retry({ kind: 'tree' }));
+  expect(tree.read().error).toBeNull();
+  expect(provider.resolveChange).toHaveBeenCalledOnce();
+  expect(provider.roots).toHaveBeenCalledTimes(failureKind === 'classification' ? 1 : 2);
+});
+
 it('defers hidden tree changes without rejecting the visible list commit', async () => {
   const provider = providerWith([node('a')]);
   provider.resolveChange = vi.fn(async () => ({ kind: 'unknown' as const }));

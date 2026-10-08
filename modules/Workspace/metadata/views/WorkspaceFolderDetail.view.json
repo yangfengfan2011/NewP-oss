@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "1.0", "type": "view",
+  "view": {
+    "key": "workspace.folder.detail", "mode": "detail", "model": "WorkspaceFolder", "resourceKey": "workspace.folder",
+    "dicKey": "Workspace", "titleKey": "DetailTitle", "descriptionKey": "RootDescription",
+    "sections": [{ "key": "basic", "titleKey": "Basic", "fields": ["ENAME", "Description"] },
+      { "key": "audit", "titleKey": "Audit", "fields": ["CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"] }]
+  }
+}

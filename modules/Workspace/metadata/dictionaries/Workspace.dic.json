@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "1.0", "type": "dic",
+  "Workspace": {
+    "Title": { "zhs": "工作空间", "en": "Workspace" },
+    "Folder": { "zhs": "文件夹", "en": "Folder" },
+    "Basic": { "zhs": "基本信息", "en": "Basic information" },
+    "Audit": { "zhs": "审计信息", "en": "Audit information" },
+    "Name": { "zhs": "名称", "en": "Name" },
+    "DetailTitle": { "zhs": "文件夹属性", "en": "Folder properties" },
+    "Field_ENAME": { "zhs": "名称", "en": "Name" },
+    "Field_Description": { "zhs": "说明", "en": "Description" },
+    "Field_CreatedBy": { "zhs": "创建人", "en": "Created by" },
+    "Field_CreatedAt": { "zhs": "创建时间", "en": "Created at" },
+    "Field_UpdatedBy": { "zhs": "更新人", "en": "Updated by" },
+    "Field_UpdatedAt": { "zhs": "更新时间", "en": "Updated at" },
+    "Public": { "zhs": "公共空间", "en": "Public space" },
+    "Personal": { "zhs": "个人空间", "en": "Personal space" },
+    "RootDescription": { "zhs": "当前空间根文件夹", "en": "Current space root folder" },
+    "PublicUnavailable": { "zhs": "公共空间尚未初始化，请联系管理员。", "en": "Public space is not initialized. Contact an administrator." },
+    "SearchDisabled": { "zhs": "工作空间未启用树搜索。", "en": "Workspace tree search is disabled." },
+    "SubjectInputForbidden": { "zhs": "个人空间命令不接受客户端主体。", "en": "The personal space command does not accept a client-provided subject." }
+  }
+}

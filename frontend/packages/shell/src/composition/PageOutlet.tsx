@@ -10,6 +10,7 @@ import { resolveComposedHostPresentation, StandardCrudHostEnvironmentContext, ty
 import { PageComposition } from './PageCompositionContext';
 import { createAddressNavigation } from './compositionNavigation';
 import './composition.css';
+import { useOptionalAuth } from '../contexts/AuthContext';
 import { FeaturePlacementContext, type FeaturePlacement } from '../authorization/FeaturePlacementContext';
 const TreePage = lazy(() => import('./StandardTreePage'));
 const TabPage = lazy(() => import('./StandardTabPage'));
@@ -17,6 +18,7 @@ const ListPage = lazy(() => import('../pages/StandardCrudListPageHost'));
 const DetailPage = lazy(() => import('../pages/StandardCrudDetailPageHost'));
 
 export function PageEntry({ page }: { page: PageRef }) {
+  const auth = useOptionalAuth();
   const location = useLocation();
   const entryPage = useMemo(() => ({ ...page, parameters: { ...location.state?.pageParameters, ...page.parameters } }), [location.state, page]);
   const navigate = useNavigate();
@@ -25,7 +27,7 @@ export function PageEntry({ page }: { page: PageRef }) {
     navigate({ pathname: location.pathname, search }, { replace });
   });
   // 导航入口切换必须释放旧页面的 dirty/submitting 登记；同一路径的查询参数变化保留组合状态。
-  return <PageComposition key={location.pathname}><div className="sh-page np-composed-page" style={{
+  return <PageComposition key={`${auth?.user?.id ?? ''}:${location.pathname}`}><div className="sh-page np-composed-page" style={{
     '--np-composition-surface': token.colorBgContainer,
     '--np-composition-border': token.colorBorderSecondary,
     '--np-composition-secondary': token.colorTextSecondary,

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "1.0", "type": "view",
+  "view": {
+    "key": "workspace.folder.list", "mode": "list", "model": "WorkspaceFolder", "resourceKey": "workspace.folder",
+    "dicKey": "Workspace", "titleKey": "Folder", "descriptionKey": "RootDescription", "detailViewKey": "workspace.folder.detail",
+    "query": { "fields": [], "defaultPageSize": 20, "defaultSort": { "field": "ENAME", "direction": "asc" } },
+    "columns": [{ "key": "name", "labelKey": "Name", "source": "model", "field": "ENAME" }],
+    "pageActions": [], "rowActions": [], "export": { "enabled": false }
+  }
+}

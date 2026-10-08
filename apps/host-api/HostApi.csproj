@@ -77,6 +77,8 @@
 
   <ItemGroup>
     <!-- Development-time staging only; runtime module composition is manifest-driven. -->
+    <ProjectReference Include="../../server/modules/Workspace/WorkspaceModule.csproj" />
+    <ProjectReference Include="../../server/modules/Workspace/Migrations.SqlServer/Workspace.SqlServerMigrations.csproj" />
     <ProjectReference Include="..\..\server\kernel\Kernel.csproj" />
     <ProjectReference Include="..\..\server\sdk\Sdk.csproj" />
     <ProjectReference Include="..\..\server\platform-authorization\PlatformAuthorization.csproj" />
@@ -103,6 +105,12 @@
     <ProjectReference Include="..\..\server\modules\Organization\Migrations.SqlServer\Organization.SqlServerMigrations.csproj" />
     <ProjectReference Include="..\..\server\modules\Authentication\Migrations.SqlServer\Authentication.SqlServerMigrations.csproj" />
     <ProjectReference Include="..\..\server\modules\Example\Migrations.SqlServer\Example.SqlServerMigrations.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="../../modules/Workspace/newp.plugin.json" Link="modules/Workspace/plugin.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../modules/Workspace/migrations/Workspace.SqlServerMigrations.json" Link="modules/Workspace/migrations/Workspace.SqlServerMigrations.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../server/modules/Workspace/Migrations.SqlServer/bin/$(Configuration)/$(TargetFramework)/Workspace.SqlServerMigrations.dll" Link="modules/Workspace/migrations/Workspace.SqlServerMigrations.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

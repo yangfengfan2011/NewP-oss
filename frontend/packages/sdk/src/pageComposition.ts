@@ -5,6 +5,8 @@ export interface PageRef { pageKey: string; parameters?: Record<string, unknown>
 export interface TreeNodeDescriptor {
   nodeKey: string; nodeType: string; label: string; hasChildren: boolean;
   code?: string; isEnabled?: boolean; context?: Record<string, unknown>;
+  /** 合成节点的本地化标题；label 保留 Provider 的显示回退值。 */
+  labelKey?: string;
 }
 export interface PageInput {
   parameters: Record<string, unknown>; context?: TreeNodeDescriptor;
@@ -56,6 +58,8 @@ export interface TabView {
 }
 export interface TreeView {
   key: string; mode: 'tree'; dicKey: string; providerKey: string;
+  /** 缺省开启搜索；关闭后宿主不挂载搜索入口或发起搜索请求。 */
+  searchEnabled?: boolean;
   relationSource?: RelationTreeSource;
   treeActions?: TreeActionReference[];
   nodeTypes: { key: string; titleKey: string; pageRef: PageRef;

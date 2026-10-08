@@ -59,6 +59,8 @@ public static class PageCompositionMetadataValidator
             }
             else
             {
+                if (view.TryGetProperty("searchEnabled", out var searchEnabled) && searchEnabled.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                    throw new JsonException("Tree searchEnabled must be boolean.");
                 var providerKey = Required(view, "providerKey");
                 if (providerKey == RelationTreeMetadata.ProviderKey) RelationTreeMetadata.Read(view);
                 else

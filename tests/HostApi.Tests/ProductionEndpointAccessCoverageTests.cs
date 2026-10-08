@@ -49,6 +49,7 @@ public sealed class ProductionEndpointAccessCoverageTests
             .AddApplicationPart(typeof(SampleStatusController).Assembly)
             .AddApplicationPart(typeof(IdentityAccountsController).Assembly)
             .AddApplicationPart(typeof(PersonOrganizationLookupsController).Assembly)
+            .AddApplicationPart(typeof(ICP.Platform.Modules.Workspace.WorkspaceSpacesController).Assembly)
             .AddApplicationPart(typeof(ExampleModule).Assembly);
         builder.Services.AddStandardCrudKernel();
         builder.Services.AddStandardCrudResource(PersonCrudDescriptorFactory.Create());

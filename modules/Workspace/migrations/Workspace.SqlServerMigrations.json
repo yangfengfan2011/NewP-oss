@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "1.0",
+  "provider": "SqlServer",
+  "moduleId": "Workspace",
+  "modelDigest": "c7697bab6bc9a2d0d9a4208e074d7badd491e3fa9884fb649156de0d7f15cbc8",
+  "bundleChecksum": "d1fd56521f9c77027aa86fe623c2b16969be9d3727a4d190731e2ad58366b67d",
+  "migrations": [
+    {
+      "sequence": "000001",
+      "migrationId": "20261008072758_Workspace_000001_Spaces",
+      "previousContentDigest": null,
+      "contentDigest": "c0e86694c4561d6b2f19bf7adfe7104115898438a668efe697114b797bcb65a3",
+      "fromModelDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "toModelDigest": "c7697bab6bc9a2d0d9a4208e074d7badd491e3fa9884fb649156de0d7f15cbc8",
+      "compatibility": "safe-expand"
+    }
+  ]
+}

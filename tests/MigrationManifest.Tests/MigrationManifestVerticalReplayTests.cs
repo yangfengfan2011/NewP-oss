@@ -169,6 +169,55 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
         _output.WriteLine(JsonSerializer.Serialize(new { module = "Audit", migration = first.MigrationId, firstFinalize = "finalized", secondFinalize = "already finalized", manifestSha256 = Convert.ToHexStringLower(SHA256.HashData(bytes)), result.CheckedBundles, result.ProviderResults, before.Head, before.IndexTree, before.Status, before.TrackedContentSha256 }));
     }
 
+    [Fact]
+    public void WorkspaceFirstStream_FinalizesTwiceAndChecksFrozenInputs()
+    {
+        InitializeIsolatedOrganizationRepository(FindRepositoryRoot(), "Workspace");
+        InitializeIsolatedGitRepository();
+        var manifestPath = Path.Combine(_fixtureRoot, "modules/Workspace/migrations/Workspace.SqlServerMigrations.json");
+        var original = MigrationManifestIntegrity.Parse(File.ReadAllBytes(manifestPath));
+        var first = Assert.Single(original.Migrations);
+        File.WriteAllBytes(manifestPath, MigrationManifestIntegrity.SerializeCanonical(original with
+        { Migrations = [], ModelDigest = new string('0', 64), BundleChecksum = new string('0', 64) }));
+        var application = new MigrationManifestApplication(_fixtureRoot);
+        Assert.True(application.Finalize("Workspace", "SqlServer", first.MigrationId, first.Compatibility).Changed);
+        var bytes = File.ReadAllBytes(manifestPath);
+        Assert.False(application.Finalize("Workspace", "SqlServer", first.MigrationId, first.Compatibility).Changed);
+        Assert.Equal(bytes, File.ReadAllBytes(manifestPath));
+        var hostRoot = Path.Combine(_fixtureRoot, "apps/host-api/bin/Release/net10.0/modules/Workspace/migrations");
+        File.Copy(manifestPath, Path.Combine(hostRoot, "Workspace.SqlServerMigrations.json"), true);
+        var assetPaths = new[] { manifestPath, Path.Combine(_fixtureRoot, "server/modules/Workspace/Migrations.SqlServer/bin/Release/net10.0/Workspace.SqlServerMigrations.dll"),
+            Path.Combine(hostRoot, "Workspace.SqlServerMigrations.json"), Path.Combine(hostRoot, "Workspace.SqlServerMigrations.dll") };
+        var hashes = assetPaths.Select(path => Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path)))).ToArray();
+        var before = CaptureGitSnapshot();
+        var result = application.CheckAll(noBuild: true);
+        Assert.Equal(1, result.CheckedBundles);
+        Assert.Equal(before, CaptureGitSnapshot());
+        Assert.Equal(hashes, assetPaths.Select(path => Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path)))));
+        _output.WriteLine(JsonSerializer.Serialize(new { module = "Workspace", provider = "SqlServer", migration = first.MigrationId, first.Compatibility,
+            firstFinalize = "finalized", secondFinalize = "already finalized", manifestSha256 = hashes[0], result.CheckedBundles, result.ProviderResults,
+            before.Head, before.IndexTree, before.Status, before.TrackedContentSha256, assets = hashes }));
+    }
+
+    [EnvironmentGatedFact(DatabaseEvidenceEnvironmentVariable, "Workspace正式check保持SQL日志前沿、history、Git与Release资产只读")]
+    public async Task WorkspaceCheck_WithReadOnlyObserver_PreservesDatabaseAndInputs()
+    {
+        var root = FindRepositoryRoot();
+        InitializeIsolatedOrganizationRepository(root, "Workspace");
+        InitializeIsolatedGitRepository();
+        var configuration = ResolveSqlServerObserver(root);
+        await using var observer = await SqlServerDatabaseObserver.OpenAsync(configuration.ConnectionString);
+        var before = await observer.CaptureAsync();
+        var git = CaptureGitSnapshot();
+        var application = new MigrationManifestApplication(_fixtureRoot);
+        var result = application.CheckAll(noBuild: true);
+        Assert.Equal(1, result.CheckedBundles);
+        Assert.Equal(git, CaptureGitSnapshot());
+        Assert.Equal(before, await observer.CaptureAsync());
+        _output.WriteLine(JsonSerializer.Serialize(new { module = "Workspace", configuration.Source, result.CheckedBundles, result.ProviderResults,
+            database = before, git }));
+    }
+
     [EnvironmentGatedFact(
         DatabaseEvidenceEnvironmentVariable,
         "SQL Server 每库日志前沿与 migration history 内容的只读前后快照；配置来源与 Acceptance admin connection 一致")]

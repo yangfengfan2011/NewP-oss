@@ -10,6 +10,30 @@ namespace ICP.Platform.Kernel.Tests;
 public sealed class PageCompositionMetadataTests
 {
     [Fact]
+    public void WorkspaceFolder_RuntimeModelMatchesTheSharedDetailConsumerFixture()
+    {
+        var root = RepositoryRoot();
+        var path = Path.Combine(root, "modules/Workspace/metadata/models/WorkspaceFolder.model.json");
+        var authoring = File.ReadAllBytes(path);
+        var projected = new ICP.Platform.Modeling.Projection.ModelRuntimeMetadataProjector().Project(authoring, path);
+        var fixture = File.ReadAllBytes(Path.Combine(root, "tests/Kernel.Tests/Fixtures/WorkspaceFolderRuntime.contract.json"));
+        Assert.True(JsonNode.DeepEquals(JsonNode.Parse(projected), JsonNode.Parse(fixture)));
+        Assert.Equal(authoring, File.ReadAllBytes(path));
+    }
+
+    [Fact]
+    public void TreeSearch_CanBeExplicitlyDisabledButMustRemainBoolean()
+    {
+        var documents = ReadDocuments();
+        var tree = documents.Single(document => document["view"]?["key"]?.GetValue<string>() == "organization.structure")["view"]!;
+        Validate(documents);
+        tree["searchEnabled"] = false;
+        Validate(documents);
+        tree["searchEnabled"] = "false";
+        Assert.Throws<JsonException>(() => Validate(documents));
+    }
+
+    [Fact]
     public void OrganizationTreeActions_CompileAndStageTheSharedRuntimeContract()
     {
         var repository = RepositoryRoot();

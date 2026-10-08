@@ -1,0 +1,5 @@
+{
+  "schemaVersion": "1.0", "type": "nav",
+  "navigation": { "items": [{ "key": "workspace", "titleKey": "Workspace.Title", "icon": "folder", "order": 200, "path": "/workspace", "featureKey": "workspace",
+    "page": { "pageKey": "platform.tree", "parameters": { "viewKey": "workspace.structure" }, "inputResolverKey": "workspace.tree.current" } }] }
+}

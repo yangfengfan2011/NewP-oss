@@ -19,6 +19,14 @@ const modules: FrontendModule[] = [{ metadata: { moduleId: 'Organization', displ
   pageInputResolvers: ['organization.department.global', 'organization.node.detail', 'organization.company.direct', 'organization.department.direct', 'organization.tree.global'].map(key => ({ key, pageKeys: ['platform.tree', 'platform.list', 'platform.detail'], resolve: parameters => ({ parameters }) })),
 }];
 describe('formal page configuration references', () => {
+  it('accepts disabled search and rejects a non-boolean declaration', () => {
+    const metadata = authoring();
+    const tree = metadata.viewDocuments.find(item => item.view.mode === 'tree')!.view;
+    tree.searchEnabled = false;
+    expect(() => validateCompositionCandidate(modules, metadata)).not.toThrow();
+    tree.searchEnabled = 'false';
+    expect(() => validateCompositionCandidate(modules, metadata)).toThrow(/searchEnabled/);
+  });
   it('accepts configured trees without a module Provider and still accepts a custom Provider', () => {
     expect(() => validateCompositionCandidate([{ ...modules[0], treeProviders: [] }], authoring())).not.toThrow();
     const metadata = authoring();

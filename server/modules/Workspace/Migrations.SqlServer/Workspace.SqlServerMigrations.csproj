@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Workspace.SqlServerMigrations</AssemblyName>
+    <RootNamespace>ICP.Platform.Modules.Workspace.Migrations.SqlServer</RootNamespace>
+    <DebugType>none</DebugType><DebugSymbols>false</DebugSymbols><Optimize>true</Optimize><Deterministic>true</Deterministic>
+    <PathMap>$(MSBuildProjectDirectory)=/_/Workspace.SqlServerMigrations</PathMap>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../WorkspaceModule.csproj" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.1" PrivateAssets="all" />
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.10" />
+  </ItemGroup>
+</Project>

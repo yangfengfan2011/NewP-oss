@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace ICP.Platform.Authorization.Contracts;
 
-/// <summary>规范资源身份显式映射到所属模型和对象标识字段。</summary>
+/// <summary>规范资源身份显式映射到所属模型和对象标识字段；专用命令模块可通过 DI 贡献，标准 CRUD 由描述符贡献。</summary>
 public sealed record DataScopeResource(string ResourceKey, string ModuleId, string ModelName, string IdField)
 {
     /// <summary>模型身份始终包含声明 owner，已规范化的描述符不再重复加前缀。</summary>

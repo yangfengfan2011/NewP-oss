@@ -8,11 +8,12 @@ using ICP.Platform.Presentation;
 
 namespace ICP.Platform.Modules.Authorization.Services;
 
-/// <summary>规范资源映射来自全部显式描述符，动作来自正式候选；不按模块名硬编码资源。</summary>
+/// <summary>规范资源映射来自标准描述符及模块的显式资源贡献，动作来自正式候选。</summary>
 public sealed class DataScopeCatalog(IStandardCrudResourceRegistry resources, CanonicalModulePlan plan,
     EfPlatformDbContext db, DataScopeIdentities identities, ITemporalInputNormalizer? temporalInputNormalizer = null,
     IEnumerable<IDataScopeBusinessConditionProvider>? conditionProviders = null,
-    IEnumerable<IDataScopeEnumFieldProvider>? enumProviders = null)
+    IEnumerable<IDataScopeEnumFieldProvider>? enumProviders = null,
+    IEnumerable<DataScopeResource>? resourceContributions = null)
 {
     private DataScopeConditions Conditions => new(this, db, identities, temporalInputNormalizer, conditionProviders ?? [], enumProviders ?? []);
     public IReadOnlyList<DataActionDeclaration> Actions => plan.DataActionCatalog;
@@ -21,8 +22,31 @@ public sealed class DataScopeCatalog(IStandardCrudResourceRegistry resources, Ca
         get { Conditions.ValidateRegistration(); return Conditions.BusinessTypes; }
     }
     public IReadOnlyList<string>? EnumValues(string resourceKey, string field) => Conditions.EnumValues(resourceKey, field);
-    public IReadOnlyList<DataScopeResource> Resources => resources.GetAll().Select(resource =>
-        new DataScopeResource(resource.ResourceKey, resource.ModuleId, resource.ModelName, resource.IdField)).ToArray();
+    public IReadOnlyList<DataScopeResource> Resources => ReadResources();
+
+    // 专用命令资源不必开放普通 CRUD；目录仍验证真实活动 owner、模型和唯一主键，不推断字段身份。
+    private IReadOnlyList<DataScopeResource> ReadResources()
+    {
+        var declared = (resourceContributions ?? []).ToArray();
+        foreach (var resource in declared)
+        {
+            if (string.IsNullOrWhiteSpace(resource.ResourceKey) || string.IsNullOrWhiteSpace(resource.ModuleId)
+                || string.IsNullOrWhiteSpace(resource.ModelName) || string.IsNullOrWhiteSpace(resource.IdField)
+                || !resource.ModelKey.StartsWith(resource.ModuleId + "/", StringComparison.Ordinal)
+                || !plan.Modules.Any(module => module.ModuleId == resource.ModuleId))
+                throw new InvalidOperationException("DATA_SCOPE_RESOURCE_OWNER_INVALID");
+            var model = db.Model.FindEntityType(resource.ModelKey)
+                ?? throw new InvalidOperationException("DATA_SCOPE_MODEL_UNAVAILABLE");
+            if (model.FindPrimaryKey()?.Properties is not { Count: 1 } keys || keys[0].Name != resource.IdField
+                || keys[0].ClrType != typeof(string))
+                throw new InvalidOperationException("DATA_SCOPE_RESOURCE_ID_INVALID");
+        }
+        var all = resources.GetAll().Select(resource => new DataScopeResource(resource.ResourceKey, resource.ModuleId, resource.ModelName, resource.IdField))
+            .Concat(declared).ToArray();
+        if (all.Select(resource => resource.ResourceKey).Distinct(StringComparer.Ordinal).Count() != all.Length)
+            throw new InvalidOperationException("DATA_SCOPE_RESOURCE_DUPLICATE");
+        return all;
+    }
 
     /// <summary>定位明确登记的资源；不从模型名或页面猜测身份。</summary>
     public DataScopeResource Resolve(string key) => Resources.SingleOrDefault(resource => resource.ResourceKey == key)

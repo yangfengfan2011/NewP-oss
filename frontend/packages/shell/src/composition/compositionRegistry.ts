@@ -49,6 +49,7 @@ export function validateCompositionCandidate(modules: FrontendModule[], metadata
     }
     if (view.mode === 'tree') {
       const tree = view as unknown as TreeView;
+      if (tree.searchEnabled !== undefined && typeof tree.searchEnabled !== 'boolean') throw new Error('searchEnabled 必须为布尔值');
       if (tree.providerKey === relationTreeProviderKey) {
         if (!tree.relationSource?.nodes.length
           || tree.relationSource.nodes.length !== tree.nodeTypes.length

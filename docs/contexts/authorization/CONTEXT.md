@@ -161,7 +161,7 @@ _Avoid_: 部门资源的数据条件、公司全体人员、组织准入
 - 规则名称保存前去除首尾空白，按原文精确比较；同一父节点下名称唯一，所有根规则共享同一名称范围，不同父节点下可同名。前端新建自动选择未占用名称，后端在事务中锁定根名称范围后核对冲突，避免并发创建同名根；此限制只用于保存，不阻断既有规则读取。
 
 - 独立 `dataActions` 由 Capsule 声明并经正式候选编译，开关属于动作目录；模块内的动作展示顺序保留数组声明顺序，跨模块沿用正式模块计划顺序，前端不另行排序；默认启用、停用保留配置，启动装配后生效。规则保存后的下一次请求直接读取已提交配置，不建立权限版本或跨请求缓存。
-- `DataScopeResource` 从全部显式 Standard CRUD 描述符取得资源键、模块、模型和 ID 字段，包含 Identity 账号资源，不从页面或裸模型名猜测身份。Authorization.Contracts 暴露可组合读取计划；公共查询在 Count、排序、分页前应用谓词，详情在同一数据库比较规则下核对可读性，拒绝返回 404。LocalAdmin 跳过该层配置和条件执行；认证与功能资格保持原流水线。
+- `DataScopeResource` 从显式 Standard CRUD 描述符及专用模块的 DI 贡献取得资源键、模块、模型和 ID 字段，不从页面或裸模型名猜测身份。目录拒绝重复资源、活动 owner 不符、缺失模型和无效主键；专用资源不因此开放普通 CRUD 路由。Authorization.Contracts 暴露可组合读取计划；公共查询在 Count、排序、分页前应用谓词，详情在同一数据库比较规则下核对可读性，拒绝返回 404。LocalAdmin 跳过该层配置和条件执行；认证与功能资格保持原流水线，Workspace 自身的个人空间准入不被跳过。
 - 固定 Instant 条件在保存时按既有可信时区规范为 UTC，读取只解释已存规范值；CalendarDate 不作时区转换。管理入口 `/authorization/data-scope` 编辑一棵根规则及子树，支持组合条件、固定值或有类型当前身份值、多主体显式优先级与读取三态。节点和主体项身份稳定，根/父关系及资源一致且无环。整树 PUT/DELETE 复用平台事务及根目标锁，实际旧配置与 `dataScope.rule.changed` 审计共同提交；失败保留旧配置，无变化不登记。
 - `DataScopeRuleNode`、`DataScopeRuleSubject` 的模型 owner 是 Authorization；物理迁移沿现有 `platform.foundation` 载体追加 `20260922094146_AddDataScopeRules`，不改写旧 migration、业务数据或历史。将来独立 bundle 的迁移不属于本片。
 - `IDataScopeIdentityProvider` 是主体、最小管理目录与当前身份值的稳定扩展契约；Identity 注册用户/当前账号，Authorization 注册所有已认证用户（界面显示“所有用户”）与当前有效角色，Organization 注册公司、部门及当前人员/公司/部门。模块通过既有 `ConfigureServices` 接入，核心不识别模块业务字段。资源 owner 用 `DataScopeContextBinding` 显式绑定直接字段的规范身份域；CLR 类型相同不能使账号、公司、部门身份混用。

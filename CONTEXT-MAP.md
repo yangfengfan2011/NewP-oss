@@ -7,6 +7,7 @@
 - [Identity](./docs/contexts/identity/CONTEXT.md) — 管理用户账号、账号状态与可供认证机制使用的账号目录
 - [Authentication](./docs/contexts/authentication/CONTEXT.md) — 管理认证会话、服务端有效性与统一撤销
 - [Organization](./docs/contexts/organization/CONTEXT.md) — 管理公司、部门、岗位、人员档案及人员与用户账号的永久绑定
+- [Workspace](./docs/contexts/workspace/CONTEXT.md) — 管理公共空间、当前账号个人空间、强制准入与真实根文件夹
 - [Object Operations](./docs/contexts/object-operations/CONTEXT.md) — 提供可按职责复用的对象操作、默认 CRUD 行为与对象拥有者声明的横切扩展点
 - [Standard CRUD](./docs/contexts/standard-crud/CONTEXT.md) — 管理共享 CRUD 宿主使用的字段、表单、列表与详情展示契约
 - [View Composition](./docs/contexts/view-composition/CONTEXT.md) — 定义页面引用、视图配置及树与标签页组合的已确认目标契约，落地状态见 ADR-0046
@@ -16,6 +17,9 @@
 - [Platform Acceptance](./docs/contexts/platform-acceptance/CONTEXT.md) — 编排正式观察面上的用户旅程与故障场景，并从完整证据集中产生两道闸门的唯一裁决
 
 ## Relationships
+
+- **Workspace → Authorization**：Workspace 贡献自己的稳定数据资源身份，读取根时交集正式读取计划与空间准入；专用资源不因此开放普通 CRUD。
+- **Workspace → View Composition / Standard CRUD**：模块 Provider 和输入 resolver 提供真实双根及 Folder EID，共享树与只读详情拥有布局、生命周期与显示投影。
 
 - **Organization → Object Operations**：Organization 的公司、部门、岗位、人员普通 CRUD 复用默认对象行为及其既有扩展能力；人员启用、停用与永久账号绑定由 Organization 业务服务拥有，不声明对象动作或横切开放点。
 - **Object Operations → Platform Persistence**：对象操作执行其必需规则、已开放的前后横切及声明的跨对象调用，并复用唯一事务执行器、可信审计值和缓存提交机制；专用业务服务可直接复用同一事务与审计能力，统一规则不要求统一入口。

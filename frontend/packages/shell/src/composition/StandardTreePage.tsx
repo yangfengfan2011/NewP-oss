@@ -45,7 +45,7 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
   const { roots, branches, selected, expanded } = tree.snapshot;
   const data = (nodes: readonly TreeNodeDescriptor[]): DataNode[] => nodes.map(node => {
     const type = view.nodeTypes.find(item => item.key === node.nodeType);
-    const title = <span style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }} title={type ? t(`${view.dicKey}.${type.titleKey}`, type.titleKey) : ''}>{node.label}{node.isEnabled === false ? t('Platform.TreeDisabledSuffix', '（停用）') : ''}</span>;
+    const title = <span style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }} title={type ? t(`${view.dicKey}.${type.titleKey}`, type.titleKey) : ''}>{node.labelKey ? t(node.labelKey, node.label) : node.label}{node.isEnabled === false ? t('Platform.TreeDisabledSuffix', '（停用）') : ''}</span>;
     return { key: node.nodeKey, isLeaf: branches[node.nodeKey] ? branches[node.nodeKey].length === 0 : !node.hasChildren,
       title: <Dropdown trigger={['contextMenu']} open={menuNode === node.nodeKey} menu={{ items: (type?.contextMenu ?? []).map(menu => ({ menu, resolution: features.action(menu.key, 'contextMenu', node.nodeType) })).filter(({ resolution }) => !features.placement || resolution.kind === 'allowed').map(({ menu, resolution }) => ({ key: menu.key, label: t(`${view.dicKey}.${menu.labelKey}`, menu.labelKey), onClick: () => tree.select(node.nodeKey, () => { setMenuNode(null); setEditFeature(features.placement ? { ...features.placement, staticScope: node.nodeType, actionPosition: resolvedFeaturePosition(resolution), actionKey: menu.actionKey ?? menu.standardAction } : undefined); setEditContext(node); setEditPage({ pageKey: 'platform.list', parameters: { viewKey: menu.viewKey, presentation: 'drawer', standardAction: menu.standardAction, actionKey: menu.actionKey }, inputResolverKey: menu.inputResolverKey }); }) })) }}
         onOpenChange={open => { if (open) tree.select(node.nodeKey, () => setMenuNode(node.nodeKey)); else setMenuNode(null); }}>{title}</Dropdown>,
@@ -60,7 +60,7 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
           {view.treeActions.map(action => ({ action, resolution: features.action(action.key, 'treeActions') })).filter(({ resolution }) => !features.placement || resolution.kind === 'allowed').map(({ action, resolution }) => <Button key={action.key} size="small" icon={action.standardAction === 'create' ? <PlusOutlined aria-hidden="true" /> : undefined}
             onClick={() => runtime.leave(() => { setEditContext(undefined); setEditFeature(features.placement ? { ...features.placement, actionPosition: resolvedFeaturePosition(resolution), actionKey: action.actionKey ?? action.standardAction } : undefined); setEditPage({ pageKey: 'platform.list', parameters: { viewKey: action.viewKey, presentation: 'drawer', standardAction: action.standardAction, actionKey: action.actionKey }, inputResolverKey: action.inputResolverKey }); })}>{t(`${view.dicKey}.${action.labelKey}`, action.labelKey)}</Button>)}
         </Space> : undefined}>
-      <TreeSearch provider={provider} scope={treeScope} view={view} choose={tree.locate} />
+      {view.searchEnabled !== false && <TreeSearch provider={provider} scope={treeScope} view={view} choose={tree.locate} />}
       {tree.error && <div role="alert">{tree.error.saved ? t('Platform.SavedRefreshFailed', '已保存，刷新失败。请重新加载。') : t('Platform.TreeReadFailed', '树读取失败：{message}', { message: formatRequestError(tree.error.failure, t) })}<Button onClick={() => tree.retry({ kind: 'tree' })}>{t('Platform.Retry', '重试')}</Button></div>}
       {tree.locationError != null && <div role="alert">{t('Platform.TreeLocationFailed', '定位读取失败：{message}', { message: formatRequestError(tree.locationError, t) })}<Button onClick={() => tree.retry({ kind: 'location' })}>{t('Platform.TreeRetryLocation', '重试定位')}</Button></div>}
       {tree.locationNotice && <div role="status">{t(tree.locationNotice, '目标节点已不存在')}</div>}
@@ -76,7 +76,7 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
     </aside>
     <section aria-label={t('Platform.TreeContent', '节点内容')} className="np-tree-content">
       {selected && <header className="np-tree-context-header">
-        <h2>{selected.label}</h2>
+        <h2>{selected.labelKey ? t(selected.labelKey, selected.label) : selected.label}</h2>
         {selectedType && <span>{t(`${view.dicKey}.${selectedType.titleKey}`, selectedType.titleKey)}</span>}
       </header>}
       <div className="np-tree-content-body">

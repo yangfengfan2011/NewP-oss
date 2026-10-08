@@ -1339,8 +1339,7 @@ internal sealed class SteppingEntityAuditStampProvider : IEntityAuditStampProvid
 internal sealed class BusinessAuditHostFixture : IAsyncDisposable
 {
     private readonly string _connection;
-    private readonly string _admin;
-    private readonly string _catalog;
+    private readonly ReusableSqlServerDatabase _database;
     private readonly string _root = Path.Combine(Path.GetTempPath(), "newp-audit-" + Guid.NewGuid().ToString("N"));
     private WebApplication _app = null!;
     internal StoreFault Fault { get; } = new();
@@ -1349,19 +1348,16 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
     internal string ActorId { get; private set; } = "";
     internal IReadOnlyList<FeaturePoint> FeatureCatalog { get; private set; } = [];
     private bool _useRequestPresentation;
-    private BusinessAuditHostFixture(string admin, string catalog)
+    private BusinessAuditHostFixture(ReusableSqlServerDatabase database)
     {
-        _admin = admin; _catalog = catalog;
-        _connection = new SqlConnectionStringBuilder(admin) { InitialCatalog = catalog }.ConnectionString;
+        _database = database;
+        _connection = database.ConnectionString;
     }
     internal static async Task<BusinessAuditHostFixture> CreateAsync(Action<IServiceCollection>? configureServices = null,
         IReadOnlyDictionary<string, bool>? actionStates = null, bool useRequestPresentation = false)
     {
-        var admin = new SqlConnectionStringBuilder(Environment.GetEnvironmentVariable("NEWP_ORGANIZATION_SQLSERVER_ADMIN_CONNECTION")
-            ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true") { InitialCatalog = "master" }.ConnectionString;
-        var fixture = new BusinessAuditHostFixture(admin, "NewPBusinessAudit_" + Guid.NewGuid().ToString("N"));
+        var fixture = new BusinessAuditHostFixture(await ReusableSqlServerDatabase.AcquireAsync());
         fixture._useRequestPresentation = useRequestPresentation;
-        await fixture.ExecuteAdminAsync($"CREATE DATABASE [{fixture._catalog}]");
         try
         {
             await fixture.StartAsync(configureServices, actionStates: actionStates);
@@ -1656,16 +1652,16 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "ICP-Platform.sln"))) directory = directory.Parent;
         return directory!.FullName;
     }
-    private async Task ExecuteAdminAsync(string sql)
-    {
-        await using var connection = new SqlConnection(_admin); await connection.OpenAsync();
-        await using var command = connection.CreateCommand(); command.CommandText = sql; await command.ExecuteNonQueryAsync();
-    }
     public async ValueTask DisposeAsync()
     {
-        if (_app is not null) await _app.DisposeAsync();
-        SqlConnection.ClearAllPools();
-        await ExecuteAdminAsync($"ALTER DATABASE [{_catalog}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{_catalog}]");
-        if (Directory.Exists(_root)) Directory.Delete(_root, true);
+        try
+        {
+            if (_app is not null) await _app.DisposeAsync();
+        }
+        finally
+        {
+            await _database.DisposeAsync();
+            if (Directory.Exists(_root)) Directory.Delete(_root, true);
+        }
     }
 }

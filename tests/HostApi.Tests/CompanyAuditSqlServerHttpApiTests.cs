@@ -30,14 +30,7 @@ public sealed class CompanyAuditSqlServerHttpApiTests
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "Company 正式 CRUD HTTP 与真实 SQL Server 审计投影")]
     public async Task CompanyApi_PreservesSqlPrecisionAndProjectsExistingReadAndWriteResponses()
     {
-        var admin = new SqlConnectionStringBuilder(Environment.GetEnvironmentVariable("NEWP_ORGANIZATION_SQLSERVER_ADMIN_CONNECTION")
-            ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true") { InitialCatalog = "master" };
-        var catalog = $"NewPCompanyAudit_{Guid.NewGuid():N}";
-        await using var connection = new SqlConnection(admin.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"CREATE DATABASE [{catalog}]";
-        await command.ExecuteNonQueryAsync();
+        var databaseLease = await ReusableSqlServerDatabase.AcquireAsync();
         try
         {
             var model = OrganizationModelDefinitions.All.Single(model => model.Name == "Company") with { OwnerModuleId = "Organization" };
@@ -57,7 +50,7 @@ public sealed class CompanyAuditSqlServerHttpApiTests
                     Path.GetDirectoryName(typeof(ICP.Platform.HostApi.Controllers.AuthController).Assembly.Location)!)));
             builder.Services.AddSingleton<ITemporalDisplayFormatter, TemporalDisplayFormatter>();
             builder.Services.AddSingleton<ITemporalDisplayProjectionExecutor, TemporalDisplayProjectionExecutor>();
-            var database = new SqlConnectionStringBuilder(admin.ConnectionString) { InitialCatalog = catalog }.ConnectionString;
+            var database = databaseLease.ConnectionString;
             builder.Services.AddScoped(_ => new EfPlatformDbContext(new DbContextOptionsBuilder<EfPlatformDbContext>()
                 .UseSqlServer(database).ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().Options,
                 plan,
@@ -102,9 +95,7 @@ public sealed class CompanyAuditSqlServerHttpApiTests
         }
         finally
         {
-            SqlConnection.ClearAllPools();
-            command.CommandText = $"ALTER DATABASE [{catalog}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{catalog}]";
-            await command.ExecuteNonQueryAsync();
+            await databaseLease.DisposeAsync();
         }
     }
 

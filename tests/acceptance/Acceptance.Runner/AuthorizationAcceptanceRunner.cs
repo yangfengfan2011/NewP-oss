@@ -1,3 +1,4 @@
+using ICP.Platform.Testing;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
@@ -6,16 +7,16 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Playwright;
 namespace ICP.Platform.Acceptance;
 
-/// <summary>Authorization 的唯一真实用户旅程和一次性资源 owner。</summary>
+/// <summary>Authorization 的真实用户旅程、专用测试库租约与临时目录 owner。</summary>
 internal sealed class AuthorizationAcceptanceRunner(string repositoryRoot, string runDirectory, string runId)
     : AcceptanceRunner(repositoryRoot, runDirectory, runId)
 {
-    private string? _adminConnection;
+    private ReusableSqlServerDatabase? _databaseLease;
     private string? _connection;
     private string? _catalog;
     private string? _ownership;
     private string? _devRun;
-    private bool _created;
+    private bool _databasePrepared;
     private readonly Dictionary<string, string?> _environment = new();
 
     /// <inheritdoc/>
@@ -24,24 +25,14 @@ internal sealed class AuthorizationAcceptanceRunner(string repositoryRoot, strin
         await RunScenarioAsync("authorization.startup-and-read", StartAndReadAsync, cancellationToken);
     }
 
-    // 新空库由正式 Host 维护命令运行全部 migration，随后才进入真实 HTTP 工作台。
+    // 专用测试库的空 schema 由正式 Host 维护命令迁移，租约覆盖整个 HTTP/浏览器旅程。
     private async Task StartAndReadAsync(CancellationToken token)
     {
-        var connection = AcceptanceSqlServerConnectionResolver.Resolve(_repositoryRoot);
-        AddConnectionSecrets(connection.ConfiguredConnectionString, connection.Password);
-        _adminConnection = connection.AdminConnectionString;
-        _catalog = $"NewP_acceptance_authorization_{_runId}";
-        if (!System.Text.RegularExpressions.Regex.IsMatch(_catalog, "^NewP_acceptance_authorization_[0-9a-f]{24}$"))
-            throw new InvalidOperationException("Invalid owned catalog name.");
-        _connection = new SqlConnectionStringBuilder(_adminConnection) { InitialCatalog = _catalog, Pooling = false }.ConnectionString;
-        await using (var db = new SqlConnection(_adminConnection))
-        {
-            await db.OpenAsync(token);
-            await using var create = db.CreateCommand();
-            create.CommandText = $"CREATE DATABASE [{_catalog}];";
-            await create.ExecuteNonQueryAsync(token);
-            _created = true;
-        }
+        _databaseLease = await ReusableSqlServerDatabase.AcquireAsync(_repositoryRoot, token);
+        _connection = _databaseLease.ConnectionString;
+        _catalog = ReusableSqlServerDatabase.Catalog;
+        AddConnectionSecrets(_connection, new SqlConnectionStringBuilder(_connection).Password);
+        _databasePrepared = true;
         _environment["ConnectionStrings__SqlServer"] = _connection;
         _environment["NEWP_DEV_SQLSERVER_CONNECTION_STRING"] = _connection;
         _environment["Platform__PluginInstallRoot"] = Path.Combine(_runDirectory, "resources", "plugins");
@@ -211,7 +202,21 @@ internal sealed class AuthorizationAcceptanceRunner(string repositoryRoot, strin
     /// <inheritdoc/>
     protected override async Task<AcceptanceCleanupResult> TeardownAsync(CancellationToken token)
     {
-        if (!_created) return new("completed", null);
+        try { return await TeardownResourcesAsync(token); }
+        finally
+        {
+            // 即使无法确认归属而保留现场，也必须归还共享会话锁，避免阻塞后续 fixture。
+            if (_databaseLease is not null)
+            {
+                await _databaseLease.ReleaseAsync();
+                _databaseLease = null;
+            }
+        }
+    }
+
+    private async Task<AcceptanceCleanupResult> TeardownResourcesAsync(CancellationToken token)
+    {
+        if (!_databasePrepared) return new("completed", null);
         _ownership ??= await ReadOwnershipAsync(token);
         if (_ownership != await ReadOwnershipAsync(token)) return new("failed", AcceptanceFailureCodes.OwnershipMismatch);
         if (_devRun is not null)
@@ -221,16 +226,13 @@ internal sealed class AuthorizationAcceptanceRunner(string repositoryRoot, strin
             var stop = await AcceptanceInfrastructure.RunProcessAsync("pwsh.exe", ["-NoLogo", "-NoProfile", "-File", Path.Combine(_repositoryRoot, "scripts", "stop-dev.ps1")], _repositoryRoot, cancellationToken: token);
             if (stop.ExitCode != 0) return new("failed", AcceptanceFailureCodes.CleanupFailed, Sanitize(stop.StandardOutput + stop.StandardError));
         }
-        await using var db = new SqlConnection(_adminConnection);
-        await db.OpenAsync(token);
-        await using var drop = db.CreateCommand();
-        drop.CommandText = $"ALTER DATABASE [{_catalog}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{_catalog}];";
-        await drop.ExecuteNonQueryAsync(token);
-        _created = false;
+        await _databaseLease!.DisposeAsync();
+        _databaseLease = null;
+        _databasePrepared = false;
         var resources = Path.GetFullPath(Path.Combine(_runDirectory, "resources"));
         if (!resources.StartsWith(Path.GetFullPath(_runDirectory) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Resource root escaped run directory.");
         if (Directory.Exists(resources)) Directory.Delete(resources, recursive: true);
-        await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "cleanup.json"), new { catalog = _catalog, dropped = true, marker = _ownership == "owned-empty" ? "created-empty" : "verified" }, token);
+        await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "cleanup.json"), new { catalog = _catalog, dropped = false, schemaCleaned = true, marker = _ownership == "owned-empty" ? "created-empty" : "verified" }, token);
         return new("completed", null);
     }
 }

@@ -1,3 +1,4 @@
+using ICP.Platform.Testing;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
@@ -30,8 +31,8 @@ namespace ICP.Platform.HostApi.Tests;
 // 只在一次性发行副本修改真实Example声明；Host仍执行正式编译、migration、runtime staging及目录同步。
 internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
 {
-    private readonly string _adminConnection;
-    private readonly string _database = "NewPFeature205_" + Guid.NewGuid().ToString("N");
+    private readonly ReusableSqlServerDatabase _databaseLease;
+    private readonly string _runId = "NewPFeature205_" + Guid.NewGuid().ToString("N");
     private readonly string _temporaryRoot;
     private Process? _host;
     private Task[] _captures = [];
@@ -48,17 +49,16 @@ internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
     internal string CapsulePath => Path.Combine(HostRoot, "modules", "Example", "plugin.json");
     internal string LastError { get; private set; } = "";
 
-    private FeatureCatalogHostFixture()
+    private FeatureCatalogHostFixture(ReusableSqlServerDatabase databaseLease)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null && !Directory.Exists(Path.Combine(directory.FullName, ".git"))) directory = directory.Parent;
         RepositoryRoot = directory?.FullName ?? throw new InvalidOperationException("Repository root missing.");
-        EvidenceRoot = Path.Combine(RepositoryRoot, ".codex-temp", "issue205", _database);
+        EvidenceRoot = Path.Combine(RepositoryRoot, ".codex-temp", "issue205", _runId);
         Directory.CreateDirectory(EvidenceRoot);
         _temporaryRoot = Path.Combine(EvidenceRoot, "workspace");
-        _adminConnection = new SqlConnectionStringBuilder(Environment.GetEnvironmentVariable("NEWP_ORGANIZATION_SQLSERVER_ADMIN_CONNECTION")
-            ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true") { InitialCatalog = "master" }.ConnectionString;
-        ConnectionString = new SqlConnectionStringBuilder(_adminConnection) { InitialCatalog = _database }.ConnectionString;
+        _databaseLease = databaseLease;
+        ConnectionString = databaseLease.ConnectionString;
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         HostUrl = $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}";
@@ -66,7 +66,10 @@ internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
 
     internal static async Task<FeatureCatalogHostFixture> CreateAsync(JsonArray declarations)
     {
-        var fixture = new FeatureCatalogHostFixture();
+        var lease = await ReusableSqlServerDatabase.AcquireAsync();
+        FeatureCatalogHostFixture fixture;
+        try { fixture = new FeatureCatalogHostFixture(lease); }
+        catch { await lease.DisposeAsync(); throw; }
         try
         {
             var output = new DirectoryInfo(AppContext.BaseDirectory);
@@ -79,7 +82,6 @@ internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
             }
             File.Copy(Path.Combine(fixture.RepositoryRoot, "modules", "Example", "newp.plugin.json"), fixture.CapsulePath, overwrite: true);
             fixture.SetDeclarations(declarations);
-            await fixture.ExecuteAdminAsync($"CREATE DATABASE [{fixture._database}]");
             await fixture.StartAsync();
             await fixture.StopAsync();
             await fixture.BootstrapAsync();
@@ -186,14 +188,6 @@ internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
             new(IdentityMaintenanceActors.LocalMaintenance, IdentitySecurityActorKind.LocalMaintenance, Guid.NewGuid().ToString("N"))));
     }
 
-    private async Task ExecuteAdminAsync(string sql)
-    {
-        await using var connection = new SqlConnection(_adminConnection);
-        await connection.OpenAsync();
-        await using var command = new SqlCommand(sql, connection);
-        await command.ExecuteNonQueryAsync();
-    }
-
     private async Task CaptureAsync(StreamReader reader, string file)
     {
         var text = (await reader.ReadToEndAsync()).Replace(ConnectionString, "[connection]").Replace(AdministratorPassword, "[credential]");
@@ -206,8 +200,7 @@ internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
         finally
         {
             Administrator?.Dispose();
-            SqlConnection.ClearAllPools();
-            await ExecuteAdminAsync($"IF DB_ID(N'{_database}') IS NOT NULL BEGIN ALTER DATABASE [{_database}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{_database}]; END");
+            await _databaseLease.DisposeAsync();
             if (Directory.Exists(_temporaryRoot)) Directory.Delete(_temporaryRoot, recursive: true);
         }
     }

@@ -39,14 +39,7 @@ public sealed class OrganizationCacheSqlServerHttpApiTests(Xunit.Abstractions.IT
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "组织公司正式提交与缓存发布一致性")]
     public async Task CompanyApi_UpdatesCacheForEveryWriteAndDistinguishesCommittedPublicationFailure()
     {
-        var admin = new SqlConnectionStringBuilder(Environment.GetEnvironmentVariable("NEWP_ORGANIZATION_SQLSERVER_ADMIN_CONNECTION")
-            ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true") { InitialCatalog = "master" };
-        var catalog = $"NewPCompanyCache_{Guid.NewGuid():N}";
-        await using var connection = new SqlConnection(admin.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"CREATE DATABASE [{catalog}]";
-        await command.ExecuteNonQueryAsync();
+        var databaseLease = await ReusableSqlServerDatabase.AcquireAsync();
         try
         {
             var models = OrganizationModelDefinitions.All.Select(model => model with { OwnerModuleId = "Organization" }).ToArray();
@@ -65,7 +58,16 @@ public sealed class OrganizationCacheSqlServerHttpApiTests(Xunit.Abstractions.IT
             builder.Services.AddSingleton<ICP.Platform.Organization.Contracts.IOrganizationQuery, OrganizationQuery>();
             builder.Services.AddSingleton<ControlledParticipant>();
             builder.Services.AddSingleton(sp => new PlatformCommitRegistration("Organization/Company", sp.GetRequiredService<ControlledParticipant>()));
-            builder.Services.AddScoped<ICompanyDirectory, EfCompanyDirectory>();
+            // 与正式模块一致，显式构造只在模块内部公开的目录与事务事实源。
+            builder.Services.AddScoped<ICompanyDirectory>(sp =>
+            {
+                var db = sp.GetRequiredService<EfPlatformDbContext>();
+                var facts = new OrganizationEffectiveFacts(
+                    sp.GetRequiredService<IPlatformTransactionExecutor>(),
+                    new ICP.Platform.Modules.Organization.Caching.PublishedOrganizationFacts(sp.GetRequiredService<ICP.Platform.Organization.Contracts.IOrganizationQuery>()),
+                    new SqlOrganizationFacts(db, new SqlServerDepartmentHierarchyQuery(db)));
+                return new EfCompanyDirectory(db, facts);
+            });
             var sql = new SqlCounter();
             var commitFault = new AfterCommitFault();
             builder.Services.AddSingleton(plan);
@@ -73,7 +75,7 @@ public sealed class OrganizationCacheSqlServerHttpApiTests(Xunit.Abstractions.IT
             builder.Services.AddSingleton<IRequestPresentationContextAccessor, Presentation>();
             builder.Services.AddSingleton<ITemporalDisplayFormatter, TemporalDisplayFormatter>();
             builder.Services.AddSingleton<ITemporalDisplayProjectionExecutor, TemporalDisplayProjectionExecutor>();
-            var database = new SqlConnectionStringBuilder(admin.ConnectionString) { InitialCatalog = catalog }.ConnectionString;
+            var database = databaseLease.ConnectionString;
             builder.Services.AddScoped(_ => new EfPlatformDbContext(new DbContextOptionsBuilder<EfPlatformDbContext>()
                 .UseSqlServer(database).AddInterceptors(sql, commitFault).ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().Options,
                 plan,
@@ -196,9 +198,7 @@ public sealed class OrganizationCacheSqlServerHttpApiTests(Xunit.Abstractions.IT
         }
         finally
         {
-            SqlConnection.ClearAllPools();
-            command.CommandText = $"ALTER DATABASE [{catalog}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{catalog}]";
-            await command.ExecuteNonQueryAsync();
+            await databaseLease.DisposeAsync();
         }
     }
 
@@ -210,17 +210,10 @@ public sealed class OrganizationCacheSqlServerHttpApiTests(Xunit.Abstractions.IT
 
     private async Task AssertCommitFailureAsync(bool afterCommit)
     {
-        var admin = new SqlConnectionStringBuilder(Environment.GetEnvironmentVariable("NEWP_ORGANIZATION_SQLSERVER_ADMIN_CONNECTION")
-            ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true") { InitialCatalog = "master" };
-        var catalog = $"NewPCompanyCommit_{Guid.NewGuid():N}";
-        await using var connection = new SqlConnection(admin.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"CREATE DATABASE [{catalog}]";
-        await command.ExecuteNonQueryAsync();
+        var databaseLease = await ReusableSqlServerDatabase.AcquireAsync();
         try
         {
-            var database = new SqlConnectionStringBuilder(admin.ConnectionString) { InitialCatalog = catalog }.ConnectionString;
+            var database = databaseLease.ConnectionString;
             var models = OrganizationModelDefinitions.All.Select(model => model with { OwnerModuleId = "Organization" }).ToArray();
             var fault = new AfterCommitFault();
             var options = new DbContextOptionsBuilder<EfPlatformDbContext>().UseSqlServer(database).AddInterceptors(fault)
@@ -274,9 +267,7 @@ public sealed class OrganizationCacheSqlServerHttpApiTests(Xunit.Abstractions.IT
         }
         finally
         {
-            SqlConnection.ClearAllPools();
-            command.CommandText = $"ALTER DATABASE [{catalog}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{catalog}]";
-            await command.ExecuteNonQueryAsync();
+            await databaseLease.DisposeAsync();
         }
     }
 

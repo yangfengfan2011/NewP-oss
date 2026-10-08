@@ -40,15 +40,8 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "Organization 范围列表与树端点在正式权限流水线和真实 SQL Server 上贯通")]
     public async Task ScopedDepartmentApi_IntersectsBeforeCountAndPagingAndTreeReadsUsePermissions()
     {
-        var admin = new SqlConnectionStringBuilder(Environment.GetEnvironmentVariable("NEWP_ORGANIZATION_SQLSERVER_ADMIN_CONNECTION")
-            ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true") { InitialCatalog = "master" };
-        var catalog = $"NewPOrganizationTree_{Guid.NewGuid():N}";
+        var databaseLease = await ReusableSqlServerDatabase.AcquireAsync();
         var treeArtifacts = Directory.CreateTempSubdirectory("NewPRelationTree_");
-        await using var connection = new SqlConnection(admin.ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"CREATE DATABASE [{catalog}]";
-        await command.ExecuteNonQueryAsync();
         try
         {
             var models = OrganizationModelDefinitions.All.Select(model => model with { OwnerModuleId = "Organization" }).ToArray();
@@ -62,6 +55,8 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
             builder.Services.AddPlatformAuthorization();
             builder.Services.AddSingleton<ICP.Platform.Authorization.Http.IFeatureDecisionSource, GrantedPermissions>();
             builder.Services.AddStandardCrudKernel();
+            // 本夹具验证功能权限和树范围；引用显示的数据范围在专用 DataScope HTTP 测试中验证。
+            builder.Services.AddSingleton<ICP.Platform.Authorization.Contracts.IDataScopeReadableIds, ReadableReferences>();
             builder.Services.AddSingleton<IDataScopeReadPlanProvider>(readPlans);
             builder.Services.AddSingleton<ICP.Platform.Modules.Organization.Caching.OrganizationCache>();
             builder.Services.AddSingleton<ICP.Platform.Organization.Contracts.IOrganizationQuery, ICP.Platform.Modules.Organization.Caching.OrganizationQuery>();
@@ -89,7 +84,16 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
                 sp.GetRequiredService<OrganizationEffectiveFacts>()));
             builder.Services.AddScoped<IStandardCrudQueryCustomizer, DepartmentCrudQueryCustomizer>();
             builder.Services.AddScoped<IStandardCrudDisplayValueResolver, DepartmentCrudDisplayValueResolver>();
-            builder.Services.AddScoped<ICompanyDirectory, EfCompanyDirectory>();
+            // 与正式模块一致，显式构造只在模块内部公开的目录与事务事实源。
+            builder.Services.AddScoped<ICompanyDirectory>(sp =>
+            {
+                var db = sp.GetRequiredService<EfPlatformDbContext>();
+                var facts = new OrganizationEffectiveFacts(
+                    sp.GetRequiredService<ICP.Platform.Persistence.Abstractions.IPlatformTransactionExecutor>(),
+                    new ICP.Platform.Modules.Organization.Caching.PublishedOrganizationFacts(sp.GetRequiredService<ICP.Platform.Organization.Contracts.IOrganizationQuery>()),
+                    new SqlOrganizationFacts(db, new SqlServerDepartmentHierarchyQuery(db)));
+                return new EfCompanyDirectory(db, facts);
+            });
             builder.Services.AddScoped<IDepartmentDirectory, EfDepartmentDirectory>();
             builder.Services.AddControllers();
             builder.Services.AddSingleton(plan);
@@ -97,7 +101,7 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
             builder.Services.AddSingleton<IRequestPresentationContextAccessor, Presentation>();
             builder.Services.AddSingleton<ITemporalDisplayFormatter, TemporalDisplayFormatter>();
             builder.Services.AddSingleton<ITemporalDisplayProjectionExecutor, TemporalDisplayProjectionExecutor>();
-            var database = new SqlConnectionStringBuilder(admin.ConnectionString) { InitialCatalog = catalog }.ConnectionString;
+            var database = databaseLease.ConnectionString;
             builder.Services.AddScoped(_ => new EfPlatformDbContext(new DbContextOptionsBuilder<EfPlatformDbContext>()
                 .UseSqlServer(database).AddInterceptors(recorder).ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().Options,
                 plan,
@@ -293,9 +297,7 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
         }
         finally
         {
-            SqlConnection.ClearAllPools();
-            command.CommandText = $"ALTER DATABASE [{catalog}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{catalog}]";
-            await command.ExecuteNonQueryAsync();
+            await databaseLease.DisposeAsync();
             treeArtifacts.Delete(true);
         }
     }
@@ -381,6 +383,12 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
     private sealed class Presentation : IRequestPresentationContextAccessor
     {
         public RequestPresentationContext? Current => new("zh-CN", "Asia/Taipei");
+    }
+    private sealed class ReadableReferences : ICP.Platform.Authorization.Contracts.IDataScopeReadableIds
+    {
+        public Task<IReadOnlySet<string>> GetReadableIdsAsync(string resourceKey, IReadOnlyCollection<string> objectIds,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlySet<string>>(objectIds.ToHashSet(StringComparer.Ordinal));
     }
     private sealed class GrantedPermissions : ICP.Platform.Authorization.Http.IFeatureDecisionSource
     {

@@ -9,4 +9,9 @@
              Link="TestSupport\%(Filename)%(Extension)" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Kernel.Tests' Or '$(MSBuildProjectName)' == 'HostApi.Tests' Or '$(MSBuildProjectName)' == 'Organization.Tests' Or '$(MSBuildProjectName)' == 'Identity.Tests' Or '$(MSBuildProjectName)' == 'Authentication.Tests' Or '$(MSBuildProjectName)' == 'Acceptance.Runner'">
+    <Compile Include="$(MSBuildThisFileDirectory)TestSupport\SqlServer\*.cs"
+             Link="TestSupport\SqlServer\%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>

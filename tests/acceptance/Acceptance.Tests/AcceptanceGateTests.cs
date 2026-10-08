@@ -29,7 +29,7 @@ public sealed class AcceptanceGateTests
         await new IdentityFoundationAcceptanceRunner(RepositoryRoot, root, runId).RunAsync(CancellationToken.None);
     }
 
-    [EnvironmentGatedFact(RunEnvironmentVariable, "一次性 SQL Server catalog、dev supervisor 与真实浏览器")]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "共享专用 SQL Server catalog、dev supervisor 与真实浏览器")]
     public async Task Personnel_CompletesEveryScenario()
     {
         var (root, runId) = PrepareRun("personnel");

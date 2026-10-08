@@ -1,0 +1,142 @@
+using System.Text.Json;
+using Microsoft.Data.SqlClient;
+
+namespace ICP.Platform.Testing;
+
+// 只管理专用测试 catalog。会话锁跨测试进程互斥；fixture 关闭连接后才归还租约。
+internal sealed class ReusableSqlServerDatabase : IAsyncDisposable
+{
+    internal const string Catalog = "NewP_Test";
+    internal const string ConnectionVariable = "NEWP_TEST_SQLSERVER_CONNECTION_STRING";
+    private const string Marker = "NewP.AutomatedTests";
+    private readonly SqlConnection _lease;
+    private bool _disposed;
+    internal string ConnectionString { get; }
+
+    private ReusableSqlServerDatabase(SqlConnection lease, string connectionString)
+    {
+        _lease = lease;
+        ConnectionString = connectionString;
+    }
+
+    internal static string ResolveConnection(string? repositoryRoot = null, Func<string, string?>? readEnvironment = null)
+    {
+        readEnvironment ??= Environment.GetEnvironmentVariable;
+        var dedicated = readEnvironment(ConnectionVariable);
+        var configured = dedicated;
+        if (string.IsNullOrWhiteSpace(configured)) configured = readEnvironment("NEWP_DEV_SQLSERVER_CONNECTION_STRING");
+        if (string.IsNullOrWhiteSpace(configured))
+        {
+            var root = new DirectoryInfo(repositoryRoot ?? AppContext.BaseDirectory);
+            while (root is not null && !File.Exists(Path.Combine(root.FullName, "ICP-Platform.sln"))) root = root.Parent;
+            if (root is null) throw new InvalidOperationException("Test database repository root was not found.");
+            using var configuration = JsonDocument.Parse(File.ReadAllText(Path.Combine(root.FullName, "apps", "host-api", "appsettings.Development.json")));
+            configured = configuration.RootElement.GetProperty("ConnectionStrings").GetProperty("SqlServer").GetString();
+        }
+        return UseTestCatalog(configured!, !string.IsNullOrWhiteSpace(dedicated));
+    }
+
+    internal static string UseTestCatalog(string configured, bool dedicated)
+    {
+        var builder = new SqlConnectionStringBuilder(configured);
+        if (dedicated && !string.Equals(builder.InitialCatalog, Catalog, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"{ConnectionVariable} must select {Catalog}.");
+        if (!string.IsNullOrEmpty(builder.AttachDBFilename))
+            throw new InvalidOperationException("Test database connections cannot attach database files.");
+        builder.InitialCatalog = Catalog;
+        builder.Pooling = false;
+        builder.ConnectRetryCount = 0;
+        return builder.ConnectionString;
+    }
+
+    internal static async Task<ReusableSqlServerDatabase> AcquireAsync(string? repositoryRoot = null,
+        CancellationToken cancellationToken = default, int lockTimeoutMilliseconds = 900_000)
+    {
+        var configured = ResolveConnection(repositoryRoot);
+        var admin = new SqlConnectionStringBuilder(configured) { InitialCatalog = "master" };
+        var lease = new SqlConnection(admin.ConnectionString);
+        try
+        {
+            await lease.OpenAsync(cancellationToken);
+            await using (var command = lease.CreateCommand())
+            {
+                command.CommandTimeout = Math.Max(30, lockTimeoutMilliseconds / 1000 + 10);
+                command.CommandText = "DECLARE @result int; EXEC @result = sys.sp_getapplock @Resource=N'NewP_Test.fixture', @LockMode=N'Exclusive', @LockOwner=N'Session', @LockTimeout=@timeout; SELECT @result;";
+                command.Parameters.AddWithValue("@timeout", lockTimeoutMilliseconds);
+                if (Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) < 0)
+                    throw new TimeoutException("NewP_Test is in use by another test fixture; the database was not changed.");
+            }
+            var database = new ReusableSqlServerDatabase(lease, configured);
+            await database.EnsureCatalogAsync(cancellationToken);
+            await database.ResetSchemaAsync(cancellationToken);
+            return database;
+        }
+        catch
+        {
+            await lease.DisposeAsync();
+            cancellationToken.ThrowIfCancellationRequested();
+            throw;
+        }
+    }
+
+    // 只在不存在时建库。已有同名库必须具有专用测试标记，不能自动接管开发库。
+    private async Task EnsureCatalogAsync(CancellationToken token)
+    {
+        await using var command = _lease.CreateCommand();
+        command.CommandText = "SELECT DB_ID(N'NewP_Test');";
+        if (await command.ExecuteScalarAsync(token) is not DBNull) return;
+        command.CommandText = "CREATE DATABASE [NewP_Test];";
+        await command.ExecuteNonQueryAsync(token);
+        command.CommandText = "EXEC [NewP_Test].sys.sp_addextendedproperty @name=N'NewP.AutomatedTests', @value=N'disposable-schema';";
+        await command.ExecuteNonQueryAsync(token);
+    }
+
+    // 各 fixture 的模型子集不同，保留 catalog、重置 schema，继续由原 fixture/Host 建表与迁移。
+    // 标记位于数据库扩展属性，不会混进 EF EnsureCreated 的用户表检测。
+    private async Task ResetSchemaAsync(CancellationToken token)
+    {
+        await using var command = _lease.CreateCommand();
+        command.CommandTimeout = 120;
+        command.CommandText = $$"""
+            USE [NewP_Test];
+            IF NOT EXISTS (SELECT 1 FROM sys.extended_properties WHERE class=0 AND name=N'{{Marker}}' AND CONVERT(nvarchar(128),value)=N'disposable-schema')
+                THROW 51000, N'NewP_Test is not marked as an automated test database; refusing cleanup.', 1;
+            IF EXISTS (SELECT 1 FROM sys.tables WHERE is_ms_shipped=0 AND (temporal_type<>0 OR is_memory_optimized=1))
+                THROW 51000, N'Unsupported test database table type; refusing cleanup.', 1;
+            BEGIN TRANSACTION;
+            DECLARE @sql nvarchar(max)=N'';
+            SELECT @sql+=N'ALTER TABLE '+QUOTENAME(OBJECT_SCHEMA_NAME(parent_object_id))+N'.'+QUOTENAME(OBJECT_NAME(parent_object_id))+N' DROP CONSTRAINT '+QUOTENAME(name)+N';' FROM sys.foreign_keys;
+            EXEC sys.sp_executesql @sql;
+            SET @sql=N'';
+            SELECT @sql+=N'DROP TABLE '+QUOTENAME(SCHEMA_NAME(schema_id))+N'.'+QUOTENAME(name)+N';' FROM sys.tables WHERE is_ms_shipped=0;
+            EXEC sys.sp_executesql @sql;
+            SET @sql=N'';
+            SELECT @sql+=N'DROP SEQUENCE '+QUOTENAME(SCHEMA_NAME(schema_id))+N'.'+QUOTENAME(name)+N';' FROM sys.sequences;
+            EXEC sys.sp_executesql @sql;
+            COMMIT;
+            USE [master];
+            """;
+        try { await command.ExecuteNonQueryAsync(token); }
+        catch
+        {
+            command.CommandText = "IF @@TRANCOUNT > 0 ROLLBACK; USE [master];";
+            await command.ExecuteNonQueryAsync(CancellationToken.None);
+            throw;
+        }
+    }
+
+    // 归属检查或停止 Host 失败时仅结束持锁会话，保留 schema 供诊断；下一次租用仍执行正常初始化。
+    internal async ValueTask ReleaseAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        await _lease.DisposeAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        try { await ResetSchemaAsync(CancellationToken.None); }
+        finally { await ReleaseAsync(); }
+    }
+}

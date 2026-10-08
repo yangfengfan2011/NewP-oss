@@ -22,7 +22,6 @@ namespace ICP.Platform.Modules.Organization.Tests;
 public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstractions.ITestOutputHelper output)
 {
     private const string RunEnvironmentVariable = "NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION";
-    private const string AdminConnectionEnvironmentVariable = "NEWP_ORGANIZATION_SQLSERVER_ADMIN_CONNECTION";
 
     [EnvironmentGatedFact(RunEnvironmentVariable, "受控上级候选在 SQL 分页前过滤并清理临时层级集合")]
     [Trait("Category", "SqlServerSmoke")]
@@ -701,38 +700,10 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
             ["UpdatedAt"] = DateTime.UtcNow
         });
 
-    private sealed class SqlFixture(
-        string adminConnectionString,
-        string catalog,
-        string connectionString) : IAsyncDisposable
+    private sealed class SqlFixture(ReusableSqlServerDatabase database) : IAsyncDisposable
     {
-        public string ConnectionString { get; } = connectionString;
-
-        public static async Task<SqlFixture> CreateAsync()
-        {
-            var configured = Environment.GetEnvironmentVariable(AdminConnectionEnvironmentVariable)
-                ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true";
-            var admin = new SqlConnectionStringBuilder(configured) { InitialCatalog = "master" }.ConnectionString;
-            var catalog = $"NewPDepartmentHierarchyQueries_{Guid.NewGuid():N}";
-            await using var connection = new SqlConnection(admin);
-            await connection.OpenAsync();
-            await using var command = connection.CreateCommand();
-            command.CommandText = $"CREATE DATABASE [{catalog}]";
-            await command.ExecuteNonQueryAsync();
-            return new SqlFixture(
-                admin,
-                catalog,
-                new SqlConnectionStringBuilder(admin) { InitialCatalog = catalog }.ConnectionString);
-        }
-
-        public async ValueTask DisposeAsync()
-        {
-            SqlConnection.ClearAllPools();
-            await using var connection = new SqlConnection(adminConnectionString);
-            await connection.OpenAsync();
-            await using var command = connection.CreateCommand();
-            command.CommandText = $"IF DB_ID(N'{catalog}') IS NOT NULL BEGIN ALTER DATABASE [{catalog}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{catalog}]; END";
-            await command.ExecuteNonQueryAsync();
-        }
+        public string ConnectionString => database.ConnectionString;
+        public static async Task<SqlFixture> CreateAsync() => new(await ReusableSqlServerDatabase.AcquireAsync());
+        public ValueTask DisposeAsync() => database.DisposeAsync();
     }
 }

@@ -38,23 +38,16 @@ public sealed partial class HostAuthenticationProcessRestartTests
     [Trait("Category", "SqlServerSmoke")]
     public async Task RealHostProcessRestart_ReusesDatabaseSessionAndProtectedCookie()
     {
-        var catalog = $"NewPAuth35_{Guid.NewGuid():N}";
         var root = Path.Combine(Path.GetTempPath(), $"newp-auth35-{Guid.NewGuid():N}");
         var keyRing = Path.Combine(root, "key-ring");
         var plugins = Path.Combine(root, "plugins");
         Directory.CreateDirectory(keyRing);
         Directory.CreateDirectory(plugins);
-        // 与人员 SQL 组合共用显式连接选择；默认 LocalDB 保持 Windows 集成认证及同库重启语义。
-        var adminConnectionString = new SqlConnectionStringBuilder(Environment.GetEnvironmentVariable("NEWP_ORGANIZATION_SQLSERVER_ADMIN_CONNECTION")
-            ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true") { InitialCatalog = "master" }.ConnectionString;
-        var applicationConnectionString = new SqlConnectionStringBuilder(adminConnectionString)
-        {
-            InitialCatalog = catalog
-        }.ConnectionString;
+        var databaseLease = await ReusableSqlServerDatabase.AcquireAsync();
+        var applicationConnectionString = databaseLease.ConnectionString;
         var port = ReservePort();
         Process? process = null;
 
-        await CreateCatalogAsync(adminConnectionString, catalog);
         try
         {
             process = StartHost(root, keyRing, plugins, applicationConnectionString, port, "migration");
@@ -143,8 +136,7 @@ public sealed partial class HostAuthenticationProcessRestartTests
                 StopExactProcess(process);
             }
 
-            SqlConnection.ClearAllPools();
-            await DropCatalogAsync(adminConnectionString, catalog);
+            await databaseLease.DisposeAsync();
             Directory.Delete(root, recursive: true);
         }
     }
@@ -320,6 +312,7 @@ public sealed partial class HostAuthenticationProcessRestartTests
         await File.WriteAllTextAsync(path, content);
     }
 
+    // 仅供 OrganizationCacheStartupProcessTests 的隔离启动故障场景使用。
     private static async Task CreateCatalogAsync(string connectionString, string catalog)
     {
         await using var connection = new SqlConnection(connectionString);

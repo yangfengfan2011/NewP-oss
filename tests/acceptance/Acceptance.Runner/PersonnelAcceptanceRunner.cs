@@ -1,3 +1,4 @@
+using ICP.Platform.Testing;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -47,7 +48,9 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
     private int _hostPort;
     private AcceptanceFeatureCatalog? _features;
     private int _shellPort;
-    private bool _catalogCreated;
+    private bool _databasePrepared;
+    private bool _requiresIsolatedCatalog;
+    private ReusableSqlServerDatabase? _databaseLease;
     private FixtureData? _fixture;
     private PersonData? _person;
     private CompanyData? _company;
@@ -108,6 +111,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         string rawSamplesPath,
         CancellationToken cancellationToken)
     {
+        _requiresIsolatedCatalog = true;
         AcceptanceCleanupResult cleanup = new("not-started", AcceptanceFailureCodes.CleanupIncomplete);
         ProductionColdStartBrowserExecution? browserExecution = null;
         string? failureDiagnostic = null;
@@ -196,20 +200,22 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
 
     private async Task RunPreflightAsync(CancellationToken cancellationToken)
     {
-        var adminConnection = AcceptanceSqlServerConnectionResolver.Resolve(_repositoryRoot);
-        var adminBuilder = new SqlConnectionStringBuilder(adminConnection.AdminConnectionString);
-        _adminConnectionString = adminConnection.AdminConnectionString;
-        _adminConnectionSource = adminConnection.SourceName;
-        AddConnectionSecrets(adminConnection.ConfiguredConnectionString, adminConnection.Password);
-
-        _catalog = $"NewP_acceptance_{_runId}";
+        _catalog = _requiresIsolatedCatalog ? $"NewP_acceptance_{_runId}" : ReusableSqlServerDatabase.Catalog;
         ValidateCatalogName(_catalog);
-        var appBuilder = new SqlConnectionStringBuilder(adminBuilder.ConnectionString)
+        if (_requiresIsolatedCatalog)
         {
-            InitialCatalog = _catalog,
-            Pooling = false
-        };
-        _applicationConnectionString = appBuilder.ConnectionString;
+            var adminConnection = AcceptanceSqlServerConnectionResolver.Resolve(_repositoryRoot);
+            _adminConnectionString = adminConnection.AdminConnectionString;
+            _adminConnectionSource = adminConnection.SourceName;
+            AddConnectionSecrets(adminConnection.ConfiguredConnectionString, adminConnection.Password);
+            _applicationConnectionString = new SqlConnectionStringBuilder(_adminConnectionString) { InitialCatalog = _catalog, Pooling = false }.ConnectionString;
+        }
+        else
+        {
+            _adminConnectionSource = "shared-test-database";
+            _applicationConnectionString = ReusableSqlServerDatabase.ResolveConnection(_repositoryRoot);
+        }
+        AddConnectionSecrets(_applicationConnectionString, new SqlConnectionStringBuilder(_applicationConnectionString).Password);
 
         _pluginRoot = Path.Combine(_runDirectory, "resources", "plugins");
         _keyRingRoot = Path.Combine(_runDirectory, "resources", "key-ring");
@@ -238,7 +244,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         _devEnvironment["Logging__LogLevel__Default"] = "Information";
 
         await RunDevScriptAsync("stop-dev.ps1", "personnel/preflight-stop-existing.json", cancellationToken, allowAlreadyStopped: true);
-        await CreateCatalogAsync(cancellationToken);
+        await PrepareDatabaseAsync(cancellationToken);
         await ObserveBootstrapRequiredDevAsync(cancellationToken);
         var bootstrap = await FormalIdentityBootstrap.RunAsync(
             _repositoryRoot,
@@ -1417,9 +1423,23 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
 
     protected override async Task<AcceptanceCleanupResult> TeardownAsync(CancellationToken cancellationToken)
     {
+        try { return await TeardownResourcesAsync(cancellationToken); }
+        finally
+        {
+            // 即使无法确认归属而保留现场，也必须归还共享会话锁，避免阻塞后续 fixture。
+            if (_databaseLease is not null)
+            {
+                await _databaseLease.ReleaseAsync();
+                _databaseLease = null;
+            }
+        }
+    }
+
+    private async Task<AcceptanceCleanupResult> TeardownResourcesAsync(CancellationToken cancellationToken)
+    {
         try
         {
-            if (_catalogCreated)
+            if (_databasePrepared)
             {
                 await VerifyOwnershipAsync(cancellationToken);
             }
@@ -1430,16 +1450,16 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
             return new AcceptanceCleanupResult(
                 "failed",
                 AcceptanceFailureCodes.OwnershipMismatch,
-                $"一次性资源归属校验失败，资源已保留：{Sanitize(exception.Message)}");
+                $"测试资源归属校验失败，资源已保留：{Sanitize(exception.Message)}");
         }
 
         try
         {
             await RunDevScriptAsync("stop-dev.ps1", "personnel/teardown-stop.json", cancellationToken, allowAlreadyStopped: true);
-            if (_catalogCreated)
+            if (_databasePrepared)
             {
-                await DropCatalogAsync(cancellationToken);
-                _catalogCreated = false;
+                await ReleaseDatabaseAsync(cancellationToken);
+                _databasePrepared = false;
             }
             foreach (var root in new[] { _pluginRoot, _keyRingRoot })
             {
@@ -1738,18 +1758,33 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         }
     }
 
-    private async Task CreateCatalogAsync(CancellationToken cancellationToken)
+    // 常规旅程复用专用库，production cold-start 保留独立 catalog。
+    private async Task PrepareDatabaseAsync(CancellationToken cancellationToken)
     {
+        if (!_requiresIsolatedCatalog)
+        {
+            _databaseLease = await ReusableSqlServerDatabase.AcquireAsync(_repositoryRoot, cancellationToken);
+            _databasePrepared = true;
+            return;
+        }
         await using var connection = new SqlConnection(_adminConnectionString!);
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"CREATE DATABASE [{_catalog}];";
         await command.ExecuteNonQueryAsync(cancellationToken);
-        _catalogCreated = true;
+        _databasePrepared = true;
     }
 
-    private async Task DropCatalogAsync(CancellationToken cancellationToken)
+    // 先归还共享租约；只有明确选择隔离模式时才允许删除 catalog。
+    private async Task ReleaseDatabaseAsync(CancellationToken cancellationToken)
     {
+        if (_databaseLease is not null)
+        {
+            await _databaseLease.DisposeAsync();
+            _databaseLease = null;
+            return;
+        }
+        if (!_requiresIsolatedCatalog) throw new InvalidOperationException("Personnel test database lease is missing.");
         ValidateCatalogName(_catalog!);
         SqlConnection.ClearAllPools();
         await using var connection = new SqlConnection(_adminConnectionString!);
@@ -1964,6 +1999,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
 
     private void ValidateCatalogName(string catalog)
     {
+        if (!_requiresIsolatedCatalog && catalog == ReusableSqlServerDatabase.Catalog) return;
         const string pattern = "^NewP_acceptance_[a-f0-9]{24}$";
         if (!Regex.IsMatch(catalog, pattern, RegexOptions.CultureInvariant))
         {

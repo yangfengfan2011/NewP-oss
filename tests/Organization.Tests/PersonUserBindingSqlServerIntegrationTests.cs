@@ -392,7 +392,7 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
     [Trait("Category", "SqlServerSmoke")]
     public async Task SqlServer_PositionReferenceForwardMigrationPreservesPersonValuesAndAddsRestrictForeignKey()
     {
-        var fixture = await SqlFixture.CreateAsync("PositionMigration");
+        var fixture = await SqlFixture.CreateAsync("PositionMigration", requiresIsolatedCatalog: true);
         await using (fixture)
         {
             await using (var context = CreateOrganizationMigrationContext(fixture.ConnectionString))
@@ -605,10 +605,18 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
 
     private sealed class SqlFixture(string adminConnectionString, string catalog, string connectionString) : IAsyncDisposable
     {
+        private ReusableSqlServerDatabase? _databaseLease;
         public string ConnectionString { get; } = connectionString;
 
-        public static async Task<SqlFixture> CreateAsync(string suffix)
+        public static async Task<SqlFixture> CreateAsync(string suffix, bool requiresIsolatedCatalog = false)
         {
+            if (!requiresIsolatedCatalog)
+            {
+                var lease = await ReusableSqlServerDatabase.AcquireAsync();
+                return new SqlFixture("", "", lease.ConnectionString) { _databaseLease = lease };
+            }
+            // 迁移测试需要独立控制历史和结构，保留一次性 catalog。
+
             var configured = Environment.GetEnvironmentVariable(AdminConnectionEnvironmentVariable)
                 ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true";
             var admin = new SqlConnectionStringBuilder(configured) { InitialCatalog = "master" }.ConnectionString;
@@ -623,6 +631,11 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
 
         public async ValueTask DisposeAsync()
         {
+            if (_databaseLease is not null)
+            {
+                await _databaseLease.DisposeAsync();
+                return;
+            }
             SqlConnection.ClearAllPools();
             await using var connection = new SqlConnection(adminConnectionString);
             await connection.OpenAsync();

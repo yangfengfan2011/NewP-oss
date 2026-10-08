@@ -34,21 +34,13 @@ public sealed class IdentitySqlServerIntegrationTests
     }
 
     private const string RunEnvironmentVariable = "NEWP_RUN_IDENTITY_SQLSERVER_INTEGRATION";
-    private const string AdminConnectionEnvironmentVariable = "NEWP_IDENTITY_SQLSERVER_ADMIN_CONNECTION";
 
     [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server 上的 Identity 持久化与并发行为")]
     [Trait("Category", "SqlServerSmoke")]
     public async Task SqlServer_WhenLocalAdminRoleAssignmentFails_RollsBackEveryBootstrapWrite()
     {
-        var catalog = $"NewPIdentity33Rollback_{Guid.NewGuid():N}";
-        var adminConnectionString = Environment.GetEnvironmentVariable(AdminConnectionEnvironmentVariable)
-            ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true";
-        var applicationConnectionString = new SqlConnectionStringBuilder(adminConnectionString)
-        {
-            InitialCatalog = catalog
-        }.ConnectionString;
-
-        await CreateCatalogAsync(adminConnectionString, catalog);
+        var databaseLease = await ReusableSqlServerDatabase.AcquireAsync();
+        var applicationConnectionString = databaseLease.ConnectionString;
         try
         {
             await using (var setup = CreateIdentityAndAuthorizationContext(applicationConnectionString))
@@ -90,8 +82,7 @@ public sealed class IdentitySqlServerIntegrationTests
         }
         finally
         {
-            SqlConnection.ClearAllPools();
-            await DropCatalogAsync(adminConnectionString, catalog);
+            await databaseLease.DisposeAsync();
         }
     }
 
@@ -99,15 +90,8 @@ public sealed class IdentitySqlServerIntegrationTests
     [Trait("Category", "SqlServerSmoke")]
     public async Task SqlServer_ConcurrentBootstrapUsesDatabaseMutexAndCreatesExactlyOneAdministrator()
     {
-        var catalog = $"NewPIdentity33_{Guid.NewGuid():N}";
-        var adminConnectionString = Environment.GetEnvironmentVariable(AdminConnectionEnvironmentVariable)
-            ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true";
-        var applicationConnectionString = new SqlConnectionStringBuilder(adminConnectionString)
-        {
-            InitialCatalog = catalog
-        }.ConnectionString;
-
-        await CreateCatalogAsync(adminConnectionString, catalog);
+        var databaseLease = await ReusableSqlServerDatabase.AcquireAsync();
+        var applicationConnectionString = databaseLease.ConnectionString;
         try
         {
             await using (var setup = CreateIdentityAndAuthorizationContext(applicationConnectionString))
@@ -143,8 +127,7 @@ public sealed class IdentitySqlServerIntegrationTests
         }
         finally
         {
-            SqlConnection.ClearAllPools();
-            await DropCatalogAsync(adminConnectionString, catalog);
+            await databaseLease.DisposeAsync();
         }
     }
 
@@ -152,15 +135,8 @@ public sealed class IdentitySqlServerIntegrationTests
     [Trait("Category", "SqlServerSmoke")]
     public async Task SqlServer_RevisionClaimAndFailureInjectionAreAtomic()
     {
-        var catalog = $"NewPIdentity32_{Guid.NewGuid():N}";
-        var adminConnectionString = Environment.GetEnvironmentVariable(AdminConnectionEnvironmentVariable)
-            ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true";
-        var applicationConnectionString = new SqlConnectionStringBuilder(adminConnectionString)
-        {
-            InitialCatalog = catalog
-        }.ConnectionString;
-
-        await CreateCatalogAsync(adminConnectionString, catalog);
+        var databaseLease = await ReusableSqlServerDatabase.AcquireAsync();
+        var applicationConnectionString = databaseLease.ConnectionString;
         try
         {
             await using (var setup = CreateContext(applicationConnectionString))
@@ -244,8 +220,7 @@ public sealed class IdentitySqlServerIntegrationTests
         }
         finally
         {
-            SqlConnection.ClearAllPools();
-            await DropCatalogAsync(adminConnectionString, catalog);
+            await databaseLease.DisposeAsync();
         }
     }
 
@@ -253,15 +228,8 @@ public sealed class IdentitySqlServerIntegrationTests
     [Trait("Category", "SqlServerSmoke")]
     public async Task SqlServer_PasswordChangeRotatesSessionPagesEventsAndRollsBackFailedResign()
     {
-        var catalog = $"NewPIdentity37_{Guid.NewGuid():N}";
-        var adminConnectionString = Environment.GetEnvironmentVariable(AdminConnectionEnvironmentVariable)
-            ?? "Server=(localdb)\\MSSQLLocalDB;Database=master;Integrated Security=true;TrustServerCertificate=true";
-        var applicationConnectionString = new SqlConnectionStringBuilder(adminConnectionString)
-        {
-            InitialCatalog = catalog
-        }.ConnectionString;
-
-        await CreateCatalogAsync(adminConnectionString, catalog);
+        var databaseLease = await ReusableSqlServerDatabase.AcquireAsync();
+        var applicationConnectionString = databaseLease.ConnectionString;
         try
         {
             AuthenticationSessionIssuance oldSession;
@@ -367,8 +335,7 @@ public sealed class IdentitySqlServerIntegrationTests
         }
         finally
         {
-            SqlConnection.ClearAllPools();
-            await DropCatalogAsync(adminConnectionString, catalog);
+            await databaseLease.DisposeAsync();
         }
     }
 
@@ -532,27 +499,4 @@ public sealed class IdentitySqlServerIntegrationTests
         UpdatedAt = now
     };
 
-    private static async Task CreateCatalogAsync(string connectionString, string catalog)
-    {
-        await using var connection = new SqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"CREATE DATABASE [{catalog}]";
-        await command.ExecuteNonQueryAsync();
-    }
-
-    private static async Task DropCatalogAsync(string connectionString, string catalog)
-    {
-        await using var connection = new SqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"""
-            IF DB_ID(N'{catalog}') IS NOT NULL
-            BEGIN
-                ALTER DATABASE [{catalog}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-                DROP DATABASE [{catalog}];
-            END
-            """;
-        await command.ExecuteNonQueryAsync();
-    }
 }

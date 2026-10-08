@@ -81,7 +81,7 @@
 1. `NEWP_DEV_SQLSERVER_CONNECTION_STRING`
 2. `apps/host-api/appsettings.Development.json` 的 `ConnectionStrings:SqlServer`
 
-Acceptance 会复用该服务器和登录身份，但创建本轮唯一的临时 catalog；连接值不得进入命令参数、日志或提交内容。
+普通自动化测试及 Personnel / Authorization 常规 Acceptance 默认独占复用 `NewP_Test`；只有需要独立 catalog / migration history / 数据库级状态的场景才创建并清理一次性库。连接选择、schema 重置边界和例外见[本地开发环境](../guides/local-environment.md)。连接值不得进入命令参数、日志或提交内容。
 
 开发 catalog 只能在仍匹配当前实验基线时复用。基线整体替换或 Host 返回 `PERSISTENCE_DATABASE_REBUILD_REQUIRED` 时，先停止当前 Host，核对目标 catalog 的 ownership marker、repository/worktree identity、数据可丢弃性和保护状态，再显式删除并新建空 catalog；Host 重新启动后负责创建 schema。不得用 Required 字段回填绕过基线不兼容，也不得把 Acceptance、验收证据、显式保护或来源不明的数据库作为重建目标。
 

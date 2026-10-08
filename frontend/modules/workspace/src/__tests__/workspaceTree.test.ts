@@ -5,6 +5,23 @@ const roots = [
   { spaceId: 'public', spaceKind: 'Public', rootFolderId: 'root-public', name: '公共空间' },
   { spaceId: 'mine', spaceKind: 'Personal', rootFolderId: 'root-mine', name: '个人空间' },
 ];
+it.each([
+  ['Public', 'Workspace.PublicUnavailable'],
+  ['Personal', 'Workspace.PersonalUnavailable'],
+])('reports a missing %s root after ensure succeeds and retries only reads', async (missingKind, reasonKey) => {
+  let unavailable = true;
+  const request = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => new Response(JSON.stringify(
+    init?.method === 'POST' ? { initialized: true } : unavailable ? roots.filter(space => space.spaceKind !== missingKind) : roots,
+  )));
+  const provider = createWorkspaceTreeProvider(request);
+  const scope = { kind: 'currentUser', featurePosition: 'workspace-entry' };
+  await expect(provider.roots(scope)).rejects.toMatchObject({ status: 503, reasonKey });
+  await expect(provider.roots(scope)).rejects.toMatchObject({ status: 503, reasonKey });
+  unavailable = false;
+  expect((await provider.roots(scope)).map(node => node.nodeKey)).toEqual(['public:root-public', 'mine:root-mine']);
+  expect(request.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+});
+
 it('prepares the current account once and retries only reads after a successful ensure', async () => {
   let failRead = true;
   const request = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

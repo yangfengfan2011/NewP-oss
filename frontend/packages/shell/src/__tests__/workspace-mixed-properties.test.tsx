@@ -48,8 +48,11 @@ it.each(['part', 'document'] as const)('opens same EID through the registered %s
     const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost');
     if (url.pathname.endsWith('antiforgery-token')) return json({ requestToken: 'token' });
     if (url.pathname.endsWith('current-user')) return json(user);
-    if (url.pathname.endsWith('/personal/ensure')) return json({ succeeded: true });
-    if (url.pathname === '/api/workspace/spaces') return json([{ spaceId: 'public', spaceKind: 'Public', rootFolderId: 'root', name: '公共空间', hasChildren: true }]);
+    if (url.pathname.endsWith('/personal/ensure')) return json({ initialized: true });
+    if (url.pathname === '/api/workspace/spaces') return json([
+      { spaceId: 'public', spaceKind: 'Public', rootFolderId: 'root', name: '公共空间', hasChildren: true },
+      { spaceId: 'personal', spaceKind: 'Personal', rootFolderId: 'personal-root', name: '个人空间' },
+    ]);
     if (url.pathname.endsWith('/path')) return json({ folderIds: ['root', 'shared'], names: ['公共空间', '当前共享文件夹'] });
     if (url.pathname.endsWith('/children')) return json({ items: [{ linkId: 'shared-link', associatedObject: { id: 'shared' }, fields: { Name: '当前共享文件夹' }, hasChildren: false }] });
     if (url.pathname === '/api/workspace/content/references') {

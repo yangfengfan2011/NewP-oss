@@ -51,6 +51,7 @@ export function createWorkspaceTreeProvider(fetcher: typeof fetch = platformFetc
       signal?.throwIfAborted();
       const spaces = await read<SpaceRoot[]>(api, scope, signal);
       if (!spaces.some(space => space.spaceKind === 'Public')) throw new StandardCrudRequestError('公共空间尚未初始化或不可读取。', 503, {}, { reasonKey: 'Workspace.PublicUnavailable' });
+      if (!spaces.some(space => space.spaceKind === 'Personal')) throw new StandardCrudRequestError('个人空间尚未初始化或不可读取，请重试或联系管理员。', 503, {}, { reasonKey: 'Workspace.PersonalUnavailable' });
       return spaces.map(node);
     },
     children: async (scope, key, signal) => {

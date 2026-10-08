@@ -59,6 +59,11 @@ public sealed class WorkspaceSqlServerHttpApiTests
         var receipt = await EnsureAsync(ordinary, entry);
         Assert.True(receipt.GetProperty("initialized").GetBoolean());
         Assert.False(receipt.TryGetProperty("rootFolderId", out _));
+        var visibleRoots = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, "/api/workspace/spaces");
+        var visibleRoot = Assert.Single(visibleRoots.EnumerateArray());
+        Assert.Equal("Public", visibleRoot.GetProperty("spaceKind").GetString());
+        Assert.Equal(space.GetProperty("rootFolderId").GetString(), visibleRoot.GetProperty("rootFolderId").GetString());
+        Assert.DoesNotContain(personal.GetProperty("rootFolderId").GetString()!, visibleRoots.GetRawText(), StringComparison.Ordinal);
     }
 
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "专用资源贡献验证真实owner、model、id及重复身份")]

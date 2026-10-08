@@ -29,6 +29,7 @@
     "Personal": { "zhs": "个人空间", "en": "Personal space" },
     "RootDescription": { "zhs": "当前空间根文件夹", "en": "Current space root folder" },
     "PublicUnavailable": { "zhs": "公共空间尚未初始化，请联系管理员。", "en": "Public space is not initialized. Contact an administrator." },
+    "PersonalUnavailable": { "zhs": "个人空间尚未初始化或不可读取，请重试或联系管理员。", "en": "Personal space is not initialized or cannot be read. Retry or contact an administrator." },
     "SearchDisabled": { "zhs": "工作空间未启用树搜索。", "en": "Workspace tree search is disabled." },
     "SubjectInputForbidden": { "zhs": "个人空间命令不接受客户端主体。", "en": "The personal space command does not accept a client-provided subject." }
   }

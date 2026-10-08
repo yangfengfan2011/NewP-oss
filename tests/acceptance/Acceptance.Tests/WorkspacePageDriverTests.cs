@@ -7,8 +7,27 @@ namespace ICP.Platform.Acceptance.Tests;
 
 public sealed class WorkspacePageDriverTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "真实 Chromium 的 ARIA 失败快照沿既有登记凭据脱敏，无服务器或端口")]
+    public async Task AriaDiagnostic_RedactsRegisteredInputValueAndPreservesTheControlName()
+    {
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new()
+        {
+            Headless = true,
+            ExecutablePath = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_CHROMIUM_EXECUTABLE")
+                ?? @"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        });
+        var page = await browser.NewPageAsync();
+        const string credential = "registered-secret-value";
+        await page.SetContentAsync($"<label for='candidate'>对象</label><input id='candidate' role='combobox' value='{credential}'>");
+        var snapshot = await WorkspaceAcceptanceRunner.ReadSanitizedAriaAsync(page.Locator("body"), value => AcceptanceInfrastructure.Sanitize([credential], value));
+        Assert.Contains("对象", snapshot);
+        Assert.Contains("[REDACTED]", snapshot);
+        Assert.DoesNotContain(credential, snapshot);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "真实 Chromium 验证正式候选 driver 的必填标签及选择，无服务器或端口")]
-    public async Task FolderCandidate_SelectsTheRequiredComboboxAndWaitsForReadyConfirmation()
+    public async Task ObjectCandidate_SelectsTypeThenRequiredLookupWithoutConfusingTheirSelectedLabels()
     {
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync(new()
@@ -19,26 +38,37 @@ public sealed class WorkspacePageDriverTests
         });
         var page = await browser.NewPageAsync();
         page.SetDefaultTimeout(1000);
-        // 正式 HTML/ARIA 现场：必填星号属于 label 文本，combobox 名称为“* 文件夹”。
+        // 正式标准表单有 enum 和 required Lookup 两个 Select，回显必须归属对象字段。
         await page.SetContentAsync("""
             <style>.ant-form-item-required::before { content: '*'; margin-right: 4px; }</style>
-            <div class="ant-modal" role="dialog" aria-label="添加已有文件夹">
-              <label for="folder" class="ant-form-item-required">文件夹</label>
-              <input id="folder" role="combobox" aria-required="true">
-              <span class="ant-select-selection-item"></span><button disabled>确 认</button>
+            <style>.ant-select-selector { position:relative; width:300px; height:32px; }
+              .ant-select-selector input { width:100%; height:100%; }
+              .ant-select-selection-item { position:absolute; inset:0; background:white; }</style>
+            <div class="ant-modal" role="dialog" aria-label="添加已有对象">
+              <div class="ant-form-item"><label for="type">对象类型</label><div class="ant-select-selector"><input id="type" role="combobox" readonly>
+                <span class="ant-select-selection-item">文件夹</span></div></div>
+              <div class="ant-form-item"><label for="folder" class="ant-form-item-required">对象</label>
+                <div class="ant-select-selector"><input id="folder" role="combobox" aria-required="true"><span class="ant-select-selection-item"></span></div></div>
+              <button disabled>确 认</button>
             </div>
-            <div class="ant-select-dropdown" hidden><div class="ant-select-item-option-content">来源文件夹</div></div>
+            <div class="ant-select-dropdown" id="types" hidden><div>零组件</div></div>
+            <div class="ant-select-dropdown" id="objects" hidden><div class="ant-select-item-option-content">P-1 - 来源对象</div></div>
             <script>
-              const input=document.querySelector('input');
-              input.oninput=()=>document.querySelector('.ant-select-dropdown').hidden=false;
+              document.querySelector('#type').parentNode.onclick=()=>document.querySelector('#types').hidden=false;
+              document.querySelector('#types div').onclick=()=>{
+                document.querySelector('#types').hidden=true;
+                document.querySelector('#type').parentNode.querySelector('.ant-select-selection-item').textContent='零组件';
+              };
+              const input=document.querySelector('#folder');
+              input.oninput=()=>document.querySelector('#objects').hidden=false;
               document.querySelector('.ant-select-item-option-content').onclick=()=>{
-                document.querySelector('.ant-select-selection-item').textContent='来源文件夹';
+                input.parentNode.querySelector('.ant-select-selection-item').textContent='P-1 - 来源对象';
                 document.querySelector('button').disabled=false;
-                document.querySelector('.ant-select-dropdown').hidden=true;
+                document.querySelector('#objects').hidden=true;
               };
             </script>
             """);
-        await new WorkspacePageDriver(page).SelectFolderCandidateAsync(page.GetByRole(AriaRole.Dialog), "来源文件夹");
+        await new WorkspacePageDriver(page).SelectObjectCandidateAsync(page.GetByRole(AriaRole.Dialog), "零组件", "来源对象", "P-1 - 来源对象");
         await Assertions.Expect(page.GetByRole(AriaRole.Button, new() { Name = "确 认" })).ToBeEnabledAsync();
     }
 

@@ -103,6 +103,28 @@ internal static class WorkspaceAcceptanceFixture
         return folderId;
     }
 
+    // 元数据对象由已授权的普通主体正式创建，实体字段契约沿用所属模块。
+    internal static async Task<string> CreateMetadataObjectAsync(HttpClient ordinary, AcceptanceFeatureCatalog features,
+        string module, string behavior, string path, string code, string name, CancellationToken token)
+    {
+        var entry = features.Behavior(module, behavior);
+        var result = await SendAsync(ordinary, HttpMethod.Post, path, new { ECODE = code, ENAME = name },
+            features.Action(entry, "create", "list.pageActions").Position, token);
+        // 受控成功回执不含可引用身份，不能伪造 ID 继续准备。
+        return result.GetProperty("fields").GetProperty("EID").GetString()
+            ?? throw new InvalidOperationException("正式元数据创建未返回可引用的 EID。");
+    }
+
+    // 根内容查询与真实列表使用相同的正式 Link 入口；语义比较只留在 API 层。
+    internal static Task<JsonElement> ReadRootContentsAsync(HttpClient client, JsonElement root, string entryPosition, CancellationToken token)
+    {
+        var rootId = root.GetProperty("rootFolderId").GetString()!;
+        var scope = JsonSerializer.Serialize(new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = rootId, linkIds = "[]" });
+        return SendAsync(client, HttpMethod.Get,
+            $"/api/links/workspace.content?direction=forward&anchorModelKey=Workspace%2FWorkspaceFolder&anchorId={Uri.EscapeDataString(rootId)}&queryScope={Uri.EscapeDataString(scope)}&pageSize=20",
+            null, entryPosition, token);
+    }
+
     // 正式命令保留空请求体；所有写请求取得同会话防伪令牌，Secure Cookie 仅在 loopback client 显式回放。
     internal static async Task<JsonElement> SendAsync(HttpClient client, HttpMethod method, string path,
         object? body, string? featurePosition, CancellationToken token)

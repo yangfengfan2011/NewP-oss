@@ -24,6 +24,10 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
     private int _shellPort;
     private WorkspaceAcceptanceActor? _actor;
     private string? _entryPosition;
+    private string PartCode => $"WS-P-{_runId[..8]}";
+    private string PartName => $"混合零组件旅程 {_runId[..8]}";
+    private string DocumentCode => $"WS-D-{_runId[..8]}";
+    private string DocumentName => $"混合图文档旅程 {_runId[..8]}";
 
     protected override async Task RunScenariosAsync(CancellationToken token)
     {
@@ -62,8 +66,11 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
         else
         {
             var entry = features.Behavior("Workspace", "workspace.spaces.access");
+            var part = features.Behavior("Part", "part.part.read");
+            var document = features.Behavior("Document", "document.document.read");
             grantedFeatures = [entry, features.Action(entry, "create", "list.pageActions", "folder"),
-                features.Action(entry, "add", "list.pageActions", "folder"), features.Action(entry, "remove", "list.rowActions", "folder")];
+                features.Action(entry, "add", "list.pageActions", "folder"), features.Action(entry, "remove", "list.rowActions", "folder"),
+                part, features.Action(part, "create", "list.pageActions"), document, features.Action(document, "create", "list.pageActions")];
         }
         if (browserJourney is null)
         {
@@ -72,6 +79,13 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
                 "/api/workspace/spaces/public/initialize", null, _entryPosition, token);
         }
         _actor = await WorkspaceAcceptanceFixture.PrepareAsync(administrator, features, _runId, RegisterSecret, grantedFeatures, token);
+        if (browserJourney is null)
+        {
+            using var ordinary = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
+            await WorkspaceAcceptanceFixture.LoginAsync(ordinary, _actor, token);
+            await WorkspaceAcceptanceFixture.CreateMetadataObjectAsync(ordinary, features, "Part", "part.part.read", "/api/part/parts", PartCode, PartName, token);
+            await WorkspaceAcceptanceFixture.CreateMetadataObjectAsync(ordinary, features, "Document", "document.document.read", "/api/document/documents", DocumentCode, DocumentName, token);
+        }
         if (prepareJourney is not null) await prepareJourney(administrator, features, _actor, token);
         await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "initialization.json"),
             new { catalog = ReusableSqlServerDatabase.Catalog, devRun = _devRun, actorId = _actor.AccountId, formalInitialization = true }, token);
@@ -130,7 +144,12 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
                 await driver.SelectRootAsync("公共空间");
             }
             var folderName = $"工作空间旅程文件夹 {_runId[..8]}";
+            await driver.SelectRootAsync("个人空间");
             await driver.CreateFolderAsync(folderName);
+            await driver.SelectRootAsync("公共空间");
+            await driver.AddExistingFolderAsync(folderName);
+            await driver.AddExistingObjectAsync("零组件", PartName, $"{PartCode} - {PartName}");
+            await driver.AddExistingObjectAsync("图文档", DocumentName, $"{DocumentCode} - {DocumentName}");
             await driver.ExpandRootToFolderAsync("公共空间", folderName);
             await CapturePresentationAsync(page, "folder-content.png");
             var properties = await driver.OpenFolderPropertiesAsync(folderName);
@@ -138,8 +157,12 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             await page.SetViewportSizeAsync(900, 1000);
             await CapturePresentationAsync(page, "folder-properties-narrow.png");
             await driver.ClosePropertiesAsync(properties);
-            await driver.RemoveReferenceAsync(folderName);
-            await driver.AddExistingFolderAsync(folderName);
+            await driver.OpenOwnedPropertiesAsync(PartName, "/parts");
+            await driver.ReturnToPublicContentAsync();
+            await driver.OpenOwnedPropertiesAsync(DocumentName, "/documents");
+            await driver.ReturnToPublicContentAsync();
+            await driver.RemoveReferenceAsync(PartName);
+            await driver.AddExistingObjectAsync("零组件", PartName, $"{PartCode} - {PartName}");
             await driver.ExpandRootToFolderAsync("公共空间", folderName);
             await CapturePresentationAsync(page, "folder-content-narrow.png");
             await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "browser.json"),
@@ -157,13 +180,14 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
         Path = Path.Combine(_runDirectory, name), FullPage = true, Animations = ScreenshotAnimations.Disabled
     });
 
-    // 同一 catalog 跨真实 Host 进程重启后新登录；只在 API 层比较空间和根身份，不重复浏览器旅程。
+    // 同一 catalog 跨真实 Host 进程重启后新登录；在 API 层比较空间、根与混合关系，不重复浏览器旅程。
     private async Task VerifyProcessRestartAsync(CancellationToken token)
     {
         var actor = _actor ?? throw new InvalidOperationException("Workspace 普通主体尚未准备。");
         using var beforeClient = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
         await WorkspaceAcceptanceFixture.LoginAsync(beforeClient, actor, token);
         var before = await WorkspaceAcceptanceFixture.SendAsync(beforeClient, HttpMethod.Get, "/api/workspace/spaces", null, _entryPosition, token);
+        var beforeContents = await ReadPersistedContentAsync(beforeClient, before, token);
         using (var state = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(_repositoryRoot, ".codex-temp", "dev", "state.json"), token)))
         {
             if (state.RootElement.GetProperty("runId").GetString() != _devRun)
@@ -183,9 +207,38 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
         var expected = RootIdentities(before);
         if (expected.Length != 2 || !expected.SequenceEqual(RootIdentities(afterRead)) || !expected.SequenceEqual(RootIdentities(afterEnsure)))
             throw new InvalidOperationException("真实 Host 进程重启后空间或根身份发生漂移。");
+        var afterContents = await ReadPersistedContentAsync(afterClient, afterEnsure, token);
+        if (!beforeContents.SequenceEqual(afterContents)) throw new InvalidOperationException("真实 Host 进程重启后混合引用或正式根内容查询发生漂移。");
         await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "process-restart.json"),
-            new { catalog = ReusableSqlServerDatabase.Catalog, previousRun, restartedRun = _devRun, rootIdentities = expected }, token);
+            new { catalog = ReusableSqlServerDatabase.Catalog, previousRun, restartedRun = _devRun, rootIdentities = expected, contentIdentities = afterContents }, token);
     }
+
+    private async Task<string[]> ReadPersistedContentAsync(HttpClient client, JsonElement roots, CancellationToken token)
+    {
+        var identities = new List<string>();
+        var models = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var root in roots.EnumerateArray())
+        {
+            var space = root.GetProperty("spaceId").GetString()!;
+            await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get,
+                $"/api/workspace/spaces/{Uri.EscapeDataString(space)}/root", null, _entryPosition, token);
+            var contents = await WorkspaceAcceptanceFixture.ReadRootContentsAsync(client, root, _entryPosition!, token);
+            if (contents.GetProperty("total").GetInt32() != contents.GetProperty("items").GetArrayLength())
+                throw new InvalidOperationException("正式重启样本未在一页完整返回，不能以部分关系快照证明持久性。");
+            identities.AddRange(ContentIdentities(contents).Select(identity => space + ":" + identity));
+            foreach (var item in contents.GetProperty("items").EnumerateArray())
+                models.Add(item.GetProperty("associatedObject").GetProperty("modelKey").GetString()!);
+        }
+        if (!models.SetEquals(["Workspace/WorkspaceFolder", "Part/Part", "Document/Document"]))
+            throw new InvalidOperationException("正式重启样本缺少已建立的三类型混合引用。");
+        return identities.Order(StringComparer.Ordinal).ToArray();
+    }
+
+    // 关系与模型身份均参与比对，同值 EID 跨模型及同对象不同 LID 不得合并。
+    internal static string[] ContentIdentities(JsonElement contents) => contents.GetProperty("items").EnumerateArray()
+        .Select(item => JsonSerializer.Serialize(new[] { item.GetProperty("linkId").GetString(),
+            item.GetProperty("associatedObject").GetProperty("modelKey").GetString(), item.GetProperty("associatedObject").GetProperty("id").GetString() }))
+        .Order(StringComparer.Ordinal).ToArray();
 
     private static string[] RootIdentities(JsonElement roots) => roots.EnumerateArray().Select(root =>
         $"{root.GetProperty("spaceKind").GetString()}/{root.GetProperty("spaceId").GetString()}/{root.GetProperty("rootFolderId").GetString()}")
@@ -208,12 +261,16 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
                 diagnostic = Sanitize(failure.ToString()),
                 errors = diagnostics.Select(Sanitize).ToArray(),
                 page = Sanitize(await driver.ReadPageDiagnosticAsync()),
-                dom = Sanitize(await page.Locator("body").InnerTextAsync())
+                dom = Sanitize(await page.Locator("body").InnerTextAsync()),
+                aria = await ReadSanitizedAriaAsync(page.Locator("body"), Sanitize)
             });
             await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "browser-failure.png"), FullPage = true, Mask = [page.Locator("input,textarea")] });
         }
         catch (Exception) { /* 诊断采集不得覆盖原始浏览器失败。 */ }
     }
+
+    internal static async Task<string> ReadSanitizedAriaAsync(ILocator surface, Func<string?, string> sanitize) =>
+        sanitize(await surface.AriaSnapshotAsync());
 
     // 响应体可能已被浏览器归还；读取失败仍保留请求身份和状态，最终由外层统一脱敏。
     internal static async Task<string> ReadFailedResponseDiagnosticAsync(string method, string url, int status, Func<Task<string>> readBody)

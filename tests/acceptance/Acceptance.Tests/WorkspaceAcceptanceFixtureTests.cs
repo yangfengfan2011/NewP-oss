@@ -106,6 +106,56 @@ public sealed class WorkspaceAcceptanceFixtureTests
     private static HttpResponseMessage Json(HttpStatusCode status, string text) =>
         new(status) { Content = new StringContent(text, Encoding.UTF8, "application/json") };
 
+    [Theory]
+    [InlineData("Part", "part.part.read", "/api/part/parts")]
+    [InlineData("Document", "document.document.read", "/api/document/documents")]
+    public async Task MetadataPreparation_UsesGrantedCreatePointAndThe201FieldsEid(string module, string behavior, string path)
+    {
+        var entry = new FeaturePoint("entry", module, "entry", "navigation", "entry", null, behavior, [], 0);
+        var create = new FeaturePoint("create", module, "create", "action", "create", "entry", "create", [], 0) { ActionScope = "list.pageActions" };
+        var created = false;
+        using var client = new HttpClient(new AsyncHandler(async (request, token) =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/api/auth/antiforgery-token") return Json(HttpStatusCode.OK, "{\"requestToken\":\"fixture-token\"}");
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal(path, request.RequestUri.AbsolutePath);
+            Assert.Equal("create", Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
+            using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(token));
+            Assert.Equal(["ECODE", "ENAME"], body.RootElement.EnumerateObject().Select(property => property.Name).ToArray());
+            Assert.Equal("CODE", body.RootElement.GetProperty("ECODE").GetString());
+            Assert.Equal("名称", body.RootElement.GetProperty("ENAME").GetString());
+            created = true;
+            return Json(HttpStatusCode.Created, "{\"id\":\"wrong-top-level-id\",\"fields\":{\"EID\":\"real-EID\"},\"summaries\":{}}");
+        })) { BaseAddress = new Uri("http://127.0.0.1:5000") };
+
+        var id = await WorkspaceAcceptanceFixture.CreateMetadataObjectAsync(client, new([entry, create]), module, behavior, path, "CODE", "名称", CancellationToken.None);
+
+        Assert.True(created);
+        Assert.Equal("real-EID", id);
+    }
+
+    [Fact]
+    public void RestartContentIdentities_PreserveModelAndRelationIdentityButIgnoreQueryOrderAndPresentation()
+    {
+        using var before = JsonDocument.Parse("""
+            {"items":[
+              {"linkId":"link2","associatedObject":{"modelKey":"Part/Part","id":"same-id"},"fields":{"Name":"before"}},
+              {"linkId":"link1","associatedObject":{"modelKey":"Document/Document","id":"same-id"}},
+              {"linkId":"link3","associatedObject":{"modelKey":"Part/Part","id":"same-id"}}]}
+            """);
+        using var after = JsonDocument.Parse("""
+            {"items":[
+              {"linkId":"link3","associatedObject":{"modelKey":"Part/Part","id":"same-id"}},
+              {"linkId":"link1","associatedObject":{"modelKey":"Document/Document","id":"same-id"}},
+              {"linkId":"link2","associatedObject":{"modelKey":"Part/Part","id":"same-id"},"fields":{"Name":"after"}}]}
+            """);
+        var identities = WorkspaceAcceptanceRunner.ContentIdentities(before.RootElement);
+        Assert.Equal(3, identities.Distinct().Count());
+        Assert.Equal(identities, WorkspaceAcceptanceRunner.ContentIdentities(after.RootElement));
+        using var wrongModel = JsonDocument.Parse(after.RootElement.GetRawText().Replace("Document/Document", "Part/Part", StringComparison.Ordinal));
+        Assert.NotEqual(identities, WorkspaceAcceptanceRunner.ContentIdentities(wrongModel.RootElement));
+    }
+
     private sealed class Handler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>

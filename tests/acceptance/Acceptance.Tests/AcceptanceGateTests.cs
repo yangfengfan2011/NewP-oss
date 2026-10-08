@@ -108,6 +108,72 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
+    [EnvironmentGatedFact(RunEnvironmentVariable, "普通账号三类型混合内容、所属属性及独立候选移除重加")]
+    public async Task WorkspaceMixedContent_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("workspace-mixed");
+        var suffix = runId[..8];
+        var folderName = $"混合文件夹旅程 {suffix}";
+        var partCode = $"WS-P-{suffix}";
+        var partName = $"混合零组件旅程 {suffix}";
+        var documentCode = $"WS-D-{suffix}";
+        var documentName = $"混合图文档旅程 {suffix}";
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false,
+            selectFeatures: features =>
+            {
+                var entry = features.Behavior("Workspace", "workspace.spaces.access");
+                var part = features.Behavior("Part", "part.part.read");
+                var document = features.Behavior("Document", "document.document.read");
+                return [entry, features.Action(entry, "create", "list.pageActions", "folder"),
+                    features.Action(entry, "add", "list.pageActions", "folder"), features.Action(entry, "remove", "list.rowActions", "folder"),
+                    part, features.Action(part, "create", "list.pageActions"), document, features.Action(document, "create", "list.pageActions")];
+            },
+            prepareJourney: async (administrator, features, actor, token) =>
+            {
+                var entry = features.Behavior("Workspace", "workspace.spaces.access");
+                await WorkspaceAcceptanceFixture.SendAsync(administrator, HttpMethod.Post, "/api/workspace/spaces/public/initialize", null, entry.Position, token);
+                using var ordinary = WorkspaceAcceptanceFixture.CreateClient(administrator.BaseAddress!.Port);
+                await WorkspaceAcceptanceFixture.LoginAsync(ordinary, actor, token);
+                var folderId = await WorkspaceAcceptanceFixture.PrepareOrphanFolderAsync(ordinary, features, folderName, token);
+                var spaces = await WorkspaceAcceptanceFixture.SendAsync(ordinary, HttpMethod.Get, "/api/workspace/spaces", null, entry.Position, token);
+                var publicRoot = spaces.EnumerateArray().Single(space => space.GetProperty("spaceKind").GetString() == "Public");
+                var position = new { spaceId = publicRoot.GetProperty("spaceId").GetString(), rootFolderId = publicRoot.GetProperty("rootFolderId").GetString(), linkIds = Array.Empty<string>() };
+                await WorkspaceAcceptanceFixture.SendAsync(ordinary, HttpMethod.Post, "/api/workspace/content/references",
+                    new { position, target = new { modelKey = "Workspace/WorkspaceFolder", id = folderId } },
+                    features.Action(entry, "add", "list.pageActions", "folder").Position, token);
+                var partId = await WorkspaceAcceptanceFixture.CreateMetadataObjectAsync(ordinary, features, "Part", "part.part.read", "/api/part/parts", partCode, partName, token);
+                var documentId = await WorkspaceAcceptanceFixture.CreateMetadataObjectAsync(ordinary, features, "Document", "document.document.read", "/api/document/documents", documentCode, documentName, token);
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "fixture-mixed.json"), new { folderId, partId, documentId, actorId = actor.AccountId }, token);
+            },
+            browserJourney: async (page, token) =>
+            {
+                var driver = new WorkspacePageDriver(page);
+                async Task CapturePairAsync(string stage, ILocator? surface = null)
+                {
+                    if (surface is not null) await surface.EvaluateAsync("async element => { await new Promise(requestAnimationFrame); await Promise.all(element.getAnimations({subtree:true}).map(animation => animation.finished.catch(() => {}))); }");
+                    await page.ScreenshotAsync(new() { Path = Path.Combine(root, stage + ".png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                    await page.SetViewportSizeAsync(900, 1000);
+                    await page.ScreenshotAsync(new() { Path = Path.Combine(root, stage + "-narrow.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                    await page.SetViewportSizeAsync(1440, 1000);
+                }
+                await driver.OpenAsync();
+                await driver.SelectRootAsync("公共空间");
+                await driver.AddExistingObjectAsync("零组件", partName, $"{partCode} - {partName}", dialog => CapturePairAsync("part-candidate", dialog));
+                await driver.AddExistingObjectAsync("图文档", documentName, $"{documentCode} - {documentName}", dialog => CapturePairAsync("document-candidate", dialog));
+                await new StandardCrudPageDriver(page).WaitForRowAsync(folderName);
+                await CapturePairAsync("mixed-content");
+                await driver.OpenOwnedPropertiesAsync(partName, "/parts");
+                await CapturePairAsync("mixed-part-properties");
+                await driver.ReturnToPublicContentAsync();
+                await driver.OpenOwnedPropertiesAsync(documentName, "/documents");
+                await CapturePairAsync("mixed-document-properties");
+                await driver.ReturnToPublicContentAsync();
+                await driver.RemoveReferenceAsync(partName, dialog => CapturePairAsync("mixed-remove-reference", dialog));
+                await driver.AddExistingObjectAsync("零组件", partName, $"{partCode} - {partName}");
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"), new { url = page.Url, actor = "ordinary", readdedObject = partName }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact(RunEnvironmentVariable, "正式 Part 迁移、普通账号标准创建及 Drawer/独立只读属性 driver")]
     public async Task PartCreation_UsesFormalDriver()
     {

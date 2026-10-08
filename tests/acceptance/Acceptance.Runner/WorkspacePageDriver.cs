@@ -73,34 +73,63 @@ internal sealed class WorkspacePageDriver(IPage page)
 
     internal Task ClosePropertiesAsync(ILocator drawer) => new StandardCrudPageDriver(page).CloseDrawerAsync(drawer);
 
-    internal async Task<ILocator> OpenAddExistingFolderDialogAsync()
+    internal async Task<ILocator> OpenAddExistingObjectDialogAsync()
     {
         var crud = new StandardCrudPageDriver(page);
-        await crud.ClickPageActionAsync("添加已有文件夹");
+        await crud.ClickPageActionAsync("添加已有对象");
         var dialog = crud.VisibleModal();
         await dialog.WaitForAsync(new() { State = WaitForSelectorState.Visible });
         return dialog;
     }
 
-    internal async Task AddExistingFolderAsync(string name, Func<ILocator, Task>? capture = null)
+    internal Task AddExistingFolderAsync(string name, Func<ILocator, Task>? capture = null) =>
+        AddExistingObjectAsync("文件夹", name, name, capture);
+
+    internal async Task AddExistingObjectAsync(string type, string name, string optionLabel, Func<ILocator, Task>? capture = null)
     {
         var crud = new StandardCrudPageDriver(page);
-        var dialog = await OpenAddExistingFolderDialogAsync();
-        await SelectFolderCandidateAsync(dialog, name);
+        var dialog = await OpenAddExistingObjectDialogAsync();
+        await SelectObjectCandidateAsync(dialog, type, name, optionLabel);
         if (capture is not null) await capture(dialog);
-        await crud.ConfirmAsync(dialog, new("POST", "/api/workspace/content/references", 200, "添加已有文件夹"));
+        await crud.ConfirmAsync(dialog, new("POST", "/api/workspace/content/references", 200, "添加已有对象"));
         await crud.WaitForRowAsync(name);
     }
 
-    internal async Task SelectFolderCandidateAsync(ILocator dialog, string name)
+    internal async Task SelectObjectCandidateAsync(ILocator dialog, string type, string keyword, string optionLabel)
     {
-        var input = dialog.GetByRole(AriaRole.Combobox, new() { NameRegex = new Regex(@"^\*\s*文件夹$") });
-        await input.ClickAsync();
-        await input.FillAsync(name);
-        await page.Locator(".ant-select-dropdown:visible").Last.GetByText(name, new() { Exact = true }).ClickAsync();
-        await Assertions.Expect(dialog.Locator(".ant-select-selection-item")).ToHaveTextAsync(name, new() { Timeout = 30_000 });
+        // Ant Select 的 readonly input 会被已选值覆盖；通过标签定位字段，再点击正式 selector。
+        var typeField = dialog.Locator(".ant-form-item").Filter(new()
+            { Has = page.GetByRole(AriaRole.Combobox, new() { Name = "对象类型", Exact = true }) });
+        await typeField.Locator(".ant-select-selector").ClickAsync();
+        await page.Locator(".ant-select-dropdown:visible").Last.GetByText(type, new() { Exact = true }).ClickAsync();
+        var input = dialog.GetByRole(AriaRole.Combobox, new() { NameRegex = new Regex(@"^\*\s*对象$") });
+        var objectField = dialog.Locator(".ant-form-item").Filter(new()
+            { Has = page.GetByRole(AriaRole.Combobox, new() { NameRegex = new Regex(@"^\*\s*对象$") }) });
+        await objectField.Locator(".ant-select-selector").ClickAsync();
+        await input.FillAsync(keyword);
+        await page.Locator(".ant-select-dropdown:visible").Last.GetByText(optionLabel, new() { Exact = true }).ClickAsync();
+        await Assertions.Expect(objectField.Locator(".ant-select-selection-item"))
+            .ToHaveTextAsync(optionLabel, new() { Timeout = 30_000 });
         await Assertions.Expect(dialog.GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^确\s*认$") }))
             .ToBeEnabledAsync(new() { Timeout = 30_000 });
+    }
+
+    internal async Task OpenOwnedPropertiesAsync(string name, string route)
+    {
+        var row = await new StandardCrudPageDriver(page).WaitForRowAsync(name);
+        await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
+        await page.GetByRole(AriaRole.Menuitem, new() { Name = "打开属性", Exact = true }).ClickAsync();
+        await page.WaitForURLAsync(url => new Uri(url).AbsolutePath.StartsWith(route.TrimEnd('/') + "/", StringComparison.Ordinal));
+        await page.GetByText(name, new() { Exact = true }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        await page.GetByText("基本信息", new() { Exact = true }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        await page.GetByText("审计信息", new() { Exact = true }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
+    }
+
+    internal async Task ReturnToPublicContentAsync()
+    {
+        await page.GoBackAsync();
+        await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/workspace");
+        await SelectRootAsync("公共空间");
     }
 
     internal async Task<ILocator> OpenRemoveReferenceDialogAsync(string name)

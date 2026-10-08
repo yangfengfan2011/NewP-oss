@@ -2,6 +2,13 @@ import type { ComponentType } from 'react';
 
 /** 页面身份与固定配置分离；运行时节点从 context 传递。 */
 export interface PageRef { pageKey: string; parameters?: Record<string, unknown>; inputResolverKey?: string }
+/** 模块在自己的 List View 声明只读详情入口；宿主传入已验证的 recordId，查询授权属于来源导航。 */
+export interface StandardCrudDetailContribution {
+  key: string;
+  targetViewKey: string;
+  navigationKey: string;
+  pageRef: PageRef;
+}
 export interface TreeNodeDescriptor {
   nodeKey: string; nodeType: string; label: string; hasChildren: boolean;
   code?: string; isEnabled?: boolean; context?: Record<string, unknown>;

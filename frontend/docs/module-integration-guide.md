@@ -101,3 +101,11 @@ corepack pnpm --dir frontend --filter @icp-platform/shell test
 外仓 `standard-data.v1` 插件不携带任意前端运行时代码；它使用独立 build-only plugin SDK 生成声明式标准投影。代码型外部 profile 必须另行设计。
 
 异构只读列表可用 Adapter.getDetailTarget 返回已登记的 detailViewKey 与真实实体主键；共享行操作只解析正式所属详情路由并重新执行目标准入，行选择与关系命令仍使用 getRowId。动作输入需要跨资源候选时，可从 navigationFeaturePosition(targetKey) 取得当前允许的正式导航位置；缺失位置不得拼接身份或以原动作位置冒充目标读取。候选继续使用所属模块标准 GET 的分页与字段协议。
+
+## 从标准详情进入只读关联列表
+
+模块可在自己的 List View authoring 声明 `detailContributions`，每项含唯一 `key`、正式 `targetViewKey`、本模块 `navigationKey` 及 `pageRef`。PageRef 只允许本 List View 的 `platform.list` 和本模块已登记的 inputResolver；参数 `anchorModelKey` 必须与目标详情的规范模型身份一致，不能声明 `recordId`。`WorkspaceReferencesList.view.json` 是三个真实详情消费者的接入实例。
+
+准备阶段核对来源绑定/导航归属、目标详情能力及模型、唯一 key/目标、PageRef 和 resolver，任一缺失或歧义拒绝候选。运行时仅从通过详情契约的真实对象注入 `recordId`，由 resolver 形成该列表的 queryScope；标题来自来源 View 词典。入口按来源导航授权，目标详情读取位置保留所属身份；无来源资格时不显示入口或发起关联读取。服务器仍独立验证锚点与关联对象资格。
+
+共享宿主在 Drawer 和独立详情使用同一入口，以 Modal/PageOutlet 装载标准列表；它不接受任意组件或 URL。每个 Modal 使用独立组合与列表状态，真实对象或资格变化释放旧读取，关闭回到原详情。多个纯内嵌列表可以复用同一 Drawer 详情 View；拥有独立详情路由的 capability 仍必须唯一，不因此生成额外路由。

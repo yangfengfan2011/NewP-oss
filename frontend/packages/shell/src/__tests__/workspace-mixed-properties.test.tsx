@@ -17,6 +17,7 @@ import content from '../../../../../modules/Workspace/metadata/models/WorkspaceF
 import workspaceNavigation from '../../../../../modules/Workspace/metadata/navigation/Workspace.nav.json';
 import tree from '../../../../../modules/Workspace/metadata/views/WorkspaceStructure.view.json';
 import list from '../../../../../modules/Workspace/metadata/views/WorkspaceFolderList.view.json';
+import references from '../../../../../modules/Workspace/metadata/views/WorkspaceReferencesList.view.json';
 import detail from '../../../../../modules/Workspace/metadata/views/WorkspaceFolderDetail.view.json';
 import partList from '../../../../../modules/Part/metadata/views/PartList.view.json';
 import partDetail from '../../../../../modules/Part/metadata/views/PartDetail.view.json';
@@ -61,6 +62,17 @@ it.each(['part', 'document'] as const)('opens same EID through the registered %s
       expect(new Headers(input instanceof Request ? input.headers : init?.headers).get('X-NewP-Feature')).toBe(type + '-entry');
       return json({ items: [{ EID: 'same-id', ECODE: 'SAME-CODE', ENAME: '无引用候选' }], total: 1, page: 1, pageSize: 20 });
     }
+    if (url.pathname === '/api/links/workspace.content' && url.searchParams.get('direction') === 'reverse') {
+      expect(url.searchParams.get('anchorModelKey')).toBe(type === 'part' ? 'Part/Part' : 'Document/Document');
+      expect(url.searchParams.get('anchorId')).toBe('same-id');
+      expect(url.searchParams.has('queryScope')).toBe(false);
+      expect(new Headers(input instanceof Request ? input.headers : init?.headers).get('X-NewP-Feature')).toBe('workspace-entry');
+      return json({ items: [{ linkId: 'incoming-relation', associatedObject: { modelKey: 'Workspace/WorkspaceFolder', id: 'parent-folder' },
+        fields: { LID: 'incoming-relation', Name: '直接父文件夹', UpdatedBy: 'actor', UpdatedBy_DisplayValue: '更新账号', UpdatedAt: '2026-10-08T00:00:00Z', UpdatedAt_DisplayValue: '2026-10-08 08:00' } }], total: 1, page: 1, pageSize: 20 });
+    }
+    if (url.pathname === '/api/workspace/folders/parent-folder') return json({ fields: { EID: 'parent-folder', ENAME: '父文件夹属性', Description: '只开对象不定位路径',
+      CreatedBy: 'actor', CreatedBy_DisplayValue: '创建账号', UpdatedBy: 'actor', UpdatedBy_DisplayValue: '更新账号',
+      CreatedAt: '2026-10-08T00:00:00Z', CreatedAt_DisplayValue: '2026-10-08 08:00', UpdatedAt: '2026-10-08T00:00:00Z', UpdatedAt_DisplayValue: '2026-10-08 08:00' } });
     if (url.pathname === '/api/links/workspace.content') return json({ items: ['part', 'document'].map(owner => ({ linkId: owner + '-relation',
       associatedObject: { modelKey: owner === 'part' ? 'Part/Part' : 'Document/Document', id: 'same-id' },
       fields: { LID: owner + '-relation', ObjectType: owner === 'part' ? 'Part/Part' : 'Document/Document',
@@ -79,7 +91,8 @@ it.each(['part', 'document'] as const)('opens same EID through the registered %s
     { metadata: { moduleId: 'Part', displayName: '零组件', version: '1' }, ...part },
     { metadata: { moduleId: 'Document', displayName: '图文档', version: '1' }, ...documentModule }], 'workspace-mixed');
   const navs = [partNavigation, documentNavigation].map((navigation, index) => ({ ...navigation, navigation: { items: navigation.navigation.items.map(item => ({ ...item, featurePosition: index ? 'document-entry' : 'part-entry' })) } }));
-  const views = [tree, list, detail, partList, partDetail, documentList, documentDetail];
+  const views = [tree, list, detail, references, partList, partDetail, documentList, documentDetail];
+  const workspaceNav = { ...workspaceNavigation, navigation: { items: workspaceNavigation.navigation.items.map(item => ({ ...item, featurePosition: 'workspace-entry' })) } };
   expect(compileStandardCrudRouteProjection(ModuleRegistry.getAllModules(), [workspaceNavigation, ...navs], views, []).detailEntries).toHaveLength(2);
   const catalogs = { zhs: Object.fromEntries([[dictionary.Workspace, 'Workspace'], [partDictionary.Part, 'Part'], [documentDictionary.Document, 'Document']].flatMap(([dict, key]) =>
     Object.entries(dict).map(([name, value]) => [`${key}.${name}`, (value as { zhs: string }).zhs]))) };
@@ -91,7 +104,7 @@ it.each(['part', 'document'] as const)('opens same EID through the registered %s
       <RuntimeMetadataProvider value={{ manifest: { modules: [{ moduleId: 'Workspace', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: [
         { key: 'workspace', position: 'workspace-entry', kind: 'navigation' }, { key: 'add', position: 'workspace-add', kind: 'action', parentPosition: 'workspace-entry', staticScope: 'folder', actionScope: 'list.pageActions' },
       ] }, ...['Part', 'Document'].map(moduleId => ({ moduleId, metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: [{ key: moduleId === 'Part' ? 'part.parts' : 'document.documents', kind: 'navigation', position: moduleId.toLowerCase() + '-entry' }] }))] },
-      navDocuments: navs, modelDocuments: [folder, content, partModel, documentModel], viewDocuments: views }}>
+      navDocuments: [workspaceNav, ...navs], modelDocuments: [folder, content, partModel, documentModel], viewDocuments: views }}>
         {page}
       </RuntimeMetadataProvider>
     </PlatformQueryProvider></AuthorizationProvider></AuthProvider>
@@ -122,6 +135,20 @@ it.each(['part', 'document'] as const)('opens same EID through the registered %s
   expect(container.textContent).toContain('审计信息'); expect(container.textContent).toContain('更新账号');
   expect(container.querySelector('input,textarea')).toBeNull();
   expect(fetcher.mock.calls.some(([input]) => String(input instanceof Request ? input.url : input).includes('-relation'))).toBe(false);
+  await act(async () => [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === '直接引用文件夹')!.click());
+  await vi.waitFor(() => expect(document.querySelector('tr[data-row-key="incoming-relation"]')).not.toBeNull());
+  expect(router.state.location.pathname).toBe(type === 'part' ? '/parts/same-id' : '/documents/same-id');
+  const incoming = document.querySelector('tr[data-row-key="incoming-relation"]')!;
+  await act(async () => [...incoming.querySelectorAll<HTMLElement>('*')].find(node => node.children.length === 0 && node.textContent === '更多')!.click());
+  await vi.waitFor(() => expect(document.querySelector('[role="menuitem"]')).not.toBeNull());
+  await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(node => node.textContent === '打开属性')!.click());
+  await vi.waitFor(() => expect(document.querySelector('.ant-drawer-body')?.textContent).toContain('父文件夹属性'));
+  expect(document.querySelector('.ant-drawer-body')?.textContent).toContain('直接引用文件夹');
+  await act(async () => document.querySelector<HTMLButtonElement>('.ant-drawer-close')!.click());
+  await vi.waitFor(() => expect(document.querySelector('.ant-drawer')).toBeNull());
+  await act(async () => document.querySelector<HTMLButtonElement>('.ant-modal-close')!.click());
+  await vi.waitFor(() => expect(document.querySelector('.ant-modal')).toBeNull());
+  expect(container.textContent).toContain(type + '-owned-properties');
   await act(async () => router.navigate(-1));
   await vi.waitFor(() => expect(container.querySelector('.np-tree-context-header .ant-breadcrumb')?.textContent).toBe('公共空间/当前共享文件夹'));
   await vi.waitFor(() => expect(container.querySelector(`tr[data-row-key="${type}-relation"]`)).not.toBeNull());

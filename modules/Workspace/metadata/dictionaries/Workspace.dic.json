@@ -3,6 +3,8 @@
   "Workspace": {
     "Title": { "zhs": "工作空间", "en": "Workspace" },
     "Folder": { "zhs": "文件夹", "en": "Folder" },
+    "DirectReferences": { "zhs": "直接引用文件夹", "en": "Direct referencing folders" },
+    "DirectReferencesDescription": { "zhs": "仅显示直接引用关系；请从工作空间树选择具体位置。", "en": "Direct references only. Select a location from the workspace tree." },
     "CreateFolder": { "zhs": "新建文件夹", "en": "New folder" },
     "AddFolder": { "zhs": "添加已有对象", "en": "Add existing object" },
     "Object": { "zhs": "对象", "en": "Object" },

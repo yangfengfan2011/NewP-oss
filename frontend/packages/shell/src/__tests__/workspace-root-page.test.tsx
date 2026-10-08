@@ -6,11 +6,22 @@ import { beforeAll, expect, it, onTestFinished, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import workspace from '../../../../modules/workspace/src';
+import part from '../../../../modules/part/src';
+import documentModule from '../../../../modules/document/src';
+import partDetail from '../../../../../modules/Part/metadata/views/PartDetail.view.json';
+import partList from '../../../../../modules/Part/metadata/views/PartList.view.json';
+import documentDetail from '../../../../../modules/Document/metadata/views/DocumentDetail.view.json';
+import documentList from '../../../../../modules/Document/metadata/views/DocumentList.view.json';
+import partNavigation from '../../../../../modules/Part/metadata/navigation/Part.nav.json';
+import documentNavigation from '../../../../../modules/Document/metadata/navigation/Document.nav.json';
+import partModel from '../../../../../tests/Kernel.Tests/Fixtures/PartRuntime.contract.json';
+import documentModel from '../../../../../tests/Kernel.Tests/Fixtures/DocumentRuntime.contract.json';
 import folder from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceFolderRuntime.contract.json';
 import content from '../../../../../modules/Workspace/metadata/models/WorkspaceFolderContent.model.json';
 import tree from '../../../../../modules/Workspace/metadata/views/WorkspaceStructure.view.json';
 import list from '../../../../../modules/Workspace/metadata/views/WorkspaceFolderList.view.json';
 import detail from '../../../../../modules/Workspace/metadata/views/WorkspaceFolderDetail.view.json';
+import incoming from '../../../../../modules/Workspace/metadata/views/WorkspaceReferencesList.view.json';
 import dictionary from '../../../../../modules/Workspace/metadata/dictionaries/Workspace.dic.json';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { PageEntry } from '../composition/PageOutlet';
@@ -89,11 +100,16 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
     throw new Error(`Unexpected request ${method} ${path}`);
   });
   vi.stubGlobal('fetch', fetcher);
-  ModuleRegistry.replaceAll([{ metadata: { moduleId: 'Workspace', displayName: '工作空间', version: '1' }, ...workspace }], 'workspace-test');
+  ModuleRegistry.replaceAll([{ metadata: { moduleId: 'Workspace', displayName: '工作空间', version: '1' }, ...workspace },
+    { metadata: { moduleId: 'Part', displayName: '零组件', version: '1' }, ...part },
+    { metadata: { moduleId: 'Document', displayName: '图文档', version: '1' }, ...documentModule }], 'workspace-test');
+  const views = [tree, list, detail, incoming, partDetail, partList, documentDetail, documentList];
+  const navs = [{ ...navigation, navigation: { items: navigation.navigation.items.map(item => ({ ...item, featurePosition: 'workspace-entry' })) } }, partNavigation, documentNavigation];
   // 实际 AppRoutes 先编译所有模块路由，再装载组合；直接挂 PageEntry 不能替代这一步。
-  expect(compileStandardCrudRouteProjection(ModuleRegistry.getAllModules(), [navigation], [tree, list, detail], [])).toEqual({
-    detailEntries: [], drawerRedirects: [], fallbackRoutes: [],
-  });
+  const projection = compileStandardCrudRouteProjection(ModuleRegistry.getAllModules(), navs, views, []);
+  expect(projection.detailEntries.map(entry => entry.path)).toEqual(['/parts/:id', '/documents/:id']);
+  expect(projection.drawerRedirects).toEqual([{ from: '/parts/new', to: '/parts?drawer=create' }, { from: '/documents/new', to: '/documents?drawer=create' }]);
+  expect(projection.fallbackRoutes).toEqual([]);
   function SessionSwitch() {
     const auth = useAuth();
     return <button onClick={() => { account = 'b'; void auth.retrySessionValidation(); }}>切换账号</button>;
@@ -109,7 +125,7 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
           { key: 'create', position: 'workspace-create', kind: 'action', parentPosition: 'workspace-entry', staticScope: 'folder', actionScope: 'list.pageActions' },
           { key: 'add', position: 'workspace-add', kind: 'action', parentPosition: 'workspace-entry', staticScope: 'folder', actionScope: 'list.pageActions' },
           { key: 'remove', position: 'workspace-remove', kind: 'action', parentPosition: 'workspace-entry', staticScope: 'folder', actionScope: 'list.rowActions' },
-        ] }] }, navDocuments: [], modelDocuments: [folder, content], viewDocuments: [tree, list, detail] }}>
+        ] }] }, navDocuments: navs, modelDocuments: [folder, content, partModel, documentModel], viewDocuments: views }}>
           <SessionSwitch /><PageEntry page={{ pageKey: 'platform.tree', parameters: { viewKey: tree.view.key, featurePosition: 'workspace-entry' }, inputResolverKey: 'workspace.tree.current' }} />
         </RuntimeMetadataProvider>
       </PlatformQueryProvider></AuthorizationProvider></AuthProvider>

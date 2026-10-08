@@ -9,6 +9,30 @@ namespace ICP.Platform.Kernel.Tests;
 
 public sealed class PageCompositionMetadataTests
 {
+    [Theory]
+    [InlineData("valid")]
+    [InlineData("duplicate-key")]
+    [InlineData("duplicate-target")]
+    [InlineData("navigation")]
+    [InlineData("page")]
+    [InlineData("record-id")]
+    [InlineData("binding")]
+    public void WorkspaceDetailContributions_ValidateOwnedAuthoringBeforeStaging(string kind)
+    {
+        var root = Path.Combine(RepositoryRoot(), "modules/Workspace");
+        var documents = Directory.GetFiles(Path.Combine(root, "metadata"), "*.json", SearchOption.AllDirectories).Select(path => JsonNode.Parse(File.ReadAllText(path))!).ToArray();
+        var bindings = JsonNode.Parse(File.ReadAllText(Path.Combine(root, "newp.plugin.json")))!["frontend"]!["bindings"]!.AsArray().Select(value => value!.GetValue<string>()).ToHashSet(StringComparer.Ordinal);
+        var entries = documents.Single(document => document["view"]?["key"]?.GetValue<string>() == "workspace.references.list")["view"]!["detailContributions"]!.AsArray();
+        if (kind == "duplicate-key") entries.Add(entries[0]!.DeepClone());
+        if (kind == "duplicate-target") { var copy = entries[0]!.DeepClone(); copy["key"] = "another-key"; entries.Add(copy); }
+        if (kind == "navigation") entries[0]!["navigationKey"] = "part.parts";
+        if (kind == "page") entries[0]!["pageRef"]!["parameters"]!["viewKey"] = "workspace.folder.list";
+        if (kind == "record-id") entries[0]!["pageRef"]!["parameters"]!["recordId"] = "spoofed";
+        if (kind == "binding") bindings.Remove("workspace.references.object");
+        IReadOnlyList<string> ValidateWorkspace() => PageCompositionMetadataValidator.Validate(documents.Select(document => JsonSerializer.SerializeToElement(document)), bindings);
+        if (kind == "valid") { Assert.Contains("workspace.references.object", ValidateWorkspace()); Assert.Contains("workspace.references.list", ValidateWorkspace()); }
+        else Assert.Throws<JsonException>(() => ValidateWorkspace());
+    }
     [Fact]
     public void Document_RuntimeModelMatchesTheSharedCreateAndDetailConsumerFixture()
     {

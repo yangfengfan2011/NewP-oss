@@ -5,14 +5,15 @@ import navigation from '../../../../../modules/Workspace/metadata/navigation/Wor
 import tree from '../../../../../modules/Workspace/metadata/views/WorkspaceStructure.view.json';
 import list from '../../../../../modules/Workspace/metadata/views/WorkspaceFolderList.view.json';
 import detail from '../../../../../modules/Workspace/metadata/views/WorkspaceFolderDetail.view.json';
+import references from '../../../../../modules/Workspace/metadata/views/WorkspaceReferencesList.view.json';
 import capsule from '../../../../../modules/Workspace/newp.plugin.json';
 import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';
 
 const module: FrontendModule = { metadata: { moduleId: 'Workspace', displayName: '工作空间', version: '1' }, ...workspace };
-const views = [tree, list, detail];
+const views = [tree, list, detail, references];
 
 it('projects the formal Workspace composed content list without inventing standalone routes', () => {
-  expect(module.standardCrudCapabilities?.map(binding => binding.kind)).toEqual(['standard-list']);
+  expect(module.standardCrudCapabilities?.map(binding => binding.kind)).toEqual(['standard-list', 'standard-list']);
   expect(new Set(capsule.frontend.bindings)).toEqual(new Set([
     ...(workspace.treeProviders ?? []).map(binding => binding.key),
     ...(workspace.pageInputResolvers ?? []).map(binding => binding.key),

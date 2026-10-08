@@ -75,6 +75,10 @@ export function createWorkspaceTreeProvider(fetcher: typeof fetch = platformFetc
 }
 
 export const workspacePageInputs: PageInputResolverBinding[] = [
+  { key: 'workspace.references.object', pageKeys: ['platform.list'], resolve: parameters => {
+    if (typeof parameters.recordId !== 'string' || !parameters.recordId || typeof parameters.anchorModelKey !== 'string') throw new Error('缺少直接引用对象');
+    return { parameters, queryScope: { anchorId: parameters.recordId, anchorModelKey: parameters.anchorModelKey } };
+  } },
   { key: 'workspace.tree.current', pageKeys: ['platform.tree'], resolve: parameters => ({ parameters,
     treeScope: { kind: 'currentUser', featurePosition: parameters.featurePosition } }) },
   { key: 'workspace.folder.content', pageKeys: ['platform.list'], resolve: (parameters, context) => {

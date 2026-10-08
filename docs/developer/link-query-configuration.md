@@ -1,6 +1,6 @@
 # 通用 Link 查询接入
 
-仅显式声明 `model.linkQuery` 的 Link 采用此能力；旧 Link、Entity 查询及标准关系树保持原协议。真实采用者 WorkspaceFolderContent 已支持文件夹、零组件与图文档混合内容及跨空间已有对象引用。反向界面按父规格后续切片交付，不能从接口能表达双向推断这些消费者已完成。
+仅显式声明 `model.linkQuery` 的 Link 采用此能力；旧 Link、Entity 查询及标准关系树保持原协议。真实采用者 WorkspaceFolderContent 支持三类混合内容、跨空间已有对象引用，以及从三类对象属性读取直接引用文件夹。
 
 ## Authoring 与准备
 
@@ -17,7 +17,7 @@
 
 公开 GET 路径为 `/api/links/{已登记资源键}`，输入为 `direction`（forward/reverse）、`anchorModelKey`、`anchorId`、可选 `types`，以及标准 fields/pageIndex/pageSize/sortBy/sortDirection/queryScope。源拥有者通过 ILinkQuerySourcePolicy 强制校验 queryScope；Workspace 正向源要求真实空间、根与有序 LID 链。通用内核不解释这些业务含义。
 
-响应沿用 items、total、page、pageSize、sortBy、sortDirection。每行保留 resourceKey、linkId、parent、child、associatedObject 与公共 fields。反向只改变关联端角色，不交换 parent/child 的存储含义。当前 Workspace 策略仅开放正向位置内消费者，反向采用由后续片接入。
+响应沿用 items、total、page、pageSize、sortBy、sortDirection。每行保留 resourceKey、linkId、parent、child、associatedObject 与公共 fields。反向只改变关联端角色，不交换 parent/child 的存储含义；公共列、显示、筛选及主排序来自关联父端。Workspace 反向不接受出现位置 queryScope，逐关系返回经过父文件夹有效范围与读取计划交集的结果，不返回根路径、空间身份或跳转许可。
 
 每个端点先交集正式 IDataScopeReadPlanProvider 与已声明 ILinkQueryEndpointConstraint；声明条件执行失败或不可下推时失败关闭。源若登记为真实数据范围资源则应用其读取计划；已有源 CRUD QueryCustomizer 仍在数据库中执行。未登记的 Link 不虚构授权资源。端点独立列表的临时用户筛选不继承到 Link 查询。
 

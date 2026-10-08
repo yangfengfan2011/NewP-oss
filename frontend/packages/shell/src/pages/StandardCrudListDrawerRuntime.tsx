@@ -23,7 +23,7 @@ export interface StandardCrudListDrawerRuntimeProps {
   fields: StandardCrudFieldDefinition[];
   sections: StandardCrudFormSection[];
   detailPresentation: StandardCrudDetailPresentation | null;
-  registration: Pick<StandardCrudResourceRegistration, 'detailFieldRenderers' | 'enumOptions'>;
+  registration: Pick<StandardCrudResourceRegistration, 'detailFieldRenderers' | 'enumOptions' | 'detailViewKey'>;
   values: Record<string, unknown>;
   lookupOptions: Record<string, StandardCrudOption[]>;
   lookupLoading: Record<string, boolean>;

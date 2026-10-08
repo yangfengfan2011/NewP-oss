@@ -7,6 +7,7 @@ const workspaceBindings: FrontendBehaviorBindings = {
   pageInputResolvers: workspacePageInputs,
   standardCrudCapabilities: [
     { kind: 'standard-list', targetKey: 'workspace.folder.list', load: () => import('./workspaceRootResource') },
+    { kind: 'standard-list', targetKey: 'workspace.references.list', load: () => import('./workspaceReferencesResource') },
   ],
 };
 export default workspaceBindings;

@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace ICP.Platform.Kernel.ModulePlanning;
 
-/// <summary>正式候选读取中的 PageRef、Tree／Tab 配置及当前引用链校验。</summary>
+/// <summary>正式候选读取中的 PageRef、Tree／Tab、详情贡献及当前引用链校验。</summary>
 public static class PageCompositionMetadataValidator
 {
     private static readonly IReadOnlyDictionary<string, string> StandardModes = new Dictionary<string, string>
@@ -22,6 +22,29 @@ public static class PageCompositionMetadataValidator
             if (!views.TryAdd(key, view)) throw new JsonException($"Duplicate View: {key}");
         }
         var references = new HashSet<string>(StringComparer.Ordinal);
+        var contributions = new HashSet<string>(StringComparer.Ordinal);
+        var contributionTargets = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var view in views.Values)
+        {
+            if (!view.TryGetProperty("detailContributions", out var entries)) continue;
+            if (Mode(view) != "list" || entries.ValueKind != JsonValueKind.Array) throw new JsonException("Detail contributions require a List View array.");
+            Title(Required(view, "dicKey"), view);
+            foreach (var entry in entries.EnumerateArray())
+            {
+                if (!contributions.Add(Required(entry, "key"))) throw new JsonException("Duplicate detail contribution key.");
+                if (!contributionTargets.Add(Required(view, "key") + ":" + Required(entry, "targetViewKey"))) throw new JsonException("Duplicate detail contribution target.");
+                var navigationKey = Required(entry, "navigationKey");
+                if (all.Count(document => document.TryGetProperty("navigation", out var navigation) && navigation.TryGetProperty("items", out var items)
+                    && items.EnumerateArray().Any(item => Required(item, "key") == navigationKey)) != 1) throw new JsonException("Detail contribution requires an owning navigation.");
+                var page = entry.GetProperty("pageRef");
+                if (Required(page, "pageKey") != "platform.list" || Required(page.GetProperty("parameters"), "viewKey") != Required(view, "key"))
+                    throw new JsonException("Detail contribution must use its owning List View.");
+                _ = Required(page.GetProperty("parameters"), "anchorModelKey");
+                if (page.GetProperty("parameters").TryGetProperty("recordId", out _)) throw new JsonException("Detail contribution recordId belongs to the host.");
+                CheckPage(page, []);
+                Bind(Required(view, "key"));
+            }
+        }
         foreach (var view in views.Values.Where(view => Mode(view) is "tree" or "tab"))
             CheckView(view, new HashSet<string>(StringComparer.Ordinal));
         foreach (var document in all)

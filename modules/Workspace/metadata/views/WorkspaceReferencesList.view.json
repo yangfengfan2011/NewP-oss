@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "1.0", "type": "view",
+  "view": {
+    "key": "workspace.references.list", "mode": "list", "model": "WorkspaceFolder", "resourceKey": "workspace.references",
+    "querySource": { "kind": "link", "model": "WorkspaceFolderContent", "resourceKey": "workspace.content" },
+    "dicKey": "Workspace", "titleKey": "DirectReferences", "descriptionKey": "DirectReferencesDescription", "detailViewKey": "workspace.folder.detail",
+    "query": { "fields": [{ "key": "keyword", "labelKey": "Keyword", "source": "preset", "preset": "keyword", "operator": "like" }], "defaultPageSize": 20, "defaultSort": { "field": "UpdatedAt", "direction": "desc" } },
+    "columns": [
+      { "key": "name", "labelKey": "Name", "source": "projection", "field": "Name", "sortable": true },
+      { "key": "updatedBy", "labelKey": "Field_UpdatedBy", "source": "projection", "field": "UpdatedBy" },
+      { "key": "updatedAt", "labelKey": "Field_UpdatedAt", "source": "projection", "field": "UpdatedAt", "sortable": true }
+    ],
+    "pageActions": [], "rowActions": [{ "key": "view", "labelKey": "OpenProperties", "standardAction": "view" }], "export": { "enabled": false },
+    "detailContributions": [
+      { "key": "workspace.folder.references", "targetViewKey": "workspace.folder.detail", "navigationKey": "workspace", "pageRef": { "pageKey": "platform.list", "parameters": { "viewKey": "workspace.references.list", "anchorModelKey": "Workspace/WorkspaceFolder" }, "inputResolverKey": "workspace.references.object" } },
+      { "key": "workspace.part.references", "targetViewKey": "part.part.detail", "navigationKey": "workspace", "pageRef": { "pageKey": "platform.list", "parameters": { "viewKey": "workspace.references.list", "anchorModelKey": "Part/Part" }, "inputResolverKey": "workspace.references.object" } },
+      { "key": "workspace.document.references", "targetViewKey": "document.document.detail", "navigationKey": "workspace", "pageRef": { "pageKey": "platform.list", "parameters": { "viewKey": "workspace.references.list", "anchorModelKey": "Document/Document" }, "inputResolverKey": "workspace.references.object" } }
+    ]
+  }
+}

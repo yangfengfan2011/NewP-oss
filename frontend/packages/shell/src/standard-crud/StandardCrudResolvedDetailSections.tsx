@@ -4,12 +4,13 @@ import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { DetailPage } from '@icp-platform/ui/crud-detail';
 import type { StandardCrudResolvedDetailFieldSchema } from '../metadata/standardCrudSchemaResolver';
 import type { StandardCrudDetailPresentation } from './standardCrudDetailPresentation';
+import StandardCrudDetailContributions from './StandardCrudDetailContributions';
 
 type ReadyDetailPresentation = Extract<StandardCrudDetailPresentation, { kind: 'ready' }>;
 
 interface StandardCrudResolvedDetailSectionsProps {
   presentation: ReadyDetailPresentation;
-  registration: Pick<StandardCrudResourceRegistration, 'detailFieldRenderers' | 'enumOptions'>;
+  registration: Pick<StandardCrudResourceRegistration, 'detailFieldRenderers' | 'enumOptions' | 'detailViewKey'>;
   textFor: (key: string, fallback: string) => string;
 }
 
@@ -98,5 +99,6 @@ export default function StandardCrudResolvedDetailSections({
         }))}
       />
     );
-  })}</div>;
+  })}<StandardCrudDetailContributions key={`${registration.detailViewKey}:${String(presentation.sourceFields.EID)}`}
+    viewKey={registration.detailViewKey} recordId={String(presentation.sourceFields.EID)} /></div>;
 }

@@ -61,7 +61,7 @@ public sealed class WorkspacePositions(EfPlatformDbContext db, IDataScopeReadPla
     }
 }
 
-/// <summary>Workspace 的正向读取源强制要求真实出现位置；公共 Link 内核不认识空间或文件夹规则。</summary>
+/// <summary>正向读取验证出现位置；反向仅读取经过端点范围交集的直接关系，不授予路径跳转。</summary>
 public sealed class WorkspaceContentQueryPolicy(WorkspacePositions positions, IHttpContextAccessor context) : ILinkQuerySourcePolicy
 {
     public string Key => "workspace.content";
@@ -69,6 +69,11 @@ public sealed class WorkspaceContentQueryPolicy(WorkspacePositions positions, IH
     /// <inheritdoc/>
     public async Task ValidateAsync(LinkQueryDefinition definition, LinkQueryRequest request, CancellationToken token)
     {
+        if (request.Direction == "reverse")
+        {
+            if (request.Query.QueryScope is { Count: > 0 }) throw new LinkQueryException(400, "Workspace.InvalidPosition", "queryScope");
+            return;
+        }
         if (request.Direction != "forward" || request.Anchor.ModelKey != WorkspacePositions.FolderModel)
             throw new LinkQueryException(400, "Workspace.UnsupportedQueryDirection", "direction");
         var actor = context.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new LinkQueryException(403, "Workspace.SubjectRequired");

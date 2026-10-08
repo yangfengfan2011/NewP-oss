@@ -79,6 +79,7 @@ export function compileStandardCrudRouteProjection(
   const composedPages = viewDocuments.flatMap(document => [
     ...(Array.isArray(document.view.tabs) ? document.view.tabs : []),
     ...(Array.isArray(document.view.nodeTypes) ? document.view.nodeTypes : []),
+    ...(Array.isArray(document.view.detailContributions) ? document.view.detailContributions : []),
   ]).map(item => item.pageRef);
 
   for (const module of modules) {
@@ -115,10 +116,10 @@ export function compileStandardCrudRouteProjection(
       if (matchingDetailTargets.length > 1) {
         fail('STANDARD_CRUD_DETAIL_CAPABILITY_NOT_UNIQUE', detailViewKey);
       }
-      if (consumedLazyDetailTargets.has(detailViewKey)) {
+      if (matchingDetailTargets.length && consumedLazyDetailTargets.has(detailViewKey)) {
         fail('STANDARD_CRUD_DETAIL_CAPABILITY_NOT_UNIQUE', detailViewKey);
       }
-      consumedLazyDetailTargets.add(detailViewKey);
+      if (matchingDetailTargets.length) consumedLazyDetailTargets.add(detailViewKey);
       if (nav) owners.push({
         detailViewKey,
         projectsFullDetail: matchingDetailTargets.length === 1,

@@ -1,6 +1,7 @@
 import type { FrontendModule, PageInput, PageRef, TabView, TreeView } from '@icp-platform/sdk';
 import type { RuntimeMetadataState } from '../metadata/runtimeMetadataManifest';
 import { relationTreeProviderKey } from './relationTreeProvider';
+import { resolveDetailContributions } from '../standard-crud/detailContributionRegistry';
 
 const modes: Record<string, string> = { 'platform.tree': 'tree', 'platform.tabs': 'tab', 'platform.list': 'list', 'platform.detail': 'detail' };
 export function resolvePageInput(ref: PageRef, modules: FrontendModule[], context?: PageInput['context']): PageInput {
@@ -86,4 +87,5 @@ export function validateCompositionCandidate(modules: FrontendModule[], metadata
   for (const view of views.values()) if (view.mode === 'tree' || view.mode === 'tab')
     check({ pageKey: view.mode === 'tree' ? 'platform.tree' : 'platform.tabs', parameters: { viewKey: view.key } }, new Set());
   for (const nav of metadata.navDocuments.flatMap(document => document.navigation.items)) if (nav.page) check(nav.page, new Set());
+  for (const contribution of resolveDetailContributions(modules, metadata)) check(contribution.pageRef, new Set());
 }

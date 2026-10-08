@@ -408,7 +408,9 @@ describe('人员中心 CRUD Pro 样板', () => {
     await flushAsync();
     expect(document.body.textContent).toContain('查看人员');
     expect(document.body.querySelector('.ant-drawer-title')?.textContent).toContain('查看人员');
-    expect(document.body.querySelector('.ant-descriptions')?.textContent).toContain('张三');
+    await vi.waitFor(() => {
+      expect(document.body.querySelector('.ant-descriptions')?.textContent).toContain('张三');
+    });
 
     const editButton = findAntdButtonByText(document.body, '编辑');
     expect(editButton?.textContent?.replace(/\s+/g, '')).toContain('编辑');

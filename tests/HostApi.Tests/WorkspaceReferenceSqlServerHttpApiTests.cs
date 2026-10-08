@@ -283,7 +283,7 @@ public sealed class WorkspaceReferenceSqlServerHttpApiTests(ITestOutputHelper ou
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    private sealed class SqlObservation : IObserver<DiagnosticListener>, IObserver<KeyValuePair<string, object?>>, IDisposable
+    internal sealed class SqlObservation : IObserver<DiagnosticListener>, IObserver<KeyValuePair<string, object?>>, IDisposable
     {
         private readonly IDisposable _all;
         private readonly List<IDisposable> _subscriptions = [];

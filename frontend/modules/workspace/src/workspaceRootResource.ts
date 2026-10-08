@@ -15,16 +15,23 @@ async function referenceCommand(method: string, path: string, body: unknown, fea
   return { operation: 'action' as const, payload: await response.json() as unknown, change: { operation: 'update' as const, id: '' } };
 }
 
-/** 本片正式目录仅有文件夹；关系身份参与表格，属性打开始终使用真实端点 EID。 */
+/** 关系身份参与表格；异构属性使用所属模块正式 View 和真实 EID，未知类型不能猜测。 */
 const resource: StandardCrudResourceRegistration = {
   resourceKey: 'workspace.folder', listViewKey: 'workspace.folder.list', detailViewKey: 'workspace.folder.detail',
+  enumOptions: { 'workspace.content.types': [
+    { value: '', label: '全部', labelKey: 'Workspace.All' }, { value: 'Workspace/WorkspaceFolder', label: '文件夹', labelKey: 'Workspace.Folder' },
+    { value: 'Part/Part', label: '零组件', labelKey: 'Part.Title' }, { value: 'Document/Document', label: '图文档', labelKey: 'Document.Title' },
+  ] },
+  listFieldRenderers: { ObjectType: ({ row, value }) => createElement('span', null,
+    createElement('span', { 'aria-hidden': true }, row.ObjectModelKey === 'Workspace/WorkspaceFolder' ? '📁 ' : row.ObjectModelKey === 'Part/Part' ? '▦ ' : '▤ '), String(value ?? '')) },
   actionInputRenderers: {
     folderCandidate: context => createElement(Suspense, { fallback: null }, createElement(FolderCandidateInput, context)),
   },
   actionHandlers: {
     add: async ({ input, queryScope, featurePosition }) => {
-      if (typeof input !== 'string' || !input) throw new Error('请选择文件夹');
-      return referenceCommand('POST', '/api/workspace/content/references', { position: positionFromScope(queryScope), target: { modelKey: 'Workspace/WorkspaceFolder', id: input } }, featurePosition);
+      if (typeof input !== 'object' || input === null || !('modelKey' in input) || !('id' in input)
+        || typeof input.modelKey !== 'string' || typeof input.id !== 'string' || !input.id) throw new Error('请选择对象');
+      return referenceCommand('POST', '/api/workspace/content/references', { position: positionFromScope(queryScope), target: input }, featurePosition);
     },
     remove: async ({ id, queryScope, featurePosition }) => {
       if (!id) throw new Error('缺少引用标识');
@@ -67,6 +74,14 @@ const resource: StandardCrudResourceRegistration = {
     getDetailId: row => {
       if (row.ObjectModelKey !== 'Workspace/WorkspaceFolder' || typeof row.ObjectId !== 'string') throw new Error('未登记的文件夹属性端点');
       return row.ObjectId;
+    },
+    getDetailTarget: row => {
+      if (typeof row.ObjectId !== 'string' || !row.ObjectId) throw new Error('缺少对象标识');
+      if (row.ObjectModelKey === 'Workspace/WorkspaceFolder') return undefined;
+      const views: Record<string, string> = { 'Part/Part': 'part.part.detail', 'Document/Document': 'document.document.detail' };
+      const view = views[String(row.ObjectModelKey)];
+      if (!view) throw new Error('未登记的对象属性端点');
+      return { detailViewKey: view, id: row.ObjectId };
     },
   },
 };

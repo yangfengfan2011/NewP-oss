@@ -934,7 +934,7 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
       if (field.source === 'model') {
         assertModelFieldReference(
           field.field,
-          modelFields,
+          linkModel ? projectionFields : modelFields,
           `query field "${field.key}" references unknown model field "${field.field}"`,
         );
       }

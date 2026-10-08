@@ -1,12 +1,12 @@
 # 通用 Link 查询接入
 
-仅显式声明 `model.linkQuery` 的 Link 采用此能力；旧 Link、Entity 查询及标准关系树保持原协议。真实采用者 WorkspaceFolderContent 已支持文件夹直接内容与跨空间已有文件夹引用。异构引用及反向界面按父规格后续切片交付，不能从接口能表达双向推断这些消费者已完成。
+仅显式声明 `model.linkQuery` 的 Link 采用此能力；旧 Link、Entity 查询及标准关系树保持原协议。真实采用者 WorkspaceFolderContent 已支持文件夹、零组件与图文档混合内容及跨空间已有对象引用。反向界面按父规格后续切片交付，不能从接口能表达双向推断这些消费者已完成。
 
 ## Authoring 与准备
 
 `linkedTypes` 是允许父子模型组合的唯一来源，采用模块限定模型键。`linkQuery` 声明查询资源键、读取 behavior、可选源策略、两端引用字段与类型绑定、端点资源映射及公共列：
 
-- 每端在 `fixedModelKey` 与 `typeField` 中选择一种；判别字段必须是必填普通文本。引用字段必须是非空 ObjectId，父子引用字段不能相同。
+- 每端在 `fixedModelKey` 与 `typeField` 中选择一种；判别字段必须是必填、ordinalKey 的普通 Scalar 文本，不能占用主键、审计或两端引用角色。引用字段必须是非空 ObjectId，父子引用字段不能相同。
 - `endpoints` 只覆盖 linkedTypes 的规范模型键，绑定真实 Entity 资源、类型标题词条及图标；可选 `constraintKey` 明确要求端点强制读取条件。
 - `columns` 声明 field、valueType、nullable、sortable、operators 与按模型键的 mappings。映射只能是端点真实字段、`$modelKey` 或明确允许的 null；不取所有字段并集。
 - 规范身份字段使用平台 `ordinalKey` 存储机制保留完整值。Link 的固定字段、审计物理语义和未采用资源不被改写。
@@ -25,12 +25,12 @@
 
 所有端点 SQL scope 在单条 Link 读取命令内组合，并在锚点、关联端点、hasChildren、统一计数/排序/分页之前交集。命令内集合随成功、失败或取消销毁，不建立连接级残留、跨主体缓存或持久闭包。Workspace 用同一 scope 实现来源空间或可读根路径范围，且在数据库逐层维护去重 frontier/visited，而不枚举全部根路径。
 
-条件分组与参数翻译复用 EfPlatformQueryExecutor。各类型形成受控 SQL 分支，合并后统一计数、稳定排序和分页；缺失目标在此前排除，未知存储类型失败关闭。只物化本页，canonical raw/display 成对，非请求安全依赖不输出。用户与时间显示沿用真实 Model planner 和批量 resolver；类型标题来自活动词典。
+条件分组与参数翻译复用 EfPlatformQueryExecutor。各类型形成受控 SQL 分支，合并后统一计数、稳定排序和分页；缺失目标在此前排除，未知存储类型失败关闭。内部只记录损坏类型诊断及按目标范围/筛选排除的聚合数量，不记录隐藏对象标识，不在读取时修复关系。只物化本页，canonical raw/display 成对，非请求安全依赖不输出。用户与时间显示沿用真实 Model planner 和批量 resolver；类型标题来自活动词典。
 
 受信任树通过 ReadDirectLayerAsync 读取一层完整同类型关系及 hasChildren，使用相同源/端点条件，不提供 HTTP 无限列表开关，不预载整树。层规模、实际数据库往返、物化量及 SQL IO/时间由真实数据验证；此契约不声明行数或深度 SLA。
 
 ## 标准列表与回退
 
-List View 的 querySource 绑定上述 Link 模型/资源；公共列使用 projection，字段及排序继续按同一正式目录校验。共享列表请求 LID，Adapter 的 getRowId 提供关系身份，getDetailId 可提供当前目标资源真实 EID；目标详情重新执行自身准入。创建和写后回执继续沿共享 Mutation Execution，不以刷新失败重放写入。
+List View 的 querySource 绑定上述 Link 模型/资源；公共列使用 projection，字段及排序继续按同一正式目录校验。共享列表请求 LID，Adapter 的 getRowId 提供关系身份，getDetailId 可提供当前目标资源真实 EID；异构 Adapter 的 getDetailTarget 只返回已登记 detailViewKey 与真实主键，宿主验证完整详情能力并解析唯一正式路由；不接受任意 URL，目标详情重新执行自身准入。listFieldRenderers 仅呈现已声明公共字段，不放开请求白名单或 display 筛选排序。创建和写后回执继续沿共享 Mutation Execution，不以刷新失败重放写入。
 
 撤回采用时关闭入口并撤销新增查询登记，保留实体、Link 和 migration history；不自动 Down、清表或让旧 Host 越过 migration frontier。新增目录不授权通用写入、实体删除、重命名或任意图查询。

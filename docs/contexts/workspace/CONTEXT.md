@@ -20,7 +20,7 @@ Workspace 拥有公共空间、当前账号个人空间及其根文件夹。入�
 
 ## 直接文件夹内容
 
-WorkspaceFolderContent 是正式 Link，父端由 authoring 固定为 Workspace/WorkspaceFolder，子端由必填 ChildModelKey 判别；允许组合只来自 linkedTypes。本片先登记文件夹端点，后续独立业务对象继续扩展同一目录。LID、PEID、CEID 与关系审计由服务端填写；关系不保存 SpaceId、父位置、名称或对象审计影子值。
+WorkspaceFolderContent 是正式 Link，父端由 authoring 固定为 Workspace/WorkspaceFolder，子端由必填 ChildModelKey 判别；允许组合只来自 linkedTypes。正式目录登记 Workspace/WorkspaceFolder、Part/Part、Document/Document 三个真实端点；读取/显示契约来自其所属模块，Workspace 显式依赖 Part 与 Document。LID、PEID、CEID 与关系审计由服务端填写；关系不保存 SpaceId、父位置、名称或对象审计影子值。
 
 出现位置由 SpaceId、RootFolderId 与有序 LID 链组成。位置解析批量读取该链，核对空间准入、唯一根归属、父子衔接、无重复节点及每层对象读取资格。正向内容查询、树直属层、已知路径恢复和全部内容写入均执行该检查；可读的裸 Folder EID 不能代替出现位置。
 
@@ -30,14 +30,14 @@ WorkspaceFolderContent 是正式 Link，父端由 authoring 固定为 Workspace/
 
 可达范围用 SQL Server 命令内的 readable、visited 与 frontier 集合计算，汇聚路径不会递归枚举；集合与参数只属于本次命令，不向应用进程完整物化，不建立持久闭包或全局缓存。对象读取条件先由正式 EF 查询翻译；Link reader 的可信 SQL scope 将同一集合交集到锚点、关联端点及 hasChildren，并在计数和分页前生效。空间规则留在 Workspace，平台不认识空间类别。
 
-新建子文件夹只接受 ENAME 与可选 Description（最多 500 字）。平台事务同时保存实体与内容 Link；父文件夹 edit 动作与完整新候选 create 动作分别裁决。创建、添加和移除按相同顺序取得跨 Host 的事务级文件夹图锁，再校验完整位置与当前父动作。添加重新判定目标范围，并以完整存储图（包括不可见节点及跨空间关系）检查自环和多级环；同级名称沿 SQL Server 字符串比较，组合唯一索引另保证同父同类型同对象唯一。图锁覆盖并发互成环与 create/add 同级名竞争，不是权限凭证。
+新建子文件夹只接受 ENAME 与可选 Description（最多 500 字）。平台事务同时保存实体与内容 Link；父文件夹 edit 动作与完整新候选 create 动作分别裁决。创建、添加和移除按相同顺序取得跨 Host 的事务级文件夹图锁，再校验完整位置与当前父动作。添加和移除通过正式 Link 端点目录重新判定真实目标读取范围，无任何 Link 的可读独立对象仍可由各自标准 GET 候选发现；最后引用移除后仍可重加。文件夹添加另以完整存储图（包括不可见节点及跨空间关系）检查自环和多级环；同级名称沿 SQL Server 字符串比较，组合唯一索引另保证同父同类型同对象唯一。图锁覆盖并发互成环与 create/add 同级名竞争，不是权限凭证。
 
 添加/移除只变更引用并返回受控成功回执，不修改目标实体审计。移除按当前完整位置验证实际关系父端与目标读取后只删除指定 LID，保留实体、其他入向关系及共享后代。创建提交后结果不可读或展示失败只返回不含标识的成功回执，不重放写入。普通 rename/delete 和任意 Link CRUD 均未开放。
 
-右侧消费通用 Link 查询及共享 Standard CRUD List View。公共字段目录来自 Link authoring，字段白名单、条件、授权与端点强制条件在数据库计数和分页前执行；列表以 LID 标识行，打开属性以真实 Folder EID 读取共享详情。树直属层与 hasChildren 共用查询规划，仅完整读取当前文件夹层，不受右列表筛选影响。unknown-change 交接给既有组合协调器，刷新已加载范围，读取故障不改变已提交事实。
+右侧消费通用 Link 查询及共享 Standard CRUD List View。公共字段目录来自 Link authoring，字段白名单、条件、授权与端点强制条件在数据库计数和分页前执行；列表以 LID 标识行，打开属性使用规范模型键及真实对象 EID：Folder 使用共享 Drawer，Part/Document 由受控 View 绑定解析正式所属路由并重新准入，不把 LID 传给实体详情。对象类型筛选、编码/名称关键词、名称/编码/更新时间排序、分页、列设置及刷新复用标准列表。树直属层与 hasChildren 共用查询规划，仅完整读取当前文件夹层，不受右列表筛选影响。unknown-change 交接给既有组合协调器，刷新已加载范围，读取故障不改变已提交事实。
 
 ## 非目标与回退
 
-尚不提供部门/项目空间、空间管理、代看个人空间、异构对象引用、反向位置 UI 或完整多父状态恢复。后续能力继续在已确认父规格中逐片接入。
+尚不提供部门/项目空间、空间管理、代看个人空间、反向位置 UI 或完整多父状态恢复。后续能力继续在已确认父规格中逐片接入。
 
 回退优先关闭 Workspace 导航、模块及其显式资源贡献，保留已创建的空间/文件夹数据；不得自动 Down、清表或让旧 Host 读取超出其 migration frontier 的数据库。

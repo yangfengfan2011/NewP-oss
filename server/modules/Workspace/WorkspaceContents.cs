@@ -13,7 +13,7 @@ namespace ICP.Platform.Modules.Workspace;
 /// <summary>Workspace 拥有位置内的原子写入；通用查询没有任意 Link CRUD。</summary>
 public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions positions, IPlatformTransactionExecutor transactions,
     IDataScopeObjectDecisionProvider decisions, IPlatformObjectIdGenerator ids, IEntityAuditValueProvider audit, LinkQueryCatalog catalog,
-    WorkspaceFolderScope folderScope)
+    WorkspaceFolderScope folderScope, LinkQueryReader reader)
 {
     /// <summary>在有效位置内创建实体与 Link，同父名称比较及并发串行化由 SQL Server 事务锁保护。</summary>
     public ValueTask<string> CreateFolderAsync(string actorId, WorkspacePosition position, IReadOnlyDictionary<string, JsonElement> values, CancellationToken token)
@@ -57,30 +57,31 @@ public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions
         }, token);
     }
 
-    /// <summary>已有文件夹引用跨空间共享同一实体；锁内重验完整位置、动作与目标范围后维护完整图不变量。</summary>
-    public ValueTask<bool> AddFolderAsync(string actorId, WorkspacePosition position, LinkObjectReference target, CancellationToken token) =>
+    /// <summary>已有对象引用共享真实实体；锁内重验位置、配对与目标读取，文件夹另维护完整图不变量。</summary>
+    public ValueTask<bool> AddReferenceAsync(string actorId, WorkspacePosition position, LinkObjectReference target, CancellationToken token) =>
         transactions.ExecuteAsync<bool>(async cancellation =>
         {
             using var operation = audit.BeginOperation();
             await LockGraphAsync(cancellation);
             var path = await WritablePositionAsync(actorId, position, cancellation);
-            if (target.ModelKey != WorkspacePositions.FolderModel || string.IsNullOrWhiteSpace(target.Id))
-                throw new LinkQueryException(400, "Workspace.InvalidEndpoint", "target");
-            if (!await folderScope.ContainsAsync(actorId, target.Id, cancellation)) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
-            if (await db.Set<Dictionary<string, object?>>("Workspace/WorkspaceSpace").AnyAsync(space => EF.Property<string>(space, "RootFolderId") == target.Id, cancellation))
-                throw new LinkQueryException(409, "Workspace.RootReferenceForbidden");
             var definition = catalog.Get("workspace.content");
-            if (!definition.Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == target.ModelKey))
+            if (string.IsNullOrWhiteSpace(target.Id) || !definition.Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == target.ModelKey))
                 throw new LinkQueryException(400, "Workspace.InvalidEndpoint", "target");
+            if (!await reader.IsEndpointReadableAsync("workspace.content", target, cancellation)) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
+            if (target.ModelKey == WorkspacePositions.FolderModel && await db.Set<Dictionary<string, object?>>("Workspace/WorkspaceSpace").AnyAsync(space => EF.Property<string>(space, "RootFolderId") == target.Id, cancellation))
+                throw new LinkQueryException(409, "Workspace.RootReferenceForbidden");
             var links = db.Set<Dictionary<string, object?>>(WorkspacePositions.ContentModel);
             if (await links.AnyAsync(link => EF.Property<string>(link, "PEID") == path.FolderId && EF.Property<string>(link, "ChildModelKey") == target.ModelKey
                 && EF.Property<string>(link, "CEID") == target.Id, cancellation)) throw new LinkQueryException(409, "Workspace.DuplicateReference");
-            var folders = db.Set<Dictionary<string, object?>>(WorkspacePositions.FolderModel);
-            var name = await folders.Where(folder => EF.Property<string>(folder, "EID") == target.Id).Select(folder => EF.Property<string>(folder, "ENAME")).SingleAsync(cancellation);
-            if (await links.AnyAsync(link => EF.Property<string>(link, "PEID") == path.FolderId && EF.Property<string>(link, "ChildModelKey") == WorkspacePositions.FolderModel
-                && folders.Any(folder => EF.Property<string>(folder, "EID") == EF.Property<string>(link, "CEID") && EF.Property<string>(folder, "ENAME") == name), cancellation))
-                throw new LinkQueryException(409, "Workspace.SiblingNameConflict", "ENAME");
-            if (await WouldCycleAsync(path.FolderId, target.Id, cancellation)) throw new LinkQueryException(409, "Workspace.CycleForbidden");
+            if (target.ModelKey == WorkspacePositions.FolderModel)
+            {
+                var folders = db.Set<Dictionary<string, object?>>(WorkspacePositions.FolderModel);
+                var name = await folders.Where(folder => EF.Property<string>(folder, "EID") == target.Id).Select(folder => EF.Property<string>(folder, "ENAME")).SingleAsync(cancellation);
+                if (await links.AnyAsync(link => EF.Property<string>(link, "PEID") == path.FolderId && EF.Property<string>(link, "ChildModelKey") == WorkspacePositions.FolderModel
+                    && folders.Any(folder => EF.Property<string>(folder, "EID") == EF.Property<string>(link, "CEID") && EF.Property<string>(folder, "ENAME") == name), cancellation))
+                    throw new LinkQueryException(409, "Workspace.SiblingNameConflict", "ENAME");
+                if (await WouldCycleAsync(path.FolderId, target.Id, cancellation)) throw new LinkQueryException(409, "Workspace.CycleForbidden");
+            }
             var stamp = audit.Current();
             links.Add(new()
             {
@@ -98,8 +99,11 @@ public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions
             var path = await WritablePositionAsync(actorId, position, cancellation);
             var links = db.Set<Dictionary<string, object?>>(WorkspacePositions.ContentModel);
             var link = await links.SingleOrDefaultAsync(row => EF.Property<string>(row, "LID") == linkId && EF.Property<string>(row, "PEID") == path.FolderId, cancellation);
-            if (link is null || link["ChildModelKey"] as string != WorkspacePositions.FolderModel
-                || !await folderScope.ContainsAsync(actorId, (string)link["CEID"]!, cancellation)) throw new LinkQueryException(404, "Workspace.ReferenceUnavailable");
+            if (link is null) throw new LinkQueryException(404, "Workspace.ReferenceUnavailable");
+            var target = new LinkObjectReference((string)link["ChildModelKey"]!, (string)link["CEID"]!);
+            var definition = catalog.Get("workspace.content");
+            if (!definition.Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == target.ModelKey)
+                || !await reader.IsEndpointReadableAsync("workspace.content", target, cancellation)) throw new LinkQueryException(404, "Workspace.ReferenceUnavailable");
             links.Remove(link);
             return true;
         }, token);

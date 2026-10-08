@@ -1362,8 +1362,8 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         var fixture = new BusinessAuditHostFixture(await ReusableSqlServerDatabase.AcquireAsync());
         fixture._useRequestPresentation = useRequestPresentation;
         fixture._includeWorkspace = includeWorkspace;
-        fixture._includePart = includePart;
-        fixture._includeDocument = includeDocument;
+        fixture._includePart = includePart || includeWorkspace;
+        fixture._includeDocument = includeDocument || includeWorkspace;
         try
         {
             await fixture.StartAsync(configureServices, actionStates: actionStates);

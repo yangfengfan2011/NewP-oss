@@ -2,6 +2,7 @@ import { useLocalization } from '@icp-platform/core';
 import { StandardCrudDialogTitle } from './StandardCrudDialogTitle';
 import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { useOptionalAuth } from '../contexts/AuthContext';
+import { useFeaturePlacement } from '../authorization/FeaturePlacementContext';
 import Modal from 'antd/es/modal';
 import Button from 'antd/es/button';
 import type {
@@ -45,6 +46,7 @@ export function StandardCrudActionReviewDialog({
 }: StandardCrudActionReviewDialogProps): ReactElement | null {
   const { t } = useLocalization();
   const auth = useOptionalAuth();
+  const features = useFeaturePlacement();
   const authority = JSON.stringify([auth?.user?.id, auth?.isAuthenticated, auth?.isInitialized,
     auth?.permissionEpoch, auth?.user?.isLocalAdministrator, auth?.user?.mustChangePassword,
     [...(auth?.user?.featurePositions ?? [])].sort(), featurePosition, action.key]);
@@ -84,6 +86,10 @@ export function StandardCrudActionReviewDialog({
         {inputRenderer({
           action,
           featurePosition,
+          navigationFeaturePosition: key => {
+            const resolution = features.navigation(key);
+            return resolution.kind === 'allowed' ? resolution.position : undefined;
+          },
           queryScope,
           submitting: pending,
           value,

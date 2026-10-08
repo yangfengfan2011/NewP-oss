@@ -27,7 +27,7 @@ public sealed class WorkspaceContentsController(WorkspaceContents contents, Work
         try
         {
             if (input.Position is null || input.Target is null) throw new LinkQueryException(400, "Workspace.InvalidReferenceInput");
-            await contents.AddFolderAsync(Actor(), input.Position, input.Target, token);
+            await contents.AddReferenceAsync(Actor(), input.Position, input.Target, token);
             return Results.Ok(new { succeeded = true });
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }

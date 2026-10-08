@@ -99,3 +99,5 @@ corepack pnpm --dir frontend --filter @icp-platform/shell test
 ```
 
 外仓 `standard-data.v1` 插件不携带任意前端运行时代码；它使用独立 build-only plugin SDK 生成声明式标准投影。代码型外部 profile 必须另行设计。
+
+异构只读列表可用 Adapter.getDetailTarget 返回已登记的 detailViewKey 与真实实体主键；共享行操作只解析正式所属详情路由并重新执行目标准入，行选择与关系命令仍使用 getRowId。动作输入需要跨资源候选时，可从 navigationFeaturePosition(targetKey) 取得当前允许的正式导航位置；缺失位置不得拼接身份或以原动作位置冒充目标读取。候选继续使用所属模块标准 GET 的分页与字段协议。

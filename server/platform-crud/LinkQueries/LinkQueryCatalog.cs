@@ -95,7 +95,8 @@ public sealed class LinkQueryCatalog
         if (string.IsNullOrWhiteSpace(end.FixedModelKey) == string.IsNullOrWhiteSpace(end.TypeField)
             || model.Fields.SingleOrDefault(f => f.Name == end.ReferenceField) is not { Required: true, ValueType: FieldValueType.ObjectId })
             throw Invalid(model, "端点类型声明歧义或引用字段无效");
-        if (end.TypeField is { } field && model.Fields.SingleOrDefault(f => f.Name == field) is not { Required: true, ValueType: FieldValueType.Text, IsAuditField: false, IsPrimaryKey: false, OrdinalKey: true })
+        if (end.TypeField is { } field && (field == model.LinkQuery!.Parent.ReferenceField || field == model.LinkQuery.Child.ReferenceField
+            || model.Fields.SingleOrDefault(f => f.Name == field) is not { Kind: FieldKind.Scalar, Required: true, ValueType: FieldValueType.Text, IsAuditField: false, IsPrimaryKey: false, OrdinalKey: true }))
             throw Invalid(model, "类型判别字段必须是必填普通完整文本身份");
     }
 

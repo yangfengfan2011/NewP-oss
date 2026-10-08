@@ -3,7 +3,7 @@
   "WorkspaceFolderContent": {
     "kind": "Link",
     "fields": [{ "name": "ChildModelKey", "contract": { "valueType": "Text" }, "storage": { "type": "string", "ordinalKey": true }, "uiType": "text", "form": { "create": { "mode": "hidden" }, "edit": { "mode": "hidden" } } }],
-    "linkedTypes": [{ "parent": "Workspace/WorkspaceFolder", "child": "Workspace/WorkspaceFolder" }],
+    "linkedTypes": [{ "parent": "Workspace/WorkspaceFolder", "child": "Workspace/WorkspaceFolder" }, { "parent": "Workspace/WorkspaceFolder", "child": "Part/Part" }, { "parent": "Workspace/WorkspaceFolder", "child": "Document/Document" }],
     "indexes": [
       { "name": "UX_WorkspaceFolderContent_Target", "fields": ["PEID", "ChildModelKey", "CEID"], "unique": true },
       { "name": "IX_WorkspaceFolderContent_Reverse", "fields": ["ChildModelKey", "CEID", "PEID"], "unique": false }
@@ -13,13 +13,13 @@
       "resourceKey": "workspace.content", "readBehavior": "workspace.spaces.access", "policyKey": "workspace.content",
       "parent": { "referenceField": "PEID", "fixedModelKey": "Workspace/WorkspaceFolder" },
       "child": { "referenceField": "CEID", "typeField": "ChildModelKey" },
-      "endpoints": { "Workspace/WorkspaceFolder": { "resourceKey": "workspace.folder", "constraintKey": "workspace.folder.scope", "titleKey": "Workspace.Folder", "icon": "folder" } },
+      "endpoints": { "Workspace/WorkspaceFolder": { "resourceKey": "workspace.folder", "constraintKey": "workspace.folder.scope", "titleKey": "Workspace.Folder", "icon": "folder" }, "Part/Part": { "resourceKey": "part.part", "titleKey": "Part.Title", "icon": "module" }, "Document/Document": { "resourceKey": "document.document", "titleKey": "Document.Title", "icon": "module" } },
       "columns": [
-        { "field": "ObjectType", "valueType": "Text", "operators": ["="], "mappings": { "Workspace/WorkspaceFolder": "$modelKey" } },
-        { "field": "Code", "valueType": "Text", "nullable": true, "sortable": true, "operators": ["=", "contains", "isNull"], "mappings": { "Workspace/WorkspaceFolder": null } },
-        { "field": "Name", "valueType": "Text", "sortable": true, "operators": ["=", "contains"], "mappings": { "Workspace/WorkspaceFolder": "ENAME" } },
-        { "field": "UpdatedBy", "valueType": "User", "mappings": { "Workspace/WorkspaceFolder": "UpdatedBy" } },
-        { "field": "UpdatedAt", "valueType": "Instant", "sortable": true, "mappings": { "Workspace/WorkspaceFolder": "UpdatedAt" } }
+        { "field": "ObjectType", "valueType": "Text", "operators": ["="], "mappings": { "Workspace/WorkspaceFolder": "$modelKey", "Part/Part": "$modelKey", "Document/Document": "$modelKey" } },
+        { "field": "Code", "valueType": "Text", "nullable": true, "sortable": true, "operators": ["=", "contains", "isNull"], "mappings": { "Workspace/WorkspaceFolder": null, "Part/Part": "ECODE", "Document/Document": "ECODE" } },
+        { "field": "Name", "valueType": "Text", "sortable": true, "operators": ["=", "contains"], "mappings": { "Workspace/WorkspaceFolder": "ENAME", "Part/Part": "ENAME", "Document/Document": "ENAME" } },
+        { "field": "UpdatedBy", "valueType": "User", "mappings": { "Workspace/WorkspaceFolder": "UpdatedBy", "Part/Part": "UpdatedBy", "Document/Document": "UpdatedBy" } },
+        { "field": "UpdatedAt", "valueType": "Instant", "sortable": true, "mappings": { "Workspace/WorkspaceFolder": "UpdatedAt", "Part/Part": "UpdatedAt", "Document/Document": "UpdatedAt" } }
       ]
     }
   }

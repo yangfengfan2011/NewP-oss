@@ -497,6 +497,8 @@ function renderMetadataTableCell<TRow extends Record<string, unknown>>(
 ): ReactNode {
   const fieldKey = column.dataIndex ?? column.key;
   const value = readStandardCrudFieldDisplayValue(row, fieldKey);
+  const renderer = registration.listFieldRenderers?.[fieldKey];
+  if (renderer) return renderer({ row, value });
   if (column.metadataSource !== 'model') {
     return value == null ? '' : String(value);
   }
@@ -805,6 +807,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     write: (search, options) => navigate({ pathname: routePathname, search }, { replace: options?.replace === true }),
   }), [navigate, routePathname, routeSearch]);
   const host = useStandardCrudHostEnvironment(routeAddress);
+  const runtimeMetadata = useRuntimeMetadata();
   const features = useFeaturePlacement();
   const readResolution = features.read();
   const readPosition = features.placement ? resolvedFeaturePosition(readResolution) : undefined;
@@ -1693,7 +1696,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           return {
             key: action.key,
             label,
-            onClick: () => confirmDiscardIfNeeded(() => { void openViewDrawer(dataAdapter.getDetailId?.(row) ?? rowId); }),
+            onClick: () => confirmDiscardIfNeeded(() => { openRowProperties(row); }),
           };
         }
         if (action.standardAction === 'edit') {
@@ -1797,13 +1800,23 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         } : item;
       });
   }
+  // 绑定只返回正式 View 身份；路由与目标准入继续由 owning module 的标准页面负责。
+  function openRowProperties(row: TRow): void {
+    const target = dataAdapter.getDetailTarget?.(row);
+    if (!target) { void openViewDrawer(dataAdapter.getDetailId?.(row) ?? dataAdapter.getRowId(row)); return; }
+    const route = resolveExplicitDetailRoute(runtimeMetadata?.navDocuments ?? [], target.detailViewKey);
+    if (!target.id || !route?.path || !hasStandardCrudFullDetailPage(ModuleRegistry.getAllModules(), target.detailViewKey)) {
+      void messageApi.error(t('Platform.ActionUnavailable', '当前操作不可用。')); return;
+    }
+    navigate(route.path.replace(':id', encodeURIComponent(target.id)));
+  }
   const metadataColumns = resolvedColumns.map((column) => {
     const renderColumn = column.standardAction === 'view'
       ? (row: TRow) => (
         <AntdButton
           className="np-standard-crud-cell-action"
           type="link"
-          onClick={() => confirmDiscardIfNeeded(() => { void openViewDrawer(dataAdapter.getDetailId?.(row) ?? dataAdapter.getRowId(row)); })}
+          onClick={() => confirmDiscardIfNeeded(() => { openRowProperties(row); })}
         >
           {String(readRowActionValue(row, column.field) ?? '-')}
         </AntdButton>

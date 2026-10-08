@@ -169,10 +169,10 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
     await vi.waitFor(() => expect([...container.querySelectorAll('.ant-tree-title')].filter(element => element.textContent === '共享后代')).toHaveLength(2));
     const loadedReads = () => fetcher.mock.calls.filter(([input]) => String(input instanceof Request ? input.url : input).startsWith('/api/workspace/content/children?')).length;
     const beforeAddReads = loadedReads();
-    const add = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === '添加已有文件夹');
+    const add = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === '添加已有对象');
     expect(add).toBeDefined(); await act(async () => add!.click());
     await vi.waitFor(() => expect(document.querySelector('.ant-modal [role="combobox"]')).not.toBeNull());
-    await act(async () => document.querySelector<HTMLElement>('.ant-modal .ant-select-selector')!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })));
+    await act(async () => document.querySelectorAll<HTMLElement>('.ant-modal .ant-select-selector')[1]!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })));
     await vi.waitFor(() => expect(document.querySelector('.ant-select-item-option-content')?.textContent).toContain('已有共享文件夹'));
     await act(async () => document.querySelector<HTMLElement>('.ant-select-item-option-content')!.click());
     const confirm = document.querySelector<HTMLButtonElement>('.ant-modal-footer .ant-btn-primary')!;

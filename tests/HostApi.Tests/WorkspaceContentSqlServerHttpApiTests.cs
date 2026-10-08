@@ -215,9 +215,14 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         var allowedRow = Assert.Single(scopedList.GetProperty("items").EnumerateArray());
         Assert.Equal(allowed.GetProperty("id").GetString(), allowedRow.GetProperty("associatedObject").GetProperty("id").GetString());
         var add = Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "workspace.folder.add");
+        constraint.AllowExcluded = true;
         using var attached = await FeatureHttpTestRequests.SendAsync(admin, add, HttpMethod.Post, "/api/workspace/content/references",
             new { position = root with { LinkIds = [allowedRow.GetProperty("linkId").GetString()!] }, target = new { modelKey = "Workspace/WorkspaceFolder", id = excluded.GetProperty("id").GetString() } });
         Assert.Equal(HttpStatusCode.OK, attached.StatusCode);
+        constraint.AllowExcluded = false;
+        using var excludedWrite = await FeatureHttpTestRequests.SendAsync(admin, add, HttpMethod.Post, "/api/workspace/content/references",
+            new { position = root with { LinkIds = [allowedRow.GetProperty("linkId").GetString()!] }, target = new { modelKey = "Workspace/WorkspaceFolder", id = excluded.GetProperty("id").GetString() } });
+        Assert.Equal(HttpStatusCode.NotFound, excludedWrite.StatusCode);
         var tree = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, ChildrenUrl(root));
         var treeRow = Assert.Single(tree.GetProperty("items").EnumerateArray());
         Assert.Equal(1, tree.GetProperty("total").GetInt32()); Assert.False(treeRow.GetProperty("hasChildren").GetBoolean());
@@ -356,12 +361,13 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         public bool Fail { get; set; }
         public bool CannotTranslate { get; set; }
         public bool ExcludeRoot { get; set; }
+        public bool AllowExcluded { get; set; }
         public string[]? ScopeIds { get; set; }
         public Task<Expression<Func<Dictionary<string, object?>, bool>>> ReadPredicateAsync(LinkQueryEndpoint endpoint, CancellationToken token)
         {
             if (Fail) throw new InvalidOperationException("TEST_REQUIRED_CONDITION_FAILED");
             Expression<Func<Dictionary<string, object?>, bool>> predicate = CannotTranslate ? row => OnlyInMemory(EF.Property<string>(row, "ENAME"))
-                : row => EF.Property<string>(row, "ENAME") != "被范围排除" && (!ExcludeRoot || EF.Property<string>(row, "ENAME") != "公共空间");
+                : row => (AllowExcluded || EF.Property<string>(row, "ENAME") != "被范围排除") && (!ExcludeRoot || EF.Property<string>(row, "ENAME") != "公共空间");
             return Task.FromResult(predicate);
         }
         public Task<LinkQuerySqlScope?> ReadSqlScopeAsync(LinkQueryEndpoint endpoint, string scopeName, CancellationToken token)

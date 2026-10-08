@@ -52,6 +52,9 @@ public sealed class LinkQueryAuthoringTests
             link with { LinkQuery = query with { Child = query.Child with { ReferenceField = "PEID" } } },
             link with { Fields = link.Fields.Select(f => f.Name == "ChildModelKey" ? f with { Required = false } : f).ToArray() },
             link with { Fields = link.Fields.Select(f => f.Name == "ChildModelKey" ? f with { OrdinalKey = false } : f).ToArray() },
+            link with { Fields = link.Fields.Select(f => f.Name == "ChildModelKey" ? f with { IsAuditField = true } : f).ToArray() },
+            link with { Fields = link.Fields.Select(f => f.Name == "ChildModelKey" ? f with { IsPrimaryKey = true } : f).ToArray() },
+            link with { Fields = link.Fields.Select(f => f.Name == "ChildModelKey" ? f with { Kind = FieldKind.Reference } : f).ToArray() },
             link with { LinkQuery = query with { Endpoints = new Dictionary<string, LinkQueryEndpointMetadata> { ["Unknown/Folder"] = new() { ResourceKey = "workspace.folder" } } } },
             link with { LinkQuery = query with { Endpoints = new Dictionary<string, LinkQueryEndpointMetadata> { ["Workspace/WorkspaceFolder"] = new() { ResourceKey = "missing.resource" } } } },
             link with { LinkQuery = query with { Columns = query.Columns.Select(c => c.Field == "Name" ? c with { Mappings = new Dictionary<string, string?> { ["Workspace/WorkspaceFolder"] = "MissingField" } } : c).ToArray() } },
@@ -64,6 +67,25 @@ public sealed class LinkQueryAuthoringTests
         Assert.Throws<InvalidOperationException>(() => Compile(models, new("workspace.folder", "WrongOwner", "Workspace/WorkspaceFolder", "EID")));
         Assert.Throws<InvalidOperationException>(() => Compile(models.Select(model => model == link ? link with { LinkQuery = query with
             { Columns = query.Columns.Select(column => column.Field == "Name" ? column with { Field = "AssociatedId" } : column).ToArray() } } : model).ToArray()));
+    }
+
+    [Fact]
+    public void GenericQuery_AcceptsTwoDiscriminatedEndsAndDoesNotForbidParallelRelations()
+    {
+        var models = new WorkspaceModelMetadataProvider().GetDefinitions();
+        var link = Assert.Single(models, model => model.LinkQuery is not null);
+        var discriminator = Assert.Single(link.Fields, field => field.Name == "ChildModelKey");
+        var generic = link with { Fields = [.. link.Fields, discriminator with { Name = "ParentType", StoreName = "ParentType" }],
+            LinkQuery = link.LinkQuery! with { Parent = link.LinkQuery.Parent with { FixedModelKey = null, TypeField = "ParentType" } },
+            Indexes = link.Indexes.Where(index => !index.IsUnique).ToArray() };
+        var definition = Assert.Single(Compile(models.Select(model => model == link ? generic : model).ToArray()).Definitions);
+        Assert.Null(definition.Metadata.Parent.FixedModelKey);
+        Assert.Equal(3, definition.Model.LinkedTypes.Count);
+        var fixedChild = generic with { LinkedTypes = [link.LinkedTypes[0]], LinkQuery = generic.LinkQuery with {
+            Child = generic.LinkQuery.Child with { TypeField = null, FixedModelKey = "Workspace/WorkspaceFolder" },
+            Endpoints = generic.LinkQuery.Endpoints.Where(pair => pair.Key == "Workspace/WorkspaceFolder").ToDictionary(),
+            Columns = generic.LinkQuery.Columns.Select(column => column with { Mappings = column.Mappings.Where(pair => pair.Key == "Workspace/WorkspaceFolder").ToDictionary() }).ToArray() } };
+        Assert.Single(Compile(models.Select(model => model == link ? fixedChild : model).ToArray()).Definitions);
     }
 
     [Fact]
@@ -84,12 +106,15 @@ public sealed class LinkQueryAuthoringTests
 
     private static LinkQueryCatalog Compile(IReadOnlyList<ModelDefinition> models, DataScopeResource? endpoint = null)
     {
+        models = models.Concat(new ICP.Platform.Modules.Part.PartModelMetadataProvider().GetDefinitions())
+            .Concat(new ICP.Platform.Modules.Document.DocumentModelMetadataProvider().GetDefinitions()).ToArray();
         var plan = new CompiledPersistencePlan("query-test", "snapshot", "hash", default, "digest", [], models, []);
         var module = new CanonicalModulePlanModule("Workspace", "1", "工作空间", null, ".", null, null, null, null, "behavior-bindings",
-            ["Identity", "Authentication", "Authorization"], [], [], [], models.Select(m => m.LogicalKey).ToArray(), new("test", "Workspace", "/"))
+            ["Identity", "Authentication", "Authorization", "Part", "Document"], [], [], [], models.Select(m => m.LogicalKey).ToArray(), new("test", "Workspace", "/"))
         { Features = [new("Workspace", "workspace", "navigation", "工作空间", null, "workspace.spaces.access")] };
         var modules = new CanonicalModulePlan("test", "1", "hash", "snapshot", [], [module]);
-        return new(plan, new StandardCrudResourceRegistry([], plan), [endpoint ?? new("workspace.folder", "Workspace", "WorkspaceFolder", "EID")], modules);
+        return new(plan, new StandardCrudResourceRegistry([], plan), [endpoint ?? new("workspace.folder", "Workspace", "WorkspaceFolder", "EID"),
+            new("part.part", "Part", "Part", "EID"), new("document.document", "Document", "Document", "EID")], modules);
     }
 
     private sealed class SourcePolicy : ILinkQuerySourcePolicy

@@ -2,6 +2,13 @@ import { afterEach, expect, it, vi } from 'vitest';
 import resource from '../workspaceRootResource';
 
 afterEach(() => { vi.unstubAllGlobals(); });
+it('resolves the same EID to the registered owning detail view without confusing LID', () => {
+  const target = resource.dataAdapter.getDetailTarget;
+  expect(target).toBeTypeOf('function');
+  expect(target!({ LID: 'part-link', ObjectModelKey: 'Part/Part', ObjectId: 'same-id' })).toEqual({ detailViewKey: 'part.part.detail', id: 'same-id' });
+  expect(target!({ LID: 'document-link', ObjectModelKey: 'Document/Document', ObjectId: 'same-id' })).toEqual({ detailViewKey: 'document.document.detail', id: 'same-id' });
+  expect(() => target!({ ObjectModelKey: 'Unknown/Type', ObjectId: 'same-id' })).toThrow();
+});
 it('uses LID as row identity and the associated Entity EID for properties', async () => {
   const request = vi.fn(async (_input: RequestInfo | URL) => new Response(JSON.stringify({ items: [{ linkId: 'relation',
     parent: { modelKey: 'Workspace/WorkspaceFolder', id: 'root' }, child: { modelKey: 'Workspace/WorkspaceFolder', id: 'folder' },

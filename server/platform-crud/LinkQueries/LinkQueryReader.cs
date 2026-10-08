@@ -28,6 +28,26 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
     public Task<LinkQueryResult> QueryAsync(string resourceKey, LinkQueryRequest request, CancellationToken token = default) =>
         ReadAsync(resourceKey, request, false, false, token);
 
+    /// <summary>引用写入复用正式端点目录和读取范围；没有任何 Link 的独立对象也能重新准入。</summary>
+    public async Task<bool> IsEndpointReadableAsync(string resourceKey, LinkObjectReference target, CancellationToken token = default)
+    {
+        var definition = catalog.Get(resourceKey);
+        if (!definition.Endpoints.TryGetValue(target.ModelKey, out var endpoint) || string.IsNullOrWhiteSpace(target.Id))
+            throw new LinkQueryException(400, "LinkQuery.InvalidType", "target");
+        var parameters = new List<DbParameter>();
+        var rows = await EndpointRowsAsync(endpoint, token);
+        var query = SqlFor(rows.Where(row => EF.Property<string>(row, endpoint.IdField) == target.Id)
+            .Select(row => EF.Property<string>(row, endpoint.IdField)), parameters);
+        LinkQuerySqlScope? scope = null;
+        if (endpoint.ConstraintKey is { } key)
+            scope = await constraints.Single(c => c.Key == key).ReadSqlScopeAsync(endpoint, "linkTarget", token);
+        if (scope is not null) parameters.AddRange(scope.Parameters);
+        var id = Parameter(target.Id, parameters);
+        var sql = (scope?.Preparation ?? "") + "\nSELECT 1 WHERE " + id + " IN (" + query + ")"
+            + (scope is null ? "" : " AND " + id + " IN (" + scope.IdsQuery + ")");
+        return await ExecuteAsync(sql, parameters, async reader => await reader.ReadAsync(token), token);
+    }
+
     /// <summary>受信任树适配读取一层全部节点；不能由 HTTP 请求关闭分页，也不预取整树。</summary>
     public Task<LinkQueryResult> ReadDirectLayerAsync(string resourceKey, LinkQueryRequest request, CancellationToken token = default) =>
         ReadAsync(resourceKey, request, true, true, token);
@@ -160,15 +180,22 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
         var pageSize = request.Query.PageSize <= 0 ? 20 : request.Query.PageSize;
         if (page > int.MaxValue / pageSize) throw new LinkQueryException(400, "LinkQuery.InvalidPage", "page");
         var union = "WITH Relations AS (" + string.Join(" UNION ALL ", branches) + ") ";
+        var associatedEndForDiagnostics = forward ? child : parent;
+        var eligibleSourceCount = "SELECT COUNT(*) FROM " + linkTable + " l WHERE " + anchorCondition + " AND " + sourceCondition
+            + " AND " + EndType(associatedEndForDiagnostics, "l", linkEntity) + " IN (" + string.Join(",", allowedTypes.Select(Literal)) + ");";
         var sql = string.Join("\n", sqlScopes.Values.Where(scope => scope is not null).Select(scope => scope!.Preparation))
             + "\n" + anchorAvailableSql + "; SELECT TOP(1) 1 FROM " + linkTable + " l WHERE " + anchorCondition + " AND " + sourceCondition + " AND NOT(" + validPairs + "); "
             + union + "SELECT COUNT(*) FROM Relations; " + union + "SELECT * FROM Relations ORDER BY " + Quote(sortField!) + " " + sortDirection
-            + ",AssociatedModelKey,AssociatedId,LID" + (completeLayer ? ";" : " OFFSET " + Parameter((page - 1) * pageSize, parameters) + " ROWS FETCH NEXT " + Parameter(pageSize, parameters) + " ROWS ONLY;");
+            + ",AssociatedModelKey,AssociatedId,LID" + (completeLayer ? ";" : " OFFSET " + Parameter((page - 1) * pageSize, parameters) + " ROWS FETCH NEXT " + Parameter(pageSize, parameters) + " ROWS ONLY;") + eligibleSourceCount;
         var result = await ExecuteAsync(sql, parameters, async reader =>
         {
             if (!await reader.ReadAsync(token)) throw new LinkQueryException(404, "LinkQuery.AnchorUnavailable");
             await reader.NextResultAsync(token);
-            if (await reader.ReadAsync(token)) throw new InvalidOperationException("LINK_QUERY_STORED_TYPE_INVALID");
+            if (await reader.ReadAsync(token))
+            {
+                logger.LogWarning("LINK_QUERY_STORED_TYPE_INVALID: Resource={Resource}", resourceKey);
+                throw new InvalidOperationException("LINK_QUERY_STORED_TYPE_INVALID");
+            }
             await reader.NextResultAsync(token); await reader.ReadAsync(token); var total = reader.GetInt32(0);
             await reader.NextResultAsync(token); var items = new List<LinkQueryRow>();
             while (await reader.ReadAsync(token))
@@ -185,6 +212,9 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
                 var childRef = new LinkObjectReference(reader.GetString(3), reader.GetString(4));
                 items.Add(new(resourceKey, reader.GetString(0), parentRef, childRef, forward ? childRef : parentRef, fields, reader.GetBoolean(reader.GetOrdinal("HasChildren"))));
             }
+            await reader.NextResultAsync(token); await reader.ReadAsync(token);
+            // 内部仅记录聚合排除量，覆盖缺失目标、对象范围及筛选；不输出被隐藏的主键或字段。
+            logger.LogDebug("LINK_QUERY_EXCLUDED_RELATIONS: Resource={Resource} ExcludedByTargetScopeOrFilter={Excluded}", resourceKey, reader.GetInt32(0) - total);
             return new LinkQueryResult(items, total, page, completeLayer ? items.Count : pageSize, sortField, sortDirection);
         }, token);
         var displayed = await DisplayAsync(definition, result.Items, fieldPlan.ResponseFields, token);

@@ -10,6 +10,8 @@ it('validates Link projection fields against the formal query directory and requ
   const context = { modelDocuments: [folder, content] };
   const schema = buildStandardCrudListSchema(list.view, resource, context);
   expect(schema.idField).toBe('LID');
+  expect(schema.query.fields[0]).toMatchObject({ key: 'ObjectType', field: 'ObjectType', dataSourceKey: 'workspace.content.types' });
+  expect(() => buildStandardCrudListSchema({ ...list.view, query: { fields: [{ key: 'OriginSpaceId', source: 'model', field: 'OriginSpaceId' }] } }, resource, context)).toThrow('outside its field catalog');
   expect(collectStandardCrudListRequestFields(schema.columns, schema.rowActions, schema.idField)).toEqual(['LID', 'ObjectType', 'Code', 'Name', 'UpdatedBy', 'UpdatedAt']);
   expect(() => buildStandardCrudListSchema({ ...list.view, columns: [{ key: 'origin', labelKey: 'Name', source: 'projection', field: 'OriginSpaceId' }] }, resource, context)).toThrow('query field catalog');
   expect(() => buildStandardCrudListSchema({ ...list.view, query: { ...list.view.query, defaultSort: { field: 'Description', direction: 'asc' } } }, resource, context)).toThrow('unsupported default sort');

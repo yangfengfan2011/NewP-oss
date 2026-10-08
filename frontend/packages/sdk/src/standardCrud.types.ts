@@ -77,6 +77,8 @@ export type StandardCrudFieldKind =
 export interface StandardCrudOption {
   value: string;
   label: string;
+  /** 非业务枚举的静态选项可引用正式词典键；label 仍作为缺项回退。 */
+  labelKey?: string;
   disabled?: boolean;
   /** 仅 SDK 合成的缺失当前值项使用此标记；业务 label 和 disabled 不构成不可用事实。 */
   unavailable?: true;
@@ -249,6 +251,8 @@ export type StandardCrudActionEligibilityResolver<TDetail = unknown, TRow = unkn
 
 /** 模块动作输入渲染上下文；值由 Shell 持有，模块只渲染业务输入并报告变化。 */
 export interface StandardCrudActionInputRenderContext extends StandardCrudFeatureRequestContext {
+  /** 从活动导航目录取得已允许的读取位置；业务输入不拼接功能位置身份。 */
+  navigationFeaturePosition?: (targetKey: string) => string | undefined;
   queryScope?: Record<string, unknown>;
   submitting?: boolean;
   action: StandardCrudActionDefinition;
@@ -356,6 +360,8 @@ export interface StandardCrudResourceRegistration<
   operationResultPresenters?: StandardCrudOperationResultPresenter[];
   buildMutationValues?: (values: Record<string, unknown>) => StandardCrudMutationValues;
   columnProvider?: StandardCrudListColumnProvider<TFilter>;
+  /** 已声明列表字段的模块呈现；不改变字段白名单、排序或筛选语义。 */
+  listFieldRenderers?: Record<string, (context: { row: TRow; value: unknown }) => ReactNode>;
 }
 
 /** 写入成功后的无详情回执；不得从中推断对象 ID 或读取资格。 */
@@ -425,6 +431,8 @@ export interface StandardCrudDataAdapter<TRow = Record<string, unknown>, TDetail
   getRowId: (row: TRow) => string;
   /** 只读属性打开可使用关联对象主键；行选择和关系动作仍使用 getRowId。 */
   getDetailId?: (row: TRow) => string;
+  /** 异构行只返回已登记的详情 View 与真实主键；宿主解析正式路由并重新执行目标准入。 */
+  getDetailTarget?: (row: TRow) => { detailViewKey: string; id: string } | undefined;
 }
 
 /** 标准 REST 资源总是支持规范写入；其他 Adapter 可以按资源能力选择是否实现。 */

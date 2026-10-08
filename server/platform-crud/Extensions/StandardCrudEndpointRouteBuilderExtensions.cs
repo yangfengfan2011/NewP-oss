@@ -46,6 +46,8 @@ public static class StandardCrudEndpointRouteBuilderExtensions
             MapResource(endpoints, descriptor);
         }
 
+        endpoints.MapLinkQueries();
+
         return endpoints;
     }
 
@@ -266,7 +268,7 @@ public static class StandardCrudEndpointRouteBuilderExtensions
     }
 
     // 页面范围与用户筛选分离传入模块查询 owner；模块在计数和分页前取交集。
-    private static StandardCrudListQuery BuildListQuery(IQueryCollection query)
+    internal static StandardCrudListQuery BuildListQuery(IQueryCollection query)
     {
         var filters = new Dictionary<string, string?>(StringComparer.Ordinal);
         foreach (var pair in query)

@@ -4,6 +4,10 @@
 
 Standard CRUD 上下文定义平台共享宿主用于组合资源列表、创建、编辑和详情体验的公共语言。模块拥有业务数据与行为，Standard CRUD 拥有一致的 metadata 解释和呈现契约。
 
+显式 Link 查询采用 List View 的 `querySource: { kind: "link", model, resourceKey }`。form 的 Model 继续拥有创建字段，查询列只能是 Link 正式公共目录中的 projection 字段，默认排序及可排序列也按该目录校验。共享宿主收集 LID 而非默认 EID；Adapter 的 `getRowId` 仍拥有关系行身份，可选 `getDetailId` 单独提供当前目标资源的真实 Entity 主键。第一片采用者仅登记文件夹详情；异构对象的资源/页面选择继续由对象拥有模块登记，不能绑定虚假的混合 Entity Detail View。
+
+通用 Link 查询的端点目录、条件与执行入口见[接入指南](../../developer/link-query-configuration.md)。公开请求始终分页；受信任树适配只能读取当前一层，不能通过 HTTP 关闭分页。读取失败不自动修复关系或扩大授权。
+
 ## Language
 
 **标准 CRUD 资源（Standard CRUD Resource）**：

@@ -77,6 +77,78 @@ namespace ICP.Platform.Modules.Workspace.Migrations.SqlServer.Migrations
                     b.ToTable("WorkspaceFolder", "dbo");
                 });
 
+            modelBuilder.Entity("Workspace/WorkspaceFolderContent", b =>
+                {
+                    b.Property<string>("LID")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("LID");
+
+                    b.Property<string>("CEID")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("CEID");
+
+                    b.Property<string>("ChildModelKey")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("ChildModelKey")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<DateTime>("LCreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("LCreatedAt");
+
+                    b.Property<string>("LCreatedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("LCreatedBy");
+
+                    b.Property<DateTime?>("LUpdatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("LUpdatedAt");
+
+                    b.Property<string>("LUpdatedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("LUpdatedBy");
+
+                    b.Property<string>("PEID")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("PEID");
+
+                    b.Property<string>("__ordinal_ChildModelKey")
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasComputedColumnSql("isnull(CONVERT([nvarchar](64),hashbytes('SHA2_256',CONVERT([varbinary](max),[ChildModelKey])),(2)),N'')", true);
+
+                    b.HasKey("LID");
+
+                    b.HasIndex("CEID")
+                        .HasDatabaseName("IX_WorkspaceFolderContent_CEID");
+
+                    b.HasIndex("LID")
+                        .IsUnique()
+                        .HasDatabaseName("UX_WorkspaceFolderContent_LID");
+
+                    b.HasIndex("PEID")
+                        .HasDatabaseName("IX_WorkspaceFolderContent_PEID");
+
+                    b.HasIndex("PEID", "__ordinal_ChildModelKey", "CEID")
+                        .IsUnique()
+                        .HasDatabaseName("UX_WorkspaceFolderContent_Target");
+
+                    b.HasIndex("__ordinal_ChildModelKey", "CEID", "PEID")
+                        .HasDatabaseName("IX_WorkspaceFolderContent_Reverse");
+
+                    b.ToTable("WorkspaceFolderContent", "dbo");
+                });
+
             modelBuilder.Entity("Workspace/WorkspaceSpace", b =>
                 {
                     b.Property<string>("EID")
@@ -147,6 +219,16 @@ namespace ICP.Platform.Modules.Workspace.Migrations.SqlServer.Migrations
                         .HasDatabaseName("UX_WorkspaceSpace_Subject");
 
                     b.ToTable("WorkspaceSpace", "dbo");
+                });
+
+            modelBuilder.Entity("Workspace/WorkspaceFolderContent", b =>
+                {
+                    b.HasOne("Workspace/WorkspaceFolder", null)
+                        .WithMany()
+                        .HasForeignKey("PEID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_WorkspaceFolderContent_Parent");
                 });
 
             modelBuilder.Entity("Workspace/WorkspaceSpace", b =>

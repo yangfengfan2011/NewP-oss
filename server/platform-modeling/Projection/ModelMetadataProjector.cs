@@ -89,7 +89,7 @@ public sealed class ModelMetadataProjector
             Enum.Parse<ModelKind>(document.Model.Kind, ignoreCase: true),
             fields,
             indexes,
-            ForeignKeys: foreignKeys);
+            ForeignKeys: foreignKeys) { LinkQuery = document.Model.LinkQuery, LinkedTypes = document.Model.LinkedTypes };
     }
 
     /// <summary>

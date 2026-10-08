@@ -15,6 +15,7 @@
 
 - 内建模块：[componentized-development.md](developer/componentized-development.md)
 - 标准关系树：[relation-tree-configuration.md](developer/relation-tree-configuration.md)
+- 通用 Link 查询：[link-query-configuration.md](developer/link-query-configuration.md)
 - 五分钟接入：[componentized-development-quickstart.md](developer/componentized-development-quickstart.md)
 - 前端 binding：[module-integration-guide.md](../frontend/docs/module-integration-guide.md)
 - 外部声明式插件：[external-plugin-development.md](developer/external-plugin-development.md)

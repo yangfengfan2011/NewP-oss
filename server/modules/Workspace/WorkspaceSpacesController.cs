@@ -14,7 +14,7 @@ namespace ICP.Platform.Modules.Workspace;
 [EndpointModule("Workspace")]
 [PlatformRequestValidation]
 public sealed class WorkspaceSpacesController(WorkspaceSpaces spaces, ILogger<WorkspaceSpacesController> logger,
-    ILocalAdministratorRoleAssignment administrators) : ControllerBase
+    ILocalAdministratorRoleAssignment administrators, ICP.Platform.Crud.LinkQueries.LinkQueryReader links) : ControllerBase
 {
     /// <summary>显式接入命令初始化公共空间；入口资格不自动授予初始化权。</summary>
     [HttpPost("public/initialize")]
@@ -44,8 +44,19 @@ public sealed class WorkspaceSpacesController(WorkspaceSpaces spaces, ILogger<Wo
     /// <summary>读取当前可准入根，不隐式创建公共或个人空间。</summary>
     [HttpGet]
     [RequireFeature("workspace.spaces.access")]
-    public async Task<ActionResult<IReadOnlyList<WorkspaceSpaceRoot>>> List(CancellationToken token) =>
-        Ok(await spaces.ListAsync(ActorId(), token));
+    public async Task<ActionResult<IReadOnlyList<WorkspaceSpaceRoot>>> List(CancellationToken token)
+    {
+        var roots = await spaces.ListAsync(ActorId(), token);
+        var result = new List<WorkspaceSpaceRoot>();
+        // 空间根最多两个；存在性由通用 Link 规划判定，不把第一页或关系数量当作树分支。
+        foreach (var root in roots)
+        {
+            var scope = new Dictionary<string, string?> { ["spaceId"] = root.SpaceId, ["rootFolderId"] = root.RootFolderId, ["linkIds"] = "[]" };
+            result.Add(root with { HasChildren = await links.HasChildrenAsync("workspace.content", new("forward", new(WorkspacePositions.FolderModel, root.RootFolderId),
+                new ICP.Platform.Crud.Models.StandardCrudListQuery(QueryScope: scope), [WorkspacePositions.FolderModel]), token) });
+        }
+        return Ok(result);
+    }
 
     /// <summary>共享详情页读取当前空间的真实根，不接受裸文件夹 ID。</summary>
     [HttpGet("{spaceId}/root")]

@@ -11,10 +11,10 @@
   "features": [{ "key": "workspace", "kind": "navigation", "title": "工作空间", "titleKey": "Workspace.Title", "behaviorKey": "workspace.spaces.access" }],
   "frontend": {
     "behaviorKey": "workspace.frontend", "entry": "workspace", "bindingMode": "behavior-bindings",
-    "bindings": ["workspace.spaces", "workspace.tree.current", "workspace.root.detail", "workspace.folder.list"]
+    "bindings": ["workspace.spaces", "workspace.tree.current", "workspace.folder.content", "workspace.folder.list"]
   },
   "persistence": {
-    "models": ["metadata/models/WorkspaceSpace.model.json", "metadata/models/WorkspaceFolder.model.json"],
+    "models": ["metadata/models/WorkspaceSpace.model.json", "metadata/models/WorkspaceFolder.model.json", "metadata/models/WorkspaceFolderContent.model.json"],
     "migrations": { "sqlServer": { "assembly": "migrations/Workspace.SqlServerMigrations.dll", "manifest": "migrations/Workspace.SqlServerMigrations.json" } }
   }
 }

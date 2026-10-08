@@ -88,6 +88,7 @@ export interface StandardCrudRuntimeQuerySchema {
 export interface StandardCrudListRuntimeSchema {
   viewKey: string;
   resourceKey: string;
+  idField?: string;
   dicKey: string;
   titleKey: string;
   descriptionKey: string;
@@ -823,8 +824,27 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
   const modelKey = readString(view.model);
   const model = modelKey.length > 0 ? requireModelDocument(viewKey, context?.modelDocuments, modelKey) : {};
   const modelFields = collectModelFields(model);
+  const querySource = readRecord(view.querySource);
+  if (Object.keys(querySource).length > 0 && (querySource.kind !== 'link'
+    || Object.keys(querySource).some(key => !['kind', 'model', 'resourceKey'].includes(key)))) {
+    throw new Error(`list view "${viewKey}" has an unsupported query source`);
+  }
+  const linkModel = querySource.kind === 'link'
+    ? requireModelDocument(viewKey, context?.modelDocuments, readString(querySource.model)) : undefined;
+  const linkQuery = readRecord(linkModel?.linkQuery);
+  const projectionFields = new Set(readRecordArray(linkQuery.columns).map(column => readString(column.field)));
+  if (linkModel && (linkModel.kind !== 'Link' || linkQuery.resourceKey !== querySource.resourceKey || projectionFields.size === 0)) {
+    throw new Error(`list view "${viewKey}" has an invalid Link query source`);
+  }
+  if (linkModel) projectionFields.add('LID');
   const advancedFilter = readAdvancedFilter(resolveAdvancedFilterSource(view, queryRecord), model);
   const query = readQuery(queryRecord, model);
+  if (linkModel && query.defaultSort && !readRecordArray(linkQuery.columns).some(column => column.field === query.defaultSort?.field && column.sortable === true)) {
+    throw new Error(`Link list "${viewKey}" has an unsupported default sort`);
+  }
+  if (linkModel && query.fields.some(field => field.source === 'model' && !projectionFields.has(field.field ?? ''))) {
+    throw new Error(`Link list "${viewKey}" contains a query field outside its field catalog`);
+  }
   query.advancedFilter = advancedFilter;
   const columnSourceValue = readString(view.columnSource, 'metadata');
   if (columnSourceValue !== 'metadata' && columnSourceValue !== 'runtime') {
@@ -834,6 +854,7 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
   const schema: StandardCrudListRuntimeSchema = {
     viewKey,
     resourceKey: registration.resourceKey,
+    ...(linkModel ? { idField: 'LID' } : {}),
     dicKey,
     titleKey,
     descriptionKey,
@@ -889,6 +910,12 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
     assertDictionaryKey(dicKey, column.labelKey, context?.defaultLanguageCatalog);
     if (column.source === 'projection' && column.field.length === 0) {
       throw new Error(`projection column "${column.key}" must declare field`);
+    }
+    if (linkModel && (column.source !== 'projection' || !projectionFields.has(column.field))) {
+      throw new Error(`Link list column "${column.key}" is not in its query field catalog`);
+    }
+    if (linkModel && column.sortable && !readRecordArray(linkQuery.columns).some(item => item.field === column.field && item.sortable === true)) {
+      throw new Error(`Link list column "${column.key}" does not support sorting`);
     }
     if (column.source === 'model' && column.field.length === 0) {
       throw new Error(`model column "${column.key}" must declare field`);

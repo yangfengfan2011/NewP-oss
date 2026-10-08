@@ -86,11 +86,12 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
     /// 按当前条件语义构造数据库谓词。
     /// 非分组条件始终按 AND 组合；分组条件先在组内按 and/or 组合，再与其他条件按 AND 组合。
     /// </summary>
-    private static IQueryable<Dictionary<string, object?>> ApplyConditions(
+    public static IQueryable<Dictionary<string, object?>> ApplyConditions(
         IQueryable<Dictionary<string, object?>> source,
         PlatformQueryDescriptor descriptor,
         IEntityType entityType,
-        IReadOnlyList<PlatformQueryCondition> conditions)
+        IReadOnlyList<PlatformQueryCondition> conditions,
+        Func<ParameterExpression, PlatformQueryCondition, Expression>? conditionFactory = null)
     {
         var unsupported = conditions.FirstOrDefault(static condition =>
             !string.Equals(condition.Operator, "=", StringComparison.OrdinalIgnoreCase) &&
@@ -124,7 +125,7 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
 
         foreach (var condition in executableConditions.Where(static condition => string.IsNullOrWhiteSpace(condition.GroupKey)))
         {
-            predicate = Combine(predicate, BuildConditionExpression(descriptor, entityType, row, condition), useOr: false);
+            predicate = Combine(predicate, conditionFactory?.Invoke(row, condition) ?? BuildConditionExpression(descriptor, entityType, row, condition), useOr: false);
         }
 
         foreach (var group in executableConditions
@@ -156,7 +157,7 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
             {
                 groupExpression = Combine(
                     groupExpression,
-                    BuildConditionExpression(descriptor, entityType, row, condition),
+                    conditionFactory?.Invoke(row, condition) ?? BuildConditionExpression(descriptor, entityType, row, condition),
                     useOr: string.Equals(groupOperator, "or", StringComparison.OrdinalIgnoreCase));
             }
 
@@ -172,8 +173,8 @@ public sealed class EfPlatformQueryExecutor : IPlatformQueryExecutor
         return source.Where(lambda);
     }
 
-    // 条件操作符在查询内核统一翻译；比较条件继续使用字段的 EF CLR 类型，避免字符串比较或模块特判。
-    private static Expression BuildConditionExpression(
+    /// <summary>按已经校验的字段语义翻译单个条件；公共投影仅通过可信字段映射复用，不接收执行表达式。</summary>
+    public static Expression BuildConditionExpression(
         PlatformQueryDescriptor descriptor,
         IEntityType entityType,
         ParameterExpression row,

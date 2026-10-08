@@ -18,6 +18,8 @@ Tree View 的 `treeActions` 与节点 `contextMenu` 都是可选数组，缺省�
 
 ## Language
 
+自定义导航可以通过 `featureKey` 保留自己的主行为，并用 PageRef 组合标准 Tree/List/Detail。候选编译器将这些标准页面的读取行为及业务动作派生到同一入口；初始化命令仍绑定导航原有主行为，派生读取不能用于 POST。动作位置保留 node-type、surface 和入口依赖，不复制第二份功能目录。
+
 **页面（Page）**：
 可通过稳定身份引用、在导航入口或组合中呈现的已注册界面，包括平台标准页面和模块自定义页面；它不必拥有独立菜单或地址。
 _Avoid_: View 定义、菜单项、URL、React 节点

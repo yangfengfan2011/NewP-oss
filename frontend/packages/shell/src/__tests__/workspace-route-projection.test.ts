@@ -11,7 +11,7 @@ import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRo
 const module: FrontendModule = { metadata: { moduleId: 'Workspace', displayName: '工作空间', version: '1' }, ...workspace };
 const views = [tree, list, detail];
 
-it('projects the formal Workspace root detail without inventing list, full-detail or drawer routes', () => {
+it('projects the formal Workspace composed content list without inventing standalone routes', () => {
   expect(module.standardCrudCapabilities?.map(binding => binding.kind)).toEqual(['standard-list']);
   expect(new Set(capsule.frontend.bindings)).toEqual(new Set([
     ...(workspace.treeProviders ?? []).map(binding => binding.key),
@@ -26,5 +26,6 @@ it('still rejects an unconsumed list binding and an object list that hides every
   const composedList = { ...tree, view: { ...tree.view, nodeTypes: [{ ...tree.view.nodeTypes[0], pageRef: {
     pageKey: 'platform.list', parameters: { viewKey: list.view.key },
   } }] } };
-  expect(() => compileStandardCrudRouteProjection([module], [navigation], [composedList, list, detail], [])).toThrow('STANDARD_CRUD_DETAIL_ACTION_MISSING');
+  const hiddenDetailList = { ...list, view: { ...list.view, rowActions: [] } };
+  expect(() => compileStandardCrudRouteProjection([module], [navigation], [composedList, hiddenDetailList, detail], [])).toThrow('STANDARD_CRUD_DETAIL_ACTION_MISSING');
 });

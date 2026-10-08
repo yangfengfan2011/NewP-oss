@@ -419,6 +419,8 @@ export interface StandardCrudDataAdapter<TRow = Record<string, unknown>, TDetail
   remove?: (id: string, before?: Record<string, unknown>, context?: StandardCrudFeatureRequestContext) => Promise<StandardCrudOperationResult | void>;
   exportList?: (request: StandardCrudExportRequest, context?: StandardCrudFeatureRequestContext) => Promise<StandardCrudExportResponse>;
   getRowId: (row: TRow) => string;
+  /** 只读属性打开可使用关联对象主键；行选择和关系动作仍使用 getRowId。 */
+  getDetailId?: (row: TRow) => string;
 }
 
 /** 标准 REST 资源总是支持规范写入；其他 Adapter 可以按资源能力选择是否实现。 */

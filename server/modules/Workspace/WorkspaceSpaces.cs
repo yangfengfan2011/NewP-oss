@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 namespace ICP.Platform.Modules.Workspace;
 
 /// <summary>仅公开导航所需的空间与根身份，不暴露主体或文件夹来源。</summary>
-public sealed record WorkspaceSpaceRoot(string SpaceId, string SpaceKind, string RootFolderId, string Name);
+public sealed record WorkspaceSpaceRoot(string SpaceId, string SpaceKind, string RootFolderId, string Name, bool HasChildren = false);
 
 /// <summary>空间初始化与强制准入；普通内容权限不由初始化命令授予。</summary>
 public sealed class WorkspaceSpaces(EfPlatformDbContext db, IPlatformTransactionExecutor transactions, IDataScopeReadPlanProvider readPlans,
@@ -22,7 +22,7 @@ public sealed class WorkspaceSpaces(EfPlatformDbContext db, IPlatformTransaction
     public async Task<IReadOnlyList<WorkspaceSpaceRoot>> ListAsync(string actorId, CancellationToken token = default)
     {
         var folders = await ReadableFoldersAsync(token);
-        return await Admitted(actorId).Where(space => folders.Any(folder =>
+        return await Admitted(db, actorId).Where(space => folders.Any(folder =>
                 EF.Property<string>(folder, "EID") == EF.Property<string>(space, "RootFolderId")))
             .OrderByDescending(r => EF.Property<string>(r, "SpaceKind"))
             .Select(r => new WorkspaceSpaceRoot(EF.Property<string>(r, "EID"), EF.Property<string>(r, "SpaceKind"),
@@ -43,7 +43,7 @@ public sealed class WorkspaceSpaces(EfPlatformDbContext db, IPlatformTransaction
             var existing = SpaceRows().Where(r => EF.Property<string>(r, "SpaceKind") == kind);
             if (personal) existing = existing.Where(r => EF.Property<string?>(r, "SubjectId") == actorId);
             var current = await existing.SingleOrDefaultAsync(cancellation);
-            if (current is not null) return await ValidateRootAsync(current, cancellation);
+            if (current is not null) return await ValidateRootAsync(db, current, cancellation);
             var spaceId = Guid.NewGuid().ToString("N");
             var rootId = Guid.NewGuid().ToString("N");
             var name = personal ? "个人空间" : "公共空间";
@@ -66,9 +66,9 @@ public sealed class WorkspaceSpaces(EfPlatformDbContext db, IPlatformTransaction
     /// <summary>先在数据库判定空间准入，再读取其唯一根；管理员也不能绕过个人主体比较。</summary>
     public async Task<Dictionary<string, object?>?> ReadRootAsync(string actorId, string spaceId, CancellationToken token = default)
     {
-        var space = await Admitted(actorId).SingleOrDefaultAsync(r => EF.Property<string>(r, "EID") == spaceId, token);
+        var space = await Admitted(db, actorId).SingleOrDefaultAsync(r => EF.Property<string>(r, "EID") == spaceId, token);
         if (space is null) return null;
-        var root = await ValidateRootAsync(space, token);
+        var root = await ValidateRootAsync(db, space, token);
         var detail = await details.GetDetailAsync(descriptor.Value, root.RootFolderId, token);
         return detail is null ? null : new(detail.Fields);
     }
@@ -76,13 +76,23 @@ public sealed class WorkspaceSpaces(EfPlatformDbContext db, IPlatformTransaction
     /// <summary>共享详情按真实根 EID 读取；唯一根归属与当前准入条件都在服务端解析，非根不能借此读取。</summary>
     public async Task<Dictionary<string, object?>?> ReadRootByIdAsync(string actorId, string rootId, CancellationToken token = default)
     {
-        var spaceId = await Admitted(actorId).Where(r => EF.Property<string>(r, "RootFolderId") == rootId)
+        var spaceId = await Admitted(db, actorId).Where(r => EF.Property<string>(r, "RootFolderId") == rootId)
             .Select(r => EF.Property<string>(r, "EID")).SingleOrDefaultAsync(token);
         return spaceId is null ? null : await ReadRootAsync(actorId, spaceId, token);
     }
 
+    /// <summary>独立详情仍执行空间来源准入与对象读取；当前片只创建来源范围内的文件夹。</summary>
+    internal async Task<Dictionary<string, object?>?> ReadFolderAsync(string actorId, string id, CancellationToken token)
+    {
+        var origins = Admitted(db, actorId).Select(space => EF.Property<string>(space, "EID"));
+        if (!await db.Set<Dictionary<string, object?>>(FolderModel).AsNoTracking().AnyAsync(folder =>
+            EF.Property<string>(folder, "EID") == id && origins.Contains(EF.Property<string>(folder, "OriginSpaceId")), token)) return null;
+        var detail = await details.GetDetailAsync(descriptor.Value, id, token);
+        return detail is null ? null : new(detail.Fields);
+    }
+
     // 两个根是固定有界集合；范围在数据库先过滤，调用方不能提交主体或关闭该条件。
-    private IQueryable<Dictionary<string, object?>> Admitted(string actorId) => SpaceRows().Where(r =>
+    internal static IQueryable<Dictionary<string, object?>> Admitted(EfPlatformDbContext db, string actorId) => db.Set<Dictionary<string, object?>>(SpaceModel).AsNoTracking().Where(r =>
         EF.Property<string>(r, "SpaceKind") == "Public" && EF.Property<string?>(r, "SubjectModelKey") == null && EF.Property<string?>(r, "SubjectId") == null
         || EF.Property<string>(r, "SpaceKind") == "Personal" && EF.Property<string?>(r, "SubjectModelKey") == AccountModel && EF.Property<string?>(r, "SubjectId") == actorId);
 
@@ -90,7 +100,7 @@ public sealed class WorkspaceSpaces(EfPlatformDbContext db, IPlatformTransaction
     private IQueryable<Dictionary<string, object?>> SpaceRows() => db.Set<Dictionary<string, object?>>(SpaceModel).AsNoTracking();
 
     // 无根或来源损坏是不可用状态，不能重建空间或回退全局目录。
-    private async Task<WorkspaceSpaceRoot> ValidateRootAsync(Dictionary<string, object?> space, CancellationToken token)
+    internal static async Task<WorkspaceSpaceRoot> ValidateRootAsync(EfPlatformDbContext db, Dictionary<string, object?> space, CancellationToken token)
     {
         var kind = (string)space["SpaceKind"]!;
         if (!(kind == "Public" && space["SubjectModelKey"] is null && space["SubjectId"] is null)

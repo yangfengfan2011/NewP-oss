@@ -170,19 +170,19 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
     }
 
     [Fact]
-    public void WorkspaceFirstStream_FinalizesTwiceAndChecksFrozenInputs()
+    public void WorkspaceTail_FinalizesTwiceAndChecksFrozenInputs()
     {
         InitializeIsolatedOrganizationRepository(FindRepositoryRoot(), "Workspace");
         InitializeIsolatedGitRepository();
         var manifestPath = Path.Combine(_fixtureRoot, "modules/Workspace/migrations/Workspace.SqlServerMigrations.json");
         var original = MigrationManifestIntegrity.Parse(File.ReadAllBytes(manifestPath));
-        var first = Assert.Single(original.Migrations);
+        var tail = original.Migrations.OrderBy(migration => migration.Sequence, StringComparer.Ordinal).Last();
         File.WriteAllBytes(manifestPath, MigrationManifestIntegrity.SerializeCanonical(original with
-        { Migrations = [], ModelDigest = new string('0', 64), BundleChecksum = new string('0', 64) }));
+        { Migrations = original.Migrations.Take(original.Migrations.Count - 1).ToArray() }));
         var application = new MigrationManifestApplication(_fixtureRoot);
-        Assert.True(application.Finalize("Workspace", "SqlServer", first.MigrationId, first.Compatibility).Changed);
+        Assert.True(application.Finalize("Workspace", "SqlServer", tail.MigrationId, tail.Compatibility).Changed);
         var bytes = File.ReadAllBytes(manifestPath);
-        Assert.False(application.Finalize("Workspace", "SqlServer", first.MigrationId, first.Compatibility).Changed);
+        Assert.False(application.Finalize("Workspace", "SqlServer", tail.MigrationId, tail.Compatibility).Changed);
         Assert.Equal(bytes, File.ReadAllBytes(manifestPath));
         var hostRoot = Path.Combine(_fixtureRoot, "apps/host-api/bin/Release/net10.0/modules/Workspace/migrations");
         File.Copy(manifestPath, Path.Combine(hostRoot, "Workspace.SqlServerMigrations.json"), true);
@@ -194,7 +194,7 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
         Assert.Equal(1, result.CheckedBundles);
         Assert.Equal(before, CaptureGitSnapshot());
         Assert.Equal(hashes, assetPaths.Select(path => Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path)))));
-        _output.WriteLine(JsonSerializer.Serialize(new { module = "Workspace", provider = "SqlServer", migration = first.MigrationId, first.Compatibility,
+        _output.WriteLine(JsonSerializer.Serialize(new { module = "Workspace", provider = "SqlServer", migration = tail.MigrationId, tail.Compatibility,
             firstFinalize = "finalized", secondFinalize = "already finalized", manifestSha256 = hashes[0], result.CheckedBundles, result.ProviderResults,
             before.Head, before.IndexTree, before.Status, before.TrackedContentSha256, assets = hashes }));
     }

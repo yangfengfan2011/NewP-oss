@@ -207,7 +207,7 @@ public sealed class ModuleCapsuleCandidateReader
                     .Select(path => JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(path)))
                 : Enumerable.Empty<JsonElement>();
         var custom = FeatureCatalogCompiler.Read(capsule, moduleId);
-        return [.. custom, .. StandardFeatureMetadataCompiler.Read(moduleId, documents, custom)];
+        return StandardFeatureMetadataCompiler.Read(moduleId, documents, custom, includeCustomFeatures: true);
     }
     private static ModulePersistenceContribution? ReadPersistence(JsonElement root, string sourcePath)
     {

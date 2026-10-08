@@ -18,6 +18,8 @@ public sealed class ModelMetadataModel
     // Link 模型在这里声明允许的父子类型组合。
     public List<ModelMetadataLinkedType> LinkedTypes { get; init; } = [];
 
+    public LinkQueryMetadata? LinkQuery { get; init; }
+
     public List<ModelMetadataIndex> Indexes { get; init; } = [];
 
     public List<ModelMetadataForeignKey> ForeignKeys { get; init; } = [];

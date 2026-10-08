@@ -31,3 +31,21 @@ it('rejects a stale or forged root occurrence instead of returning another path'
   await expect(provider.path({ kind: 'currentUser', featurePosition: 'read' }, 'mine:stale-root')).rejects.toThrow();
   await expect(provider.roots({ kind: 'global', subjectId: 'other' })).rejects.toThrow();
 });
+
+it('keeps the complete ordered occurrence chain and loads only the direct folder layer', async () => {
+  const request = vi.fn(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), 'http://localhost');
+    if (url.pathname.endsWith('/path')) return new Response(JSON.stringify({ folderIds: ['root', 'parent', 'shared'], names: ['公共空间', '父级', '共享文件夹'] }));
+    expect(url.pathname).toBe('/api/workspace/content/children');
+    expect(url.searchParams.get('linkIds')).toBe('["first"]');
+    expect([...url.searchParams.keys()]).toEqual(['spaceId', 'rootFolderId', 'linkIds']);
+    return new Response(JSON.stringify({ items: [{ linkId: 'shared-link', associatedObject: { id: 'shared' }, fields: { Name: '共享文件夹' }, hasChildren: true }] }));
+  });
+  const provider = createWorkspaceTreeProvider(request); const scope = { kind: 'currentUser', featurePosition: 'read' };
+  const nodes = await provider.children(scope, 'space:root:first');
+  expect(nodes).toEqual([{ nodeKey: 'space:root:first:shared-link', nodeType: 'folder', label: '共享文件夹', hasChildren: true,
+    context: { spaceId: 'space', rootFolderId: 'root', linkIds: ['first', 'shared-link'], id: 'shared' } }]);
+  const path = await provider.path(scope, nodes[0].nodeKey);
+  expect(path.map(item => item.nodeKey)).toEqual(['space:root', 'space:root:first', 'space:root:first:shared-link']);
+  expect(await provider.resolveChange({ resourceKey: 'workspace.folder', operation: 'create', id: '' }, scope)).toEqual({ kind: 'unknown' });
+});

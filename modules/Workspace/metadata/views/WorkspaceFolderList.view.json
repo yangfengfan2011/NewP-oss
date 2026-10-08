@@ -2,9 +2,17 @@
   "schemaVersion": "1.0", "type": "view",
   "view": {
     "key": "workspace.folder.list", "mode": "list", "model": "WorkspaceFolder", "resourceKey": "workspace.folder",
+    "querySource": { "kind": "link", "model": "WorkspaceFolderContent", "resourceKey": "workspace.content" },
     "dicKey": "Workspace", "titleKey": "Folder", "descriptionKey": "RootDescription", "detailViewKey": "workspace.folder.detail",
-    "query": { "fields": [], "defaultPageSize": 20, "defaultSort": { "field": "ENAME", "direction": "asc" } },
-    "columns": [{ "key": "name", "labelKey": "Name", "source": "model", "field": "ENAME" }],
-    "pageActions": [], "rowActions": [], "export": { "enabled": false }
+    "query": { "fields": [{ "key": "keyword", "labelKey": "Keyword", "source": "preset", "preset": "keyword", "operator": "like" }], "defaultPageSize": 20, "defaultSort": { "field": "UpdatedAt", "direction": "desc" } },
+    "columns": [
+      { "key": "type", "labelKey": "ObjectType", "source": "projection", "field": "ObjectType" },
+      { "key": "code", "labelKey": "Code", "source": "projection", "field": "Code", "sortable": true },
+      { "key": "name", "labelKey": "Name", "source": "projection", "field": "Name", "sortable": true },
+      { "key": "updatedBy", "labelKey": "Field_UpdatedBy", "source": "projection", "field": "UpdatedBy" },
+      { "key": "updatedAt", "labelKey": "Field_UpdatedAt", "source": "projection", "field": "UpdatedAt", "sortable": true }
+    ],
+    "pageActions": [{ "key": "create", "labelKey": "CreateFolder", "standardAction": "create", "variant": "primary" }],
+    "rowActions": [{ "key": "view", "labelKey": "OpenProperties", "standardAction": "view" }], "export": { "enabled": false }
   }
 }

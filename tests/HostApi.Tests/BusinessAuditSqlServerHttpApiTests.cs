@@ -1437,8 +1437,8 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
             DataActions = DataActionCatalogCompiler.Read(JsonSerializer.SerializeToElement(authoring), "Authorization"),
             Provenance = new ModulePlanProvenance("fixture-authoring", "Authorization/plugin.json", "/")
         };
-        var modulePlan = new CanonicalModulePlanCompiler().Compile("personnel-authorization", candidates).Plan
-            ?? throw new InvalidOperationException("Formal module plan did not compile.");
+        var compilation = new CanonicalModulePlanCompiler().Compile("personnel-authorization", candidates);
+        var modulePlan = compilation.Plan ?? throw new InvalidOperationException("Formal module plan did not compile: " + JsonSerializer.Serialize(compilation.Diagnostics));
         FeatureCatalog = modulePlan.FeatureCatalog;
         builder.Services.AddSingleton(modulePlan);
         builder.Services.AddRelationTrees(modulePlan);
@@ -1455,12 +1455,12 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         builder.Services.AddScoped<ITemporalDisplayFormatter, TemporalDisplayFormatter>();
         builder.Services.AddScoped<ITemporalDisplayProjectionExecutor, TemporalDisplayProjectionExecutor>();
         builder.Services.AddSingleton<IRequestPresentationContextAccessor, TestPresentation>();
-        if (_useRequestPresentation)
+        if (_useRequestPresentation || _includeWorkspace)
         {
             var localization = new ICP.Platform.Kernel.PluginPackages.LocalizationRuntimeManifestBuilder().Build(hostRoot);
             builder.Services.AddSingleton(ICP.Platform.HostApi.Presentation.ActiveLocalizationManifest.Parse(localization));
             builder.Services.AddSingleton<IRuntimeTextCatalog>(RuntimeTextCatalog.Parse(localization));
-            builder.Services.Replace(ServiceDescriptor.Scoped<IRequestPresentationContextAccessor, ICP.Platform.HostApi.Presentation.HttpRequestPresentationContextAccessor>());
+            if (_useRequestPresentation) builder.Services.Replace(ServiceDescriptor.Scoped<IRequestPresentationContextAccessor, ICP.Platform.HostApi.Presentation.HttpRequestPresentationContextAccessor>());
         }
         builder.Services.AddScoped<ITemporalInputNormalizer>(sp => new TemporalInputNormalizer(sp.GetRequiredService<IRequestPresentationContextAccessor>(), "Asia/Shanghai", TimeProvider.System));
         var models = IdentityModelDefinitions.All.Select(m => m with { OwnerModuleId = "Identity" })

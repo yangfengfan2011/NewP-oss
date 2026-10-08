@@ -6,7 +6,8 @@ namespace ICP.Platform.Kernel.ModulePlanning;
 public static class StandardFeatureMetadataCompiler
 {
     /// <summary>仅投影明确采用位置授权的导航；未切换模块由原授权协议拥有。</summary>
-    public static IReadOnlyList<FeatureDeclaration> Read(string moduleId, IEnumerable<JsonElement> documents, IReadOnlyList<FeatureDeclaration>? customFeatures = null)
+    public static IReadOnlyList<FeatureDeclaration> Read(string moduleId, IEnumerable<JsonElement> documents, IReadOnlyList<FeatureDeclaration>? customFeatures = null,
+        bool includeCustomFeatures = false)
     {
         var all = documents.ToArray();
         var views = all.Where(document => document.TryGetProperty("view", out _))
@@ -14,16 +15,21 @@ public static class StandardFeatureMetadataCompiler
         var navigation = all.Where(document => document.TryGetProperty("navigation", out _))
             .SelectMany(document => document.GetProperty("navigation").GetProperty("items").EnumerateArray())
             .ToDictionary(item => Text(item, "key"), StringComparer.Ordinal);
-        var result = new List<FeatureDeclaration>();
+        var result = customFeatures?.ToList() ?? [];
         var scopeTitles = new Dictionary<(string Owner, string Scope), (string Title, string? TitleKey)>();
         var entered = new HashSet<string>(StringComparer.Ordinal);
         foreach (var item in navigation.Values)
             if (item.TryGetProperty("featureAuthorization", out var enabled) && enabled.ValueKind == JsonValueKind.True)
                 Navigation(item);
         foreach (var item in navigation.Values)
+            if (Optional(item, "featureKey") is { } featureKey && customFeatures?.SingleOrDefault(feature => feature.Key == featureKey && feature.Kind == "navigation") is { } custom
+                && item.TryGetProperty("page", out var page) && page.TryGetProperty("parameters", out var parameters) && parameters.TryGetProperty("viewKey", out _))
+                Page(page, custom.ReferenceKey ?? custom.Key, null, []);
+        foreach (var item in navigation.Values)
             if (Optional(item, "featureOwner") is { } owner && !item.TryGetProperty("redirectTo", out _))
                 View(Text(item, "targetKey"), owner, null, []);
-        return result;
+        var customKeys = customFeatures?.Select(feature => feature.ReferenceKey ?? feature.Key).ToHashSet(StringComparer.Ordinal) ?? [];
+        return includeCustomFeatures ? result : result.Where(feature => !customKeys.Contains(feature.ReferenceKey ?? feature.Key)).ToArray();
 
         // 导航祖先也是独立资格，但纯容器不获得任何后代读取行为。
         void Navigation(JsonElement item)
@@ -101,7 +107,7 @@ public static class StandardFeatureMetadataCompiler
         // 内容入口只获得当前实际承载页面的读取，不递归给予子 Tab 读取。
         void BindRead(string owner, string behavior)
         {
-            var index = result.FindIndex(node => node.ReferenceKey == owner);
+            var index = result.FindIndex(node => (node.ReferenceKey ?? node.Key) == owner);
             var node = result[index];
             result[index] = node with { Container = false, BehaviorKey = node.BehaviorKey.Length == 0 ? behavior : node.BehaviorKey,
                 ReadBehaviors = [.. node.ReadBehaviors, behavior] };

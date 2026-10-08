@@ -1,7 +1,17 @@
 import { platformFetch } from '@icp-platform/core';
 import { readStandardCrudRequestError, StandardCrudRequestError, TreeNodeNotFoundError, type PageInputResolverBinding, type TreeNodeDescriptor, type TreeProviderBinding } from '@icp-platform/sdk';
 
-interface SpaceRoot { spaceId: string; spaceKind: 'Public' | 'Personal'; rootFolderId: string; name: string }
+interface SpaceRoot { spaceId: string; spaceKind: 'Public' | 'Personal'; rootFolderId: string; name: string; hasChildren?: boolean }
+interface Position { spaceId: string; rootFolderId: string; linkIds: string[] }
+function position(key: string): Position {
+  try {
+    const parts = key.split(':').map(decodeURIComponent);
+    if (parts.length < 2 || parts.some(part => !part)) throw new Error();
+    return { spaceId: parts[0], rootFolderId: parts[1], linkIds: parts.slice(2) };
+  } catch { throw new TreeNodeNotFoundError('无效工作空间出现位置'); }
+}
+function keyFor(value: Position): string { return [value.spaceId, value.rootFolderId, ...value.linkIds].map(encodeURIComponent).join(':'); }
+function positionQuery(value: Position): string { return new URLSearchParams({ spaceId: value.spaceId, rootFolderId: value.rootFolderId, linkIds: JSON.stringify(value.linkIds) }).toString(); }
 const api = '/api/workspace/spaces';
 function headers(scope: Record<string, unknown>) {
   if (scope.kind !== 'currentUser' || typeof scope.featurePosition !== 'string'
@@ -10,7 +20,7 @@ function headers(scope: Record<string, unknown>) {
 }
 function node(space: SpaceRoot): TreeNodeDescriptor {
   return { nodeKey: `${encodeURIComponent(space.spaceId)}:${encodeURIComponent(space.rootFolderId)}`, nodeType: 'folder',
-    label: space.name, labelKey: `Workspace.${space.spaceKind}`, hasChildren: false,
+    label: space.name, labelKey: `Workspace.${space.spaceKind}`, hasChildren: space.hasChildren ?? false,
     context: { spaceId: space.spaceId, rootFolderId: space.rootFolderId, id: space.rootFolderId, linkIds: [] } };
 }
 
@@ -43,27 +53,36 @@ export function createWorkspaceTreeProvider(fetcher: typeof fetch = platformFetc
       if (!spaces.some(space => space.spaceKind === 'Public')) throw new StandardCrudRequestError('公共空间尚未初始化或不可读取。', 503, {}, { reasonKey: 'Workspace.PublicUnavailable' });
       return spaces.map(node);
     },
-    children: async () => { throw new Error('工作空间子内容尚未接入'); },
+    children: async (scope, key, signal) => {
+      const parent = position(key);
+      const result = await read<{ items: Array<{ linkId: string; associatedObject: { id: string }; fields: { Name: string }; hasChildren: boolean }> }>(
+        `/api/workspace/content/children?${positionQuery(parent)}`, scope, signal);
+      return result.items.map(row => {
+        const value = { ...parent, linkIds: [...parent.linkIds, row.linkId] };
+        return { nodeKey: keyFor(value), nodeType: 'folder', label: row.fields.Name, hasChildren: row.hasChildren,
+          context: { ...value, id: row.associatedObject.id } };
+      });
+    },
     path: async (scope, key, signal) => {
-      const parts = key.split(':');
-      if (parts.length !== 2 || parts.some(part => !part)) throw new TreeNodeNotFoundError('无效工作空间出现位置');
-      const [spaceId, rootId] = parts.map(decodeURIComponent);
-      const detail = await read<{ id: string; fields: { ENAME: string } }>(`${api}/${encodeURIComponent(spaceId)}/root`, scope, signal);
-      if (detail.id !== rootId) throw new TreeNodeNotFoundError('工作空间出现位置已过期');
-      return [{ nodeKey: key, label: detail.fields.ENAME }];
+      const value = position(key);
+      const result = await read<{ folderIds: string[]; names: string[] }>(`/api/workspace/content/path?${positionQuery(value)}`, scope, signal);
+      if (result.folderIds.length !== value.linkIds.length + 1 || result.folderIds[0] !== value.rootFolderId) throw new TreeNodeNotFoundError('工作空间出现位置已过期');
+      return result.names.map((label, index) => ({ nodeKey: keyFor({ ...value, linkIds: value.linkIds.slice(0, index) }), label }));
     },
     search: async () => { throw new StandardCrudRequestError('工作空间未启用树搜索。', 400, {}, { reasonKey: 'Workspace.SearchDisabled' }); },
-    resolveChange: async () => ({ kind: 'unrelated' }),
+    resolveChange: async change => ({ kind: change.resourceKey === 'workspace.folder' || change.resourceKey === 'workspace.content' ? 'unknown' : 'unrelated' }),
   };
 }
 
 export const workspacePageInputs: PageInputResolverBinding[] = [
   { key: 'workspace.tree.current', pageKeys: ['platform.tree'], resolve: parameters => ({ parameters,
     treeScope: { kind: 'currentUser', featurePosition: parameters.featurePosition } }) },
-  { key: 'workspace.root.detail', pageKeys: ['platform.detail'], resolve: (parameters, context) => {
+  { key: 'workspace.folder.content', pageKeys: ['platform.list'], resolve: (parameters, context) => {
     if (context?.nodeType !== 'folder' || typeof context.context?.spaceId !== 'string'
-      || typeof context.context.rootFolderId !== 'string' || context.context.id !== context.context.rootFolderId
-      || !Array.isArray(context.context.linkIds) || context.context.linkIds.length !== 0) throw new Error('缺少工作空间根上下文');
-    return { parameters, context, recordId: context.context.rootFolderId };
+      || typeof context.context.rootFolderId !== 'string' || typeof context.context.id !== 'string'
+      || !Array.isArray(context.context.linkIds) || context.context.linkIds.some(id => typeof id !== 'string')) throw new Error('缺少工作空间出现位置');
+    const value = { spaceId: context.context.spaceId, rootFolderId: context.context.rootFolderId, linkIds: context.context.linkIds as string[] };
+    return { parameters, context, queryScope: { spaceId: value.spaceId, rootFolderId: value.rootFolderId, linkIds: JSON.stringify(value.linkIds), anchorId: context.context.id },
+      fixedCreateValues: { WorkspacePosition: value } };
   } },
 ];

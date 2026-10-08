@@ -354,7 +354,7 @@ public sealed class StandardCrudService : IStandardCrudService
     }
 
     // 显示值补齐以 row copy 方式合并，并拒绝 resolver 覆盖原始字段、返回未请求字段或非字符串伴随值。
-    private async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> ApplyDisplayValuesAsync(
+    internal async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> ApplyDisplayValuesAsync(
         StandardCrudDescriptor descriptor,
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
         IReadOnlyList<ICP.Platform.Query.Descriptors.PlatformDisplayValueField> requestedDisplayFields,

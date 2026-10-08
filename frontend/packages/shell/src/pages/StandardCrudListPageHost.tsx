@@ -892,8 +892,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     [location.search, schema.query, resolvedColumns, schema.advancedFilter],
   );
   const listRequestFields = useMemo(
-    () => collectStandardCrudListRequestFields(resolvedColumns, schema.rowActions),
-    [resolvedColumns, schema.rowActions],
+    () => collectStandardCrudListRequestFields(resolvedColumns, schema.rowActions, schema.idField),
+    [resolvedColumns, schema.rowActions, schema.idField],
   );
   const [filters, setFilters] = useState<TFilter>(() => initialListState.filters as TFilter);
   const [appliedFilters, setAppliedFilters] = useState<TFilter>(() => initialListState.filters as TFilter);
@@ -1678,7 +1678,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           return {
             key: action.key,
             label,
-            onClick: () => confirmDiscardIfNeeded(() => { void openViewDrawer(rowId); }),
+            onClick: () => confirmDiscardIfNeeded(() => { void openViewDrawer(dataAdapter.getDetailId?.(row) ?? rowId); }),
           };
         }
         if (action.standardAction === 'edit') {
@@ -1788,7 +1788,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         <AntdButton
           className="np-standard-crud-cell-action"
           type="link"
-          onClick={() => confirmDiscardIfNeeded(() => { void openViewDrawer(dataAdapter.getRowId(row)); })}
+          onClick={() => confirmDiscardIfNeeded(() => { void openViewDrawer(dataAdapter.getDetailId?.(row) ?? dataAdapter.getRowId(row)); })}
         >
           {String(readRowActionValue(row, column.field) ?? '-')}
         </AntdButton>

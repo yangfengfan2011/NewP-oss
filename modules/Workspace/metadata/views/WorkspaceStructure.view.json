@@ -3,6 +3,6 @@
   "view": {
     "key": "workspace.structure", "mode": "tree", "dicKey": "Workspace", "titleKey": "Title",
     "providerKey": "workspace.spaces", "searchEnabled": false,
-    "nodeTypes": [{ "key": "folder", "titleKey": "Folder", "pageRef": { "pageKey": "platform.detail", "parameters": { "viewKey": "workspace.folder.detail" }, "inputResolverKey": "workspace.root.detail" } }]
+    "nodeTypes": [{ "key": "folder", "titleKey": "Folder", "pageRef": { "pageKey": "platform.list", "parameters": { "viewKey": "workspace.folder.list" }, "inputResolverKey": "workspace.folder.content" } }]
   }
 }

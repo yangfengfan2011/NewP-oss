@@ -12,6 +12,12 @@ public sealed record ModelDefinition(
 {
     public IReadOnlyList<ForeignKeyDefinition> ForeignKeys { get; init; } = ForeignKeys ?? [];
 
+    // 仅显式采用查询的 Link 保留目录输入；旧模型的持久化摘要仍由独立的 digest 契约拥有。
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Metadata.LinkQueryMetadata? LinkQuery { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<Metadata.ModelMetadataLinkedType> LinkedTypes { get; init; } = [];
+
     /// <summary>
     /// 获取跨模块唯一的稳定逻辑模型键。
     /// </summary>

@@ -91,7 +91,7 @@ public static class PlatformQueryFieldPlanner
     /// <summary>
     /// 解析并校验单列排序请求；字段必须属于 descriptor 排序白名单，方向只允许 asc/desc。
     /// </summary>
-    internal static (string? Field, string? Direction) ResolveSort(
+    public static (string? Field, string? Direction) ResolveSort(
         PlatformQueryDescriptor descriptor,
         PlatformQueryRequest request)
     {

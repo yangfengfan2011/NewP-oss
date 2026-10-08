@@ -54,9 +54,22 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
         if (definition.Metadata.PolicyKey is { } policyKey)
             await GetPolicy(policyKey).ValidateAsync(definition, request, token);
         var parameters = new List<DbParameter>();
+        var sqlScopes = new Dictionary<string, LinkQuerySqlScope?>(StringComparer.Ordinal);
+        foreach (var endpoint in definition.Endpoints.Values)
+        {
+            if (endpoint.ConstraintKey is not { } key) continue;
+            var constraint = constraints.SingleOrDefault(c => c.Key == key) ?? throw new InvalidOperationException("LINK_QUERY_ENDPOINT_CONSTRAINT_MISSING");
+            var scope = await constraint.ReadSqlScopeAsync(endpoint, "linkEndpoint" + sqlScopes.Count, token);
+            sqlScopes.Add(endpoint.Model.LogicalKey, scope);
+            if (scope is not null) parameters.AddRange(scope.Parameters);
+        }
         var anchorRows = await EndpointRowsAsync(anchor, token);
-        if (!await anchorRows.AnyAsync(row => EF.Property<string>(row, anchor.IdField) == request.Anchor.Id, token))
-            throw new LinkQueryException(404, "LinkQuery.AnchorUnavailable");
+        var anchorSql = SqlFor(anchorRows.Where(row => EF.Property<string>(row, anchor.IdField) == request.Anchor.Id)
+            .Select(row => EF.Property<string>(row, anchor.IdField)), parameters);
+        var anchorValue = Parameter(request.Anchor.Id, parameters);
+        var anchorAvailableSql = "SELECT 1 WHERE " + anchorValue + " IN (" + anchorSql + ")";
+        if (sqlScopes.GetValueOrDefault(anchor.Model.LogicalKey) is { } anchorScope)
+            anchorAvailableSql += " AND " + anchorValue + " IN (" + anchorScope.IdsQuery + ")";
         var columns = definition.Metadata.Columns;
         var queryDescriptor = new PlatformQueryDescriptor
         {
@@ -119,6 +132,9 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
                 return EfPlatformQueryExecutor.BuildConditionExpression(queryDescriptor, entity, row, condition with { Field = mapping });
             });
             var endpointSql = SqlFor(rows.Select(row => EF.Property<string>(row, endpoint.IdField)), parameters);
+            if (sqlScopes.GetValueOrDefault(type) is { } endpointScope)
+                // scope 自身可含 UNION；派生表闭合其运算边界，不能让来源 OR 分支逃出查询条件交集。
+                endpointSql += " INTERSECT SELECT ScopeId FROM (" + endpointScope.IdsQuery + ") scopeKeys(ScopeId)";
             var associatedEnd = forward ? child : parent;
             var projections = fieldPlan.DbSelectFields.Where(f => f != "LID").Select(field =>
             {
@@ -144,11 +160,14 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
         var pageSize = request.Query.PageSize <= 0 ? 20 : request.Query.PageSize;
         if (page > int.MaxValue / pageSize) throw new LinkQueryException(400, "LinkQuery.InvalidPage", "page");
         var union = "WITH Relations AS (" + string.Join(" UNION ALL ", branches) + ") ";
-        var sql = "SELECT TOP(1) 1 FROM " + linkTable + " l WHERE " + anchorCondition + " AND " + sourceCondition + " AND NOT(" + validPairs + "); "
+        var sql = string.Join("\n", sqlScopes.Values.Where(scope => scope is not null).Select(scope => scope!.Preparation))
+            + "\n" + anchorAvailableSql + "; SELECT TOP(1) 1 FROM " + linkTable + " l WHERE " + anchorCondition + " AND " + sourceCondition + " AND NOT(" + validPairs + "); "
             + union + "SELECT COUNT(*) FROM Relations; " + union + "SELECT * FROM Relations ORDER BY " + Quote(sortField!) + " " + sortDirection
             + ",AssociatedModelKey,AssociatedId,LID" + (completeLayer ? ";" : " OFFSET " + Parameter((page - 1) * pageSize, parameters) + " ROWS FETCH NEXT " + Parameter(pageSize, parameters) + " ROWS ONLY;");
         var result = await ExecuteAsync(sql, parameters, async reader =>
         {
+            if (!await reader.ReadAsync(token)) throw new LinkQueryException(404, "LinkQuery.AnchorUnavailable");
+            await reader.NextResultAsync(token);
             if (await reader.ReadAsync(token)) throw new InvalidOperationException("LINK_QUERY_STORED_TYPE_INVALID");
             await reader.NextResultAsync(token); await reader.ReadAsync(token); var total = reader.GetInt32(0);
             await reader.NextResultAsync(token); var items = new List<LinkQueryRow>();
@@ -169,7 +188,7 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
             return new LinkQueryResult(items, total, page, completeLayer ? items.Count : pageSize, sortField, sortDirection);
         }, token);
         var displayed = await DisplayAsync(definition, result.Items, fieldPlan.ResponseFields, token);
-        logger.LogDebug("LINK_QUERY_READ: Resource={Resource} CompleteLayer={CompleteLayer} Total={Total} Materialized={Materialized} DirectReaderCommands=2; excludes source policy, authorization and display", resourceKey, completeLayer, result.Total, result.Items.Count);
+        logger.LogDebug("LINK_QUERY_READ: Resource={Resource} CompleteLayer={CompleteLayer} Total={Total} Materialized={Materialized} DirectReaderCommands=1; excludes source policy, authorization and display", resourceKey, completeLayer, result.Total, result.Items.Count);
         return result with { Items = displayed };
     }
 

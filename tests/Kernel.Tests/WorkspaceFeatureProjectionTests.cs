@@ -20,10 +20,17 @@ public sealed class WorkspaceFeatureProjectionTests
         var entry = Assert.Single(catalog, point => point.Kind == "navigation");
         Assert.Equal("workspace.spaces.access", entry.BehaviorKey);
         Assert.Contains("tree:workspace.structure", entry.ReadBehaviors); Assert.Contains("workspace.folder.read", entry.ReadBehaviors);
-        var create = Assert.Single(catalog, point => point.Kind == "action");
+        var create = Assert.Single(catalog, point => point.BehaviorKey == "workspace.folder.create");
         Assert.Equal("Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:create", create.Position);
         Assert.Equal("workspace.folder.create", create.BehaviorKey); Assert.Equal(new[] { entry.Position }, create.EntryDependencies);
         Assert.Throws<FeatureSelectionException>(() => FeatureCatalogCompiler.ValidateSelection(catalog, [create.Position]));
         FeatureCatalogCompiler.ValidateSelection(catalog, [entry.Position, create.Position]);
+        foreach (var (behavior, surface) in new[] { ("add", "pageActions"), ("remove", "rowActions") })
+        {
+            var action = Assert.Single(catalog, point => point.BehaviorKey == "workspace.folder." + behavior);
+            Assert.Equal("Workspace/navigation:workspace/node-type:folder/surface:list." + surface + "/action:" + behavior, action.Position);
+            Assert.Equal(new[] { entry.Position }, action.EntryDependencies);
+            Assert.Contains("workspace.folder.read", action.ReadBehaviors);
+        }
     }
 }

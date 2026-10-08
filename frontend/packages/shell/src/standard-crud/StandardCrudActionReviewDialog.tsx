@@ -16,6 +16,7 @@ interface StandardCrudActionReviewDialogProps {
   confirmMessage?: string;
   inputRenderer: StandardCrudActionInputRenderer;
   featurePosition?: string;
+  queryScope?: Record<string, unknown>;
   value: unknown;
   detail?: unknown;
   row?: unknown;
@@ -33,6 +34,7 @@ export function StandardCrudActionReviewDialog({
   confirmMessage,
   inputRenderer,
   featurePosition,
+  queryScope,
   value,
   detail,
   row,
@@ -82,6 +84,8 @@ export function StandardCrudActionReviewDialog({
         {inputRenderer({
           action,
           featurePosition,
+          queryScope,
+          submitting: pending,
           value,
           onChange,
           detail,

@@ -15,6 +15,8 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
         services.AddScoped<WorkspaceSpaces>();
         services.AddScoped<WorkspacePositions>();
         services.AddScoped<WorkspaceContents>();
+        services.AddScoped<WorkspaceFolderScope>();
+        services.AddScoped<ICP.Platform.Crud.LinkQueries.ILinkQueryEndpointConstraint>(provider => provider.GetRequiredService<WorkspaceFolderScope>());
         services.AddScoped<ICP.Platform.Crud.LinkQueries.ILinkQuerySourcePolicy, WorkspaceContentQueryPolicy>();
         services.AddSingleton<WorkspaceFolderReadDescriptor>();
         services.AddSingleton(new DataScopeResource("workspace.folder", ModuleId, "WorkspaceFolder", "EID"));

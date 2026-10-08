@@ -13,7 +13,7 @@
       "resourceKey": "workspace.content", "readBehavior": "workspace.spaces.access", "policyKey": "workspace.content",
       "parent": { "referenceField": "PEID", "fixedModelKey": "Workspace/WorkspaceFolder" },
       "child": { "referenceField": "CEID", "typeField": "ChildModelKey" },
-      "endpoints": { "Workspace/WorkspaceFolder": { "resourceKey": "workspace.folder", "titleKey": "Workspace.Folder", "icon": "folder" } },
+      "endpoints": { "Workspace/WorkspaceFolder": { "resourceKey": "workspace.folder", "constraintKey": "workspace.folder.scope", "titleKey": "Workspace.Folder", "icon": "folder" } },
       "columns": [
         { "field": "ObjectType", "valueType": "Text", "operators": ["="], "mappings": { "Workspace/WorkspaceFolder": "$modelKey" } },
         { "field": "Code", "valueType": "Text", "nullable": true, "sortable": true, "operators": ["=", "contains", "isNull"], "mappings": { "Workspace/WorkspaceFolder": null } },

@@ -1,12 +1,36 @@
 import { platformFetch } from '@icp-platform/core';
+import { createElement, lazy, Suspense } from 'react';
 import { readStandardCrudRequestError, type StandardCrudDetail, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 
 interface LinkRow { linkId: string; associatedObject: { modelKey: string; id: string }; fields: Record<string, unknown> }
 const headers = (featurePosition?: string): Record<string, string> => featurePosition ? { 'X-NewP-Feature': featurePosition } : {};
+const FolderCandidateInput = lazy(() => import('./FolderCandidateInput'));
+function positionFromScope(scope?: Record<string, unknown>) {
+  if (typeof scope?.spaceId !== 'string' || typeof scope.rootFolderId !== 'string' || typeof scope.linkIds !== 'string') throw new Error('缺少工作空间出现位置');
+  return { spaceId: scope.spaceId, rootFolderId: scope.rootFolderId, linkIds: JSON.parse(scope.linkIds) as unknown };
+}
+async function referenceCommand(method: string, path: string, body: unknown, featurePosition?: string) {
+  const response = await platformFetch(path, { method, headers: { ...headers(featurePosition), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!response.ok) throw await readStandardCrudRequestError(response);
+  return { operation: 'action' as const, payload: await response.json() as unknown, change: { operation: 'update' as const, id: '' } };
+}
 
 /** 本片正式目录仅有文件夹；关系身份参与表格，属性打开始终使用真实端点 EID。 */
 const resource: StandardCrudResourceRegistration = {
   resourceKey: 'workspace.folder', listViewKey: 'workspace.folder.list', detailViewKey: 'workspace.folder.detail',
+  actionInputRenderers: {
+    folderCandidate: context => createElement(Suspense, { fallback: null }, createElement(FolderCandidateInput, context)),
+  },
+  actionHandlers: {
+    add: async ({ input, queryScope, featurePosition }) => {
+      if (typeof input !== 'string' || !input) throw new Error('请选择文件夹');
+      return referenceCommand('POST', '/api/workspace/content/references', { position: positionFromScope(queryScope), target: { modelKey: 'Workspace/WorkspaceFolder', id: input } }, featurePosition);
+    },
+    remove: async ({ id, queryScope, featurePosition }) => {
+      if (!id) throw new Error('缺少引用标识');
+      return referenceCommand('DELETE', `/api/workspace/content/references/${encodeURIComponent(id)}`, { position: positionFromScope(queryScope) }, featurePosition);
+    },
+  },
   dataAdapter: {
     list: async (query = {}, context) => {
       const { anchorId, ...position } = context?.queryScope ?? {};

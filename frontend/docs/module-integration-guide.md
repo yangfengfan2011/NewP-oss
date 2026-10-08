@@ -60,6 +60,8 @@ Shell 会导入并校验整份目录，全部成功后通过 `ModuleRegistry.rep
 
 需要输入的动作通过 `StandardCrudActionInputRenderContext.featurePosition` 将发起动作位置传给 renderer。列表及详情共用 ReviewDialog；renderer 调用准备端点时传递该位置，最终 handler 继续使用同一位置。例如账号角色弹窗的账号候选、角色分页目录、当前分配与保存由该动作拥有，不能要求用户再获得其他管理页面的资格。
 
+标准列表按 metadata 顺序呈现新建及声明 handlerKey 的页动作。页/行动作的 handler 和输入 renderer 可读取当前页面的可选 queryScope；它只是定位输入，服务端必须重新校验空间、路径和对象资格。输入 renderer 的 submitting 表示共享执行器正在提交，可交给标准表单禁用输入；弹层、草稿保护、防重复提交与关闭仍由共享宿主持有。写入完成后异步列表刷新失败保留“已保存”事实，重试只读取；该事实按主体、页面实例和查询身份隔离，并在成功读取后清除。
+
 快捷跳转动作声明 `navigationTargetKey`，并保留现有 handler 返回 `StandardCrudOperationResult.navigation`。宿主按目标导航资格显示，目标路由仍执行正常准入；它不新增可授予动作，也不借用 `standardAction: view` 来改变原查看动作的含义。
 
 运行时动态列的 `StandardCrudColumnContext.featurePosition` 同样来自所属读取入口。column provider 与行 data adapter 各自沿请求传递该位置；例如 Example 动态工作量的列请求和行请求使用相同的入口位置，原有模块列上下文 token 仍负责列与行的业务一致性，不能用它替代授权位置。宿主的动态列缓存已经按读取位置隔离。

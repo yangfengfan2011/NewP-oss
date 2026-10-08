@@ -63,6 +63,7 @@ public sealed class WorkspaceSpacesController(WorkspaceSpaces spaces, ILogger<Wo
     [RequireFeature("workspace.spaces.access")]
     public async Task<IActionResult> Root(string spaceId, CancellationToken token)
     {
+        if (Request.Query.Count > 0) return InvalidDetailQuery();
         var fields = await spaces.ReadRootAsync(ActorId(), spaceId, token);
         return fields is null ? NotFound() : Ok(new { id = fields["EID"], fields });
     }
@@ -72,6 +73,7 @@ public sealed class WorkspaceSpacesController(WorkspaceSpaces spaces, ILogger<Wo
     [RequireFeature("workspace.spaces.access")]
     public async Task<IActionResult> RootById(string rootFolderId, CancellationToken token)
     {
+        if (Request.Query.Count > 0) return InvalidDetailQuery();
         var fields = await spaces.ReadRootByIdAsync(ActorId(), rootFolderId, token);
         return fields is null ? NotFound() : Ok(new { id = rootFolderId, fields });
     }
@@ -79,6 +81,10 @@ public sealed class WorkspaceSpacesController(WorkspaceSpaces spaces, ILogger<Wo
     // 认证流水线的稳定账号 EID 是唯一个人主体来源；缺失时安全拒绝。
     private string ActorId() => User.FindFirstValue(ClaimTypes.NameIdentifier)
         ?? throw new UnauthorizedAccessException("当前账号不可用。");
+
+    // 固定详情投影不接受字段选择，内部来源不能借 query 参数扩展公开字段目录。
+    private ObjectResult InvalidDetailQuery() => Problem(statusCode: 400, title: "Workspace.InvalidDetailQuery",
+        extensions: new Dictionary<string, object?> { ["code"] = "Workspace.InvalidDetailQuery" });
 
     // 命令已经提交后，读取拒绝或展示故障不改变成功事实，也不泄露不可读根或引导重放。
     private async Task<ActionResult<WorkspaceSpaceRoot>> InitializationResultAsync(WorkspaceSpaceRoot root, CancellationToken token)

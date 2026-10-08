@@ -208,6 +208,22 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         var list = await ListAsync(ordinary, entry, root, root.RootFolderId, "&pageSize=1");
         Assert.Equal(1, list.GetProperty("total").GetInt32()); Assert.Equal(allowed.GetProperty("id").GetString(), Assert.Single(list.GetProperty("items").EnumerateArray()).GetProperty("associatedObject").GetProperty("id").GetString());
         var independent = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, "/api/workspace/folders/" + excluded.GetProperty("id").GetString()); Assert.Equal("被范围排除", independent.GetProperty("fields").GetProperty("ENAME").GetString());
+        // 外层强制条件排除 B，而可信 SQL scope 的 UNION 刻意包含 B，交集仍不得放行或计数 B。
+        constraint.ScopeIds = [root.RootFolderId, allowed.GetProperty("id").GetString()!, excluded.GetProperty("id").GetString()!];
+        var scopedList = await ListAsync(ordinary, entry, root, root.RootFolderId, "&pageSize=1");
+        Assert.Equal(1, scopedList.GetProperty("total").GetInt32());
+        var allowedRow = Assert.Single(scopedList.GetProperty("items").EnumerateArray());
+        Assert.Equal(allowed.GetProperty("id").GetString(), allowedRow.GetProperty("associatedObject").GetProperty("id").GetString());
+        var add = Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "workspace.folder.add");
+        using var attached = await FeatureHttpTestRequests.SendAsync(admin, add, HttpMethod.Post, "/api/workspace/content/references",
+            new { position = root with { LinkIds = [allowedRow.GetProperty("linkId").GetString()!] }, target = new { modelKey = "Workspace/WorkspaceFolder", id = excluded.GetProperty("id").GetString() } });
+        Assert.Equal(HttpStatusCode.OK, attached.StatusCode);
+        var tree = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, ChildrenUrl(root));
+        var treeRow = Assert.Single(tree.GetProperty("items").EnumerateArray());
+        Assert.Equal(1, tree.GetProperty("total").GetInt32()); Assert.False(treeRow.GetProperty("hasChildren").GetBoolean());
+        constraint.ExcludeRoot = true;
+        using var deniedAnchor = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, ListUrl(root, root.RootFolderId));
+        Assert.Equal(HttpStatusCode.NotFound, deniedAnchor.StatusCode); constraint.ExcludeRoot = false;
         var searched = await ListAsync(ordinary, entry, root, root.RootFolderId, "&keyword=" + Uri.EscapeDataString("被范围排除")); Assert.Equal(0, searched.GetProperty("total").GetInt32());
         constraint.Fail = true;
         using var failed = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, ListUrl(root, root.RootFolderId)); Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
@@ -339,11 +355,20 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         public string Key => "test.folder.constraint";
         public bool Fail { get; set; }
         public bool CannotTranslate { get; set; }
+        public bool ExcludeRoot { get; set; }
+        public string[]? ScopeIds { get; set; }
         public Task<Expression<Func<Dictionary<string, object?>, bool>>> ReadPredicateAsync(LinkQueryEndpoint endpoint, CancellationToken token)
         {
             if (Fail) throw new InvalidOperationException("TEST_REQUIRED_CONDITION_FAILED");
-            Expression<Func<Dictionary<string, object?>, bool>> predicate = CannotTranslate ? row => OnlyInMemory(EF.Property<string>(row, "ENAME")) : row => EF.Property<string>(row, "ENAME") != "被范围排除";
+            Expression<Func<Dictionary<string, object?>, bool>> predicate = CannotTranslate ? row => OnlyInMemory(EF.Property<string>(row, "ENAME"))
+                : row => EF.Property<string>(row, "ENAME") != "被范围排除" && (!ExcludeRoot || EF.Property<string>(row, "ENAME") != "公共空间");
             return Task.FromResult(predicate);
+        }
+        public Task<LinkQuerySqlScope?> ReadSqlScopeAsync(LinkQueryEndpoint endpoint, string scopeName, CancellationToken token)
+        {
+            if (ScopeIds is null) return Task.FromResult<LinkQuerySqlScope?>(null);
+            var parameters = ScopeIds.Select((id, index) => new SqlParameter("@" + scopeName + "Test" + index, id)).ToArray();
+            return Task.FromResult<LinkQuerySqlScope?>(new("", string.Join(" UNION ", parameters.Select(parameter => "SELECT " + parameter.ParameterName)), parameters));
         }
         private static bool OnlyInMemory(string name) => name.Length > 0;
     }

@@ -24,7 +24,8 @@ public static class LinkQueryEndpointExtensions
         foreach (var definition in catalog.Definitions)
         {
             if (definition.Metadata.PolicyKey is { } policyKey && policies.Count(policy => policy.Key == policyKey) != 1
-                || definition.Endpoints.Values.Any(endpoint => endpoint.ConstraintKey is { } key && constraints.Count(constraint => constraint.Key == key) != 1))
+                || definition.Endpoints.Values.Any(endpoint => endpoint.ConstraintKey is { } key &&
+                    (constraints.Count(constraint => constraint.Key == key) != 1 || constraints.Single(constraint => constraint.Key == key).ModelKey is { } model && model != endpoint.Model.LogicalKey)))
                 throw new InvalidOperationException("LINK_QUERY_REQUIRED_POLICY_MISSING_OR_AMBIGUOUS");
             if (customizers.Any(customizer => customizer.ResourceKey == definition.Metadata.ResourceKey)
                 && resources.FindByResourceKey(definition.Metadata.ResourceKey) is null)

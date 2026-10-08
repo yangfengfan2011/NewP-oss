@@ -49,3 +49,14 @@ it('keeps the complete ordered occurrence chain and loads only the direct folder
   expect(path.map(item => item.nodeKey)).toEqual(['space:root', 'space:root:first', 'space:root:first:shared-link']);
   expect(await provider.resolveChange({ resourceKey: 'workspace.folder', operation: 'create', id: '' }, scope)).toEqual({ kind: 'unknown' });
 });
+
+it('gives shared descendants distinct occurrence keys even when the Entity and terminal LID are the same', async () => {
+  const request = vi.fn(async () => new Response(JSON.stringify({ items: [{ linkId: 'same-link', associatedObject: { id: 'same-child' }, fields: { Name: '共享后代' }, hasChildren: false }] })));
+  const provider = createWorkspaceTreeProvider(request); const scope = { kind: 'currentUser', featurePosition: 'read' };
+  const first = (await provider.children(scope, 'public:root:a:a-shared'))[0];
+  const second = (await provider.children(scope, 'public:root:b:b-shared'))[0];
+  expect(first.context?.id).toBe(second.context?.id);
+  expect(first.nodeKey).toBe('public:root:a:a-shared:same-link');
+  expect(second.nodeKey).toBe('public:root:b:b-shared:same-link');
+  expect(first.nodeKey).not.toBe(second.nodeKey);
+});

@@ -218,6 +218,8 @@ export interface StandardCrudActionDefinition {
 
 /** 标准动作上下文；Shell 只向模块处理器提供当前资源数据，不暴露页面状态与失效策略。 */
 export interface StandardCrudActionContext<TDetail = unknown, TRow = unknown> extends StandardCrudFeatureRequestContext {
+  /** 当前页面定位输入；服务端仍须独立验证，不能作为授权凭证。 */
+  queryScope?: Record<string, unknown>;
   id?: string;
   detail?: TDetail;
   row?: TRow;
@@ -247,6 +249,8 @@ export type StandardCrudActionEligibilityResolver<TDetail = unknown, TRow = unkn
 
 /** 模块动作输入渲染上下文；值由 Shell 持有，模块只渲染业务输入并报告变化。 */
 export interface StandardCrudActionInputRenderContext extends StandardCrudFeatureRequestContext {
+  queryScope?: Record<string, unknown>;
+  submitting?: boolean;
   action: StandardCrudActionDefinition;
   value: unknown;
   onChange: (value: unknown) => void;

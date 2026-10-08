@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Data.Common;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Modeling.Metadata;
@@ -34,8 +35,20 @@ public interface ILinkQuerySourcePolicy
 public interface ILinkQueryEndpointConstraint
 {
     string Key { get; }
+    /// <summary>专属端点约束可声明唯一模型归属；通用旧表达式实现保持未限定。</summary>
+    string? ModelKey => null;
     /// <summary>返回可由 EF 翻译的强制条件；已声明约束不得返回缺失结果。</summary>
     Task<Expression<Func<Dictionary<string, object?>, bool>>> ReadPredicateAsync(LinkQueryEndpoint endpoint, CancellationToken token);
+
+    /// <summary>可信实现可补充同一数据库命令内的集合范围；名称由 reader 分配，SQL 和参数不得来自请求表达式。</summary>
+    Task<LinkQuerySqlScope?> ReadSqlScopeAsync(LinkQueryEndpoint endpoint, string scopeName, CancellationToken token) => Task.FromResult<LinkQuerySqlScope?>(null);
+}
+
+/// <summary>端点 owner 的参数化 SQL 范围；Preparation 不返回结果集，IdsQuery 返回唯一一列对象主键。</summary>
+public sealed record LinkQuerySqlScope(string Preparation, string IdsQuery, IReadOnlyList<DbParameter> Parameters)
+{
+    /// <summary>隔离可信 EF 查询中的参数 token；保留字面文本，不用字符串替换更改 SQL 值。</summary>
+    public static string RenameParameters(string sql, IReadOnlyDictionary<string, string> names) => Runtime.RelationTreeReader.RenameParameters(sql, names);
 }
 
 /// <summary>安全地将输入或业务拒绝翻译为稳定 Problem Details，不暴露隐藏节点信息。</summary>

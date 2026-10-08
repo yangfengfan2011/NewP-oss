@@ -9,11 +9,32 @@ using ICP.Platform.Modeling.Metadata;
 using ICP.Platform.Modules.Workspace;
 using ICP.Platform.Persistence.Planning;
 using Xunit;
+using ICP.Platform.Crud.Extensions;
+using System.Linq.Expressions;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ICP.Platform.HostApi.Tests;
 
 public sealed class LinkQueryAuthoringTests
 {
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("duplicate")]
+    [InlineData("wrong-owner")]
+    public async Task EndpointConstraints_RejectMissingDuplicateOrWrongModelBeforeMapping(string invalid)
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddSingleton(Compile(new WorkspaceModelMetadataProvider().GetDefinitions()));
+        builder.Services.AddSingleton<ICP.Platform.Crud.Abstractions.IStandardCrudResourceRegistry>(new StandardCrudResourceRegistry([]));
+        builder.Services.AddSingleton<ILinkQuerySourcePolicy>(new SourcePolicy());
+        if (invalid != "missing") builder.Services.AddSingleton<ILinkQueryEndpointConstraint>(new ModelConstraint(invalid == "wrong-owner" ? "Other/Folder" : "Workspace/WorkspaceFolder"));
+        if (invalid == "duplicate") builder.Services.AddSingleton<ILinkQueryEndpointConstraint>(new ModelConstraint("Workspace/WorkspaceFolder"));
+        await using var app = builder.Build();
+        Assert.Equal("LINK_QUERY_REQUIRED_POLICY_MISSING_OR_AMBIGUOUS", Assert.Throws<InvalidOperationException>(() => app.MapLinkQueries()).Message);
+        Assert.Empty(((Microsoft.AspNetCore.Routing.IEndpointRouteBuilder)app).DataSources);
+    }
+
     [Fact]
     public void WorkspaceAuthoring_ClosesTheTypedDirectoryAndRejectsInvalidCandidateAsAWhole()
     {
@@ -69,5 +90,18 @@ public sealed class LinkQueryAuthoringTests
         { Features = [new("Workspace", "workspace", "navigation", "工作空间", null, "workspace.spaces.access")] };
         var modules = new CanonicalModulePlan("test", "1", "hash", "snapshot", [], [module]);
         return new(plan, new StandardCrudResourceRegistry([], plan), [endpoint ?? new("workspace.folder", "Workspace", "WorkspaceFolder", "EID")], modules);
+    }
+
+    private sealed class SourcePolicy : ILinkQuerySourcePolicy
+    {
+        public string Key => "workspace.content";
+        public Task ValidateAsync(LinkQueryDefinition definition, LinkQueryRequest request, CancellationToken token) => Task.CompletedTask;
+        public Task<Expression<Func<Dictionary<string, object?>, bool>>?> ReadPredicateAsync(CancellationToken token) => Task.FromResult<Expression<Func<Dictionary<string, object?>, bool>>?>(null);
+    }
+    private sealed class ModelConstraint(string model) : ILinkQueryEndpointConstraint
+    {
+        public string Key => "workspace.folder.scope";
+        public string ModelKey => model;
+        public Task<Expression<Func<Dictionary<string, object?>, bool>>> ReadPredicateAsync(LinkQueryEndpoint endpoint, CancellationToken token) => Task.FromResult<Expression<Func<Dictionary<string, object?>, bool>>>(row => true);
     }
 }

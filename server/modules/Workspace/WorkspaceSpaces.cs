@@ -12,7 +12,7 @@ public sealed record WorkspaceSpaceRoot(string SpaceId, string SpaceKind, string
 
 /// <summary>空间初始化与强制准入；普通内容权限不由初始化命令授予。</summary>
 public sealed class WorkspaceSpaces(EfPlatformDbContext db, IPlatformTransactionExecutor transactions, IDataScopeReadPlanProvider readPlans,
-    IStandardCrudService details, WorkspaceFolderReadDescriptor descriptor)
+    IStandardCrudService details, WorkspaceFolderReadDescriptor descriptor, WorkspaceFolderScope folderScope)
 {
     private const string SpaceModel = "Workspace/WorkspaceSpace";
     private const string FolderModel = "Workspace/WorkspaceFolder";
@@ -81,12 +81,10 @@ public sealed class WorkspaceSpaces(EfPlatformDbContext db, IPlatformTransaction
         return spaceId is null ? null : await ReadRootAsync(actorId, spaceId, token);
     }
 
-    /// <summary>独立详情仍执行空间来源准入与对象读取；当前片只创建来源范围内的文件夹。</summary>
+    /// <summary>独立详情交集对象读取与来源或可读根路径范围，不公开私人来源。</summary>
     internal async Task<Dictionary<string, object?>?> ReadFolderAsync(string actorId, string id, CancellationToken token)
     {
-        var origins = Admitted(db, actorId).Select(space => EF.Property<string>(space, "EID"));
-        if (!await db.Set<Dictionary<string, object?>>(FolderModel).AsNoTracking().AnyAsync(folder =>
-            EF.Property<string>(folder, "EID") == id && origins.Contains(EF.Property<string>(folder, "OriginSpaceId")), token)) return null;
+        if (!await folderScope.ContainsAsync(actorId, id, token)) return null;
         var detail = await details.GetDetailAsync(descriptor.Value, id, token);
         return detail is null ? null : new(detail.Fields);
     }

@@ -1,6 +1,6 @@
 # 通用 Link 查询接入
 
-仅显式声明 `model.linkQuery` 的 Link 采用此能力；旧 Link、Entity 查询及标准关系树保持原协议。第一片真实采用者是 WorkspaceFolderContent 的文件夹直接内容。异构端点、反向界面及跨空间引用按父规格后续切片交付，不能从接口能表达双向推断这些消费者已完成。
+仅显式声明 `model.linkQuery` 的 Link 采用此能力；旧 Link、Entity 查询及标准关系树保持原协议。真实采用者 WorkspaceFolderContent 已支持文件夹直接内容与跨空间已有文件夹引用。异构引用及反向界面按父规格后续切片交付，不能从接口能表达双向推断这些消费者已完成。
 
 ## Authoring 与准备
 
@@ -20,6 +20,10 @@
 响应沿用 items、total、page、pageSize、sortBy、sortDirection。每行保留 resourceKey、linkId、parent、child、associatedObject 与公共 fields。反向只改变关联端角色，不交换 parent/child 的存储含义。当前 Workspace 策略仅开放正向位置内消费者，反向采用由后续片接入。
 
 每个端点先交集正式 IDataScopeReadPlanProvider 与已声明 ILinkQueryEndpointConstraint；声明条件执行失败或不可下推时失败关闭。源若登记为真实数据范围资源则应用其读取计划；已有源 CRUD QueryCustomizer 仍在数据库中执行。未登记的 Link 不虚构授权资源。端点独立列表的临时用户筛选不继承到 Link 查询。
+
+约束继续用 `ReadPredicateAsync` 提供 EF 可翻译条件。确需数据库集合算法的可信模块可额外实现 `ReadSqlScopeAsync`，返回命令内准备 SQL、单列主键集合查询及独立 DbParameter；默认无额外 SQL，旧实现保持原行为。reader 分配唯一 scopeName，模块用它隔离局部表变量与参数名；准备 SQL 不得产生结果集。SQL/物理表列仅来自已编译可信映射，值保持参数化，HTTP 和 authoring 不接受 SQL。可选 ModelKey 限定约束归属，缺失、重复或模型不匹配的约束在激活完成前拒绝；运行期翻译/执行异常继续失败关闭。
+
+所有端点 SQL scope 在单条 Link 读取命令内组合，并在锚点、关联端点、hasChildren、统一计数/排序/分页之前交集。命令内集合随成功、失败或取消销毁，不建立连接级残留、跨主体缓存或持久闭包。Workspace 用同一 scope 实现来源空间或可读根路径范围，且在数据库逐层维护去重 frontier/visited，而不枚举全部根路径。
 
 条件分组与参数翻译复用 EfPlatformQueryExecutor。各类型形成受控 SQL 分支，合并后统一计数、稳定排序和分页；缺失目标在此前排除，未知存储类型失败关闭。只物化本页，canonical raw/display 成对，非请求安全依赖不输出。用户与时间显示沿用真实 Model planner 和批量 resolver；类型标题来自活动词典。
 

@@ -975,7 +975,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const [presentedOperationResult, setPresentedOperationResult] = useState<StandardCrudOperationResult | null>(null);
   const [rowInputAction, setRowInputAction] = useState<{
     action: StandardCrudRuntimeActionSchema;
-    row: TRow;
+    row?: TRow;
     rowId: string;
     pendingKey: string;
     label: string;
@@ -1263,6 +1263,19 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     else metadataListQuery.refresh();
   };
 
+  const committedListSnapshot = useRef<unknown>();
+  const [committedReadKey, setCommittedReadKey] = useState<string | null>(null);
+  const currentReadKey = JSON.stringify([metadataListQueryKey, runtimeRowsQueryKey, readPosition, host.input.instanceId, currentSubjectId]);
+  useEffect(() => setCommittedReadKey(null), [currentReadKey]);
+  const currentListSnapshot = schema.columnSource === 'runtime' ? runtimeRowsQuery.data : metadataListQuery.data;
+  useEffect(() => {
+    if (!effectiveLoading && !effectiveListError && currentListSnapshot !== committedListSnapshot.current) setCommittedReadKey(null);
+  }, [currentListSnapshot, effectiveListError, effectiveLoading]);
+  const recordCommittedRead = () => {
+    committedListSnapshot.current = currentListSnapshot;
+    setCommittedReadKey(currentReadKey);
+  };
+
   useEffect(() => { if (host.sync.refreshVersion > 0) refreshList();
     // refreshVersion 是组合成功事实的唯一触发源。
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1272,6 +1285,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     resourceKey: registration.resourceKey,
     onCommitted: host.sync.committed,
     onResult: (result) => {
+      recordCommittedRead();
       if (operationResultPresenterRegistry.resolve(result)) {
         setPresentedOperationResult(result);
       }
@@ -1288,6 +1302,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     onCommitted: host.sync.committed,
     refresh: refreshList,
     onResult: (result) => {
+      recordCommittedRead();
       if (operationResultPresenterRegistry.resolve(result)) {
         setPresentedOperationResult(result);
       }
@@ -1763,7 +1778,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             const outcome = await actionExecution.execute({
               key: pendingKey,
               handler,
-              context: { id: rowId, row, featurePosition: featureResolution.position },
+              context: { id: rowId, row, queryScope: host.input.queryScope, featurePosition: featureResolution.position },
             });
             if (outcome.status === 'succeeded') host.lifecycle.close?.();
             return outcome.status === 'succeeded';
@@ -1878,7 +1893,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     .map(action => ({ action, featureResolution: resolveActionFeature(action, 'list.pageActions') }))
     .filter(({ featureResolution }) => featureResolution.kind === 'allowed');
   const visibleHeaderActions = visiblePageActions
-    .filter(({ action }) => action.standardAction === 'create')
+    .filter(({ action }) => action.standardAction === 'create' || Boolean(action.handlerKey))
     .map(({ action }) => action);
   const exportResolution = features.action('export', 'list');
   const handleExport = async (mode: StandardCrudExportMode) => {
@@ -1951,7 +1966,22 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             key={action.key}
             type={action.variant === 'primary' ? 'primary' : 'default'}
             size="middle"
-            onClick={() => void openCreateDrawer()}
+            disabled={actionExecution.pendingKey !== null || mutationExecution.pending}
+            onClick={() => {
+              if (action.standardAction === 'create') { void openCreateDrawer(); return; }
+              const feature = resolveActionFeature(action, 'list.pageActions');
+              const handler = registration.actionHandlers?.[action.handlerKey ?? action.key];
+              if (feature.kind !== 'allowed' || !handler) return;
+              confirmDiscardIfNeeded(() => {
+                if (action.inputKey) {
+                  actionExecution.clearError(); setRowInputValue(undefined);
+                  setRowInputAction({ action, rowId: '', pendingKey: action.key, label: action.labelKey });
+                } else {
+                  void actionExecution.execute({ key: action.key, handler,
+                    context: { queryScope: host.input.queryScope, featurePosition: feature.position } });
+                }
+              });
+            }}
           >
             {t(`${schema.dicKey}.${action.labelKey}`, action.labelKey)}
           </AntdButton>
@@ -2088,7 +2118,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   );
 
   const rowInputFeatureResolution: FeatureResolution = rowInputAction
-    ? features.action(rowInputAction.action.key, 'list.rowActions')
+    ? features.action(rowInputAction.action.key, schema.pageActions.includes(rowInputAction.action) ? 'list.pageActions' : 'list.rowActions')
     : { kind: 'unresolved' };
   const confirmationAction = rowConfirmation
     ? buildRowActions(rowConfirmation.row, [rowConfirmation.action], rowConfirmation.rowId)[0]
@@ -2109,7 +2139,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           confirmLoading={confirmationAction?.loading}
           okButtonProps={{ danger: confirmationAction?.danger, disabled: !confirmationAction || confirmationAction.disabled }}
           destroyOnHidden
-          onCancel={() => { setRowConfirmation(null); if (rowConfirmation.closeHost) host.lifecycle.close?.(); }}
+          onCancel={() => { if (confirmationAction?.loading) return; setRowConfirmation(null); if (rowConfirmation.closeHost) host.lifecycle.close?.(); }}
           onOk={async () => {
             if (!confirmationAction || confirmationAction.disabled) return;
             if (await confirmationAction.onClick() !== false) setRowConfirmation(null);
@@ -2127,7 +2157,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       >
         {content}
       </CrudWorkspacePage>}
-      {actionExecution.synchronizationError && <div role="alert">{t('Platform.SavedRefreshFailed', '已保存，刷新失败。请重新加载。')}</div>}
+      {(actionExecution.synchronizationError || committedReadKey === currentReadKey && effectiveListError) && <div role="alert">{t('Platform.SavedRefreshFailed', '已保存，刷新失败。请重新加载。')}</div>}
       {mutationExecution.synchronizationError && <div role="alert">{mutationExecution.synchronizationError}</div>}
       {schema.advancedFilter.enabled && advancedFilterOpen && host.lifecycle.active ? (
         <Suspense fallback={<div className="sh-loading-state" role="status">{t('Platform.LoadingAdvancedFilter', '正在加载高级筛选…')}</div>}>
@@ -2265,6 +2295,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
               : undefined}
             inputRenderer={registration.actionInputRenderers[rowInputAction.action.inputKey]}
             featurePosition={resolvedFeaturePosition(rowInputFeatureResolution)}
+            queryScope={host.input.queryScope}
             value={rowInputValue}
             row={rowInputAction.row}
             pending={actionExecution.pendingKey === rowInputAction.pendingKey}
@@ -2281,7 +2312,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 const outcome = await actionExecution.execute({
                   key: pendingKey,
                   handler,
-                  context: { id: rowId, row, input: rowInputValue, featurePosition: rowInputFeatureResolution.position },
+                  context: { id: rowId, row, input: rowInputValue, queryScope: host.input.queryScope, featurePosition: rowInputFeatureResolution.position },
                 });
                 if (outcome.status === 'succeeded') {
                   setRowInputAction(null);

@@ -12,7 +12,9 @@
       { "key": "updatedBy", "labelKey": "Field_UpdatedBy", "source": "projection", "field": "UpdatedBy" },
       { "key": "updatedAt", "labelKey": "Field_UpdatedAt", "source": "projection", "field": "UpdatedAt", "sortable": true }
     ],
-    "pageActions": [{ "key": "create", "labelKey": "CreateFolder", "standardAction": "create", "variant": "primary" }],
-    "rowActions": [{ "key": "view", "labelKey": "OpenProperties", "standardAction": "view" }], "export": { "enabled": false }
+    "pageActions": [{ "key": "create", "labelKey": "CreateFolder", "standardAction": "create", "variant": "primary" },
+      { "key": "add", "labelKey": "AddFolder", "handlerKey": "add", "inputKey": "folderCandidate" }],
+    "rowActions": [{ "key": "view", "labelKey": "OpenProperties", "standardAction": "view" },
+      { "key": "remove", "labelKey": "RemoveReference", "handlerKey": "remove", "variant": "danger", "confirmMessageKey": "ConfirmRemoveReference" }], "export": { "enabled": false }
   }
 }

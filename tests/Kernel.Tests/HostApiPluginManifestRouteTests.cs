@@ -183,7 +183,13 @@ public class HostApiPluginManifestRouteTests : IAsyncLifetime
             "organization.person.detail",
             "organization.person.list",
             "organization.position.list",
-            "organization.tree.global"
+            "organization.tree.global",
+            "part.part.detail",
+            "part.part.list",
+            "workspace.folder.content",
+            "workspace.folder.list",
+            "workspace.spaces",
+            "workspace.tree.current"
         };
         Assert.True(
             expectedBindings.SequenceEqual(projectedBindings, StringComparer.Ordinal),

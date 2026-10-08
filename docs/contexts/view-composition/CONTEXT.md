@@ -14,6 +14,8 @@
 
 Tree View 的 `searchEnabled` 缺省为 true；显式 false 时不挂载搜索入口或发起搜索请求，Provider 不以假空结果代替未提供的能力。合成节点可通过可选 `labelKey` 使用词典标题，`label` 保留回退显示值。当前账号切换时，导航组合释放本地树、节点内容及旧异步请求；地址中的旧出现位置仍由新主体重新验证。
 
+标准页面同步以最近一次已报告的 dirty/submitting 状态为准：清理表单可能立即释放组合排队的成功事实，即使 React 尚未提交新状态或其他读取者仍在异步同步，也不能被旧订阅闭包误判为仍脏而丢失列表刷新。真实未保存、提交中及非活动页面继续延期，恢复后只读刷新，不重复写入。
+
 Tree View 的 `treeActions` 与节点 `contextMenu` 都是可选数组，缺省为空并按声明顺序展示。每项用 `viewKey` 指向已有 List View，并在 `standardAction` 与稳定 `actionKey` 中二选一；`actionKey` 引用该资源既有 ActionSchema 的 key，不重定义 handler、权限、确认或输入。目标身份及创建范围由可选 `inputResolverKey` 提供。候选校验拒绝重复 key、缺失／歧义动作及不匹配的资源 binding；实际资源装载继续核对 handler/input 注册。菜单先完成选择保护，标准 Host 随后复用同一 Drawer、行操作确认、Action Review Dialog 和共享执行。模块专用动作仍按原 handler key 执行并使用原服务端领域裁决。
 
 ## Language

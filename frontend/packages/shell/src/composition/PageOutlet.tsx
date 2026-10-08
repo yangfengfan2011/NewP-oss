@@ -82,7 +82,10 @@ function StandardPage({ pageKey, input, reportState, close, active }: PageProps 
   const originTreeId = useContext(TreeInstanceContext);
   const pendingRefresh = useRef(false);
   const [lifecycle, setLifecycle] = useState<PageLifecycleState>({ dirty: false, submitting: false });
+  const reportedLifecycle = useRef(lifecycle);
   const report = useCallback((state: PageLifecycleState, discard?: () => void) => {
+    // reportState 可立即派发先前排队的成功事实，订阅者须在 React 提交新状态前读到本次报告。
+    reportedLifecycle.current = state;
     setLifecycle(current => current.dirty === state.dirty && current.submitting === state.submitting ? current : state);
     reportState(state, discard);
   }, [reportState]);
@@ -103,9 +106,9 @@ function StandardPage({ pageKey, input, reportState, close, active }: PageProps 
   }, [metadata, pageKey, viewKey]);
   useEffect(() => runtime.subscribe(instanceId, async change => {
     if (change.resourceKey !== registration?.resourceKey) return;
-    if (!active || lifecycle.dirty || lifecycle.submitting) pendingRefresh.current = true;
+    if (!active || reportedLifecycle.current.dirty || reportedLifecycle.current.submitting) pendingRefresh.current = true;
     else setRefreshVersion(version => version + 1);
-  }), [active, instanceId, lifecycle, registration?.resourceKey, runtime]);
+  }), [active, instanceId, registration?.resourceKey, runtime]);
   useEffect(() => {
     if (active && !lifecycle.dirty && !lifecycle.submitting && pendingRefresh.current) {
       pendingRefresh.current = false; setRefreshVersion(version => version + 1);

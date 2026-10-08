@@ -49,7 +49,7 @@ function CandidatePicker({ modelKey, value, onChange, onDraftStateChange, featur
     lookupHasMore={{ folder: query.data?.hasMore ?? false }} onLookupSearch={(_key, keyword) => setRequest({ keyword, page: 1 })}
     onLookupLoadMore={() => { if (!query.isFetching && query.data?.hasMore) setRequest(current => ({ ...current, page: current.page + 1 })); }}
     onLookupRetry={() => query.retry()} onChange={(_key, next) => onChange(next)} onSubmit={() => undefined}
-    saving={submitting ?? false} showSubmitAction={false} titleForSection={() => t('Workspace.Folder', '文件夹')} />;
+    saving={submitting ?? false} showSubmitAction={false} titleForSection={() => t('Workspace.Object', '对象')} />;
 }
 
 export default function FolderCandidateInput(context: StandardCrudActionInputRenderContext) {

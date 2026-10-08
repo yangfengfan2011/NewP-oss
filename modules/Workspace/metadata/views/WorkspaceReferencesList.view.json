@@ -3,7 +3,7 @@
   "view": {
     "key": "workspace.references.list", "mode": "list", "model": "WorkspaceFolder", "resourceKey": "workspace.references",
     "querySource": { "kind": "link", "model": "WorkspaceFolderContent", "resourceKey": "workspace.content" },
-    "dicKey": "Workspace", "titleKey": "DirectReferences", "descriptionKey": "DirectReferencesDescription", "detailViewKey": "workspace.folder.detail",
+    "dicKey": "Workspace", "titleKey": "DirectReferences", "detailViewKey": "workspace.folder.detail",
     "query": { "fields": [{ "key": "keyword", "labelKey": "Keyword", "source": "preset", "preset": "keyword", "operator": "like" }], "defaultPageSize": 20, "defaultSort": { "field": "UpdatedAt", "direction": "desc" } },
     "columns": [
       { "key": "name", "labelKey": "Name", "source": "projection", "field": "Name", "sortable": true },

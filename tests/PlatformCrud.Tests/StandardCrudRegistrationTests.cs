@@ -1,5 +1,6 @@
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Extensions;
+using ICP.Platform.Crud.LinkQueries;
 using ICP.Platform.Crud.ObjectOperations;
 using ICP.Platform.Crud.Persistence;
 using ICP.Platform.Crud.Runtime;
@@ -27,6 +28,10 @@ public sealed class StandardCrudRegistrationTests
         Assert.Contains(services, item => item.ServiceType == typeof(Microsoft.Extensions.Hosting.IHostedService)
             && item.ImplementationType?.Name == "ObjectOperationAssemblyStartupValidator");
         AssertRegistration<StandardCrudDefaultWriter>(services, typeof(StandardCrudDefaultWriter));
+        var linkCatalog = Assert.Single(services, item => item.ServiceType == typeof(LinkQueryCatalog));
+        Assert.NotNull(linkCatalog.ImplementationFactory);
+        Assert.Equal(ServiceLifetime.Singleton, linkCatalog.Lifetime);
+        AssertRegistration<LinkQueryReader>(services, typeof(LinkQueryReader));
     }
 
     private static void AssertFactoryRegistration<TService>(IServiceCollection services)

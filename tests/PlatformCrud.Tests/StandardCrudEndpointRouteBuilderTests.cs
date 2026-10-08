@@ -11,9 +11,14 @@ using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Exports;
 using ICP.Platform.Crud.Extensions;
+using ICP.Platform.Crud.LinkQueries;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Modeling.DisplayPlanning;
+using ICP.Platform.Modeling;
+using ICP.Platform.Modeling.Definitions;
+using ICP.Platform.Modeling.Metadata;
+using ICP.Platform.Persistence.Planning;
 using ICP.Platform.Query.Descriptors;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -26,6 +31,52 @@ namespace ICP.Platform.Crud.Tests;
 
 public sealed class StandardCrudEndpointRouteBuilderTests
 {
+    [Theory]
+    [InlineData("no-plan")]
+    [InlineData("legacy-plan")]
+    [InlineData("empty-catalog")]
+    public void MapStandardCrudResources_WithoutDeclaredLinkQuery_DoesNotRequireLinkServices(string registration)
+    {
+        var builder = CreateBuilder(new RecordingStandardCrudService());
+        builder.Services.AddSingleton<IStandardCrudResourceRegistry>(new StandardCrudResourceRegistry([Descriptor()]));
+        var plan = new CompiledPersistencePlan("legacy", "snapshot", "hash", default, "digest", [],
+            [new ModelDefinition("LegacyLink", "LegacyLink", ModelKind.Link, [], [])], []);
+        if (registration != "no-plan") builder.Services.AddSingleton(plan);
+        if (registration == "empty-catalog")
+        {
+            builder.Services.AddSingleton(new LinkQueryCatalog(plan, new StandardCrudResourceRegistry([]), [], null));
+            builder.Services.AddSingleton<ILinkQuerySourcePolicy>(_ => throw new InvalidOperationException("未采用查询不应装载策略"));
+        }
+        using var app = builder.Build();
+
+        app.MapStandardCrudResources();
+
+        Assert.DoesNotContain(((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints)
+            .OfType<RouteEndpoint>(), endpoint => endpoint.RoutePattern.RawText!.StartsWith("/api/links/", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void MapStandardCrudResources_WithDeclaredLinkQueryAndMissingCatalog_RejectsStartup()
+    {
+        var builder = CreateBuilder(new RecordingStandardCrudService());
+        builder.Services.AddSingleton<IStandardCrudResourceRegistry>(new StandardCrudResourceRegistry([Descriptor()]));
+        var declared = new ModelDefinition("DeclaredLink", "DeclaredLink", ModelKind.Link, [], [])
+        {
+            LinkQuery = new LinkQueryMetadata
+            {
+                ResourceKey = "declared.link", ReadBehavior = "declared.read",
+                Parent = new() { ReferenceField = "PEID", FixedModelKey = "Organization/Person" },
+                Child = new() { ReferenceField = "CEID", FixedModelKey = "Organization/Person" }
+            }
+        };
+        builder.Services.AddSingleton(new CompiledPersistencePlan("declared", "snapshot", "hash", default, "digest", [], [declared], []));
+        using var app = builder.Build();
+
+        var error = Assert.Throws<InvalidOperationException>(() => app.MapStandardCrudResources());
+
+        Assert.Equal("LINK_QUERY_CATALOG_NOT_REGISTERED", error.Message);
+    }
+
     [Fact]
     public void MapStandardCrudResources_AttachesFeatureBehaviorRequirementsToEveryRoute()
     {

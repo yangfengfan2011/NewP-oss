@@ -2,6 +2,7 @@ using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.LinkQueries;
 using ICP.Platform.Query.Runtime;
 using ICP.Platform.Crud.Abstractions;
+using ICP.Platform.Persistence.Planning;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -12,10 +13,17 @@ namespace ICP.Platform.Crud.Extensions;
 /// <summary>只为正式登记的 Link 暴露读取；通用查询不提供任意写入。</summary>
 public static class LinkQueryEndpointExtensions
 {
-    /// <summary>以资源固定路径及活动行为绑定读取，客户端只提交类型身份和标准查询输入。</summary>
+    /// <summary>以资源固定路径及活动行为绑定读取；未采用 Link 查询的应用无需查询服务，已声明但缺目录时拒绝启动。</summary>
     public static IEndpointRouteBuilder MapLinkQueries(this IEndpointRouteBuilder endpoints)
     {
-        var catalog = endpoints.ServiceProvider.GetRequiredService<LinkQueryCatalog>();
+        var catalog = endpoints.ServiceProvider.GetService<LinkQueryCatalog>();
+        if (catalog is null)
+        {
+            if (endpoints.ServiceProvider.GetService<CompiledPersistencePlan>()?.Models.Any(model => model.LinkQuery is not null) == true)
+                throw new InvalidOperationException("LINK_QUERY_CATALOG_NOT_REGISTERED");
+            return endpoints;
+        }
+        if (catalog.Definitions.Count == 0) return endpoints;
         using var scope = endpoints.ServiceProvider.CreateScope();
         var policies = scope.ServiceProvider.GetServices<ILinkQuerySourcePolicy>().ToArray();
         var constraints = scope.ServiceProvider.GetServices<ILinkQueryEndpointConstraint>().ToArray();

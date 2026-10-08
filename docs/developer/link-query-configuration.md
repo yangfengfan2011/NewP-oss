@@ -13,6 +13,8 @@
 
 真实模型进入 CompiledPersistencePlan。Host 在启动映射端点时整体编译 LinkQueryCatalog，校验模型 kind、模块依赖、资源身份、允许组合、字段类型/可空性及显示契约；必需策略/条件缺失或重复时拒绝启动。该步骤位于 activationSession.CompleteAsync 之前，不会把损坏候选迁移或激活后再等首个请求发现。
 
+`AddStandardCrudKernel` 登记查询目录与读取服务。仅采用原 Standard CRUD descriptor 和自有 `IStandardCrudService` 的应用，在没有正式 `LinkQuery` 声明时无需新增查询注册；空目录也不会装载查询策略。映射入口优先消费显式目录，目录缺失时核对正式 CompiledPersistencePlan：存在查询声明却缺目录以 `LINK_QUERY_CATALOG_NOT_REGISTERED` 拒绝启动，不静默遗漏新端点。
+
 ## 读取边界
 
 公开 GET 路径为 `/api/links/{已登记资源键}`，输入为 `direction`（forward/reverse）、`anchorModelKey`、`anchorId`、可选 `types`，以及标准 fields/pageIndex/pageSize/sortBy/sortDirection/queryScope。源拥有者通过 ILinkQuerySourcePolicy 强制校验 queryScope；Workspace 正向源要求真实空间、根与有序 LID 链。通用内核不解释这些业务含义。

@@ -94,14 +94,57 @@ internal sealed class WorkspacePageDriver(IPage page)
         await page.GetByRole(AriaRole.Menuitem, new() { Name = "打开属性", Exact = true }).ClickAsync();
         var response = await responseTask;
         if (!response.Ok) throw new InvalidOperationException($"文件夹属性请求失败：{response.Status} {await response.TextAsync()}");
-        var drawer = await crud.WaitForVisibleDrawerAsync("文件夹属性");
+        return await WaitForFolderDrawerAsync(name);
+    }
+
+    // 嵌套反向 Modal 可以同时保留两个 Drawer，按实际对象标签定位，不能猜最后一个门户。
+    internal async Task<ILocator> WaitForFolderDrawerAsync(string name)
+    {
+        var drawer = page.Locator(".ant-drawer-content:visible").Filter(new() { Has = page.GetByText(name, new() { Exact = true }) });
+        await drawer.WaitForAsync(new() { State = WaitForSelectorState.Visible });
         await drawer.GetByText(name, new() { Exact = true }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
         await drawer.GetByText("基本信息", new() { Exact = true }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
         await drawer.GetByText("审计信息", new() { Exact = true }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        await drawer.Locator(".ant-drawer-close").ClickAsync(new() { Trial = true });
         return drawer;
     }
 
     internal Task ClosePropertiesAsync(ILocator drawer) => new StandardCrudPageDriver(page).CloseDrawerAsync(drawer);
+
+    internal async Task<ILocator> OpenDirectReferencesAsync(ILocator detail, string parentName)
+    {
+        var responseTask = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath == "/api/links/workspace.content"
+            && System.Web.HttpUtility.ParseQueryString(new Uri(response.Url).Query)["direction"] == "reverse");
+        await detail.GetByRole(AriaRole.Button, new() { Name = "直接引用文件夹", Exact = true }).ClickAsync();
+        var response = await responseTask;
+        if (!response.Ok) throw new InvalidOperationException($"直接引用文件夹请求失败：{response.Status} {await response.TextAsync()}");
+        var modal = page.GetByRole(AriaRole.Dialog, new() { Name = "直接引用文件夹", Exact = true });
+        await modal.WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        await modal.Locator("tr.ant-table-row").Filter(new() { HasTextString = parentName }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        await Assertions.Expect(modal.Locator(".ant-spin-spinning:visible")).ToHaveCountAsync(0, new() { Timeout = 30_000 });
+        await modal.Locator(".ant-modal-close").ClickAsync(new() { Trial = true });
+        return modal;
+    }
+
+    internal async Task<ILocator> OpenReferencingFolderPropertiesAsync(ILocator modal, string parentName)
+    {
+        var row = modal.Locator("tr.ant-table-row").Filter(new() { HasTextString = parentName });
+        await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
+        var responseTask = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath.StartsWith("/api/workspace/folders/", StringComparison.Ordinal)
+            && new Uri(response.Url).AbsolutePath != "/api/workspace/folders/candidates");
+        await page.GetByRole(AriaRole.Menuitem, new() { Name = "打开属性", Exact = true }).ClickAsync();
+        var response = await responseTask;
+        if (!response.Ok) throw new InvalidOperationException($"直接引用父文件夹属性请求失败：{response.Status} {await response.TextAsync()}");
+        return await WaitForFolderDrawerAsync(parentName);
+    }
+
+    internal async Task CloseDirectReferencesAsync(ILocator modal)
+    {
+        await modal.Locator(".ant-modal-close").ClickAsync();
+        await modal.WaitForAsync(new() { State = WaitForSelectorState.Hidden });
+    }
 
     internal async Task<ILocator> OpenAddExistingObjectDialogAsync()
     {

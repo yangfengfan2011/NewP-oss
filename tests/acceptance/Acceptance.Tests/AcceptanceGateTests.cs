@@ -253,6 +253,83 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
+    [EnvironmentGatedFact(RunEnvironmentVariable, "Folder Drawer与Part独立详情的反向标准列表和嵌套父Folder属性")]
+    public async Task WorkspaceDirectReferences_UseFormalDriver()
+    {
+        var (root, runId) = PrepareRun("workspace-direct-references");
+        var folderName = $"反向文件夹旅程 {runId[..8]}";
+        var partCode = $"REV-P-{runId[..8]}";
+        var partName = $"反向零组件旅程 {runId[..8]}";
+        var parentName = "公共空间";
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false,
+            selectFeatures: features =>
+            {
+                var entry = features.Behavior("Workspace", "workspace.spaces.access");
+                var part = features.Behavior("Part", "part.part.read");
+                return [entry, features.Action(entry, "create", "list.pageActions", "folder"),
+                    features.Action(entry, "add", "list.pageActions", "folder"), part, features.Action(part, "create", "list.pageActions")];
+            },
+            prepareJourney: async (administrator, features, actor, token) =>
+            {
+                var entry = features.Behavior("Workspace", "workspace.spaces.access");
+                await WorkspaceAcceptanceFixture.SendAsync(administrator, HttpMethod.Post, "/api/workspace/spaces/public/initialize", null, entry.Position, token);
+                using var ordinary = WorkspaceAcceptanceFixture.CreateClient(administrator.BaseAddress!.Port);
+                await WorkspaceAcceptanceFixture.LoginAsync(ordinary, actor, token);
+                var spaces = await WorkspaceAcceptanceFixture.SendAsync(ordinary, HttpMethod.Get, "/api/workspace/spaces", null, entry.Position, token);
+                var publicRoot = spaces.EnumerateArray().Single(space => space.GetProperty("spaceKind").GetString() == "Public");
+                parentName = publicRoot.GetProperty("name").GetString()!;
+                var rootId = publicRoot.GetProperty("rootFolderId").GetString()!;
+                var position = new WorkspaceFolderPosition(publicRoot.GetProperty("spaceId").GetString()!, rootId, rootId, []);
+                var folder = await WorkspaceAcceptanceFixture.CreateFolderAtPositionAsync(ordinary, features, position, folderName, token);
+                var partId = await WorkspaceAcceptanceFixture.CreateMetadataObjectAsync(ordinary, features, "Part", "part.part.read", "/api/part/parts", partCode, partName, token);
+                await WorkspaceAcceptanceFixture.SendAsync(ordinary, HttpMethod.Post, "/api/workspace/content/references",
+                    new { position = position.CommandPosition, target = new { modelKey = "Part/Part", id = partId } },
+                    features.Action(entry, "add", "list.pageActions", "folder").Position, token);
+                // 先证明普通主体按来源位置能读反向与父对象，避免以UI超时诊断权限/锚点准备错误。
+                foreach (var (model, id) in new[] { ("Workspace/WorkspaceFolder", folder.FolderId), ("Part/Part", partId) })
+                {
+                    var references = await WorkspaceAcceptanceFixture.ReadDirectReferencesAsync(ordinary, features, model, id, token);
+                    if (!references.GetProperty("items").EnumerateArray().Any(item => item.GetProperty("associatedObject").GetProperty("id").GetString() == rootId))
+                        throw new InvalidOperationException("正式反向读取未返回已准备的直接父文件夹。");
+                }
+                await WorkspaceAcceptanceFixture.SendAsync(ordinary, HttpMethod.Get, $"/api/workspace/folders/{Uri.EscapeDataString(rootId)}", null, entry.Position, token);
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "fixture-references.json"), new { folderId = folder.FolderId, partId, parentId = rootId, parentName }, token);
+            },
+            browserJourney: async (page, token) =>
+            {
+                var driver = new WorkspacePageDriver(page);
+                async Task CapturePairAsync(string stage)
+                {
+                    await page.ScreenshotAsync(new() { Path = Path.Combine(root, stage + ".png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                    await page.SetViewportSizeAsync(900, 1000);
+                    await page.ScreenshotAsync(new() { Path = Path.Combine(root, stage + "-narrow.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                    await page.SetViewportSizeAsync(1440, 1000);
+                }
+                await driver.OpenAsync();
+                await driver.SelectRootAsync("公共空间");
+                var detail = await driver.OpenFolderPropertiesAsync(folderName);
+                await CapturePairAsync("folder-reference-entry");
+                var references = await driver.OpenDirectReferencesAsync(detail, parentName);
+                await CapturePairAsync("folder-direct-references");
+                var parent = await driver.OpenReferencingFolderPropertiesAsync(references, parentName);
+                await CapturePairAsync("referencing-folder-properties");
+                await driver.ClosePropertiesAsync(parent);
+                await driver.CloseDirectReferencesAsync(references);
+                await driver.ClosePropertiesAsync(detail);
+                await driver.OpenOwnedPropertiesAsync(partName, "/parts");
+                var partAddress = page.Url;
+                await CapturePairAsync("part-reference-entry");
+                references = await driver.OpenDirectReferencesAsync(page.GetByRole(AriaRole.Main), parentName);
+                await CapturePairAsync("part-direct-references");
+                parent = await driver.OpenReferencingFolderPropertiesAsync(references, parentName);
+                await driver.ClosePropertiesAsync(parent);
+                await driver.CloseDirectReferencesAsync(references);
+                await Assertions.Expect(page).ToHaveURLAsync(partAddress);
+                await page.GetByText("审计信息", new() { Exact = true }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"), new { url = page.Url, actor = "ordinary", entryForms = new[] { "FolderDrawer", "PartDetail" } }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact(RunEnvironmentVariable, "正式 Part 迁移、普通账号标准创建及 Drawer/独立只读属性 driver")]
     public async Task PartCreation_UsesFormalDriver()
     {

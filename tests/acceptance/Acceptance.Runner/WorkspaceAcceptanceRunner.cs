@@ -160,8 +160,14 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             await CapturePresentationAsync(page, "folder-properties.png");
             await page.SetViewportSizeAsync(900, 1000);
             await CapturePresentationAsync(page, "folder-properties-narrow.png");
+            var references = await driver.OpenDirectReferencesAsync(properties, "公共空间");
+            var referencingFolder = await driver.OpenReferencingFolderPropertiesAsync(references, "公共空间");
+            await driver.ClosePropertiesAsync(referencingFolder);
+            await driver.CloseDirectReferencesAsync(references);
             await driver.ClosePropertiesAsync(properties);
             await driver.OpenOwnedPropertiesAsync(PartName, "/parts");
+            references = await driver.OpenDirectReferencesAsync(page.GetByRole(AriaRole.Main), "公共空间");
+            await driver.CloseDirectReferencesAsync(references);
             await driver.ReturnToPublicContentAsync();
             await driver.OpenOwnedPropertiesAsync(DocumentName, "/documents");
             await driver.ReturnToPublicContentAsync();

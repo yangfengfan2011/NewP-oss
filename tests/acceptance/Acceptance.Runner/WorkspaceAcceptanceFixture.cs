@@ -160,6 +160,11 @@ internal static class WorkspaceAcceptanceFixture
             new { position = fixture.PublicRoot.CommandPosition }, features.Action(entry, "remove", "list.rowActions", "folder").Position, token);
     }
 
+    internal static Task<JsonElement> ReadDirectReferencesAsync(HttpClient ordinary, AcceptanceFeatureCatalog features,
+        string modelKey, string id, CancellationToken token) => SendAsync(ordinary, HttpMethod.Get,
+        $"/api/links/workspace.content?direction=reverse&anchorModelKey={Uri.EscapeDataString(modelKey)}&anchorId={Uri.EscapeDataString(id)}",
+        null, features.Behavior("Workspace", "workspace.spaces.access").Position, token);
+
     // 元数据对象由已授权的普通主体正式创建，实体字段契约沿用所属模块。
     internal static async Task<string> CreateMetadataObjectAsync(HttpClient ordinary, AcceptanceFeatureCatalog features,
         string module, string behavior, string path, string code, string name, CancellationToken token)

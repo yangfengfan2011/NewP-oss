@@ -7,6 +7,35 @@ namespace ICP.Platform.Acceptance.Tests;
 
 public sealed class WorkspacePageDriverTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "Chromium中反向Modal及双Drawer按对象限定关闭，无服务器或端口")]
+    public async Task ReferencingFolderDrawer_DoesNotSelectOrCloseTheUnderlyingObjectDrawer()
+    {
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new()
+        {
+            Headless = true,
+            ExecutablePath = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_CHROMIUM_EXECUTABLE")
+                ?? @"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        });
+        var page = await browser.NewPageAsync();
+        // 保留生产门户的并存结构；姓名只能在目标Drawer内匹配，不能依赖门户顺序。
+        await page.SetContentAsync("""
+            <main>公共空间</main>
+            <div class="ant-drawer-content" id="source"><button class="ant-drawer-close">关闭</button><p>源文件夹</p><p>基本信息</p><p>审计信息</p></div>
+            <div class="ant-modal" role="dialog" aria-label="直接引用文件夹"><button class="ant-modal-close">关闭</button></div>
+            <div class="ant-drawer-content" id="parent"><button class="ant-drawer-close">关闭</button><p>公共空间</p><p>基本信息</p><p>审计信息</p></div>
+            <script>
+              document.querySelectorAll('.ant-drawer-close,.ant-modal-close').forEach(button=>button.onclick=()=>button.parentNode.remove());
+            </script>
+            """);
+        var driver = new WorkspacePageDriver(page);
+        var parent = await driver.WaitForFolderDrawerAsync("公共空间");
+        await driver.ClosePropertiesAsync(parent);
+        await Assertions.Expect(page.Locator("#source")).ToBeVisibleAsync();
+        await driver.CloseDirectReferencesAsync(page.GetByRole(AriaRole.Dialog, new() { Name = "直接引用文件夹" }));
+        await Assertions.Expect(page.Locator("#source")).ToBeVisibleAsync();
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "Chromium中共享树driver只消费节点内容面包屑，无服务器或端口")]
     public async Task NodeBreadcrumb_IgnoresTheShellNavigationWithTheSameAccessibleName()
     {

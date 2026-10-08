@@ -106,6 +106,30 @@ public sealed class WorkspaceAcceptanceFixtureTests
     private static HttpResponseMessage Json(HttpStatusCode status, string text) =>
         new(status) { Content = new StringContent(text, Encoding.UTF8, "application/json") };
 
+    [Theory]
+    [InlineData("Workspace/WorkspaceFolder")]
+    [InlineData("Part/Part")]
+    [InlineData("Document/Document")]
+    public async Task ReversePreparation_UsesTypedAnchorAndSourceEntryWithoutForwardPositionScope(string model)
+    {
+        var entry = new FeaturePoint("source-entry", "Workspace", "workspace", "navigation", "workspace", null, "workspace.spaces.access", [], 0);
+        using var client = new HttpClient(new Handler(request =>
+        {
+            Assert.Equal(HttpMethod.Get, request.Method);
+            Assert.Equal("/api/links/workspace.content", request.RequestUri!.AbsolutePath);
+            Assert.Equal("source-entry", Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
+            var query = System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query);
+            Assert.Equal(["direction", "anchorModelKey", "anchorId"], query.AllKeys);
+            Assert.Equal("reverse", query["direction"]);
+            Assert.Equal(model, query["anchorModelKey"]);
+            Assert.Equal("same/id:with?reserved", query["anchorId"]);
+            Assert.Null(request.Content);
+            return Json(HttpStatusCode.OK, "{\"items\":[],\"total\":0}");
+        })) { BaseAddress = new Uri("http://127.0.0.1:5000") };
+
+        await WorkspaceAcceptanceFixture.ReadDirectReferencesAsync(client, new([entry]), model, "same/id:with?reserved", CancellationToken.None);
+    }
+
     [Fact]
     public async Task PositionCreation_PreservesFullChainAndUsesReturnedMatchingLinkForTheNewOccurrence()
     {

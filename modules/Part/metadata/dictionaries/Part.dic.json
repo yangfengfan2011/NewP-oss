@@ -1,0 +1,98 @@
+{
+  "Part": {
+    "Title": {
+      "en": "Parts",
+      "zhs": "零组件"
+    },
+    "Code": {
+      "en": "Code",
+      "zhs": "编码"
+    },
+    "Name": {
+      "en": "Name",
+      "zhs": "名称"
+    },
+    "Keyword": {
+      "en": "Code or name",
+      "zhs": "编码或名称"
+    },
+    "Keyword_Placeholder": {
+      "en": "Search by code or name",
+      "zhs": "按编码或名称搜索"
+    },
+    "Create": {
+      "en": "New part",
+      "zhs": "新建零组件"
+    },
+    "Drawer_Create": {
+      "en": "New part",
+      "zhs": "新建零组件"
+    },
+    "DetailTitle": {
+      "en": "Part properties",
+      "zhs": "零组件属性"
+    },
+    "Basic": {
+      "en": "Basic information",
+      "zhs": "基本信息"
+    },
+    "Audit": {
+      "en": "Audit information",
+      "zhs": "审计信息"
+    },
+    "OpenProperties": {
+      "en": "Open properties",
+      "zhs": "打开属性"
+    },
+    "Authorize": {
+      "en": "Object authorization",
+      "zhs": "对象授权"
+    },
+    "Field_ECODE": {
+      "en": "Code",
+      "zhs": "编码"
+    },
+    "Field_ENAME": {
+      "en": "Name",
+      "zhs": "名称"
+    },
+    "Field_Description": {
+      "en": "Description",
+      "zhs": "说明"
+    },
+    "Field_CreatedBy": {
+      "en": "Created by",
+      "zhs": "创建人"
+    },
+    "Field_CreatedAt": {
+      "en": "Created at",
+      "zhs": "创建时间"
+    },
+    "Field_UpdatedBy": {
+      "en": "Updated by",
+      "zhs": "更新人"
+    },
+    "Field_UpdatedAt": {
+      "en": "Updated at",
+      "zhs": "更新时间"
+    },
+    "CodeDuplicated": {
+      "en": "Part code must be unique.",
+      "zhs": "零组件编码必须唯一。"
+    },
+    "DescriptionTooLong": {
+      "en": "Description must not exceed 500 characters.",
+      "zhs": "说明最多 500 字。"
+    },
+    "CodeRequired": {
+      "zhs": "编码不能为空。",
+      "en": "Code is required."
+    },
+    "NameRequired": {
+      "zhs": "名称不能为空。",
+      "en": "Name is required."
+    }
+  },
+  "type": "dic",
+  "schemaVersion": "1.0"
+}

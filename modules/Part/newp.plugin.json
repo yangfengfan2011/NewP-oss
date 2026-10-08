@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "1.0", "moduleId": "Part", "displayName": "零组件", "version": "1.0.0",
+  "description": "独立零组件元数据", "entryAssembly": "../../PartModule.dll",
+  "dependencies": ["Identity", "Authentication", "Authorization"],
+  "hostVersion": { "min": "1.1.0", "max": "2.0.0" },
+  "backend": { "behaviorKey": "part.backend" },
+  "frontend": { "behaviorKey": "part.frontend", "entry": "part", "bindingMode": "behavior-bindings", "bindings": ["part.part.list", "part.part.detail"] },
+  "persistence": { "models": ["metadata/models/Part.model.json"], "migrations": { "sqlServer": { "assembly": "migrations/Part.SqlServerMigrations.dll", "manifest": "migrations/Part.SqlServerMigrations.json" } } }
+}

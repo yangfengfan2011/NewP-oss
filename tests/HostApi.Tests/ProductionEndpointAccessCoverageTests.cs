@@ -56,12 +56,19 @@ public sealed class ProductionEndpointAccessCoverageTests
         builder.Services.AddStandardCrudResource(CompanyCrudDescriptorFactory.Create());
         builder.Services.AddStandardCrudResource(DepartmentCrudDescriptorFactory.Create());
         builder.Services.AddStandardCrudResource(ExampleRecordCrudDescriptorFactory.Create());
+        builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Part.PartCrudDescriptor.Create());
         using var app = builder.Build();
         app.MapControllers();
         app.MapStandardCrudResources();
         app.MapPluginManifestEndpoints("test-plugin-root");
 
         EndpointAccessPlanCompiler.Compile(((IEndpointRouteBuilder)app).DataSources);
+        var partEndpoints = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints).OfType<RouteEndpoint>()
+            .Where(endpoint => endpoint.RoutePattern.RawText?.StartsWith("/api/part/parts", StringComparison.Ordinal) == true).ToArray();
+        Assert.Equal(new[] { "part.part.create", "part.part.read" }, partEndpoints.SelectMany(endpoint => endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>())
+            .Select(feature => feature.BehaviorKey).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal));
+        Assert.All(partEndpoints.Where(endpoint => endpoint.Metadata.GetOrderedMetadata<HttpMethodMetadata>().Single().HttpMethods.Any(method => method is "PUT" or "DELETE")),
+            endpoint => Assert.NotNull(endpoint.Metadata.GetMetadata<DenyAllAttribute>()));
         var manifestEndpoints = ((IEndpointRouteBuilder)app).DataSources
             .SelectMany(static source => source.Endpoints)
             .OfType<RouteEndpoint>()

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "1.0", "type": "view", "view": {
+    "key": "part.part.list", "dicKey": "Part", "titleKey": "Title", "mode": "list", "model": "Part", "resourceKey": "part.part", "editorMode": "drawer", "detailViewKey": "part.part.detail",
+    "query": { "fields": [{ "key": "keyword", "labelKey": "Keyword", "source": "preset", "preset": "keyword", "operator": "like" }], "defaultSort": { "field": "ECODE", "direction": "asc" }, "defaultPageSize": 20 },
+    "columns": [
+      { "key": "code", "labelKey": "Code", "source": "model", "field": "ECODE", "sortable": true, "hideable": false, "responsivePriority": "high" },
+      { "key": "name", "labelKey": "Name", "source": "model", "field": "ENAME", "standardAction": "view", "sortable": true, "hideable": false, "responsivePriority": "high" },
+      { "key": "updatedBy", "labelKey": "Field_UpdatedBy", "source": "model", "field": "UpdatedBy", "responsivePriority": "medium" },
+      { "key": "updatedAt", "labelKey": "Field_UpdatedAt", "source": "model", "field": "UpdatedAt", "sortable": true, "responsivePriority": "medium" }
+    ],
+    "pageActions": [{ "key": "create", "labelKey": "Create", "standardAction": "create", "variant": "primary" }],
+    "featureActions": [{ "key": "authorize", "titleKey": "Authorize", "behaviorKey": "part.part.authorize" }],
+    "rowActions": [{ "key": "view", "labelKey": "OpenProperties", "standardAction": "view" }]
+  }
+}

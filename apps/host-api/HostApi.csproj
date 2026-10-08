@@ -124,4 +124,11 @@
     </Content>
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="../../server/modules/Part/PartModule.csproj" />
+    <ProjectReference Include="../../server/modules/Part/Migrations.SqlServer/Part.SqlServerMigrations.csproj" />
+    <Content Include="../../modules/Part/newp.plugin.json" Link="modules/Part/plugin.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../modules/Part/migrations/Part.SqlServerMigrations.json" Link="modules/Part/migrations/Part.SqlServerMigrations.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../server/modules/Part/Migrations.SqlServer/bin/$(Configuration)/$(TargetFramework)/Part.SqlServerMigrations.dll" Link="modules/Part/migrations/Part.SqlServerMigrations.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

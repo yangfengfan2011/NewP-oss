@@ -1,0 +1,6 @@
+{
+  "schemaVersion": "1.0", "type": "nav", "navigation": { "items": [
+    { "key": "part.parts", "titleKey": "Part.Title", "icon": "module", "path": "/parts", "order": 40, "entryType": "standard-list", "targetKey": "part.part.list", "featureAuthorization": true },
+    { "key": "part.part.detail", "path": "/parts/:id", "routeOnly": true, "entryType": "standard-crud-detail", "targetKey": "part.part.detail", "featureOwner": "navigation:part.parts" }
+  ] }
+}

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "1.0", "type": "view", "view": {
+    "key": "part.part.detail", "dicKey": "Part", "titleKey": "DetailTitle", "mode": "detail", "model": "Part", "resourceKey": "part.part",
+    "sections": [
+      { "key": "basic", "titleKey": "Basic", "fields": ["ECODE", "ENAME", "Description"] },
+      { "key": "audit", "titleKey": "Audit", "fields": ["CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"] }
+    ]
+  }
+}

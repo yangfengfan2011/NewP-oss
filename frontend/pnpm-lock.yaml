@@ -185,6 +185,22 @@ importers:
         specifier: ^1.6.1
         version: 1.6.1(jsdom@24.1.3(supports-color@7.2.0))(supports-color@7.2.0)
 
+  modules/part:
+    dependencies:
+      '@icp-platform/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@icp-platform/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+    devDependencies:
+      typescript:
+        specifier: ^5.4.2
+        version: 5.9.3
+      vitest:
+        specifier: ^1.6.1
+        version: 1.6.1(jsdom@24.1.3(supports-color@7.2.0))(supports-color@7.2.0)
+
   modules/workspace:
     dependencies:
       '@icp-platform/core':

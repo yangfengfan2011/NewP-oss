@@ -10,6 +10,18 @@ namespace ICP.Platform.Kernel.Tests;
 public sealed class PageCompositionMetadataTests
 {
     [Fact]
+    public void Part_RuntimeModelMatchesTheSharedCreateAndDetailConsumerFixture()
+    {
+        var root = RepositoryRoot();
+        var path = Path.Combine(root, "modules/Part/metadata/models/Part.model.json");
+        var authoring = File.ReadAllBytes(path);
+        var projected = new ICP.Platform.Modeling.Projection.ModelRuntimeMetadataProjector().Project(authoring, path);
+        var fixture = File.ReadAllBytes(Path.Combine(root, "tests/Kernel.Tests/Fixtures/PartRuntime.contract.json"));
+        Assert.True(JsonNode.DeepEquals(JsonNode.Parse(projected), JsonNode.Parse(fixture)));
+        Assert.Equal(authoring, File.ReadAllBytes(path));
+    }
+
+    [Fact]
     public void WorkspaceFolder_RuntimeModelMatchesTheSharedDetailConsumerFixture()
     {
         var root = RepositoryRoot();

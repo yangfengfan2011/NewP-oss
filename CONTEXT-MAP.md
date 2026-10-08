@@ -8,6 +8,7 @@
 - [Authentication](./docs/contexts/authentication/CONTEXT.md) — 管理认证会话、服务端有效性与统一撤销
 - [Organization](./docs/contexts/organization/CONTEXT.md) — 管理公司、部门、岗位、人员档案及人员与用户账号的永久绑定
 - [Workspace](./docs/contexts/workspace/CONTEXT.md) — 管理公共/个人空间、出现位置准入及真实文件夹内容，采用通用 Link 查询
+- [Part](./docs/contexts/part/CONTEXT.md) — 独立零组件元数据的最小创建、标准候选读取与只读属性
 - [Object Operations](./docs/contexts/object-operations/CONTEXT.md) — 提供可按职责复用的对象操作、默认 CRUD 行为与对象拥有者声明的横切扩展点
 - [Standard CRUD](./docs/contexts/standard-crud/CONTEXT.md) — 管理共享 CRUD 宿主使用的字段、表单、列表与详情展示契约
 - [View Composition](./docs/contexts/view-composition/CONTEXT.md) — 定义页面引用、视图配置及树与标签页组合的已确认目标契约，落地状态见 ADR-0046

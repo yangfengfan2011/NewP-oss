@@ -227,7 +227,7 @@ public class HostApiPluginManifestRouteTests : IAsyncLifetime
             .Order(StringComparer.Ordinal)
             .ToArray();
 
-        var expectedModuleIds = new[] { "Audit", "Authorization", "Example", "Identity", "Organization", "Workspace" };
+        var expectedModuleIds = new[] { "Audit", "Authorization", "Example", "Identity", "Organization", "Part", "Workspace" };
         Assert.True(
             expectedModuleIds.SequenceEqual(frontendModuleIds, StringComparer.Ordinal),
             $"Expected frontend modules: [{string.Join(", ", expectedModuleIds)}]\n"

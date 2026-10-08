@@ -1349,17 +1349,19 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
     internal IReadOnlyList<FeaturePoint> FeatureCatalog { get; private set; } = [];
     private bool _useRequestPresentation;
     private bool _includeWorkspace;
+    private bool _includePart;
     private BusinessAuditHostFixture(ReusableSqlServerDatabase database)
     {
         _database = database;
         _connection = database.ConnectionString;
     }
     internal static async Task<BusinessAuditHostFixture> CreateAsync(Action<IServiceCollection>? configureServices = null,
-        IReadOnlyDictionary<string, bool>? actionStates = null, bool useRequestPresentation = false, bool includeWorkspace = false)
+        IReadOnlyDictionary<string, bool>? actionStates = null, bool useRequestPresentation = false, bool includeWorkspace = false, bool includePart = false)
     {
         var fixture = new BusinessAuditHostFixture(await ReusableSqlServerDatabase.AcquireAsync());
         fixture._useRequestPresentation = useRequestPresentation;
         fixture._includeWorkspace = includeWorkspace;
+        fixture._includePart = includePart;
         try
         {
             await fixture.StartAsync(configureServices, actionStates: actionStates);
@@ -1409,7 +1411,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
             typeof(AuditModule).Assembly,
             typeof(OrganizationModule).Assembly,
             typeof(ObjectOperationExtensionProbeModule).Assembly
-        }.Concat(_includeWorkspace ? [typeof(ICP.Platform.Modules.Workspace.WorkspaceModule).Assembly] : []).ToArray();
+        }.Concat(_includeWorkspace ? [typeof(ICP.Platform.Modules.Workspace.WorkspaceModule).Assembly] : []).Concat(_includePart ? [typeof(ICP.Platform.Modules.Part.PartModule).Assembly] : []).ToArray();
         builder.Services.AddModuleSystem(options =>
         {
             foreach (var assembly in moduleAssemblies)
@@ -1418,7 +1420,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
             }
         });
         var productionModuleIds = new[] { "Identity", "Authentication", "Authorization", "Audit", "Organization" }
-            .Concat(_includeWorkspace ? ["Workspace"] : []).ToArray();
+            .Concat(_includeWorkspace ? ["Workspace"] : []).Concat(_includePart ? ["Part"] : []).ToArray();
         var hostRoot = Path.GetDirectoryName(typeof(AuthController).Assembly.Location)!;
         var trust = TrustedBuiltInModuleSource.CreateForHost(hostRoot, Path.Combine(hostRoot, "modules"));
         var candidates = new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(trust)
@@ -1455,7 +1457,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         builder.Services.AddScoped<ITemporalDisplayFormatter, TemporalDisplayFormatter>();
         builder.Services.AddScoped<ITemporalDisplayProjectionExecutor, TemporalDisplayProjectionExecutor>();
         builder.Services.AddSingleton<IRequestPresentationContextAccessor, TestPresentation>();
-        if (_useRequestPresentation || _includeWorkspace)
+        if (_useRequestPresentation || _includeWorkspace || _includePart)
         {
             var localization = new ICP.Platform.Kernel.PluginPackages.LocalizationRuntimeManifestBuilder().Build(hostRoot);
             builder.Services.AddSingleton(ICP.Platform.HostApi.Presentation.ActiveLocalizationManifest.Parse(localization));
@@ -1468,7 +1470,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
             .Concat(AuthorizationModelDefinitions.All.Select(m => m with { OwnerModuleId = "Authorization" }))
             .Concat(OrganizationModelDefinitions.All.Select(m => m with { OwnerModuleId = "Organization" }))
             .Concat(new AuditModelMetadataProvider().GetDefinitions().Select(m => m with { OwnerModuleId = "Audit" }))
-            .Concat(_includeWorkspace ? new ICP.Platform.Modules.Workspace.WorkspaceModelMetadataProvider().GetDefinitions() : []).ToArray();
+            .Concat(_includeWorkspace ? new ICP.Platform.Modules.Workspace.WorkspaceModelMetadataProvider().GetDefinitions() : []).Concat(_includePart ? new ICP.Platform.Modules.Part.PartModelMetadataProvider().GetDefinitions() : []).ToArray();
         var plan = new CompiledPersistencePlan("business-audit-test", "snapshot", "hash", default, "digest", [], models, []);
         builder.Services.AddSingleton(plan);
         builder.Services.AddDbContext<EfPlatformDbContext>((sp, options) => options.UseSqlServer(_connection)
@@ -1495,7 +1497,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         _app.MapRelationTrees();
         ICP.Platform.HostApi.Authorization.FeatureEndpointBindings.Validate(((Microsoft.AspNetCore.Routing.IEndpointRouteBuilder)_app).DataSources,
             modulePlan.FeatureCatalog, _app.Services.GetRequiredService<IStandardCrudResourceRegistry>());
-        if (_includeWorkspace) ICP.Platform.HostApi.Authorization.EndpointAccessPlanCompiler.Compile(((Microsoft.AspNetCore.Routing.IEndpointRouteBuilder)_app).DataSources);
+        if (_includeWorkspace || _includePart) ICP.Platform.HostApi.Authorization.EndpointAccessPlanCompiler.Compile(((Microsoft.AspNetCore.Routing.IEndpointRouteBuilder)_app).DataSources);
         using (var scope = _app.Services.CreateScope())
         {
             await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Database.EnsureCreatedAsync();

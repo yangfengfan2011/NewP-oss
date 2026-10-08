@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "1.0",
+  "provider": "SqlServer",
+  "moduleId": "Part",
+  "modelDigest": "576778fb8d03697b390465f2022ef92ed48ed800ab135841eade1efb86b2e91c",
+  "bundleChecksum": "5f037e020cf8c968d9eb91a71e3eda60bd2707f8e65c9d77ec7673f0298d4bd4",
+  "migrations": [
+    {
+      "sequence": "000001",
+      "migrationId": "20261008102916_Part_000001_Metadata",
+      "previousContentDigest": null,
+      "contentDigest": "e0222c8b0a44232ccfcd45517c4c96696c161eaa3b0ebd5dabdb69ba215f5792",
+      "fromModelDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "toModelDigest": "576778fb8d03697b390465f2022ef92ed48ed800ab135841eade1efb86b2e91c",
+      "compatibility": "safe-expand"
+    }
+  ]
+}

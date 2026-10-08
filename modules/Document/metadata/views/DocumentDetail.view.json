@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "1.0", "type": "view", "view": {
+    "key": "document.document.detail", "dicKey": "Document", "titleKey": "DetailTitle", "mode": "detail", "model": "Document", "resourceKey": "document.document",
+    "sections": [
+      { "key": "basic", "titleKey": "Basic", "fields": ["ECODE", "ENAME", "Description"] },
+      { "key": "audit", "titleKey": "Audit", "fields": ["CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"] }
+    ]
+  }
+}

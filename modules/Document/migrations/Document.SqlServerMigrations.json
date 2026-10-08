@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "1.0",
+  "provider": "SqlServer",
+  "moduleId": "Document",
+  "modelDigest": "a5f8051ba73e301ddfed4bc91bfe5fa1a9a954a97a1d099e45cc329effc0dacb",
+  "bundleChecksum": "63403f0515d5448f21487bf94af3f6582a54ca23b6dd806b677d4cecd4f52d5b",
+  "migrations": [
+    {
+      "sequence": "000001",
+      "migrationId": "20261008110912_Document_000001_Metadata",
+      "previousContentDigest": null,
+      "contentDigest": "f68a87c2e0cd006fcbff6cb4bd49d21af6c46ea6a54982a2d7efd448baa870ea",
+      "fromModelDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "toModelDigest": "a5f8051ba73e301ddfed4bc91bfe5fa1a9a954a97a1d099e45cc329effc0dacb",
+      "compatibility": "safe-expand"
+    }
+  ]
+}

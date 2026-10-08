@@ -267,6 +267,55 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
             database = before, git }));
     }
 
+    [Fact]
+    public void DocumentTail_FinalizesTwiceAndChecksFrozenInputs()
+    {
+        InitializeIsolatedOrganizationRepository(FindRepositoryRoot(), "Document");
+        InitializeIsolatedGitRepository();
+        var manifestPath = Path.Combine(_fixtureRoot, "modules/Document/migrations/Document.SqlServerMigrations.json");
+        var original = MigrationManifestIntegrity.Parse(File.ReadAllBytes(manifestPath));
+        var tail = original.Migrations.OrderBy(migration => migration.Sequence, StringComparer.Ordinal).Last();
+        File.WriteAllBytes(manifestPath, MigrationManifestIntegrity.SerializeCanonical(original with
+        { Migrations = original.Migrations.Take(original.Migrations.Count - 1).ToArray() }));
+        var application = new MigrationManifestApplication(_fixtureRoot);
+        Assert.True(application.Finalize("Document", "SqlServer", tail.MigrationId, tail.Compatibility).Changed);
+        var bytes = File.ReadAllBytes(manifestPath);
+        Assert.False(application.Finalize("Document", "SqlServer", tail.MigrationId, tail.Compatibility).Changed);
+        Assert.Equal(bytes, File.ReadAllBytes(manifestPath));
+        var hostRoot = Path.Combine(_fixtureRoot, "apps/host-api/bin/Release/net10.0/modules/Document/migrations");
+        File.Copy(manifestPath, Path.Combine(hostRoot, "Document.SqlServerMigrations.json"), true);
+        var assetPaths = new[] { manifestPath, Path.Combine(_fixtureRoot, "server/modules/Document/Migrations.SqlServer/bin/Release/net10.0/Document.SqlServerMigrations.dll"),
+            Path.Combine(hostRoot, "Document.SqlServerMigrations.json"), Path.Combine(hostRoot, "Document.SqlServerMigrations.dll") };
+        var hashes = assetPaths.Select(path => Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path)))).ToArray();
+        var before = CaptureGitSnapshot();
+        var result = application.CheckAll(noBuild: true);
+        Assert.Equal(1, result.CheckedBundles);
+        Assert.Equal(before, CaptureGitSnapshot());
+        Assert.Equal(hashes, assetPaths.Select(path => Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path)))));
+        _output.WriteLine(JsonSerializer.Serialize(new { module = "Document", provider = "SqlServer", migration = tail.MigrationId, tail.Compatibility,
+            firstFinalize = "finalized", secondFinalize = "already finalized", manifestSha256 = hashes[0], result.CheckedBundles, result.ProviderResults,
+            before.Head, before.IndexTree, before.Status, before.TrackedContentSha256, assets = hashes }));
+    }
+
+    [EnvironmentGatedFact(DatabaseEvidenceEnvironmentVariable, "Document正式check保持SQL日志前沿、history、Git与Release资产只读")]
+    public async Task DocumentCheck_WithReadOnlyObserver_PreservesDatabaseAndInputs()
+    {
+        var root = FindRepositoryRoot();
+        InitializeIsolatedOrganizationRepository(root, "Document");
+        InitializeIsolatedGitRepository();
+        var configuration = ResolveSqlServerObserver(root);
+        await using var observer = await SqlServerDatabaseObserver.OpenAsync(configuration.ConnectionString);
+        var before = await observer.CaptureAsync();
+        var git = CaptureGitSnapshot();
+        var application = new MigrationManifestApplication(_fixtureRoot);
+        var result = application.CheckAll(noBuild: true);
+        Assert.Equal(1, result.CheckedBundles);
+        Assert.Equal(git, CaptureGitSnapshot());
+        Assert.Equal(before, await observer.CaptureAsync());
+        _output.WriteLine(JsonSerializer.Serialize(new { module = "Document", configuration.Source, result.CheckedBundles, result.ProviderResults,
+            database = before, git }));
+    }
+
     [EnvironmentGatedFact(
         DatabaseEvidenceEnvironmentVariable,
         "SQL Server 每库日志前沿与 migration history 内容的只读前后快照；配置来源与 Acceptance admin connection 一致")]

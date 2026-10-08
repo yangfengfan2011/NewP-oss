@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "1.0", "moduleId": "Document", "displayName": "图文档", "version": "1.0.0",
+  "description": "独立图文档元数据", "entryAssembly": "../../DocumentModule.dll",
+  "dependencies": ["Identity", "Authentication", "Authorization"],
+  "hostVersion": { "min": "1.1.0", "max": "2.0.0" },
+  "backend": { "behaviorKey": "document.backend" },
+  "frontend": { "behaviorKey": "document.frontend", "entry": "document", "bindingMode": "behavior-bindings", "bindings": ["document.document.list", "document.document.detail"] },
+  "persistence": { "models": ["metadata/models/Document.model.json"], "migrations": { "sqlServer": { "assembly": "migrations/Document.SqlServerMigrations.dll", "manifest": "migrations/Document.SqlServerMigrations.json" } } }
+}

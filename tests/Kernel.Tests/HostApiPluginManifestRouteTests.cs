@@ -167,6 +167,8 @@ public class HostApiPluginManifestRouteTests : IAsyncLifetime
             "authorization.role.detail",
             "authorization.role.list",
             "authorization.workbench",
+            "document.document.detail",
+            "document.document.list",
             "example.record.detail",
             "example.record.list",
             "example.runtime-workload.list",
@@ -227,7 +229,7 @@ public class HostApiPluginManifestRouteTests : IAsyncLifetime
             .Order(StringComparer.Ordinal)
             .ToArray();
 
-        var expectedModuleIds = new[] { "Audit", "Authorization", "Example", "Identity", "Organization", "Part", "Workspace" };
+        var expectedModuleIds = new[] { "Audit", "Authorization", "Document", "Example", "Identity", "Organization", "Part", "Workspace" };
         Assert.True(
             expectedModuleIds.SequenceEqual(frontendModuleIds, StringComparer.Ordinal),
             $"Expected frontend modules: [{string.Join(", ", expectedModuleIds)}]\n"

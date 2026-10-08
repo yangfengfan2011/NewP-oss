@@ -57,6 +57,7 @@ public sealed class ProductionEndpointAccessCoverageTests
         builder.Services.AddStandardCrudResource(DepartmentCrudDescriptorFactory.Create());
         builder.Services.AddStandardCrudResource(ExampleRecordCrudDescriptorFactory.Create());
         builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Part.PartCrudDescriptor.Create());
+        builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Document.DocumentCrudDescriptor.Create());
         using var app = builder.Build();
         app.MapControllers();
         app.MapStandardCrudResources();
@@ -68,6 +69,12 @@ public sealed class ProductionEndpointAccessCoverageTests
         Assert.Equal(new[] { "part.part.create", "part.part.read" }, partEndpoints.SelectMany(endpoint => endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>())
             .Select(feature => feature.BehaviorKey).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal));
         Assert.All(partEndpoints.Where(endpoint => endpoint.Metadata.GetOrderedMetadata<HttpMethodMetadata>().Single().HttpMethods.Any(method => method is "PUT" or "DELETE")),
+            endpoint => Assert.NotNull(endpoint.Metadata.GetMetadata<DenyAllAttribute>()));
+        var documentEndpoints = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints).OfType<RouteEndpoint>()
+            .Where(endpoint => endpoint.RoutePattern.RawText?.StartsWith("/api/document/documents", StringComparison.Ordinal) == true).ToArray();
+        Assert.Equal(new[] { "document.document.create", "document.document.read" }, documentEndpoints.SelectMany(endpoint => endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>())
+            .Select(feature => feature.BehaviorKey).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal));
+        Assert.All(documentEndpoints.Where(endpoint => endpoint.Metadata.GetOrderedMetadata<HttpMethodMetadata>().Single().HttpMethods.Any(method => method is "PUT" or "DELETE")),
             endpoint => Assert.NotNull(endpoint.Metadata.GetMetadata<DenyAllAttribute>()));
         var manifestEndpoints = ((IEndpointRouteBuilder)app).DataSources
             .SelectMany(static source => source.Endpoints)

@@ -131,4 +131,12 @@
     <Content Include="../../modules/Part/migrations/Part.SqlServerMigrations.json" Link="modules/Part/migrations/Part.SqlServerMigrations.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../server/modules/Part/Migrations.SqlServer/bin/$(Configuration)/$(TargetFramework)/Part.SqlServerMigrations.dll" Link="modules/Part/migrations/Part.SqlServerMigrations.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../server/modules/Document/DocumentModule.csproj" />
+    <ProjectReference Include="../../server/modules/Document/Migrations.SqlServer/Document.SqlServerMigrations.csproj" />
+    <Content Include="../../modules/Document/newp.plugin.json" Link="modules/Document/plugin.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../modules/Document/migrations/Document.SqlServerMigrations.json" Link="modules/Document/migrations/Document.SqlServerMigrations.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../server/modules/Document/Migrations.SqlServer/bin/$(Configuration)/$(TargetFramework)/Document.SqlServerMigrations.dll" Link="modules/Document/migrations/Document.SqlServerMigrations.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

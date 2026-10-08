@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
-import { beforeAll, expect, it, onTestFinished, vi } from 'vitest';
+import { expect, it, onTestFinished, vi } from 'vitest';
 import { AuthorizationProvider, invalidatePlatformAntiforgeryToken, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import workspace from '../../../../modules/workspace/src';
@@ -15,11 +15,13 @@ import dictionary from '../../../../../modules/Workspace/metadata/dictionaries/W
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { PageEntry } from '../composition/PageOutlet';
 
+// 收集期装载真实模块，避免冷转换耗时进入生命周期 hook 的交互预算。
+import '../composition/StandardTreePage';
+import '../pages/StandardCrudListPageHost';
+import '../../../../modules/workspace/src/workspaceRootResource';
+
 vi.unmock('@icp-platform/core');
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-beforeAll(async () => {
-  await Promise.all([import('../composition/StandardTreePage'), import('../pages/StandardCrudListPageHost'), import('../../../../modules/workspace/src/workspaceRootResource')]);
-});
 
 it.each([
   ['zhs', '个人空间尚未初始化或不可读取，请重试或联系管理员。'],

@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider, useParams } from 'react-router-dom';
-import { beforeAll, expect, it, onTestFinished, vi } from 'vitest';
+import { expect, it, onTestFinished, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import workspace from '../../../../modules/workspace/src';
@@ -35,9 +35,14 @@ import { AuthProvider } from '../contexts/AuthContext';
 import { FeaturePlacementContext } from '../authorization/FeaturePlacementContext';
 import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';
 
+// 收集期装载真实模块，避免冷转换耗时进入生命周期 hook 的交互预算。
+import '../composition/StandardTreePage';
+import '../pages/StandardCrudListPageHost';
+import '../pages/StandardCrudListDrawerRuntime';
+import '@ant-design/pro-descriptions';
+
 vi.unmock('@icp-platform/core');
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-beforeAll(async () => { await Promise.all([import('../composition/StandardTreePage'), import('../pages/StandardCrudListPageHost'), import('../pages/StandardCrudListDrawerRuntime'), import('@ant-design/pro-descriptions')]); });
 
 it.each(['part', 'document'] as const)('opens same EID through the registered %s owning read-only page and target feature', async type => {
   const user = { id: 'actor', ecode: 'actor', ename: '账号', revision: 1, mustChangePassword: false, isLocalAdministrator: false,

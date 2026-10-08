@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
-import { beforeAll, expect, it, onTestFinished, vi } from 'vitest';
+import { expect, it, onTestFinished, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import workspace from '../../../../modules/workspace/src';
@@ -29,11 +29,15 @@ import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';
 import navigation from '../../../../../modules/Workspace/metadata/navigation/Workspace.nav.json';
 
+// 收集期装载真实模块，避免冷转换耗时进入生命周期 hook 的交互预算。
+import '../composition/StandardTreePage';
+import '../pages/StandardCrudListPageHost';
+import '../pages/StandardCrudDetailPageHost';
+import '../../../../modules/workspace/src/workspaceRootResource';
+import '@ant-design/pro-descriptions';
+
 vi.unmock('@icp-platform/core');
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-beforeAll(async () => {
-  await Promise.all([import('../composition/StandardTreePage'), import('../pages/StandardCrudListPageHost'), import('../pages/StandardCrudDetailPageHost'), import('../../../../modules/workspace/src/workspaceRootResource'), import('@ant-design/pro-descriptions')]);
-});
 
 it.each(['receipt', 'success'] as const)('mounts the real shared content list after %s creation and discards another account’s pending content', async scenario => {
   let account = 'a';

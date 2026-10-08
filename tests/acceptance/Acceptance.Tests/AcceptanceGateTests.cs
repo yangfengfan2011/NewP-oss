@@ -56,6 +56,50 @@ public sealed class AcceptanceGateTests
         var (root, runId) = PrepareRun("workspace-folder");
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false).RunAsync(CancellationToken.None);
     }
+
+    [EnvironmentGatedFact(RunEnvironmentVariable, "正式 Part 迁移、普通账号标准创建及 Drawer/独立只读属性 driver")]
+    public async Task PartCreation_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("part");
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false,
+            selectFeatures: features =>
+            {
+                var entry = features.Behavior("Part", "part.part.read");
+                return [entry, features.Action(entry, "create", "list.pageActions")];
+            },
+            browserJourney: async (page, token) =>
+            {
+                var driver = new PartPageDriver(page);
+                var code = $"ACC-PART-{runId[..8]}";
+                var name = $"零组件旅程 {runId[..8]}";
+                Task CaptureAsync(string file) => page.ScreenshotAsync(new()
+                {
+                    Path = Path.Combine(root, file), FullPage = true,
+                    Animations = Microsoft.Playwright.ScreenshotAnimations.Disabled
+                });
+                await driver.OpenAsync();
+                var form = await driver.OpenCreateAsync();
+                await CaptureAsync("part-create.png");
+                await page.SetViewportSizeAsync(900, 1000);
+                await CaptureAsync("part-create-narrow.png");
+                await page.SetViewportSizeAsync(1440, 1000);
+                await driver.SaveCreateAsync(form, code, name);
+                await CaptureAsync("part-list.png");
+                await page.SetViewportSizeAsync(900, 1000);
+                await CaptureAsync("part-list-narrow.png");
+                await page.SetViewportSizeAsync(1440, 1000);
+                var properties = await driver.OpenPropertiesAsync(code, name);
+                await CaptureAsync("part-properties.png");
+                await page.SetViewportSizeAsync(900, 1000);
+                await CaptureAsync("part-properties-narrow.png");
+                await page.SetViewportSizeAsync(1440, 1000);
+                await driver.OpenFullDetailAsync(properties, name);
+                await CaptureAsync("part-detail.png");
+                await page.SetViewportSizeAsync(900, 1000);
+                await CaptureAsync("part-detail-narrow.png");
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"), new { url = page.Url, actor = "ordinary", createdPart = code }, token);
+            }).RunAsync(CancellationToken.None);
+    }
     // run id 参与一次性 catalog 名与资源根命名，必须是固定长度的十六进制。
     private static (string RunDirectory, string RunId) PrepareRun(string gate)
     {

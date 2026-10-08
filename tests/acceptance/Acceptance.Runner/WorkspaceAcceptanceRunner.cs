@@ -2,13 +2,16 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text.Json;
 using ICP.Platform.Testing;
+using ICP.Platform.Kernel.ModulePlanning;
 using Microsoft.Data.SqlClient;
 using Microsoft.Playwright;
 
 namespace ICP.Platform.Acceptance;
 
 /// <summary>Workspace 的同一正式浏览器旅程及其专用测试库、Host 和凭据生命周期。</summary>
-internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string runDirectory, string runId, bool includeSpaceLifecycle = true)
+internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string runDirectory, string runId, bool includeSpaceLifecycle = true,
+    Func<IPage, CancellationToken, Task>? browserJourney = null,
+    Func<AcceptanceFeatureCatalog, IReadOnlyList<FeaturePoint>>? selectFeatures = null)
     : AcceptanceRunner(repositoryRoot, runDirectory, runId)
 {
     private ReusableSqlServerDatabase? _databaseLease;
@@ -25,7 +28,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
     {
         await RunScenarioAsync("workspace.formal-initialization", PrepareAsync, token);
         await RunScenarioAsync("workspace.browser", RunBrowserAsync, token);
-        if (includeSpaceLifecycle) await RunScenarioAsync("workspace.process-restart", VerifyProcessRestartAsync, token);
+        if (browserJourney is null && includeSpaceLifecycle) await RunScenarioAsync("workspace.process-restart", VerifyProcessRestartAsync, token);
     }
 
     // 空 schema 只由正式 Host bootstrap/migration 建立，普通 actor 的初次个人初始化留给真实页面入口。
@@ -53,8 +56,20 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
         await WorkspaceAcceptanceFixture.LoginAndChangePasswordAsync(administrator, "admin", bootstrap.TemporaryCredential,
             administratorPassword, token);
         var features = await AcceptanceFeatureCatalog.LoadAsync(administrator, token);
-        _entryPosition = features.Behavior("Workspace", "workspace.spaces.access").Position;
-        _actor = await WorkspaceAcceptanceFixture.PrepareAsync(administrator, features, _runId, RegisterSecret, token);
+        IReadOnlyList<FeaturePoint> grantedFeatures;
+        if (selectFeatures is not null) grantedFeatures = selectFeatures(features);
+        else
+        {
+            var entry = features.Behavior("Workspace", "workspace.spaces.access");
+            grantedFeatures = [entry, features.Action(entry, "create", "list.pageActions", "folder")];
+        }
+        if (browserJourney is null)
+        {
+            _entryPosition = features.Behavior("Workspace", "workspace.spaces.access").Position;
+            await WorkspaceAcceptanceFixture.SendAsync(administrator, HttpMethod.Post,
+                "/api/workspace/spaces/public/initialize", null, _entryPosition, token);
+        }
+        _actor = await WorkspaceAcceptanceFixture.PrepareAsync(administrator, features, _runId, RegisterSecret, grantedFeatures, token);
         await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "initialization.json"),
             new { catalog = ReusableSqlServerDatabase.Catalog, devRun = _devRun, actorId = _actor.AccountId, formalInitialization = true }, token);
     }
@@ -97,6 +112,11 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
         {
             token.ThrowIfCancellationRequested();
             await new ShellPageDriver(page, $"http://127.0.0.1:{_shellPort}").LoginAsync(actor.ECode, actor.Password);
+            if (browserJourney is not null)
+            {
+                await browserJourney(page, token);
+                return;
+            }
             await driver.OpenAsync();
             await driver.SelectRootAsync("公共空间");
             if (includeSpaceLifecycle)

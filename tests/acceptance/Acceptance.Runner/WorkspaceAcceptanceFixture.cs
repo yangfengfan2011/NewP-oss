@@ -2,12 +2,13 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text.Json;
+using ICP.Platform.Kernel.ModulePlanning;
 
 namespace ICP.Platform.Acceptance;
 
 internal sealed record WorkspaceAcceptanceActor(string AccountId, string ECode, string Password);
 
-/// <summary>通过正式 Identity、Organization、Authorization 和 Workspace API 准备普通账号与公共根。</summary>
+/// <summary>通过正式 Identity、Organization 和 Authorization API 准备指定功能集合的普通账号。</summary>
 internal static class WorkspaceAcceptanceFixture
 {
     internal const string CookieName = "ICP.Platform.WorkspaceAcceptance";
@@ -30,10 +31,9 @@ internal static class WorkspaceAcceptanceFixture
         SendAsync(client, HttpMethod.Post, "/api/auth/login", new { ecode = actor.ECode, password = actor.Password }, null, token);
 
     internal static async Task<WorkspaceAcceptanceActor> PrepareAsync(HttpClient administrator,
-        AcceptanceFeatureCatalog features, string runId, Action<string> registerSecret, CancellationToken token)
+        AcceptanceFeatureCatalog features, string runId, Action<string> registerSecret,
+        IReadOnlyList<FeaturePoint> grantedFeatures, CancellationToken token)
     {
-        var entry = features.Behavior("Workspace", "workspace.spaces.access");
-        await SendAsync(administrator, HttpMethod.Post, "/api/workspace/spaces/public/initialize", null, entry.Position, token);
         var suffix = runId[..8];
         var ecode = $"workspace.{suffix}";
         var account = await SendAsync(administrator, HttpMethod.Post, "/api/identity/accounts",
@@ -67,9 +67,8 @@ internal static class WorkspaceAcceptanceFixture
             new { Code = roleCode, Name = $"工作空间验收角色 {suffix}" },
             features.Action(roleEntry, "create", "list.pageActions").Position, token);
         var roleId = role.GetProperty("id").GetString()!;
-        var createFolder = features.Action(entry, "create", "list.pageActions", "folder");
         await SendAsync(administrator, HttpMethod.Put, $"/api/authorization/workbench/roles/{roleId}",
-            new { positions = features.GrantSet(entry, createFolder) }, features.Behavior("Authorization", "authorization.workbench.save").Position, token);
+            new { positions = features.GrantSet(grantedFeatures.ToArray()) }, features.Behavior("Authorization", "authorization.workbench.save").Position, token);
         await SendAsync(administrator, HttpMethod.Put, $"/api/authorization/users/{accountId}/roles",
             new { RoleCodes = new[] { roleCode } }, features.Action(roleEntry, "userRoles", "list.rowActions").Position, token);
         using var ordinary = CreateClient(administrator.BaseAddress!.Port);

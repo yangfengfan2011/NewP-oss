@@ -17,6 +17,68 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class WorkspaceReverseSqlServerHttpApiTests(ITestOutputHelper output)
 {
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "反向同ID合法类型保持隔离，未知存储类型失败关闭且读取不修复")]
+    public async Task ReverseReferences_RejectCorruptStoredTypeWithoutConfusingLegalSameIdOrRepairingLinks()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
+        using var admin = await fixture.LoginAdministratorAsync(); var entry = Point(fixture, "workspace.spaces.access");
+        var root = await Post(admin, entry, "/api/workspace/spaces/public/initialize");
+        var part = await Post(admin, Point(fixture, "part.part.create"), "/api/part/parts", new { ECODE = "CORRUPT-REVERSE", ENAME = "真实零组件" });
+        var id = part.GetProperty("fields").GetProperty("EID").GetString()!;
+        var document = await Post(admin, Point(fixture, "document.document.create"), "/api/document/documents", new { ECODE = "CORRUPT-REVERSE", ENAME = "同ID真实图文档" });
+        var documentId = document.GetProperty("fields").GetProperty("EID").GetString()!;
+        using (var scope = fixture.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("Document/Document")
+                .Where(row => EF.Property<string>(row, "EID") == documentId).ExecuteUpdateAsync(update => update.SetProperty(row => EF.Property<string>(row, "EID"), id));
+        foreach (var model in new[] { "Part/Part", "Document/Document" })
+            await Post(admin, Point(fixture, "workspace.folder.add"), "/api/workspace/content/references", new { position = Position(root), target = new { modelKey = model, id } });
+        var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "ReverseCorrupt", "反向完整性", "reverse-corrupt", "反向完整性账号", entry, Point(fixture, "part.part.read"), Point(fixture, "document.document.read"));
+        using var ordinary = actor.Client;
+        var forwardUrl = Forward(root.GetProperty("rootFolderId").GetString()!, Position(root));
+        var forward = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, forwardUrl); Assert.Equal(2, forward.GetProperty("total").GetInt32());
+        string partLink = "";
+        foreach (var model in new[] { "Part/Part", "Document/Document" })
+        {
+            var reverse = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, Reverse(model, id));
+            var incoming = Assert.Single(reverse.GetProperty("items").EnumerateArray());
+            var outgoing = Assert.Single(forward.GetProperty("items").EnumerateArray(), row => row.GetProperty("child").GetProperty("modelKey").GetString() == model);
+            Assert.Equal(1, reverse.GetProperty("total").GetInt32());
+            Assert.Equal(outgoing.GetProperty("linkId").GetString(), incoming.GetProperty("linkId").GetString());
+            Assert.Equal(model, incoming.GetProperty("child").GetProperty("modelKey").GetString());
+            if (model == "Part/Part") partLink = incoming.GetProperty("linkId").GetString()!;
+        }
+        foreach (var corruptType in new[] { "Unknown/Type", "Identity/IdentityAccount" })
+        {
+            using (var scope = fixture.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+                var link = await db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolderContent").SingleAsync(row => EF.Property<string>(row, "LID") == partLink);
+                link["ChildModelKey"] = corruptType; await db.SaveChangesAsync();
+            }
+            var before = await LinkSnapshot(fixture);
+            try
+            {
+                using var failedForward = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, forwardUrl);
+                Assert.Equal(HttpStatusCode.InternalServerError, failedForward.StatusCode);
+                using var failedReverse = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, Reverse("Part/Part", id) + "&fields=LID&types=Workspace%2FWorkspaceFolder");
+                output.WriteLine($"Stored type {corruptType}: forward={(int)failedForward.StatusCode}; reverse={(int)failedReverse.StatusCode}");
+                Assert.Equal(HttpStatusCode.InternalServerError, failedReverse.StatusCode);
+                Assert.DoesNotContain(partLink, await failedReverse.Content.ReadAsStringAsync());
+            }
+            finally { Assert.Equal(before, await LinkSnapshot(fixture)); }
+        }
+        await Rule(fixture, admin, "CorruptAnchorHidden", "part.part", id);
+        using var unreadable = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, Reverse("Part/Part", id));
+        Assert.Equal(HttpStatusCode.NotFound, unreadable.StatusCode);
+    }
+
+    private static async Task<string> LinkSnapshot(BusinessAuditHostFixture fixture)
+    {
+        using var scope = fixture.Services.CreateScope();
+        var rows = await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("Workspace/WorkspaceFolderContent").AsNoTracking().ToArrayAsync();
+        return JsonSerializer.Serialize(rows.OrderBy(row => row["LID"]).Select(row => row.OrderBy(field => field.Key, StringComparer.Ordinal).ToDictionary(field => field.Key, field => field.Value)));
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "真实对象的反向关系保留原始身份并投影父文件夹")]
     public async Task ReverseReferences_ProjectParentsAndKeepForwardIdentity()
     {

@@ -130,6 +130,8 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
         var anchorEnd = forward ? parent : child;
         var anchorCondition = EndType(anchorEnd, "l", linkEntity) + "=" + Parameter(request.Anchor.ModelKey, parameters)
             + " AND " + Column(linkEntity, "l", anchorEnd.ReferenceField) + "=" + Parameter(request.Anchor.Id, parameters);
+        // 反向类型损坏时不能先按该类型隐藏诊断；同 ID 的其他合法模型仍由完整 validPairs 排除。
+        var diagnosticAnchorCondition = forward ? anchorCondition : Column(linkEntity, "l", anchorEnd.ReferenceField) + "=" + anchorValue;
         var sourceCondition = Column(linkEntity, "l", "LID") + " IN (" + sourceSql + ")";
         var validPairs = string.Join(" OR ", definition.Model.LinkedTypes.Select(pair => "(" + EndType(parent, "l", linkEntity) + "=" + Literal(pair.Parent)
             + " AND " + EndType(child, "l", linkEntity) + "=" + Literal(pair.Child) + ")"));
@@ -184,7 +186,7 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
         var eligibleSourceCount = "SELECT COUNT(*) FROM " + linkTable + " l WHERE " + anchorCondition + " AND " + sourceCondition
             + " AND " + EndType(associatedEndForDiagnostics, "l", linkEntity) + " IN (" + string.Join(",", allowedTypes.Select(Literal)) + ");";
         var sql = string.Join("\n", sqlScopes.Values.Where(scope => scope is not null).Select(scope => scope!.Preparation))
-            + "\n" + anchorAvailableSql + "; SELECT TOP(1) 1 FROM " + linkTable + " l WHERE " + anchorCondition + " AND " + sourceCondition + " AND NOT(" + validPairs + "); "
+            + "\n" + anchorAvailableSql + "; SELECT TOP(1) 1 FROM " + linkTable + " l WHERE " + diagnosticAnchorCondition + " AND " + sourceCondition + " AND NOT(" + validPairs + "); "
             + union + "SELECT COUNT(*) FROM Relations; " + union + "SELECT * FROM Relations ORDER BY " + Quote(sortField!) + " " + sortDirection
             + ",AssociatedModelKey,AssociatedId,LID" + (completeLayer ? ";" : " OFFSET " + Parameter((page - 1) * pageSize, parameters) + " ROWS FETCH NEXT " + Parameter(pageSize, parameters) + " ROWS ONLY;") + eligibleSourceCount;
         var result = await ExecuteAsync(sql, parameters, async reader =>

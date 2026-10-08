@@ -7,6 +7,30 @@ namespace ICP.Platform.Acceptance.Tests;
 
 public sealed class WorkspacePageDriverTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "Chromium中共享树driver只消费节点内容面包屑，无服务器或端口")]
+    public async Task NodeBreadcrumb_IgnoresTheShellNavigationWithTheSameAccessibleName()
+    {
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new()
+        {
+            Headless = true,
+            ExecutablePath = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_CHROMIUM_EXECUTABLE")
+                ?? @"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        });
+        var page = await browser.NewPageAsync();
+        await page.SetContentAsync("""
+            <nav aria-label="面包屑"><button>路径A</button><span>Shell</span></nav>
+            <section aria-label="节点内容"><header class="np-tree-context-header">
+              <nav aria-label="面包屑"><button>公共空间</button><button id="ancestor">路径A</button><span>后代T</span></nav>
+              <h2>后代T</h2></header></section>
+            <script>document.querySelector('#ancestor').onclick=()=>document.querySelector('h2').textContent='路径A';</script>
+            """);
+        var driver = new StandardTreePageDriver(page);
+        await driver.WaitForBreadcrumbAsync("公共空间", "路径A", "后代T");
+        await driver.ClickAncestorAsync("路径A");
+        await Assertions.Expect(page.GetByRole(AriaRole.Region).GetByRole(AriaRole.Heading)).ToHaveTextAsync("路径A");
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "真实 Chromium 的 ARIA 失败快照沿既有登记凭据脱敏，无服务器或端口")]
     public async Task AriaDiagnostic_RedactsRegisteredInputValueAndPreservesTheControlName()
     {

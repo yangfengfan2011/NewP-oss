@@ -7,6 +7,11 @@ using ICP.Platform.Kernel.ModulePlanning;
 namespace ICP.Platform.Acceptance;
 
 internal sealed record WorkspaceAcceptanceActor(string AccountId, string ECode, string Password);
+internal sealed record WorkspaceFolderPosition(string SpaceId, string RootFolderId, string FolderId, string[] LinkIds)
+{
+    internal object CommandPosition => new { spaceId = SpaceId, rootFolderId = RootFolderId, linkIds = LinkIds };
+}
+internal sealed record WorkspaceOccurrenceFixture(WorkspaceFolderPosition PublicRoot, string ALinkId, string[] Labels, string SampleName);
 
 /// <summary>通过正式 Identity、Organization 和 Authorization API 准备指定功能集合的普通账号。</summary>
 internal static class WorkspaceAcceptanceFixture
@@ -101,6 +106,58 @@ internal static class WorkspaceAcceptanceFixture
         await SendAsync(ordinary, HttpMethod.Delete, $"/api/workspace/content/references/{Uri.EscapeDataString(linkId)}",
             new { position }, features.Action(entry, "remove", "list.rowActions", "folder").Position, token);
         return folderId;
+    }
+
+    // 多父恢复样本全部走当前普通主体正式命令；仅记录关系链，不在测试侧编码 Provider nodeKey。
+    internal static async Task<WorkspaceOccurrenceFixture> PrepareOccurrenceGraphAsync(HttpClient ordinary, AcceptanceFeatureCatalog features,
+        string runId, CancellationToken token)
+    {
+        var entry = features.Behavior("Workspace", "workspace.spaces.access");
+        await SendAsync(ordinary, HttpMethod.Post, "/api/workspace/spaces/personal/ensure", null, entry.Position, token);
+        var roots = await SendAsync(ordinary, HttpMethod.Get, "/api/workspace/spaces", null, entry.Position, token);
+        WorkspaceFolderPosition Root(string kind)
+        {
+            var root = roots.EnumerateArray().Single(item => item.GetProperty("spaceKind").GetString() == kind);
+            var id = root.GetProperty("rootFolderId").GetString()!;
+            return new(root.GetProperty("spaceId").GetString()!, id, id, []);
+        }
+        var publicRoot = Root("Public");
+        var suffix = runId[..8];
+        var a = await CreateFolderAtPositionAsync(ordinary, features, publicRoot, $"路径A {suffix}", token);
+        var b = await CreateFolderAtPositionAsync(ordinary, features, publicRoot, $"路径B {suffix}", token);
+        var shared = await CreateFolderAtPositionAsync(ordinary, features, a, $"共享S {suffix}", token);
+        var terminal = await CreateFolderAtPositionAsync(ordinary, features, shared, $"后代T {suffix}", token);
+        var sampleName = $"恢复内容 {suffix}";
+        await CreateFolderAtPositionAsync(ordinary, features, terminal, sampleName, token);
+        foreach (var parent in new[] { b, Root("Personal") })
+            await SendAsync(ordinary, HttpMethod.Post, "/api/workspace/content/references",
+                new { position = parent.CommandPosition, target = new { modelKey = "Workspace/WorkspaceFolder", id = shared.FolderId } },
+                features.Action(entry, "add", "list.pageActions", "folder").Position, token);
+        return new(publicRoot, a.LinkIds[^1], ["公共空间", $"路径A {suffix}", $"共享S {suffix}", $"后代T {suffix}"], sampleName);
+    }
+
+    internal static async Task<WorkspaceFolderPosition> CreateFolderAtPositionAsync(HttpClient ordinary, AcceptanceFeatureCatalog features,
+        WorkspaceFolderPosition parent, string name, CancellationToken token)
+    {
+        var entry = features.Behavior("Workspace", "workspace.spaces.access");
+        var created = await SendAsync(ordinary, HttpMethod.Post, "/api/workspace/content/folders",
+            new { position = parent.CommandPosition, values = new { ENAME = name } },
+            features.Action(entry, "create", "list.pageActions", "folder").Position, token);
+        var id = created.GetProperty("id").GetString()!;
+        var queryScope = JsonSerializer.Serialize(new { spaceId = parent.SpaceId, rootFolderId = parent.RootFolderId, linkIds = JsonSerializer.Serialize(parent.LinkIds) });
+        var contents = await SendAsync(ordinary, HttpMethod.Get,
+            $"/api/links/workspace.content?direction=forward&anchorModelKey=Workspace%2FWorkspaceFolder&anchorId={Uri.EscapeDataString(parent.FolderId)}&queryScope={Uri.EscapeDataString(queryScope)}&pageSize=20",
+            null, entry.Position, token);
+        var link = contents.GetProperty("items").EnumerateArray().Single(item => item.GetProperty("associatedObject").GetProperty("id").GetString() == id);
+        return parent with { FolderId = id, LinkIds = [.. parent.LinkIds, link.GetProperty("linkId").GetString()!] };
+    }
+
+    internal static Task<JsonElement> InvalidateOccurrenceAsync(HttpClient ordinary, AcceptanceFeatureCatalog features,
+        WorkspaceOccurrenceFixture fixture, CancellationToken token)
+    {
+        var entry = features.Behavior("Workspace", "workspace.spaces.access");
+        return SendAsync(ordinary, HttpMethod.Delete, $"/api/workspace/content/references/{Uri.EscapeDataString(fixture.ALinkId)}",
+            new { position = fixture.PublicRoot.CommandPosition }, features.Action(entry, "remove", "list.rowActions", "folder").Position, token);
     }
 
     // 元数据对象由已授权的普通主体正式创建，实体字段契约沿用所属模块。

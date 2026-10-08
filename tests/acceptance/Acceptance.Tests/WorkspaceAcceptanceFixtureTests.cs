@@ -106,6 +106,45 @@ public sealed class WorkspaceAcceptanceFixtureTests
     private static HttpResponseMessage Json(HttpStatusCode status, string text) =>
         new(status) { Content = new StringContent(text, Encoding.UTF8, "application/json") };
 
+    [Fact]
+    public async Task PositionCreation_PreservesFullChainAndUsesReturnedMatchingLinkForTheNewOccurrence()
+    {
+        var entry = new FeaturePoint("entry", "Workspace", "workspace", "navigation", "workspace", null, "workspace.spaces.access", [], 0);
+        var create = new FeaturePoint("create", "Workspace", "create", "action", "create", "entry", "workspace.folder.create", [], 0)
+            { ActionScope = "list.pageActions", StaticScope = "folder" };
+        var parent = new WorkspaceFolderPosition("space", "root-EID", "parent-EID", ["first-LID"]);
+        using var client = new HttpClient(new AsyncHandler(async (request, token) =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (path == "/api/auth/antiforgery-token") return Json(HttpStatusCode.OK, "{\"requestToken\":\"fixture-token\"}");
+            if (path == "/api/workspace/content/folders")
+            {
+                using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(token));
+                var position = body.RootElement.GetProperty("position");
+                Assert.Equal(["spaceId", "rootFolderId", "linkIds"], position.EnumerateObject().Select(property => property.Name).ToArray());
+                Assert.Equal("root-EID", position.GetProperty("rootFolderId").GetString());
+                Assert.Equal("first-LID", Assert.Single(position.GetProperty("linkIds").EnumerateArray()).GetString());
+                Assert.Equal("child", body.RootElement.GetProperty("values").GetProperty("ENAME").GetString());
+                Assert.Equal("create", Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
+                return Json(HttpStatusCode.OK, "{\"id\":\"child-EID\",\"fields\":{}}");
+            }
+            Assert.Equal("/api/links/workspace.content", path);
+            var query = System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query);
+            Assert.Equal("parent-EID", query["anchorId"]);
+            using var scope = JsonDocument.Parse(query["queryScope"]!);
+            Assert.Equal("space", scope.RootElement.GetProperty("spaceId").GetString());
+            Assert.Equal("root-EID", scope.RootElement.GetProperty("rootFolderId").GetString());
+            Assert.Equal("[\"first-LID\"]", scope.RootElement.GetProperty("linkIds").GetString());
+            return Json(HttpStatusCode.OK, "{\"items\":[{\"linkId\":\"other-LID\",\"associatedObject\":{\"id\":\"other-EID\"}},{\"linkId\":\"child-LID\",\"associatedObject\":{\"id\":\"child-EID\"}}]}");
+        })) { BaseAddress = new Uri("http://127.0.0.1:5000") };
+
+        var child = await WorkspaceAcceptanceFixture.CreateFolderAtPositionAsync(client, new([entry, create]), parent, "child", CancellationToken.None);
+
+        Assert.Equal("child-EID", child.FolderId);
+        Assert.Equal(["first-LID", "child-LID"], child.LinkIds);
+        Assert.Equal(["first-LID"], parent.LinkIds);
+    }
+
     [Theory]
     [InlineData("Part", "part.part.read", "/api/part/parts")]
     [InlineData("Document", "document.document.read", "/api/document/documents")]

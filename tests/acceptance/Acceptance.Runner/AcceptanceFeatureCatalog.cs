@@ -31,6 +31,10 @@ internal sealed class AcceptanceFeatureCatalog(IReadOnlyList<FeaturePoint> point
         && point.Key == key && point.ActionScope == scope && point.StaticScope == staticScope,
         $"{entry.Position} action {scope}/{key}");
 
+    internal FeaturePoint NodeTab(FeaturePoint tree, string nodeType, string key) => Require(point =>
+        point.ModuleId == tree.ModuleId && point.Kind == "tab" && point.ParentPosition == tree.Position
+        && point.StaticScope == nodeType && point.Key == key, $"{tree.Position} node {nodeType} tab {key}");
+
     internal string[] GrantSet(params FeaturePoint[] selected) =>
         RuntimeFeatureCatalogTestSupport.ExpandGrantSet(selected);
 

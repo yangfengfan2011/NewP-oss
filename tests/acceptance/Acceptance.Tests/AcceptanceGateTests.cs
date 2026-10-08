@@ -174,6 +174,85 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
+    [EnvironmentGatedFact(RunEnvironmentVariable, "完整出现位置实际地址恢复、失效回退及共享组织树只读呈现")]
+    public async Task WorkspaceOccurrenceRecovery_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("workspace-occurrence");
+        WorkspaceOccurrenceFixture? graph = null;
+        WorkspaceAcceptanceActor? preparedActor = null;
+        AcceptanceFeatureCatalog? preparedFeatures = null;
+        var hostPort = 0;
+        var companyName = $"工作空间验收公司 {runId[..8]}";
+        var departmentName = $"工作空间验收部门 {runId[..8]}";
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false,
+            selectFeatures: features =>
+            {
+                var entry = features.Behavior("Workspace", "workspace.spaces.access");
+                var organization = features.OrganizationTab("structure");
+                return [entry, features.Action(entry, "create", "list.pageActions", "folder"),
+                    features.Action(entry, "add", "list.pageActions", "folder"), features.Action(entry, "remove", "list.rowActions", "folder"),
+                    organization, features.NodeTab(organization, "company", "information"), features.NodeTab(organization, "department", "information")];
+            },
+            prepareJourney: async (administrator, features, actor, token) =>
+            {
+                hostPort = administrator.BaseAddress!.Port;
+                preparedActor = actor;
+                preparedFeatures = features;
+                var entry = features.Behavior("Workspace", "workspace.spaces.access");
+                await WorkspaceAcceptanceFixture.SendAsync(administrator, HttpMethod.Post, "/api/workspace/spaces/public/initialize", null, entry.Position, token);
+                using var ordinary = WorkspaceAcceptanceFixture.CreateClient(hostPort);
+                await WorkspaceAcceptanceFixture.LoginAsync(ordinary, actor, token);
+                graph = await WorkspaceAcceptanceFixture.PrepareOccurrenceGraphAsync(ordinary, features, runId, token);
+                // 先用同普通账号正式树 API 核对读取资格，失败直接定位端点，不留到 UI 控件超时。
+                var organization = features.OrganizationTab("structure");
+                var companies = await WorkspaceAcceptanceFixture.SendAsync(ordinary, HttpMethod.Get,
+                    "/api/trees/organization.structure/roots?scope=global", null, organization.Position, token);
+                var company = companies.EnumerateArray().Single(node => node.GetProperty("label").GetString() == companyName);
+                var children = await WorkspaceAcceptanceFixture.SendAsync(ordinary, HttpMethod.Get,
+                    $"/api/trees/organization.structure/children?scope=global&nodeKey={Uri.EscapeDataString(company.GetProperty("nodeKey").GetString()!)}", null, organization.Position, token);
+                if (!children.EnumerateArray().Any(node => node.GetProperty("label").GetString() == departmentName))
+                    throw new InvalidOperationException("普通主体正式组织树未返回既有准备的部门。");
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "fixture-occurrence.json"), new { graph, companyName, departmentName }, token);
+            },
+            browserJourney: async (page, token) =>
+            {
+                var fixture = graph ?? throw new InvalidOperationException("出现位置样本尚未准备。");
+                var driver = new WorkspacePageDriver(page);
+                var tree = new StandardTreePageDriver(page);
+                async Task CapturePairAsync(string stage)
+                {
+                    await page.ScreenshotAsync(new() { Path = Path.Combine(root, stage + ".png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                    await page.SetViewportSizeAsync(900, 1000);
+                    await page.ScreenshotAsync(new() { Path = Path.Combine(root, stage + "-narrow.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                    await page.SetViewportSizeAsync(1440, 1000);
+                }
+                await driver.OpenAsync();
+                var address = await driver.SelectTreePathAsync(fixture.Labels);
+                await new StandardCrudPageDriver(page).WaitForRowAsync(fixture.SampleName);
+                await tree.ClickAncestorAsync(fixture.Labels[^2]);
+                await new StandardCrudPageDriver(page).WaitForRowAsync(fixture.Labels[^1]);
+                await driver.SelectRootAsync("个人空间");
+                await driver.RestorePositionAsync(address, fixture.Labels);
+                await new StandardCrudPageDriver(page).WaitForRowAsync(fixture.SampleName);
+                await CapturePairAsync("restored-occurrence");
+                using (var ordinary = WorkspaceAcceptanceFixture.CreateClient(hostPort))
+                {
+                    await WorkspaceAcceptanceFixture.LoginAsync(ordinary, preparedActor!, token);
+                    await WorkspaceAcceptanceFixture.InvalidateOccurrenceAsync(ordinary, preparedFeatures!, fixture, token);
+                }
+                await driver.RestoreMissingPositionAsync(address);
+                var fallbackUrl = page.Url;
+                await CapturePairAsync("missing-occurrence");
+                await new StandardCrudPageDriver(page).OpenOrganizationTabAsync("组织结构", "structure");
+                await tree.SelectPathAsync(companyName, departmentName);
+                var content = page.GetByRole(AriaRole.Region, new() { Name = "节点内容", Exact = true });
+                await content.GetByText("基本信息", new() { Exact = true }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
+                await Assertions.Expect(content.Locator(".ant-spin-spinning:visible")).ToHaveCountAsync(0, new() { Timeout = 30_000 });
+                await CapturePairAsync("organization-breadcrumb");
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"), new { address, fallbackUrl, organizationUrl = page.Url, actor = "ordinary" }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact(RunEnvironmentVariable, "正式 Part 迁移、普通账号标准创建及 Drawer/独立只读属性 driver")]
     public async Task PartCreation_UsesFormalDriver()
     {

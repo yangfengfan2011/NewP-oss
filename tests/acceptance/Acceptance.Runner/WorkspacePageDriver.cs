@@ -28,10 +28,40 @@ internal sealed class WorkspacePageDriver(IPage page)
             var response = await responseTask;
             if (!response.Ok) throw new InvalidOperationException($"文件夹内容请求失败：{response.Status} {await response.TextAsync()}");
         }
+        await WaitForContentAsync(label);
+    }
+
+    private async Task WaitForContentAsync(string label)
+    {
+        var content = page.GetByRole(AriaRole.Region, new() { Name = "节点内容", Exact = true });
         await content.GetByRole(AriaRole.Heading, new() { Name = label, Exact = true }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
         await content.Locator(".ant-table").WaitForAsync(new() { State = WaitForSelectorState.Visible });
         // 共享列表有独立容器/表格加载者，全部可见指示器退出后才交给后续交互。
         await Assertions.Expect(content.Locator(".ant-spin-spinning:visible")).ToHaveCountAsync(0, new() { Timeout = 30_000 });
+    }
+
+    internal async Task<string> SelectTreePathAsync(params string[] labels)
+    {
+        await new StandardTreePageDriver(page).SelectPathAsync(labels);
+        await WaitForContentAsync(labels[^1]);
+        return page.Url;
+    }
+
+    internal async Task RestorePositionAsync(string address, params string[] labels)
+    {
+        await page.GotoAsync(address);
+        await WaitForContentAsync(labels[^1]);
+        await new StandardTreePageDriver(page).WaitForBreadcrumbAsync(labels);
+    }
+
+    internal async Task RestoreMissingPositionAsync(string address)
+    {
+        await page.GotoAsync(address);
+        await page.GetByRole(AriaRole.Complementary, new() { Name = "结构树", Exact = true })
+            .GetByRole(AriaRole.Status).GetByText("目标节点已不存在", new() { Exact = true }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        await WaitForContentAsync("公共空间");
+        await new StandardTreePageDriver(page).WaitForBreadcrumbAsync("公共空间");
+        await page.WaitForURLAsync(url => url != address);
     }
 
     internal async Task CreateFolderAsync(string name)

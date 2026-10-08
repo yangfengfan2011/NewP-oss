@@ -151,6 +151,10 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             await driver.AddExistingObjectAsync("零组件", PartName, $"{PartCode} - {PartName}");
             await driver.AddExistingObjectAsync("图文档", DocumentName, $"{DocumentCode} - {DocumentName}");
             await driver.ExpandRootToFolderAsync("公共空间", folderName);
+            var folderAddress = await driver.SelectTreePathAsync("公共空间", folderName);
+            await driver.SelectRootAsync("个人空间");
+            await driver.RestorePositionAsync(folderAddress, "公共空间", folderName);
+            await driver.SelectRootAsync("公共空间");
             await CapturePresentationAsync(page, "folder-content.png");
             var properties = await driver.OpenFolderPropertiesAsync(folderName);
             await CapturePresentationAsync(page, "folder-properties.png");

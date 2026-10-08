@@ -104,6 +104,10 @@ public sealed class AcceptanceFeatureCatalogTests
             }
             foreach (var key in new[] { "structure", "companies", "departments", "positions", "persons" })
                 Assert.Contains(catalog.OrganizationTab(key), points);
+            var structure = catalog.OrganizationTab("structure");
+            Assert.Equal("tree:organization.structure", structure.BehaviorKey);
+            Assert.Contains("organization.company.read", catalog.NodeTab(structure, "company", "information").ReadBehaviors);
+            Assert.Contains("organization.department.read", catalog.NodeTab(structure, "department", "information").ReadBehaviors);
             foreach (var key in new[] { "companies", "departments", "persons" })
                 Assert.Contains(catalog.Action(catalog.OrganizationTab(key), "create", "list.pageActions"), points);
             var persons = catalog.OrganizationTab("persons");

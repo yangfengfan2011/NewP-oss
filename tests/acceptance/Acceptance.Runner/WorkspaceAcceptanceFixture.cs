@@ -76,6 +76,33 @@ internal static class WorkspaceAcceptanceFixture
         return new(accountId, ecode, password);
     }
 
+    // 只用当前普通主体的正式命令准备个人来源孤立对象；移除的是查询返回的 LID，不是实体 EID。
+    internal static async Task<string> PrepareOrphanFolderAsync(HttpClient ordinary, AcceptanceFeatureCatalog features,
+        string name, CancellationToken token)
+    {
+        var entry = features.Behavior("Workspace", "workspace.spaces.access");
+        await SendAsync(ordinary, HttpMethod.Post, "/api/workspace/spaces/personal/ensure", null, entry.Position, token);
+        var spaces = await SendAsync(ordinary, HttpMethod.Get, "/api/workspace/spaces", null, entry.Position, token);
+        var personal = spaces.EnumerateArray().Single(space => space.GetProperty("spaceKind").GetString() == "Personal");
+        var spaceId = personal.GetProperty("spaceId").GetString()!;
+        var rootFolderId = personal.GetProperty("rootFolderId").GetString()!;
+        var position = new { spaceId, rootFolderId, linkIds = Array.Empty<string>() };
+        var created = await SendAsync(ordinary, HttpMethod.Post, "/api/workspace/content/folders",
+            new { position, values = new { ENAME = name } },
+            features.Action(entry, "create", "list.pageActions", "folder").Position, token);
+        var folderId = created.GetProperty("id").GetString()!;
+        var scope = JsonSerializer.Serialize(new { spaceId, rootFolderId, linkIds = "[]" });
+        var links = await SendAsync(ordinary, HttpMethod.Get,
+            $"/api/links/workspace.content?direction=forward&anchorModelKey=Workspace%2FWorkspaceFolder&anchorId={Uri.EscapeDataString(rootFolderId)}&queryScope={Uri.EscapeDataString(scope)}",
+            null, entry.Position, token);
+        var link = links.GetProperty("items").EnumerateArray().Single(item =>
+            item.GetProperty("associatedObject").GetProperty("id").GetString() == folderId);
+        var linkId = link.GetProperty("linkId").GetString()!;
+        await SendAsync(ordinary, HttpMethod.Delete, $"/api/workspace/content/references/{Uri.EscapeDataString(linkId)}",
+            new { position }, features.Action(entry, "remove", "list.rowActions", "folder").Position, token);
+        return folderId;
+    }
+
     // 正式命令保留空请求体；所有写请求取得同会话防伪令牌，Secure Cookie 仅在 loopback client 显式回放。
     internal static async Task<JsonElement> SendAsync(HttpClient client, HttpMethod method, string path,
         object? body, string? featurePosition, CancellationToken token)

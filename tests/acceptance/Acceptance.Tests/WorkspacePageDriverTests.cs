@@ -7,6 +7,41 @@ namespace ICP.Platform.Acceptance.Tests;
 
 public sealed class WorkspacePageDriverTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "真实 Chromium 验证正式候选 driver 的必填标签及选择，无服务器或端口")]
+    public async Task FolderCandidate_SelectsTheRequiredComboboxAndWaitsForReadyConfirmation()
+    {
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new()
+        {
+            Headless = true,
+            ExecutablePath = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_CHROMIUM_EXECUTABLE")
+                ?? @"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        });
+        var page = await browser.NewPageAsync();
+        page.SetDefaultTimeout(1000);
+        // 正式 HTML/ARIA 现场：必填星号属于 label 文本，combobox 名称为“* 文件夹”。
+        await page.SetContentAsync("""
+            <style>.ant-form-item-required::before { content: '*'; margin-right: 4px; }</style>
+            <div class="ant-modal" role="dialog" aria-label="添加已有文件夹">
+              <label for="folder" class="ant-form-item-required">文件夹</label>
+              <input id="folder" role="combobox" aria-required="true">
+              <span class="ant-select-selection-item"></span><button disabled>确 认</button>
+            </div>
+            <div class="ant-select-dropdown" hidden><div class="ant-select-item-option-content">来源文件夹</div></div>
+            <script>
+              const input=document.querySelector('input');
+              input.oninput=()=>document.querySelector('.ant-select-dropdown').hidden=false;
+              document.querySelector('.ant-select-item-option-content').onclick=()=>{
+                document.querySelector('.ant-select-selection-item').textContent='来源文件夹';
+                document.querySelector('button').disabled=false;
+                document.querySelector('.ant-select-dropdown').hidden=true;
+              };
+            </script>
+            """);
+        await new WorkspacePageDriver(page).SelectFolderCandidateAsync(page.GetByRole(AriaRole.Dialog), "来源文件夹");
+        await Assertions.Expect(page.GetByRole(AriaRole.Button, new() { Name = "确 认" })).ToBeEnabledAsync();
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "真实 Chromium 验证正式 driver 的多加载指示器等待，无服务器或端口")]
     public async Task SelectedRoot_WaitsUntilBothVisibleLoadingIndicatorsHaveFinished()
     {

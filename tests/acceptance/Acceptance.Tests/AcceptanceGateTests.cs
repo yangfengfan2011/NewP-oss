@@ -58,6 +58,56 @@ public sealed class AcceptanceGateTests
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false).RunAsync(CancellationToken.None);
     }
 
+    [EnvironmentGatedFact(RunEnvironmentVariable, "个人来源孤立 Folder 的正式 API 准备与公共空间添加/移除/候选重加 driver")]
+    public async Task WorkspaceReferences_UseFormalDriver()
+    {
+        var (root, runId) = PrepareRun("workspace-references");
+        var name = $"来源文件夹旅程 {runId[..8]}";
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false,
+            selectFeatures: features =>
+            {
+                var entry = features.Behavior("Workspace", "workspace.spaces.access");
+                return [entry, features.Action(entry, "create", "list.pageActions", "folder"),
+                    features.Action(entry, "add", "list.pageActions", "folder"), features.Action(entry, "remove", "list.rowActions", "folder")];
+            },
+            prepareJourney: async (administrator, features, actor, token) =>
+            {
+                var entry = features.Behavior("Workspace", "workspace.spaces.access");
+                await WorkspaceAcceptanceFixture.SendAsync(administrator, HttpMethod.Post,
+                    "/api/workspace/spaces/public/initialize", null, entry.Position, token);
+                using var ordinary = WorkspaceAcceptanceFixture.CreateClient(administrator.BaseAddress!.Port);
+                await WorkspaceAcceptanceFixture.LoginAsync(ordinary, actor, token);
+                var folderId = await WorkspaceAcceptanceFixture.PrepareOrphanFolderAsync(ordinary, features, name, token);
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "fixture-folder.json"), new { folderId, actorId = actor.AccountId, name }, token);
+            },
+            browserJourney: async (page, token) =>
+            {
+                var driver = new WorkspacePageDriver(page);
+                async Task CapturePairAsync(string stage, ILocator? surface = null)
+                {
+                    // Modal 外容器先可见，等待其内容动画完成后才能留下可核对的截图。
+                    if (surface is not null) await surface.EvaluateAsync("async element => { await new Promise(requestAnimationFrame); await Promise.all(element.getAnimations({subtree:true}).map(animation => animation.finished.catch(() => {}))); }");
+                    await page.ScreenshotAsync(new() { Path = Path.Combine(root, stage + ".png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                    await page.SetViewportSizeAsync(900, 1000);
+                    await page.ScreenshotAsync(new() { Path = Path.Combine(root, stage + "-narrow.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                    await page.SetViewportSizeAsync(1440, 1000);
+                }
+                await driver.OpenAsync();
+                await driver.SelectRootAsync("公共空间");
+                await driver.AddExistingFolderAsync(name, dialog => CapturePairAsync("folder-candidate", dialog));
+                await driver.ExpandRootToFolderAsync("公共空间", name);
+                await CapturePairAsync("folder-reference-list");
+                await driver.RemoveReferenceAsync(name, dialog => CapturePairAsync("remove-reference", dialog));
+                await driver.AddExistingFolderAsync(name);
+                await driver.ExpandRootToFolderAsync("公共空间", name);
+                var properties = await driver.OpenFolderPropertiesAsync(name);
+                await CapturePairAsync("shared-folder-properties");
+                await driver.ClosePropertiesAsync(properties);
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
+                    new { url = page.Url, actor = "ordinary", readdedFolder = name }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact(RunEnvironmentVariable, "正式 Part 迁移、普通账号标准创建及 Drawer/独立只读属性 driver")]
     public async Task PartCreation_UsesFormalDriver()
     {

@@ -11,7 +11,8 @@ namespace ICP.Platform.Acceptance;
 /// <summary>Workspace 的同一正式浏览器旅程及其专用测试库、Host 和凭据生命周期。</summary>
 internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string runDirectory, string runId, bool includeSpaceLifecycle = true,
     Func<IPage, CancellationToken, Task>? browserJourney = null,
-    Func<AcceptanceFeatureCatalog, IReadOnlyList<FeaturePoint>>? selectFeatures = null)
+    Func<AcceptanceFeatureCatalog, IReadOnlyList<FeaturePoint>>? selectFeatures = null,
+    Func<HttpClient, AcceptanceFeatureCatalog, WorkspaceAcceptanceActor, CancellationToken, Task>? prepareJourney = null)
     : AcceptanceRunner(repositoryRoot, runDirectory, runId)
 {
     private ReusableSqlServerDatabase? _databaseLease;
@@ -61,7 +62,8 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
         else
         {
             var entry = features.Behavior("Workspace", "workspace.spaces.access");
-            grantedFeatures = [entry, features.Action(entry, "create", "list.pageActions", "folder")];
+            grantedFeatures = [entry, features.Action(entry, "create", "list.pageActions", "folder"),
+                features.Action(entry, "add", "list.pageActions", "folder"), features.Action(entry, "remove", "list.rowActions", "folder")];
         }
         if (browserJourney is null)
         {
@@ -70,6 +72,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
                 "/api/workspace/spaces/public/initialize", null, _entryPosition, token);
         }
         _actor = await WorkspaceAcceptanceFixture.PrepareAsync(administrator, features, _runId, RegisterSecret, grantedFeatures, token);
+        if (prepareJourney is not null) await prepareJourney(administrator, features, _actor, token);
         await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "initialization.json"),
             new { catalog = ReusableSqlServerDatabase.Catalog, devRun = _devRun, actorId = _actor.AccountId, formalInitialization = true }, token);
     }
@@ -135,6 +138,9 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             await page.SetViewportSizeAsync(900, 1000);
             await CapturePresentationAsync(page, "folder-properties-narrow.png");
             await driver.ClosePropertiesAsync(properties);
+            await driver.RemoveReferenceAsync(folderName);
+            await driver.AddExistingFolderAsync(folderName);
+            await driver.ExpandRootToFolderAsync("公共空间", folderName);
             await CapturePresentationAsync(page, "folder-content-narrow.png");
             await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "browser.json"),
                 new { url = page.Url, actor = "ordinary", createdFolder = folderName, includeSpaceLifecycle }, token);
@@ -148,7 +154,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
 
     private Task CapturePresentationAsync(IPage page, string name) => page.ScreenshotAsync(new()
     {
-        Path = Path.Combine(_runDirectory, name), FullPage = true
+        Path = Path.Combine(_runDirectory, name), FullPage = true, Animations = ScreenshotAnimations.Disabled
     });
 
     // 同一 catalog 跨真实 Host 进程重启后新登录；只在 API 层比较空间和根身份，不重复浏览器旅程。

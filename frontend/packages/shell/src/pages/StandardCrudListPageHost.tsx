@@ -979,6 +979,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const [presentedOperationResult, setPresentedOperationResult] = useState<StandardCrudOperationResult | null>(null);
   const [rowInputAction, setRowInputAction] = useState<{
     action: StandardCrudRuntimeActionSchema;
+    actionScope: 'list.pageActions' | 'list.rowActions';
     row?: TRow;
     selectedRows?: readonly TRow[];
     rowId: string;
@@ -1726,7 +1727,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
               onClick: async () => {
                 actionExecution.clearError();
                 setRowInputValue(undefined);
-                setRowInputAction({ action, row, rowId, pendingKey, label });
+                setRowInputAction({ action, actionScope: 'list.rowActions', row, rowId, pendingKey, label });
               },
             };
           }
@@ -1781,7 +1782,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             if (inputRenderer) {
               actionExecution.clearError();
               setRowInputValue(undefined);
-              setRowInputAction({ action, row, rowId, pendingKey, label });
+              setRowInputAction({ action, actionScope: 'list.rowActions', row, rowId, pendingKey, label });
               return;
             }
 
@@ -1989,7 +1990,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     confirmDiscardIfNeeded(() => {
       if (action.inputKey) {
         actionExecution.clearError(); setRowInputValue(undefined);
-        setRowInputAction({ action, rowId: '', pendingKey: action.key, label: action.labelKey, selectedRows: action.requiresSelection ? [...selectedRows] : undefined });
+        setRowInputAction({ action, actionScope: 'list.pageActions', rowId: '', pendingKey: action.key, label: action.labelKey, selectedRows: action.requiresSelection ? [...selectedRows] : undefined });
       } else {
         void actionExecution.execute({ key: action.key, handler,
           context: { queryScope: host.input.queryScope, featurePosition: feature.position, selectedRows: action.requiresSelection ? [...selectedRows] : undefined } });
@@ -2157,8 +2158,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     </div>
   );
 
+  // 来源与 key 共同标识已打开动作，本地化重建配置对象不能改变会话的判权位置。
   const rowInputFeatureResolution: FeatureResolution = rowInputAction
-    ? features.action(rowInputAction.action.key, schema.pageActions.includes(rowInputAction.action) ? 'list.pageActions' : 'list.rowActions')
+    ? features.action(rowInputAction.action.key, rowInputAction.actionScope)
     : { kind: 'unresolved' };
   const confirmationAction = rowConfirmation
     ? buildRowActions(rowConfirmation.row, [rowConfirmation.action], rowConfirmation.rowId)[0]

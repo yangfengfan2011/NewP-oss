@@ -3,11 +3,12 @@ import { FeaturePlacementContext } from '../authorization/FeaturePlacementContex
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, StrictMode } from 'react';
+import { act, StrictMode, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
-import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
-import { ModuleRegistry, createStandardCrudRestDataAdapter } from '@icp-platform/sdk';
+import { AuthorizationProvider, LanguageSelect, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
+import { ModuleRegistry, createStandardCrudRestDataAdapter, type AuthUser } from '@icp-platform/sdk';
+import { AuthProvider, useAuth, useOptionalAuth } from '../contexts/AuthContext';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { StandardCrudHostEnvironmentContext, type StandardCrudHostEnvironment } from '../standard-crud/standardCrudHostEnvironment';
 import { createEmbeddedHostEnvironment } from './standardCrudHostEnvironmentTestSupport';
@@ -33,11 +34,18 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 let testNavigate: NavigateFunction | undefined;
 let currentLocationSearch = '';
+let refreshTestIdentity: (() => Promise<void>) | undefined;
 
 function NavigationProbe() {
   testNavigate = useNavigate();
   currentLocationSearch = useLocation().search;
+  refreshTestIdentity = useOptionalAuth()?.retrySessionValidation;
   return null;
+}
+
+function AuthenticatedFeatureScope({ children }: { children: ReactNode }) {
+  const auth = useAuth();
+  return <AuthorizationProvider permissions={[]} featurePositions={auth.user?.featurePositions ?? []}>{children}</AuthorizationProvider>;
 }
 
 function countTextOccurrences(text: string, keyword: string): number {
@@ -249,6 +257,7 @@ describe('StandardCrudListPageHost', () => {
     vi.restoreAllMocks();
     window.localStorage.clear();
     currentLocationSearch = '';
+    refreshTestIdentity = undefined;
     if (root) {
       await act(async () => root.unmount());
     }
@@ -269,6 +278,8 @@ describe('StandardCrudListPageHost', () => {
       };
       embedded?: StandardCrudHostEnvironment;
       modelDocument?: typeof personModelDocument;
+      englishCatalog?: Record<string, string>;
+      authenticatedUser?: AuthUser;
     } = {},
   ) {
     container = document.createElement('div');
@@ -282,7 +293,7 @@ describe('StandardCrudListPageHost', () => {
           <NavigationProbe />
           <LocalizationProvider
             defaultLanguage="zhs"
-            supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }]}
+            supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }, ...(options.englishCatalog ? [{ code: 'en', displayName: 'English' }] : [])]}
             catalogs={{
               zhs: {
                 ...personListCatalog,
@@ -290,8 +301,13 @@ describe('StandardCrudListPageHost', () => {
                 'Test.NameConflict': '姓名已被其他人修改',
                 ...catalogOverrides,
               },
+              ...(options.englishCatalog ? { en: {
+                ...Object.fromEntries(Object.entries(platformDictionary.Platform).map(([key, translation]) => [`Platform.${key}`, translation.en])),
+                ...options.englishCatalog,
+              } } : {}),
             }}
           >
+            {options.englishCatalog && <LanguageSelect />}
             <PlatformQueryProvider scopeKey="user-1">
               <RuntimeMetadataProvider
                 value={{
@@ -307,7 +323,10 @@ describe('StandardCrudListPageHost', () => {
           </LocalizationProvider>
         </MemoryRouter>
       );
-      const authorizedHost = options.feature ? <AuthorizationProvider permissions={[]} featurePositions={featurePositions}><FeaturePlacementContext.Provider value={{ entryPosition: options.feature.entry }}>{host}</FeaturePlacementContext.Provider></AuthorizationProvider> : host;
+      const placedHost = options.feature ? <FeaturePlacementContext.Provider value={{ entryPosition: options.feature.entry }}>{host}</FeaturePlacementContext.Provider> : host;
+      const authorizedHost = options.authenticatedUser
+        ? <AuthProvider initialUser={options.authenticatedUser}><AuthenticatedFeatureScope>{placedHost}</AuthenticatedFeatureScope></AuthProvider>
+        : options.feature ? <AuthorizationProvider permissions={[]} featurePositions={featurePositions}>{placedHost}</AuthorizationProvider> : placedHost;
       root.render(options.strictMode ? <StrictMode>{authorizedHost}</StrictMode> : authorizedHost);
     });
     await render();
@@ -396,6 +415,117 @@ describe('StandardCrudListPageHost', () => {
       },
     ]);
   }
+
+  it.each([
+    { scope: 'list.pageActions', standardAction: undefined },
+    { scope: 'list.rowActions', standardAction: undefined },
+    { scope: 'list.rowActions', standardAction: 'delete' },
+  ] as const)('keeps the $scope input draft and its original snapshot across locale changes (standardAction: $standardAction)', async ({ scope, standardAction }) => {
+    const pageHandler = vi.fn(async (_context: unknown) => undefined);
+    const rowHandler = vi.fn(async (_context: unknown) => undefined);
+    mockStandardCrudModule({
+      dataAdapter: { list: async () => ({ items: [{ id: 'one', PersonNo: '001', ENAME: '甲' }, { id: 'two', PersonNo: '002', ENAME: '乙' }], total: 2 }),
+        getRowId: (row: { id: string }) => row.id },
+      actionHandlers: { pageHandler, rowHandler },
+      actionInputRenderers: { draft: context => <input aria-label="Action draft" value={String(context.value ?? '')}
+        onChange={event => context.onChange(event.target.value)} /> },
+    });
+    // 同名 key 的页级与行级动作拥有各自的功能位置；本地化重建不能改变已打开动作的来源。
+    const view = { ...personListViewDocument, view: { ...personListViewDocument.view,
+      pageActions: [{ key: 'review', labelKey: 'PageReview', handlerKey: 'pageHandler', inputKey: 'draft', requiresSelection: true,
+        confirmLabelKey: 'SubmitReview', confirmMessageKey: 'ConfirmReview' }],
+      rowActions: [{ key: 'review', labelKey: 'RowReview', handlerKey: 'rowHandler', inputKey: 'draft', standardAction,
+        confirmLabelKey: 'SubmitReview', confirmMessageKey: 'ConfirmReview' }],
+    } } as unknown as typeof personListViewDocument;
+    await renderHost({ 'PersonListView.PageReview': '批量复核', 'PersonListView.RowReview': '行复核',
+      'PersonListView.SubmitReview': '提交复核', 'PersonListView.ConfirmReview': '确认当前快照？' }, view, '/organization/persons', {
+      englishCatalog: { 'PersonListView.PageReview': 'Batch review', 'PersonListView.RowReview': 'Row review',
+        'PersonListView.SubmitReview': 'Submit review', 'PersonListView.ConfirmReview': 'Confirm the current snapshot?' },
+      feature: { entry: 'entry', positions: ['entry', 'page-review', 'row-review'], points: [
+        { key: 'review', kind: 'action', position: 'page-review', parentPosition: 'entry', actionScope: 'list.pageActions' },
+        { key: 'review', kind: 'action', position: 'row-review', parentPosition: 'entry', actionScope: 'list.rowActions' },
+      ] },
+    });
+    await vi.waitFor(() => expect(container.textContent).toContain('甲'));
+    await act(async () => container.querySelector<HTMLInputElement>('tr.ant-table-row[data-row-key="one"] input[type="checkbox"]')!.click());
+    if (scope === 'list.pageActions') {
+      await act(async () => [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === '批量复核')!.click());
+    } else {
+      await act(async () => [...container.querySelectorAll<HTMLButtonElement>('tr.ant-table-row[data-row-key="one"] button')].find(button => button.textContent === '更多')!.click());
+      await vi.waitFor(() => expect([...document.querySelectorAll('.ant-dropdown-menu-item')].some(item => item.textContent === '行复核')).toBe(true));
+      await act(async () => [...document.querySelectorAll<HTMLElement>('.ant-dropdown-menu-item')].find(item => item.textContent === '行复核')!.click());
+    }
+    await vi.waitFor(() => expect(document.querySelector('input[aria-label="Action draft"]')).not.toBeNull());
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="Action draft"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'keep my draft');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(input.value).toBe('keep my draft');
+    await act(async () => {
+      const language = container.querySelector<HTMLSelectElement>('select')!;
+      language.value = 'en'; language.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(document.querySelector('input[aria-label="Action draft"]')).toBe(input);
+    expect(input.value).toBe('keep my draft');
+    expect(document.querySelector('.ant-modal-title')?.textContent).toContain(scope === 'list.pageActions' ? 'Batch review' : 'Row review');
+    expect(document.querySelector('.ant-modal-body')?.textContent).toContain('Confirm the current snapshot?');
+    expect(pageHandler).not.toHaveBeenCalled();
+    expect(rowHandler).not.toHaveBeenCalled();
+    await act(async () => [...document.querySelectorAll<HTMLButtonElement>('.ant-modal button')].find(button => button.textContent === 'Submit review')!.click());
+    const handler = scope === 'list.pageActions' ? pageHandler : rowHandler;
+    await vi.waitFor(() => expect(handler).toHaveBeenCalledTimes(1));
+    expect(handler.mock.calls[0]?.[0]).toMatchObject({ input: 'keep my draft', featurePosition: scope === 'list.pageActions' ? 'page-review' : 'row-review',
+      ...(scope === 'list.pageActions' ? { selectedRows: [{ id: 'one', ENAME: '甲' }] } : { id: 'one', row: { id: 'one', ENAME: '甲' } }) });
+    expect(scope === 'list.pageActions' ? rowHandler : pageHandler).not.toHaveBeenCalled();
+  });
+
+  it('invalidates a revoked page input action without borrowing the same-named row grant or reviving its draft', async () => {
+    const handler = vi.fn();
+    let user: AuthUser = { id: 'user-1', ecode: 'reviewer', ename: 'Reviewer', revision: 1, mustChangePassword: false,
+      isLocalAdministrator: false, featurePositions: ['entry', 'page-review', 'row-review'], timeZoneId: 'Asia/Taipei' };
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      const path = input instanceof Request ? input.url : String(input);
+      if (!path.endsWith('/current-user')) throw new Error(`Unexpected request: ${path}`);
+      return new Response(JSON.stringify(user), { headers: { 'Content-Type': 'application/json' } });
+    });
+    mockStandardCrudModule({ dataAdapter: { list: async () => ({ items: [], total: 0 }), getRowId: () => '' },
+      actionHandlers: { review: handler }, actionInputRenderers: { draft: context => <input aria-label="Action draft"
+        value={String(context.value ?? '')} onChange={event => context.onChange(event.target.value)} /> } });
+    const action = { key: 'review', labelKey: 'Review', handlerKey: 'review', inputKey: 'draft' };
+    const view = { ...personListViewDocument, view: { ...personListViewDocument.view, pageActions: [action], rowActions: [action] } } as unknown as typeof personListViewDocument;
+    await renderHost({ 'PersonListView.Review': '复核' }, view, '/organization/persons', {
+      authenticatedUser: user,
+      feature: { entry: 'entry', positions: ['entry', 'page-review', 'row-review'], points: [
+        { key: 'review', kind: 'action', position: 'page-review', parentPosition: 'entry', actionScope: 'list.pageActions' },
+        { key: 'review', kind: 'action', position: 'row-review', parentPosition: 'entry', actionScope: 'list.rowActions' },
+      ] },
+    });
+    const openInput = () => act(async () => [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === '复核')!.click());
+    await openInput();
+    await vi.waitFor(() => expect(document.querySelector('input[aria-label="Action draft"]')).not.toBeNull());
+    await act(async () => {
+      const input = document.querySelector<HTMLInputElement>('input[aria-label="Action draft"]')!;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'old draft');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const confirm = document.querySelector<HTMLButtonElement>('.ant-modal-footer .ant-btn-primary')!;
+    await act(async () => {
+      user = { ...user, featurePositions: ['entry', 'row-review'] };
+      await refreshTestIdentity!();
+    });
+    expect(document.querySelector('input[aria-label="Action draft"]')).toBeNull();
+    await act(async () => confirm.click());
+    expect(handler).not.toHaveBeenCalled();
+    await act(async () => {
+      user = { ...user, featurePositions: ['entry', 'page-review', 'row-review'] };
+      await refreshTestIdentity!();
+    });
+    expect(document.querySelector('input[aria-label="Action draft"]')).toBeNull();
+    await openInput();
+    await vi.waitFor(() => expect(document.querySelector<HTMLInputElement>('input[aria-label="Action draft"]')?.value).toBe(''));
+    expect(handler).not.toHaveBeenCalled();
+  });
 
   it('captures current-page selection for confirmation and clears it after refresh', async () => {
     const handler = vi.fn(async (_context: unknown) => ({ operation: 'action' as const, payload: {}, change: { operation: 'delete' as const, id: '' } }));

@@ -69,8 +69,8 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             var part = features.Behavior("Part", "part.part.read");
             var document = features.Behavior("Document", "document.document.read");
             grantedFeatures = [entry, features.Action(entry, "create", "list.pageActions", "folder"),
-                features.Action(entry, "add", "list.pageActions", "folder"), features.Action(entry, "remove", "list.rowActions", "folder"),
-                part, features.Action(part, "create", "list.pageActions"), document, features.Action(document, "create", "list.pageActions")];
+                features.Action(entry, "createPart", "list.pageActions", "folder"), features.Action(entry, "createDocument", "list.pageActions", "folder"), features.Action(entry, "remove", "list.rowActions", "folder"),
+                part, document];
         }
         if (browserJourney is null)
         {
@@ -79,13 +79,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
                 "/api/workspace/spaces/public/initialize", null, _entryPosition, token);
         }
         _actor = await WorkspaceAcceptanceFixture.PrepareAsync(administrator, features, _runId, RegisterSecret, grantedFeatures, token);
-        if (browserJourney is null)
-        {
-            using var ordinary = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
-            await WorkspaceAcceptanceFixture.LoginAsync(ordinary, _actor, token);
-            await WorkspaceAcceptanceFixture.CreateMetadataObjectAsync(ordinary, features, "Part", "part.part.read", "/api/part/parts", PartCode, PartName, token);
-            await WorkspaceAcceptanceFixture.CreateMetadataObjectAsync(ordinary, features, "Document", "document.document.read", "/api/document/documents", DocumentCode, DocumentName, token);
-        }
+
         if (prepareJourney is not null) await prepareJourney(administrator, features, _actor, token);
         await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "initialization.json"),
             new { catalog = ReusableSqlServerDatabase.Catalog, devRun = _devRun, actorId = _actor.AccountId, formalInitialization = true }, token);
@@ -144,12 +138,9 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
                 await driver.SelectRootAsync("公共空间");
             }
             var folderName = $"工作空间旅程文件夹 {_runId[..8]}";
-            await driver.SelectRootAsync("个人空间");
             await driver.CreateFolderAsync(folderName);
-            await driver.SelectRootAsync("公共空间");
-            await driver.AddExistingFolderAsync(folderName);
-            await driver.AddExistingObjectAsync("零组件", PartName, $"{PartCode} - {PartName}");
-            await driver.AddExistingObjectAsync("图文档", DocumentName, $"{DocumentCode} - {DocumentName}");
+            await driver.CreateObjectAsync("零组件", PartCode, PartName);
+            await driver.CreateObjectAsync("图文档", DocumentCode, DocumentName);
             await driver.ExpandRootToFolderAsync("公共空间", folderName);
             var folderAddress = await driver.SelectTreePathAsync("公共空间", folderName);
             await driver.SelectRootAsync("个人空间");
@@ -172,7 +163,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             await driver.OpenOwnedPropertiesAsync(DocumentName, "/documents");
             await driver.ReturnToPublicContentAsync();
             await driver.RemoveReferenceAsync(PartName);
-            await driver.AddExistingObjectAsync("零组件", PartName, $"{PartCode} - {PartName}");
+            await driver.CreateObjectAsync("零组件", PartCode + "-NEXT", PartName + " 新建");
             await driver.ExpandRootToFolderAsync("公共空间", folderName);
             await CapturePresentationAsync(page, "folder-content-narrow.png");
             await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "browser.json"),

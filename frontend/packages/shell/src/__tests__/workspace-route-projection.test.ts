@@ -27,6 +27,6 @@ it('still rejects an unconsumed list binding and an object list that hides every
   const composedList = { ...tree, view: { ...tree.view, nodeTypes: [{ ...tree.view.nodeTypes[0], pageRef: {
     pageKey: 'platform.list', parameters: { viewKey: list.view.key },
   } }] } };
-  const hiddenDetailList = { ...list, view: { ...list.view, rowActions: [] } };
+  const hiddenDetailList = { ...list, view: { ...list.view, rowActions: [], columns: list.view.columns.map(column => ({ ...column, standardAction: undefined })) } };
   expect(() => compileStandardCrudRouteProjection([module], [navigation], [composedList, hiddenDetailList, detail], [])).toThrow('STANDARD_CRUD_DETAIL_ACTION_MISSING');
 });

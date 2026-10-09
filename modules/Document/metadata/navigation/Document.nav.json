@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0", "type": "nav", "navigation": { "items": [
-    { "key": "document.documents", "titleKey": "Document.Title", "icon": "module", "path": "/documents", "order": 50, "entryType": "standard-list", "targetKey": "document.document.list", "featureAuthorization": true },
+    { "key": "document.documents", "titleKey": "Document.Title", "icon": "module", "path": "/documents", "order": 50, "entryType": "standard-list", "targetKey": "document.document.list", "featureAuthorization": true, "routeOnly": true },
     { "key": "document.document.detail", "path": "/documents/:id", "routeOnly": true, "entryType": "standard-crud-detail", "targetKey": "document.document.detail", "featureOwner": "navigation:document.documents" }
   ] }
 }

@@ -182,8 +182,10 @@ it('protects a cross-space draft and submission, then refreshes all loaded share
     const button = [...scope.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === label)!;
     await act(async () => button.click());
   };
-  await waitFor(() => expect([...page.container.querySelectorAll('button')].some(button => button.textContent?.replace(/\s/g, '') === '新建文件夹')).toBe(true));
-  await click('新建文件夹', page.container);
+  await waitFor(() => expect([...page.container.querySelectorAll('button')].some(button => button.textContent?.replace(/\s/g, '') === '新建')).toBe(true));
+  await click('新建', page.container);
+  await waitFor(() => expect(document.querySelector('[role="menuitem"]')).not.toBeNull());
+  await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent === '新建文件夹')!.click());
   await waitFor(() => expect(document.querySelector('.ant-drawer form')).not.toBeNull());
   const label = [...document.querySelectorAll<HTMLLabelElement>('.ant-drawer label')].find(label => label.textContent?.includes('名称'))!;
   const input = document.getElementById(label.htmlFor) as HTMLInputElement;

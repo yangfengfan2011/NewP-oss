@@ -1,10 +1,10 @@
 import { platformFetch } from '@icp-platform/core';
 import { createElement, lazy, Suspense } from 'react';
-import { readStandardCrudRequestError, type StandardCrudDetail, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
+import { readStandardCrudRequestError, type StandardCrudActionInputRenderContext, type StandardCrudDetail, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 
 interface LinkRow { linkId: string; associatedObject: { modelKey: string; id: string }; fields: Record<string, unknown> }
 const headers = (featurePosition?: string): Record<string, string> => featurePosition ? { 'X-NewP-Feature': featurePosition } : {};
-const FolderCandidateInput = lazy(() => import('./FolderCandidateInput'));
+const WorkspaceObjectCreateInput = lazy(() => import('./WorkspaceObjectCreateInput'));
 function positionFromScope(scope?: Record<string, unknown>) {
   if (typeof scope?.spaceId !== 'string' || typeof scope.rootFolderId !== 'string' || typeof scope.linkIds !== 'string') throw new Error('缺少工作空间出现位置');
   return { spaceId: scope.spaceId, rootFolderId: scope.rootFolderId, linkIds: JSON.parse(scope.linkIds) as unknown };
@@ -25,14 +25,14 @@ const resource: StandardCrudResourceRegistration = {
   listFieldRenderers: { ObjectType: ({ row, value }) => createElement('span', null,
     createElement('span', { 'aria-hidden': true }, row.ObjectModelKey === 'Workspace/WorkspaceFolder' ? '📁 ' : row.ObjectModelKey === 'Part/Part' ? '▦ ' : '▤ '), String(value ?? '')) },
   actionInputRenderers: {
-    folderCandidate: context => createElement(Suspense, { fallback: null }, createElement(FolderCandidateInput, context)),
+    createObject: Object.assign((context: StandardCrudActionInputRenderContext) =>
+      createElement(Suspense, { fallback: null }, createElement(WorkspaceObjectCreateInput, context)), { presentation: 'drawer' as const }),
   },
   actionHandlers: {
-    add: async ({ input, queryScope, featurePosition }) => {
-      if (typeof input !== 'object' || input === null || !('modelKey' in input) || !('id' in input)
-        || typeof input.modelKey !== 'string' || typeof input.id !== 'string' || !input.id) throw new Error('请选择对象');
-      return referenceCommand('POST', '/api/workspace/content/references', { position: positionFromScope(queryScope), target: input }, featurePosition);
-    },
+    createPart: async ({ input, queryScope, featurePosition }) => referenceCommand('POST', '/api/workspace/content/parts',
+      { position: positionFromScope(queryScope), values: input }, featurePosition),
+    createDocument: async ({ input, queryScope, featurePosition }) => referenceCommand('POST', '/api/workspace/content/documents',
+      { position: positionFromScope(queryScope), values: input }, featurePosition),
     remove: async ({ id, queryScope, featurePosition }) => {
       if (!id) throw new Error('缺少引用标识');
       return referenceCommand('DELETE', `/api/workspace/content/references/${encodeURIComponent(id)}`, { position: positionFromScope(queryScope) }, featurePosition);

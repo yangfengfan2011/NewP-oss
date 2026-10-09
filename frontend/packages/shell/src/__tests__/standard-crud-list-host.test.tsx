@@ -397,6 +397,25 @@ describe('StandardCrudListPageHost', () => {
     ]);
   }
 
+  it('hides a parent action when no children are granted and restores it when a child is granted', async () => {
+    mockStandardCrudModule();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ items: [], total: 0, page: 1, pageSize: 20 }),
+      { headers: { 'Content-Type': 'application/json' } }));
+    const view = { ...personListViewDocument, view: { ...personListViewDocument.view,
+      pageActionGroups: [{ key: 'new', labelKey: 'NewGroup', actionKeys: ['create'] }] } };
+    const host = await renderHost({ 'PersonListView.NewGroup': '新建' }, view, '/organization/persons',
+      { feature: { entry: 'entry', create: 'create', positions: ['entry'] } });
+    const parent = () => [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === '新建');
+    expect(parent()).toBeUndefined();
+    await host.setFeaturePositions(['entry', 'create']);
+    await vi.waitFor(() => expect(parent()).toBeDefined());
+    await act(async () => parent()!.click());
+    await vi.waitFor(() => expect([...document.querySelectorAll('[role="menuitem"]')].some(item => item.textContent === '新建人员')).toBe(true));
+    await host.setFeaturePositions(['entry']);
+    await vi.waitFor(() => expect(parent()).toBeUndefined());
+    expect(document.querySelector('.ant-drawer')).toBeNull();
+  });
+
   it('loads rows through standard CRUD registration', async () => {
     mockStandardCrudModule();
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(

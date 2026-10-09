@@ -4,6 +4,10 @@
 
 Standard CRUD 上下文定义平台共享宿主用于组合资源列表、创建、编辑和详情体验的公共语言。模块拥有业务数据与行为，Standard CRUD 拥有一致的 metadata 解释和呈现契约。
 
+List View 可用 `pageActionGroups: [{ key, labelKey, variant?, actionKeys }]` 声明父按钮，按 `actionKeys` 的顺序把已有页级动作显示为下拉子按钮。分组只拥有呈现，不拥有 handler 或权限；子动作的 key、功能位置和执行生命周期不变。每个子动作只能属于一个组，未知或重复引用在 View 解析时拒绝；父按钮位于首个可见子动作的位置，没有可见子动作时不显示。未分组动作保持原呈现，移除分组配置即可回退。
+
+动作输入渲染器可声明 `presentation: "drawer"`，由共享动作宿主使用同一 `CrudFormDrawer` 承载业务表单；新建输入采用右侧抽屉及“保存并关闭”。默认 Modal 继续用于既有确认与审阅输入。两种容器共享权限失效、草稿关闭保护、pending 与提交交接，模块不自行创建容器；Drawer 随动作按需装载，不扩大 Shell 启动依赖。该选项不改变命令、权限或持久化协议，移除声明即可回退到 Modal。
+
 显式 Link 查询采用 List View 的 `querySource: { kind: "link", model, resourceKey }`。form 的 Model 继续拥有创建字段，查询列只能是 Link 正式公共目录中的 projection 字段，默认排序及可排序列也按该目录校验。共享宿主收集 LID 而非默认 EID；Adapter 的 `getRowId` 仍拥有关系行身份，可选 `getDetailId` 单独提供当前目标资源的真实 Entity 主键。第一片采用者仅登记文件夹详情；异构对象的资源/页面选择继续由对象拥有模块登记，不能绑定虚假的混合 Entity Detail View。
 
 通用 Link 查询的端点目录、条件与执行入口见[接入指南](../../developer/link-query-configuration.md)。公开请求始终分页；受信任树适配只能读取当前一层，不能通过 HTTP 关闭分页。读取失败不自动修复关系或扩大授权。

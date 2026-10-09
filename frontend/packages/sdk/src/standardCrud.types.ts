@@ -266,6 +266,8 @@ export interface StandardCrudActionInputRenderContext extends StandardCrudFeatur
 
 /** 模块动作输入渲染器；弹层、权限、pending、错误、刷新和关闭生命周期仍归 Shell。 */
 export type StandardCrudActionInputRenderer = ((context: StandardCrudActionInputRenderContext) => ReactNode) & {
+  /** 新建等业务表单可采用标准 Drawer；省略时沿用 Modal 审阅容器，生命周期仍归宿主。 */
+  presentation?: 'modal' | 'drawer';
   /** 输入所有者提供可选宽度；宿主仍负责弹窗与窄屏约束。 */
   dialogWidth?: number;
   /** 只读输入仅展示关闭，不执行动作 handler 或制造一次写入刷新。 */

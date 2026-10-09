@@ -45,6 +45,7 @@ import {
   buildStandardCrudListSchema,
   resolveStandardCrudDetailSchema,
   type StandardCrudRuntimeActionSchema,
+  type StandardCrudPageActionGroupSchema,
 } from '../metadata/standardCrudSchemaResolver';
 import { resolveListViewDocument } from '../metadata/viewMetadataResolver';
 import { buildStandardCrudRegistry } from '../registries/standardCrudRegistry';
@@ -1971,38 +1972,55 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       </AntdButton>
     </Dropdown>
   ) : undefined;
-  const headerActions = visibleHeaderActions.length > 0
-    ? (
-      <>
-        {visibleHeaderActions.map((action) => (
-          <AntdButton
-            key={action.key}
-            type={action.variant === 'primary' ? 'primary' : 'default'}
-            size="middle"
-            disabled={actionExecution.pendingKey !== null || mutationExecution.pending}
-            onClick={() => {
-              if (action.standardAction === 'create') { void openCreateDrawer(); return; }
-              const feature = resolveActionFeature(action, 'list.pageActions');
-              const handler = registration.actionHandlers?.[action.handlerKey ?? action.key];
-              if (feature.kind !== 'allowed' || !handler) return;
-              confirmDiscardIfNeeded(() => {
-                if (action.inputKey) {
-                  actionExecution.clearError(); setRowInputValue(undefined);
-                  setRowInputAction({ action, rowId: '', pendingKey: action.key, label: action.labelKey });
-                } else {
-                  void actionExecution.execute({ key: action.key, handler,
-                    context: { queryScope: host.input.queryScope, featurePosition: feature.position } });
-                }
-              });
-            }}
-          >
-            {t(`${schema.dicKey}.${action.labelKey}`, action.labelKey)}
-          </AntdButton>
-        ))}
-      </>
-    )
-    : undefined;
-
+  // 分组只改变入口呈现；每次执行仍以子动作的当前权限和原有生命周期为准。
+  function runHeaderAction(action: StandardCrudRuntimeActionSchema): void {
+    if (actionExecution.pendingKey !== null || mutationExecution.pending) return;
+    const feature = resolveActionFeature(action, 'list.pageActions');
+    if (feature.kind !== 'allowed') return;
+    if (action.standardAction === 'create') { void openCreateDrawer(); return; }
+    const handler = registration.actionHandlers?.[action.handlerKey ?? action.key];
+    if (!handler) return;
+    confirmDiscardIfNeeded(() => {
+      if (action.inputKey) {
+        actionExecution.clearError(); setRowInputValue(undefined);
+        setRowInputAction({ action, rowId: '', pendingKey: action.key, label: action.labelKey });
+      } else {
+        void actionExecution.execute({ key: action.key, handler,
+          context: { queryScope: host.input.queryScope, featurePosition: feature.position } });
+      }
+    });
+  }
+  const groupByAction = new Map((schema.pageActionGroups ?? []).flatMap(group => group.actionKeys.map(key => [key, group] as const)));
+  const emittedGroups = new Set<string>();
+  const headerEntries: Array<{ key: string; group?: StandardCrudPageActionGroupSchema; actions: StandardCrudRuntimeActionSchema[] }> = [];
+  for (const action of visibleHeaderActions) {
+    const group = groupByAction.get(action.key);
+    if (!group) { headerEntries.push({ key: action.key, actions: [action] }); continue; }
+    if (emittedGroups.has(group.key)) continue;
+    emittedGroups.add(group.key);
+    headerEntries.push({ key: group.key, group,
+      actions: group.actionKeys.flatMap(key => visibleHeaderActions.filter(child => child.key === key)) });
+  }
+  const headerPending = actionExecution.pendingKey !== null || mutationExecution.pending;
+  const headerActions = headerEntries.length > 0 ? <>
+    {headerEntries.map(({ key, group, actions }) => group ? (
+      <Dropdown key={key} trigger={['click']} disabled={headerPending} menu={{
+        items: actions.map(action => ({ key: action.key, label: t(`${schema.dicKey}.${action.labelKey}`, action.labelKey),
+          disabled: headerPending, danger: action.variant === 'danger' })),
+        onClick: ({ key: childKey }) => { const action = actions.find(child => child.key === childKey); if (action) runHeaderAction(action); },
+      }}>
+        <AntdButton type={group.variant === 'primary' ? 'primary' : 'default'} danger={group.variant === 'danger'}
+          size="middle" disabled={headerPending}>
+          {t(`${schema.dicKey}.${group.labelKey}`, group.labelKey)} <DownOutlined aria-hidden />
+        </AntdButton>
+      </Dropdown>
+    ) : (
+      <AntdButton key={key} type={actions[0].variant === 'primary' ? 'primary' : 'default'} size="middle"
+        disabled={headerPending} onClick={() => runHeaderAction(actions[0])}>
+        {t(`${schema.dicKey}.${actions[0].labelKey}`, actions[0].labelKey)}
+      </AntdButton>
+    ))}
+  </> : undefined;
   const filterBar = (
     <CrudSearchBar
       fields={(

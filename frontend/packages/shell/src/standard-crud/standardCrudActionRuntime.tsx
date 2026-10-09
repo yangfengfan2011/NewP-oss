@@ -181,6 +181,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
           detail={context.detail}
           row={context.row}
           pending={actionExecution.pendingKey === currentInputAction.key}
+          error={actionExecution.error?.key === currentInputAction.key ? formatRequestError(actionExecution.error.failure, t) : null}
           onChange={setInputValue}
           onCancel={() => {
             if (actionExecution.pendingKey === null) setInputAction(null);

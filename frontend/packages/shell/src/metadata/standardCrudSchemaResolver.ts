@@ -85,6 +85,13 @@ export interface StandardCrudRuntimeQuerySchema {
   advancedFilter?: StandardCrudAdvancedFilterSchema;
 }
 
+export interface StandardCrudPageActionGroupSchema {
+  key: string;
+  labelKey: string;
+  variant?: StandardCrudActionDefinition['variant'];
+  actionKeys: string[];
+}
+
 export interface StandardCrudListRuntimeSchema {
   viewKey: string;
   resourceKey: string;
@@ -100,6 +107,7 @@ export interface StandardCrudListRuntimeSchema {
   columnSource: 'metadata' | 'runtime';
   columns: StandardCrudRuntimeColumnSchema[];
   pageActions: StandardCrudRuntimeActionSchema[];
+  pageActionGroups?: StandardCrudPageActionGroupSchema[];
   rowActions: StandardCrudRuntimeActionSchema[];
   exportModes: string[];
 }
@@ -809,6 +817,36 @@ function assertLocalizedActions(
   }
 }
 
+// 父按钮仅引用已有动作；不生成另一份 handler、授权位置或运行时副作用。
+function readPageActionGroups(value: unknown, actions: StandardCrudRuntimeActionSchema[]): StandardCrudPageActionGroupSchema[] {
+  if (!Array.isArray(value)) throw new Error('pageActionGroups must be an array');
+  const groups = new Set<string>();
+  const groupedActions = new Set<string>();
+  return value.map(item => {
+    const group = readRecord(item);
+    const key = readString(group.key);
+    const labelKey = readString(group.labelKey);
+    const variant = readString(group.variant);
+    if (!key || !labelKey || groups.has(key) || actions.some(action => action.key === key)
+      || Object.keys(group).some(field => !['key', 'labelKey', 'variant', 'actionKeys'].includes(field))) {
+      throw new Error('page action group must have a unique key, label and presentation-only fields');
+    }
+    if (variant && !supportedActionVariants.has(variant)) throw new Error(`unsupported action group variant "${variant}"`);
+    if (!Array.isArray(group.actionKeys) || group.actionKeys.length === 0) throw new Error(`page action group "${key}" must reference actions`);
+    const actionKeys = group.actionKeys.map(actionKey => {
+      const matches = actions.filter(action => action.key === actionKey);
+      if (typeof actionKey !== 'string' || matches.length !== 1 || groupedActions.has(actionKey)
+        || !(matches[0].standardAction === 'create' || matches[0].handlerKey)) {
+        throw new Error(`page action group "${key}" contains an unknown, duplicate or unsupported action`);
+      }
+      groupedActions.add(actionKey);
+      return actionKey;
+    });
+    groups.add(key);
+    return { key, labelKey, actionKeys, ...(variant ? { variant: variant as StandardCrudActionDefinition['variant'] } : {}) };
+  });
+}
+
 export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
   view: MetadataRecord,
   registration: StandardCrudResourceRegistration<TFilter, TRow, TDetail>,
@@ -875,6 +913,11 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
       .filter((action) => action.key.length > 0),
     exportModes: readArray<unknown>(exportConfig.modes).filter((mode): mode is string => typeof mode === 'string'),
   };
+
+  if (view.pageActionGroups !== undefined) {
+    schema.pageActionGroups = readPageActionGroups(view.pageActionGroups, schema.pageActions);
+    for (const group of schema.pageActionGroups) assertDictionaryKey(dicKey, group.labelKey, context?.defaultLanguageCatalog);
+  }
 
   for (const action of schema.pageActions) {
     if (action.standardAction === 'refresh') {

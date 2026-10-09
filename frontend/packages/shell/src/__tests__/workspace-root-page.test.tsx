@@ -48,7 +48,7 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
   let failInitialRead = scenario === 'receipt';
   let completeOld!: (response: Response) => void;
   const user = () => ({ id: account, ecode: account, ename: account, revision: 1, mustChangePassword: false,
-    isLocalAdministrator: false, timeZoneId: 'Asia/Taipei', featurePositions: ['workspace-entry', 'workspace-create', 'workspace-add', 'workspace-remove'] });
+    isLocalAdministrator: false, timeZoneId: 'Asia/Taipei', featurePositions: ['workspace-entry', 'workspace-create', 'workspace-createDocument', 'workspace-remove'] });
   const spaces = () => [
     { spaceId: 'public', spaceKind: 'Public', rootFolderId: 'public-root', name: '公共空间', hasChildren: scenario === 'success' && writes.length > 0 },
     { spaceId: `${account}-space`, spaceKind: 'Personal', rootFolderId: `${account}-root`, name: `个人空间-${account}` },
@@ -65,7 +65,7 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
     if (path.endsWith('antiforgery-token')) return json({ requestToken: 'token' });
     if (path.endsWith('current-user')) return json(user());
     if (path.startsWith('/api/workspace/folders/candidates')) return json({ items: [{ id: 'shared-folder', name: '已有共享文件夹' }], total: 1, page: 1, pageSize: 20 });
-    if (path.startsWith('/api/workspace/content/references') && (method === 'POST' || method === 'DELETE')) {
+    if ((path === '/api/workspace/content/documents' && method === 'POST') || (path.startsWith('/api/workspace/content/references') && method === 'DELETE')) {
       references.push({ method, body: input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body)) });
       referencePresent = method === 'POST'; failRefresh = true;
       return json({ succeeded: true });
@@ -127,7 +127,7 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
         <RuntimeMetadataProvider value={{ manifest: { modules: [{ moduleId: 'Workspace', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: [
           { key: 'workspace', position: 'workspace-entry', kind: 'navigation' },
           { key: 'create', position: 'workspace-create', kind: 'action', parentPosition: 'workspace-entry', staticScope: 'folder', actionScope: 'list.pageActions' },
-          { key: 'add', position: 'workspace-add', kind: 'action', parentPosition: 'workspace-entry', staticScope: 'folder', actionScope: 'list.pageActions' },
+          { key: 'createDocument', position: 'workspace-createDocument', kind: 'action', parentPosition: 'workspace-entry', staticScope: 'folder', actionScope: 'list.pageActions' },
           { key: 'remove', position: 'workspace-remove', kind: 'action', parentPosition: 'workspace-entry', staticScope: 'folder', actionScope: 'list.rowActions' },
         ] }] }, navDocuments: navs, modelDocuments: [folder, content, partModel, documentModel], viewDocuments: views }}>
           <SessionSwitch /><PageEntry page={{ pageKey: 'platform.tree', parameters: { viewKey: tree.view.key, featurePosition: 'workspace-entry' }, inputResolverKey: 'workspace.tree.current' }} />
@@ -146,9 +146,7 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
   expect(container.querySelector('.ant-tree input[placeholder]')).toBeNull();
   expect(container.querySelector('.ant-table')).not.toBeNull();
   if (scenario === 'receipt') {
-    await act(async () => [...container.querySelectorAll<HTMLElement>('.ant-table *')].find(element => element.children.length === 0 && element.textContent === '更多')!.click());
-    await vi.waitFor(() => expect(document.body.textContent).toContain('打开属性'));
-    await act(async () => [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(element => element.textContent === '打开属性')!.click());
+    await act(async () => container.querySelector<HTMLButtonElement>('.np-standard-crud-cell-action')!.click());
     await vi.waitFor(() => expect(document.body.textContent).toContain('公共对象属性'));
     expect(fetcher.mock.calls.some(([input]) => String(input instanceof Request ? input.url : input).endsWith('/folders/public-root-folder'))).toBe(true);
     await act(async () => document.querySelector<HTMLButtonElement>('.ant-drawer-close')!.click());
@@ -158,7 +156,12 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
     return url.pathname === '/api/links/workspace.content' && url.searchParams.get('anchorId') === 'public-root';
   }).length;
   const readsBeforeCreate = publicListReads();
-  const createButton = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === '新建文件夹');
+  const openNewMenu = async () => {
+    await act(async () => [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === '新建')!.click());
+    await vi.waitFor(() => expect(document.querySelector('[role="menuitem"]')).not.toBeNull());
+  };
+  await openNewMenu();
+  const createButton = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent === '新建文件夹');
   expect(createButton).toBeDefined(); await act(async () => createButton!.click());
   await vi.waitFor(() => expect(document.querySelector('.ant-drawer form')).not.toBeNull());
   const nameLabel = [...document.querySelectorAll<HTMLLabelElement>('.ant-drawer label')].find(label => label.textContent?.includes('名称'))!;
@@ -189,17 +192,22 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
     await vi.waitFor(() => expect([...container.querySelectorAll('.ant-tree-title')].filter(element => element.textContent === '共享后代')).toHaveLength(2));
     const loadedReads = () => fetcher.mock.calls.filter(([input]) => String(input instanceof Request ? input.url : input).startsWith('/api/workspace/content/children?')).length;
     const beforeAddReads = loadedReads();
-    const add = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === '添加已有对象');
-    expect(add).toBeDefined(); await act(async () => add!.click());
-    await vi.waitFor(() => expect(document.querySelector('.ant-modal [role="combobox"]')).not.toBeNull());
-    await act(async () => document.querySelectorAll<HTMLElement>('.ant-modal .ant-select-selector')[1]!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })));
-    await vi.waitFor(() => expect(document.querySelector('.ant-select-item-option-content')?.textContent).toContain('已有共享文件夹'));
-    await act(async () => document.querySelector<HTMLElement>('.ant-select-item-option-content')!.click());
-    const confirm = document.querySelector<HTMLButtonElement>('.ant-modal-footer .ant-btn-primary')!;
+    await openNewMenu();
+    const createObject = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent === '新建图文档');
+    expect(createObject).toBeDefined(); await act(async () => createObject!.click());
+    await vi.waitFor(() => expect(document.querySelector('.ant-drawer input[id="ECODE"]')).not.toBeNull());
+    for (const [key, value] of [['ECODE', 'NEW-DOC'], ['ENAME', '新建图文档']]) {
+      await act(async () => {
+        const input = document.querySelector<HTMLInputElement>(`.ant-drawer input[id="${key}"]`)!;
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    }
+    const confirm = document.querySelector<HTMLButtonElement>('.ant-drawer-footer .ant-btn-primary')!;
     await act(async () => { confirm.click(); confirm.click(); });
     await vi.waitFor(() => expect(references).toHaveLength(1));
     await vi.waitFor(() => expect(loadedReads()).toBeGreaterThanOrEqual(beforeAddReads + 5));
-    expect(references[0]).toEqual({ method: 'POST', body: { position: { spaceId: 'public', rootFolderId: 'public-root', linkIds: [] }, target: { modelKey: 'Workspace/WorkspaceFolder', id: 'shared-folder' } } });
+    expect(references[0]).toEqual({ method: 'POST', body: { position: { spaceId: 'public', rootFolderId: 'public-root', linkIds: [] }, values: { ECODE: 'NEW-DOC', ENAME: '新建图文档' } } });
     await vi.waitFor(() => expect(container.textContent).toContain('已保存，刷新失败'));
     await act(async () => [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === '刷新')!.click());
     await vi.waitFor(() => expect(container.querySelector('tr[data-row-key="shared-folder-link"]')).not.toBeNull());

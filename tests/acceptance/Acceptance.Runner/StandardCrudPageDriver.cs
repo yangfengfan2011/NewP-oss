@@ -57,14 +57,16 @@ internal sealed class StandardCrudPageDriver
             && (HasQueryValue(new Uri(url), "tab", key) || (key == "structure" && string.IsNullOrEmpty(new Uri(url).Query))));
     }
 
-    // 标准页面动作缺失时优先暴露 capability/局部错误，而不是只留下无上下文的 locator 超时。
-    internal async Task ClickPageActionAsync(string actionLabel)
+    // 可先展开声明的父按钮；动作缺失仍返回局部诊断，不把菜单子项当作独立按钮。
+    internal async Task ClickPageActionAsync(string actionLabel, string? parentActionLabel = null)
     {
         var action = Page.GetByRole(
-            AriaRole.Button,
+            parentActionLabel is null ? AriaRole.Button : AriaRole.Menuitem,
             new PageGetByRoleOptions { Name = actionLabel, Exact = true });
         try
         {
+            if (parentActionLabel is not null)
+                await Page.GetByRole(AriaRole.Button, new() { Name = parentActionLabel, Exact = true }).ClickAsync();
             await action.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         }
         catch (TimeoutException exception)
@@ -83,9 +85,9 @@ internal sealed class StandardCrudPageDriver
     internal ILocator VisibleDrawer() => Page.Locator(VisibleDrawerSelector).Last;
 
     // 点击页级创建动作并等待最新的可见 Drawer 出现。
-    internal async Task<ILocator> OpenCreateDrawerAsync(string actionLabel)
+    internal async Task<ILocator> OpenCreateDrawerAsync(string actionLabel, string? parentActionLabel = null)
     {
-        await ClickPageActionAsync(actionLabel);
+        await ClickPageActionAsync(actionLabel, parentActionLabel);
         var drawer = VisibleDrawer();
         await WaitForDrawerAsync(drawer, WaitForSelectorState.Visible, $"drawer for '{actionLabel}'");
         return drawer;

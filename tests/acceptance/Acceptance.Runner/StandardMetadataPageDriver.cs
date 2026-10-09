@@ -7,9 +7,10 @@ internal sealed class StandardMetadataPageDriver(IPage page, string navigationTi
 {
     private readonly StandardCrudPageDriver _crud = new(page);
 
+    /// <summary>保留路由的底层标准页面检查直接访问 routeOnly 地址，不依赖已移除的侧栏入口。</summary>
     internal async Task OpenAsync()
     {
-        await _crud.Page.Locator(".np-sidebar-menu").GetByRole(AriaRole.Link, new() { Name = navigationTitle, Exact = true }).ClickAsync();
+        await _crud.Page.GotoAsync(new Uri(new Uri(_crud.Page.Url), listPath).AbsoluteUri);
         await _crud.Page.WaitForURLAsync(url => new Uri(url).AbsolutePath == listPath);
         await _crud.Page.Locator(".ant-table").WaitForAsync(new() { State = WaitForSelectorState.Visible });
         await Assertions.Expect(_crud.Page.Locator(".ant-spin-spinning:visible")).ToHaveCountAsync(0, new() { Timeout = 30_000 });

@@ -132,7 +132,7 @@ internal static class WorkspaceAcceptanceFixture
         foreach (var parent in new[] { b, Root("Personal") })
             await SendAsync(ordinary, HttpMethod.Post, "/api/workspace/content/references",
                 new { position = parent.CommandPosition, target = new { modelKey = "Workspace/WorkspaceFolder", id = shared.FolderId } },
-                features.Action(entry, "add", "list.pageActions", "folder").Position, token);
+                features.Action(entry, "add", "list.custom", "folder").Position, token);
         return new(publicRoot, a.LinkIds[^1], ["公共空间", $"路径A {suffix}", $"共享S {suffix}", $"后代T {suffix}"], sampleName);
     }
 

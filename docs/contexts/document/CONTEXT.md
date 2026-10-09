@@ -6,6 +6,8 @@ Document 拥有独立图文档元数据，不包含版本、BOM、文件内容�
 
 稳定资源 `document.document` 提供 `/api/document/documents` 标准创建和读取，页面 `/documents` 使用共享标准列表与创建 Drawer，`document.document.detail` 提供只读属性 Drawer 和正式 `/documents/:id` 详情。创建提交后不可读或展示失败继续返回不含对象标识的成功回执，客户端只重试读取。
 
+侧栏不提供独立图文档入口；用户从 Workspace 选中文件夹后新建，由 Workspace 在同一对象操作事务内调用 `document.document` 创建行为并建立内容关系。原页面路由保持 routeOnly，详情与权限身份继续由 Document 拥有。
+
 创建采用平台默认 create-only 对象行为，不开放横切。插入与仓储规范重读在唯一平台事务内，规范重读失败整体回滚；提交后的读取裁决和展示故障由标准服务返回成功回执。
 
 候选通过同一标准 GET 列表按编码或名称搜索、数据库分页和窄字段投影；正式功能读取资格与对象读取计划同时生效，可发现没有任何 Link 的独立图文档。当前没有真实 Lookup 字段消费者，因此不开放单独 Options 能力。后续 Workspace 通过稳定资源、模型显示与页面绑定消费，不依赖 Document 私有实现；本模块不拥有 Link 或混合内容查询。

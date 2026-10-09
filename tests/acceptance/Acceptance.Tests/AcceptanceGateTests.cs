@@ -58,7 +58,7 @@ public sealed class AcceptanceGateTests
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false).RunAsync(CancellationToken.None);
     }
 
-    [EnvironmentGatedFact(RunEnvironmentVariable, "个人来源孤立 Folder 的正式 API 准备与公共空间添加/移除/候选重加 driver")]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "公共空间文件夹创建、移除引用与再次新建 driver")]
     public async Task WorkspaceReferences_UseFormalDriver()
     {
         var (root, runId) = PrepareRun("workspace-references");
@@ -68,7 +68,7 @@ public sealed class AcceptanceGateTests
             {
                 var entry = features.Behavior("Workspace", "workspace.spaces.access");
                 return [entry, features.Action(entry, "create", "list.pageActions", "folder"),
-                    features.Action(entry, "add", "list.pageActions", "folder"), features.Action(entry, "remove", "list.rowActions", "folder")];
+                    features.Action(entry, "add", "list.custom", "folder"), features.Action(entry, "remove", "list.rowActions", "folder")];
             },
             prepareJourney: async (administrator, features, actor, token) =>
             {
@@ -94,11 +94,11 @@ public sealed class AcceptanceGateTests
                 }
                 await driver.OpenAsync();
                 await driver.SelectRootAsync("公共空间");
-                await driver.AddExistingFolderAsync(name, dialog => CapturePairAsync("folder-candidate", dialog));
+                await driver.CreateFolderAsync(name);
                 await driver.ExpandRootToFolderAsync("公共空间", name);
                 await CapturePairAsync("folder-reference-list");
                 await driver.RemoveReferenceAsync(name, dialog => CapturePairAsync("remove-reference", dialog));
-                await driver.AddExistingFolderAsync(name);
+                await driver.CreateFolderAsync(name);
                 await driver.ExpandRootToFolderAsync("公共空间", name);
                 var properties = await driver.OpenFolderPropertiesAsync(name);
                 await CapturePairAsync("shared-folder-properties");
@@ -108,7 +108,7 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
-    [EnvironmentGatedFact(RunEnvironmentVariable, "普通账号三类型混合内容、所属属性及独立候选移除重加")]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "普通账号文件夹内新建零组件和图文档、所属属性及移除引用")]
     public async Task WorkspaceMixedContent_UsesFormalDriver()
     {
         var (root, runId) = PrepareRun("workspace-mixed");
@@ -125,8 +125,8 @@ public sealed class AcceptanceGateTests
                 var part = features.Behavior("Part", "part.part.read");
                 var document = features.Behavior("Document", "document.document.read");
                 return [entry, features.Action(entry, "create", "list.pageActions", "folder"),
-                    features.Action(entry, "add", "list.pageActions", "folder"), features.Action(entry, "remove", "list.rowActions", "folder"),
-                    part, features.Action(part, "create", "list.pageActions"), document, features.Action(document, "create", "list.pageActions")];
+                    features.Action(entry, "add", "list.custom", "folder"), features.Action(entry, "remove", "list.rowActions", "folder"),
+                    part, document, features.Action(entry, "createPart", "list.pageActions", "folder"), features.Action(entry, "createDocument", "list.pageActions", "folder")];
             },
             prepareJourney: async (administrator, features, actor, token) =>
             {
@@ -140,10 +140,8 @@ public sealed class AcceptanceGateTests
                 var position = new { spaceId = publicRoot.GetProperty("spaceId").GetString(), rootFolderId = publicRoot.GetProperty("rootFolderId").GetString(), linkIds = Array.Empty<string>() };
                 await WorkspaceAcceptanceFixture.SendAsync(ordinary, HttpMethod.Post, "/api/workspace/content/references",
                     new { position, target = new { modelKey = "Workspace/WorkspaceFolder", id = folderId } },
-                    features.Action(entry, "add", "list.pageActions", "folder").Position, token);
-                var partId = await WorkspaceAcceptanceFixture.CreateMetadataObjectAsync(ordinary, features, "Part", "part.part.read", "/api/part/parts", partCode, partName, token);
-                var documentId = await WorkspaceAcceptanceFixture.CreateMetadataObjectAsync(ordinary, features, "Document", "document.document.read", "/api/document/documents", documentCode, documentName, token);
-                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "fixture-mixed.json"), new { folderId, partId, documentId, actorId = actor.AccountId }, token);
+                    features.Action(entry, "add", "list.custom", "folder").Position, token);
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "fixture-mixed.json"), new { folderId, actorId = actor.AccountId }, token);
             },
             browserJourney: async (page, token) =>
             {
@@ -158,8 +156,8 @@ public sealed class AcceptanceGateTests
                 }
                 await driver.OpenAsync();
                 await driver.SelectRootAsync("公共空间");
-                await driver.AddExistingObjectAsync("零组件", partName, $"{partCode} - {partName}", dialog => CapturePairAsync("part-candidate", dialog));
-                await driver.AddExistingObjectAsync("图文档", documentName, $"{documentCode} - {documentName}", dialog => CapturePairAsync("document-candidate", dialog));
+                await driver.CreateObjectAsync("零组件", partCode, partName, dialog => CapturePairAsync("part-create", dialog));
+                await driver.CreateObjectAsync("图文档", documentCode, documentName, dialog => CapturePairAsync("document-create", dialog));
                 await new StandardCrudPageDriver(page).WaitForRowAsync(folderName);
                 await CapturePairAsync("mixed-content");
                 await driver.OpenOwnedPropertiesAsync(partName, "/parts");
@@ -169,7 +167,7 @@ public sealed class AcceptanceGateTests
                 await CapturePairAsync("mixed-document-properties");
                 await driver.ReturnToPublicContentAsync();
                 await driver.RemoveReferenceAsync(partName, dialog => CapturePairAsync("mixed-remove-reference", dialog));
-                await driver.AddExistingObjectAsync("零组件", partName, $"{partCode} - {partName}");
+                await driver.CreateObjectAsync("零组件", partCode + "-NEXT", partName + " 新建");
                 await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"), new { url = page.Url, actor = "ordinary", readdedObject = partName }, token);
             }).RunAsync(CancellationToken.None);
     }
@@ -190,7 +188,7 @@ public sealed class AcceptanceGateTests
                 var entry = features.Behavior("Workspace", "workspace.spaces.access");
                 var organization = features.OrganizationTab("structure");
                 return [entry, features.Action(entry, "create", "list.pageActions", "folder"),
-                    features.Action(entry, "add", "list.pageActions", "folder"), features.Action(entry, "remove", "list.rowActions", "folder"),
+                    features.Action(entry, "add", "list.custom", "folder"), features.Action(entry, "remove", "list.rowActions", "folder"),
                     organization, features.NodeTab(organization, "company", "information"), features.NodeTab(organization, "department", "information")];
             },
             prepareJourney: async (administrator, features, actor, token) =>
@@ -267,7 +265,7 @@ public sealed class AcceptanceGateTests
                 var entry = features.Behavior("Workspace", "workspace.spaces.access");
                 var part = features.Behavior("Part", "part.part.read");
                 return [entry, features.Action(entry, "create", "list.pageActions", "folder"),
-                    features.Action(entry, "add", "list.pageActions", "folder"), part, features.Action(part, "create", "list.pageActions")];
+                    features.Action(entry, "add", "list.custom", "folder"), part, features.Action(part, "create", "list.pageActions")];
             },
             prepareJourney: async (administrator, features, actor, token) =>
             {
@@ -284,7 +282,7 @@ public sealed class AcceptanceGateTests
                 var partId = await WorkspaceAcceptanceFixture.CreateMetadataObjectAsync(ordinary, features, "Part", "part.part.read", "/api/part/parts", partCode, partName, token);
                 await WorkspaceAcceptanceFixture.SendAsync(ordinary, HttpMethod.Post, "/api/workspace/content/references",
                     new { position = position.CommandPosition, target = new { modelKey = "Part/Part", id = partId } },
-                    features.Action(entry, "add", "list.pageActions", "folder").Position, token);
+                    features.Action(entry, "add", "list.custom", "folder").Position, token);
                 // 先证明普通主体按来源位置能读反向与父对象，避免以UI超时诊断权限/锚点准备错误。
                 foreach (var (model, id) in new[] { ("Workspace/WorkspaceFolder", folder.FolderId), ("Part/Part", partId) })
                 {

@@ -8,13 +8,15 @@
     "columns": [
       { "key": "type", "labelKey": "ObjectType", "source": "projection", "field": "ObjectType" },
       { "key": "code", "labelKey": "Code", "source": "projection", "field": "Code", "sortable": true },
-      { "key": "name", "labelKey": "Name", "source": "projection", "field": "Name", "sortable": true },
+      { "key": "name", "labelKey": "Name", "source": "projection", "field": "Name", "standardAction": "view", "sortable": true },
       { "key": "updatedBy", "labelKey": "Field_UpdatedBy", "source": "projection", "field": "UpdatedBy" },
       { "key": "updatedAt", "labelKey": "Field_UpdatedAt", "source": "projection", "field": "UpdatedAt", "sortable": true }
     ],
     "pageActions": [{ "key": "create", "labelKey": "CreateFolder", "standardAction": "create", "variant": "primary" },
-      { "key": "add", "labelKey": "AddFolder", "handlerKey": "add", "inputKey": "folderCandidate" }],
-    "rowActions": [{ "key": "view", "labelKey": "OpenProperties", "standardAction": "view" },
-      { "key": "remove", "labelKey": "RemoveReference", "handlerKey": "remove", "variant": "danger", "confirmMessageKey": "ConfirmRemoveReference" }], "export": { "enabled": false }
+      { "key": "createPart", "labelKey": "CreatePart", "handlerKey": "createPart", "inputKey": "createObject" },
+      { "key": "createDocument", "labelKey": "CreateDocument", "handlerKey": "createDocument", "inputKey": "createObject" }],
+    "pageActionGroups": [{ "key": "new", "labelKey": "New", "variant": "primary", "actionKeys": ["create", "createPart", "createDocument"] }],
+    "featureActions": [{ "key": "add", "titleKey": "AddFolder", "behaviorKey": "workspace.folder.add", "readBehaviors": ["workspace.folder.read"] }],
+    "rowActions": [{ "key": "remove", "labelKey": "RemoveReference", "handlerKey": "remove", "variant": "danger", "confirmMessageKey": "ConfirmRemoveReference" }], "export": { "enabled": false }
   }
 }

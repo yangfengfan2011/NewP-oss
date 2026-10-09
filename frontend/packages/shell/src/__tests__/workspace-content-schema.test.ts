@@ -17,3 +17,23 @@ it('validates Link projection fields against the formal query directory and requ
   expect(() => buildStandardCrudListSchema({ ...list.view, query: { ...list.view.query, defaultSort: { field: 'Description', direction: 'asc' } } }, resource, context)).toThrow('unsupported default sort');
   expect(() => buildStandardCrudListSchema({ ...list.view, querySource: { kind: 'table', model: 'WorkspaceFolderContent', resourceKey: 'workspace.content' } }, resource, context)).toThrow('unsupported query source');
 });
+
+it('groups existing creation actions without replacing their identities and opens properties from Name', () => {
+  const schema = buildStandardCrudListSchema(list.view, resource, { modelDocuments: [folder, content] });
+  expect(schema.pageActions.map(action => action.key)).toEqual(['create', 'createPart', 'createDocument']);
+  expect(schema.pageActionGroups).toEqual([{ key: 'new', labelKey: 'New', variant: 'primary', actionKeys: ['create', 'createPart', 'createDocument'] }]);
+  expect(schema.columns.find(column => column.field === 'Name')?.standardAction).toBe('view');
+  expect(schema.rowActions.map(action => action.key)).toEqual(['remove']);
+});
+
+it.each([
+  null,
+  [{ key: 'new', labelKey: 'New', actionKeys: [] }],
+  [{ key: 'new', labelKey: 'New', actionKeys: ['missing'] }],
+  [{ key: 'new', labelKey: 'New', actionKeys: ['create', 'create'] }],
+  [{ key: 'new', labelKey: 'New', actionKeys: ['create'] }, { key: 'other', labelKey: 'Other', actionKeys: ['create'] }],
+  [{ key: 'create', labelKey: 'New', actionKeys: ['createPart'] }],
+  [{ key: 'new', labelKey: 'New', handlerKey: 'createPart', actionKeys: ['createPart'] }],
+])('rejects invalid action group declarations %#', pageActionGroups => {
+  expect(() => buildStandardCrudListSchema({ ...list.view, pageActionGroups }, resource, { modelDocuments: [folder, content] })).toThrow('page');
+});

@@ -19,13 +19,14 @@ public sealed class WorkspaceFeatureProjectionTests
         var catalog = FeatureCatalogCompiler.Compile(StandardFeatureMetadataCompiler.Read("Workspace", documents, custom, includeCustomFeatures: true));
         var entry = Assert.Single(catalog, point => point.Kind == "navigation");
         Assert.Equal("workspace.spaces.access", entry.BehaviorKey);
+        Assert.DoesNotContain(catalog, point => point.Key == "new");
         Assert.Contains("tree:workspace.structure", entry.ReadBehaviors); Assert.Contains("workspace.folder.read", entry.ReadBehaviors);
         var create = Assert.Single(catalog, point => point.BehaviorKey == "workspace.folder.create");
         Assert.Equal("Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:create", create.Position);
         Assert.Equal("workspace.folder.create", create.BehaviorKey); Assert.Equal(new[] { entry.Position }, create.EntryDependencies);
         Assert.Throws<FeatureSelectionException>(() => FeatureCatalogCompiler.ValidateSelection(catalog, [create.Position]));
         FeatureCatalogCompiler.ValidateSelection(catalog, [entry.Position, create.Position]);
-        foreach (var (behavior, surface) in new[] { ("add", "pageActions"), ("remove", "rowActions") })
+        foreach (var (behavior, surface) in new[] { ("add", "custom"), ("remove", "rowActions"), ("createPart", "pageActions"), ("createDocument", "pageActions") })
         {
             var action = Assert.Single(catalog, point => point.BehaviorKey == "workspace.folder." + behavior);
             Assert.Equal("Workspace/navigation:workspace/node-type:folder/surface:list." + surface + "/action:" + behavior, action.Position);

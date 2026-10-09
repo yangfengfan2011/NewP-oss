@@ -1,6 +1,6 @@
 import { useLocalization } from '@icp-platform/core';
 import { StandardCrudDialogTitle } from './StandardCrudDialogTitle';
-import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { useOptionalAuth } from '../contexts/AuthContext';
 import { useFeaturePlacement } from '../authorization/FeaturePlacementContext';
 import Modal from 'antd/es/modal';
@@ -9,6 +9,8 @@ import type {
   StandardCrudActionDefinition,
   StandardCrudActionInputRenderer,
 } from '@icp-platform/sdk';
+
+const ActionFormDrawer = lazy(() => import('@icp-platform/ui/crud-form').then(module => ({ default: module.CrudFormDrawer })));
 
 interface StandardCrudActionReviewDialogProps {
   open?: boolean;
@@ -22,12 +24,13 @@ interface StandardCrudActionReviewDialogProps {
   detail?: unknown;
   row?: unknown;
   pending: boolean;
+  error?: string | null;
   onChange: (value: unknown) => void;
   onCancel: () => void;
   onConfirm: () => void;
 }
 
-/** 带业务输入的动作共用 Review Dialog；输入报告草稿状态后，关闭前保护未保存修改。 */
+/** 动作输入共用生命周期；表单可采用标准 Drawer，关闭前仍保护未保存修改。 */
 export function StandardCrudActionReviewDialog({
   open = true,
   action,
@@ -40,6 +43,7 @@ export function StandardCrudActionReviewDialog({
   detail,
   row,
   pending,
+  error,
   onChange,
   onCancel,
   onConfirm,
@@ -66,9 +70,28 @@ export function StandardCrudActionReviewDialog({
   const [draftState, setDraftState] = useState({ dirty: false, ready: true });
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   if (authorityChanged) return null;
+  const requestClose = () => { if (!pending) { if (draftState.dirty) setConfirmDiscard(true); else onCancel(); } };
+  const content = <>
+    {confirmMessage ? <p>{confirmMessage}</p> : null}
+    {inputRenderer({
+      action, featurePosition,
+      navigationFeaturePosition: key => {
+        const resolution = features.navigation(key);
+        return resolution.kind === 'allowed' ? resolution.position : undefined;
+      },
+      queryScope, submitting: pending, value, onChange, detail, row, onDraftStateChange: setDraftState,
+    })}
+  </>;
   return (
     <>
-      <Modal
+      {inputRenderer.presentation === 'drawer' ? <Suspense fallback={null}>
+        <ActionFormDrawer open={open} title={<StandardCrudDialogTitle>{title}</StandardCrudDialogTitle>}
+          saving={pending} error={error} hidePrimary={inputRenderer.readOnly}
+          primaryLabel={action.confirmLabel ?? t('Platform.SaveAndClose', '保存并关闭')}
+          primaryDisabled={!draftState.ready || pending} primaryAction={onConfirm} onClose={requestClose}>
+          {content}
+        </ActionFormDrawer>
+      </Suspense> : <Modal
         closable={{ 'aria-label': t('Platform.Close', '关闭') }}
         open={open}
         title={<StandardCrudDialogTitle>{title}</StandardCrudDialogTitle>}
@@ -79,26 +102,11 @@ export function StandardCrudActionReviewDialog({
         destroyOnHidden
         confirmLoading={pending}
         okButtonProps={{ disabled: !draftState.ready }}
-        onCancel={() => { if (!pending) { if (draftState.dirty) setConfirmDiscard(true); else onCancel(); } }}
+        onCancel={requestClose}
         onOk={inputRenderer.readOnly ? onCancel : onConfirm}
       >
-        {confirmMessage ? <p>{confirmMessage}</p> : null}
-        {inputRenderer({
-          action,
-          featurePosition,
-          navigationFeaturePosition: key => {
-            const resolution = features.navigation(key);
-            return resolution.kind === 'allowed' ? resolution.position : undefined;
-          },
-          queryScope,
-          submitting: pending,
-          value,
-          onChange,
-          detail,
-          row,
-          onDraftStateChange: setDraftState,
-        })}
-      </Modal>
+        {content}
+      </Modal>}
       <Modal open={confirmDiscard} title={<StandardCrudDialogTitle>{t('Platform.DiscardDraftTitle', '放弃未保存的草稿？')}</StandardCrudDialogTitle>} okText={t('Platform.DiscardDraft', '放弃修改')} cancelText={t('Platform.KeepEditing', '继续编辑')}
         closable={{ 'aria-label': t('Platform.Close', '关闭') }}
         onCancel={() => setConfirmDiscard(false)} onOk={() => { setConfirmDiscard(false); onCancel(); }}>

@@ -79,8 +79,8 @@ public sealed class WorkspacePageDriverTests
         Assert.DoesNotContain(credential, snapshot);
     }
 
-    [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "真实 Chromium 验证正式候选 driver 的必填标签及选择，无服务器或端口")]
-    public async Task ObjectCandidate_SelectsTypeThenRequiredLookupWithoutConfusingTheirSelectedLabels()
+    [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "真实 Chromium 验证正式新建表单 driver 的必填字段填写，无服务器或端口")]
+    public async Task ObjectCreation_FillsRequiredFieldsBeforeConfirming()
     {
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync(new()
@@ -90,41 +90,21 @@ public sealed class WorkspacePageDriverTests
                 ?? @"C:\Program Files\Google\Chrome\Application\chrome.exe"
         });
         var page = await browser.NewPageAsync();
-        page.SetDefaultTimeout(1000);
-        // 正式标准表单有 enum 和 required Lookup 两个 Select，回显必须归属对象字段。
         await page.SetContentAsync("""
-            <style>.ant-form-item-required::before { content: '*'; margin-right: 4px; }</style>
-            <style>.ant-select-selector { position:relative; width:300px; height:32px; }
-              .ant-select-selector input { width:100%; height:100%; }
-              .ant-select-selection-item { position:absolute; inset:0; background:white; }</style>
-            <div class="ant-modal" role="dialog" aria-label="添加已有对象">
-              <div class="ant-form-item"><label for="type">对象类型</label><div class="ant-select-selector"><input id="type" role="combobox" readonly>
-                <span class="ant-select-selection-item">文件夹</span></div></div>
-              <div class="ant-form-item"><label for="folder" class="ant-form-item-required">对象</label>
-                <div class="ant-select-selector"><input id="folder" role="combobox" aria-required="true"><span class="ant-select-selection-item"></span></div></div>
-              <button disabled>确 认</button>
+            <div class="ant-drawer-content" role="dialog" aria-label="新建零组件">
+              <div class="ant-form-item"><label for="ECODE">编码</label><input id="ECODE"></div>
+              <div class="ant-form-item"><label for="ENAME">名称</label><input id="ENAME"></div>
+              <button disabled>保存并关闭</button>
             </div>
-            <div class="ant-select-dropdown" id="types" hidden><div>零组件</div></div>
-            <div class="ant-select-dropdown" id="objects" hidden><div class="ant-select-item-option-content">P-1 - 来源对象</div></div>
             <script>
-              document.querySelector('#type').parentNode.onclick=()=>document.querySelector('#types').hidden=false;
-              document.querySelector('#types div').onclick=()=>{
-                document.querySelector('#types').hidden=true;
-                document.querySelector('#type').parentNode.querySelector('.ant-select-selection-item').textContent='零组件';
-              };
-              const input=document.querySelector('#folder');
-              input.oninput=()=>document.querySelector('#objects').hidden=false;
-              document.querySelector('.ant-select-item-option-content').onclick=()=>{
-                input.parentNode.querySelector('.ant-select-selection-item').textContent='P-1 - 来源对象';
-                document.querySelector('button').disabled=false;
-                document.querySelector('#objects').hidden=true;
-              };
+              document.querySelectorAll('input').forEach(input => input.oninput = () => {
+                document.querySelector('button').disabled = !document.querySelector('#ECODE').value || !document.querySelector('#ENAME').value;
+              });
             </script>
             """);
-        await new WorkspacePageDriver(page).SelectObjectCandidateAsync(page.GetByRole(AriaRole.Dialog), "零组件", "来源对象", "P-1 - 来源对象");
-        await Assertions.Expect(page.GetByRole(AriaRole.Button, new() { Name = "确 认" })).ToBeEnabledAsync();
+        await new WorkspacePageDriver(page).FillObjectCreationAsync(page.GetByRole(AriaRole.Dialog), "P-1", "新建对象");
+        await Assertions.Expect(page.GetByRole(AriaRole.Button, new() { Name = "保存并关闭" })).ToBeEnabledAsync();
     }
-
     [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "真实 Chromium 验证正式 driver 的多加载指示器等待，无服务器或端口")]
     public async Task SelectedRoot_WaitsUntilBothVisibleLoadingIndicatorsHaveFinished()
     {

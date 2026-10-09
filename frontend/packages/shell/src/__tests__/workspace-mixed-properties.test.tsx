@@ -34,6 +34,7 @@ import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { AuthProvider } from '../contexts/AuthContext';
 import { FeaturePlacementContext } from '../authorization/FeaturePlacementContext';
 import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';
+import { buildMenusFromNavDocuments } from '../metadata/navigationAdapter';
 
 // 收集期装载真实模块，避免冷转换耗时进入生命周期 hook 的交互预算。
 import '../composition/StandardTreePage';
@@ -46,7 +47,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 it.each(['part', 'document'] as const)('opens same EID through the registered %s owning read-only page and target feature', async type => {
   const user = { id: 'actor', ecode: 'actor', ename: '账号', revision: 1, mustChangePassword: false, isLocalAdministrator: false,
-    timeZoneId: 'Asia/Taipei', featurePositions: ['workspace-entry', 'workspace-add', 'part-entry', 'document-entry'] };
+    timeZoneId: 'Asia/Taipei', featurePositions: ['workspace-entry', 'workspace-createPart', 'workspace-createDocument', 'part-entry', 'document-entry'] };
   const json = (value: unknown) => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } });
   const writes: unknown[] = [];
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -60,7 +61,7 @@ it.each(['part', 'document'] as const)('opens same EID through the registered %s
     ]);
     if (url.pathname.endsWith('/path')) return json({ folderIds: ['root', 'shared'], names: ['公共空间', '当前共享文件夹'] });
     if (url.pathname.endsWith('/children')) return json({ items: [{ linkId: 'shared-link', associatedObject: { id: 'shared' }, fields: { Name: '当前共享文件夹' }, hasChildren: false }] });
-    if (url.pathname === '/api/workspace/content/references') {
+    if (url.pathname === `/api/workspace/content/${type === 'part' ? 'parts' : 'documents'}`) {
       writes.push(input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body)));
       return json({ succeeded: true });
     }
@@ -101,6 +102,7 @@ it.each(['part', 'document'] as const)('opens same EID through the registered %s
   const navs = [partNavigation, documentNavigation].map((navigation, index) => ({ ...navigation, navigation: { items: navigation.navigation.items.map(item => ({ ...item, featurePosition: index ? 'document-entry' : 'part-entry' })) } }));
   const views = [tree, list, detail, references, partList, partDetail, documentList, documentDetail];
   const workspaceNav = { ...workspaceNavigation, navigation: { items: workspaceNavigation.navigation.items.map(item => ({ ...item, featurePosition: 'workspace-entry' })) } };
+  expect(buildMenusFromNavDocuments([workspaceNav, ...navs], (title, fallback) => title ?? fallback ?? '').map(menu => menu.path)).toEqual(['/workspace']);
   expect(compileStandardCrudRouteProjection(ModuleRegistry.getAllModules(), [workspaceNavigation, ...navs], views, []).detailEntries).toHaveLength(2);
   const catalogs = { zhs: Object.fromEntries([[dictionary.Workspace, 'Workspace'], [partDictionary.Part, 'Part'], [documentDictionary.Document, 'Document']].flatMap(([dict, key]) =>
     Object.entries(dict).map(([name, value]) => [`${key}.${name}`, (value as { zhs: string }).zhs]))) };
@@ -110,7 +112,7 @@ it.each(['part', 'document'] as const)('opens same EID through the registered %s
   const wrap = (page: React.ReactNode) => <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={catalogs}>
     <AuthProvider initialUser={user}><AuthorizationProvider featurePositions={user.featurePositions}><PlatformQueryProvider scopeKey="workspace-mixed">
       <RuntimeMetadataProvider value={{ manifest: { modules: [{ moduleId: 'Workspace', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: [
-        { key: 'workspace', position: 'workspace-entry', kind: 'navigation' }, { key: 'add', position: 'workspace-add', kind: 'action', parentPosition: 'workspace-entry', staticScope: 'folder', actionScope: 'list.pageActions' },
+        { key: 'workspace', position: 'workspace-entry', kind: 'navigation' }, ...['createPart', 'createDocument'].map(key => ({ key, position: 'workspace-' + key, kind: 'action', parentPosition: 'workspace-entry', staticScope: 'folder', actionScope: 'list.pageActions' })),
       ] }, ...['Part', 'Document'].map(moduleId => ({ moduleId, metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: [{ key: moduleId === 'Part' ? 'part.parts' : 'document.documents', kind: 'navigation', position: moduleId.toLowerCase() + '-entry' }] }))] },
       navDocuments: [workspaceNav, ...navs], modelDocuments: [folder, content, partModel, documentModel], viewDocuments: views }}>
         {page}
@@ -123,21 +125,34 @@ it.each(['part', 'document'] as const)('opens same EID through the registered %s
   onTestFinished(async () => { await act(async () => root.unmount()); router.dispose(); container.remove(); vi.unstubAllGlobals(); ModuleRegistry.replaceAll([], 'workspace-mixed-cleanup'); });
   await act(async () => root.render(<RouterProvider router={router} />));
   await vi.waitFor(() => expect(container.querySelector(`tr[data-row-key="${type}-relation"]`)).not.toBeNull());
-  await act(async () => [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === '添加已有对象')!.click());
-  await vi.waitFor(() => expect(document.querySelectorAll('.ant-modal .ant-select-selector')).toHaveLength(2));
-  await act(async () => document.querySelectorAll<HTMLElement>('.ant-modal .ant-select-selector')[0].dispatchEvent(new MouseEvent('mousedown', { bubbles: true })));
-  await vi.waitFor(() => expect([...document.querySelectorAll('.ant-select-item-option-content')].some(node => node.textContent === (type === 'part' ? '零组件' : '图文档'))).toBe(true));
-  await act(async () => [...document.querySelectorAll<HTMLElement>('.ant-select-item-option-content')].find(node => node.textContent === (type === 'part' ? '零组件' : '图文档'))!.click());
-  await act(async () => document.querySelectorAll<HTMLElement>('.ant-modal .ant-select-selector')[1].dispatchEvent(new MouseEvent('mousedown', { bubbles: true })));
-  await vi.waitFor(() => expect([...document.querySelectorAll('.ant-select-item-option-content')].some(node => node.textContent === 'SAME-CODE - 无引用候选')).toBe(true));
-  await act(async () => [...document.querySelectorAll<HTMLElement>('.ant-select-item-option-content')].find(node => node.textContent === 'SAME-CODE - 无引用候选')!.click());
-  await act(async () => document.querySelector<HTMLButtonElement>('.ant-modal-footer .ant-btn-primary')!.click());
-  await vi.waitFor(() => expect(writes).toEqual([{ position: { spaceId: 'public', rootFolderId: 'root', linkIds: ['shared-link'] }, target: { modelKey: type === 'part' ? 'Part/Part' : 'Document/Document', id: 'same-id' } }]));
-  await vi.waitFor(() => expect(document.querySelector('.ant-modal')).toBeNull());
-  const row = container.querySelector(`tr[data-row-key="${type}-relation"]`)!;
-  await act(async () => [...row.querySelectorAll<HTMLElement>('*')].find(node => node.children.length === 0 && node.textContent === '更多')!.click());
+  expect(container.textContent).not.toContain('添加已有对象');
+  expect([...container.querySelectorAll('button')].some(button => button.textContent === '新建零组件')).toBe(false);
+  await act(async () => [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === '新建')!.click());
   await vi.waitFor(() => expect(document.querySelector('[role="menuitem"]')).not.toBeNull());
-  await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(node => node.textContent === '打开属性')!.click());
+  expect([...document.querySelectorAll('[role="menuitem"]')].map(item => item.textContent)).toEqual(['新建零组件', '新建图文档']);
+  await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent === (type === 'part' ? '新建零组件' : '新建图文档'))!.click());
+  await vi.waitFor(() => expect(document.querySelector('.ant-drawer input[id="ECODE"]')).not.toBeNull());
+  expect(document.querySelector('.ant-modal')).toBeNull();
+  expect(document.querySelector('.ant-drawer-footer')?.textContent).toContain('保存并关闭');
+  await vi.waitFor(() => expect(document.querySelector<HTMLButtonElement>('.ant-drawer-footer .ant-btn-primary')!.disabled).toBe(true));
+  for (const [key, value] of [['ECODE', 'NEW-CODE'], ['ENAME', '文件夹内新对象']]) {
+    await act(async () => {
+      const input = document.querySelector<HTMLInputElement>(`.ant-drawer input[id="${key}"]`)!;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+  await act(async () => document.querySelector<HTMLButtonElement>('.ant-drawer-close')!.click());
+  await vi.waitFor(() => expect(document.querySelector('.ant-modal')?.textContent).toContain('放弃未保存的草稿？'));
+  await act(async () => [...document.querySelectorAll<HTMLButtonElement>('.ant-modal button')].find(button => button.textContent === '继续编辑')!.click());
+  await vi.waitFor(() => expect((document.querySelector('.ant-modal-wrap') as HTMLElement)?.style.display).toBe('none'));
+  expect(document.querySelector<HTMLInputElement>('.ant-drawer input[id="ECODE"]')?.value).toBe('NEW-CODE');
+  await act(async () => document.querySelector<HTMLButtonElement>('.ant-drawer-footer .ant-btn-primary')!.click());
+  await vi.waitFor(() => expect(writes).toEqual([{ position: { spaceId: 'public', rootFolderId: 'root', linkIds: ['shared-link'] }, values: { ECODE: 'NEW-CODE', ENAME: '文件夹内新对象' } }]));
+  await vi.waitFor(() => expect(document.querySelector('.ant-drawer')).toBeNull());
+  const row = container.querySelector(`tr[data-row-key="${type}-relation"]`)!;
+  expect(row.textContent).not.toContain('打开属性');
+  await act(async () => row.querySelector<HTMLButtonElement>('.np-standard-crud-cell-action')!.click());
   await vi.waitFor(() => expect(router.state.location.pathname).toBe(type === 'part' ? '/parts/same-id' : '/documents/same-id'));
   await vi.waitFor(() => expect(container.textContent).toContain(type + '-owned-properties'));
   expect(container.textContent).toContain('审计信息'); expect(container.textContent).toContain('更新账号');

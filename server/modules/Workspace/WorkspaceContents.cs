@@ -108,6 +108,28 @@ public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions
             return true;
         }, token);
 
+    /// <summary>对象创建复用完整位置和父编辑裁决，且目标类型必须存在于正式 Link 目录。</summary>
+    internal async Task<string> PrepareObjectCreationAsync(string actorId, WorkspacePosition position, string modelKey, CancellationToken token)
+    {
+        await LockGraphAsync(token);
+        var path = await WritablePositionAsync(actorId, position, token);
+        if (!catalog.Get("workspace.content").Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == modelKey))
+            throw new LinkQueryException(400, "Workspace.InvalidEndpoint");
+        return path.FolderId;
+    }
+
+    /// <summary>仅消费同事务内所属行为返回的真实身份；关系审计复用本次对象操作的时间和主体。</summary>
+    internal void RegisterCreatedReference(string parentId, string modelKey, string objectId)
+    {
+        if (!transactions.IsActive) throw new InvalidOperationException("Workspace creation requires an active transaction.");
+        var stamp = audit.Current();
+        db.Set<Dictionary<string, object?>>(WorkspacePositions.ContentModel).Add(new()
+        {
+            ["LID"] = ids.NewId("WorkspaceFolderContent"), ["PEID"] = parentId, ["CEID"] = objectId, ["ChildModelKey"] = modelKey,
+            ["LCreatedBy"] = stamp.ActorId, ["LCreatedAt"] = stamp.OccurredAtUtc, ["LUpdatedBy"] = stamp.ActorId, ["LUpdatedAt"] = stamp.OccurredAtUtc
+        });
+    }
+
     // 所有内容写入按相同顺序取得跨 Host 的事务级图锁，防止互成环及 create/add 同级名竞争。
     private Task LockGraphAsync(CancellationToken token) => db.Database.ExecuteSqlRawAsync(
         "DECLARE @result int; EXEC @result = sp_getapplock @Resource=N'Workspace.FolderGraph', @LockMode='Exclusive', @LockOwner='Transaction', @LockTimeout=15000; IF @result < 0 THROW 51000, 'Workspace content lock failed.', 1;", token);

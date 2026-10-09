@@ -4,6 +4,7 @@ using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Crud.LinkQueries;
 using ICP.Platform.Crud.Models;
+using ICP.Platform.Crud.ObjectOperations;
 using ICP.Platform.Sdk.Http;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -14,11 +15,32 @@ namespace ICP.Platform.Modules.Workspace;
 /// <summary>正式创建仅接受当前出现位置与可写字段；所有业务规则仍在应用服务。</summary>
 [ApiController, Route("api/workspace"), EndpointModule("Workspace"), PlatformRequestValidation]
 public sealed class WorkspaceContentsController(WorkspaceContents contents, WorkspaceSpaces spaces, WorkspacePositions positions,
-    LinkQueryReader links, ILogger<WorkspaceContentsController> logger, WorkspaceFolderScope folderScope) : ControllerBase
+    LinkQueryReader links, ILogger<WorkspaceContentsController> logger, WorkspaceFolderScope folderScope, IObjectOperationExecutor operations) : ControllerBase
 {
     public sealed record CreateFolderInput(WorkspacePosition Position, Dictionary<string, JsonElement> Values);
     public sealed record AddReferenceInput(WorkspacePosition Position, LinkObjectReference Target);
     public sealed record RemoveReferenceInput(WorkspacePosition Position);
+
+    /// <summary>在当前文件夹内创建真实零组件，所属对象行为与内容关系共享事务。</summary>
+    [HttpPost("content/parts"), RequireFeature("workspace.folder.createPart")]
+    public Task<IResult> CreatePart(CreateFolderInput input, CancellationToken token) => CreateObjectAsync(input, WorkspaceObjectCreation.CreatePart, token);
+
+    /// <summary>在当前文件夹内创建真实图文档，不通过两个 HTTP 写入拼接。</summary>
+    [HttpPost("content/documents"), RequireFeature("workspace.folder.createDocument")]
+    public Task<IResult> CreateDocument(CreateFolderInput input, CancellationToken token) => CreateObjectAsync(input, WorkspaceObjectCreation.CreateDocument, token);
+
+    // 唯一执行器提交后只返回成功回执；业务校验保留所属模块的标准字段错误。
+    private async Task<IResult> CreateObjectAsync(CreateFolderInput input, ObjectOperationAction action, CancellationToken token)
+    {
+        try
+        {
+            if (input.Position is null || input.Values is null) throw new LinkQueryException(400, "Workspace.InvalidCreateInput");
+            var result = await operations.ExecuteAsync(WorkspaceObjectCreation.BehaviorDefinition.ObjectKey, action, null,
+                new Dictionary<string, object?> { ["ActorId"] = Actor(), ["Position"] = input.Position, ["Values"] = input.Values }, token);
+            return result.Succeeded ? Results.Ok(new { succeeded = true }) : Results.Json(result.Error, statusCode: result.Error!.StatusCode);
+        }
+        catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+    }
 
     /// <summary>添加只提交引用；回执不绑定提交后的读取资格，不会因刷新故障重放命令。</summary>
     [HttpPost("content/references"), RequireFeature("workspace.folder.add")]

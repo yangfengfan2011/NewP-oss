@@ -22,6 +22,10 @@ Workspace 拥有公共空间、当前账号个人空间及其根文件夹。入�
 
 WorkspaceFolderContent 是正式 Link，父端由 authoring 固定为 Workspace/WorkspaceFolder，子端由必填 ChildModelKey 判别；允许组合只来自 linkedTypes。正式目录登记 Workspace/WorkspaceFolder、Part/Part、Document/Document 三个真实端点；读取/显示契约来自其所属模块，Workspace 显式依赖 Part 与 Document。LID、PEID、CEID 与关系审计由服务端填写；关系不保存 SpaceId、父位置、名称或对象审计影子值。
 
+零组件和图文档不提供独立侧栏菜单；用户选择文件夹后，从“新建”父按钮选择新建文件夹、零组件或图文档，统一使用共享右侧 Drawer 和“保存并关闭”，页面不再提供“添加已有对象”。内容列表的名称作为属性入口，操作菜单只保留关系操作；所属模块的 routeOnly 路由及功能位置继续服务于详情准入与属性打开。
+
+文件夹内创建由 Workspace 的 createPart/createDocument 功能动作准入，并交集当前完整位置、父文件夹 edit 与所属对象 create 数据范围。Workspace 对象行为静态声明调用 part.part/document.document 的 create，统一执行器在一个事务与审计作用域内保存所属实体和内容 Link；字段规范化、校验、唯一约束及对象审计仍由所属模块标准行为负责。创建回执不包含对象标识，后续列表读取独立裁决；刷新失败不能重放创建。已有引用 API 保留为独立功能授权能力，不再贡献页面按钮。回退这两个创建入口不删除已创建实体或关系。
+
 出现位置由 SpaceId、RootFolderId 与有序 LID 链组成。位置解析批量读取该链，核对空间准入、唯一根归属、父子衔接、无重复节点及每层对象读取资格。正向内容查询、树直属层、已知路径恢复和全部内容写入均执行该检查；可读的裸 Folder EID 不能代替出现位置。
 
 文件夹独立详情、单选候选与 Link 端点共享强制范围：对象可读，且来源空间可准入，或存在一条从可准入根出发、祖先皆可读的路径。OriginSpaceId 不公开且不可修改；私人来源的普通文件夹可以通过公共引用共享，移除最后公共路径后重新计算范围。来源主体仍能发现失去全部引用的文件夹并重新添加，所有正式空间根排除于候选。候选以 EID 去重，Link 查询仍逐 LID 返回。

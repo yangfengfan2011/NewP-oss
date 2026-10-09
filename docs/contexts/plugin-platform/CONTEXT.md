@@ -2,6 +2,8 @@
 
 Plugin Platform 上下文管理仓库外插件包从离线部署意图到启动期激活和运行时投影的生命周期。它不拥有插件的业务领域，也不把 Host、Shell 或持久化实现细节暴露给普通插件作者；当前不提供 Host 运行期间的插件变更能力。
 
+组件组合、平台必需集合与独立生命周期的已确认目标见 [ADR-0055](../../adr/0055-component-composition-separates-model-identity-and-deployment.md)，尚待 Issue #258 实施；下述相关术语不表示当前源码已完成该目标。
+
 ## Language
 
 **插件包（Plugin Package）**：
@@ -32,6 +34,18 @@ _Avoid_: 通用工作流 DSL、Host 配置、生成代码真源
 一个模块的可构建 authoring 边界；根声明唯一拥有身份、版本和依赖，metadata 与行为代码各自拥有局部事实，并由同一编译器连接。它不要求把所有事实写进一个大文件。
 _Avoid_: 源码目录约定、运行时插件目录、巨型 manifest
 
+**组合组件（Composite Component）**：
+把多个保留独立身份、版本和生命周期的组件组织为一个产品整体的组件。组合关系不重新拥有成员组件的模型、数据或迁移流。
+_Avoid_: 合并模块、共享模型 owner、父组件拥有子组件数据
+
+**成员组件（Member Component）**：
+被归入组合组件、仍保留自身身份、版本和生命周期的组件。成员资格与组件之间实际消费能力的依赖关系是两个不同概念。
+_Avoid_: 内部目录、父组件的私有实现、依赖项等于成员
+
+**有效启用（Effective Enablement）**：
+组件自身选择启用且全部祖先组合组件均启用时，组件具备进入下一活动快照的资格。父级屏蔽不改写成员自己的启用选择，也不替代实际依赖和完整候选校验。
+_Avoid_: 继承父级期望状态、父级启用强制打开全部成员、组合关系等于依赖关系
+
 **Canonical Module Plan**：
 Module Capsule 经规范化、引用连接和冲突校验后得到的确定内部计划；Host、Shell、metadata、localization 和 Authorization 的投影都从它生成。
 _Avoid_: 根清单、FrontendModule、运行时 manifest
@@ -45,8 +59,12 @@ _Avoid_: 模块声明、页面路由、运行时注册副作用
 _Avoid_: frontend manifest、metadata manifest、workspace glob
 
 **平台组合（Platform Composition）**：
-平台发布物声明哪些内建 Module Capsule 是必需能力以及它们的组合约束；它不重新拥有这些模块的身份、路由、菜单或权限。
+由平台发布物指定、其自身及成员后代共同构成必需基础能力集合的组件组合。业务组件可依赖该集合始终可用；组合不重新拥有成员的身份、模型、数据或迁移流。
 _Avoid_: Shell 内建模块数组、host-managed 特判、模块源码清单
+
+**必需组件（Required Component）**：
+平台运行不可缺失或停用的组件，也不能因祖先组合停用而被屏蔽。必需性由平台组合界定；随平台交付的内建组件并不因此自动成为必需组件。
+_Avoid_: 内建即必需、组件自行宣布不可禁用、静默改写启用选择
 
 **投影溯源（Projection Provenance）**：
 记录每个运行时事实来自哪个 authoring owner、source path 和 compiler contract，用于解释和诊断，不参与运行时覆盖优先级。

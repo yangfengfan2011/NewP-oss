@@ -4,11 +4,29 @@ Platform Persistence 上下文把候选 Canonical Module Plan 中由各模块拥
 
 迁移执行策略由 [ADR-0027：Host 是完整 Up Migration 的唯一执行入口](../../adr/0027-host-is-the-only-full-up-migration-entry.md) 约束；当前基线生命周期由 [ADR-0042：开发期使用可重建迁移基线直到兼容基线冻结](../../adr/0042-development-uses-a-resettable-migration-baseline.md) 约束；Required 字段演进由 [ADR-0043：Required 字段使用显式写入与迁移生命周期](../../adr/0043-required-fields-use-explicit-write-and-migration-lifecycles.md) 约束。
 
+组件组合、模型身份与独立持久化生命周期的已确认目标见 [ADR-0055](../../adr/0055-component-composition-separates-model-identity-and-deployment.md)，尚待 Issue #258 实施；其中各 owner 的独立迁移前缀与全局实际提交顺序调整 ADR-0027 的全局有序目标前缀约束。
+
 ## Language
 
 **归属模型（Owned Model）**：
 由唯一模块声明并演进的逻辑模型。模型键、物理 schema/table 以及相关索引都必须能追溯到同一个 owner module；其他模块不得直接修改。
 _Avoid_: 全局模型、Host 模型、按实体名推断归属
+
+**模型身份（Model Identity）**：
+由平台范围内唯一的模型技术名称确定的稳定引用身份，独立于模型所属组件及其父级组合。技术名称不是中文标题或记录的显示名称。
+_Avoid_: 模块名加模型名、组件目录路径、模型显示名称
+
+**模型归属（Model Ownership）**：
+拥有该模型的唯一组件对模型声明、数据和迁移演进的所有权。模型身份可全局寻址，不表示其他组件可以修改其模型或数据。
+_Avoid_: 全局共享所有权、父组件继承模型所有权、通过模型名前缀判断 owner
+
+**已部署持久化状态（Deployed Persistence State）**：
+组件最后成功部署的模型、物理数据库目标和迁移前沿的可验证事实，独立于其当前活动资格及磁盘上新安装的版本。组件停用时保留该状态，重新启用时才推进到选定新版本。
+_Avoid_: 活动模块集合、最新安装包、停用即删除数据库目标
+
+**已应用迁移事实（Applied Migration Facts）**：
+已由数据库提交、可验证归属于组件的迁移步骤及其实际持久化结果。它可以超出最后成功部署状态，首次部署部分失败时也成立，不表示组件已激活或候选已成功。
+_Avoid_: 最后成功部署即全部数据库事实、失败候选没有数据、活动快照替代迁移历史
 
 **共享运行时模型（Shared Runtime Model）**：
 从同一份已编译持久化计划投影到共享 `EfPlatformDbContext` 的完整活动模型，用于 Standard CRUD、查询内核和现有 repository。它不是迁移真源，也不允许 Host 手工追加模块定义。

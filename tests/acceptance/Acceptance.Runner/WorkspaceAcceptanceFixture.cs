@@ -177,6 +177,56 @@ internal static class WorkspaceAcceptanceFixture
             ?? throw new InvalidOperationException("正式元数据创建未返回可引用的 EID。");
     }
 
+    // 重启场景独立拥有三类样本，不借用浏览器旅程可能已经删除的对象；沿用普通主体的 Workspace 创建权限。
+    internal static async Task PrepareRestartContentAsync(HttpClient ordinary, AcceptanceFeatureCatalog features,
+        JsonElement roots, string runId, CancellationToken token)
+    {
+        var entry = features.Behavior("Workspace", "workspace.spaces.access");
+        var root = roots.EnumerateArray().Single(item => item.GetProperty("spaceKind").GetString() == "Public");
+        var rootId = root.GetProperty("rootFolderId").GetString()!;
+        var position = new WorkspaceFolderPosition(root.GetProperty("spaceId").GetString()!, rootId, rootId, []);
+        var suffix = runId[..8];
+        await CreateFolderAtPositionAsync(ordinary, features, position, $"重启文件夹 {suffix}", token);
+        foreach (var (action, path, code, name) in new[]
+        {
+            ("createPart", "/api/workspace/content/parts", $"WS-R-P-{suffix}", $"重启零组件 {suffix}"),
+            ("createDocument", "/api/workspace/content/documents", $"WS-R-D-{suffix}", $"重启图文档 {suffix}")
+        })
+            await SendAsync(ordinary, HttpMethod.Post, path,
+                new { position = position.CommandPosition, values = new { ECODE = code, ENAME = name } },
+                features.Action(entry, action, "list.pageActions", "folder").Position, token);
+        // 创建回执不含实体或关系身份；重启前后的快照只消费正式 Link 查询。
+    }
+
+    // 两个根的完整内容与三类非空样本共同构成重启证据，不能用部分页或两个空列表证明持久性。
+    internal static async Task<string[]> ReadRestartContentAsync(HttpClient client, JsonElement roots, string entryPosition,
+        CancellationToken token)
+    {
+        var identities = new List<string>();
+        var models = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var root in roots.EnumerateArray())
+        {
+            var space = root.GetProperty("spaceId").GetString()!;
+            await SendAsync(client, HttpMethod.Get,
+                $"/api/workspace/spaces/{Uri.EscapeDataString(space)}/root", null, entryPosition, token);
+            var contents = await ReadRootContentsAsync(client, root, entryPosition, token);
+            if (contents.GetProperty("total").GetInt32() != contents.GetProperty("items").GetArrayLength())
+                throw new InvalidOperationException("正式重启样本未在一页完整返回，不能以部分关系快照证明持久性。");
+            identities.AddRange(ContentIdentities(contents).Select(identity => space + ":" + identity));
+            foreach (var item in contents.GetProperty("items").EnumerateArray())
+                models.Add(item.GetProperty("associatedObject").GetProperty("modelKey").GetString()!);
+        }
+        if (!models.SetEquals(["Workspace/WorkspaceFolder", "Part/Part", "Document/Document"]))
+            throw new InvalidOperationException("正式重启样本缺少已建立的三类型混合引用。");
+        return identities.Order(StringComparer.Ordinal).ToArray();
+    }
+
+    // 关系与模型身份均参与比对，同值 EID 跨模型及同对象不同 LID 不得合并。
+    internal static string[] ContentIdentities(JsonElement contents) => contents.GetProperty("items").EnumerateArray()
+        .Select(item => JsonSerializer.Serialize(new[] { item.GetProperty("linkId").GetString(),
+            item.GetProperty("associatedObject").GetProperty("modelKey").GetString(), item.GetProperty("associatedObject").GetProperty("id").GetString() }))
+        .Order(StringComparer.Ordinal).ToArray();
+
     // 根内容查询与真实列表使用相同的正式 Link 入口；语义比较只留在 API 层。
     internal static Task<JsonElement> ReadRootContentsAsync(HttpClient client, JsonElement root, string entryPosition, CancellationToken token)
     {

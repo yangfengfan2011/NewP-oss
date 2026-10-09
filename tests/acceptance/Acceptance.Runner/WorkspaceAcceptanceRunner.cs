@@ -187,14 +187,16 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
         Path = Path.Combine(_runDirectory, name), FullPage = true, Animations = ScreenshotAnimations.Disabled
     });
 
-    // 同一 catalog 跨真实 Host 进程重启后新登录；在 API 层比较空间、根与混合关系，不重复浏览器旅程。
+    // 独立准备重启样本，再在同一 catalog 跨真实 Host 重启比较空间、根与混合关系；重启后只读，不补建内容。
     private async Task VerifyProcessRestartAsync(CancellationToken token)
     {
         var actor = _actor ?? throw new InvalidOperationException("Workspace 普通主体尚未准备。");
         using var beforeClient = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
         await WorkspaceAcceptanceFixture.LoginAsync(beforeClient, actor, token);
         var before = await WorkspaceAcceptanceFixture.SendAsync(beforeClient, HttpMethod.Get, "/api/workspace/spaces", null, _entryPosition, token);
-        var beforeContents = await ReadPersistedContentAsync(beforeClient, before, token);
+        var features = await AcceptanceFeatureCatalog.LoadAsync(beforeClient, token);
+        await WorkspaceAcceptanceFixture.PrepareRestartContentAsync(beforeClient, features, before, _runId, token);
+        var beforeContents = await WorkspaceAcceptanceFixture.ReadRestartContentAsync(beforeClient, before, _entryPosition!, token);
         using (var state = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(_repositoryRoot, ".codex-temp", "dev", "state.json"), token)))
         {
             if (state.RootElement.GetProperty("runId").GetString() != _devRun)
@@ -214,38 +216,11 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
         var expected = RootIdentities(before);
         if (expected.Length != 2 || !expected.SequenceEqual(RootIdentities(afterRead)) || !expected.SequenceEqual(RootIdentities(afterEnsure)))
             throw new InvalidOperationException("真实 Host 进程重启后空间或根身份发生漂移。");
-        var afterContents = await ReadPersistedContentAsync(afterClient, afterEnsure, token);
+        var afterContents = await WorkspaceAcceptanceFixture.ReadRestartContentAsync(afterClient, afterEnsure, _entryPosition!, token);
         if (!beforeContents.SequenceEqual(afterContents)) throw new InvalidOperationException("真实 Host 进程重启后混合引用或正式根内容查询发生漂移。");
         await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "process-restart.json"),
             new { catalog = ReusableSqlServerDatabase.Catalog, previousRun, restartedRun = _devRun, rootIdentities = expected, contentIdentities = afterContents }, token);
     }
-
-    private async Task<string[]> ReadPersistedContentAsync(HttpClient client, JsonElement roots, CancellationToken token)
-    {
-        var identities = new List<string>();
-        var models = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var root in roots.EnumerateArray())
-        {
-            var space = root.GetProperty("spaceId").GetString()!;
-            await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get,
-                $"/api/workspace/spaces/{Uri.EscapeDataString(space)}/root", null, _entryPosition, token);
-            var contents = await WorkspaceAcceptanceFixture.ReadRootContentsAsync(client, root, _entryPosition!, token);
-            if (contents.GetProperty("total").GetInt32() != contents.GetProperty("items").GetArrayLength())
-                throw new InvalidOperationException("正式重启样本未在一页完整返回，不能以部分关系快照证明持久性。");
-            identities.AddRange(ContentIdentities(contents).Select(identity => space + ":" + identity));
-            foreach (var item in contents.GetProperty("items").EnumerateArray())
-                models.Add(item.GetProperty("associatedObject").GetProperty("modelKey").GetString()!);
-        }
-        if (!models.SetEquals(["Workspace/WorkspaceFolder", "Part/Part", "Document/Document"]))
-            throw new InvalidOperationException("正式重启样本缺少已建立的三类型混合引用。");
-        return identities.Order(StringComparer.Ordinal).ToArray();
-    }
-
-    // 关系与模型身份均参与比对，同值 EID 跨模型及同对象不同 LID 不得合并。
-    internal static string[] ContentIdentities(JsonElement contents) => contents.GetProperty("items").EnumerateArray()
-        .Select(item => JsonSerializer.Serialize(new[] { item.GetProperty("linkId").GetString(),
-            item.GetProperty("associatedObject").GetProperty("modelKey").GetString(), item.GetProperty("associatedObject").GetProperty("id").GetString() }))
-        .Order(StringComparer.Ordinal).ToArray();
 
     private static string[] RootIdentities(JsonElement roots) => roots.EnumerateArray().Select(root =>
         $"{root.GetProperty("spaceKind").GetString()}/{root.GetProperty("spaceId").GetString()}/{root.GetProperty("rootFolderId").GetString()}")

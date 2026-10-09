@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 import { formatRequestError, platformFetch, useLocalization, usePlatformQuery } from '@icp-platform/core';
-import { loadStandardCrudLookupPage, readStandardCrudRequestError, type StandardCrudActionInputRenderContext, type StandardCrudLookupProvider, type StandardCrudOption } from '@icp-platform/sdk';
+import { loadStandardCrudLookupPage, readStandardCrudRequestError, StandardCrudRequestError, type StandardCrudActionInputRenderContext, type StandardCrudLookupProvider, type StandardCrudOption } from '@icp-platform/sdk';
 import { StandardCrudForm } from '@icp-platform/ui/crud-form';
 
 function candidateProvider(modelKey: string): StandardCrudLookupProvider { return {
   key: 'workspace.object.candidate',
   load: async (request, context) => {
-    if (modelKey !== 'Workspace/WorkspaceFolder' && !context?.featurePosition) throw new Error('没有该对象类型的读取权限');
+    if (modelKey !== 'Workspace/WorkspaceFolder' && !context?.featurePosition)
+      throw new StandardCrudRequestError('Workspace candidate read permission is missing.', 403, {}, {
+        code: 'Workspace.CandidateReadDenied', reasonKey: 'Workspace.CandidateReadDenied',
+      });
     const query = new URLSearchParams({ keyword: request.keyword, pageIndex: String(request.page), pageSize: String(request.pageSize) });
     const route = modelKey === 'Part/Part' ? '/api/part/parts' : modelKey === 'Document/Document' ? '/api/document/documents' : '/api/workspace/folders/candidates';
     if (modelKey !== 'Workspace/WorkspaceFolder') query.set('fields', 'EID,ECODE,ENAME');

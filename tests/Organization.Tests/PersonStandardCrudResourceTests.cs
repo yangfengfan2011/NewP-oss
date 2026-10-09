@@ -338,8 +338,7 @@ public sealed class PersonStandardCrudResourceTests
             new Dictionary<string, object?> { ["CompanyId"] = "Company_missing" }
         };
 
-        var result = await resolver.ResolveListAsync(
-            OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create()), rows,
+        var result = await resolver.ResolveListAsync(rows,
             OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create()).DisplayValueFields);
 
         Assert.Equal("***", result[0]["CompanyId_DisplayValue"]);
@@ -381,9 +380,7 @@ public sealed class PersonStandardCrudResourceTests
             new Dictionary<string, object?> { ["CompanyId"] = "Company_missing" }
         ];
 
-        var resolved = await resolver.ResolveListAsync(
-            descriptor,
-            rows,
+        var resolved = await resolver.ResolveListAsync(rows,
             [companyDisplayField],
             CancellationToken.None);
 
@@ -416,9 +413,7 @@ public sealed class PersonStandardCrudResourceTests
             new Dictionary<string, object?> { ["CompanyId"] = "Company_1", ["DepartmentId"] = "Department_1", ["PositionId"] = "Position_2" }
         ];
 
-        var resolved = await resolver.ResolveListAsync(
-            descriptor,
-            rows,
+        var resolved = await resolver.ResolveListAsync(rows,
             descriptor.DisplayValueFields,
             CancellationToken.None);
 
@@ -447,9 +442,7 @@ public sealed class PersonStandardCrudResourceTests
             }
         ];
 
-        var result = await resolver.ResolveListAsync(
-            OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create()),
-            rows,
+        var result = await resolver.ResolveListAsync(rows,
             OrganizationCrudTestResources.Resolve(PersonCrudDescriptorFactory.Create()).DisplayValueFields,
             CancellationToken.None);
 

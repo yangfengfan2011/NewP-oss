@@ -71,10 +71,11 @@ public sealed class RoleManagementDisplayTests
             new EfPlatformQueryExecutor(db),
             new StandardCrudDefaultWriter(writeRepository, [], []),
             [new RoleReadResource()],
-            [],
-            [],
-            temporalDisplayProjectionExecutor: new TemporalDisplayProjectionExecutor(new Presentation(locale, zone), new TemporalDisplayFormatter()),
-            userDisplayNameDirectory: names);
+            new DisplayValueProjection(
+                [],
+                temporalDisplayProjectionExecutor: new TemporalDisplayProjectionExecutor(new Presentation(locale, zone), new TemporalDisplayFormatter()),
+                userDisplayNameDirectory: names),
+            []);
         var query = new RoleManagementQuery(service, registry);
         var page = JsonSerializer.SerializeToElement(await query.ListAsync("role", 1, 20, default));
         Assert.Equal(2, page.GetProperty("total").GetInt32());

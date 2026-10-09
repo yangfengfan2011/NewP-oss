@@ -29,16 +29,17 @@ internal static class IdentityCrudQueryTestFactory
             executor,
             new StandardCrudDefaultWriter(crudRepository, [], []),
             [new IdentityAccountCrudResource()],
-            [],
-            [],
-            temporalDisplayProjectionExecutor: temporal,
-            userDisplayNameDirectory: new IdentityUserDisplayNameDirectory(new IdentityAccountDirectory(repository), new AllowAllReadableIds()),
-            presentationContextAccessor: new TestPresentationContext(),
-            textCatalog: RuntimeTextCatalog.Parse("""
+            new DisplayValueProjection(
+                [],
+                temporalDisplayProjectionExecutor: temporal,
+                userDisplayNameDirectory: new IdentityUserDisplayNameDirectory(new IdentityAccountDirectory(repository), new AllowAllReadableIds()),
+                presentationContextAccessor: new TestPresentationContext(),
+                textCatalog: RuntimeTextCatalog.Parse("""
                 { "defaultLanguage": "zhs", "supportedLanguages": [
                     { "code": "zhs", "locale": "zh-CN" }, { "code": "en", "locale": "en-US" } ],
                   "catalogs": { "zhs": { "Platform.SystemActor": "系统" }, "en": { "Platform.SystemActor": "System" } } }
-                """));
+                """)),
+            []);
         return new IdentityManagementQueryService(repository, crud, temporal, registry);
     }
 

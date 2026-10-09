@@ -1,5 +1,4 @@
 using ICP.Platform.Crud.Abstractions;
-using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Organization.Contracts;
 using ICP.Platform.Query.Descriptors;
@@ -13,7 +12,6 @@ public sealed class DepartmentCrudDisplayValueResolver(IOrganizationQuery query,
 
     /// <inheritdoc/>
     public async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> ResolveListAsync(
-        StandardCrudDescriptor descriptor,
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
         IReadOnlyList<PlatformDisplayValueField> requestedDisplayFields,
         CancellationToken cancellationToken = default)

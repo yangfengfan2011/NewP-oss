@@ -16,7 +16,9 @@ Model 至少区分日历日期、时间点和本地日期时间。字段显示�
 
 展示投影按字段收集并去重原始值，再通过批量策略解析为原始值到显示值的受控映射；不继续使用逐行 fallback 或依赖返回数组顺序。协议的结构化策略包括 reference、user、group、enum 和 instant；具体交付只采用已冻结真实 owner 与正式 consumer 的策略，未冻结的策略候选不构成交付门禁。复杂业务文本使用模块拥有的计算字段，不开放任意 formatter key。Runtime Column 只能继承所引用 Model 字段的显示规则，或声明由计算型行数据提供的伴随显示字段，不能返回前端 formatter 或 UI 节点。
 
-display projection-planning module 是已采用策略的唯一判定 owner：它从规范 Model definition 编译 typed lookup 或 temporal plan，同时拥有支持集合、source 语义、策略参数、canonical companion 资格与稳定诊断。`ModelMetadataProjector` 负责固定字段默认语义和保留 authoring display 声明的 definition；validator、DTO generator、Standard CRUD descriptor adapter 和模块读取只能消费编译结果，不能再次按字段类型或 display.type 推导策略。Standard CRUD 继续只由共享服务合并 resolver 输出；Identity 普通账号读取也消费该共享服务，安全事件业务时间使用 temporal plan executor，前端只消费 companion。新增策略不以外部 strategy registry、模块 formatter 或 UI fallback 扩展本边界。
+display projection-planning module 是已采用策略的唯一判定 owner：它从规范 Model definition 编译 typed lookup 或 temporal plan，同时拥有支持集合、source 语义、策略参数、canonical companion 资格与稳定诊断。`ModelMetadataProjector` 负责固定字段默认语义和保留 authoring display 声明的 definition；validator、DTO generator、Standard CRUD descriptor adapter 和模块读取只能消费编译结果，不能再次按字段类型或 display.type 推导策略。Standard CRUD 与显式 Link 查询只由共享显示投影执行模块 `DisplayValueProjection` 合并 resolver 输出；Identity 普通账号读取经 Standard CRUD 消费同一模块，安全事件业务时间使用 temporal plan executor，前端只消费 companion。新增策略不以外部 strategy registry、模块 formatter 或 UI fallback 扩展本边界。
+
+Link 目录在构建时为真实端点编译完整 typed plan，公共 companion 资格由映射字段的计划决定；未映射或无计划的端点返回空 companion，不按字段类型补造策略。请求阶段只选择本次字段并执行计划，不创建临时 CRUD descriptor 或资源注册表。模块 resolver 以 `ResourceKey` 标识归属，只接收批量原始行、请求的显示字段和取消令牌；批量方法为必需实现，不传入路由、授权或写入字段上下文，也不保留逐行兼容入口。此次迁移的回滚单位是 resolver interface、全部实现、共享执行模块和两个读取 consumer，不能单独恢复旧签名或第二个合并 owner。
 
 该 planning 边界的回滚单位是 planner、typed plan consumer 与真实 adopter 的同一组变更；回滚不得恢复类型推断 companion、未知策略默认分支、第二 merge owner、模块直连 formatter 或 raw UI fallback。raw/display 输出协议、reference/user 批量 resolver、数据库 schema 与历史 raw 不属于该回滚单位，若必须改变这些事实应重新形成独立决策。
 

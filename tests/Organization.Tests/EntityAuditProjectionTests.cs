@@ -42,10 +42,11 @@ public sealed class EntityAuditProjectionTests
             new EfPlatformQueryExecutor(context),
             new StandardCrudDefaultWriter(writeRepository, [], [], auditValueProvider: new EntityAuditValueProvider(stamp)),
             [],
-            [],
-            [],
-            temporalDisplayProjectionExecutor: new TemporalDisplayProjectionExecutor(new Presentation(locale, zone), new TemporalDisplayFormatter()),
-            userDisplayNameDirectory: directory);
+            new DisplayValueProjection(
+                [],
+                temporalDisplayProjectionExecutor: new TemporalDisplayProjectionExecutor(new Presentation(locale, zone), new TemporalDisplayFormatter()),
+                userDisplayNameDirectory: directory),
+            []);
 
         foreach (var descriptor in registry.GetAll())
         {

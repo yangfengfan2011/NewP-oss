@@ -3,6 +3,8 @@ using System.Data.Common;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Modeling.Metadata;
+using ICP.Platform.Modeling.DisplayPlanning;
+using ICP.Platform.Query.Descriptors;
 
 namespace ICP.Platform.Crud.LinkQueries;
 
@@ -18,8 +20,8 @@ public sealed record LinkQueryRequest(string Direction, LinkObjectReference Anch
     IReadOnlyList<string>? Types = null);
 /// <summary>已验证的唯一查询源，不建立独立于 linkedTypes 的业务类型清单。</summary>
 public sealed record LinkQueryDefinition(ModelDefinition Model, LinkQueryMetadata Metadata,
-    IReadOnlyDictionary<string, LinkQueryEndpoint> Endpoints, bool HasDataScopeResource = false);
-public sealed record LinkQueryEndpoint(ModelDefinition Model, string ResourceKey, string IdField, string? ConstraintKey, string? TitleKey, string? Icon);
+    IReadOnlyDictionary<string, LinkQueryEndpoint> Endpoints, IReadOnlyList<PlatformDisplayValueField> DisplayValueFields, bool HasDataScopeResource = false);
+public sealed record LinkQueryEndpoint(ModelDefinition Model, string ResourceKey, string IdField, string? ConstraintKey, string? TitleKey, string? Icon, ModelDisplayProjectionPlan DisplayProjectionPlan);
 
 /// <summary>查询源拥有者提供强制上下文验证和源级读取条件，失败必须传播。</summary>
 public interface ILinkQuerySourcePolicy

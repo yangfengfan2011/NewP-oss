@@ -1,11 +1,8 @@
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
-using ICP.Platform.Persistence.Auditing;
 using ICP.Platform.Query.Models;
 using ICP.Platform.Query.Runtime;
-using ICP.Platform.Modeling.DisplayPlanning;
-using ICP.Platform.Presentation;
 using ICP.Platform.Crud.ObjectOperations;
 using Microsoft.Extensions.Logging;
 
@@ -16,12 +13,8 @@ public sealed class StandardCrudService : IStandardCrudService
     private readonly IStandardCrudRepository _repository;
     private readonly IPlatformQueryExecutor _queryExecutor;
     private readonly IReadOnlyDictionary<string, IStandardCrudQueryCustomizer> _queryCustomizers;
-    private readonly IReadOnlyDictionary<string, IStandardCrudDisplayValueResolver> _displayResolvers;
+    private readonly DisplayValueProjection _displayProjection;
     private readonly IReadOnlyDictionary<(string ResourceKey, string Key), IStandardCrudSummaryProvider> _summaryProviders;
-    private readonly ITemporalDisplayProjectionExecutor? _temporalDisplayProjectionExecutor;
-    private readonly IUserDisplayNameDirectory? _userDisplayNameDirectory;
-    private readonly IRequestPresentationContextAccessor? _presentationContextAccessor;
-    private readonly IRuntimeTextCatalog? _textCatalog;
     private readonly ILogger<StandardCrudService>? _logger;
     private readonly IObjectOperationExecutor? _objectOperations;
     private readonly StandardCrudDefaultWriter _defaultWriter;
@@ -34,27 +27,19 @@ public sealed class StandardCrudService : IStandardCrudService
         IPlatformQueryExecutor queryExecutor,
         StandardCrudDefaultWriter defaultWriter,
         IEnumerable<IStandardCrudQueryCustomizer> queryCustomizers,
-        IEnumerable<IStandardCrudDisplayValueResolver> displayResolvers,
+        DisplayValueProjection displayProjection,
         IEnumerable<IStandardCrudSummaryProvider> summaryProviders,
-        ITemporalDisplayProjectionExecutor? temporalDisplayProjectionExecutor = null,
-        IUserDisplayNameDirectory? userDisplayNameDirectory = null,
-        IRequestPresentationContextAccessor? presentationContextAccessor = null,
         ILogger<StandardCrudService>? logger = null,
         IObjectOperationExecutor? objectOperations = null,
         ICP.Platform.Authorization.Contracts.IDataScopeReadPlanProvider? dataScope = null,
-        ICP.Platform.Authorization.Contracts.IDataScopeObjectDecisionProvider? objectScope = null,
-        IRuntimeTextCatalog? textCatalog = null)
+        ICP.Platform.Authorization.Contracts.IDataScopeObjectDecisionProvider? objectScope = null)
     {
         _repository = repository;
-        _textCatalog = textCatalog;
         _queryExecutor = queryExecutor;
         _defaultWriter = defaultWriter;
         _queryCustomizers = queryCustomizers.ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
-        _displayResolvers = displayResolvers.ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
+        _displayProjection = displayProjection;
         _summaryProviders = summaryProviders.ToDictionary(item => (item.ResourceKey, item.Key));
-        _temporalDisplayProjectionExecutor = temporalDisplayProjectionExecutor;
-        _userDisplayNameDirectory = userDisplayNameDirectory;
-        _presentationContextAccessor = presentationContextAccessor;
         _logger = logger;
         _objectOperations = objectOperations;
         _dataScope = dataScope;
@@ -88,7 +73,7 @@ public sealed class StandardCrudService : IStandardCrudService
         if (_dataScope is not null)
             platformRequest = platformRequest with { ScopePredicate = (await _dataScope.GetReadPlanAsync(descriptor.ResourceKey, cancellationToken)).Predicate };
         var result = await _queryExecutor.QueryAsync(queryDescriptor, platformRequest, cancellationToken);
-        var rows = await ApplyDisplayValuesAsync(descriptor, result.Items, result.RequestedDisplayFields, cancellationToken);
+        var rows = await _displayProjection.ApplyDisplayValuesAsync(descriptor.ResourceKey, descriptor.DisplayProjectionPlan, result.Items, result.RequestedDisplayFields, cancellationToken);
         var projectedRows = rows.Select(row => Project(row, result.ResponseFields)).ToList();
 
         return new StandardCrudListResult(
@@ -353,203 +338,14 @@ public sealed class StandardCrudService : IStandardCrudService
             : [];
     }
 
-    // 显示值补齐以 row copy 方式合并，并拒绝 resolver 覆盖原始字段、返回未请求字段或非字符串伴随值。
-    internal async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> ApplyDisplayValuesAsync(
-        StandardCrudDescriptor descriptor,
-        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
-        IReadOnlyList<ICP.Platform.Query.Descriptors.PlatformDisplayValueField> requestedDisplayFields,
-        CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        var values = rows
-            .Select(row => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>(row, StringComparer.Ordinal))
-            .ToList();
-        if (requestedDisplayFields.Count == 0)
-        {
-            return values;
-        }
-
-        if (rows.Any(row => requestedDisplayFields.Any(field => row.ContainsKey(field.Field))))
-        {
-            throw new InvalidOperationException($"DISPLAY_RAW_FIELD_CONFLICT: {descriptor.ResourceKey}");
-        }
-
-        var temporalPlans = descriptor.DisplayProjectionPlan?.Fields
-            .Where(plan => requestedDisplayFields.Any(field => string.Equals(field.Field, plan.CompanionField, StringComparison.Ordinal)))
-            .Where(static plan => plan is TemporalFieldDisplayProjectionPlan or CalendarDateFieldDisplayProjectionPlan)
-            .ToDictionary(static plan => plan.CompanionField, StringComparer.Ordinal)
-            ?? new Dictionary<string, FieldDisplayProjectionPlan>(StringComparer.Ordinal);
-        var auditUserPlans = descriptor.DisplayProjectionPlan?.Fields
-            .OfType<LookupFieldDisplayProjectionPlan>()
-            .Where(plan => plan.IsEntityAuditField && requestedDisplayFields.Any(field => field.Field == plan.CompanionField))
-            .ToArray() ?? [];
-        var lookupFields = requestedDisplayFields
-            .Where(field => !temporalPlans.ContainsKey(field.Field))
-            .Where(field => !auditUserPlans.Any(plan => plan.CompanionField == field.Field))
-            .ToArray();
-
-        IStandardCrudDisplayValueResolver? resolver = null;
-        if (lookupFields.Length > 0 && !_displayResolvers.TryGetValue(descriptor.ResourceKey, out resolver))
-        {
-            throw new InvalidOperationException(
-                $"标准 CRUD 资源 {descriptor.ResourceKey} 请求了显示值字段，但未注册显示值解析器。");
-        }
-
-        if (resolver is not null)
-        {
-            EnsureDisplayResolverImplementation(descriptor, resolver);
-        }
-
-        if (temporalPlans.Count > 0 && _temporalDisplayProjectionExecutor is null)
-        {
-            throw new InvalidOperationException(
-                $"标准 CRUD 资源 {descriptor.ResourceKey} 请求了 temporal 显示值字段，但未注册平台执行器。");
-        }
-
-        if (values.Count == 0)
-        {
-            return values;
-        }
-
-        var resolvedRows = resolver is null
-            ? rows.Select(static _ => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>()).ToArray()
-            : await resolver.ResolveListAsync(descriptor, rows, lookupFields, cancellationToken);
-        if (resolvedRows.Count != values.Count)
-        {
-            throw new InvalidOperationException(
-                $"标准 CRUD 资源 {descriptor.ResourceKey} 的显示值解析器返回行数 {resolvedRows.Count}，预期 {values.Count}。");
-        }
-
-        var allowedDisplayFields = lookupFields
-            .Select(static field => field.Field)
-            .ToHashSet(StringComparer.Ordinal);
-        var auditNames = await ResolveAuditNamesAsync(rows, auditUserPlans, cancellationToken);
-        for (var index = 0; index < values.Count; index++)
-        {
-            foreach (var pair in resolvedRows[index])
-            {
-                if (rows[index].ContainsKey(pair.Key))
-                {
-                    throw new InvalidOperationException(
-                        $"标准 CRUD 资源 {descriptor.ResourceKey} 的显示值解析器尝试覆盖原始字段 {pair.Key}。");
-                }
-
-                if (!allowedDisplayFields.Contains(pair.Key))
-                {
-                    throw new InvalidOperationException(
-                        $"标准 CRUD 资源 {descriptor.ResourceKey} 的显示值解析器返回未请求字段 {pair.Key}。");
-                }
-
-                if (pair.Value is not null and not string)
-                {
-                    throw new InvalidOperationException(
-                        $"标准 CRUD 资源 {descriptor.ResourceKey} 的显示值解析器返回字段 {pair.Key} 的值必须是 string 或 null。");
-                }
-
-                ((Dictionary<string, object?>)values[index])[pair.Key] = pair.Value;
-            }
-
-            foreach (var (companionField, plan) in temporalPlans)
-            {
-                var rawValue = rows[index].TryGetValue(plan.SourceField, out var value) ? value : null;
-                object? displayValue = (plan, rawValue) switch
-                {
-                    (_, null) => null,
-                    (TemporalFieldDisplayProjectionPlan instantPlan, DateTime instant) =>
-                        _temporalDisplayProjectionExecutor!.Project(instantPlan, instant).DisplayValue,
-                    (CalendarDateFieldDisplayProjectionPlan datePlan, DateOnly date) =>
-                        _temporalDisplayProjectionExecutor!.Project(datePlan, date).DisplayValue,
-                    _ => throw new InvalidOperationException(
-                        $"标准 CRUD 资源 {descriptor.ResourceKey} 的 temporal 字段 {plan.SourceField} 与计划类型不匹配。")
-                };
-                ((Dictionary<string, object?>)values[index])[companionField] = displayValue;
-            }
-
-            foreach (var plan in auditUserPlans)
-            {
-                var raw = ReadAuditActor(rows[index], plan.SourceField);
-                var display = raw == SystemEntityAuditStampProvider.SystemActorId
-                    ? _textCatalog?.GetText("Platform.SystemActor", _presentationContextAccessor?.Current?.Locale)
-                    : raw is null || auditNames is null ? null
-                    : auditNames.TryGetValue(raw, out var name) ? name : raw;
-                ((Dictionary<string, object?>)values[index])[plan.CompanionField] = display;
-            }
-        }
-
-        return values;
-    }
-
-    // 一个读取批次合并两列全部账号；只有非关键目录调用失败可以降级，结构校验留在 catch 外。
-    private async Task<IReadOnlyDictionary<string, string>?> ResolveAuditNamesAsync(
-        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
-        IReadOnlyList<LookupFieldDisplayProjectionPlan> plans,
-        CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        var ids = rows.SelectMany(row => plans.Select(plan => ReadAuditActor(row, plan.SourceField)))
-            .Where(id => id is not null && id != SystemEntityAuditStampProvider.SystemActorId)
-            .Cast<string>().ToHashSet(StringComparer.Ordinal);
-        if (ids.Count == 0)
-        {
-            return new Dictionary<string, string>();
-        }
-        IReadOnlyDictionary<string, string> names;
-        try
-        {
-            if (_userDisplayNameDirectory is null)
-            {
-                throw new InvalidOperationException("AUDIT_NAME_DIRECTORY_UNAVAILABLE");
-            }
-            names = await _userDisplayNameDirectory.FindManyAsync(ids, cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception exception) when (exception is not UserDisplayNameDirectoryContractException
-            and not ICP.Platform.Authorization.Contracts.DataScopeReadExecutionException)
-        {
-            _logger?.LogWarning("AUDIT_NAME_DIRECTORY_UNAVAILABLE: {FailureType}", exception.GetType().Name);
-            return null;
-        }
-        if (names is null || names.Any(pair => !ids.Contains(pair.Key) || pair.Value is null))
-        {
-            throw new UserDisplayNameDirectoryContractException();
-        }
-        return names;
-    }
-
-    // 审计 ID 类型是公共契约；不能把结构错误当作名称未命中或字符串转换。
-    private static string? ReadAuditActor(IReadOnlyDictionary<string, object?> row, string field) =>
-        !row.TryGetValue(field, out var value) || value is null ? null
-        : value is string id ? id
-        : throw new InvalidOperationException($"AUDIT_ACTOR_TYPE_INVALID: {field}");
-
-    private static void EnsureDisplayResolverImplementation(
-        StandardCrudDescriptor descriptor,
-        IStandardCrudDisplayValueResolver resolver)
-    {
-        var resolverType = resolver.GetType();
-        var implementsBatch = resolverType.GetMethod(
-            nameof(IStandardCrudDisplayValueResolver.ResolveListAsync),
-            [typeof(StandardCrudDescriptor), typeof(IReadOnlyList<IReadOnlyDictionary<string, object?>>), typeof(IReadOnlyList<ICP.Platform.Query.Descriptors.PlatformDisplayValueField>), typeof(CancellationToken)]) is not null;
-        var implementsSingle = resolverType.GetMethod(
-            nameof(IStandardCrudDisplayValueResolver.ResolveAsync),
-            [typeof(StandardCrudDescriptor), typeof(IReadOnlyDictionary<string, object?>), typeof(CancellationToken)]) is not null;
-        if (!implementsBatch && !implementsSingle)
-        {
-            throw new InvalidOperationException(
-                $"标准 CRUD 资源 {descriptor.ResourceKey} 的显示值解析器未实现批量 ResolveListAsync，也未提供兼容的单行 ResolveAsync。");
-        }
-    }
-
+    // 单行读取与列表经过同一批量显示投影入口。
     private async Task<IReadOnlyDictionary<string, object?>> ApplyDisplayValuesToSingleRowAsync(
         StandardCrudDescriptor descriptor,
         IReadOnlyDictionary<string, object?> row,
         IReadOnlyList<ICP.Platform.Query.Descriptors.PlatformDisplayValueField> requestedDisplayFields,
         CancellationToken cancellationToken)
     {
-        var resolvedRows = await ApplyDisplayValuesAsync(descriptor, [row], requestedDisplayFields, cancellationToken);
+        var resolvedRows = await _displayProjection.ApplyDisplayValuesAsync(descriptor.ResourceKey, descriptor.DisplayProjectionPlan, [row], requestedDisplayFields, cancellationToken);
         return resolvedRows[0];
     }
 

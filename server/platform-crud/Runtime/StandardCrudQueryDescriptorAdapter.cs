@@ -1,6 +1,6 @@
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Query.Descriptors;
-using ICP.Platform.Modeling.DisplayPlanning;
+using ICP.Platform.Crud.Planning;
 
 namespace ICP.Platform.Crud.Runtime;
 
@@ -53,9 +53,7 @@ public static class StandardCrudQueryDescriptorAdapter
 
         foreach (var plan in descriptor.DisplayProjectionPlan.Fields)
         {
-            var projected = plan is LookupFieldDisplayProjectionPlan lookup
-                ? new PlatformDisplayValueField(lookup.CompanionField, lookup.SourceField, lookup.TargetModel, lookup.TargetIdField, lookup.TargetDisplayField)
-                : new PlatformDisplayValueField(plan.CompanionField, plan.SourceField, "$temporal", plan.SourceField, plan.CompanionField);
+            var projected = ModelDisplayValueFieldProjector.ProjectField(plan);
             var existing = fields.SingleOrDefault(field => string.Equals(field.Field, plan.CompanionField, StringComparison.Ordinal));
             if (existing is not null)
             {

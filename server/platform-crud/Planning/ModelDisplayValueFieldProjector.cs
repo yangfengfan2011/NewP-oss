@@ -40,16 +40,17 @@ public sealed class ModelDisplayValueFieldProjector
 
         return projectionPlan.Fields
             .OfType<LookupFieldDisplayProjectionPlan>()
-            .Select(ProjectLookupField)
+            .Select(ProjectField)
             .ToArray();
     }
 
-    // target 与 companion 已由 planner 闭合，这里只完成 runtime descriptor 形状适配。
-    private static PlatformDisplayValueField ProjectLookupField(LookupFieldDisplayProjectionPlan plan) =>
-        new(
-            plan.CompanionField,
-            plan.SourceField,
-            plan.TargetModel,
-            plan.TargetIdField,
-            plan.TargetDisplayField);
+    // typed plan 已闭合策略；两个读取入口共用相同的查询字段映射。
+    internal static PlatformDisplayValueField ProjectField(FieldDisplayProjectionPlan plan) => plan switch
+    {
+        LookupFieldDisplayProjectionPlan lookup => new(lookup.CompanionField, lookup.SourceField,
+            lookup.TargetModel, lookup.TargetIdField, lookup.TargetDisplayField),
+        TemporalFieldDisplayProjectionPlan or CalendarDateFieldDisplayProjectionPlan =>
+            new(plan.CompanionField, plan.SourceField, "$temporal", plan.SourceField, plan.CompanionField),
+        _ => throw new InvalidOperationException($"DISPLAY_PLAN_UNSUPPORTED: {plan.SourceField}")
+    };
 }

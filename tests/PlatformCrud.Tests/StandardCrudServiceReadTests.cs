@@ -25,9 +25,10 @@ public sealed class StandardCrudServiceReadTests
             EmptyQueryExecutor(),
             new StandardCrudDefaultWriter(repository, [], []),
             [],
-            [],
-            [],
-            userDisplayNameDirectory: directory);
+            new DisplayValueProjection(
+                [],
+                userDisplayNameDirectory: directory),
+            []);
         var descriptor = new StandardCrudDescriptor
         {
             ResourceKey = "organization.person", ModuleId = "Organization", ModelName = "Person",
@@ -89,10 +90,12 @@ public sealed class StandardCrudServiceReadTests
             executor,
             new StandardCrudDefaultWriter(writeRepository, [], []),
             [],
-            [],
-            [],
-            userDisplayNameDirectory: directory,
-            presentationContextAccessor: new FixedPresentationContextAccessor(new RequestPresentationContext("zh-CN", "Asia/Taipei")), textCatalog: TextCatalog());
+            new DisplayValueProjection(
+                [],
+                userDisplayNameDirectory: directory,
+                presentationContextAccessor: new FixedPresentationContextAccessor(new RequestPresentationContext("zh-CN", "Asia/Taipei")),
+                textCatalog: TextCatalog()),
+            []);
 
         var result = await service.ListAsync(descriptor, new StandardCrudListQuery());
         Assert.Equal(1, directory.Calls);
@@ -143,10 +146,12 @@ public sealed class StandardCrudServiceReadTests
             EmptyQueryExecutor(),
             new StandardCrudDefaultWriter(writeRepository, [], []),
             [],
-            [],
-            [],
-            userDisplayNameDirectory: directory,
-            presentationContextAccessor: new FixedPresentationContextAccessor(new RequestPresentationContext(locale, "Asia/Taipei")), textCatalog: TextCatalog());
+            new DisplayValueProjection(
+                [],
+                userDisplayNameDirectory: directory,
+                presentationContextAccessor: new FixedPresentationContextAccessor(new RequestPresentationContext(locale, "Asia/Taipei")),
+                textCatalog: TextCatalog()),
+            []);
 
         var detail = await service.GetDetailAsync(descriptor, "1");
         Assert.Equal(expected, detail!.Fields["CreatedBy_DisplayValue"]);
@@ -175,9 +180,10 @@ public sealed class StandardCrudServiceReadTests
             EmptyQueryExecutor(),
             new StandardCrudDefaultWriter(repository, [], []),
             [],
-            [],
-            [],
-            temporalDisplayProjectionExecutor: executor);
+            new DisplayValueProjection(
+                [],
+                temporalDisplayProjectionExecutor: executor),
+            []);
         var descriptor = new StandardCrudDescriptor
         {
             ResourceKey = "organization.person",
@@ -239,7 +245,7 @@ public sealed class StandardCrudServiceReadTests
             executor,
             new StandardCrudDefaultWriter(repository, [], []),
             [new KeywordQueryCustomizer()],
-            [new PersonDisplayResolver()],
+            new DisplayValueProjection([new PersonDisplayResolver()]),
             []);
 
         var result = await service.ListAsync(
@@ -270,7 +276,7 @@ public sealed class StandardCrudServiceReadTests
             executor,
             new StandardCrudDefaultWriter(writeRepository, [], []),
             [],
-            [new PersonDisplayResolver()],
+            new DisplayValueProjection([new PersonDisplayResolver()]),
             []);
 
         var result = await service.ListAsync(
@@ -313,7 +319,7 @@ public sealed class StandardCrudServiceReadTests
             executor,
             new StandardCrudDefaultWriter(writeRepository, [], []),
             [],
-            [],
+            new DisplayValueProjection([]),
             []);
 
         var result = await service.ListAsync(
@@ -337,7 +343,7 @@ public sealed class StandardCrudServiceReadTests
             EmptyQueryExecutor(),
             new StandardCrudDefaultWriter(repository, [], []),
             [],
-            [new PersonDisplayResolver()],
+            new DisplayValueProjection([new PersonDisplayResolver()]),
             [new FailingSummaryProvider()]);
 
         var detail = await service.GetDetailAsync(Descriptor(summaryKeys: ["userLink"]), "person-1");
@@ -352,7 +358,7 @@ public sealed class StandardCrudServiceReadTests
         var repository = new InMemoryStandardCrudRepository(
             [new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["ENAME"] = "张三" }]);
         var service = new StandardCrudService(repository, EmptyQueryExecutor(),
-            new StandardCrudDefaultWriter(repository, [], []), [], [new PersonDisplayResolver()],
+            new StandardCrudDefaultWriter(repository, [], []), [], new DisplayValueProjection([new PersonDisplayResolver()]),
             [new FailingSummaryProvider(new ICP.Platform.Authorization.Contracts.DataScopeReadExecutionException(
                 "identity.account", new IOException("authorization unavailable")))]);
 
@@ -378,7 +384,7 @@ public sealed class StandardCrudServiceReadTests
             EmptyQueryExecutor(),
             new StandardCrudDefaultWriter(repository, [], []),
             [],
-            [new PersonDisplayResolver()],
+            new DisplayValueProjection([new PersonDisplayResolver()]),
             []);
 
         var detail = await service.GetDetailAsync(Descriptor(), "person-1");
@@ -400,7 +406,7 @@ public sealed class StandardCrudServiceReadTests
             EmptyQueryExecutor(),
             new StandardCrudDefaultWriter(repository, [], []),
             [],
-            [],
+            new DisplayValueProjection([]),
             []);
 
         var options = await service.OptionsAsync(Descriptor(), new StandardCrudListQuery());
@@ -420,7 +426,7 @@ public sealed class StandardCrudServiceReadTests
             executor,
             new StandardCrudDefaultWriter(writeRepository, [], []),
             [],
-            [new RawOverwritingDisplayResolver()],
+            new DisplayValueProjection([new RawOverwritingDisplayResolver()]),
             []);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
@@ -441,7 +447,7 @@ public sealed class StandardCrudServiceReadTests
             DisplayValueQueryExecutor(),
             new StandardCrudDefaultWriter(writeRepository, [], []),
             [],
-            [new ExtraFieldDisplayResolver()],
+            new DisplayValueProjection([new ExtraFieldDisplayResolver()]),
             []);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
@@ -464,7 +470,7 @@ public sealed class StandardCrudServiceReadTests
             DisplayValueQueryExecutor(),
             new StandardCrudDefaultWriter(writeRepository, [], []),
             [],
-            [new FixedDisplayValueResolver(invalidDisplayValue)],
+            new DisplayValueProjection([new FixedDisplayValueResolver(invalidDisplayValue)]),
             []);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
@@ -487,7 +493,7 @@ public sealed class StandardCrudServiceReadTests
             DisplayValueQueryExecutor(),
             new StandardCrudDefaultWriter(writeRepository, [], []),
             [],
-            [new FixedDisplayValueResolver(displayValue)],
+            new DisplayValueProjection([new FixedDisplayValueResolver(displayValue)]),
             []);
 
         var result = await service.ListAsync(
@@ -530,7 +536,7 @@ public sealed class StandardCrudServiceReadTests
             executor,
             new StandardCrudDefaultWriter(repository, [], []),
             [],
-            [new BrokenPersonDisplayResolver()],
+            new DisplayValueProjection([new BrokenPersonDisplayResolver()]),
             []);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
@@ -538,49 +544,6 @@ public sealed class StandardCrudServiceReadTests
             new StandardCrudListQuery(Fields: ["EID", "PersonNo", "CompanyId"])));
 
         Assert.Equal("标准 CRUD 资源 organization.person 的显示值解析器返回行数 0，预期 1。", ex.Message);
-    }
-
-    [Fact]
-    public async Task ListAsync_WhenDisplayResolverProvidesNoSupportedImplementation_ThrowsStableMessage()
-    {
-        var repository = new InMemoryStandardCrudRepository(
-        [
-            new Dictionary<string, object?> { ["EID"] = "person-1", ["PersonNo"] = "P001", ["CompanyId"] = "company-1" }
-        ]);
-        var executor = new RecordingPlatformQueryExecutor(new PlatformQueryResult(
-        [
-            new Dictionary<string, object?>
-            {
-                ["EID"] = "person-1",
-                ["PersonNo"] = "P001",
-                ["CompanyId"] = "company-1"
-            }
-        ],
-        Total: 1,
-        Page: 1,
-        PageSize: 20,
-        SortBy: "PersonNo",
-        SortDirection: "asc",
-        ResponseFields: ["EID", "PersonNo", "CompanyId", "CompanyId_DisplayValue"],
-        RequestedDisplayFields:
-        [
-            new PlatformDisplayValueField("CompanyId_DisplayValue", "CompanyId", "Company", "EID", "ENAME")
-        ]));
-        var service = new StandardCrudService(
-            repository,
-            executor,
-            new StandardCrudDefaultWriter(repository, [], []),
-            [],
-            [new MissingDisplayResolver()],
-            []);
-
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
-            Descriptor(),
-            new StandardCrudListQuery(Fields: ["EID", "PersonNo", "CompanyId"])));
-
-        Assert.Equal(
-            "标准 CRUD 资源 organization.person 的显示值解析器未实现批量 ResolveListAsync，也未提供兼容的单行 ResolveAsync。",
-            ex.Message);
     }
 
     [Fact]
@@ -614,7 +577,7 @@ public sealed class StandardCrudServiceReadTests
             executor,
             new StandardCrudDefaultWriter(repository, [], []),
             [],
-            [],
+            new DisplayValueProjection([]),
             []);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
@@ -645,7 +608,7 @@ public sealed class StandardCrudServiceReadTests
             executor,
             new StandardCrudDefaultWriter(repository, [], []),
             [],
-            [],
+            new DisplayValueProjection([]),
             []);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ListAsync(
@@ -699,7 +662,6 @@ public sealed class StandardCrudServiceReadTests
         public string ResourceKey => "organization.person";
 
         public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> ResolveListAsync(
-            StandardCrudDescriptor descriptor,
             IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
             IReadOnlyList<PlatformDisplayValueField> requestedDisplayFields,
             CancellationToken cancellationToken = default)
@@ -721,7 +683,6 @@ public sealed class StandardCrudServiceReadTests
         public string ResourceKey => "organization.person";
 
         public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> ResolveListAsync(
-            StandardCrudDescriptor descriptor,
             IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
             IReadOnlyList<PlatformDisplayValueField> requestedDisplayFields,
             CancellationToken cancellationToken = default) =>
@@ -733,7 +694,6 @@ public sealed class StandardCrudServiceReadTests
         public string ResourceKey => "organization.person";
 
         public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> ResolveListAsync(
-            StandardCrudDescriptor descriptor,
             IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
             IReadOnlyList<PlatformDisplayValueField> requestedDisplayFields,
             CancellationToken cancellationToken = default) =>
@@ -748,7 +708,6 @@ public sealed class StandardCrudServiceReadTests
         public string ResourceKey => "organization.person";
 
         public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> ResolveListAsync(
-            StandardCrudDescriptor descriptor,
             IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
             IReadOnlyList<PlatformDisplayValueField> requestedDisplayFields,
             CancellationToken cancellationToken = default) =>
@@ -763,7 +722,6 @@ public sealed class StandardCrudServiceReadTests
         public string ResourceKey => "organization.person";
 
         public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> ResolveListAsync(
-            StandardCrudDescriptor descriptor,
             IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
             IReadOnlyList<PlatformDisplayValueField> requestedDisplayFields,
             CancellationToken cancellationToken = default) =>
@@ -771,11 +729,6 @@ public sealed class StandardCrudServiceReadTests
             [
                 new Dictionary<string, object?> { ["CompanyId_DisplayValue"] = displayValue }
             ]);
-    }
-
-    private sealed class MissingDisplayResolver : IStandardCrudDisplayValueResolver
-    {
-        public string ResourceKey => "organization.person";
     }
 
     private sealed class RecordingPlatformQueryExecutor : IPlatformQueryExecutor

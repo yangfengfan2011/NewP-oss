@@ -275,10 +275,11 @@ public sealed class ExampleRecordStandardCrudServiceTests
             executor,
             new StandardCrudDefaultWriter(repository, [], [], conditionalDeleteExecutors: [], auditValueProvider: new EntityAuditValueProvider(new SystemEntityAuditStampProvider(TimeProvider.System))),
             [],
-            [new ExampleRecordDisplayValueResolver(directory)],
-            [],
-            temporalDisplayProjectionExecutor: new ICP.Platform.Presentation.TemporalDisplayProjectionExecutor(
-                new NoPresentationContext(), new ICP.Platform.Presentation.TemporalDisplayFormatter()));
+            new DisplayValueProjection(
+                [new ExampleRecordDisplayValueResolver(directory)],
+                temporalDisplayProjectionExecutor: new ICP.Platform.Presentation.TemporalDisplayProjectionExecutor(
+                new NoPresentationContext(), new ICP.Platform.Presentation.TemporalDisplayFormatter())),
+            []);
 
     private sealed class NoPresentationContext : ICP.Platform.Presentation.IRequestPresentationContextAccessor
     {

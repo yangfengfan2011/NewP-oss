@@ -61,6 +61,7 @@ public static class StandardCrudServiceCollectionExtensions
             provider.GetRequiredService<ObjectOperationExecutor>());
         services.TryAddScoped<Func<IObjectOperationExecutor>>(static provider =>
             () => provider.GetRequiredService<IObjectOperationExecutor>());
+        services.AddScoped<DisplayValueProjection>();
         services.AddScoped<StandardCrudService>();
         services.AddScoped<IStandardCrudService>(static provider =>
             provider.GetRequiredService<StandardCrudService>());

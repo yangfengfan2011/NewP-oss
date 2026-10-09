@@ -75,7 +75,7 @@ public sealed class DepartmentCrudUniqueConstraintTests
             null!,
             new StandardCrudDefaultWriter(repository, [], [], auditValueProvider: new EntityAuditValueProvider(new FixedAuditStampProvider())),
             [],
-            [],
+            new DisplayValueProjection([]),
             []);
 
     private static Dictionary<string, object?> DepartmentValues(

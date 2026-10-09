@@ -119,7 +119,7 @@ public sealed class ExampleStandardCrudResourceTests
             new Dictionary<string, object?> { ["ReviewerUserEID"] = null }
         ];
 
-        var resolved = await resolver.ResolveListAsync(descriptor, rows, [displayField], CancellationToken.None);
+        var resolved = await resolver.ResolveListAsync(rows, [displayField], CancellationToken.None);
 
         Assert.All(resolved, row =>
         {
@@ -145,7 +145,7 @@ public sealed class ExampleStandardCrudResourceTests
             new Dictionary<string, object?> { ["ReviewerUserEID"] = "User_1" }
         ];
 
-        var resolved = await resolver.ResolveListAsync(descriptor, rows, [displayField], CancellationToken.None);
+        var resolved = await resolver.ResolveListAsync(rows, [displayField], CancellationToken.None);
 
         Assert.Null(Assert.Single(resolved)["ReviewerUserEID_DisplayValue"]);
     }
@@ -165,7 +165,7 @@ public sealed class ExampleStandardCrudResourceTests
         ];
 
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
-            resolver.ResolveListAsync(descriptor, rows, [displayField], cancellationTokenSource.Token));
+            resolver.ResolveListAsync(rows, [displayField], cancellationTokenSource.Token));
     }
 
     [Fact]
@@ -181,7 +181,7 @@ public sealed class ExampleStandardCrudResourceTests
         ];
 
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
-            resolver.ResolveListAsync(descriptor, rows, [displayField], CancellationToken.None));
+            resolver.ResolveListAsync(rows, [displayField], CancellationToken.None));
     }
 
     [Fact]

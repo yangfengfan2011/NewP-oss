@@ -1,5 +1,7 @@
 using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Crud.Abstractions;
+using ICP.Platform.Modeling.DisplayPlanning;
+using ICP.Platform.Query.Descriptors;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Modeling;
@@ -47,7 +49,10 @@ public sealed class LinkQueryCatalog
                     ?? throw Invalid(model, "端点读取资源未登记");
                 if (resource.ModelKey != type || resource.ModuleId != target.OwnerModuleId || target.Fields.SingleOrDefault(f => f.Name == resource.IdField)?.IsPrimaryKey != true)
                     throw Invalid(model, "端点资源模型或主键不一致");
-                endpoints.Add(type, new(target, resource.ResourceKey, resource.IdField, mapping.ConstraintKey, mapping.TitleKey, mapping.Icon));
+                var display = new ModelDisplayProjectionPlanner().Compile(target, plan.Models);
+                if (!display.IsSuccess)
+                    throw Invalid(model, string.Join(Environment.NewLine, display.Diagnostics.Select(d => $"{d.Code}: {d.ModelName}.{d.FieldName}: {d.Message}")));
+                endpoints.Add(type, new(target, resource.ResourceKey, resource.IdField, mapping.ConstraintKey, mapping.TitleKey, mapping.Icon, display.Plan!));
             }
             foreach (var pair in model.LinkedTypes)
                 if (query.Parent.FixedModelKey is { } parent && parent != pair.Parent || query.Child.FixedModelKey is { } child && child != pair.Child)
@@ -69,7 +74,9 @@ public sealed class LinkQueryCatalog
                     var targetField = endpoint.Model.Fields.SingleOrDefault(f => f.Name == field);
                     if (targetField is null || targetField.ValueType != valueType || !column.Nullable && !targetField.Required)
                         throw Invalid(model, "公共列字段缺失、类型或可空性不兼容");
-                    if (valueType is FieldValueType.User or FieldValueType.Instant && targetField.DisplayRule is null)
+                    // 保留公共用户／时间列的显示契约要求；策略与 companion 资格只消费编译结果。
+                    if (valueType is FieldValueType.User or FieldValueType.Instant
+                        && !endpoint.DisplayProjectionPlan.Fields.Any(display => display.SourceField == field))
                         throw Invalid(model, "端点缺少正式显示契约");
                 }
                 if (column.Mappings.Keys.Except(types, StringComparer.Ordinal).Any()) throw Invalid(model, "公共列映射包含未知模型");
@@ -78,7 +85,11 @@ public sealed class LinkQueryCatalog
                 throw Invalid(model, "默认排序无效");
             var source = resources.SingleOrDefault(resource => resource.ResourceKey == query.ResourceKey);
             if (source is not null && (source.ModelKey != model.LogicalKey || source.ModuleId != model.OwnerModuleId || source.IdField != "LID")) throw Invalid(model, "源读取资源与Link身份不一致");
-            definitions.Add(new(model, query, endpoints, source is not null));
+            // 公共 companion 资格来自真实端点计划；无映射或无显示计划的类型只返回空 companion。
+            var displayFields = query.Columns.Where(column => column.Mappings.Any(mapping => mapping.Value == "$modelKey"
+                || endpoints[mapping.Key].DisplayProjectionPlan.Fields.Any(field => field.SourceField == mapping.Value)))
+                .Select(column => new PlatformDisplayValueField(column.Field + "_DisplayValue", column.Field, "link:" + column.Field, "", "")).ToArray();
+            definitions.Add(new(model, query, endpoints, displayFields, source is not null));
         }
         if (definitions.Select(d => d.Metadata.ResourceKey).Distinct(StringComparer.Ordinal).Count() != definitions.Count)
             throw new InvalidOperationException("重复 Link 查询资源。");

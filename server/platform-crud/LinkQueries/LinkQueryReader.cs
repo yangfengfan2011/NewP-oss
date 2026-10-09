@@ -2,7 +2,7 @@ using System.Data.Common;
 using System.Linq.Expressions;
 using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Crud.Abstractions;
-using ICP.Platform.Crud.Descriptors;
+using ICP.Platform.Crud.Planning;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Modeling.Metadata;
@@ -22,7 +22,7 @@ namespace ICP.Platform.Crud.LinkQueries;
 public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog catalog, IDataScopeReadPlanProvider readPlans,
     IEnumerable<ILinkQuerySourcePolicy> policies, IEnumerable<ILinkQueryEndpointConstraint> constraints,
     IStandardCrudResourceRegistry resources, IEnumerable<IStandardCrudQueryCustomizer> customizers,
-    StandardCrudService displays, ILogger<LinkQueryReader> logger, IRuntimeTextCatalog? texts = null, IRequestPresentationContextAccessor? presentation = null)
+    DisplayValueProjection displays, ILogger<LinkQueryReader> logger, IRuntimeTextCatalog? texts = null, IRequestPresentationContextAccessor? presentation = null)
 {
     /// <summary>公开查询只返回一页关系；关系身份与端点身份始终独立。</summary>
     public Task<LinkQueryResult> QueryAsync(string resourceKey, LinkQueryRequest request, CancellationToken token = default) =>
@@ -95,11 +95,10 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
         {
             ResourceKey = resourceKey, ModelName = definition.Model.LogicalKey, IdField = "LID",
             AllowedModelFields = columns.Select(c => c.Field).Prepend("LID").ToArray(),
-            DefaultFields = columns.SelectMany(c => HasDisplay(c) ? new[] { c.Field, c.Field + "_DisplayValue" } : [c.Field]).Prepend("LID").ToArray(),
+            DefaultFields = columns.Select(c => c.Field).Prepend("LID").Concat(definition.DisplayValueFields.Select(field => field.Field)).ToArray(),
             SortableFields = columns.Where(c => c.Sortable).Select(c => c.Field).ToArray(),
             DefaultSortField = definition.Metadata.DefaultSortField, DefaultSortDirection = definition.Metadata.DefaultSortDirection,
-            DisplayValueFields = columns.Where(HasDisplay)
-                .Select(c => new PlatformDisplayValueField(c.Field + "_DisplayValue", c.Field, "link:" + c.Field, "", "")).ToArray()
+            DisplayValueFields = definition.DisplayValueFields
         };
         var conditions = BuildConditions(definition, request.Query);
         var requested = request.Query.Fields;
@@ -206,9 +205,13 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
                 foreach (var field in fieldPlan.DbSelectFields)
                 {
                     var index = reader.GetOrdinal(field); var value = reader.IsDBNull(index) ? null : reader.GetValue(index);
-                    // SQL datetime2 不携带 Kind；按正式公共列 Instant 语义恢复 UTC，沿用 EF materialization 边界。
-                    fields[field] = value is DateTime date && columns.Any(column => column.Field == field && column.ValueType == "Instant")
-                        ? DateTime.SpecifyKind(date, DateTimeKind.Utc) : value;
+                    // SqlClient 的 date/datetime2 都可能返回 DateTime；按公共列的 raw 语义恢复 DateOnly 或 UTC。
+                    fields[field] = (value, columns.SingleOrDefault(column => column.Field == field)?.ValueType) switch
+                    {
+                        (DateTime date, "CalendarDate") => DateOnly.FromDateTime(date),
+                        (DateTime instant, "Instant") => DateTime.SpecifyKind(instant, DateTimeKind.Utc),
+                        _ => value
+                    };
                 }
                 var parentRef = new LinkObjectReference(reader.GetString(1), reader.GetString(2));
                 var childRef = new LinkObjectReference(reader.GetString(3), reader.GetString(4));
@@ -271,20 +274,12 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
         {
             var endpoint = definition.Endpoints[group.Key];
             var mappings = definition.Metadata.Columns.Where(c => c.Mappings[group.Key] is not null and not "$modelKey").ToArray();
-            var fields = mappings.Select(c => c.Mappings[group.Key]!).Append(endpoint.IdField).Distinct().ToArray();
-            var descriptor = new StandardCrudResourceRegistry([new StandardCrudDescriptor
-            {
-                ResourceKey = endpoint.ResourceKey, ModuleId = endpoint.Model.OwnerModuleId, ModelName = endpoint.Model.Name,
-                Route = "link-query-display", MapStandardEndpoints = false, IdField = endpoint.IdField,
-                DisplayField = fields.FirstOrDefault(f => f == "ENAME") ?? endpoint.IdField,
-                FieldSet = new(fields, fields, [], []), Authorization = StandardCrudAuthorization.ByFeature(endpoint.ResourceKey)
-            }], db.PersistencePlan).GetAll().Single();
             var groupRows = group.ToArray();
             var values = groupRows.Select(row => (IReadOnlyDictionary<string, object?>)mappings.Where(c => row.Fields.ContainsKey(c.Field))
                 .ToDictionary(c => c.Mappings[group.Key]!, c => row.Fields[c.Field], StringComparer.Ordinal)).ToArray();
-            var displayFields = StandardCrudQueryDescriptorAdapter.GetQueryDisplayValueFields(descriptor, fields)
+            var displayFields = endpoint.DisplayProjectionPlan.Fields.Select(ModelDisplayValueFieldProjector.ProjectField)
                 .Where(d => mappings.Any(c => c.Mappings[group.Key] == d.SourceField && responseFields.Contains(c.Field + "_DisplayValue", StringComparer.Ordinal))).ToArray();
-            var projected = await displays.ApplyDisplayValuesAsync(descriptor, values, displayFields, token);
+            var projected = await displays.ApplyDisplayValuesAsync(endpoint.ResourceKey, endpoint.DisplayProjectionPlan, values, displayFields, token);
             for (var index = 0; index < groupRows.Length; index++)
             {
                 var output = new Dictionary<string, object?>(StringComparer.Ordinal);
@@ -295,7 +290,7 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
                         var column = definition.Metadata.Columns.Single(c => c.Field + "_DisplayValue" == field);
                         var mapping = column.Mappings[group.Key]!;
                         output[field] = mapping == "$modelKey" ? (texts ?? throw new InvalidOperationException("LINK_QUERY_TYPE_TEXT_CATALOG_MISSING")).GetText(endpoint.TitleKey!, presentation?.Current?.Locale)
-                            : projected[index].GetValueOrDefault(mapping + "_DisplayValue");
+                            : mapping is null ? null : projected[index].GetValueOrDefault(mapping + "_DisplayValue");
                     }
                     else output[field] = groupRows[index].Fields.GetValueOrDefault(field);
                 }
@@ -341,8 +336,6 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
 
     // 已声明策略缺失属于配置故障，不允许无条件读取。
     private ILinkQuerySourcePolicy GetPolicy(string key) => policies.SingleOrDefault(p => p.Key == key) ?? throw new InvalidOperationException("LINK_QUERY_SOURCE_POLICY_MISSING");
-    // 用户、时间及正式类型标签各有明确的 canonical 显示伴随值。
-    private static bool HasDisplay(LinkQueryColumnMetadata column) => column.ValueType is "User" or "Instant" || column.Mappings.Values.All(field => field == "$modelKey");
     // 只从已编译 EF 模型取得物理标识。
     private IEntityType Entity(string model) => db.Model.FindEntityType(model) ?? throw new InvalidOperationException("LINK_QUERY_ENTITY_MISSING");
     // 方括号转义保护可信物理名，值仍参数化。

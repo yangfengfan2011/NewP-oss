@@ -18,6 +18,24 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class LinkQueryAuthoringTests
 {
+    [Fact]
+    public void EndpointDisplay_InvalidPlanIsRejectedBeforeAnyQuery()
+    {
+        var models = new WorkspaceModelMetadataProvider().GetDefinitions()
+            .Select(model => model.Name == "WorkspaceFolder" ? model with
+            {
+                Fields = model.Fields.Select(field => field.Name == "ENAME" ? field with
+                {
+                    DisplayRule = new FieldDisplayRuleDefinition("unsupported", "", "", "")
+                } : field).ToArray()
+            } : model).ToArray();
+
+        var error = Assert.Throws<InvalidOperationException>(() => Compile(models));
+
+        Assert.Contains("MODEL_DISPLAY_TYPE_UNSUPPORTED", error.Message);
+        Assert.Contains("ENAME", error.Message);
+    }
+
     [Theory]
     [InlineData("missing")]
     [InlineData("duplicate")]

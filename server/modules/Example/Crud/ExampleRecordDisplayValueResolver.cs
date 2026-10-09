@@ -1,5 +1,4 @@
 using ICP.Platform.Crud.Abstractions;
-using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Query.Descriptors;
 
@@ -16,12 +15,10 @@ public sealed class ExampleRecordDisplayValueResolver(IIdentityAccountDirectory 
     /// 仅为当前请求的 canonical user companion 批量解析显示名，保留 raw EID 并避免逐行目录查询。
     /// </summary>
     public async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> ResolveListAsync(
-        StandardCrudDescriptor descriptor,
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
         IReadOnlyList<PlatformDisplayValueField> requestedDisplayFields,
         CancellationToken cancellationToken = default)
     {
-        _ = descriptor;
         var requested = requestedDisplayFields
             .Where(static field => string.Equals(field.Field, "ReviewerUserEID_DisplayValue", StringComparison.Ordinal))
             .ToArray();

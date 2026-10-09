@@ -102,7 +102,7 @@ public sealed class StandardCrudServiceWriteTests
             EmptyQueryExecutor(),
             new StandardCrudDefaultWriter(repository, [], [], temporalInputNormalizer: normalizer),
             [],
-            [],
+            new DisplayValueProjection([]),
             []);
 
         var result = await service.CreateAsync(TemporalDescriptor(), new Dictionary<string, object?>
@@ -1348,7 +1348,7 @@ public sealed class StandardCrudServiceWriteTests
             EmptyQueryExecutor(),
             new StandardCrudDefaultWriter(repository, [], [new AllowingDeleteGuard()]),
             [],
-            [],
+            new DisplayValueProjection([]),
             []);
 
         var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Conditional), "person-1");
@@ -1383,7 +1383,7 @@ public sealed class StandardCrudServiceWriteTests
             EmptyQueryExecutor(),
             new StandardCrudDefaultWriter(repository, [], [executor], conditionalDeleteExecutors: [executor]),
             [],
-            [],
+            new DisplayValueProjection([]),
             []);
 
         var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Conditional), "person-1");
@@ -1406,7 +1406,7 @@ public sealed class StandardCrudServiceWriteTests
             EmptyQueryExecutor(),
             new StandardCrudDefaultWriter(repository, [], [], conditionalDeleteExecutors: [executor]),
             [],
-            [],
+            new DisplayValueProjection([]),
             []);
 
         var result = await service.DeleteAsync(Descriptor(StandardCrudDeletePolicy.Hard), "person-1");
@@ -1430,7 +1430,7 @@ public sealed class StandardCrudServiceWriteTests
             EmptyQueryExecutor(),
             new StandardCrudDefaultWriter(repository, [], [], conditionalDeleteExecutors: [], auditValueProvider: auditStampProvider is null ? null : new EntityAuditValueProvider(auditStampProvider)),
             [],
-            displayValueResolvers ?? [],
+            new DisplayValueProjection(displayValueResolvers ?? []),
             [],
             objectOperations: objectOperations);
     }
@@ -1962,7 +1962,6 @@ public sealed class StandardCrudServiceWriteTests
         public string ResourceKey => "organization.person";
 
         public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> ResolveListAsync(
-            StandardCrudDescriptor descriptor,
             IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
             IReadOnlyList<PlatformDisplayValueField> requestedDisplayFields,
             CancellationToken cancellationToken = default) =>

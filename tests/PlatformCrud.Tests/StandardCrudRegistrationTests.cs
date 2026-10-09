@@ -32,6 +32,7 @@ public sealed class StandardCrudRegistrationTests
         Assert.NotNull(linkCatalog.ImplementationFactory);
         Assert.Equal(ServiceLifetime.Singleton, linkCatalog.Lifetime);
         AssertRegistration<LinkQueryReader>(services, typeof(LinkQueryReader));
+        AssertRegistration<DisplayValueProjection>(services, typeof(DisplayValueProjection));
     }
 
     private static void AssertFactoryRegistration<TService>(IServiceCollection services)

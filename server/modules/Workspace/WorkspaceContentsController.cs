@@ -15,7 +15,7 @@ namespace ICP.Platform.Modules.Workspace;
 /// <summary>正式创建仅接受当前出现位置与可写字段；所有业务规则仍在应用服务。</summary>
 [ApiController, Route("api/workspace"), EndpointModule("Workspace"), PlatformRequestValidation]
 public sealed class WorkspaceContentsController(WorkspaceContents contents, WorkspaceSpaces spaces, WorkspacePositions positions,
-    LinkQueryReader links, ILogger<WorkspaceContentsController> logger, WorkspaceFolderScope folderScope, IObjectOperationExecutor operations, WorkspaceObjectMutation mutation) : ControllerBase
+    LinkQueryReader links, ILogger<WorkspaceContentsController> logger, WorkspaceFolderScope folderScope, IObjectOperationExecutor operations) : ControllerBase
 {
     public sealed record CreateFolderInput(WorkspacePosition Position, Dictionary<string, JsonElement> Values);
     public sealed record AddReferenceInput(WorkspacePosition Position, LinkObjectReference Target);
@@ -29,7 +29,7 @@ public sealed class WorkspaceContentsController(WorkspaceContents contents, Work
         try
         {
             if (input.Position is null) throw new LinkQueryException(400, "Workspace.InvalidEditInput");
-            return Results.Ok(new { fields = await mutation.ReadEditValuesAsync(Actor(), input.Position, linkId, token) });
+            return Results.Ok(new { fields = await contents.ReadEditValuesAsync(Actor(), input.Position, linkId, token) });
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
     }

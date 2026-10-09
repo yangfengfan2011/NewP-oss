@@ -127,6 +127,94 @@ public sealed class WorkspaceObjectMutationSqlServerHttpApiTests
         Assert.True(await db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolderContent").AnyAsync(row => EF.Property<string>(row, "LID") == part.Link));
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "编辑与删除等待真实图锁后重验位置，编辑装载不申请图写锁")]
+    public async Task Mutation_WaitingForGraphLockRejectsRemovedPositionWithoutChangingTarget()
+    {
+        foreach (var editing in new[] { true, false })
+        {
+            var gate = new GraphLockPause();
+            await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
+                services.AddDbContext<EfPlatformDbContext>((_, options) => options.AddInterceptors(gate)), includeWorkspace: true);
+            using var admin = await fixture.LoginAdministratorAsync();
+            var root = await RootAsync(fixture, admin);
+            var parent = await CreateAsync(fixture, admin, root, "folders", "create", "parent");
+            var position = root with { LinkIds = [parent.Link] };
+            var target = await CreateAsync(fixture, admin, position, "parts", "createPart", "target");
+            using var beforeScope = fixture.Services.CreateScope();
+            var before = await beforeScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>()
+                .Set<Dictionary<string, object?>>(target.Model).AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == target.Id);
+
+            // 移除请求已经在 SQL Server 中持有图锁；等竞争写入也开始申请同一锁后才放行移除。
+            gate.Enabled = true;
+            var removal = SendAsync(fixture, admin, "remove", HttpMethod.Delete, $"/api/workspace/content/references/{parent.Link}", new { position = root });
+            Task<HttpResponseMessage>? mutation = null;
+            try
+            {
+                await gate.Held.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                using var editValues = await SendAsync(fixture, admin, "edit", HttpMethod.Post, $"/api/workspace/content/{target.Link}/edit-values",
+                    new { position }).WaitAsync(TimeSpan.FromSeconds(10));
+                Assert.Equal(HttpStatusCode.OK, editValues.StatusCode);
+                mutation = editing
+                    ? SendAsync(fixture, admin, "edit", HttpMethod.Put, $"/api/workspace/content/{target.Link}", new { position, values = new { ENAME = "must-not-change" } })
+                    : SendAsync(fixture, admin, "delete", HttpMethod.Delete, $"/api/workspace/content/{target.Link}", new { position });
+                await gate.ContenderRequested.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                Assert.False(mutation.IsCompleted);
+            }
+            finally
+            {
+                gate.Release.TrySetResult();
+                using var removed = await removal;
+                Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
+                if (mutation is not null)
+                {
+                    using var rejected = await mutation;
+                    Assert.Equal(HttpStatusCode.NotFound, rejected.StatusCode);
+                }
+            }
+
+            using var afterScope = fixture.Services.CreateScope();
+            var db = afterScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+            var after = await db.Set<Dictionary<string, object?>>(target.Model).AsNoTracking()
+                .SingleAsync(row => EF.Property<string>(row, "EID") == target.Id);
+            Assert.Equal(before["ENAME"], after["ENAME"]);
+            Assert.Equal(before["UpdatedAt"], after["UpdatedAt"]);
+            Assert.Equal(before["UpdatedBy"], after["UpdatedBy"]);
+            var links = db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolderContent");
+            Assert.False(await links.AnyAsync(row => EF.Property<string>(row, "LID") == parent.Link));
+            Assert.True(await links.AnyAsync(row => EF.Property<string>(row, "LID") == target.Link));
+        }
+    }
+
+    private sealed class GraphLockPause : DbCommandInterceptor
+    {
+        private DbCommand? _holder;
+        public bool Enabled { get; set; }
+        public TaskCompletionSource Held { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ContenderRequested { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (Enabled && command.CommandText.Contains("sp_getapplock", StringComparison.Ordinal)
+                && command.CommandText.Contains("Workspace.FolderGraph", StringComparison.Ordinal)
+                && Interlocked.CompareExchange(ref _holder, command, null) is not null)
+                ContenderRequested.TrySetResult();
+            return ValueTask.FromResult(result);
+        }
+
+        public override async ValueTask<int> NonQueryExecutedAsync(DbCommand command, CommandExecutedEventData eventData,
+            int result, CancellationToken cancellationToken = default)
+        {
+            if (ReferenceEquals(_holder, command))
+            {
+                Held.TrySetResult();
+                await Release.Task.WaitAsync(cancellationToken);
+            }
+            return result;
+        }
+    }
+
     private sealed record Position(string SpaceId, string RootFolderId, string[] LinkIds);
     private sealed record Target(string Model, string Id, string Link);
     private static FeaturePoint Point(BusinessAuditHostFixture fixture, string action) => Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "workspace.folder." + (action == "edit" ? "editObject" : action == "delete" ? "deleteObject" : action));

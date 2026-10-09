@@ -1,6 +1,9 @@
 using System.Text.Json;
 using ICP.Platform.Authorization.Contracts;
+using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.LinkQueries;
+using ICP.Platform.Crud.Models;
+using ICP.Platform.Crud.ObjectOperations;
 using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.Auditing;
@@ -10,10 +13,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Modules.Workspace;
 
-/// <summary>Workspace 拥有位置内的原子写入；通用查询没有任意 Link CRUD。</summary>
+/// <summary>集中编排 Workspace 完整图命令、位置校验和引用规则；所属对象规则仍通过正式行为执行。</summary>
 public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions positions, IPlatformTransactionExecutor transactions,
     IDataScopeObjectDecisionProvider decisions, IPlatformObjectIdGenerator ids, IEntityAuditValueProvider audit, LinkQueryCatalog catalog,
-    WorkspaceFolderScope folderScope, LinkQueryReader reader)
+    WorkspaceFolderScope folderScope, LinkQueryReader reader, IStandardCrudService crud, IStandardCrudResourceRegistry resources)
 {
     /// <summary>在有效位置内创建实体与 Link，同父名称比较及并发串行化由 SQL Server 事务锁保护。</summary>
     public ValueTask<string> CreateFolderAsync(string actorId, WorkspacePosition position, IReadOnlyDictionary<string, JsonElement> values, CancellationToken token)
@@ -28,8 +31,7 @@ public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions
         {
             using var operation = audit.BeginOperation();
             await LockGraphAsync(cancellation);
-            var path = await positions.ResolveAsync(actorId, position, cancellation);
-            if (!await decisions.IsAllowedAsync("workspace.folder", path.FolderId, "edit", cancellation)) throw new LinkQueryException(403, "Workspace.ParentWriteDenied");
+            var path = await WritablePositionAsync(actorId, position, cancellation);
             var links = db.Set<Dictionary<string, object?>>(WorkspacePositions.ContentModel);
             var folders = db.Set<Dictionary<string, object?>>(WorkspacePositions.FolderModel);
             if (await links.AnyAsync(link => EF.Property<string>(link, "PEID") == path.FolderId && EF.Property<string>(link, "ChildModelKey") == WorkspacePositions.FolderModel
@@ -47,12 +49,7 @@ public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions
                 throw new LinkQueryException(400, "Workspace.InvalidEndpoint");
             folders.Add(candidate);
             await transactions.FlushAsync(cancellation);
-            var stamp = audit.Current();
-            links.Add(new()
-            {
-                ["LID"] = ids.NewId("WorkspaceFolderContent"), ["PEID"] = path.FolderId, ["CEID"] = id, ["ChildModelKey"] = WorkspacePositions.FolderModel,
-                ["LCreatedBy"] = stamp.ActorId, ["LCreatedAt"] = stamp.OccurredAtUtc, ["LUpdatedBy"] = stamp.ActorId, ["LUpdatedAt"] = stamp.OccurredAtUtc
-            });
+            RegisterCreatedReference(path.FolderId, WorkspacePositions.FolderModel, id);
             return id;
         }, token);
     }
@@ -82,12 +79,7 @@ public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions
                     throw new LinkQueryException(409, "Workspace.SiblingNameConflict", "ENAME");
                 if (await WouldCycleAsync(path.FolderId, target.Id, cancellation)) throw new LinkQueryException(409, "Workspace.CycleForbidden");
             }
-            var stamp = audit.Current();
-            links.Add(new()
-            {
-                ["LID"] = ids.NewId("WorkspaceFolderContent"), ["PEID"] = path.FolderId, ["CEID"] = target.Id, ["ChildModelKey"] = target.ModelKey,
-                ["LCreatedBy"] = stamp.ActorId, ["LCreatedAt"] = stamp.OccurredAtUtc, ["LUpdatedBy"] = stamp.ActorId, ["LUpdatedAt"] = stamp.OccurredAtUtc
-            });
+            RegisterCreatedReference(path.FolderId, target.ModelKey, target.Id);
             return true;
         }, token);
 
@@ -108,18 +100,174 @@ public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions
             return true;
         }, token);
 
-    /// <summary>对象写入复用完整位置和父编辑裁决，且目标类型必须存在于正式 Link 目录。</summary>
-    internal async Task<string> PrepareObjectWriteAsync(string actorId, WorkspacePosition position, string modelKey, CancellationToken token)
+    // 已登记对象行为进入后由此完整创建所属对象与引用，调用方不再拼接准备和关系登记。
+    internal async ValueTask<StandardCrudMutationResult> CreateObjectAsync(ObjectOperationContext context,
+        IObjectOperationExecutor operations, CancellationToken cancellationToken)
     {
-        await LockGraphAsync(token);
-        var path = await WritablePositionAsync(actorId, position, token);
-        if (!catalog.Get("workspace.content").Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == modelKey))
+        var (resource, model) = context.Action == WorkspaceObjectCreation.CreatePart ? ("part.part", "Part/Part")
+            : context.Action == WorkspaceObjectCreation.CreateDocument ? ("document.document", "Document/Document")
+            : throw new InvalidOperationException("Unsupported Workspace creation action.");
+        var actor = (string)context.Values["ActorId"]!;
+        var position = (WorkspacePosition)context.Values["Position"]!;
+        var input = (IReadOnlyDictionary<string, JsonElement>)context.Values["Values"]!;
+        var values = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var (field, value) in input)
+        {
+            if (field is not ("ECODE" or "ENAME" or "Description"))
+                throw new LinkQueryException(400, "Workspace.ServerFieldForbidden", field);
+            if (value.ValueKind is not (JsonValueKind.String or JsonValueKind.Null))
+                throw new LinkQueryException(400, "Workspace.InvalidCreateInput", field);
+            values[field] = value.ValueKind == JsonValueKind.Null ? null : value.GetString();
+        }
+        await LockGraphAsync(cancellationToken);
+        var path = await WritablePositionAsync(actor, position, cancellationToken);
+        if (!catalog.Get("workspace.content").Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == model))
             throw new LinkQueryException(400, "Workspace.InvalidEndpoint");
-        return path.FolderId;
+        var result = await operations.ExecuteAsync(resource, ObjectOperationAction.Create, null, values, cancellationToken);
+        if (!result.Succeeded) return result;
+        var id = result.Detail?.Fields.GetValueOrDefault("EID") as string
+            ?? throw new InvalidOperationException("Created object identity is missing.");
+        RegisterCreatedReference(path.FolderId, model, id);
+        // 不执行展示读取；事务完成后由独立列表读取决定新对象的可见性。
+        return StandardCrudMutationResult.Success();
+    }
+
+    // 锁后位置只解析一次；目标规则、所属行为和全部引用清理在同一对象操作事务内完成。
+    internal async ValueTask<StandardCrudMutationResult> MutateObjectsAsync(ObjectOperationContext context,
+        IObjectOperationExecutor operations, CancellationToken cancellationToken)
+    {
+        var actor = (string)context.Values["ActorId"]!;
+        var position = (WorkspacePosition)context.Values["Position"]!;
+        var linkIds = (string[])context.Values["LinkIds"]!;
+        var editing = context.Action == ObjectOperationAction.Update;
+        ValidateSelection(linkIds);
+        if (editing && linkIds.Length != 1) throw new LinkQueryException(400, "Workspace.InvalidSelection");
+        // 与创建、引用变更取得同一图锁；等待之后重新验证整个位置和对象资格。
+        await LockGraphAsync(cancellationToken);
+        var path = await WritablePositionAsync(actor, position, cancellationToken);
+        var targets = await ResolveTargetsAsync(path.FolderId, linkIds, editing ? "edit" : "delete", cancellationToken);
+        if (!editing)
+        {
+            var folders = targets.Where(target => target.ModelKey == WorkspacePositions.FolderModel).Select(target => target.Id).ToArray();
+            // 在任何引用被清理前检查整批文件夹，避免选择的其他对象使原本非空的文件夹变空。
+            if (folders.Length > 0 && await Links.AnyAsync(row => folders.Contains(EF.Property<string>(row, "PEID")), cancellationToken))
+                throw new LinkQueryException(409, "Workspace.FolderNotEmpty");
+        }
+        foreach (var target in targets)
+        {
+            if (editing)
+            {
+                var values = ReadValues((IReadOnlyDictionary<string, JsonElement>)context.Values["Values"]!, target.ModelKey);
+                if (target.ModelKey == WorkspacePositions.FolderModel) await UpdateFolderAsync(target.Id, values, cancellationToken);
+                else
+                {
+                    var result = await operations.ExecuteAsync(Resource(target.ModelKey), ObjectOperationAction.Update, target.Id, values, cancellationToken);
+                    if (!result.Succeeded) return result;
+                }
+            }
+            else
+            {
+                // 清理全部入向关系留在 SQL 内；后续对象失败时同一事务回滚，包括先前成功的批量项。
+                await Links.Where(row => EF.Property<string>(row, "ChildModelKey") == target.ModelKey && EF.Property<string>(row, "CEID") == target.Id)
+                    .ExecuteDeleteAsync(cancellationToken);
+                if (target.ModelKey == WorkspacePositions.FolderModel)
+                    await Folders.Where(row => EF.Property<string>(row, "EID") == target.Id).ExecuteDeleteAsync(cancellationToken);
+                else
+                {
+                    var result = await operations.ExecuteAsync(Resource(target.ModelKey), ObjectOperationAction.Delete, target.Id, new Dictionary<string, object?>(), cancellationToken);
+                    if (!result.Succeeded) return result;
+                }
+            }
+        }
+        return StandardCrudMutationResult.Success();
+    }
+
+    /// <summary>编辑装载不取图写锁，仍验证完整位置和 edit 资格；提交时另行执行锁后重验。</summary>
+    public async Task<IReadOnlyDictionary<string, object?>> ReadEditValuesAsync(string actor, WorkspacePosition position, string linkId, CancellationToken token)
+    {
+        ValidateSelection([linkId]);
+        var path = await WritablePositionAsync(actor, position, token);
+        var target = (await ResolveTargetsAsync(path.FolderId, [linkId], "edit", token)).Single();
+        IReadOnlyDictionary<string, object?> fields;
+        if (target.ModelKey == WorkspacePositions.FolderModel)
+            fields = await Folders.AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == target.Id, token);
+        else
+            fields = (await crud.GetDetailAsync(resources.FindByResourceKey(Resource(target.ModelKey))!, target.Id, token))?.Fields
+                ?? throw new LinkQueryException(404, "Workspace.TargetUnavailable");
+        string[] names = target.ModelKey == WorkspacePositions.FolderModel ? ["ENAME", "Description"] : ["ECODE", "ENAME", "Description"];
+        return names.ToDictionary(name => name, name => fields.GetValueOrDefault(name));
+    }
+
+    private DbSet<Dictionary<string, object?>> Links => db.Set<Dictionary<string, object?>>(WorkspacePositions.ContentModel);
+    private DbSet<Dictionary<string, object?>> Folders => db.Set<Dictionary<string, object?>>(WorkspacePositions.FolderModel);
+
+    // 用本次已验证的父身份批量匹配 LID，再对最多一页对象重验端点和动作；不重新解析位置或接受客户端类型/EID。
+    private async Task<LinkObjectReference[]> ResolveTargetsAsync(string parentId, string[] linkIds, string action, CancellationToken token)
+    {
+        var rows = await Links.AsNoTracking().Where(row => linkIds.Contains(EF.Property<string>(row, "LID")) && EF.Property<string>(row, "PEID") == parentId)
+            .Select(row => new { Model = EF.Property<string>(row, "ChildModelKey"), Id = EF.Property<string>(row, "CEID") }).ToArrayAsync(token);
+        if (rows.Length != linkIds.Length) throw new LinkQueryException(404, "Workspace.ReferenceUnavailable");
+        var targets = rows.Select(row => new LinkObjectReference(row.Model, row.Id)).Distinct().ToArray();
+        foreach (var target in targets)
+        {
+            var resource = Resource(target.ModelKey);
+            if (!await reader.IsEndpointReadableAsync("workspace.content", target, token)) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
+            if (!await decisions.IsAllowedAsync(resource, target.Id, action, token)) throw new LinkQueryException(403, "Workspace.ObjectWriteDenied");
+            if (target.ModelKey == WorkspacePositions.FolderModel && await db.Set<Dictionary<string, object?>>("Workspace/WorkspaceSpace")
+                .AnyAsync(row => EF.Property<string>(row, "RootFolderId") == target.Id, token)) throw new LinkQueryException(409, "Workspace.RootMutationForbidden");
+        }
+        return targets;
+    }
+
+    // 每个请求最多消费标准列表一页；不接受空、重复或无界选择。
+    private static void ValidateSelection(string[] ids)
+    {
+        if (ids.Length is < 1 or > 100 || ids.Any(string.IsNullOrWhiteSpace) || ids.Distinct(StringComparer.OrdinalIgnoreCase).Count() != ids.Length)
+            throw new LinkQueryException(400, "Workspace.InvalidSelection");
+    }
+
+    // 静态允许的类型与行为对应关系属于 Workspace；未知端点失败关闭。
+    private static string Resource(string model) => model switch
+    {
+        WorkspacePositions.FolderModel => "workspace.folder", "Part/Part" => "part.part", "Document/Document" => "document.document",
+        _ => throw new LinkQueryException(400, "Workspace.InvalidEndpoint")
+    };
+
+    // 请求字段白名单在进入目标行为前检查；所属模块仍执行规范化、长度和唯一性规则。
+    private static Dictionary<string, object?> ReadValues(IReadOnlyDictionary<string, JsonElement> input, string model)
+    {
+        var values = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var (key, value) in input)
+        {
+            if (key is not ("ENAME" or "Description") && (key != "ECODE" || model == WorkspacePositions.FolderModel))
+                throw new LinkQueryException(400, "Workspace.ServerFieldForbidden", key);
+            if (value.ValueKind is not (JsonValueKind.String or JsonValueKind.Null)) throw new LinkQueryException(400, "Workspace.InvalidEditInput", key);
+            values[key] = value.ValueKind == JsonValueKind.Null ? null : value.GetString();
+        }
+        return values;
+    }
+
+    // 同名约束作用于所有真实父文件夹；只检查是否冲突，不物化或返回不可见路径。
+    private async Task UpdateFolderAsync(string id, IReadOnlyDictionary<string, object?> values, CancellationToken token)
+    {
+        var folder = await Folders.SingleAsync(row => EF.Property<string>(row, "EID") == id, token);
+        if (values.TryGetValue("ENAME", out var name))
+        {
+            if (name is not string text || string.IsNullOrWhiteSpace(text) || text.Length > 256) throw new LinkQueryException(400, "Workspace.InvalidName", "ENAME");
+            if (await Links.AnyAsync(sibling => EF.Property<string>(sibling, "ChildModelKey") == WorkspacePositions.FolderModel
+                && EF.Property<string>(sibling, "CEID") != id
+                && Links.Any(parent => EF.Property<string>(parent, "ChildModelKey") == WorkspacePositions.FolderModel && EF.Property<string>(parent, "CEID") == id
+                    && EF.Property<string>(parent, "PEID") == EF.Property<string>(sibling, "PEID"))
+                && Folders.Any(other => EF.Property<string>(other, "EID") == EF.Property<string>(sibling, "CEID") && EF.Property<string>(other, "ENAME") == text), token))
+                throw new LinkQueryException(409, "Workspace.SiblingNameConflict", "ENAME");
+        }
+        if (values.GetValueOrDefault("Description") is string { Length: > 500 }) throw new LinkQueryException(400, "Workspace.DescriptionTooLong", "Description");
+        foreach (var (key, value) in values) folder[key] = value;
+        audit.ForUpdate((string)folder["CreatedBy"]!, (DateTime)folder["CreatedAt"]!).ApplyTo(folder);
     }
 
     /// <summary>仅消费同事务内所属行为返回的真实身份；关系审计复用本次对象操作的时间和主体。</summary>
-    internal void RegisterCreatedReference(string parentId, string modelKey, string objectId)
+    private void RegisterCreatedReference(string parentId, string modelKey, string objectId)
     {
         if (!transactions.IsActive) throw new InvalidOperationException("Workspace creation requires an active transaction.");
         var stamp = audit.Current();
@@ -131,11 +279,15 @@ public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions
     }
 
     // 所有内容写入按相同顺序取得跨 Host 的事务级图锁，防止互成环及 create/add 同级名竞争。
-    private Task LockGraphAsync(CancellationToken token) => db.Database.ExecuteSqlRawAsync(
-        "DECLARE @result int; EXEC @result = sp_getapplock @Resource=N'Workspace.FolderGraph', @LockMode='Exclusive', @LockOwner='Transaction', @LockTimeout=15000; IF @result < 0 THROW 51000, 'Workspace content lock failed.', 1;", token);
+    private Task LockGraphAsync(CancellationToken token)
+    {
+        if (!transactions.IsActive) throw new InvalidOperationException("Workspace graph writes require an active transaction.");
+        return db.Database.ExecuteSqlRawAsync(
+            "DECLARE @result int; EXEC @result = sp_getapplock @Resource=N'Workspace.FolderGraph', @LockMode='Exclusive', @LockOwner='Transaction', @LockTimeout=15000; IF @result < 0 THROW 51000, 'Workspace content lock failed.', 1;", token);
+    }
 
-    // 锁后重新解析实际位置和父动作，不使用选择候选时或等待锁前的资格。
-    internal async Task<WorkspacePositionPath> WritablePositionAsync(string actorId, WorkspacePosition position, CancellationToken token)
+    // 写命令在图锁后重验位置和父动作；编辑装载只读取资格，不能替代提交时重验。
+    private async Task<WorkspacePositionPath> WritablePositionAsync(string actorId, WorkspacePosition position, CancellationToken token)
     {
         var path = await positions.ResolveAsync(actorId, position, token);
         if (!await decisions.IsAllowedAsync("workspace.folder", path.FolderId, "edit", token)) throw new LinkQueryException(403, "Workspace.ParentWriteDenied");

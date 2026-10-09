@@ -41,15 +41,17 @@ import '../composition/StandardTreePage';
 import '../pages/StandardCrudListPageHost';
 import '../pages/StandardCrudListDrawerRuntime';
 import '@ant-design/pro-descriptions';
+import '../../../../modules/workspace/src/WorkspaceObjectEditInput';
 
 vi.unmock('@icp-platform/core');
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 it.each(['part', 'document'] as const)('opens same EID through the registered %s owning read-only page and target feature', async type => {
   const user = { id: 'actor', ecode: 'actor', ename: '账号', revision: 1, mustChangePassword: false, isLocalAdministrator: false,
-    timeZoneId: 'Asia/Taipei', featurePositions: ['workspace-entry', 'workspace-createPart', 'workspace-createDocument', 'part-entry', 'document-entry'] };
+    timeZoneId: 'Asia/Taipei', featurePositions: ['workspace-entry', 'workspace-edit', 'workspace-createPart', 'workspace-createDocument', 'part-entry', 'document-entry'] };
   const json = (value: unknown) => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } });
   const writes: unknown[] = [];
+  const edits: unknown[] = [];
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost');
     if (url.pathname.endsWith('antiforgery-token')) return json({ requestToken: 'token' });
@@ -93,6 +95,11 @@ it.each(['part', 'document'] as const)('opens same EID through the registered %s
         CreatedBy: 'actor', CreatedBy_DisplayValue: '创建账号', UpdatedBy: 'actor', UpdatedBy_DisplayValue: '更新账号',
         CreatedAt: '2026-10-08T00:00:00Z', CreatedAt_DisplayValue: '2026-10-08 08:00', UpdatedAt: '2026-10-08T00:00:00Z', UpdatedAt_DisplayValue: '2026-10-08 08:00' }, summaries: {} });
     }
+    if (url.pathname === `/api/workspace/content/${type}-relation/edit-values`) return json({ fields: { ECODE: 'SAME-CODE', ENAME: 'editable-name', Description: '原说明' } });
+    if (url.pathname === `/api/workspace/content/${type}-relation` && (input instanceof Request ? input.method : init?.method) === 'PUT') {
+      edits.push(input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body)));
+      return json({ succeeded: true });
+    }
     throw new Error(`Unexpected read ${url.pathname}`);
   });
   vi.stubGlobal('fetch', fetcher);
@@ -112,7 +119,8 @@ it.each(['part', 'document'] as const)('opens same EID through the registered %s
   const wrap = (page: React.ReactNode) => <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={catalogs}>
     <AuthProvider initialUser={user}><AuthorizationProvider featurePositions={user.featurePositions}><PlatformQueryProvider scopeKey="workspace-mixed">
       <RuntimeMetadataProvider value={{ manifest: { modules: [{ moduleId: 'Workspace', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: [
-        { key: 'workspace', position: 'workspace-entry', kind: 'navigation' }, ...['createPart', 'createDocument'].map(key => ({ key, position: 'workspace-' + key, kind: 'action', parentPosition: 'workspace-entry', staticScope: 'folder', actionScope: 'list.pageActions' })),
+        { key: 'workspace', position: 'workspace-entry', kind: 'navigation' },
+        { key: 'edit', position: 'workspace-edit', kind: 'action', parentPosition: 'workspace-entry', staticScope: 'folder', actionScope: 'list.rowActions' }, ...['createPart', 'createDocument'].map(key => ({ key, position: 'workspace-' + key, kind: 'action', parentPosition: 'workspace-entry', staticScope: 'folder', actionScope: 'list.pageActions' })),
       ] }, ...['Part', 'Document'].map(moduleId => ({ moduleId, metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: [{ key: moduleId === 'Part' ? 'part.parts' : 'document.documents', kind: 'navigation', position: moduleId.toLowerCase() + '-entry' }] }))] },
       navDocuments: [workspaceNav, ...navs], modelDocuments: [folder, content, partModel, documentModel], viewDocuments: views }}>
         {page}
@@ -177,4 +185,18 @@ it.each(['part', 'document'] as const)('opens same EID through the registered %s
   await vi.waitFor(() => expect(container.querySelector(`tr[data-row-key="${type}-relation"]`)).not.toBeNull());
   expect(new URLSearchParams(router.state.location.search).get('node')).toBe('public:root:shared-link');
   expect(new URLSearchParams(router.state.location.search).get('other')).toBe('keep');
+  const editableRow = container.querySelector(`tr[data-row-key="${type}-relation"]`)!;
+  await act(async () => [...editableRow.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === '更多')!.click());
+  await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent === '编辑')!.click());
+  await vi.waitFor(() => expect(document.querySelector<HTMLInputElement>('.ant-drawer input[id="ENAME"]')?.value).toBe('editable-name'));
+  expect(document.querySelector<HTMLTextAreaElement>('.ant-drawer textarea')?.value).toBe('原说明');
+  await act(async () => {
+    const input = document.querySelector<HTMLInputElement>('.ant-drawer input[id="ENAME"]')!;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '编辑后的名称');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () => document.querySelector<HTMLButtonElement>('.ant-drawer-footer .ant-btn-primary')!.click());
+  await vi.waitFor(() => expect(edits).toEqual([{ position: { spaceId: 'public', rootFolderId: 'root', linkIds: ['shared-link'] },
+    values: { ECODE: 'SAME-CODE', ENAME: '编辑后的名称', Description: '原说明' } }]));
+  await vi.waitFor(() => expect(document.querySelector('.ant-drawer')).toBeNull());
 });

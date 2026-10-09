@@ -5,6 +5,7 @@ import { readStandardCrudRequestError, type StandardCrudActionInputRenderContext
 interface LinkRow { linkId: string; associatedObject: { modelKey: string; id: string }; fields: Record<string, unknown> }
 const headers = (featurePosition?: string): Record<string, string> => featurePosition ? { 'X-NewP-Feature': featurePosition } : {};
 const WorkspaceObjectCreateInput = lazy(() => import('./WorkspaceObjectCreateInput'));
+const WorkspaceObjectEditInput = lazy(() => import('./WorkspaceObjectEditInput'));
 function positionFromScope(scope?: Record<string, unknown>) {
   if (typeof scope?.spaceId !== 'string' || typeof scope.rootFolderId !== 'string' || typeof scope.linkIds !== 'string') throw new Error('缺少工作空间出现位置');
   return { spaceId: scope.spaceId, rootFolderId: scope.rootFolderId, linkIds: JSON.parse(scope.linkIds) as unknown };
@@ -25,10 +26,23 @@ const resource: StandardCrudResourceRegistration = {
   listFieldRenderers: { ObjectType: ({ row, value }) => createElement('span', null,
     createElement('span', { 'aria-hidden': true }, row.ObjectModelKey === 'Workspace/WorkspaceFolder' ? '📁 ' : row.ObjectModelKey === 'Part/Part' ? '▦ ' : '▤ '), String(value ?? '')) },
   actionInputRenderers: {
+    editObject: Object.assign((context: StandardCrudActionInputRenderContext) =>
+      createElement(Suspense, { fallback: null }, createElement(WorkspaceObjectEditInput, context)), { presentation: 'drawer' as const }),
+    confirmDelete: () => null,
     createObject: Object.assign((context: StandardCrudActionInputRenderContext) =>
       createElement(Suspense, { fallback: null }, createElement(WorkspaceObjectCreateInput, context)), { presentation: 'drawer' as const }),
   },
   actionHandlers: {
+    editObject: async ({ id, input, queryScope, featurePosition }) => {
+      if (!id) throw new Error('缺少引用标识');
+      return referenceCommand('PUT', `/api/workspace/content/${encodeURIComponent(id)}`, { position: positionFromScope(queryScope), values: input }, featurePosition);
+    },
+    deleteObject: async ({ id, queryScope, featurePosition }) => {
+      if (!id) throw new Error('缺少引用标识');
+      return referenceCommand('DELETE', `/api/workspace/content/${encodeURIComponent(id)}`, { position: positionFromScope(queryScope) }, featurePosition);
+    },
+    deleteObjects: async ({ selectedRows, queryScope, featurePosition }) => referenceCommand('POST', '/api/workspace/content/delete',
+      { position: positionFromScope(queryScope), linkIds: (selectedRows ?? []).map(row => String(row.LID)) }, featurePosition),
     createPart: async ({ input, queryScope, featurePosition }) => referenceCommand('POST', '/api/workspace/content/parts',
       { position: positionFromScope(queryScope), values: input }, featurePosition),
     createDocument: async ({ input, queryScope, featurePosition }) => referenceCommand('POST', '/api/workspace/content/documents',

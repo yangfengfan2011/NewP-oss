@@ -26,7 +26,8 @@
             "required": true
           },
           "edit": {
-            "mode": "readonly"
+            "mode": "editable",
+            "required": true
           }
         },
         "contract": {
@@ -52,7 +53,7 @@
             "mode": "editable"
           },
           "edit": {
-            "mode": "readonly"
+            "mode": "editable"
           }
         }
       },

@@ -20,6 +20,16 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
         services.AddObjectBehavior<WorkspaceObjectCreation>(this, WorkspaceObjectCreation.BehaviorDefinition,
             (provider, _) => new(() => provider.GetRequiredService<WorkspaceContents>(),
                 provider.GetRequiredService<Func<ICP.Platform.Crud.ObjectOperations.IObjectOperationExecutor>>()));
+        services.AddScoped<WorkspaceObjectMutation>(provider => new(provider.GetRequiredService<ICP.Platform.Persistence.EfCore.EfPlatformDbContext>(),
+                () => provider.GetRequiredService<WorkspaceContents>(),
+                () => provider.GetRequiredService<ICP.Platform.Crud.LinkQueries.LinkQueryReader>(),
+                () => provider.GetRequiredService<ICP.Platform.Crud.Abstractions.IStandardCrudService>(),
+                provider.GetRequiredService<ICP.Platform.Crud.Abstractions.IStandardCrudResourceRegistry>(),
+                provider.GetRequiredService<IDataScopeObjectDecisionProvider>(),
+                provider.GetRequiredService<ICP.Platform.Persistence.Auditing.IEntityAuditValueProvider>(),
+                provider.GetRequiredService<Func<ICP.Platform.Crud.ObjectOperations.IObjectOperationExecutor>>()));
+        services.AddObjectBehavior<WorkspaceObjectMutation>(this, WorkspaceObjectMutation.BehaviorDefinition,
+            (provider, _) => provider.GetRequiredService<WorkspaceObjectMutation>());
         services.AddScoped<WorkspaceFolderScope>();
         services.AddScoped<ICP.Platform.Crud.LinkQueries.ILinkQueryEndpointConstraint>(provider => provider.GetRequiredService<WorkspaceFolderScope>());
         services.AddScoped<ICP.Platform.Crud.LinkQueries.ILinkQuerySourcePolicy, WorkspaceContentQueryPolicy>();

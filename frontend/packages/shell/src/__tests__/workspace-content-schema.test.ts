@@ -20,10 +20,11 @@ it('validates Link projection fields against the formal query directory and requ
 
 it('groups existing creation actions without replacing their identities and opens properties from Name', () => {
   const schema = buildStandardCrudListSchema(list.view, resource, { modelDocuments: [folder, content] });
-  expect(schema.pageActions.map(action => action.key)).toEqual(['create', 'createPart', 'createDocument']);
+  expect(schema.pageActions.map(action => action.key)).toEqual(['create', 'createPart', 'createDocument', 'deleteObjects']);
   expect(schema.pageActionGroups).toEqual([{ key: 'new', labelKey: 'New', variant: 'primary', actionKeys: ['create', 'createPart', 'createDocument'] }]);
   expect(schema.columns.find(column => column.field === 'Name')?.standardAction).toBe('view');
-  expect(schema.rowActions.map(action => action.key)).toEqual(['remove']);
+  expect(schema.rowActions.map(action => action.key)).toEqual(['edit', 'delete', 'remove']);
+  expect(schema.pageActions.find(action => action.key === 'deleteObjects')?.requiresSelection).toBe(true);
 });
 
 it.each([

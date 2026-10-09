@@ -26,3 +26,18 @@ it('uses LID as row identity and the associated Entity EID for properties', asyn
   expect(url.searchParams.get('fields')).toBe('LID,Name');
   expect(JSON.parse(url.searchParams.get('queryScope')!)).toEqual({ spaceId: 'public', rootFolderId: 'root', linkIds: '[]' });
 });
+
+it('edits and batch deletes through the current occurrence using LIDs', async () => {
+  const request = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify(String(_input).endsWith('antiforgery-token') ? { requestToken: 'token' } : { succeeded: true })));
+  vi.stubGlobal('fetch', request);
+  const context = { featurePosition: 'write', queryScope: { spaceId: 'public', rootFolderId: 'root', linkIds: '[]' } };
+  expect(resource.actionHandlers?.editObject).toBeTypeOf('function');
+  expect(resource.actionHandlers?.deleteObjects).toBeTypeOf('function');
+  await resource.actionHandlers!.editObject({ ...context, id: 'relation', input: { ENAME: 'changed', Description: 'note' } });
+  await resource.actionHandlers!.deleteObjects({ ...context, selectedRows: [{ LID: 'a', ObjectId: 'entity-a' }, { LID: 'b', ObjectId: 'entity-b' }] });
+  const writes = await Promise.all(request.mock.calls.filter(([input]) => String(input instanceof Request ? input.url : input).includes('/api/workspace/content/')).map(async ([input, init]) => input instanceof Request ? input.clone().json() : JSON.parse(String(init?.body))));
+  expect(writes).toEqual([
+    { position: { spaceId: 'public', rootFolderId: 'root', linkIds: [] }, values: { ENAME: 'changed', Description: 'note' } },
+    { position: { spaceId: 'public', rootFolderId: 'root', linkIds: [] }, linkIds: ['a', 'b'] },
+  ]);
+});

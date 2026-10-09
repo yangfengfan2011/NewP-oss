@@ -62,6 +62,7 @@ export interface SearchTablePageProps<TRow> {
   headerTitle?: ReactNode;
   toolbar?: ReactNode;
   selectableRows?: boolean;
+  selection?: { keys: Key[]; disabled?: boolean; onChange: (rows: TRow[]) => void };
   query?: SearchTableQueryState;
   onQueryChange?: (query: SearchTableQueryState) => void;
   onLoadResult?: (result: { data: TRow[]; total: number; success: boolean }) => void;
@@ -117,6 +118,7 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
   headerTitle,
   toolbar,
   selectableRows = false,
+  selection,
   query,
   onQueryChange,
   onLoadResult,
@@ -285,8 +287,9 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         } : undefined}
         toolBarRender={toolbar ? () => [toolbar] : false}
         rowSelection={selectableRows ? {
-          selectedRowKeys,
-          onChange: (nextSelectedRowKeys) => setSelectedRowKeys(nextSelectedRowKeys),
+          selectedRowKeys: selection?.keys ?? selectedRowKeys,
+          onChange: (nextSelectedRowKeys, rows) => { if (selection) selection.onChange(rows); else setSelectedRowKeys(nextSelectedRowKeys); },
+          getCheckboxProps: () => ({ disabled: selection?.disabled }),
         } : undefined}
         tableAlertRender={false}
         tableAlertOptionRender={false}

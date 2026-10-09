@@ -18,7 +18,7 @@ public sealed class DocumentModule : ModuleCapsuleBindingBase
         services.AddStandardCrudResource(DocumentCrudDescriptor.Create());
         // 插入与仓储规范重读属于同一事务；提交后的展示才由标准服务降级为成功回执。
         services.AddStandardCrudObjectBehavior(this, new("document.document", ModuleId, "Document/Document",
-            [ObjectOperationAction.Create], [], ["EID", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"]));
+            [ObjectOperationAction.Create, ObjectOperationAction.Update, ObjectOperationAction.Delete], [], ["EID", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"]));
         services.AddScoped<IStandardCrudValidator, DocumentCrudValidator>();
         services.AddScoped<IStandardCrudQueryCustomizer, DocumentCrudQueryCustomizer>();
     }

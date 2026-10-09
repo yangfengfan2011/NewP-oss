@@ -70,7 +70,8 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             var document = features.Behavior("Document", "document.document.read");
             grantedFeatures = [entry, features.Action(entry, "create", "list.pageActions", "folder"),
                 features.Action(entry, "createPart", "list.pageActions", "folder"), features.Action(entry, "createDocument", "list.pageActions", "folder"), features.Action(entry, "remove", "list.rowActions", "folder"),
-                part, document];
+                features.Action(entry, "edit", "list.rowActions", "folder"), features.Action(entry, "delete", "list.rowActions", "folder"),
+                features.Action(entry, "deleteObjects", "list.pageActions", "folder"), part, document];
         }
         if (browserJourney is null)
         {
@@ -166,6 +167,11 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             await driver.CreateObjectAsync("零组件", PartCode + "-NEXT", PartName + " 新建");
             await driver.ExpandRootToFolderAsync("公共空间", folderName);
             await CapturePresentationAsync(page, "folder-content-narrow.png");
+            await driver.EditObjectAsync(folderName, folderName + " 已编辑");
+            await driver.EditObjectAsync(DocumentName, DocumentName + " 已编辑");
+            await driver.EditObjectAsync(PartName + " 新建", PartName + " 已编辑");
+            await CapturePresentationAsync(page, "folder-content-edited.png");
+            await driver.DeleteSelectedAsync(folderName + " 已编辑", DocumentName + " 已编辑", PartName + " 已编辑");
             await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "browser.json"),
                 new { url = page.Url, actor = "ordinary", createdFolder = folderName, includeSpaceLifecycle }, token);
         }

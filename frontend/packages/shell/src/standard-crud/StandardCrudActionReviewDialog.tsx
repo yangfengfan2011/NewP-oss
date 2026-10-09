@@ -23,6 +23,7 @@ interface StandardCrudActionReviewDialogProps {
   value: unknown;
   detail?: unknown;
   row?: unknown;
+  selectedRows?: readonly unknown[];
   pending: boolean;
   error?: string | null;
   onChange: (value: unknown) => void;
@@ -42,6 +43,7 @@ export function StandardCrudActionReviewDialog({
   value,
   detail,
   row,
+  selectedRows,
   pending,
   error,
   onChange,
@@ -53,7 +55,7 @@ export function StandardCrudActionReviewDialog({
   const features = useFeaturePlacement();
   const authority = JSON.stringify([auth?.user?.id, auth?.isAuthenticated, auth?.isInitialized,
     auth?.permissionEpoch, auth?.user?.isLocalAdministrator, auth?.user?.mustChangePassword,
-    [...(auth?.user?.featurePositions ?? [])].sort(), featurePosition, action.key]);
+    [...(auth?.user?.featurePositions ?? [])].sort(), featurePosition, action.key, queryScope]);
   const [openedAuthority] = useState(authority);
   const [invalidated, setInvalidated] = useState(false);
   const cancelReported = useRef(false);
@@ -79,7 +81,7 @@ export function StandardCrudActionReviewDialog({
         const resolution = features.navigation(key);
         return resolution.kind === 'allowed' ? resolution.position : undefined;
       },
-      queryScope, submitting: pending, value, onChange, detail, row, onDraftStateChange: setDraftState,
+      queryScope, submitting: pending, value, onChange, detail, row, selectedRows, onDraftStateChange: setDraftState,
     })}
   </>;
   return (
@@ -105,6 +107,7 @@ export function StandardCrudActionReviewDialog({
         onCancel={requestClose}
         onOk={inputRenderer.readOnly ? onCancel : onConfirm}
       >
+        {error ? <div role="alert">{error}</div> : null}
         {content}
       </Modal>}
       <Modal open={confirmDiscard} title={<StandardCrudDialogTitle>{t('Platform.DiscardDraftTitle', '放弃未保存的草稿？')}</StandardCrudDialogTitle>} okText={t('Platform.DiscardDraft', '放弃修改')} cancelText={t('Platform.KeepEditing', '继续编辑')}

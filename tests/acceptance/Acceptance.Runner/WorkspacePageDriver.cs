@@ -74,6 +74,40 @@ internal sealed class WorkspacePageDriver(IPage page)
         await crud.WaitForRowAsync(name);
     }
 
+    /// <summary>从混合内容行打开编辑 Drawer；业务值与权限由 API 集成测试验证。</summary>
+    internal async Task EditObjectAsync(string name, string newName)
+    {
+        var crud = new StandardCrudPageDriver(page);
+        var row = await crud.WaitForRowAsync(name);
+        await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
+        await page.GetByRole(AriaRole.Menuitem, new() { Name = "编辑", Exact = true }).ClickAsync();
+        var drawer = await crud.WaitForVisibleDrawerAsync("编辑对象");
+        await StandardCrudPageDriver.FillDrawerFieldAsync(drawer, "名称", newName);
+        var responseTask = page.WaitForResponseAsync(response => response.Request.Method == "PUT"
+            && new Uri(response.Url).AbsolutePath.StartsWith("/api/workspace/content/", StringComparison.Ordinal));
+        await crud.SaveAndCloseWithoutResponseAsync(drawer);
+        var response = await responseTask;
+        if (!response.Ok) throw new InvalidOperationException($"编辑对象失败：{response.Status} {await response.TextAsync()}");
+        await crud.WaitForRowAsync(newName);
+    }
+
+    /// <summary>勾选当前页多个真实内容行，确认后等待一次批量写入及列表刷新。</summary>
+    internal async Task DeleteSelectedAsync(params string[] names)
+    {
+        var crud = new StandardCrudPageDriver(page);
+        foreach (var name in names)
+        {
+            var row = await crud.WaitForRowAsync(name);
+            await row.GetByRole(AriaRole.Checkbox).CheckAsync();
+        }
+        await crud.ClickPageActionAsync("批量删除");
+        var dialog = page.GetByRole(AriaRole.Dialog, new() { Name = "批量删除", Exact = true });
+        await crud.ConfirmAsync(dialog, new("POST", "/api/workspace/content/delete", 200, "批量删除对象"));
+        foreach (var name in names)
+            await page.GetByRole(AriaRole.Region, new() { Name = "节点内容", Exact = true }).Locator("tr.ant-table-row")
+                .Filter(new() { HasTextString = name }).WaitForAsync(new() { State = WaitForSelectorState.Hidden });
+    }
+
     internal async Task ExpandRootToFolderAsync(string rootLabel, string folderName)
     {
         var tree = page.GetByRole(AriaRole.Complementary, new() { Name = "结构树", Exact = true });

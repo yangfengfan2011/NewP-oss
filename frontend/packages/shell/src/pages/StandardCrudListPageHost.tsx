@@ -980,6 +980,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const [rowInputAction, setRowInputAction] = useState<{
     action: StandardCrudRuntimeActionSchema;
     row?: TRow;
+    selectedRows?: readonly TRow[];
     rowId: string;
     pendingKey: string;
     label: string;
@@ -1204,6 +1205,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     () => schema.columnSource === 'runtime' ? runtimeRowsQuery.data?.items ?? [] : metadataListQuery.data?.items ?? [],
     [metadataListQuery.data?.items, runtimeRowsQuery.data?.items, schema.columnSource],
   );
+  const selectionScope = JSON.stringify([currentSubjectId, readPosition, host.input.queryScope, tableQuery, appliedFilters]);
+  const [selection, setSelection] = useState<{ scope: string; data: TRow[]; rows: TRow[] } | null>(null);
+  // 选择仅属于当前查询快照；切页、换位置、换主体及刷新数据均同步失效。
+  const selectedRows = selection?.scope === selectionScope && selection.data === effectiveRows ? selection.rows : [];
   const effectiveTotal = schema.columnSource === 'runtime'
     ? runtimeRowsQuery.data?.total ?? 0
     : metadataListQuery.data?.total ?? 0;
@@ -1216,6 +1221,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         || runtimeRowsQuery.isFetching
       ))
     : metadataListQuery.status === 'idle' || metadataListQuery.isFetching;
+  useEffect(() => { setSelection(null); }, [selectionScope, effectiveRows, effectiveLoading]);
   const effectiveHasLoaded = schema.columnSource === 'runtime'
     ? runtimeColumnsQuery.status === 'error'
       || runtimeRowsQuery.status === 'success'
@@ -1974,7 +1980,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   ) : undefined;
   // 分组只改变入口呈现；每次执行仍以子动作的当前权限和原有生命周期为准。
   function runHeaderAction(action: StandardCrudRuntimeActionSchema): void {
-    if (actionExecution.pendingKey !== null || mutationExecution.pending) return;
+    if (actionExecution.pendingKey !== null || mutationExecution.pending || (action.requiresSelection && (effectiveLoading || selectedRows.length === 0))) return;
     const feature = resolveActionFeature(action, 'list.pageActions');
     if (feature.kind !== 'allowed') return;
     if (action.standardAction === 'create') { void openCreateDrawer(); return; }
@@ -1983,10 +1989,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     confirmDiscardIfNeeded(() => {
       if (action.inputKey) {
         actionExecution.clearError(); setRowInputValue(undefined);
-        setRowInputAction({ action, rowId: '', pendingKey: action.key, label: action.labelKey });
+        setRowInputAction({ action, rowId: '', pendingKey: action.key, label: action.labelKey, selectedRows: action.requiresSelection ? [...selectedRows] : undefined });
       } else {
         void actionExecution.execute({ key: action.key, handler,
-          context: { queryScope: host.input.queryScope, featurePosition: feature.position } });
+          context: { queryScope: host.input.queryScope, featurePosition: feature.position, selectedRows: action.requiresSelection ? [...selectedRows] : undefined } });
       }
     });
   }
@@ -2002,11 +2008,11 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       actions: group.actionKeys.flatMap(key => visibleHeaderActions.filter(child => child.key === key)) });
   }
   const headerPending = actionExecution.pendingKey !== null || mutationExecution.pending;
-  const headerActions = headerEntries.length > 0 ? <>
+  const headerActions = headerEntries.length > 0 ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
     {headerEntries.map(({ key, group, actions }) => group ? (
       <Dropdown key={key} trigger={['click']} disabled={headerPending} menu={{
         items: actions.map(action => ({ key: action.key, label: t(`${schema.dicKey}.${action.labelKey}`, action.labelKey),
-          disabled: headerPending, danger: action.variant === 'danger' })),
+          disabled: headerPending || (action.requiresSelection && (effectiveLoading || selectedRows.length === 0)), danger: action.variant === 'danger' })),
         onClick: ({ key: childKey }) => { const action = actions.find(child => child.key === childKey); if (action) runHeaderAction(action); },
       }}>
         <AntdButton type={group.variant === 'primary' ? 'primary' : 'default'} danger={group.variant === 'danger'}
@@ -2016,11 +2022,11 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       </Dropdown>
     ) : (
       <AntdButton key={key} type={actions[0].variant === 'primary' ? 'primary' : 'default'} size="middle"
-        disabled={headerPending} onClick={() => runHeaderAction(actions[0])}>
+        danger={actions[0].variant === 'danger'} disabled={headerPending || (actions[0].requiresSelection && (effectiveLoading || selectedRows.length === 0))} onClick={() => runHeaderAction(actions[0])}>
         {t(`${schema.dicKey}.${actions[0].labelKey}`, actions[0].labelKey)}
       </AntdButton>
     ))}
-  </> : undefined;
+  </div> : undefined;
   const filterBar = (
     <CrudSearchBar
       fields={(
@@ -2110,6 +2116,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     <div className="np-standard-crud-table">
       <CrudTableSection<TRow>
         headerTitle={headerActions}
+        selectableRows={visibleHeaderActions.some(action => action.requiresSelection)}
+        selection={{ keys: effectiveLoading ? [] : selectedRows.map(dataAdapter.getRowId), disabled: effectiveLoading || headerPending || rowInputAction !== null,
+          onChange: rows => setSelection({ scope: selectionScope, data: effectiveRows, rows }) }}
         rowKey={dataAdapter.getRowId}
         columns={columns}
         request={tableRequest}
@@ -2329,6 +2338,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             queryScope={host.input.queryScope}
             value={rowInputValue}
             row={rowInputAction.row}
+            selectedRows={rowInputAction.selectedRows}
+            error={actionExecution.error?.key === rowInputAction.pendingKey ? formatRequestError(actionExecution.error.failure, t) : null}
             pending={actionExecution.pendingKey === rowInputAction.pendingKey}
             onChange={setRowInputValue}
             onCancel={() => {
@@ -2343,7 +2354,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 const outcome = await actionExecution.execute({
                   key: pendingKey,
                   handler,
-                  context: { id: rowId, row, input: rowInputValue, queryScope: host.input.queryScope, featurePosition: rowInputFeatureResolution.position },
+                  context: { id: rowId, row, selectedRows: rowInputAction.selectedRows, input: rowInputValue, queryScope: host.input.queryScope, featurePosition: rowInputFeatureResolution.position },
                 });
                 if (outcome.status === 'succeeded') {
                   setRowInputAction(null);

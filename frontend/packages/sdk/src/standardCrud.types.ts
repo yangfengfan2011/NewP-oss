@@ -214,6 +214,8 @@ export interface StandardCrudActionDefinition {
   confirmLabelKey?: string;
   /** 快捷跳转使用目标导航资格，不声明独立业务动作。 */
   navigationTargetKey?: string;
+  /** 页动作只消费当前页勾选快照；无选择时禁用。 */
+  requiresSelection?: boolean;
   handlerKey?: string;
   inputKey?: string;
 }
@@ -225,6 +227,7 @@ export interface StandardCrudActionContext<TDetail = unknown, TRow = unknown> ex
   id?: string;
   detail?: TDetail;
   row?: TRow;
+  selectedRows?: readonly TRow[];
   input?: unknown;
 }
 
@@ -260,6 +263,7 @@ export interface StandardCrudActionInputRenderContext extends StandardCrudFeatur
   onChange: (value: unknown) => void;
   detail?: unknown;
   row?: unknown;
+  selectedRows?: readonly unknown[];
   /** 共享弹窗据此保护未保存草稿并阻止尚未加载的输入提交。 */
   onDraftStateChange?: (state: { dirty: boolean; ready: boolean }) => void;
 }

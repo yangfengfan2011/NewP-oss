@@ -108,8 +108,8 @@ public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions
             return true;
         }, token);
 
-    /// <summary>对象创建复用完整位置和父编辑裁决，且目标类型必须存在于正式 Link 目录。</summary>
-    internal async Task<string> PrepareObjectCreationAsync(string actorId, WorkspacePosition position, string modelKey, CancellationToken token)
+    /// <summary>对象写入复用完整位置和父编辑裁决，且目标类型必须存在于正式 Link 目录。</summary>
+    internal async Task<string> PrepareObjectWriteAsync(string actorId, WorkspacePosition position, string modelKey, CancellationToken token)
     {
         await LockGraphAsync(token);
         var path = await WritablePositionAsync(actorId, position, token);
@@ -135,7 +135,7 @@ public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions
         "DECLARE @result int; EXEC @result = sp_getapplock @Resource=N'Workspace.FolderGraph', @LockMode='Exclusive', @LockOwner='Transaction', @LockTimeout=15000; IF @result < 0 THROW 51000, 'Workspace content lock failed.', 1;", token);
 
     // 锁后重新解析实际位置和父动作，不使用选择候选时或等待锁前的资格。
-    private async Task<WorkspacePositionPath> WritablePositionAsync(string actorId, WorkspacePosition position, CancellationToken token)
+    internal async Task<WorkspacePositionPath> WritablePositionAsync(string actorId, WorkspacePosition position, CancellationToken token)
     {
         var path = await positions.ResolveAsync(actorId, position, token);
         if (!await decisions.IsAllowedAsync("workspace.folder", path.FolderId, "edit", token)) throw new LinkQueryException(403, "Workspace.ParentWriteDenied");

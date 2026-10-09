@@ -26,6 +26,12 @@ public sealed class WorkspaceFeatureProjectionTests
         Assert.Equal("workspace.folder.create", create.BehaviorKey); Assert.Equal(new[] { entry.Position }, create.EntryDependencies);
         Assert.Throws<FeatureSelectionException>(() => FeatureCatalogCompiler.ValidateSelection(catalog, [create.Position]));
         FeatureCatalogCompiler.ValidateSelection(catalog, [entry.Position, create.Position]);
+        foreach (var (key, behavior, surface) in new[] { ("edit", "editObject", "rowActions"), ("delete", "deleteObject", "rowActions"), ("deleteObjects", "deleteObjects", "pageActions") })
+        {
+            var action = Assert.Single(catalog, point => point.BehaviorKey == "workspace.folder." + behavior);
+            Assert.Equal("Workspace/navigation:workspace/node-type:folder/surface:list." + surface + "/action:" + key, action.Position);
+            Assert.Contains("workspace.folder.read", action.ReadBehaviors);
+        }
         foreach (var (behavior, surface) in new[] { ("add", "custom"), ("remove", "rowActions"), ("createPart", "pageActions"), ("createDocument", "pageActions") })
         {
             var action = Assert.Single(catalog, point => point.BehaviorKey == "workspace.folder." + behavior);

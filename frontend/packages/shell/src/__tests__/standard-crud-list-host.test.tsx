@@ -397,6 +397,40 @@ describe('StandardCrudListPageHost', () => {
     ]);
   }
 
+  it('captures current-page selection for confirmation and clears it after refresh', async () => {
+    const handler = vi.fn(async (_context: unknown) => ({ operation: 'action' as const, payload: {}, change: { operation: 'delete' as const, id: '' } }));
+    mockStandardCrudModule({ actionHandlers: { deleteSelected: handler }, actionInputRenderers: { confirm: () => null } });
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({
+      items: [{ id: 'one', PersonNo: '001', ENAME: '甲' }, { id: 'two', PersonNo: '002', ENAME: '乙' }], total: 2, page: 1, pageSize: 20,
+    }), { headers: { 'Content-Type': 'application/json' } }));
+    const view = { ...personListViewDocument, view: { ...personListViewDocument.view, rowActions: [],
+      pageActions: [{ key: 'deleteSelected', labelKey: 'BatchDelete', handlerKey: 'deleteSelected', requiresSelection: true, inputKey: 'confirm', variant: 'danger', confirmMessageKey: 'ConfirmBatch' }],
+    } } as unknown as typeof personListViewDocument;
+    const host = await renderHost({ 'PersonListView.BatchDelete': '批量删除', 'PersonListView.ConfirmBatch': '确认删除选择？' }, view, '/organization/persons', {
+      feature: { entry: 'entry', positions: ['entry', 'batch'], points: [{ key: 'deleteSelected', kind: 'action', position: 'batch', parentPosition: 'entry', actionScope: 'list.pageActions' }] },
+    });
+    const button = () => [...container.querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent?.replace(/\s/g, '') === '批量删除')!;
+    await vi.waitFor(() => expect(container.textContent).toContain('甲'));
+    expect(button().disabled).toBe(true);
+    await act(async () => container.querySelector<HTMLInputElement>('tr.ant-table-row[data-row-key="one"] input[type="checkbox"]')!.click());
+    expect(button().disabled).toBe(false);
+    await act(async () => button().click());
+    await waitForBodyText('确认删除选择？');
+    expect(handler).not.toHaveBeenCalled();
+    expect(container.querySelector<HTMLInputElement>('tr.ant-table-row[data-row-key="one"] input[type="checkbox"]')!.disabled).toBe(true);
+    await act(async () => [...document.querySelectorAll<HTMLButtonElement>('.ant-modal button')].find(item => item.textContent?.replace(/\s/g, '') === '确认')!.click());
+    await vi.waitFor(() => expect(handler).toHaveBeenCalledTimes(1));
+    expect(handler.mock.calls[0]?.[0]).toMatchObject({ featurePosition: 'batch', selectedRows: [{ id: 'one' }] });
+    await vi.waitFor(() => expect(button().disabled).toBe(true));
+    expect(container.querySelector<HTMLInputElement>('tr.ant-table-row[data-row-key="one"] input[type="checkbox"]')!.checked).toBe(false);
+    await act(async () => container.querySelector<HTMLInputElement>('tr.ant-table-row[data-row-key="one"] input[type="checkbox"]')!.click());
+    await act(async () => [...container.querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent?.replace(/\s/g, '') === '刷新')!.click());
+    await vi.waitFor(() => expect(button().disabled).toBe(true));
+    await host.setFeaturePositions(['entry']);
+    expect(button()).toBeUndefined();
+    expect(container.querySelector('tr.ant-table-row[data-row-key="one"] input[type="checkbox"]')).toBeNull();
+  });
+
   it('hides a parent action when no children are granted and restores it when a child is granted', async () => {
     mockStandardCrudModule();
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ items: [], total: 0, page: 1, pageSize: 20 }),

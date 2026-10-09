@@ -43,6 +43,7 @@ export interface StandardCrudRuntimeActionSchema {
   labelKey: string;
   standardAction?: StandardCrudActionDefinition['standardAction'];
   variant?: StandardCrudActionDefinition['variant'];
+  requiresSelection?: boolean;
   confirmMessageKey?: string;
   confirmLabelKey?: string;
   navigationTargetKey?: string;
@@ -183,6 +184,7 @@ function readActionVisibility(value: unknown): StandardCrudRowActionVisibilitySc
 }
 
 function readAction(value: MetadataRecord): StandardCrudRuntimeActionSchema {
+  if (value.requiresSelection !== undefined && typeof value.requiresSelection !== 'boolean') throw new Error('requiresSelection must be a boolean');
   const standardAction = readString(value.standardAction);
   const variant = readString(value.variant);
   const confirmMessageKey = readString(value.confirmMessageKey);
@@ -208,6 +210,7 @@ function readAction(value: MetadataRecord): StandardCrudRuntimeActionSchema {
   return {
     key: readString(value.key),
     labelKey: readString(value.labelKey),
+    ...(value.requiresSelection === true ? { requiresSelection: true } : {}),
     ...(standardAction.length > 0 ? { standardAction: standardAction as StandardCrudRuntimeActionSchema['standardAction'] } : {}),
     ...(variant.length > 0 ? { variant: variant as StandardCrudRuntimeActionSchema['variant'] } : {}),
     ...(confirmMessageKey.length > 0 ? { confirmMessageKey } : {}),
@@ -251,6 +254,7 @@ function readField(value: MetadataRecord, model: MetadataRecord = {}): StandardC
   const field: StandardCrudRuntimeFieldSchema = {
     key: readString(value.key),
     labelKey: readString(value.labelKey),
+    ...(value.requiresSelection === true ? { requiresSelection: true } : {}),
     source: value.source === 'model' ? 'model' : 'preset',
   };
   const sourceField = readString(value.field);
@@ -326,6 +330,7 @@ function readColumn(value: MetadataRecord): StandardCrudRuntimeColumnSchema {
   return {
     key: readString(value.key),
     labelKey: readString(value.labelKey),
+    ...(value.requiresSelection === true ? { requiresSelection: true } : {}),
     source: source === 'projection' ? 'projection' : 'model',
     field,
     ...(width !== undefined ? { width } : {}),
@@ -914,6 +919,7 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
     exportModes: readArray<unknown>(exportConfig.modes).filter((mode): mode is string => typeof mode === 'string'),
   };
 
+  if (schema.rowActions.some(action => action.requiresSelection)) throw new Error('requiresSelection is only supported on pageActions');
   if (view.pageActionGroups !== undefined) {
     schema.pageActionGroups = readPageActionGroups(view.pageActionGroups, schema.pageActions);
     for (const group of schema.pageActionGroups) assertDictionaryKey(dicKey, group.labelKey, context?.defaultLanguageCatalog);

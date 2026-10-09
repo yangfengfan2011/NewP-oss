@@ -18,7 +18,7 @@ public sealed class PartModule : ModuleCapsuleBindingBase
         services.AddStandardCrudResource(PartCrudDescriptor.Create());
         // 插入与仓储规范重读属于同一事务；提交后的展示才由标准服务降级为成功回执。
         services.AddStandardCrudObjectBehavior(this, new("part.part", ModuleId, "Part/Part",
-            [ObjectOperationAction.Create], [], ["EID", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"]));
+            [ObjectOperationAction.Create, ObjectOperationAction.Update, ObjectOperationAction.Delete], [], ["EID", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"]));
         services.AddScoped<IStandardCrudValidator, PartCrudValidator>();
         services.AddScoped<IStandardCrudQueryCustomizer, PartCrudQueryCustomizer>();
     }

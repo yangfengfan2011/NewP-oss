@@ -15,11 +15,54 @@ namespace ICP.Platform.Modules.Workspace;
 /// <summary>正式创建仅接受当前出现位置与可写字段；所有业务规则仍在应用服务。</summary>
 [ApiController, Route("api/workspace"), EndpointModule("Workspace"), PlatformRequestValidation]
 public sealed class WorkspaceContentsController(WorkspaceContents contents, WorkspaceSpaces spaces, WorkspacePositions positions,
-    LinkQueryReader links, ILogger<WorkspaceContentsController> logger, WorkspaceFolderScope folderScope, IObjectOperationExecutor operations) : ControllerBase
+    LinkQueryReader links, ILogger<WorkspaceContentsController> logger, WorkspaceFolderScope folderScope, IObjectOperationExecutor operations, WorkspaceObjectMutation mutation) : ControllerBase
 {
     public sealed record CreateFolderInput(WorkspacePosition Position, Dictionary<string, JsonElement> Values);
     public sealed record AddReferenceInput(WorkspacePosition Position, LinkObjectReference Target);
     public sealed record RemoveReferenceInput(WorkspacePosition Position);
+    public sealed record DeleteObjectsInput(WorkspacePosition Position, string[] LinkIds);
+
+    /// <summary>编辑装载重新验证当前出现位置与对象 edit 资格。</summary>
+    [HttpPost("content/{linkId}/edit-values"), RequireFeature("workspace.folder.editObject")]
+    public async Task<IResult> EditValues(string linkId, RemoveReferenceInput input, CancellationToken token)
+    {
+        try
+        {
+            if (input.Position is null) throw new LinkQueryException(400, "Workspace.InvalidEditInput");
+            return Results.Ok(new { fields = await mutation.ReadEditValuesAsync(Actor(), input.Position, linkId, token) });
+        }
+        catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+    }
+
+    /// <summary>编辑使用当前 LID 定位真实对象；字段规则由对象拥有者执行。</summary>
+    [HttpPut("content/{linkId}"), RequireFeature("workspace.folder.editObject")]
+    public Task<IResult> EditObject(string linkId, CreateFolderInput input, CancellationToken token) =>
+        MutateObjectsAsync(input.Position, [linkId], input.Values, ObjectOperationAction.Update, token);
+
+    /// <summary>单行删除与批量命令共享原子对象删除规则。</summary>
+    [HttpDelete("content/{linkId}"), RequireFeature("workspace.folder.deleteObject")]
+    public Task<IResult> DeleteObject(string linkId, RemoveReferenceInput input, CancellationToken token) =>
+        MutateObjectsAsync(input.Position, [linkId], null, ObjectOperationAction.Delete, token);
+
+    /// <summary>混合选择整批原子删除，清理所有引用；不递归删除非空文件夹。</summary>
+    [HttpPost("content/delete"), RequireFeature("workspace.folder.deleteObjects")]
+    public Task<IResult> DeleteObjects(DeleteObjectsInput input, CancellationToken token) =>
+        MutateObjectsAsync(input.Position, input.LinkIds, null, ObjectOperationAction.Delete, token);
+
+    // 服务端构造可信上下文；成功后只返回回执，刷新读取不参与写入结果。
+    private async Task<IResult> MutateObjectsAsync(WorkspacePosition? position, string[]? linkIds,
+        Dictionary<string, JsonElement>? values, ObjectOperationAction action, CancellationToken token)
+    {
+        try
+        {
+            if (position is null || linkIds is null || action == ObjectOperationAction.Update && values is null)
+                throw new LinkQueryException(400, "Workspace.InvalidEditInput");
+            var result = await operations.ExecuteAsync(WorkspaceObjectMutation.BehaviorDefinition.ObjectKey, action, null,
+                new Dictionary<string, object?> { ["ActorId"] = Actor(), ["Position"] = position, ["LinkIds"] = linkIds, ["Values"] = values }, token);
+            return result.Succeeded ? Results.Ok(new { succeeded = true }) : Results.Json(result.Error, statusCode: result.Error!.StatusCode);
+        }
+        catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+    }
 
     /// <summary>在当前文件夹内创建真实零组件，所属对象行为与内容关系共享事务。</summary>
     [HttpPost("content/parts"), RequireFeature("workspace.folder.createPart")]

@@ -36,7 +36,7 @@ public sealed class WorkspaceObjectCreation(Func<WorkspaceContents> resolveConte
             values[field] = value.ValueKind == JsonValueKind.Null ? null : value.GetString();
         }
         var contents = resolveContents();
-        var parentId = await contents.PrepareObjectCreationAsync(actor, position, model, cancellationToken);
+        var parentId = await contents.PrepareObjectWriteAsync(actor, position, model, cancellationToken);
         var result = await operations().ExecuteAsync(resource, ObjectOperationAction.Create, null, values, cancellationToken);
         if (!result.Succeeded) return result;
         var id = result.Detail?.Fields.GetValueOrDefault("EID") as string

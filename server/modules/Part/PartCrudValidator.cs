@@ -27,7 +27,12 @@ public sealed class PartCrudValidator(EfPlatformDbContext db) : IStandardCrudVal
 
     /// <inheritdoc/>
     public Task<StandardCrudError?> ValidateUpdateAsync(StandardCrudDescriptor descriptor, string id, IReadOnlyDictionary<string, object?> values, CancellationToken cancellationToken = default)
-        => ValidateCreateAsync(descriptor, values, cancellationToken);
+    {
+        if (values.GetValueOrDefault("Description") is string { Length: > 500 })
+            return Task.FromResult<StandardCrudError?>(FieldError("Description", "Part.DescriptionTooLong", "说明最多 500 字。"));
+        // 标准写入规则按合并后的候选检查唯一约束并排除当前 EID；部分更新无需重复创建校验。
+        return Task.FromResult<StandardCrudError?>(null);
+    }
 
     // 业务校验使用标准字段错误协议，Drawer 可直接定位失败字段。
     private static StandardCrudError FieldError(string field, string code, string message, int status = 400) => new()

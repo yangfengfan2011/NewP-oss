@@ -17,6 +17,7 @@ using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Persistence.EfCore.Extensions;
 using ICP.Platform.Persistence.Ownership;
 using ICP.Platform.Persistence.Planning;
+using ICP.Platform.Persistence.ProviderTargets;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -103,6 +104,36 @@ public sealed class SqlServerPersistenceSmokeTests
     [Trait("Category", "SqlServerSmoke")]
     public Task SqlServerExampleRequiredField_BackfillsHistoricalPrefixWithoutPermanentDefaultAndRestartsReady() =>
         RunCatalogScenarioAsync("requiredfield", VerifyExampleRequiredFieldLifecycleAsync);
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task FullUpPreparation_ProjectsGlobalForeignKeyAndIndependentPhysicalOwner(int stage)
+    {
+        // 直接复用真实 SQL smoke 的三阶段准备；仅构建 EF/ProviderTarget，不连接或迁移数据库。
+        await using var provider = BuildProvider(
+            "Server=127.0.0.1;Database=FullUpPreparationOnly;Integrated Security=true;TrustServerCertificate=true",
+            WorktreeDatabaseIdentity.FromGitPaths(@"D:\repo\.git", @"D:\repo\.git"),
+            BuildFullUpPlan(stage));
+        await using var scope = provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        var asset = db.Model.FindEntityType("Asset")!;
+        var relationship = Assert.Single(asset.GetForeignKeys());
+        Assert.Equal("Parent", relationship.PrincipalEntityType.Name);
+        Assert.Equal("Id", Assert.Single(relationship.PrincipalKey.Properties).Name);
+        Assert.Null(db.Model.FindEntityType("Partner.FullUp/Parent"));
+
+        var target = scope.ServiceProvider.GetRequiredService<IProviderTargetSource>().Read();
+        var physical = Assert.Single(target.Tables, table => table.OwnerModuleId == "Partner.FullUp"
+            && table.Name == (stage == 1 ? "LegacyAsset" : "Asset"));
+        Assert.Equal(FullUpSchema, physical.Schema);
+        var foreignKey = Assert.Single(physical.ForeignKeys);
+        Assert.Equal("Partner.FullUp", foreignKey.PrincipalOwnerModuleId);
+        Assert.Equal(FullUpSchema, foreignKey.PrincipalSchema);
+        Assert.Equal("Parent", foreignKey.PrincipalTable);
+        Assert.Equal(["Id"], foreignKey.PrincipalColumns);
+    }
 
     [EnvironmentGatedFact(RunEnvironmentVariable, "真实 SQL Server，一次性 catalog 上的迁移生命周期冒烟")]
     [Trait("Category", "SqlServerSmoke")]
@@ -1471,7 +1502,7 @@ public sealed class SqlServerPersistenceSmokeTests
                     [new ForeignKeyDefinition(
                         "FK_LegacyAsset_Parent",
                         ["ParentId"],
-                        $"{owner}/Parent",
+                        "Parent",
                         ["Id"],
                         ForeignKeyDeleteBehavior.Restrict)]);
                 var retired = new ModelDefinition(
@@ -1520,7 +1551,7 @@ public sealed class SqlServerPersistenceSmokeTests
                 [new ForeignKeyDefinition(
                     "FK_Asset_Parent",
                     ["ParentId"],
-                    $"{owner}/Parent",
+                    "Parent",
                     ["Id"],
                     ForeignKeyDeleteBehavior.Restrict)]);
             return [parent, asset];

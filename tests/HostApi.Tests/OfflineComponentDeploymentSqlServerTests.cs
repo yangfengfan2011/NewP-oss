@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using ICP.Platform.Testing;
@@ -10,6 +11,67 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class OfflineComponentDeploymentSqlServerTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "完整历史快照覆盖SQL分块后的末行事实，不能只比较首块")]
+    public async Task HistorySnapshot_CoversEveryRowAndDetectsFactChangesAfterFirstChunk()
+    {
+        await using var fixture = await FeatureCatalogHostFixture.CreateAsync([]);
+        await fixture.StopAsync();
+        var before = await History(fixture);
+        using var snapshot = JsonDocument.Parse(before);
+        Assert.Equal(await Scalar(fixture, "SELECT COUNT(*) FROM dbo.__NewPMigrationHistory;"), snapshot.RootElement.GetArrayLength());
+        await using var connection = new SqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT TOP (1) Position, MigrationId, ContentDigest FROM dbo.__NewPMigrationHistory ORDER BY Position DESC;";
+        int position;
+        string migrationId;
+        string originalDigest;
+        await using (var reader = await command.ExecuteReaderAsync())
+        {
+            Assert.True(await reader.ReadAsync());
+            position = reader.GetInt32(0);
+            migrationId = reader.GetString(1);
+            originalDigest = reader.GetString(2);
+        }
+        var last = snapshot.RootElement.EnumerateArray().Last();
+        Assert.Equal(position, last.GetProperty("Position").GetInt32());
+        Assert.Equal(migrationId, last.GetProperty("MigrationId").GetString());
+        // 仅读取首个传输块用于校准旧消费者盲区，不将它作为任何账本快照。
+        command.CommandText = "SELECT * FROM dbo.__NewPMigrationHistory ORDER BY Position FOR JSON PATH;";
+        var firstChunk = (string)(await command.ExecuteScalarAsync())!;
+        Assert.True(before.Length > firstChunk.Length, "The real history did not exercise SQL JSON chunking.");
+        Assert.True(before.LastIndexOf("\"MigrationId\":\"" + migrationId + "\"", StringComparison.Ordinal) >= firstChunk.Length);
+        Assert.Equal(firstChunk, before[..firstChunk.Length]);
+        var changedDigest = originalDigest == new string('0', 64) ? new string('1', 64) : new string('0', 64);
+        command.Parameters.AddWithValue("@position", position);
+        command.Parameters.AddWithValue("@digest", changedDigest);
+        try
+        {
+            // Host 已停止且catalog由夹具独占；只校准末行，finally恢复原事实，不把篡改作为启动候选。
+            command.CommandText = "UPDATE dbo.__NewPMigrationHistory SET ContentDigest=@digest WHERE Position=@position;";
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
+            var after = await History(fixture);
+            using var changed = JsonDocument.Parse(after);
+            Assert.Equal(snapshot.RootElement.GetArrayLength(), changed.RootElement.GetArrayLength());
+            Assert.Equal(changedDigest, changed.RootElement.EnumerateArray().Last().GetProperty("ContentDigest").GetString());
+            Assert.Equal(firstChunk, after[..firstChunk.Length]);
+            Assert.NotEqual(before, after);
+        }
+        finally
+        {
+            command.CommandText = "UPDATE dbo.__NewPMigrationHistory SET ContentDigest=@digest WHERE Position=@position;";
+            command.Parameters["@digest"].Value = originalDigest;
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        }
+        Assert.Equal(before, await History(fixture));
+        await File.WriteAllTextAsync(Path.Combine(fixture.EvidenceRoot, "history-snapshot-calibration.json"), JsonSerializer.Serialize(new
+        {
+            rows = snapshot.RootElement.GetArrayLength(), lastPosition = position, lastMigrationId = migrationId,
+            scalarFirstChunkLength = firstChunk.Length, completeJsonLength = before.Length,
+            lastFactOffset = before.LastIndexOf("\"MigrationId\":\"" + migrationId + "\"", StringComparison.Ordinal)
+        }));
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "真实成员移组和解除归组保留自身选择与数据库身份")]
     public async Task MoveAndUngroup_RecomputeOwnChoiceAndPreserveRealData()
     {
@@ -161,7 +223,11 @@ public sealed class OfflineComponentDeploymentSqlServerTests
         await using var connection = new SqlConnection(fixture.ConnectionString);
         await connection.OpenAsync();
         await using var command = new SqlCommand("SELECT * FROM dbo.__NewPMigrationHistory ORDER BY Position FOR JSON PATH;", connection);
-        return (string)(await command.ExecuteScalarAsync())!;
+        // FOR JSON PATH 把长JSON分为多行；完整账本比较必须消费全部传输块。
+        await using var reader = await command.ExecuteReaderAsync();
+        var json = new StringBuilder();
+        while (await reader.ReadAsync()) json.Append(reader.GetString(0));
+        return json.ToString();
     }
 
     private static async Task<int> Scalar(FeatureCatalogHostFixture fixture, string sql)

@@ -203,6 +203,8 @@ public sealed class OfflineComponentDeploymentSqlServerTests
         var start = new ProcessStartInfo("pwsh.exe") { WorkingDirectory = fixture.HostRoot, UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (var argument in new[] { "-NoProfile", "-File", Path.Combine(fixture.RepositoryRoot, "scripts", "manage-unified-plugin.ps1"), "-Action", action, "-HostPath", Path.Combine(fixture.HostRoot, "HostApi.dll"), "-InstallRoot", fixture.PluginRoot }.Concat(options)) start.ArgumentList.Add(argument);
         start.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+        // 离线确认与正常 Host 使用同一 catalog，不能读取发行物默认数据库的部署状态。
+        start.Environment["ConnectionStrings__SqlServer"] = fixture.ConnectionString;
         start.Environment["Platform__ExternalPluginsEnabled"] = "false";
         using var process = Process.Start(start)!;
         var stdout = process.StandardOutput.ReadToEndAsync();
@@ -213,7 +215,7 @@ public sealed class OfflineComponentDeploymentSqlServerTests
             await Task.WhenAll(stdout, stderr).WaitAsync(TimeSpan.FromSeconds(15));
         }
         catch { if (!process.HasExited) process.Kill(entireProcessTree: true); throw; }
-        var output = await stdout + await stderr;
+        var output = (await stdout + await stderr).Replace(fixture.ConnectionString, "[connection]", StringComparison.Ordinal);
         await File.WriteAllTextAsync(Path.Combine(fixture.EvidenceRoot, "offline-" + action + "-" + Guid.NewGuid().ToString("N") + ".log"), output);
         return (process.ExitCode, output);
     }

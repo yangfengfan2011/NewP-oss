@@ -165,6 +165,7 @@ public class RuntimeViewMaterializer
         return authoringJson.ToArray();
     }
 
+    /// <summary>兼容物化入口仍消费来源携带的发布角色，不能重编译出不同基础集合。</summary>
     public CanonicalModulePlan Materialize(string installRoot)
     {
         var enabledRecords = _stateStore.LoadAllEnabled();
@@ -181,7 +182,7 @@ public class RuntimeViewMaterializer
                     .Where(candidate => !installedModuleIds.Contains(candidate.ModuleId)));
         }
 
-        var compilation = _compiler.Compile("active-module-runtime", candidates);
+        var compilation = _compiler.Compile("active-module-runtime", candidates, _builtInModuleSource?.PlatformCompositionModuleId);
         if (!compilation.IsSuccess || compilation.Plan is null)
         {
             var details = string.Join(

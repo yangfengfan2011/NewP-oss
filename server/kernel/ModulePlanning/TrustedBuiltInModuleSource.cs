@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace ICP.Platform.Kernel.ModulePlanning;
 
 /// <summary>
@@ -20,6 +22,21 @@ internal sealed class TrustedBuiltInModuleSource
     internal string ModulesRoot { get; }
 
     internal string DistributionRoot { get; }
+
+    internal string? PlatformCompositionModuleId { get; private init; }
+
+    // 正式 Host 与只读发布物检查从同一受控工件读取角色；缺失工件不可退回无基础约束。
+    internal static TrustedBuiltInModuleSource CreateForHostDistribution(string installationRoot, string validatedModulesRoot)
+    {
+        var source = CreateForHost(installationRoot, validatedModulesRoot);
+        using var document = JsonDocument.Parse(source.CaptureDistributionFile(
+            Path.Combine(source.DistributionRoot, "module-composition.json")));
+        if (!document.RootElement.TryGetProperty("platformCompositionModuleId", out var role)
+            || role.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(role.GetString()))
+            throw new JsonException("Distribution module-composition.json requires a platformCompositionModuleId.");
+        return new TrustedBuiltInModuleSource(source.ModulesRoot, source.DistributionRoot, beforeArtifactOpen: null)
+        { PlatformCompositionModuleId = role.GetString() };
+    }
 
     internal static TrustedBuiltInModuleSource CreateForHost(
         string installationRoot,

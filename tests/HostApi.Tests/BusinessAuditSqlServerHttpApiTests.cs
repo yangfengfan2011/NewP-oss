@@ -1427,6 +1427,17 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         var trust = TrustedBuiltInModuleSource.CreateForHost(hostRoot, Path.Combine(hostRoot, "modules"));
         var candidates = new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(trust)
             .Where(candidate => productionModuleIds.Contains(candidate.ModuleId, StringComparer.Ordinal)).ToArray();
+        // 注册的测试扩展也必须拥有同一候选中的正式 Capsule，不能只靠 IModule 注册旁路依赖校验。
+        var probeModulesRoot = Path.Combine(_root, "probe-capsules");
+        var probeRoot = Path.Combine(probeModulesRoot, "ObjectOperationExtensionProbe");
+        Directory.CreateDirectory(probeRoot);
+        using (var source = typeof(ObjectOperationExtensionProbeModule).Assembly.GetManifestResourceStream(
+                   "ICP.Platform.HostApi.Tests.ObjectOperationExtensionProbe.newp.plugin.json")!)
+        await using (var target = File.Create(Path.Combine(probeRoot, "plugin.json")))
+        {
+            await source.CopyToAsync(target);
+        }
+        candidates = [.. candidates, .. new ModuleCapsuleCandidateReader().ReadBuiltIn(probeModulesRoot)];
         // 下一次启动的正式声明候选；不在活动目录中原位切换开关。
         var owner = Array.FindIndex(candidates, candidate => candidate.ModuleId == "Authorization");
         var authoring = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(hostRoot, "modules", "Authorization", "plugin.json")))!;

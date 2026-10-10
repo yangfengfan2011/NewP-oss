@@ -2,7 +2,7 @@
 
 Plugin Platform 上下文管理仓库外插件包从离线部署意图到启动期激活和运行时投影的生命周期。它不拥有插件的业务领域，也不把 Host、Shell 或持久化实现细节暴露给普通插件作者；当前不提供 Host 运行期间的插件变更能力。
 
-组件组合、平台必需集合与独立生命周期的已确认目标见 [ADR-0055](../../adr/0055-component-composition-separates-model-identity-and-deployment.md)，尚待 Issue #258 实施；下述相关术语不表示当前源码已完成该目标。
+组件组合、平台必需集合与独立生命周期的已确认目标见 [ADR-0055](../../adr/0055-component-composition-separates-model-identity-and-deployment.md)。通用组合声明及平台必需基础集合已落地，当前消费契约见 [Module Contract](../../architecture/module-contract.md#平台必需基础集合)；全局模型身份、可选祖先屏蔽与保留持久化生命周期仍待 Issue #258 的后续 child 完成。
 
 ## Language
 

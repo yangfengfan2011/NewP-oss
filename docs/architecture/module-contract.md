@@ -19,6 +19,16 @@ Capsule 通过可选 `composition.members` 数组引用成员组件 ID。同一�
 
 InforCenter 是无自有模型和迁移流的纯组合组件，直接成员为 Workspace、Part、Document。Workspace 的 Part、Document 能力依赖保持显式，工作空间内容 Link 与对象所属 API/页面不表示组件父子关系。本阶段保留既有 qualified 模型键；模型身份与持久化生命周期的后续切换遵循 ADR-0055。
 
+## 平台必需基础集合
+
+Host 发布物的 `module-composition.json` 只通过 `platformCompositionModuleId` 指定平台组合角色。当前角色引用既有 Platform Capsule；初始成员唯一声明于 `apps/host-api/modules/Platform/plugin.json` 的 `composition.members`，保留其既有语言与字典贡献。Host、migration-manifest preflight 和 runtime materializer 读取同一发布角色，Canonical 编译器由组合自身及完整成员后代派生 `RequiredModuleIds`；角色和派生结果都参与计划 hash，并由活动目录公开，不在 Host、Shell 或业务 Capsule 复制名单，也不按组件名称推断必需性。
+
+必需组合或成员缺失、卸载后仍被引用、直接停用，或被外部祖先屏蔽时，完整候选在持久化编译与 DDL 前拒绝；不改写期望版本或成员自身启用选择。内建交付不等于必需，示例不在该集合；成员的模型 owner、版本和 migration stream 继续独立，`platform.foundation` 不变为 Platform Capsule 的自有迁移。Organization 已成为必需基础成员；Identity、Authentication 的可信来源、基础模型与 migration frontier 检查继续有效。
+
+Link 端点与对象动作扩展通过 `ModuleDependencyPolicy` 消费同一活动计划：目标为必需平台基础或来源显式声明的业务依赖时可引用，两端必须活动；资源与目标 owner、主键、对象开放动作和用户授权仍独立校验。Workspace 仅声明 Part、Document 两项业务硬依赖，可以省略 Identity、Authentication、Authorization 基础依赖。停用或缺失业务目标仍拒绝，不用组合归属替代能力依赖。
+
+PluginOps 参与基础候选，其 Capsule 继续关闭前端。ConfigCenter、MetadataConfigCenter、Files 等既有冻结入口保持关闭，运行时插件写操作继续遵守 ADR-0032 的 `501 / PLUGIN_RUNTIME_OPERATIONS_UNSUPPORTED`。可选组件的祖先屏蔽和保留持久化生命周期仍由 ADR-0055 定义，尚未在本阶段完成。
+
 ## Runtime contract
 
 `CanonicalModulePlanCompiler` 把候选 Capsule、metadata 与 behavior references 编译为一份确定的 Canonical Module Plan。Host 与 Shell 只消费该计划生成的活动投影：

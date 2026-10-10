@@ -19,6 +19,57 @@ namespace ICP.Platform.HostApi.Tests;
 public sealed class LinkQueryAuthoringTests
 {
     [Fact]
+    public void NonPlatformEndpoint_StillRequiresExplicitBusinessDependency()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() => Compile(
+            new WorkspaceModelMetadataProvider().GetDefinitions(), omitBusinessDependency: true));
+        Assert.Contains("端点不是可依赖的规范 Entity", error.Message);
+    }
+
+    [Fact]
+    public void PlatformEndpoint_WithoutExplicitDependencyStillRequiresCorrectResourceOwner()
+    {
+        var models = PlatformEndpointModels();
+        var resource = new DataScopeResource("identity.accounts", "Identity", "IdentityAccount", "EID");
+        var definition = Assert.Single(Compile(models, platformEndpoint: resource).Definitions);
+        Assert.Equal("Identity", definition.Endpoints["Identity/IdentityAccount"].Model.OwnerModuleId);
+        var wrong = resource with { ModuleId = "Workspace" };
+        var error = Assert.Throws<InvalidOperationException>(() => Compile(models, platformEndpoint: wrong));
+        Assert.Contains("端点资源模型或主键不一致", error.Message);
+    }
+
+    private static IReadOnlyList<ModelDefinition> PlatformEndpointModels()
+    {
+        var models = new WorkspaceModelMetadataProvider().GetDefinitions();
+        var link = Assert.Single(models, model => model.LinkQuery is not null);
+        var query = link.LinkQuery!;
+        var identity = new ICP.Platform.Modules.Identity.Persistence.Descriptors.IdentityModelMetadataProvider()
+            .GetDefinitions().Single(model => model.Name == "IdentityAccount");
+        var types = new[] { "Workspace/WorkspaceFolder", "Identity/IdentityAccount" };
+        var adapted = link with
+        {
+            LinkedTypes = [new ModelMetadataLinkedType { Parent = types[0], Child = types[1] }],
+            LinkQuery = query with
+            {
+                Endpoints = new Dictionary<string, LinkQueryEndpointMetadata>
+                {
+                    [types[0]] = query.Endpoints[types[0]],
+                    [types[1]] = new() { ResourceKey = "identity.accounts", TitleKey = "Identity.Account" }
+                },
+                Columns = query.Columns.Select(column => column with
+                {
+                    Mappings = new Dictionary<string, string?>
+                    {
+                        [types[0]] = column.Mappings[types[0]],
+                        [types[1]] = column.Mappings["Part/Part"]
+                    }
+                }).ToArray()
+            }
+        };
+        return [.. models.Select(model => model == link ? adapted : model), identity];
+    }
+
+    [Fact]
     public void EndpointDisplay_InvalidPlanIsRejectedBeforeAnyQuery()
     {
         var models = new WorkspaceModelMetadataProvider().GetDefinitions()
@@ -122,17 +173,21 @@ public sealed class LinkQueryAuthoringTests
         Assert.Equal(bytes, File.ReadAllBytes(path));
     }
 
-    private static LinkQueryCatalog Compile(IReadOnlyList<ModelDefinition> models, DataScopeResource? endpoint = null)
+    private static LinkQueryCatalog Compile(IReadOnlyList<ModelDefinition> models, DataScopeResource? endpoint = null,
+        DataScopeResource? platformEndpoint = null, bool omitBusinessDependency = false)
     {
         models = models.Concat(new ICP.Platform.Modules.Part.PartModelMetadataProvider().GetDefinitions())
             .Concat(new ICP.Platform.Modules.Document.DocumentModelMetadataProvider().GetDefinitions()).ToArray();
         var plan = new CompiledPersistencePlan("query-test", "snapshot", "hash", default, "digest", [], models, []);
-        var module = new CanonicalModulePlanModule("Workspace", "1", "工作空间", null, ".", null, null, null, null, "behavior-bindings",
-            ["Identity", "Authentication", "Authorization", "Part", "Document"], [], [], [], models.Select(m => m.LogicalKey).ToArray(), new("test", "Workspace", "/"))
-        { Features = [new("Workspace", "workspace", "navigation", "工作空间", null, "workspace.spaces.access")] };
-        var modules = new CanonicalModulePlan("test", "1", "hash", "snapshot", [], [module]);
-        return new(plan, new StandardCrudResourceRegistry([], plan), [endpoint ?? new("workspace.folder", "Workspace", "WorkspaceFolder", "EID"),
-            new("part.part", "Part", "Part", "EID"), new("document.document", "Document", "Document", "EID")], modules);
+        var source = TrustedBuiltInModuleSource.CreateForHostDistribution(AppContext.BaseDirectory, Path.Combine(AppContext.BaseDirectory, "modules"));
+        var candidates = new ModuleCapsuleCandidateReader().ReadBuiltIn(source.ModulesRoot).Select(candidate =>
+            omitBusinessDependency && candidate.ModuleId == "Workspace" ? candidate with { Dependencies = [] } : candidate);
+        var compilation = new CanonicalModulePlanCompiler().Compile("link-test", candidates, source.PlatformCompositionModuleId);
+        Assert.True(compilation.IsSuccess, string.Join(Environment.NewLine, compilation.Diagnostics));
+        var resources = new List<DataScopeResource> { endpoint ?? new("workspace.folder", "Workspace", "WorkspaceFolder", "EID"),
+            new("part.part", "Part", "Part", "EID"), new("document.document", "Document", "Document", "EID") };
+        if (platformEndpoint is not null) resources.Add(platformEndpoint);
+        return new(plan, new StandardCrudResourceRegistry([], plan), resources, compilation.Plan);
     }
 
     private sealed class SourcePolicy : ILinkQuerySourcePolicy

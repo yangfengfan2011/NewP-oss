@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using ICP.Platform.Kernel.PluginPackages;
+using ICP.Platform.PluginPlatform.Lifecycle;
 using Microsoft.Data.SqlClient;
 using Xunit;
 
@@ -294,7 +295,38 @@ public class HostApiPluginManifestRouteTests : IAsyncLifetime
         var auditFrontend = audit.GetProperty("frontend");
         Assert.Equal(JsonValueKind.Object, auditFrontend.ValueKind);
         Assert.Contains(modules, module => module.GetProperty("moduleId").GetString() == "Organization");
-        Assert.DoesNotContain(modules, module => module.GetProperty("moduleId").GetString() == "PluginOps");
+        var pluginOps = Assert.Single(modules, module => module.GetProperty("moduleId").GetString() == "PluginOps");
+        Assert.Equal(JsonValueKind.Null, pluginOps.GetProperty("frontend").ValueKind);
+        Assert.Equal("Platform", document.RootElement.GetProperty("platformCompositionModuleId").GetString());
+        Assert.Equal(["Audit", "Authentication", "Authorization", "ConfigCenter", "Files", "Identity", "MetadataConfigCenter", "Organization", "Platform", "PluginOps"],
+            document.RootElement.GetProperty("requiredModuleIds").EnumerateArray().Select(value => value.GetString()));
+        var workspace = Assert.Single(modules, module => module.GetProperty("moduleId").GetString() == "Workspace");
+        Assert.Equal(["Document", "Part"], workspace.GetProperty("dependencies").EnumerateArray().Select(value => value.GetString()));
+    }
+
+    [Fact]
+    public async Task RequiredPlatformMemberDisabled_RejectsBeforeAnySqlTablesAndPreservesDesiredChoice()
+    {
+        var installRoot = CreateTempRoot();
+        var packageRoot = _testData.CreateValidPackage("Files", "1.0.0");
+        EnableInstalledPackage(packageRoot, installRoot, "Files");
+        var inventory = InstalledPluginInventoryAdapter.Create(new InstalledPluginStateStore(installRoot));
+        var lifecycle = new PluginLifecycleManager(new PluginLifecycleStateStore(installRoot));
+        Assert.True(lifecycle.RequestDisable(inventory, "Files").IsSuccess);
+        _database = await ReusableSqlServerDatabase.AcquireAsync();
+        await using var connection = new SqlConnection(_database.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM sys.tables WHERE is_ms_shipped = 0;";
+        Assert.Equal(0, Convert.ToInt32(await command.ExecuteScalarAsync()));
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => StartHostAsync(installRoot));
+
+        Assert.Contains("MODULE_REQUIRED_DISABLED", error.Message);
+        Assert.Equal(0, Convert.ToInt32(await command.ExecuteScalarAsync()));
+        var desired = Assert.Single(lifecycle.Resolve(inventory).DesiredModules, module => module.ModuleId == "Files");
+        Assert.False(desired.Enabled);
+        Assert.Equal("1.0.0", desired.Version);
     }
 
     [Fact]
@@ -766,8 +798,16 @@ public class HostApiPluginManifestRouteTests : IAsyncLifetime
             process.BeginErrorReadLine();
 
             var host = new HostApiProcess(process, baseAddress, stdout, stderr);
-            await host.WaitForStartupAsync();
-            return host;
+            try
+            {
+                await host.WaitForStartupAsync();
+                return host;
+            }
+            catch
+            {
+                await host.DisposeAsync();
+                throw;
+            }
         }
 
         public async ValueTask DisposeAsync()

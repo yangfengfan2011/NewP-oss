@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "description": "公共空间与当前账号个人空间",
   "entryAssembly": "../../WorkspaceModule.dll",
-  "dependencies": ["Identity", "Authentication", "Authorization", "Part", "Document"],
+  "dependencies": ["Part", "Document"],
   "hostVersion": { "min": "1.1.0", "max": "2.0.0" },
   "backend": { "behaviorKey": "workspace.backend" },
   "features": [{ "key": "workspace", "kind": "navigation", "title": "工作空间", "titleKey": "Workspace.Title", "behaviorKey": "workspace.spaces.access" }],

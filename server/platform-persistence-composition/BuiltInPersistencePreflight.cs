@@ -36,11 +36,12 @@ public static class BuiltInPersistencePreflight
             "metadata",
             "storage-types.json");
 
-        var source = TrustedBuiltInModuleSource.CreateForHost(resolvedHostRoot, modulesRoot);
+        var source = TrustedBuiltInModuleSource.CreateForHostDistribution(resolvedHostRoot, modulesRoot);
         var candidates = new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(source);
         var moduleCompilation = new CanonicalModulePlanCompiler().Compile(
             "migration-manifest-preflight",
-            candidates);
+            candidates,
+            source.PlatformCompositionModuleId);
         if (!moduleCompilation.IsSuccess || moduleCompilation.Plan is null)
         {
             return new BuiltInPersistencePreflightResult(

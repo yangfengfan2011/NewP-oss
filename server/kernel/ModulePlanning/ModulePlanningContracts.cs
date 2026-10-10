@@ -362,6 +362,10 @@ public sealed record CanonicalModulePlan(
     /// <summary>同一次候选选定的完整模块声明，包含自身选择停用的组件。</summary>
     public IReadOnlyList<CanonicalModulePlanModule> SelectedModules { get; init; } = Modules;
     public IReadOnlyList<ModuleCompositionNode> CompositionGraph { get; init; } = [];
+    /// <summary>平台发布物明确指定的组合角色，与组件名称约定无关。</summary>
+    public string? PlatformCompositionModuleId { get; init; }
+    /// <summary>从平台组合及其完整成员后代一次派生的必需基础集合。</summary>
+    public IReadOnlyList<string> RequiredModuleIds { get; init; } = [];
     /// <summary>由已验证声明一次派生的完整目录，所有运行时投影共享该结果。</summary>
     public IReadOnlyList<DataActionDeclaration> DataActionCatalog { get; } = DataActionCatalogCompiler.Compile(Modules.SelectMany(module => module.DataActions));
     public IReadOnlyList<FeaturePoint> FeatureCatalog { get; } = FeatureCatalogCompiler.Compile(Modules.SelectMany(module => module.Features));

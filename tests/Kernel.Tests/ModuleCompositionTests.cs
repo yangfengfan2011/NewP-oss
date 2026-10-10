@@ -34,7 +34,7 @@ public sealed class ModuleCompositionTests
             Assert.Equal("InforCenter", entry.GetProperty("parentModuleId").GetString());
             Assert.Equal(id.ToLowerInvariant() + ".frontend", entry.GetProperty("frontend").GetProperty("behaviorKey").GetString());
         }
-        Assert.Equal(["Authentication", "Authorization", "Document", "Identity", "Part"],
+        Assert.Equal(["Document", "Part"],
             Assert.Single(plan.Modules, module => module.ModuleId == "Workspace").Dependencies);
     }
 

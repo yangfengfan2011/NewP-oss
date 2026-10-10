@@ -2,6 +2,8 @@
 
 Organization 上下文管理组织主数据与人员档案。它描述人员属于哪个组织，不拥有登录账号、凭据或授权分配。
 
+Organization 是平台组合的必需基础成员，必须存在并有效启用；必需性由发布角色及唯一组合声明派生，不能缺失、停用、卸载或因祖先停用而被屏蔽。组合归属不改变其独立组件身份、模型 owner、数据及迁移流，也不改变 Identity／Authentication 的可信来源约束。当前唯一契约见 [Module Contract](../../architecture/module-contract.md#平台必需基础集合) 与 [ADR-0021](../../adr/0021-identity-and-authentication-are-required-builtins.md)。
+
 组织结构页面现由 `platform.relations` 消费 Organization 的公司、部门关系配置，读取走 `/api/trees/organization.structure/*`；页面输入和业务写入仍由 Organization 解释。原有组织专用树 API（`/api/organization/tree/*`）已退役，结构页面不再注册专用前端 Provider；部门父级候选与防环校验仍由 Organization 独立查询提供。
 
 组织树读取由本模块提供根、直属子节点、分页搜索和当前路径；节点上下文由模块解析为标准页面输入。树 SQL 按各节点显式资源键消费最终读取裁决，并只返回从真实根经过全部可读祖先抵达的节点；直接指定子节点、搜索和路径定位也受同一可达性约束。内部完整组织视图及平面列表、详情不继承树可达性。公司直属部门范围显式使用空上级，查询范围与用户筛选相交并在总数、分页前执行。组织管理统一入口组合组织结构与公司、部门、岗位、人员四个全局目录；全局部门通过显式解析器移除节点上下文与固定创建值，以 `queryScope: { kind: "global" }` 向本模块声明全局资源语义。空范围和不完整直属范围仍拒绝，全局范围不得混入直属字段。旧目录地址跳转到对应标签，人员完整详情由导航 metadata 独立声明。完整结构操作及搜索呈现见 [交付地图 #179](https://github.com/yangfengfan2011/NewP/issues/179)。

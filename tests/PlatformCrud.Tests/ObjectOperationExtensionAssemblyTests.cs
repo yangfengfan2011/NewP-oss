@@ -6,6 +6,7 @@ using ICP.Platform.Crud.ObjectOperations;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Crud.Tests.Support;
 using ICP.Platform.Kernel.Abstractions;
+using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.Auditing;
 using ICP.Platform.Persistence.Transactions;
@@ -18,6 +19,54 @@ namespace ICP.Platform.Crud.Tests;
 
 public sealed class ObjectOperationExtensionAssemblyTests
 {
+    [Fact]
+    public async Task StartAsync_PlatformTargetDoesNotRequireRepeatedExplicitDependency()
+    {
+        var candidates = new[] { Capsule("Foundation", members: ["Organization"]), Capsule("Organization"), Capsule("ExtensionProvider") };
+        var plan = new CanonicalModulePlanCompiler().Compile("object-foundation", candidates, "Foundation").Plan!;
+        using var host = BuildHost(services =>
+        {
+            services.AddSingleton(plan);
+            services.AddSingleton<InvocationLog>();
+            services.AddObjectBehavior<RecordingBehavior>(new TestModule("Organization", []), PersonDefinition());
+            services.AddObjectOperationExtension<ExtensionA>(new TestModule("ExtensionProvider", []), Extension("foundation"));
+        });
+        await host.StartAsync();
+        await host.StopAsync();
+    }
+
+    private static ModuleCapsuleCandidate Capsule(string id, string[]? dependencies = null, string[]? members = null) =>
+        new(id, "1.0.0", id, null, "fixtures/" + id, null, null, null, null, "behavior-bindings",
+            dependencies ?? [], [], [], [], [], new("fixture", "fixtures/" + id + "/plugin.json", "/"))
+        { CompositionMembers = members ?? [] };
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task StartAsync_NonPlatformTargetUsesCanonicalExplicitDependency(bool declared, bool registrationDeclared)
+    {
+        var plan = new CanonicalModulePlanCompiler().Compile("explicit-business",
+            [Capsule("Organization"), Capsule("ExtensionProvider", dependencies: declared ? ["Organization"] : [])]).Plan!;
+        using var host = BuildHost(services =>
+        {
+            services.AddSingleton(plan);
+            services.AddSingleton<InvocationLog>();
+            services.AddObjectBehavior<RecordingBehavior>(new TestModule("Organization", []), PersonDefinition());
+            services.AddObjectOperationExtension<ExtensionA>(
+                new TestModule("ExtensionProvider", registrationDeclared ? ["Organization"] : []), Extension("business"));
+        });
+        if (declared)
+        {
+            await host.StartAsync();
+            await host.StopAsync();
+        }
+        else
+        {
+            var error = await Assert.ThrowsAnyAsync<Exception>(() => host.StartAsync());
+            Assert.Contains("OBJECT_OPERATION_EXTENSION_MODULE_DEPENDENCY_REQUIRED", error.ToString());
+        }
+    }
+
     [Theory]
     [InlineData("missing-target", "OBJECT_OPERATION_EXTENSION_TARGET_NOT_FOUND")]
     [InlineData("closed-action", "OBJECT_OPERATION_EXTENSION_ACTION_NOT_OPEN")]

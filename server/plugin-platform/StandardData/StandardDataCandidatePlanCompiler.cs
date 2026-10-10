@@ -122,7 +122,7 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
             candidates.Add(BuildCandidate(packageRoot, inspection) with { Enabled = desired.Enabled });
         }
 
-        var compilation = _compiler.Compile("plugin-activation", candidates);
+        var compilation = _compiler.Compile("plugin-activation", candidates, _builtInModuleSource?.PlatformCompositionModuleId);
         if (!compilation.IsSuccess || compilation.Plan is null)
         {
             var first = compilation.Diagnostics[0];

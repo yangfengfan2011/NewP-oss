@@ -18,10 +18,12 @@ public sealed class CanonicalModulePlanCompiler
 
     /// <summary>
     /// 编译候选模块集合；输入枚举顺序不会影响计划 bytes 或 hash。
+    /// 平台组合角色由发布物指定，不从组件名称推断。
     /// </summary>
     public ModulePlanCompilationResult Compile(
         string candidateId,
-        IEnumerable<ModuleCapsuleCandidate> candidates)
+        IEnumerable<ModuleCapsuleCandidate> candidates,
+        string? platformCompositionModuleId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(candidateId);
         ArgumentNullException.ThrowIfNull(candidates);
@@ -31,8 +33,13 @@ public sealed class CanonicalModulePlanCompiler
             .ThenBy(static candidate => candidate.Version, StringComparer.Ordinal)
             .ToArray();
         var activeCandidates = candidateArray.Where(candidate => candidate.Enabled).ToArray();
-        var diagnostics = ValidateIdentity(candidateId, candidateArray)
-            .Concat(ValidateComposition(candidateId, candidateArray))
+        var graphDiagnostics = ValidateIdentity(candidateId, candidateArray)
+            .Concat(ValidateComposition(candidateId, candidateArray)).ToArray();
+        var required = graphDiagnostics.Length == 0
+            ? CompileRequiredModules(candidateId, candidateArray, platformCompositionModuleId)
+            : (ModuleIds: (IReadOnlyList<string>)[], Diagnostics: (IReadOnlyList<ModulePlanDiagnostic>)[]);
+        var diagnostics = graphDiagnostics
+            .Concat(required.Diagnostics)
             .Concat(ValidateDependencies(candidateId, activeCandidates))
             .Concat(ValidateBindings(candidateId, activeCandidates))
             .Concat(ValidateRouteOwners(candidateId, activeCandidates))
@@ -63,6 +70,8 @@ public sealed class CanonicalModulePlanCompiler
             modules,
             selectedModules,
             compositionGraph,
+            platformCompositionModuleId,
+            requiredModuleIds = required.ModuleIds,
             verifiedArtifactDigests = modules
                 .Select(module => new
                 {
@@ -83,8 +92,52 @@ public sealed class CanonicalModulePlanCompiler
                 planHash,
                 planHash,
                 canonicalBytes,
-                modules) { SelectedModules = selectedModules, CompositionGraph = compositionGraph },
+                modules)
+            {
+                SelectedModules = selectedModules, CompositionGraph = compositionGraph,
+                PlatformCompositionModuleId = platformCompositionModuleId, RequiredModuleIds = required.ModuleIds
+            },
             Array.Empty<ModulePlanDiagnostic>());
+    }
+
+    // 在完整无环选定图上派生基础集合，直接拒绝停用及外部祖先屏蔽，不改写自身选择。
+    private static (IReadOnlyList<string> ModuleIds, IReadOnlyList<ModulePlanDiagnostic> Diagnostics) CompileRequiredModules(
+        string candidateId, IReadOnlyList<ModuleCapsuleCandidate> candidates, string? platformCompositionModuleId)
+    {
+        if (platformCompositionModuleId is null) return ([], []);
+        var byId = candidates.ToDictionary(candidate => candidate.ModuleId, StringComparer.Ordinal);
+        if (!byId.TryGetValue(platformCompositionModuleId, out var root))
+            return ([], [new(candidateId, platformCompositionModuleId, "", platformCompositionModuleId,
+                "module-composition.json", "/platformCompositionModuleId", "platform-composition", "MODULE_PLATFORM_COMPOSITION_MISSING",
+                $"The distribution platform composition '{platformCompositionModuleId}' is missing.")]);
+        if (root.CompositionMembers.Count == 0)
+            return ([], [new(candidateId, root.ModuleId, root.Version, root.ModuleId,
+                root.Provenance.SourcePath, "/composition/members", "platform-composition", "MODULE_PLATFORM_COMPOSITION_INVALID",
+                "The distribution platform composition must declare members.")]);
+
+        var required = new HashSet<string>(StringComparer.Ordinal);
+        var pending = new Stack<string>();
+        pending.Push(root.ModuleId);
+        while (pending.TryPop(out var id))
+        {
+            if (!required.Add(id)) continue;
+            foreach (var member in byId[id].CompositionMembers) pending.Push(member);
+        }
+        var diagnostics = required.Where(id => !byId[id].Enabled).Select(id =>
+            new ModulePlanDiagnostic(candidateId, id, byId[id].Version, id, byId[id].Provenance.SourcePath,
+                "/enabled", "platform-composition", "MODULE_REQUIRED_DISABLED", $"Required component '{id}' cannot be disabled.")).ToList();
+        var parents = candidates.SelectMany(candidate => candidate.CompositionMembers.Select(member => (member, candidate.ModuleId)))
+            .ToDictionary(edge => edge.member, edge => edge.ModuleId, StringComparer.Ordinal);
+        var ancestor = parents.GetValueOrDefault(root.ModuleId);
+        while (ancestor is not null)
+        {
+            if (!byId[ancestor].Enabled)
+                diagnostics.Add(new(candidateId, root.ModuleId, root.Version, ancestor, byId[ancestor].Provenance.SourcePath,
+                    "/enabled", "platform-composition", "MODULE_REQUIRED_ANCESTOR_DISABLED",
+                    $"Required composition '{root.ModuleId}' cannot be masked by disabled ancestor '{ancestor}'."));
+            ancestor = parents.GetValueOrDefault(ancestor);
+        }
+        return (required.Order(StringComparer.Ordinal).ToArray(), diagnostics);
     }
 
     private static IReadOnlyList<ModulePlanDiagnostic> ValidateIdentity(

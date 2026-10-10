@@ -15,7 +15,7 @@ public sealed class LinkQueryCatalog
 {
     public IReadOnlyList<LinkQueryDefinition> Definitions { get; }
 
-    /// <summary>只为显式采用的 Link 编译目录；旧 Link 不改变行为。</summary>
+    /// <summary>只为显式采用的 Link 编译目录；能力依赖消费同一活动计划，资源 owner 仍独立核对。</summary>
     public LinkQueryCatalog(CompiledPersistencePlan? plan, IStandardCrudResourceRegistry crud,
         IEnumerable<DataScopeResource> contributions, CanonicalModulePlan? modules)
     {
@@ -42,7 +42,7 @@ public sealed class LinkQueryCatalog
             foreach (var type in types)
             {
                 if (!type.Contains('/', StringComparison.Ordinal) || !models.TryGetValue(type, out var target) || target.Kind != ModelKind.Entity
-                    || target.OwnerModuleId != owner.ModuleId && !owner.Dependencies.Contains(target.OwnerModuleId, StringComparer.Ordinal))
+                    || !ModuleDependencyPolicy.Allows(modules, owner.ModuleId, target.OwnerModuleId))
                     throw Invalid(model, "端点不是可依赖的规范 Entity");
                 var mapping = query.Endpoints[type];
                 var resource = resources.SingleOrDefault(r => r.ResourceKey == mapping.ResourceKey)

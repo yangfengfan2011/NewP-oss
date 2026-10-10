@@ -6,6 +6,9 @@
   "description": "平台级 metadata 与 localization 组合胶囊",
   "entryAssembly": null,
   "dependencies": [],
+  "composition": {
+    "members": ["Identity", "Authentication", "Authorization", "Organization", "Audit", "ConfigCenter", "MetadataConfigCenter", "Files", "PluginOps"]
+  },
   "frontend": {
     "enabled": false
   }

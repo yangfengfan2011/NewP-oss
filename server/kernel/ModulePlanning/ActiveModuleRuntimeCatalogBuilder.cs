@@ -26,6 +26,8 @@ public sealed class ActiveModuleRuntimeCatalogBuilder
             compilerContractVersion = plan.CompilerContractVersion,
             planHash = plan.PlanHash,
             compositionGraph = plan.CompositionGraph,
+            platformCompositionModuleId = plan.PlatformCompositionModuleId,
+            requiredModuleIds = plan.RequiredModuleIds,
             projections = new
             {
                 frontend = "/plugins/frontend-plugin-manifest.json",

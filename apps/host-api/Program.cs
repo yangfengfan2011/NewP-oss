@@ -81,7 +81,7 @@ var configuredModulesPath = builder.Configuration["Platform:ModulesPath"] ?? "mo
 var modulesRootPath = Path.IsPathRooted(configuredModulesPath)
     ? configuredModulesPath
     : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, configuredModulesPath));
-var builtInModuleSource = TrustedBuiltInModuleSource.CreateForHost(
+var builtInModuleSource = TrustedBuiltInModuleSource.CreateForHostDistribution(
     AppContext.BaseDirectory,
     modulesRootPath);
 
@@ -163,8 +163,7 @@ var activationGate = new PluginActivationGate(
     new StandardDataPackagePreflight(standardDataInspector, hostVersion),
     new StandardDataCandidatePlanCompiler(
         builtInModuleSource,
-        standardDataInspector,
-        externalPluginsEnabled ? null : ["PluginOps"]),
+        standardDataInspector),
     new HostPluginPersistencePlanCompiler(storageTypeMapPath, persistenceProvider),
     new HostPluginRuntimeProjection(materializer, pluginInstallRoot));
 using var activationSession = activationGate.Prepare(pluginInventory);

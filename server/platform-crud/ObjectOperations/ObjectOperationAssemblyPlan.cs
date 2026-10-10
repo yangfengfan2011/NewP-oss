@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using ICP.Platform.Kernel.ModulePlanning;
 
 namespace ICP.Platform.Crud.ObjectOperations;
 
@@ -180,15 +181,15 @@ internal sealed class ObjectOperationContributionSet
 internal sealed class ObjectOperationAssemblyPlan
 {
     /// <summary>从模块注册声明编译唯一行为和稳定扩展拓扑。</summary>
-    public ObjectOperationAssemblyPlan(IOptions<ObjectOperationAssemblyOptions> options)
-        : this(options?.Value ?? throw new ArgumentNullException(nameof(options)))
+    public ObjectOperationAssemblyPlan(IOptions<ObjectOperationAssemblyOptions> options, CanonicalModulePlan? modules = null)
+        : this(options?.Value ?? throw new ArgumentNullException(nameof(options)), modules)
     {
     }
 
     // 内部候选只在完整编译成功后发布为计划。
-    private ObjectOperationAssemblyPlan(ObjectOperationAssemblyOptions options)
+    private ObjectOperationAssemblyPlan(ObjectOperationAssemblyOptions options, CanonicalModulePlan? modules = null)
     {
-        Behaviors = Compile(options);
+        Behaviors = Compile(options, modules);
     }
 
     internal IReadOnlyDictionary<string, ObjectBehaviorPlan> Behaviors { get; }
@@ -207,7 +208,7 @@ internal sealed class ObjectOperationAssemblyPlan
     }
 
     // 一次性校验完整候选；任何错误都不返回部分行为或部分扩展计划。
-    private static IReadOnlyDictionary<string, ObjectBehaviorPlan> Compile(ObjectOperationAssemblyOptions options)
+    private static IReadOnlyDictionary<string, ObjectBehaviorPlan> Compile(ObjectOperationAssemblyOptions options, CanonicalModulePlan? modules)
     {
         var behaviors = new Dictionary<string, ObjectBehaviorRegistration>(StringComparer.Ordinal);
         foreach (var registration in options.Behaviors)
@@ -225,7 +226,7 @@ internal sealed class ObjectOperationAssemblyPlan
                 (registration.Definition.ObjectKey, registration.Definition.Action))
             .ToDictionary(
                 static group => group.Key,
-                group => CompileExtensions(group.Key.ObjectKey, group.Key.Action, group.ToArray(), behaviors));
+                group => CompileExtensions(group.Key.ObjectKey, group.Key.Action, group.ToArray(), behaviors, modules));
 
         var plans = behaviors.ToDictionary(
             static pair => pair.Key,
@@ -281,7 +282,8 @@ internal sealed class ObjectOperationAssemblyPlan
         string objectKey,
         ObjectOperationAction action,
         IReadOnlyList<ObjectOperationExtensionRegistration> registrations,
-        IReadOnlyDictionary<string, ObjectBehaviorRegistration> behaviors)
+        IReadOnlyDictionary<string, ObjectBehaviorRegistration> behaviors,
+        CanonicalModulePlan? modules)
     {
         if (!behaviors.TryGetValue(objectKey, out var behavior))
         {
@@ -303,8 +305,12 @@ internal sealed class ObjectOperationAssemblyPlan
                 throw new InvalidOperationException(
                     $"OBJECT_OPERATION_EXTENSION_TARGET_MODULE_MISMATCH: {definition.ExtensionKey}/{definition.TargetModuleId}/{behavior.Definition.OwnerModuleId}");
             }
-            if (!string.Equals(registration.ProviderModuleId, definition.TargetModuleId, StringComparison.Ordinal)
-                && !registration.ProviderDependencies.Contains(definition.TargetModuleId, StringComparer.Ordinal))
+            // 正式 Host 的能力引用只消费 canonical 依赖；无模块计划的独立装配保留显式注册契约。
+            var dependencyAllowed = modules is not null
+                ? ModuleDependencyPolicy.Allows(modules, registration.ProviderModuleId, definition.TargetModuleId)
+                : registration.ProviderModuleId == definition.TargetModuleId
+                    || registration.ProviderDependencies.Contains(definition.TargetModuleId, StringComparer.Ordinal);
+            if (!dependencyAllowed)
             {
                 throw new InvalidOperationException(
                     $"OBJECT_OPERATION_EXTENSION_MODULE_DEPENDENCY_REQUIRED: {definition.ExtensionKey}/{registration.ProviderModuleId}/{definition.TargetModuleId}");

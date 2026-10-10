@@ -607,6 +607,21 @@ internal sealed class MigrationManifestFixture : IDisposable
         });
         File.WriteAllBytes(Path.Combine(ModuleRoot, "newp.plugin.json"), capsuleBytes);
         File.WriteAllBytes(Path.Combine(HostRoot, "modules", ModuleId, "plugin.json"), capsuleBytes);
+        // 隔离工具发布物也显式声明组合角色，既有 fixture 模块仍独立拥有唯一迁移流。
+        var composition = new
+        {
+            schemaVersion = "1.0", moduleId = "FixtureComposition", displayName = "Fixture composition", version = "1.0.0",
+            composition = new { members = new[] { ModuleId } }, frontend = new { enabled = false }
+        };
+        var compositionBytes = JsonSerializer.SerializeToUtf8Bytes(composition);
+        var authoringCompositionRoot = Path.Combine(Root, "modules", "FixtureComposition");
+        var hostCompositionRoot = Path.Combine(HostRoot, "modules", "FixtureComposition");
+        Directory.CreateDirectory(authoringCompositionRoot);
+        Directory.CreateDirectory(hostCompositionRoot);
+        File.WriteAllBytes(Path.Combine(authoringCompositionRoot, "newp.plugin.json"), compositionBytes);
+        File.WriteAllBytes(Path.Combine(hostCompositionRoot, "plugin.json"), compositionBytes);
+        File.WriteAllText(Path.Combine(HostRoot, "module-composition.json"),
+            JsonSerializer.Serialize(new { platformCompositionModuleId = "FixtureComposition" }));
         File.Copy(ModelPath, Path.Combine(HostRoot, "modules", ModuleId, "metadata", "models", "ExampleRecord.model.json"));
 
         var typeMap = new JsonStorageTypeMapLoader().LoadFromFile(

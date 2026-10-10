@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using ICP.Platform.HostApi.PluginActivation;
 using ICP.Platform.Persistence;
 using ICP.Platform.Persistence.Composition;
 using ICP.Platform.PluginPlatform.Lifecycle;
@@ -212,8 +213,9 @@ public sealed class PersistenceDeploymentRecoverySqlServerTests
             Assert.NotNull(LifecycleState(fixture)["activeSnapshotId"]);
             using (var store = Store(fixture))
             {
-                var manager = new PluginLifecycleManager(new PluginLifecycleStateStore(LifecycleRoot(fixture), snapshot =>
-                    store.IsSuccessfulDeployment(snapshot.SnapshotId, snapshot.PlanHash, snapshot.PersistencePlanDigest)));
+                var manager = new PluginLifecycleManager(new PluginLifecycleStateStore(LifecycleRoot(fixture),
+                    HostPluginActivationDeployment.WithDeploymentStore(
+                        Path.Combine(fixture.HostRoot, "server/platform-modeling/metadata/storage-types.json"), PersistenceProvider.SqlServer, store)));
                 Assert.Null(manager.Resolve([]).ActiveSnapshot);
                 Assert.Null(manager.Resolve([]).LastKnownGoodSnapshot);
             }
@@ -227,8 +229,9 @@ public sealed class PersistenceDeploymentRecoverySqlServerTests
             Assert.Null(State(fixture)["pending"]);
             await fixture.StopAsync();
             using var confirmedStore = Store(fixture);
-            var confirmedManager = new PluginLifecycleManager(new PluginLifecycleStateStore(LifecycleRoot(fixture), snapshot =>
-                confirmedStore.IsSuccessfulDeployment(snapshot.SnapshotId, snapshot.PlanHash, snapshot.PersistencePlanDigest)));
+            var confirmedManager = new PluginLifecycleManager(new PluginLifecycleStateStore(LifecycleRoot(fixture),
+                HostPluginActivationDeployment.WithDeploymentStore(
+                    Path.Combine(fixture.HostRoot, "server/platform-modeling/metadata/storage-types.json"), PersistenceProvider.SqlServer, confirmedStore)));
             Assert.NotNull(confirmedManager.Resolve([]).ActiveSnapshot);
             Assert.NotNull(confirmedManager.Resolve([]).LastKnownGoodSnapshot);
         }

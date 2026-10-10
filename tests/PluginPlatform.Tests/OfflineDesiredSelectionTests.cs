@@ -11,7 +11,7 @@ public sealed class OfflineDesiredSelectionTests : IDisposable
     public void WholeSelection_UpdatesAtomicallyWithoutPublishingActiveOrChangingInventory()
     {
         var inventory = new[] { new InstalledPluginInventoryItem("Part", ["1.0.0", "1.1.0"], "1.0.0"), new InstalledPluginInventoryItem("Workspace", ["1.0.0"], "1.0.0") };
-        var manager = new PluginLifecycleManager(new PluginLifecycleStateStore(_root));
+        var manager = new PluginLifecycleManager(new PluginLifecycleStateStore(_root, new TestActivationDeployment(requiresConfirmation: false)));
         var before = manager.Resolve(inventory);
         var result = manager.RequestDesired(inventory, [new("Part", "1.1.0", false), new("Workspace", "1.0.0", false)]);
         Assert.True(result.RestartRequired);

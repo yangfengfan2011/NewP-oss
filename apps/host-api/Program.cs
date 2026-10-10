@@ -117,8 +117,16 @@ using var persistenceDeploymentStore = persistenceProvider == PersistenceProvide
         deploymentConnection.DataSource.ToUpperInvariant() + "|" + deploymentConnection.InitialCatalog.ToUpperInvariant())
     : null;
 var stateStore = new InstalledPluginStateStore(pluginInstallRoot);
-var lifecycleManager = new PluginLifecycleManager(new PluginLifecycleStateStore(pluginLifecycleRoot, snapshot => persistenceDeploymentStore is null ||
-    persistenceDeploymentStore.IsSuccessfulDeployment(snapshot.SnapshotId, snapshot.PlanHash, snapshot.PersistencePlanDigest)));
+var storageTypeMapPath = Path.Combine(
+    AppContext.BaseDirectory,
+    "server",
+    "platform-modeling",
+    "metadata",
+    "storage-types.json");
+var activationDeployment = persistenceDeploymentStore is null
+    ? HostPluginActivationDeployment.WithoutDeploymentConfirmation(storageTypeMapPath, persistenceProvider)
+    : HostPluginActivationDeployment.WithDeploymentStore(storageTypeMapPath, persistenceProvider, persistenceDeploymentStore);
+var lifecycleManager = new PluginLifecycleManager(new PluginLifecycleStateStore(pluginLifecycleRoot, activationDeployment));
 var platformApiCatalog = new PlatformApiHostCatalog(
     PlatformApiReleaseIdentity.Version,
     [PlatformApiReleaseIdentity.StandardDataProfile],
@@ -164,13 +172,6 @@ builder.Services.AddSingleton(sp =>
         sp.GetRequiredService<PluginUploadService>(),
         pluginInstallRoot));
 
-var storageTypeMapPath = Path.Combine(
-    AppContext.BaseDirectory,
-    "server",
-    "platform-modeling",
-    "metadata",
-    "storage-types.json");
-
 var pluginInventory = externalPluginsEnabled
     ? InstalledPluginInventoryAdapter.Create(stateStore)
     : Array.Empty<InstalledPluginInventoryItem>();
@@ -180,12 +181,9 @@ var activationGate = new PluginActivationGate(
     new StandardDataCandidatePlanCompiler(
         builtInModuleSource,
         standardDataInspector),
-    new HostPluginPersistencePlanCompiler(storageTypeMapPath, persistenceProvider, persistenceDeploymentStore),
     new HostPluginRuntimeProjection(materializer, pluginInstallRoot));
 using var activationSession = activationGate.Prepare(pluginInventory);
 var canonicalModulePlan = activationSession.ModulePlan;
-// 恢复候选在 Build/ownership guard/任何 migration DDL 前发布，失败不能被标记为成功部署。
-persistenceDeploymentStore?.PrepareCandidate(canonicalModulePlan, activationSession.PersistencePlan);
 builder.Services.AddSingleton(canonicalModulePlan);
 builder.Services.AddRelationTrees(canonicalModulePlan);
 
@@ -310,7 +308,6 @@ var permissionSynchronizer = new HostPluginPermissionSynchronizer(async cancella
 await activationSession.CompleteAsync(
     new HostPluginMigrationExecutor(app, activationSession.PersistencePlan),
     permissionSynchronizer);
-persistenceDeploymentStore?.CompleteCandidate(activationSession.PersistencePlan);
 
 if (identityMaintenanceCommand.IsMaintenanceCommand)
 {

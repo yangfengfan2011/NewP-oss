@@ -12,24 +12,24 @@ public sealed class PluginActivationGate
     private readonly PluginLifecycleManager _lifecycleManager;
     private readonly IPluginPackagePreflight _packagePreflight;
     private readonly IPluginCandidatePlanCompiler _modulePlanCompiler;
-    private readonly IPluginPersistencePlanCompiler _persistencePlanCompiler;
+    private readonly IPluginActivationDeployment _deployment;
     private readonly IPluginRuntimeProjection _runtimeProjection;
 
+    // 从生命周期读取方取得同一部署适配器，调用者不能另外拼接候选与确认策略。
     public PluginActivationGate(
         PluginLifecycleManager lifecycleManager,
         IPluginPackagePreflight packagePreflight,
         IPluginCandidatePlanCompiler modulePlanCompiler,
-        IPluginPersistencePlanCompiler persistencePlanCompiler,
         IPluginRuntimeProjection runtimeProjection)
     {
         _lifecycleManager = lifecycleManager;
         _packagePreflight = packagePreflight;
         _modulePlanCompiler = modulePlanCompiler;
-        _persistencePlanCompiler = persistencePlanCompiler;
+        _deployment = lifecycleManager.Deployment;
         _runtimeProjection = runtimeProjection;
     }
 
-    // Prepare 在迁移与权限同步前完成整份候选的静态编译和 runtime metadata 验证。
+    // 静态编译与校验后归档可信恢复输入；失败时不返回可执行迁移的会话。
     public PluginActivationSession Prepare(IReadOnlyList<InstalledPluginInventoryItem> inventory)
     {
         ArgumentNullException.ThrowIfNull(inventory);
@@ -46,7 +46,7 @@ public sealed class PluginActivationGate
             () => _runtimeProjection.Validate(modulePlan));
         var persistencePlan = RunPhase(
             PluginActivationFailureCodes.PersistencePlanFailed,
-            () => _persistencePlanCompiler.Compile(modulePlan));
+            () => _deployment.Compile(modulePlan));
 
         if (!string.Equals(modulePlan.SnapshotId, persistencePlan.SnapshotId, StringComparison.Ordinal)
             || !string.Equals(modulePlan.PlanHash, persistencePlan.ModulePlanHash, StringComparison.Ordinal))
@@ -57,6 +57,10 @@ public sealed class PluginActivationGate
                 new InvalidDataException(
                     "Compiled Persistence Plan is not bound to the candidate Canonical Module Plan."));
         }
+
+        RunPhase(
+            PluginActivationFailureCodes.DeploymentPreparationFailed,
+            () => _deployment.PrepareCandidate(modulePlan, persistencePlan));
 
         return new PluginActivationSession(
             _lifecycleManager,
@@ -105,9 +109,11 @@ public sealed class PluginActivationSession : IDisposable
     private readonly PluginLifecycleManager _lifecycleManager;
     private readonly IPluginRuntimeProjection _runtimeProjection;
     private readonly IReadOnlyList<InstalledPluginInventoryItem> _inventory;
+    private readonly IPluginActivationDeployment _deployment;
     private bool _completed;
     private bool _disposed;
 
+    // 会话固定准备时的计划与部署目标，Build 后继续同一候选的提交。
     internal PluginActivationSession(
         PluginLifecycleManager lifecycleManager,
         IPluginRuntimeProjection runtimeProjection,
@@ -117,6 +123,7 @@ public sealed class PluginActivationSession : IDisposable
     {
         _lifecycleManager = lifecycleManager;
         _runtimeProjection = runtimeProjection;
+        _deployment = lifecycleManager.Deployment;
         _inventory = inventory.ToArray();
         ModulePlan = modulePlan;
         PersistencePlan = persistencePlan;
@@ -126,6 +133,7 @@ public sealed class PluginActivationSession : IDisposable
 
     public CompiledPersistencePlan PersistencePlan { get; }
 
+    // 完整迁移与活动提交后才发布最终部署确认；异常不清理恢复输入或改写历史。
     public async Task CompleteAsync(
         IPluginMigrationExecutor migrationExecutor,
         IPluginPermissionSynchronizer permissionSynchronizer,
@@ -232,6 +240,18 @@ public sealed class PluginActivationSession : IDisposable
                         exception);
                 }
             }
+        }
+
+        try
+        {
+            _deployment.CompleteCandidate(PersistencePlan);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            throw PluginActivationException.Wrap(
+                PluginActivationFailureCodes.DeploymentConfirmationFailed,
+                databaseAhead: true,
+                exception);
         }
 
         _completed = true;

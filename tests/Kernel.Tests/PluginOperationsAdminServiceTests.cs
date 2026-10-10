@@ -18,7 +18,7 @@ public sealed class PluginOperationsAdminServiceTests : IDisposable
     {
         Directory.CreateDirectory(_installRoot);
         _stateStore = new InstalledPluginStateStore(_installRoot);
-        _lifecycleManager = new PluginLifecycleManager(new PluginLifecycleStateStore(_installRoot));
+        _lifecycleManager = new PluginLifecycleManager(new PluginLifecycleStateStore(_installRoot, new PluginLifecycleTestDeployment()));
         _service = new PluginOperationsAdminService(_stateStore, _lifecycleManager);
     }
 

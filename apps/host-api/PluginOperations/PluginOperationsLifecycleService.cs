@@ -19,28 +19,7 @@ public class PluginOperationsLifecycleService
     private readonly PluginUploadService _uploadService;
     private readonly string _installRoot;
 
-    public PluginOperationsLifecycleService(
-        InstalledPluginStateStore stateStore,
-        UnifiedPluginPackageInstaller legacyInstaller,
-        UnifiedPluginPackageOperations legacyOperations,
-        RuntimeViewMaterializer legacyMaterializer,
-        PluginUploadService uploadService,
-        string installRoot)
-        : this(
-            stateStore,
-            legacyInstaller,
-            new StandardDataPackageInstaller(
-                installRoot,
-                stateStore,
-                new StandardDataPackageInspector(CreateHostCatalog())),
-            new PluginLifecycleManager(new PluginLifecycleStateStore(installRoot)),
-            uploadService,
-            installRoot)
-    {
-        _ = legacyOperations;
-        _ = legacyMaterializer;
-    }
-
+    // 写入期望状态与回滚选择复用同一确认读取，不能创建无策略的旁路管理器。
     public PluginOperationsLifecycleService(
         InstalledPluginStateStore stateStore,
         UnifiedPluginPackageInstaller legacyInstaller,
@@ -167,13 +146,6 @@ public class PluginOperationsLifecycleService
         }
     }
 
-    private static PlatformApiHostCatalog CreateHostCatalog() =>
-        new(
-            PlatformApiReleaseIdentity.Version,
-            [PlatformApiReleaseIdentity.StandardDataProfile],
-            [new PlatformApiReleaseReference(
-                PlatformApiReleaseIdentity.Version,
-                PlatformApiReleaseIdentity.ReleaseDigest)]);
 }
 
 /// <summary>

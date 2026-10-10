@@ -1,7 +1,9 @@
 using System.IO.Compression;
 using ICP.Platform.HostApi.PluginOperations;
 using ICP.Platform.Kernel.PluginPackages;
+using ICP.Platform.Plugin.Contracts;
 using ICP.Platform.PluginPlatform.Lifecycle;
+using ICP.Platform.PluginPlatform.StandardData;
 using Xunit;
 
 namespace ICP.Platform.Kernel.Tests;
@@ -22,12 +24,15 @@ public sealed class PluginOperationsLifecycleTests : IDisposable
         Directory.CreateDirectory(_installRoot);
         _stateStore = new InstalledPluginStateStore(_installRoot);
         _uploadService = new PluginUploadService(_stateStore, _installRoot);
-        _lifecycleManager = new PluginLifecycleManager(new PluginLifecycleStateStore(_installRoot));
+        _lifecycleManager = new PluginLifecycleManager(new PluginLifecycleStateStore(_installRoot, new PluginLifecycleTestDeployment()));
         _service = new PluginOperationsLifecycleService(
             _stateStore,
             new UnifiedPluginPackageInstaller(_stateStore),
-            new UnifiedPluginPackageOperations(_stateStore),
-            new RuntimeViewMaterializer(_stateStore),
+            new StandardDataPackageInstaller(_installRoot, _stateStore, new StandardDataPackageInspector(
+                new PlatformApiHostCatalog(PlatformApiReleaseIdentity.Version,
+                    [PlatformApiReleaseIdentity.StandardDataProfile],
+                    [new PlatformApiReleaseReference(PlatformApiReleaseIdentity.Version, PlatformApiReleaseIdentity.ReleaseDigest)]))),
+            _lifecycleManager,
             _uploadService,
             _installRoot);
     }

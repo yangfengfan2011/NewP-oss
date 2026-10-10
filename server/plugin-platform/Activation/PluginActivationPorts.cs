@@ -25,11 +25,21 @@ public interface IPluginCandidatePlanCompiler
 }
 
 /// <summary>
-/// 从同一个 Canonical Module Plan 编译唯一持久化计划实例。
+/// 将恢复输入、候选归档、最终确认与活动读取绑定到同一部署目标。
 /// </summary>
-public interface IPluginPersistencePlanCompiler
+public interface IPluginActivationDeployment
 {
+    /// <summary>使用本部署目标的可信恢复输入编译唯一持久化计划。</summary>
     CompiledPersistencePlan Compile(CanonicalModulePlan modulePlan);
+
+    /// <summary>在 Host Build 与首个 DDL 前保存候选的完整可信恢复输入。</summary>
+    void PrepareCandidate(CanonicalModulePlan modulePlan, CompiledPersistencePlan persistencePlan);
+
+    /// <summary>在完整活动提交后发布候选的最终部署确认。</summary>
+    void CompleteCandidate(CompiledPersistencePlan persistencePlan);
+
+    /// <summary>仅接受本部署目标已最终确认的活动或 LKG 快照。</summary>
+    bool IsSnapshotCommitted(PluginActiveSnapshot snapshot);
 }
 
 /// <summary>

@@ -9,10 +9,119 @@ namespace ICP.Platform.PluginPlatform.Tests;
 
 public sealed class PluginActivationGateTests : IDisposable
 {
+    private TestActivationDeployment _deployment = new(requiresConfirmation: false);
     private readonly string _root = Path.Combine(
         Path.GetTempPath(),
         "newp-plugin-activation-tests",
         Guid.NewGuid().ToString("N"));
+
+    [Fact]
+    public void Prepare_WhenRecoveryArchiveFails_StopsBeforeMigrationAndPreservesTheCause()
+    {
+        var events = new List<string>();
+        var failure = new IOException("recovery archive unavailable");
+        var manager = CreateManager(new TestActivationDeployment(requiresConfirmation: true) { PreparationFailure = failure });
+        var plan = CreateModulePlan("snapshot-archive", "1.1.0");
+        var projection = new RecordingProjection(events, "legacy-active");
+
+        var error = Assert.Throws<PluginActivationException>(() =>
+            CreateGate(events, manager, plan, CreatePersistencePlan(plan), projection).Prepare(CreateInventory()));
+
+        Assert.Equal(PluginActivationFailureCodes.DeploymentPreparationFailed, error.FailureCode);
+        Assert.False(error.DatabaseAhead);
+        Assert.Same(failure, error.InnerException);
+        Assert.Equal(["preflight", "module-plan", "runtime-metadata-validation", "persistence-plan", "deployment-prepare"], events);
+        Assert.Null(_deployment.Pending);
+        Assert.Equal("legacy-active", projection.ActiveSnapshotId);
+        Assert.Null(manager.Resolve(CreateInventory()).ActiveSnapshot);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_WhenFinalConfirmationFails_HidesRawActiveKeepsConfirmedLkgAndCanResume()
+    {
+        var events = new List<string>();
+        var failure = new IOException("final confirmation unavailable");
+        var deployment = new TestActivationDeployment(requiresConfirmation: true) { ConfirmationFailure = failure };
+        deployment.ConfirmedSnapshotIds.Add("confirmed-first");
+        var manager = CreateManager(deployment);
+        var inventory = CreateInventory();
+        var first = new PluginActiveSnapshot("confirmed-first", new string('c', 64), new string('d', 64),
+            [new PluginActiveModule("Partner.AssetCatalog", "1.0.0", "installed-package")]);
+        manager.CommitActive(inventory, first);
+        var plan = CreateModulePlan("snapshot-confirmation", "1.1.0");
+        var persistencePlan = CreatePersistencePlan(plan);
+        var projection = new RecordingProjection(events, "confirmed-first");
+        using var session = CreateGate(events, manager, plan, persistencePlan, projection).Prepare(inventory);
+        Assert.Same(persistencePlan, deployment.Pending);
+        Assert.Same(plan, session.ModulePlan);
+        Assert.Same(persistencePlan, session.PersistencePlan);
+
+        var error = await Assert.ThrowsAsync<PluginActivationException>(() => session.CompleteAsync(
+            new RecordingMigrationExecutor(events), new RecordingPermissionSynchronizer(events)));
+
+        Assert.Equal(PluginActivationFailureCodes.DeploymentConfirmationFailed, error.FailureCode);
+        Assert.True(error.DatabaseAhead);
+        Assert.Same(failure, error.InnerException);
+        Assert.Equal("snapshot-confirmation", projection.ActiveSnapshotId);
+        Assert.Same(persistencePlan, deployment.Pending);
+        var restarted = new PluginLifecycleManager(new PluginLifecycleStateStore(_root, deployment));
+        Assert.Null(restarted.Resolve(inventory).ActiveSnapshot);
+        Assert.Equal(first, restarted.Resolve(inventory).LastKnownGoodSnapshot);
+        var raw = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(_root, "lifecycle/v2/state.json")))!;
+        Assert.Equal(plan.SnapshotId, raw["activeSnapshotId"]!.GetValue<string>());
+        Assert.True(restarted.RequestRollback(inventory, "Partner.AssetCatalog").IsSuccess);
+
+        deployment.ConfirmationFailure = null;
+        await session.CompleteAsync(new RecordingMigrationExecutor(events), new RecordingPermissionSynchronizer(events));
+        Assert.Equal(plan.SnapshotId, restarted.Resolve(inventory).ActiveSnapshot!.SnapshotId);
+        Assert.Equal(first, restarted.Resolve(inventory).LastKnownGoodSnapshot);
+        Assert.Null(deployment.Pending);
+        var completed = await Assert.ThrowsAsync<PluginActivationException>(() => session.CompleteAsync(
+            new RecordingMigrationExecutor(events), new RecordingPermissionSynchronizer(events)));
+        Assert.Equal(PluginActivationFailureCodes.SessionAlreadyCompleted, completed.FailureCode);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task DeploymentCancellation_PropagatesWithoutPublishingConfirmation(bool duringPreparation)
+    {
+        var events = new List<string>();
+        var cancellation = new OperationCanceledException();
+        var deployment = new TestActivationDeployment(requiresConfirmation: true);
+        var manager = CreateManager(deployment);
+        var plan = CreateModulePlan("snapshot-cancelled", "1.1.0");
+        var gate = CreateGate(events, manager, plan, CreatePersistencePlan(plan), new RecordingProjection(events, "legacy-active"));
+        if (duringPreparation)
+        {
+            deployment.PreparationFailure = cancellation;
+            Assert.Same(cancellation, Assert.Throws<OperationCanceledException>(() => gate.Prepare(CreateInventory())));
+            Assert.Null(deployment.Pending);
+        }
+        else
+        {
+            using var session = gate.Prepare(CreateInventory());
+            deployment.ConfirmationFailure = cancellation;
+            Assert.Same(cancellation, await Assert.ThrowsAsync<OperationCanceledException>(() => session.CompleteAsync(
+                new RecordingMigrationExecutor(events), new RecordingPermissionSynchronizer(events))));
+            Assert.NotNull(deployment.Pending);
+        }
+        Assert.Null(manager.Resolve(CreateInventory()).ActiveSnapshot);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_ReturnsOnlyWhenTheCandidateIsConfirmed()
+    {
+        var events = new List<string>();
+        var manager = CreateManager(new TestActivationDeployment(requiresConfirmation: true));
+        var plan = CreateModulePlan("snapshot-confirmation", "1.1.0");
+        using var session = CreateGate(events, manager, plan, CreatePersistencePlan(plan),
+            new RecordingProjection(events, "legacy-active")).Prepare(CreateInventory());
+
+        await session.CompleteAsync(new RecordingMigrationExecutor(events), new RecordingPermissionSynchronizer(events));
+
+        Assert.Equal(plan.SnapshotId, manager.Resolve(CreateInventory()).ActiveSnapshot?.SnapshotId);
+    }
 
     [Fact]
     public async Task CompleteAsync_UsesTheApprovedOrderAndCommitsOneActiveSnapshot()
@@ -28,7 +137,7 @@ public sealed class PluginActivationGateTests : IDisposable
         using var session = gate.Prepare(inventory);
 
         Assert.Equal(
-            ["preflight", "module-plan", "runtime-metadata-validation", "persistence-plan"],
+            ["preflight", "module-plan", "runtime-metadata-validation", "persistence-plan", "deployment-prepare"],
             events);
         Assert.Equal("1.0.0", Assert.Single(manager.Resolve(inventory).ActiveSnapshot!.Modules).Version);
         Assert.Equal("legacy-active", projection.ActiveSnapshotId);
@@ -43,11 +152,13 @@ public sealed class PluginActivationGateTests : IDisposable
                 "module-plan",
                 "runtime-metadata-validation",
                 "persistence-plan",
+                "deployment-prepare",
                 "migration",
                 "runtime-stage",
                 "permission-sync",
                 "runtime-begin-commit",
-                "runtime-complete"
+                "runtime-complete",
+                "deployment-complete"
             ],
             events);
         var state = manager.Resolve(inventory);
@@ -139,6 +250,7 @@ public sealed class PluginActivationGateTests : IDisposable
                 "module-plan",
                 "runtime-metadata-validation",
                 "persistence-plan",
+                "deployment-prepare",
                 "migration"
             ],
             events);
@@ -197,24 +309,30 @@ public sealed class PluginActivationGateTests : IDisposable
         }
     }
 
-    private PluginLifecycleManager CreateManager() =>
-        new(new PluginLifecycleStateStore(_root));
+    private PluginLifecycleManager CreateManager(TestActivationDeployment? deployment = null)
+    {
+        _deployment = deployment ?? new TestActivationDeployment(requiresConfirmation: false);
+        return new(new PluginLifecycleStateStore(_root, _deployment));
+    }
 
     private static IReadOnlyList<InstalledPluginInventoryItem> CreateInventory() =>
         [new("Partner.AssetCatalog", ["1.0.0", "1.1.0"], "1.0.0")];
 
-    private static PluginActivationGate CreateGate(
+    private PluginActivationGate CreateGate(
         List<string> events,
         PluginLifecycleManager manager,
         CanonicalModulePlan plan,
         CompiledPersistencePlan persistencePlan,
-        IPluginRuntimeProjection projection) =>
-        new(
+        IPluginRuntimeProjection projection)
+    {
+        _deployment.Events = events;
+        _deployment.Plan = persistencePlan;
+        return new(
             manager,
             new RecordingPreflight(events),
             new RecordingModulePlanCompiler(events, plan),
-            new RecordingPersistencePlanCompiler(events, persistencePlan),
             projection);
+    }
 
     private static CanonicalModulePlan CreateModulePlan(string snapshotId, string version)
     {
@@ -277,17 +395,6 @@ public sealed class PluginActivationGateTests : IDisposable
     }
 
 
-
-    private sealed class RecordingPersistencePlanCompiler(
-        List<string> events,
-        CompiledPersistencePlan plan) : IPluginPersistencePlanCompiler
-    {
-        public CompiledPersistencePlan Compile(CanonicalModulePlan modulePlan)
-        {
-            events.Add("persistence-plan");
-            return plan;
-        }
-    }
 
     private sealed class RecordingMigrationExecutor(
         List<string> events,

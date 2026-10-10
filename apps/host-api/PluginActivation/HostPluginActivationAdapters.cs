@@ -9,30 +9,39 @@ using ICP.Platform.Persistence;
 using ICP.Platform.Persistence.Composition;
 using ICP.Platform.Persistence.Planning;
 using ICP.Platform.PluginPlatform.Activation;
+using ICP.Platform.PluginPlatform.Lifecycle;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ICP.Platform.HostApi.PluginActivation;
 
-public sealed class HostPluginPersistencePlanCompiler : IPluginPersistencePlanCompiler
+/// <summary>把 Host 的持久化编译、恢复输入和最终确认绑定到同一部署存储。</summary>
+public sealed class HostPluginActivationDeployment : IPluginActivationDeployment
 {
     private readonly string _storageTypeMapPath;
     private readonly PersistenceProvider _provider;
     private readonly PersistenceDeploymentStore? _deploymentStore;
 
-    // 直接消费者沿用无状态编译；正式 Host 额外提供绑定当前 catalog 的部署资产存储。
-    public HostPluginPersistencePlanCompiler(string storageTypeMapPath, PersistenceProvider provider)
-        : this(storageTypeMapPath, provider, deploymentStore: null)
-    {
-    }
-
-    // 同一候选的活动计划和保留部署视图由一个持久化编译器合并。
-    public HostPluginPersistencePlanCompiler(string storageTypeMapPath, PersistenceProvider provider, PersistenceDeploymentStore? deploymentStore)
+    // 仅显式工厂可选择是否要求最终确认，仓内消费者没有省略策略的构造入口。
+    private HostPluginActivationDeployment(string storageTypeMapPath, PersistenceProvider provider, PersistenceDeploymentStore? deploymentStore)
     {
         _storageTypeMapPath = storageTypeMapPath;
         _provider = provider;
         _deploymentStore = deploymentStore;
     }
+
+    /// <summary>绑定当前 provider/catalog 的存储；编译、提交与活动读取共用此实例。</summary>
+    public static HostPluginActivationDeployment WithDeploymentStore(
+        string storageTypeMapPath, PersistenceProvider provider, PersistenceDeploymentStore deploymentStore)
+    {
+        ArgumentNullException.ThrowIfNull(deploymentStore);
+        return new HostPluginActivationDeployment(storageTypeMapPath, provider, deploymentStore);
+    }
+
+    /// <summary>明确选择既有无部署确认分支；不扩大对应 provider 的支持边界。</summary>
+    public static HostPluginActivationDeployment WithoutDeploymentConfirmation(
+        string storageTypeMapPath, PersistenceProvider provider) =>
+        new(storageTypeMapPath, provider, deploymentStore: null);
 
     /// <inheritdoc/>
     public CompiledPersistencePlan Compile(CanonicalModulePlan modulePlan)
@@ -47,6 +56,19 @@ public sealed class HostPluginPersistencePlanCompiler : IPluginPersistencePlanCo
             Environment.NewLine,
             result.Diagnostics.Select(static diagnostic => $"{diagnostic.Code}: {diagnostic.Message}")));
     }
+
+    /// <inheritdoc/>
+    public void PrepareCandidate(CanonicalModulePlan modulePlan, CompiledPersistencePlan persistencePlan) =>
+        _deploymentStore?.PrepareCandidate(modulePlan, persistencePlan);
+
+    /// <inheritdoc/>
+    public void CompleteCandidate(CompiledPersistencePlan persistencePlan) =>
+        _deploymentStore?.CompleteCandidate(persistencePlan);
+
+    /// <inheritdoc/>
+    public bool IsSnapshotCommitted(PluginActiveSnapshot snapshot) =>
+        _deploymentStore is null || _deploymentStore.IsSuccessfulDeployment(
+            snapshot.SnapshotId, snapshot.PlanHash, snapshot.PersistencePlanDigest);
 }
 
 public sealed class HostPluginRuntimeProjection : IPluginRuntimeProjection

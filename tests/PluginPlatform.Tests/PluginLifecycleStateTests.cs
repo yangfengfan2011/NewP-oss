@@ -99,13 +99,15 @@ public sealed class PluginLifecycleStateTests : IDisposable
     public void UnconfirmedRawSnapshot_IsHiddenAcrossRestartAndPreservesConfirmedLastKnownGood()
     {
         var committed = new HashSet<string>(StringComparer.Ordinal) { "confirmed-first" };
-        var manager = new PluginLifecycleManager(new PluginLifecycleStateStore(_root, snapshot => committed.Contains(snapshot.SnapshotId)));
+        var deployment = new TestActivationDeployment(requiresConfirmation: true);
+        deployment.ConfirmedSnapshotIds.UnionWith(committed);
+        var manager = new PluginLifecycleManager(new PluginLifecycleStateStore(_root, deployment));
         var inventory = CreateInventory(legacyCurrentEnabledVersion: null);
         var first = CreateSnapshot("confirmed-first", "1.0.0");
         manager.CommitActive(inventory, first);
         var candidate = CreateSnapshot("unconfirmed", "1.1.0");
         manager.CommitActive(inventory, candidate);
-        var restarted = new PluginLifecycleManager(new PluginLifecycleStateStore(_root, snapshot => committed.Contains(snapshot.SnapshotId)));
+        var restarted = new PluginLifecycleManager(new PluginLifecycleStateStore(_root, deployment));
         Assert.Null(restarted.Resolve(inventory).ActiveSnapshot);
         Assert.Equal(first, restarted.Resolve(inventory).LastKnownGoodSnapshot);
         Assert.True(restarted.RequestRollback(inventory, "Partner.AssetCatalog").IsSuccess);
@@ -114,7 +116,7 @@ public sealed class PluginLifecycleStateTests : IDisposable
         Assert.Equal(candidate.SnapshotId, raw["activeSnapshotId"]!.GetValue<string>());
         Assert.Equal(first.SnapshotId, raw["lastKnownGoodSnapshotId"]!.GetValue<string>());
         restarted.CommitActive(inventory, candidate);
-        committed.Add(candidate.SnapshotId);
+        deployment.ConfirmedSnapshotIds.Add(candidate.SnapshotId);
         Assert.Equal(candidate, restarted.Resolve(inventory).ActiveSnapshot);
         Assert.Equal(first, restarted.Resolve(inventory).LastKnownGoodSnapshot);
     }
@@ -128,7 +130,7 @@ public sealed class PluginLifecycleStateTests : IDisposable
     }
 
     private PluginLifecycleManager CreateManager() =>
-        new(new PluginLifecycleStateStore(_root));
+        new(new PluginLifecycleStateStore(_root, new TestActivationDeployment(requiresConfirmation: false)));
 
     private static IReadOnlyList<InstalledPluginInventoryItem> CreateInventory(
         string? legacyCurrentEnabledVersion) =>

@@ -311,7 +311,7 @@ public class HostApiPluginManifestRouteTests : IAsyncLifetime
         var packageRoot = _testData.CreateValidPackage("Files", "1.0.0");
         EnableInstalledPackage(packageRoot, installRoot, "Files");
         var inventory = InstalledPluginInventoryAdapter.Create(new InstalledPluginStateStore(installRoot));
-        var lifecycle = new PluginLifecycleManager(new PluginLifecycleStateStore(installRoot));
+        var lifecycle = new PluginLifecycleManager(new PluginLifecycleStateStore(installRoot, new PluginLifecycleTestDeployment()));
         Assert.True(lifecycle.RequestDisable(inventory, "Files").IsSuccess);
         _database = await ReusableSqlServerDatabase.AcquireAsync();
         await using var connection = new SqlConnection(_database.ConnectionString);

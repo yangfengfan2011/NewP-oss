@@ -11,13 +11,7 @@ public class PluginOperationsAdminService
     private readonly InstalledPluginStateStore _stateStore;
     private readonly PluginLifecycleManager _lifecycleManager;
 
-    public PluginOperationsAdminService(InstalledPluginStateStore stateStore)
-        : this(
-            stateStore,
-            new PluginLifecycleManager(new PluginLifecycleStateStore(stateStore.InstallRoot)))
-    {
-    }
-
+    // 运维读取复用 Host 已绑定部署确认策略的生命周期管理器。
     public PluginOperationsAdminService(
         InstalledPluginStateStore stateStore,
         PluginLifecycleManager lifecycleManager)

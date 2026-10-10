@@ -2,7 +2,10 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using ICP.Platform.HostApi.PluginActivation;
 using ICP.Platform.Kernel.ModulePlanning;
+using ICP.Platform.Persistence;
+using ICP.Platform.Persistence.Composition;
 using ICP.Platform.PluginPlatform.Lifecycle;
 using ICP.Platform.Testing;
 using Microsoft.Data.SqlClient;
@@ -49,8 +52,8 @@ public sealed class OptionalComponentLifecycleSqlServerTests
         Assert.Equal(before, await Scalar(fixture, "SELECT COUNT(*) FROM dbo.__NewPMigrationHistory;"));
     }
 
-    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "首个Host数据库屏障前已有完整pending恢复资产，失败候选不得覆盖或记成功")]
-    public async Task FirstHostDatabaseBarrierFailure_AlreadyHasRecoveryAssetsAndCannotOverwritePending()
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "首个Host数据库屏障前已有完整恢复资产，屏蔽重试保留可信模型与迁移输入且不记成功")]
+    public async Task FirstHostDatabaseBarrierFailure_PreservesRecoveryInputsAcrossMaskedRetry()
     {
         await using var fixture = await FeatureCatalogHostFixture.CreateAsync([], async prepared =>
             await Execute(prepared, "CREATE TABLE dbo.UnknownFirst262 (ID int NOT NULL);"), expectInitialStartupFailure: true);
@@ -73,8 +76,22 @@ public sealed class OptionalComponentLifecycleSqlServerTests
         }
         SetEnabled(fixture, "InforCenter", false);
         await fixture.StartAsync(expectFailure: true);
-        Assert.Contains("PERSISTENCE_DEPLOYMENT_PENDING", fixture.LastError);
-        Assert.Equal(stateBytes, File.ReadAllBytes(statePath));
+        Assert.Contains("PERSISTENCE_DATABASE_REBUILD_REQUIRED", fixture.LastError);
+        Assert.Equal(0, await Scalar(fixture, "SELECT COUNT(*) FROM sys.tables WHERE name IN (N'Part',N'Document',N'WorkspaceFolder',N'__NewPMigrationHistory',N'__EFMigrationsHistory');"));
+        var retryState = JsonNode.Parse(File.ReadAllBytes(statePath))!;
+        Assert.Null(retryState["successful"]);
+        Assert.Null(retryState["previousSuccessful"]);
+        var retryAssetPath = Path.Combine(Path.GetDirectoryName(statePath)!, retryState["pending"]!.GetValue<string>() + ".json");
+        var retryAsset = JsonNode.Parse(File.ReadAllBytes(retryAssetPath))!;
+        // 既有恢复规则允许合法候选重绑定 pending，但不允许覆写已归档身份、模型或不可变迁移前缀。
+        Assert.Equal(asset["targetIdentity"]!.GetValue<string>(), retryAsset["targetIdentity"]!.GetValue<string>());
+        Assert.Equal(asset["plan"]!["provider"]!.ToJsonString(), retryAsset["plan"]!["provider"]!.ToJsonString());
+        Assert.Equal(asset["plan"]!["models"]!.ToJsonString(), retryAsset["plan"]!["models"]!.ToJsonString());
+        Assert.Equal(asset["plan"]!["streams"]!.AsArray().OrderBy(item => item!["moduleId"]!.GetValue<string>(), StringComparer.Ordinal).Select(item => item!.ToJsonString()),
+            retryAsset["plan"]!["streams"]!.AsArray().OrderBy(item => item!["moduleId"]!.GetValue<string>(), StringComparer.Ordinal).Select(item => item!.ToJsonString()));
+        Assert.Equal(asset["images"]!.AsArray().OrderBy(item => item!["moduleId"]!.GetValue<string>(), StringComparer.Ordinal).Select(item => item!.ToJsonString()),
+            retryAsset["images"]!.AsArray().OrderBy(item => item!["moduleId"]!.GetValue<string>(), StringComparer.Ordinal).Select(item => item!.ToJsonString()));
+        Assert.Equal(new[] { "Document", "Part", "Workspace" }, retryAsset["plan"]!["retainedModuleIds"]!.AsArray().Select(item => item!.GetValue<string>()));
         Assert.Equal(assetBytes, File.ReadAllBytes(assetPath));
     }
 
@@ -182,7 +199,13 @@ public sealed class OptionalComponentLifecycleSqlServerTests
         using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(fixture.HostRoot, "modules", moduleId, "plugin.json")));
         var version = document.RootElement.GetProperty("version").GetString()!;
         var inventory = new[] { new InstalledPluginInventoryItem(moduleId, [version], version) };
-        var manager = new PluginLifecycleManager(new PluginLifecycleStateStore(Path.Combine(fixture.PluginRoot, ".feature-gates", "external-plugins-disabled")));
+        var connection = new SqlConnectionStringBuilder(fixture.ConnectionString);
+        using var deploymentStore = new PersistenceDeploymentStore(Path.Combine(fixture.PluginRoot, "persistence"), PersistenceProvider.SqlServer,
+            connection.DataSource.ToUpperInvariant() + "|" + connection.InitialCatalog.ToUpperInvariant());
+        var deployment = HostPluginActivationDeployment.WithDeploymentStore(
+            Path.Combine(fixture.HostRoot, "server/platform-modeling/metadata/storage-types.json"), PersistenceProvider.SqlServer, deploymentStore);
+        var manager = new PluginLifecycleManager(new PluginLifecycleStateStore(
+            Path.Combine(fixture.PluginRoot, ".feature-gates", "external-plugins-disabled"), deployment));
         // 离线选版先选定已安装版本，再保留最终停用选择；RequestDisable 本身刻意保留旧 desired 版本。
         var selected = manager.RequestEnable(inventory, moduleId, version);
         Assert.True(selected.IsSuccess, selected.Message);

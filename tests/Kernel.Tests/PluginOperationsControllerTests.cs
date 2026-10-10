@@ -129,6 +129,8 @@ public sealed class PluginOperationsControllerTests : IDisposable
         builder.Services.AddAuthorization(options =>
             options.AddPolicy("AdminOnly", policy => policy.RequireRole("LocalAdmin")));
         builder.Services.AddSingleton(new InstalledPluginStateStore(_installRoot));
+        builder.Services.AddSingleton(new ICP.Platform.PluginPlatform.Lifecycle.PluginLifecycleManager(
+            new ICP.Platform.PluginPlatform.Lifecycle.PluginLifecycleStateStore(_installRoot, new PluginLifecycleTestDeployment())));
         builder.Services.AddSingleton<PluginOperationsAdminService>();
 
         await using var app = builder.Build();
@@ -182,7 +184,9 @@ public sealed class PluginOperationsControllerTests : IDisposable
     private PluginOperationsController CreateController()
     {
         var stateStore = new InstalledPluginStateStore(_installRoot);
-        return new PluginOperationsController(new PluginOperationsAdminService(stateStore));
+        var manager = new ICP.Platform.PluginPlatform.Lifecycle.PluginLifecycleManager(
+            new ICP.Platform.PluginPlatform.Lifecycle.PluginLifecycleStateStore(_installRoot, new PluginLifecycleTestDeployment()));
+        return new PluginOperationsController(new PluginOperationsAdminService(stateStore, manager));
     }
 
     private IReadOnlyList<string> CaptureState()

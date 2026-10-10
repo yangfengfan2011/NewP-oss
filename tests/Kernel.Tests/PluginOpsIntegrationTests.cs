@@ -65,7 +65,7 @@ public class PluginOpsIntegrationTests : IDisposable
             [typeof(TrustedBuiltInModuleSource), typeof(StandardDataPackageInspector), typeof(IEnumerable<string>)], null)!;
         var compiler = (StandardDataCandidatePlanCompiler)constructor.Invoke([source, inspector, null]);
         var inventory = InstalledPluginInventoryAdapter.Create(new InstalledPluginStateStore(installRoot));
-        return compiler.Compile(inventory, new PluginLifecycleManager(new PluginLifecycleStateStore(installRoot)).Resolve(inventory));
+        return compiler.Compile(inventory, new PluginLifecycleManager(new PluginLifecycleStateStore(installRoot, new PluginLifecycleTestDeployment())).Resolve(inventory));
     }
 
     [Fact]

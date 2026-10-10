@@ -9,6 +9,8 @@ public static class PluginActivationFailureCodes
     public const string RuntimeMetadataValidationFailed = "PLUGIN_ACTIVATION_RUNTIME_METADATA_VALIDATION_FAILED";
     public const string PermissionCatalogFailed = "PLUGIN_ACTIVATION_PERMISSION_CATALOG_FAILED";
     public const string PersistencePlanFailed = "PLUGIN_ACTIVATION_PERSISTENCE_PLAN_FAILED";
+    public const string DeploymentPreparationFailed = "PLUGIN_ACTIVATION_DEPLOYMENT_PREPARATION_FAILED";
+    public const string DeploymentConfirmationFailed = "PLUGIN_ACTIVATION_DEPLOYMENT_CONFIRMATION_FAILED";
     public const string MigrationFailed = "PLUGIN_ACTIVATION_MIGRATION_FAILED";
     public const string PermissionSyncFailed = "PLUGIN_ACTIVATION_PERMISSION_SYNC_FAILED";
     public const string RuntimeStagingFailed = "PLUGIN_ACTIVATION_RUNTIME_STAGING_FAILED";

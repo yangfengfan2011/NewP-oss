@@ -1,3 +1,5 @@
+using ICP.Platform.PluginPlatform.Activation;
+
 namespace ICP.Platform.PluginPlatform.Lifecycle;
 
 /// <summary>
@@ -6,6 +8,8 @@ namespace ICP.Platform.PluginPlatform.Lifecycle;
 public sealed class PluginLifecycleManager
 {
     private readonly PluginLifecycleStateStore _stateStore;
+
+    internal IPluginActivationDeployment Deployment => _stateStore.Deployment;
 
     public PluginLifecycleManager(PluginLifecycleStateStore stateStore)
     {

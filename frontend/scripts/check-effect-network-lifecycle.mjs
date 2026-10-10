@@ -127,6 +127,18 @@ function classifyImportedCallable(imported) {
   return 'unknown-network';
 }
 
+// 唯一已审查的 POST 读取接受固定路由与单个编码 LID；未知形状继续按写命令处理。
+function isWorkspaceEditValuesQuery(input) {
+  if (!input || !ts.isTemplateExpression(input)
+    || input.head.text !== '/api/workspace/content/' || input.templateSpans.length !== 1) return false;
+  const span = input.templateSpans[0];
+  const encodedId = span.expression;
+  return span.literal.text === '/edit-values'
+    && ts.isCallExpression(encodedId) && !encodedId.questionDotToken
+    && ts.isIdentifier(encodedId.expression) && encodedId.expression.text === 'encodeURIComponent'
+    && encodedId.arguments.length === 1 && !ts.isSpreadElement(encodedId.arguments[0]);
+}
+
 function classifyTransportCall(call, inputIndex = 0, initIndex = 1) {
   const input = call.arguments[inputIndex];
   const init = call.arguments[initIndex];
@@ -148,6 +160,8 @@ function classifyTransportCall(call, inputIndex = 0, initIndex = 1) {
   }
   const method = methodProperty.initializer.text.toUpperCase();
   if (method === 'GET' || method === 'HEAD') return 'read-query';
+  if (method === 'POST' && !init.properties.some(ts.isSpreadAssignment)
+    && isWorkspaceEditValuesQuery(input)) return 'read-query';
   if (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE') return 'write-command';
   return 'unknown-network';
 }

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -11,6 +11,55 @@ import {
   runEffectNetworkLifecycleGate,
 } from './check-effect-network-lifecycle.mjs';
 import { effectNetworkLifecycleAllowlist } from './effect-network-lifecycle.allowlist.mjs';
+
+test('the real Workspace edit-values POST is a reviewed read query at its exact effect callsite', () => {
+  const findings = analyzeEffectNetworkLifecycleSource({
+    file: 'modules/workspace/src/WorkspaceObjectEditInput.tsx',
+    source: readFileSync(new URL('../modules/workspace/src/WorkspaceObjectEditInput.tsx', import.meta.url), 'utf8'),
+  });
+  assert.equal(findings.length, 1);
+  const finding = findings[0];
+  assert.equal(finding.classification, 'read-query');
+  assert.equal(finding.id, 'modules/workspace/src/WorkspaceObjectEditInput.tsx::WorkspaceObjectEditInput::useEffect::platformFetch');
+  assert.deepEqual(evaluateEffectNetworkLifecycle({ findings, allowlist: [] }).diagnostics,
+    [{ code: 'EFFECT_NETWORK_NOT_ALLOWLISTED', id: finding.id }]);
+  const reviewed = effectNetworkLifecycleAllowlist.filter(entry => entry.id === finding.id);
+  assert.equal(reviewed.length, 1);
+  assert.equal(evaluateEffectNetworkLifecycle({ findings, allowlist: reviewed }).ok, true);
+});
+
+test('Workspace write endpoints and unknown edit-values transport shapes remain write commands', () => {
+  const inputs = [
+    ['POST', "'/api/workspace/content/folders'"],
+    ['POST', "'/api/workspace/content/parts'"],
+    ['POST', "'/api/workspace/content/documents'"],
+    ['POST', "'/api/workspace/content/delete'"],
+    ['PUT', '`/api/workspace/content/${encodeURIComponent(target.LID)}/edit-values`'],
+    ['DELETE', '`/api/workspace/content/${encodeURIComponent(target.LID)}/edit-values`'],
+    ['POST', '`/api/workspace/content/${target.LID}/edit-values`'],
+    ['POST', '`/api/workspace/content/${encodeURIComponent(target.LID)}/edit-values/extra`'],
+    ['POST', '`/api/other/content/${encodeURIComponent(target.LID)}/edit-values`'],
+    ['POST', '`/api/workspace/content/${encodeURIComponent(target.LID)}${suffix}/edit-values`'],
+    ['POST', '`/api/workspace/content/${encodeURIComponent(...ids)}/edit-values`'],
+    ['POST', '`/api/workspace/content/${encodeURIComponent?.(target.LID)}/edit-values`'],
+    ['POST', '`/api/workspace/content/${encodeURIComponent(target.LID)}/edit-values`', '...options'],
+    ['POST', 'queryUrl'],
+  ];
+  for (const [method, input, additionalInit = ''] of inputs) {
+    const findings = analyzeEffectNetworkLifecycleSource({
+      file: 'modules/workspace/src/WriteProbe.tsx',
+      source: `import { useEffect } from 'react';
+        import { platformFetch } from '@icp-platform/core';
+        export function WriteProbe() {
+          useEffect(() => { void platformFetch(${input}, { method: '${method}', ${additionalInit} }); }, []);
+        }`,
+    });
+    assert.equal(findings.length, 1, input);
+    assert.equal(findings[0].classification, 'write-command', `${method} ${input}`);
+    assert.deepEqual(evaluateEffectNetworkLifecycle({ findings, allowlist: [] }).diagnostics,
+      [{ code: 'EFFECT_NETWORK_WRITE_COMMAND', id: findings[0].id }]);
+  }
+});
 
 test('reports a nested platformFetch query started by useEffect', () => {
   const findings = analyzeEffectNetworkLifecycleSource({
@@ -1002,10 +1051,6 @@ test('matches the reviewed current-tree baseline with no effect write commands',
       classification: 'read-query',
     },
     {
-      id: 'modules/workspace/src/FolderCandidateInput.tsx::query::usePlatformQuery.load::loadStandardCrudLookupPage',
-      classification: 'read-query',
-    },
-    {
       id: 'packages/shell/src/pages/StandardCrudListPageHost.tsx::metadataListQuery::usePlatformQuery.load::dataAdapter.list',
       classification: 'read-query',
     },
@@ -1046,7 +1091,7 @@ test('runs as a standalone current-tree gate', () => {
   });
 
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /5 reviewed effect findings, 8 platform query loads, 0 write commands/);
+  assert.match(result.stdout, /6 reviewed effect findings, 7 platform query loads, 0 write commands/);
 });
 
 test('keeps repeated sink call sites distinct without using line numbers in ids', () => {

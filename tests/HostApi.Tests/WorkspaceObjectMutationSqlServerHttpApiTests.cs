@@ -1,6 +1,7 @@
 using System.Data.Common;
 using System.Net;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Persistence.EfCore;
@@ -17,7 +18,9 @@ public sealed class WorkspaceObjectMutationSqlServerHttpApiTests
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "真实混合内容编辑、共享引用清理和批量删除")]
     public async Task EditAndDelete_UsesOwningRulesAndDeletesAllReferences()
     {
-        await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
+        var reads = new ReadOnlyRequestGuard();
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
+            services.AddDbContext<EfPlatformDbContext>((_, options) => options.AddInterceptors(reads)), includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
         var root = await RootAsync(fixture, admin);
         var folder = await CreateAsync(fixture, admin, root, "folders", "create", "folder");
@@ -25,14 +28,39 @@ public sealed class WorkspaceObjectMutationSqlServerHttpApiTests
         var part = await CreateAsync(fixture, admin, root, "parts", "createPart", "part");
         var document = await CreateAsync(fixture, admin, root, "documents", "createDocument", "document");
         var anotherPart = await CreateAsync(fixture, admin, root, "parts", "createPart", "other-part");
+        // 校准同一拦截器：即使恒等 UPDATE 也须在执行前拒绝，不能靠前后值相等漏掉隐式写入。
+        using (var calibrationScope = fixture.Services.CreateScope())
+        {
+            var calibrationDb = calibrationScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+            reads.Enabled = true;
+            try
+            {
+                var blocked = await Assert.ThrowsAsync<InvalidOperationException>(() => calibrationDb.Set<Dictionary<string, object?>>("Part")
+                    .Where(row => EF.Property<string>(row, "EID") == part.Id)
+                    .ExecuteUpdateAsync(setters => setters.SetProperty(row => EF.Property<string>(row, "ENAME"),
+                        row => EF.Property<string>(row, "ENAME"))));
+                Assert.Equal("WORKSPACE_EDIT_VALUES_WRITE_FORBIDDEN", blocked.Message);
+            }
+            finally { reads.Enabled = false; }
+        }
+        reads.Reset();
         foreach (var target in new[] { folder, part, document })
         {
             using var beforeScope = fixture.Services.CreateScope();
             var before = await beforeScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>(target.Model).AsNoTracking()
                 .SingleAsync(row => EF.Property<string>(row, "EID") == target.Id);
-            using var editRead = await SendAsync(fixture, admin, "edit", HttpMethod.Post, $"/api/workspace/content/{target.Link}/edit-values", new { position = root });
-            Assert.True(editRead.StatusCode == HttpStatusCode.OK, await editRead.Content.ReadAsStringAsync());
-            var fields = JsonSerializer.Deserialize<JsonElement>(await editRead.Content.ReadAsStringAsync()).GetProperty("fields");
+            var beforeRead = await ReadPersistentStateAsync(fixture);
+            JsonElement fields;
+            reads.Enabled = true;
+            try
+            {
+                using var editRead = await SendAsync(fixture, admin, "edit", HttpMethod.Post, $"/api/workspace/content/{target.Link}/edit-values", new { position = root });
+                Assert.True(editRead.StatusCode == HttpStatusCode.OK, await editRead.Content.ReadAsStringAsync());
+                fields = JsonSerializer.Deserialize<JsonElement>(await editRead.Content.ReadAsStringAsync()).GetProperty("fields");
+            }
+            finally { reads.Enabled = false; }
+            Assert.Equal(0, reads.RejectedWrites);
+            Assert.Equal(beforeRead, await ReadPersistentStateAsync(fixture));
             Assert.False(fields.TryGetProperty("OriginSpaceId", out _));
             var values = new Dictionary<string, object?> { ["ENAME"] = "edited-" + target.Id, ["Description"] = "changed" };
             if (target.Model != "WorkspaceFolder") values["ECODE"] = fields.GetProperty("ECODE").GetString();
@@ -78,6 +106,55 @@ public sealed class WorkspaceObjectMutationSqlServerHttpApiTests
         Assert.True(await db.Set<Dictionary<string, object?>>("Part").AnyAsync(row => EF.Property<string>(row, "EID") == anotherPart.Id));
         using var single = await SendAsync(fixture, admin, "delete", HttpMethod.Delete, $"/api/workspace/content/{anotherPart.Link}", new { position = root });
         Assert.Equal(HttpStatusCode.OK, single.StatusCode);
+    }
+
+    private static async Task<string> ReadPersistentStateAsync(BusinessAuditHostFixture fixture)
+    {
+        // 固定六张小型夹具表比较完整持久事实，包含对象、空间、关系及审计；不只比较响应字段。
+        using var scope = fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        var state = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        foreach (var model in new[] { "WorkspaceFolder", "Part", "Document", "WorkspaceSpace", "WorkspaceFolderContent", "BusinessChange" })
+        {
+            var rows = await db.Set<Dictionary<string, object?>>(model).AsNoTracking().ToArrayAsync();
+            state[model] = rows.Select(row => JsonSerializer.Serialize(row.OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                    .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal)))
+                .Order(StringComparer.Ordinal).ToArray();
+        }
+        return JsonSerializer.Serialize(state);
+    }
+
+    private sealed class ReadOnlyRequestGuard : DbCommandInterceptor
+    {
+        public bool Enabled { get; set; }
+        public int RejectedWrites { get; private set; }
+        public void Reset() => RejectedWrites = 0;
+
+        // EF reader/nonquery/scalar 均受保护；@局部表变量及#临时表范围计算不属于持久表 DML。
+        private void Inspect(DbCommand command)
+        {
+            if (!Enabled || !Regex.IsMatch(command.CommandText,
+                @"\b(?:INSERT\s+(?:INTO\s+)?|UPDATE\s+|DELETE\s+(?:FROM\s+)?|MERGE\s+(?:INTO\s+)?|TRUNCATE\s+TABLE\s+)(?:\[|[A-Za-z_])",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)) return;
+            RejectedWrites++;
+            throw new InvalidOperationException("WORKSPACE_EDIT_VALUES_WRITE_FORBIDDEN");
+        }
+
+        public override InterceptionResult<DbDataReader> ReaderExecuting(DbCommand command, CommandEventData eventData,
+            InterceptionResult<DbDataReader> result) { Inspect(command); return result; }
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        { Inspect(command); return ValueTask.FromResult(result); }
+        public override InterceptionResult<int> NonQueryExecuting(DbCommand command, CommandEventData eventData,
+            InterceptionResult<int> result) { Inspect(command); return result; }
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        { Inspect(command); return ValueTask.FromResult(result); }
+        public override InterceptionResult<object> ScalarExecuting(DbCommand command, CommandEventData eventData,
+            InterceptionResult<object> result) { Inspect(command); return result; }
+        public override ValueTask<InterceptionResult<object>> ScalarExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<object> result, CancellationToken cancellationToken = default)
+        { Inspect(command); return ValueTask.FromResult(result); }
     }
 
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "批量拒绝、写失败及权限边界不留下部分删除")]

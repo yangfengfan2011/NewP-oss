@@ -1,5 +1,16 @@
 export const effectNetworkLifecycleAllowlist = [
   {
+    id: 'modules/workspace/src/WorkspaceObjectEditInput.tsx::WorkspaceObjectEditInput::useEffect::platformFetch',
+    file: 'modules/workspace/src/WorkspaceObjectEditInput.tsx',
+    enclosingFunction: 'WorkspaceObjectEditInput',
+    hook: 'useEffect',
+    triggerChain: 'platformFetch',
+    classification: 'read-query',
+    owner: 'Workspace',
+    reason: 'edit-values 按完整 position 与 LID 只读取编辑字段和资格，不初始化空间或提交对象；Effect 有 AbortController 清理。',
+    exitCondition: '该查询迁入 Platform Query Runtime，或移除此 Effect 时删除条目。',
+  },
+  {
     id: 'packages/core/src/authentication/index.tsx::useAuthenticationState::useEffect::readCurrentUser>platformFetch',
     file: 'packages/core/src/authentication/index.tsx',
     enclosingFunction: 'useAuthenticationState',

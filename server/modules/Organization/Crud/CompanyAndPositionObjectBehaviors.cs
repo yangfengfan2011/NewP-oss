@@ -11,7 +11,7 @@ public static class CompanyObjectBehavior
     public static ObjectBehaviorDefinition BehaviorDefinition { get; } = new(
         "organization.company",
         "Organization",
-        "Organization/Company",
+        "Company",
         [ObjectOperationAction.Create, ObjectOperationAction.Update, ObjectOperationAction.Delete],
         [ObjectOperationAction.Create, ObjectOperationAction.Update, ObjectOperationAction.Delete],
         ["EID", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"]);
@@ -26,7 +26,7 @@ public static class PositionObjectBehavior
     public static ObjectBehaviorDefinition BehaviorDefinition { get; } = new(
         "organization.position",
         "Organization",
-        "Organization/Position",
+        "Position",
         [ObjectOperationAction.Create, ObjectOperationAction.Update, ObjectOperationAction.Delete],
         [ObjectOperationAction.Create, ObjectOperationAction.Update, ObjectOperationAction.Delete],
         ["EID", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"]);

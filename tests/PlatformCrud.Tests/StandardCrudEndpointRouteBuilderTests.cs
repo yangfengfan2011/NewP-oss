@@ -65,8 +65,8 @@ public sealed class StandardCrudEndpointRouteBuilderTests
             LinkQuery = new LinkQueryMetadata
             {
                 ResourceKey = "declared.link", ReadBehavior = "declared.read",
-                Parent = new() { ReferenceField = "PEID", FixedModelKey = "Organization/Person" },
-                Child = new() { ReferenceField = "CEID", FixedModelKey = "Organization/Person" }
+                Parent = new() { ReferenceField = "PEID", FixedModelKey = "Person" },
+                Child = new() { ReferenceField = "CEID", FixedModelKey = "Person" }
             }
         };
         builder.Services.AddSingleton(new CompiledPersistencePlan("declared", "snapshot", "hash", default, "digest", [], [declared], []));

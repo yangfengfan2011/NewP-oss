@@ -8,7 +8,7 @@ public sealed class OrganizationAdmissionPolicy(IOrganizationQuery query) : IIde
 {
     /// <inheritdoc/>
     public IReadOnlyCollection<string> GetCoordinationModels(IdentityAccountSnapshot account) =>
-        account.IsLocalAdministrator ? [] : ["Organization/Person"];
+        account.IsLocalAdministrator ? [] : ["Person"];
 
     /// <inheritdoc/>
     public async ValueTask<bool> IsAllowedAsync(IdentityAccountSnapshot account, CancellationToken cancellationToken = default)

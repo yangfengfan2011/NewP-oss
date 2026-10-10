@@ -31,7 +31,7 @@ it('switches the real Select empty state inside the open condition drawer withou
     condition: { type: 'attribute', field: 'RawField', operator: 'equal', value: 'draft-value' }, subjects: [], children: [] };
   fetcher.mockImplementation(async (url: string) => new Response(JSON.stringify(url.includes('/plugins/') ? { modules: [] }
     : url.endsWith('/catalog') ? { actions: [], features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
-      resources: [{ resource: { resourceKey: 'custom.record', modelKey: 'Custom/Record', modelName: 'Record' }, fields: [] }] } : [rule])));
+      resources: [{ resource: { resourceKey: 'custom.record', moduleId: 'Custom', modelKey: 'Record', modelName: 'Record' }, fields: [] }] } : [rule])));
   let setLanguage!: (language: string) => void;
   function Driver() { setLanguage = useLocalization().setLanguage; return null; }
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
@@ -62,7 +62,7 @@ it('switches the real Select empty state inside the open condition drawer withou
 
 it('uses real dic labels in resources, fields and ancestor summaries, switches language and saves raw field keys', async () => {
   let finishSave!: (response: Response) => void;
-  const resource = { resourceKey: 'organization.person', modelKey: 'Organization/Person', modelName: 'Organization/Person' };
+  const resource = { resourceKey: 'organization.person', moduleId: 'Organization', modelKey: 'Person', modelName: 'Person' };
   const fields = [{ name: 'EID', type: 'String' }, { name: 'ENAME', type: 'String' }, { name: 'CompanyId', type: 'String' }];
   const child = { id: 'child', rootId: 'root', parentId: 'root', name: '子规则', enabled: true, resourceKey: resource.resourceKey,
     condition: { type: 'attribute', field: 'ENAME', operator: 'equal', value: '甲' }, subjects: [], children: [] };
@@ -85,7 +85,7 @@ it('uses real dic labels in resources, fields and ancestor summaries, switches l
     expect(container.textContent).toContain('人员中心');
     expect(container.textContent).toContain('姓名 等于 甲');
     expect(container.textContent).toContain('唯一标识 等于 甲');
-    expect(container.textContent).not.toContain('Organization/Person');
+    expect(container.textContent).not.toContain('Person');
     expect(container.textContent).not.toContain('ENAME');
     await act(async () => (container.querySelector('button') as HTMLElement).click());
     expect(container.textContent).toContain('Person Center');
@@ -116,7 +116,7 @@ it('uses real dic labels in resources, fields and ancestor summaries, switches l
   } finally { await act(async () => root.unmount()); container.remove(); localStorage.clear(); vi.clearAllMocks(); }
 });
 
-it('resolves declared column labels and owner-qualified models without guessing a dictionary name', async () => {
+it('resolves global model labels using the explicitly declared owner', async () => {
   const requests: string[] = [];
   const controller = new AbortController();
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -126,7 +126,7 @@ it('resolves declared column labels and owner-qualified models without guessing 
       ? { modules: [{ moduleId: 'Custom', metadataBasePath: '/custom', viewFiles: ['list.json'] }, { moduleId: 'Other', metadataBasePath: '/other', viewFiles: ['unused.json'] }] }
       : { view: { model: 'Record', mode: 'list', dicKey: 'CustomLabels', titleKey: 'Records', columns: [{ field: 'Code', labelKey: 'MyCode' }] } }));
   });
-  const views = await loadDataScopeViewLabels(fetcher, [{ resourceKey: 'custom.record', modelKey: 'Custom/Record' }], controller.signal);
+  const views = await loadDataScopeViewLabels(fetcher, [{ resourceKey: 'custom.record', moduleId: 'Custom', modelKey: 'Record' }], controller.signal);
   const labels = dataScopeLabels(views, 'custom.record', (key, fallback) => ({ 'CustomLabels.Records': '自定义记录', 'CustomLabels.MyCode': '业务编号' })[key] ?? fallback ?? key);
   expect(labels.resource('Record')).toBe('自定义记录');
   expect(labels.field('Code')).toBe('业务编号');
@@ -140,8 +140,8 @@ it('reads enum identities from the real model data sources for both person and a
       { moduleId: 'Identity', metadataBasePath: '/identity', viewFiles: [], modelFiles: ['Account.json'] }] }
     : String(input).endsWith('Person.json') ? JSON.parse(personModel) : JSON.parse(accountModel)));
   const views = await loadDataScopeViewLabels(fetcher, [
-    { resourceKey: 'organization.person', modelKey: 'Organization/Person' },
-    { resourceKey: 'identity.account', modelKey: 'Identity/IdentityAccount' },
+    { resourceKey: 'organization.person', moduleId: 'Organization', modelKey: 'Person' },
+    { resourceKey: 'identity.account', moduleId: 'Identity', modelKey: 'IdentityAccount' },
   ], new AbortController().signal);
   expect(dataScopeLabels(views, 'organization.person', key => key).enumeration('EmploymentStatus')).toBe('EmploymentStatus');
   expect(dataScopeLabels(views, 'identity.account', key => key).enumeration('Status')).toBe('IdentityAccountStatus');

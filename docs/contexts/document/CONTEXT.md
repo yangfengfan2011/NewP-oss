@@ -1,6 +1,6 @@
 # Document
 
-Document 拥有独立图文档元数据，不包含版本、BOM、文件内容或专业属性。`Document/Document` 是真实 Entity，身份和审计由平台维护；`ECODE`、`ENAME` 显式采用 builtin，`Description` 使用可空长文本语义。
+Document 拥有独立图文档元数据，不包含版本、BOM、文件内容或专业属性。`Document` 是真实 Entity，身份和审计由平台维护；`ECODE`、`ENAME` 显式采用 builtin，`Description` 使用可空长文本语义。
 
 图文档编码必填且本模型内唯一，名称必填但不唯一。标准字段策略规范化名称与编码，模块在数据库侧按同一列比较规则预检编码；数据库唯一索引是并发保护事实源，竞争复用标准 409 冲突。说明可缺省，最多 500 字，服务端拒绝超长值。
 

@@ -4,7 +4,7 @@ Workspace 拥有公共空间、当前账号个人空间及其根文件夹。入�
 
 ## Language
 
-**空间（Space）**：导航入口及强制准入范围。Public 对具备入口资格的已认证用户开放，Personal 只匹配可信当前账号 `Identity/IdentityAccount`；LocalAdmin 也不能绕过他人的 Personal 准入。
+**空间（Space）**：导航入口及强制准入范围。Public 对具备入口资格的已认证用户开放，Personal 只匹配可信当前账号 `IdentityAccount`；LocalAdmin 也不能绕过他人的 Personal 准入。
 
 **根文件夹（Root Folder）**：空间 `RootFolderId` 唯一关联的真实 WorkspaceFolder。根与普通文件夹共表，不另建根标志；本期根不能经普通 CRUD 删除、改名或替换。
 
@@ -20,7 +20,7 @@ Workspace 拥有公共空间、当前账号个人空间及其根文件夹。入�
 
 ## 直接文件夹内容
 
-WorkspaceFolderContent 是正式 Link，父端由 authoring 固定为 Workspace/WorkspaceFolder，子端由必填 ChildModelKey 判别；允许组合只来自 linkedTypes。正式目录登记 Workspace/WorkspaceFolder、Part/Part、Document/Document 三个真实端点；读取/显示契约来自其所属模块，Workspace 显式依赖 Part 与 Document。LID、PEID、CEID 与关系审计由服务端填写；关系不保存 SpaceId、父位置、名称或对象审计影子值。
+WorkspaceFolderContent 是正式 Link，父端由 authoring 固定为 WorkspaceFolder，子端由必填 ChildModelKey 判别；允许组合只来自 linkedTypes。正式目录登记 WorkspaceFolder、Part、Document 三个真实端点；读取/显示契约来自其所属模块，Workspace 显式依赖 Part 与 Document。LID、PEID、CEID 与关系审计由服务端填写；关系不保存 SpaceId、父位置、名称或对象审计影子值。
 
 零组件和图文档不提供独立侧栏菜单；用户选择文件夹后，从“新建”父按钮选择新建文件夹、零组件或图文档，统一使用共享右侧 Drawer 和“保存并关闭”，页面不再提供“添加已有对象”。内容列表的名称作为属性入口，操作菜单提供编辑、删除及移除引用；所属模块的 routeOnly 路由及功能位置继续服务于详情准入与属性打开。
 

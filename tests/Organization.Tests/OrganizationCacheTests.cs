@@ -27,12 +27,12 @@ public sealed class OrganizationCacheTests
         services.AddScoped(_ => new EfPlatformDbContext(options, definitions));
         await using var provider = services.BuildServiceProvider();
         await using var db = new EfPlatformDbContext(options, definitions);
-        db.Set<Dictionary<string, object?>>("Organization/Company").Add(Row("company"));
+        db.Set<Dictionary<string, object?>>("Company").Add(Row("company"));
         var department = Row("department");
         department["CompanyId"] = corruption == "missing-company" ? "missing" : "company";
         department["ParentDepartmentId"] = corruption == "cycle" ? "department" : null;
-        db.Set<Dictionary<string, object?>>("Organization/Department").Add(department);
-        db.Set<Dictionary<string, object?>>("Organization/Person").Add(new()
+        db.Set<Dictionary<string, object?>>("Department").Add(department);
+        db.Set<Dictionary<string, object?>>("Person").Add(new()
         {
             ["EID"] = "person", ["PersonNo"] = "P", ["ENAME"] = "人员", ["EmploymentStatus"] = "Active", ["IsEnabled"] = false,
             ["CompanyId"] = corruption == "half-affiliation" ? "company" : null,
@@ -58,14 +58,14 @@ public sealed class OrganizationCacheTests
         await cache.InitializeAsync();
         await using var db = new EfPlatformDbContext(options, definitions);
         var executor = new EfPlatformTransactionExecutor(db, new[] { "Company", "Department", "Position", "Person" }
-            .Select(model => new PlatformCommitRegistration($"Organization/{model}", cache)));
+            .Select(model => new PlatformCommitRegistration(model, cache)));
         await executor.ExecuteAsync(["Company", "Department"], token =>
         {
-            db.Set<Dictionary<string, object?>>("Organization/Company").Add(Row("shared"));
+            db.Set<Dictionary<string, object?>>("Company").Add(Row("shared"));
             var department = Row("shared");
             department["CompanyId"] = "shared";
             department["ENAME"] = "部门";
-            db.Set<Dictionary<string, object?>>("Organization/Department").Add(department);
+            db.Set<Dictionary<string, object?>>("Department").Add(department);
             return ValueTask.FromResult(true);
         });
         Assert.Equal("shared", (await cache.ReadAsync()).Companies["shared"]["ENAME"]);
@@ -85,7 +85,7 @@ public sealed class OrganizationCacheTests
         await cache.InitializeAsync();
         var old = await cache.ReadAsync();
         await using var db = new EfPlatformDbContext(options, OrganizationModelDefinitions.All.Select(d => d with { OwnerModuleId = "Organization" }).ToArray());
-        var executor = new EfPlatformTransactionExecutor(db, [new PlatformCommitRegistration("Organization/Company", cache)]);
+        var executor = new EfPlatformTransactionExecutor(db, [new PlatformCommitRegistration("Company", cache)]);
         await executor.ExecuteAsync(["Company"], async token =>
         {
             db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Company")).Add(new()
@@ -122,14 +122,14 @@ public sealed class OrganizationCacheTests
         await cache.InitializeAsync();
         await using var firstDb = new EfPlatformDbContext(options, definitions);
         await using var secondDb = new EfPlatformDbContext(options, definitions);
-        var registration = new PlatformCommitRegistration("Organization/Company", cache);
+        var registration = new PlatformCommitRegistration("Company", cache);
         var first = new EfPlatformTransactionExecutor(firstDb, [registration]);
         var second = new EfPlatformTransactionExecutor(secondDb, [registration]);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var firstWrite = first.ExecuteAsync(["Company"], async token =>
         {
-            firstDb.Set<Dictionary<string, object?>>("Organization/Company").Add(Row("one"));
+            firstDb.Set<Dictionary<string, object?>>("Company").Add(Row("one"));
             entered.SetResult();
             await release.Task.WaitAsync(token);
             return true;
@@ -139,7 +139,7 @@ public sealed class OrganizationCacheTests
         var secondWrite = second.ExecuteAsync(["Company"], token =>
         {
             secondEntered = true;
-            secondDb.Set<Dictionary<string, object?>>("Organization/Company").Add(Row("two"));
+            secondDb.Set<Dictionary<string, object?>>("Company").Add(Row("two"));
             return ValueTask.FromResult(true);
         }).AsTask();
         Assert.False(secondEntered);
@@ -148,7 +148,7 @@ public sealed class OrganizationCacheTests
         Assert.Equal(2, (await cache.ReadAsync()).Companies.Count);
         await Assert.ThrowsAsync<InvalidOperationException>(() => first.ExecuteAsync(token =>
         {
-            firstDb.Set<Dictionary<string, object?>>("Organization/Company").Add(Row("undeclared"));
+            firstDb.Set<Dictionary<string, object?>>("Company").Add(Row("undeclared"));
             return ValueTask.FromResult(true);
         }).AsTask());
         Assert.Equal(2, (await cache.ReadAsync()).Companies.Count);

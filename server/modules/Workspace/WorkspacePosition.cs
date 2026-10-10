@@ -16,8 +16,8 @@ public sealed record WorkspacePositionPath(string FolderId, IReadOnlyList<string
 /// <summary>批量验证当前链，读取规模为提交路径长度，不枚举所有根路径。</summary>
 public sealed class WorkspacePositions(EfPlatformDbContext db, IDataScopeReadPlanProvider reads)
 {
-    internal const string FolderModel = "Workspace/WorkspaceFolder";
-    internal const string ContentModel = "Workspace/WorkspaceFolderContent";
+    internal const string FolderModel = "WorkspaceFolder";
+    internal const string ContentModel = "WorkspaceFolderContent";
 
     /// <summary>根归属、空间准入、链衔接与每层读取资格共同决定位置是否有效。</summary>
     public async Task<WorkspacePositionPath> ResolveAsync(string actorId, WorkspacePosition position, CancellationToken token)

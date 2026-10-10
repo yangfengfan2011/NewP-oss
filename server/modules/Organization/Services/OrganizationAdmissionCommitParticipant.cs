@@ -68,11 +68,11 @@ public sealed class OrganizationAdmissionCommitParticipant(OrganizationCache cac
         {
             switch (change.ModelKey)
             {
-                case "Organization/Person": people.Add(change.Id); break;
-                case "Organization/Company":
+                case "Person": people.Add(change.Id); break;
+                case "Company":
                     if (snapshot.PersonsByCompany.TryGetValue(change.Id, out var companyPeople)) people.UnionWith(companyPeople);
                     break;
-                case "Organization/Department": departments.Add(change.Id); break;
+                case "Department": departments.Add(change.Id); break;
             }
         }
         var pending = new Queue<string>(departments);

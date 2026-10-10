@@ -35,7 +35,7 @@ public sealed class WorkspaceObjectMutationSqlServerHttpApiTests
             var fields = JsonSerializer.Deserialize<JsonElement>(await editRead.Content.ReadAsStringAsync()).GetProperty("fields");
             Assert.False(fields.TryGetProperty("OriginSpaceId", out _));
             var values = new Dictionary<string, object?> { ["ENAME"] = "edited-" + target.Id, ["Description"] = "changed" };
-            if (target.Model != "Workspace/WorkspaceFolder") values["ECODE"] = fields.GetProperty("ECODE").GetString();
+            if (target.Model != "WorkspaceFolder") values["ECODE"] = fields.GetProperty("ECODE").GetString();
             using var edited = await SendAsync(fixture, admin, "edit", HttpMethod.Put, $"/api/workspace/content/{target.Link}", new { position = root, values });
             Assert.True(edited.StatusCode == HttpStatusCode.OK, await edited.Content.ReadAsStringAsync());
             using var afterScope = fixture.Services.CreateScope();
@@ -73,9 +73,9 @@ public sealed class WorkspaceObjectMutationSqlServerHttpApiTests
         foreach (var target in new[] { folder, part, document })
         {
             Assert.False(await db.Set<Dictionary<string, object?>>(target.Model).AnyAsync(row => EF.Property<string>(row, "EID") == target.Id));
-            Assert.False(await db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolderContent").AnyAsync(row => EF.Property<string>(row, "CEID") == target.Id));
+            Assert.False(await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AnyAsync(row => EF.Property<string>(row, "CEID") == target.Id));
         }
-        Assert.True(await db.Set<Dictionary<string, object?>>("Part/Part").AnyAsync(row => EF.Property<string>(row, "EID") == anotherPart.Id));
+        Assert.True(await db.Set<Dictionary<string, object?>>("Part").AnyAsync(row => EF.Property<string>(row, "EID") == anotherPart.Id));
         using var single = await SendAsync(fixture, admin, "delete", HttpMethod.Delete, $"/api/workspace/content/{anotherPart.Link}", new { position = root });
         Assert.Equal(HttpStatusCode.OK, single.StatusCode);
     }
@@ -124,7 +124,7 @@ public sealed class WorkspaceObjectMutationSqlServerHttpApiTests
         var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
         Assert.True(await db.Set<Dictionary<string, object?>>(otherPart.Model).AnyAsync(row => EF.Property<string>(row, "EID") == otherPart.Id));
         Assert.True(await db.Set<Dictionary<string, object?>>(part.Model).AnyAsync(row => EF.Property<string>(row, "EID") == part.Id));
-        Assert.True(await db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolderContent").AnyAsync(row => EF.Property<string>(row, "LID") == part.Link));
+        Assert.True(await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AnyAsync(row => EF.Property<string>(row, "LID") == part.Link));
     }
 
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "编辑与删除等待真实图锁后重验位置，编辑装载不申请图写锁")]
@@ -179,7 +179,7 @@ public sealed class WorkspaceObjectMutationSqlServerHttpApiTests
             Assert.Equal(before["ENAME"], after["ENAME"]);
             Assert.Equal(before["UpdatedAt"], after["UpdatedAt"]);
             Assert.Equal(before["UpdatedBy"], after["UpdatedBy"]);
-            var links = db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolderContent");
+            var links = db.Set<Dictionary<string, object?>>("WorkspaceFolderContent");
             Assert.False(await links.AnyAsync(row => EF.Property<string>(row, "LID") == parent.Link));
             Assert.True(await links.AnyAsync(row => EF.Property<string>(row, "LID") == target.Link));
         }
@@ -233,12 +233,12 @@ public sealed class WorkspaceObjectMutationSqlServerHttpApiTests
         if (kind != "folders") values["ECODE"] = name;
         using var response = await SendAsync(fixture, admin, action, HttpMethod.Post, "/api/workspace/content/" + kind, new { position, values });
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var model = kind == "folders" ? "Workspace/WorkspaceFolder" : kind == "parts" ? "Part/Part" : "Document/Document";
+        var model = kind == "folders" ? "WorkspaceFolder" : kind == "parts" ? "Part" : "Document";
         using var scope = fixture.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
         var entity = await db.Set<Dictionary<string, object?>>(model).SingleAsync(row => EF.Property<string>(row, "ENAME") == name);
         var id = (string)entity["EID"]!;
-        var link = await db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolderContent").SingleAsync(row => EF.Property<string>(row, "CEID") == id);
+        var link = await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").SingleAsync(row => EF.Property<string>(row, "CEID") == id);
         return new(model, id, (string)link["LID"]!);
     }
     private sealed class MutationDecisions : IDataScopeObjectDecisionProvider

@@ -19,4 +19,8 @@ public sealed record ForeignKeyDefinition(
     IReadOnlyList<string> Fields,
     string PrincipalModelKey,
     IReadOnlyList<string> PrincipalFields,
-    ForeignKeyDeleteBehavior DeleteBehavior);
+    ForeignKeyDeleteBehavior DeleteBehavior)
+{
+    /// <summary>显式 principalModuleId 的独立归属约束；缺省时按全局目录解析实际 owner。</summary>
+    public string? PrincipalOwnerModuleId { get; init; }
+}

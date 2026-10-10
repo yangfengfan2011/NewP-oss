@@ -37,23 +37,12 @@ public static class PlatformFoundationModelSource
                 })).ToArray();
     }
 
+    // 基础流只适配拥有者；全局模型引用独立于该迁移流归属。
     private static IEnumerable<ModelDefinition> AdaptOwner(
         IEnumerable<ModelDefinition> definitions,
         string ownerModuleId) =>
         definitions.Select(definition => definition with
         {
-            OwnerModuleId = ownerModuleId,
-            ForeignKeys = definition.ForeignKeys
-                .Select(foreignKey => foreignKey with
-                {
-                    PrincipalModelKey = $"{ownerModuleId}/{GetModelName(foreignKey.PrincipalModelKey)}"
-                })
-                .ToArray()
+            OwnerModuleId = ownerModuleId
         });
-
-    private static string GetModelName(string logicalKey)
-    {
-        var separator = logicalKey.LastIndexOf('/');
-        return separator >= 0 ? logicalKey[(separator + 1)..] : logicalKey;
-    }
 }

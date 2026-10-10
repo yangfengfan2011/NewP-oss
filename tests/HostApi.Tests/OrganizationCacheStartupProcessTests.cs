@@ -42,9 +42,9 @@ public sealed partial class HostAuthenticationProcessRestartTests
                 .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().Options;
             await using (var db = new EfPlatformDbContext(options, OrganizationModelDefinitions.All.Select(m => m with { OwnerModuleId = "Organization" }).ToArray()))
             {
-                db.Set<Dictionary<string, object?>>("Organization/Company").Add(new()
+                db.Set<Dictionary<string, object?>>("Company").Add(new()
                 { ["EID"] = "company", ["ECODE"] = "CACHE", ["ENAME"] = "启动故障公司", ["SortOrder"] = "01", ["IsEnabled"] = true });
-                db.Set<Dictionary<string, object?>>("Organization/Department").Add(new()
+                db.Set<Dictionary<string, object?>>("Department").Add(new()
                 { ["EID"] = "department", ["ECODE"] = "CACHE", ["ENAME"] = "启动故障部门", ["SortOrder"] = "01", ["IsEnabled"] = true,
                     ["CompanyId"] = "company", ["ParentDepartmentId"] = "department" });
                 await db.SaveChangesAsync();

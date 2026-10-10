@@ -17,7 +17,7 @@ public sealed class EfAuditDateTimeMaterializationTests
             .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>()
             .Options;
         using var dbContext = new EfPlatformDbContext(options, [TemporalProbeDefinition()]);
-        var entityType = dbContext.Model.FindEntityType("platform.core/TemporalProbe");
+        var entityType = dbContext.Model.FindEntityType("TemporalProbe");
 
         Assert.NotNull(entityType);
         var auditProperty = entityType!.FindProperty("CreatedAt");

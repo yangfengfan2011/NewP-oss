@@ -57,7 +57,7 @@ public sealed class OrganizationCacheSqlServerHttpApiTests(Xunit.Abstractions.IT
             builder.Services.AddSingleton<OrganizationCache>();
             builder.Services.AddSingleton<ICP.Platform.Organization.Contracts.IOrganizationQuery, OrganizationQuery>();
             builder.Services.AddSingleton<ControlledParticipant>();
-            builder.Services.AddSingleton(sp => new PlatformCommitRegistration("Organization/Company", sp.GetRequiredService<ControlledParticipant>()));
+            builder.Services.AddSingleton(sp => new PlatformCommitRegistration("Company", sp.GetRequiredService<ControlledParticipant>()));
             // 与正式模块一致，显式构造只在模块内部公开的目录与事务事实源。
             builder.Services.AddScoped<ICompanyDirectory>(sp =>
             {
@@ -225,8 +225,8 @@ public sealed class OrganizationCacheSqlServerHttpApiTests(Xunit.Abstractions.IT
             await db.Database.EnsureCreatedAsync();
             var cache = new OrganizationCache(provider.GetRequiredService<IServiceScopeFactory>());
             await cache.InitializeAsync();
-            var executor = new EfPlatformTransactionExecutor(db, [new("Organization/Company", cache)]);
-            var rows = db.Set<Dictionary<string, object?>>("Organization/Company");
+            var executor = new EfPlatformTransactionExecutor(db, [new("Company", cache)]);
+            var rows = db.Set<Dictionary<string, object?>>("Company");
             await executor.ExecuteAsync(["Company"], _ =>
             {
                 rows.Add(new() { ["EID"] = "company", ["ECODE"] = "COMMIT", ["ENAME"] = "before", ["SortOrder"] = "01", ["IsEnabled"] = true });
@@ -243,7 +243,7 @@ public sealed class OrganizationCacheSqlServerHttpApiTests(Xunit.Abstractions.IT
             Assert.NotNull(writeError);
             await using var observer = new EfPlatformDbContext(new DbContextOptionsBuilder<EfPlatformDbContext>().UseSqlServer(database)
                 .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().Options, models);
-            var saved = (await observer.Set<Dictionary<string, object?>>("Organization/Company").AsNoTracking().SingleAsync())["ENAME"];
+            var saved = (await observer.Set<Dictionary<string, object?>>("Company").AsNoTracking().SingleAsync())["ENAME"];
             Assert.Equal(afterCommit ? "committed" : "before", saved);
             object? visible = null;
             var readError = await Record.ExceptionAsync(async () => visible = (await cache.ReadAsync()).Companies["company"]["ENAME"]);

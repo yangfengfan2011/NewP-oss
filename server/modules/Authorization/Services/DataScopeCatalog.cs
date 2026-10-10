@@ -32,9 +32,9 @@ public sealed class DataScopeCatalog(IStandardCrudResourceRegistry resources, Ca
         {
             if (string.IsNullOrWhiteSpace(resource.ResourceKey) || string.IsNullOrWhiteSpace(resource.ModuleId)
                 || string.IsNullOrWhiteSpace(resource.ModelName) || string.IsNullOrWhiteSpace(resource.IdField)
-                || !resource.ModelKey.StartsWith(resource.ModuleId + "/", StringComparison.Ordinal)
                 || !plan.Modules.Any(module => module.ModuleId == resource.ModuleId))
                 throw new InvalidOperationException("DATA_SCOPE_RESOURCE_OWNER_INVALID");
+            ValidateModelOwner(resource);
             var model = db.Model.FindEntityType(resource.ModelKey)
                 ?? throw new InvalidOperationException("DATA_SCOPE_MODEL_UNAVAILABLE");
             if (model.FindPrimaryKey()?.Properties is not { Count: 1 } keys || keys[0].Name != resource.IdField
@@ -56,11 +56,19 @@ public sealed class DataScopeCatalog(IStandardCrudResourceRegistry resources, Ca
     public IReadOnlyList<IProperty> Fields(string key)
     {
         var resource = Resolve(key);
-        if (!resource.ModelKey.StartsWith(resource.ModuleId + "/", StringComparison.Ordinal))
-            throw new InvalidOperationException("DATA_SCOPE_MODEL_OWNER_MISMATCH");
+        ValidateModelOwner(resource);
         var model = db.Model.FindEntityType(db.ResolveModelKey(resource.ModelKey))
             ?? throw new InvalidOperationException("DATA_SCOPE_MODEL_UNAVAILABLE");
         return model.GetProperties().Where(property => !property.Name.StartsWith("__", StringComparison.Ordinal)).ToArray();
+    }
+
+    // 名称只用于寻址；归属从正式编译目录核对，不能从字符串前缀推断。
+    private void ValidateModelOwner(DataScopeResource resource)
+    {
+        var model = db.PersistencePlan.Models.SingleOrDefault(model => model.LogicalKey == resource.ModelKey)
+            ?? throw new InvalidOperationException("DATA_SCOPE_MODEL_UNAVAILABLE");
+        if (model.OwnerModuleId != resource.ModuleId)
+            throw new InvalidOperationException("DATA_SCOPE_MODEL_OWNER_MISMATCH");
     }
 
     /// <summary>验证完整根树的身份、层级和已注册主体、条件。</summary>

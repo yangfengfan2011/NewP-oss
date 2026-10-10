@@ -20,7 +20,7 @@ public sealed class DocumentCrudValidator(EfPlatformDbContext db) : IStandardCru
         // 输入已由标准字段策略规范化；数据库比较与唯一索引采用同一列规则。
         // 预检只改善字段反馈，真正并发冲突仍由 UX_Document_ECODE 与标准 409 翻译保护。
         var code = (string)values["ECODE"]!;
-        return await db.Set<Dictionary<string, object?>>("Document/Document").AsNoTracking()
+        return await db.Set<Dictionary<string, object?>>("Document").AsNoTracking()
             .AnyAsync(row => EF.Property<string>(row, "ECODE") == code, cancellationToken)
                 ? FieldError("ECODE", "Document.CodeDuplicated", "图文档编码必须唯一。", 409) : null;
     }

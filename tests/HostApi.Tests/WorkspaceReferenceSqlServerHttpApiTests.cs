@@ -48,8 +48,8 @@ public sealed class WorkspaceReferenceSqlServerHttpApiTests(ITestOutputHelper ou
         using (var serviceScope = fixture.Services.CreateScope())
         {
             var db = serviceScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-            var folders = db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolder");
-            var links = db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolderContent");
+            var folders = db.Set<Dictionary<string, object?>>("WorkspaceFolder");
+            var links = db.Set<Dictionary<string, object?>>("WorkspaceFolderContent");
             var folder = await folders.AsNoTracking().SingleAsync(row => EF.Property<string>(row, "ENAME") == "真实来源种子");
             var link = await links.AsNoTracking().SingleAsync();
             void Folder(string id, string name) => folders.Add(new(folder) { ["EID"] = id, ["ENAME"] = name });
@@ -106,7 +106,7 @@ public sealed class WorkspaceReferenceSqlServerHttpApiTests(ITestOutputHelper ou
         var a = await New(root, "A"); var b = await New(root, "B"); var hidden = await New(root, "隐藏中间节点");
         var rootList = await FeatureHttpTestRequests.ReadAsync(admin, entry, ListUrl(root));
         object At(string id) => ChildPosition(root, [LinkTo(rootList, id)]);
-        async Task<HttpResponseMessage> Add(HttpClient client, object position, string id) => await FeatureHttpTestRequests.SendAsync(client, add, HttpMethod.Post, "/api/workspace/content/references", new { position, target = new { modelKey = "Workspace/WorkspaceFolder", id } });
+        async Task<HttpResponseMessage> Add(HttpClient client, object position, string id) => await FeatureHttpTestRequests.SendAsync(client, add, HttpMethod.Post, "/api/workspace/content/references", new { position, target = new { modelKey = "WorkspaceFolder", id } });
         using (var ah = await Add(admin, At(a), hidden)) Assert.Equal(HttpStatusCode.OK, ah.StatusCode);
         using (var hb = await Add(admin, At(hidden), b)) Assert.Equal(HttpStatusCode.OK, hb.StatusCode);
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "GraphWriter", "图写入", "graph-writer", "图写入账号", entry, create, add, Point(fixture, "workspace.folder.remove"));
@@ -155,7 +155,7 @@ public sealed class WorkspaceReferenceSqlServerHttpApiTests(ITestOutputHelper ou
         var privateList = await FeatureHttpTestRequests.ReadAsync(owner, entry, ListUrl(personal));
         var privateLink = LinkTo(privateList, parent);
         var child = (await Command(owner, create, "/api/workspace/content/folders", new { position = ChildPosition(personal, [privateLink]), values = new { ENAME = "共享后代" } })).GetProperty("id").GetString()!;
-        await Command(owner, add, "/api/workspace/content/references", new { position = Position(root), target = new { modelKey = "Workspace/WorkspaceFolder", id = parent } });
+        await Command(owner, add, "/api/workspace/content/references", new { position = Position(root), target = new { modelKey = "WorkspaceFolder", id = parent } });
         var publicList = await FeatureHttpTestRequests.ReadAsync(reader, entry, ListUrl(root)); var publicLink = LinkTo(publicList, parent);
         var publicParentPosition = ChildPosition(root, [publicLink]);
         var sharedChildren = await FeatureHttpTestRequests.ReadAsync(reader, entry, ListUrl(root, parent, [publicLink]));
@@ -166,7 +166,7 @@ public sealed class WorkspaceReferenceSqlServerHttpApiTests(ITestOutputHelper ou
         await Rule(admin, fixture, "UnreadableSharedAncestor", parent, "read", "deny");
         await Missing(reader, entry, child);
         using var stalePath = await FeatureHttpTestRequests.SendAsync(reader, entry, HttpMethod.Get, ListUrl(root, parent, [publicLink])); Assert.Equal(HttpStatusCode.NotFound, stalePath.StatusCode);
-        await Command(owner, add, "/api/workspace/content/references", new { position = Position(root), target = new { modelKey = "Workspace/WorkspaceFolder", id = child } });
+        await Command(owner, add, "/api/workspace/content/references", new { position = Position(root), target = new { modelKey = "WorkspaceFolder", id = child } });
         var visible = await FeatureHttpTestRequests.ReadAsync(reader, add, "/api/workspace/folders/candidates");
         Assert.Equal(child, Assert.Single(visible.GetProperty("items").EnumerateArray()).GetProperty("id").GetString());
         publicList = await FeatureHttpTestRequests.ReadAsync(reader, entry, ListUrl(root)); var alternateLink = LinkTo(publicList, child);
@@ -224,7 +224,7 @@ public sealed class WorkspaceReferenceSqlServerHttpApiTests(ITestOutputHelper ou
         var candidates = await FeatureHttpTestRequests.ReadAsync(reader, add, "/api/workspace/folders/candidates");
         Assert.Equal(0, candidates.GetProperty("total").GetInt32());
         await Missing(reader, entry, id);
-        await Command(owner, add, "/api/workspace/content/references", new { position = publicPosition, target = new { modelKey = "Workspace/WorkspaceFolder", id } });
+        await Command(owner, add, "/api/workspace/content/references", new { position = publicPosition, target = new { modelKey = "WorkspaceFolder", id } });
         var detail = await FeatureHttpTestRequests.ReadAsync(reader, entry, "/api/workspace/folders/" + id);
         Assert.Equal("私人来源共享文件夹", detail.GetProperty("fields").GetProperty("ENAME").GetString());
         Assert.False(detail.GetProperty("fields").TryGetProperty("OriginSpaceId", out _));
@@ -250,7 +250,7 @@ public sealed class WorkspaceReferenceSqlServerHttpApiTests(ITestOutputHelper ou
         var retainedDetail = await FeatureHttpTestRequests.ReadAsync(owner, entry, "/api/workspace/folders/" + id);
         Assert.Equal(created.GetProperty("fields").GetProperty("UpdatedAt").GetString(), retainedDetail.GetProperty("fields").GetProperty("UpdatedAt").GetString());
         Assert.Equal(descendant, (await FeatureHttpTestRequests.ReadAsync(owner, entry, "/api/workspace/folders/" + descendant)).GetProperty("id").GetString());
-        await Command(owner, add, "/api/workspace/content/references", new { position = privatePosition, target = new { modelKey = "Workspace/WorkspaceFolder", id } });
+        await Command(owner, add, "/api/workspace/content/references", new { position = privatePosition, target = new { modelKey = "WorkspaceFolder", id } });
         Assert.Equal(id, Assert.Single((await FeatureHttpTestRequests.ReadAsync(owner, entry, ListUrl(personal))).GetProperty("items").EnumerateArray()).GetProperty("associatedObject").GetProperty("id").GetString());
     }
 
@@ -258,7 +258,7 @@ public sealed class WorkspaceReferenceSqlServerHttpApiTests(ITestOutputHelper ou
     private static object Position(JsonElement root) => new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = root.GetProperty("rootFolderId").GetString(), linkIds = Array.Empty<string>() };
     private static object ChildPosition(JsonElement root, string[] linkIds) => new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = root.GetProperty("rootFolderId").GetString(), linkIds };
     private static string LinkTo(JsonElement list, string id) => Assert.Single(list.GetProperty("items").EnumerateArray(), row => row.GetProperty("associatedObject").GetProperty("id").GetString() == id).GetProperty("linkId").GetString()!;
-    private static string ListUrl(JsonElement root, string? anchor = null, string[]? linkIds = null) => "/api/links/workspace.content?direction=forward&anchorModelKey=Workspace%2FWorkspaceFolder&anchorId=" + (anchor ?? root.GetProperty("rootFolderId").GetString()) + "&queryScope=" + Uri.EscapeDataString(JsonSerializer.Serialize(new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = root.GetProperty("rootFolderId").GetString(), linkIds = JsonSerializer.Serialize(linkIds ?? []) }));
+    private static string ListUrl(JsonElement root, string? anchor = null, string[]? linkIds = null) => "/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId=" + (anchor ?? root.GetProperty("rootFolderId").GetString()) + "&queryScope=" + Uri.EscapeDataString(JsonSerializer.Serialize(new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = root.GetProperty("rootFolderId").GetString(), linkIds = JsonSerializer.Serialize(linkIds ?? []) }));
     private static async Task Conflict(HttpResponseMessage response, string code, string? hidden = null)
     {
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode); var text = await response.Content.ReadAsStringAsync();

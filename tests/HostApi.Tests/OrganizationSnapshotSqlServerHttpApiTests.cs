@@ -201,7 +201,7 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
         await Assert.ThrowsAsync<PlatformCacheUnavailableException>(() => cache.ReadAsync().AsTask());
         await using var scope = fixture.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-        Assert.False(await db.Set<Dictionary<string, object?>>("Organization/Company").AsNoTracking()
+        Assert.False(await db.Set<Dictionary<string, object?>>("Company").AsNoTracking()
             .AnyAsync(row => EF.Property<string>(row, "EID") == company));
         Assert.Equal(1, cache.FailedPublications);
     }
@@ -244,7 +244,7 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
         await Assert.ThrowsAsync<PlatformCacheUnavailableException>(() => cache.ReadAsync().AsTask());
         await using var scope = fixture.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-        var stored = await db.Set<Dictionary<string, object?>>("Organization/Person").AsNoTracking().SingleAsync();
+        var stored = await db.Set<Dictionary<string, object?>>("Person").AsNoTracking().SingleAsync();
         if (binding) Assert.NotNull(stored["AccountEID"]);
         else Assert.Equal(false, stored["IsEnabled"]);
         Assert.Equal(1, cache.FailedPublications);
@@ -281,20 +281,20 @@ public sealed class OrganizationSnapshotSqlServerHttpApiTests(ITestOutputHelper 
         await using var firstDb = new EfPlatformDbContext(options, definitions);
         await using var secondDb = new EfPlatformDbContext(options, definitions);
         var registrations = new[] { "Company", "Department", "Position", "Person" }
-            .Select(model => new PlatformCommitRegistration($"Organization/{model}", cache)).ToArray();
+            .Select(model => new PlatformCommitRegistration(model, cache)).ToArray();
         var first = new EfPlatformTransactionExecutor(firstDb, registrations);
         var second = new EfPlatformTransactionExecutor(secondDb, registrations);
         var entered = false;
         Task<bool> FirstWrite() => first.ExecuteAsync(["Company"], async token =>
         {
             entered = true;
-            var row = await firstDb.Set<Dictionary<string, object?>>("Organization/Company").SingleAsync(token);
+            var row = await firstDb.Set<Dictionary<string, object?>>("Company").SingleAsync(token);
             row["ENAME"] = "已更新公司";
             return true;
         }).AsTask();
         Task<bool> SecondWrite() => second.ExecuteAsync(["Person"], async token =>
         {
-            var row = await secondDb.Set<Dictionary<string, object?>>("Organization/Person").SingleAsync(token);
+            var row = await secondDb.Set<Dictionary<string, object?>>("Person").SingleAsync(token);
             row["ENAME"] = "已更新人员";
             return true;
         }).AsTask();

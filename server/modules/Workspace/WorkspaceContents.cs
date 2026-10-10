@@ -65,7 +65,7 @@ public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions
             if (string.IsNullOrWhiteSpace(target.Id) || !definition.Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == target.ModelKey))
                 throw new LinkQueryException(400, "Workspace.InvalidEndpoint", "target");
             if (!await reader.IsEndpointReadableAsync("workspace.content", target, cancellation)) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
-            if (target.ModelKey == WorkspacePositions.FolderModel && await db.Set<Dictionary<string, object?>>("Workspace/WorkspaceSpace").AnyAsync(space => EF.Property<string>(space, "RootFolderId") == target.Id, cancellation))
+            if (target.ModelKey == WorkspacePositions.FolderModel && await db.Set<Dictionary<string, object?>>("WorkspaceSpace").AnyAsync(space => EF.Property<string>(space, "RootFolderId") == target.Id, cancellation))
                 throw new LinkQueryException(409, "Workspace.RootReferenceForbidden");
             var links = db.Set<Dictionary<string, object?>>(WorkspacePositions.ContentModel);
             if (await links.AnyAsync(link => EF.Property<string>(link, "PEID") == path.FolderId && EF.Property<string>(link, "ChildModelKey") == target.ModelKey
@@ -104,8 +104,8 @@ public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions
     internal async ValueTask<StandardCrudMutationResult> CreateObjectAsync(ObjectOperationContext context,
         IObjectOperationExecutor operations, CancellationToken cancellationToken)
     {
-        var (resource, model) = context.Action == WorkspaceObjectCreation.CreatePart ? ("part.part", "Part/Part")
-            : context.Action == WorkspaceObjectCreation.CreateDocument ? ("document.document", "Document/Document")
+        var (resource, model) = context.Action == WorkspaceObjectCreation.CreatePart ? ("part.part", "Part")
+            : context.Action == WorkspaceObjectCreation.CreateDocument ? ("document.document", "Document")
             : throw new InvalidOperationException("Unsupported Workspace creation action.");
         var actor = (string)context.Values["ActorId"]!;
         var position = (WorkspacePosition)context.Values["Position"]!;
@@ -213,7 +213,7 @@ public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions
             var resource = Resource(target.ModelKey);
             if (!await reader.IsEndpointReadableAsync("workspace.content", target, token)) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
             if (!await decisions.IsAllowedAsync(resource, target.Id, action, token)) throw new LinkQueryException(403, "Workspace.ObjectWriteDenied");
-            if (target.ModelKey == WorkspacePositions.FolderModel && await db.Set<Dictionary<string, object?>>("Workspace/WorkspaceSpace")
+            if (target.ModelKey == WorkspacePositions.FolderModel && await db.Set<Dictionary<string, object?>>("WorkspaceSpace")
                 .AnyAsync(row => EF.Property<string>(row, "RootFolderId") == target.Id, token)) throw new LinkQueryException(409, "Workspace.RootMutationForbidden");
         }
         return targets;
@@ -229,7 +229,7 @@ public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions
     // 静态允许的类型与行为对应关系属于 Workspace；未知端点失败关闭。
     private static string Resource(string model) => model switch
     {
-        WorkspacePositions.FolderModel => "workspace.folder", "Part/Part" => "part.part", "Document/Document" => "document.document",
+        WorkspacePositions.FolderModel => "workspace.folder", "Part" => "part.part", "Document" => "document.document",
         _ => throw new LinkQueryException(400, "Workspace.InvalidEndpoint")
     };
 
@@ -309,7 +309,7 @@ public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions
             BEGIN
                 INSERT INTO @next SELECT DISTINCT l.{WorkspaceFolderScope.Column(link, "CEID")} FROM {WorkspaceFolderScope.Table(link)} l
                     JOIN @frontier f ON f.EID=l.{WorkspaceFolderScope.Column(link, "PEID")}
-                    WHERE l.{WorkspaceFolderScope.Column(link, "ChildModelKey")}=N'Workspace/WorkspaceFolder'
+                    WHERE l.{WorkspaceFolderScope.Column(link, "ChildModelKey")}=N'WorkspaceFolder'
                     AND NOT EXISTS(SELECT 1 FROM @seen v WHERE v.EID=l.{WorkspaceFolderScope.Column(link, "CEID")});
                 DELETE FROM @frontier; INSERT INTO @frontier SELECT EID FROM @next;
                 INSERT INTO @seen SELECT EID FROM @next; DELETE FROM @next;

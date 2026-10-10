@@ -62,7 +62,7 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
             builder.Services.AddSingleton<ICP.Platform.Organization.Contracts.IOrganizationQuery, ICP.Platform.Modules.Organization.Caching.OrganizationQuery>();
             builder.Services.AddScoped<ICP.Platform.Persistence.Abstractions.IPlatformTransactionExecutor, ICP.Platform.Persistence.EfCore.Transactions.EfPlatformTransactionExecutor>();
             foreach (var model in new[] { "Company", "Department", "Person" })
-                builder.Services.AddSingleton(sp => new ICP.Platform.Persistence.Transactions.PlatformCommitRegistration($"Organization/{model}", sp.GetRequiredService<ICP.Platform.Modules.Organization.Caching.OrganizationCache>()));
+                builder.Services.AddSingleton(sp => new ICP.Platform.Persistence.Transactions.PlatformCommitRegistration(model, sp.GetRequiredService<ICP.Platform.Modules.Organization.Caching.OrganizationCache>()));
             builder.Services.AddStandardCrudResource(CompanyCrudDescriptorFactory.Create());
             builder.Services.AddStandardCrudResource(DepartmentCrudDescriptorFactory.Create());
             // 组织结构树视图含人员节点，树 SQL 在启动期需要能解析全部节点资源。

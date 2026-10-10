@@ -32,7 +32,7 @@ public sealed class AuthenticationSessionSqlServerIntegrationTests
             await using (var setup = CreateContext(applicationConnectionString))
             {
                 await setup.Database.EnsureCreatedAsync();
-                setup.Set<Dictionary<string, object?>>(setup.ResolveModelKey("Identity/IdentityAccount")).Add(Account("User_1"));
+                setup.Set<Dictionary<string, object?>>(setup.ResolveModelKey("IdentityAccount")).Add(Account("User_1"));
                 await setup.SaveChangesAsync();
             }
 
@@ -201,7 +201,7 @@ public sealed class AuthenticationSessionSqlServerIntegrationTests
     {
         await using var context = CreateContext(connectionString);
         return await context
-            .Set<Dictionary<string, object?>>(context.ResolveModelKey("Authentication/AuthenticationSession"))
+            .Set<Dictionary<string, object?>>(context.ResolveModelKey("AuthenticationSession"))
             .CountAsync();
     }
 

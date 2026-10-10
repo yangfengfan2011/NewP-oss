@@ -37,7 +37,7 @@ it('saves row order as unique priorities and restores it from an unordered respo
   const catalog = { actions: [{ key: 'read', title: '读取', enabled: true }],
     subjectTypes: [{ key: 'all', title: '所有用户', requiresId: false }],
     features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
-    resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Organization/Person' }, fields: [{ name: 'ENAME', type: 'String' }] }] };
+    resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Person' }, fields: [{ name: 'ENAME', type: 'String' }] }] };
   let persisted = { id: 'order', rootId: 'order', parentId: null, name: '主体顺序', enabled: true, resourceKey: 'organization.person',
     condition: { type: 'attribute', field: 'ENAME', operator: 'equal', value: '甲' }, children: [],
     subjects: [{ id: 'low', type: 'all', subjectId: null, priority: 0, actions: { read: 'deny' } },
@@ -75,7 +75,7 @@ it('offers explicit rename, allocates unused names and blocks duplicate saves', 
   fetcher.mockImplementation((url: string, init?: RequestInit) => Promise.resolve(init?.method === 'PUT'
     ? new Response(null, { status: 204 }) : new Response(JSON.stringify(url.endsWith('/catalog')
       ? { features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }], resources: [
-        { resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Organization/Person' }, fields: [{ name: 'ENAME', type: 'String' }] }] }
+        { resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Person' }, fields: [{ name: 'ENAME', type: 'String' }] }] }
       : [saved]))));
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
   let lifecycle!: Parameters<PageProps['reportState']>;
@@ -139,7 +139,7 @@ it('cycles each opinion independently, preserves it across tabs and only persist
     ? new Response(null, { status: 204 }) : new Response(JSON.stringify(url.endsWith('/catalog') ? {
       actions: [{ key: 'read', title: '读取', enabled: true }, { key: 'edit', title: '编辑', enabled: true }],
       features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
-      resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Organization/Person' }, fields: [{ name: 'ENAME', type: 'String' }] }],
+      resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Person' }, fields: [{ name: 'ENAME', type: 'String' }] }],
     } : [rule]))));
   let lifecycle!: Parameters<PageProps['reportState']>;
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
@@ -181,8 +181,8 @@ it('loads minimal names for multiple subjects and preserves identity context and
     subjectTypes: [{ key: 'all', title: '所有用户', requiresId: false }, { key: 'company', title: '公司', requiresId: true },
       { key: 'department', title: '部门', requiresId: true, supportsDescendants: true }],
     contextValues: [{ key: 'current.company', title: '当前公司', valueType: 'String' }],
-    contextBindings: [{ modelKey: 'Organization/Person', field: 'CompanyId', contextKey: 'current.company' }],
-    resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Organization/Person' }, fields: [{ name: 'CompanyId', type: 'String' }] }] };
+    contextBindings: [{ modelKey: 'Person', field: 'CompanyId', contextKey: 'current.company' }],
+    resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Person' }, fields: [{ name: 'CompanyId', type: 'String' }] }] };
   fetcher.mockImplementation((url: string, init?: RequestInit) => {
     if (init?.method === 'PUT') return Promise.resolve(new Response(null, { status: 204 }));
     const result = url.endsWith('/catalog') ? catalog : url.includes('/subjects/') ? {
@@ -229,7 +229,7 @@ it('keeps stable root and subject identities after failed save and distinguishes
     return Promise.resolve(new Response(JSON.stringify(url.endsWith('/catalog') ? {
       actions: [{ key: 'read', title: '读取', enabled: false }],
       features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
-      resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Organization/Person' }, fields: [{ name: 'ENAME', type: 'String' }] }],
+      resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Person' }, fields: [{ name: 'ENAME', type: 'String' }] }],
     } : [])));
   });
   let lifecycle!: Parameters<PageProps['reportState']>;
@@ -268,7 +268,7 @@ it('keeps the draft and places a server error at the nested condition named in P
     ? new Response(JSON.stringify({ title: 'diagnostic only', code: 'DataScope.InvalidConfiguration', reasonKey: 'AuthorizationErrors.DATA_SCOPE_VALUE_TYPE_MISMATCH', args: { conditionPath: '1.2' } }), { status: 400 })
     : new Response(JSON.stringify(url.endsWith('/catalog') ? {
       actions: [{ key: 'read', enabled: true }], features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
-      resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Organization/Person' },
+      resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Person' },
         fields: [{ name: 'ENAME', type: 'String' }] }],
     } : [rule]))));
   let lifecycle!: Parameters<PageProps['reportState']>;
@@ -292,7 +292,7 @@ it('edits nested nodes in one root draft and sends the complete tree on save', a
   fetcher.mockImplementation((url: string, init?: RequestInit) => Promise.resolve(init?.method === 'PUT'
     ? new Response(null, { status: 204 }) : new Response(JSON.stringify(url.endsWith('/catalog') ? {
       actions: [{ key: 'read', enabled: true }], features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
-      resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Organization/Person' },
+      resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Person' },
         fields: [{ name: 'ENAME', type: 'String' }] }],
     } : [rule, { ...rule, id: 'other', rootId: 'other', name: '另一根' }]))));
   let lifecycle!: Parameters<PageProps['reportState']>;
@@ -342,8 +342,8 @@ it('selects the failing child and keeps its condition error inline', async () =>
       actions: [{ key: 'read', enabled: true }], features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
       contextValues: [{ key: 'current.person', title: '当前人员', valueType: 'String' }],
       businessConditions: [{ key: 'organization.person.departmentEnabled', title: '人员所属部门已启用',
-        modelKeys: ['Organization/Person'], hasReadContribution: false }],
-      resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Organization/Person' },
+        modelKeys: ['Person'], hasReadContribution: false }],
+      resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Person' },
         fields: [{ name: 'ENAME', type: 'String' }, { name: 'EID', type: 'String' }] }],
     } : [rootRule]))));
   let lifecycle!: Parameters<PageProps['reportState']>;

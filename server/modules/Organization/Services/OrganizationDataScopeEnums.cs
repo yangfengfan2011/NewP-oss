@@ -7,5 +7,5 @@ namespace ICP.Platform.Modules.Organization.Services;
 public sealed class OrganizationDataScopeEnums : IDataScopeEnumFieldProvider
 {
     public IReadOnlyList<DataScopeEnumField> Fields { get; } =
-        [new("Organization/Person", "EmploymentStatus", Enum.GetNames<EmploymentStatus>())];
+        [new("Person", "EmploymentStatus", Enum.GetNames<EmploymentStatus>())];
 }

@@ -9,7 +9,7 @@ namespace ICP.Platform.Modules.Organization.Services;
 public sealed class OrganizationDataScopeConditions(IOrganizationQuery organizations) : IDataScopeBusinessConditionProvider
 {
     public IReadOnlyList<DataScopeBusinessConditionDefinition> Definitions { get; } =
-        [new("organization.person.departmentEnabled", "所属部门已启用", ["Organization/Person"], false)];
+        [new("organization.person.departmentEnabled", "所属部门已启用", ["Person"], false)];
 
     /// <inheritdoc/>
     public void Validate(string key, JsonElement value)
@@ -23,7 +23,7 @@ public sealed class OrganizationDataScopeConditions(IOrganizationQuery organizat
         CancellationToken cancellationToken)
     {
         Validate(key, value);
-        if (resource.ModelKey != "Organization/Person") throw new InvalidOperationException("DATA_SCOPE_BUSINESS_TARGET_MISMATCH");
+        if (resource.ModelKey != "Person") throw new InvalidOperationException("DATA_SCOPE_BUSINESS_TARGET_MISMATCH");
         var view = await organizations.ReadAsync(cancellationToken);
         var person = view.Find(OrganizationRecordKind.Person, objectId);
         return person?["DepartmentId"] is string departmentId &&
@@ -35,7 +35,7 @@ public sealed class OrganizationDataScopeConditions(IOrganizationQuery organizat
         IReadOnlyDictionary<string, object?> candidate, JsonElement value, CancellationToken cancellationToken)
     {
         Validate(key, value);
-        if (resource.ModelKey != "Organization/Person") throw new InvalidOperationException("DATA_SCOPE_BUSINESS_TARGET_MISMATCH");
+        if (resource.ModelKey != "Person") throw new InvalidOperationException("DATA_SCOPE_BUSINESS_TARGET_MISMATCH");
         if (!candidate.TryGetValue("DepartmentId", out var raw) || raw is not string departmentId) return false;
         var view = await organizations.ReadAsync(cancellationToken);
         return view.Find(OrganizationRecordKind.Department, departmentId)?["IsEnabled"] is true;

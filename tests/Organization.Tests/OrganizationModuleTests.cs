@@ -34,7 +34,7 @@ public class OrganizationModuleTests
         Assert.IsType<ICP.Platform.Modules.Organization.Caching.OrganizationQuery>(provider.GetRequiredService<ICP.Platform.Organization.Contracts.IOrganizationQuery>());
         Assert.Single(services, d => d.ServiceType == typeof(ICP.Platform.Organization.Contracts.IOrganizationQuery));
         var registrations = scope.ServiceProvider.GetServices<ICP.Platform.Persistence.Transactions.PlatformCommitRegistration>().ToArray();
-        Assert.Equal(["Organization/Company", "Organization/Department", "Organization/Person", "Organization/Position"],
+        Assert.Equal(["Company", "Department", "Person", "Position"],
             registrations.Select(r => r.ModelKey).Order(StringComparer.Ordinal));
         Assert.All(registrations, registration => Assert.Same(scope.ServiceProvider.GetRequiredService<OrganizationAdmissionCommitParticipant>(), registration.Participant));
         Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, d => d.ServiceType == typeof(OrganizationAdmissionCommitParticipant)).Lifetime);
@@ -64,20 +64,20 @@ public class OrganizationModuleTests
         AssertCrudBehavior(
             CompanyObjectBehavior.BehaviorDefinition,
             "organization.company",
-            "Organization/Company");
+            "Company");
         AssertCrudBehavior(
             DepartmentObjectBehavior.BehaviorDefinition,
             "organization.department",
-            "Organization/Department",
+            "Department",
             "CompanyId");
         AssertCrudBehavior(
             PositionObjectBehavior.BehaviorDefinition,
             "organization.position",
-            "Organization/Position");
+            "Position");
         AssertCrudBehavior(
             PersonObjectBehavior.BehaviorDefinition,
             "organization.person",
-            "Organization/Person");
+            "Person");
         Assert.True(typeof(CompanyObjectBehavior).IsAbstract && typeof(CompanyObjectBehavior).IsSealed);
         Assert.True(typeof(DepartmentObjectBehavior).IsAbstract && typeof(DepartmentObjectBehavior).IsSealed);
         Assert.True(typeof(PositionObjectBehavior).IsAbstract && typeof(PositionObjectBehavior).IsSealed);

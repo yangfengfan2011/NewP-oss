@@ -101,7 +101,7 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
         Assert.Equal(unknownCommit ? 2 : 0, acknowledgement.Failures);
         await using var scope = fixture.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-        var saved = await db.Set<Dictionary<string, object?>>("Organization/Company").AsNoTracking().SingleAsync();
+        var saved = await db.Set<Dictionary<string, object?>>("Company").AsNoTracking().SingleAsync();
         Assert.Equal("已保存等待恢复", saved["ENAME"]);
 
         async Task AssertFailureAsync(HttpResponseMessage response)

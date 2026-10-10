@@ -27,7 +27,7 @@ public sealed class ModuleCompositionTests
         {
             var member = Assert.Single(plan.Modules, module => module.ModuleId == id);
             Assert.Equal("1.0.0", member.Version);
-            Assert.Contains(id + "." + (id == "Workspace" ? "WorkspaceFolder" : id), member.ModelKeys);
+            Assert.Contains(id == "Workspace" ? "WorkspaceFolder" : id, member.ModelKeys);
             Assert.NotNull(member.Persistence);
             Assert.Single(member.Persistence.MigrationBundles);
             var entry = Assert.Single(entries, entry => entry.GetProperty("moduleId").GetString() == id);

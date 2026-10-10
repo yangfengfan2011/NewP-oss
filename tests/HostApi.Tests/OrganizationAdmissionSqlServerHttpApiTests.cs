@@ -51,7 +51,7 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
         Assert.Equal(HttpStatusCode.Unauthorized, (await second.GetAsync("/api/auth/current-user")).StatusCode);
         await using var scope = fixture.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-        var sessions = await db.Set<Dictionary<string, object?>>("Authentication/AuthenticationSession").AsNoTracking()
+        var sessions = await db.Set<Dictionary<string, object?>>("AuthenticationSession").AsNoTracking()
             .Where(row => EF.Property<string>(row, "AccountEID") == prepared.Account).ToListAsync();
         Assert.Equal(3, sessions.Count);
         Assert.All(sessions, row => Assert.NotNull(row["RevokedAt"]));

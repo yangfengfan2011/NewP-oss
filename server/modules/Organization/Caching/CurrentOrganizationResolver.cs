@@ -60,9 +60,9 @@ internal abstract class OrganizationRelationshipRecordView(OrganizationSnapshot 
     // overlay 使用平台模型键；映射保持在 Organization 内部，不扩大公共查询 interface。
     protected static string ModelKey(OrganizationRelationshipRecordKind kind) => kind switch
     {
-        OrganizationRelationshipRecordKind.Company => "Organization/Company",
-        OrganizationRelationshipRecordKind.Department => "Organization/Department",
-        OrganizationRelationshipRecordKind.Person => "Organization/Person",
+        OrganizationRelationshipRecordKind.Company => "Company",
+        OrganizationRelationshipRecordKind.Department => "Department",
+        OrganizationRelationshipRecordKind.Person => "Person",
         _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
 }

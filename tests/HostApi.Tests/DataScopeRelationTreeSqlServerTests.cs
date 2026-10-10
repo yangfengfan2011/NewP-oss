@@ -204,7 +204,7 @@ public sealed class DataScopeRelationTreeSqlServerTests(ITestOutputHelper output
         foreach (var size in new[] { 128, 512 })
         {
             for (; created < size; created++)
-                db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Organization/Department")).Add(new()
+                db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Department")).Add(new()
                 {
                     ["EID"] = $"Department_TreeCost_{created:D4}", ["CompanyId"] = company,
                     ["ParentDepartmentId"] = null, ["ECODE"] = $"COST-{created:D4}",

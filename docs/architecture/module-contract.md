@@ -17,7 +17,19 @@ Capsule 通过可选 `composition.members` 数组引用成员组件 ID。同一�
 
 `active-module-runtime.json` 从同一规范计划公开 `compositionGraph`，活动模块条目保留 `compositionMembers` 和 `parentModuleId`。没有 backend entry、且显式关闭 frontend 的纯组合组件不需要空实现程序集或页面。Host 只装载成员原有行为，Shell 仍以成员自己的身份绑定前端实现。
 
-InforCenter 是无自有模型和迁移流的纯组合组件，直接成员为 Workspace、Part、Document。Workspace 的 Part、Document 能力依赖保持显式，工作空间内容 Link 与对象所属 API/页面不表示组件父子关系。本阶段保留既有 qualified 模型键；模型身份与持久化生命周期的后续切换遵循 ADR-0055。
+InforCenter 是无自有模型和迁移流的纯组合组件，直接成员为 Workspace、Part、Document。Workspace 的 Part、Document 能力依赖保持显式，工作空间内容 Link 与对象所属 API/页面不表示组件父子关系。模型身份采用下文全局技术名称；可选启停与保留持久化生命周期的后续实现继续遵循 ADR-0055。
+
+## 全局模型身份
+
+Model authoring 的技术名称是平台范围内唯一的引用身份，例如 `Part`、`Document`、`WorkspaceFolder` 和 `IdentityAccount`。Canonical Module Plan 的 `ModelKeys` 与运行时 `ModelDefinition.LogicalKey` 直接采用同一声明名称；名字按大小写不敏感规则拒绝重名，引用使用声明的规范大小写，不接受旧 `ModuleId/ModelName` 别名。组件归组不改变名称，当前不支持技术名改名或模型 owner 转移。
+
+`OwnerModuleId` 独立声明唯一拥有者。EF shared-type entity、外键目标、Link 的 `linkedTypes`、固定端点、公共列映射、显示、CRUD、授权、缓存及 PageRef 输入共用全局名称；Workspace 的 `ChildModelKey` 和个人空间 `SubjectModelKey` 也保存该名称。同一对象 ID 在不同模型中仍是不同对象，Link 的 LID 保持独立关系身份。资源键、behavior key、功能位置、路由和物理 schema/table 不由模型键派生，也不随身份切换改名。
+
+归属从正式编译模型目录解析，资源 owner、真实主键、活动集合、平台基础或显式业务依赖及实际服务端授权继续独立验证。外键显式声明的 `principalModuleId` 保留为独立归属约束，不再拼入目标模型键。
+
+发布的 ModelDigest v1 保持原 `owner/name` 的 Ordinal 序列化顺序；该组合只属于内部持久摘要排序，不能作为目录、EF 或 API 的寻址键。迁移 owner 和物理 target 保持独立，按正式 `migration-manifest check` 的真实 digest、Provider Target/Transition 结果决定是否需要 authoring 新迁移，不因逻辑名称切换改写已发布前缀或手改生成资产。
+
+模型引用值的协议切换不提供存量旧 qualified 值的 alias 或回填兼容，即使物理 schema 没有变化。首次验证使用受支持的空 catalog；已有开发数据须按 ADR-0042 确认归属和可丢弃边界后显式重建，Host 不自动重建。回退需要配套旧代码与兼容数据库备份，或对已确认可丢弃的开发 catalog 显式重建；仅回退源码不能让旧 Host 正确消费新格式引用值。
 
 ## 平台必需基础集合
 

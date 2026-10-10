@@ -14,9 +14,9 @@ public sealed record WorkspaceSpaceRoot(string SpaceId, string SpaceKind, string
 public sealed class WorkspaceSpaces(EfPlatformDbContext db, IPlatformTransactionExecutor transactions, IDataScopeReadPlanProvider readPlans,
     IStandardCrudService details, WorkspaceFolderReadDescriptor descriptor, WorkspaceFolderScope folderScope)
 {
-    private const string SpaceModel = "Workspace/WorkspaceSpace";
-    private const string FolderModel = "Workspace/WorkspaceFolder";
-    private const string AccountModel = "Identity/IdentityAccount";
+    private const string SpaceModel = "WorkspaceSpace";
+    private const string FolderModel = "WorkspaceFolder";
+    private const string AccountModel = "IdentityAccount";
 
     /// <summary>只查询公共空间及可信当前账号的个人空间，GET 不创建记录。</summary>
     public async Task<IReadOnlyList<WorkspaceSpaceRoot>> ListAsync(string actorId, CancellationToken token = default)

@@ -54,14 +54,14 @@ public sealed class LinkQueryDisplaySqlServerHttpApiTests
         {
             Assert.Null(scope.ServiceProvider.GetRequiredService<IStandardCrudResourceRegistry>().FindByResourceKey("workspace.folder"));
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-            var links = db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolderContent");
+            var links = db.Set<Dictionary<string, object?>>("WorkspaceFolderContent");
             // 构造通用 Link 的读取样本；Person 实体仍由正式创建入口写入，Workspace 命令不新增人员接入能力。
             var seed = await links.AsNoTracking().FirstAsync(row => EF.Property<string>(row, "PEID") == rootId);
-            links.Add(new(seed) { ["LID"] = Guid.NewGuid().ToString("N"), ["CEID"] = personId, ["ChildModelKey"] = "Organization/Person" });
+            links.Add(new(seed) { ["LID"] = Guid.NewGuid().ToString("N"), ["CEID"] = personId, ["ChildModelKey"] = "Person" });
             await db.SaveChangesAsync();
         }
         var queryScope = Uri.EscapeDataString(JsonSerializer.Serialize(new { spaceId, rootFolderId = rootId, linkIds = "[]" }));
-        var url = "/api/links/workspace.content?direction=forward&anchorModelKey=Workspace%2FWorkspaceFolder&anchorId=" + rootId + "&queryScope=" + queryScope;
+        var url = "/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId=" + rootId + "&queryScope=" + queryScope;
         resolver.Calls.Clear();
         var result = await FeatureHttpTestRequests.ReadAsync(admin, entry, url);
         var rows = result.GetProperty("items").EnumerateArray().ToArray();
@@ -73,7 +73,7 @@ public sealed class LinkQueryDisplaySqlServerHttpApiTests
         {
             var fields = row.GetProperty("fields");
             Assert.False(fields.TryGetProperty("Name_DisplayValue", out _));
-            if (row.GetProperty("associatedObject").GetProperty("modelKey").GetString() == "Organization/Person")
+            if (row.GetProperty("associatedObject").GetProperty("modelKey").GetString() == "Person")
             {
                 Assert.Equal("2000-02-29", fields.GetProperty("BirthDate").GetString());
                 Assert.Equal(person.GetProperty("fields").GetProperty("BirthDate_DisplayValue").GetString(), fields.GetProperty("BirthDate_DisplayValue").GetString());
@@ -93,7 +93,7 @@ public sealed class LinkQueryDisplaySqlServerHttpApiTests
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
 
         var reverse = await FeatureHttpTestRequests.ReadAsync(admin, entry,
-            "/api/links/workspace.content?direction=reverse&anchorModelKey=Organization%2FPerson&anchorId=" + personId);
+            "/api/links/workspace.content?direction=reverse&anchorModelKey=Person&anchorId=" + personId);
         var parent = Assert.Single(reverse.GetProperty("items").EnumerateArray());
         Assert.Equal(rootId, parent.GetProperty("associatedObject").GetProperty("id").GetString());
         Assert.Equal("空间显示", parent.GetProperty("fields").GetProperty("Origin_DisplayValue").GetString());
@@ -104,28 +104,28 @@ public sealed class LinkQueryDisplaySqlServerHttpApiTests
         var plan = provider.GetRequiredService<CompiledPersistencePlan>();
         var original = Assert.Single(plan.Models, model => model.LinkQuery is not null);
         var query = original.LinkQuery!;
-        var types = query.Endpoints.Keys.Append("Organization/Person").ToArray();
-        var folder = plan.Models.Single(model => model.LogicalKey == "Workspace/WorkspaceFolder");
+        var types = query.Endpoints.Keys.Append("Person").ToArray();
+        var folder = plan.Models.Single(model => model.LogicalKey == "WorkspaceFolder");
         var origin = folder.Fields.Single(field => field.Name == "OriginSpaceId");
         var endpoints = query.Endpoints.ToDictionary();
-        endpoints.Add("Organization/Person", new() { ResourceKey = "organization.person" });
+        endpoints.Add("Person", new() { ResourceKey = "organization.person" });
         var columns = query.Columns.Select(column => column with
         {
             Nullable = column.Nullable || column.Field == "ObjectType",
-            Mappings = column.Mappings.Append(new KeyValuePair<string, string?>("Organization/Person", column.Field switch
+            Mappings = column.Mappings.Append(new KeyValuePair<string, string?>("Person", column.Field switch
             { "ObjectType" => null, "Code" => "PersonNo", "Name" => "ENAME", _ => column.Field })).ToDictionary()
         }).ToList();
         columns.Add(new() { Field = "Origin", ValueType = origin.ValueType.ToString(), Nullable = true,
             Mappings = types.ToDictionary(type => type, type => type == folder.LogicalKey ? "OriginSpaceId" : (string?)null) });
         columns.Add(new() { Field = "BirthDate", ValueType = "CalendarDate", Nullable = true,
-            Mappings = types.ToDictionary(type => type, type => type == "Organization/Person" ? "BirthDate" : (string?)null) });
+            Mappings = types.ToDictionary(type => type, type => type == "Person" ? "BirthDate" : (string?)null) });
         var models = plan.Models.Select(model => model == folder ? model with
         {
             Fields = model.Fields.Select(field => field == origin ? field with { Kind = FieldKind.Reference,
                 DisplayRule = new("reference", "WorkspaceSpace", "EID", "ENAME") } : field).ToArray()
         } : model == original ? model with
         {
-            LinkedTypes = [.. model.LinkedTypes, new ModelMetadataLinkedType { Parent = "Workspace/WorkspaceFolder", Child = "Organization/Person" }],
+            LinkedTypes = [.. model.LinkedTypes, new ModelMetadataLinkedType { Parent = "WorkspaceFolder", Child = "Person" }],
             LinkQuery = query with { Endpoints = endpoints, Columns = columns }
         } : model).ToArray();
         var modules = provider.GetRequiredService<CanonicalModulePlan>();

@@ -19,11 +19,79 @@ namespace ICP.Platform.Persistence.Tests;
 
 public sealed class PersistencePlanCompilerTests
 {
+    [Fact]
+    public void Compile_GlobalNamesCollideAcrossOwnersAfterCaseFolding_RejectsWholeCandidate()
+    {
+        using var first = TestPackage.Create("Partner.First", "Asset");
+        using var second = TestPackage.Create("Partner.Second", "asset");
+        second.RewriteManifest(manifest => manifest["migrations"]!.AsArray()[0]!["migrationId"] =
+            "20260809000001_partner_second_000001_initial_22222222");
+        var result = new PersistencePlanCompiler(FindStorageTypeMap()).Compile(
+            BuildCanonicalPlan(first.BuildModule(), second.BuildModule()), PersistenceProvider.SqlServer);
+
+        Assert.False(result.IsSuccess);
+        Assert.Null(result.Plan);
+        Assert.Contains(result.Diagnostics, item => item.Code == "PERSISTENCE_MODEL_KEY_CONFLICT");
+    }
+
+    [Theory]
+    [InlineData("Partner.Other", "Asset", "PERSISTENCE_FOREIGN_KEY_OWNER_INVALID")]
+    [InlineData("Partner.AssetCatalog", "asset", "PERSISTENCE_FOREIGN_KEY_PRINCIPAL_MISSING")]
+    public void Compile_ForeignKeyRequiresDeclaredCanonicalNameAndIndependentOwner(string owner, string name, string code)
+    {
+        using var package = TestPackage.Create("Partner.AssetCatalog", "Asset");
+        package.RewriteModel(model => model["foreignKeys"] = new JsonArray(new JsonObject
+        {
+            ["name"] = "FK_Asset_Self", ["fields"] = new JsonArray("Code"),
+            ["principalModuleId"] = owner, ["principalModel"] = name,
+            ["principalFields"] = new JsonArray("EID"), ["onDelete"] = "Restrict"
+        }));
+        var result = new PersistencePlanCompiler(FindStorageTypeMap()).Compile(
+            BuildCanonicalPlan(package.BuildModule()), PersistenceProvider.SqlServer);
+
+        Assert.False(result.IsSuccess);
+        Assert.Null(result.Plan);
+        Assert.Contains(result.Diagnostics, item => item.Code == code);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Compile_ForeignKeyWithoutOwner_ResolvesGlobalTargetAndRetainsDependencyBoundary(bool declareDependency)
+    {
+        using var source = TestPackage.Create("Partner.First", "Asset");
+        using var target = TestPackage.Create("Partner.Second", "Category");
+        target.RewriteManifest(manifest => manifest["migrations"]!.AsArray()[0]!["migrationId"] =
+            "20260809000001_partner_second_000001_initial_22222222");
+        source.RewriteModel(model => model["foreignKeys"] = new JsonArray(new JsonObject
+        {
+            ["name"] = "FK_Asset_Category", ["fields"] = new JsonArray("Code"),
+            ["principalModel"] = "Category", ["principalFields"] = new JsonArray("EID"), ["onDelete"] = "Restrict"
+        }));
+        var module = source.BuildModule() with { Dependencies = declareDependency ? ["Partner.Second"] : [] };
+        var result = new PersistencePlanCompiler(FindStorageTypeMap()).Compile(
+            BuildCanonicalPlan(module, target.BuildModule()), PersistenceProvider.SqlServer);
+
+        if (declareDependency)
+        {
+            Assert.True(result.IsSuccess, string.Join(Environment.NewLine, result.Diagnostics.Select(item => item.Message)));
+            var foreignKey = Assert.Single(Assert.Single(result.Plan!.Models, model => model.Name == "Asset").ForeignKeys);
+            Assert.Equal("Category", foreignKey.PrincipalModelKey);
+            Assert.Null(foreignKey.PrincipalOwnerModuleId);
+            Assert.Equal("Partner.Second", Assert.Single(result.Plan.Models, model => model.Name == "Category").OwnerModuleId);
+        }
+        else
+        {
+            Assert.False(result.IsSuccess);
+            Assert.Contains(result.Diagnostics, item => item.Code == "PERSISTENCE_FOREIGN_KEY_OWNER_INVALID");
+        }
+    }
+
     private const string OrganizationInitialFromModelDigest =
         "a0d7b6421f280436e2b3726504c3b64a7eaf04dec7fb967faae2046546b3cb2c";
 
     [Fact]
-    public void Compile_ExternalOwnedModel_UsesQualifiedKeySchemaAndDeterministicDigest()
+    public void Compile_ExternalOwnedModel_UsesGlobalNameIndependentOwnerAndDeterministicDigest()
     {
         using var package = TestPackage.Create("Partner.AssetCatalog", "Asset");
         var module = package.BuildModule();
@@ -39,7 +107,7 @@ public sealed class PersistencePlanCompilerTests
         Assert.NotNull(second.Plan);
         Assert.Equal(first.Plan.PlanDigest, second.Plan.PlanDigest);
         Assert.Equal(first.Plan.CanonicalBytes, second.Plan.CanonicalBytes);
-        Assert.Equal("Partner.AssetCatalog/Asset", first.Plan.Models.Single().LogicalKey);
+        Assert.Equal("Asset", first.Plan.Models.Single().LogicalKey);
         Assert.Equal("Partner.AssetCatalog", first.Plan.Models.Single().OwnerModuleId);
         Assert.Equal("np_partner_assetcatalog", first.Plan.Models.Single().SchemaName);
         Assert.Same(first.Plan, first.Plan.RuntimeModelPlan);
@@ -103,7 +171,7 @@ public sealed class PersistencePlanCompilerTests
         Assert.Contains(result.Diagnostics, static item =>
             item.Code == "PERSISTENCE_FOREIGN_KEY_PRINCIPAL_MISSING"
             && item.ModuleId == "Partner.AssetCatalog"
-            && item.CanonicalKey == "Partner.AssetCatalog/Asset/FK_Asset_Missing");
+            && item.CanonicalKey == "Asset/FK_Asset_Missing");
     }
 
     [Fact]
@@ -132,7 +200,7 @@ public sealed class PersistencePlanCompilerTests
         Assert.Contains(result.Diagnostics, static item =>
             item.Code == "PERSISTENCE_FOREIGN_KEY_PRINCIPAL_FIELD_MISSING"
             && item.ModuleId == "Partner.AssetCatalog"
-            && item.CanonicalKey == "Partner.AssetCatalog/Asset/FK_Asset_Self");
+            && item.CanonicalKey == "Asset/FK_Asset_Self");
     }
 
     [Fact]

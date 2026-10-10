@@ -78,7 +78,7 @@ public sealed class EfPlatformDbContext : DbContext
     public string ModelCacheSignature => _modelCacheSignature;
 
     /// <summary>
-    /// 把 qualified key 或唯一的 legacy 裸模型名解析为 EF shared-type entity key。
+    /// 按唯一声明的技术名称解析 EF shared-type entity；不接受旧 owner/name 别名。
     /// </summary>
     public string ResolveModelKey(string modelKey)
     {
@@ -91,15 +91,7 @@ public sealed class EfPlatformDbContext : DbContext
             return exact.LogicalKey;
         }
 
-        var legacyMatches = _definitions
-            .Where(definition => string.Equals(definition.Name, modelKey, StringComparison.Ordinal))
-            .ToArray();
-        return legacyMatches.Length switch
-        {
-            1 => legacyMatches[0].LogicalKey,
-            0 => throw new InvalidOperationException($"Persistence model '{modelKey}' is absent from the compiled plan."),
-            _ => throw new InvalidOperationException($"Persistence model name '{modelKey}' is ambiguous; use moduleId/modelKey.")
-        };
+        throw new InvalidOperationException($"Persistence model '{modelKey}' is absent from the compiled plan.");
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

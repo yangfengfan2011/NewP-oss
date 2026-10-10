@@ -139,7 +139,7 @@ public sealed class AcceptanceGateTests
                 var publicRoot = spaces.EnumerateArray().Single(space => space.GetProperty("spaceKind").GetString() == "Public");
                 var position = new { spaceId = publicRoot.GetProperty("spaceId").GetString(), rootFolderId = publicRoot.GetProperty("rootFolderId").GetString(), linkIds = Array.Empty<string>() };
                 await WorkspaceAcceptanceFixture.SendAsync(ordinary, HttpMethod.Post, "/api/workspace/content/references",
-                    new { position, target = new { modelKey = "Workspace/WorkspaceFolder", id = folderId } },
+                    new { position, target = new { modelKey = "WorkspaceFolder", id = folderId } },
                     features.Action(entry, "add", "list.custom", "folder").Position, token);
                 await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "fixture-mixed.json"), new { folderId, actorId = actor.AccountId }, token);
                 await WorkspaceAcceptanceFixture.VerifyPartCreationAsync(ordinary, features, publicRoot, runId, token);
@@ -282,10 +282,10 @@ public sealed class AcceptanceGateTests
                 var folder = await WorkspaceAcceptanceFixture.CreateFolderAtPositionAsync(ordinary, features, position, folderName, token);
                 var partId = await WorkspaceAcceptanceFixture.CreateMetadataObjectAsync(ordinary, features, "Part", "part.part.read", "/api/part/parts", partCode, partName, token);
                 await WorkspaceAcceptanceFixture.SendAsync(ordinary, HttpMethod.Post, "/api/workspace/content/references",
-                    new { position = position.CommandPosition, target = new { modelKey = "Part/Part", id = partId } },
+                    new { position = position.CommandPosition, target = new { modelKey = "Part", id = partId } },
                     features.Action(entry, "add", "list.custom", "folder").Position, token);
                 // 先证明普通主体按来源位置能读反向与父对象，避免以UI超时诊断权限/锚点准备错误。
-                foreach (var (model, id) in new[] { ("Workspace/WorkspaceFolder", folder.FolderId), ("Part/Part", partId) })
+                foreach (var (model, id) in new[] { ("WorkspaceFolder", folder.FolderId), ("Part", partId) })
                 {
                     var references = await WorkspaceAcceptanceFixture.ReadDirectReferencesAsync(ordinary, features, model, id, token);
                     if (!references.GetProperty("items").EnumerateArray().Any(item => item.GetProperty("associatedObject").GetProperty("id").GetString() == rootId))

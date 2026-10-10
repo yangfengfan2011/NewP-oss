@@ -36,7 +36,7 @@ it.each(['target', 'model', 'navigation', 'page', 'resolver', 'duplicate-key', '
     const entries = list.detailContributions as Array<{ key: string; targetViewKey: string; navigationKey: string; pageRef: { pageKey: string; parameters: Record<string, unknown>; inputResolverKey: string } }>;
     const entry = entries[1]; let bindings = modules;
     if (failure === 'target') entry.targetViewKey = 'missing.detail';
-    if (failure === 'model') entry.pageRef.parameters.anchorModelKey = 'Document/Document';
+    if (failure === 'model') entry.pageRef.parameters.anchorModelKey = 'Document';
     if (failure === 'navigation') entry.navigationKey = 'part.parts';
     if (failure === 'page') entry.pageRef.parameters.viewKey = 'workspace.folder.list';
     if (failure === 'resolver') entry.pageRef.inputResolverKey = 'missing';

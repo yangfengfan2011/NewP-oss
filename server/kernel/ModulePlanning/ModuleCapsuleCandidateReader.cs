@@ -339,9 +339,7 @@ public sealed class ModuleCapsuleCandidateReader
                         continue;
                     }
 
-                    modelKeys.Add(property.Name.Contains('.', StringComparison.Ordinal)
-                        ? property.Name
-                        : $"{moduleId}.{property.Name}");
+                    modelKeys.Add(property.Name);
                 }
             }
         }
@@ -403,9 +401,7 @@ public sealed class ModuleCapsuleCandidateReader
                     continue;
                 }
 
-                modelKeys.Add(property.Name.Contains('.', StringComparison.Ordinal)
-                    ? property.Name
-                    : $"{moduleId}.{property.Name}");
+                modelKeys.Add(property.Name);
             }
         }
 

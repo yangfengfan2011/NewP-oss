@@ -6,8 +6,8 @@ namespace ICP.Platform.Authorization.Contracts;
 /// <summary>规范资源身份显式映射到所属模型和对象标识字段；专用命令模块可通过 DI 贡献，标准 CRUD 由描述符贡献。</summary>
 public sealed record DataScopeResource(string ResourceKey, string ModuleId, string ModelName, string IdField)
 {
-    /// <summary>模型身份始终包含声明 owner，已规范化的描述符不再重复加前缀。</summary>
-    public string ModelKey => ModelName.Contains('/', StringComparison.Ordinal) ? ModelName : $"{ModuleId}/{ModelName}";
+    /// <summary>技术名称是唯一模型身份，ModuleId 独立声明资源 owner。</summary>
+    public string ModelKey => ModelName;
 }
 
 /// <summary>统一裁决的可组合读取贡献；null 表示本层不限制，不表示执行失败。</summary>

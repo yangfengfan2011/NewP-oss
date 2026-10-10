@@ -199,13 +199,13 @@ public sealed class EfIdentityRepository : IIdentityRepository
     }
 
     private DbSet<Dictionary<string, object?>> Accounts =>
-        _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("Identity/IdentityAccount"));
+        _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("IdentityAccount"));
 
     private DbSet<Dictionary<string, object?>> Credentials =>
-        _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("Identity/LocalCredential"));
+        _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("LocalCredential"));
 
     private DbSet<Dictionary<string, object?>> SecurityEvents =>
-        _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("Identity/IdentitySecurityEvent"));
+        _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("IdentitySecurityEvent"));
 
     private static IdentityAccount MapAccount(IReadOnlyDictionary<string, object?> entity) => new()
     {

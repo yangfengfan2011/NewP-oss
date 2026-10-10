@@ -190,7 +190,7 @@ public sealed class RelationTreeReader(EfPlatformDbContext db, RelationTreeSql c
         {
             var plan = await readPlans.GetReadPlanAsync(node.ResourceKey, token);
             if (plan.Predicate is null) continue;
-            var rows = db.Set<Dictionary<string, object?>>(db.ResolveModelKey(definition.ModuleId + "/" + node.Model))
+            var rows = db.Set<Dictionary<string, object?>>(db.ResolveModelKey(node.Model))
                 .AsNoTracking().Where(plan.Predicate).Select(row => EF.Property<string>(row, node.IdField));
             using var scoped = rows.CreateDbCommand();
             var names = new Dictionary<string, string>(StringComparer.Ordinal);

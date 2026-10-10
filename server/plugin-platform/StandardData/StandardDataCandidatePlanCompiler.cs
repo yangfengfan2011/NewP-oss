@@ -196,8 +196,10 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
                 .ToArray(),
             FrontendBindings: frontendBindings,
             FrontendBindingReferences: frontendBindings,
-            ModelKeys: projection.Resources
-                .Select(static resource => resource.ResourceKey)
+            ModelKeys: documents.Values
+                .Where(static document => document["type"]?.GetValue<string>() == "model")
+                .SelectMany(static document => document.Select(property => property.Key)
+                    .Where(static key => key is not ("schemaVersion" or "type")))
                 .OrderBy(static key => key, StringComparer.Ordinal)
                 .ToArray(),
             Provenance: new ModulePlanProvenance(

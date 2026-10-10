@@ -32,7 +32,7 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         services.AddScoped<ICP.Platform.Identity.Contracts.IIdentityAdmissionPolicy, OrganizationAdmissionPolicy>();
         services.AddScoped<OrganizationAdmissionCommitParticipant>();
         foreach (var model in new[] { "Company", "Department", "Position", "Person" })
-            services.AddScoped(sp => new PlatformCommitRegistration($"Organization/{model}", sp.GetRequiredService<OrganizationAdmissionCommitParticipant>()));
+            services.AddScoped(sp => new PlatformCommitRegistration(model, sp.GetRequiredService<OrganizationAdmissionCommitParticipant>()));
         services.AddHostedService<OrganizationCacheInitializer>();
         services.AddScoped<PersonCreationRecorder>();
         services.AddScoped<IStandardCrudCreationRecorder>(static provider =>

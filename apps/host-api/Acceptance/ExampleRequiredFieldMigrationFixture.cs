@@ -314,7 +314,7 @@ internal static class ExampleRequiredFieldMigrationFixture
             [stream]);
     }
 
-    // 模块 model 只补齐 owner/schema/FK 归属投影，不重新声明字段事实。
+    // 模块 model 只补齐 owner/schema，不改写全局外键身份或字段事实。
     private static ModelDefinition[] AdaptOwner(
         IEnumerable<ModelDefinition> definitions,
         string ownerModuleId) =>
@@ -322,13 +322,7 @@ internal static class ExampleRequiredFieldMigrationFixture
             .Select(definition => definition with
             {
                 OwnerModuleId = ownerModuleId,
-                SchemaName = "dbo",
-                ForeignKeys = definition.ForeignKeys
-                    .Select(foreignKey => foreignKey with
-                    {
-                        PrincipalModelKey = $"{GetPrincipalOwner(ownerModuleId, foreignKey.PrincipalModelKey)}/{GetModelName(foreignKey.PrincipalModelKey)}"
-                    })
-                    .ToArray()
+                SchemaName = "dbo"
             })
             .OrderBy(static definition => definition.LogicalKey, StringComparer.Ordinal)
             .ToArray();
@@ -399,19 +393,6 @@ internal static class ExampleRequiredFieldMigrationFixture
     {
         var sourcePath = Path.Combine(repositoryRoot, sourceRelativePath.Replace('/', Path.DirectorySeparatorChar));
         return File.Exists(sourcePath) ? sourcePath : Path.Combine(AppContext.BaseDirectory, outputName);
-    }
-
-    // Authentication 中指向 IdentityAccount 的 FK 仍保留 Identity owner。
-    private static string GetPrincipalOwner(string ownerModuleId, string logicalKey) =>
-        ownerModuleId == "Authentication" && string.Equals(GetModelName(logicalKey), "IdentityAccount", StringComparison.Ordinal)
-            ? "Identity"
-            : ownerModuleId;
-
-    // Model key 可能已带 owner 前缀，投影时只取稳定 model name。
-    private static string GetModelName(string logicalKey)
-    {
-        var separator = logicalKey.LastIndexOf('/');
-        return separator >= 0 ? logicalKey[(separator + 1)..] : logicalKey;
     }
 
     private sealed record MigrationManifest(

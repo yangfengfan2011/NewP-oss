@@ -295,10 +295,10 @@ public sealed class DataScopePersonMutationSqlServerTests
         using (var scope = fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-            hiddenId = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Organization/Person"))
+            hiddenId = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Person"))
                 .AsNoTracking().Where(row => EF.Property<string>(row, "PersonNo") == "WRITE-SCOPE-HIDDEN")
                 .Select(row => EF.Property<string>(row, "EID")).SingleAsync();
-            var grants = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Authorization/DataScopeObjectSubject"))
+            var grants = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("DataScopeObjectSubject"))
                 .AsNoTracking().CountAsync(row => EF.Property<string>(row, "ResourceKey") == "organization.person"
                     && EF.Property<string>(row, "ObjectId") == hiddenId);
             Assert.Equal(0, grants);

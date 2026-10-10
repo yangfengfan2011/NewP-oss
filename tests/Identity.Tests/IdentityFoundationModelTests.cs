@@ -92,7 +92,7 @@ public sealed class IdentityFoundationModelTests
         AssertAuditFields(credential);
         Assert.Contains(credential.Indexes, static index => index is { Name: "UX_LocalCredential_AccountEID", IsUnique: true });
         Assert.Contains(credential.ForeignKeys, static foreignKey =>
-            foreignKey is { Name: "FK_LocalCredential_IdentityAccount", PrincipalModelKey: "Identity/IdentityAccount" });
+            foreignKey is { Name: "FK_LocalCredential_IdentityAccount", PrincipalModelKey: "IdentityAccount" });
 
         var securityEvent = Assert.Single(definitions, static model => model.Name == "IdentitySecurityEvent");
         AssertAuditFields(securityEvent);
@@ -101,7 +101,7 @@ public sealed class IdentityFoundationModelTests
         Assert.Equal("instant", occurredAt.DisplayRule?.Type);
         Assert.Equal("dateTime", occurredAt.DisplayRule?.Format);
         Assert.Contains(securityEvent.ForeignKeys, static foreignKey =>
-            foreignKey is { Name: "FK_IdentitySecurityEvent_TargetIdentityAccount", PrincipalModelKey: "Identity/IdentityAccount" });
+            foreignKey is { Name: "FK_IdentitySecurityEvent_TargetIdentityAccount", PrincipalModelKey: "IdentityAccount" });
     }
 
     [Fact]

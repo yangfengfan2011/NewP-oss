@@ -16,10 +16,10 @@ it('edits a nested condition using stable accessible leaf groups and keeps the o
   const render = () => <Harness />;
   function Harness() {
     const [condition, setCondition] = useState(initial);
-    return <DataScopeConditionEditor condition={condition} path="1" modelKey="Organization/Person"
+    return <DataScopeConditionEditor condition={condition} path="1" modelKey="Person"
       fields={[{ name: 'ENAME', type: 'String' }, { name: 'BirthDate', type: 'DateOnly' }]}
       contexts={[]} bindings={[]} businessTypes={[{ key: 'organization.person.departmentEnabled', title: '所属部门已启用',
-        modelKeys: ['Organization/Person'], hasReadContribution: false }]}
+        modelKeys: ['Person'], hasReadContribution: false }]}
       onChange={next => { current = next; setCondition(next); }} />;
   }
   try {
@@ -41,7 +41,7 @@ it('places a server validation error beside the named nested condition', async (
     children: [{ type: 'attribute', field: 'BirthDate', operator: 'greaterThan', value: 'invalid' }] };
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
   try {
-    await act(async () => root.render(localizeDataScope(<DataScopeConditionEditor condition={condition} path="1" modelKey="Organization/Person"
+    await act(async () => root.render(localizeDataScope(<DataScopeConditionEditor condition={condition} path="1" modelKey="Person"
       fields={[{ name: 'BirthDate', type: 'DateOnly' }]} contexts={[]} bindings={[]} businessTypes={[]}
       errorPath="1.1" errorMessage="条件 1.1：日历日期无效。" onChange={() => {}} />)));
     expect(container.querySelector('[aria-label="条件项 1.1"] .ant-alert')?.textContent).toContain('条件 1.1');

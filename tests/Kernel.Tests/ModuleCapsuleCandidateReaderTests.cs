@@ -143,7 +143,7 @@ public sealed class ModuleCapsuleCandidateReaderTests : IDisposable
         Assert.Equal(
             ["organization.person.detail", "organization.person.list", "organization.tree.page"],
             candidate.FrontendBindingReferences.OrderBy(static key => key, StringComparer.Ordinal));
-        Assert.Equal(["Organization.Person"], candidate.ModelKeys);
+        Assert.Equal(["Person"], candidate.ModelKeys);
         Assert.NotNull(candidate.Persistence);
         Assert.Equal(["metadata/models/Person.model.json"], candidate.Persistence.ModelPaths);
         var bundle = Assert.Single(candidate.Persistence.MigrationBundles);

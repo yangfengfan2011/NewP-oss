@@ -9,7 +9,7 @@ public sealed class IdentityDataScopeIdentities(EfPlatformDbContext db) : IDataS
 {
     public IReadOnlyList<DataScopeSubjectType> SubjectTypes { get; } = [new("user", "用户", true)];
     public IReadOnlyList<DataScopeContextValue> ContextValues { get; } = [new("current.account", "当前账号", "String", "Identity")];
-    public IReadOnlyList<DataScopeContextBinding> ContextBindings { get; } = [new("Identity/IdentityAccount", "EID", "current.account")];
+    public IReadOnlyList<DataScopeContextBinding> ContextBindings { get; } = [new("IdentityAccount", "EID", "current.account")];
 
     /// <inheritdoc/>
     public Task<IDataScopeIdentityFacts> ResolveAsync(string accountId, CancellationToken token) => Task.FromResult<IDataScopeIdentityFacts>(new Facts(accountId));

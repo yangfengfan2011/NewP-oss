@@ -73,8 +73,8 @@ internal static class WorkspaceAcceptanceFixture
         var row = contents.GetProperty("items").EnumerateArray().Single(item => item.GetProperty("fields").GetProperty("Name").GetString() == name);
         var target = row.GetProperty("associatedObject");
         var id = target.GetProperty("id").GetString()!;
-        if (target.GetProperty("modelKey").GetString() != "Part/Part"
-            || row.GetProperty("parent").GetProperty("modelKey").GetString() != "Workspace/WorkspaceFolder"
+        if (target.GetProperty("modelKey").GetString() != "Part"
+            || row.GetProperty("parent").GetProperty("modelKey").GetString() != "WorkspaceFolder"
             || row.GetProperty("parent").GetProperty("id").GetString() != rootId
             || string.IsNullOrEmpty(row.GetProperty("linkId").GetString()))
             throw new InvalidOperationException("组合后的内容 Link 未保留 Workspace/Part 端点与真实身份。");
@@ -148,7 +148,7 @@ internal static class WorkspaceAcceptanceFixture
         var folderId = created.GetProperty("id").GetString()!;
         var scope = JsonSerializer.Serialize(new { spaceId, rootFolderId, linkIds = "[]" });
         var links = await SendAsync(ordinary, HttpMethod.Get,
-            $"/api/links/workspace.content?direction=forward&anchorModelKey=Workspace%2FWorkspaceFolder&anchorId={Uri.EscapeDataString(rootFolderId)}&queryScope={Uri.EscapeDataString(scope)}",
+            $"/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId={Uri.EscapeDataString(rootFolderId)}&queryScope={Uri.EscapeDataString(scope)}",
             null, entry.Position, token);
         var link = links.GetProperty("items").EnumerateArray().Single(item =>
             item.GetProperty("associatedObject").GetProperty("id").GetString() == folderId);
@@ -181,7 +181,7 @@ internal static class WorkspaceAcceptanceFixture
         await CreateFolderAtPositionAsync(ordinary, features, terminal, sampleName, token);
         foreach (var parent in new[] { b, Root("Personal") })
             await SendAsync(ordinary, HttpMethod.Post, "/api/workspace/content/references",
-                new { position = parent.CommandPosition, target = new { modelKey = "Workspace/WorkspaceFolder", id = shared.FolderId } },
+                new { position = parent.CommandPosition, target = new { modelKey = "WorkspaceFolder", id = shared.FolderId } },
                 features.Action(entry, "add", "list.custom", "folder").Position, token);
         return new(publicRoot, a.LinkIds[^1], ["公共空间", $"路径A {suffix}", $"共享S {suffix}", $"后代T {suffix}"], sampleName);
     }
@@ -196,7 +196,7 @@ internal static class WorkspaceAcceptanceFixture
         var id = created.GetProperty("id").GetString()!;
         var queryScope = JsonSerializer.Serialize(new { spaceId = parent.SpaceId, rootFolderId = parent.RootFolderId, linkIds = JsonSerializer.Serialize(parent.LinkIds) });
         var contents = await SendAsync(ordinary, HttpMethod.Get,
-            $"/api/links/workspace.content?direction=forward&anchorModelKey=Workspace%2FWorkspaceFolder&anchorId={Uri.EscapeDataString(parent.FolderId)}&queryScope={Uri.EscapeDataString(queryScope)}&pageSize=20",
+            $"/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId={Uri.EscapeDataString(parent.FolderId)}&queryScope={Uri.EscapeDataString(queryScope)}&pageSize=20",
             null, entry.Position, token);
         var link = contents.GetProperty("items").EnumerateArray().Single(item => item.GetProperty("associatedObject").GetProperty("id").GetString() == id);
         return parent with { FolderId = id, LinkIds = [.. parent.LinkIds, link.GetProperty("linkId").GetString()!] };
@@ -266,7 +266,7 @@ internal static class WorkspaceAcceptanceFixture
             foreach (var item in contents.GetProperty("items").EnumerateArray())
                 models.Add(item.GetProperty("associatedObject").GetProperty("modelKey").GetString()!);
         }
-        if (!models.SetEquals(["Workspace/WorkspaceFolder", "Part/Part", "Document/Document"]))
+        if (!models.SetEquals(["WorkspaceFolder", "Part", "Document"]))
             throw new InvalidOperationException("正式重启样本缺少已建立的三类型混合引用。");
         return identities.Order(StringComparer.Ordinal).ToArray();
     }
@@ -283,7 +283,7 @@ internal static class WorkspaceAcceptanceFixture
         var rootId = root.GetProperty("rootFolderId").GetString()!;
         var scope = JsonSerializer.Serialize(new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = rootId, linkIds = "[]" });
         return SendAsync(client, HttpMethod.Get,
-            $"/api/links/workspace.content?direction=forward&anchorModelKey=Workspace%2FWorkspaceFolder&anchorId={Uri.EscapeDataString(rootId)}&queryScope={Uri.EscapeDataString(scope)}&pageSize=20",
+            $"/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId={Uri.EscapeDataString(rootId)}&queryScope={Uri.EscapeDataString(scope)}&pageSize=20",
             null, entryPosition, token);
     }
 

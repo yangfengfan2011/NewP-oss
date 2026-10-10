@@ -6,6 +6,21 @@ namespace ICP.Platform.Kernel.Tests;
 public sealed class CanonicalModulePlanCompilerTests
 {
     [Fact]
+    public void Compile_GlobalModelNamesDifferOnlyByCase_RejectsWholeCandidate()
+    {
+        var part = CreateCapsule("Part", [], ["/part"], ["part.page"], ["Part"]);
+        var other = CreateCapsule("Other", [], ["/other"], ["other.page"], ["part"]);
+
+        var result = new CanonicalModulePlanCompiler().Compile("global-model-collision", [other, part]);
+
+        Assert.False(result.IsSuccess);
+        Assert.Null(result.Plan);
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal("MODULE_MODEL_OWNER_CONFLICT", diagnostic.Code);
+        Assert.Equal("Other", diagnostic.ConflictingOwner);
+    }
+
+    [Fact]
     public void Compile_ShuffledCapsulesAndFacts_ProducesIdenticalPlanBytesAndHash()
     {
         var organization = CreateCapsule(
@@ -13,13 +28,13 @@ public sealed class CanonicalModulePlanCompilerTests
             dependencies: ["Authorization"],
             routes: ["/organization/tree", "/organization/persons"],
             frontendBindings: ["organization.tree.page", "organization.positions.page"],
-            models: ["Organization.Person", "Organization.Department"]);
+            models: ["Person", "Department"]);
         var authorization = CreateCapsule(
             moduleId: "Authorization",
             dependencies: [],
             routes: ["/authorization/roles"],
             frontendBindings: ["authorization.roles.page"],
-            models: ["Authorization.Role"]);
+            models: ["Role"]);
 
         var compiler = new CanonicalModulePlanCompiler();
 
@@ -60,7 +75,7 @@ public sealed class CanonicalModulePlanCompilerTests
             dependencies: [],
             routes: ["/organization/persons"],
             frontendBindings: ["organization.person.list"],
-            models: ["Organization.Person"]);
+            models: ["Person"]);
         var lower = CreateCapsule(
             moduleId: "organization",
             dependencies: [],
@@ -86,7 +101,7 @@ public sealed class CanonicalModulePlanCompilerTests
             dependencies: ["Authorization"],
             routes: ["/organization/persons"],
             frontendBindings: ["organization.person.list"],
-            models: ["Organization.Person"]);
+            models: ["Person"]);
 
         var result = new CanonicalModulePlanCompiler().Compile("candidate-missing-dependency", [organization]);
 
@@ -106,13 +121,13 @@ public sealed class CanonicalModulePlanCompilerTests
             dependencies: ["Authorization"],
             routes: ["/organization/persons"],
             frontendBindings: ["organization.person.list"],
-            models: ["Organization.Person"]);
+            models: ["Person"]);
         var authorization = CreateCapsule(
             moduleId: "Authorization",
             dependencies: ["Organization"],
             routes: ["/authorization/roles"],
             frontendBindings: ["authorization.roles.page"],
-            models: ["Authorization.Role"]);
+            models: ["Role"]);
 
         var result = new CanonicalModulePlanCompiler().Compile(
             "candidate-cycle",
@@ -133,7 +148,7 @@ public sealed class CanonicalModulePlanCompilerTests
             dependencies: [],
             routes: ["/organization/tree"],
             frontendBindings: ["organization.tree.page"],
-            models: ["Organization.Person"])
+            models: ["Person"])
             with
             {
                 FrontendBindingReferences = ["organization.tree.page", "organization.missing.page"]
@@ -156,7 +171,7 @@ public sealed class CanonicalModulePlanCompilerTests
             dependencies: [],
             routes: ["/organization/tree"],
             frontendBindings: ["organization.tree.page", "organization.orphan.page"],
-            models: ["Organization.Person"])
+            models: ["Person"])
             with
             {
                 FrontendBindingReferences = ["organization.tree.page"]
@@ -181,7 +196,7 @@ public sealed class CanonicalModulePlanCompilerTests
             dependencies: [],
             routes: ["/organization/persons/"],
             frontendBindings: ["organization.person.list"],
-            models: ["Organization.Person"]);
+            models: ["Person"]);
         var partner = CreateCapsule(
             moduleId: "Partner",
             dependencies: [],

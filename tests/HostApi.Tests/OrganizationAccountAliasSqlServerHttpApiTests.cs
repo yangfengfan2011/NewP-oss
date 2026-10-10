@@ -51,7 +51,7 @@ public sealed class OrganizationAccountAliasSqlServerHttpApiTests(ITestOutputHel
         output.WriteLine($"bindingStatus={(int)bound.StatusCode}; bindingBody={await bound.Content.ReadAsStringAsync()}");
         Assert.Equal(HttpStatusCode.OK, bound.StatusCode);
         Assert.Equal(canonical, (await bound.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("accountEid").GetString());
-        var stored = await db.Set<Dictionary<string, object?>>("Organization/Person").AsNoTracking().SingleAsync();
+        var stored = await db.Set<Dictionary<string, object?>>("Person").AsNoTracking().SingleAsync();
         output.WriteLine($"storedPerson.AccountEID={stored["AccountEID"]}; identityCanonical={(await directory.FindAsync(alias))!.AccountEid}; identityBound={(await directory.FindAsync(canonical))!.IsPersonnelBound}");
         var view = await fixture.Services.GetRequiredService<IOrganizationQuery>().ReadAsync();
         var current = view.FindByAccount(canonical);

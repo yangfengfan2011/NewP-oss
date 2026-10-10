@@ -43,17 +43,17 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
             await executor.ExecuteAsync(["Department", "Position", "Person"], token =>
             {
                 for (var index = 1; index < departments.Length; index++)
-                    db.Set<Dictionary<string, object?>>("Organization/Department").Add(new()
+                    db.Set<Dictionary<string, object?>>("Department").Add(new()
                     {
                         ["EID"] = departments[index], ["ECODE"] = $"D{index:0000}", ["ENAME"] = $"完整档案部门{index:0000}",
                         ["CompanyId"] = prepared.Company, ["ParentDepartmentId"] = departments[(index - 1) / 4],
                         ["SortOrder"] = index.ToString("0000"), ["IsEnabled"] = index % 17 != 0
                     });
                 for (var index = 0; index < positions.Length; index++)
-                    db.Set<Dictionary<string, object?>>("Organization/Position").Add(new()
+                    db.Set<Dictionary<string, object?>>("Position").Add(new()
                     { ["EID"] = positions[index], ["ENAME"] = $"完整档案岗位{index}", ["Description"] = new string('岗', 120), ["IsEnabled"] = index % 3 != 0 });
                 for (var index = 1; index < 10000; index++)
-                    db.Set<Dictionary<string, object?>>("Organization/Person").Add(new()
+                    db.Set<Dictionary<string, object?>>("Person").Add(new()
                     {
                         ["EID"] = Guid.NewGuid().ToString("N"), ["PersonNo"] = $"P{index:00000}", ["ENAME"] = $"完整档案人员{index:00000}",
                         ["CompanyId"] = prepared.Company, ["DepartmentId"] = departments[index % 1000], ["PositionId"] = positions[index % 10],
@@ -109,7 +109,7 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
         });
         await Measure("subtree-disable", () => SetOrganizationStateAsync(admin, http, "departments", prepared.Department, false));
         await Measure("subtree-enable", () => SetOrganizationStateAsync(admin, http, "departments", prepared.Department, true));
-        await Measure("independent-one-person-refresh", () => cache.RefreshAsync([new("Organization/Person", prepared.Person)]).AsTask());
+        await Measure("independent-one-person-refresh", () => cache.RefreshAsync([new("Person", prepared.Person)]).AsTask());
 
         await Measure("concurrent-warm-read", () => Task.WhenAll(Enumerable.Range(0, 16).Select(_ => Task.Run(async () =>
         {

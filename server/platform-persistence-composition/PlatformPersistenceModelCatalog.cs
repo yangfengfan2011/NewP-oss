@@ -19,13 +19,7 @@ public static class PlatformPersistenceModelCatalog
             .Select(static definition => definition with
             {
                 OwnerModuleId = "platform.core",
-                SchemaName = "dbo",
-                ForeignKeys = definition.ForeignKeys
-                    .Select(static foreignKey => foreignKey with
-                    {
-                        PrincipalModelKey = $"platform.core/{GetModelName(foreignKey.PrincipalModelKey)}"
-                    })
-                    .ToArray()
+                SchemaName = "dbo"
             })
             .OrderBy(static definition => definition.LogicalKey, StringComparer.Ordinal)
             .ToArray();
@@ -46,23 +40,11 @@ public static class PlatformPersistenceModelCatalog
                 {
                     // 设计期 migration 使用裸实体名，运行时归属仍由 Compiled Plan 保留。
                     OwnerModuleId = string.Empty,
-                    SchemaName = string.Empty,
-                    ForeignKeys = definition.ForeignKeys
-                        .Select(static foreignKey => foreignKey with
-                        {
-                            PrincipalModelKey = $"platform.core/{GetModelName(foreignKey.PrincipalModelKey)}"
-                        })
-                        .ToArray()
+                    SchemaName = string.Empty
                 };
             })
             .OrderBy(static definition => definition.LogicalKey, StringComparer.Ordinal)
             .ToArray();
-    }
-
-    private static string GetModelName(string logicalKey)
-    {
-        var separator = logicalKey.LastIndexOf('/');
-        return separator >= 0 ? logicalKey[(separator + 1)..] : logicalKey;
     }
 
     /// <summary>

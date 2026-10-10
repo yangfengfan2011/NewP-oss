@@ -12,10 +12,10 @@ public sealed class OrganizationDataScopeIdentities(IOrganizationQuery organizat
     public IReadOnlyList<DataScopeContextValue> ContextValues { get; } =
         [new("current.person", "当前人员", "String", "Organization"), new("current.company", "当前公司", "String", "Organization"), new("current.department", "当前部门", "String", "Organization")];
     public IReadOnlyList<DataScopeContextBinding> ContextBindings { get; } =
-        [new("Organization/Person", "EID", "current.person"), new("Organization/Person", "AccountEID", "current.account"),
-         new("Organization/Person", "CompanyId", "current.company"), new("Organization/Person", "DepartmentId", "current.department"),
-         new("Organization/Company", "EID", "current.company"), new("Organization/Department", "EID", "current.department"),
-         new("Organization/Department", "CompanyId", "current.company"), new("Organization/Department", "ParentDepartmentId", "current.department")];
+        [new("Person", "EID", "current.person"), new("Person", "AccountEID", "current.account"),
+         new("Person", "CompanyId", "current.company"), new("Person", "DepartmentId", "current.department"),
+         new("Company", "EID", "current.company"), new("Department", "EID", "current.department"),
+         new("Department", "CompanyId", "current.company"), new("Department", "ParentDepartmentId", "current.department")];
 
     /// <inheritdoc/>
     public async Task<IDataScopeIdentityFacts> ResolveAsync(string accountId, CancellationToken token) =>
@@ -25,7 +25,7 @@ public sealed class OrganizationDataScopeIdentities(IOrganizationQuery organizat
     public async Task<DataScopeSubjectPage> SearchAsync(string type, string? query, int page, IReadOnlyList<string> currentIds, CancellationToken token)
     {
         var model = type == "company" ? "Company" : "Department";
-        var rows = db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Organization/" + model)).AsNoTracking();
+        var rows = db.Set<Dictionary<string, object?>>(db.ResolveModelKey(model)).AsNoTracking();
         var filtered = rows;
         if (!string.IsNullOrWhiteSpace(query)) filtered = filtered.Where(row => EF.Property<string>(row, "ENAME").Contains(query));
         var selected = filtered.OrderBy(row => EF.Property<string>(row, "EID")).Skip((page - 1) * 20).Take(21);

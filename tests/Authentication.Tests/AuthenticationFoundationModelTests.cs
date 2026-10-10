@@ -122,6 +122,6 @@ public sealed class AuthenticationFoundationModelTests
         Assert.Contains(session.Fields, static field => field is { Name: "UpdatedAt", Required: true, IsAuditField: true });
         Assert.Contains(session.Indexes, static index => index is { Name: "UX_AuthenticationSession_TokenHash", IsUnique: true });
         Assert.Contains(session.ForeignKeys, static foreignKey =>
-            foreignKey is { Name: "FK_AuthenticationSession_IdentityAccount", PrincipalModelKey: "Identity/IdentityAccount" });
+            foreignKey is { Name: "FK_AuthenticationSession_IdentityAccount", PrincipalModelKey: "IdentityAccount" });
     }
 }

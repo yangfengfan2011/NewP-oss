@@ -14,12 +14,12 @@ interface MetadataManifest { modules: { moduleId: string; metadataBasePath: stri
 type Translate = (key: string, fallback?: string) => string;
 
 /** 从公开 runtime 视图声明定位词典，不依赖 Shell 私有上下文，也不推测模型与词典的命名关系。 */
-export async function loadDataScopeViewLabels(fetcher: typeof fetch, resources: { resourceKey: string; modelKey: string }[], signal: AbortSignal): Promise<DataScopeViewLabels[]> {
+export async function loadDataScopeViewLabels(fetcher: typeof fetch, resources: { resourceKey: string; moduleId: string; modelKey: string }[], signal: AbortSignal): Promise<DataScopeViewLabels[]> {
   const read = async <T,>(url: string): Promise<T> => {
     return requestAuthorization(fetcher, url, { credentials: 'same-origin', signal }) as Promise<T>;
   };
   const manifest = await read<MetadataManifest>('/plugins/metadata-runtime-manifest.json');
-  const owners = new Set(resources.map(resource => resource.modelKey.split('/')[0]));
+  const owners = new Set(resources.map(resource => resource.moduleId));
   const labels: DataScopeViewLabels[] = [];
   // 按涉及的模块串行读取视图；已取消的页面不再发起下一次读取。
   for (const module of manifest.modules.filter(module => owners.has(module.moduleId))) {
@@ -27,8 +27,8 @@ export async function loadDataScopeViewLabels(fetcher: typeof fetch, resources: 
     for (const file of module.modelFiles ?? []) {
       signal.throwIfAborted();
       const document = await read<Record<string, unknown>>(`${module.metadataBasePath}/${file}`);
-      for (const resource of resources.filter(resource => resource.modelKey.startsWith(`${module.moduleId}/`))) {
-        const model = document[resource.modelKey.slice(module.moduleId.length + 1)] as {
+      for (const resource of resources.filter(resource => resource.moduleId === module.moduleId)) {
+        const model = document[resource.modelKey] as {
           fields?: { name: string; dataSource?: { type: string; key?: string } }[];
         } | undefined;
         if (!model?.fields) continue;
@@ -41,8 +41,7 @@ export async function loadDataScopeViewLabels(fetcher: typeof fetch, resources: 
       signal.throwIfAborted();
       const { view } = await read<ViewDocument>(`${module.metadataBasePath}/${file}`);
       if (!view.dicKey || !['list', 'detail'].includes(view.mode ?? '')) continue;
-      const modelKey = view.model?.includes('/') ? view.model : `${module.moduleId}/${view.model}`;
-      const matching = resources.filter(resource => resource.modelKey === modelKey);
+      const matching = resources.filter(resource => resource.moduleId === module.moduleId && resource.modelKey === view.model);
       const resourceKey = view.resourceKey ?? (matching.length === 1 ? matching[0].resourceKey : undefined);
       if (!resourceKey) continue;
       const fields: Record<string, string> = {};

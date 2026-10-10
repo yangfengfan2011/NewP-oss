@@ -42,7 +42,7 @@ public sealed class BusinessAuditQuery(EfPlatformDbContext db, IEnumerable<IBusi
         return row;
     }
     // 只从 Audit 当前编译计划的 shared model 读取，不连接业务实体。
-    private IQueryable<Dictionary<string, object?>> Rows() => db.Set<Dictionary<string, object?>>("Audit/BusinessChange").AsNoTracking();
+    private IQueryable<Dictionary<string, object?>> Rows() => db.Set<Dictionary<string, object?>>("BusinessChange").AsNoTracking();
     // 每类目录只调用一次，非关键目录故障只降级名称；关键缓存及数据库故障继续传播。
     private async Task ProjectAsync(List<Dictionary<string, object?>> rows, CancellationToken token)
     {

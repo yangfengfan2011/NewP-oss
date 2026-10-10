@@ -12,9 +12,9 @@
     ],
     "pageActions": [], "rowActions": [{ "key": "view", "labelKey": "OpenProperties", "standardAction": "view" }], "export": { "enabled": false },
     "detailContributions": [
-      { "key": "workspace.folder.references", "targetViewKey": "workspace.folder.detail", "navigationKey": "workspace", "pageRef": { "pageKey": "platform.list", "parameters": { "viewKey": "workspace.references.list", "anchorModelKey": "Workspace/WorkspaceFolder" }, "inputResolverKey": "workspace.references.object" } },
-      { "key": "workspace.part.references", "targetViewKey": "part.part.detail", "navigationKey": "workspace", "pageRef": { "pageKey": "platform.list", "parameters": { "viewKey": "workspace.references.list", "anchorModelKey": "Part/Part" }, "inputResolverKey": "workspace.references.object" } },
-      { "key": "workspace.document.references", "targetViewKey": "document.document.detail", "navigationKey": "workspace", "pageRef": { "pageKey": "platform.list", "parameters": { "viewKey": "workspace.references.list", "anchorModelKey": "Document/Document" }, "inputResolverKey": "workspace.references.object" } }
+      { "key": "workspace.folder.references", "targetViewKey": "workspace.folder.detail", "navigationKey": "workspace", "pageRef": { "pageKey": "platform.list", "parameters": { "viewKey": "workspace.references.list", "anchorModelKey": "WorkspaceFolder" }, "inputResolverKey": "workspace.references.object" } },
+      { "key": "workspace.part.references", "targetViewKey": "part.part.detail", "navigationKey": "workspace", "pageRef": { "pageKey": "platform.list", "parameters": { "viewKey": "workspace.references.list", "anchorModelKey": "Part" }, "inputResolverKey": "workspace.references.object" } },
+      { "key": "workspace.document.references", "targetViewKey": "document.document.detail", "navigationKey": "workspace", "pageRef": { "pageKey": "platform.list", "parameters": { "viewKey": "workspace.references.list", "anchorModelKey": "Document" }, "inputResolverKey": "workspace.references.object" } }
     ]
   }
 }

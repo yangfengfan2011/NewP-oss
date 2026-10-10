@@ -7,5 +7,5 @@ namespace ICP.Platform.Modules.Identity;
 public sealed class IdentityDataScopeEnums : IDataScopeEnumFieldProvider
 {
     public IReadOnlyList<DataScopeEnumField> Fields { get; } =
-        [new("Identity/IdentityAccount", "Status", Enum.GetNames<IdentityAccountStatus>())];
+        [new("IdentityAccount", "Status", Enum.GetNames<IdentityAccountStatus>())];
 }

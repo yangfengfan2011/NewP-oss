@@ -21,7 +21,7 @@ public sealed class BusinessAuditRecorder(EfPlatformDbContext db, IEntityAuditSt
         var stamp = stampProvider.GetCurrent();
         var traceId = Activity.Current?.TraceId.ToString();
         if (string.IsNullOrWhiteSpace(traceId)) throw new InvalidOperationException("Business audit requires a trusted trace.");
-        db.Set<Dictionary<string, object?>>("Audit/BusinessChange").Add(new()
+        db.Set<Dictionary<string, object?>>("BusinessChange").Add(new()
         {
             ["EID"] = ids.NewId("BusinessChange"), ["EventType"] = change.EventType,
             ["Resource"] = change.Resource, ["TargetId"] = change.TargetId,

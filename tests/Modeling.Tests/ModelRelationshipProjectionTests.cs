@@ -53,7 +53,9 @@ public sealed class ModelRelationshipProjectionTests
         var foreignKey = Assert.Single(definition.ForeignKeys);
         Assert.Equal("FK_LocalCredential_IdentityAccount", foreignKey.Name);
         Assert.Equal(["AccountEID"], foreignKey.Fields);
-        Assert.Equal("Identity/IdentityAccount", foreignKey.PrincipalModelKey);
+        Assert.Equal("LocalCredential", definition.LogicalKey);
+        Assert.Equal("Identity", definition.OwnerModuleId);
+        Assert.Equal("IdentityAccount", foreignKey.PrincipalModelKey);
         Assert.Equal(["EID"], foreignKey.PrincipalFields);
         Assert.Equal(ForeignKeyDeleteBehavior.Restrict, foreignKey.DeleteBehavior);
     }

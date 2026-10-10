@@ -23,7 +23,7 @@ public sealed class PlatformTransactionExecutorTests
         var result = await executor.ExecuteAsync(
             _ =>
             {
-                var rows = dbContext.Set<Dictionary<string, object?>>("platform.core/TransactionProbe");
+                var rows = dbContext.Set<Dictionary<string, object?>>("TransactionProbe");
                 rows.Add(new Dictionary<string, object?> { ["EID"] = "probe-1" });
                 rows.Add(new Dictionary<string, object?> { ["EID"] = "probe-2" });
                 return ValueTask.FromResult("committed");
@@ -31,7 +31,7 @@ public sealed class PlatformTransactionExecutorTests
 
         Assert.Equal("committed", result);
         await using var verification = new EfPlatformDbContext(options, [Definition()]);
-        Assert.Equal(2, await verification.Set<Dictionary<string, object?>>("platform.core/TransactionProbe").CountAsync());
+        Assert.Equal(2, await verification.Set<Dictionary<string, object?>>("TransactionProbe").CountAsync());
     }
 
     [Fact]
@@ -44,13 +44,13 @@ public sealed class PlatformTransactionExecutorTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => executor.ExecuteAsync<string>(
             _ =>
             {
-                dbContext.Set<Dictionary<string, object?>>("platform.core/TransactionProbe")
+                dbContext.Set<Dictionary<string, object?>>("TransactionProbe")
                     .Add(new Dictionary<string, object?> { ["EID"] = "probe-failed" });
                 throw new InvalidOperationException("participant failed");
             }).AsTask());
 
         await using var verification = new EfPlatformDbContext(options, [Definition()]);
-        Assert.Empty(await verification.Set<Dictionary<string, object?>>("platform.core/TransactionProbe").ToListAsync());
+        Assert.Empty(await verification.Set<Dictionary<string, object?>>("TransactionProbe").ToListAsync());
     }
 
     [Fact]
@@ -63,7 +63,7 @@ public sealed class PlatformTransactionExecutorTests
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => executor.ExecuteAsync<string>(
             async token =>
             {
-                dbContext.Set<Dictionary<string, object?>>("platform.core/TransactionProbe")
+                dbContext.Set<Dictionary<string, object?>>("TransactionProbe")
                     .Add(new Dictionary<string, object?> { ["EID"] = "outer" });
                 try
                 {
@@ -80,7 +80,7 @@ public sealed class PlatformTransactionExecutorTests
 
         Assert.Equal("nested failure", exception.Message);
         await using var verification = new EfPlatformDbContext(options, [Definition()]);
-        Assert.Empty(await verification.Set<Dictionary<string, object?>>("platform.core/TransactionProbe").ToListAsync());
+        Assert.Empty(await verification.Set<Dictionary<string, object?>>("TransactionProbe").ToListAsync());
     }
 
     [Fact]
@@ -92,17 +92,17 @@ public sealed class PlatformTransactionExecutorTests
         var participant = new PreparingParticipant(_ =>
         {
             // 模拟提交参与者登记另一上下文的tracked变更；只有平台执行器负责保存。
-            db.Set<Dictionary<string, object?>>("platform.core/DeferredProbe").Add(new() { ["EID"] = "deferred" });
+            db.Set<Dictionary<string, object?>>("DeferredProbe").Add(new() { ["EID"] = "deferred" });
             return ValueTask.CompletedTask;
-        }, () => Assert.True(db.Set<Dictionary<string, object?>>("platform.core/DeferredProbe").AsNoTracking().Any()));
-        var executor = new EfPlatformTransactionExecutor(db, [new("platform.core/TransactionProbe", participant)]);
+        }, () => Assert.True(db.Set<Dictionary<string, object?>>("DeferredProbe").AsNoTracking().Any()));
+        var executor = new EfPlatformTransactionExecutor(db, [new("TransactionProbe", participant)]);
         await executor.ExecuteAsync(["TransactionProbe"], _ =>
         {
-            db.Set<Dictionary<string, object?>>("platform.core/TransactionProbe").Add(new() { ["EID"] = "business" });
+            db.Set<Dictionary<string, object?>>("TransactionProbe").Add(new() { ["EID"] = "business" });
             return ValueTask.FromResult(true);
         });
         await using var verification = new EfPlatformDbContext(options, definitions);
-        Assert.Single(await verification.Set<Dictionary<string, object?>>("platform.core/DeferredProbe").ToListAsync());
+        Assert.Single(await verification.Set<Dictionary<string, object?>>("DeferredProbe").ToListAsync());
         Assert.Equal(1, participant.PublishCount);
     }
 
@@ -118,16 +118,16 @@ public sealed class PlatformTransactionExecutorTests
         {
             var row = new Dictionary<string, object?> { ["EID"] = "too-late" };
             if (explicitRegistration) executor!.RegisterChange(new("TransactionProbe", "too-late", null, row));
-            else db.Set<Dictionary<string, object?>>("platform.core/TransactionProbe").Add(row);
+            else db.Set<Dictionary<string, object?>>("TransactionProbe").Add(row);
             return ValueTask.CompletedTask;
         });
-        executor = new EfPlatformTransactionExecutor(db, [new("platform.core/TransactionProbe", participant)]);
+        executor = new EfPlatformTransactionExecutor(db, [new("TransactionProbe", participant)]);
         await Assert.ThrowsAsync<InvalidOperationException>(() => executor.ExecuteAsync(["TransactionProbe"],
             _ => ValueTask.FromResult(true)).AsTask());
         Assert.Equal(0, participant.PublishCount);
         // InMemory不证明数据库事务回滚；这里证明最后保存之前拒绝缓存模型新变更。
         await using var verification = new EfPlatformDbContext(options, [Definition()]);
-        Assert.Empty(await verification.Set<Dictionary<string, object?>>("platform.core/TransactionProbe").ToListAsync());
+        Assert.Empty(await verification.Set<Dictionary<string, object?>>("TransactionProbe").ToListAsync());
     }
 
     private sealed class PreparingParticipant(Func<CancellationToken, ValueTask> prepare, Action? published = null) : IPlatformCommitParticipant, IPlatformCommitScope

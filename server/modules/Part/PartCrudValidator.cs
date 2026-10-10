@@ -20,7 +20,7 @@ public sealed class PartCrudValidator(EfPlatformDbContext db) : IStandardCrudVal
         // 输入已由标准字段策略规范化；数据库比较与唯一索引采用同一列规则。
         // 预检只改善字段反馈，真正并发冲突仍由 UX_Part_ECODE 与标准 409 翻译保护。
         var code = (string)values["ECODE"]!;
-        return await db.Set<Dictionary<string, object?>>("Part/Part").AsNoTracking()
+        return await db.Set<Dictionary<string, object?>>("Part").AsNoTracking()
             .AnyAsync(row => EF.Property<string>(row, "ECODE") == code, cancellationToken)
                 ? FieldError("ECODE", "Part.CodeDuplicated", "零组件编码必须唯一。", 409) : null;
     }

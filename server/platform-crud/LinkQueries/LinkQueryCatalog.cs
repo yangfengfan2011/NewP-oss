@@ -41,7 +41,7 @@ public sealed class LinkQueryCatalog
             var endpoints = new Dictionary<string, LinkQueryEndpoint>(StringComparer.Ordinal);
             foreach (var type in types)
             {
-                if (!type.Contains('/', StringComparison.Ordinal) || !models.TryGetValue(type, out var target) || target.Kind != ModelKind.Entity
+                if (!models.TryGetValue(type, out var target) || target.Kind != ModelKind.Entity
                     || !ModuleDependencyPolicy.Allows(modules, owner.ModuleId, target.OwnerModuleId))
                     throw Invalid(model, "端点不是可依赖的规范 Entity");
                 var mapping = query.Endpoints[type];

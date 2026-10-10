@@ -11,7 +11,7 @@ public static class DepartmentObjectBehavior
     public static ObjectBehaviorDefinition BehaviorDefinition { get; } = new(
         "organization.department",
         "Organization",
-        "Organization/Department",
+        "Department",
         [ObjectOperationAction.Create, ObjectOperationAction.Update, ObjectOperationAction.Delete],
         [ObjectOperationAction.Create, ObjectOperationAction.Update, ObjectOperationAction.Delete],
         ["EID", "CompanyId", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"]);

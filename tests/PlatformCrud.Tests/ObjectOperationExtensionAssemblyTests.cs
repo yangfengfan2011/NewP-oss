@@ -113,12 +113,12 @@ public sealed class ObjectOperationExtensionAssemblyTests
         using var host = BuildHost(services =>
         {
             var owner = new TestModule("Organization", []);
-            var declared = ReusableDefinition("organization.person", "Organization/Person");
+            var declared = ReusableDefinition("organization.person", "Person");
             services.AddObjectBehavior<ConfigurableBehavior>(
                 owner,
                 declared,
                 static (_, _) => new ConfigurableBehavior(
-                    ReusableDefinition("organization.person", "Organization/Other")));
+                    ReusableDefinition("organization.person", "Other")));
         });
 
         var exception = await Assert.ThrowsAnyAsync<Exception>(() => host.StartAsync());
@@ -134,7 +134,7 @@ public sealed class ObjectOperationExtensionAssemblyTests
             var owner = new TestModule("Organization", []);
             services.AddObjectBehavior<ConfigurableBehavior>(
                 owner,
-                ReusableDefinition("organization.person", "Organization/Person"),
+                ReusableDefinition("organization.person", "Person"),
                 static (_, _) => throw new InvalidOperationException("injected behavior construction failure"));
         });
 
@@ -231,8 +231,8 @@ public sealed class ObjectOperationExtensionAssemblyTests
         {
             var owner = new TestModule("Organization", []);
             var contributor = new TestModule("ExtensionProvider", ["Organization"]);
-            var person = ReusableDefinition("organization.person", "Organization/Person");
-            var company = ReusableDefinition("organization.company", "Organization/Company");
+            var person = ReusableDefinition("organization.person", "Person");
+            var company = ReusableDefinition("organization.company", "Company");
             services.AddObjectBehavior<ConfigurableBehavior>(owner, person, static (_, definition) => new(definition));
             services.AddObjectBehavior<ConfigurableBehavior>(owner, company, static (_, definition) => new(definition));
             services.AddObjectOperationExtension<ReusableExtension>(contributor, new(
@@ -265,8 +265,8 @@ public sealed class ObjectOperationExtensionAssemblyTests
     {
         var services = CreateServices();
         var owner = new TestModule("Organization", []);
-        var person = ReusableDefinition("organization.person", "Organization/Person");
-        var company = ReusableDefinition("organization.company", "Organization/Company");
+        var person = ReusableDefinition("organization.person", "Person");
+        var company = ReusableDefinition("organization.company", "Company");
         services.AddStandardCrudResource(Resource("organization.person", "Person"));
         services.AddStandardCrudResource(Resource("organization.company", "Company"));
         services.AddStandardCrudObjectBehavior(owner, person);
@@ -302,8 +302,8 @@ public sealed class ObjectOperationExtensionAssemblyTests
         var services = CreateServices(transaction);
         var owner = new TestModule("Organization", []);
         var contributor = new TestModule("ExtensionProvider", ["Organization"]);
-        services.AddObjectBehavior<ConfigurableBehavior>(owner, ReusableDefinition("organization.company", "Organization/Company"), static (_, definition) => new(definition));
-        services.AddObjectBehavior<ConfigurableBehavior>(owner, ReusableDefinition("organization.person", "Organization/Person"), static (_, definition) => new(definition));
+        services.AddObjectBehavior<ConfigurableBehavior>(owner, ReusableDefinition("organization.company", "Company"), static (_, definition) => new(definition));
+        services.AddObjectBehavior<ConfigurableBehavior>(owner, ReusableDefinition("organization.person", "Person"), static (_, definition) => new(definition));
         services.AddObjectOperationExtension<NestedCallExtension>(
             contributor,
             new ObjectOperationExtensionDefinition(
@@ -323,7 +323,7 @@ public sealed class ObjectOperationExtensionAssemblyTests
             new Dictionary<string, object?>());
 
         Assert.True(result.Succeeded);
-        Assert.Equal(["Organization/Company", "Organization/Person"], transaction.RootModelKeys.Order(StringComparer.Ordinal));
+        Assert.Equal(["Company", "Person"], transaction.RootModelKeys.Order(StringComparer.Ordinal));
         Assert.Equal(2, transaction.Executions);
         Assert.Equal(2, transaction.Flushes);
     }
@@ -341,8 +341,8 @@ public sealed class ObjectOperationExtensionAssemblyTests
             Code = "Organization.Person.NestedRejected",
             Message = "嵌套人员写入失败。"
         };
-        services.AddObjectBehavior<ConfigurableBehavior>(owner, ReusableDefinition("organization.company", "Organization/Company"), static (_, definition) => new(definition));
-        services.AddObjectBehavior<RejectingBehavior>(owner, ReusableDefinition("organization.person", "Organization/Person"), (_, definition) => new(definition, nestedError));
+        services.AddObjectBehavior<ConfigurableBehavior>(owner, ReusableDefinition("organization.company", "Company"), static (_, definition) => new(definition));
+        services.AddObjectBehavior<RejectingBehavior>(owner, ReusableDefinition("organization.person", "Person"), (_, definition) => new(definition, nestedError));
         services.AddObjectOperationExtension<NestedCallExtension>(
             contributor,
             new ObjectOperationExtensionDefinition(
@@ -373,8 +373,8 @@ public sealed class ObjectOperationExtensionAssemblyTests
         var services = CreateServices(transaction);
         var owner = new TestModule("Organization", []);
         var contributor = new TestModule("ExtensionProvider", ["Organization"]);
-        services.AddObjectBehavior<ConfigurableBehavior>(owner, ReusableDefinition("organization.company", "Organization/Company"), static (_, definition) => new(definition));
-        services.AddObjectBehavior<ConfigurableBehavior>(owner, ReusableDefinition("organization.person", "Organization/Person"), static (_, definition) => new(definition));
+        services.AddObjectBehavior<ConfigurableBehavior>(owner, ReusableDefinition("organization.company", "Company"), static (_, definition) => new(definition));
+        services.AddObjectBehavior<ConfigurableBehavior>(owner, ReusableDefinition("organization.person", "Person"), static (_, definition) => new(definition));
         services.AddObjectOperationExtension<NestedCallExtension>(
             contributor,
             new ObjectOperationExtensionDefinition(
@@ -407,7 +407,7 @@ public sealed class ObjectOperationExtensionAssemblyTests
         services.AddObjectBehavior<OuterCallingBehavior>(owner, OuterDefinition());
         services.AddObjectBehavior<ConfigurableBehavior>(
             owner,
-            ReusableDefinition("organization.inner", "Organization/Inner"),
+            ReusableDefinition("organization.inner", "Inner"),
             static (_, definition) => new(definition));
         services.AddObjectOperationExtension<CoreMarkerExtension>(
             contributor,
@@ -486,7 +486,7 @@ public sealed class ObjectOperationExtensionAssemblyTests
     private static ObjectBehaviorDefinition PersonDefinition(bool open = true) => new(
         "organization.person",
         "Organization",
-        "Organization/Person",
+        "Person",
         [ObjectOperationAction.Create],
         open ? [ObjectOperationAction.Create] : [],
         ["EID", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"]);
@@ -502,7 +502,7 @@ public sealed class ObjectOperationExtensionAssemblyTests
     private static ObjectBehaviorDefinition OuterDefinition() => new(
         "organization.outer",
         "Organization",
-        "Organization/Outer",
+        "Outer",
         [ObjectOperationAction.Create],
         [ObjectOperationAction.Create],
         ["EID", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"],

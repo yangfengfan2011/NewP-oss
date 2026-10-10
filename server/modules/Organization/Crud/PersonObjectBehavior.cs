@@ -11,7 +11,7 @@ public static class PersonObjectBehavior
     public static ObjectBehaviorDefinition BehaviorDefinition { get; } = new(
         "organization.person",
         "Organization",
-        "Organization/Person",
+        "Person",
         [ObjectOperationAction.Create, ObjectOperationAction.Update, ObjectOperationAction.Delete],
         [ObjectOperationAction.Create, ObjectOperationAction.Update, ObjectOperationAction.Delete],
         ["EID", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"]);

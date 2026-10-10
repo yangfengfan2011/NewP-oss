@@ -88,7 +88,7 @@ public class EfCorePersistenceServiceCollectionExtensionsTests
         Assert.Same(plan, dbContext.PersistencePlan);
         Assert.Equal(64, dbContext.ModelCacheSignature.Length);
         Assert.NotEqual(plan.PlanDigest, dbContext.ModelCacheSignature);
-        var entityType = dbContext.Model.FindEntityType("platform.core/ConfigItem");
+        var entityType = dbContext.Model.FindEntityType("ConfigItem");
         Assert.NotNull(entityType);
         Assert.Equal("dbo", entityType.GetSchema());
     }
@@ -121,7 +121,7 @@ public class EfCorePersistenceServiceCollectionExtensionsTests
                     new ForeignKeyDefinition(
                         "FK_Child_Parent",
                         ["ParentId"],
-                        "platform.core/Parent",
+                        "Parent",
                         ["Id"],
                         ForeignKeyDeleteBehavior.Restrict)
                 ]

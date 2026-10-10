@@ -94,7 +94,7 @@ public class OrganizationModelMetadataProviderTests
 
         Assert.False(positionId.Required);
         Assert.Equal(["PositionId"], foreignKey.Fields);
-        Assert.Equal("Organization/Position", foreignKey.PrincipalModelKey);
+        Assert.Equal("Position", foreignKey.PrincipalModelKey);
         Assert.Equal(["EID"], foreignKey.PrincipalFields);
         Assert.Equal(ForeignKeyDeleteBehavior.Restrict, foreignKey.DeleteBehavior);
     }
@@ -108,19 +108,19 @@ public class OrganizationModelMetadataProviderTests
 
         var departmentCompany = Assert.Single(department.ForeignKeys, item => item.Name == "FK_Department_Company");
         Assert.Equal(["CompanyId"], departmentCompany.Fields);
-        Assert.Equal("Organization/Company", departmentCompany.PrincipalModelKey);
+        Assert.Equal("Company", departmentCompany.PrincipalModelKey);
         Assert.Equal(ForeignKeyDeleteBehavior.Restrict, departmentCompany.DeleteBehavior);
 
         var personCompany = Assert.Single(person.ForeignKeys, item => item.Name == "FK_Person_Company");
         Assert.Equal(["CompanyId"], personCompany.Fields);
-        Assert.Equal("Organization/Company", personCompany.PrincipalModelKey);
+        Assert.Equal("Company", personCompany.PrincipalModelKey);
         Assert.Equal(ForeignKeyDeleteBehavior.Restrict, personCompany.DeleteBehavior);
 
         var personDepartment = Assert.Single(
             person.ForeignKeys,
             item => item.Name == "FK_Person_Company_Department");
         Assert.Equal(["CompanyId", "DepartmentId"], personDepartment.Fields);
-        Assert.Equal("Organization/Department", personDepartment.PrincipalModelKey);
+        Assert.Equal("Department", personDepartment.PrincipalModelKey);
         Assert.Equal(["CompanyId", "EID"], personDepartment.PrincipalFields);
         Assert.Equal(ForeignKeyDeleteBehavior.Restrict, personDepartment.DeleteBehavior);
 

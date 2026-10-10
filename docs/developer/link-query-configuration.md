@@ -4,7 +4,7 @@
 
 ## Authoring 与准备
 
-`linkedTypes` 是允许父子模型组合的唯一来源，采用模块限定模型键。`linkQuery` 声明查询资源键、读取 behavior、可选源策略、两端引用字段与类型绑定、端点资源映射及公共列：
+`linkedTypes` 是允许父子模型组合的唯一来源，采用全局唯一且大小写规范的模型技术名称；owner 从正式模型目录独立解析，见 [全局模型身份](../architecture/module-contract.md#全局模型身份)。`linkQuery` 声明查询资源键、读取 behavior、可选源策略、两端引用字段与类型绑定、端点资源映射及公共列：
 
 - 每端在 `fixedModelKey` 与 `typeField` 中选择一种；判别字段必须是必填、ordinalKey 的普通 Scalar 文本，不能占用主键、审计或两端引用角色。引用字段必须是非空 ObjectId，父子引用字段不能相同。
 - `endpoints` 只覆盖 linkedTypes 的规范模型键，绑定真实 Entity 资源、类型标题词条及图标；可选 `constraintKey` 明确要求端点强制读取条件。

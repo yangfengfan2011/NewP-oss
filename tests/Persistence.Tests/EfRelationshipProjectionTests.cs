@@ -10,6 +10,20 @@ namespace ICP.Platform.Persistence.Tests;
 public sealed class EfRelationshipProjectionTests
 {
     [Fact]
+    public void ResolveModelKey_UsesDeclaredGlobalNameAndRejectsFormerQualifiedAlias()
+    {
+        var part = new ModelDefinition("Part", "Part", ModelKind.Entity,
+            [Field("EID", FieldValueType.ObjectId, isPrimaryKey: true)], [], OwnerModuleId: "Part");
+        using var db = new EfPlatformDbContext(new DbContextOptionsBuilder<EfPlatformDbContext>()
+            .UseInMemoryDatabase(nameof(ResolveModelKey_UsesDeclaredGlobalNameAndRejectsFormerQualifiedAlias))
+            .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().Options, [part]);
+
+        Assert.Equal("Part", db.ResolveModelKey("Part"));
+        Assert.Throws<InvalidOperationException>(() => db.ResolveModelKey("Part/Part"));
+        Assert.Equal("Part", Assert.Single(db.Model.GetEntityTypes()).Name);
+    }
+
+    [Fact]
     public void RuntimeModel_ProjectsLongRevisionAndRequiredUserForeignKey()
     {
         var user = new ModelDefinition(
@@ -46,7 +60,7 @@ public sealed class EfRelationshipProjectionTests
                 new ForeignKeyDefinition(
                     "FK_LocalCredential_IdentityAccount",
                     ["AccountEID"],
-                    "Identity/IdentityAccount",
+                    "IdentityAccount",
                     ["EID"],
                     ForeignKeyDeleteBehavior.Restrict)
             ]);
@@ -57,12 +71,12 @@ public sealed class EfRelationshipProjectionTests
 
         using var dbContext = new EfPlatformDbContext(options, [credential, user]);
 
-        var userType = dbContext.Model.FindEntityType("Identity/IdentityAccount");
-        var credentialType = dbContext.Model.FindEntityType("Identity/LocalCredential");
+        var userType = dbContext.Model.FindEntityType("IdentityAccount");
+        var credentialType = dbContext.Model.FindEntityType("LocalCredential");
         Assert.Equal(typeof(long), userType!.FindProperty("Revision")!.ClrType);
         Assert.Equal(typeof(DateTime?), credentialType!.FindProperty("RevokedAt")!.ClrType);
         var foreignKey = Assert.Single(credentialType!.GetForeignKeys());
-        Assert.Equal("Identity/IdentityAccount", foreignKey.PrincipalEntityType.Name);
+        Assert.Equal("IdentityAccount", foreignKey.PrincipalEntityType.Name);
         Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior);
         Assert.True(credentialType.FindIndex(credentialType.FindProperty("AccountEID")!)!.IsUnique);
     }

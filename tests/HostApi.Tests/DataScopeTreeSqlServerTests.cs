@@ -123,7 +123,7 @@ public sealed class DataScopeTreeSqlServerTests
                 var predicate = (await services.GetRequiredService<IDataScopeReadPlanProvider>()
                     .GetReadPlanAsync("organization.person")).Predicate!;
                 var db = services.GetRequiredService<EfPlatformDbContext>();
-                var sameBusinessFilter = db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Organization/Person"))
+                var sameBusinessFilter = db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Person"))
                     .AsNoTracking().Where(row => EF.Property<string>(row, "ENAME").StartsWith("Tree")).Where(predicate);
                 Assert.Equal(filtered.GetProperty("total").GetInt32(), await sameBusinessFilter.CountAsync());
                 var aggregate = await sameBusinessFilter.GroupBy(row => EF.Property<bool>(row, "IsEnabled"))

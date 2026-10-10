@@ -32,7 +32,7 @@ public sealed class LinkQueryAuthoringTests
         var models = PlatformEndpointModels();
         var resource = new DataScopeResource("identity.accounts", "Identity", "IdentityAccount", "EID");
         var definition = Assert.Single(Compile(models, platformEndpoint: resource).Definitions);
-        Assert.Equal("Identity", definition.Endpoints["Identity/IdentityAccount"].Model.OwnerModuleId);
+        Assert.Equal("Identity", definition.Endpoints["IdentityAccount"].Model.OwnerModuleId);
         var wrong = resource with { ModuleId = "Workspace" };
         var error = Assert.Throws<InvalidOperationException>(() => Compile(models, platformEndpoint: wrong));
         Assert.Contains("端点资源模型或主键不一致", error.Message);
@@ -45,7 +45,7 @@ public sealed class LinkQueryAuthoringTests
         var query = link.LinkQuery!;
         var identity = new ICP.Platform.Modules.Identity.Persistence.Descriptors.IdentityModelMetadataProvider()
             .GetDefinitions().Single(model => model.Name == "IdentityAccount");
-        var types = new[] { "Workspace/WorkspaceFolder", "Identity/IdentityAccount" };
+        var types = new[] { "WorkspaceFolder", "IdentityAccount" };
         var adapted = link with
         {
             LinkedTypes = [new ModelMetadataLinkedType { Parent = types[0], Child = types[1] }],
@@ -61,7 +61,7 @@ public sealed class LinkQueryAuthoringTests
                     Mappings = new Dictionary<string, string?>
                     {
                         [types[0]] = column.Mappings[types[0]],
-                        [types[1]] = column.Mappings["Part/Part"]
+                        [types[1]] = column.Mappings["Part"]
                     }
                 }).ToArray()
             }
@@ -97,8 +97,8 @@ public sealed class LinkQueryAuthoringTests
         builder.Services.AddSingleton(Compile(new WorkspaceModelMetadataProvider().GetDefinitions()));
         builder.Services.AddSingleton<ICP.Platform.Crud.Abstractions.IStandardCrudResourceRegistry>(new StandardCrudResourceRegistry([]));
         builder.Services.AddSingleton<ILinkQuerySourcePolicy>(new SourcePolicy());
-        if (invalid != "missing") builder.Services.AddSingleton<ILinkQueryEndpointConstraint>(new ModelConstraint(invalid == "wrong-owner" ? "Other/Folder" : "Workspace/WorkspaceFolder"));
-        if (invalid == "duplicate") builder.Services.AddSingleton<ILinkQueryEndpointConstraint>(new ModelConstraint("Workspace/WorkspaceFolder"));
+        if (invalid != "missing") builder.Services.AddSingleton<ILinkQueryEndpointConstraint>(new ModelConstraint(invalid == "wrong-owner" ? "Other/Folder" : "WorkspaceFolder"));
+        if (invalid == "duplicate") builder.Services.AddSingleton<ILinkQueryEndpointConstraint>(new ModelConstraint("WorkspaceFolder"));
         await using var app = builder.Build();
         Assert.Equal("LINK_QUERY_REQUIRED_POLICY_MISSING_OR_AMBIGUOUS", Assert.Throws<InvalidOperationException>(() => app.MapLinkQueries()).Message);
         Assert.Empty(((Microsoft.AspNetCore.Routing.IEndpointRouteBuilder)app).DataSources);
@@ -108,7 +108,7 @@ public sealed class LinkQueryAuthoringTests
     public void WorkspaceAuthoring_ClosesTheTypedDirectoryAndRejectsInvalidCandidateAsAWhole()
     {
         var models = new WorkspaceModelMetadataProvider().GetDefinitions(); var link = Assert.Single(models, m => m.LinkQuery is not null);
-        Assert.Equal("Workspace/WorkspaceFolder", link.LinkQuery!.Parent.FixedModelKey); Assert.Equal("ChildModelKey", link.LinkQuery.Child.TypeField);
+        Assert.Equal("WorkspaceFolder", link.LinkQuery!.Parent.FixedModelKey); Assert.Equal("ChildModelKey", link.LinkQuery.Child.TypeField);
         Assert.Single(Compile(models).Definitions);
         var query = link.LinkQuery;
         var variants = new[]
@@ -125,15 +125,15 @@ public sealed class LinkQueryAuthoringTests
             link with { Fields = link.Fields.Select(f => f.Name == "ChildModelKey" ? f with { IsPrimaryKey = true } : f).ToArray() },
             link with { Fields = link.Fields.Select(f => f.Name == "ChildModelKey" ? f with { Kind = FieldKind.Reference } : f).ToArray() },
             link with { LinkQuery = query with { Endpoints = new Dictionary<string, LinkQueryEndpointMetadata> { ["Unknown/Folder"] = new() { ResourceKey = "workspace.folder" } } } },
-            link with { LinkQuery = query with { Endpoints = new Dictionary<string, LinkQueryEndpointMetadata> { ["Workspace/WorkspaceFolder"] = new() { ResourceKey = "missing.resource" } } } },
-            link with { LinkQuery = query with { Columns = query.Columns.Select(c => c.Field == "Name" ? c with { Mappings = new Dictionary<string, string?> { ["Workspace/WorkspaceFolder"] = "MissingField" } } : c).ToArray() } },
+            link with { LinkQuery = query with { Endpoints = new Dictionary<string, LinkQueryEndpointMetadata> { ["WorkspaceFolder"] = new() { ResourceKey = "missing.resource" } } } },
+            link with { LinkQuery = query with { Columns = query.Columns.Select(c => c.Field == "Name" ? c with { Mappings = new Dictionary<string, string?> { ["WorkspaceFolder"] = "MissingField" } } : c).ToArray() } },
             link with { LinkQuery = query with { Columns = query.Columns.Select(c => c.Field == "Name" ? c with { ValueType = "Instant" } : c).ToArray() } },
-            link with { LinkQuery = query with { Columns = query.Columns.Select(c => c.Field == "Name" ? c with { Mappings = new Dictionary<string, string?> { ["Workspace/WorkspaceFolder"] = null } } : c).ToArray() } }
+            link with { LinkQuery = query with { Columns = query.Columns.Select(c => c.Field == "Name" ? c with { Mappings = new Dictionary<string, string?> { ["WorkspaceFolder"] = null } } : c).ToArray() } }
         };
         foreach (var invalid in variants) Assert.Throws<InvalidOperationException>(() => Compile(models.Select(m => m == link ? invalid : m).ToArray()));
         var missingDisplay = models.Select(m => m.Name == "WorkspaceFolder" ? m with { Fields = m.Fields.Select(f => f.Name == "UpdatedAt" ? f with { DisplayRule = null } : f).ToArray() } : m).ToArray();
         Assert.Throws<InvalidOperationException>(() => Compile(missingDisplay));
-        Assert.Throws<InvalidOperationException>(() => Compile(models, new("workspace.folder", "WrongOwner", "Workspace/WorkspaceFolder", "EID")));
+        Assert.Throws<InvalidOperationException>(() => Compile(models, new("workspace.folder", "WrongOwner", "WorkspaceFolder", "EID")));
         Assert.Throws<InvalidOperationException>(() => Compile(models.Select(model => model == link ? link with { LinkQuery = query with
             { Columns = query.Columns.Select(column => column.Field == "Name" ? column with { Field = "AssociatedId" } : column).ToArray() } } : model).ToArray()));
     }
@@ -151,9 +151,9 @@ public sealed class LinkQueryAuthoringTests
         Assert.Null(definition.Metadata.Parent.FixedModelKey);
         Assert.Equal(3, definition.Model.LinkedTypes.Count);
         var fixedChild = generic with { LinkedTypes = [link.LinkedTypes[0]], LinkQuery = generic.LinkQuery with {
-            Child = generic.LinkQuery.Child with { TypeField = null, FixedModelKey = "Workspace/WorkspaceFolder" },
-            Endpoints = generic.LinkQuery.Endpoints.Where(pair => pair.Key == "Workspace/WorkspaceFolder").ToDictionary(),
-            Columns = generic.LinkQuery.Columns.Select(column => column with { Mappings = column.Mappings.Where(pair => pair.Key == "Workspace/WorkspaceFolder").ToDictionary() }).ToArray() } };
+            Child = generic.LinkQuery.Child with { TypeField = null, FixedModelKey = "WorkspaceFolder" },
+            Endpoints = generic.LinkQuery.Endpoints.Where(pair => pair.Key == "WorkspaceFolder").ToDictionary(),
+            Columns = generic.LinkQuery.Columns.Select(column => column with { Mappings = column.Mappings.Where(pair => pair.Key == "WorkspaceFolder").ToDictionary() }).ToArray() } };
         Assert.Single(Compile(models.Select(model => model == link ? fixedChild : model).ToArray()).Definitions);
     }
 

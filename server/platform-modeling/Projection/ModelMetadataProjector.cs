@@ -89,6 +89,7 @@ public sealed class ModelMetadataProjector
             Enum.Parse<ModelKind>(document.Model.Kind, ignoreCase: true),
             fields,
             indexes,
+            OwnerModuleId: document.ModuleId,
             ForeignKeys: foreignKeys) { LinkQuery = document.Model.LinkQuery, LinkedTypes = document.Model.LinkedTypes };
     }
 
@@ -273,20 +274,18 @@ public sealed class ModelMetadataProjector
         return indexes;
     }
 
+    // 全局名称负责寻址，显式 principal owner 作为独立归属约束保留。
     private static IReadOnlyList<ForeignKeyDefinition> BuildForeignKeys(ModelMetadataDocument document) =>
         document.Model.ForeignKeys
             .Select(foreignKey => new ForeignKeyDefinition(
                 foreignKey.Name,
                 foreignKey.Fields,
-                $"{ResolvePrincipalModuleId(document, foreignKey)}/{foreignKey.PrincipalModel}",
+                foreignKey.PrincipalModel,
                 foreignKey.PrincipalFields,
-                Enum.Parse<ForeignKeyDeleteBehavior>(foreignKey.OnDelete, ignoreCase: true)))
+                Enum.Parse<ForeignKeyDeleteBehavior>(foreignKey.OnDelete, ignoreCase: true))
+            {
+                PrincipalOwnerModuleId = string.IsNullOrWhiteSpace(foreignKey.PrincipalModuleId) ? null : foreignKey.PrincipalModuleId
+            })
             .ToArray();
 
-    private static string ResolvePrincipalModuleId(
-        ModelMetadataDocument document,
-        ModelMetadataForeignKey foreignKey) =>
-        string.IsNullOrWhiteSpace(foreignKey.PrincipalModuleId)
-            ? document.ModuleId
-            : foreignKey.PrincipalModuleId;
 }

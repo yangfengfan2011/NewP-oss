@@ -505,7 +505,7 @@ public sealed class PersonUserBindingSqlServerIntegrationTests
         bool isPersonnelBound = false,
         bool personnelDisableHold = false,
         string status = "Enabled") =>
-        context.Set<Dictionary<string, object?>>(context.ResolveModelKey("Identity/IdentityAccount")).Add(new Dictionary<string, object?>
+        context.Set<Dictionary<string, object?>>(context.ResolveModelKey("IdentityAccount")).Add(new Dictionary<string, object?>
         {
             ["EID"] = eid,
             ["ECODE"] = eid.ToLowerInvariant(),

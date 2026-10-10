@@ -26,7 +26,7 @@ public sealed class ObjectOperationExecutorTests
         var result = await executor.ExecuteAsync(context.ObjectKey, context.Action, context.TargetId, context.Values);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(["Organization/Person"], transaction.LastModelKeys);
+        Assert.Equal(["Person"], transaction.LastModelKeys);
         Assert.Equal(1, transaction.Executions);
         Assert.Equal(1, stamps.Reads);
         Assert.NotSame(context, behavior.LastContext);
@@ -65,7 +65,7 @@ public sealed class ObjectOperationExecutorTests
         var invalid = new ObjectBehaviorDefinition(
             "organization.person",
             "Organization",
-            "Organization/Person",
+            "Person",
             [ObjectOperationAction.Create],
             [ObjectOperationAction.Update]);
 
@@ -118,7 +118,7 @@ public sealed class ObjectOperationExecutorTests
     private static ObjectBehaviorDefinition PersonDefinition() => new(
         "organization.person",
         "Organization",
-        "Organization/Person",
+        "Person",
         [ObjectOperationAction.Create],
         [ObjectOperationAction.Create]);
 

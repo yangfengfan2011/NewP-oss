@@ -58,7 +58,7 @@ public sealed class WorkspaceFolderScope(EfPlatformDbContext db, IDataScopeReadP
                 INSERT INTO {next} SELECT DISTINCT l.{Column(link, "CEID")} FROM {Table(link)} l
                     JOIN {frontier} f ON f.EID=l.{Column(link, "PEID")}
                     JOIN {readable} r ON r.EID=l.{Column(link, "CEID")}
-                    WHERE l.{Column(link, "ChildModelKey")}=N'Workspace/WorkspaceFolder'
+                    WHERE l.{Column(link, "ChildModelKey")}=N'WorkspaceFolder'
                     AND NOT EXISTS(SELECT 1 FROM {reached} v WHERE v.EID=r.EID);
                 DELETE FROM {frontier};
                 INSERT INTO {frontier} SELECT EID FROM {next};
@@ -85,7 +85,7 @@ public sealed class WorkspaceFolderScope(EfPlatformDbContext db, IDataScopeReadP
         var scope = await BuildAsync(actorId, "folderCandidates", token);
         var parameters = scope.Parameters.ToList();
         var rows = db.Set<Dictionary<string, object?>>(WorkspacePositions.FolderModel).AsNoTracking();
-        var spaces = db.Set<Dictionary<string, object?>>("Workspace/WorkspaceSpace").AsNoTracking();
+        var spaces = db.Set<Dictionary<string, object?>>("WorkspaceSpace").AsNoTracking();
         rows = rows.Where(row => !spaces.Any(space => EF.Property<string>(space, "RootFolderId") == EF.Property<string>(row, "EID")));
         if (!string.IsNullOrWhiteSpace(keyword)) rows = rows.Where(row => EF.Property<string>(row, "ENAME").Contains(keyword));
         var candidates = QuerySql(rows.Select(row => new { EID = EF.Property<string>(row, "EID"), ENAME = EF.Property<string>(row, "ENAME") }), "candidateFilter", parameters);

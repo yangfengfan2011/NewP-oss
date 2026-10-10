@@ -72,7 +72,7 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
             Assert.Equal(HttpStatusCode.Unauthorized, result.StatusCode);
             await using var scope = fixture.Services.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-            Assert.Equal(firstPassword ? 1 : 2, await db.Set<Dictionary<string, object?>>("Authentication/AuthenticationSession")
+            Assert.Equal(firstPassword ? 1 : 2, await db.Set<Dictionary<string, object?>>("AuthenticationSession")
                 .CountAsync(row => EF.Property<string>(row, "AccountEID") == prepared.Account));
             control.BeforeExecute = null;
             using var fresh = fixture.CreateClient();
@@ -144,7 +144,7 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
         }
         await using var scope = fixture.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-        Assert.Equal(0, await db.Set<Dictionary<string, object?>>("Authentication/AuthenticationSession")
+        Assert.Equal(0, await db.Set<Dictionary<string, object?>>("AuthenticationSession")
             .CountAsync(row => EF.Property<string>(row, "AccountEID") == prepared.Account && EF.Property<DateTime?>(row, "RevokedAt") == null));
         control.BeforeExecute = null;
         control.AfterRegister = null;
@@ -179,9 +179,9 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
             Assert.Equal(prepared.Department, current.Department!["EID"]);
             await using var scope = fixture.Services.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-            var person = await db.Set<Dictionary<string, object?>>("Organization/Person").AsNoTracking().SingleAsync();
+            var person = await db.Set<Dictionary<string, object?>>("Person").AsNoTracking().SingleAsync();
             Assert.Equal(prepared.Department, person["DepartmentId"]);
-            Assert.Equal(1, await db.Set<Dictionary<string, object?>>("Authentication/AuthenticationSession")
+            Assert.Equal(1, await db.Set<Dictionary<string, object?>>("AuthenticationSession")
                 .CountAsync(row => EF.Property<string>(row, "AccountEID") == prepared.Account && EF.Property<DateTime?>(row, "RevokedAt") == null));
         }
     }

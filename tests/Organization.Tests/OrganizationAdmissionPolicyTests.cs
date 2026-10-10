@@ -47,7 +47,7 @@ public sealed class OrganizationAdmissionPolicyTests
             PersonnelDisableHold = condition == "personnel-hold" };
         var policy = new OrganizationAdmissionPolicy(query);
         Assert.Equal(allowed, await policy.IsAllowedAsync(account));
-        Assert.Equal(["Organization/Person"], policy.GetCoordinationModels(account));
+        Assert.Equal(["Person"], policy.GetCoordinationModels(account));
     }
 
     [Fact]

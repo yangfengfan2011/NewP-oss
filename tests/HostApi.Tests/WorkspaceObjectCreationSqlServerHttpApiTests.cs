@@ -32,7 +32,7 @@ public sealed class WorkspaceObjectCreationSqlServerHttpApiTests
         using (var scope = fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-            var link = await db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolderContent").SingleAsync();
+            var link = await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").SingleAsync();
             position = position with { LinkIds = [(string)link["LID"]!] };
         }
         foreach (var (kind, model, action) in Targets)
@@ -64,7 +64,7 @@ public sealed class WorkspaceObjectCreationSqlServerHttpApiTests
             using var scope = fixture.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
             var entity = await db.Set<Dictionary<string, object?>>(model).SingleAsync();
-            var link = await db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolderContent")
+            var link = await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent")
                 .SingleAsync(row => EF.Property<string>(row, "ChildModelKey") == model);
             Assert.Equal(entity["EID"], link["CEID"]);
             Assert.Equal(folderId, link["PEID"]);
@@ -105,12 +105,12 @@ public sealed class WorkspaceObjectCreationSqlServerHttpApiTests
             using var scope = fixture.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
             Assert.Equal(0, await db.Set<Dictionary<string, object?>>(model).CountAsync());
-            Assert.Equal(0, await db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolderContent").CountAsync());
+            Assert.Equal(0, await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").CountAsync());
         }
     }
 
     private static readonly (string Kind, string Model, string Action)[] Targets =
-        [("parts", "Part/Part", "createPart"), ("documents", "Document/Document", "createDocument")];
+        [("parts", "Part", "createPart"), ("documents", "Document", "createDocument")];
     private static FeaturePoint Point(BusinessAuditHostFixture fixture, string behavior) => Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == behavior);
     private sealed record Position(string SpaceId, string RootFolderId, string[] LinkIds);
     private static async Task<Position> RootAsync(HttpClient admin, FeaturePoint entry)

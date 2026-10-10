@@ -18,7 +18,7 @@ public sealed class StandardCrudEfRepositoryTests
     public async Task OptionsAsync_UsesConfiguredLabelFields()
     {
         await using var dbContext = BuildDbContext();
-        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").Add(Row("person-1", "P001", "张三", true));
+        dbContext.Set<Dictionary<string, object?>>("Person").Add(Row("person-1", "P001", "张三", true));
         await dbContext.SaveChangesAsync();
 
         var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
@@ -33,7 +33,7 @@ public sealed class StandardCrudEfRepositoryTests
     public async Task LookupAsync_AppliesKeywordStablePagingAndResolvesCurrentValues()
     {
         await using var dbContext = BuildDbContext();
-        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").AddRange(
+        dbContext.Set<Dictionary<string, object?>>("Person").AddRange(
             Row("person-3", "P003", "Alpha Three", true),
             Row("person-1", "P001", "Alpha One", true),
             Row("person-2", "P002", "Alpha Two", true),
@@ -66,7 +66,7 @@ public sealed class StandardCrudEfRepositoryTests
         await connection.OpenAsync();
         await using var dbContext = BuildSqliteDbContext(connection);
         await dbContext.Database.EnsureCreatedAsync();
-        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").AddRange(
+        dbContext.Set<Dictionary<string, object?>>("Person").AddRange(
             Row("person-2", "P002", "Alpha Two", true),
             Row("person-1", "P001", "Alpha One", true),
             Row("person-3", "P003", "Other", true));
@@ -88,7 +88,7 @@ public sealed class StandardCrudEfRepositoryTests
         await connection.OpenAsync();
         await using var dbContext = BuildSqliteDbContext(connection);
         await dbContext.Database.EnsureCreatedAsync();
-        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").AddRange(
+        dbContext.Set<Dictionary<string, object?>>("Person").AddRange(
             Row("person-1", "P001", "Hidden name", true),
             Row("person-2", "P002", "Visible name", true));
         await dbContext.SaveChangesAsync();
@@ -132,7 +132,7 @@ public sealed class StandardCrudEfRepositoryTests
     {
         await using var dbContext = BuildDbContext();
         var ids = Enumerable.Range(0, 105).Select(index => $"person-{index:D3}").ToArray();
-        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").AddRange(ids.Select(id =>
+        dbContext.Set<Dictionary<string, object?>>("Person").AddRange(ids.Select(id =>
             Row(id, id, id, true)));
         await dbContext.SaveChangesAsync();
         var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
@@ -148,7 +148,7 @@ public sealed class StandardCrudEfRepositoryTests
     public async Task ExistsAsync_WhenMatchingRowExists_ReturnsTrue()
     {
         await using var dbContext = BuildDbContext();
-        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").AddRange(
+        dbContext.Set<Dictionary<string, object?>>("Person").AddRange(
             Row("person-1", "P001", "张三", true),
             Row("person-2", "P002", "李四", true));
         await dbContext.SaveChangesAsync();
@@ -167,7 +167,7 @@ public sealed class StandardCrudEfRepositoryTests
     public async Task ExistsAsync_WhenExcludedIdMatchesOnlyRow_ReturnsFalse()
     {
         await using var dbContext = BuildDbContext();
-        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").Add(Row("person-1", "P001", "张三", true));
+        dbContext.Set<Dictionary<string, object?>>("Person").Add(Row("person-1", "P001", "张三", true));
         await dbContext.SaveChangesAsync();
 
         var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
@@ -185,7 +185,7 @@ public sealed class StandardCrudEfRepositoryTests
     public async Task ExistsAsync_WhenConstraintTrimsStoredValue_ReturnsTrue()
     {
         await using var dbContext = BuildDbContext();
-        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").Add(Row("person-1", " P001 ", "张三", true));
+        dbContext.Set<Dictionary<string, object?>>("Person").Add(Row("person-1", " P001 ", "张三", true));
         await dbContext.SaveChangesAsync();
 
         var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
@@ -202,7 +202,7 @@ public sealed class StandardCrudEfRepositoryTests
     public async Task ExistsAsync_WhenConstraintIsCaseSensitive_RespectsCase()
     {
         await using var dbContext = BuildDbContext();
-        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").Add(Row("person-1", "P001", "张三", true));
+        dbContext.Set<Dictionary<string, object?>>("Person").Add(Row("person-1", "P001", "张三", true));
         await dbContext.SaveChangesAsync();
 
         var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
@@ -258,7 +258,7 @@ public sealed class StandardCrudEfRepositoryTests
     public async Task UpdateAsync_WhenDateTimeValueIsRoundTripText_ConvertsToMappedClrType()
     {
         await using var dbContext = BuildDbContext();
-        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").Add(Row("person-1", "P001", "张三", true));
+        dbContext.Set<Dictionary<string, object?>>("Person").Add(Row("person-1", "P001", "张三", true));
         await dbContext.SaveChangesAsync();
         var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
         var expected = new DateTime(2026, 8, 9, 2, 3, 4, DateTimeKind.Utc);
@@ -276,7 +276,7 @@ public sealed class StandardCrudEfRepositoryTests
     public async Task UpdateAsync_WhenNullableDateTimeValueIsBlank_StoresNull()
     {
         await using var dbContext = BuildDbContext();
-        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").Add(Row("person-1", "P001", "张三", true));
+        dbContext.Set<Dictionary<string, object?>>("Person").Add(Row("person-1", "P001", "张三", true));
         await dbContext.SaveChangesAsync();
         var repository = new EfStandardCrudRepository(dbContext, new PlatformObjectIdGenerator());
 
@@ -285,7 +285,7 @@ public sealed class StandardCrudEfRepositoryTests
             "person-1",
             new Dictionary<string, object?> { ["EffectiveAt"] = string.Empty });
 
-        var stored = await dbContext.Set<Dictionary<string, object?>>("platform.core/Person").SingleAsync();
+        var stored = await dbContext.Set<Dictionary<string, object?>>("Person").SingleAsync();
         Assert.Null(stored["EffectiveAt"]);
     }
 
@@ -296,7 +296,7 @@ public sealed class StandardCrudEfRepositoryTests
         await connection.OpenAsync();
         await using var dbContext = BuildSqliteDbContext(connection);
         await dbContext.Database.EnsureCreatedAsync();
-        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").Add(Row("person-1", "P001", "服务器姓名", true));
+        dbContext.Set<Dictionary<string, object?>>("Person").Add(Row("person-1", "P001", "服务器姓名", true));
         await dbContext.SaveChangesAsync();
         dbContext.ChangeTracker.Clear();
         ICP.Platform.Crud.Abstractions.IStandardCrudRepository repository =

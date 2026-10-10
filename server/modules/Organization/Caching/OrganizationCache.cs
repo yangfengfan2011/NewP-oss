@@ -32,7 +32,7 @@ public class OrganizationCache(IServiceScopeFactory scopes) : NamedCache<Organiz
         {
             await foreach (var row in db.Set<Dictionary<string, object?>>(db.ResolveModelKey(model))
                 .AsNoTracking().AsAsyncEnumerable().WithCancellation(cancellationToken))
-                builder.Apply(new($"Organization/{model}", (string)row["EID"]!, null, row));
+                builder.Apply(new(model, (string)row["EID"]!, null, row));
         }
         var snapshot = builder.Build();
         OrganizationSnapshotValidation.ValidateAll(snapshot, cancellationToken);
@@ -98,10 +98,10 @@ public class OrganizationCache(IServiceScopeFactory scopes) : NamedCache<Organiz
         {
             var records = change.ModelKey switch
             {
-                "Organization/Company" => _companies,
-                "Organization/Department" => _departments,
-                "Organization/Position" => _positions,
-                "Organization/Person" => _persons,
+                "Company" => _companies,
+                "Department" => _departments,
+                "Position" => _positions,
+                "Person" => _persons,
                 _ => throw new InvalidOperationException($"Unexpected organization model: {change.ModelKey}.")
             };
             if (records.TryGetValue(change.Id, out var before)) Index(change.ModelKey, change.Id, before, false);
@@ -120,16 +120,16 @@ public class OrganizationCache(IServiceScopeFactory scopes) : NamedCache<Organiz
         {
             switch (model)
             {
-                case "Organization/Company":
+                case "Company":
                     Unique(_companyCodes, (string)row["ECODE"]!, id, add);
                     break;
-                case "Organization/Department":
+                case "Department":
                     var company = (string)row["CompanyId"]!;
                     Unique(_departmentCodes, (company, ((string)row["ECODE"]!).ToUpperInvariant()), id, add);
                     Relation(_departmentsByCompany, company, id, add);
                     Relation(_childDepartments, Text(row, "ParentDepartmentId"), id, add);
                     break;
-                case "Organization/Person":
+                case "Person":
                     Unique(_personNumbers, (string)row["PersonNo"]!, id, add);
                     if (Text(row, "AccountEID") is { } account) Unique(_personByAccount, account, id, add);
                     Relation(_personsByCompany, Text(row, "CompanyId"), id, add);

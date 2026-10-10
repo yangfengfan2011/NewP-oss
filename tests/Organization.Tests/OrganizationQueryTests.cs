@@ -35,13 +35,13 @@ public sealed class OrganizationQueryTests
         services.AddScoped(_ => new EfPlatformDbContext(options, definitions));
         await using var provider = services.BuildServiceProvider();
         await using var db = new EfPlatformDbContext(options, definitions);
-        db.Set<Dictionary<string, object?>>("Organization/Company").Add(new()
+        db.Set<Dictionary<string, object?>>("Company").Add(new()
         { ["EID"] = "c", ["ECODE"] = "C", ["ENAME"] = "公司", ["SortOrder"] = "01", ["IsEnabled"] = true });
         foreach (var (id, parent) in new[] { ("root", (string?)null), ("middle", "root"), ("leaf", "middle") })
-            db.Set<Dictionary<string, object?>>("Organization/Department").Add(new()
+            db.Set<Dictionary<string, object?>>("Department").Add(new()
             { ["EID"] = id, ["ECODE"] = id, ["ENAME"] = id, ["CompanyId"] = "c", ["ParentDepartmentId"] = parent,
                 ["SortOrder"] = "01", ["IsEnabled"] = id != "middle" });
-        db.Set<Dictionary<string, object?>>("Organization/Person").Add(new()
+        db.Set<Dictionary<string, object?>>("Person").Add(new()
         { ["EID"] = "p", ["PersonNo"] = "P", ["ENAME"] = "人员", ["EmploymentStatus"] = "Active", ["IsEnabled"] = true,
             ["CompanyId"] = "c", ["DepartmentId"] = "leaf", ["AccountEID"] = "account", ["BirthDate"] = new DateOnly(1990, 2, 3) });
         await db.SaveChangesAsync();

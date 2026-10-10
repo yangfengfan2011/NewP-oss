@@ -24,7 +24,8 @@ public static class PersistenceModelDigest
         ArgumentNullException.ThrowIfNull(definitions);
 
         var models = definitions
-            .OrderBy(static definition => definition.LogicalKey, StringComparer.Ordinal)
+            // v1 的序列化顺序是 owner/name；该持久摘要规则独立于全局技术名寻址。
+            .OrderBy(static definition => $"{definition.OwnerModuleId}/{definition.Name}", StringComparer.Ordinal)
             .Select(static definition => new
             {
                 definition.OwnerModuleId,

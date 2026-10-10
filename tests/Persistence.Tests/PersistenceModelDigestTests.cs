@@ -8,6 +8,27 @@ namespace ICP.Platform.Persistence.Tests;
 public sealed class PersistenceModelDigestTests
 {
     [Fact]
+    public void Compute_V1CrossOwnerPrefixOrderingRetainsFrozenBytes()
+    {
+        var field = new FieldDefinition("EID", "EID", FieldKind.Scalar, FieldValueType.ObjectId,
+            "nvarchar(128)", true, true, false);
+        var alpha = new ModelDefinition("Alpha", "Alpha", ModelKind.Entity, [field], [], "A.X");
+        var zulu = new ModelDefinition("Zulu", "Zulu", ModelKind.Entity, [field], [], "A");
+
+        // 冻结 v1 canonical 字节中 A.X/Alpha 排在 A/Zulu 之前，'.' 的 Ordinal 小于 '/'。
+        const string expected = "0bb022d2b670216110c4100b26994df480f017b11e61a310a5a1177a5b93b6dc";
+        Assert.Equal(expected, PersistenceModelDigest.Compute([zulu, alpha]));
+        Assert.Equal(expected, PersistenceModelDigest.Compute([alpha, zulu]));
+    }
+
+    [Fact]
+    public void Compute_CurrentFoundationAuthoringRetainsPublishedV1Digest()
+    {
+        Assert.Equal("56554470f57d6620d947482f760982f3f6c2473739c2c66696019fefc5aa21a1",
+            PersistenceModelDigest.Compute(ICP.Platform.Persistence.Composition.PlatformFoundationModelSource.GetDefinitions()));
+    }
+
+    [Fact]
     public void Compute_CompositeIndexFieldOrderChanges_DigestChanges()
     {
         var first = BuildModel(["Code", "Name"]);

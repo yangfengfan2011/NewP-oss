@@ -151,7 +151,7 @@ public sealed class EfAuthenticationSessionRepository : IAuthenticationSessionRe
     }
 
     private DbSet<Dictionary<string, object?>> Sessions =>
-        _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("Authentication/AuthenticationSession"));
+        _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey("AuthenticationSession"));
 
     private void EnsureRelationalTransaction()
     {

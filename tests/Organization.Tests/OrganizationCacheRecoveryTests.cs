@@ -23,10 +23,10 @@ public sealed class OrganizationCacheRecoveryTests
         {
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
             var department = Row("department"); department["CompanyId"] = "company";
-            db.Set<Dictionary<string, object?>>("Organization/Department").Add(department);
-            db.Set<Dictionary<string, object?>>("Organization/Position").Add(new()
+            db.Set<Dictionary<string, object?>>("Department").Add(department);
+            db.Set<Dictionary<string, object?>>("Position").Add(new()
             { ["EID"] = "position", ["ENAME"] = "岗位", ["IsEnabled"] = false });
-            db.Set<Dictionary<string, object?>>("Organization/Person").Add(new()
+            db.Set<Dictionary<string, object?>>("Person").Add(new()
             { ["EID"] = "person", ["PersonNo"] = "P1", ["ENAME"] = "人员", ["IsEnabled"] = false });
             await db.SaveChangesAsync();
         }
@@ -36,7 +36,7 @@ public sealed class OrganizationCacheRecoveryTests
         { ["EID"] = "added", ["PersonNo"] = "P2", ["ENAME"] = "新增人员", ["IsEnabled"] = true };
         await using (var commit = await cache.BeginAsync(default))
         {
-            await commit.PrepareAsync([new("Organization/Person", "added", null, added)], default);
+            await commit.PrepareAsync([new("Person", "added", null, added)], default);
             Assert.Equal(4L, status.RecordCount);
             commit.BlockReads();
             await commit.PublishAsync();
@@ -44,7 +44,7 @@ public sealed class OrganizationCacheRecoveryTests
         Assert.Equal(5L, status.RecordCount);
         await using (var commit = await cache.BeginAsync(default))
         {
-            await commit.PrepareAsync([new("Organization/Person", "added", added, null)], default);
+            await commit.PrepareAsync([new("Person", "added", added, null)], default);
             Assert.Equal(5L, status.RecordCount);
             commit.BlockReads();
             await commit.PublishAsync();
@@ -52,7 +52,7 @@ public sealed class OrganizationCacheRecoveryTests
         Assert.Equal(4L, status.RecordCount);
         await using (var commit = await cache.BeginAsync(default))
         {
-            await commit.PrepareAsync([new("Organization/Company", "company", null, Row("company"))], default);
+            await commit.PrepareAsync([new("Company", "company", null, Row("company"))], default);
             commit.MarkUnavailable();
         }
         Assert.False(status.IsAvailable);
@@ -122,7 +122,7 @@ public sealed class OrganizationCacheRecoveryTests
         await fixture.SaveAsync(Row("company"));
         cache.PauseReload = true;
         using var cancellation = new CancellationTokenSource();
-        var refresh = cache.RefreshAsync([new("Organization/Company", "company")], cancellation.Token).AsTask();
+        var refresh = cache.RefreshAsync([new("Company", "company")], cancellation.Token).AsTask();
         await cache.Entered.Task;
         var read = cache.ReadAsync().AsTask();
         Assert.False(read.IsCompleted);
@@ -153,11 +153,11 @@ public sealed class OrganizationCacheRecoveryTests
         if (recovering)
         {
             await using var commit = await cache.BeginAsync(default);
-            await commit.PrepareAsync([new("Organization/Company", "company", null, Row("company"))], default);
+            await commit.PrepareAsync([new("Company", "company", null, Row("company"))], default);
             commit.MarkUnavailable();
         }
         var refresh = recovering ? cache.InitializeAsync().AsTask()
-            : cache.RefreshAsync([new("Organization/Company", "company")]).AsTask();
+            : cache.RefreshAsync([new("Company", "company")]).AsTask();
         await cache.Entered.Task;
         if (recovering) await Assert.ThrowsAsync<PlatformCacheUnavailableException>(() => cache.BeginAsync(default).AsTask());
         var writer = recovering ? null : cache.BeginAsync(default).AsTask();
@@ -168,7 +168,7 @@ public sealed class OrganizationCacheRecoveryTests
         await using (var commit = writer is null ? await cache.BeginAsync(default) : await writer)
         {
             var changed = Row("company"); changed["ENAME"] = "later";
-            await commit.PrepareAsync([new("Organization/Company", "company", null, changed)], default);
+            await commit.PrepareAsync([new("Company", "company", null, changed)], default);
             commit.BlockReads();
             var reader = cache.ReadAsync().AsTask();
             Assert.False(reader.IsCompleted);
@@ -190,10 +190,10 @@ public sealed class OrganizationCacheRecoveryTests
         {
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
             var department = Row("department"); department["CompanyId"] = "company";
-            db.Set<Dictionary<string, object?>>("Organization/Department").Add(department);
+            db.Set<Dictionary<string, object?>>("Department").Add(department);
             await db.SaveChangesAsync();
         }
-        await Assert.ThrowsAsync<InvalidOperationException>(() => cache.RefreshAsync([new("Organization/Department", "department")]).AsTask());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => cache.RefreshAsync([new("Department", "department")]).AsTask());
         Assert.False(cache.IsAvailable);
         Assert.Equal(1, cache.Loads);
         await cache.InitializeAsync();
@@ -227,11 +227,11 @@ public sealed class OrganizationCacheRecoveryTests
         var before = await cache.ReadAsync();
         await using (var commit = await cache.BeginAsync(default))
         {
-            await commit.PrepareAsync([new("Organization/Company", "company", null, Row("company"))], default);
+            await commit.PrepareAsync([new("Company", "company", null, Row("company"))], default);
             Assert.Same(before, await cache.ReadAsync());
         }
         await fixture.SaveAsync(Row("company"));
-        await cache.RefreshAsync([new("Organization/Company", "company")]);
+        await cache.RefreshAsync([new("Company", "company")]);
         Assert.Equal("company", (await cache.ReadAsync()).Companies["company"]["ENAME"]);
         Assert.Empty(before.Companies);
         await using var next = await cache.BeginAsync(default);
@@ -280,7 +280,7 @@ public sealed class OrganizationCacheRecoveryTests
         {
             await using var scope = Services.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-            db.Set<Dictionary<string, object?>>("Organization/Company").Add(row);
+            db.Set<Dictionary<string, object?>>("Company").Add(row);
             await db.SaveChangesAsync();
         }
         public ValueTask DisposeAsync() => Services.DisposeAsync();

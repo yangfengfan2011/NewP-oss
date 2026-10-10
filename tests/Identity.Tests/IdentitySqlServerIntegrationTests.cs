@@ -75,9 +75,9 @@ public sealed class IdentitySqlServerIntegrationTests
             }
 
             await using var verification = CreateIdentityAndAuthorizationContext(applicationConnectionString);
-            Assert.Empty(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("Identity/IdentityAccount")).ToListAsync());
-            Assert.Empty(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("Identity/LocalCredential")).ToListAsync());
-            Assert.Empty(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("Identity/IdentitySecurityEvent")).ToListAsync());
+            Assert.Empty(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("IdentityAccount")).ToListAsync());
+            Assert.Empty(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("LocalCredential")).ToListAsync());
+            Assert.Empty(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("IdentitySecurityEvent")).ToListAsync());
             Assert.Empty(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("UserRole")).ToListAsync());
         }
         finally
@@ -120,9 +120,9 @@ public sealed class IdentitySqlServerIntegrationTests
             Assert.Single(outcomes, static result => result == "success");
             Assert.Single(outcomes, static result => result == IdentityMaintenanceFailureCodes.BootstrapAlreadyCompleted);
             await using var verification = CreateIdentityAndAuthorizationContext(applicationConnectionString);
-            Assert.Single(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("Identity/IdentityAccount")).ToListAsync());
-            Assert.Single(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("Identity/LocalCredential")).ToListAsync());
-            Assert.Single(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("Identity/IdentitySecurityEvent")).ToListAsync());
+            Assert.Single(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("IdentityAccount")).ToListAsync());
+            Assert.Single(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("LocalCredential")).ToListAsync());
+            Assert.Single(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("IdentitySecurityEvent")).ToListAsync());
             Assert.Single(await verification.Set<Dictionary<string, object?>>(verification.ResolveModelKey("UserRole")).ToListAsync());
         }
         finally
@@ -187,7 +187,7 @@ public sealed class IdentitySqlServerIntegrationTests
                 Assert.Equal(1, rolledBack.Revision);
                 Assert.Equal("Alice", rolledBack.ENAME);
                 Assert.Single(await verification
-                    .Set<Dictionary<string, object?>>("Identity/IdentitySecurityEvent")
+                    .Set<Dictionary<string, object?>>("IdentitySecurityEvent")
                     .ToListAsync());
             }
 
@@ -214,7 +214,7 @@ public sealed class IdentitySqlServerIntegrationTests
                 Assert.Equal(2, committed.Revision);
                 Assert.Equal("Committed", committed.ENAME);
                 Assert.Equal(2, await finalVerification
-                    .Set<Dictionary<string, object?>>("Identity/IdentitySecurityEvent")
+                    .Set<Dictionary<string, object?>>("IdentitySecurityEvent")
                     .CountAsync());
             }
         }

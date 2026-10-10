@@ -53,7 +53,7 @@ it('keeps owning details available without Workspace and discards an old reverse
     if (url.pathname === '/api/links/workspace.content') {
       reverseIds.push(url.searchParams.get('anchorId')!);
       if (url.searchParams.get('anchorId') === 'first') return new Promise<Response>(resolve => { finishOld = resolve; });
-      return json({ items: [{ linkId: 'second-incoming', associatedObject: { modelKey: 'Workspace/WorkspaceFolder', id: 'second-parent' }, fields: { LID: 'second-incoming', Name: '第二对象的父' } }], total: 1, page: 1, pageSize: 20 });
+      return json({ items: [{ linkId: 'second-incoming', associatedObject: { modelKey: 'WorkspaceFolder', id: 'second-parent' }, fields: { LID: 'second-incoming', Name: '第二对象的父' } }], total: 1, page: 1, pageSize: 20 });
     }
     throw new Error('Unexpected request ' + url.pathname);
   });
@@ -92,7 +92,7 @@ it('keeps owning details available without Workspace and discards an old reverse
   await vi.waitFor(() => expect(document.querySelector('.ant-modal')).toBeNull());
   await act(async () => entryButton()!.click());
   await vi.waitFor(() => expect(document.querySelector('tr[data-row-key="second-incoming"]')).not.toBeNull());
-  await act(async () => finishOld!(json({ items: [{ linkId: 'old-private', associatedObject: { modelKey: 'Workspace/WorkspaceFolder', id: 'old' }, fields: { LID: 'old-private', Name: '旧私有父' } }], total: 1, page: 1, pageSize: 20 })));
+  await act(async () => finishOld!(json({ items: [{ linkId: 'old-private', associatedObject: { modelKey: 'WorkspaceFolder', id: 'old' }, fields: { LID: 'old-private', Name: '旧私有父' } }], total: 1, page: 1, pageSize: 20 })));
   expect(document.body.textContent).not.toContain('旧私有父');
   await render('second', false);
   await vi.waitFor(() => expect(document.querySelector('.ant-modal')).toBeNull());

@@ -107,9 +107,9 @@ public sealed class WorkspaceAcceptanceFixtureTests
         new(status) { Content = new StringContent(text, Encoding.UTF8, "application/json") };
 
     [Theory]
-    [InlineData("Workspace/WorkspaceFolder")]
-    [InlineData("Part/Part")]
-    [InlineData("Document/Document")]
+    [InlineData("WorkspaceFolder")]
+    [InlineData("Part")]
+    [InlineData("Document")]
     public async Task ReversePreparation_UsesTypedAnchorAndSourceEntryWithoutForwardPositionScope(string model)
     {
         var entry = new FeaturePoint("source-entry", "Workspace", "workspace", "navigation", "workspace", null, "workspace.spaces.access", [], 0);
@@ -224,7 +224,7 @@ public sealed class WorkspaceAcceptanceFixtureTests
                 Assert.Equal("/api/links/workspace.content", path);
                 var query = System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query);
                 Assert.Equal("forward", query["direction"]);
-                Assert.Equal("Workspace/WorkspaceFolder", query["anchorModelKey"]);
+                Assert.Equal("WorkspaceFolder", query["anchorModelKey"]);
                 using var scope = JsonDocument.Parse(query["queryScope"]!);
                 var isPublic = query["anchorId"] == "public-root";
                 Assert.Equal(isPublic ? "public-space" : "personal-space", scope.RootElement.GetProperty("spaceId").GetString());
@@ -236,9 +236,9 @@ public sealed class WorkspaceAcceptanceFixtureTests
             Assert.Equal("fixture-token", Assert.Single(request.Headers.GetValues("X-CSRF-TOKEN")));
             var (action, model, id) = path switch
             {
-                "/api/workspace/content/folders" => ("create", "Workspace/WorkspaceFolder", "folder-EID"),
-                "/api/workspace/content/parts" => ("createPart", "Part/Part", "part-EID"),
-                "/api/workspace/content/documents" => ("createDocument", "Document/Document", "document-EID"),
+                "/api/workspace/content/folders" => ("create", "WorkspaceFolder", "folder-EID"),
+                "/api/workspace/content/parts" => ("createPart", "Part", "part-EID"),
+                "/api/workspace/content/documents" => ("createDocument", "Document", "document-EID"),
                 _ => throw new InvalidOperationException("重启准备不应扩大权限或使用其他写入入口：" + path)
             };
             Assert.Equal(action, Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
@@ -264,9 +264,9 @@ public sealed class WorkspaceAcceptanceFixtureTests
         Assert.Equal(3, writes);
         var expected = new[]
         {
-            "public-space:" + JsonSerializer.Serialize(new[] { "create-LID", "Workspace/WorkspaceFolder", "folder-EID" }),
-            "public-space:" + JsonSerializer.Serialize(new[] { "createPart-LID", "Part/Part", "part-EID" }),
-            "public-space:" + JsonSerializer.Serialize(new[] { "createDocument-LID", "Document/Document", "document-EID" })
+            "public-space:" + JsonSerializer.Serialize(new[] { "create-LID", "WorkspaceFolder", "folder-EID" }),
+            "public-space:" + JsonSerializer.Serialize(new[] { "createPart-LID", "Part", "part-EID" }),
+            "public-space:" + JsonSerializer.Serialize(new[] { "createDocument-LID", "Document", "document-EID" })
         };
         Assert.Equal(expected.Order(StringComparer.Ordinal), before);
         Assert.Equal(before, after);
@@ -285,7 +285,7 @@ public sealed class WorkspaceAcceptanceFixtureTests
             : Json(HttpStatusCode.OK, JsonSerializer.Serialize(new
             {
                 total = partialPage ? 2 : 1,
-                items = new[] { new { linkId = "folder-LID", associatedObject = new { modelKey = "Workspace/WorkspaceFolder", id = "folder-EID" } } }
+                items = new[] { new { linkId = "folder-LID", associatedObject = new { modelKey = "WorkspaceFolder", id = "folder-EID" } } }
             })))) { BaseAddress = new Uri("http://127.0.0.1:5000") };
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => WorkspaceAcceptanceFixture.ReadRestartContentAsync(
@@ -299,20 +299,20 @@ public sealed class WorkspaceAcceptanceFixtureTests
     {
         using var before = JsonDocument.Parse("""
             {"items":[
-              {"linkId":"link2","associatedObject":{"modelKey":"Part/Part","id":"same-id"},"fields":{"Name":"before"}},
-              {"linkId":"link1","associatedObject":{"modelKey":"Document/Document","id":"same-id"}},
-              {"linkId":"link3","associatedObject":{"modelKey":"Part/Part","id":"same-id"}}]}
+              {"linkId":"link2","associatedObject":{"modelKey":"Part","id":"same-id"},"fields":{"Name":"before"}},
+              {"linkId":"link1","associatedObject":{"modelKey":"Document","id":"same-id"}},
+              {"linkId":"link3","associatedObject":{"modelKey":"Part","id":"same-id"}}]}
             """);
         using var after = JsonDocument.Parse("""
             {"items":[
-              {"linkId":"link3","associatedObject":{"modelKey":"Part/Part","id":"same-id"}},
-              {"linkId":"link1","associatedObject":{"modelKey":"Document/Document","id":"same-id"}},
-              {"linkId":"link2","associatedObject":{"modelKey":"Part/Part","id":"same-id"},"fields":{"Name":"after"}}]}
+              {"linkId":"link3","associatedObject":{"modelKey":"Part","id":"same-id"}},
+              {"linkId":"link1","associatedObject":{"modelKey":"Document","id":"same-id"}},
+              {"linkId":"link2","associatedObject":{"modelKey":"Part","id":"same-id"},"fields":{"Name":"after"}}]}
             """);
         var identities = WorkspaceAcceptanceFixture.ContentIdentities(before.RootElement);
         Assert.Equal(3, identities.Distinct().Count());
         Assert.Equal(identities, WorkspaceAcceptanceFixture.ContentIdentities(after.RootElement));
-        using var wrongModel = JsonDocument.Parse(after.RootElement.GetRawText().Replace("Document/Document", "Part/Part", StringComparison.Ordinal));
+        using var wrongModel = JsonDocument.Parse(after.RootElement.GetRawText().Replace("Document", "Part", StringComparison.Ordinal));
         Assert.NotEqual(identities, WorkspaceAcceptanceFixture.ContentIdentities(wrongModel.RootElement));
         using var wrongLink = JsonDocument.Parse(after.RootElement.GetRawText().Replace("link3", "replacement-link", StringComparison.Ordinal));
         Assert.NotEqual(identities, WorkspaceAcceptanceFixture.ContentIdentities(wrongLink.RootElement));

@@ -34,7 +34,7 @@ export function resolveDetailContributions(modules: FrontendModule[], metadata: 
         || metadata.viewDocuments.some(item => item.view.mode === 'list' && item.view.detailViewKey === entry.targetViewKey && ownsList(module, String(item.view.key))));
       if (targets.length !== 1 || targetOwners.length !== 1) throw new Error('详情贡献目标 detail binding 不唯一');
       const targetModel = String(targets[0].view.model);
-      const modelKey = targetModel.includes('/') ? targetModel : `${targetOwners[0].metadata.moduleId}/${targetModel}`;
+      const modelKey = targetModel;
       if (entry.pageRef?.pageKey !== 'platform.list' || entry.pageRef.parameters?.viewKey !== view.key
         || entry.pageRef.parameters?.anchorModelKey !== modelKey || 'recordId' in entry.pageRef.parameters || !entry.pageRef.inputResolverKey
         || !owners[0].pageInputResolvers?.some(resolver => resolver.key === entry.pageRef.inputResolverKey && resolver.pageKeys.includes('platform.list')))

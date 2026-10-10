@@ -32,14 +32,14 @@ public sealed class WorkspaceMixedSqlServerHttpApiTests(ITestOutputHelper output
             var registration = Assert.Single(services, service => service.ServiceType == typeof(CompiledPersistencePlan));
             var plan = Assert.IsType<CompiledPersistencePlan>(registration.ImplementationInstance); services.Remove(registration);
             services.AddSingleton(plan with { Models = plan.Models.Select(model => model.LinkQuery is not { } query ? model : model with {
-                LinkQuery = query with { Endpoints = query.Endpoints.ToDictionary(pair => pair.Key, pair => pair.Key == "Part/Part" ? pair.Value with { ConstraintKey = business.Key } : pair.Value) } }).ToArray() });
+                LinkQuery = query with { Endpoints = query.Endpoints.ToDictionary(pair => pair.Key, pair => pair.Key == "Part" ? pair.Value with { ConstraintKey = business.Key } : pair.Value) } }).ToArray() });
             services.AddSingleton<ILinkQueryEndpointConstraint>(business);
         }, includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync(); var entry = Point(fixture, "workspace.spaces.access"); var add = Point(fixture, "workspace.folder.add"); var remove = Point(fixture, "workspace.folder.remove");
         var partRead = Point(fixture, "part.part.read"); var documentRead = Point(fixture, "document.document.read");
         var root = await Post(admin, entry, "/api/workspace/spaces/public/initialize", null); var position = Position(root);
         var targets = new List<(string Model, string Route, FeaturePoint Read, string Id)>();
-        foreach (var (model, route, create, read) in new[] { ("Part/Part", "/api/part/parts", "part.part.create", partRead), ("Document/Document", "/api/document/documents", "document.document.create", documentRead) })
+        foreach (var (model, route, create, read) in new[] { ("Part", "/api/part/parts", "part.part.create", partRead), ("Document", "/api/document/documents", "document.document.create", documentRead) })
         {
             var created = await Post(admin, Point(fixture, create), route, new { ECODE = "INDEPENDENT", ENAME = "可读取元数据" });
             var id = created.GetProperty("fields").GetProperty("EID").GetString()!; targets.Add((model, route, read, id));
@@ -48,7 +48,7 @@ public sealed class WorkspaceMixedSqlServerHttpApiTests(ITestOutputHelper output
         await Post(admin, Point(fixture, "workspace.folder.create"), "/api/workspace/content/folders", new { position, values = new { ENAME = "可读文件夹" } });
         var excluded = await Post(admin, Point(fixture, "part.part.create"), "/api/part/parts", new { ECODE = "EXCLUDED", ENAME = "强制业务排除" });
         var excludedId = excluded.GetProperty("fields").GetProperty("EID").GetString();
-        await Post(admin, add, "/api/workspace/content/references", new { position, target = new { modelKey = "Part/Part", id = excludedId } });
+        await Post(admin, add, "/api/workspace/content/references", new { position, target = new { modelKey = "Part", id = excludedId } });
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "MixedWriter", "混合写入", "mixed-writer", "混合写入账号", entry, add, remove, partRead, documentRead);
         using var ordinary = actor.Client;
         business.Enabled = true;
@@ -56,29 +56,29 @@ public sealed class WorkspaceMixedSqlServerHttpApiTests(ITestOutputHelper output
         Assert.Equal(1, independent.GetProperty("total").GetInt32());
         var list = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, Url(root) + "&pageSize=2");
         Assert.Equal(3, list.GetProperty("total").GetInt32()); Assert.Equal(2, list.GetProperty("items").GetArrayLength());
-        using (var rejected = await FeatureHttpTestRequests.SendAsync(ordinary, add, HttpMethod.Post, "/api/workspace/content/references", new { position, target = new { modelKey = "Part/Part", id = excludedId } }))
+        using (var rejected = await FeatureHttpTestRequests.SendAsync(ordinary, add, HttpMethod.Post, "/api/workspace/content/references", new { position, target = new { modelKey = "Part", id = excludedId } }))
             Assert.Equal(HttpStatusCode.NotFound, rejected.StatusCode);
         foreach (var target in targets)
         {
             var candidate = await FeatureHttpTestRequests.ReadAsync(ordinary, target.Read, target.Route + "?keyword=INDEPENDENT&fields=EID,ECODE,ENAME");
             Assert.Equal(target.Id, Assert.Single(candidate.GetProperty("items").EnumerateArray()).GetProperty("EID").GetString());
-            await Rule(fixture, admin, "Deny" + target.Model.Replace('/', '_'), target.Model == "Part/Part" ? "part.part" : "document.document", target.Id);
+            await Rule(fixture, admin, "Deny" + target.Model.Replace('/', '_'), target.Model == "Part" ? "part.part" : "document.document", target.Id);
             var hidden = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, Url(root) + "&pageSize=1"); Assert.Equal(2, hidden.GetProperty("total").GetInt32());
             using var denied = await FeatureHttpTestRequests.SendAsync(ordinary, add, HttpMethod.Post, "/api/workspace/content/references", new { position, target = new { modelKey = target.Model, id = target.Id } });
             Assert.Equal(HttpStatusCode.NotFound, denied.StatusCode);
             using var deniedDetail = await FeatureHttpTestRequests.SendAsync(ordinary, target.Read, HttpMethod.Get, target.Route + "/" + target.Id); Assert.Equal(HttpStatusCode.NotFound, deniedDetail.StatusCode);
             Assert.Equal(0, (await FeatureHttpTestRequests.ReadAsync(ordinary, target.Read, target.Route + "?keyword=INDEPENDENT")).GetProperty("total").GetInt32());
-            await Rule(fixture, admin, "Deny" + target.Model.Replace('/', '_'), target.Model == "Part/Part" ? "part.part" : "document.document", "unused");
+            await Rule(fixture, admin, "Deny" + target.Model.Replace('/', '_'), target.Model == "Part" ? "part.part" : "document.document", "unused");
             var all = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, Url(root));
             var row = Assert.Single(all.GetProperty("items").EnumerateArray(), item => item.GetProperty("associatedObject").GetProperty("modelKey").GetString() == target.Model);
             var before = await FeatureHttpTestRequests.ReadAsync(ordinary, target.Read, target.Route + "/" + target.Id);
             using var removed = await FeatureHttpTestRequests.SendAsync(ordinary, remove, HttpMethod.Delete, "/api/workspace/content/references/" + row.GetProperty("linkId").GetString(), new { position });
             Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
             Assert.Equal(1, (await FeatureHttpTestRequests.ReadAsync(ordinary, target.Read, target.Route + "?keyword=INDEPENDENT")).GetProperty("total").GetInt32());
-            await Rule(fixture, admin, "Deny" + target.Model.Replace('/', '_'), target.Model == "Part/Part" ? "part.part" : "document.document", target.Id);
+            await Rule(fixture, admin, "Deny" + target.Model.Replace('/', '_'), target.Model == "Part" ? "part.part" : "document.document", target.Id);
             using (var revokedAfterLastRemoval = await FeatureHttpTestRequests.SendAsync(ordinary, add, HttpMethod.Post, "/api/workspace/content/references", new { position, target = new { modelKey = target.Model, id = target.Id } }))
                 Assert.Equal(HttpStatusCode.NotFound, revokedAfterLastRemoval.StatusCode);
-            await Rule(fixture, admin, "Deny" + target.Model.Replace('/', '_'), target.Model == "Part/Part" ? "part.part" : "document.document", "unused");
+            await Rule(fixture, admin, "Deny" + target.Model.Replace('/', '_'), target.Model == "Part" ? "part.part" : "document.document", "unused");
             await Post(ordinary, add, "/api/workspace/content/references", new { position, target = new { modelKey = target.Model, id = target.Id } });
             var after = await FeatureHttpTestRequests.ReadAsync(ordinary, target.Read, target.Route + "/" + target.Id);
             Assert.Equal(before.GetProperty("fields").GetProperty("UpdatedAt").GetString(), after.GetProperty("fields").GetProperty("UpdatedAt").GetString());
@@ -88,19 +88,19 @@ public sealed class WorkspaceMixedSqlServerHttpApiTests(ITestOutputHelper output
         business.Fail = false;
         using (var scope = fixture.Services.CreateScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>(); var links = db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolderContent");
+            var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>(); var links = db.Set<Dictionary<string, object?>>("WorkspaceFolderContent");
             var seed = await links.AsNoTracking().FirstAsync();
-            links.Add(new(seed) { ["LID"] = "missing-part", ["ChildModelKey"] = "Part/Part", ["CEID"] = "no-target" }); await db.SaveChangesAsync();
+            links.Add(new(seed) { ["LID"] = "missing-part", ["ChildModelKey"] = "Part", ["CEID"] = "no-target" }); await db.SaveChangesAsync();
         }
         var missing = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, Url(root) + "&pageSize=1"); Assert.Equal(3, missing.GetProperty("total").GetInt32());
         using (var scope = fixture.Services.CreateScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>(); var links = db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolderContent");
+            var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>(); var links = db.Set<Dictionary<string, object?>>("WorkspaceFolderContent");
             Assert.Equal(5, await links.CountAsync());
             var corrupt = await links.SingleAsync(row => EF.Property<string>(row, "LID") == "missing-part"); corrupt["ChildModelKey"] = "Unknown/Type"; await db.SaveChangesAsync();
         }
-        using (var corrupt = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, Url(root) + "&types=Part%2FPart")) Assert.Equal(HttpStatusCode.InternalServerError, corrupt.StatusCode);
-        using (var scope = fixture.Services.CreateScope()) Assert.Equal(5, await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("Workspace/WorkspaceFolderContent").CountAsync());
+        using (var corrupt = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, Url(root) + "&types=Part")) Assert.Equal(HttpStatusCode.InternalServerError, corrupt.StatusCode);
+        using (var scope = fixture.Services.CreateScope()) Assert.Equal(5, await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("WorkspaceFolderContent").CountAsync());
     }
 
     private static async Task Rule(BusinessAuditHostFixture fixture, HttpClient admin, string key, string resource, string id)
@@ -114,7 +114,7 @@ public sealed class WorkspaceMixedSqlServerHttpApiTests(ITestOutputHelper output
     private sealed class PartBusinessConstraint : ILinkQueryEndpointConstraint
     {
         public string Key => "test.part.business";
-        public string ModelKey => "Part/Part";
+        public string ModelKey => "Part";
         public bool Enabled { get; set; }
         public bool Fail { get; set; }
         public Task<Expression<Func<Dictionary<string, object?>, bool>>> ReadPredicateAsync(LinkQueryEndpoint endpoint, CancellationToken token)
@@ -139,12 +139,17 @@ public sealed class WorkspaceMixedSqlServerHttpApiTests(ITestOutputHelper output
         await Post(admin, Point(fixture, "workspace.folder.create"), "/api/workspace/content/folders", new { position, values = new { ENAME = "seed" } });
         foreach (var (route, behavior) in new[] { ("/api/part/parts", "part.part.create"), ("/api/document/documents", "document.document.create") })
             await Post(admin, Point(fixture, behavior), route, new { ECODE = "seed", ENAME = "seed" });
-        var types = new[] { "Document/Document", "Part/Part", "Workspace/WorkspaceFolder" };
+        var types = new[] { "Document", "Part", "WorkspaceFolder" };
+        // 关系 LID 是夹具的独立身份，不随模型技术名切换重新命名。
+        var relationPrefixes = new Dictionary<string, string>
+        {
+            ["Document"] = "Document-Document", ["Part"] = "Part-Part", ["WorkspaceFolder"] = "Workspace-WorkspaceFolder"
+        };
         string database;
         using (var serviceScope = fixture.Services.CreateScope())
         {
             var db = serviceScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>(); database = db.Database.GetDbConnection().Database;
-            var links = db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolderContent");
+            var links = db.Set<Dictionary<string, object?>>("WorkspaceFolderContent");
             var link = await links.AsNoTracking().SingleAsync();
             foreach (var type in types)
             {
@@ -154,9 +159,9 @@ public sealed class WorkspaceMixedSqlServerHttpApiTests(ITestOutputHelper output
                 {
                     var id = "same-id-" + index.ToString("D2");
                     var entity = new Dictionary<string, object?>(seed) { ["EID"] = id, ["ENAME"] = "mix-" + index.ToString("D2"), ["UpdatedAt"] = new DateTime(2026, 10, 8, 0, 0, 0, DateTimeKind.Utc) };
-                    if (type != "Workspace/WorkspaceFolder") entity["ECODE"] = "CODE-" + index.ToString("D2");
+                    if (type != "WorkspaceFolder") entity["ECODE"] = "CODE-" + index.ToString("D2");
                     entities.Add(entity);
-                    links.Add(new(link) { ["LID"] = type.Replace('/', '-') + "-" + index.ToString("D2"), ["CEID"] = id, ["ChildModelKey"] = type });
+                    links.Add(new(link) { ["LID"] = relationPrefixes[type] + "-" + index.ToString("D2"), ["CEID"] = id, ["ChildModelKey"] = type });
                 }
             }
             await db.SaveChangesAsync();
@@ -169,7 +174,7 @@ public sealed class WorkspaceMixedSqlServerHttpApiTests(ITestOutputHelper output
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "MixedReader", "混合读取", "mixed-reader", "混合读取账号", entry);
         using var ordinary = actor.Client;
         var url = Url(root) + "&keyword=mix-&sortBy=Name&sortDirection=asc&pageSize=7&fields=LID,Name";
-        var expected = Enumerable.Range(0, 10).SelectMany(index => types.Select(type => type.Replace('/', '-') + "-" + index.ToString("D2"))).ToArray();
+        var expected = Enumerable.Range(0, 10).SelectMany(index => types.Select(type => relationPrefixes[type] + "-" + index.ToString("D2"))).ToArray();
         using var costs = new WorkspaceReferenceSqlServerHttpApiTests.SqlObservation(database); costs.Begin();
         var first = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, url);
         var observation = costs.End();
@@ -212,7 +217,7 @@ public sealed class WorkspaceMixedSqlServerHttpApiTests(ITestOutputHelper output
         var nullCodes = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, Url(root) + "&keyword=mix-&Code:isNull=true");
         Assert.Equal(10, nullCodes.GetProperty("total").GetInt32());
         Assert.All(nullCodes.GetProperty("items").EnumerateArray(), row => Assert.Equal(JsonValueKind.Null, row.GetProperty("fields").GetProperty("Code").ValueKind));
-        var filtered = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, Url(root) + "&keyword=CODE-00&ObjectType=Part%2FPart");
+        var filtered = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, Url(root) + "&keyword=CODE-00&ObjectType=Part");
         Assert.Equal(1, filtered.GetProperty("total").GetInt32());
         var defaultOrder = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, Url(root) + "&keyword=mix-&pageSize=7&fields=LID,Name");
         Assert.Equal(Enumerable.Range(0, 7).Select(index => "Document-Document-" + index.ToString("D2")), defaultOrder.GetProperty("items").EnumerateArray().Select(row => row.GetProperty("linkId").GetString()));
@@ -245,7 +250,7 @@ public sealed class WorkspaceMixedSqlServerHttpApiTests(ITestOutputHelper output
     }
 
     private static object Position(JsonElement root) => new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = root.GetProperty("rootFolderId").GetString(), linkIds = Array.Empty<string>() };
-    private static string Url(JsonElement root) => "/api/links/workspace.content?direction=forward&anchorModelKey=Workspace%2FWorkspaceFolder&anchorId=" + Uri.EscapeDataString(root.GetProperty("rootFolderId").GetString()!)
+    private static string Url(JsonElement root) => "/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId=" + Uri.EscapeDataString(root.GetProperty("rootFolderId").GetString()!)
         + "&queryScope=" + Uri.EscapeDataString(JsonSerializer.Serialize(new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = root.GetProperty("rootFolderId").GetString(), linkIds = "[]" }));
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "三类正式业务输入经同一Link查询进入混合列表")]
     public async Task ThreeRealModels_AddAndReadThroughOneContentResource()
@@ -256,14 +261,14 @@ public sealed class WorkspaceMixedSqlServerHttpApiTests(ITestOutputHelper output
         var root = await Post(admin, entry, "/api/workspace/spaces/public/initialize", null);
         var position = new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = root.GetProperty("rootFolderId").GetString(), linkIds = Array.Empty<string>() };
         await Post(admin, Point(fixture, "workspace.folder.create"), "/api/workspace/content/folders", new { position, values = new { ENAME = "B-folder" } });
-        foreach (var (model, route, behavior, name) in new[] { ("Part/Part", "/api/part/parts", "part.part.create", "A-part"), ("Document/Document", "/api/document/documents", "document.document.create", "C-document") })
+        foreach (var (model, route, behavior, name) in new[] { ("Part", "/api/part/parts", "part.part.create", "A-part"), ("Document", "/api/document/documents", "document.document.create", "C-document") })
         {
             var created = await Post(admin, Point(fixture, behavior), route, new { ECODE = "SAME-CODE", ENAME = name });
             var id = created.GetProperty("fields").GetProperty("EID").GetString();
             await Post(admin, Point(fixture, "workspace.folder.add"), "/api/workspace/content/references", new { position, target = new { modelKey = model, id } });
         }
         var scope = JsonSerializer.Serialize(new { position.spaceId, position.rootFolderId, linkIds = "[]" });
-        var url = "/api/links/workspace.content?direction=forward&anchorModelKey=Workspace%2FWorkspaceFolder&anchorId=" + Uri.EscapeDataString(position.rootFolderId!) + "&queryScope=" + Uri.EscapeDataString(scope) + "&sortBy=Name&sortDirection=asc";
+        var url = "/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId=" + Uri.EscapeDataString(position.rootFolderId!) + "&queryScope=" + Uri.EscapeDataString(scope) + "&sortBy=Name&sortDirection=asc";
         var result = await FeatureHttpTestRequests.ReadAsync(admin, entry, url);
         Assert.Equal(3, result.GetProperty("total").GetInt32());
         Assert.Equal(new[] { "A-part", "B-folder", "C-document" }, result.GetProperty("items").EnumerateArray().Select(row => row.GetProperty("fields").GetProperty("Name").GetString()));

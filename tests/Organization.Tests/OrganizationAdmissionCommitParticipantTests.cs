@@ -27,7 +27,7 @@ public sealed class OrganizationAdmissionCommitParticipantTests
         var participant = new OrganizationAdmissionCommitParticipant(cache, revoker);
 
         await using var scope = await participant.BeginAsync(default);
-        await scope.PrepareAsync([new("Organization/Person", "person", before, after)], default);
+        await scope.PrepareAsync([new("Person", "person", before, after)], default);
 
         Assert.Empty(revoker.Accounts);
     }
@@ -54,7 +54,7 @@ public sealed class OrganizationAdmissionCommitParticipantTests
         var participant = new OrganizationAdmissionCommitParticipant(cache, revoker);
 
         await using var scope = await participant.BeginAsync(default);
-        await scope.PrepareAsync([new("Organization/Person", "person", before, after)], default);
+        await scope.PrepareAsync([new("Person", "person", before, after)], default);
 
         Assert.Equal(["account"], revoker.Accounts);
         Assert.Equal("organization-admission-interrupted", revoker.Reason);
@@ -73,7 +73,7 @@ public sealed class OrganizationAdmissionCommitParticipantTests
         services.AddScoped(_ => new EfPlatformDbContext(options, definitions));
         var provider = services.BuildServiceProvider();
         await using var db = new EfPlatformDbContext(options, definitions);
-        db.Set<Dictionary<string, object?>>("Organization/Company").Add(Company("company"));
+        db.Set<Dictionary<string, object?>>("Company").Add(Company("company"));
         foreach (var (id, parent) in new[]
         {
             ("root", (string?)null),
@@ -83,9 +83,9 @@ public sealed class OrganizationAdmissionCommitParticipantTests
             ("target-leaf", "target-parent")
         })
         {
-            db.Set<Dictionary<string, object?>>("Organization/Department").Add(Department(id, parent));
+            db.Set<Dictionary<string, object?>>("Department").Add(Department(id, parent));
         }
-        db.Set<Dictionary<string, object?>>("Organization/Person").Add(Person());
+        db.Set<Dictionary<string, object?>>("Person").Add(Person());
         await db.SaveChangesAsync();
         return provider;
     }

@@ -74,19 +74,19 @@ it.each(['part', 'document'] as const)('opens same EID through the registered %s
       return json({ items: [{ EID: 'same-id', ECODE: 'SAME-CODE', ENAME: '无引用候选' }], total: 1, page: 1, pageSize: 20 });
     }
     if (url.pathname === '/api/links/workspace.content' && url.searchParams.get('direction') === 'reverse') {
-      expect(url.searchParams.get('anchorModelKey')).toBe(type === 'part' ? 'Part/Part' : 'Document/Document');
+      expect(url.searchParams.get('anchorModelKey')).toBe(type === 'part' ? 'Part' : 'Document');
       expect(url.searchParams.get('anchorId')).toBe('same-id');
       expect(url.searchParams.has('queryScope')).toBe(false);
       expect(new Headers(input instanceof Request ? input.headers : init?.headers).get('X-NewP-Feature')).toBe('workspace-entry');
-      return json({ items: [{ linkId: 'incoming-relation', associatedObject: { modelKey: 'Workspace/WorkspaceFolder', id: 'parent-folder' },
+      return json({ items: [{ linkId: 'incoming-relation', associatedObject: { modelKey: 'WorkspaceFolder', id: 'parent-folder' },
         fields: { LID: 'incoming-relation', Name: '直接父文件夹', UpdatedBy: 'actor', UpdatedBy_DisplayValue: '更新账号', UpdatedAt: '2026-10-08T00:00:00Z', UpdatedAt_DisplayValue: '2026-10-08 08:00' } }], total: 1, page: 1, pageSize: 20 });
     }
     if (url.pathname === '/api/workspace/folders/parent-folder') return json({ fields: { EID: 'parent-folder', ENAME: '父文件夹属性', Description: '只开对象不定位路径',
       CreatedBy: 'actor', CreatedBy_DisplayValue: '创建账号', UpdatedBy: 'actor', UpdatedBy_DisplayValue: '更新账号',
       CreatedAt: '2026-10-08T00:00:00Z', CreatedAt_DisplayValue: '2026-10-08 08:00', UpdatedAt: '2026-10-08T00:00:00Z', UpdatedAt_DisplayValue: '2026-10-08 08:00' } });
     if (url.pathname === '/api/links/workspace.content') return json({ items: ['part', 'document'].map(owner => ({ linkId: owner + '-relation',
-      associatedObject: { modelKey: owner === 'part' ? 'Part/Part' : 'Document/Document', id: 'same-id' },
-      fields: { LID: owner + '-relation', ObjectType: owner === 'part' ? 'Part/Part' : 'Document/Document',
+      associatedObject: { modelKey: owner === 'part' ? 'Part' : 'Document', id: 'same-id' },
+      fields: { LID: owner + '-relation', ObjectType: owner === 'part' ? 'Part' : 'Document',
         ObjectType_DisplayValue: owner === 'part' ? '零组件' : '图文档', Name: owner + '-name', Code: 'SAME-CODE' } })), total: 2, page: 1, pageSize: 20 });
     if (url.pathname === `/api/${type}/${type === 'part' ? 'parts' : 'documents'}/same-id`) {
       const headers = new Headers(input instanceof Request ? input.headers : init?.headers);

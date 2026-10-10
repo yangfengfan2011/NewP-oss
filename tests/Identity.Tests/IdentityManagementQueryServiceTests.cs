@@ -117,7 +117,7 @@ public sealed class IdentityManagementQueryServiceTests
             Assert.Equal("or", condition.GroupOperator);
         });
         Assert.Equal("identity.account", executor.Descriptor?.ResourceKey);
-        Assert.Equal("Identity/IdentityAccount", executor.Descriptor?.ModelName);
+        Assert.Equal("IdentityAccount", executor.Descriptor?.ModelName);
         Assert.Equal("ECODE", executor.Descriptor?.DefaultSortField);
         Assert.Equal("EID", executor.Descriptor?.IdField);
     }

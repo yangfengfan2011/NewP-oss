@@ -64,18 +64,18 @@ public sealed class ExampleRequiredFieldMigrationFixtureTests
         Assert.Equal(beforeOrganization.Migrations[0].ToModelDigest, beforeOrganization.ModelDigest);
         Assert.Equal(beforeOrganization.ModelDigest, nullableOrganization.ModelDigest);
 
-        var beforeModel = Assert.Single(beforeField.Models, model => model.LogicalKey == "Example/ExampleRecord");
-        var nullableModel = Assert.Single(nullableField.Models, model => model.LogicalKey == "Example/ExampleRecord");
+        var beforeModel = Assert.Single(beforeField.Models, model => model.LogicalKey == "ExampleRecord");
+        var nullableModel = Assert.Single(nullableField.Models, model => model.LogicalKey == "ExampleRecord");
         Assert.DoesNotContain(beforeModel.Fields, field => field.Name == "RecordSource");
         Assert.False(Assert.Single(nullableModel.Fields, field => field.Name == "RecordSource").Required);
 
-        var beforePosition = Assert.Single(beforeField.Models, model => model.LogicalKey == "Organization/Position");
+        var beforePosition = Assert.Single(beforeField.Models, model => model.LogicalKey == "Position");
         Assert.Contains(beforePosition.Fields, field => field.Name == "CompanyId" && field.Required);
         Assert.Contains(beforePosition.Fields, field => field.Name == "DepartmentId" && field.Required);
         Assert.Contains(beforePosition.Fields, field => field.Name == "ECODE" && field.Required);
         Assert.DoesNotContain(beforePosition.Fields, field => field.Name == "Description");
 
-        var beforeCompany = Assert.Single(beforeField.Models, model => model.LogicalKey == "Organization/Company");
+        var beforeCompany = Assert.Single(beforeField.Models, model => model.LogicalKey == "Company");
         Assert.Contains(beforeCompany.Indexes, index =>
             index.Name == "UX_Company_ECODE"
             && index.IsUnique
@@ -85,7 +85,7 @@ public sealed class ExampleRequiredFieldMigrationFixtureTests
 
         var beforeDepartment = Assert.Single(
             beforeField.Models,
-            model => model.LogicalKey == "Organization/Department");
+            model => model.LogicalKey == "Department");
         Assert.Contains(beforeDepartment.Indexes, index =>
             index.Name == "IX_Department_Company_Parent_ECODE"
             && !index.IsUnique

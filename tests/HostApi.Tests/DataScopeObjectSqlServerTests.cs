@@ -108,7 +108,7 @@ public sealed class DataScopeObjectSqlServerTests
         using (var scope = fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-            db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Authorization/Role")).Add(new()
+            db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Role")).Add(new()
             {
                 ["EID"] = id, ["ECODE"] = "SAME-OBJECT-ID", ["ENAME"] = "相同对象 ID 角色",
                 ["IsEnabled"] = true, ["IsBuiltIn"] = false,
@@ -264,7 +264,7 @@ public sealed class DataScopeObjectSqlServerTests
         using (var scope = fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-            var retained = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Authorization/DataScopeObjectSubject"))
+            var retained = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("DataScopeObjectSubject"))
                 .CountAsync(row => EF.Property<string>(row, "ResourceKey") == "organization.person"
                     && EF.Property<string>(row, "ObjectId") == id);
             Assert.Equal(2, retained);

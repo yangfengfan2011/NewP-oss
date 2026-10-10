@@ -404,6 +404,7 @@ public sealed class CanonicalModulePlanCompiler
         return normalized.ToLowerInvariant();
     }
 
+    // 技术名称跨 owner 唯一；大小写折叠仅用于冲突判定，计划保留声明名称。
     private static IReadOnlyList<ModulePlanDiagnostic> ValidateModelOwners(
         string candidateId,
         IReadOnlyList<ModuleCapsuleCandidate> candidates)
@@ -414,7 +415,7 @@ public sealed class CanonicalModulePlanCompiler
                 Candidate = candidate,
                 ModelKey = modelKey
             }))
-            .GroupBy(static item => item.ModelKey, StringComparer.Ordinal)
+            .GroupBy(static item => item.ModelKey, StringComparer.OrdinalIgnoreCase)
             .Where(static group => group.Count() > 1)
             .OrderBy(static group => group.Key, StringComparer.Ordinal)
             .SelectMany(group =>

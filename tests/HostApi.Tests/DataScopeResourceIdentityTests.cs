@@ -27,27 +27,29 @@ public sealed class DataScopeResourceIdentityTests
         var plan = new CanonicalModulePlan("test", "1.0", "", "", [], []);
         var identities = new DataScopeIdentities([]);
         Assert.Throws<InvalidOperationException>(() => new DataScopeCatalog(resources, plan, db, identities,
-            conditionProviders: [new TestCondition("Organization/Person"), new TestCondition("Organization/Person")]).BusinessConditions);
+            conditionProviders: [new TestCondition("Person"), new TestCondition("Person")]).BusinessConditions);
         Assert.Throws<InvalidOperationException>(() => new DataScopeCatalog(resources, plan, db, identities,
             conditionProviders: [new TestCondition("Missing/Person")]).BusinessConditions);
     }
 
-    [Theory]
-    [InlineData("Person")]
-    [InlineData("Organization/Person")]
-    public void Catalog_UsesDeclaredOwnerWhenBareModelNameIsAmbiguous(string modelName)
+    [Fact]
+    public void Catalog_ResolvesGlobalModelAndRejectsResourceOwnerMismatch()
     {
         var models = new OrganizationModelMetadataProvider().GetDefinitions().Select(model => model with { OwnerModuleId = "Organization" }).ToArray();
         var person = models.Single(model => model.Name == "Person");
         using var db = new EfPlatformDbContext(new DbContextOptionsBuilder<EfPlatformDbContext>()
             .UseSqlServer("Server=localhost;Database=never-connect;Integrated Security=true;TrustServerCertificate=true")
             .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().Options,
-            [.. models, person with { OwnerModuleId = "Other", TableName = "OtherPerson", ForeignKeys = [] }]);
-        Assert.Throws<InvalidOperationException>(() => db.ResolveModelKey("Person"));
-        var resources = new StandardCrudResourceRegistry([PersonCrudDescriptorFactory.Create() with { ModelName = modelName }]);
+            [.. models, person with { Name = "OtherPerson", OwnerModuleId = "Other", TableName = "OtherPerson", ForeignKeys = [] }]);
+        Assert.Equal("Person", db.ResolveModelKey("Person"));
+        Assert.Throws<InvalidOperationException>(() => db.ResolveModelKey("Organization/Person"));
+        var resources = new StandardCrudResourceRegistry([PersonCrudDescriptorFactory.Create()]);
         var catalog = new DataScopeCatalog(resources, new CanonicalModulePlan("test", "1.0", "", "", [], []), db, new DataScopeIdentities([]));
         Assert.Contains(catalog.Fields("organization.person"), field => field.Name == "ENAME");
-        Assert.Equal("Organization/Person", catalog.Resolve("organization.person").ModelKey);
+        Assert.Equal("Person", catalog.Resolve("organization.person").ModelKey);
+        var wrongResources = new StandardCrudResourceRegistry([PersonCrudDescriptorFactory.Create() with { ModuleId = "Other" }]);
+        var wrongCatalog = new DataScopeCatalog(wrongResources, new CanonicalModulePlan("test", "1.0", "", "", [], []), db, new DataScopeIdentities([]));
+        Assert.Equal("DATA_SCOPE_MODEL_OWNER_MISMATCH", Assert.Throws<InvalidOperationException>(() => wrongCatalog.Fields("organization.person")).Message);
     }
 
     [Fact]
@@ -65,9 +67,9 @@ public sealed class DataScopeResourceIdentityTests
             person with { ResourceKey = "organization.person.other-entry", Route = "api/organization/person-other-entry" }
         ]);
         var catalog = new DataScopeCatalog(resources, new CanonicalModulePlan("test", "1.0", "", "", [], []),
-            db, new DataScopeIdentities([]), conditionProviders: [new TestCondition("Organization/Company", "Organization/Department")]);
-        Assert.Equal("Organization/Person", catalog.Resolve("organization.person").ModelKey);
-        Assert.Equal("Organization/Person", catalog.Resolve("organization.person.other-entry").ModelKey);
+            db, new DataScopeIdentities([]), conditionProviders: [new TestCondition("Company", "Department")]);
+        Assert.Equal("Person", catalog.Resolve("organization.person").ModelKey);
+        Assert.Equal("Person", catalog.Resolve("organization.person.other-entry").ModelKey);
         Assert.NotEqual(catalog.Resolve("organization.person").ResourceKey,
             catalog.Resolve("organization.person.other-entry").ResourceKey);
         foreach (var resource in new[] { "organization.company", "organization.department" })

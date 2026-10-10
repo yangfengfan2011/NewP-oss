@@ -19,22 +19,22 @@ internal static class OrganizationSnapshotValidation
     // 日常候选只检查变更记录与删除节点的直接引用，不扫描全部人员或部门。
     public static void ValidateChanges(OrganizationSnapshot snapshot, IReadOnlyList<PlatformRecordChange> changes, CancellationToken cancellationToken)
     {
-        ValidateDepartments(snapshot, changes.Where(c => c.ModelKey == "Organization/Department").Select(c => c.Id).Distinct(), cancellationToken);
+        ValidateDepartments(snapshot, changes.Where(c => c.ModelKey == "Department").Select(c => c.Id).Distinct(), cancellationToken);
         foreach (var change in changes)
         {
             cancellationToken.ThrowIfCancellationRequested();
             switch (change.ModelKey)
             {
-                case "Organization/Company" when !snapshot.Companies.ContainsKey(change.Id):
+                case "Company" when !snapshot.Companies.ContainsKey(change.Id):
                     Require(!snapshot.DepartmentsByCompany.ContainsKey(change.Id) && !snapshot.PersonsByCompany.ContainsKey(change.Id));
                     break;
-                case "Organization/Department" when !snapshot.Departments.ContainsKey(change.Id):
+                case "Department" when !snapshot.Departments.ContainsKey(change.Id):
                     Require(!snapshot.ChildDepartments.ContainsKey(change.Id) && !snapshot.PersonsByDepartment.ContainsKey(change.Id));
                     break;
-                case "Organization/Position" when !snapshot.Positions.ContainsKey(change.Id):
+                case "Position" when !snapshot.Positions.ContainsKey(change.Id):
                     Require(!snapshot.PersonsByPosition.ContainsKey(change.Id));
                     break;
-                case "Organization/Person" when snapshot.Persons.ContainsKey(change.Id):
+                case "Person" when snapshot.Persons.ContainsKey(change.Id):
                     ValidatePerson(snapshot, change.Id);
                     break;
             }

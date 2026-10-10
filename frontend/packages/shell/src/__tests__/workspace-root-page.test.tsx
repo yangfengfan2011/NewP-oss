@@ -57,8 +57,8 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
   const rootDetail = (id: string, name: string, description: string) => ({ id, fields: { EID: id, ENAME: name, Description: description,
     CreatedBy: 'actor', CreatedBy_DisplayValue: '创建账号', UpdatedBy: 'actor', UpdatedBy_DisplayValue: '更新账号',
     CreatedAt: '2026-10-08T00:00:00Z', CreatedAt_DisplayValue: '2026-10-08 08:00', UpdatedAt: '2026-10-08T00:00:00Z', UpdatedAt_DisplayValue: '2026-10-08 08:00' } });
-  const contents = (id: string, name: string) => ({ items: [{ linkId: `${id}-link`, associatedObject: { modelKey: 'Workspace/WorkspaceFolder', id },
-    fields: { LID: `${id}-link`, Name: name, Code: null, ObjectType: 'Workspace/WorkspaceFolder', UpdatedBy: 'actor', UpdatedBy_DisplayValue: '更新账号', UpdatedAt: '2026-10-08T00:00:00Z', UpdatedAt_DisplayValue: '2026-10-08 08:00' } }], total: 1, page: 1, pageSize: 20 });
+  const contents = (id: string, name: string) => ({ items: [{ linkId: `${id}-link`, associatedObject: { modelKey: 'WorkspaceFolder', id },
+    fields: { LID: `${id}-link`, Name: name, Code: null, ObjectType: 'WorkspaceFolder', UpdatedBy: 'actor', UpdatedBy_DisplayValue: '更新账号', UpdatedAt: '2026-10-08T00:00:00Z', UpdatedAt_DisplayValue: '2026-10-08 08:00' } }], total: 1, page: 1, pageSize: 20 });
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = input instanceof Request ? new URL(input.url).pathname : String(input);
     const method = input instanceof Request ? input.method : init?.method;

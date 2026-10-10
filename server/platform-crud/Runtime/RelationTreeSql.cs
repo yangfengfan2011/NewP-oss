@@ -65,9 +65,11 @@ public sealed class RelationTreeSql(EfPlatformDbContext db, IStandardCrudResourc
         IEntityType ResolveEntity(RelationTreeNodeSource node)
         {
             var resource = resources.FindByResourceKey(node.ResourceKey) ?? throw new InvalidOperationException($"Tree resource is not registered: {node.ResourceKey}");
-            if (resource.ModuleId != definition.ModuleId || resource.ModelName != node.Model || resource.IdField != node.IdField)
+            var model = db.PersistencePlan.Models.SingleOrDefault(model => model.LogicalKey == node.Model);
+            if (resource.ModuleId != definition.ModuleId || resource.ModelName != node.Model || resource.IdField != node.IdField
+                || model?.OwnerModuleId != definition.ModuleId)
                 throw new InvalidOperationException($"Tree resource ownership/model mismatch: {node.Key}");
-            return db.Model.FindEntityType(db.ResolveModelKey(definition.ModuleId + "/" + node.Model))
+            return db.Model.FindEntityType(db.ResolveModelKey(node.Model))
                 ?? throw new InvalidOperationException($"Unknown tree model: {node.Model}");
         }
 

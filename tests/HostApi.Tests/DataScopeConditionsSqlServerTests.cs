@@ -32,9 +32,9 @@ public sealed class DataScopeConditionsSqlServerTests(ITestOutputHelper output)
         using (var scope = fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-            Assert.Equal(typeof(bool), db.Model.FindEntityType(db.ResolveModelKey("Organization/Person"))!
+            Assert.Equal(typeof(bool), db.Model.FindEntityType(db.ResolveModelKey("Person"))!
                 .FindProperty("IsEnabled")!.ClrType);
-            Assert.Equal(typeof(DateTime), db.Model.FindEntityType(db.ResolveModelKey("Organization/Person"))!
+            Assert.Equal(typeof(DateTime), db.Model.FindEntityType(db.ResolveModelKey("Person"))!
                 .FindProperty("CreatedAt")!.ClrType);
         }
         var save = fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save");

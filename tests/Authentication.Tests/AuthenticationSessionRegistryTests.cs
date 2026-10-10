@@ -32,7 +32,7 @@ public sealed class AuthenticationSessionRegistryTests
             new EfPlatformTransactionExecutor(context).ExecuteAsync(token => IssueAsync(missing, cancellationToken: token)).AsTask());
         Assert.Equal(AuthenticationSessionFailureCodes.AdmissionUnavailable, failure.FailureCode);
         Assert.Equal(AuthenticationSessionValidationStatus.Active, (await admitted.ValidateAsync(issuance.Credential)).Status);
-        Assert.Single(await context.Set<Dictionary<string, object?>>(context.ResolveModelKey("Authentication/AuthenticationSession")).ToListAsync());
+        Assert.Single(await context.Set<Dictionary<string, object?>>(context.ResolveModelKey("AuthenticationSession")).ToListAsync());
     }
     // 本fixture仅证明会话或跨owner事务；完整组织准入由Host真实业务fixture另行证明。
     internal sealed class IsolatedAdmissionPolicy : IIdentityAdmissionPolicy
@@ -68,7 +68,7 @@ public sealed class AuthenticationSessionRegistryTests
         Assert.Equal(AuthenticationSessionValidationStatus.Active, (await registry.ValidateAsync(issuance.Credential)).Status);
         Assert.Equal(AuthenticationSessionValidationStatus.Unknown, (await registry.ValidateAsync(issuance.Session.SessionEid)).Status);
         var stored = Assert.Single(await context
-            .Set<Dictionary<string, object?>>(context.ResolveModelKey("Authentication/AuthenticationSession"))
+            .Set<Dictionary<string, object?>>(context.ResolveModelKey("AuthenticationSession"))
             .AsNoTracking()
             .ToListAsync());
         Assert.NotEqual(issuance.Credential, stored["TokenHash"]);
@@ -103,7 +103,7 @@ public sealed class AuthenticationSessionRegistryTests
                 cancellationToken: token)));
         Assert.Equal(AuthenticationSessionFailureCodes.InvalidTimeZone, exception.FailureCode);
         Assert.Equal(2, await context
-            .Set<Dictionary<string, object?>>(context.ResolveModelKey("Authentication/AuthenticationSession"))
+            .Set<Dictionary<string, object?>>(context.ResolveModelKey("AuthenticationSession"))
             .CountAsync());
     }
 
@@ -141,7 +141,7 @@ public sealed class AuthenticationSessionRegistryTests
 
         Assert.Equal(AuthenticationSessionFailureCodes.InvalidTimeZone, exception.FailureCode);
         Assert.Empty(await context
-            .Set<Dictionary<string, object?>>(context.ResolveModelKey("Authentication/AuthenticationSession"))
+            .Set<Dictionary<string, object?>>(context.ResolveModelKey("AuthenticationSession"))
             .ToListAsync());
     }
 
@@ -158,7 +158,7 @@ public sealed class AuthenticationSessionRegistryTests
         Assert.NotEqual(regular.Credential, restricted.Credential);
         Assert.Equal(AuthenticationSessionType.Restricted, (await registry.ValidateAsync(restricted.Credential)).Session!.Type);
         Assert.Equal(AuthenticationSessionValidationStatus.Active, (await registry.ValidateAsync(regular.Credential)).Status);
-        Assert.Equal(2, await context.Set<Dictionary<string, object?>>(context.ResolveModelKey("Authentication/AuthenticationSession")).CountAsync());
+        Assert.Equal(2, await context.Set<Dictionary<string, object?>>(context.ResolveModelKey("AuthenticationSession")).CountAsync());
     }
 
     [Fact]

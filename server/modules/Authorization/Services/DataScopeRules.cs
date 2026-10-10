@@ -12,8 +12,8 @@ public sealed class DataScopeRules(EfPlatformDbContext db, IPlatformTransactionE
     DataScopeCatalog catalog, IBusinessAuditRecorder audit, DataScopeIdentities identities)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-    private DbSet<Dictionary<string, object?>> Nodes => db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Authorization/DataScopeRuleNode"));
-    private DbSet<Dictionary<string, object?>> Subjects => db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Authorization/DataScopeRuleSubject"));
+    private DbSet<Dictionary<string, object?>> Nodes => db.Set<Dictionary<string, object?>>(db.ResolveModelKey("DataScopeRuleNode"));
+    private DbSet<Dictionary<string, object?>> Subjects => db.Set<Dictionary<string, object?>>(db.ResolveModelKey("DataScopeRuleSubject"));
 
     /// <summary>管理列表在数据库分页，配置不随对象数量增长。</summary>
     public async Task<IReadOnlyList<DataScopeRuleDto>> ListAsync(int page, CancellationToken token)

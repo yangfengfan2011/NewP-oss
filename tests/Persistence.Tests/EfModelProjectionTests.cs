@@ -35,7 +35,7 @@ public class EfModelProjectionTests
             .Options;
 
         using var db = new EfPlatformDbContext(options, definitions);
-        var entityType = db.Model.FindEntityType("platform.core/ConfigItem");
+        var entityType = db.Model.FindEntityType("ConfigItem");
         var table = StoreObjectIdentifier.Table("ConfigItem", "dbo");
 
         Assert.NotNull(entityType);
@@ -67,7 +67,7 @@ public class EfModelProjectionTests
             .Options;
 
         using var db = new EfPlatformDbContext(options, definitions);
-        var property = db.Model.FindEntityType("platform.core/Person")!.FindProperty("BirthDate")!;
+        var property = db.Model.FindEntityType("Person")!.FindProperty("BirthDate")!;
 
         Assert.Equal(typeof(DateOnly?), property.ClrType);
         Assert.Equal("date", property.GetColumnType());
@@ -102,7 +102,7 @@ public class EfModelProjectionTests
             .Options;
 
         using var db = new EfPlatformDbContext(options, definitions);
-        var index = Assert.Single(db.Model.FindEntityType("platform.core/Department")!.GetIndexes());
+        var index = Assert.Single(db.Model.FindEntityType("Department")!.GetIndexes());
 
         Assert.True(index.IsUnique);
         Assert.Null(index.GetFilter());

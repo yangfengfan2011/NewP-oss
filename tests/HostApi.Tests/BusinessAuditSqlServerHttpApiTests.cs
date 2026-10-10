@@ -603,7 +603,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
         var rejectedPersonStored = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Person"))
             .AsNoTracking()
             .SingleAsync(row => EF.Property<string>(row, "EID") == disabledPersonId);
-        var rejectedAccountStored = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Identity/IdentityAccount"))
+        var rejectedAccountStored = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("IdentityAccount"))
             .AsNoTracking()
             .SingleAsync(row => EF.Property<string>(row, "EID") == rejectedAccount.GetProperty("eid").GetString());
         Assert.Null(rejectedPersonStored["AccountEID"]);
@@ -1129,7 +1129,7 @@ public sealed class BusinessAuditSqlServerHttpApiTests
             .AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == Id(company));
         var storedPerson = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Person"))
             .AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == Id(person));
-        var storedAccount = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Identity/IdentityAccount"))
+        var storedAccount = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("IdentityAccount"))
             .AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == control.NestedAccountId);
         Assert.Equal("专用动作根公司", storedCompany["ENAME"]);
         Assert.True((bool)storedPerson["IsEnabled"]!);

@@ -721,7 +721,7 @@ public sealed class ProviderTargetTests
     private static CompiledPersistencePlan Plan(ProviderTargetSnapshot target)
     {
         var models = target.Tables.Select(table => new ModelDefinition(
-            $"Example/{table.Name}",
+            table.Name,
             table.Name,
             ModelKind.Entity,
             [new FieldDefinition(

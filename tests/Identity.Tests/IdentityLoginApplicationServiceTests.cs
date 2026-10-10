@@ -79,7 +79,7 @@ public sealed class IdentityLoginApplicationServiceTests
 
     private sealed class FixedAdmissionPolicy : IIdentityAdmissionPolicy
     {
-        public IReadOnlyCollection<string> GetCoordinationModels(IdentityAccountSnapshot account) => ["Organization/Person"];
+        public IReadOnlyCollection<string> GetCoordinationModels(IdentityAccountSnapshot account) => ["Person"];
 
         public ValueTask<bool> IsAllowedAsync(
             IdentityAccountSnapshot account,

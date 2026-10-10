@@ -42,6 +42,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         _platformFoundationRoot = Path.GetFullPath(platformFoundationRoot);
     }
 
+    /// <inheritdoc/>
     public PersistencePlanCompilationResult Compile(
         CanonicalModulePlan modules,
         PersistenceProvider provider)
@@ -58,7 +59,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         }
 
         AddPlatformStream(modules, provider, models, streams, diagnostics);
-        AddGlobalConflictDiagnostics(models, streams, diagnostics);
+        AddGlobalConflictDiagnostics(modules, models, streams, diagnostics);
         var orderedDiagnostics = diagnostics
             .OrderBy(static item => item.Code, StringComparer.Ordinal)
             .ThenBy(static item => item.ModuleId, StringComparer.Ordinal)
@@ -149,6 +150,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         return depths;
     }
 
+    // 按模块可信 authoring 编译独立 owner 的全局模型及迁移流。
     private void CompileModule(
         CanonicalModulePlanModule module,
         PersistenceProvider provider,
@@ -197,8 +199,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                     continue;
                 }
 
-                if (!module.ModelKeys.Contains(document.Model.Name, StringComparer.Ordinal)
-                    && !module.ModelKeys.Contains($"{module.ModuleId}.{document.Model.Name}", StringComparer.Ordinal))
+                if (!module.ModelKeys.Contains(document.Model.Name, StringComparer.Ordinal))
                 {
                     diagnostics.Add(new PersistencePlanDiagnostic(
                         "PERSISTENCE_MODEL_KEY_UNDECLARED",
@@ -522,7 +523,9 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         return $"np_{normalized}";
     }
 
+    // 全局模型引用保留独立 owner 和活动能力依赖检查；名称相似不授予归属。
     private static void AddGlobalConflictDiagnostics(
+        CanonicalModulePlan modules,
         IReadOnlyList<ModelDefinition> models,
         IReadOnlyList<ModuleMigrationStream> streams,
         List<PersistencePlanDiagnostic> diagnostics)
@@ -538,7 +541,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 $"Logical model key '{group.Key}' has multiple definitions."));
         }
 
-        var modelsByLogicalKey = models.ToLookup(static model => model.LogicalKey, StringComparer.OrdinalIgnoreCase);
+        var modelsByLogicalKey = models.ToLookup(static model => model.LogicalKey, StringComparer.Ordinal);
         foreach (var model in models)
         {
             foreach (var foreignKey in model.ForeignKeys)
@@ -553,6 +556,14 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                         string.Empty,
                         $"Foreign key '{foreignKey.Name}' references missing principal model '{foreignKey.PrincipalModelKey}'."));
                     continue;
+                }
+
+                if (foreignKey.PrincipalOwnerModuleId is { } principalOwner && principalOwner != principalModel.OwnerModuleId
+                    || !ModuleDependencyPolicy.Allows(modules, model.OwnerModuleId, principalModel.OwnerModuleId))
+                {
+                    diagnostics.Add(new PersistencePlanDiagnostic("PERSISTENCE_FOREIGN_KEY_OWNER_INVALID",
+                        model.OwnerModuleId, foreignKey.Name, string.Empty,
+                        $"Foreign key '{foreignKey.Name}' references an undeclared owner or unavailable dependency '{principalModel.OwnerModuleId}'."));
                 }
 
                 var principalFieldNames = principalModel.Fields

@@ -77,7 +77,7 @@ public sealed class WorkspaceSqlServerHttpApiTests
         foreach (var invalid in new[]
         {
             new[] { registration, registration },
-            new[] { registration with { ModelName = "Identity/IdentityAccount" } },
+            new[] { registration with { ModelName = "IdentityAccount" } },
             new[] { registration with { ModuleId = "Missing" } },
             new[] { registration with { ModelName = "Missing" } },
             new[] { registration with { IdField = "ENAME" } }
@@ -104,8 +104,8 @@ public sealed class WorkspaceSqlServerHttpApiTests
         using (var scope = fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-            Assert.Equal(0, await db.Set<Dictionary<string, object?>>("Workspace/WorkspaceSpace").CountAsync());
-            Assert.Equal(0, await db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolder").CountAsync());
+            Assert.Equal(0, await db.Set<Dictionary<string, object?>>("WorkspaceSpace").CountAsync());
+            Assert.Equal(0, await db.Set<Dictionary<string, object?>>("WorkspaceFolder").CountAsync());
         }
         using var response = await FeatureHttpTestRequests.SendAsync(admin, entry, HttpMethod.Post, "/api/workspace/spaces/public/initialize");
         Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
@@ -161,11 +161,11 @@ public sealed class WorkspaceSqlServerHttpApiTests
 
         using var persisted = fixture.Services.CreateScope();
         var stored = persisted.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-        Assert.Equal(3, await stored.Set<Dictionary<string, object?>>("Workspace/WorkspaceSpace").CountAsync());
-        Assert.Equal(3, await stored.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolder").CountAsync());
-        var own = await stored.Set<Dictionary<string, object?>>("Workspace/WorkspaceSpace").AsNoTracking()
+        Assert.Equal(3, await stored.Set<Dictionary<string, object?>>("WorkspaceSpace").CountAsync());
+        Assert.Equal(3, await stored.Set<Dictionary<string, object?>>("WorkspaceFolder").CountAsync());
+        var own = await stored.Set<Dictionary<string, object?>>("WorkspaceSpace").AsNoTracking()
             .SingleAsync(r => EF.Property<string>(r, "EID") == personalA.GetProperty("spaceId").GetString());
-        Assert.Equal("Identity/IdentityAccount", own["SubjectModelKey"]);
+        Assert.Equal("IdentityAccount", own["SubjectModelKey"]);
         Assert.Equal(first.AccountId, own["SubjectId"]);
     }
 

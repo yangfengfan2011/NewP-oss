@@ -7,8 +7,8 @@ import { StandardCrudForm } from '@icp-platform/ui/crud-form';
 export default function WorkspaceObjectEditInput({ row, queryScope, featurePosition, value, onChange, onDraftStateChange, submitting }: StandardCrudActionInputRenderContext) {
   const { t } = useLocalization();
   const target = row as Record<string, unknown>;
-  const folder = target.ObjectModelKey === 'Workspace/WorkspaceFolder';
-  const dictionary = folder ? 'Workspace' : target.ObjectModelKey === 'Part/Part' ? 'Part' : 'Document';
+  const folder = target.ObjectModelKey === 'WorkspaceFolder';
+  const dictionary = folder ? 'Workspace' : target.ObjectModelKey === 'Part' ? 'Part' : 'Document';
   const position = JSON.stringify({ spaceId: queryScope?.spaceId, rootFolderId: queryScope?.rootFolderId,
     linkIds: JSON.parse(String(queryScope?.linkIds ?? '[]')) as unknown });
   const [initial, setInitial] = useState<Record<string, unknown> | null>(null);

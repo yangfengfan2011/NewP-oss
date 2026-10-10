@@ -33,7 +33,7 @@ it('can navigate again after saving a new data-scope rule from the leave dialog'
     return Promise.resolve(new Response(JSON.stringify(url.endsWith('/catalog') ? {
       actions: [{ key: 'read', title: '读取', enabled: true }],
       features: [{ behaviorKey: 'authorization.dataScope.save', position: 'save' }],
-      resources: [{ resource: { resourceKey: 'organization.person', modelName: 'Person', modelKey: 'Organization/Person' }, fields: [{ name: 'ENAME', type: 'String' }] }],
+      resources: [{ resource: { resourceKey: 'organization.person', moduleId: 'Organization', modelName: 'Person', modelKey: 'Person' }, fields: [{ name: 'ENAME', type: 'String' }] }],
     } : [])));
   });
   window.history.replaceState(null, '', '/rules');

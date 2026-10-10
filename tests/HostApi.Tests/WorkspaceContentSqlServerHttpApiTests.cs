@@ -38,13 +38,28 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         var detail = await created.Content.ReadFromJsonAsync<JsonElement>();
         var id = detail.GetProperty("id").GetString();
         var scope = JsonSerializer.Serialize(new { position.spaceId, position.rootFolderId, linkIds = "[]" });
-        var url = "/api/links/workspace.content?direction=forward&anchorModelKey=Workspace%2FWorkspaceFolder&anchorId=" + Uri.EscapeDataString(position.rootFolderId!) + "&queryScope=" + Uri.EscapeDataString(scope);
+        var url = "/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId=" + Uri.EscapeDataString(position.rootFolderId!) + "&queryScope=" + Uri.EscapeDataString(scope);
         var list = await FeatureHttpTestRequests.ReadAsync(admin, entry, url);
+        foreach (var (legacyUrl, code, field) in new[]
+        {
+            (url.Replace("anchorModelKey=WorkspaceFolder", "anchorModelKey=Workspace%2FWorkspaceFolder", StringComparison.Ordinal), "LinkQuery.InvalidAnchor", "anchor"),
+            (url + "&types=Workspace%2FWorkspaceFolder", "LinkQuery.InvalidType", "types")
+        })
+        {
+            using var rejected = await FeatureHttpTestRequests.SendAsync(admin, entry, HttpMethod.Get, legacyUrl);
+            Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+            var problem = await rejected.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(code, problem.GetProperty("code").GetString());
+            Assert.Equal(code, problem.GetProperty("reasonKey").GetString());
+            var fieldError = Assert.Single(problem.GetProperty("fieldErrors").EnumerateArray());
+            Assert.Equal(field, fieldError.GetProperty("field").GetString());
+            Assert.Equal(code, fieldError.GetProperty("reasonKey").GetString());
+        }
         var row = Assert.Single(list.GetProperty("items").EnumerateArray());
         Assert.Equal(1, list.GetProperty("total").GetInt32());
         Assert.NotEqual(id, row.GetProperty("linkId").GetString());
         Assert.Equal(id, row.GetProperty("associatedObject").GetProperty("id").GetString());
-        Assert.Equal("Workspace/WorkspaceFolder", row.GetProperty("parent").GetProperty("modelKey").GetString());
+        Assert.Equal("WorkspaceFolder", row.GetProperty("parent").GetProperty("modelKey").GetString());
         Assert.Equal("首个文件夹", row.GetProperty("fields").GetProperty("Name").GetString());
         Assert.False(row.GetProperty("fields").TryGetProperty("OriginSpaceId", out _));
         Assert.Equal(500, detail.GetProperty("fields").GetProperty("Description").GetString()!.Length);
@@ -111,10 +126,10 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
                 Assert.True(bypass.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed);
             }
         using var scope = fixture.Services.CreateScope(); var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-        var link = Assert.Single(await db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolderContent").AsNoTracking().ToArrayAsync());
+        var link = Assert.Single(await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AsNoTracking().ToArrayAsync());
         Assert.StartsWith("WorkspaceFolderContent_", (string)link["LID"]!);
         Assert.NotNull(link["LCreatedBy"]); Assert.NotNull(link["LUpdatedBy"]); Assert.NotNull(link["LCreatedAt"]); Assert.NotNull(link["LUpdatedAt"]);
-        var entity = await db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolder").AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == (string)link["CEID"]!);
+        var entity = await db.Set<Dictionary<string, object?>>("WorkspaceFolder").AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == (string)link["CEID"]!);
         Assert.Equal(entity["CreatedBy"], link["LCreatedBy"]); Assert.Equal(entity["CreatedAt"], link["LCreatedAt"]);
         Assert.Equal(position.SpaceId, entity["OriginSpaceId"]);
     }
@@ -217,11 +232,11 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         var add = Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "workspace.folder.add");
         constraint.AllowExcluded = true;
         using var attached = await FeatureHttpTestRequests.SendAsync(admin, add, HttpMethod.Post, "/api/workspace/content/references",
-            new { position = root with { LinkIds = [allowedRow.GetProperty("linkId").GetString()!] }, target = new { modelKey = "Workspace/WorkspaceFolder", id = excluded.GetProperty("id").GetString() } });
+            new { position = root with { LinkIds = [allowedRow.GetProperty("linkId").GetString()!] }, target = new { modelKey = "WorkspaceFolder", id = excluded.GetProperty("id").GetString() } });
         Assert.Equal(HttpStatusCode.OK, attached.StatusCode);
         constraint.AllowExcluded = false;
         using var excludedWrite = await FeatureHttpTestRequests.SendAsync(admin, add, HttpMethod.Post, "/api/workspace/content/references",
-            new { position = root with { LinkIds = [allowedRow.GetProperty("linkId").GetString()!] }, target = new { modelKey = "Workspace/WorkspaceFolder", id = excluded.GetProperty("id").GetString() } });
+            new { position = root with { LinkIds = [allowedRow.GetProperty("linkId").GetString()!] }, target = new { modelKey = "WorkspaceFolder", id = excluded.GetProperty("id").GetString() } });
         Assert.Equal(HttpStatusCode.NotFound, excludedWrite.StatusCode);
         var tree = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, ChildrenUrl(root));
         var treeRow = Assert.Single(tree.GetProperty("items").EnumerateArray());
@@ -247,15 +262,15 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         using (var scope = fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-            var example = await db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolderContent").AsNoTracking().SingleAsync();
-            db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolderContent").Add(new(example) { ["LID"] = "broken-link", ["CEID"] = "missing-entity" }); await db.SaveChangesAsync();
+            var example = await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AsNoTracking().SingleAsync();
+            db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").Add(new(example) { ["LID"] = "broken-link", ["CEID"] = "missing-entity" }); await db.SaveChangesAsync();
         }
         var list = await ListAsync(admin, entry, root, root.RootFolderId, "&pageSize=1"); Assert.Equal(1, list.GetProperty("total").GetInt32()); Assert.Single(list.GetProperty("items").EnumerateArray());
         Assert.Equal((2, 2), await CountsAsync(fixture));
         using (var scope = fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-            var broken = await db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolderContent").SingleAsync(row => EF.Property<string>(row, "LID") == "broken-link");
+            var broken = await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").SingleAsync(row => EF.Property<string>(row, "LID") == "broken-link");
             broken["ChildModelKey"] = "Unknown/Entity"; await db.SaveChangesAsync();
         }
         using var failed = await FeatureHttpTestRequests.SendAsync(admin, entry, HttpMethod.Get, ListUrl(root, root.RootFolderId)); Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
@@ -330,7 +345,7 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         using var response = await FeatureHttpTestRequests.SendAsync(client, create, HttpMethod.Post, "/api/workspace/content/folders", new { position, values = new { ENAME = name } });
         Assert.Equal(HttpStatusCode.OK, response.StatusCode); return await response.Content.ReadFromJsonAsync<JsonElement>();
     }
-    private static string ListUrl(Position position, string anchor) => "/api/links/workspace.content?direction=forward&anchorModelKey=Workspace%2FWorkspaceFolder&anchorId=" + Uri.EscapeDataString(anchor)
+    private static string ListUrl(Position position, string anchor) => "/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId=" + Uri.EscapeDataString(anchor)
         + "&queryScope=" + Uri.EscapeDataString(JsonSerializer.Serialize(new { spaceId = position.SpaceId, rootFolderId = position.RootFolderId, linkIds = JsonSerializer.Serialize(position.LinkIds) }));
     private static Task<JsonElement> ListAsync(HttpClient client, FeaturePoint entry, Position position, string anchor, string suffix = "") => FeatureHttpTestRequests.ReadAsync(client, entry, ListUrl(position, anchor) + suffix);
     private static string ChildrenUrl(Position position) => "/api/workspace/content/children?spaceId=" + Uri.EscapeDataString(position.SpaceId) + "&rootFolderId=" + Uri.EscapeDataString(position.RootFolderId) + "&linkIds=" + Uri.EscapeDataString(JsonSerializer.Serialize(position.LinkIds));
@@ -338,7 +353,7 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
     private static async Task<(int Folders, int Links)> CountsAsync(BusinessAuditHostFixture fixture)
     {
         using var scope = fixture.Services.CreateScope(); var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-        return (await db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolder").CountAsync(), await db.Set<Dictionary<string, object?>>("Workspace/WorkspaceFolderContent").CountAsync());
+        return (await db.Set<Dictionary<string, object?>>("WorkspaceFolder").CountAsync(), await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").CountAsync());
     }
     private static async Task SaveRuleAsync(HttpClient admin, FeaturePoint save, string id, string field, string value, Dictionary<string, string> actions)
     {

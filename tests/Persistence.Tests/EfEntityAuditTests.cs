@@ -25,7 +25,7 @@ public sealed class EfEntityAuditTests
             ["UpdatedAt"] = DateTime.UnixEpoch
         };
 
-        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").Add(row);
+        dbContext.Set<Dictionary<string, object?>>("Person").Add(row);
         await dbContext.SaveChangesAsync();
 
         Assert.Equal("subject-1", row["CreatedBy"]);
@@ -42,7 +42,7 @@ public sealed class EfEntityAuditTests
         var provider = new FakeEntityAuditStampProvider("creator", createdAt);
         await using var dbContext = CreateDbContext(nameof(SaveChangesAsync_WhenEntityIsUpdated_PreservesCreationAuditAndRefreshesUpdateAudit), provider);
         var row = new Dictionary<string, object?> { ["EID"] = "person-1" };
-        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").Add(row);
+        dbContext.Set<Dictionary<string, object?>>("Person").Add(row);
         await dbContext.SaveChangesAsync();
 
         provider.Set("editor", updatedAt);
@@ -65,7 +65,7 @@ public sealed class EfEntityAuditTests
         var provider = new FakeEntityAuditStampProvider("creator", createdAt);
         await using var dbContext = CreateDbContext(nameof(SaveChangesAsync_WhenClockMovesBack_DoesNotSetUpdatedAtBeforeCreatedAt), provider);
         var row = new Dictionary<string, object?> { ["EID"] = "person-1" };
-        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").Add(row);
+        dbContext.Set<Dictionary<string, object?>>("Person").Add(row);
         await dbContext.SaveChangesAsync();
 
         provider.Set("editor", createdAt.AddMinutes(-1));
@@ -93,7 +93,7 @@ public sealed class EfEntityAuditTests
             Assert.Equal("person-creator", auditValues.Current().ActorId);
             Assert.Equal(behaviorTime, auditValues.Current().OccurredAtUtc);
             auditValues.ForCreate().ApplyTo(row);
-            dbContext.Set<Dictionary<string, object?>>("platform.core/Person").Add(row);
+            dbContext.Set<Dictionary<string, object?>>("Person").Add(row);
             await dbContext.SaveChangesAsync();
         }
 
@@ -163,7 +163,7 @@ public sealed class EfEntityAuditTests
     {
         var databaseName = nameof(SaveChangesAsync_WhenAuditOwnerReturnsNoValue_FailsWithStableCodeBeforeStoreWrite);
         await using var dbContext = CreateDbContext(databaseName, new NullEntityAuditStampProvider());
-        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").Add(
+        dbContext.Set<Dictionary<string, object?>>("Person").Add(
             new Dictionary<string, object?> { ["EID"] = "person-1" });
 
         var exception = await Assert.ThrowsAsync<EntityAuditStampUnavailableException>(
@@ -171,7 +171,7 @@ public sealed class EfEntityAuditTests
 
         Assert.Equal(EntityAuditFailureCodes.StampUnavailable, exception.FailureCode);
         dbContext.ChangeTracker.Clear();
-        Assert.Empty(await dbContext.Set<Dictionary<string, object?>>("platform.core/Person").AsNoTracking().ToListAsync());
+        Assert.Empty(await dbContext.Set<Dictionary<string, object?>>("Person").AsNoTracking().ToListAsync());
     }
 
     [Fact]
@@ -179,7 +179,7 @@ public sealed class EfEntityAuditTests
     {
         var databaseName = nameof(SaveChangesAsync_WhenAuditOwnerCannotBuildNonEmptyValue_FailsWithStableCodeBeforeStoreWrite);
         await using var dbContext = CreateDbContext(databaseName, new MissingActorEntityAuditStampProvider());
-        dbContext.Set<Dictionary<string, object?>>("platform.core/Person").Add(
+        dbContext.Set<Dictionary<string, object?>>("Person").Add(
             new Dictionary<string, object?> { ["EID"] = "person-1" });
 
         var exception = await Assert.ThrowsAsync<EntityAuditStampUnavailableException>(
@@ -187,7 +187,7 @@ public sealed class EfEntityAuditTests
 
         Assert.Equal(EntityAuditFailureCodes.StampUnavailable, exception.FailureCode);
         dbContext.ChangeTracker.Clear();
-        Assert.Empty(await dbContext.Set<Dictionary<string, object?>>("platform.core/Person").AsNoTracking().ToListAsync());
+        Assert.Empty(await dbContext.Set<Dictionary<string, object?>>("Person").AsNoTracking().ToListAsync());
     }
 
     private static EfPlatformDbContext CreateDbContext(

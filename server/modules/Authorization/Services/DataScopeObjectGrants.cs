@@ -14,8 +14,8 @@ namespace ICP.Platform.Modules.Authorization.Services;
 public sealed class DataScopeObjectGrants(EfPlatformDbContext db, IPlatformTransactionExecutor transactions,
     DataScopeCatalog catalog, DataScopeIdentities identities, IBusinessAuditRecorder audit, IPlatformObjectIdGenerator ids)
 {
-    private DbSet<Dictionary<string, object?>> Subjects => db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Authorization/DataScopeObjectSubject"));
-    private DbSet<Dictionary<string, object?>> Actions => db.Set<Dictionary<string, object?>>(db.ResolveModelKey("Authorization/DataScopeObjectAction"));
+    private DbSet<Dictionary<string, object?>> Subjects => db.Set<Dictionary<string, object?>>(db.ResolveModelKey("DataScopeObjectSubject"));
+    private DbSet<Dictionary<string, object?>> Actions => db.Set<Dictionary<string, object?>>(db.ResolveModelKey("DataScopeObjectAction"));
 
     /// <summary>仅读取指定规范资源和对象的完整配置，不依赖操作者是否仍能读取目标。</summary>
     public async Task<DataScopeObjectDto> GetAsync(string resourceKey, string objectId, CancellationToken token)

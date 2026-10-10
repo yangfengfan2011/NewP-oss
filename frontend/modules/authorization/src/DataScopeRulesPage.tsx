@@ -25,7 +25,7 @@ interface Catalog { subjectTypes?: SubjectType[]; contextValues?: { key: string;
   contextBindings?: { modelKey: string; field: string; contextKey: string }[]; actions: { key: string; title: string; enabled: boolean }[];
   businessConditions?: DataScopeBusinessType[];
   features: { behaviorKey: string; position: string }[];
-  resources: { resource: { resourceKey: string; modelName: string; modelKey: string }; fields: DataScopeResourceField[] }[] }
+  resources: { resource: { resourceKey: string; moduleId: string; modelName: string; modelKey: string }; fields: DataScopeResourceField[] }[] }
 const endpoint = '/api/authorization/data-scope';
 const findNode = (node: Rule, id: string): Rule | undefined => node.id === id ? node
   : node.children.map(child => findNode(child, id)).find(Boolean);

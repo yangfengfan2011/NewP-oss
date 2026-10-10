@@ -165,13 +165,7 @@ internal static class TestPersistencePlan
             .Select(definition => definition with
             {
                 OwnerModuleId = ownerModuleId,
-                SchemaName = "dbo",
-                ForeignKeys = definition.ForeignKeys
-                    .Select(foreignKey => foreignKey with
-                    {
-                        PrincipalModelKey = $"{GetPrincipalOwner(ownerModuleId, foreignKey.PrincipalModelKey)}/{GetModelName(foreignKey.PrincipalModelKey)}"
-                    })
-                    .ToArray()
+                SchemaName = "dbo"
             })
             .OrderBy(static definition => definition.LogicalKey, StringComparer.Ordinal)
             .ToArray();
@@ -223,17 +217,6 @@ internal static class TestPersistencePlan
         {
             AssemblyImage = new VerifiedArtifactImage(assemblyBytes)
         };
-    }
-
-    private static string GetPrincipalOwner(string ownerModuleId, string logicalKey) =>
-        ownerModuleId == "Authentication" && string.Equals(GetModelName(logicalKey), "IdentityAccount", StringComparison.Ordinal)
-            ? "Identity"
-            : ownerModuleId;
-
-    private static string GetModelName(string logicalKey)
-    {
-        var separator = logicalKey.LastIndexOf('/');
-        return separator >= 0 ? logicalKey[(separator + 1)..] : logicalKey;
     }
 
     private static string FindRepositoryRoot()

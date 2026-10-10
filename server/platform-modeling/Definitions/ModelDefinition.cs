@@ -21,5 +21,5 @@ public sealed record ModelDefinition(
     /// <summary>
     /// 获取跨模块唯一的稳定逻辑模型键。
     /// </summary>
-    public string LogicalKey => $"{OwnerModuleId}/{Name}";
+    public string LogicalKey => Name;
 }

@@ -136,10 +136,10 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
             await using var scope = fixture.Services.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
             var model = resource == "companies" ? "Company" : "Department";
-            Assert.True(await db.Set<Dictionary<string, object?>>("Organization/" + model).AsNoTracking()
+            Assert.True(await db.Set<Dictionary<string, object?>>(model).AsNoTracking()
                 .Where(row => EF.Property<string>(row, "EID") == id).Select(row => EF.Property<bool>(row, "IsEnabled")).SingleAsync());
             var ids = new[] { prepared.Account, actor.Account };
-            Assert.Equal(4, await db.Set<Dictionary<string, object?>>("Authentication/AuthenticationSession")
+            Assert.Equal(4, await db.Set<Dictionary<string, object?>>("AuthenticationSession")
                 .CountAsync(row => ids.Contains(EF.Property<string>(row, "AccountEID")) && EF.Property<DateTime?>(row, "RevokedAt") == null));
         }
     }
@@ -228,7 +228,7 @@ public sealed partial class OrganizationAdmissionSqlServerHttpApiTests
             {
                 Assert.Equal(true, view.FindByAccount(account)!.Person["IsEnabled"]);
                 Assert.Equal(IdentityAccountStatus.Enabled, (await scope.ServiceProvider.GetRequiredService<IIdentityAccountDirectory>().FindAsync(account))!.Status);
-                var sessions = await db.Set<Dictionary<string, object?>>("Authentication/AuthenticationSession").AsNoTracking()
+                var sessions = await db.Set<Dictionary<string, object?>>("AuthenticationSession").AsNoTracking()
                     .Where(row => EF.Property<string>(row, "AccountEID") == account).ToListAsync();
                 Assert.Equal(3, sessions.Count);
                 Assert.All(sessions, row => Assert.NotNull(row["RevokedAt"]));

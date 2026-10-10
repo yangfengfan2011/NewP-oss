@@ -29,7 +29,7 @@ async function render(initial: DataScopeCondition) {
   function Harness() {
     const [condition, setCondition] = useState(initial);
     return <DataScopeConditionTable condition={condition} fields={[{ name: 'ENAME', type: 'String' }]} contexts={[]} bindings={[]}
-      businessTypes={[]} modelKey="Organization/Person" disabled={false} onEditingChange={onEditingChange}
+      businessTypes={[]} modelKey="Person" disabled={false} onEditingChange={onEditingChange}
       onChange={next => { current = next; setCondition(next); }} />;
   }
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);

@@ -93,6 +93,8 @@ pwsh -NoProfile -File scripts/manage-unified-plugin.ps1 -Action desired -Candida
 
 移组和解除归组在发行物所选版本的 Capsule `composition.members` 中声明，不通过工具创建平行关系表。`uninstall -ModuleId <id>` 删除该组件的内建发行声明和 installed 包；`prune -ModuleId <id> -Version <未选版本>` 仅裁剪指定 installed 包版本。两者保留安装根下独立的持久化归档，且不连接数据库或删除数据；必需成员卸载在离线入口拒绝。卸载后仍有组合引用，即使父级停用，下一次启动也会拒绝；解除引用后仍有活动依赖同样拒绝。必须在同一次停服部署中处理完整声明和选择，随后完整重启 Host 和 Shell。
 
+正式离线 `install` 仅追加或替换指定包，不自动裁剪旧版本，因此安装未选版本不会移除 desired 所选包或改变其组合图。运维人员通过已有 `prune` 显式管理 installed 库存，所选版本仍禁止裁剪；此规则不改变旧 legacy 安装 API 的默认保留策略。
+
 成功输出 `PendingRestart` 只表示离线文件已保存。离线选择允许保存尚未闭合的组合或依赖，下一次正式 Host 在 DDL 和活动提交前验证整份候选；失败时保持 Not Ready，修正同一候选后重启，不把保存视为已部署。安装未选包不会发布活动视图。Host 与离线进程共享开关无关的安装根租约，运行期间拒绝离线写入，在线 HTTP 写入口继续返回 `501 / PLUGIN_RUNTIME_OPERATIONS_UNSUPPORTED`。中断的离线包删除可重新安装对应发行物；不要删除持久化归档或数据库对象来修复候选。
 
 旧 `tools/PluginOps` CLI 已改为该 Host 命令的薄转发，必须增加 `--host-path <HostApi.dll>`；原 `--install-root` 和生命周期参数继续使用，但不再离线生成 runtime，也不直接改 legacy 启用字段。普通部署工具不签发 builtin 信任，信任仍来自正在执行的正式 Host 发行物。

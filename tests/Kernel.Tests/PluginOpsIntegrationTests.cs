@@ -1,6 +1,11 @@
 using System.Diagnostics;
+using System.Reflection;
 using System.Text;
+using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Kernel.PluginPackages;
+using ICP.Platform.Plugin.Contracts;
+using ICP.Platform.PluginPlatform.Lifecycle;
+using ICP.Platform.PluginPlatform.StandardData;
 using Xunit;
 
 namespace ICP.Platform.Kernel.Tests;
@@ -9,6 +14,59 @@ public class PluginOpsIntegrationTests : IDisposable
 {
     private readonly UnifiedPluginPackageTestData _testData = new();
     private readonly List<string> _tempRoots = new();
+
+    [Fact]
+    public void Install_UnselectedVersions_PreservesDesiredPackageAndCompleteCompositionUntilExplicitPrune()
+    {
+        var installRoot = CreateTempRoot("plugin_ops_selected_retention");
+        var versionTwo = _testData.CreateValidPackage("Part", "2.0.0");
+        var first = PluginOpsProcess.Run("install", ["--package", versionTwo, "--install-root", installRoot], externalPluginsEnabled: true);
+        Assert.True(first.ExitCode == 0, first.StdOut + first.StdErr);
+        var selected = PluginOpsProcess.Run("select", ["--module-id", "Part", "--version", "2.0.0", "--enabled", "true", "--install-root", installRoot], externalPluginsEnabled: true);
+        Assert.True(selected.ExitCode == 0, selected.StdOut + selected.StdErr);
+        var desiredPath = Path.Combine(installRoot, "lifecycle", "v2", "state.json");
+        var desired = File.ReadAllBytes(desiredPath);
+        var before = CompileSelectedCandidate(installRoot);
+        var member = Assert.Single(before.CompositionGraph, node => node.ModuleId == "Part");
+        Assert.Equal("2.0.0", member.Version);
+        Assert.Equal("InforCenter", member.ParentModuleId);
+        foreach (var version in new[] { "3.0.0", "4.0.0" })
+        {
+            var installed = PluginOpsProcess.Run("install", ["--package", _testData.CreateValidPackage("Part", version), "--install-root", installRoot], externalPluginsEnabled: true);
+            Assert.True(installed.ExitCode == 0, installed.StdOut + installed.StdErr);
+        }
+        Assert.Equal(desired, File.ReadAllBytes(desiredPath));
+        var after = CompileSelectedCandidate(installRoot);
+        Assert.Equal(before.CanonicalBytes, after.CanonicalBytes);
+        var store = new InstalledPluginStateStore(installRoot);
+        Assert.True(store.TryLoad("Part", out var record, out _));
+        Assert.Equal(["2.0.0", "3.0.0", "4.0.0"], record!.InstalledVersions);
+        Assert.Null(record.CurrentEnabledVersion);
+        Assert.True(Directory.Exists(Path.Combine(installRoot, "packages", "Part", "2.0.0")));
+        Assert.False(Directory.Exists(Path.Combine(installRoot, ".pruned", "packages", "Part", "2.0.0")));
+        var rejected = PluginOpsProcess.Run("prune", ["--module-id", "Part", "--version", "2.0.0", "--install-root", installRoot], externalPluginsEnabled: true);
+        Assert.NotEqual(0, rejected.ExitCode);
+        Assert.Contains("PLUGIN_SELECTED_VERSION_CANNOT_BE_PRUNED", rejected.StdErr);
+        var pruned = PluginOpsProcess.Run("prune", ["--module-id", "Part", "--version", "3.0.0", "--install-root", installRoot], externalPluginsEnabled: true);
+        Assert.True(pruned.ExitCode == 0, pruned.StdOut + pruned.StdErr);
+        Assert.False(Directory.Exists(Path.Combine(installRoot, "packages", "Part", "3.0.0")));
+        Assert.Equal(desired, File.ReadAllBytes(desiredPath));
+        Assert.Equal(before.CanonicalBytes, CompileSelectedCandidate(installRoot).CanonicalBytes);
+    }
+
+    // 复用正式选定候选消费者；反射仅跨越保护builtin签发的内部构造入口，不构造手工计划或装载夹具代码。
+    private static CanonicalModulePlan CompileSelectedCandidate(string installRoot)
+    {
+        var hostRoot = Path.Combine(installRoot, "host-distribution");
+        var source = TrustedBuiltInModuleSource.CreateForHostDistribution(hostRoot, Path.Combine(hostRoot, "modules"));
+        var inspector = new StandardDataPackageInspector(new PlatformApiHostCatalog(PlatformApiReleaseIdentity.Version,
+            [PlatformApiReleaseIdentity.StandardDataProfile], [new(PlatformApiReleaseIdentity.Version, PlatformApiReleaseIdentity.ReleaseDigest)]));
+        var constructor = typeof(StandardDataCandidatePlanCompiler).GetConstructor(BindingFlags.Instance | BindingFlags.NonPublic, null,
+            [typeof(TrustedBuiltInModuleSource), typeof(StandardDataPackageInspector), typeof(IEnumerable<string>)], null)!;
+        var compiler = (StandardDataCandidatePlanCompiler)constructor.Invoke([source, inspector, null]);
+        var inventory = InstalledPluginInventoryAdapter.Create(new InstalledPluginStateStore(installRoot));
+        return compiler.Compile(inventory, new PluginLifecycleManager(new PluginLifecycleStateStore(installRoot)).Resolve(inventory));
+    }
 
     [Fact]
     public void Install_WhenCurrentVersionAlreadyEnabled_LeavesRuntimeProjectionForHostRestart()
@@ -190,7 +248,7 @@ public class PluginOpsIntegrationTests : IDisposable
 
     private static class PluginOpsProcess
     {
-        public static PluginOpsResult Run(string command, IReadOnlyList<string> options)
+        public static PluginOpsResult Run(string command, IReadOnlyList<string> options, bool externalPluginsEnabled = false)
         {
             var repoRoot = FindRepositoryRoot();
             var projectPath = Path.Combine(repoRoot, "tools", "PluginOps", "PluginOps.csproj");
@@ -229,7 +287,7 @@ public class PluginOpsIntegrationTests : IDisposable
             }
             process.StartInfo.ArgumentList.Add("--host-path");
             process.StartInfo.ArgumentList.Add(Path.Combine(hostRoot, "HostApi.dll"));
-            process.StartInfo.Environment["Platform__ExternalPluginsEnabled"] = "false";
+            process.StartInfo.Environment["Platform__ExternalPluginsEnabled"] = externalPluginsEnabled ? "true" : "false";
             foreach (var option in options)
             {
                 process.StartInfo.ArgumentList.Add(option);

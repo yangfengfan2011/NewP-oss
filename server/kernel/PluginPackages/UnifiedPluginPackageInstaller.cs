@@ -35,7 +35,13 @@ public class UnifiedPluginPackageInstaller
         _restoreInstallDirectory = restoreInstallDirectory;
     }
 
-    public UnifiedPluginInstallResult Install(string packageRoot, string installRoot)
+    /// <summary>沿用 legacy 安装调用的默认版本保留策略，不改变其启用和回滚边界。</summary>
+    public UnifiedPluginInstallResult Install(string packageRoot, string installRoot) =>
+        Install(packageRoot, installRoot, pruneOldVersions: true);
+
+    /// <summary>安装完整包；由调用方明确选择是否使用 legacy 自动裁剪，启用状态仍由原状态源拥有。</summary>
+    /// <param name="pruneOldVersions">false 时仅追加库存，由 desired 生命周期的显式清理入口裁剪版本。</param>
+    public UnifiedPluginInstallResult Install(string packageRoot, string installRoot, bool pruneOldVersions)
     {
         var resolvedInstallRoot = Path.GetFullPath(installRoot);
         var scanResult = _scanner.ScanPackage(packageRoot);
@@ -110,9 +116,9 @@ public class UnifiedPluginPackageInstaller
                 throw new IOException(saveError);
             }
 
-            // 裁剪必须在新状态成功落盘后才执行。
+            // legacy 裁剪必须在新状态成功落盘后才执行；desired 生命周期不能用 legacy 启用字段决定保留。
             // 即使旧版本清理失败，当前版本记录也已经稳定，可继续依赖回滚归档。
-            if (!_stateStore.TryPruneOldVersions(
+            if (pruneOldVersions && !_stateStore.TryPruneOldVersions(
                 installedRecord,
                 InstalledPluginStateStore.DefaultRetainedVersionCount,
                 out _,

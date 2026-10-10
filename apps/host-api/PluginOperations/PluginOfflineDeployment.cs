@@ -54,7 +54,8 @@ internal static class PluginOfflineDeployment
                         }
                         else
                         {
-                            var result = new UnifiedPluginPackageInstaller(store).Install(package, installRoot);
+                            // 安装未选包不能隐式移除 desired 版本；正式库存由已有显式 prune 管理。
+                            var result = new UnifiedPluginPackageInstaller(store).Install(package, installRoot, pruneOldVersions: false);
                             if (result.Status != "Installed") throw new InvalidDataException(result.ErrorMessage);
                         }
                     }

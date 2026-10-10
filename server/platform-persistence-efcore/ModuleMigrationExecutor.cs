@@ -93,6 +93,7 @@ internal sealed class ModuleMigrationExecutor(
         return GenerateSqlCommands(validatedStreams);
     }
 
+    // 各 owner 保持 manifest Sequence；只在不同 owner 的当前队列头之间按 ID 确定候选执行顺序。
     private IReadOnlyList<CompiledMigrationHistoryEntry> BuildExpectedHistory(
         IReadOnlyList<ValidatedMigrationStream> streams)
     {
@@ -167,16 +168,26 @@ internal sealed class ModuleMigrationExecutor(
             }
         }
 
-        var ordered = entries
-            .OrderBy(static entry => entry.MigrationId, StringComparer.Ordinal)
-            .Select((entry, position) => entry with { Position = position })
-            .ToArray();
+        var heads = new PriorityQueue<Queue<CompiledMigrationHistoryEntry>, string>(StringComparer.Ordinal);
+        foreach (var owner in entries.GroupBy(static entry => entry.OwnerModuleId, StringComparer.Ordinal))
+        {
+            var queue = new Queue<CompiledMigrationHistoryEntry>(owner);
+            heads.Enqueue(queue, queue.Peek().MigrationId);
+        }
+
+        var ordered = new List<CompiledMigrationHistoryEntry>(entries.Count);
+        while (heads.TryDequeue(out var queue, out _))
+        {
+            ordered.Add(queue.Dequeue() with { Position = ordered.Count });
+            if (queue.Count > 0) heads.Enqueue(queue, queue.Peek().MigrationId);
+        }
         return UnifiedMigrationHistoryDigest.BindPlanDigests(ordered);
     }
 
     private static string Hash(string value) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 
+    // 只推进目标中尚未应用的步骤；每步在自己的事务锁内重新核对历史并绑定新事实。
     public async Task ApplyAsync(CancellationToken cancellationToken)
     {
         ValidateBeforeConnection();
@@ -246,7 +257,7 @@ internal sealed class ModuleMigrationExecutor(
                 continue;
             }
 
-            await ApplyMigrationAsync(item.Stream, item.Migration, expected, cancellationToken);
+            await ApplyMigrationAsync(item.Stream, item.Migration, cancellationToken);
             appliedMigrations.Add(expected.MigrationId);
         }
     }
@@ -393,6 +404,7 @@ internal sealed class ModuleMigrationExecutor(
         }
     }
 
+    // EF history 只核对成员集合；统一事实表的 Position 才是不可变实际提交顺序。
     private async Task<UnifiedMigrationHistoryReconciliation> ReadAndReconcileHistoryAsync(
         DbConnection connection,
         DbTransaction transaction,
@@ -416,13 +428,12 @@ internal sealed class ModuleMigrationExecutor(
         var expectedById = expected.ToDictionary(static fact => fact.MigrationId, StringComparer.Ordinal);
         var compatibilityPlatformOwner = plan.Streams.SingleOrDefault(static stream =>
             stream.IsPlatformStream && stream.Migrations.Count == 0)?.ModuleId;
-        var applied = new List<CompiledMigrationHistoryEntry>(migrationIds.Count);
+        var applied = facts.ToList();
         for (var position = 0; position < migrationIds.Count; position++)
         {
             var migrationId = migrationIds[position];
             if (factsById.TryGetValue(migrationId, out var fact))
             {
-                applied.Add(fact);
                 continue;
             }
 
@@ -456,7 +467,7 @@ internal sealed class ModuleMigrationExecutor(
                 orphan.MigrationId);
         }
 
-        return UnifiedMigrationHistoryReconciler.Reconcile(plan.HistoryVersion, applied, expected);
+        return UnifiedMigrationHistoryReconciler.Reconcile(plan.HistoryVersion, applied.OrderBy(static fact => fact.Position).ToArray(), expected);
     }
 
     private static CompiledMigrationHistoryEntry UnknownFact(int position, string migrationId) =>
@@ -572,10 +583,10 @@ internal sealed class ModuleMigrationExecutor(
         }
     }
 
+    // 持有全局事务锁后核对真实前缀，再将本步操作与新的实际顺序事实原子提交。
     private async Task ApplyMigrationAsync(
         ModuleMigrationStream stream,
         ValidatedMigration migration,
-        CompiledMigrationHistoryEntry expectedHistory,
         CancellationToken cancellationToken)
     {
         await dbContext.Database.OpenConnectionAsync(cancellationToken);
@@ -636,7 +647,7 @@ internal sealed class ModuleMigrationExecutor(
             await InsertMigrationHistoryFactAsync(
                 connection,
                 transaction,
-                expectedHistory,
+                next,
                 cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }

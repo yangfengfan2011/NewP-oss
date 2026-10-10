@@ -118,7 +118,7 @@ public sealed class DatabaseOwnershipPolicyTests
     }
 
     [Fact]
-    public void Evaluate_MigrationHistoryGap_Rejects()
+    public void Evaluate_KnownMembers_LeavesOwnerPrefixToStrictReconciliation()
     {
         var decision = DatabaseOwnershipPolicy.Evaluate(
             ExpectedMarker,
@@ -129,8 +129,7 @@ public sealed class DatabaseOwnershipPolicyTests
                 Tables("ConfigItem", "Role", "Permission", "RolePermission", "UserRole")),
             KnownMigrations);
 
-        Assert.Equal(DatabaseOwnershipDecisionKind.Reject, decision.Kind);
-        Assert.Equal(PersistenceHistoryFailureCodes.NonPrefix, decision.FailureCode);
+        Assert.Equal(DatabaseOwnershipDecisionKind.Allow, decision.Kind);
     }
 
     [Fact]
@@ -178,6 +177,60 @@ public sealed class DatabaseOwnershipPolicyTests
         Assert.Equal(
             prefix.Select(static entry => entry.PlanDigest),
             extended.Take(prefix.Count).Select(static entry => entry.PlanDigest));
+    }
+
+    [Fact]
+    public void BindPlanDigests_LegacyV1Golden_PreservesPublishedAlgorithm()
+    {
+        // 冻结旧v1 canonical字段顺序的已知向量；期望值不由被测函数生成。
+        Assert.Equal(new[]
+        {
+            "2600f05203e37da13522d66d5c054e3ee1ba0fc2cb11fec75ab242df8c4824e2",
+            "428232150804b0d161da602e16a58b5046ae1523bc38773fe4268566c1d04f7b",
+            "705a9a40182f56e119e25e29e99271f65cae9d7990323269c8a32a1b13e730b9"
+        }, BuildHistory().Select(entry => entry.PlanDigest));
+    }
+
+    [Fact]
+    public void Reconcile_DeferredOwner_AppendsAfterActualCommittedOrder()
+    {
+        var target = UnifiedMigrationHistoryDigest.BindPlanDigests(new[]
+        {
+            Entry(0, "20000101000000_A_000001", "A", '1'),
+            Entry(1, "20000101000001_A_000002", "A", '2'),
+            Entry(2, "20000101000002_B_000001", "B", '3'),
+            Entry(3, "20000101000003_B_000002", "B", '4')
+        });
+        var applied = UnifiedMigrationHistoryDigest.BindPlanDigests(new[]
+        { target[0], target[2] with { Position = 1 }, target[3] with { Position = 2 } });
+        var result = UnifiedMigrationHistoryReconciler.Reconcile(PersistenceHistoryVersions.ReconciliationV1, applied, target);
+        Assert.Equal(applied, result.Applied);
+        var pending = Assert.Single(result.Pending);
+        Assert.Equal("20000101000001_A_000002", pending.MigrationId);
+        Assert.Equal(3, pending.Position);
+        Assert.NotEqual(target[1].PlanDigest, pending.PlanDigest);
+        var completed = UnifiedMigrationHistoryReconciler.Reconcile(PersistenceHistoryVersions.ReconciliationV1, [.. applied, pending], target);
+        Assert.Empty(completed.Pending);
+        Assert.Equal(applied, completed.Applied.Take(applied.Count));
+    }
+
+    [Fact]
+    public void Reconcile_OwnerSkipsItsFirstStep_Rejects()
+    {
+        var target = UnifiedMigrationHistoryDigest.BindPlanDigests(new[]
+        { Entry(0, "A_000001", "A", '1'), Entry(1, "A_000002", "A", '2') });
+        var applied = UnifiedMigrationHistoryDigest.BindPlanDigests([target[1] with { Position = 0 }]);
+        var exception = Assert.Throws<PersistenceHistoryException>(() => UnifiedMigrationHistoryReconciler.Reconcile(PersistenceHistoryVersions.ReconciliationV1, applied, target));
+        Assert.Equal(PersistenceHistoryFailureCodes.NonPrefix, exception.FailureCode);
+    }
+
+    [Fact]
+    public void Reconcile_ReorderedCommittedFactsWithoutNewDigests_Rejects()
+    {
+        var target = BuildHistory();
+        var applied = new[] { target[1] with { Position = 0 }, target[0] with { Position = 1 }, target[2] };
+        var exception = Assert.Throws<PersistenceHistoryException>(() => UnifiedMigrationHistoryReconciler.Reconcile(PersistenceHistoryVersions.ReconciliationV1, applied, target));
+        Assert.Equal(PersistenceHistoryFailureCodes.PlanMismatch, exception.FailureCode);
     }
 
     [Fact]
@@ -324,12 +377,12 @@ public sealed class DatabaseOwnershipPolicyTests
     private static IReadOnlySet<string> Tables(params string[] names) =>
         new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
 
-    private static CompiledMigrationHistoryEntry[] BuildHistory() =>
+    private static CompiledMigrationHistoryEntry[] BuildHistory() => UnifiedMigrationHistoryDigest.BindPlanDigests(
     [
         Entry(0, "20000101000000_TestHistory_000001_Initial", "Test.Owner.Alpha", '1'),
         Entry(1, "20000101000001_TestHistory_000002_Expand", "Test.Owner.Beta", '2'),
         Entry(2, "20000101000002_TestHistory_000003_Finalize", "Test.Owner.Gamma", '3')
-    ];
+    ]).ToArray();
 
     private static CompiledMigrationHistoryEntry Entry(int position, string migrationId, string owner, char digest) =>
         new(

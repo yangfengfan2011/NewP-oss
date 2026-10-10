@@ -7,6 +7,7 @@ namespace ICP.Platform.Persistence.Ownership;
 /// </summary>
 public static class DatabaseOwnershipPolicy
 {
+    /// <summary>核对目录归属及已应用 ID 的成员资格；owner 前缀和完整事实由执行器在业务 DDL 前核对。</summary>
     public static DatabaseOwnershipDecision Evaluate(
         DatabaseOwnershipMarker expectedMarker,
         DatabaseOwnershipInspection inspection,
@@ -44,6 +45,7 @@ public static class DatabaseOwnershipPolicy
         return historyDecision;
     }
 
+    // EF history 没有 owner 或提交位置；这里只拒绝重复与未知 ID，不用字典序猜测执行前缀。
     private static DatabaseOwnershipDecision ValidateMigrationHistory(
         IReadOnlyList<string> appliedMigrations,
         IReadOnlyList<string> knownMigrations)
@@ -60,18 +62,13 @@ public static class DatabaseOwnershipPolicy
             return Reject(PersistenceHistoryFailureCodes.Duplicate);
         }
 
+        var known = knownMigrations.ToHashSet(StringComparer.Ordinal);
         for (var index = 0; index < appliedMigrations.Count; index++)
         {
             var appliedMigration = appliedMigrations[index];
-            if (index < knownMigrations.Count
-                && string.Equals(appliedMigration, knownMigrations[index], StringComparison.Ordinal))
+            if (known.Contains(appliedMigration))
             {
                 continue;
-            }
-
-            if (knownMigrations.Contains(appliedMigration, StringComparer.Ordinal))
-            {
-                return Reject(PersistenceHistoryFailureCodes.NonPrefix);
             }
 
             if (index == 0)

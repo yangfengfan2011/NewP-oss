@@ -1027,9 +1027,10 @@ public sealed class SqlServerPersistenceSmokeTests
             DELETE FROM [dbo].[__EFMigrationsHistory]
             WHERE [MigrationId] = N'{ModuleMigrationOne}';
             """);
-        var nonPrefix = await Assert.ThrowsAsync<DatabaseOwnershipException>(
+        // EF membership 被删除但版本化事实仍存在，执行器必须拒绝孤立事实，不能补写或重放。
+        var orphanFact = await Assert.ThrowsAsync<PersistencePlanExecutionException>(
             () => RunMigrationsAsync(secondProvider));
-        Assert.Equal(PersistenceHistoryFailureCodes.NonPrefix, nonPrefix.FailureCode);
+        Assert.Equal(PersistenceHistoryFailureCodes.Unknown, orphanFact.FailureCode);
 
         const string unknownMigration = "20260813001500_UnknownAssetCatalog";
         await ExecuteNonQueryAsync(applicationConnectionString, $"""

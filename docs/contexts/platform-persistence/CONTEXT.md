@@ -4,7 +4,7 @@ Platform Persistence 上下文把候选 Canonical Module Plan 中由各模块拥
 
 迁移执行策略由 [ADR-0027：Host 是完整 Up Migration 的唯一执行入口](../../adr/0027-host-is-the-only-full-up-migration-entry.md) 约束；当前基线生命周期由 [ADR-0042：开发期使用可重建迁移基线直到兼容基线冻结](../../adr/0042-development-uses-a-resettable-migration-baseline.md) 约束；Required 字段演进由 [ADR-0043：Required 字段使用显式写入与迁移生命周期](../../adr/0043-required-fields-use-explicit-write-and-migration-lifecycles.md) 约束。
 
-组件组合、模型身份与独立持久化生命周期的已确认目标见 [ADR-0055](../../adr/0055-component-composition-separates-model-identity-and-deployment.md)。正常部署后的停用保留与首 DDL 前恢复资产已实施，当前契约见 [Module Contract](../../architecture/module-contract.md#停用与保留部署)；独立 owner 前缀、全局实际提交顺序及未完成 pending 的真实历史恢复仍待 Issue #258 后续 child 完成。
+组件组合、模型身份与独立持久化生命周期的已确认目标见 [ADR-0055](../../adr/0055-component-composition-separates-model-identity-and-deployment.md)。正常部署后的停用保留、首 DDL 前恢复资产、独立 owner 前缀与全局实际提交顺序已实施，当前契约见 [Module Contract](../../architecture/module-contract.md#停用与保留部署)；未完成 pending 的真实历史恢复仍待 Issue #258 后续 child 完成。
 
 ## Language
 
@@ -105,7 +105,7 @@ _Avoid_: safe-expand only、metadata diff SQL、按环境隐式裁剪操作
 _Avoid_: 可安全忽略的前缀、自动回滚、激活成功
 
 **统一迁移历史（Unified Migration History）**：
-同一 provider 数据库中由 Platform Persistence 统一维护的 EF migration 执行事实。`dbo.__EFMigrationsHistory` 保存全局执行顺序；每个 migration 还在同一事务中向 `dbo.__NewPMigrationHistory` 写入版本化 owner、step-scoped bundle membership、content、model/from-to、全局前缀及 Provider Target/Transition 摘要。所有模块 migration stream 与 Platform Foundation Stream 共用该历史，Migration ID 在整份计划中全局唯一；模块不拥有私有 history。SQL Server 只接受空 catalog 或由当前已编译计划创建的有效 history 前缀，不补写、兼容或改写旧 history。
+同一 provider 数据库中由 Platform Persistence 统一维护的 EF migration 执行事实。`dbo.__EFMigrationsHistory` 保存全局唯一的已应用 ID 集合；每个 migration 还在同一事务中向 `dbo.__NewPMigrationHistory` 写入版本化 owner、step-scoped bundle membership、content、model/from-to、实际提交 Position/前缀 PlanDigest 及 Provider Target/Transition 摘要。各 owner 独立保持 manifest Sequence 的有效前缀，统一账本保留实际提交顺序，较早 ID 的延期步骤只追加、不重排旧事实。所有模块 migration stream 与 Platform Foundation Stream 共用该历史，模块不拥有私有 history。SQL Server 只接受空 catalog 或当前计划可严格验证的 owner 前缀，不补写、兼容、放宽摘要或改写旧 history。
 _Avoid_: 模块 history table、活动快照状态、手工回写记录
 
 **迁移包完整性摘要（Bundle Checksum）与步骤成员摘要（Bundle Digest）**：

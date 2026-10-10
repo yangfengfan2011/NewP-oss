@@ -24,7 +24,7 @@ public static class PersistenceHistoryVersions
 }
 
 /// <summary>
-/// 已编译持久化计划期望的单个全局有序迁移事实。
+/// 单个迁移事实；候选保留 owner 顺序，已应用事实的 Position 与 PlanDigest 绑定实际提交前缀。
 /// </summary>
 public sealed record CompiledMigrationHistoryEntry(
     int Position,

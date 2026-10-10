@@ -52,19 +52,19 @@ public sealed record UnifiedMigrationHistoryReconciliation(
     IReadOnlyList<CompiledMigrationHistoryEntry> Pending);
 
 /// <summary>
-/// 将数据库执行事实与全局有序的已编译历史对齐。该过程保持纯函数，确保 provider
+/// 将数据库实际提交顺序与各 owner 的已编译线性前缀对齐。该过程保持纯函数，确保 provider
 /// 在发出 DDL 前已经决定所有 history 不一致。
 /// </summary>
 public static class UnifiedMigrationHistoryReconciler
 {
     /// <summary>
-    /// 校验数据库已应用事实是否为候选计划的严格有序前缀，并返回已应用前缀与待执行后缀。
+    /// 校验各 owner 的已应用前缀和不可变实际提交摘要，返回可追加的待执行事实。
     /// 所有不一致均在返回结果前以稳定失败码关闭执行路径。
     /// </summary>
     /// <param name="historyVersion">数据库 history 使用的 reconciliation 契约版本。</param>
     /// <param name="applied">按全局位置读取的数据库已应用迁移事实。</param>
-    /// <param name="target">按全局位置排列的候选计划迁移事实。</param>
-    /// <returns>已验证的应用前缀与尚待执行的目标后缀。</returns>
+    /// <param name="target">保持 owner 内迁移顺序的确定性候选事实。</param>
+    /// <returns>原样保留的已应用事实与绑定到实际前缀的新事实。</returns>
     /// <exception cref="ArgumentNullException"><paramref name="applied"/> 或 <paramref name="target"/> 为 <see langword="null"/>。</exception>
     /// <exception cref="PersistenceHistoryException">
     /// 契约版本不受支持，history 或目标含重复、未知、非前缀或 frontier 不一致的迁移，
@@ -88,6 +88,14 @@ public static class UnifiedMigrationHistoryReconciler
 
         ValidateTarget(target);
         var targetById = target.ToDictionary(static entry => entry.MigrationId, StringComparer.Ordinal);
+        var ownerTargets = target.GroupBy(static entry => entry.OwnerModuleId, StringComparer.Ordinal)
+            .ToDictionary(static group => group.Key, static group => group.ToArray(), StringComparer.Ordinal);
+        var ownerPositions = new Dictionary<string, int>(StringComparer.Ordinal);
+        // 按实际 Position 绑定候选的不可变步骤事实，保留既有摘要诊断的先后顺序。
+        var boundApplied = UnifiedMigrationHistoryDigest.BindPlanDigests(applied.Select(actual =>
+            targetById.TryGetValue(actual.MigrationId, out var expected)
+                ? expected with { Position = actual.Position }
+                : actual));
         var seen = new HashSet<string>(StringComparer.Ordinal);
         for (var index = 0; index < applied.Count; index++)
         {
@@ -106,19 +114,28 @@ public static class UnifiedMigrationHistoryReconciler
                     actual.MigrationId);
             }
 
-            if (index >= target.Count
-                || !string.Equals(actual.MigrationId, target[index].MigrationId, StringComparison.Ordinal)
-                || actual.Position != index)
+            if (actual.Position != index)
             {
                 throw Failure(PersistenceHistoryFailureCodes.NonPrefix, actual);
             }
 
-            ValidateFact(actual, expected);
+            ValidateFact(actual, expected with { PlanDigest = boundApplied[index].PlanDigest });
+            var ownerPosition = ownerPositions.GetValueOrDefault(expected.OwnerModuleId);
+            if (!string.Equals(actual.MigrationId, ownerTargets[expected.OwnerModuleId][ownerPosition].MigrationId, StringComparison.Ordinal))
+            {
+                throw Failure(PersistenceHistoryFailureCodes.NonPrefix, actual);
+            }
+
+            ownerPositions[expected.OwnerModuleId] = ownerPosition + 1;
         }
 
+        // 旧事实只核对，不重写；新 Position 与摘要绑定到本次锁内读到的真实提交前缀。
+        var pending = target.Where(entry => !seen.Contains(entry.MigrationId))
+            .Select((entry, index) => entry with { Position = applied.Count + index });
+        var bound = UnifiedMigrationHistoryDigest.BindPlanDigests(applied.Concat(pending));
         return new UnifiedMigrationHistoryReconciliation(
             applied.ToArray(),
-            target.Skip(applied.Count).ToArray());
+            bound.Skip(applied.Count).ToArray());
     }
 
     private static void ValidateTarget(IReadOnlyList<CompiledMigrationHistoryEntry> target)
@@ -219,7 +236,7 @@ public static class UnifiedMigrationHistoryReconciler
 }
 
 /// <summary>
-/// 将每个迁移事实绑定到它之前的不可变全局前缀；追加 migration 不会改变数据库中
+/// 将每个迁移事实绑定到它之前的不可变实际提交前缀；追加 migration 不会改变数据库中
 /// 已经持久化的前缀摘要。
 /// </summary>
 public static class UnifiedMigrationHistoryDigest

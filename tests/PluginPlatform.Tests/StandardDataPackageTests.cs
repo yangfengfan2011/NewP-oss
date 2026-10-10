@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using ICP.Platform.Plugin.Contracts;
 using ICP.Platform.PluginPlatform.Activation;
 using ICP.Platform.PluginPlatform.Lifecycle;
@@ -125,11 +126,41 @@ public sealed class StandardDataPackageTests : IDisposable
         Assert.Equal("standard-data", module.FrontendBindingMode);
         Assert.Contains("/api/standard/partner-asset-catalog/assets", module.Routes);
         Assert.Contains("/assets", module.Routes);
-        Assert.Equal(["", "Partner.AssetCatalog.Asset.create", "Partner.AssetCatalog.Asset.read", "Partner.AssetCatalog.Asset.update"],
+        Assert.Equal(["", "Partner.AssetCatalog.Asset.authorize", "Partner.AssetCatalog.Asset.create", "Partner.AssetCatalog.Asset.read", "Partner.AssetCatalog.Asset.update"],
             plan.FeatureCatalog.Select(point => point.BehaviorKey).Order(StringComparer.Ordinal));
         Assert.DoesNotContain(plan.FeatureCatalog, point => point.Key == "refresh");
         Assert.Equal("Asset", Assert.Single(module.ModelKeys));
         Assert.Equal("installed-package", module.Provenance.SourceKind);
+    }
+
+    [Theory]
+    [InlineData("composition", "MODULE_COMPOSITION_MEMBER_MISSING")]
+    [InlineData("dependencies", "MODULE_DEPENDENCY_MISSING")]
+    public void Compile_OnlySelectedVersionContributesCompositionAndExplicitDependencies(string declaration, string expectedCode)
+    {
+        var original = WritePackage("1.0.0");
+        var changed = WritePackage("1.1.0", blueprint => blueprint[declaration] = declaration == "composition"
+            ? new JsonObject { ["members"] = new JsonArray("Partner.Missing") }
+            : new JsonArray("Partner.Missing"));
+        var inventory = new[] { new InstalledPluginInventoryItem("Partner.AssetCatalog", ["1.0.0", "1.1.0"], "1.0.0",
+            new Dictionary<string, string> { ["1.0.0"] = original, ["1.1.0"] = changed }) };
+        var compiler = new StandardDataCandidatePlanCompiler(new StandardDataPackageInspector(CreateHostCatalog()));
+        Assert.Equal("1.0.0", Assert.Single(compiler.Compile(inventory,
+            new([new("Partner.AssetCatalog", "1.0.0", true)], null, null, false)).Modules).Version);
+        var exception = Assert.Throws<PluginActivationException>(() => compiler.Compile(inventory,
+            new([new("Partner.AssetCatalog", "1.1.0", true)], null, null, false)));
+        Assert.Equal(expectedCode, exception.FailureCode);
+    }
+
+    [Fact]
+    public void Compile_DisabledSelectedComposition_StillRejectsMissingMember()
+    {
+        var package = WritePackage("1.0.0", blueprint => blueprint["composition"] = new JsonObject { ["members"] = new JsonArray("Partner.Missing") });
+        var compiler = new StandardDataCandidatePlanCompiler(new StandardDataPackageInspector(CreateHostCatalog()));
+        var exception = Assert.Throws<PluginActivationException>(() => compiler.Compile(
+            [new("Partner.AssetCatalog", ["1.0.0"], "1.0.0", new Dictionary<string, string> { ["1.0.0"] = package })],
+            new([new("Partner.AssetCatalog", "1.0.0", false)], null, null, false)));
+        Assert.Equal("MODULE_COMPOSITION_MEMBER_MISSING", exception.FailureCode);
     }
 
     [Fact]
@@ -183,7 +214,7 @@ public sealed class StandardDataPackageTests : IDisposable
         }
     }
 
-    private string WritePackage(string version)
+    private string WritePackage(string version, Action<JsonObject>? configure = null)
     {
         var packageRoot = Path.Combine(_root, version.Replace('.', '-'));
         var files = new Dictionary<string, byte[]>(StringComparer.Ordinal)
@@ -197,6 +228,9 @@ public sealed class StandardDataPackageTests : IDisposable
             ["migrations/sqlserver/Partner.AssetCatalog.Migrations.dll"] = [1, 2, 3],
             ["migrations/sqlserver/migrations.json"] = Encoding.UTF8.GetBytes("{\"schemaVersion\":\"1.0\"}")
         };
+        var blueprint = JsonNode.Parse(files["authoring/newp.plugin.json"])!.AsObject();
+        configure?.Invoke(blueprint);
+        files["authoring/newp.plugin.json"] = JsonSerializer.SerializeToUtf8Bytes(blueprint, JsonOptions);
         var manifest = new StandardPluginPackageManifest(
             1,
             PlatformApiReleaseIdentity.StandardDataProfile,

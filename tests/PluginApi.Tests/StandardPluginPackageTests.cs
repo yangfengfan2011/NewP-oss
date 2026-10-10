@@ -129,7 +129,7 @@ public sealed class StandardPluginPackageTests : IDisposable
             {
               "schemaVersion": "1.0",
               "type": "model",
-              "Partner.AssetCatalog.Asset": {
+              "Asset": {
                 "displayField": "Name"
               }
             }

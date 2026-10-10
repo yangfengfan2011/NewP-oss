@@ -18,6 +18,7 @@ $dotnetHome = Join-Path $externalRoot "dotnet-home"
 $releaseManifest = Join-Path $feedRoot "platform-api-release.json"
 $registryJob = $null
 $completed = $false
+$runStopwatch = [Diagnostics.Stopwatch]::StartNew()
 
 function Invoke-Native {
     param(
@@ -356,8 +357,6 @@ try {
     Set-Content -LiteralPath (Join-Path $externalRoot ".newp-platform-api-run") -Value $runId -Encoding ascii
     Copy-Item -Path (Join-Path $baselineRoot "*") -Destination $consumerRoot -Recurse -Force
 
-    $env:NUGET_PACKAGES = $nugetCache
-    $env:DOTNET_CLI_HOME = $dotnetHome
     $env:PNPM_HOME = Join-Path $externalRoot "pnpm-home"
 
     Invoke-Native "dotnet" @("pack", ".\server\plugin-contracts\Plugin.Contracts.csproj", "-c", "Release", "-o", $nugetFeed, "--nologo", "-p:ContinuousIntegrationBuild=true") $repoRoot (Join-Path $evidenceRoot "pack-contracts.log")
@@ -387,7 +386,12 @@ try {
   <packageSources>
     <clear />
     <add key="newp-platform-api-$runId" value="$nugetFeed" />
+    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
   </packageSources>
+  <packageSourceMapping>
+    <packageSource key="newp-platform-api-$runId"><package pattern="ICP.Platform.Plugin.*" /></packageSource>
+    <packageSource key="nuget.org"><package pattern="*" /></packageSource>
+  </packageSourceMapping>
 </configuration>
 "@
     $nugetConfigPath = Join-Path $consumerRoot "NuGet.config"
@@ -396,8 +400,13 @@ try {
     Invoke-Native "git" @("init", "--quiet") $consumerRoot (Join-Path $evidenceRoot "consumer-git-init.log")
     Invoke-Native "git" @("config", "user.name", "NewP Acceptance") $consumerRoot (Join-Path $evidenceRoot "consumer-git-config-name.log")
     Invoke-Native "git" @("config", "user.email", "acceptance@newp.invalid") $consumerRoot (Join-Path $evidenceRoot "consumer-git-config-email.log")
+    Invoke-Native "git" @("add", "migrations/sqlserver/migrations.json") $consumerRoot (Join-Path $evidenceRoot "consumer-git-seed-add.log")
+    Invoke-Native "git" @("commit", "--quiet", "-m", "固定初始空迁移前缀") $consumerRoot (Join-Path $evidenceRoot "consumer-git-seed-commit.log")
 
     $authoringProject = Join-Path $consumerRoot "src\Partner.AssetCatalog.Authoring\Partner.AssetCatalog.Authoring.csproj"
+    # 隔离缓存只属于外仓；发布本仓Tool时保留仓库assets的默认缓存路径，避免清理临时目录后污染后续构建。
+    $env:NUGET_PACKAGES = $nugetCache
+    $env:DOTNET_CLI_HOME = $dotnetHome
     $migrationProject = Join-Path $consumerRoot "src\Partner.AssetCatalog.Migrations\Partner.AssetCatalog.Migrations.csproj"
     Invoke-Native "dotnet" @("restore", $authoringProject, "--configfile", $nugetConfigPath, "--use-lock-file", "--force-evaluate") $consumerRoot (Join-Path $evidenceRoot "restore-authoring.log")
     Invoke-Native "dotnet" @("restore", $authoringProject, "--configfile", $nugetConfigPath, "--locked-mode") $consumerRoot (Join-Path $evidenceRoot "restore-authoring-locked.log")
@@ -466,12 +475,54 @@ namespace Partner.AssetCatalog
     $consumerRelease = Join-Path $consumerRoot ".artifacts\platform-api-release.json"
     New-Item -ItemType Directory -Path (Split-Path -Parent $consumerRelease) -Force | Out-Null
     Copy-Item -LiteralPath $releaseManifest -Destination $consumerRelease
+    $finalizeOptions = @("newp", "plugin", "finalize-migration", "--root", $consumerRoot, "--release-manifest", $consumerRelease,
+        "--migration", "20261010000100_AssetInitial", "--source", "src/Partner.AssetCatalog.Migrations/Migrations/20261010000100_AssetInitial.cs", "--compatibility", "safe-expand")
+    Invoke-Native "dotnet" $finalizeOptions $consumerRoot (Join-Path $evidenceRoot "plugin-finalize-first.log")
+    $manifestPath = Join-Path $consumerRoot "migrations/sqlserver/migrations.json"
+    $firstManifestSha = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash
+    Invoke-Native "dotnet" $finalizeOptions $consumerRoot (Join-Path $evidenceRoot "plugin-finalize-replay.log")
+    if ((Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash -ne $firstManifestSha) {
+        throw "Repeated public finalize changed the canonical manifest."
+    }
+    Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $evidenceRoot "migrations.json")
+    Invoke-Native "git" @("add", "migrations/sqlserver/migrations.json", "src/Partner.AssetCatalog.Migrations/Migrations/20261010000100_AssetInitial.cs") $consumerRoot (Join-Path $evidenceRoot "consumer-git-published-add.log")
+    Invoke-Native "git" @("commit", "--quiet", "-m", "固定已发布迁移前缀") $consumerRoot (Join-Path $evidenceRoot "consumer-git-published-commit.log")
+    $originalManifest = [IO.File]::ReadAllBytes($manifestPath)
+    try {
+        $changedPrefix = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json -Depth 100
+        $changedPrefix.migrations[0].compatibility = "contract"
+        [IO.File]::WriteAllText($manifestPath, ($changedPrefix | ConvertTo-Json -Depth 100), [Text.UTF8Encoding]::new($false))
+        $invalidPrefixSha = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash
+        Invoke-NativeExpectFailure "dotnet" $finalizeOptions $consumerRoot (Join-Path $evidenceRoot "negative-migration-published-prefix.log") @("MIGRATION_MANIFEST_HISTORY_CHANGED")
+        if ((Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash -ne $invalidPrefixSha) { throw "Rejected finalize modified the invalid manifest." }
+    }
+    finally { [IO.File]::WriteAllBytes($manifestPath, $originalManifest) }
+    $missingTypeOptions = @("newp", "plugin", "finalize-migration", "--root", $consumerRoot, "--release-manifest", $consumerRelease,
+        "--migration", "20261010000200_MissingAssetTail", "--source", "src/Partner.AssetCatalog.Migrations/Migrations/20261010000200_MissingAssetTail.cs", "--compatibility", "safe-expand")
+    Invoke-NativeExpectFailure "dotnet" $missingTypeOptions $consumerRoot (Join-Path $evidenceRoot "negative-migration-type-set.log") @("PERSISTENCE_MIGRATION_MISSING")
+    if ((Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash -ne $firstManifestSha) { throw "Rejected migration type set changed the canonical manifest." }
     $explainPath = Join-Path $consumerRoot ".artifacts\explain.json"
     $packagePath = Join-Path $consumerRoot ".artifacts\Partner.AssetCatalog@1.0.0.npp"
     Invoke-Native "dotnet" @("newp", "plugin", "validate", "--root", $consumerRoot, "--release-manifest", $consumerRelease) $consumerRoot (Join-Path $evidenceRoot "plugin-validate.log")
     Invoke-Native "dotnet" @("newp", "plugin", "explain", "--root", $consumerRoot, "--release-manifest", $consumerRelease, "--output", $explainPath) $consumerRoot (Join-Path $evidenceRoot "plugin-explain.log")
     Invoke-Native "dotnet" @("newp", "plugin", "pack", "--root", $consumerRoot, "--release-manifest", $consumerRelease, "--output", $packagePath) $consumerRoot (Join-Path $evidenceRoot "plugin-pack.log")
     Invoke-Native "dotnet" @("newp", "plugin", "verify", "--package", $packagePath, "--release-manifest", $consumerRelease) $consumerRoot (Join-Path $evidenceRoot "plugin-verify.log")
+    $blueprintPath = Join-Path $consumerRoot "newp.plugin.json"
+    $originalBlueprint = [IO.File]::ReadAllBytes($blueprintPath)
+    try {
+        foreach ($version in @("1.1.0", "1.2.0")) {
+            $variant = [Text.Encoding]::UTF8.GetString($originalBlueprint) | ConvertFrom-Json -Depth 100
+            $variant.version = $version
+            if ($version -eq "1.1.0") { $variant.composition.members = @("Part") }
+            else { $variant.composition.members = @() }
+            [IO.File]::WriteAllText($blueprintPath, ($variant | ConvertTo-Json -Depth 100), [Text.UTF8Encoding]::new($false))
+            $variantPackage = Join-Path $consumerRoot ".artifacts/Partner.AssetCatalog@$version.npp"
+            Invoke-Native "dotnet" @("newp", "plugin", "pack", "--root", $consumerRoot, "--release-manifest", $consumerRelease, "--output", $variantPackage) $consumerRoot (Join-Path $evidenceRoot "plugin-pack-$version.log")
+            Invoke-Native "dotnet" @("newp", "plugin", "verify", "--package", $variantPackage, "--release-manifest", $consumerRelease) $consumerRoot (Join-Path $evidenceRoot "plugin-verify-$version.log")
+            Copy-Item -LiteralPath $variantPackage -Destination (Join-Path $evidenceRoot "Partner.AssetCatalog@$version.npp")
+        }
+    }
+    finally { [IO.File]::WriteAllBytes($blueprintPath, $originalBlueprint) }
 
     Assert-NoForbiddenConsumerReferences -Root $consumerRoot
     Assert-ResolvedGraphs -Root $consumerRoot
@@ -540,6 +591,8 @@ namespace Partner.AssetCatalog
         verdict = "passed"
         releaseVersion = "1.0.0"
         releaseDigest = (Get-Content -LiteralPath $releaseManifest -Raw | ConvertFrom-Json).releaseDigest
+        finalizedManifestSha256 = $firstManifestSha.ToLowerInvariant()
+        authoringDurationSeconds = $runStopwatch.Elapsed.TotalSeconds
         externalConsumerFingerprint = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($consumerRoot))).ToLowerInvariant()
         trackedDiffFingerprintBefore = $trackedFingerprintBefore
         trackedDiffFingerprintAfter = $trackedFingerprintAfter

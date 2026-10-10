@@ -12,6 +12,8 @@ export interface StandardPluginBlueprint {
   displayName: string;
   version: string;
   description?: string;
+  dependencies?: string[];
+  composition?: { members: string[] };
   compatibility: {
     platformApi: {
       minInclusive: string;

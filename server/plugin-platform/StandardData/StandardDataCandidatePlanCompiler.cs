@@ -194,7 +194,7 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
             FrontendEntry: manifest.Artifacts.StandardProjection,
             FrontendBehaviorKey: PlatformApiReleaseIdentity.StandardDataProfile,
             FrontendBindingMode: "standard-data",
-            Dependencies: Array.Empty<string>(),
+            Dependencies: inspection.Blueprint!.Dependencies ?? [],
             Routes: projection.Resources
                 .SelectMany(static resource => new[] { resource.ApiRoute, resource.PageRoute })
                 .Distinct(StringComparer.Ordinal)
@@ -214,7 +214,11 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
                 "/"),
             Persistence: new ModulePersistenceContribution(
                 manifest.Persistence.Models,
-                migrationBundles)) { Features = features };
+                migrationBundles))
+        {
+            Features = features,
+            CompositionMembers = inspection.Blueprint!.Composition?.Members ?? []
+        };
     }
 
     private static string NormalizeProvider(string provider) =>

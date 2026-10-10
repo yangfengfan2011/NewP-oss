@@ -1,4 +1,5 @@
 using System.Net;
+using System.Reflection;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
@@ -24,6 +25,9 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using Microsoft.AspNetCore.Mvc.ApplicationParts;
+using Microsoft.AspNetCore.Mvc.Controllers;
+using ICP.Platform.Modules.Authorization.Controllers;
 
 namespace ICP.Platform.HostApi.Tests;
 
@@ -170,6 +174,12 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         builder.Services.AddSingleton<IStandardCrudRepository>(repository);
         builder.Services.AddSingleton<IPlatformQueryExecutor, UnusedQueryExecutor>();
         builder.Services.AddStandardCrudResource(descriptor);
+        // 与既有Example夹具相同，接入真实通用对象授权Controller，消费新增的资源功能声明。
+        builder.Services.AddControllers().ConfigureApplicationPartManager(manager =>
+        {
+            manager.ApplicationParts.Clear();
+            manager.FeatureProviders.Add(new ObjectAuthorizationControllerFeatureProvider());
+        });
         if (auditProjection)
         {
             var model = new ICP.Platform.Modeling.Projection.ModelMetadataProjector().Project(new ICP.Platform.Modeling.Metadata.ModelMetadataDocument
@@ -191,8 +201,15 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         });
         app.UseAuthorization();
         app.MapStandardCrudResources();
-        FeatureEndpointBindings.Validate(((IEndpointRouteBuilder)app).DataSources, _points);
+        app.MapControllers();
+        FeatureEndpointBindings.Validate(((IEndpointRouteBuilder)app).DataSources, _points,
+            app.Services.GetRequiredService<IStandardCrudResourceRegistry>());
         return app;
+    }
+
+    private sealed class ObjectAuthorizationControllerFeatureProvider : IApplicationFeatureProvider<ControllerFeature>
+    {
+        public void PopulateFeature(IEnumerable<ApplicationPart> parts, ControllerFeature feature) => feature.Controllers.Add(typeof(DataScopeObjectsController).GetTypeInfo());
     }
 
     private StandardCrudDescriptor BuildDescriptor()

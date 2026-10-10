@@ -21,6 +21,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\server\plugin-contracts\Plugin.Contracts.csproj" />
     <ProjectReference Include="..\..\server\plugin-sdk\Plugin.Sdk.csproj" />
+    <ProjectReference Include="..\..\server\platform-persistence\PlatformPersistence.csproj" />
+    <None Include="..\..\server\platform-modeling\metadata\storage-types.json" Link="storage-types.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\server\plugin-contracts\platform-api-release.identity.json"
           Link="platform-api-release.identity.json"
           CopyToOutputDirectory="PreserveNewest"

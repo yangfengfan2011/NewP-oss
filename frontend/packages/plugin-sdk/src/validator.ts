@@ -30,6 +30,20 @@ export const validateStandardPluginBlueprint = (value: unknown): PlatformApiDiag
     diagnostics.push(diagnostic('STANDARD_PROFILE_FRONTEND_CODE_FORBIDDEN', 'profile', 'Frontend runtime entries are forbidden.', '/frontend'));
   }
 
+  const isIdentityArray = (input: unknown): input is string[] => Array.isArray(input)
+    && input.every((item: unknown) => typeof item === 'string' && item.trim().length > 0);
+  // 本地校验只检查输入形状；完整图、实际依赖与必需集合由Host的同一规范编译器裁决。
+  if ('dependencies' in value && !isIdentityArray(value.dependencies)) {
+    diagnostics.push(diagnostic('PACKAGE_SCHEMA_UNSUPPORTED', 'schema', 'dependencies must contain component identities.', '/dependencies'));
+  }
+  if ('composition' in value && (!isRecord(value.composition) || !isIdentityArray(value.composition.members)
+    || Object.keys(value.composition).some((key) => key !== 'members'))) {
+    diagnostics.push(diagnostic('PACKAGE_SCHEMA_UNSUPPORTED', 'schema', 'composition must declare only members.', '/composition'));
+  }
+  if ('distributionRole' in value) {
+    diagnostics.push(diagnostic('PACKAGE_SCHEMA_UNSUPPORTED', 'schema', 'Distribution roles cannot be declared by external authors.', '/distributionRole'));
+  }
+
   const compatibility = isRecord(value.compatibility) ? value.compatibility : undefined;
   const platformApi = compatibility && isRecord(compatibility.platformApi) ? compatibility.platformApi : undefined;
   if (

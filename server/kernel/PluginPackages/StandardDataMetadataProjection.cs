@@ -138,6 +138,11 @@ public static class StandardDataMetadataProjection
                 ["model"] = resourceKey,
                 ["resourceKey"] = $"{moduleId}.{resourceKey}",
                 ["editorMode"] = "drawer",
+                // 通用资源授权端点消费每个CRUD资源的功能声明；声明不增加页面行操作。
+                ["featureActions"] = JsonSerializer.SerializeToNode(new[]
+                {
+                    new { key = "authorize", titleKey = "Authorize", behaviorKey = $"{moduleId}.{resourceKey}.authorize" }
+                }),
                 ["columns"] = JsonSerializer.SerializeToNode(columns),
                 ["pageActions"] = JsonSerializer.SerializeToNode(new object[]
                 {

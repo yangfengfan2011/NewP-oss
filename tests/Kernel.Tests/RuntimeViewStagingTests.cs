@@ -81,7 +81,7 @@ public sealed class RuntimeViewStagingTests : IDisposable
                 .Select(document => JsonSerializer.SerializeToElement(document))));
         Assert.Equal(candidate.FeatureCatalog.Select(point => (point.Position, point.BehaviorKey)),
             runtimeFeatures.Select(point => (point.Position, point.BehaviorKey)));
-        Assert.Equal(["", "Partner.AssetCatalog.Asset.create", "Partner.AssetCatalog.Asset.disable", "Partner.AssetCatalog.Asset.enable", "Partner.AssetCatalog.Asset.read", "Partner.AssetCatalog.Asset.update"],
+        Assert.Equal(["", "Partner.AssetCatalog.Asset.authorize", "Partner.AssetCatalog.Asset.create", "Partner.AssetCatalog.Asset.disable", "Partner.AssetCatalog.Asset.enable", "Partner.AssetCatalog.Asset.read", "Partner.AssetCatalog.Asset.update"],
             runtimeFeatures.Select(point => point.BehaviorKey).Order(StringComparer.Ordinal));
         Assert.DoesNotContain(runtimeFeatures, point => point.Key == "refresh");
         var modelPath = Path.Combine(moduleRuntimeRoot, "metadata", "models", "Asset.model.json");

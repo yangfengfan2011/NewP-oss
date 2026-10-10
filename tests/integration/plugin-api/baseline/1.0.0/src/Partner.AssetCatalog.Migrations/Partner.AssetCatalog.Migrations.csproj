@@ -7,6 +7,15 @@
     <AssemblyName>Partner.AssetCatalog.Migrations</AssemblyName>
     <RootNamespace>Partner.AssetCatalog.Migrations</RootNamespace>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <Deterministic>true</Deterministic>
+    <DebugType>none</DebugType>
+    <PathMap>$(MSBuildProjectDirectory)=/_/Partner.AssetCatalog.Migrations</PathMap>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.1" />
+  </ItemGroup>
 
 </Project>

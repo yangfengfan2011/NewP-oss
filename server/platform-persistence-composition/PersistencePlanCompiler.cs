@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Modeling.Metadata;
@@ -544,10 +543,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
             return "dbo";
         }
 
-        var normalized = NonSchemaCharacterPattern()
-            .Replace(module.ModuleId.ToLowerInvariant(), "_")
-            .Trim('_');
-        return $"np_{normalized}";
+        return PersistenceStorageIdentity.ExternalSchema(module.ModuleId);
     }
 
     // 保留存储引用核对 owner 和物理闭合，活动引用还必须满足能力依赖；存储不授予访问资格。
@@ -653,8 +649,5 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 $"Migration id '{group.Key}' is owned by multiple module streams."));
         }
     }
-
-    [GeneratedRegex("[^a-z0-9]+", RegexOptions.CultureInvariant)]
-    private static partial Regex NonSchemaCharacterPattern();
 
 }

@@ -32,8 +32,9 @@ public sealed partial class StandardPluginBlueprintCompiler
         {
             var json = File.ReadAllText(fullPath);
             using var raw = JsonDocument.Parse(json);
-            var forbidden = FindForbiddenRuntimeEntries(raw.RootElement, fullPath);
-            if (forbidden.Count > 0)
+            var forbidden = FindForbiddenRuntimeEntries(raw.RootElement, fullPath)
+                .Concat(ValidateDeclarationShapes(raw.RootElement, fullPath)).ToArray();
+            if (forbidden.Length > 0)
             {
                 return new StandardPluginCompilationResult(null, forbidden);
             }
@@ -76,6 +77,23 @@ public sealed partial class StandardPluginBlueprintCompiler
                 fullPath);
         }
     }
+
+    // 只核对公开JSON输入形状；缺失引用、重复归组、循环及必需性留给完整规范候选。
+    private static IReadOnlyList<PlatformApiDiagnostic> ValidateDeclarationShapes(JsonElement root, string path)
+    {
+        var diagnostics = new List<PlatformApiDiagnostic>();
+        if (root.ValueKind != JsonValueKind.Object) return diagnostics;
+        if (root.TryGetProperty("dependencies", out var dependencies) && !IsIdentityArray(dependencies))
+            diagnostics.Add(Diagnostic(PlatformApiDiagnosticCodes.PackageSchemaUnsupported, "schema", "dependencies must be an array of non-empty component identities.", path, "/dependencies"));
+        if (root.TryGetProperty("composition", out var composition)
+            && (composition.ValueKind != JsonValueKind.Object || !composition.TryGetProperty("members", out var members) || !IsIdentityArray(members)))
+            diagnostics.Add(Diagnostic(PlatformApiDiagnosticCodes.PackageSchemaUnsupported, "schema", "composition must contain a members array of non-empty component identities.", path, "/composition"));
+        return diagnostics;
+    }
+
+    // 身份数组只验证字面类型，字符串规范化和图规则由canonical compiler统一负责。
+    private static bool IsIdentityArray(JsonElement value) => value.ValueKind == JsonValueKind.Array
+        && value.EnumerateArray().All(item => item.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(item.GetString()));
 
     private static IReadOnlyList<PlatformApiDiagnostic> FindForbiddenRuntimeEntries(
         JsonElement root,

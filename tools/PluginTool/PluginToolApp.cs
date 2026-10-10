@@ -16,7 +16,7 @@ public static class PluginToolApp
     };
 
     /// <summary>
-    /// 执行 validate、explain、pack 或 verify，并只输出结构化结果。
+    /// 执行静态 authoring、validate、explain、pack 或 verify，并只输出结构化结果。
     /// </summary>
     public static async Task<int> RunAsync(
         string[] args,
@@ -39,7 +39,7 @@ public static class PluginToolApp
 
             if (args.Length < 2 || !string.Equals(args[0], "plugin", StringComparison.OrdinalIgnoreCase))
             {
-                await error.WriteLineAsync("Usage: newp plugin <validate|explain|pack|verify> [options]");
+                await error.WriteLineAsync("Usage: newp plugin <validate|explain|pack|verify|finalize-migration> [options]");
                 return 2;
             }
 
@@ -53,6 +53,7 @@ public static class PluginToolApp
                 "explain" => await RunExplainAsync(options, release, output, cancellationToken),
                 "pack" => await RunPackAsync(options, release, output, cancellationToken),
                 "verify" => await RunVerifyAsync(options, release, output, cancellationToken),
+                "finalize-migration" => await RunFinalizeMigrationAsync(options, release, output, cancellationToken),
                 _ => await UnknownCommandAsync(command, error)
             };
         }
@@ -90,6 +91,38 @@ public static class PluginToolApp
             diagnostics: result.Diagnostics,
             cancellationToken: cancellationToken);
         return result.Compilation is null ? 1 : 0;
+    }
+
+    // 公开 finalize 先通过同版 release/依赖/Blueprint 检查，再派生静态 manifest；不执行数据库操作。
+    private static async Task<int> RunFinalizeMigrationAsync(IReadOnlyDictionary<string, string> options,
+        PlatformApiReleaseManifest release, TextWriter output, CancellationToken token)
+    {
+        var root = RequireOption(options, "root");
+        var result = ValidateAuthoring(root, release);
+        if (!result.IsSuccess)
+        {
+            await WriteResultAsync(output, "plugin finalize-migration", "failed", diagnostics: result.Diagnostics, cancellationToken: token);
+            return 1;
+        }
+        try
+        {
+            var path = await StandardPluginMigrationAuthoring.FinalizeAsync(root, result.Compilation!.Blueprint,
+                RequireOption(options, "migration"), RequireOption(options, "source"), RequireOption(options, "compatibility"), token);
+            await WriteResultAsync(output, "plugin finalize-migration", "passed", result.Compilation.Blueprint.ModuleId, path, cancellationToken: token);
+            return 0;
+        }
+        catch (ICP.Platform.Persistence.Planning.MigrationManifestValidationException exception)
+        {
+            await WriteResultAsync(output, "plugin finalize-migration", "failed", diagnostics:
+                [new PlatformApiDiagnostic(exception.Code, "migration-authoring", exception.Message)], cancellationToken: token);
+            return 1;
+        }
+        catch (Exception exception) when (exception is BadImageFormatException or InvalidOperationException)
+        {
+            await WriteResultAsync(output, "plugin finalize-migration", "failed", diagnostics:
+                [new PlatformApiDiagnostic("MIGRATION_MANIFEST_AUTHORING_INVALID", "migration-authoring", exception.Message)], cancellationToken: token);
+            return 1;
+        }
     }
 
     private static async Task<int> RunPlatformApiReleaseAsync(

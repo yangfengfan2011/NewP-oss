@@ -98,6 +98,8 @@ Audit 列表和详情使用 `audit.change.read`，并继续由 `ILocalAdministra
 
 `standard-data.v1` 由 `StandardDataMetadataProjection` 根据同一包内 blueprint、标准投影和 metadata 生成导航、列表与详情声明。候选编译使用该输出登记完整功能目录，运行时物化复用同一输出；Model 仍由原持久化/模型投影拥有。刷新是纯交互，不生成授权点；显式详情保留原结构并绑定所属入口。
 
+公开 Blueprint 的可选 `dependencies` 和 `composition.members` 原样进入同一规范候选，由完整组合图、必需集合及实际依赖校验统一裁决；平台发布角色不能由外部作者自行授予。标准资源额外声明既有通用对象授权端点消费的 `authorize` 功能，它不自动给主体授予权限，也不新增页面行操作。Model 使用全局技术名，物理存储继续由其 metadata 和正式 PersistencePlan 拥有；旧标准投影中的物理提示不是第二份存储真源。外部作者的静态 migration finalize、构建及正式停服部署入口见[外部插件开发](../developer/external-plugin-development.md)。
+
 C# 与 TypeScript 插件 SDK 不再提供旧 `PermissionCodes` / `permissionCodes` 形状。正式候选与生成页面消费功能声明及编译位置，目录与执行绑定仍必须完整校验。
 
 标准启用和停用绑定独立行为。`POST /{id}/enable` 与 `/disable` 固定写入对应状态，不从请求 body 接收其他更新字段；编辑动作保留其正式字段白名单。`ByFeature` 按声明操作绑定功能位置，不从资源命名约定生成旧业务权限。

@@ -46,6 +46,22 @@ const blueprint = (): StandardPluginBlueprint => ({
 });
 
 describe('@icp-platform/plugin-sdk', () => {
+  it('accepts explicit dependencies and composition without assuming the installed candidate graph', () => {
+    expect(validateStandardPluginBlueprint({ ...blueprint(), dependencies: ['Part'], composition: { members: ['Partner.AssetCatalog.Member'] } })).toEqual([]);
+  });
+
+  it.each([
+    [{ dependencies: null }, '/dependencies'],
+    [{ dependencies: [''] }, '/dependencies'],
+    [{ composition: {} }, '/composition'],
+    [{ composition: { members: null } }, '/composition'],
+    [{ distributionRole: 'platform' }, '/distributionRole'],
+  ])('rejects invalid authoring declaration shapes %j', (declaration, pointer) => {
+    expect(validateStandardPluginBlueprint({ ...blueprint(), ...declaration })).toContainEqual(expect.objectContaining({
+      code: 'PACKAGE_SCHEMA_UNSUPPORTED', jsonPointer: pointer,
+    }));
+  });
+
   it('shares release identity and derives the canonical standard frontend projection', () => {
     const input = blueprint();
 

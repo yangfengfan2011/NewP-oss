@@ -3,24 +3,22 @@
   "type": "model",
   "Asset": {
     "kind": "Entity",
-    "builtinFields": [
-      "ENAME",
-      "ECODE"
-    ],
     "fields": [
+      { "name": "Code", "storage": { "type": "string", "nullable": false } },
+      { "name": "Name", "storage": { "type": "string", "nullable": false } },
       {
         "name": "PurchasedAt",
         "storage": {
-          "type": "datetime",
+          "type": "date",
           "nullable": true
         }
       }
     ],
     "indexes": [
       {
-        "name": "UX_Asset_ECODE",
+        "name": "UX_Asset_Code",
         "fields": [
-          "ECODE"
+          "Code"
         ],
         "unique": true
       }

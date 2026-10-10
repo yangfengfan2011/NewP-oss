@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ICP.Platform.Plugin.Contracts;
 
 /// <summary>
@@ -13,7 +15,14 @@ public sealed record StandardPluginBlueprint(
     StandardPluginCompatibility Compatibility,
     StandardDataBlueprint StandardData,
     StandardNavigationBlueprint Navigation,
-    StandardPersistenceBlueprint Persistence);
+    StandardPersistenceBlueprint Persistence,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Dependencies = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StandardPluginCompositionBlueprint? Composition = null);
+
+/// <summary>
+/// 只声明成员身份；完整图、必需性和有效启用由 Host 的规范编译器裁决。
+/// </summary>
+public sealed record StandardPluginCompositionBlueprint(IReadOnlyList<string> Members);
 
 /// <summary>
 /// 插件声明的 Platform API 与持久化兼容边界。

@@ -8,6 +8,43 @@ public sealed class StandardPluginBlueprintCompilerTests : IDisposable
     private readonly string _root = Directory.CreateTempSubdirectory("newp_blueprint_").FullName;
 
     [Fact]
+    public void Compile_SdkSerializationOfOmittedDeclarations_PreservesSupportedInputShape()
+    {
+        var compiler = new StandardPluginBlueprintCompiler();
+        var original = compiler.Compile(WriteBlueprint(ValidBlueprint()));
+        Assert.True(original.IsSuccess);
+        var json = System.Text.Json.JsonSerializer.Serialize(original.Compilation!.Blueprint, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        var replay = compiler.Compile(WriteBlueprint(json));
+        Assert.True(replay.IsSuccess, string.Join(Environment.NewLine, replay.Diagnostics.Select(diagnostic => diagnostic.Message)));
+    }
+
+    [Theory]
+    [InlineData("\"dependencies\": null", "/dependencies")]
+    [InlineData("\"dependencies\": [\"\"]", "/dependencies")]
+    [InlineData("\"composition\": {}", "/composition")]
+    [InlineData("\"composition\": { \"members\": null }", "/composition")]
+    public void Compile_InvalidDeclarationShape_RejectsAtAuthoringBoundary(string declaration, string pointer)
+    {
+        var json = ValidBlueprint().Replace("\"standardData\":", declaration + ", \"standardData\":", StringComparison.Ordinal);
+        var result = new StandardPluginBlueprintCompiler().Compile(WriteBlueprint(json));
+        Assert.False(result.IsSuccess);
+        Assert.Equal(pointer, Assert.Single(result.Diagnostics).JsonPointer);
+    }
+
+    [Fact]
+    public void Compile_ExplicitDependenciesAndComposition_PreservesAuthoringForCanonicalConsumer()
+    {
+        var json = ValidBlueprint().Replace("\"standardData\":", "\"dependencies\": [\"Part\"], \"composition\": { \"members\": [\"Partner.AssetCatalog.Member\"] }, \"standardData\":", StringComparison.Ordinal);
+
+        var result = new StandardPluginBlueprintCompiler().Compile(WriteBlueprint(json));
+
+        Assert.True(result.IsSuccess, string.Join(Environment.NewLine, result.Diagnostics.Select(diagnostic => diagnostic.Message)));
+        var serialized = System.Text.Json.JsonSerializer.SerializeToElement(result.Compilation!.Blueprint, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        Assert.Equal("Part", serialized.GetProperty("dependencies")[0].GetString());
+        Assert.Equal("Partner.AssetCatalog.Member", serialized.GetProperty("composition").GetProperty("members")[0].GetString());
+    }
+
+    [Fact]
     public void Compile_AssetBlueprint_DerivesCanonicalStandardDataProjection()
     {
         var path = WriteBlueprint(ValidBlueprint());

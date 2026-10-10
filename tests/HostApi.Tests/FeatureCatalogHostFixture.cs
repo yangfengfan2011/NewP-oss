@@ -49,6 +49,7 @@ internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
     internal IReadOnlyList<FeaturePoint> Catalog { get; private set; } = [];
     internal string CapsulePath => Path.Combine(HostRoot, "modules", "Example", "plugin.json");
     internal string LastError { get; private set; } = "";
+    internal bool ExternalPluginsEnabled { get; set; }
 
     private FeatureCatalogHostFixture(ReusableSqlServerDatabase databaseLease)
     {
@@ -121,7 +122,7 @@ internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
         start.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
         start.Environment["ConnectionStrings__SqlServer"] = ConnectionString;
         start.Environment["Platform__PluginInstallRoot"] = PluginRoot;
-        start.Environment["Platform__ExternalPluginsEnabled"] = "false";
+        start.Environment["Platform__ExternalPluginsEnabled"] = ExternalPluginsEnabled ? "true" : "false";
         start.Environment["Authentication__Host__KeyRingPath"] = Path.Combine(_temporaryRoot, "keys");
         start.Environment["Authentication__Host__AllowInsecureDevelopmentCookie"] = "true";
         start.Environment["Identity__Credentials__UseSharedDevelopmentCredential"] = "false";

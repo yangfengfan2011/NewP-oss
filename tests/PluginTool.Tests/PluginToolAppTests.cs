@@ -12,6 +12,25 @@ public sealed class PluginToolAppTests : IDisposable
     private readonly string _root = Directory.CreateTempSubdirectory("newp_tool_").FullName;
 
     [Fact]
+    public async Task RunAsync_FinalizeMigration_RejectsBundleWithoutRequestedTypeWithoutWritingManifest()
+    {
+        CreateFixture();
+        var manifestPath = Path.Combine(_root, "migrations", "sqlserver", "migrations.json");
+        File.Copy(typeof(PluginToolApp).Assembly.Location, Path.Combine(_root, "migrations", "sqlserver", "Partner.AssetCatalog.Migrations.dll"), overwrite: true);
+        var original = File.ReadAllBytes(manifestPath);
+        var stdout = new StringWriter();
+
+        var exitCode = await PluginToolApp.RunAsync(
+            ["plugin", "finalize-migration", "--root", _root, "--release-manifest", WriteReleaseManifest(),
+             "--migration", "20261010000100_AssetInitial", "--source", "src/Migrations/20261010000100_AssetInitial.cs", "--compatibility", "safe-expand"],
+            stdout, new StringWriter());
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("PERSISTENCE_MIGRATION_MISSING", stdout.ToString(), StringComparison.Ordinal);
+        Assert.Equal(original, File.ReadAllBytes(manifestPath));
+    }
+
+    [Fact]
     public async Task RunAsync_ValidateExplainPackVerify_UsesOneCompiledBlueprint()
     {
         CreateFixture();
@@ -181,7 +200,7 @@ public sealed class PluginToolAppTests : IDisposable
         Directory.CreateDirectory(Path.Combine(_root, "metadata", "models"));
         File.WriteAllText(
             Path.Combine(_root, "metadata", "models", "Asset.model.json"),
-            "{ \"schemaVersion\": \"1.0\", \"type\": \"model\", \"Partner.AssetCatalog.Asset\": {} }");
+            "{ \"schemaVersion\": \"1.0\", \"type\": \"model\", \"Asset\": { \"kind\": \"Entity\", \"fields\": [] } }");
         Directory.CreateDirectory(Path.Combine(_root, "migrations", "sqlserver"));
         File.WriteAllBytes(
             Path.Combine(_root, "migrations", "sqlserver", "Partner.AssetCatalog.Migrations.dll"),

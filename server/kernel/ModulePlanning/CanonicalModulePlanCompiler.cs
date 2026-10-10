@@ -30,12 +30,14 @@ public sealed class CanonicalModulePlanCompiler
             .OrderBy(static candidate => candidate.ModuleId, StringComparer.Ordinal)
             .ThenBy(static candidate => candidate.Version, StringComparer.Ordinal)
             .ToArray();
+        var activeCandidates = candidateArray.Where(candidate => candidate.Enabled).ToArray();
         var diagnostics = ValidateIdentity(candidateId, candidateArray)
-            .Concat(ValidateDependencies(candidateId, candidateArray))
-            .Concat(ValidateBindings(candidateId, candidateArray))
-            .Concat(ValidateRouteOwners(candidateId, candidateArray))
-            .Concat(ValidateModelOwners(candidateId, candidateArray)).Concat(ValidateFeatures(candidateId, candidateArray))
-            .Concat(ValidateDataActions(candidateId, candidateArray))
+            .Concat(ValidateComposition(candidateId, candidateArray))
+            .Concat(ValidateDependencies(candidateId, activeCandidates))
+            .Concat(ValidateBindings(candidateId, activeCandidates))
+            .Concat(ValidateRouteOwners(candidateId, activeCandidates))
+            .Concat(ValidateModelOwners(candidateId, activeCandidates)).Concat(ValidateFeatures(candidateId, activeCandidates))
+            .Concat(ValidateDataActions(candidateId, activeCandidates))
             .OrderBy(static diagnostic => diagnostic.Stage, StringComparer.Ordinal)
             .ThenBy(static diagnostic => diagnostic.Code, StringComparer.Ordinal)
             .ThenBy(static diagnostic => diagnostic.ModuleId, StringComparer.Ordinal)
@@ -47,9 +49,11 @@ public sealed class CanonicalModulePlanCompiler
             return new ModulePlanCompilationResult(null, diagnostics);
         }
 
-        var modules = candidateArray
+        var selectedModules = candidateArray
             .Select(Normalize)
             .ToArray();
+        var modules = selectedModules.Where(module => module.Enabled).ToArray();
+        var compositionGraph = BuildCompositionGraph(selectedModules);
 
         var canonicalDocument = new
         {
@@ -57,6 +61,8 @@ public sealed class CanonicalModulePlanCompiler
             candidateId,
             compilerContractVersion = ContractVersion,
             modules,
+            selectedModules,
+            compositionGraph,
             verifiedArtifactDigests = modules
                 .Select(module => new
                 {
@@ -77,7 +83,7 @@ public sealed class CanonicalModulePlanCompiler
                 planHash,
                 planHash,
                 canonicalBytes,
-                modules),
+                modules) { SelectedModules = selectedModules, CompositionGraph = compositionGraph },
             Array.Empty<ModulePlanDiagnostic>());
     }
 
@@ -106,6 +112,64 @@ public sealed class CanonicalModulePlanCompiler
                     owner.ModuleId));
             })
             .ToArray();
+    }
+
+    // 静态组合声明先在完整选定集合上校验，停用不豁免成员声明。
+    private static IReadOnlyList<ModulePlanDiagnostic> ValidateComposition(string candidateId, IReadOnlyList<ModuleCapsuleCandidate> candidates)
+    {
+        var diagnostics = candidates.SelectMany(candidate => candidate.CompositionMembers
+            .GroupBy(member => member, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .Select(group => new ModulePlanDiagnostic(candidateId, candidate.ModuleId, candidate.Version, group.Key,
+                candidate.Provenance.SourcePath, "/composition/members", "composition-graph", "MODULE_COMPOSITION_MEMBER_DUPLICATE",
+                $"Component '{candidate.ModuleId}' declares member '{group.Key}' more than once."))).ToList();
+        var ids = candidates.Select(candidate => candidate.ModuleId).ToHashSet(StringComparer.Ordinal);
+        var parents = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var candidate in candidates)
+        {
+            foreach (var member in candidate.CompositionMembers.Distinct(StringComparer.Ordinal))
+            {
+                var self = string.Equals(candidate.ModuleId, member, StringComparison.OrdinalIgnoreCase);
+                if (self || !ids.Contains(member))
+                    diagnostics.Add(new(candidateId, candidate.ModuleId, candidate.Version, member,
+                        candidate.Provenance.SourcePath, "/composition/members", "composition-graph",
+                        self ? "MODULE_COMPOSITION_SELF_MEMBER" : "MODULE_COMPOSITION_MEMBER_MISSING",
+                        self ? $"Component '{candidate.ModuleId}' cannot contain itself." : $"Component '{candidate.ModuleId}' references missing member '{member}'."));
+                else if (!parents.TryAdd(member, candidate.ModuleId) && parents[member] != candidate.ModuleId)
+                    diagnostics.Add(new(candidateId, candidate.ModuleId, candidate.Version, member,
+                        candidate.Provenance.SourcePath, "/composition/members", "composition-graph", "MODULE_COMPOSITION_MULTIPLE_PARENTS",
+                        $"Member '{member}' belongs to both '{parents[member]}' and '{candidate.ModuleId}'.", parents[member]));
+            }
+        }
+        if (diagnostics.Count > 0) return diagnostics;
+
+        // 单父图可沿父链迭代访问，每个节点至多完成一次，深层组合不使用递归调用栈。
+        var byId = candidates.GroupBy(candidate => candidate.ModuleId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        var completed = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var id in ids.Order(StringComparer.Ordinal))
+        {
+            var path = new List<string>();
+            var positions = new Dictionary<string, int>(StringComparer.Ordinal);
+            string? current = id;
+            while (current is not null && !completed.Contains(current))
+            {
+                if (positions.TryGetValue(current, out var cycleStart))
+                {
+                    var cycle = CanonicalizeCycle(path.Skip(cycleStart).Reverse().ToArray());
+                    var owner = byId[cycle.Split(" -> ", StringSplitOptions.None)[0]];
+                    diagnostics.Add(new(candidateId, owner.ModuleId, owner.Version, cycle,
+                        owner.Provenance.SourcePath, "/composition/members", "composition-graph", "MODULE_COMPOSITION_CYCLE",
+                        $"Component composition cycle detected: {cycle}."));
+                    break;
+                }
+                positions[current] = path.Count;
+                path.Add(current);
+                current = parents.GetValueOrDefault(current);
+            }
+            completed.UnionWith(path);
+        }
+        return diagnostics;
     }
 
     private static IReadOnlyList<ModulePlanDiagnostic> ValidateDependencies(
@@ -354,7 +418,16 @@ public sealed class CanonicalModulePlanCompiler
         { return [new(candidateId, "*", "", "dataActions", "", "/dataActions", "data-actions", "MODULE_DATA_ACTION_INVALID", exception.Message)]; }
     }
 
-    // 保留动作声明与开关的规范排序，将其纳入候选内容身份。
+    // 组合投影只记录选定的关系，不从能力依赖推断父子或改变模型归属。
+    private static IReadOnlyList<ModuleCompositionNode> BuildCompositionGraph(IReadOnlyList<CanonicalModulePlanModule> modules)
+    {
+        var parents = modules.SelectMany(module => module.CompositionMembers.Select(member => (member, module.ModuleId)))
+            .ToDictionary(edge => edge.member, edge => edge.ModuleId, StringComparer.Ordinal);
+        return modules.Select(module => new ModuleCompositionNode(module.ModuleId, module.Version, module.Enabled,
+            parents.GetValueOrDefault(module.ModuleId), module.CompositionMembers)).ToArray();
+    }
+
+    // 规范化当前声明，并把组合成员及启用选择一起绑定到同一可信来源指纹。
     private static CanonicalModulePlanModule Normalize(ModuleCapsuleCandidate candidate)
     {
         ArgumentNullException.ThrowIfNull(candidate);
@@ -377,7 +450,13 @@ public sealed class CanonicalModulePlanCompiler
             Sort(candidate.FrontendBindingReferences),
             Sort(candidate.ModelKeys),
             provenance,
-            NormalizePersistence(candidate.Persistence)) { Features = candidate.Features.OrderBy(node => node.Key, StringComparer.Ordinal).ToArray(), DataActions = candidate.DataActions.ToArray() };
+            NormalizePersistence(candidate.Persistence))
+        {
+            Features = candidate.Features.OrderBy(node => node.Key, StringComparer.Ordinal).ToArray(),
+            DataActions = candidate.DataActions.ToArray(),
+            CompositionMembers = Sort(candidate.CompositionMembers),
+            Enabled = candidate.Enabled
+        };
     }
 
     private static ModulePersistenceContribution? NormalizePersistence(ModulePersistenceContribution? persistence)

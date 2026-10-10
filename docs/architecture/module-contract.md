@@ -9,6 +9,16 @@
 
 C#、TypeScript 和子清单不得重新声明 Capsule 已拥有的 identity，也不得与 authoring metadata 平行维护 route、menu 或功能授权声明。
 
+## 组件组合
+
+Capsule 通过可选 `composition.members` 数组引用成员组件 ID。同一声明可嵌套组合，但每个成员只能有一个直接父组件。成员重复（含大小写重复）、缺失、自包含、多父或环均拒绝完整候选；错误数组形状不得被静默忽略。组合声明独立于 `dependencies`，归组或移组不增加能力依赖，也不改变成员身份、版本、模型 owner、物理映射或 migration stream。
+
+组合图采用本次期望选定版本的声明，停用组件仍参与完整图校验；安装但未选中的版本不改变图。`CanonicalModulePlan.SelectedModules` 保留同一候选的选定声明，`CompositionGraph` 给出版本、自身启用选择、直接父组件和规范排序的成员。活动能力继续由 `Modules` 及既有功能目录投影消费；祖先屏蔽和已部署持久化保留的完整生命周期由 ADR-0055 定义，尚未在本阶段完成。
+
+`active-module-runtime.json` 从同一规范计划公开 `compositionGraph`，活动模块条目保留 `compositionMembers` 和 `parentModuleId`。没有 backend entry、且显式关闭 frontend 的纯组合组件不需要空实现程序集或页面。Host 只装载成员原有行为，Shell 仍以成员自己的身份绑定前端实现。
+
+InforCenter 是无自有模型和迁移流的纯组合组件，直接成员为 Workspace、Part、Document。Workspace 的 Part、Document 能力依赖保持显式，工作空间内容 Link 与对象所属 API/页面不表示组件父子关系。本阶段保留既有 qualified 模型键；模型身份与持久化生命周期的后续切换遵循 ADR-0055。
+
 ## Runtime contract
 
 `CanonicalModulePlanCompiler` 把候选 Capsule、metadata 与 behavior references 编译为一份确定的 Canonical Module Plan。Host 与 Shell 只消费该计划生成的活动投影：

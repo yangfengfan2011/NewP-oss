@@ -142,6 +142,7 @@ public sealed class AcceptanceGateTests
                     new { position, target = new { modelKey = "Workspace/WorkspaceFolder", id = folderId } },
                     features.Action(entry, "add", "list.custom", "folder").Position, token);
                 await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "fixture-mixed.json"), new { folderId, actorId = actor.AccountId }, token);
+                await WorkspaceAcceptanceFixture.VerifyPartCreationAsync(ordinary, features, publicRoot, runId, token);
             },
             browserJourney: async (page, token) =>
             {

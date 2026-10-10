@@ -37,13 +37,13 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
+    /// <inheritdoc/>
     public CanonicalModulePlan Compile(
         IReadOnlyList<InstalledPluginInventoryItem> inventory,
         ResolvedPluginLifecycleState state)
     {
         var candidates = new List<ModuleCapsuleCandidate>();
-        var enabledDesiredModuleIds = state.DesiredModules
-            .Where(static item => item.Enabled)
+        var selectedDesiredModuleIds = state.DesiredModules
             .Select(static item => item.ModuleId)
             .ToHashSet(StringComparer.Ordinal);
         if (_builtInModuleSource is not null)
@@ -52,11 +52,10 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
             // 仅排除大小写完全一致的内建项，大小写折叠冲突仍交给 Canonical 编译器拒绝。
             candidates.AddRange(_candidateReader.ReadTrustedBuiltIn(_builtInModuleSource)
                 .Where(candidate => !_excludedBuiltInModuleIds.Contains(candidate.ModuleId))
-                .Where(candidate => !enabledDesiredModuleIds.Contains(candidate.ModuleId)));
+                .Where(candidate => !selectedDesiredModuleIds.Contains(candidate.ModuleId)));
         }
 
         foreach (var desired in state.DesiredModules
-                     .Where(static item => item.Enabled)
                      .OrderBy(static item => item.ModuleId, StringComparer.Ordinal))
         {
             var installed = inventory.SingleOrDefault(item =>
@@ -88,7 +87,7 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
                             InstalledVersions = installed.InstalledVersions.ToList()
                         }
                     ]).Single());
-                candidates.Add(legacyCandidate);
+                candidates.Add(legacyCandidate with { Enabled = desired.Enabled });
                 continue;
             }
 
@@ -120,7 +119,7 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
                         $"Desired identity '{desired.ModuleId}@{desired.Version}' does not match package '{manifest.ModuleId}@{manifest.Version}'."));
             }
 
-            candidates.Add(BuildCandidate(packageRoot, inspection));
+            candidates.Add(BuildCandidate(packageRoot, inspection) with { Enabled = desired.Enabled });
         }
 
         var compilation = _compiler.Compile("plugin-activation", candidates);

@@ -35,6 +35,56 @@ internal static class WorkspaceAcceptanceFixture
     internal static Task<JsonElement> LoginAsync(HttpClient client, WorkspaceAcceptanceActor actor, CancellationToken token) =>
         SendAsync(client, HttpMethod.Post, "/api/auth/login", new { ecode = actor.ECode, password = actor.Password }, null, token);
 
+    // 在正式 Host 的 API 层证明新组合来自本次 authoring，浏览器不判断身份或数据语义。
+    internal static async Task VerifyInforCenterCompositionAsync(HttpClient client, CancellationToken token)
+    {
+        var catalog = await SendAsync(client, HttpMethod.Get, "/plugins/active-module-runtime.json", null, null, token);
+        var modules = catalog.GetProperty("modules").EnumerateArray().ToArray();
+        var parent = modules.Single(module => module.GetProperty("moduleId").GetString() == "InforCenter");
+        if (!parent.GetProperty("compositionMembers").EnumerateArray().Select(member => member.GetString()).SequenceEqual(["Document", "Part", "Workspace"])
+            || parent.GetProperty("modelKeys").GetArrayLength() != 0
+            || parent.GetProperty("backend").ValueKind != JsonValueKind.Null
+            || parent.GetProperty("frontend").ValueKind != JsonValueKind.Null)
+            throw new InvalidOperationException("正式 InforCenter 组合未保留直接成员或意外取得业务模型/实现。");
+        foreach (var id in new[] { "Workspace", "Part", "Document" })
+        {
+            var member = modules.Single(module => module.GetProperty("moduleId").GetString() == id);
+            if (member.GetProperty("parentModuleId").GetString() != "InforCenter"
+                || member.GetProperty("frontend").GetProperty("behaviorKey").GetString() != id.ToLowerInvariant() + ".frontend")
+                throw new InvalidOperationException($"正式组合成员 {id} 的父组件或 behavior owner 已改变。");
+        }
+    }
+
+    // 普通主体经真实创建、Link 查询和所属详情证明 SQL/授权消费链，不使用手工持久化计划。
+    internal static async Task VerifyPartCreationAsync(HttpClient client, AcceptanceFeatureCatalog features, JsonElement root,
+        string runId, CancellationToken token)
+    {
+        var entry = features.Behavior("Workspace", "workspace.spaces.access");
+        var rootId = root.GetProperty("rootFolderId").GetString()!;
+        var code = "WS-COMPOSITION-" + runId[..8];
+        var name = "组合 API 零组件 " + runId[..8];
+        var receipt = await SendAsync(client, HttpMethod.Post, "/api/workspace/content/parts",
+            new { position = new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = rootId, linkIds = Array.Empty<string>() },
+                values = new { ECODE = code, ENAME = name } },
+            features.Action(entry, "createPart", "list.pageActions", "folder").Position, token);
+        if (!receipt.GetProperty("succeeded").GetBoolean() || receipt.TryGetProperty("id", out _))
+            throw new InvalidOperationException("组合后的真实 Part 创建未返回受控成功回执。");
+        var contents = await ReadRootContentsAsync(client, root, entry.Position, token);
+        var row = contents.GetProperty("items").EnumerateArray().Single(item => item.GetProperty("fields").GetProperty("Name").GetString() == name);
+        var target = row.GetProperty("associatedObject");
+        var id = target.GetProperty("id").GetString()!;
+        if (target.GetProperty("modelKey").GetString() != "Part/Part"
+            || row.GetProperty("parent").GetProperty("modelKey").GetString() != "Workspace/WorkspaceFolder"
+            || row.GetProperty("parent").GetProperty("id").GetString() != rootId
+            || string.IsNullOrEmpty(row.GetProperty("linkId").GetString()))
+            throw new InvalidOperationException("组合后的内容 Link 未保留 Workspace/Part 端点与真实身份。");
+        var detail = await SendAsync(client, HttpMethod.Get, "/api/part/parts/" + Uri.EscapeDataString(id), null,
+            features.Behavior("Part", "part.part.read").Position, token);
+        var fields = detail.GetProperty("fields");
+        if (fields.GetProperty("EID").GetString() != id || fields.GetProperty("ECODE").GetString() != code || fields.GetProperty("ENAME").GetString() != name)
+            throw new InvalidOperationException("组合后的所属 Part 详情未保持正式对象字段与身份。");
+    }
+
     internal static async Task<WorkspaceAcceptanceActor> PrepareAsync(HttpClient administrator,
         AcceptanceFeatureCatalog features, string runId, Action<string> registerSecret,
         IReadOnlyList<FeaturePoint> grantedFeatures, CancellationToken token)

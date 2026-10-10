@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "InforCenter",
+  "displayName": "InforCenter",
+  "version": "1.0.0",
+  "description": "工作空间、零组件与图文档的组合组件",
+  "dependencies": [],
+  "hostVersion": { "min": "1.1.0", "max": "2.0.0" },
+  "composition": { "members": ["Workspace", "Part", "Document"] },
+  "frontend": { "enabled": false }
+}

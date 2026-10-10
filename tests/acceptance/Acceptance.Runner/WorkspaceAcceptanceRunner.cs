@@ -60,6 +60,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
         RegisterSecret(administratorPassword);
         await WorkspaceAcceptanceFixture.LoginAndChangePasswordAsync(administrator, "admin", bootstrap.TemporaryCredential,
             administratorPassword, token);
+        await WorkspaceAcceptanceFixture.VerifyInforCenterCompositionAsync(administrator, token);
         var features = await AcceptanceFeatureCatalog.LoadAsync(administrator, token);
         IReadOnlyList<FeaturePoint> grantedFeatures;
         if (selectFeatures is not null) grantedFeatures = selectFeatures(features);

@@ -108,6 +108,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="../../modules/InforCenter/newp.plugin.json" Link="modules/InforCenter/plugin.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../modules/Workspace/newp.plugin.json" Link="modules/Workspace/plugin.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../modules/Workspace/migrations/Workspace.SqlServerMigrations.json" Link="modules/Workspace/migrations/Workspace.SqlServerMigrations.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../server/modules/Workspace/Migrations.SqlServer/bin/$(Configuration)/$(TargetFramework)/Workspace.SqlServerMigrations.dll" Link="modules/Workspace/migrations/Workspace.SqlServerMigrations.dll" CopyToOutputDirectory="PreserveNewest" />

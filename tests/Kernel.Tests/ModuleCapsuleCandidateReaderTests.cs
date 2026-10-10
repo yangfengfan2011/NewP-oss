@@ -193,8 +193,12 @@ public sealed class ModuleCapsuleCandidateReaderTests : IDisposable
                 continue;
             }
             CopyBuiltInModuleToRuntimeView(Path.GetFileName(moduleRoot), runtimeModulesRoot);
-            var assemblyName = Path.GetFileName(moduleRoot) + "Module.dll";
-            File.Copy(Path.Combine(AppContext.BaseDirectory, assemblyName), Path.Combine(_root, assemblyName));
+            using var manifest = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(moduleRoot, "newp.plugin.json")));
+            if (manifest.RootElement.TryGetProperty("entryAssembly", out var entry))
+            {
+                var assemblyName = Path.GetFileName(entry.GetString())!;
+                File.Copy(Path.Combine(AppContext.BaseDirectory, assemblyName), Path.Combine(_root, assemblyName));
+            }
         }
 
         if (utf8Bom)
@@ -243,6 +247,7 @@ public sealed class ModuleCapsuleCandidateReaderTests : IDisposable
     private static void CopyDirectory(string sourceRoot, string targetRoot)
     {
         Directory.CreateDirectory(targetRoot);
+        if (!Directory.Exists(sourceRoot)) return;
         foreach (var directory in Directory.EnumerateDirectories(sourceRoot, "*", SearchOption.AllDirectories))
         {
             Directory.CreateDirectory(directory.Replace(sourceRoot, targetRoot, StringComparison.Ordinal));

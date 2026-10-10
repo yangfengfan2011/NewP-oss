@@ -10,6 +10,36 @@ describe('active-module-runtime-loader', () => {
     vi.unstubAllGlobals();
   });
 
+  it('loads composition members with their own identities and skips a composition without a frontend', async () => {
+    const importModule = vi.fn();
+    const internalModules = {
+      workspace: vi.fn().mockResolvedValue({ default: { behaviorKey: 'workspace.frontend' } }),
+      part: vi.fn().mockResolvedValue({ default: { behaviorKey: 'part.frontend' } }),
+    };
+    const fetchCatalog = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        schemaVersion: '1.0', snapshotId: 'composition', planHash: 'composition',
+        modules: [
+          { moduleId: 'InforCenter', version: '1.0.0', displayName: 'InforCenter', dependencies: [],
+            compositionMembers: ['Part', 'Workspace'], frontend: null },
+          { moduleId: 'Workspace', version: '1.2.0', displayName: '工作空间', dependencies: ['Part'], parentModuleId: 'InforCenter',
+            frontend: { moduleId: 'workspace', behaviorKey: 'workspace.frontend', bindingMode: 'behavior-bindings', bindings: [] } },
+          { moduleId: 'Part', version: '2.0.0', displayName: '零组件', dependencies: [], parentModuleId: 'InforCenter',
+            frontend: { moduleId: 'part', behaviorKey: 'part.frontend', bindingMode: 'behavior-bindings', bindings: [] } },
+        ],
+      }),
+    });
+    const result = await loadActiveModuleRuntimeWith({ fetchCatalog, internalModules, importModule });
+    expect(result.modules.map((module) => [module.metadata.moduleId, module.metadata.version])).toEqual([
+      ['Workspace', '1.2.0'], ['Part', '2.0.0'],
+    ]);
+    expect(internalModules.workspace).toHaveBeenCalledOnce();
+    expect(internalModules.part).toHaveBeenCalledOnce();
+    expect(importModule).not.toHaveBeenCalled();
+  });
+
   it('loads every required frontend entry and binds behavior implementations to canonical identity', async () => {
     const organizationBindings: FrontendBehaviorBindings = {
       behaviorKey: 'organization.frontend',

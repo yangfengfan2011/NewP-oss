@@ -27,6 +27,8 @@ public sealed record ModuleCapsuleCandidate(
 {
     public IReadOnlyList<FeatureDeclaration> Features { get; init; } = [];
     public IReadOnlyList<DataActionDeclaration> DataActions { get; init; } = [];
+    public IReadOnlyList<string> CompositionMembers { get; init; } = [];
+    public bool Enabled { get; init; } = true;
 }
 
 /// <summary>
@@ -177,7 +179,7 @@ public sealed class ModulePlanProvenance
             artifactDigest
         })));
 
-    // 信任指纹覆盖动作目录与开关，避免保留旧身份却替换授权声明。
+    // 信任指纹覆盖动作、组合声明与自身启用选择，避免保留旧身份却替换已验证事实。
     private static string ComputeCanonicalFingerprint(ModuleCapsuleCandidate candidate) =>
         ComputeCanonicalFingerprint(
             candidate.ModuleId,
@@ -195,9 +197,9 @@ public sealed class ModulePlanProvenance
             candidate.FrontendBindings,
             candidate.FrontendBindingReferences,
             candidate.ModelKeys,
-            candidate.Persistence, candidate.Features, candidate.DataActions);
+            candidate.Persistence, candidate.Features, candidate.DataActions, candidate.CompositionMembers, candidate.Enabled);
 
-    // 信任指纹覆盖动作目录与开关，避免保留旧身份却替换授权声明。
+    // 信任指纹覆盖动作、组合声明与自身启用选择，避免保留旧身份却替换已验证事实。
     private static string ComputeCanonicalFingerprint(CanonicalModulePlanModule module) =>
         ComputeCanonicalFingerprint(
             module.ModuleId,
@@ -215,9 +217,9 @@ public sealed class ModulePlanProvenance
             module.FrontendBindings,
             module.FrontendBindingReferences,
             module.ModelKeys,
-            module.Persistence, module.Features, module.DataActions);
+            module.Persistence, module.Features, module.DataActions, module.CompositionMembers, module.Enabled);
 
-    // 信任指纹覆盖动作目录与开关，避免保留旧身份却替换授权声明。
+    // 信任指纹覆盖动作、组合声明与自身启用选择，避免保留旧身份却替换已验证事实。
     private static string ComputeCanonicalFingerprint(
         string moduleId,
         string version,
@@ -234,7 +236,8 @@ public sealed class ModulePlanProvenance
         IReadOnlyList<string> frontendBindings,
         IReadOnlyList<string> frontendBindingReferences,
         IReadOnlyList<string> modelKeys,
-        ModulePersistenceContribution? persistence, IReadOnlyList<FeatureDeclaration> features, IReadOnlyList<DataActionDeclaration> dataActions)
+        ModulePersistenceContribution? persistence, IReadOnlyList<FeatureDeclaration> features, IReadOnlyList<DataActionDeclaration> dataActions,
+        IReadOnlyList<string> compositionMembers, bool enabled)
     {
         var bytes = JsonSerializer.SerializeToUtf8Bytes(new
         {
@@ -253,6 +256,8 @@ public sealed class ModulePlanProvenance
             frontendBindings = Sort(frontendBindings),
             frontendBindingReferences = Sort(frontendBindingReferences),
             modelKeys = Sort(modelKeys),
+            compositionMembers = Sort(compositionMembers),
+            enabled,
             dataActions = dataActions.ToArray(),
             features = features.OrderBy(node => node.Key, StringComparer.Ordinal).ToArray(),
             persistence = persistence is null
@@ -331,7 +336,17 @@ public sealed record CanonicalModulePlanModule(
 {
     public IReadOnlyList<FeatureDeclaration> Features { get; init; } = [];
     public IReadOnlyList<DataActionDeclaration> DataActions { get; init; } = [];
+    public IReadOnlyList<string> CompositionMembers { get; init; } = [];
+    public bool Enabled { get; init; } = true;
 }
+
+/// <summary>选定版本的组件组合投影；父子关系不改变成员身份或持久化归属。</summary>
+public sealed record ModuleCompositionNode(
+    string ModuleId,
+    string Version,
+    bool Enabled,
+    string? ParentModuleId,
+    IReadOnlyList<string> Members);
 
 /// <summary>
 /// 编译成功后唯一可供 runtime materializer 消费的计划。
@@ -344,6 +359,9 @@ public sealed record CanonicalModulePlan(
     byte[] CanonicalBytes,
     IReadOnlyList<CanonicalModulePlanModule> Modules)
 {
+    /// <summary>同一次候选选定的完整模块声明，包含自身选择停用的组件。</summary>
+    public IReadOnlyList<CanonicalModulePlanModule> SelectedModules { get; init; } = Modules;
+    public IReadOnlyList<ModuleCompositionNode> CompositionGraph { get; init; } = [];
     /// <summary>由已验证声明一次派生的完整目录，所有运行时投影共享该结果。</summary>
     public IReadOnlyList<DataActionDeclaration> DataActionCatalog { get; } = DataActionCatalogCompiler.Compile(Modules.SelectMany(module => module.DataActions));
     public IReadOnlyList<FeaturePoint> FeatureCatalog { get; } = FeatureCatalogCompiler.Compile(Modules.SelectMany(module => module.Features));

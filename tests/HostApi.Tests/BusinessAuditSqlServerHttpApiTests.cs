@@ -1422,7 +1422,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
             }
         });
         var productionModuleIds = new[] { "Identity", "Authentication", "Authorization", "Audit", "Organization" }
-            .Concat(_includeWorkspace ? ["Workspace"] : []).Concat(_includePart ? ["Part"] : []).Concat(_includeDocument ? ["Document"] : []).ToArray();
+            .Concat(_includeWorkspace ? ["InforCenter", "Workspace"] : []).Concat(_includePart ? ["Part"] : []).Concat(_includeDocument ? ["Document"] : []).ToArray();
         var hostRoot = Path.GetDirectoryName(typeof(AuthController).Assembly.Location)!;
         var trust = TrustedBuiltInModuleSource.CreateForHost(hostRoot, Path.Combine(hostRoot, "modules"));
         var candidates = new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(trust)

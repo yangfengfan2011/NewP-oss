@@ -14,15 +14,18 @@ public sealed class ActiveModuleRuntimeCatalogBuilder
         _publicBaseUrl = publicBaseUrl;
     }
 
+    // 发布同一规范计划的活动能力和完整组合关系，Shell 不需要另一份成员清单。
     public string Build(CanonicalModulePlan plan)
     {
         ArgumentNullException.ThrowIfNull(plan);
+        var parents = plan.CompositionGraph.ToDictionary(node => node.ModuleId, node => node.ParentModuleId, StringComparer.Ordinal);
         var catalog = new
         {
             schemaVersion = "1.0",
             snapshotId = plan.SnapshotId,
             compilerContractVersion = plan.CompilerContractVersion,
             planHash = plan.PlanHash,
+            compositionGraph = plan.CompositionGraph,
             projections = new
             {
                 frontend = "/plugins/frontend-plugin-manifest.json",
@@ -37,6 +40,8 @@ public sealed class ActiveModuleRuntimeCatalogBuilder
                 displayName = module.DisplayName,
                 description = module.Description,
                 dependencies = module.Dependencies,
+                compositionMembers = module.CompositionMembers,
+                parentModuleId = parents.GetValueOrDefault(module.ModuleId),
                 backend = module.BackendEntry is null
                     ? null
                     : new

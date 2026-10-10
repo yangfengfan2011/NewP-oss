@@ -18,6 +18,10 @@ public sealed class WorkspaceObjectCreationSqlServerHttpApiTests
     public async Task CreateObjects_UsesCurrentFolderAndOwningValidation()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
+        var canonical = fixture.Services.GetRequiredService<CanonicalModulePlan>();
+        Assert.Null(Assert.Single(canonical.Modules, module => module.ModuleId == "InforCenter").Persistence);
+        foreach (var member in new[] { "Workspace", "Part", "Document" })
+            Assert.Equal("InforCenter", Assert.Single(canonical.CompositionGraph, node => node.ModuleId == member).ParentModuleId);
         using var admin = await fixture.LoginAdministratorAsync();
         var entry = Point(fixture, "workspace.spaces.access");
         var position = await RootAsync(admin, entry);

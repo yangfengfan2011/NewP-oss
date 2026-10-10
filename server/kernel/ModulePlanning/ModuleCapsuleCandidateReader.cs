@@ -146,7 +146,12 @@ public sealed class ModuleCapsuleCandidateReader
                     "built-in",
                     Path.GetFullPath(manifestPath),
                     "/"),
-            ReadPersistence(root, manifestPath)) { Features = ReadFeatures(root, moduleId, Path.Combine(moduleRoot, "metadata"), snapshot), DataActions = DataActionCatalogCompiler.Read(root, moduleId) };
+            ReadPersistence(root, manifestPath))
+        {
+            Features = ReadFeatures(root, moduleId, Path.Combine(moduleRoot, "metadata"), snapshot),
+            DataActions = DataActionCatalogCompiler.Read(root, moduleId),
+            CompositionMembers = ReadCompositionMembers(root, manifestPath)
+        };
     }
 
     // 外部包动作与内建动作经过相同读取、规范编译和启动装配。
@@ -192,7 +197,30 @@ public sealed class ModuleCapsuleCandidateReader
             metadata.FrontendBindingReferences,
             metadata.ModelKeys,
             new ModulePlanProvenance("installed-package", manifestPath, "/"),
-            ReadPersistence(root, manifestPath)) { Features = ReadFeatures(root, moduleId, Path.Combine(packageRoot, "modules", moduleId, "metadata"), null), DataActions = DataActionCatalogCompiler.Read(root, moduleId) };
+            ReadPersistence(root, manifestPath))
+        {
+            Features = ReadFeatures(root, moduleId, Path.Combine(packageRoot, "modules", moduleId, "metadata"), null),
+            DataActions = DataActionCatalogCompiler.Read(root, moduleId),
+            CompositionMembers = ReadCompositionMembers(root, manifestPath)
+        };
+    }
+
+    // 组合引用必须完整读取；错误形状不能像可选旧数组一样被静默裁剪。
+    private static IReadOnlyList<string> ReadCompositionMembers(JsonElement root, string sourcePath)
+    {
+        if (!TryGetProperty(root, "composition", out var composition)) return [];
+        if (composition.ValueKind != JsonValueKind.Object
+            || !TryGetProperty(composition, "members", out var members)
+            || members.ValueKind != JsonValueKind.Array)
+            throw new JsonException($"Invalid composition.members in '{sourcePath}'. Expected an array of component ids.");
+        var result = new List<string>();
+        foreach (var member in members.EnumerateArray())
+        {
+            if (member.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(member.GetString()))
+                throw new JsonException($"Invalid composition member in '{sourcePath}'. Expected a non-empty component id.");
+            result.Add(member.GetString()!);
+        }
+        return result;
     }
 
     // 功能声明与已校验 metadata 来自同一候选快照，不能旁读变化中的 authoring 文件。

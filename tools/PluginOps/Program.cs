@@ -1,251 +1,53 @@
-using ICP.Platform.Kernel.PluginPackages;
+using System.Diagnostics;
 
-return PluginOpsApp.Run(args);
+return await PluginOpsApp.RunAsync(args);
 
+/// <summary>旧 CLI 名称只转发到正式发行 Host 的离线入口，不再持有安装、启用或运行时投影逻辑。</summary>
 static class PluginOpsApp
 {
-    public static int Run(string[] args)
+    // 调用者明确指定发行物，确保卸载只作用于预期部署；信任签发和停服租约仍由发行 Host 持有。
+    public static async Task<int> RunAsync(string[] args)
     {
-        if (args.Length == 0 || IsHelpCommand(args[0]))
+        if (args.Length == 0 || args[0] is "help" or "--help" or "-h")
         {
-            PrintUsage();
+            Console.WriteLine("PluginOps <install|select|desired|enable|disable|uninstall|prune|rollback> --host-path <HostApi.dll> --install-root <root> [--module-id <id> --version <version> --enabled <true|false> | --file <desired.json> | --package <root>]");
             return args.Length == 0 ? 1 : 0;
         }
-
         try
         {
-            var command = args[0].ToLowerInvariant();
-            var options = ParseOptions(args[1..]);
-
-            return command switch
+            var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            for (var index = 1; index < args.Length; index += 2)
             {
-                "install" => RunInstall(options),
-                "enable" => RunEnable(options),
-                "disable" => RunDisable(options),
-                "uninstall" => RunUninstall(options),
-                "rollback" => RunRollback(options),
-                _ => Fail($"Unknown command '{args[0]}'.")
-            };
+                if (index + 1 >= args.Length || !args[index].StartsWith("--") || !options.TryAdd(args[index][2..], args[index + 1]))
+                    throw new ArgumentException("PLUGIN_OFFLINE_ARGUMENT_INVALID");
+            }
+            if (!options.Remove("host-path", out var hostPath) || !File.Exists(hostPath)) throw new ArgumentException("A valid --host-path is required.");
+            if (!options.Remove("install-root", out var installRoot)) throw new ArgumentException("--install-root is required.");
+            var resolvedHost = Path.GetFullPath(hostPath);
+            var start = new ProcessStartInfo("dotnet") { WorkingDirectory = Path.GetDirectoryName(resolvedHost), UseShellExecute = false, CreateNoWindow = true,
+                RedirectStandardOutput = true, RedirectStandardError = true };
+            start.ArgumentList.Add(resolvedHost);
+            start.ArgumentList.Add("plugin-deploy");
+            start.ArgumentList.Add(args[0]);
+            start.ArgumentList.Add("--Platform:PluginInstallRoot");
+            start.ArgumentList.Add(Path.GetFullPath(installRoot));
+            foreach (var option in options)
+            {
+                start.ArgumentList.Add("--" + option.Key);
+                start.ArgumentList.Add(option.Key is "package" or "file" ? Path.GetFullPath(option.Value) : option.Value);
+            }
+            using var process = Process.Start(start) ?? throw new InvalidOperationException("Failed to start deployment Host.");
+            // 无窗口子进程必须显式转发输出；否则 Windows 会丢弃下游的部署结果与诊断。
+            var stdout = process.StandardOutput.BaseStream.CopyToAsync(Console.OpenStandardOutput());
+            var stderr = process.StandardError.BaseStream.CopyToAsync(Console.OpenStandardError());
+            await process.WaitForExitAsync();
+            await Task.WhenAll(stdout, stderr).WaitAsync(TimeSpan.FromSeconds(15));
+            return process.ExitCode;
         }
-        catch (ArgumentException ex)
+        catch (Exception exception) when (exception is ArgumentException or IOException or InvalidOperationException)
         {
-            return Fail(ex.Message, printUsage: true);
-        }
-        catch (Exception ex)
-        {
-            return Fail(ex.Message);
-        }
-    }
-
-    private static int RunInstall(IReadOnlyDictionary<string, string> options)
-    {
-        var packagePath = RequireOption(options, "package");
-        var installRoot = ResolveInstallRoot(RequireOption(options, "install-root"));
-        var stateStore = new InstalledPluginStateStore(installRoot);
-        var installer = new UnifiedPluginPackageInstaller(stateStore);
-
-        var result = installer.Install(packagePath, installRoot);
-        if (!string.Equals(result.Status, "Installed", StringComparison.OrdinalIgnoreCase))
-        {
-            PrintInstallResult(result);
+            Console.Error.WriteLine(exception.Message);
             return 1;
         }
-
-        try
-        {
-            MaterializeRuntimeView(installRoot, stateStore);
-        }
-        catch (Exception ex)
-        {
-            return Fail($"Installed {result.ModuleId}@{result.Version} but failed to refresh runtime projection: {ex.Message}");
-        }
-
-        PrintInstallResult(result);
-        return 0;
-    }
-
-    private static int RunEnable(IReadOnlyDictionary<string, string> options)
-    {
-        var moduleId = RequireOption(options, "module-id");
-        var version = RequireOption(options, "version");
-        var installRoot = ResolveInstallRoot(RequireOption(options, "install-root"));
-        return RunLifecycleWithRefresh(installRoot, moduleId, stateStore => new UnifiedPluginPackageOperations(stateStore).Enable(moduleId, version));
-    }
-
-    private static int RunDisable(IReadOnlyDictionary<string, string> options)
-    {
-        var moduleId = RequireOption(options, "module-id");
-        var installRoot = ResolveInstallRoot(RequireOption(options, "install-root"));
-        return RunLifecycleWithRefresh(installRoot, moduleId, stateStore => new UnifiedPluginPackageOperations(stateStore).Disable(moduleId));
-    }
-
-    private static int RunUninstall(IReadOnlyDictionary<string, string> options)
-    {
-        var moduleId = RequireOption(options, "module-id");
-        var installRoot = ResolveInstallRoot(RequireOption(options, "install-root"));
-        return RunLifecycleWithRefresh(installRoot, moduleId, stateStore => new UnifiedPluginPackageOperations(stateStore).Uninstall(moduleId));
-    }
-
-    private static int RunRollback(IReadOnlyDictionary<string, string> options)
-    {
-        var moduleId = RequireOption(options, "module-id");
-        var installRoot = ResolveInstallRoot(RequireOption(options, "install-root"));
-        return RunLifecycleWithRefresh(installRoot, moduleId, stateStore => new UnifiedPluginPackageOperations(stateStore).Rollback(moduleId));
-    }
-
-    private static int RunLifecycleWithRefresh(
-        string installRoot,
-        string moduleId,
-        Func<InstalledPluginStateStore, UnifiedPluginLifecycleResult> action)
-    {
-        var stateStore = new InstalledPluginStateStore(installRoot);
-        if (!stateStore.TryLoad(moduleId, out var previousRecord, out var loadError))
-        {
-            return Fail(loadError ?? $"Failed to load plugin state for '{moduleId}'.");
-        }
-
-        var result = action(stateStore);
-        if (!string.Equals(result.Status, "Enabled", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(result.Status, "Disabled", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(result.Status, "Uninstalled", StringComparison.OrdinalIgnoreCase))
-        {
-            PrintLifecycleResult(result);
-            return 1;
-        }
-
-        try
-        {
-            MaterializeRuntimeView(installRoot, stateStore);
-            PrintLifecycleResult(result);
-            return 0;
-        }
-        catch (Exception ex)
-        {
-            if (previousRecord is not null && !stateStore.TrySave(previousRecord, out var restoreStateError))
-            {
-                return Fail($"{ex.Message} Failed to restore previous plugin state: {restoreStateError}");
-            }
-
-            try
-            {
-                MaterializeRuntimeView(installRoot, stateStore);
-            }
-            catch (Exception restoreProjectionEx)
-            {
-                return Fail($"{ex.Message} Failed to restore previous runtime projection: {restoreProjectionEx.Message}");
-            }
-
-            return Fail($"{ex.Message} Plugin state was restored to the previous version.");
-        }
-    }
-
-    private static void MaterializeRuntimeView(string installRoot, InstalledPluginStateStore stateStore)
-    {
-        var frontendPluginBaseUrl = Environment.GetEnvironmentVariable("Platform__FrontendPluginBaseUrl") ?? "/plugin-assets";
-        var materializer = new RuntimeViewMaterializer(stateStore, new FrontendRuntimeManifestBuilder(frontendPluginBaseUrl));
-        materializer.Materialize(installRoot);
-    }
-
-    private static Dictionary<string, string> ParseOptions(string[] args)
-    {
-        var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        for (var index = 0; index < args.Length; index += 2)
-        {
-            var optionName = args[index];
-            if (!optionName.StartsWith("--", StringComparison.Ordinal))
-            {
-                throw new ArgumentException($"Unexpected token '{optionName}'. Options must use the form --name value.");
-            }
-
-            if (index + 1 >= args.Length)
-            {
-                throw new ArgumentException($"Missing value for option '{optionName}'.");
-            }
-
-            var optionValue = args[index + 1];
-            if (optionValue.StartsWith("--", StringComparison.Ordinal))
-            {
-                throw new ArgumentException($"Missing value for option '{optionName}'.");
-            }
-
-            options[optionName[2..]] = optionValue;
-        }
-
-        return options;
-    }
-
-    private static string RequireOption(IReadOnlyDictionary<string, string> options, string name)
-    {
-        if (!options.TryGetValue(name, out var value) || string.IsNullOrWhiteSpace(value))
-        {
-            throw new ArgumentException($"Missing required option '--{name}'.");
-        }
-
-        return value;
-    }
-
-    private static string ResolveInstallRoot(string installRoot)
-    {
-        return Path.GetFullPath(installRoot);
-    }
-
-    private static bool IsHelpCommand(string value)
-    {
-        return value is "-h" or "--help" or "help";
-    }
-
-    private static void PrintInstallResult(UnifiedPluginInstallResult result)
-    {
-        if (string.Equals(result.Status, "Installed", StringComparison.OrdinalIgnoreCase))
-        {
-            Console.WriteLine($"{result.ModuleId}:{result.Version}:{result.Status}");
-            if (!string.IsNullOrWhiteSpace(result.Message))
-            {
-                Console.Error.WriteLine(result.Message);
-            }
-            return;
-        }
-
-        Console.Error.WriteLine(result.ErrorMessage);
-    }
-
-    private static void PrintLifecycleResult(UnifiedPluginLifecycleResult result)
-    {
-        if (string.Equals(result.Status, "Enabled", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(result.Status, "Disabled", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(result.Status, "Uninstalled", StringComparison.OrdinalIgnoreCase))
-        {
-            Console.WriteLine($"{result.ModuleId}:{result.Version ?? string.Empty}:{result.Status}");
-            if (!string.IsNullOrWhiteSpace(result.Message))
-            {
-                Console.Error.WriteLine(result.Message);
-            }
-            return;
-        }
-
-        Console.Error.WriteLine(result.ErrorMessage);
-    }
-
-    private static int Fail(string message, bool printUsage = false)
-    {
-        Console.Error.WriteLine(message);
-        if (printUsage)
-        {
-            Console.Error.WriteLine();
-            PrintUsage();
-        }
-
-        return 1;
-    }
-
-    private static void PrintUsage()
-    {
-        Console.WriteLine("Usage:");
-        Console.WriteLine("  dotnet run --project .\\tools\\PluginOps\\PluginOps.csproj -- install --package <path> --install-root <path>");
-        Console.WriteLine("  dotnet run --project .\\tools\\PluginOps\\PluginOps.csproj -- enable --module-id <id> --version <version> --install-root <path>");
-        Console.WriteLine("  dotnet run --project .\\tools\\PluginOps\\PluginOps.csproj -- disable --module-id <id> --install-root <path>");
-        Console.WriteLine("  dotnet run --project .\\tools\\PluginOps\\PluginOps.csproj -- uninstall --module-id <id> --install-root <path>");
-        Console.WriteLine("  dotnet run --project .\\tools\\PluginOps\\PluginOps.csproj -- rollback --module-id <id> --install-root <path>");
     }
 }

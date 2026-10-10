@@ -15,6 +15,24 @@ public sealed class PluginLifecycleManager
     public ResolvedPluginLifecycleState Resolve(IReadOnlyList<InstalledPluginInventoryItem> inventory) =>
         _stateStore.Resolve(inventory);
 
+    /// <summary>一次原子保存完整离线期望集合；完整组合与依赖由下一次 Host 启动验证。</summary>
+    public PluginLifecycleCommandResult RequestDesired(IReadOnlyList<InstalledPluginInventoryItem> inventory,
+        IReadOnlyList<PluginDesiredModuleState> selections)
+    {
+        var current = Resolve(inventory);
+        IReadOnlyList<PluginDesiredModuleState> desired = [];
+        var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var selection in selections)
+        {
+            var installed = FindInventoryItem(inventory, selection.ModuleId);
+            if (!ids.Add(selection.ModuleId) || installed is null || !installed.InstalledVersions.Contains(selection.Version, StringComparer.Ordinal))
+                return PluginLifecycleCommandResult.Failed(selection.ModuleId, selection.Version, "PLUGIN_SELECTION_INVALID: duplicate or unavailable installed identity.");
+            desired = UpsertDesired(desired, selection with { ModuleId = installed.ModuleId });
+        }
+        _stateStore.SaveDesired(current, desired);
+        return PluginLifecycleCommandResult.PendingRestart("candidate", null);
+    }
+
     public PluginLifecycleCommandResult RequestEnable(
         IReadOnlyList<InstalledPluginInventoryItem> inventory,
         string moduleId,

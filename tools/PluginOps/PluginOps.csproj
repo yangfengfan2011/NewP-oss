@@ -8,8 +8,4 @@
     <RootNamespace>ICP.Platform.PluginOps</RootNamespace>
   </PropertyGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\..\server\kernel\Kernel.csproj" />
-  </ItemGroup>
-
 </Project>

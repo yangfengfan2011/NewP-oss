@@ -56,8 +56,9 @@ if (identityMaintenanceCommand.IsMaintenanceCommand)
     }
 }
 
+var offlinePluginCommand = args.Length > 1 && args[0] == "plugin-deploy";
 var builder = WebApplication.CreateBuilder(
-    identityMaintenanceCommand.IsMaintenanceCommand ? Array.Empty<string>() : args);
+    identityMaintenanceCommand.IsMaintenanceCommand ? Array.Empty<string>() : offlinePluginCommand ? args[2..] : args);
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -108,6 +109,12 @@ var platformApiCatalog = new PlatformApiHostCatalog(
         PlatformApiReleaseIdentity.Version,
         PlatformApiReleaseIdentity.ReleaseDigest)]);
 var standardDataInspector = new StandardDataPackageInspector(platformApiCatalog);
+using var pluginDeploymentLease = PluginDeploymentLease.Acquire(pluginInstallRoot);
+if (offlinePluginCommand)
+{
+    Environment.ExitCode = PluginOfflineDeployment.Run(args, pluginInstallRoot, builtInModuleSource, externalPluginsEnabled, standardDataInspector);
+    return;
+}
 var standardDataInstaller = new StandardDataPackageInstaller(
     pluginInstallRoot,
     stateStore,

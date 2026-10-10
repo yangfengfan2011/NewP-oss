@@ -11,7 +11,7 @@ public class PluginOpsIntegrationTests : IDisposable
     private readonly List<string> _tempRoots = new();
 
     [Fact]
-    public void Install_WhenCurrentVersionAlreadyEnabled_RebuildsRuntimeProjection()
+    public void Install_WhenCurrentVersionAlreadyEnabled_LeavesRuntimeProjectionForHostRestart()
     {
         var installRoot = CreateTempRoot("plugin_ops_install");
         var initialPackageRoot = _testData.CreateValidPackage("Audit", "1.0.0");
@@ -44,16 +44,16 @@ public class PluginOpsIntegrationTests : IDisposable
                 "--install-root", installRoot
             ]);
 
-        Assert.Equal(0, result.ExitCode);
-        Assert.Contains("Audit:1.0.0:Installed", result.StdOut, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal("export default 'updated-audit';\n", File.ReadAllText(projectedEntryPath));
+        Assert.True(result.ExitCode == 0, result.StdOut + result.StdErr);
+        Assert.Contains("install:PendingRestart", result.StdOut, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("export default 'audit';\n", File.ReadAllText(projectedEntryPath));
     }
 
     [Fact]
     public void Uninstall_WhenModuleIsInstalled_RemovesStateAndPackages()
     {
         var installRoot = CreateTempRoot("plugin_ops_uninstall");
-        var packageRoot = _testData.CreateValidPackage("Audit", "1.0.0");
+        var packageRoot = _testData.CreateValidPackage("Part", "1.0.0");
 
         var stateStore = new InstalledPluginStateStore(installRoot);
         var installer = new UnifiedPluginPackageInstaller(stateStore);
@@ -63,16 +63,53 @@ public class PluginOpsIntegrationTests : IDisposable
         var result = PluginOpsProcess.Run(
             "uninstall",
             [
-                "--module-id", "Audit",
+                "--module-id", "Part",
                 "--install-root", installRoot
             ]);
 
-        Assert.Equal(0, result.ExitCode);
-        Assert.Contains("Audit::Uninstalled", result.StdOut, StringComparison.OrdinalIgnoreCase);
-        Assert.True(stateStore.TryLoad("Audit", out var record, out var loadError));
+        Assert.True(result.ExitCode == 0, result.StdOut + result.StdErr);
+        Assert.Contains("uninstall:PendingRestart", result.StdOut, StringComparison.OrdinalIgnoreCase);
+        Assert.True(stateStore.TryLoad("Part", out var record, out var loadError));
         Assert.Null(loadError);
         Assert.Null(record);
-        Assert.False(Directory.Exists(Path.Combine(installRoot, "packages", "Audit")));
+        Assert.False(Directory.Exists(Path.Combine(installRoot, "packages", "Part")));
+    }
+
+    [Fact]
+    public void Desired_MissingOwnChoice_IsRejectedWithoutWritingLifecycleState()
+    {
+        var installRoot = CreateTempRoot("plugin_ops_invalid_desired");
+        var file = Path.Combine(installRoot, "desired.json");
+        File.WriteAllText(file, "[{\"moduleId\":\"Part\",\"version\":\"1.0.0\"}]");
+        var result = PluginOpsProcess.Run("desired", ["--file", file, "--install-root", installRoot]);
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("PLUGIN_SELECTION_INVALID", result.StdErr);
+        Assert.False(File.Exists(Path.Combine(installRoot, ".feature-gates", "external-plugins-disabled", "lifecycle", "v2", "state.json")));
+    }
+
+    [Fact]
+    public void Prune_UnselectedVersion_RemovesOnlyItsPackageAndPreservesDeploymentAssets()
+    {
+        var installRoot = CreateTempRoot("plugin_ops_prune");
+        var stateStore = new InstalledPluginStateStore(installRoot);
+        var installer = new UnifiedPluginPackageInstaller(stateStore);
+        foreach (var version in new[] { "1.0.0", "2.0.0" })
+            Assert.Equal("Installed", installer.Install(_testData.CreateValidPackage("Audit", version), installRoot).Status);
+        var archive = Path.Combine(installRoot, "persistence", "catalog", "retained.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(archive)!);
+        File.WriteAllText(archive, "immutable validation asset");
+        var result = PluginOpsProcess.Run("prune", ["--module-id", "Audit", "--version", "2.0.0", "--install-root", installRoot]);
+        Assert.True(result.ExitCode == 0, result.StdOut + result.StdErr);
+        Assert.False(Directory.Exists(Path.Combine(installRoot, "packages", "Audit", "2.0.0")));
+        Assert.True(Directory.Exists(Path.Combine(installRoot, "packages", "Audit", "1.0.0")));
+        Assert.Equal("immutable validation asset", File.ReadAllText(archive));
+        Assert.True(stateStore.TryLoad("Audit", out var record, out _));
+        Assert.Equal(["1.0.0"], record!.InstalledVersions);
+        // 新正式入口拒绝裁剪被 builtin 选定的版本，且失败不改库存。
+        var blocked = PluginOpsProcess.Run("prune", ["--module-id", "Audit", "--version", "1.0.0", "--install-root", installRoot]);
+        Assert.NotEqual(0, blocked.ExitCode);
+        Assert.Contains("PLUGIN_SELECTED_VERSION_CANNOT_BE_PRUNED", blocked.StdErr);
+        Assert.True(Directory.Exists(Path.Combine(installRoot, "packages", "Audit", "1.0.0")));
     }
 
     [Fact]
@@ -180,6 +217,19 @@ public class PluginOpsIntegrationTests : IDisposable
             process.StartInfo.ArgumentList.Add("--no-build");
             process.StartInfo.ArgumentList.Add("--");
             process.StartInfo.ArgumentList.Add(command);
+            var installRoot = options[options.ToList().IndexOf("--install-root") + 1];
+            var hostRoot = Path.Combine(installRoot, "host-distribution");
+            var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
+            var hostSource = Path.Combine(repoRoot, "apps", "host-api", "bin", configuration, "net10.0");
+            foreach (var file in Directory.EnumerateFiles(hostSource, "*", SearchOption.AllDirectories))
+            {
+                var target = Path.Combine(hostRoot, Path.GetRelativePath(hostSource, file));
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                File.Copy(file, target, overwrite: true);
+            }
+            process.StartInfo.ArgumentList.Add("--host-path");
+            process.StartInfo.ArgumentList.Add(Path.Combine(hostRoot, "HostApi.dll"));
+            process.StartInfo.Environment["Platform__ExternalPluginsEnabled"] = "false";
             foreach (var option in options)
             {
                 process.StartInfo.ArgumentList.Add(option);
@@ -206,6 +256,11 @@ public class PluginOpsIntegrationTests : IDisposable
             Assert.True(process.Start(), "Failed to start PluginOps.");
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
+            if (!process.WaitForExit(30000))
+            {
+                process.Kill(entireProcessTree: true);
+                throw new TimeoutException("PluginOps child process timed out.");
+            }
             process.WaitForExit();
 
             return new PluginOpsResult(process.ExitCode, stdout.ToString(), stderr.ToString());
@@ -232,6 +287,11 @@ public class PluginOpsIntegrationTests : IDisposable
             process.StartInfo.Environment["DOTNET_NOLOGO"] = "1";
 
             Assert.True(process.Start(), "Failed to start PluginOps build.");
+            if (!process.WaitForExit(30000))
+            {
+                process.Kill(entireProcessTree: true);
+                throw new TimeoutException("PluginOps child process timed out.");
+            }
             process.WaitForExit();
             Assert.Equal(0, process.ExitCode);
         }

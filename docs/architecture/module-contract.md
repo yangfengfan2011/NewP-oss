@@ -31,6 +31,8 @@ InforCenter 是无自有模型和迁移流的纯组合组件，直接成员为 W
 
 各 owner 的已应用步骤独立保持 manifest `Sequence` 的线性前缀。`dbo.__EFMigrationsHistory` 只保存全局唯一已应用 ID 集合，`dbo.__NewPMigrationHistory.Position/PlanDigest` 保存实际提交顺序及不可变前缀摘要。候选在 owner 队列头之间按 MigrationId 确定执行顺序，既有事实按数据库 Position 只读核对，新的 Position 和摘要在全局事务锁内绑定；ID 较早的延期或首次启用步骤可追加到其他 owner 已提交步骤之后。停用 owner 只核对保留流，不消费所选新版；完整目标/过渡、owner、所有摘要、未知对象、owner 跳步和数据库超前仍严格阻断。迁移与一致性成功之前不得公开新活动版本，见 [ADR-0027](../adr/0027-host-is-the-only-full-up-migration-entry.md)。
 
+正式离线选版、移组、解除归组与卸载入口见[停服部署入口](../developer/external-plugin-development.md#停服部署入口)。工具只保存库存或期望选择；完整选定组合图和有效活动依赖由随后 Host 启动在 DDL／活动提交前裁决。停用父级不能豁免缺失成员，可信保留资产不代表成员已安装。移组只重新计算自身选择与祖先共同决定的有效资格，不改模型名称、owner、物理目标或迁移流。代码卸载与精确包裁剪不删除独立持久化校验资产。
+
 ## 全局模型身份
 
 Model authoring 的技术名称是平台范围内唯一的引用身份，例如 `Part`、`Document`、`WorkspaceFolder` 和 `IdentityAccount`。Canonical Module Plan 的 `ModelKeys` 与运行时 `ModelDefinition.LogicalKey` 直接采用同一声明名称；名字按大小写不敏感规则拒绝重名，引用使用声明的规范大小写，不接受旧 `ModuleId/ModelName` 别名。组件归组不改变名称，当前不支持技术名改名或模型 owner 转移。

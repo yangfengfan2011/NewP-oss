@@ -158,16 +158,26 @@ var storageTypeMapPath = Path.Combine(
 var pluginInventory = externalPluginsEnabled
     ? InstalledPluginInventoryAdapter.Create(stateStore)
     : Array.Empty<InstalledPluginInventoryItem>();
+// 部署资产跟随实际 provider/catalog；外部插件开关不改变已经提交的数据库归属。
+var deploymentConnection = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(builder.Configuration.GetConnectionString("SqlServer"));
+if (persistenceProvider == PersistenceProvider.SqlServer && (string.IsNullOrWhiteSpace(deploymentConnection.DataSource) || string.IsNullOrWhiteSpace(deploymentConnection.InitialCatalog)))
+    throw new InvalidDataException("PERSISTENCE_DEPLOYMENT_TARGET_MISSING: an explicit SQL Server and catalog are required.");
+using var persistenceDeploymentStore = persistenceProvider == PersistenceProvider.SqlServer
+    ? new ICP.Platform.Persistence.Composition.PersistenceDeploymentStore(Path.Combine(pluginInstallRoot, "persistence"), persistenceProvider,
+        deploymentConnection.DataSource.ToUpperInvariant() + "|" + deploymentConnection.InitialCatalog.ToUpperInvariant())
+    : null;
 var activationGate = new PluginActivationGate(
     lifecycleManager,
-    new StandardDataPackagePreflight(standardDataInspector, hostVersion),
+    new StandardDataPackagePreflight(standardDataInspector, hostVersion, builtInModuleSource),
     new StandardDataCandidatePlanCompiler(
         builtInModuleSource,
         standardDataInspector),
-    new HostPluginPersistencePlanCompiler(storageTypeMapPath, persistenceProvider),
+    new HostPluginPersistencePlanCompiler(storageTypeMapPath, persistenceProvider, persistenceDeploymentStore),
     new HostPluginRuntimeProjection(materializer, pluginInstallRoot));
 using var activationSession = activationGate.Prepare(pluginInventory);
 var canonicalModulePlan = activationSession.ModulePlan;
+// 恢复候选在 Build/ownership guard/任何 migration DDL 前发布，失败不能被标记为成功部署。
+persistenceDeploymentStore?.PrepareCandidate(canonicalModulePlan, activationSession.PersistencePlan);
 builder.Services.AddSingleton(canonicalModulePlan);
 builder.Services.AddRelationTrees(canonicalModulePlan);
 
@@ -292,6 +302,7 @@ var permissionSynchronizer = new HostPluginPermissionSynchronizer(async cancella
 await activationSession.CompleteAsync(
     new HostPluginMigrationExecutor(app, activationSession.PersistencePlan),
     permissionSynchronizer);
+persistenceDeploymentStore?.CompleteCandidate(activationSession.PersistencePlan);
 
 if (identityMaintenanceCommand.IsMaintenanceCommand)
 {

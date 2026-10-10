@@ -64,7 +64,8 @@ internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
         HostUrl = $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}";
     }
 
-    internal static async Task<FeatureCatalogHostFixture> CreateAsync(JsonArray declarations)
+    internal static async Task<FeatureCatalogHostFixture> CreateAsync(JsonArray declarations,
+        Func<FeatureCatalogHostFixture, Task>? beforeFirstStartup = null, bool expectInitialStartupFailure = false)
     {
         var lease = await ReusableSqlServerDatabase.AcquireAsync();
         FeatureCatalogHostFixture fixture;
@@ -82,7 +83,9 @@ internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
             }
             File.Copy(Path.Combine(fixture.RepositoryRoot, "modules", "Example", "newp.plugin.json"), fixture.CapsulePath, overwrite: true);
             fixture.SetDeclarations(declarations);
-            await fixture.StartAsync();
+            if (beforeFirstStartup is not null) await beforeFirstStartup(fixture);
+            await fixture.StartAsync(expectFailure: expectInitialStartupFailure);
+            if (expectInitialStartupFailure) return fixture;
             await fixture.StopAsync();
             await fixture.BootstrapAsync();
             await fixture.StartAsync();

@@ -7,6 +7,21 @@ namespace ICP.Platform.Kernel.Tests;
 public sealed class ModuleCompositionTests
 {
     [Fact]
+    public void DisabledAncestor_MasksDescendantsWithoutOverwritingTheirSelection()
+    {
+        var compiler = new CanonicalModulePlanCompiler();
+        var candidates = new[] { Capsule("Product", ["Group"], false), Capsule("Group", ["Part", "Document"]), Capsule("Part"), Capsule("Document", enabled: false) };
+        var masked = compiler.Compile("masked", candidates);
+        Assert.True(masked.IsSuccess, string.Join(Environment.NewLine, masked.Diagnostics));
+        Assert.Empty(masked.Plan!.Modules);
+        Assert.True(Assert.Single(masked.Plan.SelectedModules, module => module.ModuleId == "Part").Enabled);
+        Assert.False(Assert.Single(masked.Plan.SelectedModules, module => module.ModuleId == "Document").Enabled);
+        var restored = compiler.Compile("restored", candidates.Select(candidate => candidate.ModuleId == "Product" ? candidate with { Enabled = true } : candidate));
+        Assert.True(restored.IsSuccess, string.Join(Environment.NewLine, restored.Diagnostics));
+        Assert.Equal(["Group", "Part", "Product"], restored.Plan!.Modules.Select(module => module.ModuleId));
+    }
+
+    [Fact]
     public void RealInforCenterAuthoring_PreservesMemberIdentityAndRuntimeBindings()
     {
         var candidates = new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules"));

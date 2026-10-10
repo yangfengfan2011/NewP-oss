@@ -18,16 +18,26 @@ public sealed class HostPluginPersistencePlanCompiler : IPluginPersistencePlanCo
 {
     private readonly string _storageTypeMapPath;
     private readonly PersistenceProvider _provider;
+    private readonly PersistenceDeploymentStore? _deploymentStore;
 
+    // 直接消费者沿用无状态编译；正式 Host 额外提供绑定当前 catalog 的部署资产存储。
     public HostPluginPersistencePlanCompiler(string storageTypeMapPath, PersistenceProvider provider)
+        : this(storageTypeMapPath, provider, deploymentStore: null)
+    {
+    }
+
+    // 同一候选的活动计划和保留部署视图由一个持久化编译器合并。
+    public HostPluginPersistencePlanCompiler(string storageTypeMapPath, PersistenceProvider provider, PersistenceDeploymentStore? deploymentStore)
     {
         _storageTypeMapPath = storageTypeMapPath;
         _provider = provider;
+        _deploymentStore = deploymentStore;
     }
 
+    /// <inheritdoc/>
     public CompiledPersistencePlan Compile(CanonicalModulePlan modulePlan)
     {
-        var result = new PersistencePlanCompiler(_storageTypeMapPath).Compile(modulePlan, _provider);
+        var result = new PersistencePlanCompiler(_storageTypeMapPath).Compile(modulePlan, _provider, _deploymentStore?.ReadDeployed());
         if (result.IsSuccess && result.Plan is not null)
         {
             return result.Plan;

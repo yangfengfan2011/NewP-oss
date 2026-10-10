@@ -4,7 +4,7 @@ Platform Persistence 上下文把候选 Canonical Module Plan 中由各模块拥
 
 迁移执行策略由 [ADR-0027：Host 是完整 Up Migration 的唯一执行入口](../../adr/0027-host-is-the-only-full-up-migration-entry.md) 约束；当前基线生命周期由 [ADR-0042：开发期使用可重建迁移基线直到兼容基线冻结](../../adr/0042-development-uses-a-resettable-migration-baseline.md) 约束；Required 字段演进由 [ADR-0043：Required 字段使用显式写入与迁移生命周期](../../adr/0043-required-fields-use-explicit-write-and-migration-lifecycles.md) 约束。
 
-组件组合、模型身份与独立持久化生命周期的已确认目标见 [ADR-0055](../../adr/0055-component-composition-separates-model-identity-and-deployment.md)，尚待 Issue #258 实施；其中各 owner 的独立迁移前缀与全局实际提交顺序调整 ADR-0027 的全局有序目标前缀约束。
+组件组合、模型身份与独立持久化生命周期的已确认目标见 [ADR-0055](../../adr/0055-component-composition-separates-model-identity-and-deployment.md)。正常部署后的停用保留与首 DDL 前恢复资产已实施，当前契约见 [Module Contract](../../architecture/module-contract.md#停用与保留部署)；独立 owner 前缀、全局实际提交顺序及未完成 pending 的真实历史恢复仍待 Issue #258 后续 child 完成。
 
 ## Language
 
@@ -29,7 +29,7 @@ _Avoid_: 活动模块集合、最新安装包、停用即删除数据库目标
 _Avoid_: 最后成功部署即全部数据库事实、失败候选没有数据、活动快照替代迁移历史
 
 **共享运行时模型（Shared Runtime Model）**：
-从同一份已编译持久化计划投影到共享 `EfPlatformDbContext` 的完整活动模型，用于 Standard CRUD、查询内核和现有 repository。它不是迁移真源，也不允许 Host 手工追加模块定义。
+从同一份已编译持久化计划投影到共享 `EfPlatformDbContext` 的数据库模型，包含活动目标与仅用于保留结构校验的目标。业务 CRUD、Link 和 repository 的注册仍由活动组件拥有；保留 EF 结构不开放业务访问。它不是迁移真源，也不允许 Host 手工追加模块定义。
 _Avoid_: 平台拥有的模型、模块 DbContext 集合、运行时扫描结果
 
 **模块迁移流（Module Migration Stream）**：

@@ -60,6 +60,10 @@ public sealed record ModuleMigrationStream(
     /// </summary>
     [JsonIgnore]
     public VerifiedArtifactImage? AssemblyImage { get; init; }
+
+    /// <summary>编译时验证的 manifest 字节；保留部署资产时不得重新打开包路径。</summary>
+    [JsonIgnore]
+    public VerifiedArtifactImage? ManifestImage { get; init; }
 }
 
 /// <summary>
@@ -80,14 +84,19 @@ public sealed record CompiledPersistencePlan(
     /// </summary>
     public string HistoryVersion { get; init; } = PersistenceHistoryVersions.ReconciliationV1;
 
+    /// <summary>保留数据库结构而不进入活动能力的 owner；模型与流仍参与严格一致性检查。</summary>
+    public IReadOnlyList<string> RetainedModuleIds { get; init; } = [];
+
     /// <summary>
     /// DbContext 注册消费的计划实例。
     /// </summary>
+    [JsonIgnore]
     public CompiledPersistencePlan RuntimeModelPlan => this;
 
     /// <summary>
     /// migration runner 消费的计划实例。
     /// </summary>
+    [JsonIgnore]
     public CompiledPersistencePlan MigrationPlan => this;
 }
 

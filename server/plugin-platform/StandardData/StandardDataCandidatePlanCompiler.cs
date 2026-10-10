@@ -43,6 +43,7 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
         ResolvedPluginLifecycleState state)
     {
         var candidates = new List<ModuleCapsuleCandidate>();
+        var builtInCandidates = _builtInModuleSource is null ? [] : _candidateReader.ReadTrustedBuiltIn(_builtInModuleSource);
         var selectedDesiredModuleIds = state.DesiredModules
             .Select(static item => item.ModuleId)
             .ToHashSet(StringComparer.Ordinal);
@@ -50,7 +51,7 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
         {
             // 同 ID 的已安装 desired 版本是内建模块的显式升级候选；
             // 仅排除大小写完全一致的内建项，大小写折叠冲突仍交给 Canonical 编译器拒绝。
-            candidates.AddRange(_candidateReader.ReadTrustedBuiltIn(_builtInModuleSource)
+            candidates.AddRange(builtInCandidates
                 .Where(candidate => !_excludedBuiltInModuleIds.Contains(candidate.ModuleId))
                 .Where(candidate => !selectedDesiredModuleIds.Contains(candidate.ModuleId)));
         }
@@ -60,6 +61,11 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
         {
             var installed = inventory.SingleOrDefault(item =>
                 string.Equals(item.ModuleId, desired.ModuleId, StringComparison.OrdinalIgnoreCase));
+            if (installed is null && builtInCandidates.SingleOrDefault(candidate => candidate.ModuleId == desired.ModuleId && candidate.Version == desired.Version) is { } builtIn)
+            {
+                candidates.Add(builtIn with { Enabled = desired.Enabled });
+                continue;
+            }
             var packageRoot = installed?.FindPackageRoot(desired.Version);
             if (installed is null || string.IsNullOrWhiteSpace(packageRoot))
             {
@@ -229,25 +235,37 @@ public sealed class StandardDataPackagePreflight : IPluginPackagePreflight
     private readonly StandardDataPackageInspector _inspector;
     private readonly UnifiedPluginPackageScanner _legacyScanner = new();
     private readonly HostVersionChecker? _hostVersionChecker;
+    private readonly TrustedBuiltInModuleSource? _builtInModuleSource;
 
+    // 普通包 preflight 不具有内建信任签发能力。
     public StandardDataPackagePreflight(
         StandardDataPackageInspector inspector,
         string? hostVersion = null)
+        : this(inspector, hostVersion, builtInModuleSource: null)
+    {
+    }
+
+    // Host 签发的内建发布物也可受 desired 控制；普通包路径不能提升为内建可信来源。
+    internal StandardDataPackagePreflight(StandardDataPackageInspector inspector, string? hostVersion, TrustedBuiltInModuleSource? builtInModuleSource)
     {
         _inspector = inspector;
+        _builtInModuleSource = builtInModuleSource;
         _hostVersionChecker = string.IsNullOrWhiteSpace(hostVersion)
             ? null
             : new HostVersionChecker(hostVersion);
     }
 
+    /// <inheritdoc/>
     public void Validate(
         IReadOnlyList<InstalledPluginInventoryItem> inventory,
         ResolvedPluginLifecycleState state)
     {
+        var builtIns = _builtInModuleSource is null ? [] : new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(_builtInModuleSource);
         foreach (var desired in state.DesiredModules.Where(static item => item.Enabled))
         {
             var installed = inventory.SingleOrDefault(item =>
                 string.Equals(item.ModuleId, desired.ModuleId, StringComparison.OrdinalIgnoreCase));
+            if (installed is null && builtIns.Any(candidate => candidate.ModuleId == desired.ModuleId && candidate.Version == desired.Version)) continue;
             var packageRoot = installed?.FindPackageRoot(desired.Version);
             if (installed is null || string.IsNullOrWhiteSpace(packageRoot))
             {

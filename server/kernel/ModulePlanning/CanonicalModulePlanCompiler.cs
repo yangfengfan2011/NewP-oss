@@ -32,9 +32,12 @@ public sealed class CanonicalModulePlanCompiler
             .OrderBy(static candidate => candidate.ModuleId, StringComparer.Ordinal)
             .ThenBy(static candidate => candidate.Version, StringComparer.Ordinal)
             .ToArray();
-        var activeCandidates = candidateArray.Where(candidate => candidate.Enabled).ToArray();
         var graphDiagnostics = ValidateIdentity(candidateId, candidateArray)
             .Concat(ValidateComposition(candidateId, candidateArray)).ToArray();
+        var activeIds = graphDiagnostics.Length == 0
+            ? ResolveEffectiveModuleIds(candidateArray)
+            : candidateArray.Where(candidate => candidate.Enabled).Select(candidate => candidate.ModuleId).ToHashSet(StringComparer.Ordinal);
+        var activeCandidates = candidateArray.Where(candidate => activeIds.Contains(candidate.ModuleId)).ToArray();
         var required = graphDiagnostics.Length == 0
             ? CompileRequiredModules(candidateId, candidateArray, platformCompositionModuleId)
             : (ModuleIds: (IReadOnlyList<string>)[], Diagnostics: (IReadOnlyList<ModulePlanDiagnostic>)[]);
@@ -59,7 +62,7 @@ public sealed class CanonicalModulePlanCompiler
         var selectedModules = candidateArray
             .Select(Normalize)
             .ToArray();
-        var modules = selectedModules.Where(module => module.Enabled).ToArray();
+        var modules = selectedModules.Where(module => activeIds.Contains(module.ModuleId)).ToArray();
         var compositionGraph = BuildCompositionGraph(selectedModules);
 
         var canonicalDocument = new
@@ -470,6 +473,24 @@ public sealed class CanonicalModulePlanCompiler
         try { DataActionCatalogCompiler.Compile(candidates.SelectMany(candidate => candidate.DataActions)); return []; }
         catch (InvalidOperationException exception)
         { return [new(candidateId, "*", "", "dataActions", "", "/dataActions", "data-actions", "MODULE_DATA_ACTION_INVALID", exception.Message)]; }
+    }
+
+    // 从已经完整校验的单父图计算活动资格，不改写各组件自己的启用选择。
+    private static HashSet<string> ResolveEffectiveModuleIds(IReadOnlyList<ModuleCapsuleCandidate> candidates)
+    {
+        var byId = candidates.ToDictionary(candidate => candidate.ModuleId, StringComparer.Ordinal);
+        var parents = candidates.SelectMany(candidate => candidate.CompositionMembers.Select(member => (member, candidate.ModuleId)))
+            .ToDictionary(edge => edge.member, edge => edge.ModuleId, StringComparer.Ordinal);
+        var enabled = new Dictionary<string, bool>(StringComparer.Ordinal);
+
+        // 图已通过单父、无环校验；缓存祖先结果，保留声明中的成员自身选择。
+        bool IsEnabled(string id)
+        {
+            if (enabled.TryGetValue(id, out var result)) return result;
+            return enabled[id] = byId[id].Enabled && (!parents.TryGetValue(id, out var parent) || IsEnabled(parent));
+        }
+
+        return byId.Keys.Where(IsEnabled).ToHashSet(StringComparer.Ordinal);
     }
 
     // 组合投影只记录选定的关系，不从能力依赖推断父子或改变模型归属。

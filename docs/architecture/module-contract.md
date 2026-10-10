@@ -13,11 +13,21 @@ C#、TypeScript 和子清单不得重新声明 Capsule 已拥有的 identity，�
 
 Capsule 通过可选 `composition.members` 数组引用成员组件 ID。同一声明可嵌套组合，但每个成员只能有一个直接父组件。成员重复（含大小写重复）、缺失、自包含、多父或环均拒绝完整候选；错误数组形状不得被静默忽略。组合声明独立于 `dependencies`，归组或移组不增加能力依赖，也不改变成员身份、版本、模型 owner、物理映射或 migration stream。
 
-组合图采用本次期望选定版本的声明，停用组件仍参与完整图校验；安装但未选中的版本不改变图。`CanonicalModulePlan.SelectedModules` 保留同一候选的选定声明，`CompositionGraph` 给出版本、自身启用选择、直接父组件和规范排序的成员。活动能力继续由 `Modules` 及既有功能目录投影消费；祖先屏蔽和已部署持久化保留的完整生命周期由 ADR-0055 定义，尚未在本阶段完成。
+组合图采用本次期望选定版本的声明，停用组件仍参与完整图校验；安装但未选中的版本不改变图。`CanonicalModulePlan.SelectedModules` 保留同一候选的选定声明，`CompositionGraph` 给出版本、自身启用选择、直接父组件和规范排序的成员。`Modules` 只包含自身选择启用且全部祖先启用的组件；业务装配、页面和功能目录只消费该活动集合。父级屏蔽不改写成员选择，恢复不会打开显式停用成员；活动依赖不闭合在持久化编译与 DDL 前拒绝整份候选。
 
 `active-module-runtime.json` 从同一规范计划公开 `compositionGraph`，活动模块条目保留 `compositionMembers` 和 `parentModuleId`。没有 backend entry、且显式关闭 frontend 的纯组合组件不需要空实现程序集或页面。Host 只装载成员原有行为，Shell 仍以成员自己的身份绑定前端实现。
 
-InforCenter 是无自有模型和迁移流的纯组合组件，直接成员为 Workspace、Part、Document。Workspace 的 Part、Document 能力依赖保持显式，工作空间内容 Link 与对象所属 API/页面不表示组件父子关系。模型身份采用下文全局技术名称；可选启停与保留持久化生命周期的后续实现继续遵循 ADR-0055。
+InforCenter 是无自有模型和迁移流的纯组合组件，直接成员为 Workspace、Part、Document。Workspace 的 Part、Document 能力依赖保持显式，工作空间内容 Link 与对象所属 API/页面不表示组件父子关系。模型身份采用下文全局技术名称，启停与保留持久化遵循 ADR-0055。
+
+## 停用与保留部署
+
+内建可选组件的选定版本与自身开关也可由受控 desired 声明；选定版本必须与可信内建发布物或已安装包一致，不补回被停用的内建组件，不静默回退版本。首次停用或屏蔽的组件不编译业务持久化贡献、建表或执行迁移；已有部署的组件则从最后成功部署资产保留旧模型与 migration stream。停用时选定新版只影响完整组合图，重新有效启用后才编译并迁移该版本。
+
+同一次启动候选形成活动能力和数据库部署视图。`CompiledPersistencePlan.Models/Streams` 包含活动目标及保留目标，`RetainedModuleIds` 标识仅用于数据库验证的 owner。保留结构参加全局名称、物理目标、外键归属、字段、manifest、Provider Target 和实际 schema/history 的严格核对；保留外键不要求其业务能力活动。业务服务、控制器、CRUD 资源、Link 入口、页面及授权目录仍由活动 Canonical Plan 装配，保留 EF 结构不授予访问资格。仍有数据的模型技术名称和 owner 不得转移、改名或移除。
+
+当前 SQL Server Host 的 `PersistenceDeploymentStore` 在 plugin install root 下的 `persistence` 目录保存按 provider、明确服务器及 catalog 绑定的不可变内容寻址资产。资产保留正式编译的 canonical 模型、owner/version/source、manifest 和已验证程序集字节；读取时重核内容摘要、模型摘要、manifest 链、程序集摘要及 frontier。不能从当前磁盘包重建缺失的保留资产，未知表、真实 drift 或资产缺失继续阻断。
+
+本机独占部署租约串行发布引用，数据库写入仍使用原全局迁移锁与逐步事务。Host 在 Build、ownership guard 和首个可能提交的 DDL 前先 flush 并原子发布恢复资产与 `pending` 引用；完整 migration、只读检查和活动提交成功后才发布 `successful` 引用。失败保留 pending，不覆盖旧成功事实、不自动 Down。本阶段遇到未完成 pending 稳定阻断新候选；按真实已应用 history 恢复部分提交/进程中断，以及独立 owner 交错迁移，由 Issue #258 的后续 child 完成。
 
 ## 全局模型身份
 

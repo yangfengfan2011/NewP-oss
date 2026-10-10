@@ -46,6 +46,10 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
     public PersistencePlanCompilationResult Compile(
         CanonicalModulePlan modules,
         PersistenceProvider provider)
+        => Compile(modules, provider, retainedDeployment: null);
+
+    /// <summary>同一启动候选编译活动贡献，并合并非活动 owner 最后成功部署的可信存储贡献。</summary>
+    public PersistencePlanCompilationResult Compile(CanonicalModulePlan modules, PersistenceProvider provider, CompiledPersistencePlan? retainedDeployment)
     {
         ArgumentNullException.ThrowIfNull(modules);
 
@@ -59,7 +63,26 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         }
 
         AddPlatformStream(modules, provider, models, streams, diagnostics);
-        AddGlobalConflictDiagnostics(modules, models, streams, diagnostics);
+        var activeOwners = modules.Modules.Select(module => module.ModuleId).ToHashSet(StringComparer.Ordinal);
+        var retainedOwners = retainedDeployment?.Models.Select(model => model.OwnerModuleId)
+            .Where(owner => !activeOwners.Contains(owner)).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray() ?? [];
+        if (retainedDeployment is not null)
+        {
+            if (retainedDeployment.Provider != provider)
+                diagnostics.Add(new("PERSISTENCE_DEPLOYMENT_PROVIDER_MISMATCH", "platform.persistence", provider.ToString(), string.Empty, "Retained deployment provider differs from the candidate."));
+            foreach (var previous in retainedDeployment.Models)
+            {
+                if (activeOwners.Contains(previous.OwnerModuleId) && !models.Any(model => model.OwnerModuleId == previous.OwnerModuleId && model.Name == previous.Name))
+                    diagnostics.Add(new("PERSISTENCE_DEPLOYED_MODEL_IDENTITY_CHANGED", previous.OwnerModuleId, previous.Name, string.Empty, "A deployed model technical identity cannot be renamed or removed while its data is retained."));
+                if (models.Any(model => string.Equals(model.Name, previous.Name, StringComparison.OrdinalIgnoreCase) && model.OwnerModuleId != previous.OwnerModuleId)
+                    || models.Any(model => string.Equals(model.SchemaName, previous.SchemaName, StringComparison.OrdinalIgnoreCase) && string.Equals(model.TableName, previous.TableName, StringComparison.OrdinalIgnoreCase) && model.OwnerModuleId != previous.OwnerModuleId))
+                    diagnostics.Add(new("PERSISTENCE_DEPLOYED_IDENTITY_CONFLICT", previous.OwnerModuleId, previous.Name, string.Empty, "A retained model identity or physical target cannot change owner."));
+            }
+            models.AddRange(retainedDeployment.Models.Where(model => retainedOwners.Contains(model.OwnerModuleId, StringComparer.Ordinal)));
+            var currentStreams = streams.Select(stream => stream.ModuleId).ToHashSet(StringComparer.Ordinal);
+            streams.AddRange(retainedDeployment.Streams.Where(stream => !currentStreams.Contains(stream.ModuleId)));
+        }
+        AddGlobalConflictDiagnostics(modules, models, streams, diagnostics, retainedOwners);
         var orderedDiagnostics = diagnostics
             .OrderBy(static item => item.Code, StringComparer.Ordinal)
             .ThenBy(static item => item.ModuleId, StringComparer.Ordinal)
@@ -87,6 +110,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
             modules.SnapshotId,
             modulePlanHash = modules.PlanHash,
             provider = provider.ToString(),
+            retainedModuleIds = retainedOwners,
             models = orderedModels,
             streams = orderedStreams.Select(static stream => new
             {
@@ -111,7 +135,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 planDigest,
                 canonicalBytes,
                 orderedModels,
-                orderedStreams),
+                orderedStreams) { RetainedModuleIds = retainedOwners },
             Array.Empty<PersistencePlanDiagnostic>());
     }
 
@@ -330,7 +354,8 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         try
         {
             var assemblyBytes = File.ReadAllBytes(assemblyPath);
-            var manifest = MigrationManifestIntegrity.Parse(File.ReadAllBytes(manifestPath));
+            var manifestBytes = File.ReadAllBytes(manifestPath);
+            var manifest = MigrationManifestIntegrity.Parse(manifestBytes);
             var manifestSteps = MigrationManifestIntegrity.Validate(
                 moduleId,
                 PersistenceProvider.SqlServer,
@@ -350,7 +375,8 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 IsPlatformStream: true,
                 migrations)
             {
-                AssemblyImage = new VerifiedArtifactImage(assemblyBytes)
+                AssemblyImage = new VerifiedArtifactImage(assemblyBytes),
+                ManifestImage = new VerifiedArtifactImage(manifestBytes)
             });
         }
         catch (Exception exception)
@@ -402,7 +428,8 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 IsPlatformStream: false,
                 migrations)
             {
-                AssemblyImage = new VerifiedArtifactImage(assemblyArtifact.Bytes.Span)
+                AssemblyImage = new VerifiedArtifactImage(assemblyArtifact.Bytes.Span),
+                ManifestImage = new VerifiedArtifactImage(manifestArtifact.Bytes.Span)
             });
         }
         catch (MigrationManifestValidationException exception)
@@ -523,12 +550,13 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         return $"np_{normalized}";
     }
 
-    // 全局模型引用保留独立 owner 和活动能力依赖检查；名称相似不授予归属。
+    // 保留存储引用核对 owner 和物理闭合，活动引用还必须满足能力依赖；存储不授予访问资格。
     private static void AddGlobalConflictDiagnostics(
         CanonicalModulePlan modules,
         IReadOnlyList<ModelDefinition> models,
         IReadOnlyList<ModuleMigrationStream> streams,
-        List<PersistencePlanDiagnostic> diagnostics)
+        List<PersistencePlanDiagnostic> diagnostics,
+        IReadOnlyList<string> retainedOwners)
     {
         foreach (var group in models.GroupBy(static model => model.LogicalKey, StringComparer.OrdinalIgnoreCase)
                      .Where(static group => group.Count() > 1))
@@ -559,7 +587,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 }
 
                 if (foreignKey.PrincipalOwnerModuleId is { } principalOwner && principalOwner != principalModel.OwnerModuleId
-                    || !ModuleDependencyPolicy.Allows(modules, model.OwnerModuleId, principalModel.OwnerModuleId))
+                    || !retainedOwners.Contains(model.OwnerModuleId, StringComparer.Ordinal) && !ModuleDependencyPolicy.Allows(modules, model.OwnerModuleId, principalModel.OwnerModuleId))
                 {
                     diagnostics.Add(new PersistencePlanDiagnostic("PERSISTENCE_FOREIGN_KEY_OWNER_INVALID",
                         model.OwnerModuleId, foreignKey.Name, string.Empty,

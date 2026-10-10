@@ -198,7 +198,10 @@ internal sealed class ModuleMigrationExecutor(
             throw new InvalidOperationException("The persistence connection string is unavailable.");
         }
 
-        await ReconcileHistoryAsync(cancellationToken);
+        var initialHistory = await ReconcileHistoryAsync(cancellationToken);
+        // pending 归档的完整目标不等于已应用 schema；停用 owner 不能借恢复路径执行剩余 Up。
+        if (initialHistory.Pending.FirstOrDefault(entry => plan.RetainedModuleIds.Contains(entry.OwnerModuleId, StringComparer.Ordinal)) is { } retainedPending)
+            throw new PersistenceHistoryException(PersistenceHistoryFailureCodes.FrontierMismatch, retainedPending.MigrationId);
         var compatibilityPlatformStream = plan.Streams.SingleOrDefault(static stream =>
             stream.IsPlatformStream && stream.Migrations.Count == 0);
         var appliedMigrations = (await dbContext.Database

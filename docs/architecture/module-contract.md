@@ -27,7 +27,9 @@ InforCenter 是无自有模型和迁移流的纯组合组件，直接成员为 W
 
 当前 SQL Server Host 的 `PersistenceDeploymentStore` 在 plugin install root 下的 `persistence` 目录保存按 provider、明确服务器及 catalog 绑定的不可变内容寻址资产。资产保留正式编译的 canonical 模型、owner/version/source、manifest 和已验证程序集字节；读取时重核内容摘要、模型摘要、manifest 链、程序集摘要及 frontier。不能从当前磁盘包重建缺失的保留资产，未知表、真实 drift 或资产缺失继续阻断。
 
-本机独占部署租约串行发布引用，数据库写入仍使用原全局迁移锁与逐步事务。Host 在 Build、ownership guard 和首个可能提交的 DDL 前先 flush 并原子发布恢复资产与 `pending` 引用；完整 migration、只读检查和活动提交成功后才发布 `successful` 引用。失败保留 pending，不覆盖旧成功事实、不自动 Down。本阶段遇到未完成 pending 稳定阻断新候选；按真实已应用 history 恢复部分提交/进程中断，由 Issue #258 的后续 child 完成。
+本机独占部署租约串行发布引用，数据库写入仍使用原全局迁移锁与逐步事务。Host 在 Build、ownership guard 和首个可能提交的 DDL 前先 flush 并原子发布恢复资产与 `pending` 引用；首次尚无 successful 记录时也保留完整可信输入。重启编译消费 pending 的模型、owner 和不可变步骤约束，同候选或前向候选必须保持原 owner stream 的完整不可变前缀。完整目标不代表已经应用：执行器在 SQL 锁内核对真实 EF 成员、NewP Position、摘要、Provider Target/Transition 及 owner 前缀，只补未提交步骤。被停用 owner 尚有未应用步骤时按真实 frontier 拒绝，不能把完整 pending 目标视为已部署结构或执行其剩余 Up。
+
+SQL Server Host 和发行离线入口在读取 active/LKG 时，按同一 provider、服务器和 catalog 的成功资产核对 snapshot ID、module plan hash 与 persistence plan digest。原始活动指针和 runtime 文件先完成准备，完整 migration、只读检查、权限与活动提交及 runtime 确认后，部署存储最后一次原子替换才发布 `successful`。同时保留紧邻 `previousSuccessful`，使旧已确认 LKG 仍可读取和选择；未获最终确认的 raw snapshot 不进入活动集合。迁移后校验、活动提交、最终确认失败或进程中断均保留 pending 和既有成功事实；重试仍走正式编译与真实历史核对，不依赖 catch，不自动 Down、清 pending 或重写历史。
 
 各 owner 的已应用步骤独立保持 manifest `Sequence` 的线性前缀。`dbo.__EFMigrationsHistory` 只保存全局唯一已应用 ID 集合，`dbo.__NewPMigrationHistory.Position/PlanDigest` 保存实际提交顺序及不可变前缀摘要。候选在 owner 队列头之间按 MigrationId 确定执行顺序，既有事实按数据库 Position 只读核对，新的 Position 和摘要在全局事务锁内绑定；ID 较早的延期或首次启用步骤可追加到其他 owner 已提交步骤之后。停用 owner 只核对保留流，不消费所选新版；完整目标/过渡、owner、所有摘要、未知对象、owner 跳步和数据库超前仍严格阻断。迁移与一致性成功之前不得公开新活动版本，见 [ADR-0027](../adr/0027-host-is-the-only-full-up-migration-entry.md)。
 

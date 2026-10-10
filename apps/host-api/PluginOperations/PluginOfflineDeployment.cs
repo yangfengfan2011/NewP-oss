@@ -27,7 +27,7 @@ internal static class PluginOfflineDeployment
 
     // builtin 信任仅由当前发行 Host 签发；外部命令不能指定任意目录成为可信内建来源。
     internal static int Run(string[] args, string installRoot, TrustedBuiltInModuleSource source,
-        bool externalPluginsEnabled, StandardDataPackageInspector inspector)
+        bool externalPluginsEnabled, StandardDataPackageInspector inspector, PluginLifecycleManager manager)
     {
         try
         {
@@ -37,8 +37,6 @@ internal static class PluginOfflineDeployment
             var builtIns = new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(source);
             var inventory = installed.Concat(builtIns.Where(module => !installed.Any(item => item.ModuleId == module.ModuleId))
                 .Select(module => new InstalledPluginInventoryItem(module.ModuleId, [module.Version], module.Version))).ToArray();
-            var stateRoot = externalPluginsEnabled ? installRoot : Path.Combine(installRoot, ".feature-gates", "external-plugins-disabled");
-            var manager = new PluginLifecycleManager(new PluginLifecycleStateStore(stateRoot));
             var current = manager.Resolve(installed);
             var desired = current.DesiredModules.Concat(builtIns.Where(module => !current.DesiredModules.Any(item => item.ModuleId == module.ModuleId))
                 .Select(module => new PluginDesiredModuleState(module.ModuleId, module.Version, true))).ToArray();

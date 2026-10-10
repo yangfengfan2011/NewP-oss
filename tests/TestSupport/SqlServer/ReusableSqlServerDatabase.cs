@@ -125,6 +125,30 @@ internal sealed class ReusableSqlServerDatabase : IAsyncDisposable
         }
     }
 
+    // 只清理调用 fixture 明确登记的数据库级 trigger；原 master session 租约和 disposable 标记缺一不可。
+    internal async Task CleanupDatabaseTriggersAsync(IReadOnlyCollection<string> triggerNames)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        foreach (var name in triggerNames.Distinct(StringComparer.Ordinal))
+        {
+            await using var command = _lease.CreateCommand();
+            command.CommandText = """
+                IF DB_NAME() <> N'master' OR COALESCE(APPLOCK_MODE(N'public',N'NewP_Test.fixture',N'Session'),N'NoLock') <> N'Exclusive'
+                    THROW 51000,N'Test fixture lease is not held; refusing trigger cleanup.',1;
+                IF NOT EXISTS (SELECT 1 FROM [NewP_Test].sys.extended_properties WHERE class=0
+                    AND name=N'NewP.AutomatedTests' AND CONVERT(nvarchar(128),value)=N'disposable-schema')
+                    THROW 51000,N'Test database marker missing; refusing trigger cleanup.',1;
+                IF EXISTS (SELECT 1 FROM [NewP_Test].sys.triggers WHERE parent_class=0 AND name=@name)
+                BEGIN
+                    DECLARE @sql nvarchar(max)=N'USE [NewP_Test]; DROP TRIGGER '+QUOTENAME(@name)+N' ON DATABASE;';
+                    EXEC sys.sp_executesql @sql;
+                END;
+                """;
+            command.Parameters.AddWithValue("@name", name);
+            await command.ExecuteNonQueryAsync();
+        }
+    }
+
     // 归属检查或停止 Host 失败时仅结束持锁会话，保留 schema 供诊断；下一次租用仍执行正常初始化。
     internal async ValueTask ReleaseAsync()
     {

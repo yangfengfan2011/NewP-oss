@@ -45,7 +45,8 @@ public sealed class PersistenceDeploymentTests : IDisposable
             Assert.Null(store.ReadDeployed());
             store.PrepareCandidate(modules, plan);
             Assert.Contains("PERSISTENCE_DEPLOYMENT_PENDING", Assert.Throws<InvalidDataException>(() => store.ReadDeployed()).Message);
-            Assert.Contains("PERSISTENCE_DEPLOYMENT_PENDING", Assert.Throws<InvalidDataException>(() => store.PrepareCandidate(modules, plan)).Message);
+            Assert.Equal(plan.PlanDigest, store.ReadRecoveryCandidate()!.PlanDigest);
+            store.PrepareCandidate(modules, plan);
             using var competing = new PersistenceDeploymentStore(_root, plan.Provider, "SERVER|CATALOG");
             Assert.Throws<IOException>(() => competing.ReadDeployed());
             Assert.Throws<IOException>(() => competing.CompleteCandidate(plan));
@@ -62,6 +63,29 @@ public sealed class PersistenceDeploymentTests : IDisposable
         });
         using var otherCatalog = new PersistenceDeploymentStore(_root, plan.Provider, "SERVER|OTHER_CATALOG");
         Assert.Null(otherCatalog.ReadDeployed());
+    }
+
+    [Fact]
+    public void SuccessfulDeploymentConfirmation_IsCatalogBoundAndKeepsPreviousSuccess()
+    {
+        var modules = ReadFormalCandidate();
+        var first = Compile(modules);
+        using var store = new PersistenceDeploymentStore(_root, first.Provider, "SERVER|CATALOG");
+        store.PrepareCandidate(modules, first);
+        Assert.False(store.IsSuccessfulDeployment(first.SnapshotId, first.ModulePlanHash, first.PlanDigest));
+        store.CompleteCandidate(first);
+        Assert.True(store.IsSuccessfulDeployment(first.SnapshotId, first.ModulePlanHash, first.PlanDigest));
+        var masked = ReadFormalCandidate(candidate => candidate.ModuleId == "InforCenter" ? candidate with { Enabled = false } : candidate);
+        var second = Compile(masked, store.ReadRecoveryCandidate());
+        store.PrepareCandidate(masked, second);
+        Assert.False(store.IsSuccessfulDeployment(second.SnapshotId, second.ModulePlanHash, second.PlanDigest));
+        Assert.True(store.IsSuccessfulDeployment(first.SnapshotId, first.ModulePlanHash, first.PlanDigest));
+        store.CompleteCandidate(second);
+        Assert.True(store.IsSuccessfulDeployment(first.SnapshotId, first.ModulePlanHash, first.PlanDigest));
+        Assert.True(store.IsSuccessfulDeployment(second.SnapshotId, second.ModulePlanHash, second.PlanDigest));
+        Assert.False(store.IsSuccessfulDeployment(first.SnapshotId, first.ModulePlanHash, second.PlanDigest));
+        using var otherCatalog = new PersistenceDeploymentStore(_root, first.Provider, "SERVER|OTHER");
+        Assert.False(otherCatalog.IsSuccessfulDeployment(second.SnapshotId, second.ModulePlanHash, second.PlanDigest));
     }
 
     [Fact]

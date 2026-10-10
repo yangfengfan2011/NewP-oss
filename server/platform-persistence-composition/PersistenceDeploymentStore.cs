@@ -38,6 +38,27 @@ public sealed class PersistenceDeploymentStore : IDisposable
         return state?.Successful is { } successful ? ReadAsset(successful).Plan : null;
     }
 
+    /// <summary>读取首 DDL 前归档的完整恢复输入；它只约束身份与可验证步骤，不证明目标已全部落库。</summary>
+    public CompiledPersistencePlan? ReadRecoveryCandidate()
+    {
+        AcquireLease();
+        var state = ReadState();
+        return (state?.Pending ?? state?.Successful) is { } digest ? ReadAsset(digest).Plan : null;
+    }
+
+    /// <summary>按本存储绑定的 catalog 验证当前或上一份成功候选，未确认的 raw 活动快照不可见。</summary>
+    public bool IsSuccessfulDeployment(string snapshotId, string modulePlanHash, string persistencePlanDigest)
+    {
+        AcquireLease();
+        var state = ReadState();
+        foreach (var digest in new[] { state?.Successful, state?.PreviousSuccessful }.Where(static digest => digest is not null).Distinct(StringComparer.Ordinal))
+        {
+            var plan = ReadAsset(digest!).Plan;
+            if (plan.SnapshotId == snapshotId && plan.ModulePlanHash == modulePlanHash && plan.PlanDigest == persistencePlanDigest) return true;
+        }
+        return false;
+    }
+
     /// <summary>在 Host 第一次可能提交数据库变更前原子保存全部恢复资产及 pending 引用。</summary>
     public void PrepareCandidate(CanonicalModulePlan modules, CompiledPersistencePlan plan)
     {
@@ -45,9 +66,8 @@ public sealed class PersistenceDeploymentStore : IDisposable
         if (plan.Provider != _provider || plan.ModulePlanHash != modules.PlanHash || plan.SnapshotId != modules.SnapshotId)
             throw new InvalidDataException("PERSISTENCE_DEPLOYMENT_CANDIDATE_MISMATCH: deployment must belong to the same formal candidate.");
         var state = ReadState() ?? new DeploymentState(null, null);
-        if (state.Pending is not null)
-            throw new InvalidDataException("PERSISTENCE_DEPLOYMENT_PENDING: cannot overwrite unfinished recovery assets.");
-        var previous = state.Successful is null ? null : ReadAsset(state.Successful);
+        var previous = (state.Pending ?? state.Successful) is { } previousDigest ? ReadAsset(previousDigest) : null;
+        if (state.Pending is not null && previous is not null) ValidateContinuation(previous.Plan, plan);
         var identities = (previous?.Modules ?? []).Where(module => plan.RetainedModuleIds.Contains(module.ModuleId, StringComparer.Ordinal))
             .Concat(modules.Modules.Select(module => new DeploymentModule(module.ModuleId, module.Version, module.Provenance.SourceKind)))
             .OrderBy(module => module.ModuleId, StringComparer.Ordinal).ToArray();
@@ -63,6 +83,19 @@ public sealed class PersistenceDeploymentStore : IDisposable
         WriteAtomic("state.json", JsonSerializer.SerializeToUtf8Bytes(state with { Pending = digest }, JsonOptions));
     }
 
+    // 恢复候选只能保持可信 owner 的不可变前缀；真实应用进度仍由 SQL 锁内的两账本裁决。
+    private static void ValidateContinuation(CompiledPersistencePlan previous, CompiledPersistencePlan candidate)
+    {
+        foreach (var stream in previous.Streams)
+        {
+            var current = candidate.Streams.SingleOrDefault(item => item.ModuleId == stream.ModuleId);
+            if (current is null || current.Provider != stream.Provider || current.IsPlatformStream != stream.IsPlatformStream
+                || current.Migrations.Count < stream.Migrations.Count
+                || !current.Migrations.Take(stream.Migrations.Count).SequenceEqual(stream.Migrations))
+                throw new InvalidDataException("PERSISTENCE_DEPLOYMENT_RECOVERY_FRONTIER_MISMATCH: " + stream.ModuleId);
+        }
+    }
+
     /// <summary>只在 migration、只读检查及完整活动提交成功之后发布成功部署引用。</summary>
     public void CompleteCandidate(CompiledPersistencePlan plan)
     {
@@ -71,7 +104,8 @@ public sealed class PersistenceDeploymentStore : IDisposable
         var pending = state.Pending ?? throw new InvalidDataException("PERSISTENCE_DEPLOYMENT_PENDING_MISSING");
         if (ReadAsset(pending).Plan.PlanDigest != plan.PlanDigest)
             throw new InvalidDataException("PERSISTENCE_DEPLOYMENT_CANDIDATE_MISMATCH");
-        WriteAtomic("state.json", JsonSerializer.SerializeToUtf8Bytes(new DeploymentState(pending, null), JsonOptions));
+        var previousSuccessful = state.Successful == pending ? state.PreviousSuccessful : state.Successful;
+        WriteAtomic("state.json", JsonSerializer.SerializeToUtf8Bytes(new DeploymentState(pending, null, previousSuccessful), JsonOptions));
         Dispose();
     }
 
@@ -173,7 +207,7 @@ public sealed class PersistenceDeploymentStore : IDisposable
     // 缺少模型演进的可信输入时保持稳定、关闭的失败信号。
     private static InvalidDataException MissingAsset(string owner) => new("PERSISTENCE_DEPLOYMENT_ASSET_MISSING: " + owner);
 
-    private sealed record DeploymentState(string? Successful, string? Pending);
+    private sealed record DeploymentState(string? Successful, string? Pending, string? PreviousSuccessful = null);
     private sealed record DeploymentModule(string ModuleId, string Version, string SourceKind);
     private sealed record DeploymentImage(string ModuleId, byte[] Assembly, byte[] Manifest);
     private sealed record DeploymentAsset(string TargetIdentity, CompiledPersistencePlan Plan, IReadOnlyList<DeploymentModule> Modules, IReadOnlyList<DeploymentImage> Images);

@@ -95,6 +95,30 @@ public sealed class PluginLifecycleStateTests : IDisposable
         Assert.Equal(before.LastKnownGoodSnapshot, after.LastKnownGoodSnapshot);
     }
 
+    [Fact]
+    public void UnconfirmedRawSnapshot_IsHiddenAcrossRestartAndPreservesConfirmedLastKnownGood()
+    {
+        var committed = new HashSet<string>(StringComparer.Ordinal) { "confirmed-first" };
+        var manager = new PluginLifecycleManager(new PluginLifecycleStateStore(_root, snapshot => committed.Contains(snapshot.SnapshotId)));
+        var inventory = CreateInventory(legacyCurrentEnabledVersion: null);
+        var first = CreateSnapshot("confirmed-first", "1.0.0");
+        manager.CommitActive(inventory, first);
+        var candidate = CreateSnapshot("unconfirmed", "1.1.0");
+        manager.CommitActive(inventory, candidate);
+        var restarted = new PluginLifecycleManager(new PluginLifecycleStateStore(_root, snapshot => committed.Contains(snapshot.SnapshotId)));
+        Assert.Null(restarted.Resolve(inventory).ActiveSnapshot);
+        Assert.Equal(first, restarted.Resolve(inventory).LastKnownGoodSnapshot);
+        Assert.True(restarted.RequestRollback(inventory, "Partner.AssetCatalog").IsSuccess);
+        Assert.Equal("1.0.0", Assert.Single(restarted.Resolve(inventory).DesiredModules).Version);
+        var raw = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(_root, "lifecycle/v2/state.json")))!;
+        Assert.Equal(candidate.SnapshotId, raw["activeSnapshotId"]!.GetValue<string>());
+        Assert.Equal(first.SnapshotId, raw["lastKnownGoodSnapshotId"]!.GetValue<string>());
+        restarted.CommitActive(inventory, candidate);
+        committed.Add(candidate.SnapshotId);
+        Assert.Equal(candidate, restarted.Resolve(inventory).ActiveSnapshot);
+        Assert.Equal(first, restarted.Resolve(inventory).LastKnownGoodSnapshot);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root))

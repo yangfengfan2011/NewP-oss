@@ -92,6 +92,22 @@ public sealed class DeferredModuleMigrationSqlServerTests
         Assert.Equal(efCount, await Scalar(fixture, "SELECT COUNT(*) FROM dbo.__EFMigrationsHistory;"));
         Assert.Equal(0, await Scalar(fixture, $"SELECT COUNT(*) FROM dbo.__EFMigrationsHistory WHERE MigrationId=N'{DocumentTail}';"));
         Assert.Equal(oldState, File.ReadAllBytes(statePath));
+
+        await using (var connection = new SqlConnection(fixture.ConnectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "DROP TRIGGER dbo.TR_DeferredRollback263;";
+            await command.ExecuteNonQueryAsync();
+        }
+        await fixture.StartAsync();
+        var recovered = await History(fixture);
+        Assert.Equal(before, recovered.Take(before.Length));
+        Assert.Equal(before.Length + 1, recovered.Length);
+        Assert.Equal(1, await Scalar(fixture, "SELECT COUNT(*) FROM sys.indexes WHERE name=N'IX_Document_ENAME';"));
+        await fixture.StopAsync();
+        await fixture.StartAsync();
+        Assert.Equal(recovered, await History(fixture));
     }
 
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "owner不符在首个新业务DDL前阻断，失败候选不发布新活动版本")]
@@ -211,7 +227,7 @@ public sealed class DeferredModuleMigrationSqlServerTests
     }
 
     // 在真实模块的隔离authoring副本追加已有字段索引；不改正式历史或增加业务字段。
-    private static async Task PrepareUpgrade(FeatureCatalogHostFixture fixture, string module, string migrationId)
+    internal static async Task PrepareUpgrade(FeatureCatalogHostFixture fixture, string module, string migrationId)
     {
         // 副本随既有fixture workspace归还，持久证据只保留脱敏工具日志与资产摘要。
         var root = Path.Combine(Path.GetDirectoryName(fixture.HostRoot)!, "authoring", module);

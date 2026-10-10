@@ -63,14 +63,15 @@
 - 所有模块迁移流与 Platform Foundation Stream 共用统一 EF Migration History；模块不得维护私有 history 或从 Host 外回写迁移事实。
 - 每个 migration 会在同一事务内同时写入 `dbo.__EFMigrationsHistory` 与 `dbo.__NewPMigrationHistory`。后者保存 `unified-history/v1` 的 owner、step-scoped bundle membership、content、model/from-to、全局前缀及 Provider Target/Transition 事实；任何未知版本、缺失事实、非有效前缀或事实不匹配都会在新增 DDL 前阻断 Host readiness。SQL Server 不兼容旧 history，也不执行 fact backfill。
 - manifest 的 `bundleChecksum` 是当前整份 assembly 的完整性校验，会在追加 migration 或实验基线整体替换后变化；history 的 `BundleDigest` 是从候选内不可变 migration step 链输入计算的稳定成员事实。兼容基线冻结后不得复用、删除或改写旧 step；实验基线替换后的旧 history 不做摘要兼容，必须要求重建 catalog。
-- 全局唯一 Migration ID 同时决定跨模块的应用顺序：统一 history 按 ID 字典序排列，前缀校验是逐位置比对。实验基线整体替换时，如果新 Migration ID 的时间戳前缀晚于其他模块已有 migration，该模块在全局序列中的位置会后移，插到那些 migration 之后。任何部分应用的数据库或按历史前缀构造的验收 fixture 都会因此不再是有效前缀，Host 以 `PERSISTENCE_MIGRATION_HISTORY_NON_PREFIX` 拒绝接管。替换基线时要么保持新 ID 的原有排序位置，要么同步更新依赖历史前缀的 fixture，并用对应 Acceptance Gate 取证。
+- 全局唯一 Migration ID 只用于在不同 owner 的当前队列头之间确定候选执行顺序。owner 内前缀按 manifest Sequence，已提交 history 按 NewP Position 和实际前缀 PlanDigest 核对，不能按 ID 重排旧事实；其他 owner 升级后可追加较早 ID 的延期步骤。实验基线整体替换仍不兼容旧 history，不能借恢复路径忽略未知步骤或摘要变化，见 ADR-0055。
 - history 中的 Provider Target/Transition fact 使用 #43 v1 canonical 算法的 owner-scoped 投影：保留 owner 表完整结构及 FK principal 物理引用，排除其他 owner 的表。它只服务历史前缀稳定性；执行端仍必须用 full Provider Target/Transition 对当前候选逐 operation 精确校验。
 - 每个 migration 的 DDL 与 history 写入共用事务；不能参与事务或无法证明模块归属的操作必须在执行前失败。
 - `form.create.defaultValue`、服务端赋值、一次性 migration backfill 与数据库永久 `DEFAULT` 是四个不同概念。当前不支持数据库永久 `DEFAULT`；前三者不得投影或遗留为数据库默认约束。
 - Required 字段回填只服务当前有效 history 前缀的显式前向演进，不能用来跨越已被替换的实验基线。若旧数据没有保留价值，应更新当前空库基线并显式重建开发 catalog；若选择保留数据，则必须执行上节的有序迁移而不是放松数据前置条件或自动降级 nullability。
 - 已冻结 migration 若历史上只携带 CLR 默认值，执行端仅在目标明确无 DEFAULT、值确为该 CLR 类型默认值且新增列 required 时通用消除该参数，并仍执行“表必须为空”前置检查；不得改写旧 migration/content digest 或添加模块特例。
 - 数据库超前、history 不是有效迁移链前缀或摘要不一致时，Host 保持 Not Ready，不运行旧快照、自动回退或改写 history。
-- migration 成功后仍要等待整个插件候选原子激活，不能单独写入活动状态。
+- 首个可能提交的 DDL 前保存的 pending 可信资产支撑首次或后续失败、迁移后校验失败及进程中断恢复。正式编译保持 owner 不可变步骤前缀，真实 SQL history 核对后只补未提交步骤；停用 owner 尚未到归档目标 frontier 时拒绝启动，完整 pending schema 不算已全部应用。
+- migration 成功后仍要等待整个候选完成活动与 runtime 提交，再原子确认 successful。SQL Host 与发行离线入口只接受当前或上一份成功资产确认的 active/LKG；raw snapshot 写入而最终确认失败时不得使用它，旧已确认 LKG 仍保留。完整契约见 [Module Contract](../architecture/module-contract.md#停用与保留部署)。
 - Host 外结构同步 CLI 和直接 SQL apply 路径已经移除；Host 仅保留所有环境一致的只读 schema/history/digest/target 检查。
 - 首个需要保留数据与 history 的受支持数据库进入范围前，必须先通过独立设计确认兼容基线冻结，并写清数据保留、备份恢复、受控 backfill、发布授权和失败处理；ADR-0043 只确定 Required 字段生命周期，不替代该发布设计。不得仅依据环境名隐式改变迁移语义。
 

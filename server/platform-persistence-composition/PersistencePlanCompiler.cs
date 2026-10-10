@@ -48,7 +48,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         PersistenceProvider provider)
         => Compile(modules, provider, retainedDeployment: null);
 
-    /// <summary>同一启动候选编译活动贡献，并合并非活动 owner 最后成功部署的可信存储贡献。</summary>
+    /// <summary>编译活动贡献并合并成功或待恢复候选的可信存储约束；实际应用进度仍由迁移执行器核对。</summary>
     public PersistencePlanCompilationResult Compile(CanonicalModulePlan modules, PersistenceProvider provider, CompiledPersistencePlan? retainedDeployment)
     {
         ArgumentNullException.ThrowIfNull(modules);

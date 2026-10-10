@@ -100,8 +100,25 @@ var hostVersion = builder.Configuration["Platform:HostVersion"]
     ?? "1.0.0";
 var frontendPluginBaseUrl = builder.Configuration["Platform:FrontendPluginBaseUrl"] ?? "/plugin-assets";
 
+var configuredPersistenceProvider = builder.Configuration["Persistence:Provider"];
+var persistenceProvider = PersistenceProvider.SqlServer;
+if (!string.IsNullOrWhiteSpace(configuredPersistenceProvider)
+    && !Enum.TryParse(configuredPersistenceProvider, true, out persistenceProvider))
+{
+    throw new InvalidOperationException("Persistence provider is missing or unsupported.");
+}
+
+// 部署资产跟随实际 provider/catalog；外部插件开关不改变已经提交的数据库归属。
+var deploymentConnection = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(builder.Configuration.GetConnectionString("SqlServer"));
+if (persistenceProvider == PersistenceProvider.SqlServer && (string.IsNullOrWhiteSpace(deploymentConnection.DataSource) || string.IsNullOrWhiteSpace(deploymentConnection.InitialCatalog)))
+    throw new InvalidDataException("PERSISTENCE_DEPLOYMENT_TARGET_MISSING: an explicit SQL Server and catalog are required.");
+using var persistenceDeploymentStore = persistenceProvider == PersistenceProvider.SqlServer
+    ? new ICP.Platform.Persistence.Composition.PersistenceDeploymentStore(Path.Combine(pluginInstallRoot, "persistence"), persistenceProvider,
+        deploymentConnection.DataSource.ToUpperInvariant() + "|" + deploymentConnection.InitialCatalog.ToUpperInvariant())
+    : null;
 var stateStore = new InstalledPluginStateStore(pluginInstallRoot);
-var lifecycleManager = new PluginLifecycleManager(new PluginLifecycleStateStore(pluginLifecycleRoot));
+var lifecycleManager = new PluginLifecycleManager(new PluginLifecycleStateStore(pluginLifecycleRoot, snapshot => persistenceDeploymentStore is null ||
+    persistenceDeploymentStore.IsSuccessfulDeployment(snapshot.SnapshotId, snapshot.PlanHash, snapshot.PersistencePlanDigest)));
 var platformApiCatalog = new PlatformApiHostCatalog(
     PlatformApiReleaseIdentity.Version,
     [PlatformApiReleaseIdentity.StandardDataProfile],
@@ -112,7 +129,7 @@ var standardDataInspector = new StandardDataPackageInspector(platformApiCatalog)
 using var pluginDeploymentLease = PluginDeploymentLease.Acquire(pluginInstallRoot);
 if (offlinePluginCommand)
 {
-    Environment.ExitCode = PluginOfflineDeployment.Run(args, pluginInstallRoot, builtInModuleSource, externalPluginsEnabled, standardDataInspector);
+    Environment.ExitCode = PluginOfflineDeployment.Run(args, pluginInstallRoot, builtInModuleSource, externalPluginsEnabled, standardDataInspector, lifecycleManager);
     return;
 }
 var standardDataInstaller = new StandardDataPackageInstaller(
@@ -147,14 +164,6 @@ builder.Services.AddSingleton(sp =>
         sp.GetRequiredService<PluginUploadService>(),
         pluginInstallRoot));
 
-var configuredPersistenceProvider = builder.Configuration["Persistence:Provider"];
-var persistenceProvider = PersistenceProvider.SqlServer;
-if (!string.IsNullOrWhiteSpace(configuredPersistenceProvider)
-    && !Enum.TryParse(configuredPersistenceProvider, true, out persistenceProvider))
-{
-    throw new InvalidOperationException("Persistence provider is missing or unsupported.");
-}
-
 var storageTypeMapPath = Path.Combine(
     AppContext.BaseDirectory,
     "server",
@@ -165,14 +174,6 @@ var storageTypeMapPath = Path.Combine(
 var pluginInventory = externalPluginsEnabled
     ? InstalledPluginInventoryAdapter.Create(stateStore)
     : Array.Empty<InstalledPluginInventoryItem>();
-// 部署资产跟随实际 provider/catalog；外部插件开关不改变已经提交的数据库归属。
-var deploymentConnection = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(builder.Configuration.GetConnectionString("SqlServer"));
-if (persistenceProvider == PersistenceProvider.SqlServer && (string.IsNullOrWhiteSpace(deploymentConnection.DataSource) || string.IsNullOrWhiteSpace(deploymentConnection.InitialCatalog)))
-    throw new InvalidDataException("PERSISTENCE_DEPLOYMENT_TARGET_MISSING: an explicit SQL Server and catalog are required.");
-using var persistenceDeploymentStore = persistenceProvider == PersistenceProvider.SqlServer
-    ? new ICP.Platform.Persistence.Composition.PersistenceDeploymentStore(Path.Combine(pluginInstallRoot, "persistence"), persistenceProvider,
-        deploymentConnection.DataSource.ToUpperInvariant() + "|" + deploymentConnection.InitialCatalog.ToUpperInvariant())
-    : null;
 var activationGate = new PluginActivationGate(
     lifecycleManager,
     new StandardDataPackagePreflight(standardDataInspector, hostVersion, builtInModuleSource),

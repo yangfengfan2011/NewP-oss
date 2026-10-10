@@ -37,7 +37,7 @@ public sealed class HostPluginPersistencePlanCompiler : IPluginPersistencePlanCo
     /// <inheritdoc/>
     public CompiledPersistencePlan Compile(CanonicalModulePlan modulePlan)
     {
-        var result = new PersistencePlanCompiler(_storageTypeMapPath).Compile(modulePlan, _provider, _deploymentStore?.ReadDeployed());
+        var result = new PersistencePlanCompiler(_storageTypeMapPath).Compile(modulePlan, _provider, _deploymentStore?.ReadRecoveryCandidate());
         if (result.IsSuccess && result.Plan is not null)
         {
             return result.Plan;

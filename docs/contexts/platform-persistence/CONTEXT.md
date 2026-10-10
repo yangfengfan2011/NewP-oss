@@ -4,7 +4,7 @@ Platform Persistence 上下文把候选 Canonical Module Plan 中由各模块拥
 
 迁移执行策略由 [ADR-0027：Host 是完整 Up Migration 的唯一执行入口](../../adr/0027-host-is-the-only-full-up-migration-entry.md) 约束；当前基线生命周期由 [ADR-0042：开发期使用可重建迁移基线直到兼容基线冻结](../../adr/0042-development-uses-a-resettable-migration-baseline.md) 约束；Required 字段演进由 [ADR-0043：Required 字段使用显式写入与迁移生命周期](../../adr/0043-required-fields-use-explicit-write-and-migration-lifecycles.md) 约束。
 
-组件组合、模型身份与独立持久化生命周期的已确认目标见 [ADR-0055](../../adr/0055-component-composition-separates-model-identity-and-deployment.md)。正常部署后的停用保留、首 DDL 前恢复资产、独立 owner 前缀与全局实际提交顺序已实施，当前契约见 [Module Contract](../../architecture/module-contract.md#停用与保留部署)；未完成 pending 的真实历史恢复仍待 Issue #258 后续 child 完成。
+组件组合、模型身份与独立持久化生命周期见 [ADR-0055](../../adr/0055-component-composition-separates-model-identity-and-deployment.md)。SQL Server 已支持首 DDL 前可信资产、正常停用保留，以及未完成 pending 按真实 owner 前缀和全局实际提交事实恢复；最后成功记录不能替代已经应用的步骤。当前恢复、严格拒绝与最终确认契约见 [Module Contract](../../architecture/module-contract.md#停用与保留部署)。
 
 ## Language
 

@@ -37,6 +37,7 @@ internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
     private Process? _host;
     private Task[] _captures = [];
     private int _phase;
+    private readonly HashSet<string> _databaseTriggers = new(StringComparer.Ordinal);
     internal string RepositoryRoot { get; }
     internal string EvidenceRoot { get; }
     internal string HostRoot => Path.Combine(_temporaryRoot, "host");
@@ -166,6 +167,35 @@ internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
         _host.Dispose(); _host = null;
     }
 
+    // 只中断本夹具持有的 Host 树；StartAsync 随后按真实退出收尾，不依赖 Host catch 发布资产。
+    internal async Task InterruptStartupAsync()
+    {
+        var host = _host ?? throw new InvalidOperationException("Fixture Host is not running.");
+        if (!host.HasExited) host.Kill(entireProcessTree: true);
+        await host.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15));
+    }
+
+    // 登记在 Create 前，但拒绝已存在的名字；即使创建回调中途抛错，也只归还本场景拥有的 trigger。
+    internal async Task CreateDatabaseTriggerAsync(string name, string sql)
+    {
+        await using var connection = new SqlConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            IF DB_NAME() <> N'NewP_Test' OR NOT EXISTS (SELECT 1 FROM sys.extended_properties WHERE class=0
+                AND name=N'NewP.AutomatedTests' AND CONVERT(nvarchar(128),value)=N'disposable-schema')
+                THROW 51000,N'Expected disposable test catalog missing.',1;
+            SELECT COUNT(*) FROM sys.triggers WHERE parent_class=0 AND name=@name;
+            """;
+        command.Parameters.AddWithValue("@name", name);
+        if (Convert.ToInt32(await command.ExecuteScalarAsync()) != 0)
+            throw new InvalidOperationException("Fixture trigger name already exists: " + name);
+        _databaseTriggers.Add(name);
+        command.Parameters.Clear();
+        command.CommandText = sql;
+        await command.ExecuteNonQueryAsync();
+    }
+
     internal async Task<HttpClient> LoginAsync(string code, string password)
     {
         var client = new HttpClient(new HttpClientHandler { CookieContainer = new CookieContainer(), UseCookies = true }) { BaseAddress = new Uri(HostUrl) };
@@ -203,8 +233,12 @@ internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
         finally
         {
             Administrator?.Dispose();
-            await _databaseLease.DisposeAsync();
-            if (Directory.Exists(_temporaryRoot)) Directory.Delete(_temporaryRoot, recursive: true);
+            try { await _databaseLease.CleanupDatabaseTriggersAsync(_databaseTriggers); }
+            finally
+            {
+                await _databaseLease.DisposeAsync();
+                if (Directory.Exists(_temporaryRoot)) Directory.Delete(_temporaryRoot, recursive: true);
+            }
         }
     }
 

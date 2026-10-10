@@ -13,6 +13,7 @@ public sealed class PluginLifecycleStateStore
     private readonly string _stateRoot;
     private readonly string _snapshotsRoot;
     private readonly string _statePath;
+    private readonly Func<PluginActiveSnapshot, bool>? _isSnapshotCommitted;
     private readonly JsonSerializerOptions _jsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -20,15 +21,23 @@ public sealed class PluginLifecycleStateStore
         WriteIndented = true
     };
 
-    public PluginLifecycleStateStore(string installRoot)
+    /// <summary>直接消费者保留原有构造契约与生命周期语义。</summary>
+    public PluginLifecycleStateStore(string installRoot) : this(installRoot, isSnapshotCommitted: null)
+    {
+    }
+
+    /// <summary>按宿主提供的最终确认条件读取活动事实，具体部署存储由宿主组合。</summary>
+    public PluginLifecycleStateStore(string installRoot, Func<PluginActiveSnapshot, bool>? isSnapshotCommitted)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(installRoot);
         var resolvedInstallRoot = Path.GetFullPath(installRoot);
         _stateRoot = Path.Combine(resolvedInstallRoot, "lifecycle", "v2");
         _snapshotsRoot = Path.Combine(_stateRoot, "snapshots");
         _statePath = Path.Combine(_stateRoot, "state.json");
+        _isSnapshotCommitted = isSnapshotCommitted;
     }
 
+    // snapshot 文件与活动指针可先写入，只有宿主的最终确认允许消费者将其视为活动或 LKG。
     public ResolvedPluginLifecycleState Resolve(IReadOnlyList<InstalledPluginInventoryItem> inventory)
     {
         ArgumentNullException.ThrowIfNull(inventory);
@@ -41,14 +50,14 @@ public sealed class PluginLifecycleStateStore
             var legacySnapshot = BuildLegacySnapshot(inventory);
             return new ResolvedPluginLifecycleState(
                 desired,
-                legacySnapshot,
-                legacySnapshot,
+                AcceptSnapshot(legacySnapshot),
+                AcceptSnapshot(legacySnapshot),
                 legacySnapshot is not null);
         }
 
         var desiredModules = MergeNewlyInstalledModules(document.DesiredModules, inventory);
-        var active = LoadSnapshot(document.ActiveSnapshotId);
-        var lastKnownGood = LoadSnapshot(document.LastKnownGoodSnapshotId);
+        var active = AcceptSnapshot(LoadSnapshot(document.ActiveSnapshotId));
+        var lastKnownGood = AcceptSnapshot(LoadSnapshot(document.LastKnownGoodSnapshotId));
         return new ResolvedPluginLifecycleState(
             desiredModules,
             active,
@@ -56,6 +65,11 @@ public sealed class PluginLifecycleStateStore
             UsesLegacyFallback: false);
     }
 
+    // 持久化确认由 Host 组合注入，插件生命周期不绑定具体 provider 或部署资产实现。
+    private PluginActiveSnapshot? AcceptSnapshot(PluginActiveSnapshot? snapshot) =>
+        snapshot is not null && (_isSnapshotCommitted?.Invoke(snapshot) ?? true) ? snapshot : null;
+
+    // 保存离线意图保留既有 raw 指针；最终确认过滤只影响读取，不允许 desired 写入删掉准备事实。
     internal void SaveDesired(
         ResolvedPluginLifecycleState current,
         IReadOnlyList<PluginDesiredModuleState> desiredModules)
@@ -75,12 +89,13 @@ public sealed class PluginLifecycleStateStore
             DesiredModules = desiredModules
                 .OrderBy(static item => item.ModuleId, StringComparer.Ordinal)
                 .ToList(),
-            ActiveSnapshotId = current.ActiveSnapshot?.SnapshotId,
-            LastKnownGoodSnapshotId = current.LastKnownGoodSnapshot?.SnapshotId
+            ActiveSnapshotId = existing is null ? current.ActiveSnapshot?.SnapshotId : existing.ActiveSnapshotId,
+            LastKnownGoodSnapshotId = existing is null ? current.LastKnownGoodSnapshot?.SnapshotId : existing.LastKnownGoodSnapshotId
         };
         WriteState(document);
     }
 
+    // raw 指针提交保留此前已确认的 LKG；读取方仍须等待宿主最终确认候选。
     internal void CommitActive(
         ResolvedPluginLifecycleState current,
         PluginActiveSnapshot candidate)
@@ -96,7 +111,7 @@ public sealed class PluginLifecycleStateStore
         PluginActiveSnapshot lastKnownGood;
         if (current.ActiveSnapshot is null)
         {
-            lastKnownGood = candidate;
+            lastKnownGood = current.LastKnownGoodSnapshot ?? candidate;
         }
         else if (string.Equals(
                      current.ActiveSnapshot.SnapshotId,

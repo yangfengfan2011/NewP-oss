@@ -1,4 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { fileURLToPath, URL } from 'node:url'
 import { discoverFrontendEntries } from '../../scripts/component-sources.mjs'
@@ -76,6 +77,7 @@ function newpFrontendEntryRegistry(): Plugin {
 
 // URL 组件通过 import map 消费与 Shell 相同的模块实例；共享入口由本次发行构建生成。
 function nativeSharedRuntime(): Plugin {
+  const require = createRequire(import.meta.url)
   const modules = {
     '@icp-platform/core': 'core', '@icp-platform/sdk': 'sdk',
     react: 'react', 'react/jsx-runtime': 'react-jsx', 'react/jsx-dev-runtime': 'react-jsx-dev',
@@ -89,7 +91,10 @@ function nativeSharedRuntime(): Plugin {
       if (!id.startsWith(prefix)) return null
       const name = id.slice(prefix.length)
       const hasDefault = name === 'react' || name === 'react-dom' || name === 'react-dom/client'
-      return `export * from ${JSON.stringify(name)};${hasDefault ? `export { default } from ${JSON.stringify(name)};` : ''}`
+      if (name.startsWith('@icp-platform/')) return `export * from ${JSON.stringify(name)};`
+      // CommonJS 的 export * 不会生成命名导出；按受控实际包导出显式引用，仍由同一 Rollup 图共享实例。
+      const names = Object.keys(require(name)).filter(key => key !== 'default' && key !== '__esModule').sort()
+      return `export { ${[...names, ...(hasDefault ? ['default'] : [])].join(', ')} } from ${JSON.stringify(name)};`
     },
     buildStart() {
       const release = JSON.parse(readFileSync(fileURLToPath(new URL('../../../server/plugin-platform/ComponentBundles/platform-runtime-release.json', import.meta.url)), 'utf8'))

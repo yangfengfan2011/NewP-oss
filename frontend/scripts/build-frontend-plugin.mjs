@@ -6,6 +6,7 @@ import { existsSync, readFileSync } from 'fs';
 import { createHash } from 'node:crypto';
 import { discoverFrontendEntries } from './component-sources.mjs';
 import { validateFrontendRuntimeRelease } from './frontend-runtime-release.mjs';
+import { createUiSourceAliases } from './ui-source-aliases.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -33,7 +34,6 @@ if (hasInvalidModuleName) {
 
 // Construct paths
 const modulesRoot = resolve(__dirname, '../modules');
-const uiSourceRoot = resolve(__dirname, '../packages/ui/src');
 const artifactsRoot = resolve(__dirname, '../../artifacts/frontend-plugins');
 const entryPath = discoverFrontendEntries(resolve(__dirname, '../..'))[moduleName];
 const outDir = resolve(artifactsRoot, moduleName);
@@ -93,10 +93,7 @@ try {
     configFile: false,
     plugins: [artifactIndex],
     resolve: {
-      alias: [
-        { find: '@icp-platform/ui/core', replacement: resolve(uiSourceRoot, 'core.ts') },
-        { find: '@icp-platform/ui', replacement: resolve(uiSourceRoot, 'index.ts') }
-      ]
+      alias: createUiSourceAliases()
     },
     build: {
       lib: {

@@ -262,6 +262,16 @@ public sealed class DeferredModuleMigrationSqlServerTests
         foreach (var reference in moduleProject.Descendants("ProjectReference"))
             reference.SetAttributeValue("Include", Path.GetFullPath(Path.Combine(productionModule, reference.Attribute("Include")!.Value)));
         moduleProject.Save(Path.Combine(isolatedModule, module + "Module.csproj"));
+        // 隔离工程复用正式身份映射；基础依赖仍引用仓库，Capsule 只从隔离源码根嵌入。
+        CopyFile(Path.Combine(fixture.RepositoryRoot, "Directory.Build.targets"), Path.Combine(root, "Directory.Build.targets"));
+        var productionTool = Path.Combine(fixture.RepositoryRoot, "server/tools/component-source-build");
+        var isolatedTool = Path.Combine(root, "server/tools/component-source-build");
+        foreach (var path in Directory.EnumerateFiles(productionTool, "*.cs"))
+            CopyFile(path, Path.Combine(isolatedTool, Path.GetFileName(path)));
+        var toolProject = XDocument.Load(Path.Combine(productionTool, "ComponentSource.Build.csproj"));
+        foreach (var reference in toolProject.Descendants("ProjectReference"))
+            reference.SetAttributeValue("Include", Path.GetFullPath(Path.Combine(productionTool, reference.Attribute("Include")!.Value)));
+        toolProject.Save(Path.Combine(isolatedTool, "ComponentSource.Build.csproj"));
         CopyFile(Path.Combine(fixture.RepositoryRoot, "server/platform-modeling/metadata/storage-types.json"), Path.Combine(root, "server/platform-modeling/metadata/storage-types.json"));
         CopyFile(Path.Combine(fixture.RepositoryRoot, "apps/host-api/HostApi.csproj"), Path.Combine(root, "apps/host-api/HostApi.csproj"));
         var hostModule = Path.Combine(root, "apps/host-api/bin/Release/net10.0/modules", module);
@@ -283,6 +293,21 @@ public sealed class DeferredModuleMigrationSqlServerTests
         Assert.DoesNotContain("DropTable", migrationSource);
         Assert.Contains("IX_" + module + "_ENAME", File.ReadAllText(Path.Combine(projectRoot, "Migrations", "EfPlatformDbContextModelSnapshot.cs")));
         await Run(fixture, module + "-build", fixture.RepositoryRoot, "build", projectPath, "-c", "Release", "--no-restore", "--disable-build-servers", "--nologo", "-v", "quiet");
+        var moduleAssembly = Path.Combine(isolatedModule, "bin/Release/net10.0", module + "Module.dll");
+        // 从字节装载避免锁住夹具产物；正式消费前拒绝遗漏映射或误用旧版本 DLL。
+        var loadContext = new System.Runtime.Loader.AssemblyLoadContext(module + "-isolated-capsule", isCollectible: true);
+        try
+        {
+            using var assemblyBytes = new MemoryStream(File.ReadAllBytes(moduleAssembly));
+            var assembly = loadContext.LoadFromStream(assemblyBytes);
+            var resource = Assert.Single(assembly.GetManifestResourceNames(), name => name.EndsWith(".newp.plugin.json", StringComparison.Ordinal));
+            using var stream = assembly.GetManifestResourceStream(resource)!;
+            var embedded = JsonNode.Parse(stream)!;
+            Assert.Equal(module, embedded["moduleId"]!.GetValue<string>());
+            Assert.Equal("1.1.0", embedded["version"]!.GetValue<string>());
+            Assert.True(JsonNode.DeepEquals(capsule, embedded), "Isolated Release DLL must embed its own authoring Capsule.");
+        }
+        finally { loadContext.Unload(); }
         var tool = Path.Combine(fixture.RepositoryRoot, "server/tools/migration-manifest/bin/Release/net10.0/MigrationManifest.dll");
         var finalize = new[] { tool, "finalize", "--module", module, "--provider", "SqlServer", "--migration", migrationId, "--compatibility", "safe-expand", "--repository-root", root };
         Assert.Contains("finalized", await Run(fixture, module + "-finalize-first", root, finalize));
@@ -294,7 +319,6 @@ public sealed class DeferredModuleMigrationSqlServerTests
         File.Copy(capsulePath, Path.Combine(hostModule, "plugin.json"), true);
         var bundle = Path.Combine(projectRoot, "bin/Release/net10.0", module + ".SqlServerMigrations.dll");
         CopyFile(bundle, Path.Combine(hostModule, "migrations", module + ".SqlServerMigrations.dll"));
-        var moduleAssembly = Path.Combine(isolatedModule, "bin/Release/net10.0", module + "Module.dll");
         CopyFile(moduleAssembly, Path.Combine(root, "apps/host-api/bin/Release/net10.0", module + "Module.dll"));
         await Run(fixture, module + "-check", root, tool, "check", "--all", "--no-build", "--repository-root", root);
         await File.WriteAllTextAsync(Path.Combine(fixture.EvidenceRoot, module + "-authoring.json"), JsonSerializer.Serialize(new

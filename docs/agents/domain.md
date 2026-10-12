@@ -26,8 +26,8 @@
 │           └── adr/                 # 当前上下文专属决策
 ├── apps/
 ├── server/
-├── modules/
 └── frontend/
+    └── modules/                    # 可移动组件源码根，支持组合嵌套
 ```
 
 `CONTEXT-MAP.md` 是唯一的上下文导航入口，负责把逻辑上下文映射到实际代码和文档路径。
@@ -35,7 +35,7 @@
 不要仅凭目录名把每个 package 或工程自动视为领域上下文。NewP 的一个逻辑上下文可能同时覆盖：
 
 - `server/modules/<ModuleId>/`
-- `modules/<ModuleId>/metadata/`
+- `frontend/modules/` 下组件源码根的 `metadata/`（由 `ComponentSourceCatalog` 按身份定位；slug 与嵌套布局见[组件开发指南](../developer/componentized-development.md)）
 - 对应的前端注册或页面
 - `docs/contexts/<context>/CONTEXT.md` 中已确认的术语与边界（如已建立）
 

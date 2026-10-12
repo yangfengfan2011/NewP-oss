@@ -189,7 +189,7 @@ child 按其验收条件、首次集成及适用定向证据关闭，不统一�
 
 ## 验收资产开发
 
-Workspace/All 选择需要先按[唯一开发指南的固定发行物准备与登记](../developer/componentized-development.md#workspace-固定发行物验收输入)生成本轮三成员包及未预装成员的固定 Host/Shell，并设置 `NEWP_ACCEPTANCE_WORKSPACE_DELIVERY_INPUT`。此要求同样适用于普通 `accept.ps1` 与完整 `verify.ps1`；允许 dirty 候选，运行期间候选和目标保持不变。父级在最终冻结后刷新输入，不复用返修前的旧产物冒充最终验证。100/5 规模入口的开关、默认 skip 与复跑命令也见该指南。
+普通验收使用 `accept.ps1 -Gate Workspace` 或 `accept.ps1 -Gate All`，完整验证使用 `verify.ps1 -AcceptanceGate Workspace` 或包含 Workspace 的显式命名 Gate 列表时，需要先按[唯一开发指南的固定发行物准备与登记](../developer/componentized-development.md#workspace-固定发行物验收输入)生成本轮三成员包及未预装成员的固定 Host/Shell，并设置 `NEWP_ACCEPTANCE_WORKSPACE_DELIVERY_INPUT`。允许 dirty 候选，运行期间候选和目标保持不变。父级在最终冻结后刷新输入，不复用返修前的旧产物冒充最终验证。100/5 规模入口的开关、默认 skip 与复跑命令也见该指南。
 
 闸门 runner 一律继承 `AcceptanceRunner`。收尾由它统一持有：无论场景成败都先归还一次性资源（用 `CancellationToken.None`，取消时更需要归还）、再反向扫描产物里的凭据。**这两步各自兜住异常**——扫描要读遍本轮全部产物，撞上被占用或已消失的文件就会抛，裸 `await` 会让这种基础设施异常顶掉更具体的场景失败。最后按「场景失败 → 查到凭据泄漏 → 扫描失败 → 清理抛异常 → 清理报未完成」由具体到泛报出去。子类只写两件事：场景序列和自己的资源归还方式；凭据一律经 `RegisterSecret` / `AddConnectionSecrets` 登记，`RunScenarioAsync` 负责场景归属，两者都不留绕过的口子。
 

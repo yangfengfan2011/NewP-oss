@@ -136,7 +136,7 @@ MSBuild 命令中的 `%2c` 转义逗号，避免将组件列表拆成多个属�
 
 ## Workspace 固定发行物验收输入
 
-Workspace Gate（包括普通 `accept.ps1 -Gate Workspace`、`-Gate All` 及 `verify.ps1 -AcceptanceGate Workspace/All`）消费正式三成员包，不再用静态 dev 装配替代独立交付。先准备与本轮冻结候选对应的新包和平台发行物，再登记输入；开发候选可以 dirty。登记只记录 HEAD/tree/index/status、tracked/untracked 内容摘要及发行资产摘要，不授信、不产出另一套裁决。候选或固定目标变化时，在再次执行前重新准备受影响资产并登记，不能沿用返修前的旧发行物冒充最终候选。
+Workspace Gate 消费正式三成员包，不再用静态 dev 装配替代独立交付。普通验收使用 `accept.ps1 -Gate Workspace` 或 `accept.ps1 -Gate All`；完整验证使用 `verify.ps1 -AcceptanceGate Workspace`，也可在 `-AcceptanceGate` 中显式列出其他命名 Gate，列表包含 Workspace 时同样需要本节输入。先准备与本轮冻结候选对应的新包和平台发行物，再登记输入；开发候选可以 dirty。登记只记录 HEAD/tree/index/status、tracked/untracked 内容摘要及发行资产摘要，不授信、不产出另一套裁决。候选或固定目标变化时，在再次执行前重新准备受影响资产并登记，不能沿用返修前的旧发行物冒充最终候选。
 
 旧数据由一份已有完整正式部署 Host 的真实 bootstrap/API 建立，随后同一个专用 `NewP_Test` catalog 切换到裁剪目标，正式 `install-native`、`enable-bundle` 后重启。baseline 必须包含三个成员的原实现；它与新目标用途不同。调用方必须提供该已有完整部署 Host 的绝对目录；缺少此历史输入的新环境不能用空库或新裁剪目标替代，也不能伪造已有数据连续性。SQL 管理连接沿用 Acceptance 的 `NEWP_ACCEPTANCE_SQLSERVER_ADMIN_CONNECTION`、`NEWP_DEV_SQLSERVER_CONNECTION_STRING` 和开发配置读取顺序，不把凭据写入交付输入或命令日志。
 

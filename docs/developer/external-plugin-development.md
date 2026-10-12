@@ -91,7 +91,7 @@ pwsh -NoProfile -File scripts/manage-unified-plugin.ps1 -Action desired -Candida
 ]
 ```
 
-移组和解除归组在发行物所选版本的 Capsule `composition.members` 中声明，不通过工具创建平行关系表。`uninstall -ModuleId <id>` 删除该组件的内建发行声明和 installed 包；`prune -ModuleId <id> -Version <未选版本>` 仅裁剪指定 installed 包版本。两者保留安装根下独立的持久化归档，且不连接数据库或删除数据；必需成员卸载在离线入口拒绝。卸载后仍有组合引用，即使父级停用，下一次启动也会拒绝；解除引用后仍有活动依赖同样拒绝。必须在同一次停服部署中处理完整声明和选择，随后完整重启 Host 和 Shell。
+移组和解除归组在发行物所选版本的 Capsule `composition.members` 中声明，不通过工具创建平行关系表。`uninstall -ModuleId <id>` 删除该组件的内建发行声明和 installed 包；整包卸载用 `uninstall -CandidatePath <组件ID数组JSON>` 明确列出精确集合，底层入口和恢复边界见[原生发行开发指南](componentized-development.md#原生发行的离线接纳与独立消费)。删除前整批检查平台必需保护及卸载后的完整 Canonical 候选；保留组合引用（包括停用父级）或活动依赖都在离线入口拒绝，不删除部分组件、不自动修正集合或选择。`prune -ModuleId <id> -Version <未选版本>` 仅裁剪指定 installed 包版本。卸载和裁剪都保留安装根下独立的持久化归档，不连接数据库或删除数据；必须明确形成合法声明与选择，再完整重启 Host 和 Shell。
 
 正式离线 `install` 仅追加或替换指定包，不自动裁剪旧版本，因此安装未选版本不会移除 desired 所选包或改变其组合图。运维人员通过已有 `prune` 显式管理 installed 库存，所选版本仍禁止裁剪；此规则不改变旧 legacy 安装 API 的默认保留策略。
 

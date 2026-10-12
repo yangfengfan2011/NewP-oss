@@ -196,7 +196,7 @@ public sealed class NativeComponentInstallRecoveryProcessTests
         return files;
     }
 
-    private static async Task RunAndKillWorkerAsync(ComponentBundleTestInput input, string root, string checkpoint, string evidence, string phase)
+    internal static async Task RunAndKillWorkerAsync(ComponentBundleTestInput input, string root, string checkpoint, string evidence, string phase)
     {
         var start = new ProcessStartInfo("dotnet") { WorkingDirectory = input.SourceRepository,
             UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };

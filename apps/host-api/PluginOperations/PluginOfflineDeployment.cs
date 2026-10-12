@@ -152,17 +152,8 @@ internal static class PluginOfflineDeployment
                     Check(manager.RequestDesired(inventory, desired.Where(item => item.ModuleId != rollbackId).Append(new(rollbackId, rollbackVersion, true)).ToArray()));
                     break;
                 case "uninstall":
-                    var id = Required(options, "module-id");
-                    var item = inventory.SingleOrDefault(item => item.ModuleId == id) ?? throw new InvalidDataException("PLUGIN_NOT_INSTALLED");
-                    // 必需身份先由同一规范编译器裁决；可选成员引用在卸载后的完整启动候选中验证。
-                    var plan = new StandardDataCandidatePlanCompiler(source, inspector, installRoot: installRoot, externalPluginsEnabled: externalPluginsEnabled).Compile(installed, current with { DesiredModules = desired });
-                    if (plan.RequiredModuleIds.Contains(id)) throw new InvalidDataException("PLATFORM_REQUIRED_MODULE_MISSING: " + id);
-                    var builtIn = builtIns.SingleOrDefault(module => module.ModuleId == id);
-                    ValidateDirectory(Path.Combine(installRoot, "packages"), Path.Combine(installRoot, "packages", item.ModuleId));
-                    ValidateDirectory(Path.Combine(installRoot, ".pruned", "packages"), Path.Combine(installRoot, ".pruned", "packages", item.ModuleId));
-                    if (builtIn is not null) DeleteDirectory(source.ModulesRoot, builtIn.PackageRoot);
-                    if (!store.TryDeleteModule(item.ModuleId, out var error)) throw new IOException(error);
-                    Check(manager.RequestDesired(inventory.Where(item => item.ModuleId != id).ToArray(), desired.Where(item => item.ModuleId != id).ToArray()));
+                    Uninstall(installRoot, source, inspector, manager, store, installed, inventory, builtIns,
+                        desired, current, ReadUninstallSet(options), externalPluginsEnabled);
                     break;
                 case "prune":
                     Prune(store, manager, inventory, Required(options, "module-id"), Required(options, "version"));
@@ -177,6 +168,55 @@ internal static class PluginOfflineDeployment
             Console.Error.WriteLine(exception.Message);
             return 1;
         }
+    }
+
+    // 显式集合必须完整有效；单组件入口也走同一裁决，不从包或依赖推导额外成员。
+    private static string[] ReadUninstallSet(IReadOnlyDictionary<string, string> options)
+    {
+        if (!options.TryGetValue("file", out var file)) return [Required(options, "module-id")];
+        if (options.ContainsKey("module-id")) throw new InvalidDataException("PLUGIN_UNINSTALL_SET_INVALID: choose file or module-id.");
+        using var document = JsonDocument.Parse(File.ReadAllText(file));
+        if (document.RootElement.ValueKind != JsonValueKind.Array
+            || document.RootElement.EnumerateArray().Any(item => item.ValueKind != JsonValueKind.String))
+            throw new InvalidDataException("PLUGIN_UNINSTALL_SET_INVALID: expected an array of component ids.");
+        return document.RootElement.EnumerateArray().Select(item => item.GetString()!).ToArray();
+    }
+
+    // 删除前整批验证必需身份、保留组合与活动依赖；只移除代码/库存/选择，部署归档与数据库由原恢复链保留。
+    private static void Uninstall(string installRoot, TrustedBuiltInModuleSource source, StandardDataPackageInspector inspector,
+        PluginLifecycleManager manager, InstalledPluginStateStore store, IReadOnlyList<InstalledPluginInventoryItem> installed,
+        IReadOnlyList<InstalledPluginInventoryItem> inventory, IReadOnlyList<ModuleCapsuleCandidate> builtIns,
+        IReadOnlyList<PluginDesiredModuleState> desired, ResolvedPluginLifecycleState current, IReadOnlyList<string> requested,
+        bool externalPluginsEnabled)
+    {
+        var ids = requested.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (requested.Count == 0 || requested.Any(string.IsNullOrWhiteSpace) || ids.Count != requested.Count)
+            throw new InvalidDataException("PLUGIN_UNINSTALL_SET_INVALID: a non-empty exact set is required.");
+        var items = requested.Select(id => inventory.SingleOrDefault(item => string.Equals(item.ModuleId, id, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidDataException("PLUGIN_NOT_INSTALLED: " + id)).ToArray();
+        var plan = new StandardDataCandidatePlanCompiler(source, inspector, installRoot: installRoot,
+            externalPluginsEnabled: externalPluginsEnabled).Compile(installed, current with { DesiredModules = desired });
+        var required = plan.RequiredModuleIds.Where(ids.Contains).ToArray();
+        if (required.Length > 0) throw new InvalidDataException("PLATFORM_REQUIRED_MODULE_MISSING: " + string.Join(", ", required));
+        var remainingDesired = desired.Where(item => !ids.Contains(item.ModuleId)).ToArray();
+        _ = new StandardDataCandidatePlanCompiler(source, inspector, excludedBuiltInModuleIds: ids, installRoot: installRoot,
+            externalPluginsEnabled: externalPluginsEnabled).Compile(installed.Where(item => !ids.Contains(item.ModuleId)).ToArray(),
+                current with { DesiredModules = remainingDesired });
+        foreach (var item in items)
+        {
+            ValidateDirectory(Path.Combine(installRoot, "packages"), Path.Combine(installRoot, "packages", item.ModuleId));
+            ValidateDirectory(Path.Combine(installRoot, ".pruned", "packages"), Path.Combine(installRoot, ".pruned", "packages", item.ModuleId));
+            if (builtIns.SingleOrDefault(module => module.ModuleId == item.ModuleId) is { } builtIn)
+                ValidateDirectory(source.ModulesRoot, builtIn.PackageRoot);
+        }
+        Console.WriteLine("uninstall-components:" + JsonSerializer.Serialize(items.Select(item => item.ModuleId)));
+        foreach (var item in items)
+        {
+            if (builtIns.SingleOrDefault(module => module.ModuleId == item.ModuleId) is { } builtIn)
+                DeleteDirectory(source.ModulesRoot, builtIn.PackageRoot);
+            if (!store.TryDeleteModule(item.ModuleId, out var error)) throw new IOException(error);
+        }
+        Check(manager.RequestDesired(inventory.Where(item => !ids.Contains(item.ModuleId)).ToArray(), remainingDesired));
     }
 
     // 裁决覆盖完整旧来源差异后原子合并到唯一 desired，成功保存才退出旧入口。

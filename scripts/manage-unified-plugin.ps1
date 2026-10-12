@@ -26,6 +26,17 @@ switch ($Action) {
         if ([string]::IsNullOrWhiteSpace($CandidatePath)) { throw "-CandidatePath is required." }
         $commandArgs += @("--file", (Resolve-Path -LiteralPath $CandidatePath).Path)
     }
+    "uninstall" {
+        # 集合只来自调用方的显式 JSON，不能从包内容或依赖扩展；单 ID 保留原命令。
+        if (-not [string]::IsNullOrWhiteSpace($CandidatePath)) {
+            if (-not [string]::IsNullOrWhiteSpace($ModuleId)) { throw "Choose -CandidatePath or -ModuleId." }
+            $commandArgs += @("--file", (Resolve-Path -LiteralPath $CandidatePath).Path)
+        }
+        else {
+            if ([string]::IsNullOrWhiteSpace($ModuleId)) { throw "-ModuleId or -CandidatePath is required." }
+            $commandArgs += @("--module-id", $ModuleId)
+        }
+    }
     default {
         if ([string]::IsNullOrWhiteSpace($ModuleId)) { throw "-ModuleId is required." }
         $commandArgs += @("--module-id", $ModuleId)

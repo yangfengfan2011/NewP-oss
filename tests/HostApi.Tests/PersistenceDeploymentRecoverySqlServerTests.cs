@@ -4,6 +4,7 @@ using ICP.Platform.HostApi.PluginActivation;
 using ICP.Platform.Persistence;
 using ICP.Platform.Persistence.Composition;
 using ICP.Platform.PluginPlatform.Lifecycle;
+using ICP.Platform.PluginPlatform.ComponentBundles;
 using ICP.Platform.Testing;
 using Microsoft.Data.SqlClient;
 using Xunit;
@@ -264,6 +265,34 @@ public sealed class PersistenceDeploymentRecoverySqlServerTests
         Assert.Equal(successful, State(fixture)["successful"]!.GetValue<string>());
         Assert.Equal(active, LifecycleState(fixture)["activeSnapshotId"]!.GetValue<string>());
         Assert.NotNull(State(fixture)["pending"]);
+        // 数据库已有真实提交后，再终止既有原生安装worker；正式离线入口恢复文件但不能覆盖SQL恢复事实。
+        using (var input = new ComponentBundleTestInput())
+        {
+            input.IncludePart();
+            new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, input.Artifacts);
+            var protectedFiles = Directory.GetFiles(fixture.PluginRoot, "*.json", SearchOption.AllDirectories)
+                .ToDictionary(path => path, File.ReadAllBytes, StringComparer.OrdinalIgnoreCase);
+            await NativeComponentInstallRecoveryProcessTests.RunAndKillWorkerAsync(input, fixture.PluginRoot,
+                Path.Combine(input.Root, "checkpoint"), fixture.EvidenceRoot, "install");
+            Assert.True(File.Exists(Path.Combine(fixture.PluginRoot, "native-install.pending")));
+            Assert.True(Directory.Exists(Path.Combine(fixture.PluginRoot, "packages", "InforCenter", "1.0.0")));
+            Assert.False(Directory.Exists(Path.Combine(fixture.PluginRoot, "packages", "Part", "1.0.0")));
+            var recoveredFiles = await OfflineComponentDeploymentSqlServerTests.Offline(fixture, "uninstall",
+                "-ModuleId", "UnavailableAfterFileRecovery");
+            Assert.NotEqual(0, recoveredFiles.ExitCode);
+            Assert.Contains("PLUGIN_NOT_INSTALLED", recoveredFiles.Output);
+            Assert.False(File.Exists(Path.Combine(fixture.PluginRoot, "native-install.pending")));
+            Assert.False(Directory.Exists(Path.Combine(fixture.PluginRoot, "packages", "InforCenter", "1.0.0")));
+            foreach (var file in protectedFiles) Assert.Equal(file.Value, File.ReadAllBytes(file.Key));
+            Assert.Equal(prefix, await History(fixture));
+            Assert.Equal(successful, State(fixture)["successful"]!.GetValue<string>());
+            Assert.Equal(active, LifecycleState(fixture)["activeSnapshotId"]!.GetValue<string>());
+            Assert.NotNull(State(fixture)["pending"]);
+            await File.WriteAllTextAsync(Path.Combine(fixture.EvidenceRoot, "native-files-with-sql-pending.json"),
+                JsonSerializer.Serialize(new { partialMigration = PartTail, protectedAssetCount = protectedFiles.Count,
+                    fileJournalRecovered = true, persistencePendingPreserved = true, previousSuccessPreserved = true,
+                    activeUnchanged = true, historyRows = prefix.Length }));
+        }
         // pending 和旧 successful 都不能掩盖实际数据库超出候选：只注入并归还这一条夹具未知 EF 成员。
         await Execute(fixture, "INSERT INTO dbo.__EFMigrationsHistory(MigrationId,ProductVersion) VALUES(N'99991231235959_RecoveryUnknown',N'10.0.1');");
         await fixture.StartAsync(expectFailure: true);

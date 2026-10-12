@@ -33,7 +33,7 @@ SQL Server Host 和发行离线入口在读取 active/LKG 时，按同一 provid
 
 各 owner 的已应用步骤独立保持 manifest `Sequence` 的线性前缀。`dbo.__EFMigrationsHistory` 只保存全局唯一已应用 ID 集合，`dbo.__NewPMigrationHistory.Position/PlanDigest` 保存实际提交顺序及不可变前缀摘要。候选在 owner 队列头之间按 MigrationId 确定执行顺序，既有事实按数据库 Position 只读核对，新的 Position 和摘要在全局事务锁内绑定；ID 较早的延期或首次启用步骤可追加到其他 owner 已提交步骤之后。停用 owner 只核对保留流，不消费所选新版；完整目标/过渡、owner、所有摘要、未知对象、owner 跳步和数据库超前仍严格阻断。迁移与一致性成功之前不得公开新活动版本，见 [ADR-0027](../adr/0027-host-is-the-only-full-up-migration-entry.md)。
 
-正式离线选版、移组、解除归组与卸载入口见[停服部署入口](../developer/external-plugin-development.md#停服部署入口)。工具只保存库存或期望选择；完整选定组合图和有效活动依赖由随后 Host 启动在 DDL／活动提交前裁决。停用父级不能豁免缺失成员，可信保留资产不代表成员已安装。移组只重新计算自身选择与祖先共同决定的有效资格，不改模型名称、owner、物理目标或迁移流。代码卸载与精确包裁剪不删除独立持久化校验资产。
+正式离线选版、移组、解除归组与卸载入口见[停服部署入口](../developer/external-plugin-development.md#停服部署入口)。工具只保存库存或期望选择；单组件与显式精确集合卸载在删除前先检查平台必需保护，再用同一 Canonical 编译器验证卸载后的完整组合图和有效活动依赖，阻塞时不修改集合、代码、库存或选择。完整 Host 重启仍在 DDL／活动提交前验证最终候选。停用父级不能豁免缺失成员，可信保留资产不代表成员已安装。移组只重新计算自身选择与祖先共同决定的有效资格，不改模型名称、owner、物理目标或迁移流。代码卸载与精确包裁剪不删除独立持久化校验资产。
 
 ## 全局模型身份
 

@@ -124,9 +124,13 @@ pnpm --dir frontend --filter @icp-platform/shell exec vite build --outDir <新�
 Remove-Item Env:NEWP_EXCLUDED_MODULE_IDS
 ```
 
-MSBuild 命令中的 `%2c` 转义逗号，避免将组件列表拆成多个属性。三成员正式包已贯通未预装它们的固定 Host/Shell：真实 Workspace、Part、Document API、旧业务行/内容 Link/迁移历史与 Workspace 页面消费连续。安装先完成整批校验与暂存，再以 `native-install.pending` 持久记录原库存字节及每个目录/receipt的先前所有权。提交期间进程中断，下一次正式离线命令或Host启动在同一安装根独占租约内、读取库存前恢复完整旧集合；恢复自身中断可重入。journal只在全部提交或全部恢复完成后移除；损坏、旧版仅摘要标记或无法恢复时保留journal与材料并以 `COMPONENT_BUNDLE_INSTALL_INCOMPLETE` 失败关闭，不能手工删除标记绕过。重复安装幂等，原选择、无关库存与Persistence pending/成功记录及恢复归档保持；文件恢复不连接数据库，也不代替数据库前沿恢复。整包选版和独立升级已沿固定 Host 重启及真实 Part API 验证；三成员归组与消费已完成；整包退出及相应恢复边界仍由 #275 交付，不能据此宣称整个 #267 完成。
+MSBuild 命令中的 `%2c` 转义逗号，避免将组件列表拆成多个属性。三成员正式包已贯通未预装它们的固定 Host/Shell：真实 Workspace、Part、Document API、旧业务行/内容 Link/迁移历史与 Workspace 页面消费连续。安装先完成整批校验与暂存，再以 `native-install.pending` 持久记录原库存字节及每个目录/receipt的先前所有权。提交期间进程中断，下一次正式离线命令或Host启动在同一安装根独占租约内、读取库存前恢复完整旧集合；恢复自身中断可重入。journal只在全部提交或全部恢复完成后移除；损坏、旧版仅摘要标记或无法恢复时保留journal与材料并以 `COMPONENT_BUNDLE_INSTALL_INCOMPLETE` 失败关闭，不能手工删除标记绕过。重复安装幂等，原选择、无关库存与Persistence pending/成功记录及恢复归档保持；文件恢复不连接数据库，也不代替数据库前沿恢复。整包选版和独立升级已沿固定 Host 重启及真实 Part API 验证；三成员归组、消费及显式集合退出/重装恢复已完成；真实部分迁移提交后叠加原生文件安装中断与恢复，SQL pending、成功事实、可信资产和历史保持，最终按真实数据库前沿恢复。父 #267 的完整审查与最终验证仍集中执行。
 
 创建固定目标时，restore 和 publish 必须使用同一排除集合；上述命令完成 restore 并重建 Host，避免复用其他组合生成的 deps/MVC ApplicationPart 引用。目标固定后，安装、选版和重启只操作安装根；二进制身份比较以安装前后同一固定目标为准。
+
+整包卸载由调用方明确列出组件 ID，不从 ZIP、组合关系或依赖自动推导集合。停服后运行 `dotnet <发行Host>/HostApi.dll plugin-deploy uninstall --file <组件ID数组JSON> --Platform:PluginInstallRoot <安装根>`；例如 `["InforCenter","Workspace","Part","Document"]`。已有 `uninstall --module-id <id>` 与集合入口使用相同预检；PowerShell wrapper 对应 `-Action uninstall -CandidatePath <JSON>` 或原 `-ModuleId <id>`，两者互斥。空集合、重复或不可用 ID 都拒绝整批。先检查平台必需保护，再用正式 Canonical 编译器验证删除后的完整候选；保留的包外组合引用即使停用仍阻止卸载，活动依赖也不能通过隐式停用、扩大或缩减集合解决。全部语义和路径检查通过后才删除指定代码/installed 库存并一次保存剩余 desired，随后完整重启才生效。
+
+代码退出保留全局模型身份、已有表与业务行/Link、迁移历史、生命周期快照及必要可信持久化恢复资产。这些归档不成为 installed 库存或活动业务注册；需要恢复业务时重新接纳相容包、明确选版启用并重启。该卸载预检不承诺通用跨目录卸载事务；文件安装事务继续使用 `native-install.pending` 的既有恢复链，数据库部署 pending 与成功事实继续由 `PersistenceDeploymentStore` 按真实已提交前沿恢复。
 
 回退应在停服租约内恢复相容的平台文件与明确选择；数据库前沿已变化时必须保留相容组件和恢复资产，不执行 Down、改写已提交历史或清除 Persistence pending。未完成原生文件事务也不能通过手工删除标记冒充恢复完成。
 
@@ -169,6 +173,7 @@ $env:NEWP_ACCEPTANCE_WORKSPACE_DELIVERY_INPUT = $workspaceDeliveryInput
 ```powershell
 $env:NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE = '1'
 dotnet test tests/acceptance/Acceptance.Tests/Acceptance.Tests.csproj -c Release --no-build --no-restore --filter 'FullyQualifiedName~NativeWorkspaceApi_UsesFixedRelease' --logger 'console;verbosity=detailed'
+dotnet test tests/acceptance/Acceptance.Tests/Acceptance.Tests.csproj -c Release --no-build --no-restore --filter 'FullyQualifiedName~NativeWorkspaceUninstall_RecoversExistingBusiness' --logger 'console;verbosity=detailed'
 dotnet test tests/acceptance/Acceptance.Tests/Acceptance.Tests.csproj -c Release --no-build --no-restore --filter 'FullyQualifiedName~NativeWorkspace_UsesFormalDriver' --logger 'console;verbosity=detailed'
 Remove-Item Env:NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE
 ```

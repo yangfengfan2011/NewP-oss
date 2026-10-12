@@ -187,13 +187,14 @@ public sealed class StandardDataCompositionSqlServerTests
         Assert.Contains(deployed["plan"]!["models"]!.AsArray(), model => model!["name"]!.GetValue<string>() == "Asset" && model["ownerModuleId"]!.GetValue<string>() == ModuleId);
         await fixture.StopAsync();
         await Select(fixture, "InforCenter", "1.0.0", false);
-        await Offline(fixture, "uninstall", "-ModuleId", ModuleId);
-        await fixture.StartAsync(expectFailure: true);
-        Assert.Contains("MODULE_COMPOSITION_MEMBER_MISSING", fixture.LastError);
+        var referenced = await Offline(fixture, "uninstall", true, "-ModuleId", ModuleId);
+        Assert.Contains("MODULE_COMPOSITION_MEMBER_MISSING", referenced.Output);
+        Assert.True(Directory.Exists(Path.Combine(fixture.PluginRoot, "packages", ModuleId)));
         Assert.Equal(history, await History(fixture));
         Assert.Equal(archive, File.ReadAllBytes(assetPath));
         Composition(fixture, "InforCenter", ["Workspace", "Document", "Part"]);
         await Select(fixture, "InforCenter", "1.0.0", true);
+        await Offline(fixture, "uninstall", "-ModuleId", ModuleId);
         await fixture.StartAsync();
         Assert.DoesNotContain(fixture.Catalog, point => point.ModuleId == ModuleId);
         Assert.Contains(fixture.Catalog, point => point.ModuleId == "Part");
@@ -273,7 +274,11 @@ public sealed class StandardDataCompositionSqlServerTests
     }
 
     // 与正常Host相同发行物和安装根，仅在已停止期间写desired/installed；配置开关一致。
-    private static async Task<(int ExitCode, string Output)> Offline(FeatureCatalogHostFixture fixture, string action, params string[] options)
+    private static Task<(int ExitCode, string Output)> Offline(FeatureCatalogHostFixture fixture, string action, params string[] options) =>
+        Offline(fixture, action, false, options);
+
+    private static async Task<(int ExitCode, string Output)> Offline(FeatureCatalogHostFixture fixture, string action,
+        bool expectFailure, params string[] options)
     {
         var start = new ProcessStartInfo("pwsh.exe") { WorkingDirectory = fixture.HostRoot, UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (var argument in new[] { "-NoProfile", "-File", Path.Combine(fixture.RepositoryRoot, "scripts", "manage-unified-plugin.ps1"), "-Action", action, "-HostPath", Path.Combine(fixture.HostRoot, "HostApi.dll"), "-InstallRoot", fixture.PluginRoot }.Concat(options)) start.ArgumentList.Add(argument);
@@ -288,7 +293,7 @@ public sealed class StandardDataCompositionSqlServerTests
         var output = (await stdout + await stderr).Replace(fixture.ConnectionString, "[connection]", StringComparison.Ordinal)
             .Replace(fixture.AdministratorPassword, "[credential]", StringComparison.Ordinal);
         await File.WriteAllTextAsync(Path.Combine(fixture.EvidenceRoot, "external266-offline-" + action + "-" + Guid.NewGuid().ToString("N") + ".log"), output);
-        Assert.True(process.ExitCode == 0, output);
+        Assert.True(expectFailure ? process.ExitCode != 0 : process.ExitCode == 0, output);
         return (process.ExitCode, output);
     }
 }

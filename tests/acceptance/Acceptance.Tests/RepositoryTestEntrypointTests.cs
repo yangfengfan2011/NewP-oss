@@ -66,7 +66,7 @@ public class RepositoryTestEntrypointTests
         var rootTest = scripts.GetProperty("test").GetString();
 
         Assert.StartsWith(
-            "pnpm run test:effect-network-lifecycle && pnpm run check:effect-network-lifecycle && ",
+            "pnpm run test:effect-network-lifecycle && pnpm run test:component-frontend-build && pnpm run check:effect-network-lifecycle && ",
             rootTest,
             StringComparison.Ordinal);
         Assert.EndsWith("pnpm -r --if-present test", rootTest, StringComparison.Ordinal);
@@ -76,6 +76,9 @@ public class RepositoryTestEntrypointTests
         Assert.Equal(
             "node scripts/check-effect-network-lifecycle.mjs",
             scripts.GetProperty("check:effect-network-lifecycle").GetString());
+        Assert.Equal(
+            "node --experimental-vm-modules --test scripts/ui-source-aliases.test.mjs scripts/browser-component-build.test.mjs",
+            scripts.GetProperty("test:component-frontend-build").GetString());
     }
 
     [Fact]

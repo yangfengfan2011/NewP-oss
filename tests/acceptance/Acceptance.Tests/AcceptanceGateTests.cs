@@ -61,6 +61,16 @@ public sealed class AcceptanceGateTests
             includeBrowser: false).RunAsync(CancellationToken.None);
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "显式四组件卸载及同一固定 Host 恢复旧三成员行、Link和历史")]
+    public async Task NativeWorkspaceUninstall_RecoversExistingBusiness()
+    {
+        var (root, runId) = PrepareRun("native-workspace-uninstall");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, exerciseUninstallRecovery: true);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false,
+            publishedFixture: fixture, includeBrowser: false).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "三成员包通过正式 Workspace driver 打开旧内容、属性并创建一次对象")]
     public async Task NativeWorkspace_UsesFormalDriver()
     {

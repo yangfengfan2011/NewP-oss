@@ -6,6 +6,8 @@ using System.Text;
 using System.Text.Json;
 using ICP.Platform.Testing;
 using ICP.Platform.Kernel.ModulePlanning;
+using ICP.Platform.Kernel.PluginPackages;
+using ICP.Platform.PluginPlatform.Lifecycle;
 using Microsoft.Data.SqlClient;
 
 namespace ICP.Platform.Acceptance;
@@ -19,7 +21,8 @@ internal sealed record WorkspaceDeliveryInput(JsonElement Candidate, string Base
 internal sealed class PublishedComponentAcceptanceFixture(
     string repositoryRoot, string runDirectory, string runId,
     string baselineHostRoot, string hostRoot, string shellRoot, string packagePath,
-    bool workspaceDelivery = false, WorkspaceDeliveryInput? deliveryInput = null, bool exerciseCompositionLifecycle = true)
+    bool workspaceDelivery = false, WorkspaceDeliveryInput? deliveryInput = null, bool exerciseCompositionLifecycle = true,
+    bool exerciseUninstallRecovery = false)
 {
     private readonly Dictionary<string, string?> _environment = new();
     private ReusableSqlServerDatabase? _database;
@@ -43,14 +46,14 @@ internal sealed class PublishedComponentAcceptanceFixture(
     internal string HostIdentity => $"published:{_host?.Process.Id}:{runId}";
 
     internal static PublishedComponentAcceptanceFixture FromWorkspaceDelivery(string repositoryRoot, string runDirectory, string runId,
-        bool exerciseCompositionLifecycle = true)
+        bool exerciseCompositionLifecycle = true, bool exerciseUninstallRecovery = false)
     {
         var path = RequiredPath("NEWP_ACCEPTANCE_WORKSPACE_DELIVERY_INPUT");
         var input = JsonSerializer.Deserialize<WorkspaceDeliveryInput>(File.ReadAllText(path), AcceptanceJson.Options)
             ?? throw new InvalidOperationException("Workspace delivery input was empty.");
         return new(repositoryRoot, runDirectory, runId, input.BaselineHostRoot, input.HostRoot,
             input.ShellRoot, input.PackagePath, workspaceDelivery: true, deliveryInput: input,
-            exerciseCompositionLifecycle: exerciseCompositionLifecycle);
+            exerciseCompositionLifecycle: exerciseCompositionLifecycle, exerciseUninstallRecovery: exerciseUninstallRecovery);
     }
 
     // 只登记受控构建的输入与来源；不产出裁决，也不授予包信任。Gate 仍走正式安装/Host。
@@ -169,13 +172,7 @@ internal sealed class PublishedComponentAcceptanceFixture(
         using var installed = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
         await WorkspaceAcceptanceFixture.LoginAsync(installed, actor, token);
         var installedFeatures = await AcceptanceFeatureCatalog.LoadAsync(installed, token);
-        var detail = await WorkspaceAcceptanceFixture.SendAsync(installed, HttpMethod.Get,
-            "/api/part/parts/" + Uri.EscapeDataString(oldId), null,
-            installedFeatures.Behavior("Part", "part.part.read").Position, token);
-        var fields = detail.GetProperty("fields");
-        if (fields.GetProperty("EID").GetString() != oldId || fields.GetProperty("ECODE").GetString() != ExistingCode
-            || fields.GetProperty("ENAME").GetString() != ExistingName)
-            throw new InvalidOperationException("安装后的正式 Part API 未返回 baseline 的旧身份与字段。");
+        var detail = await ReadOldPartAsync(installed, installedFeatures, oldId, token);
         var runtime = await WorkspaceAcceptanceFixture.SendAsync(installed, HttpMethod.Get,
             "/plugins/active-module-runtime.json", null, null, token);
         var modules = runtime.GetProperty("modules").EnumerateArray().ToArray();
@@ -184,22 +181,9 @@ internal sealed class PublishedComponentAcceptanceFixture(
         if (!parent.GetProperty("compositionMembers").EnumerateArray().Select(member => member.GetString()).Order(StringComparer.Ordinal).SequenceEqual(expectedMembers))
             throw new InvalidOperationException("首片未使用只含 Part 的正式 InforCenter 包。");
         if (workspaceDelivery)
-        {
-            if (_baselineOwners != await ReadModelOwnersAsync(installed, token)) throw new InvalidOperationException("三成员的模型 owner 发生漂移。");
-            var oldDocument = await WorkspaceAcceptanceFixture.SendAsync(installed, HttpMethod.Get, "/api/document/documents/" + _oldDocumentId,
-                null, installedFeatures.Behavior("Document", "document.document.read").Position, token);
-            if (oldDocument.GetProperty("fields").GetProperty("ECODE").GetString() != ExistingDocumentCode)
-                throw new InvalidOperationException("归组后的正式 Document API 未读取旧对象。");
-            var roots = await WorkspaceAcceptanceFixture.SendAsync(installed, HttpMethod.Get, "/api/workspace/spaces", null,
-                installedFeatures.Behavior("Workspace", "workspace.spaces.access").Position, token);
-            var root = roots.EnumerateArray().Single(item => string.Equals(item.GetProperty("spaceKind").GetString(), "public", StringComparison.OrdinalIgnoreCase));
-            var contents = await WorkspaceAcceptanceFixture.ReadRootContentsAsync(installed, root, installedFeatures.Behavior("Workspace", "workspace.spaces.access").Position, token);
-            var ids = contents.GetProperty("items").EnumerateArray().Select(item => item.GetProperty("associatedObject").GetProperty("id").GetString()).Order(StringComparer.Ordinal);
-            if (!ids.SequenceEqual(new[] { oldId, _oldDocumentId, _oldFolderId }.Order(StringComparer.Ordinal)))
-                throw new InvalidOperationException("三成员旧内容 Link 未由正式 Workspace 查询连续读取。");
-            await WriteAsync("workspace-api-continuity.json", new { oldDocument, roots, contents, modelOwners = _baselineOwners }, token);
-        }
+            await VerifyWorkspaceApiContinuityAsync(installed, installedFeatures, oldId, "workspace-api-continuity.json", token);
         await WriteAsync("api-continuity.json", new { oldId, detail, runtime, externalPluginsEnabled = false }, token);
+        if (workspaceDelivery && exerciseUninstallRecovery) await ExerciseUninstallRecoveryAsync(oldId, baseline, token);
         if (workspaceDelivery && exerciseCompositionLifecycle)
         {
             await VerifyCompositionLifecycleAsync(actor, oldId, installedFeatures.Behavior("Part", "part.part.read").Position, baseline, token);
@@ -255,6 +239,169 @@ internal sealed class PublishedComponentAcceptanceFixture(
             .Where(module => new[] { "Workspace", "Part", "Document" }.Contains(module.GetProperty("moduleId").GetString()))
             .Select(module => new { owner = module.GetProperty("moduleId").GetString(), models = module.GetProperty("modelKeys").EnumerateArray().Select(key => key.GetString()).Order(StringComparer.Ordinal).ToArray() })
             .OrderBy(module => module.owner, StringComparer.Ordinal));
+    }
+
+    private async Task<JsonElement> ReadOldPartAsync(HttpClient client, AcceptanceFeatureCatalog features, string oldId, CancellationToken token)
+    {
+        var detail = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get, "/api/part/parts/" + Uri.EscapeDataString(oldId),
+            null, features.Behavior("Part", "part.part.read").Position, token);
+        var fields = detail.GetProperty("fields");
+        if (fields.GetProperty("EID").GetString() != oldId || fields.GetProperty("ECODE").GetString() != ExistingCode
+            || fields.GetProperty("ENAME").GetString() != ExistingName)
+            throw new InvalidOperationException("正式 Part API 未返回 baseline 的旧身份与字段。");
+        return detail;
+    }
+
+    private async Task VerifyWorkspaceApiContinuityAsync(HttpClient client, AcceptanceFeatureCatalog features, string oldId,
+        string evidenceName, CancellationToken token)
+    {
+        if (_baselineOwners != await ReadModelOwnersAsync(client, token)) throw new InvalidOperationException("三成员的模型 owner 发生漂移。");
+        var oldDocument = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get, "/api/document/documents/" + _oldDocumentId,
+            null, features.Behavior("Document", "document.document.read").Position, token);
+        if (oldDocument.GetProperty("fields").GetProperty("ECODE").GetString() != ExistingDocumentCode)
+            throw new InvalidOperationException("正式 Document API 未读取旧对象。");
+        var roots = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get, "/api/workspace/spaces", null,
+            features.Behavior("Workspace", "workspace.spaces.access").Position, token);
+        var root = roots.EnumerateArray().Single(item => string.Equals(item.GetProperty("spaceKind").GetString(), "public", StringComparison.OrdinalIgnoreCase));
+        var contents = await WorkspaceAcceptanceFixture.ReadRootContentsAsync(client, root, features.Behavior("Workspace", "workspace.spaces.access").Position, token);
+        var ids = contents.GetProperty("items").EnumerateArray().Select(item => item.GetProperty("associatedObject").GetProperty("id").GetString()).Order(StringComparer.Ordinal);
+        if (!ids.SequenceEqual(new[] { oldId, _oldDocumentId, _oldFolderId }.Order(StringComparer.Ordinal)))
+            throw new InvalidOperationException("三成员旧内容 Link 未由正式 Workspace 查询连续读取。");
+        await WriteAsync(evidenceName, new { oldDocument, roots, contents, modelOwners = _baselineOwners }, token);
+    }
+
+    // 卸载只退出代码库存；原成功恢复输入和 SQL 前沿继续由正式 Host 的持久化链持有。
+    private async Task ExerciseUninstallRecoveryAsync(string oldId, Continuity baseline, CancellationToken token)
+    {
+        string[] ids = ["InforCenter", "Workspace", "Part", "Document"];
+        using var beforeClient = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
+        var registeredEndpoints = await ReadBusinessEndpointsAsync(beforeClient, token);
+        RequireBusinessEndpoints(registeredEndpoints);
+        await StopHostAsync(token);
+        var retained = ReadSuccessfulAssets().Concat(ReadFiles(Path.Combine(InstallRoot, "native-receipts"))).ToArray();
+        var installedBefore = ReadInstalledIds();
+        var before = HashTree(InstallRoot, _ => true);
+        await WriteAsync("uninstall-before.json", new { installed = installedBefore, registeredEndpoints, retainedAssets = retained, fileIdentity = before }, token);
+        var partSelection = Path.Combine(Resources, "uninstall-part.json");
+        await AcceptanceInfrastructure.WriteJsonAsync(partSelection, new[] { "Part" }, token);
+        await RunOfflineAsync("uninstall", ["--file", partSelection], token, "MODULE_COMPOSITION_MEMBER_MISSING");
+        if (HashTree(InstallRoot, _ => true) != before)
+            throw new InvalidOperationException("拒绝不完整卸载集合时改变了安装根的代码、选择、活动或持久化字节。");
+        await WriteAsync("uninstall-rejected.json", new { code = "MODULE_COMPOSITION_MEMBER_MISSING", fileIdentityUnchanged = true }, token);
+
+        var selection = Path.Combine(Resources, "uninstall-components.json");
+        await AcceptanceInfrastructure.WriteJsonAsync(selection, ids, token);
+        await RunOfflineAsync("uninstall", ["--file", selection], token);
+        foreach (var id in ids)
+            if (File.Exists(Path.Combine(InstallRoot, "state", id + ".json"))
+                || Directory.Exists(Path.Combine(InstallRoot, "packages", id)) || Directory.Exists(Path.Combine(InstallRoot, ".pruned", "packages", id)))
+                throw new InvalidOperationException($"显式卸载后 {id} 的代码或库存仍然存在。");
+        var installed = ReadInstalledIds();
+        using var state = JsonDocument.Parse(File.ReadAllText(Path.Combine(InstallRoot, "lifecycle", "v2", "state.json")));
+        if (!installed.SequenceEqual(installedBefore.Where(id => !ids.Contains(id)))
+            || state.RootElement.GetProperty("desiredModules").EnumerateArray().Any(module => ids.Contains(module.GetProperty("moduleId").GetString())))
+            throw new InvalidOperationException("保留的恢复材料被当作已安装库存或 desired 选择。");
+        await WriteAsync("uninstalled-inventory.json", new { installed, explicitlyRemoved = ids }, token);
+        RequireRetainedAssets(retained);
+        await StartHostAsync(hostRoot, "uninstalled-host", token);
+        var uninstalledContinuity = await ReadContinuityAsync(oldId, token);
+        await WriteAsync("uninstall-sql-preserved.json", uninstalledContinuity, token);
+        if (uninstalledContinuity != baseline)
+            throw new InvalidOperationException("卸载后的固定 Host 改变了旧数据、Link、物理映射或迁移历史。");
+        using (var client = WorkspaceAcceptanceFixture.CreateClient(_hostPort))
+        {
+            await WorkspaceAcceptanceFixture.LoginAsync(client, _administrator!, token);
+            var runtime = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get, "/plugins/active-module-runtime.json", null, null, token);
+            var endpoints = await ReadBusinessEndpointsAsync(client, token);
+            await WriteAsync("uninstalled-runtime.json", new { runtime, endpoints, installed = ReadInstalledIds(), modelOwners = await ReadModelOwnersAsync(client, token) }, token);
+            if (ReadInstalledIds().Intersect(ids, StringComparer.Ordinal).Any()
+                || endpoints.Length != 0 || runtime.GetProperty("modules").EnumerateArray().Any(module => ids.Contains(module.GetProperty("moduleId").GetString())))
+                throw new InvalidOperationException("已卸载组件仍在业务活动目录中注册。");
+            var responses = new List<object>();
+            foreach (var route in new[] { "/api/part/parts/" + oldId, "/api/document/documents/" + _oldDocumentId, "/api/workspace/spaces" })
+            {
+                using var response = await client.GetAsync(route, token);
+                var body = _sanitize(await response.Content.ReadAsStringAsync(token));
+                responses.Add(new { route, status = (int)response.StatusCode, body });
+                await WriteAsync("uninstalled-endpoints.json", responses, token);
+                using var problem = JsonDocument.Parse(body);
+                // 既有 Host deny-all fallback 对未匹配路径也返回 AUTH_FORBIDDEN；注册缺失由正式 Swagger 同时证明。
+                if (response.StatusCode != HttpStatusCode.Forbidden || problem.RootElement.GetProperty("code").GetString() != "AUTH_FORBIDDEN")
+                    throw new InvalidOperationException($"卸载后旧入口 {route} 未遵循正式 fallback 拒绝契约：HTTP {(int)response.StatusCode}。");
+            }
+        }
+        RequireRetainedAssets(retained);
+        await StopHostAsync(token);
+        await RunOfflineAsync("install-native", ["--package", packagePath], token);
+        await RunOfflineAsync("enable-bundle", ["--package", packagePath], token);
+        await StartHostAsync(hostRoot, "uninstall-restored-host", token);
+        var restoredContinuity = await ReadContinuityAsync(oldId, token);
+        await WriteAsync("uninstall-sql-restored.json", restoredContinuity, token);
+        if (restoredContinuity != baseline)
+            throw new InvalidOperationException("重新安装后旧数据、Link、物理映射或迁移历史未保持。");
+        using var restored = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
+        await WorkspaceAcceptanceFixture.LoginAsync(restored, _administrator!, token);
+        var restoredEndpoints = await ReadBusinessEndpointsAsync(restored, token);
+        RequireBusinessEndpoints(restoredEndpoints);
+        if (!restoredEndpoints.SequenceEqual(registeredEndpoints)) throw new InvalidOperationException("重装后真实三成员 endpoint 集合发生漂移。");
+        var features = await AcceptanceFeatureCatalog.LoadAsync(restored, token);
+        var detail = await ReadOldPartAsync(restored, features, oldId, token);
+        await VerifyWorkspaceApiContinuityAsync(restored, features, oldId, "uninstall-restored-workspace-api.json", token);
+        RequireRetainedAssets(retained);
+        var restoredInventory = ReadInstalledIds();
+        if (!restoredInventory.SequenceEqual(installedBefore)) throw new InvalidOperationException("重新安装未恢复原完整库存集合。");
+        await WriteAsync("uninstall-recovery.json", new { explicitlyRemoved = ids, restoredInventory, restoredEndpoints, detail,
+            retainedAssets = retained, continuityPreserved = true, ordinaryGrantsReplayed = false, consumer = "local-admin" }, token);
+    }
+
+    private string[] ReadInstalledIds() => InstalledPluginInventoryAdapter.Create(new InstalledPluginStateStore(InstallRoot))
+        .Select(item => item.ModuleId).Order(StringComparer.Ordinal).ToArray();
+
+    private static async Task<string[]> ReadBusinessEndpointsAsync(HttpClient client, CancellationToken token)
+    {
+        var swagger = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get, "/swagger/v1/swagger.json", null, null, token);
+        return swagger.GetProperty("paths").EnumerateObject().Select(path => path.Name)
+            .Where(path => new[] { "/api/part/", "/api/document/", "/api/workspace/" }.Any(prefix => path.StartsWith(prefix, StringComparison.Ordinal)))
+            .Order(StringComparer.Ordinal).ToArray();
+    }
+
+    private static void RequireBusinessEndpoints(string[] endpoints)
+    {
+        if (!new[] { "/api/part/", "/api/document/", "/api/workspace/" }.All(prefix => endpoints.Any(path => path.StartsWith(prefix, StringComparison.Ordinal))))
+            throw new InvalidOperationException("正式 Swagger 未注册完整的三成员业务 endpoint。");
+    }
+
+    private CandidateFile[] ReadFiles(string root) => Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+        .Select(path => new CandidateFile(Path.GetRelativePath(InstallRoot, path), FileHash(path))).OrderBy(file => file.Path, StringComparer.Ordinal).ToArray();
+
+    private CandidateFile[] ReadSuccessfulAssets()
+    {
+        var assets = new List<CandidateFile>();
+        foreach (var path in Directory.EnumerateFiles(Path.Combine(InstallRoot, "persistence"), "state.json", SearchOption.AllDirectories))
+        {
+            using var state = JsonDocument.Parse(File.ReadAllText(path));
+            var digest = state.RootElement.GetProperty("successful").GetString()
+                ?? throw new InvalidOperationException("卸载前缺少正式成功持久化资产。");
+            var asset = Path.Combine(Path.GetDirectoryName(path)!, digest + ".json");
+            using var recovery = JsonDocument.Parse(File.ReadAllText(asset));
+            var owners = recovery.RootElement.GetProperty("plan").GetProperty("models").EnumerateArray()
+                .Select(model => model.GetProperty("ownerModuleId").GetString()).ToHashSet(StringComparer.Ordinal);
+            if (!new[] { "Workspace", "Part", "Document" }.All(owners.Contains))
+                throw new InvalidOperationException("卸载前成功恢复资产未持有三成员的模型 owner。");
+            assets.Add(new(Path.GetRelativePath(InstallRoot, asset), FileHash(asset)));
+        }
+        if (assets.Count == 0) throw new InvalidOperationException("卸载前缺少成功数据库部署输入。");
+        return assets.ToArray();
+    }
+
+    private void RequireRetainedAssets(IEnumerable<CandidateFile> assets)
+    {
+        foreach (var asset in assets)
+        {
+            var path = Path.Combine(InstallRoot, asset.Path);
+            if (!File.Exists(path) || FileHash(path) != asset.Sha256)
+                throw new InvalidOperationException($"卸载/恢复改变了必要可信资产 {asset.Path}。");
+        }
     }
 
     internal async Task RestartAsync(CancellationToken token)
@@ -427,19 +574,22 @@ internal sealed class PublishedComponentAcceptanceFixture(
         timeout.Token.ThrowIfCancellationRequested();
     }
 
-    private async Task RunOfflineAsync(string operation, IReadOnlyList<string> arguments, CancellationToken token)
+    private async Task RunOfflineAsync(string operation, IReadOnlyList<string> arguments, CancellationToken token, string? expectedFailureCode = null)
     {
         var command = new[] { Path.Combine(hostRoot, "HostApi.dll"), "plugin-deploy", operation }.Concat(arguments).ToArray();
         var process = StartProcess("dotnet", command, hostRoot, operation + "-" + Guid.NewGuid().ToString("N"));
+        var exitCode = -1;
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
             timeout.CancelAfter(TimeSpan.FromSeconds(180));
             await process.Process.WaitForExitAsync(timeout.Token);
-            if (process.Process.ExitCode != 0) throw new InvalidOperationException($"正式 plugin-deploy {operation} 返回 {process.Process.ExitCode}。");
+            exitCode = process.Process.ExitCode;
         }
         finally { await StopProcessAsync(process, CancellationToken.None); }
-        await WriteAsync(operation + "-command-" + Guid.NewGuid().ToString("N") + ".json", new { file = "dotnet", arguments = command, exitCode = 0 }, token);
+        await WriteAsync(operation + "-command-" + Guid.NewGuid().ToString("N") + ".json", new { file = "dotnet", arguments = command, exitCode, expectedFailureCode }, token);
+        if (expectedFailureCode is null ? exitCode != 0 : exitCode != 1 || !(await process.Output + await process.Error).Contains(expectedFailureCode, StringComparison.Ordinal))
+            throw new InvalidOperationException($"正式 plugin-deploy {operation} 返回 {exitCode}，期望 {expectedFailureCode ?? "成功"}。");
     }
 
     private sealed record OwnedProcess(Process Process, Task<string> Output, Task<string> Error, string LogName);

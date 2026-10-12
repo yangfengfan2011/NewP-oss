@@ -100,26 +100,33 @@ dotnet run --project server/tools/component-bundle/ComponentBundle.csproj -c Rel
 
 ```powershell
 dotnet <目标Host目录>/HostApi.dll plugin-deploy install-native --package <发行目录或ZIP>
-dotnet <目标Host目录>/HostApi.dll plugin-deploy enable --module-id InforCenter --version 1.0.0
-dotnet <目标Host目录>/HostApi.dll plugin-deploy enable --module-id Part --version 1.0.0
+dotnet <目标Host目录>/HostApi.dll plugin-deploy enable-bundle --package <同一发行目录或ZIP>
 ```
 
-命令使用相同目标配置和 `Platform:PluginInstallRoot`。`install-native` 只增加库存和安装根的接纳 receipt，不改变 desired、active 或数据库。既有 `select`、`enable`、`desired` 命令保存合并后的完整选择；待选择完整后重启 Host / Shell，统一 Activation Gate/Session 校验完整候选并经 Persistence deployment 确认活动快照。选择期间尚未闭合的依赖不能启动，也不会部分激活或自动启用依赖。
+命令使用相同目标配置和 `Platform:PluginInstallRoot`。`install-native` 只增加库存和安装根的接纳 receipt，不改变 desired、active 或数据库。`select-bundle --package <包>` 明确选定整包版本，新组件先停用；`enable-bundle` 明确启用根组件和未有运维选择的新成员，已有成员保留自身启用或停用选择。安装后的库存默认停用、Host 对未选库存的默认投影都不算运维选择；旧库存的显式 `IsDisabled` 仍算既有停用选择。所有包内版本必须已通过 `install-native` 接纳，选包不会代替安装或授信。
 
-生命周期只有 `<PluginInstallRoot>/lifecycle/v2/state.json` 一份状态源。原生库存和选择不受 `ExternalPluginsEnabled` 影响；关闭第三方开关时保留普通外部组件的选择，但不消费其候选，也拒绝新的普通外部安装、选版和启用。旧 `.feature-gates/external-plugins-disabled/lifecycle/v2/state.json` 有不能由当前根覆盖的选择时，以 `PLUGIN_DESIRED_SOURCE_CONFLICT` 和组件 ID 失败关闭；显式差异裁决由 #273 继续交付。
+两个整包命令都先输出完整 `bundle-version-differences`。已选成员版本与包内版本不同，无论升版或降版，缺少任一裁决都以 `PLUGIN_BUNDLE_VERSION_CHOICE_REQUIRED` 拒绝且不写 desired。使用 `--decisions <JSON文件>` 提供数组，例如 `[{"moduleId":"Part","version":"1.1.0"}]`；每个差异恰好裁决一次，可选包内版本或其他已安装版本，包括保留独立升级版本。裁决只指定版本，不覆盖已有成员启停。批量操作合并所有无关组件，最后复用整份 desired 的原子保存；版本不存在、重复裁决或无关裁决同样拒绝。
+
+成员可独立 `install-native --package <单成员发行包>`，再 `select --module-id Part --version 1.1.0`，该命令默认保留该成员自身启停。父组件不重发，重装旧整包也不覆盖独立选择；新包不再携带某成员，不自动卸载库存或删除其选择。既有 `select`、`enable`、`desired` 命令同样只保存完整选择。待选择完整后重启 Host / Shell，统一 Activation Gate/Session 校验完整候选并经 Persistence deployment 确认活动快照。选择期间尚未闭合的依赖不能启动，也不会部分激活、自动启用依赖或停用依赖者。
+
+生命周期只有 `<PluginInstallRoot>/lifecycle/v2/state.json` 一份状态源。原生库存和选择不受 `ExternalPluginsEnabled` 影响；关闭第三方开关时保留普通外部组件的选择，但不消费其候选，也拒绝新的普通外部安装、选版和启用。旧 `.feature-gates/external-plugins-disabled/lifecycle/v2/state.json` 有不能由当前根覆盖的选择时，以 `PLUGIN_DESIRED_SOURCE_CONFLICT` 输出每个组件的当前与旧来源选择，Host 和其他离线操作失败关闭。
+
+在停服租约内运行 `plugin-deploy reconcile-desired --file <裁决JSON>`，为每个来源差异明确提供 `moduleId`、已安装 `version` 和 `enabled`，例如 `[{"moduleId":"Part","version":"1.1.0","enabled":true}]`。全部差异恰好裁决一次才原子合并到当前根，保留其他组件及当前 active/LKG 指针。成功后旧文件改名为同目录 `state.reconciled-<随机标识>.json`，保留原字节及旧 snapshots、persistence 材料，但退出选择入口；没有差异的旧文件同样退出入口。若保存后、归档前中断，保留两个文件并在下次操作失败关闭或安全完成，不能删文件绕过冲突。旧文件不再随开关写入，也不导入其 active/LKG 指针或把它当成数据库恢复事实。
 
 接纳 receipt 与重新核对的固定快照共同签发原生来源，后端从固定程序集字节和受控依赖装载；既有成员保持 dbo、模型 owner、物理映射与迁移摘要前缀。前端交付方式与信任分离，活动目录生成验证资产的 URL，物化器只公开 `frontend` 子树中的入口和懒加载资源，不公开后端、metadata 或 migration。Shell 的构建产物通过 import map 提供同一共享运行时实例；Shell 与组件 builder 共用受控发行声明并核对实际解析的共享依赖版本。
 
 目标发行可通过通用身份参数排除待装实现，后续安装和消费不重建这些目标文件：
 
 ```powershell
-dotnet publish apps/host-api/HostApi.csproj -c Release -p:NewpExcludedModuleIds=InforCenter%2cPart -o <新目标Host目录>
+dotnet publish apps/host-api/HostApi.csproj -c Release -t:Rebuild -p:NewpExcludedModuleIds=InforCenter%2cPart -o <新目标Host目录>
 $env:NEWP_EXCLUDED_MODULE_IDS = 'InforCenter,Part'
 pnpm --dir frontend --filter @icp-platform/shell exec vite build --outDir <新目标Shell目录>
 Remove-Item Env:NEWP_EXCLUDED_MODULE_IDS
 ```
 
-MSBuild 命令中的 `%2c` 转义逗号，避免将组件列表拆成多个属性。首片已用真实 InforCenter/Part 包贯通未预装这两项的固定 Host/Shell、正式 Part API/页面和既有 SQL 数据及迁移历史；主仓的平面三成员布局仍未归组。安装先完成整批校验与暂存，再以 `native-install.pending` 持久记录原库存字节及每个目录/receipt的先前所有权。提交期间进程中断，下一次正式离线命令或Host启动在同一安装根独占租约内、读取库存前恢复完整旧集合；恢复自身中断可重入。journal只在全部提交或全部恢复完成后移除；损坏、旧版仅摘要标记或无法恢复时保留journal与材料并以 `COMPONENT_BUNDLE_INSTALL_INCOMPLETE` 失败关闭，不能手工删除标记绕过。重复安装幂等，原选择、无关库存与Persistence pending/成功记录及恢复归档保持；文件恢复不连接数据库，也不代替数据库前沿恢复。整包选版、独立升级、三成员扩展及退出边界仍由 #273/#274/#275 交付。
+MSBuild 命令中的 `%2c` 转义逗号，避免将组件列表拆成多个属性。首片已用真实 InforCenter/Part 包贯通未预装这两项的固定 Host/Shell、正式 Part API/页面和既有 SQL 数据及迁移历史；主仓的平面三成员布局仍未归组。安装先完成整批校验与暂存，再以 `native-install.pending` 持久记录原库存字节及每个目录/receipt的先前所有权。提交期间进程中断，下一次正式离线命令或Host启动在同一安装根独占租约内、读取库存前恢复完整旧集合；恢复自身中断可重入。journal只在全部提交或全部恢复完成后移除；损坏、旧版仅摘要标记或无法恢复时保留journal与材料并以 `COMPONENT_BUNDLE_INSTALL_INCOMPLETE` 失败关闭，不能手工删除标记绕过。重复安装幂等，原选择、无关库存与Persistence pending/成功记录及恢复归档保持；文件恢复不连接数据库，也不代替数据库前沿恢复。整包选版和独立升级已沿固定 Host 重启及真实 Part API 验证；三成员扩展及退出边界仍由 #274/#275 交付。
+
+创建固定目标时，restore 和 publish 必须使用同一排除集合；上述命令完成 restore 并重建 Host，避免复用其他组合生成的 deps/MVC ApplicationPart 引用。目标固定后，安装、选版和重启只操作安装根；二进制身份比较以安装前后同一固定目标为准。
 
 回退应在停服租约内恢复相容的平台文件与明确选择；数据库前沿已变化时必须保留相容组件和恢复资产，不执行 Down、改写已提交历史或清除 Persistence pending。未完成原生文件事务也不能通过手工删除标记冒充恢复完成。
 

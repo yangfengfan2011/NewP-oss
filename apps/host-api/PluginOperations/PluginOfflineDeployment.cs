@@ -26,25 +26,55 @@ internal static class PluginOfflineDeployment
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    // 旧关闭态只能与唯一状态根一致；差异交由后续显式裁决，不静默丢失任何选版。
+    // 旧关闭态有差异时失败关闭；已覆盖的旧文件仅退出选择入口，原字节和恢复材料保留。
     internal static void RejectConflictingLegacyDesired(string installRoot)
     {
-        var legacy = Path.Combine(installRoot, ".feature-gates", "external-plugins-disabled", "lifecycle", "v2", "state.json");
+        var legacy = LegacyDesiredPath(installRoot);
         if (!File.Exists(legacy)) return;
         var canonical = Path.Combine(installRoot, "lifecycle", "v2", "state.json");
-        var previous = JsonSerializer.Deserialize<DesiredSelectionsDocument>(PathContainment.ReadContainedFile(installRoot, legacy), JsonOptions)
-            ?? throw new InvalidDataException("PLUGIN_DESIRED_SOURCE_CONFLICT: legacy desired is invalid.");
-        var current = File.Exists(canonical)
-            ? JsonSerializer.Deserialize<DesiredSelectionsDocument>(PathContainment.ReadContainedFile(installRoot, canonical), JsonOptions)
-            : null;
-        if (previous.DesiredModules is null || current is not null && current.DesiredModules is null)
-            throw new InvalidDataException("PLUGIN_DESIRED_SOURCE_CONFLICT: desired selection collection is missing.");
-        var differences = previous.DesiredModules.Where(old => current?.DesiredModules.Any(item => item == old) != true).Select(item => item.ModuleId).Order(StringComparer.Ordinal).ToArray();
+        var previous = ReadDesiredSource(installRoot, legacy);
+        var current = File.Exists(canonical) ? ReadDesiredSource(installRoot, canonical) : [];
+        var differences = DescribeSourceDifferences(current, previous);
         if (differences.Length > 0)
-            throw new InvalidDataException("PLUGIN_DESIRED_SOURCE_CONFLICT: explicit legacy desired reconciliation required for " + string.Join(", ", differences));
+            throw new InvalidDataException("PLUGIN_DESIRED_SOURCE_CONFLICT: " + JsonSerializer.Serialize(differences, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        RetireLegacyDesired(installRoot);
     }
 
-    private sealed record DesiredSelectionsDocument(IReadOnlyList<PluginDesiredModuleState> DesiredModules);
+    private sealed record DesiredSourceDifference(string ModuleId, PluginDesiredModuleState? Canonical, PluginDesiredModuleState Legacy);
+
+    // 来源迁移严格核对旧协议与显式启停值，不把损坏或缺项静默解释为默认值。
+    private static PluginDesiredModuleState[] ReadDesiredSource(string installRoot, string path)
+    {
+        using var document = JsonDocument.Parse(PathContainment.ReadContainedFile(installRoot, path));
+        if (!document.RootElement.TryGetProperty("schemaVersion", out var schema) || schema.GetString() != "2.0"
+            || !document.RootElement.TryGetProperty("desiredModules", out var desired))
+            throw new InvalidDataException("PLUGIN_DESIRED_SOURCE_CONFLICT: invalid desired source.");
+        var selections = ReadSelections(desired);
+        if (selections.Select(item => item.ModuleId).Distinct(StringComparer.OrdinalIgnoreCase).Count() != selections.Length)
+            throw new InvalidDataException("PLUGIN_DESIRED_SOURCE_CONFLICT: duplicate identity in desired source.");
+        return selections;
+    }
+
+    // 当前根额外选择保持；旧根每个未被当前覆盖的选择都必须有一次明确裁决。
+    private static DesiredSourceDifference[] DescribeSourceDifferences(IReadOnlyList<PluginDesiredModuleState> canonical,
+        IReadOnlyList<PluginDesiredModuleState> legacy)
+    {
+        var current = canonical.ToDictionary(item => item.ModuleId, StringComparer.OrdinalIgnoreCase);
+        return legacy.Where(old => !current.TryGetValue(old.ModuleId, out var item) || item.Version != old.Version || item.Enabled != old.Enabled)
+            .Select(old => new DesiredSourceDifference(old.ModuleId, current.GetValueOrDefault(old.ModuleId), old))
+            .OrderBy(item => item.ModuleId, StringComparer.Ordinal).ToArray();
+    }
+
+    // 精确退出旧状态文件，保留其字节与旁边的 snapshots/persistence；中断后重试仍失败关闭或幂等完成。
+    private static void RetireLegacyDesired(string installRoot)
+    {
+        var path = LegacyDesiredPath(installRoot);
+        if (File.Exists(path)) File.Move(path, Path.Combine(Path.GetDirectoryName(path)!, "state.reconciled-" + Guid.NewGuid().ToString("N") + ".json"));
+    }
+
+    // 第三方关闭态旧根是唯一兼容入口；不得随着开关继续写入。
+    private static string LegacyDesiredPath(string installRoot) =>
+        Path.Combine(installRoot, ".feature-gates", "external-plugins-disabled", "lifecycle", "v2", "state.json");
 
     // builtin 信任仅由当前发行 Host 签发；外部命令不能指定任意目录成为可信内建来源。
     internal static int Run(string[] args, string installRoot, TrustedBuiltInModuleSource source,
@@ -53,16 +83,18 @@ internal static class PluginOfflineDeployment
         try
         {
             var options = Parse(args[2..]);
+            var action = args[1].ToLowerInvariant();
             var store = new InstalledPluginStateStore(installRoot);
             NativeComponentInventory.Recover(installRoot);
+            if (action != "reconcile-desired") RejectConflictingLegacyDesired(installRoot);
             var installed = InstalledPluginInventoryAdapter.Create(store);
             var builtIns = new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(source);
             var inventory = installed.Concat(builtIns.Where(module => !installed.Any(item => item.ModuleId == module.ModuleId))
                 .Select(module => new InstalledPluginInventoryItem(module.ModuleId, [module.Version], module.Version))).ToArray();
             var current = manager.Resolve(installed);
-            var desired = current.DesiredModules.Concat(builtIns.Where(module => !current.DesiredModules.Any(item => item.ModuleId == module.ModuleId))
+            var recorded = manager.ReadRecordedDesired(installed);
+            var desired = recorded.Concat(builtIns.Where(module => !recorded.Any(item => string.Equals(item.ModuleId, module.ModuleId, StringComparison.OrdinalIgnoreCase)))
                 .Select(module => new PluginDesiredModuleState(module.ModuleId, module.Version, true))).ToArray();
-            var action = args[1].ToLowerInvariant();
             switch (action)
             {
                 case "install-native":
@@ -90,6 +122,14 @@ internal static class PluginOfflineDeployment
                     var selections = ReadSelections(Required(options, "file"));
                     foreach (var selection in selections) RequireExternalSelection(externalPluginsEnabled, installRoot, installed, selection.ModuleId, selection.Version);
                     Check(manager.RequestDesired(inventory, desired.Where(item => !selections.Any(selection => selection.ModuleId == item.ModuleId)).Concat(selections).ToArray()));
+                    break;
+                case "select-bundle":
+                case "enable-bundle":
+                    SelectBundle(installRoot, inventory, desired, manager, Required(options, "package"),
+                        action == "enable-bundle", options.GetValueOrDefault("decisions"), externalPluginsEnabled);
+                    break;
+                case "reconcile-desired":
+                    ReconcileLegacyDesired(installRoot, inventory, desired, manager, ReadSelections(Required(options, "file")), externalPluginsEnabled);
                     break;
                 case "select":
                 case "enable":
@@ -137,6 +177,70 @@ internal static class PluginOfflineDeployment
             Console.Error.WriteLine(exception.Message);
             return 1;
         }
+    }
+
+    // 裁决覆盖完整旧来源差异后原子合并到唯一 desired，成功保存才退出旧入口。
+    private static void ReconcileLegacyDesired(string installRoot, IReadOnlyList<InstalledPluginInventoryItem> inventory,
+        IReadOnlyList<PluginDesiredModuleState> desired, PluginLifecycleManager manager,
+        IReadOnlyList<PluginDesiredModuleState> decisions, bool externalPluginsEnabled)
+    {
+        var legacyPath = LegacyDesiredPath(installRoot);
+        if (!File.Exists(legacyPath)) throw new InvalidDataException("PLUGIN_DESIRED_SOURCE_CONFLICT: legacy source is absent or already reconciled.");
+        var differences = DescribeSourceDifferences(desired, ReadDesiredSource(installRoot, legacyPath));
+        Console.WriteLine("desired-source-differences:" + JsonSerializer.Serialize(differences, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        var required = differences.Select(item => item.ModuleId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var ids = decisions.Select(item => item.ModuleId).ToArray();
+        if (ids.Length != ids.Distinct(StringComparer.OrdinalIgnoreCase).Count() || !required.SetEquals(ids))
+            throw new InvalidDataException("PLUGIN_DESIRED_SOURCE_CONFLICT: decisions must cover every difference exactly once.");
+        foreach (var decision in decisions) RequireExternalSelection(externalPluginsEnabled, installRoot, inventory, decision.ModuleId, decision.Version);
+        Check(manager.RequestDesired(inventory, desired.Where(item => !required.Contains(item.ModuleId)).Concat(decisions).ToArray()));
+        RetireLegacyDesired(installRoot);
+    }
+
+    // 只选择已完整接纳的原生包；核验交付输入和库存身份后才一次保存完整 desired。
+    private static void SelectBundle(string installRoot, IReadOnlyList<InstalledPluginInventoryItem> inventory,
+        IReadOnlyList<PluginDesiredModuleState> desired, PluginLifecycleManager manager, string packagePath,
+        bool enableNewMembers, string? decisionsPath, bool externalPluginsEnabled)
+    {
+        var staging = Path.Combine(installRoot, ".native-selection-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var inspector = new ComponentBundleInspector();
+            var bundle = (File.Exists(packagePath) ? inspector.ExtractVerified(packagePath, staging) : inspector.Inspect(packagePath)).Manifest;
+            foreach (var member in bundle.Components)
+            {
+                var installed = inventory.SingleOrDefault(item => item.ModuleId == member.ModuleId);
+                var packageRoot = installed?.FindPackageRoot(member.Version);
+                var receipt = NativeComponentInventory.ReadReceipt(installRoot, member.ModuleId, member.Version);
+                if (packageRoot is null || receipt is null)
+                    throw new InvalidDataException("PLUGIN_BUNDLE_NOT_INSTALLED: " + member.ModuleId + "@" + member.Version);
+                ComponentBundleInspector.RequireReusable(receipt.Component, member);
+                NativeComponentInventory.ValidateSnapshot(member, VerifiedModuleArtifactSnapshot.Capture(packageRoot));
+            }
+            Console.WriteLine("bundle-version-differences:" + JsonSerializer.Serialize(
+                OfflineDesiredSelectionService.DescribeDifferences(bundle, desired), new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+            var decisions = decisionsPath is null ? [] : ReadVersionDecisions(decisionsPath);
+            var selections = OfflineDesiredSelectionService.SelectBundle(bundle, desired, enableNewMembers, decisions);
+            foreach (var member in bundle.Components)
+            {
+                var selected = selections.Single(item => item.ModuleId == member.ModuleId);
+                RequireExternalSelection(externalPluginsEnabled, installRoot, inventory, selected.ModuleId, selected.Version);
+            }
+            Check(manager.RequestDesired(inventory, selections));
+        }
+        finally { if (Directory.Exists(staging)) DeleteDirectory(installRoot, staging); }
+    }
+
+    // 差异裁决只携带组件与版本，不能顺便改写已有成员的启停选择。
+    private static BundleVersionDecision[] ReadVersionDecisions(string path)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        if (document.RootElement.ValueKind != JsonValueKind.Array) throw new InvalidDataException("PLUGIN_BUNDLE_VERSION_DECISION_INVALID");
+        foreach (var item in document.RootElement.EnumerateArray())
+            if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty("moduleId", out var id) || id.ValueKind != JsonValueKind.String
+                || !item.TryGetProperty("version", out var version) || version.ValueKind != JsonValueKind.String)
+                throw new InvalidDataException("PLUGIN_BUNDLE_VERSION_DECISION_INVALID: moduleId and version are required.");
+        return document.RootElement.Deserialize<BundleVersionDecision[]>(JsonOptions)!;
     }
 
     // 关闭第三方开关时只接纳受控原生库存的选版；原选择在唯一 desired 中保留。
@@ -190,15 +294,21 @@ internal static class PluginOfflineDeployment
     private static PluginDesiredModuleState[] ReadSelections(string path)
     {
         using var document = JsonDocument.Parse(File.ReadAllText(path));
-        if (document.RootElement.ValueKind != JsonValueKind.Array) throw new InvalidDataException("PLUGIN_SELECTION_INVALID");
-        foreach (var selection in document.RootElement.EnumerateArray())
+        return ReadSelections(document.RootElement);
+    }
+
+    // 来源兼容与批量CLI使用同一严格显式选择形状。
+    private static PluginDesiredModuleState[] ReadSelections(JsonElement selections)
+    {
+        if (selections.ValueKind != JsonValueKind.Array) throw new InvalidDataException("PLUGIN_SELECTION_INVALID");
+        foreach (var selection in selections.EnumerateArray())
         {
             if (selection.ValueKind != JsonValueKind.Object || !selection.TryGetProperty("moduleId", out var id) || id.ValueKind != JsonValueKind.String
                 || !selection.TryGetProperty("version", out var version) || version.ValueKind != JsonValueKind.String
                 || !selection.TryGetProperty("enabled", out var enabled) || enabled.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
                 throw new InvalidDataException("PLUGIN_SELECTION_INVALID: moduleId, version and enabled are required.");
         }
-        return document.RootElement.Deserialize<PluginDesiredModuleState[]>(JsonOptions)!;
+        return selections.Deserialize<PluginDesiredModuleState[]>(JsonOptions)!;
     }
 
     // 命令失败仅报告未保存的选择；成功不表示已完成组合、迁移或活动提交。

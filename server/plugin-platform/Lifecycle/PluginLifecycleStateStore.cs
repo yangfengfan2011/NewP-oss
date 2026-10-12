@@ -62,6 +62,16 @@ public sealed class PluginLifecycleStateStore
             UsesLegacyFallback: false);
     }
 
+    // 库存合成的默认停用项不是运维选择；只返回持久选择或旧库存的显式启停。
+    internal IReadOnlyList<PluginDesiredModuleState> ReadRecordedDesired(IReadOnlyList<InstalledPluginInventoryItem> inventory)
+    {
+        ValidateInventory(inventory);
+        if (LoadDocument() is { } document) return document.DesiredModules;
+        var explicitlyDisabled = inventory.Where(item => item.LegacyExplicitlyDisabledVersion is not null)
+            .Select(item => item.ModuleId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return BuildLegacyDesired(inventory).Where(item => item.Enabled || explicitlyDisabled.Contains(item.ModuleId)).ToArray();
+    }
+
     // 持久化确认由 Host 组合注入，插件生命周期不绑定具体 provider 或部署资产实现。
     private PluginActiveSnapshot? AcceptSnapshot(PluginActiveSnapshot? snapshot) =>
         snapshot is not null && Deployment.IsSnapshotCommitted(snapshot) ? snapshot : null;
@@ -95,7 +105,8 @@ public sealed class PluginLifecycleStateStore
     // raw 指针提交保留此前已确认的 LKG；读取方仍须等待宿主最终确认候选。
     internal void CommitActive(
         ResolvedPluginLifecycleState current,
-        PluginActiveSnapshot candidate)
+        PluginActiveSnapshot candidate,
+        IReadOnlyList<PluginDesiredModuleState> recordedDesiredModules)
     {
         ArgumentNullException.ThrowIfNull(current);
         ArgumentNullException.ThrowIfNull(candidate);
@@ -128,7 +139,8 @@ public sealed class PluginLifecycleStateStore
         {
             SchemaVersion = CurrentSchemaVersion,
             Revision = checked((existing?.Revision ?? 0) + 1),
-            DesiredModules = current.DesiredModules
+            // 激活不把新库存的默认停用项升级为运维选择。
+            DesiredModules = recordedDesiredModules
                 .OrderBy(static item => item.ModuleId, StringComparer.Ordinal)
                 .ToList(),
             ActiveSnapshotId = candidate.SnapshotId,
@@ -269,6 +281,7 @@ public sealed class PluginLifecycleStateStore
         }
     }
 
+    // 旧库存的显式启停保留原版本；其余安装项只合成运行时默认停用投影。
     private static IReadOnlyList<PluginDesiredModuleState> BuildLegacyDesired(
         IReadOnlyList<InstalledPluginInventoryItem> inventory)
     {
@@ -276,7 +289,7 @@ public sealed class PluginLifecycleStateStore
             .Select(item =>
             {
                 var legacyVersion = FindInstalledVersion(item, item.LegacyCurrentEnabledVersion);
-                var version = legacyVersion ?? item.InstalledVersions.LastOrDefault() ?? string.Empty;
+                var version = legacyVersion ?? FindInstalledVersion(item, item.LegacyExplicitlyDisabledVersion) ?? item.InstalledVersions.LastOrDefault() ?? string.Empty;
                 return new PluginDesiredModuleState(
                     item.ModuleId,
                     version,

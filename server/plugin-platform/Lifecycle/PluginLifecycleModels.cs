@@ -1,14 +1,15 @@
 namespace ICP.Platform.PluginPlatform.Lifecycle;
 
 /// <summary>
-/// 已安装插件包的只读清单。LegacyCurrentEnabledVersion 只用于一个发布周期的迁移读取，
-/// Plugin Platform 永远不会回写该字段。
+/// 已安装插件包的只读清单。LegacyCurrentEnabledVersion 与 LegacyExplicitlyDisabledVersion
+/// 只投影已有库存的显式运维选择；Plugin Platform 永远不会回写这些字段。
 /// </summary>
 public sealed record InstalledPluginInventoryItem(
     string ModuleId,
     IReadOnlyList<string> InstalledVersions,
     string? LegacyCurrentEnabledVersion,
-    IReadOnlyDictionary<string, string>? PackageRoots = null)
+    IReadOnlyDictionary<string, string>? PackageRoots = null,
+    string? LegacyExplicitlyDisabledVersion = null)
 {
     public string? FindPackageRoot(string version)
     {

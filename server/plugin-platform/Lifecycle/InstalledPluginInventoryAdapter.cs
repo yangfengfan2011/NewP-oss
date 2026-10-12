@@ -8,7 +8,7 @@ namespace ICP.Platform.PluginPlatform.Lifecycle;
 /// </summary>
 public static class InstalledPluginInventoryAdapter
 {
-    // 正式入口先在租约内恢复；其他读取者也不能绕过未完成文件事务屏障。
+    // 正式入口先在租约内恢复；保留 legacy 显式停用，其他读取者也不能绕过文件事务屏障。
     public static IReadOnlyList<InstalledPluginInventoryItem> Create(
         InstalledPluginStateStore stateStore)
     {
@@ -34,7 +34,8 @@ public static class InstalledPluginInventoryAdapter
                             "packages",
                             record.ModuleId,
                             version)),
-                        StringComparer.OrdinalIgnoreCase)))
+                        StringComparer.OrdinalIgnoreCase),
+                record.IsDisabled ? record.Version : null))
             .OrderBy(static item => item.ModuleId, StringComparer.Ordinal)
             .ToArray();
     }

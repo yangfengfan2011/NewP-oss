@@ -19,6 +19,10 @@ public sealed class PluginLifecycleManager
     public ResolvedPluginLifecycleState Resolve(IReadOnlyList<InstalledPluginInventoryItem> inventory) =>
         _stateStore.Resolve(inventory);
 
+    /// <summary>读取实际保存的离线选择；未选定库存的默认停用项不表示已有运维决定。</summary>
+    public IReadOnlyList<PluginDesiredModuleState> ReadRecordedDesired(IReadOnlyList<InstalledPluginInventoryItem> inventory) =>
+        _stateStore.ReadRecordedDesired(inventory);
+
     /// <summary>一次原子保存完整离线期望集合；完整组合与依赖由下一次 Host 启动验证。</summary>
     public PluginLifecycleCommandResult RequestDesired(IReadOnlyList<InstalledPluginInventoryItem> inventory,
         IReadOnlyList<PluginDesiredModuleState> selections)
@@ -37,6 +41,7 @@ public sealed class PluginLifecycleManager
         return PluginLifecycleCommandResult.PendingRestart("candidate", null);
     }
 
+    /// <summary>保存指定组件的启用选择，保持其他已记录选择且不持久化库存默认项。</summary>
     public PluginLifecycleCommandResult RequestEnable(
         IReadOnlyList<InstalledPluginInventoryItem> inventory,
         string moduleId,
@@ -63,12 +68,13 @@ public sealed class PluginLifecycleManager
 
         var current = Resolve(inventory);
         var desired = UpsertDesired(
-            current.DesiredModules,
+            ReadRecordedDesired(inventory),
             new PluginDesiredModuleState(installed.ModuleId, installedVersion, Enabled: true));
         _stateStore.SaveDesired(current, desired);
         return PluginLifecycleCommandResult.PendingRestart(installed.ModuleId, installedVersion);
     }
 
+    /// <summary>保存指定组件的停用选择，保留其版本与其他已记录选择。</summary>
     public PluginLifecycleCommandResult RequestDisable(
         IReadOnlyList<InstalledPluginInventoryItem> inventory,
         string moduleId)
@@ -97,12 +103,13 @@ public sealed class PluginLifecycleManager
         }
 
         var desired = UpsertDesired(
-            current.DesiredModules,
+            ReadRecordedDesired(inventory),
             new PluginDesiredModuleState(installed.ModuleId, preservedVersion, Enabled: false));
         _stateStore.SaveDesired(current, desired);
         return PluginLifecycleCommandResult.PendingRestart(installed.ModuleId, preservedVersion);
     }
 
+    /// <summary>请求已安装的 LKG 版本，不立即改变活动集合或未选库存。</summary>
     public PluginLifecycleCommandResult RequestRollback(
         IReadOnlyList<InstalledPluginInventoryItem> inventory,
         string moduleId)
@@ -137,18 +144,19 @@ public sealed class PluginLifecycleManager
         }
 
         var desired = UpsertDesired(
-            current.DesiredModules,
+            ReadRecordedDesired(inventory),
             new PluginDesiredModuleState(installed.ModuleId, installedVersion, Enabled: true));
         _stateStore.SaveDesired(current, desired);
         return PluginLifecycleCommandResult.PendingRestart(installed.ModuleId, installedVersion);
     }
 
+    /// <summary>提交已通过启动闸门的快照，保存真实选择而不提升默认库存项。</summary>
     public void CommitActive(
         IReadOnlyList<InstalledPluginInventoryItem> inventory,
         PluginActiveSnapshot candidate)
     {
         var current = Resolve(inventory);
-        _stateStore.CommitActive(current, candidate);
+        _stateStore.CommitActive(current, candidate, ReadRecordedDesired(inventory));
     }
 
     private static InstalledPluginInventoryItem? FindInventoryItem(

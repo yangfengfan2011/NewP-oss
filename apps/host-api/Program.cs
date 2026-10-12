@@ -134,12 +134,12 @@ var platformApiCatalog = new PlatformApiHostCatalog(
         PlatformApiReleaseIdentity.ReleaseDigest)]);
 var standardDataInspector = new StandardDataPackageInspector(platformApiCatalog);
 using var pluginDeploymentLease = PluginDeploymentLease.Acquire(pluginInstallRoot);
-PluginOfflineDeployment.RejectConflictingLegacyDesired(pluginInstallRoot);
 if (offlinePluginCommand)
 {
     Environment.ExitCode = PluginOfflineDeployment.Run(args, pluginInstallRoot, builtInModuleSource, externalPluginsEnabled, standardDataInspector, lifecycleManager);
     return;
 }
+PluginOfflineDeployment.RejectConflictingLegacyDesired(pluginInstallRoot);
 var standardDataInstaller = new StandardDataPackageInstaller(
     pluginInstallRoot,
     stateStore,

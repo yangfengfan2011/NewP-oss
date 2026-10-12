@@ -20,6 +20,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\server\plugin-platform\PluginPlatform.csproj" />
+    <ProjectReference Include="..\..\server\modules\Part\PartModule.csproj" />
+    <ProjectReference Include="..\..\server\modules\Part\Migrations.SqlServer\Part.SqlServerMigrations.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "version": "1.0.0",
+  "contract": "newp.native-component-runtime.v1",
+  "backend": {
+    "targetFramework": "net10.0",
+    "frameworkAssemblyVersion": "10.0.0.0",
+    "platformAssemblyVersion": "1.0.0.0",
+    "efCore": "10.0.1",
+    "binding": "behavior-bindings",
+    "persistence": "ef-migrations.v1",
+    "storageTypeMapDigest": "5bc9528effbf0b228d577567d7c44ea3f139def035bd022c4d22880aba560302",
+    "assemblies": {
+      "Kernel": "1.0.0.0",
+      "Sdk": "1.0.0.0",
+      "PlatformModeling": "1.0.0.0",
+      "PlatformCrud": "1.0.0.0",
+      "PlatformPersistence": "1.0.0.0",
+      "PlatformPersistence.EfCore": "1.0.0.0",
+      "Microsoft.EntityFrameworkCore": "10.0.1.0",
+      "Microsoft.EntityFrameworkCore.Relational": "10.0.1.0",
+      "Microsoft.EntityFrameworkCore.SqlServer": "10.0.1.0"
+    }
+  },
+  "frontend": {
+    "@icp-platform/sdk": "0.1.0",
+    "@icp-platform/core": "1.0.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "binding": "behavior-bindings"
+  }
+}

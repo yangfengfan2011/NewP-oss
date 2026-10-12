@@ -8,6 +8,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="ComponentBundles/platform-runtime-release.json" LogicalName="NewP.PlatformRuntimeRelease.json" />
+    <EmbeddedResource Include="../platform-modeling/metadata/storage-types.json" LogicalName="NewP.NativeStorageTypes.json" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\kernel\Kernel.csproj" />
     <ProjectReference Include="..\platform-persistence\PlatformPersistence.csproj" />
     <ProjectReference Include="..\plugin-contracts\Plugin.Contracts.csproj" />

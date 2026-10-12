@@ -70,7 +70,29 @@ dotnet build apps/host-api/HostApi.csproj -c Release -p:NewpComponentRoot=InforC
 
 上述 `InforCenter` 命令要求其全部声明成员已经嵌套，现有平面三成员布局会明确拒绝。前端 workspace 使用递归模块发现，Vite 与 `build-frontend-plugin.mjs` 通过同一 Catalog CLI 获取稳定 entry key 对应的真实源码入口；新增或调整测试配置时，从 workspace 根解析共享包，不按组件嵌套深度维护相对路径。
 
-源码根和位置无关构建已落地；聚合发行、可信独立安装及库存事务仍由 [规格 #267](https://github.com/yangfengfan2011/NewP/issues/267) 的后续交付负责。回退需同时恢复通用构建入口与工程资源配置，已实际归组的目录按其 JSON 关系还原；不改写模型、manifest、已提交迁移或数据库历史。
+源码根和位置无关构建已落地。回退需同时恢复通用构建入口与工程资源配置，已实际归组的目录按其 JSON 关系还原；不改写模型、manifest、已提交迁移或数据库历史。
+
+## 聚合发行构建与静态核验
+
+正式入口 `server/tools/component-bundle` 按同一 `ComponentSourceCatalog` 取得完整归组，构建原位 owner 工程与现有前端 plugin builder，再从实际产物生成索引。纯组合可以只拥有声明，不补造后端、前端、模型或迁移入口。输出目录和 ZIP 必须是新的目标；所有命令均不写安装库存、desired、active 或 authoring。
+
+```powershell
+dotnet run --project server/tools/component-bundle/ComponentBundle.csproj -c Release -- build . InforCenter <新的暂存目录>
+dotnet run --project server/tools/component-bundle/ComponentBundle.csproj -c Release -- pack <暂存目录> <新的ZIP路径>
+dotnet run --project server/tools/component-bundle/ComponentBundle.csproj -c Release -- inspect <暂存目录或ZIP>
+```
+
+`build` 仍要求声明与成员目录完整对应；当前平面 InforCenter 三成员输入会被拒绝。后端 Release 参数只在正式发行入口排除调试路径与仓库提交号，不改变开发调试配置；产物路径来自 MSBuild `TargetPath`，目标框架及实际共享依赖必须匹配受控平台运行时发行。私有程序集按真实引用闭包从 owner 构建输出收集，受控平台依赖与 CLR 实际共享框架由目标发行提供；未知或版本不一致的引用在消费前拒绝。迁移沿用原项目的确定性设置，打包不执行 finalize。
+
+包根包含 `component-bundle.json`、`platform-runtime-release.json` 与 `modules/<ModuleId>/`。每个组件根保存原始 `authoring/newp.plugin.json`、派生 `plugin.json`、自身 metadata/resources、实际后端 DLL、前端完整产物，以及声明的 migration manifest/DLL 与已发布 canonical source。原 Capsule 是唯一声明真源；派生 transport 只把后端映射为 `backend/<AssemblyName>.dll`、前端映射为 `frontend/entry.js`，其他声明严格保持。检查器逐项比对该映射及后端嵌入的 Capsule，不追随原声明的历史 `../../` 程序集路径。
+
+成员索引记录精确版本、自有内容摘要、固定相对根和每个文件的 SHA-256。组件摘要从按相对路径排序的自有资产索引计算，排除成员；整包摘要从平台发行身份及全部组件索引计算，不增加人工包版本。ZIP 使用固定条目顺序和时间戳。同 ID 同版本相同内容可复用，不同内容通过 `ComponentBundleInspector.RequireReusable` 拒绝；库存 owner 在提交前消费此规则，检查器不维护库存。
+
+平台发行方维护 `server/plugin-platform/ComponentBundles/platform-runtime-release.json`，它拥有公共行为/持久化契约、.NET 目标、共享程序集和前端依赖的精确发行版本，并固定既有存储类型映射摘要。该受控声明嵌入平台代码，业务 HEAD、组件根位置和父组件版本均不参与。正式构建核对真实 MSBuild 输出、CLR 引用版本、现有存储输入及 Node 实际解析的前端依赖；前端 builder 从 Rollup 输出生成 `frontend-artifacts.json`，记录全部 chunk/资源引用和共享运行时引用。共享契约或依赖发行变化时由平台发行方更新此声明，不能让业务包自行增加 Host 支持的发行身份。
+
+`inspect` 与 `ExtractVerified` 在返回候选前检查整个资产集合、相对路径、大小写碰撞、链接、所有摘要、平台身份、声明映射和前端引用闭包，并通过正式 Capsule reader/Canonical 编译器读取候选。后端检查只读取 PE/CLR metadata，不加载包内代码；模型投影、manifest 前缀、bundleChecksum 和 canonical source 复用现有持久化完整性规则。检查通过及 checksum 只证明资产一致，不授予可信原生身份、平台必需角色或执行许可。可信接纳、独立运行、文件事务与选版由 [规格 #267](https://github.com/yangfengfan2011/NewP/issues/267) 的后续交付负责。
+
+回退可撤销构建工具与发行协议变更，删除未安装的暂存产物；不能借此改写已发布 manifest 或迁移历史，也不能把源码/ZIP 回退当作数据库回退。
 ## 兼容代码边界
 
 仓库仍有少量 `ModuleBase`、`FrontendModule`、Host 私有 `plugin.json` 和旧示例模块，它们是迁移兼容路径，不是新增模块模板。普通接入不得：

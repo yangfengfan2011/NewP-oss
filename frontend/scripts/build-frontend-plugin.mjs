@@ -2,7 +2,9 @@
 import { build } from 'vite';
 import { resolve, dirname, relative, isAbsolute } from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
+import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 import { discoverFrontendEntries } from './component-sources.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -35,6 +37,45 @@ const uiSourceRoot = resolve(__dirname, '../packages/ui/src');
 const artifactsRoot = resolve(__dirname, '../../artifacts/frontend-plugins');
 const entryPath = discoverFrontendEntries(resolve(__dirname, '../..'))[moduleName];
 const outDir = resolve(artifactsRoot, moduleName);
+const releaseOption = process.argv.indexOf('--runtime-release');
+const releaseBytes = releaseOption >= 0 ? readFileSync(process.argv[releaseOption + 1]) : null;
+const release = releaseBytes ? JSON.parse(releaseBytes.toString('utf8')) : null;
+const sharedPackages = release ? Object.keys(release.frontend).filter((key) => key !== 'binding') : [];
+
+// 正式发行核对实际解析依赖；开发期原入口继续沿现有配置构建。
+if (release) {
+  const require = createRequire(resolve(__dirname, '../package.json'));
+  for (const packageName of sharedPackages) {
+    const packagePath = packageName.startsWith('@icp-platform/')
+      ? resolve(__dirname, '../packages', packageName.slice('@icp-platform/'.length), 'package.json')
+      : require.resolve(`${packageName}/package.json`);
+    const actual = JSON.parse(readFileSync(packagePath, 'utf8')).version;
+    if (actual !== release.frontend[packageName]) {
+      throw new Error(`COMPONENT_BUNDLE_RUNTIME_MISMATCH: ${packageName} expected ${release.frontend[packageName]}, actual ${actual}`);
+    }
+  }
+}
+
+const isSharedImport = (id) => sharedPackages.some((name) => id === name || id.startsWith(`${name}/`));
+const artifactIndex = {
+  name: 'newp-component-frontend-artifacts',
+  generateBundle(_options, bundle) {
+    if (!release) return;
+    const files = Object.fromEntries(Object.keys(bundle).sort().map((name) => {
+      const artifact = bundle[name];
+      return [name, artifact.type === 'chunk' ? {
+        imports: [...artifact.imports, ...artifact.dynamicImports].filter((id) => !isSharedImport(id)).sort(),
+        sharedImports: [...artifact.imports, ...artifact.dynamicImports].filter(isSharedImport).sort(),
+        assets: [...artifact.referencedFiles].sort(),
+      } : { imports: [], sharedImports: [], assets: [] }];
+    }));
+    this.emitFile({ type: 'asset', fileName: 'frontend-artifacts.json', source: JSON.stringify({
+      schemaVersion: 1, entry: 'entry.js',
+      platformRuntime: { version: release.version, contentDigest: createHash('sha256').update(releaseBytes).digest('hex') },
+      files,
+    }, null, 2) });
+  },
+};
 
 const isPathInside = (parentPath, childPath) => {
   const relativePath = relative(parentPath, childPath);
@@ -64,6 +105,7 @@ console.log(`Output: ${outDir}/entry.js`);
 try {
   await build({
     configFile: false,
+    plugins: [artifactIndex],
     resolve: {
       alias: [
         { find: '@icp-platform/ui/core', replacement: resolve(uiSourceRoot, 'core.ts') },
@@ -79,7 +121,7 @@ try {
       outDir,
       emptyOutDir: true,
       rollupOptions: {
-        external: [
+        external: release ? isSharedImport : [
           'react',
           'react-dom',
           '@icp-platform/sdk',

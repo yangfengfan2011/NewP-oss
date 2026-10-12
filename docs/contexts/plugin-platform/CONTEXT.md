@@ -42,11 +42,11 @@ _Avoid_: 合并模块、共享模型 owner、父组件拥有子组件数据
 可整体移动的组件前端与声明 authoring 根，包含自身的声明、metadata、前端实现、资源和迁移清单；后端实现与迁移工程保持原位，通过稳定组件身份关联其构建产物。嵌套成员有各自的源码根，目录包含不合并组件身份、资产归属或数据归属。
 _Avoid_: namespace 前缀、模型 owner、安装版本目录
 
-**聚合发行包（Component Bundle，目标能力）**：
+**聚合发行包（Component Bundle）**：
 一次性交付一个组合组件及其成员组件产物的发行单位，以整包内容摘要标识交付物，不另维护人工包版本。成员保留各自版本并可独立选版升级，包内交付组合不替代实际期望状态。
 _Avoid_: 合并组件、统一成员版本、父组件拥有成员数据
 
-组件源码根与位置无关构建已实现；聚合发行包仍是后续目标。两者的边界见 [ADR-0056](../../adr/0056-movable-component-roots-and-aggregate-delivery.md)，当前开发入口见[内建模块开发指南](../../developer/componentized-development.md)。
+组件源码根、位置无关构建和聚合 build/pack/inspect 已实现；检查结果是内容一致的静态候选，不授予原生信任。可信独立安装、库存事务和选版仍为后续目标。边界见 [ADR-0056](../../adr/0056-movable-component-roots-and-aggregate-delivery.md)，当前开发入口见[内建模块开发指南](../../developer/componentized-development.md)。
 
 **成员组件（Member Component）**：
 被归入组合组件、仍保留自身身份、版本和生命周期的组件。成员资格与组件之间实际消费能力的依赖关系是两个不同概念。

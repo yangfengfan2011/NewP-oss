@@ -10,6 +10,7 @@ using ICP.Platform.Plugin.Contracts;
 using ICP.Platform.PluginPlatform.Lifecycle;
 using ICP.Platform.PluginPlatform.StandardData;
 using Xunit;
+using ICP.Platform.Testing;
 
 namespace ICP.Platform.PluginPlatform.Tests;
 
@@ -18,7 +19,7 @@ public sealed class ComponentBundleTests
     [Fact]
     public void OrdinaryInstall_AndDescriptiveSourceFieldsCannotGrantNativeTrust()
     {
-        using var input = new BundleInput();
+        using var input = new ComponentBundleTestInput();
         var capsule = JsonNode.Parse(File.ReadAllText(input.Capsule))!;
         capsule["sourceKind"] = "built-in";
         capsule["profile"] = "native-component.v1";
@@ -39,7 +40,7 @@ public sealed class ComponentBundleTests
     [Fact]
     public void NativeInstall_RejectsRuntimeMismatchAndDistributionRoleBeforeInventoryCommit()
     {
-        using var input = new BundleInput();
+        using var input = new ComponentBundleTestInput();
         var manifest = new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, input.Artifacts);
         var installRoot = input.Output + "-installed";
         var store = new InstalledPluginStateStore(installRoot);
@@ -58,7 +59,7 @@ public sealed class ComponentBundleTests
     [Fact]
     public void NativeInstall_SameVersionDifferentContentPreservesInventoryAndSelection()
     {
-        using var input = new BundleInput();
+        using var input = new ComponentBundleTestInput();
         var builder = new ComponentBundleBuilder();
         builder.Stage(input.Repository, "InforCenter", input.Output, input.Artifacts);
         var installRoot = input.Output + "-installed";
@@ -83,7 +84,7 @@ public sealed class ComponentBundleTests
     [Fact]
     public void NativeInstall_OrdinaryWriteFailureRollsBackAllMemberInventory()
     {
-        using var input = new BundleInput();
+        using var input = new ComponentBundleTestInput();
         input.IncludePart();
         new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, input.Artifacts);
         var installRoot = input.Output + "-installed";
@@ -97,12 +98,148 @@ public sealed class ComponentBundleTests
         Assert.False(File.Exists(Path.Combine(installRoot, "native-install.pending")));
     }
 
+    [Fact]
+    public void NativeInstall_RetryRecoversInterruptedRollbackWithoutChangingOtherState()
+    {
+        using var input = new ComponentBundleTestInput();
+        input.IncludePart();
+        new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, input.Artifacts);
+        var root = input.Output + "-installed";
+        var store = new InstalledPluginStateStore(root);
+        Assert.True(store.TrySave(new InstalledPluginRecord
+        {
+            ModuleId = "Unrelated", Version = "2.0.0", Status = InstalledPluginLifecycleState.Installed,
+            PackageRoot = Path.Combine(root, "packages", "Unrelated", "2.0.0"), InstalledVersions = ["2.0.0"],
+            CurrentEnabledVersion = "2.0.0", IsDisabled = false
+        }, out _));
+        var protectedFiles = new Dictionary<string, byte[]>
+        {
+            ["state/Unrelated.json"] = File.ReadAllBytes(Path.Combine(root, "state", "Unrelated.json")),
+            ["lifecycle/v2/state.json"] = "original desired and active"u8.ToArray(),
+            ["persistence/catalog/state.json"] = "original pending and successful"u8.ToArray(),
+            ["persistence/catalog/assets/recovery.bin"] = "retained recovery bytes"u8.ToArray()
+        };
+        foreach (var item in protectedFiles)
+        {
+            var path = Path.Combine(root, item.Key);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllBytes(path, item.Value);
+        }
+        FileStream? lockedReceipt = null;
+        var saves = 0;
+        var failingStore = new InstalledPluginStateStore(root, (source, target, _) => File.Move(source, target, true),
+            (source, target) =>
+            {
+                if (++saves == 2) throw new IOException("controlled inventory failure");
+                File.Move(source, target);
+                lockedReceipt = new FileStream(NativeComponentInventory.ReceiptPath(root, "InforCenter", "1.0.0"),
+                    FileMode.Open, FileAccess.Read, FileShare.None);
+            });
+        try
+        {
+            Assert.ThrowsAny<IOException>(() => new NativeComponentPackageInstaller(root, failingStore).Install(input.Output));
+            Assert.True(File.Exists(Path.Combine(root, "native-install.pending")));
+            Assert.Throws<InvalidDataException>(() => NativeComponentInventory.EnsureComplete(root));
+            Assert.Throws<InvalidDataException>(() => InstalledPluginInventoryAdapter.Create(store));
+        }
+        finally { lockedReceipt?.Dispose(); }
+        new NativeComponentPackageInstaller(root, store).Install(input.Output);
+        new NativeComponentPackageInstaller(root, store).Install(input.Output);
+        Assert.Equal(["InforCenter", "Part", "Unrelated"], store.LoadAll().Select(item => item.ModuleId).Order().ToArray());
+        Assert.False(File.Exists(Path.Combine(root, "native-install.pending")));
+        foreach (var item in protectedFiles) Assert.Equal(item.Value, File.ReadAllBytes(Path.Combine(root, item.Key)));
+    }
+
+    [Theory]
+    [InlineData("staging")]
+    [InlineData("directory")]
+    public void NativeInstall_FileBoundaryFailurePreservesOriginalInventory(string boundary)
+    {
+        using var input = new ComponentBundleTestInput();
+        var capsule = JsonNode.Parse(File.ReadAllText(input.Capsule))!;
+        capsule["version"] = "0.9.0";
+        File.WriteAllText(input.Capsule, capsule.ToJsonString());
+        var builder = new ComponentBundleBuilder();
+        builder.Stage(input.Repository, "InforCenter", input.Output + "-old", input.Artifacts);
+        var root = input.Output + "-installed";
+        var store = new InstalledPluginStateStore(root);
+        new NativeComponentPackageInstaller(root, store).Install(input.Output + "-old");
+        var before = Directory.GetFiles(root, "*", SearchOption.AllDirectories).ToDictionary(path => path, File.ReadAllBytes);
+        capsule["version"] = "1.0.0";
+        File.WriteAllText(input.Capsule, capsule.ToJsonString());
+        input.IncludePart();
+        builder.Stage(input.Repository, "InforCenter", input.Output, input.Artifacts);
+        var copies = 0;
+        var moves = 0;
+        var installer = new NativeComponentPackageInstaller(root, store,
+            copyFile: (source, target) =>
+            {
+                if (boundary == "staging" && ++copies == 2) throw new IOException("controlled staging failure");
+                File.Copy(source, target);
+            }, moveDirectory: (source, target) =>
+            {
+                if (boundary == "directory" && ++moves == 2) throw new IOException("controlled member directory failure");
+                Directory.Move(source, target);
+            });
+        Assert.Throws<IOException>(() => installer.Install(input.Output));
+        Assert.Equal("0.9.0", Assert.Single(store.LoadAll()).Version);
+        Assert.False(File.Exists(Path.Combine(root, "native-install.pending")));
+        Assert.Empty(Directory.GetDirectories(root, ".native-stage-*"));
+        Assert.Equal(before.Keys.Order(), Directory.GetFiles(root, "*", SearchOption.AllDirectories).Order());
+        foreach (var item in before) Assert.Equal(item.Value, File.ReadAllBytes(item.Key));
+    }
+
+    [Fact]
+    public void NativeInstall_ReusedDirectoriesAndReceiptsSurviveFailedInventoryCommit()
+    {
+        using var input = new ComponentBundleTestInput();
+        input.IncludePart();
+        new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, input.Artifacts);
+        var root = input.Output + "-installed";
+        new NativeComponentPackageInstaller(root, new InstalledPluginStateStore(root)).Install(input.Output);
+        var before = Directory.GetFiles(root, "*", SearchOption.AllDirectories).ToDictionary(path => path, File.ReadAllBytes);
+        var saves = 0;
+        var store = new InstalledPluginStateStore(root, (source, target, _) =>
+        {
+            if (++saves == 2) throw new IOException("controlled inventory replacement failure");
+            File.Move(source, target, true);
+        }, File.Move);
+        Assert.Throws<IOException>(() => new NativeComponentPackageInstaller(root, store).Install(input.Output));
+        Assert.Equal(before.Keys.Order(), Directory.GetFiles(root, "*", SearchOption.AllDirectories).Order());
+        foreach (var item in before) Assert.Equal(item.Value, File.ReadAllBytes(item.Key));
+        Assert.Equal(2, store.LoadAll().Count);
+    }
+
+    [Fact]
+    public void NativeInstall_InvalidRecoveryFactsFailClosedBeforeAnyRestoration()
+    {
+        using var input = new ComponentBundleTestInput();
+        var root = input.Output + "-installed";
+        Directory.CreateDirectory(root);
+        var marker = Path.Combine(root, "native-install.pending");
+        var unchanged = Path.Combine(root, "untouched.bin");
+        File.WriteAllText(unchanged, "unrelated inventory and retained assets");
+        var before = File.ReadAllBytes(unchanged);
+        foreach (var recovery in new[]
+        {
+            new NativeInstallRecovery(".native-stage-" + Guid.NewGuid().ToString("N"), [new("../untouched", "1.0.0", null, false, false)]),
+            new NativeInstallRecovery(null!, [new("InforCenter", "1.0.0", null, false, false)])
+        })
+        {
+            File.WriteAllBytes(marker, ComponentBundleIntegrity.Serialize(new NativeInstallJournal(recovery, ComponentBundleIntegrity.Hash(recovery))));
+            var journal = File.ReadAllBytes(marker);
+            var failure = Assert.Throws<InvalidDataException>(() => new NativeComponentPackageInstaller(root, new InstalledPluginStateStore(root)).Install(input.Output));
+            Assert.Contains("COMPONENT_BUNDLE_INSTALL_INCOMPLETE", failure.Message);
+            Assert.Equal(journal, File.ReadAllBytes(marker));
+            Assert.Equal(before, File.ReadAllBytes(unchanged));
+        }
+    }
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public void AcceptedNativeCandidate_PreservesTrustedStorageAndUrlAssetsAcrossExternalSwitch(bool externalEnabled)
     {
-        using var input = new BundleInput();
+        using var input = new ComponentBundleTestInput();
         input.IncludePart();
         new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, input.Artifacts);
         var installRoot = input.Output + "-installed";
@@ -153,7 +290,7 @@ public sealed class ComponentBundleTests
     [Fact]
     public void NativeInstall_AddsImmutableInventoryWithoutSelectingOrActivating()
     {
-        using var input = new BundleInput();
+        using var input = new ComponentBundleTestInput();
         var manifest = new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, new Dictionary<string, ComponentBuiltArtifacts>());
         var installRoot = input.Output + "-installed";
         var store = new ICP.Platform.Kernel.PluginPackages.InstalledPluginStateStore(installRoot);
@@ -169,7 +306,7 @@ public sealed class ComponentBundleTests
     [Fact]
     public void NativeInstall_RejectsInvalidBundleBeforeInventoryCommit()
     {
-        using var input = new BundleInput();
+        using var input = new ComponentBundleTestInput();
         new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, new Dictionary<string, ComponentBuiltArtifacts>());
         File.AppendAllText(Path.Combine(input.Output, "modules", "InforCenter", "plugin.json"), "changed");
         var installRoot = input.Output + "-installed";
@@ -182,7 +319,7 @@ public sealed class ComponentBundleTests
     [Fact]
     public void PureComposition_PacksAndReadsWithoutInventedRuntimeEntries()
     {
-        using var input = new BundleInput();
+        using var input = new ComponentBundleTestInput();
         var manifest = new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, new Dictionary<string, ComponentBuiltArtifacts>());
         var inspected = new ComponentBundleInspector().Inspect(input.Output);
         var component = Assert.Single(inspected.Components);
@@ -198,7 +335,7 @@ public sealed class ComponentBundleTests
     [Fact]
     public void SameIdentityAndVersion_ReuseRequiresExactlyTheSameContent()
     {
-        using var input = new BundleInput();
+        using var input = new ComponentBundleTestInput();
         var builder = new ComponentBundleBuilder();
         var original = builder.Stage(input.Repository, "InforCenter", input.Output, new Dictionary<string, ComponentBuiltArtifacts>());
         ComponentBundleInspector.RequireReusable(original.Components[0], original.Components[0]);
@@ -214,7 +351,7 @@ public sealed class ComponentBundleTests
     [Fact]
     public void Inspector_ReindexedInvalidBackendFailsBeforeAnyAssemblyExecution()
     {
-        using var input = new BundleInput();
+        using var input = new ComponentBundleTestInput();
         input.IncludePart();
         new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, input.Artifacts);
         File.WriteAllText(Path.Combine(input.Output, "modules", "Part", "backend", "PartModule.dll"), "invalid managed assembly");
@@ -226,7 +363,7 @@ public sealed class ComponentBundleTests
     [Fact]
     public void Inspector_ReindexedMissingFrontendChunkIsRejected()
     {
-        using var input = new BundleInput();
+        using var input = new ComponentBundleTestInput();
         input.IncludePart();
         new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, input.Artifacts);
         File.Delete(Path.Combine(input.Output, "modules", "Part", "frontend", "resource.mjs"));
@@ -238,7 +375,7 @@ public sealed class ComponentBundleTests
     [Fact]
     public void Inspector_ReindexedModelChangeCannotRewritePublishedMigrationTarget()
     {
-        using var input = new BundleInput();
+        using var input = new ComponentBundleTestInput();
         input.IncludePart();
         new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, input.Artifacts);
         var modelPath = Path.Combine(input.Output, "modules", "Part", "metadata", "models", "Part.model.json");
@@ -253,7 +390,7 @@ public sealed class ComponentBundleTests
     [Fact]
     public void Inspector_ReindexedAssemblyForDifferentFrameworkIsRejected()
     {
-        using var input = new BundleInput();
+        using var input = new ComponentBundleTestInput();
         input.IncludePart();
         new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, input.Artifacts);
         var assembly = Path.Combine(input.Output, "modules", "Part", "backend", "PartModule.dll");
@@ -271,7 +408,7 @@ public sealed class ComponentBundleTests
     [Fact]
     public void Inspector_ReindexedUnknownAssemblyReferenceIsRejected()
     {
-        using var input = new BundleInput();
+        using var input = new ComponentBundleTestInput();
         input.IncludePart();
         new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, input.Artifacts);
         var assembly = Path.Combine(input.Output, "modules", "Part", "backend", "PartModule.dll");
@@ -298,7 +435,7 @@ public sealed class ComponentBundleTests
     [InlineData("frontend-shared-import", "COMPONENT_BUNDLE_RUNTIME_MISMATCH")]
     public void Inspector_RejectsBadAssetsAndInconsistentDeclarations(string mutation, string code)
     {
-        using var input = new BundleInput();
+        using var input = new ComponentBundleTestInput();
         input.IncludePart();
         new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, input.Artifacts);
         var memberRoot = Path.Combine(input.Output, "modules", "Part");
@@ -341,7 +478,7 @@ public sealed class ComponentBundleTests
     [InlineData("asset:stream")]
     public void Inspector_ReindexedIllegalAssetPathIsRejected(string relative)
     {
-        using var input = new BundleInput();
+        using var input = new ComponentBundleTestInput();
         var manifest = new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, input.Artifacts);
         var files = new SortedDictionary<string, string>(manifest.Components[0].Files.ToDictionary(item => item.Key, item => item.Value), StringComparer.Ordinal)
             { [relative] = new string('0', 64) };
@@ -359,7 +496,7 @@ public sealed class ComponentBundleTests
     [InlineData(true)]
     public void Archive_DuplicatePathsAndLinksAreRejectedBeforeExtraction(bool link)
     {
-        using var input = new BundleInput();
+        using var input = new ComponentBundleTestInput();
         var zipPath = Path.Combine(input.Root, "unsafe.zip");
         using (var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create))
         {
@@ -381,7 +518,7 @@ public sealed class ComponentBundleTests
     [InlineData("modules\\InforCenter\\escaped.txt")]
     public void Archive_IllegalPathIsRejectedBeforeExtraction(string path)
     {
-        using var input = new BundleInput();
+        using var input = new ComponentBundleTestInput();
         var zipPath = Path.Combine(input.Root, "unsafe.zip");
         using (var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create)) archive.CreateEntry(path);
         var destination = Path.Combine(input.Root, "extracted");
@@ -393,7 +530,7 @@ public sealed class ComponentBundleTests
     [Fact]
     public void PackTwice_IsByteIdenticalAndArchiveReadsAsTheSameComponents()
     {
-        using var input = new BundleInput();
+        using var input = new ComponentBundleTestInput();
         var builder = new ComponentBundleBuilder();
         var manifest = builder.Stage(input.Repository, "InforCenter", input.Output, input.Artifacts);
         var first = Path.Combine(input.Root, "first.zip");
@@ -425,62 +562,4 @@ public sealed class ComponentBundleTests
         File.WriteAllBytes(manifestPath, JsonSerializer.SerializeToUtf8Bytes(manifest, options));
     }
 
-    private sealed class BundleInput : IDisposable
-    {
-        internal string Root { get; } = Path.Combine(Path.GetTempPath(), "NewP-270-bundle-" + Guid.NewGuid().ToString("N"));
-        internal string Repository => Path.Combine(Root, "repository");
-        internal string Output => Path.Combine(Root, "bundle");
-        internal string Capsule => Path.Combine(Repository, "frontend", "modules", "infor-center", "newp.plugin.json");
-        internal string SourceRepository { get; }
-        internal Dictionary<string, ComponentBuiltArtifacts> Artifacts { get; } = new(StringComparer.Ordinal);
-
-        internal BundleInput()
-        {
-            var directory = new DirectoryInfo(AppContext.BaseDirectory);
-            while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "ICP-Platform.sln"))) directory = directory.Parent;
-            SourceRepository = directory?.FullName ?? throw new DirectoryNotFoundException();
-            var source = ComponentSourceCatalog.Discover(SourceRepository).Get("InforCenter");
-            Directory.CreateDirectory(Path.GetDirectoryName(Capsule)!);
-            var capsule = JsonNode.Parse(File.ReadAllText(source.CapsulePath))!;
-            capsule["composition"]!["members"] = new JsonArray();
-            File.WriteAllText(Capsule, capsule.ToJsonString());
-        }
-
-        internal void IncludePart()
-        {
-            var catalog = ComponentSourceCatalog.Discover(SourceRepository);
-            var part = catalog.Get("Part");
-            var partRoot = Path.Combine(Path.GetDirectoryName(Capsule)!, "part");
-            foreach (var file in catalog.EnumerateOwnFiles("Part"))
-            {
-                var relative = Path.GetRelativePath(part.Root, file);
-                if (relative != "newp.plugin.json" && !relative.StartsWith("metadata") && !relative.StartsWith("migrations")) continue;
-                var target = Path.Combine(partRoot, relative);
-                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                File.Copy(file, target);
-            }
-            var parent = JsonNode.Parse(File.ReadAllText(Capsule))!;
-            parent["composition"]!["members"] = new JsonArray("Part");
-            File.WriteAllText(Capsule, parent.ToJsonString());
-            var frontend = Path.Combine(Root, "frontend-built");
-            Directory.CreateDirectory(frontend);
-            File.WriteAllText(Path.Combine(frontend, "entry.js"), "export { default } from './resource.mjs';");
-            File.WriteAllText(Path.Combine(frontend, "resource.mjs"), "export default { behaviorKey: 'part.frontend' };");
-            File.WriteAllText(Path.Combine(frontend, "frontend-artifacts.json"), JsonSerializer.Serialize(new
-            {
-                schemaVersion = 1, entry = "entry.js", platformRuntime = PlatformRuntimeReleaseIdentity.Current,
-                files = new Dictionary<string, object>
-                {
-                    ["entry.js"] = new { imports = new[] { "resource.mjs" }, sharedImports = Array.Empty<string>(), assets = Array.Empty<string>() },
-                    ["resource.mjs"] = new { imports = Array.Empty<string>(), sharedImports = Array.Empty<string>(), assets = Array.Empty<string>() }
-                }
-            }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
-            var migrationSource = Directory.GetFiles(Path.Combine(SourceRepository, "server", "modules", "Part", "Migrations.SqlServer"), "20261008102916_Part_000001_Metadata.cs", SearchOption.AllDirectories).Single();
-            Artifacts.Add("Part", new(Path.Combine(AppContext.BaseDirectory, "PartModule.dll"), frontend,
-                new Dictionary<string, string> { ["migrations/Part.SqlServerMigrations.dll"] = Path.Combine(AppContext.BaseDirectory, "Part.SqlServerMigrations.dll") },
-                new Dictionary<string, string> { ["migrations/sources/sqlServer/20261008102916_Part_000001_Metadata.cs"] = migrationSource }));
-        }
-
-        public void Dispose() => Directory.Delete(Root, true);
-    }
 }

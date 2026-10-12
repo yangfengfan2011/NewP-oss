@@ -19,6 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="../TestSupport/Components/ComponentBundleTestInput.cs" Link="TestSupport/ComponentBundleTestInput.cs" />
     <ProjectReference Include="..\..\server\plugin-platform\PluginPlatform.csproj" />
     <ProjectReference Include="..\..\server\modules\Part\PartModule.csproj" />
     <ProjectReference Include="..\..\server\modules\Part\Migrations.SqlServer\Part.SqlServerMigrations.csproj" />

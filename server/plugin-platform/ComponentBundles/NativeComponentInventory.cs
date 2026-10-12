@@ -9,10 +9,14 @@ internal sealed record NativeComponentReceipt(PlatformRuntimeRelease PlatformRun
 
 internal static class NativeComponentInventory
 {
+    // Host 与正式离线入口已经持有安装根独占租约，先恢复再允许读取库存。
+    internal static void Recover(string installRoot) => NativeComponentInstallTransaction.Recover(installRoot);
+
     // 状态与 receipt 均处于停服租约范围；未完成文件事务不得进入启动候选。
     internal static void EnsureComplete(string installRoot)
     {
-        if (File.Exists(Path.Combine(installRoot, "native-install.pending")))
+        var marker = Path.Combine(installRoot, "native-install.pending");
+        if (File.Exists(marker) || Directory.Exists(marker))
             throw new InvalidDataException("COMPONENT_BUNDLE_INSTALL_INCOMPLETE: finish offline recovery before reading inventory.");
     }
 

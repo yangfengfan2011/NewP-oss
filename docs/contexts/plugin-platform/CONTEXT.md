@@ -48,7 +48,7 @@ _Avoid_: 合并组件、统一成员版本、父组件拥有成员数据
 
 组件源码根、位置无关构建和聚合 build/pack/inspect 已实现；检查结果是内容一致的静态候选，不授予原生信任。真实 InforCenter/Part 首片已通过本机专用入口接纳库存，在未预装实现的固定 Host/Shell 中经显式选版、完整启动激活及 URL 前端消费，保持既有 SQL 数据、dbo owner 和迁移历史。原生来源由安装根 receipt 与核对后的固定快照签发，不由 SourceKind/profile 或 checksum 签发，也不授予平台必需角色。
 
-普通外部开关只影响普通外部候选与部署入口，原生库存和选择共用安装根的一份 desired/active 状态。旧关闭态状态根有冲突时失败关闭并定位组件；#273 负责显式裁决与整包选版。安装只追加库存，普通异常恢复本轮写入；`native-install.pending` 阻止进程中断后的不完整库存被消费，#272 继续实现跨成员可恢复文件事务。主仓三成员归组及后续扩展、独立升级和退出仍未完成。边界见 [ADR-0056](../../adr/0056-movable-component-roots-and-aggregate-delivery.md)，当前开发入口见[内建模块开发指南](../../developer/componentized-development.md#原生发行的离线接纳与独立消费)。
+普通外部开关只影响普通外部候选与部署入口，原生库存和选择共用安装根的一份 desired/active 状态。旧关闭态状态根有冲突时失败关闭并定位组件；#273 负责显式裁决与整包选版。安装只追加库存。整批校验与暂存后，`native-install.pending` 以原库存字节和目录/receipt所有权记录持久恢复事实；目录、receipt及多成员库存完成后才移除journal。Host与正式离线入口在安装根独占租约内、读取库存前恢复完整旧集合，恢复中断可重复执行；损坏或不可恢复时保留journal与材料并失败关闭，不消费半集合，也不修改desired、active、Persistence pending或恢复归档。主仓三成员归组及后续扩展、独立升级和退出仍未完成。边界见 [ADR-0056](../../adr/0056-movable-component-roots-and-aggregate-delivery.md)，当前开发入口见[内建模块开发指南](../../developer/componentized-development.md#原生发行的离线接纳与独立消费)。
 
 **成员组件（Member Component）**：
 被归入组合组件、仍保留自身身份、版本和生命周期的组件。成员资格与组件之间实际消费能力的依赖关系是两个不同概念。

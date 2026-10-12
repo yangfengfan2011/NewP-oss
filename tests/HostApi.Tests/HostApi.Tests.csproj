@@ -27,6 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="../TestSupport/Components/ComponentBundleTestInput.cs" Link="TestSupport/ComponentBundleTestInput.cs" />
     <ProjectReference Include="..\..\apps\host-api\HostApi.csproj" />
   </ItemGroup>
 

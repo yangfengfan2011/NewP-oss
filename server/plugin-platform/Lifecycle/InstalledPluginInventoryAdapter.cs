@@ -1,4 +1,5 @@
 using ICP.Platform.Kernel.PluginPackages;
+using ICP.Platform.PluginPlatform.ComponentBundles;
 
 namespace ICP.Platform.PluginPlatform.Lifecycle;
 
@@ -7,11 +8,13 @@ namespace ICP.Platform.PluginPlatform.Lifecycle;
 /// </summary>
 public static class InstalledPluginInventoryAdapter
 {
+    // 正式入口先在租约内恢复；其他读取者也不能绕过未完成文件事务屏障。
     public static IReadOnlyList<InstalledPluginInventoryItem> Create(
         InstalledPluginStateStore stateStore)
     {
         ArgumentNullException.ThrowIfNull(stateStore);
         var installRoot = stateStore.InstallRoot;
+        NativeComponentInventory.EnsureComplete(installRoot);
 
         return stateStore.LoadAll()
             .Select(record => new InstalledPluginInventoryItem(

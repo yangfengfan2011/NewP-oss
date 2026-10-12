@@ -54,7 +54,7 @@ internal static class PluginOfflineDeployment
         {
             var options = Parse(args[2..]);
             var store = new InstalledPluginStateStore(installRoot);
-            NativeComponentInventory.EnsureComplete(installRoot);
+            NativeComponentInventory.Recover(installRoot);
             var installed = InstalledPluginInventoryAdapter.Create(store);
             var builtIns = new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(source);
             var inventory = installed.Concat(builtIns.Where(module => !installed.Any(item => item.ModuleId == module.ModuleId))

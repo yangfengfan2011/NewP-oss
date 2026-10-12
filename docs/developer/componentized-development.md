@@ -119,7 +119,7 @@ pnpm --dir frontend --filter @icp-platform/shell exec vite build --outDir <新�
 Remove-Item Env:NEWP_EXCLUDED_MODULE_IDS
 ```
 
-MSBuild 命令中的 `%2c` 转义逗号，避免将组件列表拆成多个属性。首片已用真实 InforCenter/Part 包贯通未预装这两项的固定 Host/Shell、正式 Part API/页面和既有 SQL 数据及迁移历史；主仓的平面三成员布局仍未归组。普通安装异常恢复本轮新增库存，进程中断留下 `native-install.pending` 并在离线操作或启动读取前失败关闭；#272 继续实现跨成员进程中断恢复。整包选版、独立升级、三成员扩展及退出边界仍由 #273/#274/#275 交付。
+MSBuild 命令中的 `%2c` 转义逗号，避免将组件列表拆成多个属性。首片已用真实 InforCenter/Part 包贯通未预装这两项的固定 Host/Shell、正式 Part API/页面和既有 SQL 数据及迁移历史；主仓的平面三成员布局仍未归组。安装先完成整批校验与暂存，再以 `native-install.pending` 持久记录原库存字节及每个目录/receipt的先前所有权。提交期间进程中断，下一次正式离线命令或Host启动在同一安装根独占租约内、读取库存前恢复完整旧集合；恢复自身中断可重入。journal只在全部提交或全部恢复完成后移除；损坏、旧版仅摘要标记或无法恢复时保留journal与材料并以 `COMPONENT_BUNDLE_INSTALL_INCOMPLETE` 失败关闭，不能手工删除标记绕过。重复安装幂等，原选择、无关库存与Persistence pending/成功记录及恢复归档保持；文件恢复不连接数据库，也不代替数据库前沿恢复。整包选版、独立升级、三成员扩展及退出边界仍由 #273/#274/#275 交付。
 
 回退应在停服租约内恢复相容的平台文件与明确选择；数据库前沿已变化时必须保留相容组件和恢复资产，不执行 Down、改写已提交历史或清除 Persistence pending。未完成原生文件事务也不能通过手工删除标记冒充恢复完成。
 

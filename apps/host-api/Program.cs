@@ -172,7 +172,7 @@ builder.Services.AddSingleton(sp =>
         sp.GetRequiredService<PluginUploadService>(),
         pluginInstallRoot));
 
-NativeComponentInventory.EnsureComplete(pluginInstallRoot);
+NativeComponentInventory.Recover(pluginInstallRoot);
 var pluginInventory = InstalledPluginInventoryAdapter.Create(stateStore);
 var activationGate = new PluginActivationGate(
     lifecycleManager,

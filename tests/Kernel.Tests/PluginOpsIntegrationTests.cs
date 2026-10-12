@@ -147,19 +147,47 @@ public class PluginOpsIntegrationTests : IDisposable
 
         Assert.Equal("Installed", installer.Install(packageRoot, installRoot).Status);
 
-        var result = PluginOpsProcess.Run(
+        // 正式发行仍声明 InforCenter 的三个成员；单独删除 Part 必须先拒绝且不修改库存或代码。
+        CopyHostDistribution(installRoot);
+        var removedIds = new[] { "InforCenter", "Workspace", "Part", "Document" };
+        var modulesRoot = Path.Combine(installRoot, "host-distribution", "modules");
+        var statePath = Path.Combine(installRoot, "state", "Part.json");
+        var stateBytes = File.ReadAllBytes(statePath);
+        var protectedFiles = Directory.GetFiles(Path.Combine(installRoot, "packages", "Part"), "*", SearchOption.AllDirectories)
+            .Concat(removedIds.SelectMany(id => Directory.GetFiles(Path.Combine(modulesRoot, id), "*", SearchOption.AllDirectories)))
+            .ToDictionary(path => path, File.ReadAllBytes);
+        var blocked = PluginOpsProcess.Run(
             "uninstall",
             [
                 "--module-id", "Part",
                 "--install-root", installRoot
             ]);
 
+        Assert.NotEqual(0, blocked.ExitCode);
+        Assert.Contains("MODULE_COMPOSITION_MEMBER_MISSING", blocked.StdErr);
+        Assert.Equal(stateBytes, File.ReadAllBytes(statePath));
+        foreach (var file in protectedFiles) Assert.Equal(file.Value, File.ReadAllBytes(file.Key));
+        var desiredPath = Path.Combine(installRoot, "lifecycle", "v2", "state.json");
+        Assert.False(File.Exists(desiredPath));
+
+        // 通过调用方精确列出的完整集合解除组合和活动依赖，不改写真实发行声明。
+        var selections = Path.Combine(installRoot, "uninstall.json");
+        File.WriteAllText(selections, System.Text.Json.JsonSerializer.Serialize(removedIds));
+        var result = PluginOpsProcess.Run("uninstall", ["--file", selections, "--install-root", installRoot]);
         Assert.True(result.ExitCode == 0, result.StdOut + result.StdErr);
+        Assert.Contains("uninstall-components:[\"InforCenter\",\"Workspace\",\"Part\",\"Document\"]", result.StdOut);
         Assert.Contains("uninstall:PendingRestart", result.StdOut, StringComparison.OrdinalIgnoreCase);
         Assert.True(stateStore.TryLoad("Part", out var record, out var loadError));
         Assert.Null(loadError);
         Assert.Null(record);
         Assert.False(Directory.Exists(Path.Combine(installRoot, "packages", "Part")));
+        foreach (var id in removedIds) Assert.False(Directory.Exists(Path.Combine(modulesRoot, id)));
+        Assert.True(Directory.Exists(Path.Combine(modulesRoot, "Audit")));
+        using var lifecycle = System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(desiredPath));
+        var desiredIds = lifecycle.RootElement.GetProperty("desiredModules").EnumerateArray()
+            .Select(item => item.GetProperty("moduleId").GetString()).ToArray();
+        Assert.DoesNotContain(desiredIds, id => removedIds.Contains(id));
+        Assert.Contains("Audit", desiredIds);
     }
 
     [Fact]

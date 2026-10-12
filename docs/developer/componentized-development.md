@@ -90,9 +90,39 @@ dotnet run --project server/tools/component-bundle/ComponentBundle.csproj -c Rel
 
 平台发行方维护 `server/plugin-platform/ComponentBundles/platform-runtime-release.json`，它拥有公共行为/持久化契约、.NET 目标、共享程序集和前端依赖的精确发行版本，并固定既有存储类型映射摘要。该受控声明嵌入平台代码，业务 HEAD、组件根位置和父组件版本均不参与。正式构建核对真实 MSBuild 输出、CLR 引用版本、现有存储输入及 Node 实际解析的前端依赖；前端 builder 从 Rollup 输出生成 `frontend-artifacts.json`，记录全部 chunk/资源引用和共享运行时引用。共享契约或依赖发行变化时由平台发行方更新此声明，不能让业务包自行增加 Host 支持的发行身份。
 
-`inspect` 与 `ExtractVerified` 在返回候选前检查整个资产集合、相对路径、大小写碰撞、链接、所有摘要、平台身份、声明映射和前端引用闭包，并通过正式 Capsule reader/Canonical 编译器读取候选。后端检查只读取 PE/CLR metadata，不加载包内代码；模型投影、manifest 前缀、bundleChecksum 和 canonical source 复用现有持久化完整性规则。检查通过及 checksum 只证明资产一致，不授予可信原生身份、平台必需角色或执行许可。可信接纳、独立运行、文件事务与选版由 [规格 #267](https://github.com/yangfengfan2011/NewP/issues/267) 的后续交付负责。
+`inspect` 与 `ExtractVerified` 在返回候选前检查整个资产集合、相对路径、大小写碰撞、链接、所有摘要、平台身份、声明映射和前端引用闭包，并通过正式 Capsule reader/Canonical 编译器读取候选。后端检查只读取 PE/CLR metadata，不加载包内代码；模型投影、manifest 前缀、bundleChecksum 和 canonical source 复用现有持久化完整性规则。检查通过及 checksum 只证明资产一致，不授予可信原生身份、平台必需角色或执行许可。
 
 回退可撤销构建工具与发行协议变更，删除未安装的暂存产物；不能借此改写已发布 manifest 或迁移历史，也不能把源码/ZIP 回退当作数据库回退。
+
+## 原生发行的离线接纳与独立消费
+
+持有目标安装根部署权限的操作方在 Host 停止时使用已发布 Host 的专用入口。安装接受完整发行目录或 ZIP，严格匹配受控平台运行时发行；路径、资产集合、摘要、声明映射及同 ID/版本的内容复用检查全部在库存提交前完成。平台发行物指定的平台组合角色不能被原生包替换；普通 `install`、包内 SourceKind/profile 和静态检查结果不能授予原生信任。
+
+```powershell
+dotnet <目标Host目录>/HostApi.dll plugin-deploy install-native --package <发行目录或ZIP>
+dotnet <目标Host目录>/HostApi.dll plugin-deploy enable --module-id InforCenter --version 1.0.0
+dotnet <目标Host目录>/HostApi.dll plugin-deploy enable --module-id Part --version 1.0.0
+```
+
+命令使用相同目标配置和 `Platform:PluginInstallRoot`。`install-native` 只增加库存和安装根的接纳 receipt，不改变 desired、active 或数据库。既有 `select`、`enable`、`desired` 命令保存合并后的完整选择；待选择完整后重启 Host / Shell，统一 Activation Gate/Session 校验完整候选并经 Persistence deployment 确认活动快照。选择期间尚未闭合的依赖不能启动，也不会部分激活或自动启用依赖。
+
+生命周期只有 `<PluginInstallRoot>/lifecycle/v2/state.json` 一份状态源。原生库存和选择不受 `ExternalPluginsEnabled` 影响；关闭第三方开关时保留普通外部组件的选择，但不消费其候选，也拒绝新的普通外部安装、选版和启用。旧 `.feature-gates/external-plugins-disabled/lifecycle/v2/state.json` 有不能由当前根覆盖的选择时，以 `PLUGIN_DESIRED_SOURCE_CONFLICT` 和组件 ID 失败关闭；显式差异裁决由 #273 继续交付。
+
+接纳 receipt 与重新核对的固定快照共同签发原生来源，后端从固定程序集字节和受控依赖装载；既有成员保持 dbo、模型 owner、物理映射与迁移摘要前缀。前端交付方式与信任分离，活动目录生成验证资产的 URL，物化器只公开 `frontend` 子树中的入口和懒加载资源，不公开后端、metadata 或 migration。Shell 的构建产物通过 import map 提供同一共享运行时实例；Shell 与组件 builder 共用受控发行声明并核对实际解析的共享依赖版本。
+
+目标发行可通过通用身份参数排除待装实现，后续安装和消费不重建这些目标文件：
+
+```powershell
+dotnet publish apps/host-api/HostApi.csproj -c Release -p:NewpExcludedModuleIds=InforCenter%2cPart -o <新目标Host目录>
+$env:NEWP_EXCLUDED_MODULE_IDS = 'InforCenter,Part'
+pnpm --dir frontend --filter @icp-platform/shell exec vite build --outDir <新目标Shell目录>
+Remove-Item Env:NEWP_EXCLUDED_MODULE_IDS
+```
+
+MSBuild 命令中的 `%2c` 转义逗号，避免将组件列表拆成多个属性。首片已用真实 InforCenter/Part 包贯通未预装这两项的固定 Host/Shell、正式 Part API/页面和既有 SQL 数据及迁移历史；主仓的平面三成员布局仍未归组。普通安装异常恢复本轮新增库存，进程中断留下 `native-install.pending` 并在离线操作或启动读取前失败关闭；#272 继续实现跨成员进程中断恢复。整包选版、独立升级、三成员扩展及退出边界仍由 #273/#274/#275 交付。
+
+回退应在停服租约内恢复相容的平台文件与明确选择；数据库前沿已变化时必须保留相容组件和恢复资产，不执行 Down、改写已提交历史或清除 Persistence pending。未完成原生文件事务也不能通过手工删除标记冒充恢复完成。
+
 ## 兼容代码边界
 
 仓库仍有少量 `ModuleBase`、`FrontendModule`、Host 私有 `plugin.json` 和旧示例模块，它们是迁移兼容路径，不是新增模块模板。普通接入不得：

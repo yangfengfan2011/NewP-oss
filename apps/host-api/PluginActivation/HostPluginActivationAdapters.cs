@@ -256,12 +256,14 @@ public sealed class CanonicalModuleAssemblyLoader
             .ToArray();
     }
 
+    // 主体只消费计划签发字节；原生包边界独立于 Host 发行目录，不能退回路径重读。
     private VerifiedModuleImage ReadModuleImage(CanonicalModulePlanModule module)
     {
         var isBuiltIn = module.Provenance.AuthenticatesBuiltIn(module);
-        var boundary = isBuiltIn
+        var nativePackage = isBuiltIn && module.Provenance.GetAuthenticatedBuiltInSource(module)!.IsAcceptedNativeRoot(module.PackageRoot);
+        var boundary = isBuiltIn && !nativePackage
             ? _distributionRoot
-            : Path.GetFullPath(Path.Combine(module.PackageRoot, "backend"));
+            : nativePackage ? module.PackageRoot : Path.GetFullPath(Path.Combine(module.PackageRoot, "backend"));
         var path = Path.GetFullPath(Path.Combine(
             isBuiltIn ? module.PackageRoot : boundary,
             module.BackendEntry!));

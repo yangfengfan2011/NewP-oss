@@ -39,4 +39,9 @@
     <!-- 原位工程按 owner 目录发现；归组不新增逐组件 Host 接线。 -->
     <ProjectReference Include="../../server/modules/**/*.csproj" Exclude="../../server/modules/**/obj/**;../../server/modules/**/bin/**" />
   </ItemGroup>
+  <!-- 发行裁剪按显式组件身份进行；不得将未交付实现预装到独立安装验证目标。 -->
+  <ItemGroup Condition="'$(NewpExcludedModuleIds)' != ''">
+    <NewpExcludedModule Include="$(NewpExcludedModuleIds.Split(','))" />
+    <ProjectReference Remove="@(NewpExcludedModule->'../../server/modules/%(Identity)/**/*.csproj')" />
+  </ItemGroup>
 </Project>

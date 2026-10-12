@@ -5,12 +5,180 @@ using System.IO.Compression;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.PluginPlatform.ComponentBundles;
 using ICP.Platform.Persistence.Planning;
+using ICP.Platform.Kernel.PluginPackages;
+using ICP.Platform.Plugin.Contracts;
+using ICP.Platform.PluginPlatform.Lifecycle;
+using ICP.Platform.PluginPlatform.StandardData;
 using Xunit;
 
 namespace ICP.Platform.PluginPlatform.Tests;
 
 public sealed class ComponentBundleTests
 {
+    [Fact]
+    public void OrdinaryInstall_AndDescriptiveSourceFieldsCannotGrantNativeTrust()
+    {
+        using var input = new BundleInput();
+        var capsule = JsonNode.Parse(File.ReadAllText(input.Capsule))!;
+        capsule["sourceKind"] = "built-in";
+        capsule["profile"] = "native-component.v1";
+        File.WriteAllText(input.Capsule, capsule.ToJsonString());
+        new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, input.Artifacts);
+        var candidate = Assert.Single(new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(input.Output, "modules")));
+        var plan = new CanonicalModulePlanCompiler().Compile("untrusted-source-fields", [candidate]).Plan!;
+        Assert.False(Assert.Single(plan.Modules).Provenance.AuthenticatesBuiltIn(Assert.Single(plan.Modules)));
+        Assert.Empty(plan.RequiredModuleIds);
+        var installRoot = input.Output + "-ordinary";
+        var store = new InstalledPluginStateStore(installRoot);
+        var result = new UnifiedPluginPackageInstaller(store).Install(Path.Combine(input.Output, "modules", "InforCenter"), installRoot, pruneOldVersions: false);
+        Assert.Equal("Failed", result.Status);
+        Assert.Null(NativeComponentInventory.ReadReceipt(installRoot, "InforCenter", "1.0.0"));
+        Assert.Empty(store.LoadAll());
+    }
+
+    [Fact]
+    public void NativeInstall_RejectsRuntimeMismatchAndDistributionRoleBeforeInventoryCommit()
+    {
+        using var input = new BundleInput();
+        var manifest = new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, input.Artifacts);
+        var installRoot = input.Output + "-installed";
+        var store = new InstalledPluginStateStore(installRoot);
+        var installer = new NativeComponentPackageInstaller(installRoot, store);
+        var role = Assert.Throws<InvalidDataException>(() => installer.Install(input.Output, "InforCenter"));
+        Assert.Contains("COMPONENT_BUNDLE_PLATFORM_ROLE_FORBIDDEN", role.Message);
+        Assert.Empty(store.LoadAll());
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true };
+        File.WriteAllBytes(Path.Combine(input.Output, "component-bundle.json"), JsonSerializer.SerializeToUtf8Bytes(manifest with { PlatformRuntime = manifest.PlatformRuntime with { Version = "9.0.0" } }, options));
+        var mismatch = Assert.Throws<InvalidDataException>(() => installer.Install(input.Output));
+        Assert.Contains("COMPONENT_BUNDLE_RUNTIME_MISMATCH", mismatch.Message);
+        Assert.Empty(store.LoadAll());
+        Assert.False(File.Exists(Path.Combine(installRoot, "native-install.pending")));
+    }
+
+    [Fact]
+    public void NativeInstall_SameVersionDifferentContentPreservesInventoryAndSelection()
+    {
+        using var input = new BundleInput();
+        var builder = new ComponentBundleBuilder();
+        builder.Stage(input.Repository, "InforCenter", input.Output, input.Artifacts);
+        var installRoot = input.Output + "-installed";
+        var store = new InstalledPluginStateStore(installRoot);
+        var installer = new NativeComponentPackageInstaller(installRoot, store);
+        installer.Install(input.Output);
+        var manager = new PluginLifecycleManager(new PluginLifecycleStateStore(installRoot, new TestActivationDeployment(false)));
+        Assert.True(manager.RequestEnable(InstalledPluginInventoryAdapter.Create(store), "InforCenter", "1.0.0").IsSuccess);
+        var inventoryBytes = File.ReadAllBytes(Path.Combine(installRoot, "state", "InforCenter.json"));
+        var desiredBytes = File.ReadAllBytes(Path.Combine(installRoot, "lifecycle", "v2", "state.json"));
+        var capsule = JsonNode.Parse(File.ReadAllText(input.Capsule))!;
+        capsule["description"] = "different released content";
+        File.WriteAllText(input.Capsule, capsule.ToJsonString());
+        builder.Stage(input.Repository, "InforCenter", input.Output + "-changed", input.Artifacts);
+        Assert.Throws<InvalidDataException>(() => installer.Install(input.Output + "-changed"));
+        Assert.Equal(inventoryBytes, File.ReadAllBytes(Path.Combine(installRoot, "state", "InforCenter.json")));
+        Assert.Equal(desiredBytes, File.ReadAllBytes(Path.Combine(installRoot, "lifecycle", "v2", "state.json")));
+        installer.Install(input.Output);
+        Assert.Equal(desiredBytes, File.ReadAllBytes(Path.Combine(installRoot, "lifecycle", "v2", "state.json")));
+    }
+
+    [Fact]
+    public void NativeInstall_OrdinaryWriteFailureRollsBackAllMemberInventory()
+    {
+        using var input = new BundleInput();
+        input.IncludePart();
+        new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, input.Artifacts);
+        var installRoot = input.Output + "-installed";
+        var saves = 0;
+        var store = new InstalledPluginStateStore(installRoot, (source, target, _) => File.Move(source, target, true),
+            (source, target) => { if (++saves == 2) throw new IOException("controlled inventory write failure"); File.Move(source, target); });
+        Assert.Throws<IOException>(() => new NativeComponentPackageInstaller(installRoot, store).Install(input.Output));
+        Assert.Empty(store.LoadAll());
+        Assert.False(Directory.Exists(Path.Combine(installRoot, "packages", "InforCenter", "1.0.0")));
+        Assert.False(Directory.Exists(Path.Combine(installRoot, "packages", "Part", "1.0.0")));
+        Assert.False(File.Exists(Path.Combine(installRoot, "native-install.pending")));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AcceptedNativeCandidate_PreservesTrustedStorageAndUrlAssetsAcrossExternalSwitch(bool externalEnabled)
+    {
+        using var input = new BundleInput();
+        input.IncludePart();
+        new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, input.Artifacts);
+        var installRoot = input.Output + "-installed";
+        var store = new InstalledPluginStateStore(installRoot);
+        new NativeComponentPackageInstaller(installRoot, store).Install(input.Output);
+        var platformRoot = Path.Combine(input.Root, "platform");
+        Directory.CreateDirectory(Path.Combine(platformRoot, "modules"));
+        // 此低层检查只隔离来源与资产交付，真实平台依赖的端到端装配由固定发行物首片证明。
+        var partDeclaration = JsonNode.Parse(File.ReadAllText(Path.Combine(input.Output, "modules", "Part", "plugin.json")))!;
+        foreach (var dependency in partDeclaration["dependencies"]!.AsArray())
+        {
+            var id = dependency!.GetValue<string>();
+            var root = Path.Combine(platformRoot, "modules", id);
+            Directory.CreateDirectory(root);
+            File.WriteAllText(Path.Combine(root, "plugin.json"), JsonSerializer.Serialize(new
+            {
+                moduleId = id, version = "1.0.0", displayName = id, frontend = new { enabled = false }
+            }));
+        }
+        var source = TrustedBuiltInModuleSource.CreateForHost(platformRoot, Path.Combine(platformRoot, "modules"));
+        var inspector = new StandardDataPackageInspector(new PlatformApiHostCatalog("1.0.0", [], []));
+        var inventory = InstalledPluginInventoryAdapter.Create(store);
+        var state = new ResolvedPluginLifecycleState([new("InforCenter", "1.0.0", true), new("Part", "1.0.0", true)], null, null, false);
+        new StandardDataPackagePreflight(inspector, "1.1.0", source, installRoot, externalEnabled).Validate(inventory, state);
+        var plan = new StandardDataCandidatePlanCompiler(source, inspector, installRoot: installRoot, externalPluginsEnabled: externalEnabled).Compile(inventory, state);
+        var part = Assert.Single(plan.Modules, module => module.ModuleId == "Part");
+        Assert.True(part.Provenance.AuthenticatesBuiltIn(part));
+        Assert.Equal(ModuleFrontendDelivery.Url, part.FrontendDelivery);
+        Assert.Empty(plan.RequiredModuleIds);
+        var snapshot = part.Provenance.GetAuthenticatedBuiltInSnapshot(part)!;
+        var expectedBackend = snapshot.ReadDistributionFile(part.BackendEntry!);
+        File.WriteAllText(Path.Combine(part.PackageRoot, "backend", "PartModule.dll"), "changed after candidate preparation");
+        var materializer = new RuntimeViewMaterializer(store, new FrontendRuntimeManifestBuilder("/plugins/runtime/assets"), source);
+        using var stage = materializer.Stage(installRoot, plan);
+        using var commit = stage.BeginCommit();
+        commit.Complete();
+        Assert.Equal(expectedBackend, File.ReadAllBytes(Path.Combine(installRoot, "runtime", "backend-load-view", "Part", "PartModule.dll")));
+        Assert.True(File.Exists(Path.Combine(installRoot, "public", "Part", "1.0.0", "frontend", "entry.js")));
+        Assert.True(File.Exists(Path.Combine(installRoot, "public", "Part", "1.0.0", "frontend", "resource.mjs")));
+        Assert.DoesNotContain(Directory.EnumerateFiles(Path.Combine(installRoot, "public"), "*", SearchOption.AllDirectories), path => path.Contains("backend") || path.Contains("metadata") || path.Contains("migrations"));
+        using var catalog = JsonDocument.Parse(File.ReadAllText(Path.Combine(installRoot, "runtime", "active-module-runtime.json")));
+        var frontend = Assert.Single(catalog.RootElement.GetProperty("modules").EnumerateArray(), module => module.GetProperty("moduleId").GetString() == "Part").GetProperty("frontend");
+        Assert.Equal(JsonValueKind.Null, frontend.GetProperty("moduleId").ValueKind);
+        Assert.Equal("/plugins/runtime/assets/Part/1.0.0/frontend/entry.js", frontend.GetProperty("url").GetString());
+        Assert.Throws<InvalidDataException>(() => new StandardDataCandidatePlanCompiler(source, inspector, installRoot: installRoot).Compile(inventory, state));
+    }
+
+    [Fact]
+    public void NativeInstall_AddsImmutableInventoryWithoutSelectingOrActivating()
+    {
+        using var input = new BundleInput();
+        var manifest = new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, new Dictionary<string, ComponentBuiltArtifacts>());
+        var installRoot = input.Output + "-installed";
+        var store = new ICP.Platform.Kernel.PluginPackages.InstalledPluginStateStore(installRoot);
+        var installer = new NativeComponentPackageInstaller(installRoot, store);
+        installer.Install(input.Output);
+        installer.Install(input.Output);
+        Assert.Equal(["1.0.0"], Assert.Single(store.LoadAll()).InstalledVersions);
+        Assert.False(File.Exists(Path.Combine(installRoot, "lifecycle", "v2", "state.json")));
+        Assert.Equal(manifest.Components[0].ContentDigest,
+            NativeComponentInventory.ReadReceipt(installRoot, "InforCenter", "1.0.0")!.Component.ContentDigest);
+    }
+
+    [Fact]
+    public void NativeInstall_RejectsInvalidBundleBeforeInventoryCommit()
+    {
+        using var input = new BundleInput();
+        new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, new Dictionary<string, ComponentBuiltArtifacts>());
+        File.AppendAllText(Path.Combine(input.Output, "modules", "InforCenter", "plugin.json"), "changed");
+        var installRoot = input.Output + "-installed";
+        var store = new ICP.Platform.Kernel.PluginPackages.InstalledPluginStateStore(installRoot);
+        Assert.Throws<InvalidDataException>(() => new NativeComponentPackageInstaller(installRoot, store).Install(input.Output));
+        Assert.Empty(store.LoadAll());
+        Assert.False(Directory.Exists(Path.Combine(installRoot, "packages")));
+    }
+
     [Fact]
     public void PureComposition_PacksAndReadsWithoutInventedRuntimeEntries()
     {

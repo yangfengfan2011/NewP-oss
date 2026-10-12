@@ -8,6 +8,7 @@ namespace ICP.Platform.Kernel.ModulePlanning;
 internal sealed class TrustedBuiltInModuleSource
 {
     private readonly Action<string>? _beforeArtifactOpen;
+    private readonly Dictionary<string, VerifiedModuleArtifactSnapshot> _acceptedNativeModules = new(StringComparer.OrdinalIgnoreCase);
 
     private TrustedBuiltInModuleSource(
         string modulesRoot,
@@ -78,13 +79,27 @@ internal sealed class TrustedBuiltInModuleSource
             beforeArtifactOpen);
     }
 
+    // 内建根首次捕获，原生根复用接纳器已验证的固定字节。
     internal VerifiedModuleArtifactSnapshot CaptureModuleSnapshot(string moduleRoot)
     {
         ValidateModuleTree(moduleRoot);
+        if (_acceptedNativeModules.TryGetValue(Path.GetFullPath(moduleRoot), out var accepted)) return accepted;
         return VerifiedModuleArtifactSnapshot.Capture(
             moduleRoot,
             relativePath => _beforeArtifactOpen?.Invoke($"module:{relativePath}"));
     }
+
+    // 只有 Host 的原生库存适配器在核对本机接纳 receipt 与固定字节后登记，公开候选不能调用。
+    internal void RegisterAcceptedNativeModule(string moduleRoot, VerifiedModuleArtifactSnapshot snapshot)
+    {
+        var root = Path.GetFullPath(moduleRoot);
+        if (!string.Equals(root, snapshot.ModuleRoot, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Native snapshot does not match its accepted root.");
+        _acceptedNativeModules[root] = snapshot;
+    }
+
+    // 来源能力和前端运输方式分离；此事实仅由受控库存登记拥有。
+    internal bool IsAcceptedNativeRoot(string moduleRoot) => _acceptedNativeModules.ContainsKey(Path.GetFullPath(moduleRoot));
 
     internal byte[] CaptureDistributionFile(string path)
     {
@@ -93,9 +108,11 @@ internal sealed class TrustedBuiltInModuleSource
         return PathContainment.ReadContainedFile(DistributionRoot, resolvedPath);
     }
 
+    // 原生根只能来自已签发登记；其他根继续受发行根直接子目录及链接约束保护。
     internal void ValidateModuleTree(string moduleRoot)
     {
         var resolvedModuleRoot = Path.GetFullPath(moduleRoot);
+        if (_acceptedNativeModules.ContainsKey(resolvedModuleRoot)) return;
         if (!PathContainment.Contains(ModulesRoot, resolvedModuleRoot, allowRoot: false)
             || !string.Equals(
                 Path.GetDirectoryName(resolvedModuleRoot),

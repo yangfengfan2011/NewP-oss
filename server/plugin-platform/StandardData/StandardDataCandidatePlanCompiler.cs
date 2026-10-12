@@ -6,6 +6,7 @@ using ICP.Platform.Kernel.PluginPackages;
 using ICP.Platform.Plugin.Contracts;
 using ICP.Platform.PluginPlatform.Activation;
 using ICP.Platform.PluginPlatform.Lifecycle;
+using ICP.Platform.PluginPlatform.ComponentBundles;
 
 namespace ICP.Platform.PluginPlatform.StandardData;
 
@@ -17,6 +18,8 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
     private readonly TrustedBuiltInModuleSource? _builtInModuleSource;
     private readonly StandardDataPackageInspector _inspector;
     private readonly IReadOnlySet<string> _excludedBuiltInModuleIds;
+    private readonly string? _installRoot;
+    private readonly bool _externalPluginsEnabled;
     private readonly ModuleCapsuleCandidateReader _candidateReader = new();
     private readonly CanonicalModulePlanCompiler _compiler = new();
 
@@ -26,13 +29,16 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
     {
     }
 
+    // Host 同时提供可信发行根、单一库存根与第三方消费开关，普通构造入口不授信。
     internal StandardDataCandidatePlanCompiler(
         TrustedBuiltInModuleSource? builtInModuleSource,
         StandardDataPackageInspector inspector,
-        IEnumerable<string>? excludedBuiltInModuleIds = null)
+        IEnumerable<string>? excludedBuiltInModuleIds = null, string? installRoot = null, bool externalPluginsEnabled = true)
     {
         _builtInModuleSource = builtInModuleSource;
         _inspector = inspector;
+        _installRoot = installRoot;
+        _externalPluginsEnabled = externalPluginsEnabled;
         _excludedBuiltInModuleIds = (excludedBuiltInModuleIds ?? [])
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
@@ -76,6 +82,15 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
                         $"Desired plugin '{desired.ModuleId}@{desired.Version}' is not installed with a package root."));
             }
 
+            var native = _installRoot is not null && _builtInModuleSource is not null
+                ? NativeComponentInventory.ReadCandidate(_installRoot, desired.ModuleId, desired.Version, packageRoot, _builtInModuleSource)
+                : null;
+            if (native is not null)
+            {
+                candidates.Add(AssertDesiredIdentity(desired, native) with { Enabled = desired.Enabled });
+                continue;
+            }
+            if (!_externalPluginsEnabled) continue;
             var profile = PluginPackageProfileReader.Read(packageRoot);
             if (profile is null)
             {
@@ -240,6 +255,8 @@ public sealed class StandardDataPackagePreflight : IPluginPackagePreflight
     private readonly UnifiedPluginPackageScanner _legacyScanner = new();
     private readonly HostVersionChecker? _hostVersionChecker;
     private readonly TrustedBuiltInModuleSource? _builtInModuleSource;
+    private readonly string? _installRoot;
+    private readonly bool _externalPluginsEnabled;
 
     // 普通包 preflight 不具有内建信任签发能力。
     public StandardDataPackagePreflight(
@@ -250,10 +267,13 @@ public sealed class StandardDataPackagePreflight : IPluginPackagePreflight
     }
 
     // Host 签发的内建发布物也可受 desired 控制；普通包路径不能提升为内建可信来源。
-    internal StandardDataPackagePreflight(StandardDataPackageInspector inspector, string? hostVersion, TrustedBuiltInModuleSource? builtInModuleSource)
+    internal StandardDataPackagePreflight(StandardDataPackageInspector inspector, string? hostVersion, TrustedBuiltInModuleSource? builtInModuleSource,
+        string? installRoot = null, bool externalPluginsEnabled = true)
     {
         _inspector = inspector;
         _builtInModuleSource = builtInModuleSource;
+        _installRoot = installRoot;
+        _externalPluginsEnabled = externalPluginsEnabled;
         _hostVersionChecker = string.IsNullOrWhiteSpace(hostVersion)
             ? null
             : new HostVersionChecker(hostVersion);
@@ -280,6 +300,9 @@ public sealed class StandardDataPackagePreflight : IPluginPackagePreflight
                         $"Desired plugin '{desired.ModuleId}@{desired.Version}' is not installed with a package root."));
             }
 
+            if (_installRoot is not null && _builtInModuleSource is not null
+                && NativeComponentInventory.ReadCandidate(_installRoot, desired.ModuleId, desired.Version, packageRoot, _builtInModuleSource) is not null) continue;
+            if (!_externalPluginsEnabled) continue;
             var profile = PluginPackageProfileReader.Read(packageRoot);
             if (profile is null)
             {

@@ -5,16 +5,18 @@ using ICP.Platform.Kernel.ModulePlanning;
 // CLI 和 MSBuild 编译入口 消费同一源码发现器；前端无需维护另一份身份或成员映射。
 try
 {
-    if (args.Length is 6 or 7 && args[0] == "msbuild")
+    if (args.Length is 6 or 7 or 8 && args[0] == "msbuild")
     {
-        ComponentSourceBuildMapping.Write(args[1], args[2], args[3], args[4], bool.Parse(args[5]), args.Length == 7 ? args[6] : null);
+        ComponentSourceBuildMapping.Write(args[1], args[2], args[3], args[4], bool.Parse(args[5]), args.Length >= 7 ? args[6] : null, args.Length == 8 ? args[7] : null);
         return 0;
     }
     if (args.Length < 2 || args[0] is not ("frontend-entries" or "describe"))
         throw new ArgumentException("Usage: component-source-build <frontend-entries|describe> <repository-root> [group-module-id]");
     var repository = Path.GetFullPath(args[1]);
     var catalog = ComponentSourceCatalog.Discover(repository);
-    var components = args.Length > 2 ? catalog.GetGroup(args[2]) : catalog.Components;
+    var excludeIndex = Array.IndexOf(args, "--exclude-modules");
+    var excluded = (excludeIndex >= 0 ? args[excludeIndex + 1] : "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet(StringComparer.Ordinal);
+    var components = (args.Length > 2 && args[2] != "--exclude-modules" ? catalog.GetGroup(args[2]) : catalog.Components).Where(component => !excluded.Contains(component.ModuleId)).ToArray();
     if (args[0] == "frontend-entries")
     {
         var entries = new SortedDictionary<string, string>(StringComparer.Ordinal);

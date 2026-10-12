@@ -3,9 +3,9 @@ import { build } from 'vite';
 import { resolve, dirname, relative, isAbsolute } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, readFileSync } from 'fs';
-import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { discoverFrontendEntries } from './component-sources.mjs';
+import { validateFrontendRuntimeRelease } from './frontend-runtime-release.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -40,21 +40,7 @@ const outDir = resolve(artifactsRoot, moduleName);
 const releaseOption = process.argv.indexOf('--runtime-release');
 const releaseBytes = releaseOption >= 0 ? readFileSync(process.argv[releaseOption + 1]) : null;
 const release = releaseBytes ? JSON.parse(releaseBytes.toString('utf8')) : null;
-const sharedPackages = release ? Object.keys(release.frontend).filter((key) => key !== 'binding') : [];
-
-// 正式发行核对实际解析依赖；开发期原入口继续沿现有配置构建。
-if (release) {
-  const require = createRequire(resolve(__dirname, '../package.json'));
-  for (const packageName of sharedPackages) {
-    const packagePath = packageName.startsWith('@icp-platform/')
-      ? resolve(__dirname, '../packages', packageName.slice('@icp-platform/'.length), 'package.json')
-      : require.resolve(`${packageName}/package.json`);
-    const actual = JSON.parse(readFileSync(packagePath, 'utf8')).version;
-    if (actual !== release.frontend[packageName]) {
-      throw new Error(`COMPONENT_BUNDLE_RUNTIME_MISMATCH: ${packageName} expected ${release.frontend[packageName]}, actual ${actual}`);
-    }
-  }
-}
+const sharedPackages = release ? validateFrontendRuntimeRelease(release) : [];
 
 const isSharedImport = (id) => sharedPackages.some((name) => id === name || id.startsWith(`${name}/`));
 const artifactIndex = {

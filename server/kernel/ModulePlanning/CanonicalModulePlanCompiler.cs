@@ -502,7 +502,7 @@ public sealed class CanonicalModulePlanCompiler
             parents.GetValueOrDefault(module.ModuleId), module.CompositionMembers)).ToArray();
     }
 
-    // 规范化当前声明，并把组合成员及启用选择一起绑定到同一可信来源指纹。
+    // 规范化当前声明，将组合、启用选择与前端交付方式绑定到同一可信来源指纹。
     private static CanonicalModulePlanModule Normalize(ModuleCapsuleCandidate candidate)
     {
         ArgumentNullException.ThrowIfNull(candidate);
@@ -530,7 +530,8 @@ public sealed class CanonicalModulePlanCompiler
             Features = candidate.Features.OrderBy(node => node.Key, StringComparer.Ordinal).ToArray(),
             DataActions = candidate.DataActions.ToArray(),
             CompositionMembers = Sort(candidate.CompositionMembers),
-            Enabled = candidate.Enabled
+            Enabled = candidate.Enabled,
+            FrontendDelivery = candidate.FrontendDelivery
         };
     }
 

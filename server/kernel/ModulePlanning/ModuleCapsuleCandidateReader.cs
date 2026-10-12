@@ -22,6 +22,10 @@ public sealed class ModuleCapsuleCandidateReader
         return ReadBuiltIn(source.ModulesRoot, source);
     }
 
+    // 原生库存已由 Host source 登记固定快照，仍沿用正式 Capsule 读取和 Canonical 编译。
+    internal ModuleCapsuleCandidate ReadTrustedNativeModule(string moduleRoot, TrustedBuiltInModuleSource source) =>
+        ReadBuiltInModule(moduleRoot, source, source.CaptureModuleSnapshot(moduleRoot)) with { FrontendDelivery = ModuleFrontendDelivery.Url };
+
     private static IReadOnlyList<ModuleCapsuleCandidate> ReadBuiltIn(
         string modulesRoot,
         TrustedBuiltInModuleSource? trustedSource)
@@ -80,7 +84,9 @@ public sealed class ModuleCapsuleCandidateReader
         {
             snapshot = snapshot!.WithDistributionFile(
                 backendEntry,
-                trustedSource.CaptureDistributionFile(Path.Combine(moduleRoot, backendEntry)));
+                trustedSource.IsAcceptedNativeRoot(moduleRoot)
+                    ? snapshot.ReadFile(backendEntry)
+                    : trustedSource.CaptureDistributionFile(Path.Combine(moduleRoot, backendEntry)));
         }
         var dependencies = ReadStringArray(root, "dependencies");
 

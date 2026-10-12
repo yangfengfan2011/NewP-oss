@@ -1,7 +1,8 @@
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath, URL } from 'node:url'
 import { discoverFrontendEntries } from '../../scripts/component-sources.mjs'
+import { validateFrontendRuntimeRelease } from '../../scripts/frontend-runtime-release.mjs'
 import react from '@vitejs/plugin-react'
 import { defineConfig, normalizePath, type Plugin } from 'vite'
 
@@ -50,7 +51,8 @@ function newpFrontendEntryRegistry(): Plugin {
   }
 
   const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url))
-  for (const [entry, path] of Object.entries(discoverFrontendEntries(repositoryRoot))) {
+  const excluded = (process.env.NEWP_EXCLUDED_MODULE_IDS ?? '').split(',').map((id) => id.trim()).filter(Boolean)
+  for (const [entry, path] of Object.entries(discoverFrontendEntries(repositoryRoot, excluded))) {
     addEntry(entry, path)
   }
 
@@ -72,10 +74,39 @@ function newpFrontendEntryRegistry(): Plugin {
   }
 }
 
+// URL 组件通过 import map 消费与 Shell 相同的模块实例；共享入口由本次发行构建生成。
+function nativeSharedRuntime(): Plugin {
+  const modules = {
+    '@icp-platform/core': 'core', '@icp-platform/sdk': 'sdk',
+    react: 'react', 'react/jsx-runtime': 'react-jsx', 'react/jsx-dev-runtime': 'react-jsx-dev',
+    'react-dom': 'react-dom', 'react-dom/client': 'react-dom-client',
+  }
+  const prefix = '\0newp-shared-runtime:'
+  return {
+    name: 'newp-native-shared-runtime', apply: 'build',
+    resolveId(id) { return id.startsWith(prefix) ? id : null },
+    load(id) {
+      if (!id.startsWith(prefix)) return null
+      const name = id.slice(prefix.length)
+      const hasDefault = name === 'react' || name === 'react-dom' || name === 'react-dom/client'
+      return `export * from ${JSON.stringify(name)};${hasDefault ? `export { default } from ${JSON.stringify(name)};` : ''}`
+    },
+    buildStart() {
+      const release = JSON.parse(readFileSync(fileURLToPath(new URL('../../../server/plugin-platform/ComponentBundles/platform-runtime-release.json', import.meta.url)), 'utf8'))
+      validateFrontendRuntimeRelease(release)
+      for (const [name, slug] of Object.entries(modules)) this.emitFile({ type: 'chunk', id: prefix + name, fileName: `shared-runtime/${slug}.js`, preserveSignature: 'strict' })
+    },
+    transformIndexHtml() {
+      return [{ tag: 'script', attrs: { type: 'importmap' }, children: JSON.stringify({ imports: Object.fromEntries(Object.entries(modules).map(([name, slug]) => [name, `/shared-runtime/${slug}.js`])) }), injectTo: 'head-prepend' }]
+    },
+  }
+}
+
 export default defineConfig({
   plugins: [
     localhostIpv4Redirect(),
     newpFrontendEntryRegistry(),
+    nativeSharedRuntime(),
     react(),
   ],
   resolve: {

@@ -4,6 +4,7 @@ using ICP.Platform.Kernel.PluginPackages;
 using ICP.Platform.PluginPlatform.Lifecycle;
 using ICP.Platform.PluginPlatform.Activation;
 using ICP.Platform.PluginPlatform.StandardData;
+using ICP.Platform.PluginPlatform.ComponentBundles;
 
 namespace ICP.Platform.HostApi.PluginOperations;
 
@@ -25,6 +26,26 @@ internal static class PluginOfflineDeployment
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
+    // 旧关闭态只能与唯一状态根一致；差异交由后续显式裁决，不静默丢失任何选版。
+    internal static void RejectConflictingLegacyDesired(string installRoot)
+    {
+        var legacy = Path.Combine(installRoot, ".feature-gates", "external-plugins-disabled", "lifecycle", "v2", "state.json");
+        if (!File.Exists(legacy)) return;
+        var canonical = Path.Combine(installRoot, "lifecycle", "v2", "state.json");
+        var previous = JsonSerializer.Deserialize<DesiredSelectionsDocument>(PathContainment.ReadContainedFile(installRoot, legacy), JsonOptions)
+            ?? throw new InvalidDataException("PLUGIN_DESIRED_SOURCE_CONFLICT: legacy desired is invalid.");
+        var current = File.Exists(canonical)
+            ? JsonSerializer.Deserialize<DesiredSelectionsDocument>(PathContainment.ReadContainedFile(installRoot, canonical), JsonOptions)
+            : null;
+        if (previous.DesiredModules is null || current is not null && current.DesiredModules is null)
+            throw new InvalidDataException("PLUGIN_DESIRED_SOURCE_CONFLICT: desired selection collection is missing.");
+        var differences = previous.DesiredModules.Where(old => current?.DesiredModules.Any(item => item == old) != true).Select(item => item.ModuleId).Order(StringComparer.Ordinal).ToArray();
+        if (differences.Length > 0)
+            throw new InvalidDataException("PLUGIN_DESIRED_SOURCE_CONFLICT: explicit legacy desired reconciliation required for " + string.Join(", ", differences));
+    }
+
+    private sealed record DesiredSelectionsDocument(IReadOnlyList<PluginDesiredModuleState> DesiredModules);
+
     // builtin 信任仅由当前发行 Host 签发；外部命令不能指定任意目录成为可信内建来源。
     internal static int Run(string[] args, string installRoot, TrustedBuiltInModuleSource source,
         bool externalPluginsEnabled, StandardDataPackageInspector inspector, PluginLifecycleManager manager)
@@ -33,7 +54,8 @@ internal static class PluginOfflineDeployment
         {
             var options = Parse(args[2..]);
             var store = new InstalledPluginStateStore(installRoot);
-            var installed = externalPluginsEnabled ? InstalledPluginInventoryAdapter.Create(store) : [];
+            NativeComponentInventory.EnsureComplete(installRoot);
+            var installed = InstalledPluginInventoryAdapter.Create(store);
             var builtIns = new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(source);
             var inventory = installed.Concat(builtIns.Where(module => !installed.Any(item => item.ModuleId == module.ModuleId))
                 .Select(module => new InstalledPluginInventoryItem(module.ModuleId, [module.Version], module.Version))).ToArray();
@@ -43,7 +65,11 @@ internal static class PluginOfflineDeployment
             var action = args[1].ToLowerInvariant();
             switch (action)
             {
+                case "install-native":
+                    new NativeComponentPackageInstaller(installRoot, store).Install(Required(options, "package"), source.PlatformCompositionModuleId);
+                    break;
                 case "install":
+                    if (!externalPluginsEnabled) throw new InvalidDataException("PLUGIN_EXTERNAL_DISABLED");
                     var package = Required(options, "package");
                     using (var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(package, "plugin.json"))))
                     {
@@ -62,11 +88,13 @@ internal static class PluginOfflineDeployment
                     break;
                 case "desired":
                     var selections = ReadSelections(Required(options, "file"));
+                    foreach (var selection in selections) RequireExternalSelection(externalPluginsEnabled, installRoot, installed, selection.ModuleId, selection.Version);
                     Check(manager.RequestDesired(inventory, desired.Where(item => !selections.Any(selection => selection.ModuleId == item.ModuleId)).Concat(selections).ToArray()));
                     break;
                 case "select":
                 case "enable":
                     var selectedId = Required(options, "module-id");
+                    RequireExternalSelection(externalPluginsEnabled, installRoot, installed, selectedId, Required(options, "version"));
                     var previous = desired.SingleOrDefault(item => item.ModuleId == selectedId);
                     var enabled = action == "enable" || (options.TryGetValue("enabled", out var value) ? bool.Parse(value) : previous?.Enabled ?? false);
                     Check(manager.RequestDesired(inventory, desired.Where(item => item.ModuleId != selectedId).Append(new(selectedId, Required(options, "version"), enabled)).ToArray()));
@@ -80,13 +108,14 @@ internal static class PluginOfflineDeployment
                     var rollbackId = Required(options, "module-id");
                     var rollbackVersion = current.LastKnownGoodSnapshot?.Modules.SingleOrDefault(item => item.ModuleId == rollbackId)?.Version
                         ?? throw new InvalidDataException("PLUGIN_LAST_KNOWN_GOOD_MISSING");
+                    RequireExternalSelection(externalPluginsEnabled, installRoot, installed, rollbackId, rollbackVersion);
                     Check(manager.RequestDesired(inventory, desired.Where(item => item.ModuleId != rollbackId).Append(new(rollbackId, rollbackVersion, true)).ToArray()));
                     break;
                 case "uninstall":
                     var id = Required(options, "module-id");
                     var item = inventory.SingleOrDefault(item => item.ModuleId == id) ?? throw new InvalidDataException("PLUGIN_NOT_INSTALLED");
                     // 必需身份先由同一规范编译器裁决；可选成员引用在卸载后的完整启动候选中验证。
-                    var plan = new StandardDataCandidatePlanCompiler(source, inspector).Compile(externalPluginsEnabled ? installed : [], current with { DesiredModules = desired });
+                    var plan = new StandardDataCandidatePlanCompiler(source, inspector, installRoot: installRoot, externalPluginsEnabled: externalPluginsEnabled).Compile(installed, current with { DesiredModules = desired });
                     if (plan.RequiredModuleIds.Contains(id)) throw new InvalidDataException("PLATFORM_REQUIRED_MODULE_MISSING: " + id);
                     var builtIn = builtIns.SingleOrDefault(module => module.ModuleId == id);
                     ValidateDirectory(Path.Combine(installRoot, "packages"), Path.Combine(installRoot, "packages", item.ModuleId));
@@ -103,11 +132,21 @@ internal static class PluginOfflineDeployment
             Console.WriteLine(action + ":PendingRestart");
             return 0;
         }
-        catch (Exception exception) when (exception is IOException or InvalidOperationException or ArgumentException or JsonException or FormatException or PluginActivationException)
+        catch (Exception exception) when (exception is IOException or InvalidDataException or InvalidOperationException or ArgumentException or JsonException or FormatException or PluginActivationException)
         {
             Console.Error.WriteLine(exception.Message);
             return 1;
         }
+    }
+
+    // 关闭第三方开关时只接纳受控原生库存的选版；原选择在唯一 desired 中保留。
+    private static void RequireExternalSelection(bool externalPluginsEnabled, string installRoot,
+        IReadOnlyList<InstalledPluginInventoryItem> installed, string moduleId, string version)
+    {
+        if (externalPluginsEnabled) return;
+        var item = installed.SingleOrDefault(item => string.Equals(item.ModuleId, moduleId, StringComparison.OrdinalIgnoreCase));
+        if (item?.FindPackageRoot(version) is not null && NativeComponentInventory.ReadReceipt(installRoot, item.ModuleId, version) is null)
+            throw new InvalidDataException("PLUGIN_EXTERNAL_DISABLED: ordinary external selection is unavailable for " + moduleId);
     }
 
     // 只裁剪未选定的 installed 包版本；不读取或删除 catalog 归档，也不以旧 active 版本决定 desired。

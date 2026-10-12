@@ -1,6 +1,6 @@
 # Plugin Platform
 
-Plugin Platform 上下文管理仓库外插件包从离线部署意图到启动期激活和运行时投影的生命周期。它不拥有插件的业务领域，也不把 Host、Shell 或持久化实现细节暴露给普通插件作者；当前不提供 Host 运行期间的插件变更能力。
+Plugin Platform 上下文管理原生组件发行与仓库外插件包从离线部署意图到启动期激活和运行时投影的生命周期。它不拥有组件的业务领域，也不把 Host、Shell 或持久化实现细节暴露给普通插件作者；当前不提供 Host 运行期间的插件变更能力。
 
 组件组合、平台必需集合与独立生命周期见 [ADR-0055](../../adr/0055-component-composition-separates-model-identity-and-deployment.md)。通用组合、必需基础集合、全局模型身份、可选祖先屏蔽、停用保留和独立 owner 交错迁移已落地。激活 Gate/Session 拥有可信候选归档至最终部署确认的顺序，Host 只选择适配器、组合服务、Build 并运行。统一部署适配器同时拥有恢复编译与 active/LKG 的确认读取策略；显式无部署确认分支保留既有语义，SQL Server 未确认 raw active/LKG 不可作为活动事实，旧已确认 LKG 保留。pending 的实际历史恢复继续由持久化内核裁决。当前消费契约见 [Module Contract](../../architecture/module-contract.md)。
 
@@ -46,7 +46,9 @@ _Avoid_: namespace 前缀、模型 owner、安装版本目录
 一次性交付一个组合组件及其成员组件产物的发行单位，以整包内容摘要标识交付物，不另维护人工包版本。成员保留各自版本并可独立选版升级，包内交付组合不替代实际期望状态。
 _Avoid_: 合并组件、统一成员版本、父组件拥有成员数据
 
-组件源码根、位置无关构建和聚合 build/pack/inspect 已实现；检查结果是内容一致的静态候选，不授予原生信任。可信独立安装、库存事务和选版仍为后续目标。边界见 [ADR-0056](../../adr/0056-movable-component-roots-and-aggregate-delivery.md)，当前开发入口见[内建模块开发指南](../../developer/componentized-development.md)。
+组件源码根、位置无关构建和聚合 build/pack/inspect 已实现；检查结果是内容一致的静态候选，不授予原生信任。真实 InforCenter/Part 首片已通过本机专用入口接纳库存，在未预装实现的固定 Host/Shell 中经显式选版、完整启动激活及 URL 前端消费，保持既有 SQL 数据、dbo owner 和迁移历史。原生来源由安装根 receipt 与核对后的固定快照签发，不由 SourceKind/profile 或 checksum 签发，也不授予平台必需角色。
+
+普通外部开关只影响普通外部候选与部署入口，原生库存和选择共用安装根的一份 desired/active 状态。旧关闭态状态根有冲突时失败关闭并定位组件；#273 负责显式裁决与整包选版。安装只追加库存，普通异常恢复本轮写入；`native-install.pending` 阻止进程中断后的不完整库存被消费，#272 继续实现跨成员可恢复文件事务。主仓三成员归组及后续扩展、独立升级和退出仍未完成。边界见 [ADR-0056](../../adr/0056-movable-component-roots-and-aggregate-delivery.md)，当前开发入口见[内建模块开发指南](../../developer/componentized-development.md#原生发行的离线接纳与独立消费)。
 
 **成员组件（Member Component）**：
 被归入组合组件、仍保留自身身份、版本和生命周期的组件。成员资格与组件之间实际消费能力的依赖关系是两个不同概念。

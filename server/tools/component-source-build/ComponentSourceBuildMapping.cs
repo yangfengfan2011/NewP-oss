@@ -4,14 +4,16 @@ using ICP.Platform.Kernel.ModulePlanning;
 internal static class ComponentSourceBuildMapping
 {
     // 将当前 Capsule 与原位产物关联为本轮 obj 路径映射，不写回 authoring。
-    internal static void Write(string repositoryRoot, string projectPath, string configuration, string outputRoot, bool host, string? groupModuleId)
+    internal static void Write(string repositoryRoot, string projectPath, string configuration, string outputRoot, bool host, string? groupModuleId, string? excludedModuleIds = null)
     {
         var catalog = ComponentSourceCatalog.Discover(repositoryRoot);
         if (!string.IsNullOrWhiteSpace(groupModuleId)) catalog.GetGroup(groupModuleId);
         var capsules = new List<string>();
         var assets = new List<string>();
+        var excluded = (excludedModuleIds ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet(StringComparer.Ordinal);
         foreach (var component in catalog.Components)
         {
+            if (host && excluded.Contains(component.ModuleId)) continue;
             if (component.Capsule.TryGetProperty("entryAssembly", out var entry))
             {
                 var project = catalog.ResolveProject(repositoryRoot, component.ModuleId, entry.GetString()!);

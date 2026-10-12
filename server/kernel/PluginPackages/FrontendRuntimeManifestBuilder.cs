@@ -42,6 +42,7 @@ public class FrontendRuntimeManifestBuilder
         }) + Environment.NewLine;
     }
 
+    // 从同一活动计划投影前端交付；来源可信不要求构建期静态入口。
     public string Build(CanonicalModulePlan plan)
     {
         ArgumentNullException.ThrowIfNull(plan);
@@ -62,7 +63,7 @@ public class FrontendRuntimeManifestBuilder
                         bindingMode = module.FrontendBindingMode,
                         bindings = module.FrontendBindings
                     }
-                    : module.Provenance.AuthenticatesBuiltIn(module)
+                    : module.Provenance.AuthenticatesBuiltIn(module) && module.FrontendDelivery != ModuleFrontendDelivery.Url
                     ? (object)new
                     {
                         moduleId = module.FrontendEntry,

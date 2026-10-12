@@ -73,6 +73,7 @@ public sealed class ActiveModuleRuntimeCatalogBuilder
         return $"{publicBaseUrl.TrimEnd('/')}/{moduleId}/{version}/{entry.TrimStart('/')}";
     }
 
+    // 前端运输方式与来源信任分离；原生发行也可从固定公共资产 URL 交付。
     private object? BuildFrontend(CanonicalModulePlanModule module)
     {
         if (module.FrontendEntry is null)
@@ -95,8 +96,8 @@ public sealed class ActiveModuleRuntimeCatalogBuilder
 
         return new
         {
-            moduleId = module.Provenance.AuthenticatesBuiltIn(module) ? module.FrontendEntry : null,
-            url = module.Provenance.AuthenticatesBuiltIn(module)
+            moduleId = module.Provenance.AuthenticatesBuiltIn(module) && module.FrontendDelivery != ModuleFrontendDelivery.Url ? module.FrontendEntry : null,
+            url = module.Provenance.AuthenticatesBuiltIn(module) && module.FrontendDelivery != ModuleFrontendDelivery.Url
                 ? null
                 : CombinePublicPath(_publicBaseUrl, module.ModuleId, module.Version, module.FrontendEntry),
             behaviorKey = module.FrontendBehaviorKey,

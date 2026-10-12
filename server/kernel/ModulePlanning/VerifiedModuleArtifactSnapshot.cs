@@ -120,6 +120,9 @@ internal sealed class VerifiedModuleArtifactSnapshot
             .ToArray();
     }
 
+    // 原生接纳核对完整资产集合，不只核对某个投影子目录。
+    internal IReadOnlyList<string> EnumerateAllFiles() => _moduleFiles.Keys.Order(StringComparer.Ordinal).ToArray();
+
     private static IReadOnlyList<string> EnumeratePhysicalFiles(string root) =>
         Directory.GetFiles(root, "*", SearchOption.AllDirectories)
             .Select(path => NormalizeRelativePath(Path.GetRelativePath(root, path)))

@@ -68,7 +68,7 @@ public sealed class DeferredModuleMigrationSqlServerTests
         Select(fixture, "Document", true);
         var before = await History(fixture);
         var efCount = await Scalar(fixture, "SELECT COUNT(*) FROM dbo.__EFMigrationsHistory;");
-        var statePath = Path.Combine(fixture.PluginRoot, ".feature-gates/external-plugins-disabled/lifecycle/v2/state.json");
+        var statePath = Path.Combine(fixture.PluginRoot, "lifecycle/v2/state.json");
         var oldState = File.ReadAllBytes(statePath);
         await using (var connection = new SqlConnection(fixture.ConnectionString))
         {
@@ -117,7 +117,7 @@ public sealed class DeferredModuleMigrationSqlServerTests
         await fixture.StopAsync();
         await PrepareUpgrade(fixture, "Document", DocumentTail);
         Select(fixture, "Document", true);
-        var statePath = Path.Combine(fixture.PluginRoot, ".feature-gates/external-plugins-disabled/lifecycle/v2/state.json");
+        var statePath = Path.Combine(fixture.PluginRoot, "lifecycle/v2/state.json");
         var oldState = File.ReadAllBytes(statePath);
         await using (var connection = new SqlConnection(fixture.ConnectionString))
         {

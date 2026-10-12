@@ -3,6 +3,9 @@ using System.Text.Json;
 
 namespace ICP.Platform.Kernel.ModulePlanning;
 
+/// <summary>前端交付方式独立于可信来源；默认保留现有来源适配，原生安装资产明确采用 URL。</summary>
+public enum ModuleFrontendDelivery { SourceDefault, Url }
+
 /// <summary>
 /// 模块胶囊进入统一编译器前的候选事实。
 /// </summary>
@@ -25,6 +28,7 @@ public sealed record ModuleCapsuleCandidate(
     ModulePlanProvenance Provenance,
     ModulePersistenceContribution? Persistence = null)
 {
+    public ModuleFrontendDelivery FrontendDelivery { get; init; }
     public IReadOnlyList<FeatureDeclaration> Features { get; init; } = [];
     public IReadOnlyList<DataActionDeclaration> DataActions { get; init; } = [];
     public IReadOnlyList<string> CompositionMembers { get; init; } = [];
@@ -197,7 +201,7 @@ public sealed class ModulePlanProvenance
             candidate.FrontendBindings,
             candidate.FrontendBindingReferences,
             candidate.ModelKeys,
-            candidate.Persistence, candidate.Features, candidate.DataActions, candidate.CompositionMembers, candidate.Enabled);
+            candidate.Persistence, candidate.Features, candidate.DataActions, candidate.CompositionMembers, candidate.Enabled, candidate.FrontendDelivery);
 
     // 信任指纹覆盖动作、组合声明与自身启用选择，避免保留旧身份却替换已验证事实。
     private static string ComputeCanonicalFingerprint(CanonicalModulePlanModule module) =>
@@ -217,7 +221,7 @@ public sealed class ModulePlanProvenance
             module.FrontendBindings,
             module.FrontendBindingReferences,
             module.ModelKeys,
-            module.Persistence, module.Features, module.DataActions, module.CompositionMembers, module.Enabled);
+            module.Persistence, module.Features, module.DataActions, module.CompositionMembers, module.Enabled, module.FrontendDelivery);
 
     // 信任指纹覆盖动作、组合声明与自身启用选择，避免保留旧身份却替换已验证事实。
     private static string ComputeCanonicalFingerprint(
@@ -237,7 +241,7 @@ public sealed class ModulePlanProvenance
         IReadOnlyList<string> frontendBindingReferences,
         IReadOnlyList<string> modelKeys,
         ModulePersistenceContribution? persistence, IReadOnlyList<FeatureDeclaration> features, IReadOnlyList<DataActionDeclaration> dataActions,
-        IReadOnlyList<string> compositionMembers, bool enabled)
+        IReadOnlyList<string> compositionMembers, bool enabled, ModuleFrontendDelivery frontendDelivery)
     {
         var bytes = JsonSerializer.SerializeToUtf8Bytes(new
         {
@@ -251,6 +255,7 @@ public sealed class ModulePlanProvenance
             frontendEntry,
             frontendBehaviorKey,
             frontendBindingMode,
+            frontendDelivery,
             dependencies = Sort(dependencies),
             routes = Sort(routes),
             frontendBindings = Sort(frontendBindings),
@@ -334,6 +339,7 @@ public sealed record CanonicalModulePlanModule(
     ModulePlanProvenance Provenance,
     ModulePersistenceContribution? Persistence = null)
 {
+    public ModuleFrontendDelivery FrontendDelivery { get; init; }
     public IReadOnlyList<FeatureDeclaration> Features { get; init; } = [];
     public IReadOnlyList<DataActionDeclaration> DataActions { get; init; } = [];
     public IReadOnlyList<string> CompositionMembers { get; init; } = [];

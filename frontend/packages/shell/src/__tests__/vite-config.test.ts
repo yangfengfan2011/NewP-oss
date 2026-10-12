@@ -4,8 +4,16 @@ import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import config from '../../vite.config';
+import { validateFrontendRuntimeRelease } from '../../../../scripts/frontend-runtime-release.mjs';
 
 describe('vite config', () => {
+  it('rejects a native runtime release whose shared SDK version differs from actual resolution', () => {
+    const release = JSON.parse(readFileSync(fileURLToPath(new URL('../../../../../server/plugin-platform/ComponentBundles/platform-runtime-release.json', import.meta.url)), 'utf8'));
+    expect(() => validateFrontendRuntimeRelease({ ...release, frontend: { ...release.frontend, '@icp-platform/sdk': '9.0.0' } }))
+      .toThrow('@icp-platform/sdk expected 9.0.0, actual 0.1.0');
+    expect(validateFrontendRuntimeRelease(release)).toContain('@icp-platform/sdk');
+  });
+
   it('includes the merged Part authoring declaration in the implementation registry', () => {
     const serverConfig = typeof config === 'function' ? config({ command: 'serve', mode: 'test' }) : config;
     const registry = (serverConfig.plugins ?? []).flat()

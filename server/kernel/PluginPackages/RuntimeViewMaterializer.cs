@@ -398,11 +398,18 @@ public class RuntimeViewMaterializer
             overwrite: true);
     }
 
+    // 只公开经过签发的前端子树；metadata、后端与迁移始终留在各自消费面。
     private static void StageBuiltInFrontendAssets(
         string publicRoot,
         CanonicalModulePlanModule module,
         VerifiedModuleArtifactSnapshot snapshot)
     {
+        if (module.FrontendDelivery == ModuleFrontendDelivery.Url)
+        {
+            if (module.FrontendEntry is null) return;
+            WriteSnapshotDirectory(snapshot, "frontend", Path.Combine(publicRoot, module.ModuleId, module.Version, "frontend"));
+            return;
+        }
         const string frontendManifestPath = "frontend/plugin.frontend.json";
         if (!snapshot.ContainsFile(frontendManifestPath))
         {

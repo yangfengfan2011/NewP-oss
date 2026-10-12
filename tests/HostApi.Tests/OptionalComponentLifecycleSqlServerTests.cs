@@ -205,7 +205,7 @@ public sealed class OptionalComponentLifecycleSqlServerTests
         var deployment = HostPluginActivationDeployment.WithDeploymentStore(
             Path.Combine(fixture.HostRoot, "server/platform-modeling/metadata/storage-types.json"), PersistenceProvider.SqlServer, deploymentStore);
         var manager = new PluginLifecycleManager(new PluginLifecycleStateStore(
-            Path.Combine(fixture.PluginRoot, ".feature-gates", "external-plugins-disabled"), deployment));
+            fixture.PluginRoot, deployment));
         // 离线选版先选定已安装版本，再保留最终停用选择；RequestDisable 本身刻意保留旧 desired 版本。
         var selected = manager.RequestEnable(inventory, moduleId, version);
         Assert.True(selected.IsSuccess, selected.Message);

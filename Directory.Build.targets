@@ -22,7 +22,7 @@
     <PropertyGroup>
       <NewpMappingRoot>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'component-sources'))</NewpMappingRoot>
     </PropertyGroup>
-    <Exec Command="dotnet &quot;@(NewpComponentToolAssembly)&quot; msbuild &quot;$(NewpRepositoryRoot).&quot; &quot;$(MSBuildProjectFullPath)&quot; &quot;$(Configuration)&quot; &quot;$(NewpMappingRoot)&quot; &quot;$(NewpIsHostProject)&quot; &quot;$(NewpComponentRoot)&quot;" />
+    <Exec Command="dotnet &quot;@(NewpComponentToolAssembly)&quot; msbuild &quot;$(NewpRepositoryRoot).&quot; &quot;$(MSBuildProjectFullPath)&quot; &quot;$(Configuration)&quot; &quot;$(NewpMappingRoot)&quot; &quot;$(NewpIsHostProject)&quot; &quot;$(NewpComponentRoot)&quot; &quot;$(NewpExcludedModuleIds)&quot;" />
     <ReadLinesFromFile File="$(NewpMappingRoot)/capsules.txt">
       <Output TaskParameter="Lines" ItemName="NewpEmbeddedCapsule" />
     </ReadLinesFromFile>

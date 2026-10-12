@@ -27,6 +27,7 @@ using ICP.Platform.Plugin.Contracts;
 using ICP.Platform.PluginPlatform.Activation;
 using ICP.Platform.PluginPlatform.Lifecycle;
 using ICP.Platform.PluginPlatform.StandardData;
+using ICP.Platform.PluginPlatform.ComponentBundles;
 using ICP.Platform.Presentation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
@@ -91,10 +92,8 @@ var pluginInstallRoot = Path.IsPathRooted(configuredPluginInstallRoot)
     ? configuredPluginInstallRoot
     : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, configuredPluginInstallRoot));
 var externalPluginsEnabled = builder.Configuration.GetValue<bool>("Platform:ExternalPluginsEnabled");
-// 关闭态使用独立生命周期状态，避免 built-ins-only 快照覆盖未来重新启用时要恢复的 desired/active/LKG。
-var pluginLifecycleRoot = externalPluginsEnabled
-    ? pluginInstallRoot
-    : Path.Combine(pluginInstallRoot, ".feature-gates", "external-plugins-disabled");
+// 同一安装根只有一份 desired；第三方开关只控制普通外部候选是否消费。
+var pluginLifecycleRoot = pluginInstallRoot;
 var hostVersion = builder.Configuration["Platform:HostVersion"]
     ?? Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)
     ?? "1.0.0";
@@ -135,6 +134,7 @@ var platformApiCatalog = new PlatformApiHostCatalog(
         PlatformApiReleaseIdentity.ReleaseDigest)]);
 var standardDataInspector = new StandardDataPackageInspector(platformApiCatalog);
 using var pluginDeploymentLease = PluginDeploymentLease.Acquire(pluginInstallRoot);
+PluginOfflineDeployment.RejectConflictingLegacyDesired(pluginInstallRoot);
 if (offlinePluginCommand)
 {
     Environment.ExitCode = PluginOfflineDeployment.Run(args, pluginInstallRoot, builtInModuleSource, externalPluginsEnabled, standardDataInspector, lifecycleManager);
@@ -172,15 +172,14 @@ builder.Services.AddSingleton(sp =>
         sp.GetRequiredService<PluginUploadService>(),
         pluginInstallRoot));
 
-var pluginInventory = externalPluginsEnabled
-    ? InstalledPluginInventoryAdapter.Create(stateStore)
-    : Array.Empty<InstalledPluginInventoryItem>();
+NativeComponentInventory.EnsureComplete(pluginInstallRoot);
+var pluginInventory = InstalledPluginInventoryAdapter.Create(stateStore);
 var activationGate = new PluginActivationGate(
     lifecycleManager,
-    new StandardDataPackagePreflight(standardDataInspector, hostVersion, builtInModuleSource),
+    new StandardDataPackagePreflight(standardDataInspector, hostVersion, builtInModuleSource, pluginInstallRoot, externalPluginsEnabled),
     new StandardDataCandidatePlanCompiler(
         builtInModuleSource,
-        standardDataInspector),
+        standardDataInspector, installRoot: pluginInstallRoot, externalPluginsEnabled: externalPluginsEnabled),
     new HostPluginRuntimeProjection(materializer, pluginInstallRoot));
 using var activationSession = activationGate.Prepare(pluginInventory);
 var canonicalModulePlan = activationSession.ModulePlan;

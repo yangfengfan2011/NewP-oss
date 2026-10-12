@@ -283,7 +283,7 @@ public sealed class PersistenceDeploymentRecoverySqlServerTests
         Assert.Equal(recovered, await History(fixture));
     }
 
-    private static string LifecycleRoot(FeatureCatalogHostFixture fixture) => Path.Combine(fixture.PluginRoot, ".feature-gates/external-plugins-disabled");
+    private static string LifecycleRoot(FeatureCatalogHostFixture fixture) => fixture.PluginRoot;
     private static string LifecycleStatePath(FeatureCatalogHostFixture fixture) => Path.Combine(LifecycleRoot(fixture), "lifecycle/v2/state.json");
     private static JsonNode LifecycleState(FeatureCatalogHostFixture fixture) => JsonNode.Parse(File.ReadAllText(LifecycleStatePath(fixture)))!;
     private static string StatePath(FeatureCatalogHostFixture fixture) => Assert.Single(Directory.GetFiles(Path.Combine(fixture.PluginRoot, "persistence"), "state.json", SearchOption.AllDirectories));

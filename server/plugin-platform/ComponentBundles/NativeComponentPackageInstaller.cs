@@ -58,10 +58,11 @@ internal sealed class NativeComponentPackageInstaller(string installRoot, Instal
                     NativeComponentInstallTransaction.WriteAtomic(receiptPath, ComponentBundleIntegrity.Serialize(
                         new NativeComponentReceipt(inspection.Manifest.PlatformRuntime, inspection.Manifest.ContentDigest, component)));
                 if (!stateStore.TryLoad(component.ModuleId, out var previous, out var loadError)) throw new IOException(loadError);
+                // 无 v2 时，旧停用记录的版本与根承载显式选择；追加库存不能改写它们。
                 var record = new InstalledPluginRecord
                 {
-                    ModuleId = component.ModuleId, Version = component.Version, Status = InstalledPluginLifecycleState.Installed,
-                    PackageRoot = target, CurrentEnabledVersion = previous?.CurrentEnabledVersion, IsDisabled = previous?.IsDisabled ?? false,
+                    ModuleId = component.ModuleId, Version = previous is { IsDisabled: true } ? previous.Version : component.Version, Status = InstalledPluginLifecycleState.Installed,
+                    PackageRoot = previous is { IsDisabled: true } ? previous.PackageRoot : target, CurrentEnabledVersion = previous?.CurrentEnabledVersion, IsDisabled = previous?.IsDisabled ?? false,
                     InstalledVersions = (previous?.InstalledVersions ?? []).Append(component.Version).Distinct(StringComparer.Ordinal).ToList()
                 };
                 if (!stateStore.TrySave(record, out var saveError)) throw new IOException(saveError);

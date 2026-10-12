@@ -1,5 +1,6 @@
-import { readFileSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { discoverFrontendEntries } from '../../../../scripts/component-sources.mjs';
 import { expect, it } from 'vitest';
 import type { FrontendModule } from '@icp-platform/sdk';
 import workspace from '../../../../modules/workspace/src';
@@ -12,10 +13,15 @@ import { resolveDetailContributions } from '../standard-crud/detailContributionR
 const modules: FrontendModule[] = [[workspace, 'Workspace'], [part, 'Part'], [document, 'Document']].map(([binding, id]) => ({
   ...binding as typeof workspace, metadata: { moduleId: String(id), displayName: String(id), version: '1' },
 }));
+const componentRoots = Object.values(discoverFrontendEntries(resolve(__dirname, '../../../../..'))).map(entryPath => dirname(dirname(entryPath)))
+  .filter(componentRoot => existsSync(resolve(componentRoot, 'newp.plugin.json')));
 function metadata(): RuntimeMetadataState {
-  const root = resolve(__dirname, '../../../../..');
-  const read = (module: string, folder: string) => readdirSync(resolve(root, 'modules', module, 'metadata', folder)).map(file =>
-    JSON.parse(readFileSync(resolve(root, 'modules', module, 'metadata', folder, file), 'utf8')));
+  const read = (module: string, folder: string) => {
+    const moduleRoot = componentRoots.find(componentRoot => JSON.parse(readFileSync(resolve(componentRoot, 'newp.plugin.json'), 'utf8')).moduleId === module);
+    if (!moduleRoot) throw new Error(`Authoring component '${module}' was not found.`);
+    return readdirSync(resolve(moduleRoot, 'metadata', folder)).map(file =>
+      JSON.parse(readFileSync(resolve(moduleRoot, 'metadata', folder, file), 'utf8')));
+  };
   const navDocuments = modules.flatMap(module => read(module.metadata.moduleId, 'navigation')).map(document => ({ ...document,
     navigation: { items: document.navigation.items.map((item: { key: string }) => ({ ...item, featurePosition: `${item.key}-entry` })) } }));
   return { manifest: { modules: modules.map(module => ({ moduleId: module.metadata.moduleId, metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [],

@@ -1,5 +1,6 @@
-import { readFileSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { discoverFrontendEntries } from '../../../../scripts/component-sources.mjs';
 import { describe, expect, it } from 'vitest';
 import type { FrontendModule, TreeProviderBinding } from '@icp-platform/sdk';
 import { resolvePageInput, validateCompositionCandidate } from '../composition/compositionRegistry';
@@ -9,8 +10,12 @@ import organization from '../../../../modules/organization/src';
 import '../../../../modules/organization/src/standard-crud/departmentStandardCrudResource.primary';
 
 const root = resolve(__dirname, '../../../../..');
+const componentRoots = Object.values(discoverFrontendEntries(root)).map(entryPath => dirname(dirname(entryPath)))
+  .filter(componentRoot => existsSync(resolve(componentRoot, 'newp.plugin.json')));
 function authoring(): RuntimeMetadataState {
-  const read = (folder: string) => readdirSync(resolve(root, 'modules/Organization/metadata', folder)).map(file => JSON.parse(readFileSync(resolve(root, 'modules/Organization/metadata', folder, file), 'utf8')));
+  const moduleRoot = componentRoots.find(componentRoot => JSON.parse(readFileSync(resolve(componentRoot, 'newp.plugin.json'), 'utf8')).moduleId === 'Organization');
+  if (!moduleRoot) throw new Error('Organization authoring component was not found.');
+  const read = (folder: string) => readdirSync(resolve(moduleRoot, 'metadata', folder)).map(file => JSON.parse(readFileSync(resolve(moduleRoot, 'metadata', folder, file), 'utf8')));
   return { manifest: { modules: [] }, navDocuments: read('navigation'), viewDocuments: read('views'), modelDocuments: read('models') };
 }
 const modules: FrontendModule[] = [{ metadata: { moduleId: 'Organization', displayName: 'Organization', version: '1' },

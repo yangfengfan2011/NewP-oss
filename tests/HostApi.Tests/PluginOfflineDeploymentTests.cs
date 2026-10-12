@@ -83,6 +83,103 @@ public sealed class PluginOfflineDeploymentTests : IDisposable
         Assert.True(desired.Single(item => item.GetProperty("moduleId").GetString() == "InforCenter").GetProperty("enabled").GetBoolean());
     }
 
+    [Fact]
+    public void Prune_UnselectedMiddleVersion_PreservesLegacyDisabledVersionAndPackageRoot()
+    {
+        using var input = new ComponentBundleTestInput();
+        var root = Path.Combine(input.Root, "installed");
+        StageAndInstall(root, input, "1.0.0");
+        var store = new InstalledPluginStateStore(root);
+        Assert.Equal("Disabled", new UnifiedPluginPackageOperations(store).Disable("InforCenter").Status);
+        StageAndInstall(root, input, "1.1.0");
+        StageAndInstall(root, input, "1.2.0");
+        var manager = new PluginLifecycleManager(new PluginLifecycleStateStore(root,
+            HostPluginActivationDeployment.WithoutDeploymentConfirmation("unused-storage-types.json", PersistenceProvider.SqlServer)));
+        var before = manager.ReadRecordedDesired(InstalledPluginInventoryAdapter.Create(store));
+        Assert.Equal(new PluginDesiredModuleState("InforCenter", "1.0.0", false), Assert.Single(before));
+        Assert.True(store.TryLoad("InforCenter", out var previous, out _));
+        var previousRoot = previous!.PackageRoot;
+        Assert.Equal(0, RunOffline(root, false, "prune", "--module-id", "InforCenter", "--version", "1.1.0"));
+        Assert.Equal(before, manager.ReadRecordedDesired(InstalledPluginInventoryAdapter.Create(store)));
+        Assert.True(store.TryLoad("InforCenter", out var pruned, out _));
+        Assert.Equal(previousRoot, pruned!.PackageRoot);
+        Assert.Equal("1.0.0", pruned.Version);
+        Assert.Equal(new[] { "1.0.0", "1.2.0" }, pruned.InstalledVersions);
+        Assert.True(Directory.Exists(Path.Combine(root, "packages", "InforCenter", "1.0.0")));
+        Assert.True(Directory.Exists(Path.Combine(root, "packages", "InforCenter", "1.2.0")));
+        Assert.False(Directory.Exists(Path.Combine(root, "packages", "InforCenter", "1.1.0")));
+        Assert.False(File.Exists(Path.Combine(root, "lifecycle", "v2", "state.json")));
+    }
+
+    [Theory]
+    [InlineData("unselected")]
+    [InlineData("legacy-enabled")]
+    [InlineData("v2-enabled")]
+    [InlineData("v2-disabled")]
+    public void Prune_UsesRecordedChoicesAndPreservesLifecycleDocument(string selectionSource)
+    {
+        using var input = new ComponentBundleTestInput();
+        var root = Path.Combine(input.Root, "installed");
+        StageAndInstall(root, input, "1.0.0");
+        var store = new InstalledPluginStateStore(root);
+        var operations = new UnifiedPluginPackageOperations(store);
+        if (selectionSource == "legacy-enabled")
+        {
+            // 准备合法旧启用记录；纯组合不是旧 Unified 包，不能用其 Artifacts.Backend 依赖读器准备输入。
+            Assert.True(store.TryLoad("InforCenter", out var enabled, out _));
+            enabled!.CurrentEnabledVersion = "1.0.0";
+            enabled.IsDisabled = false;
+            Assert.True(store.TrySave(enabled, out _));
+        }
+        StageAndInstall(root, input, "1.1.0");
+        StageAndInstall(root, input, "1.2.0");
+        if (selectionSource.StartsWith("v2", StringComparison.Ordinal))
+        {
+            // 旧库存停用锚点是1.2，实际v2选择是1.0；裁剪旧锚点也必须保持唯一v2事实。
+            Assert.Equal("Disabled", operations.Disable("InforCenter").Status);
+            Assert.Equal(0, RunOffline(root, false, "select", "--module-id", "InforCenter", "--version", "1.0.0",
+                "--enabled", (selectionSource == "v2-enabled").ToString()));
+        }
+        var manager = new PluginLifecycleManager(new PluginLifecycleStateStore(root,
+            HostPluginActivationDeployment.WithoutDeploymentConfirmation("unused-storage-types.json", PersistenceProvider.SqlServer)));
+        var before = manager.ReadRecordedDesired(InstalledPluginInventoryAdapter.Create(store));
+        var statePath = Path.Combine(root, "lifecycle", "v2", "state.json");
+        var state = File.Exists(statePath) ? File.ReadAllBytes(statePath) : null;
+        var archive = Path.Combine(root, "persistence", "catalog", "retained.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(archive)!);
+        File.WriteAllText(archive, "immutable deployment asset");
+        var version = selectionSource == "legacy-enabled" ? "1.1.0" : "1.2.0";
+        Assert.Equal(0, RunOffline(root, false, "prune", "--module-id", "InforCenter", "--version", version));
+        Assert.Equal(before, manager.ReadRecordedDesired(InstalledPluginInventoryAdapter.Create(store)));
+        if (state is null) Assert.False(File.Exists(statePath));
+        else Assert.Equal(state, File.ReadAllBytes(statePath));
+        Assert.Equal("immutable deployment asset", File.ReadAllText(archive));
+        Assert.False(Directory.Exists(Path.Combine(root, "packages", "InforCenter", version)));
+        Assert.True(store.TryLoad("InforCenter", out var record, out _));
+        Assert.DoesNotContain(version, record!.InstalledVersions);
+        Assert.Contains(record.Version, record.InstalledVersions);
+        Assert.True(Directory.Exists(record.PackageRoot));
+        if (selectionSource == "unselected") Assert.Empty(before);
+        else
+        {
+            Assert.Equal(new PluginDesiredModuleState("InforCenter", "1.0.0", selectionSource != "v2-disabled"), Assert.Single(before));
+            var inventoryBytes = File.ReadAllBytes(Path.Combine(root, "state", "InforCenter.json"));
+            Assert.Equal(1, RunOffline(root, false, "prune", "--module-id", "InforCenter", "--version", "1.0.0"));
+            Assert.Equal(inventoryBytes, File.ReadAllBytes(Path.Combine(root, "state", "InforCenter.json")));
+            Assert.True(Directory.Exists(Path.Combine(root, "packages", "InforCenter", "1.0.0")));
+        }
+    }
+
+    private static void StageAndInstall(string root, ComponentBundleTestInput input, string version)
+    {
+        var capsule = JsonNode.Parse(File.ReadAllText(input.Capsule))!;
+        capsule["version"] = version;
+        File.WriteAllText(input.Capsule, capsule.ToJsonString());
+        var output = input.Output + "-" + version;
+        new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", output, input.Artifacts);
+        Assert.Equal(0, RunOffline(root, false, "install-native", "--package", output));
+    }
+
     [Theory]
     [InlineData("1.0.0")]
     [InlineData("1.1.0")]

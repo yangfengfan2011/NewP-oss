@@ -156,7 +156,7 @@ internal static class PluginOfflineDeployment
                         desired, current, ReadUninstallSet(options), externalPluginsEnabled);
                     break;
                 case "prune":
-                    Prune(store, manager, inventory, Required(options, "module-id"), Required(options, "version"));
+                    Prune(store, desired, Required(options, "module-id"), Required(options, "version"));
                     break;
                 default: throw new ArgumentException("PLUGIN_OFFLINE_ACTION_UNSUPPORTED");
             }
@@ -293,11 +293,11 @@ internal static class PluginOfflineDeployment
             throw new InvalidDataException("PLUGIN_EXTERNAL_DISABLED: ordinary external selection is unavailable for " + moduleId);
     }
 
-    // 只裁剪未选定的 installed 包版本；不读取或删除 catalog 归档，也不以旧 active 版本决定 desired。
-    private static void Prune(InstalledPluginStateStore store, PluginLifecycleManager manager,
-        IReadOnlyList<InstalledPluginInventoryItem> inventory, string id, string version)
+    // 使用本次入口的完整有效选择保护版本；库存默认投影和旧 active 不成为选择，catalog 归档保持。
+    private static void Prune(InstalledPluginStateStore store, IReadOnlyList<PluginDesiredModuleState> desired,
+        string id, string version)
     {
-        if (manager.Resolve(inventory).DesiredModules.Any(item => item.ModuleId == id && item.Version == version))
+        if (desired.Any(item => item.ModuleId == id && item.Version == version))
             throw new InvalidDataException("PLUGIN_SELECTED_VERSION_CANNOT_BE_PRUNED");
         if (!store.TryLoad(id, out var record, out var error) || record is null || !record.InstalledVersions.Contains(version, StringComparer.Ordinal))
             throw new InvalidDataException(error ?? "PLUGIN_NOT_INSTALLED");
@@ -306,8 +306,12 @@ internal static class PluginOfflineDeployment
         var packageRoot = Path.Combine(store.InstallRoot, "packages", record.ModuleId, version);
         ValidateDirectory(Path.Combine(store.InstallRoot, "packages"), packageRoot);
         record.InstalledVersions = remaining;
-        record.Version = remaining[^1];
-        record.PackageRoot = Path.Combine(store.InstallRoot, "packages", record.ModuleId, record.Version);
+        // 仍保留的 legacy 停用版本就是已有选择；只有其元数据版本被明确裁剪时才收敛到剩余库存。
+        if (!record.IsDisabled || !remaining.Contains(record.Version, StringComparer.Ordinal))
+        {
+            record.Version = remaining[^1];
+            record.PackageRoot = Path.Combine(store.InstallRoot, "packages", record.ModuleId, record.Version);
+        }
         if (record.CurrentEnabledVersion == version) record.CurrentEnabledVersion = null;
         if (!store.TrySave(record, out error)) throw new IOException(error);
         // 先收敛库存再清包；清理失败只留下未登记的包，不让 inventory 指向已经删除的版本。

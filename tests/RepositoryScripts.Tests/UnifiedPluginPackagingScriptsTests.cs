@@ -1,12 +1,14 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using ICP.Platform.Kernel.ModulePlanning;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace ICP.Platform.RepositoryScripts.Tests;
 
-public class UnifiedPluginPackagingScriptsTests : IDisposable
+public class UnifiedPluginPackagingScriptsTests(ITestOutputHelper output) : IDisposable
 {
     private readonly List<string> _tempRoots = new();
 
@@ -185,7 +187,7 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
             Path.Combine(repoRoot, "scripts", "pack-unified-plugin.ps1"),
             [
                 "-ModuleName", "Identity",
-                "-Configuration", "Debug",
+                "-Configuration", "Release",
                 "-OutputRoot", outputRoot,
                 "-Force"
             ]);
@@ -215,7 +217,7 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
             Path.Combine(repoRoot, "scripts", "pack-unified-plugin.ps1"),
             [
                 "-ModuleName", "Organization",
-                "-Configuration", "Debug",
+                "-Configuration", "Release",
                 "-OutputRoot", outputRoot,
                 "-Force"
             ]);
@@ -236,6 +238,56 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
         Assert.Equal("Person Center", personList.GetProperty("Title").GetProperty("en").GetString());
         Assert.Equal("查看完整详情", personList.GetProperty("Action_ViewFullDetail").GetProperty("zhs").GetString());
         Assert.Equal("View Full Details", personList.GetProperty("Action_ViewFullDetail").GetProperty("en").GetString());
+    }
+
+    [Theory]
+    [InlineData("Part")]
+    [InlineData("Document")]
+    [InlineData("Workspace")]
+    public void PackUnifiedPlugin_GroupedMemberPreservesIdentityFrontendAndMetadata(string moduleId)
+    {
+        var repoRoot = FindRepositoryRoot();
+        var component = ComponentSourceCatalog.Discover(repoRoot).Get(moduleId);
+        Assert.Equal("InforCenter", component.ParentModuleId);
+        var outputRoot = Path.Combine(repoRoot, "artifacts", "plugin-packages", $"script-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(outputRoot);
+        _tempRoots.Add(outputRoot);
+
+        var result = RunPowerShellScript(
+            repoRoot,
+            Path.Combine(repoRoot, "scripts", "pack-unified-plugin.ps1"),
+            ["-ModuleName", moduleId, "-Configuration", "Release", "-OutputRoot", outputRoot, "-Force"]);
+        Assert.True(result.ExitCode == 0, $"Expected exit code 0 but got {result.ExitCode}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
+
+        var packageRoot = Path.Combine(outputRoot, moduleId);
+        using var capsule = JsonDocument.Parse(File.ReadAllText(component.CapsulePath));
+        foreach (var relativePath in new[] { "plugin.json", "backend/plugin.backend.json", "frontend/manifest.json", "frontend/plugin.frontend.json" })
+        {
+            using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(packageRoot, relativePath)));
+            Assert.Equal(moduleId, manifest.RootElement.GetProperty("moduleId").GetString());
+            if (manifest.RootElement.TryGetProperty("version", out var version))
+                Assert.Equal(capsule.RootElement.GetProperty("version").GetString(), version.GetString());
+        }
+
+        using var checksums = JsonDocument.Parse(File.ReadAllText(Path.Combine(packageRoot, "checksums", "sha256sums.json")));
+        var checksumFiles = checksums.RootElement.GetProperty("files");
+        var entryBytes = File.ReadAllBytes(Path.Combine(packageRoot, "frontend", "assets", "entry.js"));
+        Assert.NotEmpty(entryBytes);
+        var entryKey = capsule.RootElement.GetProperty("frontend").GetProperty("entry").GetString()!;
+        Assert.Equal(File.ReadAllBytes(Path.Combine(repoRoot, "artifacts", "frontend-plugins", entryKey, "entry.js")), entryBytes);
+        Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(entryBytes)), checksumFiles.GetProperty("frontend/assets/entry.js").GetString());
+
+        var metadataRoot = Path.Combine(component.Root, "metadata");
+        var metadataFiles = Directory.GetFiles(metadataRoot, "*", SearchOption.AllDirectories);
+        Assert.NotEmpty(metadataFiles);
+        foreach (var sourcePath in metadataFiles)
+        {
+            var relativePath = Path.GetRelativePath(metadataRoot, sourcePath);
+            var packagePath = Path.Combine("modules", moduleId, "metadata", relativePath);
+            var sourceBytes = File.ReadAllBytes(sourcePath);
+            Assert.Equal(sourceBytes, File.ReadAllBytes(Path.Combine(packageRoot, packagePath)));
+            Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(sourceBytes)), checksumFiles.GetProperty(packagePath.Replace('\\', '/')).GetString());
+        }
     }
 
     public void Dispose()
@@ -291,7 +343,7 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
         }
     }
 
-    private static ScriptResult RunPowerShellScript(string workingDirectory, string scriptPath, IReadOnlyList<string> arguments)
+    private ScriptResult RunPowerShellScript(string workingDirectory, string scriptPath, IReadOnlyList<string> arguments)
     {
         var stdout = new StringBuilder();
         var stderr = new StringBuilder();
@@ -339,6 +391,8 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
         process.WaitForExit();
+
+        output.WriteLine($"{scriptPath} {string.Join(' ', arguments)}\nExit: {process.ExitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
 
         return new ScriptResult(process.ExitCode, stdout.ToString(), stderr.ToString());
     }

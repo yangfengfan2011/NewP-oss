@@ -46,74 +46,43 @@ function Resolve-BackendProjectPath {
     return $projectFile.FullName
 }
 
-function Resolve-FrontendModulePath {
+# The formal Catalog owns source identities and nesting; one invocation supplies all package reads.
+function Resolve-ComponentSource {
     param(
         [Parameter(Mandatory = $true)][string]$RepoRoot,
         [Parameter(Mandatory = $true)][string]$ModuleName
     )
 
-    $frontendModulesRoot = Join-Path $RepoRoot "frontend/modules"
-    if (-not (Test-Path -LiteralPath $frontendModulesRoot)) {
-        throw "Frontend modules directory not found: $frontendModulesRoot"
+    $projectPath = Join-Path $RepoRoot "server/tools/component-source-build/ComponentSource.Build.csproj"
+    $description = @(dotnet run --project $projectPath -c Release --verbosity quiet --no-launch-profile -- describe $RepoRoot)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to discover component sources for '$ModuleName'."
     }
 
-    $kebabCaseName = [regex]::Replace($ModuleName, '([a-z0-9])([A-Z])', '$1-$2').ToLowerInvariant()
-    $candidateNames = @(
-        $ModuleName,
-        $ModuleName.ToLowerInvariant(),
-        $ModuleName.ToUpperInvariant(),
-        $kebabCaseName
-    ) | Select-Object -Unique
-
-    foreach ($candidateName in $candidateNames) {
-        $candidatePath = Join-Path $frontendModulesRoot $candidateName
-        $candidateEntryPath = Join-Path $candidatePath "src/index.ts"
-        if ((Test-Path -LiteralPath $candidatePath) -and (Test-Path -LiteralPath $candidateEntryPath)) {
-            return $candidatePath
-        }
+    $components = ($description | Select-Object -Last 1) | ConvertFrom-Json
+    $matchingComponents = @($components | Where-Object { $_.ModuleId.Equals($ModuleName, [System.StringComparison]::OrdinalIgnoreCase) })
+    if ($matchingComponents.Count -ne 1) {
+        throw "Expected one component source for '$ModuleName', found $($matchingComponents.Count)."
     }
 
-    $matchingDir = Get-ChildItem -LiteralPath $frontendModulesRoot -Directory |
-        Where-Object {
-            $entryPath = Join-Path $_.FullName "src/index.ts"
-            $_.Name.Equals($ModuleName, [System.StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $entryPath)
-        } |
-        Select-Object -First 1
+    return $matchingComponents[0]
+}
 
-    if ($matchingDir) {
-        return $matchingDir.FullName
+function Resolve-FrontendModulePath {
+    param([Parameter(Mandatory = $true)][object]$ComponentSource)
+
+    $entryPath = Join-Path $ComponentSource.Root "src/index.ts"
+    if (-not (Test-Path -LiteralPath $entryPath)) {
+        throw "Frontend entry not found for '$($ComponentSource.ModuleId)': $entryPath"
     }
 
-    throw "Frontend module not found for '$ModuleName'. Expected a directory under '$frontendModulesRoot' containing 'src/index.ts'."
+    return $ComponentSource.Root
 }
 
 function Resolve-ModuleMetadataPath {
-    param(
-        [Parameter(Mandatory = $true)][string]$RepoRoot,
-        [Parameter(Mandatory = $true)][string]$ModuleName
-    )
+    param([Parameter(Mandatory = $true)][object]$ComponentSource)
 
-    $modulesRoot = Join-Path $RepoRoot "frontend/modules"
-    if (-not (Test-Path -LiteralPath $modulesRoot)) {
-        return $null
-    }
-
-    $matchingDirectory = Get-ChildItem -LiteralPath $modulesRoot -Directory |
-        Where-Object {
-            $capsule = Join-Path $_.FullName 'newp.plugin.json'
-            if (Test-Path -LiteralPath $capsule) {
-                (Get-Content -LiteralPath $capsule -Raw -Encoding utf8 | ConvertFrom-Json).moduleId.Equals($ModuleName, [System.StringComparison]::OrdinalIgnoreCase)
-            } else {
-                $_.Name.Equals(([regex]::Replace($ModuleName, '([a-z0-9])([A-Z])', '$1-$2').ToLowerInvariant()), [System.StringComparison]::OrdinalIgnoreCase)
-            }
-        } |
-        Select-Object -First 1
-
-    if (-not $matchingDirectory) {
-        return $null
-    }
-
-    $metadataPath = Join-Path $matchingDirectory.FullName "metadata"
+    $metadataPath = Join-Path $ComponentSource.Root "metadata"
     if (-not (Test-Path -LiteralPath $metadataPath)) {
         return $null
     }
@@ -122,36 +91,9 @@ function Resolve-ModuleMetadataPath {
 }
 
 function Resolve-ModuleAuthoringManifestPath {
-    param(
-        [Parameter(Mandatory = $true)][string]$RepoRoot,
-        [Parameter(Mandatory = $true)][string]$ModuleName
-    )
+    param([Parameter(Mandatory = $true)][object]$ComponentSource)
 
-    $modulesRoot = Join-Path $RepoRoot "frontend/modules"
-    if (-not (Test-Path -LiteralPath $modulesRoot)) {
-        return $null
-    }
-
-    $matchingDirectory = Get-ChildItem -LiteralPath $modulesRoot -Directory |
-        Where-Object {
-            $capsule = Join-Path $_.FullName 'newp.plugin.json'
-            if (Test-Path -LiteralPath $capsule) {
-                (Get-Content -LiteralPath $capsule -Raw -Encoding utf8 | ConvertFrom-Json).moduleId.Equals($ModuleName, [System.StringComparison]::OrdinalIgnoreCase)
-            } else {
-                $_.Name.Equals(([regex]::Replace($ModuleName, '([a-z0-9])([A-Z])', '$1-$2').ToLowerInvariant()), [System.StringComparison]::OrdinalIgnoreCase)
-            }
-        } |
-        Select-Object -First 1
-    if (-not $matchingDirectory) {
-        return $null
-    }
-
-    $manifestPath = Join-Path $matchingDirectory.FullName "newp.plugin.json"
-    if (Test-Path -LiteralPath $manifestPath) {
-        return $manifestPath
-    }
-
-    return $null
+    return $ComponentSource.CapsulePath
 }
 
 function Read-ModuleMetadataFromAuthoringManifest {
@@ -168,6 +110,10 @@ function Read-ModuleMetadataFromAuthoringManifest {
         Version = if ([string]::IsNullOrWhiteSpace($manifest.version)) { "1.0.0" } else { $manifest.version }
         Description = if ($null -eq $manifest.description) { "" } else { $manifest.description }
         Dependencies = @($manifest.dependencies)
+        # Preserve the formal frontend entry default without coupling it to the source directory name.
+        FrontendEntry = if ([string]::IsNullOrWhiteSpace($manifest.frontend.entry)) {
+            ([regex]::Replace($manifest.moduleId, '([a-z0-9])([A-Z])', '$1-$2')).ToLowerInvariant()
+        } else { $manifest.frontend.entry }
     }
 }
 
@@ -378,10 +324,9 @@ function Build-BackendModule {
 function Build-FrontendModule {
     param(
         [Parameter(Mandatory = $true)][string]$RepoRoot,
-        [Parameter(Mandatory = $true)][string]$FrontendModulePath
+        [Parameter(Mandatory = $true)][string]$FrontendEntry
     )
 
-    $moduleName = Split-Path -Leaf $FrontendModulePath
     $buildScript = Join-Path $RepoRoot "frontend/scripts/build-frontend-plugin.mjs"
 
     if (-not (Test-Path -LiteralPath $buildScript)) {
@@ -391,7 +336,7 @@ function Build-FrontendModule {
     Write-Host "Building frontend module..." -ForegroundColor Cyan
     Push-Location (Join-Path $RepoRoot "frontend")
     try {
-        node $buildScript $moduleName
+        node $buildScript $FrontendEntry
         if ($LASTEXITCODE -ne 0) {
             throw "Frontend build failed."
         }
@@ -460,17 +405,16 @@ function Copy-DirectoryContents {
 
 function Copy-ModuleMetadata {
     param(
-        [Parameter(Mandatory = $true)][string]$RepoRoot,
-        [Parameter(Mandatory = $true)][string]$ModuleName,
+        [Parameter(Mandatory = $true)][object]$ComponentSource,
         [Parameter(Mandatory = $true)][string]$TargetDirectory
     )
 
-    $metadataPath = Resolve-ModuleMetadataPath -RepoRoot $RepoRoot -ModuleName $ModuleName
+    $metadataPath = Resolve-ModuleMetadataPath -ComponentSource $ComponentSource
     if (-not $metadataPath) {
         return
     }
 
-    $targetMetadataDirectory = Join-Path $TargetDirectory "modules/$ModuleName/metadata"
+    $targetMetadataDirectory = Join-Path $TargetDirectory "modules/$($ComponentSource.ModuleId)/metadata"
     Copy-DirectoryContents -SourceDirectory $metadataPath -DestinationDirectory $targetMetadataDirectory
 }
 
@@ -672,15 +616,16 @@ Write-Host "=== Packing unified plugin ===" -ForegroundColor Green
 Write-Host "Module: $ModuleName" -ForegroundColor Cyan
 Write-Host "Configuration: $Configuration" -ForegroundColor Cyan
 
-$backendProjectPath = Resolve-BackendProjectPath -RepoRoot $repoRoot -ModuleName $ModuleName
-$frontendModulePath = Resolve-FrontendModulePath -RepoRoot $repoRoot -ModuleName $ModuleName
+$componentSource = Resolve-ComponentSource -RepoRoot $repoRoot -ModuleName $ModuleName
+$backendProjectPath = Resolve-BackendProjectPath -RepoRoot $repoRoot -ModuleName $componentSource.ModuleId
+$frontendModulePath = Resolve-FrontendModulePath -ComponentSource $componentSource
 
 Write-Host "Backend project: $backendProjectPath" -ForegroundColor Cyan
 Write-Host "Frontend module: $frontendModulePath" -ForegroundColor Cyan
 
 $projectDirectory = Split-Path -Parent $backendProjectPath
 $moduleSourcePath = Find-ModuleSourceFile -ProjectDirectory $projectDirectory
-$moduleAuthoringManifestPath = Resolve-ModuleAuthoringManifestPath -RepoRoot $repoRoot -ModuleName $ModuleName
+$moduleAuthoringManifestPath = Resolve-ModuleAuthoringManifestPath -ComponentSource $componentSource
 $moduleMetadata = if ($moduleAuthoringManifestPath) {
     Read-ModuleMetadataFromAuthoringManifest -ManifestPath $moduleAuthoringManifestPath
 } else {
@@ -770,13 +715,13 @@ New-Item -ItemType Directory -Path $packageDirectory -Force | Out-Null
 
 Build-BackendModule -ProjectPath $backendProjectPath -Configuration $Configuration
 
-$frontendModuleName = Split-Path -Leaf $frontendModulePath
-Build-FrontendModule -RepoRoot $repoRoot -FrontendModulePath $frontendModulePath
+$frontendModuleName = $moduleMetadata.FrontendEntry
+Build-FrontendModule -RepoRoot $repoRoot -FrontendEntry $frontendModuleName
 
 $outputDirectory = Join-Path $projectDirectory "bin/$Configuration/$targetFramework"
 Copy-BackendArtifacts -OutputDirectory $outputDirectory -AssemblyName $assemblyName -TargetDirectory $packageDirectory
 Copy-FrontendArtifacts -RepoRoot $repoRoot -ModuleName $frontendModuleName -TargetDirectory $packageDirectory
-Copy-ModuleMetadata -RepoRoot $repoRoot -ModuleName $moduleMetadata.ModuleId -TargetDirectory $packageDirectory
+Copy-ModuleMetadata -ComponentSource $componentSource -TargetDirectory $packageDirectory
 Copy-PlatformResources -RepoRoot $repoRoot -TargetDirectory $packageDirectory
 
 Write-RootManifest -TargetDirectory $packageDirectory -Metadata $moduleMetadata -HostVersion $hostVersionDefaults

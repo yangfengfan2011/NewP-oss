@@ -186,7 +186,7 @@ public sealed class ModuleCapsuleCandidateReaderTests : IDisposable
     public void ReadBuiltIn_RealOrganizationDrawerViews_DoNotRequireFullPageBindings(bool trustedSnapshot, bool utf8Bom)
     {
         var runtimeModulesRoot = Path.Combine(_root, "runtime-modules");
-        foreach (var moduleRoot in Directory.GetDirectories(Path.Combine(FindRepositoryRoot(), "frontend", "modules")))
+        foreach (var moduleRoot in ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.EnumerateModuleRoots(FindRepositoryRoot()))
         {
             if (!File.Exists(Path.Combine(moduleRoot, "newp.plugin.json")))
             {

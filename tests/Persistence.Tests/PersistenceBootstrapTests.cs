@@ -1,6 +1,7 @@
-using System.Xml.Linq;
 using ICP.Platform.HostApi.Extensions;
 using ICP.Platform.HostApi.Readiness;
+using ICP.Platform.Kernel.ModulePlanning;
+using ICP.Platform.Modeling.Metadata;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.Planning;
 using Microsoft.AspNetCore.Builder;
@@ -42,32 +43,39 @@ public sealed class PersistenceBootstrapTests
     }
 
     [Fact]
-    public void HostApiProject_ContainsRuntimeTruthAssetsButNoGeneratedSourceContent()
+    public void HostRuntimeOutput_ContainsRuntimeTruthAssetsButNoGeneratedSourceContent()
     {
-        var projectPath = Path.Combine(FindRepositoryRoot(), "apps", "host-api", "HostApi.csproj");
-        var document = XDocument.Load(projectPath);
-        var runtimeIncludes = new[]
+        // 声明根可嵌套；验证正式构建的消费资产，不把 csproj 的 Include 写法当契约。
+        var repositoryRoot = FindRepositoryRoot();
+        var testOutput = new DirectoryInfo(AppContext.BaseDirectory);
+        var runtimeRoot = Path.Combine(repositoryRoot, "apps", "host-api", "bin", testOutput.Parent!.Name, testOutput.Name);
+        var catalog = ComponentSourceCatalog.Discover(repositoryRoot);
+        Assert.NotEmpty(catalog.Components);
+        foreach (var component in catalog.Components)
         {
-            @"..\..\modules\**\metadata\**\*.json",
-            @"..\..\server\platform-modeling\metadata\storage-types.json"
-        };
-
-        foreach (var include in runtimeIncludes)
-        {
-            var content = Assert.Single(document.Descendants("Content"),
-                element => string.Equals(element.Attribute("Include")?.Value, include, StringComparison.Ordinal));
-            var condition = content.Attribute("Condition")?.Value
-                ?? content.Parent?.Attribute("Condition")?.Value;
-
-            Assert.True(string.IsNullOrWhiteSpace(condition));
-            Assert.Equal("PreserveNewest", content.Element("CopyToOutputDirectory")?.Value);
+            AssertRuntimeCopy(component.CapsulePath, Path.Combine("modules", component.ModuleId, "plugin.json"));
+            foreach (var source in catalog.EnumerateOwnFiles(component.ModuleId).Where(path =>
+                Path.GetRelativePath(component.Root, path).Replace('\\', '/').StartsWith("metadata/", StringComparison.Ordinal)))
+                AssertRuntimeCopy(source, Path.Combine("modules", component.ModuleId, Path.GetRelativePath(component.Root, source)));
         }
-
+        // 历史 metadata owner 没有 Capsule，继续检查其既有输出，不授予组件发行身份。
+        foreach (var root in ModuleAuthoringPaths.EnumerateModuleRoots(repositoryRoot).Where(root => !File.Exists(Path.Combine(root, "newp.plugin.json"))))
+        {
+            foreach (var source in Directory.EnumerateFiles(Path.Combine(root, "metadata"), "*.json", SearchOption.AllDirectories))
+                AssertRuntimeCopy(source, Path.Combine("modules", ModuleAuthoringPaths.ReadModuleId(root), Path.GetRelativePath(root, source)));
+        }
+        const string storageTypes = "server/platform-modeling/metadata/storage-types.json";
+        AssertRuntimeCopy(Path.Combine(repositoryRoot, storageTypes), storageTypes);
         Assert.DoesNotContain(
-            document.Descendants("Content"),
-            element => element.Attribute("Include")?.Value.Contains(
-                @"DTOs\Generated",
-                StringComparison.Ordinal) is true);
+            Directory.EnumerateFiles(runtimeRoot, "*", SearchOption.AllDirectories),
+            path => ("/" + Path.GetRelativePath(runtimeRoot, path).Replace('\\', '/')).Contains("/DTOs/Generated/", StringComparison.OrdinalIgnoreCase));
+
+        void AssertRuntimeCopy(string source, string relativeOutput)
+        {
+            var output = Path.Combine(runtimeRoot, relativeOutput);
+            Assert.True(File.Exists(output), "Runtime truth asset is missing: " + output);
+            Assert.Equal(File.ReadAllBytes(source), File.ReadAllBytes(output));
+        }
     }
 
     [Fact]

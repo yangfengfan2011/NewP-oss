@@ -1,8 +1,10 @@
+import { loadComponentSource, readComponentJson } from '../../test-support/componentTestInputs';
+import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { expect, it } from 'vitest';
 import folder from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceFolderRuntime.contract.json';
-import content from '../../../../modules/workspace/metadata/models/WorkspaceFolderContent.model.json';
-import list from '../../../../modules/workspace/metadata/views/WorkspaceFolderList.view.json';
-import resource from '../../../../modules/workspace/src/workspaceRootResource';
+const content = readComponentJson('Workspace', 'metadata/models/WorkspaceFolderContent.model.json');
+const list = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderList.view.json');
+const { default: resource } = await loadComponentSource<{ default: StandardCrudResourceRegistration }>('Workspace', 'workspaceRootResource.ts');
 import { buildStandardCrudListSchema } from '../metadata/standardCrudSchemaResolver';
 import { collectStandardCrudListRequestFields } from '../standard-crud/standardCrudMetadataQuery';
 

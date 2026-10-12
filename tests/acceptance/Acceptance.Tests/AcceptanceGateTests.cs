@@ -48,7 +48,51 @@ public sealed class AcceptanceGateTests
     public async Task Workspace_CompletesEveryScenario()
     {
         var (root, runId) = PrepareRun("workspace");
-        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId).RunAsync(CancellationToken.None);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId,
+            publishedFixture: PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId)).RunAsync(CancellationToken.None);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "三成员固定发行物与旧 Workspace/Part/Document 行、Link、历史连续性")]
+    public async Task NativeWorkspaceApi_UsesFixedRelease()
+    {
+        var (root, runId) = PrepareRun("native-workspace-api");
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false,
+            publishedFixture: PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId),
+            includeBrowser: false).RunAsync(CancellationToken.None);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "三成员包通过正式 Workspace driver 打开旧内容、属性并创建一次对象")]
+    public async Task NativeWorkspace_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-workspace");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseCompositionLifecycle: false);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
+            browserJourney: async (page, token) =>
+            {
+                var driver = new WorkspacePageDriver(page);
+                Task CaptureAsync(string name) => page.ScreenshotAsync(new()
+                { Path = Path.Combine(root, name), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                await driver.OpenAsync();
+                await driver.SelectRootAsync("公共空间");
+                await new StandardCrudPageDriver(page).WaitForRowAsync(fixture.ExistingFolderName);
+                await CaptureAsync("workspace-content.png");
+                var properties = await driver.OpenFolderPropertiesAsync(fixture.ExistingFolderName);
+                await CaptureAsync("workspace-properties.png");
+                await page.SetViewportSizeAsync(900, 1000);
+                await CaptureAsync("workspace-properties-narrow.png");
+                await driver.ClosePropertiesAsync(properties);
+                await page.SetViewportSizeAsync(1440, 1000);
+                await driver.CreateObjectAsync("图文档", "ACC-WS-D-" + runId[..8], "归组图文档旅程 " + runId[..8], async _ =>
+                {
+                    await CaptureAsync("workspace-create.png");
+                    await page.SetViewportSizeAsync(900, 1000);
+                    await CaptureAsync("workspace-create-narrow.png");
+                    await page.SetViewportSizeAsync(1440, 1000);
+                });
+                await CaptureAsync("workspace-created-content.png");
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
+                    new { url = page.Url, actor = "ordinary", journey = "workspace-published-components" }, token);
+            }).RunAsync(CancellationToken.None);
     }
 
     [EnvironmentGatedFact(RunEnvironmentVariable, "真实 Link 迁移、普通账号创建文件夹与共享树/列表/属性 driver")]

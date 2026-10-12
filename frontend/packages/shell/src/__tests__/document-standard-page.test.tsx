@@ -1,16 +1,18 @@
 // @vitest-environment jsdom
+import { loadComponentSource, readComponentJson } from '../../test-support/componentTestInputs';
+import type { FrontendBehaviorBindings } from '@icp-platform/sdk';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
-import documentBindings from '../../../../modules/document/src';
+const { default: documentBindings } = await loadComponentSource<{ default: FrontendBehaviorBindings }>('Document', 'index.ts');
 import model from '../../../../../tests/Kernel.Tests/Fixtures/DocumentRuntime.contract.json';
-import list from '../../../../modules/document/metadata/views/DocumentList.view.json';
-import detail from '../../../../modules/document/metadata/views/DocumentDetail.view.json';
-import dictionary from '../../../../modules/document/metadata/dictionaries/Document.dic.json';
-import navigation from '../../../../modules/document/metadata/navigation/Document.nav.json';
+const list = readComponentJson('Document', 'metadata/views/DocumentList.view.json');
+const detail = readComponentJson('Document', 'metadata/views/DocumentDetail.view.json');
+const dictionary = readComponentJson('Document', 'metadata/dictionaries/Document.dic.json');
+const navigation = readComponentJson('Document', 'metadata/navigation/Document.nav.json');
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { PageEntry } from '../composition/PageOutlet';
 import { AuthProvider } from '../contexts/AuthContext';
@@ -19,7 +21,7 @@ import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRo
 // 收集期装载真实模块，避免冷转换耗时进入生命周期 hook 的交互预算。
 import '../pages/StandardCrudListPageHost';
 import '../pages/StandardCrudDetailPageHost';
-import '../../../../modules/document/src/documentResource';
+await loadComponentSource('Document', 'documentResource.ts');
 import '@ant-design/pro-descriptions';
 
 vi.unmock('@icp-platform/core');

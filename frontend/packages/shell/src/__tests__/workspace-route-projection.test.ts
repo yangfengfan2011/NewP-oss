@@ -1,12 +1,14 @@
+import { loadComponentSource, readComponentJson } from '../../test-support/componentTestInputs';
+import type { FrontendBehaviorBindings } from '@icp-platform/sdk';
 import { expect, it } from 'vitest';
 import type { FrontendModule } from '@icp-platform/sdk';
-import workspace from '../../../../modules/workspace/src';
-import navigation from '../../../../modules/workspace/metadata/navigation/Workspace.nav.json';
-import tree from '../../../../modules/workspace/metadata/views/WorkspaceStructure.view.json';
-import list from '../../../../modules/workspace/metadata/views/WorkspaceFolderList.view.json';
-import detail from '../../../../modules/workspace/metadata/views/WorkspaceFolderDetail.view.json';
-import references from '../../../../modules/workspace/metadata/views/WorkspaceReferencesList.view.json';
-import capsule from '../../../../modules/workspace/newp.plugin.json';
+const { default: workspace } = await loadComponentSource<{ default: FrontendBehaviorBindings }>('Workspace', 'index.ts');
+const navigation = readComponentJson('Workspace', 'metadata/navigation/Workspace.nav.json');
+const tree = readComponentJson('Workspace', 'metadata/views/WorkspaceStructure.view.json');
+const list = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderList.view.json');
+const detail = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderDetail.view.json');
+const references = readComponentJson('Workspace', 'metadata/views/WorkspaceReferencesList.view.json');
+const capsule = readComponentJson('Workspace', 'newp.plugin.json');
 import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';
 
 const module: FrontendModule = { metadata: { moduleId: 'Workspace', displayName: '工作空间', version: '1' }, ...workspace };

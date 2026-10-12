@@ -98,22 +98,6 @@ importers:
         specifier: ^1.6.1
         version: 1.6.1(jsdom@24.1.3(supports-color@7.2.0))(supports-color@7.2.0)
 
-  modules/document:
-    dependencies:
-      '@icp-platform/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      '@icp-platform/sdk':
-        specifier: workspace:*
-        version: link:../../packages/sdk
-    devDependencies:
-      typescript:
-        specifier: ^5.4.2
-        version: 5.9.3
-      vitest:
-        specifier: ^1.6.1
-        version: 1.6.1(jsdom@24.1.3(supports-color@7.2.0))(supports-color@7.2.0)
-
   modules/example:
     dependencies:
       '@icp-platform/core':
@@ -173,20 +157,49 @@ importers:
         specifier: ^1.6.1
         version: 1.6.1(jsdom@24.1.3(supports-color@7.2.0))(supports-color@7.2.0)
 
-  modules/organization:
+  modules/infor-center/document:
     dependencies:
       '@icp-platform/core':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../../packages/core
       '@icp-platform/sdk':
         specifier: workspace:*
-        version: link:../../packages/sdk
+        version: link:../../../packages/sdk
+    devDependencies:
+      typescript:
+        specifier: ^5.4.2
+        version: 5.9.3
+      vitest:
+        specifier: ^1.6.1
+        version: 1.6.1(jsdom@24.1.3(supports-color@7.2.0))(supports-color@7.2.0)
+
+  modules/infor-center/part:
+    dependencies:
+      '@icp-platform/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@icp-platform/sdk':
+        specifier: workspace:*
+        version: link:../../../packages/sdk
+    devDependencies:
+      typescript:
+        specifier: ^5.4.2
+        version: 5.9.3
+      vitest:
+        specifier: ^1.6.1
+        version: 1.6.1(jsdom@24.1.3(supports-color@7.2.0))(supports-color@7.2.0)
+
+  modules/infor-center/workspace:
+    dependencies:
+      '@icp-platform/core':
+        specifier: workspace:*
+        version: link:../../../packages/core
+      '@icp-platform/sdk':
+        specifier: workspace:*
+        version: link:../../../packages/sdk
       '@icp-platform/ui':
         specifier: workspace:*
-        version: link:../../packages/ui
-      antd:
-        specifier: ^5.29.3
-        version: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: link:../../../packages/ui
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -201,23 +214,7 @@ importers:
         specifier: ^1.6.1
         version: 1.6.1(jsdom@24.1.3(supports-color@7.2.0))(supports-color@7.2.0)
 
-  modules/part:
-    dependencies:
-      '@icp-platform/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      '@icp-platform/sdk':
-        specifier: workspace:*
-        version: link:../../packages/sdk
-    devDependencies:
-      typescript:
-        specifier: ^5.4.2
-        version: 5.9.3
-      vitest:
-        specifier: ^1.6.1
-        version: 1.6.1(jsdom@24.1.3(supports-color@7.2.0))(supports-color@7.2.0)
-
-  modules/workspace:
+  modules/organization:
     dependencies:
       '@icp-platform/core':
         specifier: workspace:*
@@ -228,6 +225,9 @@ importers:
       '@icp-platform/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      antd:
+        specifier: ^5.29.3
+        version: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react:
         specifier: ^18.3.1
         version: 18.3.1

@@ -1,33 +1,35 @@
 // @vitest-environment jsdom
+import { loadComponentSource, readComponentJson } from '../../test-support/componentTestInputs';
+import type { FrontendBehaviorBindings, StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider, useParams } from 'react-router-dom';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
-import workspace from '../../../../modules/workspace/src';
-import part from '../../../../modules/part/src';
-import documentModule from '../../../../modules/document/src';
-import { partResource } from '../../../../modules/part/src/partResource';
-import { documentResource } from '../../../../modules/document/src/documentResource';
+const { default: workspace } = await loadComponentSource<{ default: FrontendBehaviorBindings }>('Workspace', 'index.ts');
+const { default: part } = await loadComponentSource<{ default: FrontendBehaviorBindings }>('Part', 'index.ts');
+const { default: documentModule } = await loadComponentSource<{ default: FrontendBehaviorBindings }>('Document', 'index.ts');
+const { partResource } = await loadComponentSource<{ partResource: StandardCrudResourceRegistration }>('Part', 'partResource.ts');
+const { documentResource } = await loadComponentSource<{ documentResource: StandardCrudResourceRegistration }>('Document', 'documentResource.ts');
 import folder from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceFolderRuntime.contract.json';
 import partModel from '../../../../../tests/Kernel.Tests/Fixtures/PartRuntime.contract.json';
 import documentModel from '../../../../../tests/Kernel.Tests/Fixtures/DocumentRuntime.contract.json';
-import content from '../../../../modules/workspace/metadata/models/WorkspaceFolderContent.model.json';
-import workspaceNavigation from '../../../../modules/workspace/metadata/navigation/Workspace.nav.json';
-import tree from '../../../../modules/workspace/metadata/views/WorkspaceStructure.view.json';
-import list from '../../../../modules/workspace/metadata/views/WorkspaceFolderList.view.json';
-import references from '../../../../modules/workspace/metadata/views/WorkspaceReferencesList.view.json';
-import detail from '../../../../modules/workspace/metadata/views/WorkspaceFolderDetail.view.json';
-import partList from '../../../../modules/part/metadata/views/PartList.view.json';
-import partDetail from '../../../../modules/part/metadata/views/PartDetail.view.json';
-import documentList from '../../../../modules/document/metadata/views/DocumentList.view.json';
-import documentDetail from '../../../../modules/document/metadata/views/DocumentDetail.view.json';
-import partNavigation from '../../../../modules/part/metadata/navigation/Part.nav.json';
-import documentNavigation from '../../../../modules/document/metadata/navigation/Document.nav.json';
-import dictionary from '../../../../modules/workspace/metadata/dictionaries/Workspace.dic.json';
-import partDictionary from '../../../../modules/part/metadata/dictionaries/Part.dic.json';
-import documentDictionary from '../../../../modules/document/metadata/dictionaries/Document.dic.json';
+const content = readComponentJson('Workspace', 'metadata/models/WorkspaceFolderContent.model.json');
+const workspaceNavigation = readComponentJson('Workspace', 'metadata/navigation/Workspace.nav.json');
+const tree = readComponentJson('Workspace', 'metadata/views/WorkspaceStructure.view.json');
+const list = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderList.view.json');
+const references = readComponentJson('Workspace', 'metadata/views/WorkspaceReferencesList.view.json');
+const detail = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderDetail.view.json');
+const partList = readComponentJson('Part', 'metadata/views/PartList.view.json');
+const partDetail = readComponentJson('Part', 'metadata/views/PartDetail.view.json');
+const documentList = readComponentJson('Document', 'metadata/views/DocumentList.view.json');
+const documentDetail = readComponentJson('Document', 'metadata/views/DocumentDetail.view.json');
+const partNavigation = readComponentJson('Part', 'metadata/navigation/Part.nav.json');
+const documentNavigation = readComponentJson('Document', 'metadata/navigation/Document.nav.json');
+const dictionary = readComponentJson('Workspace', 'metadata/dictionaries/Workspace.dic.json');
+const partDictionary = readComponentJson('Part', 'metadata/dictionaries/Part.dic.json');
+const documentDictionary = readComponentJson('Document', 'metadata/dictionaries/Document.dic.json');
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 import { PageEntry } from '../composition/PageOutlet';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
@@ -40,13 +42,14 @@ import { buildMenusFromNavDocuments } from '../metadata/navigationAdapter';
 import '../composition/StandardTreePage';
 import '../pages/StandardCrudListPageHost';
 import '../pages/StandardCrudListDrawerRuntime';
+import '../pages/StandardCrudListOverlayRuntime';
 import '@ant-design/pro-descriptions';
-import '../../../../modules/workspace/src/WorkspaceObjectEditInput';
+await loadComponentSource('Workspace', 'WorkspaceObjectEditInput.tsx');
 
 vi.unmock('@icp-platform/core');
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-it.each(['part', 'document'] as const)('opens same EID through the registered %s owning read-only page and target feature', async type => {
+async function renderMixedProperties(type: 'part' | 'document') {
   const user = { id: 'actor', ecode: 'actor', ename: '账号', revision: 1, mustChangePassword: false, isLocalAdministrator: false,
     timeZoneId: 'Asia/Taipei', featurePositions: ['workspace-entry', 'workspace-edit', 'workspace-createPart', 'workspace-createDocument', 'part-entry', 'document-entry'] };
   const json = (value: unknown) => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } });
@@ -133,6 +136,12 @@ it.each(['part', 'document'] as const)('opens same EID through the registered %s
   onTestFinished(async () => { await act(async () => root.unmount()); router.dispose(); container.remove(); vi.unstubAllGlobals(); ModuleRegistry.replaceAll([], 'workspace-mixed-cleanup'); });
   await act(async () => root.render(<RouterProvider router={router} />));
   await vi.waitFor(() => expect(container.querySelector(`tr[data-row-key="${type}-relation"]`)).not.toBeNull());
+
+  return { container, router, fetcher, writes, edits };
+}
+
+it.each(['part', 'document'] as const)('creates %s with draft confirmation and one formal save', async type => {
+  const { container, writes } = await renderMixedProperties(type);
   expect(container.textContent).not.toContain('添加已有对象');
   expect([...container.querySelectorAll('button')].some(button => button.textContent === '新建零组件')).toBe(false);
   await act(async () => [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === '新建')!.click());
@@ -158,6 +167,10 @@ it.each(['part', 'document'] as const)('opens same EID through the registered %s
   await act(async () => document.querySelector<HTMLButtonElement>('.ant-drawer-footer .ant-btn-primary')!.click());
   await vi.waitFor(() => expect(writes).toEqual([{ position: { spaceId: 'public', rootFolderId: 'root', linkIds: ['shared-link'] }, values: { ECODE: 'NEW-CODE', ENAME: '文件夹内新对象' } }]));
   await vi.waitFor(() => expect(document.querySelector('.ant-drawer')).toBeNull());
+});
+
+it.each(['part', 'document'] as const)('opens the owning %s properties and direct references then restores its occurrence', async type => {
+  const { container, router, fetcher } = await renderMixedProperties(type);
   const row = container.querySelector(`tr[data-row-key="${type}-relation"]`)!;
   expect(row.textContent).not.toContain('打开属性');
   await act(async () => row.querySelector<HTMLButtonElement>('.np-standard-crud-cell-action')!.click());
@@ -185,6 +198,10 @@ it.each(['part', 'document'] as const)('opens same EID through the registered %s
   await vi.waitFor(() => expect(container.querySelector(`tr[data-row-key="${type}-relation"]`)).not.toBeNull());
   expect(new URLSearchParams(router.state.location.search).get('node')).toBe('public:root:shared-link');
   expect(new URLSearchParams(router.state.location.search).get('other')).toBe('keep');
+});
+
+it.each(['part', 'document'] as const)('edits %s through the current occurrence and preserves the owning input', async type => {
+  const { container, edits } = await renderMixedProperties(type);
   const editableRow = container.querySelector(`tr[data-row-key="${type}-relation"]`)!;
   await act(async () => [...editableRow.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === '更多')!.click());
   await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent === '编辑')!.click());

@@ -3,18 +3,22 @@ import { dirname, resolve } from 'node:path';
 import { discoverFrontendEntries } from '../../../../scripts/component-sources.mjs';
 import { expect, it } from 'vitest';
 import type { FrontendModule } from '@icp-platform/sdk';
-import workspace from '../../../../modules/workspace/src';
-import part from '../../../../modules/part/src';
-import document from '../../../../modules/document/src';
 import type { RuntimeMetadataState } from '../metadata/runtimeMetadataManifest';
 import { validateCompositionCandidate } from '../composition/compositionRegistry';
 import { resolveDetailContributions } from '../standard-crud/detailContributionRegistry';
 
-const modules: FrontendModule[] = [[workspace, 'Workspace'], [part, 'Part'], [document, 'Document']].map(([binding, id]) => ({
-  ...binding as typeof workspace, metadata: { moduleId: String(id), displayName: String(id), version: '1' },
-}));
-const componentRoots = Object.values(discoverFrontendEntries(resolve(__dirname, '../../../../..'))).map(entryPath => dirname(dirname(entryPath)))
+const frontendEntries = Object.values(discoverFrontendEntries(resolve(__dirname, '../../../../..')));
+const componentRoots = frontendEntries.map(entryPath => dirname(dirname(entryPath)))
   .filter(componentRoot => existsSync(resolve(componentRoot, 'newp.plugin.json')));
+// 正式发现拥有源码位置，测试只加载所需真实 owner 的 binding，不固化组合嵌套深度。
+const bindings = import.meta.glob<{ default: Omit<FrontendModule, 'metadata'> }>('../../../../modules/**/src/index.ts');
+const modules: FrontendModule[] = await Promise.all(['Workspace', 'Part', 'Document'].map(async id => {
+  const root = componentRoots.find(path => JSON.parse(readFileSync(resolve(path, 'newp.plugin.json'), 'utf8')).moduleId === id);
+  const entry = frontendEntries.find(path => dirname(dirname(path)) === root);
+  const loader = Object.entries(bindings).find(([path]) => resolve(__dirname, path) === resolve(entry ?? ''))?.[1];
+  if (!loader) throw new Error(`Frontend binding '${id}' was not found through the component catalog.`);
+  return { ...(await loader()).default, metadata: { moduleId: id, displayName: id, version: '1' } };
+}));
 function metadata(): RuntimeMetadataState {
   const read = (module: string, folder: string) => {
     const moduleRoot = componentRoots.find(componentRoot => JSON.parse(readFileSync(resolve(componentRoot, 'newp.plugin.json'), 'utf8')).moduleId === module);

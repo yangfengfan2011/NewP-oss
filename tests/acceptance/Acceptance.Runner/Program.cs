@@ -5,6 +5,15 @@ if (args is ["--observe-feature-scale"]) return await FeatureScaleBrowserObserve
 try
 {
     var values = ParseValues(args);
+    if (values.TryGetValue("--workspace-delivery-input", out var deliveryOutput))
+    {
+        string Required(string name) => values.GetValueOrDefault(name) ?? throw new ArgumentException($"缺少 {name}。");
+        await PublishedComponentAcceptanceFixture.RecordWorkspaceDeliveryAsync(Path.GetFullPath(Required("--repository-root")),
+            Required("--baseline-host-root"), Required("--host-root"), Required("--shell-root"), Required("--package"),
+            Path.GetFullPath(deliveryOutput), CancellationToken.None);
+        Console.WriteLine($"WORKSPACE_DELIVERY_INPUT: {Path.GetFullPath(deliveryOutput)}");
+        return 0;
+    }
     if (!values.TryGetValue("--production-cold-start-mode", out var modeText))
     {
         throw new ArgumentException("缺少 --production-cold-start-mode。");

@@ -6,8 +6,8 @@
 
 一个模块由三个可独立核对的所有者组成：
 
-1. `frontend/modules/<module-slug>/newp.plugin.json` 唯一拥有 module id、显示名、版本、依赖和 behavior key。
-2. `frontend/modules/<module-slug>/metadata/**` 拥有路由、菜单、权限引用、模型与本地化等静态事实。
+1. `<组件源码根>/newp.plugin.json` 唯一拥有 module id、显示名、版本、依赖和 behavior key；源码根位于 `frontend/modules` 内，可按组合关系嵌套。
+2. `<组件源码根>/metadata/**` 拥有路由、菜单、权限引用、模型与本地化等静态事实。
 3. 后端和前端代码只把稳定 key 绑定到服务、endpoint、页面、renderer 或 action 实现。
 
 Host、Shell、C# 与 TypeScript 不再维护平行的模块身份和静态声明。
@@ -68,7 +68,7 @@ dotnet run --project server/tools/component-source-build/ComponentSource.Build.c
 dotnet build apps/host-api/HostApi.csproj -c Release -p:NewpComponentRoot=InforCenter
 ```
 
-上述 `InforCenter` 命令要求其全部声明成员已经嵌套，现有平面三成员布局会明确拒绝。前端 workspace 使用递归模块发现，Vite 与 `build-frontend-plugin.mjs` 通过同一 Catalog CLI 获取稳定 entry key 对应的真实源码入口；新增或调整测试配置时，从 workspace 根解析共享包，不按组件嵌套深度维护相对路径。
+主仓 Workspace、Part、Document 已实际位于 `frontend/modules/infor-center/{workspace,part,document}`；上述命令消费完整嵌套集合。三成员后端和迁移仍在原位，普通归组不改单个工程的相对引用或 Host/Shell 接线。前端 workspace 使用递归模块发现，Vite 与 `build-frontend-plugin.mjs` 通过同一 Catalog CLI 获取稳定 entry key 对应的真实源码入口；新增或调整测试配置时，从 workspace 根解析共享包，不按组件嵌套深度维护相对路径。
 
 源码根和位置无关构建已落地。回退需同时恢复通用构建入口与工程资源配置，已实际归组的目录按其 JSON 关系还原；不改写模型、manifest、已提交迁移或数据库历史。
 
@@ -82,7 +82,7 @@ dotnet run --project server/tools/component-bundle/ComponentBundle.csproj -c Rel
 dotnet run --project server/tools/component-bundle/ComponentBundle.csproj -c Release -- inspect <暂存目录或ZIP>
 ```
 
-`build` 仍要求声明与成员目录完整对应；当前平面 InforCenter 三成员输入会被拒绝。后端 Release 参数只在正式发行入口排除调试路径与仓库提交号，不改变开发调试配置；产物路径来自 MSBuild `TargetPath`，目标框架及实际共享依赖必须匹配受控平台运行时发行。私有程序集按真实引用闭包从 owner 构建输出收集，受控平台依赖与 CLR 实际共享框架由目标发行提供；未知或版本不一致的引用在消费前拒绝。迁移沿用原项目的确定性设置，打包不执行 finalize。
+`build` 要求声明与成员目录完整对应；当前 InforCenter 正式集合包含纯组合父组件与三个独立成员。后端 Release 参数只在正式发行入口排除调试路径与仓库提交号，不改变开发调试配置；产物路径来自 MSBuild `TargetPath`，目标框架及实际共享依赖必须匹配受控平台运行时发行。私有程序集按真实引用闭包从 owner 构建输出收集，受控平台依赖与 CLR 实际共享框架由目标发行提供；未知或版本不一致的引用在消费前拒绝。迁移沿用原项目的确定性设置，打包不执行 finalize。
 
 包根包含 `component-bundle.json`、`platform-runtime-release.json` 与 `modules/<ModuleId>/`。每个组件根保存原始 `authoring/newp.plugin.json`、派生 `plugin.json`、自身 metadata/resources、实际后端 DLL、前端完整产物，以及声明的 migration manifest/DLL 与已发布 canonical source。原 Capsule 是唯一声明真源；派生 transport 只把后端映射为 `backend/<AssemblyName>.dll`、前端映射为 `frontend/entry.js`，其他声明严格保持。检查器逐项比对该映射及后端嵌入的 Capsule，不追随原声明的历史 `../../` 程序集路径。
 
@@ -118,17 +118,78 @@ dotnet <目标Host目录>/HostApi.dll plugin-deploy enable-bundle --package <同
 目标发行可通过通用身份参数排除待装实现，后续安装和消费不重建这些目标文件：
 
 ```powershell
-dotnet publish apps/host-api/HostApi.csproj -c Release -t:Rebuild -p:NewpExcludedModuleIds=InforCenter%2cPart -o <新目标Host目录>
-$env:NEWP_EXCLUDED_MODULE_IDS = 'InforCenter,Part'
+dotnet publish apps/host-api/HostApi.csproj -c Release -t:Rebuild -p:NewpExcludedModuleIds=InforCenter%2cWorkspace%2cPart%2cDocument -o <新目标Host目录>
+$env:NEWP_EXCLUDED_MODULE_IDS = 'InforCenter,Workspace,Part,Document'
 pnpm --dir frontend --filter @icp-platform/shell exec vite build --outDir <新目标Shell目录>
 Remove-Item Env:NEWP_EXCLUDED_MODULE_IDS
 ```
 
-MSBuild 命令中的 `%2c` 转义逗号，避免将组件列表拆成多个属性。首片已用真实 InforCenter/Part 包贯通未预装这两项的固定 Host/Shell、正式 Part API/页面和既有 SQL 数据及迁移历史；主仓的平面三成员布局仍未归组。安装先完成整批校验与暂存，再以 `native-install.pending` 持久记录原库存字节及每个目录/receipt的先前所有权。提交期间进程中断，下一次正式离线命令或Host启动在同一安装根独占租约内、读取库存前恢复完整旧集合；恢复自身中断可重入。journal只在全部提交或全部恢复完成后移除；损坏、旧版仅摘要标记或无法恢复时保留journal与材料并以 `COMPONENT_BUNDLE_INSTALL_INCOMPLETE` 失败关闭，不能手工删除标记绕过。重复安装幂等，原选择、无关库存与Persistence pending/成功记录及恢复归档保持；文件恢复不连接数据库，也不代替数据库前沿恢复。整包选版和独立升级已沿固定 Host 重启及真实 Part API 验证；三成员扩展及退出边界仍由 #274/#275 交付。
+MSBuild 命令中的 `%2c` 转义逗号，避免将组件列表拆成多个属性。三成员正式包已贯通未预装它们的固定 Host/Shell：真实 Workspace、Part、Document API、旧业务行/内容 Link/迁移历史与 Workspace 页面消费连续。安装先完成整批校验与暂存，再以 `native-install.pending` 持久记录原库存字节及每个目录/receipt的先前所有权。提交期间进程中断，下一次正式离线命令或Host启动在同一安装根独占租约内、读取库存前恢复完整旧集合；恢复自身中断可重入。journal只在全部提交或全部恢复完成后移除；损坏、旧版仅摘要标记或无法恢复时保留journal与材料并以 `COMPONENT_BUNDLE_INSTALL_INCOMPLETE` 失败关闭，不能手工删除标记绕过。重复安装幂等，原选择、无关库存与Persistence pending/成功记录及恢复归档保持；文件恢复不连接数据库，也不代替数据库前沿恢复。整包选版和独立升级已沿固定 Host 重启及真实 Part API 验证；三成员归组与消费已完成；整包退出及相应恢复边界仍由 #275 交付，不能据此宣称整个 #267 完成。
 
 创建固定目标时，restore 和 publish 必须使用同一排除集合；上述命令完成 restore 并重建 Host，避免复用其他组合生成的 deps/MVC ApplicationPart 引用。目标固定后，安装、选版和重启只操作安装根；二进制身份比较以安装前后同一固定目标为准。
 
 回退应在停服租约内恢复相容的平台文件与明确选择；数据库前沿已变化时必须保留相容组件和恢复资产，不执行 Down、改写已提交历史或清除 Persistence pending。未完成原生文件事务也不能通过手工删除标记冒充恢复完成。
+
+## Workspace 固定发行物验收输入
+
+Workspace Gate（包括普通 `accept.ps1 -Gate Workspace`、`-Gate All` 及 `verify.ps1 -AcceptanceGate Workspace/All`）消费正式三成员包，不再用静态 dev 装配替代独立交付。先准备与本轮冻结候选对应的新包和平台发行物，再登记输入；开发候选可以 dirty。登记只记录 HEAD/tree/index/status、tracked/untracked 内容摘要及发行资产摘要，不授信、不产出另一套裁决。候选或固定目标变化时，在再次执行前重新准备受影响资产并登记，不能沿用返修前的旧发行物冒充最终候选。
+
+旧数据由一份已有完整正式部署 Host 的真实 bootstrap/API 建立，随后同一个专用 `NewP_Test` catalog 切换到裁剪目标，正式 `install-native`、`enable-bundle` 后重启。baseline 必须包含三个成员的原实现；它与新目标用途不同。调用方必须提供该已有完整部署 Host 的绝对目录；缺少此历史输入的新环境不能用空库或新裁剪目标替代，也不能伪造已有数据连续性。SQL 管理连接沿用 Acceptance 的 `NEWP_ACCEPTANCE_SQLSERVER_ADMIN_CONNECTION`、`NEWP_DEV_SQLSERVER_CONNECTION_STRING` 和开发配置读取顺序，不把凭据写入交付输入或命令日志。
+
+在仓库根、无其他 build/test/browser 占用时，逐条等待成功后继续。每次使用新的输出目录；Host publish 保留 restore 并 Rebuild，避免复用默认全模块的 obj/deps。下面全部完成后，安装、选版、重启期间不再重建目标：
+
+```powershell
+$repo = (Get-Location).Path
+$deliveryRoot = Join-Path $repo ('.codex-temp/workspace-delivery/' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $deliveryRoot | Out-Null
+$baselineHost = (Resolve-Path -LiteralPath '<已有完整正式部署Host的绝对目录>').Path
+$stage = Join-Path $deliveryRoot 'stage'
+$package = Join-Path $deliveryRoot 'components.zip'
+$hostRoot = Join-Path $deliveryRoot 'host'
+$shellRoot = Join-Path $deliveryRoot 'shell'
+$workspaceDeliveryInput = Join-Path $deliveryRoot 'input.json'
+
+dotnet run --project server/tools/component-bundle/ComponentBundle.csproj -c Release -- build $repo InforCenter $stage
+dotnet run --project server/tools/component-bundle/ComponentBundle.csproj -c Release --no-build --no-restore -- pack $stage $package
+dotnet run --project server/tools/component-bundle/ComponentBundle.csproj -c Release --no-build --no-restore -- inspect $package
+dotnet publish apps/host-api/HostApi.csproj -c Release -t:Rebuild -p:NewpExcludedModuleIds=InforCenter%2cWorkspace%2cPart%2cDocument -o $hostRoot
+$env:NEWP_EXCLUDED_MODULE_IDS = 'InforCenter,Workspace,Part,Document'
+try { pnpm --dir frontend --filter @icp-platform/shell exec vite build --outDir $shellRoot }
+finally { Remove-Item Env:NEWP_EXCLUDED_MODULE_IDS -ErrorAction SilentlyContinue }
+dotnet build tests/acceptance/Acceptance.Tests/Acceptance.Tests.csproj -c Release
+dotnet run --project tests/acceptance/Acceptance.Runner/Acceptance.Runner.csproj -c Release --no-build --no-restore -- --workspace-delivery-input $workspaceDeliveryInput --repository-root $repo --baseline-host-root $baselineHost --host-root $hostRoot --shell-root $shellRoot --package $package
+$env:NEWP_ACCEPTANCE_WORKSPACE_DELIVERY_INPUT = $workspaceDeliveryInput
+.\scripts\verify.ps1 -AcceptanceGate Workspace
+```
+
+输入登记会核对裁剪 Host 无三成员程序集、声明目录及 deps 引用，Shell 无对应构建期实现。正式 fixture 使用同一安装根、`ExternalPluginsEnabled=false`、`/plugins/runtime/assets` 与现有 production-shell-server 代理；保留候选/目标前后摘要、原始命令、SQL/API 快照、页面诊断及清理/凭据扫描。父级完整验证在最终冻结后重新执行上述准备，不能把 child 的旧输入当成最终输入；普通完整验证不要求 clean。
+
+开发时可只开最低层或最短页面入口，二者默认明确 skip；完整 Workspace Gate 仍由父级集中执行。页面入口沿正式 driver 走进入、旧列表/属性、一次创建和结果，不重复已通过的父成员生命周期循环：
+
+```powershell
+$env:NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE = '1'
+dotnet test tests/acceptance/Acceptance.Tests/Acceptance.Tests.csproj -c Release --no-build --no-restore --filter 'FullyQualifiedName~NativeWorkspaceApi_UsesFixedRelease' --logger 'console;verbosity=detailed'
+dotnet test tests/acceptance/Acceptance.Tests/Acceptance.Tests.csproj -c Release --no-build --no-restore --filter 'FullyQualifiedName~NativeWorkspace_UsesFormalDriver' --logger 'console;verbosity=detailed'
+Remove-Item Env:NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE
+```
+
+父组合屏蔽/恢复保留成员自身选择，以同一个正常判权的 LocalAdmin 和活动目录验证可用性。按 ADR-0048，正式删除的活动功能不恢复普通角色旧授权；fixture 如实保留恢复后的旧普通账号 403，再通过原有限授权准备流程另建页面主体，不宣称原授权恢复。退出/恢复验证复用 `PublishedComponentAcceptanceFixture.FromWorkspaceDelivery`、`PrepareAsync`、`RestartAsync` 和同一正式 Workspace runner/driver，不另建平行部署或浏览器准备。
+
+## 100 组件、5 层规模回归
+
+`ComponentBundleScaleTests` 是长期低层入口。临时输入只有组合声明，五层实际分布为 `1+4+16+48+31`；从正式 Catalog 读取的声明图与最终活动目录各自计算层数。它通过正式 CLI build/pack/inspect，再走真实原生安装、preflight、候选 compiler、RuntimeViewMaterializer，核对实际活动目录 100 个组件/5 层。真实业务 SQL/API/页面由上面的三成员纵向入口证明，规模测试不宣称 100 个业务页面或 SQL 模型。
+
+```powershell
+$repo = (Get-Location).Path
+dotnet build server/tools/component-bundle/ComponentBundle.csproj -c Release
+$env:NEWP_COMPONENT_SCALE_TOOL = (dotnet msbuild server/tools/component-bundle/ComponentBundle.csproj -nologo -p:Configuration=Release -getProperty:TargetPath).Trim()
+$env:NEWP_COMPONENT_SCALE_EVIDENCE = Join-Path $repo ('.codex-temp/component-scale/' + [guid]::NewGuid().ToString('N'))
+$env:NEWP_RUN_COMPONENT_SCALE = '1'
+dotnet test tests/PluginPlatform.Tests/PluginPlatform.Tests.csproj -c Release --filter 'FullyQualifiedName~ComponentBundleScaleTests' --logger 'console;verbosity=detailed'
+Remove-Item Env:NEWP_RUN_COMPONENT_SCALE, Env:NEWP_COMPONENT_SCALE_TOOL, Env:NEWP_COMPONENT_SCALE_EVIDENCE
+```
+
+未启用开关时 xUnit 明确记录 skip，父级默认 verify 的 skip 不替代本次要求的显式执行。证据目录只保留命令、声明/活动目录、各阶段耗时及清理结果；临时源码/包/库存均在本例归还。100/5 是回归场景，不是产品容量上限，也不增加性能阈值。
 
 ## 兼容代码边界
 

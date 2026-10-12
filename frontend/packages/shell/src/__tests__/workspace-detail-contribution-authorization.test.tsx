@@ -1,25 +1,27 @@
 // @vitest-environment jsdom
+import { loadComponentSource, readComponentJson } from '../../test-support/componentTestInputs';
+import type { FrontendBehaviorBindings, StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider, useParams } from 'react-router-dom';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
-import workspace from '../../../../modules/workspace/src';
-import part from '../../../../modules/part/src';
-import documentModule from '../../../../modules/document/src';
-import { partResource } from '../../../../modules/part/src/partResource';
+const { default: workspace } = await loadComponentSource<{ default: FrontendBehaviorBindings }>('Workspace', 'index.ts');
+const { default: part } = await loadComponentSource<{ default: FrontendBehaviorBindings }>('Part', 'index.ts');
+const { default: documentModule } = await loadComponentSource<{ default: FrontendBehaviorBindings }>('Document', 'index.ts');
+const { partResource } = await loadComponentSource<{ partResource: StandardCrudResourceRegistration }>('Part', 'partResource.ts');
 import folder from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceFolderRuntime.contract.json';
 import partModel from '../../../../../tests/Kernel.Tests/Fixtures/PartRuntime.contract.json';
 import documentModel from '../../../../../tests/Kernel.Tests/Fixtures/DocumentRuntime.contract.json';
-import content from '../../../../modules/workspace/metadata/models/WorkspaceFolderContent.model.json';
-import references from '../../../../modules/workspace/metadata/views/WorkspaceReferencesList.view.json';
-import detail from '../../../../modules/workspace/metadata/views/WorkspaceFolderDetail.view.json';
-import list from '../../../../modules/workspace/metadata/views/WorkspaceFolderList.view.json';
-import partDetail from '../../../../modules/part/metadata/views/PartDetail.view.json';
-import partList from '../../../../modules/part/metadata/views/PartList.view.json';
-import documentDetail from '../../../../modules/document/metadata/views/DocumentDetail.view.json';
-import documentList from '../../../../modules/document/metadata/views/DocumentList.view.json';
+const content = readComponentJson('Workspace', 'metadata/models/WorkspaceFolderContent.model.json');
+const references = readComponentJson('Workspace', 'metadata/views/WorkspaceReferencesList.view.json');
+const detail = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderDetail.view.json');
+const list = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderList.view.json');
+const partDetail = readComponentJson('Part', 'metadata/views/PartDetail.view.json');
+const partList = readComponentJson('Part', 'metadata/views/PartList.view.json');
+const documentDetail = readComponentJson('Document', 'metadata/views/DocumentDetail.view.json');
+const documentList = readComponentJson('Document', 'metadata/views/DocumentList.view.json');
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { AuthProvider } from '../contexts/AuthContext';
@@ -29,7 +31,7 @@ import { FeaturePlacementContext } from '../authorization/FeaturePlacementContex
 import '../pages/StandardCrudListPageHost';
 import '../pages/StandardCrudListDrawerRuntime';
 import '@ant-design/pro-descriptions';
-import '../../../../modules/workspace/src/workspaceReferencesResource';
+await loadComponentSource('Workspace', 'workspaceReferencesResource.ts');
 
 vi.unmock('@icp-platform/core');
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;

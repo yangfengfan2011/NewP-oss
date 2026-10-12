@@ -1,17 +1,19 @@
 // @vitest-environment jsdom
+import { loadComponentSource, readComponentJson } from '../../test-support/componentTestInputs';
+import type { FrontendBehaviorBindings } from '@icp-platform/sdk';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
-import workspace from '../../../../modules/workspace/src';
+const { default: workspace } = await loadComponentSource<{ default: FrontendBehaviorBindings }>('Workspace', 'index.ts');
 import folder from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceFolderRuntime.contract.json';
-import content from '../../../../modules/workspace/metadata/models/WorkspaceFolderContent.model.json';
-import tree from '../../../../modules/workspace/metadata/views/WorkspaceStructure.view.json';
-import list from '../../../../modules/workspace/metadata/views/WorkspaceFolderList.view.json';
-import detail from '../../../../modules/workspace/metadata/views/WorkspaceFolderDetail.view.json';
-import dictionary from '../../../../modules/workspace/metadata/dictionaries/Workspace.dic.json';
+const content = readComponentJson('Workspace', 'metadata/models/WorkspaceFolderContent.model.json');
+const tree = readComponentJson('Workspace', 'metadata/views/WorkspaceStructure.view.json');
+const list = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderList.view.json');
+const detail = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderDetail.view.json');
+const dictionary = readComponentJson('Workspace', 'metadata/dictionaries/Workspace.dic.json');
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { PageEntry } from '../composition/PageOutlet';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
@@ -20,7 +22,7 @@ import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import '../composition/StandardTreePage';
 import '../pages/StandardCrudListPageHost';
 import '../pages/StandardCrudListDrawerRuntime';
-import '../../../../modules/workspace/src/workspaceRootResource';
+await loadComponentSource('Workspace', 'workspaceRootResource.ts');
 
 vi.unmock('@icp-platform/core');
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;

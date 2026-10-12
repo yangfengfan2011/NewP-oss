@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { loadComponentSource, readComponentJson } from '../../test-support/componentTestInputs';
+import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, onTestFinished, vi } from 'vitest';
@@ -9,12 +11,12 @@ import type { StandardCrudFieldDefinition } from '@icp-platform/sdk';
 import { StandardCrudRequestError } from '@icp-platform/sdk';
 import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime';
 import dictionary from '../../../../modules/platform/metadata/dictionaries/Platform.dic.json';
-import workspaceDictionary from '../../../../modules/workspace/metadata/dictionaries/Workspace.dic.json';
-import partDictionary from '../../../../modules/part/metadata/dictionaries/Part.dic.json';
-import documentDictionary from '../../../../modules/document/metadata/dictionaries/Document.dic.json';
-import workspaceResource from '../../../../modules/workspace/src/workspaceRootResource';
+const workspaceDictionary = readComponentJson('Workspace', 'metadata/dictionaries/Workspace.dic.json');
+const partDictionary = readComponentJson('Part', 'metadata/dictionaries/Part.dic.json');
+const documentDictionary = readComponentJson('Document', 'metadata/dictionaries/Document.dic.json');
+const { default: workspaceResource } = await loadComponentSource<{ default: StandardCrudResourceRegistration }>('Workspace', 'workspaceRootResource.ts');
 // 装载真实模块输入，避免冷转换落入交互测试预算；错误仍由标准动作与Lookup呈现。
-import '../../../../modules/workspace/src/WorkspaceObjectCreateInput';
+await loadComponentSource('Workspace', 'WorkspaceObjectCreateInput.tsx');
 
 vi.unmock('@icp-platform/core');
 

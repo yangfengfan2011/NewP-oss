@@ -5,16 +5,21 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using ICP.Platform.Testing;
+using ICP.Platform.Kernel.ModulePlanning;
 using Microsoft.Data.SqlClient;
 
 namespace ICP.Platform.Acceptance;
 
-internal sealed record PublishedWorkspaceTarget(WorkspaceAcceptanceActor Actor, string ShellOrigin);
+internal sealed record PublishedWorkspaceTarget(WorkspaceAcceptanceActor Actor, string ShellOrigin, int HostPort, string? EntryPosition);
 
-// 首片只运输 InforCenter/Part；完整 baseline 建立旧数据，固定裁剪发行物消费同一 catalog。
+internal sealed record WorkspaceDeliveryInput(JsonElement Candidate, string BaselineHostRoot, string HostRoot,
+    string ShellRoot, string PackagePath, string HostIdentity, string ShellIdentity, string PackageSha256);
+
+// 正式 baseline 建立旧数据；裁剪的固定发行物通过原生包消费同一 catalog。
 internal sealed class PublishedComponentAcceptanceFixture(
     string repositoryRoot, string runDirectory, string runId,
-    string baselineHostRoot, string hostRoot, string shellRoot, string packagePath)
+    string baselineHostRoot, string hostRoot, string shellRoot, string packagePath,
+    bool workspaceDelivery = false, WorkspaceDeliveryInput? deliveryInput = null, bool exerciseCompositionLifecycle = true)
 {
     private readonly Dictionary<string, string?> _environment = new();
     private ReusableSqlServerDatabase? _database;
@@ -28,6 +33,37 @@ internal sealed class PublishedComponentAcceptanceFixture(
     private string HostOrigin => $"http://127.0.0.1:{_hostPort}";
     internal string ExistingCode => "ACC-OLD-P-" + runId[..8];
     internal string ExistingName => "独立安装旧零组件 " + runId[..8];
+    internal string ExistingFolderName => "归组旧文件夹 " + runId[..8];
+    private string ExistingDocumentCode => "ACC-OLD-D-" + runId[..8];
+    private string ExistingDocumentName => "归组旧图文档 " + runId[..8];
+    private string? _oldDocumentId;
+    private string? _oldFolderId;
+    private string? _baselineOwners;
+    private WorkspaceAcceptanceActor? _administrator;
+    internal string HostIdentity => $"published:{_host?.Process.Id}:{runId}";
+
+    internal static PublishedComponentAcceptanceFixture FromWorkspaceDelivery(string repositoryRoot, string runDirectory, string runId,
+        bool exerciseCompositionLifecycle = true)
+    {
+        var path = RequiredPath("NEWP_ACCEPTANCE_WORKSPACE_DELIVERY_INPUT");
+        var input = JsonSerializer.Deserialize<WorkspaceDeliveryInput>(File.ReadAllText(path), AcceptanceJson.Options)
+            ?? throw new InvalidOperationException("Workspace delivery input was empty.");
+        return new(repositoryRoot, runDirectory, runId, input.BaselineHostRoot, input.HostRoot,
+            input.ShellRoot, input.PackagePath, workspaceDelivery: true, deliveryInput: input,
+            exerciseCompositionLifecycle: exerciseCompositionLifecycle);
+    }
+
+    // 只登记受控构建的输入与来源；不产出裁决，也不授予包信任。Gate 仍走正式安装/Host。
+    internal static async Task RecordWorkspaceDeliveryAsync(string repositoryRoot, string baselineHostRoot,
+        string hostRoot, string shellRoot, string packagePath, string output, CancellationToken token)
+    {
+        var fixture = new PublishedComponentAcceptanceFixture(repositoryRoot, Path.GetDirectoryName(output)!, "input",
+            Path.GetFullPath(baselineHostRoot), Path.GetFullPath(hostRoot), Path.GetFullPath(shellRoot), Path.GetFullPath(packagePath), true);
+        var identity = fixture.ReadTargetIdentity();
+        var candidate = await ReadCandidateAsync(repositoryRoot, token);
+        await AcceptanceInfrastructure.WriteJsonAsync(output, new WorkspaceDeliveryInput(candidate, Path.GetFullPath(baselineHostRoot),
+            Path.GetFullPath(hostRoot), Path.GetFullPath(shellRoot), Path.GetFullPath(packagePath), identity.Host, identity.Shell, FileHash(packagePath)), token);
+    }
 
     internal static PublishedComponentAcceptanceFixture FromEnvironment(string repositoryRoot, string runDirectory, string runId) => new(
         repositoryRoot, runDirectory, runId,
@@ -42,6 +78,18 @@ internal sealed class PublishedComponentAcceptanceFixture(
     {
         _sanitize = sanitize;
         var before = ReadTargetIdentity();
+        if (deliveryInput is not null)
+        {
+            var actual = await ReadCandidateAsync(repositoryRoot, token);
+            if (!JsonElement.DeepEquals(deliveryInput.Candidate, actual) || deliveryInput.HostIdentity != before.Host
+                || deliveryInput.ShellIdentity != before.Shell || deliveryInput.PackageSha256 != FileHash(packagePath))
+            {
+                await WriteAsync("delivery-input-mismatch.json", new { expectedCandidate = deliveryInput.Candidate, actualCandidate = actual,
+                    hostEqual = deliveryInput.HostIdentity == before.Host, shellEqual = deliveryInput.ShellIdentity == before.Shell,
+                    packageEqual = deliveryInput.PackageSha256 == FileHash(packagePath) }, token);
+                throw new InvalidOperationException("Workspace delivery 输入与当前候选或固定发行资产不一致；读取 delivery-input-mismatch.json。");
+            }
+        }
         await WriteAsync("target-before.json", before, token);
         await WriteCandidateAsync("candidate-before.json", token);
         _database = await ReusableSqlServerDatabase.AcquireAsync(repositoryRoot, token);
@@ -68,21 +116,52 @@ internal sealed class PublishedComponentAcceptanceFixture(
         registerSecret(administratorPassword);
         await WorkspaceAcceptanceFixture.LoginAndChangePasswordAsync(administrator, "admin", bootstrap.TemporaryCredential,
             administratorPassword, token);
+        _administrator = new("local-admin", "admin", administratorPassword);
         var features = await AcceptanceFeatureCatalog.LoadAsync(administrator, token);
         var part = features.Behavior("Part", "part.part.read");
-        var actor = await WorkspaceAcceptanceFixture.PrepareAsync(administrator, features, runId, registerSecret,
-            [part, features.Action(part, "create", "list.pageActions")], token);
+        var granted = new List<FeaturePoint> { part, features.Action(part, "create", "list.pageActions") };
+        FeaturePoint? workspace = null;
+        if (workspaceDelivery)
+        {
+            workspace = features.Behavior("Workspace", "workspace.spaces.access");
+            granted.Add(workspace);
+            foreach (var key in new[] { "create", "createPart", "createDocument", "deleteObjects" })
+                granted.Add(features.Action(workspace, key, "list.pageActions", "folder"));
+            foreach (var key in new[] { "edit", "delete", "remove" })
+                granted.Add(features.Action(workspace, key, "list.rowActions", "folder"));
+            var document = features.Behavior("Document", "document.document.read");
+            granted.Add(document);
+            granted.Add(features.Action(document, "create", "list.pageActions"));
+            await WorkspaceAcceptanceFixture.SendAsync(administrator, HttpMethod.Post, "/api/workspace/spaces/public/initialize", null, workspace.Position, token);
+        }
+        var actor = await WorkspaceAcceptanceFixture.PrepareAsync(administrator, features, runId, registerSecret, granted, token);
         using var ordinary = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
         await WorkspaceAcceptanceFixture.LoginAsync(ordinary, actor, token);
-        var oldId = await WorkspaceAcceptanceFixture.CreateMetadataObjectAsync(ordinary, features,
+        string oldId;
+        if (workspaceDelivery)
+        {
+            await WorkspaceAcceptanceFixture.SendAsync(ordinary, HttpMethod.Post, "/api/workspace/spaces/personal/ensure", null, workspace!.Position, token);
+            var roots = await WorkspaceAcceptanceFixture.SendAsync(ordinary, HttpMethod.Get, "/api/workspace/spaces", null, workspace.Position, token);
+            var root = roots.EnumerateArray().Single(item => string.Equals(item.GetProperty("spaceKind").GetString(), "public", StringComparison.OrdinalIgnoreCase));
+            var position = new WorkspaceFolderPosition(root.GetProperty("spaceId").GetString()!, root.GetProperty("rootFolderId").GetString()!, root.GetProperty("rootFolderId").GetString()!, []);
+            _oldFolderId = (await WorkspaceAcceptanceFixture.CreateFolderAtPositionAsync(ordinary, features, position, ExistingFolderName, token)).FolderId;
+            oldId = await CreateWorkspaceObjectAsync(ordinary, features, root, position, "Part", "parts", ExistingCode, ExistingName, token);
+            _oldDocumentId = await CreateWorkspaceObjectAsync(ordinary, features, root, position, "Document", "documents", ExistingDocumentCode, ExistingDocumentName, token);
+            _baselineOwners = await ReadModelOwnersAsync(ordinary, token);
+        }
+        else oldId = await WorkspaceAcceptanceFixture.CreateMetadataObjectAsync(ordinary, features,
             "Part", "part.part.read", "/api/part/parts", ExistingCode, ExistingName, token);
         var baseline = await ReadContinuityAsync(oldId, token);
         await WriteAsync("sql-before.json", baseline, token);
         await StopHostAsync(token);
 
         await RunOfflineAsync("install-native", ["--package", packagePath], token);
-        await RunOfflineAsync("enable", ["--module-id", "InforCenter", "--version", "1.0.0"], token);
-        await RunOfflineAsync("enable", ["--module-id", "Part", "--version", "1.0.0"], token);
+        if (workspaceDelivery) await RunOfflineAsync("enable-bundle", ["--package", packagePath], token);
+        else
+        {
+            await RunOfflineAsync("enable", ["--module-id", "InforCenter", "--version", "1.0.0"], token);
+            await RunOfflineAsync("enable", ["--module-id", "Part", "--version", "1.0.0"], token);
+        }
         await StartHostAsync(hostRoot, "installed-host", token);
         var after = await ReadContinuityAsync(oldId, token);
         await WriteAsync("sql-after.json", after, token);
@@ -101,9 +180,38 @@ internal sealed class PublishedComponentAcceptanceFixture(
             "/plugins/active-module-runtime.json", null, null, token);
         var modules = runtime.GetProperty("modules").EnumerateArray().ToArray();
         var parent = modules.Single(module => module.GetProperty("moduleId").GetString() == "InforCenter");
-        if (!parent.GetProperty("compositionMembers").EnumerateArray().Select(member => member.GetString()).SequenceEqual(["Part"]))
+        var expectedMembers = workspaceDelivery ? new[] { "Document", "Part", "Workspace" } : ["Part"];
+        if (!parent.GetProperty("compositionMembers").EnumerateArray().Select(member => member.GetString()).Order(StringComparer.Ordinal).SequenceEqual(expectedMembers))
             throw new InvalidOperationException("首片未使用只含 Part 的正式 InforCenter 包。");
+        if (workspaceDelivery)
+        {
+            if (_baselineOwners != await ReadModelOwnersAsync(installed, token)) throw new InvalidOperationException("三成员的模型 owner 发生漂移。");
+            var oldDocument = await WorkspaceAcceptanceFixture.SendAsync(installed, HttpMethod.Get, "/api/document/documents/" + _oldDocumentId,
+                null, installedFeatures.Behavior("Document", "document.document.read").Position, token);
+            if (oldDocument.GetProperty("fields").GetProperty("ECODE").GetString() != ExistingDocumentCode)
+                throw new InvalidOperationException("归组后的正式 Document API 未读取旧对象。");
+            var roots = await WorkspaceAcceptanceFixture.SendAsync(installed, HttpMethod.Get, "/api/workspace/spaces", null,
+                installedFeatures.Behavior("Workspace", "workspace.spaces.access").Position, token);
+            var root = roots.EnumerateArray().Single(item => string.Equals(item.GetProperty("spaceKind").GetString(), "public", StringComparison.OrdinalIgnoreCase));
+            var contents = await WorkspaceAcceptanceFixture.ReadRootContentsAsync(installed, root, installedFeatures.Behavior("Workspace", "workspace.spaces.access").Position, token);
+            var ids = contents.GetProperty("items").EnumerateArray().Select(item => item.GetProperty("associatedObject").GetProperty("id").GetString()).Order(StringComparer.Ordinal);
+            if (!ids.SequenceEqual(new[] { oldId, _oldDocumentId, _oldFolderId }.Order(StringComparer.Ordinal)))
+                throw new InvalidOperationException("三成员旧内容 Link 未由正式 Workspace 查询连续读取。");
+            await WriteAsync("workspace-api-continuity.json", new { oldDocument, roots, contents, modelOwners = _baselineOwners }, token);
+        }
         await WriteAsync("api-continuity.json", new { oldId, detail, runtime, externalPluginsEnabled = false }, token);
+        if (workspaceDelivery && exerciseCompositionLifecycle)
+        {
+            await VerifyCompositionLifecycleAsync(actor, oldId, installedFeatures.Behavior("Part", "part.part.read").Position, baseline, token);
+            // 活动功能被正式删除后普通授权永久作废（ADR-0048）；页面另走原有限授权准备流程。
+            using var pageAdministrator = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
+            await WorkspaceAcceptanceFixture.LoginAsync(pageAdministrator, _administrator!, token);
+            var pageFeatures = await AcceptanceFeatureCatalog.LoadAsync(pageAdministrator, token);
+            var previousActorId = actor.AccountId;
+            actor = await WorkspaceAcceptanceFixture.PrepareAsync(pageAdministrator, pageFeatures, "page" + runId, registerSecret, granted, token);
+            await WriteAsync("page-actor-preparation.json", new { previousActorId, pageActorId = actor.AccountId,
+                oldGrantsRestored = false, preparation = "formal-limited-role", grantedPositions = pageFeatures.GrantSet(granted.ToArray()) }, token);
+        }
         var targetAfter = ReadTargetIdentity();
         await WriteAsync("target-after.json", targetAfter, token);
         if (before != targetAfter) throw new InvalidOperationException("安装期间固定 Host/Shell 发行物发生变化。");
@@ -122,17 +230,121 @@ internal sealed class PublishedComponentAcceptanceFixture(
         if (ready.RootElement.GetProperty("runId").GetString() != runId || ready.RootElement.GetProperty("pid").GetInt32() != _shell.Process.Id)
             throw new InvalidOperationException("固定 Shell ready 归属不匹配。");
         var shellOrigin = $"http://127.0.0.1:{ready.RootElement.GetProperty("port").GetInt32()}";
-        await WriteAsync("initialization.json", new { early271 = true, catalog = ReusableSqlServerDatabase.Catalog,
+        await WriteAsync("initialization.json", new { early271 = !workspaceDelivery, catalog = ReusableSqlServerDatabase.Catalog,
             hostOrigin = HostOrigin, shellOrigin, actorId = actor.AccountId, packagePath,
             packageSha256 = FileHash(packagePath), baselineHostRoot, hostRoot, shellRoot }, token);
-        return new(actor, shellOrigin);
+        return new(actor, shellOrigin, _hostPort, workspaceDelivery ? installedFeatures.Behavior("Workspace", "workspace.spaces.access").Position : null);
     }
 
-    private sealed record Continuity(string PhysicalMapping, string PartRow, string History);
+    private async Task<string> CreateWorkspaceObjectAsync(HttpClient client, AcceptanceFeatureCatalog features, JsonElement root,
+        WorkspaceFolderPosition position, string model, string route, string code, string name, CancellationToken token)
+    {
+        var entry = features.Behavior("Workspace", "workspace.spaces.access");
+        await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Post, "/api/workspace/content/" + route,
+            new { position = position.CommandPosition, values = new { ECODE = code, ENAME = name } },
+            features.Action(entry, "create" + model, "list.pageActions", "folder").Position, token);
+        var contents = await WorkspaceAcceptanceFixture.ReadRootContentsAsync(client, root, entry.Position, token);
+        return contents.GetProperty("items").EnumerateArray().Single(item => item.GetProperty("fields").GetProperty("Name").GetString() == name)
+            .GetProperty("associatedObject").GetProperty("id").GetString()!;
+    }
+
+    private async Task<string> ReadModelOwnersAsync(HttpClient client, CancellationToken token)
+    {
+        var runtime = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get, "/plugins/active-module-runtime.json", null, null, token);
+        return JsonSerializer.Serialize(runtime.GetProperty("modules").EnumerateArray()
+            .Where(module => new[] { "Workspace", "Part", "Document" }.Contains(module.GetProperty("moduleId").GetString()))
+            .Select(module => new { owner = module.GetProperty("moduleId").GetString(), models = module.GetProperty("modelKeys").EnumerateArray().Select(key => key.GetString()).Order(StringComparer.Ordinal).ToArray() })
+            .OrderBy(module => module.owner, StringComparer.Ordinal));
+    }
+
+    internal async Task RestartAsync(CancellationToken token)
+    {
+        await StopHostAsync(token);
+        await StartHostAsync(hostRoot, "restarted-host-" + Guid.NewGuid().ToString("N"), token);
+    }
+
+    // 用合法完整候选验证父屏蔽；先停用依赖者 Workspace，再停用 Document，保留 Part 自身启用。
+    private async Task VerifyCompositionLifecycleAsync(WorkspaceAcceptanceActor actor, string oldId, string partPosition,
+        Continuity baseline, CancellationToken token)
+    {
+        var allEnabled = ReadMemberChoices();
+        await StopHostAsync(token);
+        await RunOfflineAsync("disable", ["--module-id", "Workspace"], token);
+        await RunOfflineAsync("disable", ["--module-id", "Document"], token);
+        var ownChoices = ReadMemberChoices();
+        if (ownChoices == allEnabled) throw new InvalidOperationException("正式成员停用未形成自身选择。");
+        await StartHostAsync(hostRoot, "members-selected", token);
+        await RequirePartReadAsync(actor, oldId, partPosition, true, token);
+        await StopHostAsync(token);
+        await RunOfflineAsync("disable", ["--module-id", "InforCenter"], token);
+        if (ReadMemberChoices() != ownChoices) throw new InvalidOperationException("父停用改写了成员自身选择。");
+        await StartHostAsync(hostRoot, "parent-masked", token);
+        await RequirePartReadAsync(actor, oldId, partPosition, false, token);
+        if (await ReadContinuityAsync(oldId, token) != baseline) throw new InvalidOperationException("父屏蔽改变旧数据或历史。");
+        await StopHostAsync(token);
+        await RunOfflineAsync("enable", ["--module-id", "InforCenter", "--version", "1.0.0"], token);
+        if (ReadMemberChoices() != ownChoices) throw new InvalidOperationException("父恢复覆盖了停用成员。");
+        await StartHostAsync(hostRoot, "parent-restored", token);
+        await RequirePartReadAsync(actor, oldId, partPosition, true, token);
+        await StopHostAsync(token);
+        await RunOfflineAsync("enable", ["--module-id", "Document", "--version", "1.0.0"], token);
+        await RunOfflineAsync("enable", ["--module-id", "Workspace", "--version", "1.0.0"], token);
+        await StartHostAsync(hostRoot, "members-restored", token);
+        if (ReadMemberChoices() != allEnabled || await ReadContinuityAsync(oldId, token) != baseline)
+            throw new InvalidOperationException("明确恢复成员后，选择或旧数据/历史未保持。");
+        await WriteAsync("composition-lifecycle.json", new { ownChoices, parentMaskPreservedChoices = true,
+            parentRestorePreservedChoices = true, restoredMembers = allEnabled, continuityPreserved = true }, token);
+    }
+
+    private string ReadMemberChoices()
+    {
+        using var state = JsonDocument.Parse(File.ReadAllText(Path.Combine(InstallRoot, "lifecycle", "v2", "state.json")));
+        return JsonSerializer.Serialize(state.RootElement.GetProperty("desiredModules").EnumerateArray()
+            .Where(module => module.GetProperty("moduleId").GetString() != "InforCenter")
+            .OrderBy(module => module.GetProperty("moduleId").GetString(), StringComparer.Ordinal));
+    }
+
+    private async Task RequirePartReadAsync(WorkspaceAcceptanceActor actor, string oldId, string position, bool available, CancellationToken token)
+    {
+        using var client = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
+        var login = await WorkspaceAcceptanceFixture.LoginAsync(client, actor, token);
+        var runtime = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get, "/plugins/active-module-runtime.json", null, null, token);
+        var active = runtime.GetProperty("modules").EnumerateArray().Any(module => module.GetProperty("moduleId").GetString() == "Part");
+        var currentPosition = active ? (await AcceptanceFeatureCatalog.LoadAsync(client, token)).Behavior("Part", "part.part.read").Position : null;
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/part/parts/" + oldId);
+        request.Headers.Add("X-NewP-Feature", position);
+        using var response = await client.SendAsync(request, token);
+        var body = _sanitize(await response.Content.ReadAsStringAsync(token));
+        using var administrator = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
+        var adminLogin = await WorkspaceAcceptanceFixture.LoginAsync(administrator, _administrator!, token);
+        using var adminRequest = new HttpRequestMessage(HttpMethod.Get, "/api/part/parts/" + oldId);
+        adminRequest.Headers.Add("X-NewP-Feature", position);
+        using var adminResponse = await administrator.SendAsync(adminRequest, token);
+        await WriteAsync(_host!.LogName + "-part-read.json", new { actorId = actor.AccountId, actorCode = actor.ECode,
+            requestedPosition = position, currentPosition, active, expectedAvailable = available, status = (int)response.StatusCode,
+            body, featurePositions = login.GetProperty("featurePositions"), administratorStatus = (int)adminResponse.StatusCode,
+            administratorFeaturePositions = adminLogin.GetProperty("featurePositions"),
+            administratorBody = _sanitize(await adminResponse.Content.ReadAsStringAsync(token)) }, token);
+        var administratorBody = await adminResponse.Content.ReadAsStringAsync(token);
+        using var problem = available ? null : JsonDocument.Parse(administratorBody);
+        var rejectionMatches = !available && adminResponse.StatusCode == HttpStatusCode.Forbidden
+            && problem!.RootElement.GetProperty("code").GetString() == "AUTH_FORBIDDEN";
+        var adminHasFeature = adminLogin.GetProperty("featurePositions").EnumerateArray().Any(value => value.GetString() == position);
+        if (active != available || (available ? !adminResponse.IsSuccessStatusCode || !adminHasFeature || currentPosition != position
+                : !rejectionMatches || adminHasFeature || currentPosition is not null))
+            throw new InvalidOperationException($"父/成员组合下已授权消费者的 Part 可用性不符：HTTP {(int)adminResponse.StatusCode}，期望 {available}。");
+        if (_host.LogName == "parent-restored" && (response.StatusCode != HttpStatusCode.Forbidden
+                || login.GetProperty("featurePositions").EnumerateArray().Any(value => value.GetString() == position)))
+            throw new InvalidOperationException("父恢复意外重放已删除的普通角色功能授权。");
+    }
+
+    private sealed record Continuity(string PhysicalMapping, string PartRow, string History, string DocumentRow = "",
+        string WorkspaceFolders = "", string WorkspaceSpaces = "", string Links = "");
 
     private async Task<Continuity> ReadContinuityAsync(string oldId, CancellationToken token)
     {
-        var mapping = await ReadSqlJsonAsync("SELECT SCHEMA_NAME(schema_id) AS schemaName, name AS tableName FROM sys.tables WHERE name=N'Part' ORDER BY schemaName, tableName FOR JSON PATH;", null, token);
+        var mapping = await ReadSqlJsonAsync("SELECT SCHEMA_NAME(schema_id) AS schemaName, name AS tableName FROM sys.tables WHERE name IN (" +
+            (workspaceDelivery ? "N'Part',N'Document',N'WorkspaceFolder',N'WorkspaceSpace',N'WorkspaceFolderContent'" : "N'Part'") + ") ORDER BY schemaName, tableName FOR JSON PATH;", null, token);
         var row = await ReadSqlJsonAsync("SELECT * FROM dbo.Part WHERE EID=@id FOR JSON PATH;", oldId, token);
         var history = await ReadSqlJsonAsync("SELECT * FROM dbo.__NewPMigrationHistory ORDER BY Position FOR JSON PATH;", null, token);
         using var rows = JsonDocument.Parse(row);
@@ -140,7 +352,15 @@ internal sealed class PublishedComponentAcceptanceFixture(
         if (rows.RootElement.GetArrayLength() != 1 || !ledger.RootElement.EnumerateArray()
                 .Any(item => item.GetProperty("OwnerModuleId").GetString() == "Part"))
             throw new InvalidOperationException("正式 baseline 未形成旧 Part 行与真实迁移历史。");
-        return new(mapping, row, history);
+        if (!workspaceDelivery) return new(mapping, row, history);
+        foreach (var owner in new[] { "Workspace", "Part", "Document" })
+            if (!ledger.RootElement.EnumerateArray().Any(item => item.GetProperty("OwnerModuleId").GetString() == owner))
+                throw new InvalidOperationException($"正式 baseline 缺少 {owner} 迁移历史。");
+        return new(mapping, row, history,
+            await ReadSqlJsonAsync("SELECT * FROM dbo.Document WHERE EID=@id FOR JSON PATH;", _oldDocumentId, token),
+            await ReadSqlJsonAsync("SELECT * FROM dbo.WorkspaceFolder ORDER BY EID FOR JSON PATH;", null, token),
+            await ReadSqlJsonAsync("SELECT * FROM dbo.WorkspaceSpace ORDER BY EID FOR JSON PATH;", null, token),
+            await ReadSqlJsonAsync("SELECT * FROM dbo.WorkspaceFolderContent ORDER BY LID FOR JSON PATH;", null, token));
     }
 
     // SQL FOR JSON 会拆成多行传输；完整拼接后才比较，不能用 ExecuteScalar 丢弃后续账本。
@@ -163,15 +383,16 @@ internal sealed class PublishedComponentAcceptanceFixture(
     {
         if (!File.Exists(Path.Combine(hostRoot, "HostApi.dll")) || !File.Exists(Path.Combine(shellRoot, "index.html")))
             throw new InvalidOperationException("固定 Host/Shell 发行物缺失，验收不自动重新构建。");
-        if (Directory.EnumerateFiles(hostRoot, "PartModule.dll", SearchOption.AllDirectories).Any()
-            || Directory.Exists(Path.Combine(hostRoot, "modules", "Part"))
+        var ids = workspaceDelivery ? new[] { "Workspace", "Part", "Document" } : ["Part"];
+        var deps = File.ReadAllText(Path.Combine(hostRoot, "HostApi.deps.json"));
+        if (ids.Any(id => Directory.EnumerateFiles(hostRoot, id + "Module.dll", SearchOption.AllDirectories).Any()
+            || Directory.Exists(Path.Combine(hostRoot, "modules", id)) || deps.Contains(id + "Module/", StringComparison.Ordinal))
             || Directory.Exists(Path.Combine(hostRoot, "modules", "InforCenter")))
             throw new InvalidOperationException("目标 Host 已预装 Part 或旧 InforCenter。");
         var manifest = File.ReadAllText(Path.Combine(shellRoot, ".vite", "manifest.json"));
-        if (manifest.Contains("/part/src/", StringComparison.OrdinalIgnoreCase))
+        if (ids.Any(id => manifest.Contains("/" + id.ToLowerInvariant() + "/src/", StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("目标 Shell 仍含构建期 Part 实现。");
-        return new(HashTree(hostRoot, path => path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
-            || path.EndsWith(".deps.json", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".runtimeconfig.json", StringComparison.OrdinalIgnoreCase)),
+        return new(HashTree(hostRoot, _ => true),
             HashTree(shellRoot, _ => true));
     }
 
@@ -275,8 +496,14 @@ internal sealed class PublishedComponentAcceptanceFixture(
                 Directory.Delete(Resources);
             }
             await WriteCandidateAsync("candidate-after.json", token);
+            var targetAfter = ReadTargetIdentity();
+            await WriteAsync("target-after.json", targetAfter, token);
+            if (deliveryInput is not null && !JsonElement.DeepEquals(deliveryInput.Candidate, await ReadCandidateAsync(repositoryRoot, token)))
+                throw new InvalidOperationException("Workspace 验收运行期间候选变化，证据无法归属。");
             await WriteAsync("cleanup.json", new { catalog = ReusableSqlServerDatabase.Catalog, schemaCleaned = true,
                 ownedProcessesStopped = true, resourcesRemoved = true }, token);
+            if (deliveryInput is not null && (deliveryInput.HostIdentity != targetAfter.Host || deliveryInput.ShellIdentity != targetAfter.Shell))
+                throw new InvalidOperationException("Workspace 验收运行期间固定 Host/Shell 发生变化。");
             return new("completed", null);
         }
         finally
@@ -288,25 +515,51 @@ internal sealed class PublishedComponentAcceptanceFixture(
     private Task WriteAsync<T>(string name, T value, CancellationToken token) =>
         AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(runDirectory, name), value, token);
 
-    private async Task WriteCandidateAsync(string name, CancellationToken token) => await WriteAsync(name, new
+    private async Task WriteCandidateAsync(string name, CancellationToken token) => await WriteAsync(name, await ReadCandidateAsync(repositoryRoot, token), token);
+
+    private static async Task<JsonElement> ReadCandidateAsync(string repositoryRoot, CancellationToken token) => JsonSerializer.SerializeToElement(new
     {
         head = await AcceptanceInfrastructure.RunGitAsync(repositoryRoot, ["rev-parse", "HEAD"], token),
         tree = await AcceptanceInfrastructure.RunGitAsync(repositoryRoot, ["rev-parse", "HEAD^{tree}"], token),
         index = await AcceptanceInfrastructure.RunGitAsync(repositoryRoot, ["write-tree"], token),
         status = await AcceptanceInfrastructure.RunGitRawAsync(repositoryRoot, ["status", "--porcelain=v2"], token),
-        trackedDiffSha256 = AcceptanceInfrastructure.Sha256(await AcceptanceInfrastructure.RunGitRawAsync(repositoryRoot, ["diff", "--binary", "HEAD"], token)),
-        untracked = await ReadUntrackedCandidateAsync(token)
-    }, token);
+        trackedDiffSha256 = await ReadTrackedDiffHashAsync(repositoryRoot, token),
+        tracked = await ReadCandidateFilesAsync(repositoryRoot, false, token),
+        untracked = await ReadCandidateFilesAsync(repositoryRoot, true, token)
+    }, AcceptanceJson.Options);
 
     private sealed record CandidateFile(string Path, string Sha256);
 
     // status 只能证明未跟踪路径存在；内容摘要同时覆盖本片新增资产与尚未提交的产品文件。
-    private async Task<CandidateFile[]> ReadUntrackedCandidateAsync(CancellationToken token)
+    private static async Task<CandidateFile[]> ReadCandidateFilesAsync(string repositoryRoot, bool untracked, CancellationToken token)
     {
         var files = await AcceptanceInfrastructure.RunGitRawAsync(repositoryRoot,
-            ["ls-files", "--others", "--exclude-standard", "-z"], token);
+            untracked ? ["ls-files", "--others", "--exclude-standard", "-z"] : ["ls-files", "-z"], token);
         return files.Split('\0', StringSplitOptions.RemoveEmptyEntries).Order(StringComparer.Ordinal)
+            .Where(path => File.Exists(Path.Combine(repositoryRoot, path)))
             .Select(path => new CandidateFile(path, FileHash(Path.Combine(repositoryRoot, path)))).ToArray();
+    }
+
+    // CLI 与 VSTest 可以有不同 console 编码；候选差异必须按 Git 实际输出字节哈希。
+    private static async Task<string> ReadTrackedDiffHashAsync(string repositoryRoot, CancellationToken token)
+    {
+        var start = new ProcessStartInfo("git") { WorkingDirectory = repositoryRoot, UseShellExecute = false,
+            CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, StandardErrorEncoding = Encoding.UTF8 };
+        foreach (var argument in new[] { "diff", "--binary", "--no-color", "--no-ext-diff", "--no-textconv", "HEAD" }) start.ArgumentList.Add(argument);
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("无法读取 Git 候选差异。");
+        try
+        {
+            var error = process.StandardError.ReadToEndAsync(token);
+            var hash = await SHA256.HashDataAsync(process.StandardOutput.BaseStream, token);
+            await process.WaitForExitAsync(token);
+            if (process.ExitCode != 0) throw new InvalidOperationException(await error);
+            await error;
+            return Convert.ToHexString(hash).ToLowerInvariant();
+        }
+        finally
+        {
+            if (!process.HasExited) { process.Kill(entireProcessTree: true); await process.WaitForExitAsync(CancellationToken.None); }
+        }
     }
 
     private static int ReservePort()

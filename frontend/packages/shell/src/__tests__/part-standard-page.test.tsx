@@ -1,16 +1,18 @@
 // @vitest-environment jsdom
+import { loadComponentSource, readComponentJson } from '../../test-support/componentTestInputs';
+import type { FrontendBehaviorBindings } from '@icp-platform/sdk';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
-import part from '../../../../modules/part/src';
+const { default: part } = await loadComponentSource<{ default: FrontendBehaviorBindings }>('Part', 'index.ts');
 import model from '../../../../../tests/Kernel.Tests/Fixtures/PartRuntime.contract.json';
-import list from '../../../../modules/part/metadata/views/PartList.view.json';
-import detail from '../../../../modules/part/metadata/views/PartDetail.view.json';
-import dictionary from '../../../../modules/part/metadata/dictionaries/Part.dic.json';
-import navigation from '../../../../modules/part/metadata/navigation/Part.nav.json';
+const list = readComponentJson('Part', 'metadata/views/PartList.view.json');
+const detail = readComponentJson('Part', 'metadata/views/PartDetail.view.json');
+const dictionary = readComponentJson('Part', 'metadata/dictionaries/Part.dic.json');
+const navigation = readComponentJson('Part', 'metadata/navigation/Part.nav.json');
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { PageEntry } from '../composition/PageOutlet';
 import { AuthProvider } from '../contexts/AuthContext';
@@ -19,7 +21,7 @@ import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRo
 // 收集期装载真实模块，避免冷转换耗时进入生命周期 hook 的交互预算。
 import '../pages/StandardCrudListPageHost';
 import '../pages/StandardCrudDetailPageHost';
-import '../../../../modules/part/src/partResource';
+await loadComponentSource('Part', 'partResource.ts');
 import '@ant-design/pro-descriptions';
 
 vi.unmock('@icp-platform/core');

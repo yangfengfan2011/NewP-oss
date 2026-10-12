@@ -47,6 +47,8 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             var target = await publishedFixture.PrepareAsync(RegisterSecret, AddConnectionSecrets, Sanitize, token);
             _actor = target.Actor;
             _publishedShellOrigin = target.ShellOrigin;
+            _hostPort = target.HostPort;
+            _entryPosition = target.EntryPosition;
             return;
         }
         _databaseLease = await ReusableSqlServerDatabase.AcquireAsync(_repositoryRoot, token);
@@ -126,6 +128,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
         var errors = new ConcurrentQueue<string>();
         var failedResponses = new ConcurrentQueue<IResponse>();
         var frontendResponses = new ConcurrentQueue<object>();
+        page.Console += (_, message) => { if (message.Type is "error" or "warning") errors.Enqueue(message.Text); };
         page.PageError += (_, error) => errors.Enqueue(error);
         page.RequestFailed += (_, request) => errors.Enqueue($"{request.Method} {request.Url}: {request.Failure}");
         page.Response += (_, response) => { if (response.Status >= 400) failedResponses.Enqueue(response); };
@@ -146,8 +149,6 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             if (browserJourney is not null)
             {
                 await browserJourney(page, token);
-                if (publishedFixture is not null)
-                    await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "frontend-load.json"), frontendResponses.ToArray(), token);
                 return;
             }
             await driver.OpenAsync();
@@ -201,6 +202,16 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             await CaptureBrowserFailureAsync(page, driver, errors, failedResponses, failure);
             throw;
         }
+        finally
+        {
+            // 失败同样保留已消费的 URL；辅助诊断失败不能覆盖真实旅程异常。
+            try
+            {
+                if (publishedFixture is not null)
+                    await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "frontend-load.json"), frontendResponses.ToArray());
+            }
+            catch (Exception) { /* 原始场景异常和统一凭据扫描仍由 AcceptanceRunner 处理。 */ }
+        }
     }
 
     private Task CapturePresentationAsync(IPage page, string name) => page.ScreenshotAsync(new()
@@ -218,17 +229,21 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
         var features = await AcceptanceFeatureCatalog.LoadAsync(beforeClient, token);
         await WorkspaceAcceptanceFixture.PrepareRestartContentAsync(beforeClient, features, before, _runId, token);
         var beforeContents = await WorkspaceAcceptanceFixture.ReadRestartContentAsync(beforeClient, before, _entryPosition!, token);
-        using (var state = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(_repositoryRoot, ".codex-temp", "dev", "state.json"), token)))
+        var previousRun = publishedFixture?.HostIdentity ?? _devRun;
+        if (publishedFixture is not null) await publishedFixture.RestartAsync(token);
+        else
         {
-            if (state.RootElement.GetProperty("runId").GetString() != _devRun)
-                throw new InvalidOperationException("重启前 supervisor 归属已改变。");
+            using (var state = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(_repositoryRoot, ".codex-temp", "dev", "state.json"), token)))
+            {
+                if (state.RootElement.GetProperty("runId").GetString() != _devRun)
+                    throw new InvalidOperationException("重启前 supervisor 归属已改变。");
+            }
+            var stop = await AcceptanceInfrastructure.RunProcessAsync("pwsh.exe",
+                ["-NoLogo", "-NoProfile", "-File", Path.Combine(_repositoryRoot, "scripts", "stop-dev.ps1")], _repositoryRoot, cancellationToken: token);
+            if (stop.ExitCode != 0) throw new InvalidOperationException($"正式 Host 重启停止失败：{Sanitize(stop.StandardOutput + stop.StandardError)}");
+            _devRun = null;
+            await StartDevAsync(token);
         }
-        var stop = await AcceptanceInfrastructure.RunProcessAsync("pwsh.exe",
-            ["-NoLogo", "-NoProfile", "-File", Path.Combine(_repositoryRoot, "scripts", "stop-dev.ps1")], _repositoryRoot, cancellationToken: token);
-        if (stop.ExitCode != 0) throw new InvalidOperationException($"正式 Host 重启停止失败：{Sanitize(stop.StandardOutput + stop.StandardError)}");
-        var previousRun = _devRun;
-        _devRun = null;
-        await StartDevAsync(token);
         using var afterClient = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
         await WorkspaceAcceptanceFixture.LoginAsync(afterClient, actor, token);
         var afterRead = await WorkspaceAcceptanceFixture.SendAsync(afterClient, HttpMethod.Get, "/api/workspace/spaces", null, _entryPosition, token);
@@ -240,7 +255,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
         var afterContents = await WorkspaceAcceptanceFixture.ReadRestartContentAsync(afterClient, afterEnsure, _entryPosition!, token);
         if (!beforeContents.SequenceEqual(afterContents)) throw new InvalidOperationException("真实 Host 进程重启后混合引用或正式根内容查询发生漂移。");
         await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "process-restart.json"),
-            new { catalog = ReusableSqlServerDatabase.Catalog, previousRun, restartedRun = _devRun, rootIdentities = expected, contentIdentities = afterContents }, token);
+            new { catalog = ReusableSqlServerDatabase.Catalog, previousRun, restartedRun = publishedFixture?.HostIdentity ?? _devRun, rootIdentities = expected, contentIdentities = afterContents }, token);
     }
 
     private static string[] RootIdentities(JsonElement roots) => roots.EnumerateArray().Select(root =>

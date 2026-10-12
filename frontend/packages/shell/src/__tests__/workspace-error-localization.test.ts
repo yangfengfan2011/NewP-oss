@@ -1,10 +1,9 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readComponentJson } from '../../test-support/componentTestInputs';
 import { expect, it } from 'vitest';
 import { formatFieldError, formatRequestError } from '@icp-platform/core';
 import { readStandardCrudRequestError } from '@icp-platform/sdk';
 
-const dictionary = JSON.parse(readFileSync(resolve(__dirname, '../../../../modules/workspace/metadata/dictionaries/Workspace.dic.json'), 'utf8')) as {
+const dictionary = readComponentJson('Workspace', 'metadata/dictionaries/Workspace.dic.json') as {
   Workspace: Record<string, { zhs: string; en: string }>;
 };
 

@@ -1,39 +1,41 @@
 // @vitest-environment jsdom
+import { loadComponentSource, readComponentJson } from '../../test-support/componentTestInputs';
+import type { FrontendBehaviorBindings } from '@icp-platform/sdk';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
-import workspace from '../../../../modules/workspace/src';
-import part from '../../../../modules/part/src';
-import documentModule from '../../../../modules/document/src';
-import partDetail from '../../../../modules/part/metadata/views/PartDetail.view.json';
-import partList from '../../../../modules/part/metadata/views/PartList.view.json';
-import documentDetail from '../../../../modules/document/metadata/views/DocumentDetail.view.json';
-import documentList from '../../../../modules/document/metadata/views/DocumentList.view.json';
-import partNavigation from '../../../../modules/part/metadata/navigation/Part.nav.json';
-import documentNavigation from '../../../../modules/document/metadata/navigation/Document.nav.json';
+const { default: workspace } = await loadComponentSource<{ default: FrontendBehaviorBindings }>('Workspace', 'index.ts');
+const { default: part } = await loadComponentSource<{ default: FrontendBehaviorBindings }>('Part', 'index.ts');
+const { default: documentModule } = await loadComponentSource<{ default: FrontendBehaviorBindings }>('Document', 'index.ts');
+const partDetail = readComponentJson('Part', 'metadata/views/PartDetail.view.json');
+const partList = readComponentJson('Part', 'metadata/views/PartList.view.json');
+const documentDetail = readComponentJson('Document', 'metadata/views/DocumentDetail.view.json');
+const documentList = readComponentJson('Document', 'metadata/views/DocumentList.view.json');
+const partNavigation = readComponentJson('Part', 'metadata/navigation/Part.nav.json');
+const documentNavigation = readComponentJson('Document', 'metadata/navigation/Document.nav.json');
 import partModel from '../../../../../tests/Kernel.Tests/Fixtures/PartRuntime.contract.json';
 import documentModel from '../../../../../tests/Kernel.Tests/Fixtures/DocumentRuntime.contract.json';
 import folder from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceFolderRuntime.contract.json';
-import content from '../../../../modules/workspace/metadata/models/WorkspaceFolderContent.model.json';
-import tree from '../../../../modules/workspace/metadata/views/WorkspaceStructure.view.json';
-import list from '../../../../modules/workspace/metadata/views/WorkspaceFolderList.view.json';
-import detail from '../../../../modules/workspace/metadata/views/WorkspaceFolderDetail.view.json';
-import incoming from '../../../../modules/workspace/metadata/views/WorkspaceReferencesList.view.json';
-import dictionary from '../../../../modules/workspace/metadata/dictionaries/Workspace.dic.json';
+const content = readComponentJson('Workspace', 'metadata/models/WorkspaceFolderContent.model.json');
+const tree = readComponentJson('Workspace', 'metadata/views/WorkspaceStructure.view.json');
+const list = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderList.view.json');
+const detail = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderDetail.view.json');
+const incoming = readComponentJson('Workspace', 'metadata/views/WorkspaceReferencesList.view.json');
+const dictionary = readComponentJson('Workspace', 'metadata/dictionaries/Workspace.dic.json');
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { PageEntry } from '../composition/PageOutlet';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';
-import navigation from '../../../../modules/workspace/metadata/navigation/Workspace.nav.json';
+const navigation = readComponentJson('Workspace', 'metadata/navigation/Workspace.nav.json');
 
 // 收集期装载真实模块，避免冷转换耗时进入生命周期 hook 的交互预算。
 import '../composition/StandardTreePage';
 import '../pages/StandardCrudListPageHost';
 import '../pages/StandardCrudDetailPageHost';
-import '../../../../modules/workspace/src/workspaceRootResource';
+await loadComponentSource('Workspace', 'workspaceRootResource.ts');
 import '@ant-design/pro-descriptions';
 
 vi.unmock('@icp-platform/core');

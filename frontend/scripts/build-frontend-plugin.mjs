@@ -91,6 +91,8 @@ console.log(`Output: ${outDir}/entry.js`);
 try {
   await build({
     configFile: false,
+    // Vite library builds preserve NODE_ENV; browser releases need the compiled production branch.
+    define: { 'process.env.NODE_ENV': '"production"' },
     plugins: [artifactIndex],
     resolve: {
       alias: createUiSourceAliases()

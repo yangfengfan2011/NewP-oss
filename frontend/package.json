@@ -19,7 +19,7 @@
     "dev": "pnpm --filter @icp-platform/shell dev",
     "lint": "eslint \"packages/**/*.{ts,tsx}\" \"modules/**/*.{ts,tsx}\" \"templates/**/*.{ts,tsx}\" --report-unused-disable-directives --max-warnings 0",
     "test": "pnpm run test:effect-network-lifecycle && pnpm run test:component-frontend-build && pnpm run check:effect-network-lifecycle && pnpm -r --if-present test",
-    "test:component-frontend-build": "node --test scripts/ui-source-aliases.test.mjs",
+    "test:component-frontend-build": "node --experimental-vm-modules --test scripts/ui-source-aliases.test.mjs scripts/browser-component-build.test.mjs",
     "test:effect-network-lifecycle": "node --test scripts/check-effect-network-lifecycle.test.mjs",
     "check:effect-network-lifecycle": "node scripts/check-effect-network-lifecycle.mjs",
     "build": "pnpm -r build",

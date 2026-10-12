@@ -296,14 +296,8 @@ Update-FileContent -Path $backendProjectPath -Transform {
             '<AssemblyName>TemplateModule</AssemblyName>',
             "<AssemblyName>$($ModuleName)Module</AssemblyName>"
         )
-        $content = $content.Replace(
-            'capsule\newp.plugin.json',
-            "..\..\..\frontend\modules\$moduleSlug\newp.plugin.json"
-        )
-        $content = $content.Replace(
-            'ICP.Platform.Templates.BackendModuleTemplate.newp.plugin.json',
-            "ICP.Platform.Modules.$ModuleName.newp.plugin.json"
-        )
+        # 内建工程由通用构建发现器按 Capsule 身份嵌入声明，归组后无需工程相对路径。
+        $content = [regex]::Replace($content, '(?s)    <EmbeddedResource[^>]*>.*?</EmbeddedResource>\r?\n', '')
     }
 
     $content
@@ -506,63 +500,6 @@ if ($ExternalPlugin) {
     }
 }
 
-if ((-not $SkipIntegration) -and (-not $ExternalPlugin)) {
-    $hostApiPath = Join-Path $repoRoot 'apps\host-api\HostApi.csproj'
-    $projectReferenceInclude = "..\..\server\modules\$ModuleName\$ModuleName.csproj"
-    $capsuleContentInclude = "..\..\frontend\modules\$moduleSlug\newp.plugin.json"
-    $projectReferenceElement = '<ProjectReference Include="{0}" />' -f $projectReferenceInclude
-    $capsuleContentElement = '<Content Include="{0}">' -f $capsuleContentInclude
-
-    Update-FileContent -Path $hostApiPath -Transform {
-        param($content)
-
-        $newline = if ($content.Contains([Environment]::NewLine)) {
-            [Environment]::NewLine
-        } elseif ($content.Contains([char]10)) {
-            [char]10
-        } else {
-            [Environment]::NewLine
-        }
-        $insertions = [System.Collections.Generic.List[string]]::new()
-
-        if (-not $content.Contains($projectReferenceElement)) {
-            $insertions.Add(
-                '  <ItemGroup>' + $newline +
-                '    ' + $projectReferenceElement + $newline +
-                '  </ItemGroup>'
-            )
-        }
-
-        if (-not $content.Contains($capsuleContentElement)) {
-            $insertions.Add(
-                '  <ItemGroup>' + $newline +
-                '    ' + $capsuleContentElement + $newline +
-                "      <Link>modules\$ModuleName\plugin.json</Link>" + $newline +
-                '      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>' + $newline +
-                '    </Content>' + $newline +
-                '  </ItemGroup>'
-            )
-        }
-
-        if ($insertions.Count -eq 0) {
-            return $content
-        }
-
-        $closingProjectIndex = $content.LastIndexOf('</Project>', [StringComparison]::Ordinal)
-        if ($closingProjectIndex -lt 0) {
-            throw 'HostApi.csproj closing Project element not found.'
-        }
-
-        $prefix = if ($closingProjectIndex -gt 0 -and $content[$closingProjectIndex - 1] -eq [char]10) {
-            ''
-        } else {
-            $newline
-        }
-        $insertionText = $prefix + ($insertions -join ($newline + $newline)) + $newline + $newline
-        $content.Insert($closingProjectIndex, $insertionText)
-    }
-}
-
 Write-Host ''
 Write-Host '=== Scaffold generated ===' -ForegroundColor Green
 Write-Host "Backend module: $backendTargetRoot" -ForegroundColor Green
@@ -572,7 +509,7 @@ if ($ExternalPlugin) {
 } else {
     Write-Host "Frontend module: frontend/modules/$moduleSlug" -ForegroundColor Green
     Write-Host "Authoring capsule: frontend/modules/$moduleSlug/newp.plugin.json" -ForegroundColor Green
-    Write-Host 'Allowed integration target: apps/host-api/HostApi.csproj' -ForegroundColor Cyan
+    Write-Host 'Host assets and project references are discovered by the shared component build entry.' -ForegroundColor Cyan
     Write-Host 'Do not modify other Host/Shell internals for normal module integration unless a separate design approves it.' -ForegroundColor Yellow
 }
 

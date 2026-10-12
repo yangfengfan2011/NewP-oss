@@ -10,7 +10,7 @@ namespace ICP.Platform.Tools.ModelDtoSync;
 public static class ModuleDtoSyncRunner
 {
     /// <summary>
-    /// 从 frontend/modules/*/metadata/models 读取当前模型投影，在仓库根下写入模块 Generated DTO 与签名 provider。
+    /// 从按组件身份发现的 metadata/models 读取当前模型投影，在仓库根下写入模块 Generated DTO 与签名 provider。
     /// </summary>
     public static IReadOnlyList<string> Run(string repositoryRoot)
     {
@@ -65,6 +65,7 @@ public static class ModuleDtoSyncRunner
     }
 
     // 每个模块先形成完整 model catalog，再让 DTO 只消费统一 planner 的成功编译结果。
+    // 按实际 authoring owner 读取模型，输出仍归属原位后端模块。
     private static IReadOnlyList<string> Generate(string outputRepositoryRoot, string metadataRepositoryRoot)
     {
         var generator = new ModelDtoGenerator();
@@ -83,9 +84,8 @@ public static class ModuleDtoSyncRunner
             "storage-types.json"));
         var validator = new ModelMetadataValidator();
         var projector = new ModelMetadataProjector();
-        var modulesRoot = Path.Combine(metadataRepositoryRoot, "frontend", "modules");
 
-        foreach (var moduleRoot in Directory.EnumerateDirectories(modulesRoot)
+        foreach (var moduleRoot in ModuleAuthoringPaths.EnumerateModuleRoots(metadataRepositoryRoot)
                      .OrderBy(static path => path, StringComparer.Ordinal))
         {
             var moduleId = ModuleAuthoringPaths.ReadModuleId(moduleRoot);

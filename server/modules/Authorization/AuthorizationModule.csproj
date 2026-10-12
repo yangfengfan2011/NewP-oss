@@ -20,7 +20,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="..\..\..\frontend\modules\authorization\newp.plugin.json"><LogicalName>ICP.Platform.Modules.Authorization.newp.plugin.json</LogicalName></EmbeddedResource>
     <Compile Remove="Contracts\**\*.cs" />
   </ItemGroup>
 

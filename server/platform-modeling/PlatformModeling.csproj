@@ -7,4 +7,7 @@
     <RootNamespace>ICP.Platform.Modeling</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="../kernel/Kernel.csproj" />
+  </ItemGroup>
 </Project>

@@ -119,8 +119,10 @@ public sealed class JsonModelMetadataDocumentLoader : IModelMetadataDocumentLoad
         while (metadataDirectory is not null)
         {
             if (string.Equals(metadataDirectory.Name, "metadata", StringComparison.OrdinalIgnoreCase)
-                && metadataDirectory.Parent?.Parent?.Name == "modules"
-                && metadataDirectory.Parent.Parent.Parent?.Name == "frontend")
+                && metadataDirectory.Parent is not null
+                && (File.Exists(Path.Combine(metadataDirectory.Parent.FullName, "newp.plugin.json"))
+                    || metadataDirectory.Parent.Parent?.Name == "modules"
+                    && metadataDirectory.Parent.Parent.Parent?.Name == "frontend"))
             {
                 return ModuleAuthoringPaths.ReadModuleId(metadataDirectory.Parent.FullName);
             }

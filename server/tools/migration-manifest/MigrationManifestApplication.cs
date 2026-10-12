@@ -1,3 +1,4 @@
+using ICP.Platform.Kernel.ModulePlanning;
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.Loader;
@@ -253,16 +254,9 @@ public sealed class MigrationManifestApplication
 
         if (string.Equals(moduleId, "platform.foundation", StringComparison.Ordinal)) return OpenFoundationBundle(provider);
 
-        var capsulePath = Directory.GetFiles(
-                Path.Combine(_repositoryRoot, "frontend", "modules"),
-                "newp.plugin.json",
-                SearchOption.AllDirectories)
-            .SingleOrDefault(path => string.Equals(
-                ReadRequiredString(JsonDocument.Parse(File.ReadAllBytes(path)).RootElement, "moduleId", path),
-                moduleId,
-                StringComparison.OrdinalIgnoreCase))
-            ?? throw new MigrationManifestToolException(
-                "MIGRATION_MANIFEST_MODULE_NOT_FOUND",
+        var capsulePath = ComponentSourceCatalog.Discover(_repositoryRoot).Components
+            .SingleOrDefault(component => string.Equals(component.ModuleId, moduleId, StringComparison.OrdinalIgnoreCase))?.CapsulePath
+            ?? throw new MigrationManifestToolException("MIGRATION_MANIFEST_MODULE_NOT_FOUND",
                 $"module='{moduleId}', provider='{provider}': no authoring capsule was found.");
         return OpenBundle(capsulePath, provider);
     }
@@ -299,10 +293,7 @@ public sealed class MigrationManifestApplication
         // 隔离的模块 replay 根可以不包含平台流；一旦携带基础流目录，其全部正式资产必须可验证。
         if (Directory.Exists(Path.Combine(_repositoryRoot, "server", "platform-persistence-efcore.migrations.sqlserver")))
             workspaces.Add(OpenFoundationBundle(PersistenceProvider.SqlServer));
-        foreach (var capsulePath in Directory.GetFiles(
-                     modulesRoot,
-                     "newp.plugin.json",
-                     SearchOption.AllDirectories).Order(StringComparer.Ordinal))
+        foreach (var capsulePath in ComponentSourceCatalog.Discover(_repositoryRoot).Components.Select(component => component.CapsulePath))
         {
             using var document = JsonDocument.Parse(File.ReadAllBytes(capsulePath));
             var moduleId = ReadRequiredString(document.RootElement, "moduleId", capsulePath);
@@ -544,6 +535,7 @@ public sealed class MigrationManifestApplication
         }
     }
 
+    // 根据稳定身份核对移动前 HEAD 的已发布前缀；无独立 Git 边界时只接受冻结 Host 副本。
     private PublishedManifestBaseline ReadPublishedBaseline(BundleWorkspace workspace)
     {
         var gitMarker = Path.Combine(_repositoryRoot, ".git");
@@ -570,6 +562,14 @@ public sealed class MigrationManifestApplication
                 .Replace(Path.DirectorySeparatorChar, '/');
             var gitManifest = RunGit("show", $"HEAD:{relativeManifestPath}");
             var legacyModulePath = $"modules/{workspace.ModuleId}";
+            var publishedModuleRoot = gitManifest.ExitCode != 0 ? FindPublishedModuleRoot(workspace.ModuleId) : null;
+            if (publishedModuleRoot is not null)
+            {
+                var withinModule = Path.GetRelativePath(workspace.ModuleRoot, workspace.ManifestPath).Replace(Path.DirectorySeparatorChar, '/');
+                var publishedManifestPath = $"{publishedModuleRoot}/{withinModule}";
+                gitManifest = RunGit("show", $"HEAD:{publishedManifestPath}");
+                relativeManifestPath = publishedManifestPath;
+            }
             if (gitManifest.ExitCode != 0)
             {
                 var manifestWithinModule = Path.GetRelativePath(workspace.ModuleRoot, workspace.ManifestPath)
@@ -589,7 +589,7 @@ public sealed class MigrationManifestApplication
                 var head = RunGit("rev-parse", "--verify", "HEAD");
                 var publishedModule = RunGit("ls-tree", "HEAD", "--", relativeModulePath);
                 var legacyPublishedModule = RunGit("ls-tree", "HEAD", "--", legacyModulePath);
-                if (head.ExitCode == 0 && publishedModule.ExitCode == 0 && string.IsNullOrWhiteSpace(publishedModule.Output)
+                if (publishedModuleRoot is null && head.ExitCode == 0 && publishedModule.ExitCode == 0 && string.IsNullOrWhiteSpace(publishedModule.Output)
                     && legacyPublishedModule.ExitCode == 0 && string.IsNullOrWhiteSpace(legacyPublishedModule.Output))
                     return new PublishedManifestBaseline($"git:HEAD:new-module:{relativeModulePath}", []);
                 throw Failure(
@@ -622,6 +622,23 @@ public sealed class MigrationManifestApplication
             workspace,
             File.ReadAllBytes(workspace.HostManifestPath),
             workspace.HostManifestPath);
+    }
+
+    // 目录移动不能把已发布组件误判成新组件；按 HEAD Capsule 身份定位原始前缀。
+    private string? FindPublishedModuleRoot(string moduleId)
+    {
+        var tree = RunGit("ls-tree", "-r", "--name-only", "HEAD", "--", "frontend/modules");
+        if (tree.ExitCode != 0) throw new InvalidOperationException($"Cannot resolve published component sources: {tree.Error.Trim()}");
+        var matches = new List<string>();
+        foreach (var path in tree.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(path => path.Trim()).Where(path => path.EndsWith("/newp.plugin.json", StringComparison.Ordinal)))
+        {
+            var capsule = RunGit("show", $"HEAD:{path}");
+            if (capsule.ExitCode != 0) throw new InvalidOperationException($"Cannot read published Capsule '{path}': {capsule.Error.Trim()}");
+            using var document = JsonDocument.Parse(capsule.Output);
+            if (document.RootElement.GetProperty("moduleId").GetString() == moduleId) matches.Add(path[..^"/newp.plugin.json".Length]);
+        }
+        if (matches.Count > 1) throw new InvalidOperationException($"Published component '{moduleId}' has multiple Capsule roots.");
+        return matches.SingleOrDefault();
     }
 
     private static PublishedManifestBaseline ParsePublishedBaseline(

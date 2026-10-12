@@ -3,6 +3,7 @@ import { build } from 'vite';
 import { resolve, dirname, relative, isAbsolute } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync } from 'fs';
+import { discoverFrontendEntries } from './component-sources.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -32,7 +33,7 @@ if (hasInvalidModuleName) {
 const modulesRoot = resolve(__dirname, '../modules');
 const uiSourceRoot = resolve(__dirname, '../packages/ui/src');
 const artifactsRoot = resolve(__dirname, '../../artifacts/frontend-plugins');
-const entryPath = resolve(modulesRoot, moduleName, 'src/index.ts');
+const entryPath = discoverFrontendEntries(resolve(__dirname, '../..'))[moduleName];
 const outDir = resolve(artifactsRoot, moduleName);
 
 const isPathInside = (parentPath, childPath) => {
@@ -40,7 +41,7 @@ const isPathInside = (parentPath, childPath) => {
   return relativePath !== '' && !relativePath.startsWith('..') && !isAbsolute(relativePath);
 };
 
-if (!isPathInside(modulesRoot, entryPath)) {
+if (!entryPath || !isPathInside(modulesRoot, entryPath)) {
   console.error(`Error: Resolved entry path must stay under ${modulesRoot}`);
   process.exit(1);
 }

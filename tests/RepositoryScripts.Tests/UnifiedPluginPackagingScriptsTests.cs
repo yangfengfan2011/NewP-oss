@@ -55,6 +55,7 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
             </Project>
             """);
 
+        var hostProjectBefore = File.ReadAllText(hostProjectPath);
         var scriptPath = Path.Combine(fixtureRoot, "scripts", "new-module.ps1");
         var result = RunPowerShellScript(
             fixtureRoot,
@@ -126,8 +127,8 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
 
         var backendProject = File.ReadAllText(
             Path.Combine(fixtureRoot, "server", "modules", "CanonicalSample", "CanonicalSample.csproj"));
-        Assert.Contains(@"..\..\..\frontend\modules\canonical-sample\newp.plugin.json", backendProject, StringComparison.Ordinal);
-        Assert.Contains("ICP.Platform.Modules.CanonicalSample.newp.plugin.json", backendProject, StringComparison.Ordinal);
+        Assert.DoesNotContain("EmbeddedResource", backendProject, StringComparison.Ordinal);
+        Assert.DoesNotContain("newp.plugin.json", backendProject, StringComparison.Ordinal);
         Assert.Contains(@"..\..\platform-authorization\PlatformAuthorization.csproj", backendProject, StringComparison.Ordinal);
 
         var backendModule = File.ReadAllText(
@@ -168,20 +169,7 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
         Assert.Contains("createElement(CanonicalSamplePage)", frontendRecoveryEntry, StringComparison.Ordinal);
 
         var hostProject = File.ReadAllText(hostProjectPath);
-        Assert.Contains(
-            @"<ProjectReference Include=""..\..\server\modules\CanonicalSample\CanonicalSample.csproj"" />",
-            hostProject,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            @"<Content Include=""..\..\frontend\modules\canonical-sample\newp.plugin.json"">",
-            hostProject,
-            StringComparison.Ordinal);
-        Assert.Contains(@"<Link>modules\CanonicalSample\plugin.json</Link>", hostProject, StringComparison.Ordinal);
-
-        var script = File.ReadAllText(scriptPath);
-        Assert.DoesNotContain("builtin-runtime-plugins.ts", script, StringComparison.Ordinal);
-        Assert.DoesNotContain("apps\\host-api\\modules", script, StringComparison.Ordinal);
-        Assert.DoesNotContain("legacy-module", script, StringComparison.Ordinal);
+        Assert.Equal(hostProjectBefore, hostProject);
     }
 
     [Fact]

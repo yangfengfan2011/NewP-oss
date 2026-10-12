@@ -1,0 +1,42 @@
+<Project>
+  <PropertyGroup>
+    <NewpRepositoryRoot>$(MSBuildThisFileDirectory)</NewpRepositoryRoot>
+    <NewpModuleProjectRoot>$([MSBuild]::NormalizePath('$(NewpRepositoryRoot)', 'server', 'modules'))</NewpModuleProjectRoot>
+    <NewpHostProject>$([MSBuild]::NormalizePath('$(NewpRepositoryRoot)', 'apps', 'host-api', 'HostApi.csproj'))</NewpHostProject>
+    <NewpProjectParent>$([System.IO.Path]::GetDirectoryName('$(MSBuildProjectDirectory)'))</NewpProjectParent>
+    <NewpIsModuleProject Condition="'$(NewpProjectParent)' == '$(NewpModuleProjectRoot)'">true</NewpIsModuleProject>
+    <NewpIsHostProject>false</NewpIsHostProject>
+    <NewpIsHostProject Condition="'$(MSBuildProjectFullPath)' == '$(NewpHostProject)'">true</NewpIsHostProject>
+  </PropertyGroup>
+  <!-- solution 未逐个登记的原位工程仍继承调用方配置，不能回落到 Debug 消费另一份产物。 -->
+  <PropertyGroup Condition="'$(NewpIsModuleProject)' == 'true' or '$(NewpIsHostProject)' == 'true'">
+    <ShouldUnsetParentConfigurationAndPlatform>false</ShouldUnsetParentConfigurationAndPlatform>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(NewpIsModuleProject)' == 'true' or '$(NewpIsHostProject)' == 'true'">
+    <ProjectReference Include="$(NewpRepositoryRoot)server/tools/component-source-build/ComponentSource.Build.csproj" ReferenceOutputAssembly="false" Private="false" OutputItemType="NewpComponentToolAssembly" />
+    <ProjectReference Update="@(ProjectReference)" AdditionalProperties="%(ProjectReference.AdditionalProperties);Configuration=$(Configuration)" />
+  </ItemGroup>
+  <!-- 工具由项目依赖构建；本轮 obj 映射只在短生命周期 CLI 成功后被消费。 -->
+  <Target Name="ResolveComponentBuildAssets" BeforeTargets="AssignTargetPaths" DependsOnTargets="ResolveProjectReferences"
+          Condition="('$(NewpIsModuleProject)' == 'true' or '$(NewpIsHostProject)' == 'true') and '$(DesignTimeBuild)' != 'true'">
+    <PropertyGroup>
+      <NewpMappingRoot>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'component-sources'))</NewpMappingRoot>
+    </PropertyGroup>
+    <Exec Command="dotnet &quot;@(NewpComponentToolAssembly)&quot; msbuild &quot;$(NewpRepositoryRoot).&quot; &quot;$(MSBuildProjectFullPath)&quot; &quot;$(Configuration)&quot; &quot;$(NewpMappingRoot)&quot; &quot;$(NewpIsHostProject)&quot; &quot;$(NewpComponentRoot)&quot;" />
+    <ReadLinesFromFile File="$(NewpMappingRoot)/capsules.txt">
+      <Output TaskParameter="Lines" ItemName="NewpEmbeddedCapsule" />
+    </ReadLinesFromFile>
+    <ReadLinesFromFile File="$(NewpMappingRoot)/assets.txt">
+      <Output TaskParameter="Lines" ItemName="NewpAssetLine" />
+    </ReadLinesFromFile>
+    <ItemGroup>
+      <EmbeddedResource Include="@(NewpEmbeddedCapsule)" LogicalName="$(RootNamespace).newp.plugin.json" />
+      <Content Condition="'@(NewpAssetLine)' != ''" Include="$([System.String]::Copy('%(NewpAssetLine.Identity)').Split('|').GetValue(0))">
+        <Link>$([System.String]::Copy('%(NewpAssetLine.Identity)').Split('|').GetValue(1))</Link>
+        <TargetPath>$([System.String]::Copy('%(NewpAssetLine.Identity)').Split('|').GetValue(1))</TargetPath>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </Content>
+    </ItemGroup>
+  </Target>
+</Project>

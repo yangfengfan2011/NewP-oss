@@ -15,79 +15,10 @@
   <ItemGroup>
     <Content Update="module-composition.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Update="modules\**\plugin.json" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\..\frontend\modules\authorization\newp.plugin.json"><Link>modules\Authorization\plugin.json</Link><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
-    <Content Include="..\..\frontend\modules\audit\newp.plugin.json"><Link>modules\Audit\plugin.json</Link><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
-    <Content Include="..\..\frontend\modules\audit\migrations\Audit.SqlServerMigrations.json"><Link>modules\Audit\migrations\Audit.SqlServerMigrations.json</Link><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
-    <Content Include="..\..\server\modules\Audit\Migrations.SqlServer\bin\$(Configuration)\$(TargetFramework)\Audit.SqlServerMigrations.dll"><Link>modules\Audit\migrations\Audit.SqlServerMigrations.dll</Link><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
-    <Content Include="..\..\frontend\modules\organization\newp.plugin.json">
-      <Link>modules\Organization\plugin.json</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\..\frontend\modules\identity\newp.plugin.json">
-      <Link>modules\Identity\plugin.json</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\..\frontend\modules\authentication\newp.plugin.json">
-      <Link>modules\Authentication\plugin.json</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\..\frontend\modules\identity\migrations\Identity.SqlServerMigrations.json">
-      <Link>modules\Identity\migrations\Identity.SqlServerMigrations.json</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\..\frontend\modules\organization\migrations\Organization.SqlServerMigrations.json">
-      <Link>modules\Organization\migrations\Organization.SqlServerMigrations.json</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\..\frontend\modules\authentication\migrations\Authentication.SqlServerMigrations.json">
-      <Link>modules\Authentication\migrations\Authentication.SqlServerMigrations.json</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\..\frontend\modules\example\migrations\Example.SqlServerMigrations.json">
-      <Link>modules\Example\migrations\Example.SqlServerMigrations.json</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\..\server\modules\Identity\Migrations.SqlServer\bin\$(Configuration)\$(TargetFramework)\Identity.SqlServerMigrations.dll">
-      <Link>modules\Identity\migrations\Identity.SqlServerMigrations.dll</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\..\server\modules\Organization\Migrations.SqlServer\bin\$(Configuration)\$(TargetFramework)\Organization.SqlServerMigrations.dll">
-      <Link>modules\Organization\migrations\Organization.SqlServerMigrations.dll</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\..\server\modules\Authentication\Migrations.SqlServer\bin\$(Configuration)\$(TargetFramework)\Authentication.SqlServerMigrations.dll">
-      <Link>modules\Authentication\migrations\Authentication.SqlServerMigrations.dll</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\..\server\modules\Example\Migrations.SqlServer\bin\$(Configuration)\$(TargetFramework)\Example.SqlServerMigrations.dll">
-      <Link>modules\Example\migrations\Example.SqlServerMigrations.dll</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="../../frontend/modules/audit/metadata/**/*" Link="modules/Audit/metadata/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../frontend/modules/authentication/metadata/**/*" Link="modules/Authentication/metadata/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../frontend/modules/authorization/metadata/**/*" Link="modules/Authorization/metadata/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../frontend/modules/config-center/metadata/**/*" Link="modules/ConfigCenter/metadata/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../frontend/modules/document/metadata/**/*" Link="modules/Document/metadata/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../frontend/modules/example/metadata/**/*" Link="modules/Example/metadata/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../frontend/modules/identity/metadata/**/*" Link="modules/Identity/metadata/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../frontend/modules/infor-center/metadata/**/*" Link="modules/InforCenter/metadata/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../frontend/modules/organization/metadata/**/*" Link="modules/Organization/metadata/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../frontend/modules/part/metadata/**/*" Link="modules/Part/metadata/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../frontend/modules/platform/metadata/**/*" Link="modules/Platform/metadata/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../frontend/modules/workspace/metadata/**/*" Link="modules/Workspace/metadata/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\..\server\platform-modeling\metadata\storage-types.json">
-      <Link>server\platform-modeling\metadata\storage-types.json</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
   </ItemGroup>
 
   <ItemGroup>
     <!-- Development-time staging only; runtime module composition is manifest-driven. -->
-    <ProjectReference Include="../../server/modules/Workspace/WorkspaceModule.csproj" />
-    <ProjectReference Include="../../server/modules/Workspace/Migrations.SqlServer/Workspace.SqlServerMigrations.csproj" />
     <ProjectReference Include="..\..\server\kernel\Kernel.csproj" />
     <ProjectReference Include="..\..\server\sdk\Sdk.csproj" />
     <ProjectReference Include="..\..\server\platform-authorization\PlatformAuthorization.csproj" />
@@ -99,54 +30,13 @@
     <ProjectReference Include="..\..\server\platform-persistence-efcore.migrations.oracle\PlatformPersistence.EfCore.OracleMigrations.csproj" />
     <ProjectReference Include="..\..\server\platform-persistence-efcore.migrations.mysql\PlatformPersistence.EfCore.MySqlMigrations.csproj" />
     <ProjectReference Include="..\..\server\plugin-platform\PluginPlatform.csproj" />
-    <ProjectReference Include="..\..\server\modules\Demo\DemoModule.csproj" />
-    <ProjectReference Include="..\..\server\modules\Authorization\AuthorizationModule.csproj" />
-    <ProjectReference Include="..\..\server\modules\ConfigCenter\ConfigCenter.csproj" />
-    <ProjectReference Include="..\..\server\modules\MetadataConfigCenter\MetadataConfigCenter.csproj" />
-    <ProjectReference Include="..\..\server\modules\Audit\AuditModule.csproj" />
-    <ProjectReference Include="..\..\server\modules\Audit\Migrations.SqlServer\Audit.SqlServerMigrations.csproj" />
-    <ProjectReference Include="..\..\server\modules\Files\FilesModule.csproj" />
-    <ProjectReference Include="..\..\server\modules\ModuleTemplateSample\ModuleTemplateSample.csproj" />
-    <ProjectReference Include="..\..\server\modules\Organization\OrganizationModule.csproj" />
-    <ProjectReference Include="..\..\server\modules\Identity\IdentityModule.csproj" />
-    <ProjectReference Include="..\..\server\modules\Authentication\AuthenticationModule.csproj" />
-    <ProjectReference Include="..\..\server\modules\Identity\Migrations.SqlServer\Identity.SqlServerMigrations.csproj" />
-    <ProjectReference Include="..\..\server\modules\Organization\Migrations.SqlServer\Organization.SqlServerMigrations.csproj" />
-    <ProjectReference Include="..\..\server\modules\Authentication\Migrations.SqlServer\Authentication.SqlServerMigrations.csproj" />
-    <ProjectReference Include="..\..\server\modules\Example\Migrations.SqlServer\Example.SqlServerMigrations.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="../../frontend/modules/infor-center/newp.plugin.json" Link="modules/InforCenter/plugin.json" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../frontend/modules/workspace/newp.plugin.json" Link="modules/Workspace/plugin.json" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../frontend/modules/workspace/migrations/Workspace.SqlServerMigrations.json" Link="modules/Workspace/migrations/Workspace.SqlServerMigrations.json" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../server/modules/Workspace/Migrations.SqlServer/bin/$(Configuration)/$(TargetFramework)/Workspace.SqlServerMigrations.dll" Link="modules/Workspace/migrations/Workspace.SqlServerMigrations.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../server/platform-modeling/metadata/storage-types.json" Link="server/platform-modeling/metadata/storage-types.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
-
   <ItemGroup>
-    <ProjectReference Include="..\..\server\modules\Example\Example.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="..\..\frontend\modules\example\newp.plugin.json">
-      <Link>modules\Example\plugin.json</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="../../server/modules/Part/PartModule.csproj" />
-    <ProjectReference Include="../../server/modules/Part/Migrations.SqlServer/Part.SqlServerMigrations.csproj" />
-    <Content Include="../../frontend/modules/part/newp.plugin.json" Link="modules/Part/plugin.json" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../frontend/modules/part/migrations/Part.SqlServerMigrations.json" Link="modules/Part/migrations/Part.SqlServerMigrations.json" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../server/modules/Part/Migrations.SqlServer/bin/$(Configuration)/$(TargetFramework)/Part.SqlServerMigrations.dll" Link="modules/Part/migrations/Part.SqlServerMigrations.dll" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="../../server/modules/Document/DocumentModule.csproj" />
-    <ProjectReference Include="../../server/modules/Document/Migrations.SqlServer/Document.SqlServerMigrations.csproj" />
-    <Content Include="../../frontend/modules/document/newp.plugin.json" Link="modules/Document/plugin.json" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../frontend/modules/document/migrations/Document.SqlServerMigrations.json" Link="modules/Document/migrations/Document.SqlServerMigrations.json" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../server/modules/Document/Migrations.SqlServer/bin/$(Configuration)/$(TargetFramework)/Document.SqlServerMigrations.dll" Link="modules/Document/migrations/Document.SqlServerMigrations.dll" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 原位工程按 owner 目录发现；归组不新增逐组件 Host 接线。 -->
+    <ProjectReference Include="../../server/modules/**/*.csproj" Exclude="../../server/modules/**/obj/**;../../server/modules/**/bin/**" />
   </ItemGroup>
 </Project>

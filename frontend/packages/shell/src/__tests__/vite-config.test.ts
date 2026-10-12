@@ -15,7 +15,7 @@ describe('vite config', () => {
     }
     const source = registry.load.call({} as never, '\0virtual:newp-frontend-entry-registry', {});
     expect(source).toContain('"part":');
-    expect(source).toContain('/modules/part/src/index.ts');
+    expect(source).toContain('/part/src/index.ts');
   });
 
   it('keeps metadata api traffic under the shared /api proxy so page routes do not collide', () => {

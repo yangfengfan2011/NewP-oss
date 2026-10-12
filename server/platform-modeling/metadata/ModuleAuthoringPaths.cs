@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ICP.Platform.Kernel.ModulePlanning;
 using System.Text.RegularExpressions;
 
 namespace ICP.Platform.Modeling.Metadata;
@@ -13,8 +14,27 @@ public static class ModuleAuthoringPaths
     /// <summary>仓库读取 frontend/modules；发布输出仍读取 modules/&lt;ModuleId&gt;。</summary>
     public static string ResolveModuleRoot(string root, string moduleId) =>
         Directory.Exists(Path.Combine(root, "frontend", "modules"))
-            ? Path.Combine(root, "frontend", "modules", ToSlug(moduleId))
+            ? ResolveRepositoryModuleRoot(root, moduleId)
             : Path.Combine(root, "modules", moduleId);
+
+    // 有 Capsule 时按身份发现真实根；无声明历史 metadata 保留原 owner 路径约定。
+    private static string ResolveRepositoryModuleRoot(string root, string moduleId)
+    {
+        var catalog = ComponentSourceCatalog.Discover(root);
+        return catalog.Components.SingleOrDefault(component => component.ModuleId == moduleId)?.Root
+            ?? Path.Combine(root, "frontend", "modules", ToSlug(moduleId));
+    }
+
+    /// <summary>枚举真实组件根和既有无 Capsule 的 metadata owner，运行时输出保持平面。</summary>
+    public static IEnumerable<string> EnumerateModuleRoots(string root)
+    {
+        var authoringRoot = Path.Combine(root, "frontend", "modules");
+        if (!Directory.Exists(authoringRoot))
+            return Directory.Exists(Path.Combine(root, "modules")) ? Directory.EnumerateDirectories(Path.Combine(root, "modules")) : [];
+        var catalog = ComponentSourceCatalog.Discover(root);
+        return catalog.Components.Select(component => component.Root).Concat(Directory.EnumerateDirectories(authoringRoot)
+            .Where(directory => !File.Exists(Path.Combine(directory, "newp.plugin.json")) && Directory.Exists(Path.Combine(directory, "metadata")))).Order(StringComparer.Ordinal);
+    }
 
     /// <summary>读取声明身份；尚无 Capsule 的 metadata 目录沿用已有命名约定。</summary>
     public static string ReadModuleId(string moduleRoot)

@@ -50,8 +50,8 @@ public class MetadataManifestService : IMetadataManifestService
                 continue;
             }
 
-            foreach (var moduleDirectory in Directory
-                .EnumerateDirectories(modulesRoot)
+            foreach (var moduleDirectory in ModuleAuthoringPaths.EnumerateModuleRoots(
+                modulesRoot == Path.Combine(_repositoryRoot, "frontend", "modules") ? _repositoryRoot : Path.GetDirectoryName(modulesRoot)!)
                 .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
             {
                 var moduleId = ModuleAuthoringPaths.ReadModuleId(moduleDirectory);

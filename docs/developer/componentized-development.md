@@ -31,7 +31,7 @@ frontend/modules/example-module/        Capsule、metadata 与前端 binding
 server/modules/ExampleModule/           后端 binding 与实现
 ```
 
-`-SkipIntegration` 只跳过 HostApi 接线，不省略 Capsule 或两侧 binding。
+内建模块由通用构建入口发现，不再编辑 HostApi 或 Shell 接线。`-SkipIntegration` 保留命令兼容，不省略 Capsule 或两侧 binding。
 
 ### 3. 实现局部能力
 
@@ -55,6 +55,22 @@ server/modules/ExampleModule/           后端 binding 与实现
 
 仓库级验证使用 `scripts/verify.ps1 -Quick`；全量验证去掉 `-Quick`。
 
+## 可移动组件源码根与构建
+
+组件身份来自 `newp.plugin.json`，源码根可以平面存放，也可以移到组合组件目录内；后端实现与迁移工程始终位于 `server/modules/<ModuleId>`。`composition.members` 是唯一成员关系事实源。发现器按最近 Capsule 根核对嵌套 owner，不要求中间目录叫 `members`；开始嵌套后，父组件的全部直属成员必须位于该源码边界内。既有平面组合仍可开发；以组合根发起的完整集合检查要求其声明后代都实际嵌套。缺失、重复、自含、多父、环或声明与目录不一致直接拒绝。
+
+`ComponentSourceCatalog` 复用正式 Canonical 编译器校验身份与组合图；模块资源嵌入、Host metadata/迁移资源链接、模型读取、DTO 和前端入口都消费按身份发现的当前根。MSBuild 通过项目依赖构建 `server/tools/component-source-build`，在短生命周期 CLI 中生成本轮 `obj` 映射，再用内建任务读取。映射只表示当前构建的路径，不是可提交的第二份组件或成员表。项目引用显式传递调用方配置，构建工具路径来自真实 `GetTargetPath` 输出。Host 发布目录保持 `modules/<ModuleId>`；父组件自有文件枚举在独立成员根处停止。
+
+核对当前组件和完整归组集合：
+
+```powershell
+dotnet run --project server/tools/component-source-build/ComponentSource.Build.csproj -c Release -- describe . InforCenter
+dotnet build apps/host-api/HostApi.csproj -c Release -p:NewpComponentRoot=InforCenter
+```
+
+上述 `InforCenter` 命令要求其全部声明成员已经嵌套，现有平面三成员布局会明确拒绝。前端 workspace 使用递归模块发现，Vite 与 `build-frontend-plugin.mjs` 通过同一 Catalog CLI 获取稳定 entry key 对应的真实源码入口；新增或调整测试配置时，从 workspace 根解析共享包，不按组件嵌套深度维护相对路径。
+
+源码根和位置无关构建已落地；聚合发行、可信独立安装及库存事务仍由 [规格 #267](https://github.com/yangfengfan2011/NewP/issues/267) 的后续交付负责。回退需同时恢复通用构建入口与工程资源配置，已实际归组的目录按其 JSON 关系还原；不改写模型、manifest、已提交迁移或数据库历史。
 ## 兼容代码边界
 
 仓库仍有少量 `ModuleBase`、`FrontendModule`、Host 私有 `plugin.json` 和旧示例模块，它们是迁移兼容路径，不是新增模块模板。普通接入不得：

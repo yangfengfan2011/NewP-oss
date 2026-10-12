@@ -20,7 +20,7 @@
 - `server/modules/<ModuleId>/**`：后端行为实现；
 - `frontend/modules/<module-slug>/**`：前端行为实现。
 
-声明与 metadata 目录采用现有小写连字符 slug；组件身份仍来自 Capsule。仅有声明或 metadata 的模块保留实际贡献，不补建空前端包。后端工程与迁移工程保持原位，Host 发布输出仍是 `modules/<ModuleId>/`。尚无 Capsule 的历史 metadata 根沿用既有目录命名约定恢复 owner；该兼容不授予组件身份或发行资格。
+初始声明与 metadata 目录采用现有小写连字符 slug；组件身份仍来自 Capsule。组件源码根允许按组合 JSON 嵌套，最近 Capsule 根界定目录 owner；发现与构建契约见[内建模块开发指南](../developer/componentized-development.md#可移动组件源码根与构建)。仅有声明或 metadata 的模块保留实际贡献，不补建空前端包。后端工程与迁移工程保持原位，Host 发布输出仍是 `modules/<ModuleId>/`。尚无 Capsule 的历史 metadata 根沿用既有目录命名约定恢复 owner；该兼容不授予组件身份或发行资格。
 
 C# 和 TypeScript 只把稳定 behavior key 绑定到实现，不得重新声明 Capsule 已拥有的身份，也不得平行维护路由、菜单或权限。`ModuleCapsuleBindingBase` 与 `FrontendBehaviorBindings` 是当前标准绑定入口。
 
@@ -68,7 +68,7 @@ Model 固定字段目录与服务端所有权由后端 modeling 统一派生；r
 - 启动、依赖注入组合和宿主级配置；
 - 认证接入、全局中间件和宿主级横切能力；
 - 模块候选读取、计划编译、装载和运行时投影；
-- 受控的内建模块开发期 `ProjectReference` 与 Capsule 输出链接。
+- 受控的内建模块开发期工程发现与按身份生成的 Capsule 输出链接。
 
 Host 不承载模块私有业务规则、数据访问、临时迁移或 module id 分支。
 
@@ -120,11 +120,11 @@ Shell 不维护业务模块清单，不通过源码目录推断活动模块，�
 - `frontend/modules/<module-slug>/newp.plugin.json` 与最小 metadata；
 - 继承 `ModuleCapsuleBindingBase` 的后端 behavior binding；
 - `FrontendBehaviorBindings` 前端实现；
-- HostApi 中受控的项目引用和 Capsule 输出链接。
+- 通用构建入口可发现的原位后端工程与组件源码根。
 
 脚手架不得生成新的 `apps/host-api/frontend/modules/<module-slug>/plugin.json`、`legacy-module` 前端声明或 Shell 内部注册表。该 Host 目录只允许承载尚未完成 Capsule cutover 的历史兼容清单。
 
-`-SkipIntegration` 只跳过 HostApi 接线，仍应生成完整 authoring Capsule 和两侧 behavior binding。外部插件模式不修改 Host 或 Shell。
+内建脚手架不再编辑 HostApi 接线；`-SkipIntegration` 保留命令兼容，仍应生成完整 authoring Capsule 和两侧 behavior binding。外部插件模式不修改 Host 或 Shell。
 
 ## 设计门禁与失败信号
 

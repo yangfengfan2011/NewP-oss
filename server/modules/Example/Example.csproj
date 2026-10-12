@@ -22,9 +22,6 @@
 
   <ItemGroup>
     <Compile Remove="Migrations.SqlServer\**\*.cs" />
-    <EmbeddedResource Include="..\..\..\frontend\modules\example\newp.plugin.json">
-      <LogicalName>ICP.Platform.Modules.Example.newp.plugin.json</LogicalName>
-    </EmbeddedResource>
   </ItemGroup>
 
 </Project>

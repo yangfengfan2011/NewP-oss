@@ -17,7 +17,6 @@
 
   <ItemGroup>
     <Compile Remove="Contracts\**\*.cs;Migrations.SqlServer\**\*.cs" />
-    <EmbeddedResource Include="..\..\..\frontend\modules\audit\newp.plugin.json"><LogicalName>ICP.Platform.Modules.Audit.newp.plugin.json</LogicalName></EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />

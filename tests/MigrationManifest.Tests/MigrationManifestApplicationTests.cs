@@ -172,11 +172,19 @@ public sealed class MigrationManifestApplicationTests
         Assert.Equal(before, File.ReadAllBytes(fixture.ManifestPath));
     }
 
-    [Fact]
-    public void Finalize_MovedAuthoringRoot_StillRejectsPublishedHistoryDrift()
+    [Theory]
+    [InlineData("legacy")]
+    [InlineData("frontend")]
+    [InlineData("nested")]
+    public void Finalize_MovedAuthoringRoot_StillRejectsPublishedHistoryDrift(string layout)
     {
         using var fixture = MigrationManifestFixture.Create();
-        var publishedRoot = Path.Combine(fixture.Root, "modules", fixture.ModuleId);
+        var publishedRoot = layout switch
+        {
+            "legacy" => Path.Combine(fixture.Root, "modules", fixture.ModuleId),
+            "frontend" => Path.Combine(fixture.Root, "frontend", "modules", "published-fixture"),
+            _ => Path.Combine(fixture.Root, "frontend", "modules", "group", "published-fixture")
+        };
         Directory.CreateDirectory(Path.GetDirectoryName(publishedRoot)!);
         Directory.Move(fixture.ModuleRoot, publishedRoot);
         fixture.CommitPublishedBaseline();
@@ -192,7 +200,7 @@ public sealed class MigrationManifestApplicationTests
                 fixture.ModuleId, "SqlServer", MigrationManifestFixture.TailMigrationId, "safe-expand"));
 
         Assert.Equal("MIGRATION_MANIFEST_HISTORY_CHANGED", exception.Code);
-        Assert.Contains("git:HEAD:modules/Fixture/", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("git:HEAD:" + Path.GetRelativePath(fixture.Root, publishedRoot).Replace(Path.DirectorySeparatorChar, '/') + "/", exception.Message, StringComparison.Ordinal);
         Assert.Equal(before, File.ReadAllBytes(fixture.ManifestPath));
     }
 

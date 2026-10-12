@@ -1,6 +1,6 @@
 packages:
   - 'packages/*'
-  - 'modules/*'
+  - 'modules/**'
   - 'templates/*'
 shamefullyHoist: true
 allowBuilds:

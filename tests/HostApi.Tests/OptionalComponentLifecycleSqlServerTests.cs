@@ -196,7 +196,7 @@ public sealed class OptionalComponentLifecycleSqlServerTests
 
     internal static void SetEnabled(FeatureCatalogHostFixture fixture, string moduleId, bool enabled)
     {
-        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(fixture.HostRoot, "modules", moduleId, "plugin.json")));
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(Path.Combine(fixture.HostRoot, "modules", moduleId), "plugin.json")));
         var version = document.RootElement.GetProperty("version").GetString()!;
         var inventory = new[] { new InstalledPluginInventoryItem(moduleId, [version], version) };
         var connection = new SqlConnectionStringBuilder(fixture.ConnectionString);
@@ -216,7 +216,7 @@ public sealed class OptionalComponentLifecycleSqlServerTests
     // 真正声明了新版的不同迁移路径；若该停用/屏蔽 owner 被错误编译或迁移，正式 compiler 必须失败。
     private static void SelectUnmigratableNewPartVersion(FeatureCatalogHostFixture fixture, bool enabled)
     {
-        var path = Path.Combine(fixture.HostRoot, "modules", "Part", "plugin.json");
+        var path = Path.Combine(Path.Combine(fixture.HostRoot, "modules", "Part"), "plugin.json");
         var capsule = JsonNode.Parse(File.ReadAllText(path))!;
         capsule["version"] = "1.1.0";
         capsule["persistence"]!["migrations"]!["sqlServer"]!["assembly"] = "migrations/Part.NewVersion.SqlServerMigrations.dll";

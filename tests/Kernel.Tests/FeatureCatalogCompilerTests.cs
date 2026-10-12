@@ -57,7 +57,7 @@ public sealed class FeatureCatalogCompilerTests
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "ICP-Platform.sln"))) root = root.Parent;
         Assert.NotNull(root);
-        var module = Path.Combine(root.FullName, "modules", "Authorization");
+        var module = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root.FullName, "Authorization");
         var documents = Directory.GetFiles(Path.Combine(module, "metadata"), "*.json", SearchOption.AllDirectories)
             .Select(path => System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(File.ReadAllText(path)));
         var capsule = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(File.ReadAllText(Path.Combine(module, "newp.plugin.json")));
@@ -88,9 +88,9 @@ public sealed class FeatureCatalogCompilerTests
     public void CustomAuthoring_OptionalTitleKeyPreservesTheLegacyCatalogIdentity()
     {
         var repository = new DirectoryInfo(AppContext.BaseDirectory);
-        while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "modules", "Authorization", "newp.plugin.json"))) repository = repository.Parent;
+        while (repository is not null && !File.Exists(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository.FullName, "Authorization"), "newp.plugin.json"))) repository = repository.Parent;
         Assert.NotNull(repository);
-        var capsule = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(repository.FullName, "modules", "Authorization", "newp.plugin.json")))!;
+        var capsule = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository.FullName, "Authorization"), "newp.plugin.json")))!;
         var legacyCapsule = capsule.DeepClone();
         foreach (var feature in legacyCapsule["features"]!.AsArray()) feature!.AsObject().Remove("titleKey");
         var legacy = FeatureCatalogCompiler.Compile(FeatureCatalogCompiler.Read(System.Text.Json.JsonSerializer.SerializeToElement(legacyCapsule), "Authorization"));
@@ -193,13 +193,13 @@ public sealed class FeatureCatalogCompilerTests
     public void RealOrganizationAuthoring_CompilesSeparateListTreeAndDetailActions()
     {
         var repository = new DirectoryInfo(AppContext.BaseDirectory);
-        while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "modules", "Organization", "newp.plugin.json"))) repository = repository.Parent;
+        while (repository is not null && !File.Exists(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository.FullName, "Organization"), "newp.plugin.json"))) repository = repository.Parent;
         Assert.NotNull(repository);
-        var source = Path.Combine(repository.FullName, "modules", "Organization");
+        var source = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository.FullName, "Organization");
         var root = Path.Combine(repository.FullName, ".codex-temp", "feature-authoring-" + Guid.NewGuid().ToString("N"));
         try
         {
-            var module = Path.Combine(root, "Organization");
+            var module = Path.Combine(root, "modules", "Organization");
             Directory.CreateDirectory(module);
             File.Copy(Path.Combine(source, "newp.plugin.json"), Path.Combine(module, "plugin.json"));
             foreach (var file in Directory.EnumerateFiles(Path.Combine(source, "metadata"), "*", SearchOption.AllDirectories))
@@ -208,7 +208,7 @@ public sealed class FeatureCatalogCompilerTests
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                 File.Copy(file, target);
             }
-            var candidate = Assert.Single(new ModuleCapsuleCandidateReader().ReadBuiltIn(root));
+            var candidate = Assert.Single(new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(root, "modules")));
             var points = FeatureCatalogCompiler.Compile(candidate.Features);
             var legacy = FeatureCatalogCompiler.Compile(candidate.Features.Select(node => node with { TitleKey = null, StaticScopeTitleKey = null }));
             Assert.Equal(legacy.Select(point => (point.Position, point.BehaviorKey, point.Title, point.StaticScopeTitle, point.Order, string.Join(",", point.EntryDependencies), string.Join(",", point.ReadBehaviors))),
@@ -233,7 +233,7 @@ public sealed class FeatureCatalogCompilerTests
             Assert.Equal("PersonListView.Action_Edit", listEdit.GetProperty("titleKey").GetString());
             var linkUser = projected.EnumerateArray().First(point => point.GetProperty("key").GetString() == "linkUser");
             Assert.Equal("PersonDetailView.Action_LinkUser", linkUser.GetProperty("titleKey").GetString());
-            using var runtime = System.Text.Json.JsonDocument.Parse(new ICP.Platform.Kernel.PluginPackages.MetadataRuntimeManifestBuilder().Build(repository.FullName, ["Organization"], ["Organization"], points));
+            using var runtime = System.Text.Json.JsonDocument.Parse(new ICP.Platform.Kernel.PluginPackages.MetadataRuntimeManifestBuilder().Build(root, ["Organization"], ["Organization"], points));
             var active = runtime.RootElement.GetProperty("modules")[0].GetProperty("features");
             Assert.Equal(projected.GetArrayLength(), active.GetArrayLength());
             Assert.Equal(treeEdit.GetProperty("titleKey").GetString(), active.EnumerateArray().Single(point => point.GetProperty("position").GetString() == treeEdit.GetProperty("position").GetString()).GetProperty("titleKey").GetString());

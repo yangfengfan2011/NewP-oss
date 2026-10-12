@@ -199,7 +199,7 @@ public sealed class MetadataRuntimeManifestBuilderTests : IDisposable
 
     private static void WriteMetadataFile(string runtimeRoot, string moduleId, string relativePath, string content)
     {
-        var fullPath = Path.Combine(runtimeRoot, "modules", moduleId, "metadata", relativePath);
+        var fullPath = Path.Combine(Path.Combine(runtimeRoot, "modules", moduleId), "metadata", relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
         File.WriteAllText(fullPath, content);
     }

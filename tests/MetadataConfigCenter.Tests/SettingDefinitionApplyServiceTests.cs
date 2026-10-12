@@ -71,10 +71,10 @@ public class SettingDefinitionApplyServiceTests
         {
             _rootPath = rootPath;
             _runtimeRoot = runtimeRoot;
-            SourceSettingsFilePath = Path.Combine(rootPath, "modules", "ConfigCenter", "metadata", "settings", "ConfigCenter.settings.json");
+            SourceSettingsFilePath = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(rootPath, "ConfigCenter"), "metadata", "settings", "ConfigCenter.settings.json");
             RuntimeSettingsFilePath = string.IsNullOrWhiteSpace(runtimeRoot)
                 ? null
-                : Path.Combine(runtimeRoot, "modules", "ConfigCenter", "metadata", "settings", "ConfigCenter.settings.json");
+                : Path.Combine(Path.Combine(runtimeRoot, "modules", "ConfigCenter"), "metadata", "settings", "ConfigCenter.settings.json");
         }
 
         public string SourceSettingsFilePath { get; }
@@ -87,17 +87,17 @@ public class SettingDefinitionApplyServiceTests
             // Windows 的用户临时目录可能被安全软件短暂占用，干扰本测试要验证的目录级原子回滚。
             // 改用已忽略的仓库 artifacts 目录，确保正向和回滚 move 处在同一工作卷。
             var tempRoot = Path.Combine(sourceRoot, "artifacts", "test-temp", "metadata-config-center-apply-tests", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(Path.Combine(tempRoot, "modules", "ConfigCenter"));
+            Directory.CreateDirectory(Path.Combine(tempRoot, "frontend", "modules", "config-center"));
 
-            var sourceMetadata = Path.Combine(sourceRoot, "modules", "ConfigCenter", "metadata");
-            var targetMetadata = Path.Combine(tempRoot, "modules", "ConfigCenter", "metadata");
+            var sourceMetadata = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(sourceRoot, "ConfigCenter"), "metadata");
+            var targetMetadata = Path.Combine(Path.Combine(tempRoot, "frontend", "modules", "config-center"), "metadata");
             CopyDirectory(sourceMetadata, targetMetadata);
 
             string? runtimeRoot = null;
             if (includeRuntimeProjection)
             {
                 runtimeRoot = Path.Combine(tempRoot, "plugins", "runtime");
-                var runtimeMetadata = Path.Combine(runtimeRoot, "modules", "ConfigCenter", "metadata");
+                var runtimeMetadata = Path.Combine(Path.Combine(runtimeRoot, "modules", "ConfigCenter"), "metadata");
                 CopyDirectory(sourceMetadata, runtimeMetadata);
             }
 

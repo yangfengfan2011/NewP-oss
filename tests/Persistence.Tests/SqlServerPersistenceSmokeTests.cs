@@ -1785,16 +1785,13 @@ public sealed class SqlServerPersistenceSmokeTests
         foreach (var modelName in new[] { "Company", "Department", "Person", "Position" })
         {
             File.Copy(
-                Path.Combine(repositoryRoot, "modules", "Organization", "metadata", "models", $"{modelName}.model.json"),
+                Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repositoryRoot, "Organization"), "metadata", "models", $"{modelName}.model.json"),
                 Path.Combine(modelRoot, $"{modelName}.model.json"));
         }
 
         var assemblyPath = Path.Combine(migrationRoot, "Organization.SqlServerMigrations.dll");
         File.Copy(typeof(Organization_000001_Foundation).Assembly.Location, assemblyPath);
-        var manifestSourcePath = Path.Combine(
-            repositoryRoot,
-            "modules",
-            "Organization",
+        var manifestSourcePath = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repositoryRoot, "Organization"),
             "migrations",
             "Organization.SqlServerMigrations.json");
         var temporaryManifestPath = Path.Combine(migrationRoot, "Organization.SqlServerMigrations.json");

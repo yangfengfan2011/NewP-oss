@@ -3,7 +3,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import { LocalizationProvider, useLocalization } from '@icp-platform/core';
-import platformDictionary from '../../../../../modules/Platform/metadata/dictionaries/Platform.dic.json';
+import platformDictionary from '../../../../modules/platform/metadata/dictionaries/Platform.dic.json';
 import type { TreeProviderBinding, TreeView } from '@icp-platform/sdk';
 import { TreeSearch } from '../composition/TreeSearch';
 

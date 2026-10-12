@@ -28,7 +28,7 @@ public static class PlatformFoundationModelSource
         var validator = new ModelMetadataValidator();
         var projector = new ModelMetadataProjector();
         return new[] { "Authorization", "ConfigCenter" }.SelectMany(owner =>
-            Directory.EnumerateFiles(Path.Combine(repositoryRoot, "modules", owner, "metadata", "models"), "*.model.json")
+            Directory.EnumerateFiles(Path.Combine(ModuleAuthoringPaths.ResolveModuleRoot(repositoryRoot, owner), "metadata", "models"), "*.model.json")
                 .Order(StringComparer.Ordinal).Select(path =>
                 {
                     var document = loader.LoadFromFile(path);

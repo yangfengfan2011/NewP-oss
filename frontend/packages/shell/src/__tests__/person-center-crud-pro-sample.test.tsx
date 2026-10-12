@@ -8,11 +8,11 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry, type FrontendModule, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import baseOrganizationModule from '../../../../modules/organization/src/index';
-import personDetailDictionary from '../../../../../modules/Organization/metadata/dictionaries/PersonDetailView.dic.json';
-import personListDictionary from '../../../../../modules/Organization/metadata/dictionaries/PersonListView.dic.json';
+import personDetailDictionary from '../../../../modules/organization/metadata/dictionaries/PersonDetailView.dic.json';
+import personListDictionary from '../../../../modules/organization/metadata/dictionaries/PersonListView.dic.json';
 import organizationRuntimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
-import personDetailViewDocument from '../../../../../modules/Organization/metadata/views/PersonDetail.view.json';
-import personListViewDocument from '../../../../../modules/Organization/metadata/views/PersonList.view.json';
+import personDetailViewDocument from '../../../../modules/organization/metadata/views/PersonDetail.view.json';
+import personListViewDocument from '../../../../modules/organization/metadata/views/PersonList.view.json';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 

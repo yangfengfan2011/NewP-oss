@@ -1,9 +1,9 @@
 import { expect, it } from 'vitest';
-import navigation from '../../../../../modules/Authorization/metadata/navigation/Authorization.nav.json';
+import navigation from '../../../../modules/authorization/metadata/navigation/Authorization.nav.json';
 import bindings from '../../../../modules/authorization/src';
 import model from '../../../../../tests/Kernel.Tests/Fixtures/AuthorizationRoleRuntime.contract.json';
-import list from '../../../../../modules/Authorization/metadata/views/RoleList.view.json';
-import detail from '../../../../../modules/Authorization/metadata/views/RoleDetail.view.json';
+import list from '../../../../modules/authorization/metadata/views/RoleList.view.json';
+import detail from '../../../../modules/authorization/metadata/views/RoleDetail.view.json';
 import { roleResource } from '../../../../modules/authorization/src/roleResource';
 import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';
 import { buildStandardCrudListSchema, resolveStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';

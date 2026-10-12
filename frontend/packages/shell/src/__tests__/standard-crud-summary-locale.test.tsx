@@ -10,10 +10,10 @@ import type { RuntimeMetadataManifest } from '../metadata/runtimeMetadataManifes
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 import { personStandardCrudResource } from '../../../../modules/organization/src/standard-crud/personStandardCrudResource';
 import runtimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
-import detailView from '../../../../../modules/Organization/metadata/views/PersonDetail.view.json';
-import personMessages from '../../../../../modules/Organization/metadata/dictionaries/Organization.Person.dic.json';
-import detailMessages from '../../../../../modules/Organization/metadata/dictionaries/PersonDetailView.dic.json';
-import platformMessages from '../../../../../modules/Platform/metadata/dictionaries/Platform.dic.json';
+import detailView from '../../../../modules/organization/metadata/views/PersonDetail.view.json';
+import personMessages from '../../../../modules/organization/metadata/dictionaries/Organization.Person.dic.json';
+import detailMessages from '../../../../modules/organization/metadata/dictionaries/PersonDetailView.dic.json';
+import platformMessages from '../../../../modules/platform/metadata/dictionaries/Platform.dic.json';
 import featureManifest from './fixtures/organization-feature-manifest.json';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;

@@ -531,7 +531,7 @@ public class HostApiPluginManifestRouteTests : IAsyncLifetime
     {
         var installRoot = CreateTempRoot();
         var packageRoot = _testData.CreateValidPackageWithMetadataAndResources("Audit");
-        var packageMetadataRoot = Path.Combine(packageRoot, "modules", "Audit", "metadata");
+        var packageMetadataRoot = Path.Combine(Path.Combine(packageRoot, "modules", "Audit"), "metadata");
         Directory.CreateDirectory(Path.Combine(packageMetadataRoot, "navigation"));
         File.WriteAllText(
             Path.Combine(packageMetadataRoot, "navigation", "Audit.nav.json"),

@@ -428,8 +428,8 @@ public sealed class DepartmentHierarchySqlServerIntegrationTests(Xunit.Abstracti
     private static RelationTreeDefinition ReadRelationDefinition()
     {
         var repository = new DirectoryInfo(AppContext.BaseDirectory);
-        while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "modules/Organization/newp.plugin.json"))) repository = repository.Parent;
-        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(repository!.FullName, "modules/Organization/metadata/views/OrganizationStructure.view.json")));
+        while (repository is not null && !File.Exists(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository.FullName, "Organization"), "newp.plugin.json"))) repository = repository.Parent;
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository!.FullName, "Organization"), "metadata/views/OrganizationStructure.view.json")));
         return new("Organization", "organization.structure", RelationTreeMetadata.Read(document.RootElement.GetProperty("view")));
     }
 

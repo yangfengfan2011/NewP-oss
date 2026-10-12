@@ -13,7 +13,7 @@
 ## 新增或修改模块模型
 
 1. 在已确认设计中写清模型 owner、物理表、provider 范围、迁移前沿、失败信号和回滚思路。
-2. 修改 `modules/<ModuleId>/metadata/models/*.model.json`；模块 metadata 是模型 authoring 真源。
+2. 修改 `frontend/modules/<module-slug>/metadata/models/*.model.json`；模块 metadata 是模型 authoring 真源。
 3. 运行模型校验和 DTO 同步，不手改 `DTOs/Generated/*.g.cs`。
 4. 在模块自有 migration 项目中维护线性迁移流，例如 `server/modules/<ModuleId>/Migrations.SqlServer/`；实验基线期整体更新当前基线，兼容基线冻结后只追加前向步骤。
 5. 让 migration manifest、target model digest 与模型投影一致，并通过候选计划编译。

@@ -216,7 +216,7 @@ public class UnifiedPluginPackageTestData : IDisposable
 
         if (includeModuleMetadata)
         {
-            var metadataRoot = Path.Combine(tempPath, "modules", moduleId, "metadata");
+            var metadataRoot = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(tempPath, moduleId), "metadata");
             var settingsRoot = Path.Combine(metadataRoot, "settings");
             Directory.CreateDirectory(settingsRoot);
             File.WriteAllText(

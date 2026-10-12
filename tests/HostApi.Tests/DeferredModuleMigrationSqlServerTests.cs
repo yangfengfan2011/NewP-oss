@@ -231,8 +231,8 @@ public sealed class DeferredModuleMigrationSqlServerTests
     {
         // 副本随既有fixture workspace归还，持久证据只保留脱敏工具日志与资产摘要。
         var root = Path.Combine(Path.GetDirectoryName(fixture.HostRoot)!, "authoring", module);
-        var moduleRoot = Path.Combine(root, "modules", module);
-        CopyDirectory(Path.Combine(fixture.RepositoryRoot, "modules", module), moduleRoot);
+        var moduleRoot = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root, module);
+        CopyDirectory(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(fixture.RepositoryRoot, module), moduleRoot);
         var projectRoot = Path.Combine(root, "server", "modules", module, "Migrations.SqlServer");
         CopyDirectory(Path.Combine(fixture.RepositoryRoot, "server", "modules", module, "Migrations.SqlServer", "Migrations"), Path.Combine(projectRoot, "Migrations"));
         var projectName = module + ".SqlServerMigrations.csproj";

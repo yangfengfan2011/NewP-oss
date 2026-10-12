@@ -45,7 +45,7 @@ public sealed class FeatureCatalogHostLifecycleTests
 
         // 完整候选的字典输入准备失败，同样不能清理拟删除的分支。
         fixture.SetDeclarations(new JsonArray(declarations[0]!.DeepClone(), declarations[3]!.DeepClone()));
-        var dictionary = Path.Combine(fixture.HostRoot, "modules", "Example", "metadata", "dictionaries", "Navigation.dic.json");
+        var dictionary = Path.Combine(Path.Combine(fixture.HostRoot, "modules", "Example"), "metadata", "dictionaries", "Navigation.dic.json");
         var content = await File.ReadAllTextAsync(dictionary);
         await File.WriteAllTextAsync(dictionary, "{");
         await fixture.StartAsync(expectFailure: true);

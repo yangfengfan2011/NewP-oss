@@ -217,7 +217,7 @@ public sealed class LocalizationRuntimeManifestBuilderTests : IDisposable
         string englishCode = "en",
         string englishLocale = "en-US")
     {
-        var platformMetadataRoot = Path.Combine(runtimeRoot, "modules", "Platform", "metadata");
+        var platformMetadataRoot = Path.Combine(Path.Combine(runtimeRoot, "modules", "Platform"), "metadata");
         Directory.CreateDirectory(platformMetadataRoot);
         File.WriteAllText(
             Path.Combine(platformMetadataRoot, "languages.json"),
@@ -246,7 +246,7 @@ public sealed class LocalizationRuntimeManifestBuilderTests : IDisposable
 
     private static void WriteMetadataFile(string runtimeRoot, string moduleId, string relativePath, string content)
     {
-        var filePath = Path.Combine(runtimeRoot, "modules", moduleId, "metadata", relativePath);
+        var filePath = Path.Combine(Path.Combine(runtimeRoot, "modules", moduleId), "metadata", relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
         File.WriteAllText(filePath, content);
     }

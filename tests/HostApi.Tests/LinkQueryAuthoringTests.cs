@@ -161,8 +161,8 @@ public sealed class LinkQueryAuthoringTests
     public void RuntimeModelProjection_PreservesTheFormalLinkQueryFieldCatalog()
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (root is not null && !File.Exists(Path.Combine(root.FullName, "modules/Workspace/newp.plugin.json"))) root = root.Parent;
-        var path = Path.Combine(root!.FullName, "modules/Workspace/metadata/models/WorkspaceFolderContent.model.json");
+        while (root is not null && !File.Exists(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root.FullName, "Workspace"), "newp.plugin.json"))) root = root.Parent;
+        var path = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root!.FullName, "Workspace"), "metadata/models/WorkspaceFolderContent.model.json");
         var bytes = File.ReadAllBytes(path);
         var projected = new ICP.Platform.Modeling.Projection.ModelRuntimeMetadataProjector().Project(bytes, path);
         using var source = JsonDocument.Parse(bytes); using var runtime = JsonDocument.Parse(projected);

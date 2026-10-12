@@ -7,7 +7,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { Sidebar } from '../components/Sidebar';
 import { buildMenusFromNavDocuments } from '../metadata/navigationAdapter';
-import exampleNavigationDocument from '../../../../../modules/Example/metadata/navigation/Example.nav.json';
+import exampleNavigationDocument from '../../../../modules/example/metadata/navigation/Example.nav.json';
 
 vi.mock('../contexts/PlatformContext', () => ({
   usePlatform: () => ({ shellView: 'business' }),

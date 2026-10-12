@@ -6,8 +6,8 @@
 
 一个模块由三个可独立核对的所有者组成：
 
-1. `modules/<ModuleId>/newp.plugin.json` 唯一拥有 module id、显示名、版本、依赖和 behavior key。
-2. `modules/<ModuleId>/metadata/**` 拥有路由、菜单、权限引用、模型与本地化等静态事实。
+1. `frontend/modules/<module-slug>/newp.plugin.json` 唯一拥有 module id、显示名、版本、依赖和 behavior key。
+2. `frontend/modules/<module-slug>/metadata/**` 拥有路由、菜单、权限引用、模型与本地化等静态事实。
 3. 后端和前端代码只把稳定 key 绑定到服务、endpoint、页面、renderer 或 action 实现。
 
 Host、Shell、C# 与 TypeScript 不再维护平行的模块身份和静态声明。
@@ -27,9 +27,8 @@ pwsh -NoProfile -File .\scripts\new-module.ps1 -ModuleName ExampleModule -Displa
 生成结果包括：
 
 ```text
-modules/ExampleModule/                  Capsule 与 metadata
+frontend/modules/example-module/        Capsule、metadata 与前端 binding
 server/modules/ExampleModule/           后端 binding 与实现
-frontend/modules/example-module/        前端 binding 与实现
 ```
 
 `-SkipIntegration` 只跳过 HostApi 接线，不省略 Capsule 或两侧 binding。

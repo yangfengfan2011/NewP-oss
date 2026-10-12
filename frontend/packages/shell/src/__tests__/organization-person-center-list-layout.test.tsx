@@ -1,4 +1,4 @@
-import personMessages from '../../../../../modules/Organization/metadata/dictionaries/Organization.Person.dic.json';
+import personMessages from '../../../../modules/organization/metadata/dictionaries/Organization.Person.dic.json';
 import './authorizedFeatureUiFixture';
 // @vitest-environment jsdom
 
@@ -10,11 +10,11 @@ import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core'
 import { ModuleRegistry, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import organizationModule from '../../../../modules/organization/src/index';
 import PersonListPage from '../../../../modules/organization/src/pages/PersonListPage';
-import personDetailDictionary from '../../../../../modules/Organization/metadata/dictionaries/PersonDetailView.dic.json';
-import personListDictionary from '../../../../../modules/Organization/metadata/dictionaries/PersonListView.dic.json';
+import personDetailDictionary from '../../../../modules/organization/metadata/dictionaries/PersonDetailView.dic.json';
+import personListDictionary from '../../../../modules/organization/metadata/dictionaries/PersonListView.dic.json';
 import organizationRuntimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
-import personDetailViewDocument from '../../../../../modules/Organization/metadata/views/PersonDetail.view.json';
-import personListViewDocument from '../../../../../modules/Organization/metadata/views/PersonList.view.json';
+import personDetailViewDocument from '../../../../modules/organization/metadata/views/PersonDetail.view.json';
+import personListViewDocument from '../../../../modules/organization/metadata/views/PersonList.view.json';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 

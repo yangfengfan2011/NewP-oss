@@ -176,10 +176,7 @@ internal static class TestPersistencePlan
         string assemblyPath,
         IReadOnlyList<ModelDefinition> models)
     {
-        var manifestPath = Path.Combine(
-            FindRepositoryRoot(),
-            "modules",
-            moduleId,
+        var manifestPath = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(FindRepositoryRoot(), moduleId),
             "migrations",
             manifestName);
         var manifest = JsonSerializer.Deserialize<FoundationManifest>(

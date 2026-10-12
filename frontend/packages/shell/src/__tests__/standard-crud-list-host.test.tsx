@@ -13,15 +13,15 @@ import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { StandardCrudHostEnvironmentContext, type StandardCrudHostEnvironment } from '../standard-crud/standardCrudHostEnvironment';
 import { createEmbeddedHostEnvironment } from './standardCrudHostEnvironmentTestSupport';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
-import exampleRecordListViewDocument from '../../../../../modules/Example/metadata/views/ExampleRecordList.view.json';
-import exampleRecordDetailViewDocument from '../../../../../modules/Example/metadata/views/ExampleRecordDetail.view.json';
-import exampleRecordModelDocument from '../../../../../modules/Example/metadata/models/ExampleRecord.model.json';
-import exampleRecordListDictionary from '../../../../../modules/Example/metadata/dictionaries/ExampleRecordListView.dic.json';
-import companyListViewDocument from '../../../../../modules/Organization/metadata/views/CompanyList.view.json';
-import companyModelDocument from '../../../../../modules/Organization/metadata/models/Company.model.json';
+import exampleRecordListViewDocument from '../../../../modules/example/metadata/views/ExampleRecordList.view.json';
+import exampleRecordDetailViewDocument from '../../../../modules/example/metadata/views/ExampleRecordDetail.view.json';
+import exampleRecordModelDocument from '../../../../modules/example/metadata/models/ExampleRecord.model.json';
+import exampleRecordListDictionary from '../../../../modules/example/metadata/dictionaries/ExampleRecordListView.dic.json';
+import companyListViewDocument from '../../../../modules/organization/metadata/views/CompanyList.view.json';
+import companyModelDocument from '../../../../modules/organization/metadata/models/Company.model.json';
 import { companyStandardCrudResource } from '../../../../modules/organization/src/standard-crud/companyStandardCrudResource';
 import { createExampleRecordStandardCrudResource } from '../../../../modules/example/src/standard-crud/exampleRecordStandardCrudResource';
-import platformDictionary from '../../../../../modules/Platform/metadata/dictionaries/Platform.dic.json';
+import platformDictionary from '../../../../modules/platform/metadata/dictionaries/Platform.dic.json';
 
 const platformFetchMock = vi.hoisted(() => vi.fn((input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init)));
 

@@ -44,7 +44,7 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
             """
             <Project Sdk="Microsoft.NET.Sdk.Web">
               <ItemGroup>
-                <Content Include="..\..\modules\Existing\newp.plugin.json">
+                <Content Include="..\..\frontend\modules\existing\newp.plugin.json">
                   <Link>modules\Existing\plugin.json</Link>
                   <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
                 </Content>
@@ -68,7 +68,7 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
             result.ExitCode == 0,
             $"Expected exit code 0 but got {result.ExitCode}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
 
-        var capsuleRoot = Path.Combine(fixtureRoot, "modules", "CanonicalSample");
+        var capsuleRoot = Path.Combine(fixtureRoot, "frontend", "modules", "canonical-sample");
         var manifestPath = Path.Combine(capsuleRoot, "newp.plugin.json");
         var navigationPath = Path.Combine(
             capsuleRoot,
@@ -126,7 +126,7 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
 
         var backendProject = File.ReadAllText(
             Path.Combine(fixtureRoot, "server", "modules", "CanonicalSample", "CanonicalSample.csproj"));
-        Assert.Contains(@"..\..\..\modules\CanonicalSample\newp.plugin.json", backendProject, StringComparison.Ordinal);
+        Assert.Contains(@"..\..\..\frontend\modules\canonical-sample\newp.plugin.json", backendProject, StringComparison.Ordinal);
         Assert.Contains("ICP.Platform.Modules.CanonicalSample.newp.plugin.json", backendProject, StringComparison.Ordinal);
         Assert.Contains(@"..\..\platform-authorization\PlatformAuthorization.csproj", backendProject, StringComparison.Ordinal);
 
@@ -173,7 +173,7 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
             hostProject,
             StringComparison.Ordinal);
         Assert.Contains(
-            @"<Content Include=""..\..\modules\CanonicalSample\newp.plugin.json"">",
+            @"<Content Include=""..\..\frontend\modules\canonical-sample\newp.plugin.json"">",
             hostProject,
             StringComparison.Ordinal);
         Assert.Contains(@"<Link>modules\CanonicalSample\plugin.json</Link>", hostProject, StringComparison.Ordinal);
@@ -233,9 +233,9 @@ public class UnifiedPluginPackagingScriptsTests : IDisposable
             ]);
 
         var packageRoot = Path.Combine(outputRoot, "Organization");
-        var modelMetadataPath = Path.Combine(packageRoot, "modules", "Organization", "metadata", "models", "Person.model.json");
-        var navigationMetadataPath = Path.Combine(packageRoot, "modules", "Organization", "metadata", "navigation", "Organization.nav.json");
-        var personListDictionaryPath = Path.Combine(packageRoot, "modules", "Organization", "metadata", "dictionaries", "PersonListView.dic.json");
+        var modelMetadataPath = Path.Combine(Path.Combine(packageRoot, "modules", "Organization"), "metadata", "models", "Person.model.json");
+        var navigationMetadataPath = Path.Combine(Path.Combine(packageRoot, "modules", "Organization"), "metadata", "navigation", "Organization.nav.json");
+        var personListDictionaryPath = Path.Combine(Path.Combine(packageRoot, "modules", "Organization"), "metadata", "dictionaries", "PersonListView.dic.json");
 
         Assert.True(result.ExitCode == 0, $"Expected exit code 0 but got {result.ExitCode}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
         Assert.True(File.Exists(modelMetadataPath), $"Expected model metadata at {modelMetadataPath}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");

@@ -48,7 +48,7 @@ Shell 按以下顺序启动：
 - `moduleId`：指向 Vite 管理的内建源码入口；Shell 的 import registry 只提供可导入实现，不决定活动模块集合。
 - `url`：指向安装包物化到 `/plugin-assets/<ModuleId>/<Version>/...` 的外部入口。
 
-新增内建模块不修改 Shell 业务列表。迁移期 legacy 模块在 `apps/host-api/modules/<ModuleId>/plugin.json` 提供 transport 声明；完成 capsule cutover 的模块以 `modules/<ModuleId>/newp.plugin.json` 为根 authoring owner。Organization 是首个 behavior-binding adopter。
+新增内建模块不修改 Shell 业务列表。迁移期 legacy 模块在 `apps/host-api/frontend/modules/<module-slug>/plugin.json` 提供 transport 声明；完成 capsule cutover 的模块以 `frontend/modules/<module-slug>/newp.plugin.json` 为根 authoring owner。Organization 是首个 behavior-binding adopter。
 
 ## 所有权边界
 

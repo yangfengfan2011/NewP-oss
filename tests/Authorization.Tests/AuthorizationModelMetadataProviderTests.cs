@@ -13,14 +13,14 @@ public class AuthorizationModelMetadataProviderTests
         var repositoryRoot = GetRepositoryRoot();
 
         AssertManagedEntityMetadata(
-            Path.Combine(repositoryRoot, "modules", "Authorization", "metadata", "models", "RolePermission.model.json"),
+            Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repositoryRoot, "Authorization"), "metadata", "models", "RolePermission.model.json"),
             "RolePermission",
             "RoleId",
             "PermissionId",
             "UX_RolePermission_Role_Permission");
 
         AssertManagedEntityMetadata(
-            Path.Combine(repositoryRoot, "modules", "Authorization", "metadata", "models", "UserRole.model.json"),
+            Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repositoryRoot, "Authorization"), "metadata", "models", "UserRole.model.json"),
             "UserRole",
             "UserId",
             "RoleId",
@@ -32,10 +32,10 @@ public class AuthorizationModelMetadataProviderTests
     public void GetDefinitions_ReturnsAuthorizationModelsAndPassesDefinitionValidation()
     {
         var repositoryRoot = GetRepositoryRoot();
-        Assert.True(File.Exists(Path.Combine(repositoryRoot, "modules", "Authorization", "metadata", "models", "Role.model.json")));
-        Assert.True(File.Exists(Path.Combine(repositoryRoot, "modules", "Authorization", "metadata", "models", "Permission.model.json")));
-        Assert.True(File.Exists(Path.Combine(repositoryRoot, "modules", "Authorization", "metadata", "models", "RolePermission.model.json")));
-        Assert.True(File.Exists(Path.Combine(repositoryRoot, "modules", "Authorization", "metadata", "models", "UserRole.model.json")));
+        Assert.True(File.Exists(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repositoryRoot, "Authorization"), "metadata", "models", "Role.model.json")));
+        Assert.True(File.Exists(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repositoryRoot, "Authorization"), "metadata", "models", "Permission.model.json")));
+        Assert.True(File.Exists(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repositoryRoot, "Authorization"), "metadata", "models", "RolePermission.model.json")));
+        Assert.True(File.Exists(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repositoryRoot, "Authorization"), "metadata", "models", "UserRole.model.json")));
 
         var provider = new AuthorizationModelMetadataProvider();
         var validator = new ModelDefinitionValidator();

@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\platform-modeling\PlatformModeling.csproj" />
     <ProjectReference Include="..\..\platform-authorization\PlatformAuthorization.csproj" />
     <ProjectReference Include="..\..\sdk\Sdk.csproj" />
   </ItemGroup>

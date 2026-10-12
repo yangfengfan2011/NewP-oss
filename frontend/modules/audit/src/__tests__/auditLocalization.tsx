@@ -1,6 +1,6 @@
 import { LocalizationProvider } from '@icp-platform/core';
 import type { ReactNode } from 'react';
-import dictionary from '../../../../../modules/Audit/metadata/dictionaries/BusinessChangeView.dic.json';
+import dictionary from '../../../../modules/audit/metadata/dictionaries/BusinessChangeView.dic.json';
 export const auditCatalogs = Object.fromEntries(['zhs', 'en'].map(language => [language,
   Object.fromEntries(Object.entries(dictionary.BusinessChangeView).map(([key, value]) => [`BusinessChangeView.${key}`, (value as Record<string, string>)[language]])),
 ]));

@@ -4,9 +4,9 @@
 
 ## 所有权
 
-1. `modules/<ModuleId>/newp.plugin.json` 拥有 identity、version、dependencies 和 `frontend.behaviorKey`。
-2. `modules/<ModuleId>/metadata/**` 拥有 route、menu、功能授权声明、model 和 localization。
-3. `frontend/modules/<module-id>/src/index.ts` 只把稳定 key 绑定到页面、renderer 或 action 实现。
+1. `frontend/modules/<module-slug>/newp.plugin.json` 拥有 identity、version、dependencies 和 `frontend.behaviorKey`。
+2. `frontend/modules/<module-slug>/metadata/**` 拥有 route、menu、功能授权声明、model 和 localization。
+3. `frontend/modules/<module-slug>/src/index.ts` 只把稳定 key 绑定到页面、renderer 或 action 实现。
 
 ```typescript
 import { type FrontendBehaviorBindings } from '@icp-platform/sdk';

@@ -93,13 +93,20 @@ function Resolve-ModuleMetadataPath {
         [Parameter(Mandatory = $true)][string]$ModuleName
     )
 
-    $modulesRoot = Join-Path $RepoRoot "modules"
+    $modulesRoot = Join-Path $RepoRoot "frontend/modules"
     if (-not (Test-Path -LiteralPath $modulesRoot)) {
         return $null
     }
 
     $matchingDirectory = Get-ChildItem -LiteralPath $modulesRoot -Directory |
-        Where-Object { $_.Name.Equals($ModuleName, [System.StringComparison]::OrdinalIgnoreCase) } |
+        Where-Object {
+            $capsule = Join-Path $_.FullName 'newp.plugin.json'
+            if (Test-Path -LiteralPath $capsule) {
+                (Get-Content -LiteralPath $capsule -Raw -Encoding utf8 | ConvertFrom-Json).moduleId.Equals($ModuleName, [System.StringComparison]::OrdinalIgnoreCase)
+            } else {
+                $_.Name.Equals(([regex]::Replace($ModuleName, '([a-z0-9])([A-Z])', '$1-$2').ToLowerInvariant()), [System.StringComparison]::OrdinalIgnoreCase)
+            }
+        } |
         Select-Object -First 1
 
     if (-not $matchingDirectory) {
@@ -120,13 +127,20 @@ function Resolve-ModuleAuthoringManifestPath {
         [Parameter(Mandatory = $true)][string]$ModuleName
     )
 
-    $modulesRoot = Join-Path $RepoRoot "modules"
+    $modulesRoot = Join-Path $RepoRoot "frontend/modules"
     if (-not (Test-Path -LiteralPath $modulesRoot)) {
         return $null
     }
 
     $matchingDirectory = Get-ChildItem -LiteralPath $modulesRoot -Directory |
-        Where-Object { $_.Name.Equals($ModuleName, [System.StringComparison]::OrdinalIgnoreCase) } |
+        Where-Object {
+            $capsule = Join-Path $_.FullName 'newp.plugin.json'
+            if (Test-Path -LiteralPath $capsule) {
+                (Get-Content -LiteralPath $capsule -Raw -Encoding utf8 | ConvertFrom-Json).moduleId.Equals($ModuleName, [System.StringComparison]::OrdinalIgnoreCase)
+            } else {
+                $_.Name.Equals(([regex]::Replace($ModuleName, '([a-z0-9])([A-Z])', '$1-$2').ToLowerInvariant()), [System.StringComparison]::OrdinalIgnoreCase)
+            }
+        } |
         Select-Object -First 1
     if (-not $matchingDirectory) {
         return $null

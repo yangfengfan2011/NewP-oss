@@ -1,6 +1,6 @@
-import identityMessages from '../../../../../modules/Identity/metadata/dictionaries/IdentityMessages.dic.json';
-import identityErrors from '../../../../../modules/Identity/metadata/dictionaries/IdentityErrors.dic.json';
-import identityStatus from '../../../../../modules/Identity/metadata/dictionaries/IdentityAccountStatus.dic.json';
+import identityMessages from '../../../../modules/identity/metadata/dictionaries/IdentityMessages.dic.json';
+import identityErrors from '../../../../modules/identity/metadata/dictionaries/IdentityErrors.dic.json';
+import identityStatus from '../../../../modules/identity/metadata/dictionaries/IdentityAccountStatus.dic.json';
 import { platformTestCatalogs } from './localizationTestCatalogs';
 import './authorizedFeatureUiFixture';
 // @vitest-environment jsdom
@@ -12,12 +12,12 @@ import { LocalizationProvider, PlatformQueryProvider, useLocalization } from '@i
 import { ModuleRegistry, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import identityModule from '../../../../modules/identity/src/index';
-import accountDetailDictionary from '../../../../../modules/Identity/metadata/dictionaries/AccountDetailView.dic.json';
-import accountListDictionary from '../../../../../modules/Identity/metadata/dictionaries/AccountListView.dic.json';
+import accountDetailDictionary from '../../../../modules/identity/metadata/dictionaries/AccountDetailView.dic.json';
+import accountListDictionary from '../../../../modules/identity/metadata/dictionaries/AccountListView.dic.json';
 import identityRuntimeModels from '../../../../../tests/Kernel.Tests/Fixtures/IdentityRuntimeModels.contract.json';
-import identityNavigationDocument from '../../../../../modules/Identity/metadata/navigation/Identity.nav.json';
-import accountListViewDocument from '../../../../../modules/Identity/metadata/views/AccountList.view.json';
-import accountDetailViewDocument from '../../../../../modules/Identity/metadata/views/AccountDetail.view.json';
+import identityNavigationDocument from '../../../../modules/identity/metadata/navigation/Identity.nav.json';
+import accountListViewDocument from '../../../../modules/identity/metadata/views/AccountList.view.json';
+import accountDetailViewDocument from '../../../../modules/identity/metadata/views/AccountDetail.view.json';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { resolveStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';
 import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';

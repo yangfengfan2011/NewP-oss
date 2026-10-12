@@ -5,8 +5,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { PageProps } from '@icp-platform/sdk';
 import FeatureWorkbench from './FeatureWorkbench';
 import { LocalizationProvider, useLocalization } from '@icp-platform/core';
-import messageDictionary from '../../../../modules/Authorization/metadata/dictionaries/AuthorizationMessages.dic.json?raw';
-import roleDictionary from '../../../../modules/Authorization/metadata/dictionaries/RoleView.dic.json?raw';
+import messageDictionary from '../../../modules/authorization/metadata/dictionaries/AuthorizationMessages.dic.json?raw';
+import roleDictionary from '../../../modules/authorization/metadata/dictionaries/RoleView.dic.json?raw';
 
 const fetcher = vi.hoisted(() => vi.fn());
 const access = vi.hoisted(() => ({ positions: ['read', 'save'] }));

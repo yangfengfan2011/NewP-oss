@@ -15,10 +15,12 @@
 
 每个内建模块的可提交 authoring 真源位于：
 
-- `modules/<ModuleId>/newp.plugin.json`：唯一拥有 module id、显示名、版本、宿主兼容范围、依赖和 backend / frontend behavior key；
-- `modules/<ModuleId>/metadata/**`：拥有导航、路由、视图、模型、权限引用和本地化等静态声明；
+- `frontend/modules/<module-slug>/newp.plugin.json`：唯一拥有 module id、显示名、版本、宿主兼容范围、依赖和 backend / frontend behavior key；
+- `frontend/modules/<module-slug>/metadata/**`：拥有导航、路由、视图、模型、权限引用和本地化等静态声明；
 - `server/modules/<ModuleId>/**`：后端行为实现；
-- `frontend/modules/<module-id>/**`：前端行为实现。
+- `frontend/modules/<module-slug>/**`：前端行为实现。
+
+声明与 metadata 目录采用现有小写连字符 slug；组件身份仍来自 Capsule。仅有声明或 metadata 的模块保留实际贡献，不补建空前端包。后端工程与迁移工程保持原位，Host 发布输出仍是 `modules/<ModuleId>/`。尚无 Capsule 的历史 metadata 根沿用既有目录命名约定恢复 owner；该兼容不授予组件身份或发行资格。
 
 C# 和 TypeScript 只把稳定 behavior key 绑定到实现，不得重新声明 Capsule 已拥有的身份，也不得平行维护路由、菜单或权限。`ModuleCapsuleBindingBase` 与 `FrontendBehaviorBindings` 是当前标准绑定入口。
 
@@ -115,12 +117,12 @@ Shell 不维护业务模块清单，不通过源码目录推断活动模块，�
 
 内建模块脚手架必须生成：
 
-- `modules/<ModuleId>/newp.plugin.json` 与最小 metadata；
+- `frontend/modules/<module-slug>/newp.plugin.json` 与最小 metadata；
 - 继承 `ModuleCapsuleBindingBase` 的后端 behavior binding；
 - `FrontendBehaviorBindings` 前端实现；
 - HostApi 中受控的项目引用和 Capsule 输出链接。
 
-脚手架不得生成新的 `apps/host-api/modules/<ModuleId>/plugin.json`、`legacy-module` 前端声明或 Shell 内部注册表。该 Host 目录只允许承载尚未完成 Capsule cutover 的历史兼容清单。
+脚手架不得生成新的 `apps/host-api/frontend/modules/<module-slug>/plugin.json`、`legacy-module` 前端声明或 Shell 内部注册表。该 Host 目录只允许承载尚未完成 Capsule cutover 的历史兼容清单。
 
 `-SkipIntegration` 只跳过 HostApi 接线，仍应生成完整 authoring Capsule 和两侧 behavior binding。外部插件模式不修改 Host 或 Shell。
 

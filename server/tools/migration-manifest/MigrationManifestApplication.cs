@@ -254,7 +254,7 @@ public sealed class MigrationManifestApplication
         if (string.Equals(moduleId, "platform.foundation", StringComparison.Ordinal)) return OpenFoundationBundle(provider);
 
         var capsulePath = Directory.GetFiles(
-                Path.Combine(_repositoryRoot, "modules"),
+                Path.Combine(_repositoryRoot, "frontend", "modules"),
                 "newp.plugin.json",
                 SearchOption.AllDirectories)
             .SingleOrDefault(path => string.Equals(
@@ -289,7 +289,7 @@ public sealed class MigrationManifestApplication
     // 枚举实际声明，而不是从项目名或目录名推断 bundle。
     private IReadOnlyList<BundleWorkspace> DiscoverBundles()
     {
-        var modulesRoot = Path.Combine(_repositoryRoot, "modules");
+        var modulesRoot = Path.Combine(_repositoryRoot, "frontend", "modules");
         if (!Directory.Exists(modulesRoot))
         {
             throw new DirectoryNotFoundException($"Module authoring root not found: {modulesRoot}");
@@ -569,13 +569,28 @@ public sealed class MigrationManifestApplication
             var relativeManifestPath = Path.GetRelativePath(_repositoryRoot, workspace.ManifestPath)
                 .Replace(Path.DirectorySeparatorChar, '/');
             var gitManifest = RunGit("show", $"HEAD:{relativeManifestPath}");
+            var legacyModulePath = $"modules/{workspace.ModuleId}";
+            if (gitManifest.ExitCode != 0)
+            {
+                var manifestWithinModule = Path.GetRelativePath(workspace.ModuleRoot, workspace.ManifestPath)
+                    .Replace(Path.DirectorySeparatorChar, '/');
+                var legacyManifestPath = $"{legacyModulePath}/{manifestWithinModule}";
+                var legacyManifest = RunGit("show", $"HEAD:{legacyManifestPath}");
+                if (legacyManifest.ExitCode == 0)
+                {
+                    relativeManifestPath = legacyManifestPath;
+                    gitManifest = legacyManifest;
+                }
+            }
             if (gitManifest.ExitCode != 0)
             {
                 // 只有 HEAD 中整个 authoring 模块尚不存在才是首次发布；已发布模块缺清单仍失败关闭。
                 var relativeModulePath = Path.GetRelativePath(_repositoryRoot, workspace.ModuleRoot).Replace(Path.DirectorySeparatorChar, '/');
                 var head = RunGit("rev-parse", "--verify", "HEAD");
                 var publishedModule = RunGit("ls-tree", "HEAD", "--", relativeModulePath);
-                if (head.ExitCode == 0 && publishedModule.ExitCode == 0 && string.IsNullOrWhiteSpace(publishedModule.Output))
+                var legacyPublishedModule = RunGit("ls-tree", "HEAD", "--", legacyModulePath);
+                if (head.ExitCode == 0 && publishedModule.ExitCode == 0 && string.IsNullOrWhiteSpace(publishedModule.Output)
+                    && legacyPublishedModule.ExitCode == 0 && string.IsNullOrWhiteSpace(legacyPublishedModule.Output))
                     return new PublishedManifestBaseline($"git:HEAD:new-module:{relativeModulePath}", []);
                 throw Failure(
                     workspace.ModuleId,

@@ -9,10 +9,10 @@ import {
   resolveStandardCrudListRoute,
 } from '../navigation/standardCrudRouteAdapter';
 import exampleModuleBindings from '../../../../modules/example/src/index';
-import exampleNavigationDocument from '../../../../../modules/Example/metadata/navigation/Example.nav.json';
-import exampleRuntimeWorkloadListViewDocument from '../../../../../modules/Example/metadata/views/RuntimeWorkloadList.view.json';
-import exampleRecordListViewDocument from '../../../../../modules/Example/metadata/views/ExampleRecordList.view.json';
-import exampleRecordDetailViewDocument from '../../../../../modules/Example/metadata/views/ExampleRecordDetail.view.json';
+import exampleNavigationDocument from '../../../../modules/example/metadata/navigation/Example.nav.json';
+import exampleRuntimeWorkloadListViewDocument from '../../../../modules/example/metadata/views/RuntimeWorkloadList.view.json';
+import exampleRecordListViewDocument from '../../../../modules/example/metadata/views/ExampleRecordList.view.json';
+import exampleRecordDetailViewDocument from '../../../../modules/example/metadata/views/ExampleRecordDetail.view.json';
 import { createStandardCrudTestDataAdapter } from './standardCrudTestDataAdapter';
 
 const modules: FrontendModule[] = [

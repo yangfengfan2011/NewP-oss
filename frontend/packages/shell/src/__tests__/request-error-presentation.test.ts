@@ -1,8 +1,8 @@
 import { expect, it } from 'vitest';
 import { formatFieldError, formatRequestError, formatTextTemplate } from '@icp-platform/core';
 import { readStandardCrudRequestError, StandardCrudRequestError } from '@icp-platform/sdk';
-import sharedErrors from '../../../../../modules/Platform/metadata/dictionaries/StandardCrud.dic.json';
-import platformDictionary from '../../../../../modules/Platform/metadata/dictionaries/Platform.dic.json';
+import sharedErrors from '../../../../modules/platform/metadata/dictionaries/StandardCrud.dic.json';
+import platformDictionary from '../../../../modules/platform/metadata/dictionaries/Platform.dic.json';
 
 const catalog: Record<string, string> = {
   'Platform.UnexpectedError': 'Please try again.',

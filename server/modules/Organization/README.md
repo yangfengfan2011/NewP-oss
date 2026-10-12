@@ -9,4 +9,4 @@ Organization 拥有公司、部门、岗位、人员档案，以及 Person 与 I
 - 人员生命周期、账号绑定、删除保护和条件删除执行；
 - Identity/Authentication/Authorization 的稳定契约协作 seam。
 
-`modules/Organization/metadata` 是模型与静态 authoring 真源，`Migrations.SqlServer` 推进模块自有迁移流。边界和术语见 `docs/contexts/organization/CONTEXT.md`，验证以 `tests/Organization.Tests` 与 Personnel Acceptance Gate 为准。
+`frontend/modules/organization/metadata` 是模型与静态 authoring 真源，`Migrations.SqlServer` 推进模块自有迁移流。边界和术语见 `docs/contexts/organization/CONTEXT.md`，验证以 `tests/Organization.Tests` 与 Personnel Acceptance Gate 为准。

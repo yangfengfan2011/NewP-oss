@@ -29,10 +29,9 @@ apps/host-api/                       Host 组合与启动
 server/kernel/                       模块计划、包和运行时投影内核
 server/plugin-platform/              外部插件生命周期
 server/platform-persistence*/        持久化计划、EF 与 provider adapter
-modules/<ModuleId>/                  Capsule 与 metadata authoring 真源
+frontend/modules/<module-slug>/     Capsule、metadata 与前端实现
 server/modules/<ModuleId>/           后端行为实现
 frontend/packages/shell/             Shell 与活动目录消费
-frontend/modules/<module-id>/        前端行为实现
 ```
 
 架构或公共契约变化必须先有已确认设计工件；实现完成后同步更新唯一对应的 Context 或 ADR，不另写阶段性“现状副本”。

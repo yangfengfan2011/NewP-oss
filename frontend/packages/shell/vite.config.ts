@@ -27,7 +27,7 @@ function collectEnabledBuiltInFrontendEntries(repositoryRoot: string): Set<strin
   const entries = new Set<string>()
   const sources = [
     {
-      root: join(repositoryRoot, 'modules'),
+      root: join(repositoryRoot, 'frontend', 'modules'),
       manifestName: 'newp.plugin.json',
     },
     {

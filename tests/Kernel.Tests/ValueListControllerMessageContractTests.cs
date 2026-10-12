@@ -167,7 +167,7 @@ public class ValueListControllerMessageContractTests : IClassFixture<ValueListCo
 
     private static string RenderDictionaryText(string entryKey, params (string Key, string Value)[] args)
     {
-        var dictionaryPath = Path.Combine(FindRepositoryRoot(), "modules", "ConfigCenter", "metadata", "dictionaries", "ValueLists.dic.json");
+        var dictionaryPath = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(FindRepositoryRoot(), "ConfigCenter"), "metadata", "dictionaries", "ValueLists.dic.json");
         using var document = JsonDocument.Parse(File.ReadAllText(dictionaryPath));
 
         var template = document.RootElement

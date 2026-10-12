@@ -46,13 +46,14 @@ catch (Exception ex)
     return 1;
 }
 
+// 从工具当前目录向上定位包含新 authoring 根的仓库。
 static string FindRepositoryRoot()
 {
     var current = new DirectoryInfo(Directory.GetCurrentDirectory());
     while (current is not null)
     {
         if (Directory.Exists(Path.Combine(current.FullName, "server"))
-            && Directory.Exists(Path.Combine(current.FullName, "modules")))
+            && Directory.Exists(Path.Combine(current.FullName, "frontend", "modules")))
         {
             return current.FullName;
         }

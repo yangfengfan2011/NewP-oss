@@ -4,7 +4,7 @@ import { expect, it } from 'vitest';
 import { formatFieldError, formatRequestError } from '@icp-platform/core';
 import { readStandardCrudRequestError } from '@icp-platform/sdk';
 
-const dictionary = JSON.parse(readFileSync(resolve(__dirname, '../../../../../modules/Workspace/metadata/dictionaries/Workspace.dic.json'), 'utf8')) as {
+const dictionary = JSON.parse(readFileSync(resolve(__dirname, '../../../../modules/workspace/metadata/dictionaries/Workspace.dic.json'), 'utf8')) as {
   Workspace: Record<string, { zhs: string; en: string }>;
 };
 

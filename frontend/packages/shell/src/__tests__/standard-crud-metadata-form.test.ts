@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import exampleRecordModelDocument from '../../../../../modules/Example/metadata/models/ExampleRecord.model.json';
-import positionModelDocument from '../../../../../modules/Organization/metadata/models/Position.model.json';
-import personModelDocument from '../../../../../modules/Organization/metadata/models/Person.model.json';
+import exampleRecordModelDocument from '../../../../modules/example/metadata/models/ExampleRecord.model.json';
+import positionModelDocument from '../../../../modules/organization/metadata/models/Position.model.json';
+import personModelDocument from '../../../../modules/organization/metadata/models/Person.model.json';
 import standardDataRuntimeModelDocument from '../../../../../tests/Kernel.Tests/Fixtures/StandardDataRuntimeModel.contract.json';
 import { buildStandardCrudFormSchemaFromModel } from '../standard-crud/standardCrudMetadataForm';
 

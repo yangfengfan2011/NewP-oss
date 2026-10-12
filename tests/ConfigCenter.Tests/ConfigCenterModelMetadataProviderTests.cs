@@ -39,10 +39,7 @@ public class ConfigCenterModelMetadataProviderTests
     public void LoadConfigItem_ReadsModelFromUnifiedMetadataLayout()
     {
         var repositoryRoot = GetRepositoryRoot();
-        var newModelPath = Path.Combine(
-            repositoryRoot,
-            "modules",
-            "ConfigCenter",
+        var newModelPath = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repositoryRoot, "ConfigCenter"),
             "metadata",
             "models",
             "ConfigItem.model.json");
@@ -85,13 +82,10 @@ public class ConfigCenterModelMetadataProviderTests
 
         try
         {
-            var modelPath = Path.Combine(tempRoot, "modules", "ConfigCenter", "metadata", "domain", "ConfigItem.model.json");
+            var modelPath = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(tempRoot, "ConfigCenter"), "metadata", "domain", "ConfigItem.model.json");
             Directory.CreateDirectory(Path.GetDirectoryName(modelPath)!);
             var repositoryRoot = GetRepositoryRoot();
-            var sampleModelPath = Path.Combine(
-                repositoryRoot,
-                "modules",
-                "ConfigCenter",
+            var sampleModelPath = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repositoryRoot, "ConfigCenter"),
                 "metadata",
                 "models",
                 "ConfigItem.model.json");
@@ -119,10 +113,7 @@ public class ConfigCenterModelMetadataProviderTests
     public void ConfigItemLocalizationKeys_AreBackfilledIntoConfigCenterDictionary()
     {
         var repositoryRoot = GetRepositoryRoot();
-        var dictionaryPath = Path.Combine(
-            repositoryRoot,
-            "modules",
-            "Platform",
+        var dictionaryPath = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repositoryRoot, "Platform"),
             "metadata",
             "dictionaries",
             "ConfigCenter.dic.json");

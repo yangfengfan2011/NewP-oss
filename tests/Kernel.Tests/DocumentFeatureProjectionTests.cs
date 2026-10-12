@@ -10,8 +10,8 @@ public sealed class DocumentFeatureProjectionTests
     public void StandardDocument_ExposesOnlyReadCreateAndRegisteredObjectAuthorization()
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (root is not null && !File.Exists(Path.Combine(root.FullName, "modules/Document/newp.plugin.json"))) root = root.Parent;
-        var documents = Directory.GetFiles(Path.Combine(root!.FullName, "modules/Document/metadata"), "*.json", SearchOption.AllDirectories)
+        while (root is not null && !File.Exists(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root.FullName, "Document"), "newp.plugin.json"))) root = root.Parent;
+        var documents = Directory.GetFiles(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root!.FullName, "Document"), "metadata"), "*.json", SearchOption.AllDirectories)
             .Select(path => JsonSerializer.Deserialize<JsonElement>(File.ReadAllBytes(path))).ToArray();
         var catalog = FeatureCatalogCompiler.Compile(StandardFeatureMetadataCompiler.Read("Document", documents));
         var entry = Assert.Single(catalog, point => point.Kind == "navigation");

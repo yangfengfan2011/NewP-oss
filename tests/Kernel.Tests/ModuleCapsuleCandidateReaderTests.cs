@@ -186,13 +186,13 @@ public sealed class ModuleCapsuleCandidateReaderTests : IDisposable
     public void ReadBuiltIn_RealOrganizationDrawerViews_DoNotRequireFullPageBindings(bool trustedSnapshot, bool utf8Bom)
     {
         var runtimeModulesRoot = Path.Combine(_root, "runtime-modules");
-        foreach (var moduleRoot in Directory.GetDirectories(Path.Combine(FindRepositoryRoot(), "modules")))
+        foreach (var moduleRoot in Directory.GetDirectories(Path.Combine(FindRepositoryRoot(), "frontend", "modules")))
         {
             if (!File.Exists(Path.Combine(moduleRoot, "newp.plugin.json")))
             {
                 continue;
             }
-            CopyBuiltInModuleToRuntimeView(Path.GetFileName(moduleRoot), runtimeModulesRoot);
+            CopyBuiltInModuleToRuntimeView(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ReadModuleId(moduleRoot), runtimeModulesRoot);
             using var manifest = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(moduleRoot, "newp.plugin.json")));
             if (manifest.RootElement.TryGetProperty("entryAssembly", out var entry))
             {
@@ -232,7 +232,7 @@ public sealed class ModuleCapsuleCandidateReaderTests : IDisposable
     private void CopyBuiltInModuleToRuntimeView(string moduleId, string runtimeModulesRoot)
     {
         var repositoryRoot = FindRepositoryRoot();
-        var sourceModuleRoot = Path.Combine(repositoryRoot, "modules", moduleId);
+        var sourceModuleRoot = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repositoryRoot, moduleId);
         var runtimeModuleRoot = Path.Combine(runtimeModulesRoot, moduleId);
         Directory.CreateDirectory(runtimeModuleRoot);
         File.Copy(

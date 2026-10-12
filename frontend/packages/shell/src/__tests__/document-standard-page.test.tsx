@@ -7,10 +7,10 @@ import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } fr
 import { ModuleRegistry } from '@icp-platform/sdk';
 import documentBindings from '../../../../modules/document/src';
 import model from '../../../../../tests/Kernel.Tests/Fixtures/DocumentRuntime.contract.json';
-import list from '../../../../../modules/Document/metadata/views/DocumentList.view.json';
-import detail from '../../../../../modules/Document/metadata/views/DocumentDetail.view.json';
-import dictionary from '../../../../../modules/Document/metadata/dictionaries/Document.dic.json';
-import navigation from '../../../../../modules/Document/metadata/navigation/Document.nav.json';
+import list from '../../../../modules/document/metadata/views/DocumentList.view.json';
+import detail from '../../../../modules/document/metadata/views/DocumentDetail.view.json';
+import dictionary from '../../../../modules/document/metadata/dictionaries/Document.dic.json';
+import navigation from '../../../../modules/document/metadata/navigation/Document.nav.json';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { PageEntry } from '../composition/PageOutlet';
 import { AuthProvider } from '../contexts/AuthContext';

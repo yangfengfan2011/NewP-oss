@@ -6,14 +6,14 @@ import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } fr
 import { ModuleRegistry } from '@icp-platform/sdk';
 import organizationBindings from '../../../../modules/organization/src/index';
 import runtimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
-import companyList from '../../../../../modules/Organization/metadata/views/CompanyList.view.json';
-import companyDetail from '../../../../../modules/Organization/metadata/views/CompanyDetail.view.json';
-import companyListDic from '../../../../../modules/Organization/metadata/dictionaries/CompanyListView.dic.json';
-import companyDetailDic from '../../../../../modules/Organization/metadata/dictionaries/CompanyDetailView.dic.json';
-import departmentList from '../../../../../modules/Organization/metadata/views/DepartmentList.view.json';
-import departmentDetail from '../../../../../modules/Organization/metadata/views/DepartmentDetail.view.json';
-import departmentListDic from '../../../../../modules/Organization/metadata/dictionaries/DepartmentListView.dic.json';
-import departmentDetailDic from '../../../../../modules/Organization/metadata/dictionaries/DepartmentDetailView.dic.json';
+import companyList from '../../../../modules/organization/metadata/views/CompanyList.view.json';
+import companyDetail from '../../../../modules/organization/metadata/views/CompanyDetail.view.json';
+import companyListDic from '../../../../modules/organization/metadata/dictionaries/CompanyListView.dic.json';
+import companyDetailDic from '../../../../modules/organization/metadata/dictionaries/CompanyDetailView.dic.json';
+import departmentList from '../../../../modules/organization/metadata/views/DepartmentList.view.json';
+import departmentDetail from '../../../../modules/organization/metadata/views/DepartmentDetail.view.json';
+import departmentListDic from '../../../../modules/organization/metadata/dictionaries/DepartmentListView.dic.json';
+import departmentDetailDic from '../../../../modules/organization/metadata/dictionaries/DepartmentDetailView.dic.json';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 

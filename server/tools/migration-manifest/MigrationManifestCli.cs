@@ -154,7 +154,7 @@ public static class MigrationManifestCli
         while (current is not null)
         {
             if (Directory.Exists(Path.Combine(current.FullName, "server"))
-                && Directory.Exists(Path.Combine(current.FullName, "modules")))
+                && Directory.Exists(Path.Combine(current.FullName, "frontend", "modules")))
             {
                 return current.FullName;
             }

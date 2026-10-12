@@ -6,6 +6,18 @@ import { fileURLToPath, URL } from 'node:url';
 import config from '../../vite.config';
 
 describe('vite config', () => {
+  it('includes the merged Part authoring declaration in the implementation registry', () => {
+    const serverConfig = typeof config === 'function' ? config({ command: 'serve', mode: 'test' }) : config;
+    const registry = (serverConfig.plugins ?? []).flat()
+      .find((plugin) => plugin && plugin.name === 'newp-frontend-entry-registry');
+    if (!registry || !('load' in registry) || typeof registry.load !== 'function') {
+      throw new Error('Frontend entry registry is missing.');
+    }
+    const source = registry.load.call({} as never, '\0virtual:newp-frontend-entry-registry', {});
+    expect(source).toContain('"part":');
+    expect(source).toContain('/modules/part/src/index.ts');
+  });
+
   it('keeps metadata api traffic under the shared /api proxy so page routes do not collide', () => {
     const serverConfig = typeof config === 'function' ? config({ command: 'serve', mode: 'test' }) : config;
     const proxy = serverConfig.server?.proxy;

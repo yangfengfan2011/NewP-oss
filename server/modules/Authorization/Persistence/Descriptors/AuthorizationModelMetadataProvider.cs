@@ -78,6 +78,7 @@ public sealed class AuthorizationModelMetadataProvider : IModelDefinitionProvide
         return _projector.Project(document, storageTypeMap, "SqlServer");
     }
 
+    // 模型输入随 authoring 根迁移，正式发布输出保持模块身份目录。
     private static string GetRepositoryPath(params string[] segments)
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);
@@ -86,6 +87,13 @@ public sealed class AuthorizationModelMetadataProvider : IModelDefinitionProvide
             var candidate = Path.Combine(current.FullName, "server");
             if (Directory.Exists(candidate))
             {
+                if (segments.Length >= 2 && segments[0] == "modules")
+                {
+                    return Path.GetFullPath(Path.Combine(
+                        new[] { ModuleAuthoringPaths.ResolveModuleRoot(current.FullName, segments[1]) }
+                            .Concat(segments.Skip(2)).ToArray()));
+                }
+
                 var pathSegments = new List<string> { current.FullName };
                 pathSegments.AddRange(segments);
                 return Path.GetFullPath(Path.Combine(pathSegments.ToArray()));

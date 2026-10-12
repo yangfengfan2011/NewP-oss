@@ -47,7 +47,7 @@ internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
     internal string AdministratorPassword { get; } = "Feature-205-" + Guid.NewGuid().ToString("N") + "!";
     internal HttpClient Administrator { get; private set; } = null!;
     internal IReadOnlyList<FeaturePoint> Catalog { get; private set; } = [];
-    internal string CapsulePath => Path.Combine(HostRoot, "modules", "Example", "plugin.json");
+    internal string CapsulePath => Path.Combine(Path.Combine(HostRoot, "modules", "Example"), "plugin.json");
     internal string LastError { get; private set; } = "";
     internal bool ExternalPluginsEnabled { get; set; }
 
@@ -83,7 +83,7 @@ internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                 File.Copy(file, target);
             }
-            File.Copy(Path.Combine(fixture.RepositoryRoot, "modules", "Example", "newp.plugin.json"), fixture.CapsulePath, overwrite: true);
+            File.Copy(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(fixture.RepositoryRoot, "Example"), "newp.plugin.json"), fixture.CapsulePath, overwrite: true);
             fixture.SetDeclarations(declarations);
             if (beforeFirstStartup is not null) await beforeFirstStartup(fixture);
             await fixture.StartAsync(expectFailure: expectInitialStartupFailure);

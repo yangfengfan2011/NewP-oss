@@ -236,7 +236,7 @@ public class MetadataManifestServiceTests
                 Path.Combine(platformMetadataDirectory, "file-type-mappings.json"),
                 mappingContent ?? DefaultMappingContent);
 
-            var moduleMetadataDirectory = Path.Combine(repositoryRoot, "modules", moduleId, "metadata");
+            var moduleMetadataDirectory = Path.Combine(Path.Combine(repositoryRoot, "frontend", "modules", ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ToSlug(moduleId)), "metadata");
             Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(moduleMetadataDirectory, relativeFilePath))!);
             await File.WriteAllTextAsync(Path.Combine(moduleMetadataDirectory, relativeFilePath), fileContent);
 

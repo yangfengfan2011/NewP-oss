@@ -1,9 +1,9 @@
-import dataScopeDictionary from '../../../../modules/Authorization/metadata/dictionaries/DataScope.dic.json?raw';
-import personModel from '../../../../modules/Organization/metadata/models/Person.model.json?raw';
-import accountModel from '../../../../modules/Identity/metadata/models/IdentityAccount.model.json?raw';
+import dataScopeDictionary from '../../../modules/authorization/metadata/dictionaries/DataScope.dic.json?raw';
+import personModel from '../../../modules/organization/metadata/models/Person.model.json?raw';
+import accountModel from '../../../modules/identity/metadata/models/IdentityAccount.model.json?raw';
 // @vitest-environment jsdom
-import personDictionary from '../../../../modules/Organization/metadata/dictionaries/PersonListView.dic.json?raw';
-import personView from '../../../../modules/Organization/metadata/views/PersonList.view.json?raw';
+import personDictionary from '../../../modules/organization/metadata/dictionaries/PersonListView.dic.json?raw';
+import personView from '../../../modules/organization/metadata/views/PersonList.view.json?raw';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';

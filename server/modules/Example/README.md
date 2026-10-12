@@ -11,7 +11,7 @@
 - `DTOs/TemplateResponse.cs`：稳定响应 DTO；
 - `Services/*`：模块内部服务。
 
-模板中的 `capsule/` 用于保证模板项目可独立构建。`scripts/new-module.ps1` 生成真实模块时会把它移动到 `modules/<ModuleId>/`，并把项目嵌入资源改为该根 Capsule。
+模板中的 `capsule/` 用于保证模板项目可独立构建。`scripts/new-module.ps1` 生成真实模块时会把它的实际资产合并到 `frontend/modules/<module-slug>/`，并把项目嵌入资源改为该根 Capsule。
 
 ## 推荐方式
 

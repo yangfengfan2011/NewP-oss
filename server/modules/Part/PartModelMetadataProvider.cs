@@ -11,7 +11,7 @@ public sealed class PartModelMetadataProvider : IModelDefinitionProvider
     /// <summary>从正式输出或仓库 authoring 装载零组件字段声明。</summary>
     public ModelMetadataDocument GetDocument()
     {
-        return new JsonModelMetadataDocumentLoader().LoadFromFile(Path.Combine(MetadataRoot(), "modules/Part/metadata/models/Part.model.json"));
+        return new JsonModelMetadataDocumentLoader().LoadFromFile(Path.Combine(ModuleAuthoringPaths.ResolveModuleRoot(MetadataRoot(), "Part"), "metadata/models/Part.model.json"));
     }
 
     /// <summary>校验并投影正式 SQL Server 模型。</summary>
@@ -27,7 +27,7 @@ public sealed class PartModelMetadataProvider : IModelDefinitionProvider
     private static string MetadataRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "modules/Part/metadata/models/Part.model.json"))) directory = directory.Parent;
+        while (directory is not null && !File.Exists(Path.Combine(ModuleAuthoringPaths.ResolveModuleRoot(directory.FullName, "Part"), "metadata/models/Part.model.json"))) directory = directory.Parent;
         return directory?.FullName ?? throw new InvalidOperationException("无法定位 Part 元数据。");
     }
 }

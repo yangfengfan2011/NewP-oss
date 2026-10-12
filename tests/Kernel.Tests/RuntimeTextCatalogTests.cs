@@ -29,10 +29,10 @@ public sealed class RuntimeTextCatalogTests
         {
             foreach (var module in new[] { "Platform", "Organization" })
             {
-                var source = Path.Combine(repository, "modules", module, "metadata");
+                var source = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository, module), "metadata");
                 foreach (var file in Directory.EnumerateFiles(source, "*.json", SearchOption.AllDirectories))
                 {
-                    var destination = Path.Combine(root, "modules", module, "metadata", Path.GetRelativePath(source, file));
+                    var destination = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root, module), "metadata", Path.GetRelativePath(source, file));
                     Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
                     File.Copy(file, destination);
                 }
@@ -59,7 +59,7 @@ public sealed class RuntimeTextCatalogTests
     private static string FindRepository()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !Directory.Exists(Path.Combine(directory.FullName, "modules"))) directory = directory.Parent;
+        while (directory is not null && !Directory.Exists(Path.Combine(directory.FullName, "frontend", "modules"))) directory = directory.Parent;
         return directory?.FullName ?? throw new DirectoryNotFoundException("Repository modules not found.");
     }
 }

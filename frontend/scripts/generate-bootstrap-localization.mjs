@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const read = path => JSON.parse(readFileSync(resolve(root, path), 'utf8').replace(/^\uFEFF/, ''));
-const languages = read('modules/Platform/metadata/languages.json');
+const languages = read('frontend/modules/platform/metadata/languages.json');
 const catalogs = Object.fromEntries(languages.supportedLanguages.map(language => [language.code, {}]));
 // 只携带认证、语言入口及恢复所需词条；业务词典仍由活动 runtime 按原边界装载。
 const sources = [
@@ -13,7 +13,7 @@ const sources = [
   ['Platform', 'Platform', ['Language', 'MutationOutcomeUnknown', 'Diagnostics', 'UnexpectedError', 'Unauthorized', 'Forbidden', 'MutationConflict', 'ValidationFailed']],
 ];
 for (const [module, name, keys] of sources) {
-  const path = `modules/${module}/metadata/dictionaries/${name}.dic.json`;
+  const path = `frontend/modules/${module.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}/metadata/dictionaries/${name}.dic.json`;
   const entries = read(path)[name];
   for (const key of keys ?? Object.keys(entries)) {
     const fullKey = `${name}.${key}`;

@@ -94,10 +94,7 @@ public sealed class ExampleMigrationPlanTests
     public void ExampleSqlServerManifest_DeclaresDeterministicLinearExpansion()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var manifestPath = Path.Combine(
-            repositoryRoot,
-            "modules",
-            "Example",
+        var manifestPath = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repositoryRoot, "Example"),
             "migrations",
             "Example.SqlServerMigrations.json");
         using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));

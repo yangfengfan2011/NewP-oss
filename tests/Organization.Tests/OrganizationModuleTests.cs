@@ -132,7 +132,7 @@ public class OrganizationModuleTests
     [Fact]
     public void CurrentAuthoring_CompilesLifecyclePositionsWithTheirExecutionBehaviors()
     {
-        var module = Path.Combine(FindRepositoryRoot(), "modules", "Organization");
+        var module = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(FindRepositoryRoot(), "Organization");
         var documents = Directory.GetFiles(Path.Combine(module, "metadata"), "*.json", SearchOption.AllDirectories)
             .Select(path => JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(path)));
         var capsule = JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(Path.Combine(module, "newp.plugin.json")));
@@ -195,18 +195,18 @@ public class OrganizationModuleTests
     {
         var root = FindRepositoryRoot();
 
-        AssertFileContains(root, @"modules\Organization\metadata\navigation\Organization.nav.json", "\"type\": \"nav\"");
-        AssertFileContains(root, @"modules\Organization\metadata\views\PersonList.view.json", "\"type\": \"view\"");
-        AssertFileContains(root, @"modules\Organization\metadata\views\PersonDetail.view.json", "\"type\": \"view\"");
-        AssertFileContains(root, @"modules\Organization\metadata\views\PositionList.view.json", "\"type\": \"view\"");
-        AssertFileContains(root, @"modules\Organization\metadata\views\CompanyList.view.json", "\"type\": \"view\"");
-        AssertFileContains(root, @"modules\Organization\metadata\views\DepartmentList.view.json", "\"type\": \"view\"");
-        AssertFileContains(root, @"modules\Organization\metadata\models\Person.model.json", "\"type\": \"model\"");
-        AssertFileContains(root, @"modules\Organization\metadata\dictionaries\PersonListView.dic.json", "\"type\": \"dic\"");
-        AssertFileContains(root, @"modules\Organization\metadata\dictionaries\PersonDetailView.dic.json", "\"type\": \"dic\"");
-        AssertFileContains(root, @"modules\Organization\metadata\dictionaries\PositionListView.dic.json", "\"type\": \"dic\"");
-        AssertFileContains(root, @"modules\Organization\metadata\dictionaries\CompanyListView.dic.json", "\"type\": \"dic\"");
-        AssertFileContains(root, @"modules\Organization\metadata\dictionaries\DepartmentListView.dic.json", "\"type\": \"dic\"");
+        AssertFileContains(root, @"frontend\modules\organization\metadata\navigation\Organization.nav.json", "\"type\": \"nav\"");
+        AssertFileContains(root, @"frontend\modules\organization\metadata\views\PersonList.view.json", "\"type\": \"view\"");
+        AssertFileContains(root, @"frontend\modules\organization\metadata\views\PersonDetail.view.json", "\"type\": \"view\"");
+        AssertFileContains(root, @"frontend\modules\organization\metadata\views\PositionList.view.json", "\"type\": \"view\"");
+        AssertFileContains(root, @"frontend\modules\organization\metadata\views\CompanyList.view.json", "\"type\": \"view\"");
+        AssertFileContains(root, @"frontend\modules\organization\metadata\views\DepartmentList.view.json", "\"type\": \"view\"");
+        AssertFileContains(root, @"frontend\modules\organization\metadata\models\Person.model.json", "\"type\": \"model\"");
+        AssertFileContains(root, @"frontend\modules\organization\metadata\dictionaries\PersonListView.dic.json", "\"type\": \"dic\"");
+        AssertFileContains(root, @"frontend\modules\organization\metadata\dictionaries\PersonDetailView.dic.json", "\"type\": \"dic\"");
+        AssertFileContains(root, @"frontend\modules\organization\metadata\dictionaries\PositionListView.dic.json", "\"type\": \"dic\"");
+        AssertFileContains(root, @"frontend\modules\organization\metadata\dictionaries\CompanyListView.dic.json", "\"type\": \"dic\"");
+        AssertFileContains(root, @"frontend\modules\organization\metadata\dictionaries\DepartmentListView.dic.json", "\"type\": \"dic\"");
     }
 
     [Fact]
@@ -214,7 +214,7 @@ public class OrganizationModuleTests
     {
         var root = FindRepositoryRoot();
         using var model = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(root, @"modules\Organization\metadata\models\Person.model.json"),
+            Path.Combine(root, @"frontend\modules\organization\metadata\models\Person.model.json"),
             Encoding.UTF8));
         var fields = model.RootElement.GetProperty("Person").GetProperty("fields").EnumerateArray().ToArray();
 
@@ -232,7 +232,7 @@ public class OrganizationModuleTests
             departmentSource.GetProperty("dependsOn").EnumerateArray().Select(item => item.GetString()));
 
         using var listView = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(root, @"modules\Organization\metadata\views\PersonList.view.json"),
+            Path.Combine(root, @"frontend\modules\organization\metadata\views\PersonList.view.json"),
             Encoding.UTF8));
         var actions = listView.RootElement.GetProperty("view").GetProperty("rowActions").EnumerateArray().ToArray();
         Assert.Equal("edit", StandardAction(actions, "edit"));
@@ -277,7 +277,7 @@ public class OrganizationModuleTests
     {
         var root = FindRepositoryRoot();
         using var model = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(root, @"modules\Organization\metadata\models\Position.model.json"),
+            Path.Combine(root, @"frontend\modules\organization\metadata\models\Position.model.json"),
             Encoding.UTF8));
         var fields = model.RootElement.GetProperty("Position").GetProperty("fields").EnumerateArray().ToArray();
 
@@ -295,14 +295,14 @@ public class OrganizationModuleTests
                 .Select(field => field.GetString()));
 
         using var dictionary = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(root, @"modules\Organization\metadata\dictionaries\PositionListView.dic.json"),
+            Path.Combine(root, @"frontend\modules\organization\metadata\dictionaries\PositionListView.dic.json"),
             Encoding.UTF8));
         Assert.Equal(
             "启用状态",
             dictionary.RootElement.GetProperty("PositionListView").GetProperty("Field_IsEnabled").GetProperty("zhs").GetString());
 
         using var listView = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(root, @"modules\Organization\metadata\views\PositionList.view.json"),
+            Path.Combine(root, @"frontend\modules\organization\metadata\views\PositionList.view.json"),
             Encoding.UTF8));
         var actions = listView.RootElement.GetProperty("view").GetProperty("rowActions").EnumerateArray().ToArray();
         Assert.Equal(["authorize", "edit", "delete"], actions.Select(action => action.GetProperty("key").GetString()));
@@ -323,7 +323,7 @@ public class OrganizationModuleTests
     {
         var root = FindRepositoryRoot();
         using var model = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(root, @"modules\Organization\metadata\models\Company.model.json"),
+            Path.Combine(root, @"frontend\modules\organization\metadata\models\Company.model.json"),
             Encoding.UTF8));
         var fields = model.RootElement.GetProperty("Company").GetProperty("fields").EnumerateArray().ToArray();
         Assert.Equal("editable", FormMode(fields, "ECODE", "create"));
@@ -334,7 +334,7 @@ public class OrganizationModuleTests
         Assert.Equal("editable", FormMode(fields, "IsEnabled", "edit"));
 
         using var listView = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(root, @"modules\Organization\metadata\views\CompanyList.view.json"),
+            Path.Combine(root, @"frontend\modules\organization\metadata\views\CompanyList.view.json"),
             Encoding.UTF8));
         var view = listView.RootElement.GetProperty("view");
         Assert.Equal("organization.company.list", view.GetProperty("key").GetString());
@@ -360,7 +360,7 @@ public class OrganizationModuleTests
     {
         var root = FindRepositoryRoot();
         using var model = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(root, @"modules\Organization\metadata\models\Department.model.json"),
+            Path.Combine(root, @"frontend\modules\organization\metadata\models\Department.model.json"),
             Encoding.UTF8));
         var fields = model.RootElement.GetProperty("Department").GetProperty("fields").EnumerateArray().ToArray();
         Assert.Equal("editable", FormMode(fields, "CompanyId", "create"));
@@ -379,7 +379,7 @@ public class OrganizationModuleTests
         Assert.Equal(["CompanyId"], parentSource.GetProperty("dependsOn").EnumerateArray().Select(item => item.GetString()));
 
         using var listView = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(root, @"modules\Organization\metadata\views\DepartmentList.view.json"),
+            Path.Combine(root, @"frontend\modules\organization\metadata\views\DepartmentList.view.json"),
             Encoding.UTF8));
         var view = listView.RootElement.GetProperty("view");
         Assert.Equal("organization.department.list", view.GetProperty("key").GetString());
@@ -410,12 +410,10 @@ public class OrganizationModuleTests
     public void DirectoryDetail_EndsWithCanonicalAuditAndDoesNotRegisterFullPage(string modelName)
     {
         var root = FindRepositoryRoot();
-        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(
-            root, "modules", "Organization", "metadata", "views", $"{modelName}Detail.view.json")));
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root, "Organization"), "metadata", "views", $"{modelName}Detail.view.json")));
         var view = document.RootElement.GetProperty("view");
         Assert.Equal(modelName, view.GetProperty("model").GetString());
-        using var listDocument = JsonDocument.Parse(File.ReadAllText(Path.Combine(
-            root, "modules", "Organization", "metadata", "views", $"{modelName}List.view.json")));
+        using var listDocument = JsonDocument.Parse(File.ReadAllText(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root, "Organization"), "metadata", "views", $"{modelName}List.view.json")));
         var list = listDocument.RootElement.GetProperty("view");
         var nameColumn = list.GetProperty("columns").EnumerateArray()
             .Single(column => column.GetProperty("field").GetString() == "ENAME");
@@ -429,8 +427,7 @@ public class OrganizationModuleTests
             ["CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"],
             sections[^1].GetProperty("fields").EnumerateArray().Select(field => field.GetString()));
         Assert.False(view.TryGetProperty("pageActions", out _));
-        using var capsule = JsonDocument.Parse(File.ReadAllText(Path.Combine(
-            root, "modules", "Organization", "newp.plugin.json")));
+        using var capsule = JsonDocument.Parse(File.ReadAllText(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root, "Organization"), "newp.plugin.json")));
         Assert.DoesNotContain(view.GetProperty("key").GetString(), capsule.RootElement
             .GetProperty("frontend").GetProperty("bindings").EnumerateArray().Select(binding => binding.GetString()));
     }

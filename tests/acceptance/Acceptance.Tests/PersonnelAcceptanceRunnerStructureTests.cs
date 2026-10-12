@@ -9,10 +9,7 @@ public sealed class PersonnelAcceptanceRunnerStructureTests
     public void TemporalBrowserInputs_UseTheLocalizedPersonFormLabels()
     {
         var repositoryRoot = GetRepositoryRoot();
-        using var dictionary = JsonDocument.Parse(File.ReadAllText(Path.Combine(
-            repositoryRoot,
-            "modules",
-            "Organization",
+        using var dictionary = JsonDocument.Parse(File.ReadAllText(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repositoryRoot, "Organization"),
             "metadata",
             "dictionaries",
             "PersonListView.dic.json")));

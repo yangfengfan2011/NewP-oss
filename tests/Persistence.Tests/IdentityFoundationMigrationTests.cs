@@ -85,10 +85,7 @@ public sealed class IdentityFoundationMigrationTests
             .Select(static definition => definition with { OwnerModuleId = "Organization", SchemaName = "dbo" })
             .ToArray();
         var actualDigest = PersistenceModelDigest.Compute(definitions);
-        var manifestPath = Path.Combine(
-            FindRepositoryRoot(),
-            "modules",
-            "Organization",
+        var manifestPath = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(FindRepositoryRoot(), "Organization"),
             "migrations",
             "Organization.SqlServerMigrations.json");
         using var manifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
@@ -517,7 +514,7 @@ public sealed class IdentityFoundationMigrationTests
 
     private static void AssertOrganizationManifest(string repositoryRoot)
     {
-        var manifestPath = Path.Combine(repositoryRoot, "modules", "Organization", "migrations", "Organization.SqlServerMigrations.json");
+        var manifestPath = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repositoryRoot, "Organization"), "migrations", "Organization.SqlServerMigrations.json");
         using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
         var root = document.RootElement;
         var migrations = root.GetProperty("migrations").EnumerateArray().ToArray();
@@ -679,7 +676,7 @@ public sealed class IdentityFoundationMigrationTests
         string assemblyPath,
         string migrationSourceName)
     {
-        var manifestPath = Path.Combine(repositoryRoot, "modules", moduleId, "migrations", manifestName);
+        var manifestPath = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repositoryRoot, moduleId), "migrations", manifestName);
         using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
         var root = document.RootElement;
         var migration = Assert.Single(root.GetProperty("migrations").EnumerateArray());
@@ -758,7 +755,7 @@ public sealed class IdentityFoundationMigrationTests
         foreach (var owner in new[] { "Authorization", "ConfigCenter" })
         foreach (var path in Directory.GetFiles(Path.Combine(root, "tests", "Acceptance.HistoricalMigrations", "Authoring", "Platform.Foundation", owner), "*.model.json"))
         {
-            var document = new ICP.Platform.Modeling.Metadata.JsonModelMetadataDocumentLoader().Load(File.ReadAllBytes(path), Path.Combine(root, "modules", owner, "metadata", "models", Path.GetFileName(path)));
+            var document = new ICP.Platform.Modeling.Metadata.JsonModelMetadataDocumentLoader().Load(File.ReadAllBytes(path), Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root, owner), "metadata", "models", Path.GetFileName(path)));
             new ICP.Platform.Modeling.Validation.ModelMetadataValidator().Validate(document, map);
             yield return new ICP.Platform.Modeling.Projection.ModelMetadataProjector().Project(document, map, "SqlServer") with { OwnerModuleId = owner, SchemaName = "dbo" };
         }

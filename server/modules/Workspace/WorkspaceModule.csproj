@@ -17,6 +17,6 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Remove="Migrations.SqlServer/**/*.cs" />
-    <EmbeddedResource Include="../../../modules/Workspace/newp.plugin.json" LogicalName="ICP.Platform.Modules.Workspace.newp.plugin.json" />
+    <EmbeddedResource Include="../../../frontend/modules/workspace/newp.plugin.json" LogicalName="ICP.Platform.Modules.Workspace.newp.plugin.json" />
   </ItemGroup>
 </Project>

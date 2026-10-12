@@ -10,8 +10,8 @@ public sealed class WorkspaceFeatureProjectionTests
     public void CustomNavigation_ComposesStandardReadAndCreateWithoutReplacingInitializationBehavior()
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (root is not null && !File.Exists(Path.Combine(root.FullName, "modules/Workspace/newp.plugin.json"))) root = root.Parent;
-        var moduleRoot = Path.Combine(root!.FullName, "modules/Workspace");
+        while (root is not null && !File.Exists(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root.FullName, "Workspace"), "newp.plugin.json"))) root = root.Parent;
+        var moduleRoot = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root!.FullName, "Workspace");
         using var capsule = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(moduleRoot, "newp.plugin.json")));
         var custom = FeatureCatalogCompiler.Read(capsule.RootElement, "Workspace");
         var documents = Directory.GetFiles(Path.Combine(moduleRoot, "metadata"), "*.json", SearchOption.AllDirectories)

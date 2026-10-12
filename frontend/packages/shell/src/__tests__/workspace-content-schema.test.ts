@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import folder from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceFolderRuntime.contract.json';
-import content from '../../../../../modules/Workspace/metadata/models/WorkspaceFolderContent.model.json';
-import list from '../../../../../modules/Workspace/metadata/views/WorkspaceFolderList.view.json';
+import content from '../../../../modules/workspace/metadata/models/WorkspaceFolderContent.model.json';
+import list from '../../../../modules/workspace/metadata/views/WorkspaceFolderList.view.json';
 import resource from '../../../../modules/workspace/src/workspaceRootResource';
 import { buildStandardCrudListSchema } from '../metadata/standardCrudSchemaResolver';
 import { collectStandardCrudListRequestFields } from '../standard-crud/standardCrudMetadataQuery';

@@ -52,7 +52,7 @@ function Get-DictionaryFileStem {
 }
 
 $resolvedRoot = (Resolve-Path -LiteralPath $Root).Path
-$languagesPath = Join-Path $resolvedRoot "modules/Platform/metadata/languages.json"
+$languagesPath = Join-Path $resolvedRoot "frontend/modules/platform/metadata/languages.json"
 
 if (-not (Test-Path -LiteralPath $languagesPath)) {
     Add-ValidationError ("Localization languages manifest not found: {0}" -f $languagesPath)
@@ -73,7 +73,7 @@ if ($supportedLanguages.Count -eq 0) {
     Add-ValidationError ("Localization languages manifest '{0}' must declare at least one supported language." -f $languagesPath)
 }
 
-$modulesRoot = Join-Path $resolvedRoot "modules"
+$modulesRoot = Join-Path $resolvedRoot "frontend/modules"
 $dictionaryFiles = @()
 if (Test-Path -LiteralPath $modulesRoot) {
     $dictionaryFiles = @(Get-ChildItem -LiteralPath $modulesRoot -Directory | ForEach-Object {

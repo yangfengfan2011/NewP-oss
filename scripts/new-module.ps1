@@ -172,7 +172,7 @@ if ($ExternalPlugin) {
 } else {
     $backendTargetRoot = Join-Path $repoRoot "server\modules\$ModuleName"
     $frontendTargetRoot = Join-Path $frontendRoot "modules\$moduleSlug"
-    $capsuleTargetRoot = Join-Path $repoRoot "modules\$ModuleName"
+    $capsuleTargetRoot = $frontendTargetRoot
 }
 
 if (-not (Test-Path -LiteralPath $backendTemplateRoot) -and -not $ExternalPlugin) {
@@ -205,7 +205,7 @@ Write-Host "DisplayName: $DisplayName" -ForegroundColor Cyan
 Write-Host "BackendTarget: $backendTargetRoot" -ForegroundColor Cyan
 if (-not $ExternalPlugin) {
     Write-Host "FrontendTarget: frontend/modules/$moduleSlug" -ForegroundColor Cyan
-    Write-Host "CapsuleTarget: modules/$ModuleName" -ForegroundColor Cyan
+    Write-Host "CapsuleTarget: frontend/modules/$moduleSlug" -ForegroundColor Cyan
 }
 
 if ($ExternalPlugin) {
@@ -219,8 +219,18 @@ if ($ExternalPlugin) {
         throw "Backend template capsule not found: $capsuleTemplateRoot"
     }
 
-    New-Item -ItemType Directory -Path (Split-Path -Parent $capsuleTargetRoot) -Force | Out-Null
-    Move-Item -LiteralPath $capsuleTemplateRoot -Destination $capsuleTargetRoot
+    # 目录合并仅移动仓库内的模板资产；冲突不得覆盖已有前端内容。
+    $resolvedRepoRoot = [System.IO.Path]::GetFullPath($repoRoot).TrimEnd('\', '/')
+    foreach ($asset in Get-ChildItem -LiteralPath $capsuleTemplateRoot) {
+        $destination = [System.IO.Path]::GetFullPath((Join-Path $capsuleTargetRoot $asset.Name))
+        if (-not $asset.FullName.StartsWith($resolvedRepoRoot + [System.IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or
+            -not $destination.StartsWith($resolvedRepoRoot + [System.IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Capsule move must stay inside the repository.'
+        }
+        if (Test-Path -LiteralPath $destination) { throw "Capsule asset already exists: $destination" }
+        Move-Item -LiteralPath $asset.FullName -Destination $destination
+    }
+    Remove-Item -LiteralPath $capsuleTemplateRoot
 }
 
 $backendProjectPath = Join-Path $backendTargetRoot "$ModuleName.csproj"
@@ -288,7 +298,7 @@ Update-FileContent -Path $backendProjectPath -Transform {
         )
         $content = $content.Replace(
             'capsule\newp.plugin.json',
-            "..\..\..\modules\$ModuleName\newp.plugin.json"
+            "..\..\..\frontend\modules\$moduleSlug\newp.plugin.json"
         )
         $content = $content.Replace(
             'ICP.Platform.Templates.BackendModuleTemplate.newp.plugin.json',
@@ -499,7 +509,7 @@ if ($ExternalPlugin) {
 if ((-not $SkipIntegration) -and (-not $ExternalPlugin)) {
     $hostApiPath = Join-Path $repoRoot 'apps\host-api\HostApi.csproj'
     $projectReferenceInclude = "..\..\server\modules\$ModuleName\$ModuleName.csproj"
-    $capsuleContentInclude = "..\..\modules\$ModuleName\newp.plugin.json"
+    $capsuleContentInclude = "..\..\frontend\modules\$moduleSlug\newp.plugin.json"
     $projectReferenceElement = '<ProjectReference Include="{0}" />' -f $projectReferenceInclude
     $capsuleContentElement = '<Content Include="{0}">' -f $capsuleContentInclude
 
@@ -561,7 +571,7 @@ if ($ExternalPlugin) {
     Write-Host 'No Host or frontend integration was performed.' -ForegroundColor Yellow
 } else {
     Write-Host "Frontend module: frontend/modules/$moduleSlug" -ForegroundColor Green
-    Write-Host "Authoring capsule: modules/$ModuleName/newp.plugin.json" -ForegroundColor Green
+    Write-Host "Authoring capsule: frontend/modules/$moduleSlug/newp.plugin.json" -ForegroundColor Green
     Write-Host 'Allowed integration target: apps/host-api/HostApi.csproj' -ForegroundColor Cyan
     Write-Host 'Do not modify other Host/Shell internals for normal module integration unless a separate design approves it.' -ForegroundColor Yellow
 }

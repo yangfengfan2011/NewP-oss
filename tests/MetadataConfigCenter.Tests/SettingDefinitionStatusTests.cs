@@ -87,17 +87,17 @@ public class SettingDefinitionStatusTests
         {
             var sourceRoot = FindRepositoryRoot();
             var tempRoot = Path.Combine(Path.GetTempPath(), "metadata-config-center-status-tests", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(Path.Combine(tempRoot, "modules", "ConfigCenter"));
+            Directory.CreateDirectory(Path.Combine(tempRoot, "frontend", "modules", "config-center"));
 
-            var sourceMetadata = Path.Combine(sourceRoot, "modules", "ConfigCenter", "metadata");
-            var targetMetadata = Path.Combine(tempRoot, "modules", "ConfigCenter", "metadata");
+            var sourceMetadata = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(sourceRoot, "ConfigCenter"), "metadata");
+            var targetMetadata = Path.Combine(Path.Combine(tempRoot, "frontend", "modules", "config-center"), "metadata");
             CopyDirectory(sourceMetadata, targetMetadata);
 
             string? runtimeRoot = null;
             if (includeRuntimeProjection)
             {
                 runtimeRoot = Path.Combine(tempRoot, "plugins", "runtime");
-                var runtimeMetadata = Path.Combine(runtimeRoot, "modules", "ConfigCenter", "metadata");
+                var runtimeMetadata = Path.Combine(Path.Combine(runtimeRoot, "modules", "ConfigCenter"), "metadata");
                 CopyDirectory(sourceMetadata, runtimeMetadata);
             }
 

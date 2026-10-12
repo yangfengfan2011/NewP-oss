@@ -1,3 +1,4 @@
+using ICP.Platform.Modeling.Metadata;
 using System.Text.Json;
 using ICP.Platform.Modules.MetadataConfigCenter.Models;
 using ICP.Platform.Modules.MetadataConfigCenter.Storage;
@@ -36,6 +37,7 @@ public class MetadataManifestService : IMetadataManifestService
         _moduleMetadataStore = new ModuleMetadataStore(_repositoryRoot, _runtimeRoot);
     }
 
+    // 合并当前可见 metadata；声明身份不会随前端目录 slug 改变。
     public async Task<IReadOnlyList<MetadataModuleManifest>> GetModuleManifestsAsync(CancellationToken cancellationToken = default)
     {
         var fileTypeMappings = await LoadFileTypeMappingsAsync(cancellationToken);
@@ -52,7 +54,7 @@ public class MetadataManifestService : IMetadataManifestService
                 .EnumerateDirectories(modulesRoot)
                 .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
             {
-                var moduleId = Path.GetFileName(moduleDirectory);
+                var moduleId = ModuleAuthoringPaths.ReadModuleId(moduleDirectory);
                 if (manifestsByModuleId.ContainsKey(moduleId))
                 {
                     continue;
@@ -256,6 +258,7 @@ public class MetadataManifestService : IMetadataManifestService
         return new InvalidOperationException($"Module '{moduleId}' metadata file '{filePath}' failed validation: {message}", innerException);
     }
 
+    // runtime 输出保持原路径，仓库读取合并后的 authoring 根。
     private IEnumerable<string> EnumerateModulesRoots()
     {
         if (!string.IsNullOrWhiteSpace(_runtimeRoot))
@@ -263,7 +266,7 @@ public class MetadataManifestService : IMetadataManifestService
             yield return Path.Combine(_runtimeRoot, "modules");
         }
 
-        yield return Path.Combine(_repositoryRoot, "modules");
+        yield return Path.Combine(_repositoryRoot, "frontend", "modules");
     }
 
     private IEnumerable<string> GetPlatformMetadataFilePathCandidates(string fileName)

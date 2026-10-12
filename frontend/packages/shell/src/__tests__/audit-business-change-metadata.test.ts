@@ -1,10 +1,10 @@
-import navigation from '../../../../../modules/Audit/metadata/navigation/Audit.nav.json';
+import navigation from '../../../../modules/audit/metadata/navigation/Audit.nav.json';
 import auditBindings from '../../../../modules/audit/src';
 import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';
 import { expect, it } from 'vitest';
 import model from '../../../../../tests/Kernel.Tests/Fixtures/AuditBusinessChangeRuntime.contract.json';
-import list from '../../../../../modules/Audit/metadata/views/BusinessChangeList.view.json';
-import detail from '../../../../../modules/Audit/metadata/views/BusinessChangeDetail.view.json';
+import list from '../../../../modules/audit/metadata/views/BusinessChangeList.view.json';
+import detail from '../../../../modules/audit/metadata/views/BusinessChangeDetail.view.json';
 import { businessChangeResource } from '../../../../modules/audit/src/businessChangeResource';
 import { buildStandardCrudListSchema, resolveStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';
 

@@ -33,8 +33,9 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
         InitializeIsolatedOrganizationRepository(repositoryRoot);
         var manifestPath = Path.Combine(
             _fixtureRoot,
+            "frontend",
             "modules",
-            "Organization",
+            "organization",
             "migrations",
             "Organization.SqlServerMigrations.json");
         var manifest = MigrationManifestIntegrity.Parse(File.ReadAllBytes(manifestPath));
@@ -108,7 +109,7 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
     {
         var source = FindRepositoryRoot();
         foreach (var module in new[] { "Authorization", "ConfigCenter" })
-            CopyDirectory(Path.Combine(source, "modules", module), Path.Combine(_fixtureRoot, "modules", module));
+            CopyDirectory(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(source, module), Path.Combine(_fixtureRoot, "frontend", "modules", ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ToSlug(module)));
         var relative = Path.Combine("server", "platform-persistence-efcore.migrations.sqlserver");
         CopyDirectory(Path.Combine(source, relative, "Migrations"), Path.Combine(_fixtureRoot, relative, "Migrations"));
         CopyDirectory(Path.Combine(source, relative, "bin", "Release"), Path.Combine(_fixtureRoot, relative, "bin", "Release"));
@@ -151,7 +152,7 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
     {
         InitializeIsolatedOrganizationRepository(FindRepositoryRoot(), "Audit");
         InitializeIsolatedGitRepository();
-        var manifestPath = Path.Combine(_fixtureRoot, "modules", "Audit", "migrations", "Audit.SqlServerMigrations.json");
+        var manifestPath = Path.Combine(Path.Combine(_fixtureRoot, "frontend", "modules", "audit"), "migrations", "Audit.SqlServerMigrations.json");
         var original = MigrationManifestIntegrity.Parse(File.ReadAllBytes(manifestPath));
         var first = Assert.Single(original.Migrations);
         File.WriteAllBytes(manifestPath, MigrationManifestIntegrity.SerializeCanonical(original with { Migrations = [], ModelDigest = new string('0', 64), BundleChecksum = new string('0', 64) }));
@@ -174,7 +175,7 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
     {
         InitializeIsolatedOrganizationRepository(FindRepositoryRoot(), "Workspace");
         InitializeIsolatedGitRepository();
-        var manifestPath = Path.Combine(_fixtureRoot, "modules/Workspace/migrations/Workspace.SqlServerMigrations.json");
+        var manifestPath = Path.Combine(Path.Combine(_fixtureRoot, "frontend", "modules", "workspace"), "migrations/Workspace.SqlServerMigrations.json");
         var original = MigrationManifestIntegrity.Parse(File.ReadAllBytes(manifestPath));
         var tail = original.Migrations.OrderBy(migration => migration.Sequence, StringComparer.Ordinal).Last();
         File.WriteAllBytes(manifestPath, MigrationManifestIntegrity.SerializeCanonical(original with
@@ -223,7 +224,7 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
     {
         InitializeIsolatedOrganizationRepository(FindRepositoryRoot(), "Part");
         InitializeIsolatedGitRepository();
-        var manifestPath = Path.Combine(_fixtureRoot, "modules/Part/migrations/Part.SqlServerMigrations.json");
+        var manifestPath = Path.Combine(Path.Combine(_fixtureRoot, "frontend", "modules", "part"), "migrations/Part.SqlServerMigrations.json");
         var original = MigrationManifestIntegrity.Parse(File.ReadAllBytes(manifestPath));
         var tail = original.Migrations.OrderBy(migration => migration.Sequence, StringComparer.Ordinal).Last();
         File.WriteAllBytes(manifestPath, MigrationManifestIntegrity.SerializeCanonical(original with
@@ -272,7 +273,7 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
     {
         InitializeIsolatedOrganizationRepository(FindRepositoryRoot(), "Document");
         InitializeIsolatedGitRepository();
-        var manifestPath = Path.Combine(_fixtureRoot, "modules/Document/migrations/Document.SqlServerMigrations.json");
+        var manifestPath = Path.Combine(Path.Combine(_fixtureRoot, "frontend", "modules", "document"), "migrations/Document.SqlServerMigrations.json");
         var original = MigrationManifestIntegrity.Parse(File.ReadAllBytes(manifestPath));
         var tail = original.Migrations.OrderBy(migration => migration.Sequence, StringComparer.Ordinal).Last();
         File.WriteAllBytes(manifestPath, MigrationManifestIntegrity.SerializeCanonical(original with
@@ -483,8 +484,8 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
     private void InitializeIsolatedOrganizationRepository(string repositoryRoot, string module = "Organization")
     {
         CopyDirectory(
-            Path.Combine(repositoryRoot, "modules", module),
-            Path.Combine(_fixtureRoot, "modules", module));
+            ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repositoryRoot, module),
+            Path.Combine(_fixtureRoot, "frontend", "modules", ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ToSlug(module)));
         CopyDirectory(
             Path.Combine(repositoryRoot, "server", "modules", module, "Migrations.SqlServer", "Migrations"),
             Path.Combine(_fixtureRoot, "server", "modules", module, "Migrations.SqlServer", "Migrations"));
@@ -862,7 +863,7 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
 
     private static IReadOnlyList<string> GetProtectedAssetPaths(string repositoryRoot) =>
     [
-        Path.Combine(repositoryRoot, "modules", "Organization", "migrations", "Organization.SqlServerMigrations.json"),
+        Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repositoryRoot, "Organization"), "migrations", "Organization.SqlServerMigrations.json"),
         Path.Combine(repositoryRoot, "server", "modules", "Organization", "Migrations.SqlServer", "bin", "Release", "net10.0", "Organization.SqlServerMigrations.dll"),
         Path.Combine(repositoryRoot, "apps", "host-api", "bin", "Release", "net10.0", "modules", "Organization", "migrations", "Organization.SqlServerMigrations.json"),
         Path.Combine(repositoryRoot, "apps", "host-api", "bin", "Release", "net10.0", "modules", "Organization", "migrations", "Organization.SqlServerMigrations.dll")

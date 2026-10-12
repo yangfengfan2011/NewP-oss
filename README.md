@@ -55,9 +55,8 @@ dotnet run --project .\apps\host-api\HostApi.csproj -- identity bootstrap-local-
 
 ```text
 apps/          Host 与应用入口
-modules/       Module Capsule 与可提交 metadata 真源
 server/        Kernel、Contracts、SDK、平台能力与后端模块
-frontend/      Shell、前端 SDK/UI 与前端模块
+frontend/      Shell、前端 SDK/UI、组件声明、metadata 与前端模块
 tests/         单元、集成与 Acceptance 验证
 docs/          当前文档入口、Context 与 ADR
 scripts/       可复跑的开发和验证入口
@@ -69,4 +68,4 @@ scripts/       可复跑的开发和验证入口
 pwsh -NoProfile -File .\scripts\new-module.ps1 -ModuleName ExampleModule -DisplayName "示例模块"
 ```
 
-模块身份、版本和依赖由 `modules/<ModuleId>/newp.plugin.json` 拥有；metadata 拥有路由、菜单、权限引用和模型；后端与前端代码只绑定稳定 behavior key。完整边界见[组件化护栏](docs/architecture/componentization-guardrails.md)。
+模块身份、版本和依赖由 `frontend/modules/<module-slug>/newp.plugin.json` 拥有；metadata 拥有路由、菜单、权限引用和模型；后端与前端代码只绑定稳定 behavior key。完整边界见[组件化护栏](docs/architecture/componentization-guardrails.md)。

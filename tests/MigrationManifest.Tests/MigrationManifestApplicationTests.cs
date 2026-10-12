@@ -173,6 +173,30 @@ public sealed class MigrationManifestApplicationTests
     }
 
     [Fact]
+    public void Finalize_MovedAuthoringRoot_StillRejectsPublishedHistoryDrift()
+    {
+        using var fixture = MigrationManifestFixture.Create();
+        var publishedRoot = Path.Combine(fixture.Root, "modules", fixture.ModuleId);
+        Directory.CreateDirectory(Path.GetDirectoryName(publishedRoot)!);
+        Directory.Move(fixture.ModuleRoot, publishedRoot);
+        fixture.CommitPublishedBaseline();
+        Directory.Move(publishedRoot, fixture.ModuleRoot);
+        fixture.RewriteManifest(manifest => manifest with
+        {
+            Migrations = [manifest.Migrations[0] with { Compatibility = "contract" }, manifest.Migrations[1]]
+        }, synchronizeHost: true);
+        var before = File.ReadAllBytes(fixture.ManifestPath);
+
+        var exception = Assert.Throws<MigrationManifestToolException>(() =>
+            new MigrationManifestApplication(fixture.Root).Finalize(
+                fixture.ModuleId, "SqlServer", MigrationManifestFixture.TailMigrationId, "safe-expand"));
+
+        Assert.Equal("MIGRATION_MANIFEST_HISTORY_CHANGED", exception.Code);
+        Assert.Contains("git:HEAD:modules/Fixture/", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(before, File.ReadAllBytes(fixture.ManifestPath));
+    }
+
+    [Fact]
     public void Finalize_PublishedModuleWithoutTrackedManifest_FailsClosed()
     {
         using var fixture = MigrationManifestFixture.Create();
@@ -407,7 +431,7 @@ internal sealed class MigrationManifestFixture : IDisposable
 
     internal string ModuleId => "Fixture";
 
-    internal string ModuleRoot => Path.Combine(Root, "modules", ModuleId);
+    internal string ModuleRoot => Path.Combine(Root, "frontend", "modules", "fixture");
 
     internal string ManifestPath => Path.Combine(ModuleRoot, "migrations", "MigrationManifest.Tests.json");
 
@@ -542,7 +566,7 @@ internal sealed class MigrationManifestFixture : IDisposable
         Directory.CreateDirectory(Path.Combine(Root, "server", "platform-modeling", "metadata"));
 
         File.Copy(
-            Path.Combine(repositoryRoot, "modules", "Example", "metadata", "models", "ExampleRecord.model.json"),
+            Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repositoryRoot, "Example"), "metadata", "models", "ExampleRecord.model.json"),
             ModelPath);
         File.Copy(
             Path.Combine(repositoryRoot, "server", "platform-modeling", "metadata", "storage-types.json"),
@@ -614,7 +638,7 @@ internal sealed class MigrationManifestFixture : IDisposable
             composition = new { members = new[] { ModuleId } }, frontend = new { enabled = false }
         };
         var compositionBytes = JsonSerializer.SerializeToUtf8Bytes(composition);
-        var authoringCompositionRoot = Path.Combine(Root, "modules", "FixtureComposition");
+        var authoringCompositionRoot = Path.Combine(Root, "frontend", "modules", "fixture-composition");
         var hostCompositionRoot = Path.Combine(HostRoot, "modules", "FixtureComposition");
         Directory.CreateDirectory(authoringCompositionRoot);
         Directory.CreateDirectory(hostCompositionRoot);
@@ -669,7 +693,7 @@ internal sealed class MigrationManifestFixture : IDisposable
         while (current is not null)
         {
             if (Directory.Exists(Path.Combine(current.FullName, "server"))
-                && Directory.Exists(Path.Combine(current.FullName, "modules")))
+                && Directory.Exists(Path.Combine(current.FullName, "frontend", "modules")))
             {
                 return current.FullName;
             }

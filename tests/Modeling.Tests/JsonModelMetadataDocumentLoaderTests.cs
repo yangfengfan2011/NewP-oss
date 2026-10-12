@@ -6,6 +6,29 @@ namespace ICP.Platform.Modeling.Tests;
 public class JsonModelMetadataDocumentLoaderTests
 {
     [Fact]
+    public void LoadFromFile_FrontendAuthoringRoot_PreservesCapsuleIdentity()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "newp-model-authoring-" + Guid.NewGuid().ToString("N"));
+        var moduleRoot = Path.Combine(root, "frontend", "modules", "part");
+        var modelPath = Path.Combine(moduleRoot, "metadata", "models", "Part.model.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(modelPath)!);
+        try
+        {
+            File.WriteAllText(Path.Combine(moduleRoot, "newp.plugin.json"), """{"moduleId":"Part"}""");
+            File.WriteAllText(modelPath, """{"schemaVersion":"1.0","type":"model","Part":{"kind":"Entity"}}""");
+
+            var document = new JsonModelMetadataDocumentLoader().LoadFromFile(modelPath);
+
+            Assert.Equal("Part", document.ModuleId);
+            Assert.Equal("Part", document.Model.Name);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void LoadFromFile_ReadsModelNameAndKind()
     {
         var path = Path.GetTempFileName();

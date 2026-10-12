@@ -8,14 +8,19 @@
 
 ## 标准结构
 
-一个内建模块由三块共同组成：
+一个内建模块在前端与声明根和原位后端目录中共同组成：
 
 ```text
-modules/<ModuleId>/
+frontend/modules/<module-slug>/
 ├── newp.plugin.json
-└── metadata/
-    ├── navigation/
-    └── dictionaries/
+├── metadata/
+│   ├── navigation/
+│   └── dictionaries/
+├── migrations/                 # 实际拥有的迁移清单
+├── src/index.ts
+├── src/pages/
+├── package.json
+└── README.md
 
 server/modules/<ModuleId>/
 ├── <ModuleId>Module.cs
@@ -25,11 +30,6 @@ server/modules/<ModuleId>/
 ├── Services/
 └── README.md
 
-frontend/modules/<module-id>/
-├── src/index.ts
-├── src/pages/
-├── package.json
-└── README.md
 ```
 
 根 Capsule 是模块身份、版本、依赖、功能目录与 behavior key 的唯一 owner。后端和前端只实现对应 behavior binding。
@@ -53,7 +53,7 @@ pwsh -NoProfile -File .\scripts\new-module.ps1 -ModuleName ExampleModule -Displa
 - 后端模板：`server/templates/backend-module-template/`
 - 前端模板：`frontend/templates/frontend-module-template/`
 
-后端模板中的 `capsule/` 让模板项目可独立构建；脚手架生成模块时会把它移动到仓库根 `modules/<ModuleId>/`，并更新嵌入资源路径。
+后端模板中的 `capsule/` 让模板项目可独立构建；脚手架生成模块时会把它的实际资产合并到 `frontend/modules/<module-slug>/`，并更新嵌入资源路径。
 
 ## 必改项
 

@@ -181,7 +181,7 @@ public class ValueListServiceTests
 
     private static IReadOnlyDictionary<string, string> LoadDictionaryTemplates()
     {
-        var dictionaryPath = Path.Combine(FindRepositoryRoot(), "modules", "ConfigCenter", "metadata", "dictionaries", "ValueLists.dic.json");
+        var dictionaryPath = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(FindRepositoryRoot(), "ConfigCenter"), "metadata", "dictionaries", "ValueLists.dic.json");
         using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(dictionaryPath));
 
         return document.RootElement

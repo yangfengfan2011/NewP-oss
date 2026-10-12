@@ -9,7 +9,7 @@ import { validateCompositionCandidate, resolvePageInput } from '../composition/c
 import type { RuntimeMetadataState } from '../metadata/runtimeMetadataManifest';
 import type { FrontendModule, TabView } from '@icp-platform/sdk';
 
-const folder = resolve(__dirname, '../../../../../modules/Organization/metadata');
+const folder = resolve(__dirname, '../../../../modules/organization/metadata');
 const read = (name: string) => readdirSync(resolve(folder, name)).map(file => JSON.parse(readFileSync(resolve(folder, name, file), 'utf8').replace(/^\uFEFF/, '')));
 const metadata: RuntimeMetadataState = { manifest: { modules: [] }, navDocuments: read('navigation'), viewDocuments: read('views'), modelDocuments: read('models') };
 const modules: FrontendModule[] = [{ ...organizationBindings, metadata: { moduleId: 'Organization', displayName: 'Organization', version: '1' } }];

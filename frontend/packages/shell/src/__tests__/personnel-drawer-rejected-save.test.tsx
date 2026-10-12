@@ -11,8 +11,8 @@ import { PlatformRequestLocaleBridge } from '../localization/PlatformRequestLoca
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 import { personStandardCrudResource } from '../../../../modules/organization/src/standard-crud/personStandardCrudResource';
 import runtimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
-import personList from '../../../../../modules/Organization/metadata/views/PersonList.view.json';
-import personDetail from '../../../../../modules/Organization/metadata/views/PersonDetail.view.json';
+import personList from '../../../../modules/organization/metadata/views/PersonList.view.json';
+import personDetail from '../../../../modules/organization/metadata/views/PersonDetail.view.json';
 import { platformTestCatalogs } from './localizationTestCatalogs';
 // 仅将既有真实预热归入收集阶段，权限刷新及失败结果仍走完整宿主。
 import '../pages/StandardCrudListDrawerRuntime';

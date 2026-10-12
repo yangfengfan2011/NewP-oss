@@ -90,6 +90,7 @@ public static class PersistenceBootstrapExtensions
         CompiledPersistencePlan plan) =>
         PlatformPersistenceModelCatalog.GetDefinitions(plan);
 
+    // 仓库身份取新的 authoring 根；发布输出仍保留既有模块目录。
     private static string LocateRepositoryRootFromAppBase()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);
@@ -98,7 +99,7 @@ public static class PersistenceBootstrapExtensions
         {
             if (Directory.Exists(Path.Combine(current.FullName, "apps"))
                 && Directory.Exists(Path.Combine(current.FullName, "server"))
-                && Directory.Exists(Path.Combine(current.FullName, "modules")))
+                && Directory.Exists(Path.Combine(current.FullName, "frontend", "modules")))
             {
                 return current.FullName;
             }

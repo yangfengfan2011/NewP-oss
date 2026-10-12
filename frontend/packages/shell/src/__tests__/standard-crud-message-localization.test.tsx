@@ -8,10 +8,10 @@ import { useStandardCrudLookupRuntime } from '../standard-crud/standardCrudLooku
 import type { StandardCrudFieldDefinition } from '@icp-platform/sdk';
 import { StandardCrudRequestError } from '@icp-platform/sdk';
 import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime';
-import dictionary from '../../../../../modules/Platform/metadata/dictionaries/Platform.dic.json';
-import workspaceDictionary from '../../../../../modules/Workspace/metadata/dictionaries/Workspace.dic.json';
-import partDictionary from '../../../../../modules/Part/metadata/dictionaries/Part.dic.json';
-import documentDictionary from '../../../../../modules/Document/metadata/dictionaries/Document.dic.json';
+import dictionary from '../../../../modules/platform/metadata/dictionaries/Platform.dic.json';
+import workspaceDictionary from '../../../../modules/workspace/metadata/dictionaries/Workspace.dic.json';
+import partDictionary from '../../../../modules/part/metadata/dictionaries/Part.dic.json';
+import documentDictionary from '../../../../modules/document/metadata/dictionaries/Document.dic.json';
 import workspaceResource from '../../../../modules/workspace/src/workspaceRootResource';
 // 装载真实模块输入，避免冷转换落入交互测试预算；错误仍由标准动作与Lookup呈现。
 import '../../../../modules/workspace/src/WorkspaceObjectCreateInput';

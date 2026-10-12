@@ -3,7 +3,7 @@
 import { act, type ReactNode } from 'react';
 import { LanguageSelect, LocalizationProvider } from '@icp-platform/core';
 import { StandardCrudRequestError } from '@icp-platform/sdk';
-import dictionary from '../../../../../modules/Organization/metadata/dictionaries/Organization.Person.dic.json';
+import dictionary from '../../../../modules/organization/metadata/dictionaries/Organization.Person.dic.json';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 

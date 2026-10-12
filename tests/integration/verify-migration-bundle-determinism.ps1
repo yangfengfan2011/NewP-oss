@@ -32,25 +32,25 @@ $projects = @(
         Name = 'Organization'
         Project = 'server\modules\Organization\Migrations.SqlServer\Organization.SqlServerMigrations.csproj'
         Dll = 'server\modules\Organization\Migrations.SqlServer\bin\Debug\net10.0\Organization.SqlServerMigrations.dll'
-        Manifest = 'modules\Organization\migrations\Organization.SqlServerMigrations.json'
+        Manifest = 'frontend\modules\organization\migrations\Organization.SqlServerMigrations.json'
     },
     @{
         Name = 'Identity'
         Project = 'server\modules\Identity\Migrations.SqlServer\Identity.SqlServerMigrations.csproj'
         Dll = 'server\modules\Identity\Migrations.SqlServer\bin\Debug\net10.0\Identity.SqlServerMigrations.dll'
-        Manifest = 'modules\Identity\migrations\Identity.SqlServerMigrations.json'
+        Manifest = 'frontend\modules\identity\migrations\Identity.SqlServerMigrations.json'
     },
     @{
         Name = 'Authentication'
         Project = 'server\modules\Authentication\Migrations.SqlServer\Authentication.SqlServerMigrations.csproj'
         Dll = 'server\modules\Authentication\Migrations.SqlServer\bin\Debug\net10.0\Authentication.SqlServerMigrations.dll'
-        Manifest = 'modules\Authentication\migrations\Authentication.SqlServerMigrations.json'
+        Manifest = 'frontend\modules\authentication\migrations\Authentication.SqlServerMigrations.json'
     },
     @{
         Name = 'Example'
         Project = 'server\modules\Example\Migrations.SqlServer\Example.SqlServerMigrations.csproj'
         Dll = 'server\modules\Example\Migrations.SqlServer\bin\Debug\net10.0\Example.SqlServerMigrations.dll'
-        Manifest = 'modules\Example\migrations\Example.SqlServerMigrations.json'
+        Manifest = 'frontend\modules\example\migrations\Example.SqlServerMigrations.json'
     }
 )
 

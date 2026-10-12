@@ -1,6 +1,6 @@
 # 模型 DTO 同步
 
-`ModelDtoSync` 从 `modules/<ModuleId>/metadata/models/*.model.json` 读取当前模型，经 SQL Server 类型投影生成：
+`ModelDtoSync` 从 `frontend/modules/<module-slug>/metadata/models/*.model.json` 读取当前模型，经 SQL Server 类型投影生成：
 
 - `server/modules/<ModuleId>/DTOs/Generated/<Model>Dto.g.cs`
 - 同目录的受管 DTO 签名 provider

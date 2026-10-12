@@ -74,6 +74,7 @@ public sealed class AuditModelMetadataProvider : IModelDefinitionProvider
     }
 
     // 从构建输出向上定位仓库根，使 design-time 与测试均读取提交态 authoring 文件。
+    // 模型输入随 authoring 根迁移，正式发布输出保持模块身份目录。
     private static string GetRepositoryPath(params string[] segments)
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);
@@ -81,6 +82,13 @@ public sealed class AuditModelMetadataProvider : IModelDefinitionProvider
         {
             if (Directory.Exists(Path.Combine(current.FullName, "server")))
             {
+                if (segments.Length >= 2 && segments[0] == "modules")
+                {
+                    return Path.GetFullPath(Path.Combine(
+                        new[] { ModuleAuthoringPaths.ResolveModuleRoot(current.FullName, segments[1]) }
+                            .Concat(segments.Skip(2)).ToArray()));
+                }
+
                 var pathSegments = new List<string> { current.FullName };
                 pathSegments.AddRange(segments);
                 return Path.GetFullPath(Path.Combine(pathSegments.ToArray()));

@@ -1,6 +1,6 @@
 # 配置标准关系树
 
-已有 Tree View 可设置 `providerKey: "platform.relations"`，无需为该树注册前端 Provider 或实现四个查询 API。完整可运行配置见 [OrganizationStructure.view.json](../../modules/Organization/metadata/views/OrganizationStructure.view.json)。平台从活动内建模块的已签发 metadata 读取配置；普通页面引用和节点内容仍使用现有 PageRef、输入解析器及资源动作。
+已有 Tree View 可设置 `providerKey: "platform.relations"`，无需为该树注册前端 Provider 或实现四个查询 API。完整可运行配置见 [OrganizationStructure.view.json](../../frontend/modules/organization/metadata/views/OrganizationStructure.view.json)。平台从活动内建模块的已签发 metadata 读取配置；普通页面引用和节点内容仍使用现有 PageRef、输入解析器及资源动作。
 
 ## 节点配置
 

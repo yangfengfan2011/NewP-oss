@@ -33,7 +33,7 @@ async function click(text: string) {
 }
 it('loads the real personnel capability through an old address, keeps embedded queries local, and opens its explicitly owned full detail', async () => {
   vi.spyOn(window, 'matchMedia').mockImplementation(query => ({ matches: true, media: query, onchange: null, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => true }));
-  const folder = resolve(__dirname, '../../../../../modules/Organization/metadata');
+  const folder = resolve(__dirname, '../../../../modules/organization/metadata');
   const read = (name: string) => readdirSync(resolve(folder, name)).map(file => JSON.parse(readFileSync(resolve(folder, name, file), 'utf8').replace(/^\uFEFF/, '')));
   const metadata: RuntimeMetadataState = { manifest: { modules: [] }, navDocuments: read('navigation'), viewDocuments: read('views'), modelDocuments: Object.values(runtimeModels) as RuntimeMetadataState['modelDocuments'] };
   const catalog: Record<string, string> = {};

@@ -108,7 +108,7 @@ public sealed class DicLocalizationValidationScriptTests : IDisposable
 
     private static void WriteLanguages(string root)
     {
-        var platformMetadataRoot = Path.Combine(root, "modules", "Platform", "metadata");
+        var platformMetadataRoot = Path.Combine(Path.Combine(root, "frontend", "modules", "platform"), "metadata");
         Directory.CreateDirectory(platformMetadataRoot);
         File.WriteAllText(
             Path.Combine(platformMetadataRoot, "languages.json"),
@@ -126,7 +126,7 @@ public sealed class DicLocalizationValidationScriptTests : IDisposable
 
     private static void WriteDictionary(string root, string moduleId, string fileName, string content)
     {
-        var dictionaryRoot = Path.Combine(root, "modules", moduleId, "metadata", "dictionaries");
+        var dictionaryRoot = Path.Combine(Path.Combine(root, "frontend", "modules", System.Text.RegularExpressions.Regex.Replace(moduleId, "([a-z0-9])([A-Z])", "$1-$2").ToLowerInvariant()), "metadata", "dictionaries");
         Directory.CreateDirectory(dictionaryRoot);
         File.WriteAllText(Path.Combine(dictionaryRoot, fileName), content, Encoding.UTF8);
     }

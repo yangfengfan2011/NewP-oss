@@ -1,12 +1,12 @@
 import { expect, it } from 'vitest';
 import type { FrontendModule } from '@icp-platform/sdk';
 import workspace from '../../../../modules/workspace/src';
-import navigation from '../../../../../modules/Workspace/metadata/navigation/Workspace.nav.json';
-import tree from '../../../../../modules/Workspace/metadata/views/WorkspaceStructure.view.json';
-import list from '../../../../../modules/Workspace/metadata/views/WorkspaceFolderList.view.json';
-import detail from '../../../../../modules/Workspace/metadata/views/WorkspaceFolderDetail.view.json';
-import references from '../../../../../modules/Workspace/metadata/views/WorkspaceReferencesList.view.json';
-import capsule from '../../../../../modules/Workspace/newp.plugin.json';
+import navigation from '../../../../modules/workspace/metadata/navigation/Workspace.nav.json';
+import tree from '../../../../modules/workspace/metadata/views/WorkspaceStructure.view.json';
+import list from '../../../../modules/workspace/metadata/views/WorkspaceFolderList.view.json';
+import detail from '../../../../modules/workspace/metadata/views/WorkspaceFolderDetail.view.json';
+import references from '../../../../modules/workspace/metadata/views/WorkspaceReferencesList.view.json';
+import capsule from '../../../../modules/workspace/newp.plugin.json';
 import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';
 
 const module: FrontendModule = { metadata: { moduleId: 'Workspace', displayName: '工作空间', version: '1' }, ...workspace };

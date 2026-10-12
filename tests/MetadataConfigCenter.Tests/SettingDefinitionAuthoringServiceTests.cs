@@ -99,10 +99,10 @@ public class SettingDefinitionAuthoringServiceTests
         {
             _rootPath = rootPath;
             _runtimeRoot = runtimeRoot;
-            SettingsFilePath = Path.Combine(rootPath, "modules", "ConfigCenter", "metadata", "settings", "ConfigCenter.settings.json");
+            SettingsFilePath = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(rootPath, "ConfigCenter"), "metadata", "settings", "ConfigCenter.settings.json");
             RuntimeSettingsFilePath = string.IsNullOrWhiteSpace(runtimeRoot)
                 ? null
-                : Path.Combine(runtimeRoot, "modules", "ConfigCenter", "metadata", "settings", "ConfigCenter.settings.json");
+                : Path.Combine(Path.Combine(runtimeRoot, "modules", "ConfigCenter"), "metadata", "settings", "ConfigCenter.settings.json");
         }
 
         public string SettingsFilePath { get; }
@@ -113,17 +113,17 @@ public class SettingDefinitionAuthoringServiceTests
         {
             var sourceRoot = FindRepositoryRoot();
             var tempRoot = Path.Combine(Path.GetTempPath(), "metadata-config-center-tests", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(Path.Combine(tempRoot, "modules", "ConfigCenter"));
+            Directory.CreateDirectory(Path.Combine(tempRoot, "frontend", "modules", "config-center"));
 
-            var sourceMetadata = Path.Combine(sourceRoot, "modules", "ConfigCenter", "metadata");
-            var targetMetadata = Path.Combine(tempRoot, "modules", "ConfigCenter", "metadata");
+            var sourceMetadata = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(sourceRoot, "ConfigCenter"), "metadata");
+            var targetMetadata = Path.Combine(Path.Combine(tempRoot, "frontend", "modules", "config-center"), "metadata");
             CopyDirectory(sourceMetadata, targetMetadata);
 
             string? runtimeRoot = null;
             if (!string.IsNullOrWhiteSpace(runtimeRefreshIntervalSeconds))
             {
                 runtimeRoot = Path.Combine(tempRoot, "plugins", "runtime");
-                var runtimeMetadata = Path.Combine(runtimeRoot, "modules", "ConfigCenter", "metadata");
+                var runtimeMetadata = Path.Combine(Path.Combine(runtimeRoot, "modules", "ConfigCenter"), "metadata");
                 CopyDirectory(sourceMetadata, runtimeMetadata);
 
                 var runtimeSettingsPath = Path.Combine(runtimeMetadata, "settings", "ConfigCenter.settings.json");

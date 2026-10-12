@@ -41,6 +41,7 @@ public sealed class IdentityModelMetadataProvider : IModelDefinitionProvider
             .ToArray();
     }
 
+    // 模型输入随 authoring 根迁移，正式发布输出保持模块身份目录。
     private static string GetRepositoryPath(params string[] segments)
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);
@@ -48,6 +49,12 @@ public sealed class IdentityModelMetadataProvider : IModelDefinitionProvider
         {
             if (Directory.Exists(Path.Combine(current.FullName, "server")))
             {
+                if (segments.Length >= 2 && segments[0] == "modules")
+                {
+                    return Path.GetFullPath(Path.Combine([
+                        ModuleAuthoringPaths.ResolveModuleRoot(current.FullName, segments[1]), .. segments.Skip(2)]));
+                }
+
                 return Path.GetFullPath(Path.Combine([current.FullName, .. segments]));
             }
 

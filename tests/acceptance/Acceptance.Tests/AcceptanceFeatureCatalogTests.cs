@@ -16,7 +16,7 @@ public sealed class AcceptanceFeatureCatalogTests
         {
             var points = CompileFeatureCatalog(root, "Organization", documents);
             var actual = new MetadataRuntimeManifestBuilder().Build(
-                root.FullName,
+                AppContext.BaseDirectory,
                 ["Organization"],
                 ["Organization"],
                 points);
@@ -55,11 +55,11 @@ public sealed class AcceptanceFeatureCatalogTests
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "AGENTS.md"))) root = root.Parent;
         Assert.NotNull(root);
-        var documents = Directory.EnumerateFiles(Path.Combine(root.FullName, "modules", module, "metadata"), "*.json", SearchOption.AllDirectories)
+        var documents = Directory.EnumerateFiles(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root.FullName, module), "metadata"), "*.json", SearchOption.AllDirectories)
             .Select(path => JsonDocument.Parse(File.ReadAllText(path))).ToArray();
         try
         {
-            using var capsule = JsonDocument.Parse(File.ReadAllText(Path.Combine(root.FullName, "modules", module, "newp.plugin.json")));
+            using var capsule = JsonDocument.Parse(File.ReadAllText(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root.FullName, module), "newp.plugin.json")));
             var custom = FeatureCatalogCompiler.Read(capsule.RootElement, module);
             var points = FeatureCatalogCompiler.Compile([.. custom,
                 .. StandardFeatureMetadataCompiler.Read(module, documents.Select(document => document.RootElement), custom)]);
@@ -160,7 +160,7 @@ public sealed class AcceptanceFeatureCatalogTests
     }
 
     private static JsonDocument[] ReadMetadataDocuments(DirectoryInfo root, string module) =>
-        Directory.EnumerateFiles(Path.Combine(root.FullName, "modules", module, "metadata"), "*.json", SearchOption.AllDirectories)
+        Directory.EnumerateFiles(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root.FullName, module), "metadata"), "*.json", SearchOption.AllDirectories)
             .Select(path => JsonDocument.Parse(File.ReadAllText(path)))
             .ToArray();
 
@@ -169,7 +169,7 @@ public sealed class AcceptanceFeatureCatalogTests
         string module,
         IReadOnlyList<JsonDocument> documents)
     {
-        using var capsule = JsonDocument.Parse(File.ReadAllText(Path.Combine(root.FullName, "modules", module, "newp.plugin.json")));
+        using var capsule = JsonDocument.Parse(File.ReadAllText(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root.FullName, module), "newp.plugin.json")));
         var custom = FeatureCatalogCompiler.Read(capsule.RootElement, module);
         return FeatureCatalogCompiler.Compile([
             .. custom,

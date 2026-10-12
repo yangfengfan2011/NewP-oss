@@ -4,8 +4,8 @@ import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import { formatFieldError, formatRequestError, LocalizationProvider, useLocalization } from '@icp-platform/core';
 import type { StandardCrudRequestError } from '@icp-platform/sdk';
-import errors from '../../../../modules/Authorization/metadata/dictionaries/AuthorizationErrors.dic.json?raw';
-import platform from '../../../../modules/Platform/metadata/dictionaries/Platform.dic.json?raw';
+import errors from '../../../modules/authorization/metadata/dictionaries/AuthorizationErrors.dic.json?raw';
+import platform from '../../../modules/platform/metadata/dictionaries/Platform.dic.json?raw';
 import { requestAuthorization } from './authorizationRequest';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

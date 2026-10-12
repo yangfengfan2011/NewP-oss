@@ -10,7 +10,7 @@ namespace ICP.Platform.Tools.ModelDtoSync;
 public static class ModuleDtoSyncRunner
 {
     /// <summary>
-    /// 从 modules/*/metadata/models 读取当前模型投影，在仓库根下写入模块 Generated DTO 与签名 provider。
+    /// 从 frontend/modules/*/metadata/models 读取当前模型投影，在仓库根下写入模块 Generated DTO 与签名 provider。
     /// </summary>
     public static IReadOnlyList<string> Run(string repositoryRoot)
     {
@@ -83,12 +83,12 @@ public static class ModuleDtoSyncRunner
             "storage-types.json"));
         var validator = new ModelMetadataValidator();
         var projector = new ModelMetadataProjector();
-        var modulesRoot = Path.Combine(metadataRepositoryRoot, "modules");
+        var modulesRoot = Path.Combine(metadataRepositoryRoot, "frontend", "modules");
 
         foreach (var moduleRoot in Directory.EnumerateDirectories(modulesRoot)
                      .OrderBy(static path => path, StringComparer.Ordinal))
         {
-            var moduleId = Path.GetFileName(moduleRoot);
+            var moduleId = ModuleAuthoringPaths.ReadModuleId(moduleRoot);
             var modelDirectory = Path.Combine(moduleRoot, "metadata", "models");
             if (!Directory.Exists(modelDirectory))
             {
@@ -119,7 +119,7 @@ public static class ModuleDtoSyncRunner
 
                 var outputDirectory = Path.Combine(outputRepositoryRoot, "server", "modules", moduleId, "DTOs", "Generated");
                 var outputPath = Path.Combine(outputDirectory, definition.Name + "Dto.g.cs");
-                var enumClrTypeMap = LoadEnumClrTypeMap(metadataRepositoryRoot, moduleId, definition.Name);
+                var enumClrTypeMap = LoadEnumClrTypeMap(moduleRoot, definition.Name);
                 var sourceCode = GeneratedCodeWriter.WrapInNamespace(
                     generator.Generate(definition, displayCompilation.Plan!, enumClrTypeMap),
                     $"ICP.Platform.Modules.{moduleId}.DTOs",
@@ -194,15 +194,13 @@ public static class ModuleDtoSyncRunner
     }
 
     // DTO 生成必须回读 authoring 元数据中的 contract.clrType，避免 enum 字段退化为 string。
+    // enum CLR 类型来自同一次选择的 authoring 模型，避免用 slug 重推身份。
     private static IReadOnlyDictionary<string, string> LoadEnumClrTypeMap(
-        string repositoryRoot,
-        string moduleId,
+        string moduleRoot,
         string modelName)
     {
         var modelPath = Path.Combine(
-            repositoryRoot,
-            "modules",
-            moduleId,
+            moduleRoot,
             "metadata",
             "models",
             modelName + ".model.json");
@@ -233,9 +231,10 @@ public static class ModuleDtoSyncRunner
             : new[] { $"ICP.Platform.Modules.{moduleId}.Models" };
     }
 
+    // 临时输出目录没有 authoring 时回到实际源码根。
     private static string ResolveMetadataRepositoryRoot(string outputRepositoryRoot)
     {
-        if (Directory.Exists(Path.Combine(outputRepositoryRoot, "modules")))
+        if (Directory.Exists(Path.Combine(outputRepositoryRoot, "frontend", "modules")))
         {
             return Path.GetFullPath(outputRepositoryRoot);
         }
@@ -251,7 +250,7 @@ public static class ModuleDtoSyncRunner
             var current = new DirectoryInfo(candidate);
             while (current is not null)
             {
-                if (Directory.Exists(Path.Combine(current.FullName, "modules"))
+                if (Directory.Exists(Path.Combine(current.FullName, "frontend", "modules"))
                     && Directory.Exists(Path.Combine(current.FullName, "server")))
                 {
                     return current.FullName;

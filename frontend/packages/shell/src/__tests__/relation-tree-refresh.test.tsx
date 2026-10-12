@@ -8,7 +8,7 @@ import { ModuleRegistry } from '@icp-platform/sdk';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { PageEntry } from '../composition/PageOutlet';
 import { CompositionContext } from '../composition/pageCompositionRuntime';
-import organizationTree from '../../../../../modules/Organization/metadata/views/OrganizationStructure.view.json';
+import organizationTree from '../../../../modules/organization/metadata/views/OrganizationStructure.view.json';
 
 const { fetchMock } = vi.hoisted(() => ({ fetchMock: vi.fn() }));
 vi.mock('@icp-platform/core', async importOriginal => ({ ...await importOriginal<object>(), platformFetch: fetchMock }));

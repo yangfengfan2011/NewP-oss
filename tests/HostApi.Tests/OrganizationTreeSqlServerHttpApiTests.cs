@@ -305,9 +305,9 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
     private static CanonicalModulePlan ReadTreePlan(string root)
     {
         var repository = new DirectoryInfo(AppContext.BaseDirectory);
-        while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "modules", "Organization", "newp.plugin.json"))) repository = repository.Parent;
-        var source = Path.Combine(repository!.FullName, "modules", "Organization");
-        var module = Path.Combine(root, "modules", "Organization");
+        while (repository is not null && !File.Exists(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository.FullName, "Organization"), "newp.plugin.json"))) repository = repository.Parent;
+        var source = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository!.FullName, "Organization");
+        var module = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root, "Organization");
         foreach (var path in Directory.GetFiles(Path.Combine(source, "metadata"), "*.json", SearchOption.AllDirectories))
         {
             var target = Path.Combine(module, Path.GetRelativePath(source, path));

@@ -8,7 +8,7 @@ import { LocalizedBusinessBoundary, RuntimeLocalizationProvider } from '../local
 import { useLocalizedStandardCrudRegistration } from '../standard-crud/useLocalizedStandardCrudRegistration';
 import { buildStandardCrudFormSchemaFromModel } from '../standard-crud/standardCrudMetadataForm';
 import { personStandardCrudResource } from '../../../../modules/organization/src/standard-crud/personStandardCrudResource';
-import personModel from '../../../../../modules/Organization/metadata/models/Person.model.json';
+import personModel from '../../../../modules/organization/metadata/models/Person.model.json';
 
 function PersonnelEmploymentField() {
   const registration = useLocalizedStandardCrudRegistration(personStandardCrudResource);

@@ -335,7 +335,7 @@ internal static class ExampleRequiredFieldMigrationFixture
         string assemblyPath,
         IReadOnlyList<ModelDefinition> models)
     {
-        var manifestPath = Path.Combine(repositoryRoot, "modules", moduleId, "migrations", manifestName);
+        var manifestPath = Path.Combine(ModuleAuthoringPaths.ResolveModuleRoot(repositoryRoot, moduleId), "migrations", manifestName);
         return ReadStream(moduleId, assemblyPath, manifestPath, models, isPlatformStream: false);
     }
 

@@ -7,11 +7,11 @@ import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } fr
 import { ModuleRegistry } from '@icp-platform/sdk';
 import workspace from '../../../../modules/workspace/src';
 import folder from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceFolderRuntime.contract.json';
-import content from '../../../../../modules/Workspace/metadata/models/WorkspaceFolderContent.model.json';
-import tree from '../../../../../modules/Workspace/metadata/views/WorkspaceStructure.view.json';
-import list from '../../../../../modules/Workspace/metadata/views/WorkspaceFolderList.view.json';
-import detail from '../../../../../modules/Workspace/metadata/views/WorkspaceFolderDetail.view.json';
-import dictionary from '../../../../../modules/Workspace/metadata/dictionaries/Workspace.dic.json';
+import content from '../../../../modules/workspace/metadata/models/WorkspaceFolderContent.model.json';
+import tree from '../../../../modules/workspace/metadata/views/WorkspaceStructure.view.json';
+import list from '../../../../modules/workspace/metadata/views/WorkspaceFolderList.view.json';
+import detail from '../../../../modules/workspace/metadata/views/WorkspaceFolderDetail.view.json';
+import dictionary from '../../../../modules/workspace/metadata/dictionaries/Workspace.dic.json';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { PageEntry } from '../composition/PageOutlet';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';

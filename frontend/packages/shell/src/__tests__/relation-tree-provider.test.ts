@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import type { TreeView } from '@icp-platform/sdk';
 import { TreeNodeNotFoundError } from '@icp-platform/sdk';
 import { createRelationTreeProvider } from '../composition/relationTreeProvider';
-import organizationTree from '../../../../../modules/Organization/metadata/views/OrganizationStructure.view.json';
+import organizationTree from '../../../../modules/organization/metadata/views/OrganizationStructure.view.json';
 
 const { fetchMock } = vi.hoisted(() => ({ fetchMock: vi.fn() }));
 vi.mock('@icp-platform/core', () => ({ platformFetch: fetchMock }));

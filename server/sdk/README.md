@@ -18,7 +18,7 @@ public sealed class MyModule : ModuleCapsuleBindingBase
 }
 ```
 
-`BehaviorKey` 必须与 `modules/MyModule/newp.plugin.json` 的 `backend.behaviorKey` 完全一致。module id、显示名、版本、依赖和权限由嵌入的根 Capsule 提供，不在 C# 中重复声明。
+`BehaviorKey` 必须与 `frontend/modules/my-module/newp.plugin.json` 的 `backend.behaviorKey` 完全一致。module id、显示名、版本、依赖和权限由嵌入的根 Capsule 提供，不在 C# 中重复声明。
 
 ## 放置边界
 

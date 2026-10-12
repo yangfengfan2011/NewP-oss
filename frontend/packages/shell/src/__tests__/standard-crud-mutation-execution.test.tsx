@@ -4,7 +4,7 @@ import { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LanguageSelect, LocalizationProvider } from '@icp-platform/core';
-import platformDictionary from '../../../../../modules/Platform/metadata/dictionaries/Platform.dic.json';
+import platformDictionary from '../../../../modules/platform/metadata/dictionaries/Platform.dic.json';
 import {
   createStandardCrudRestDataAdapter,
   StandardCrudRequestError,

@@ -112,8 +112,22 @@ public sealed class JsonModelMetadataDocumentLoader : IModelMetadataDocumentLoad
         return businessRoot;
     }
 
+    // 源码目录读 Capsule 身份；运行时与已固定包路径继续使用其模块身份目录。
     private static string ExtractModuleId(string path)
     {
+        var metadataDirectory = new DirectoryInfo(Path.GetDirectoryName(path)!);
+        while (metadataDirectory is not null)
+        {
+            if (string.Equals(metadataDirectory.Name, "metadata", StringComparison.OrdinalIgnoreCase)
+                && metadataDirectory.Parent?.Parent?.Name == "modules"
+                && metadataDirectory.Parent.Parent.Parent?.Name == "frontend")
+            {
+                return ModuleAuthoringPaths.ReadModuleId(metadataDirectory.Parent.FullName);
+            }
+
+            metadataDirectory = metadataDirectory.Parent;
+        }
+
         var segments = Path.GetFullPath(path)
             .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
 

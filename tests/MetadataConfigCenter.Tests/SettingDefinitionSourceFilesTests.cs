@@ -42,7 +42,7 @@ public sealed class SettingDefinitionSourceFilesTests
     public async Task ApplySettingDefinitionsAsync_WhenSourceFilesSpanMultipleDirectories_ProjectsExactFiles()
     {
         await using var fixture = await MetadataSourceFilesFixture.CreateAsync(includeRuntimeProjection: true);
-        var baseSourcePath = Path.Combine(fixture.RootPath, "modules", "ConfigCenter", "metadata", "settings", "Base.settings.json");
+        var baseSourcePath = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(fixture.RootPath, "ConfigCenter"), "metadata", "settings", "Base.settings.json");
         await File.WriteAllTextAsync(
             baseSourcePath,
             """
@@ -67,8 +67,8 @@ public sealed class SettingDefinitionSourceFilesTests
 
         var result = await service.ApplySettingDefinitionsAsync("ConfigCenter");
 
-        var runtimeBasePath = Path.Combine(fixture.RuntimeRoot!, "modules", "ConfigCenter", "metadata", "settings", "Base.settings.json");
-        var runtimeAdvancedPath = Path.Combine(fixture.RuntimeRoot!, "modules", "ConfigCenter", "metadata", "domain", "Advanced.settings.json");
+        var runtimeBasePath = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(fixture.RuntimeRoot!, "ConfigCenter"), "metadata", "settings", "Base.settings.json");
+        var runtimeAdvancedPath = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(fixture.RuntimeRoot!, "ConfigCenter"), "metadata", "domain", "Advanced.settings.json");
         Assert.Contains("基础开关（已应用）", await File.ReadAllTextAsync(runtimeBasePath));
         Assert.True(File.Exists(runtimeAdvancedPath));
         Assert.Equal("已应用", result.Status);
@@ -90,7 +90,7 @@ public sealed class SettingDefinitionSourceFilesTests
         {
             var tempRoot = Path.Combine(Path.GetTempPath(), "metadata-config-center-source-files-tests", Guid.NewGuid().ToString("N"));
             var platformMetadataRoot = Path.Combine(tempRoot, "server", "platform", "metadata");
-            var moduleMetadataRoot = Path.Combine(tempRoot, "modules", "ConfigCenter", "metadata");
+            var moduleMetadataRoot = Path.Combine(Path.Combine(tempRoot, "frontend", "modules", "config-center"), "metadata");
 
             Directory.CreateDirectory(platformMetadataRoot);
             Directory.CreateDirectory(moduleMetadataRoot);
@@ -154,7 +154,7 @@ public sealed class SettingDefinitionSourceFilesTests
             {
                 runtimeRoot = Path.Combine(tempRoot, "plugins", "runtime");
                 await WriteSettingsFileAsync(
-                    Path.Combine(runtimeRoot, "modules", "ConfigCenter", "metadata", "settings", "Base.settings.json"),
+                    Path.Combine(Path.Combine(runtimeRoot, "modules", "ConfigCenter"), "metadata", "settings", "Base.settings.json"),
                     """
                     {
                       "schemaVersion": "1.0",
@@ -173,7 +173,7 @@ public sealed class SettingDefinitionSourceFilesTests
                     }
                     """);
                 await WriteSettingsFileAsync(
-                    Path.Combine(runtimeRoot, "modules", "ConfigCenter", "metadata", "domain", "Advanced.settings.json"),
+                    Path.Combine(Path.Combine(runtimeRoot, "modules", "ConfigCenter"), "metadata", "domain", "Advanced.settings.json"),
                     """
                     {
                       "schemaVersion": "1.0",

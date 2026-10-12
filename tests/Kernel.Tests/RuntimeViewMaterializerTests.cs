@@ -134,7 +134,7 @@ public class RuntimeViewMaterializerTests : IDisposable
             "metadata",
             "models");
         Directory.CreateDirectory(installedModelsRoot);
-        var repositoryModelsRoot = Path.Combine(FindRepositoryRoot(), "modules", "Organization", "metadata", "models");
+        var repositoryModelsRoot = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(FindRepositoryRoot(), "Organization"), "metadata", "models");
         var companyAuthoringPath = WriteModelWithoutField(repositoryModelsRoot, installedModelsRoot, "Company", "UpdatedAt");
         var departmentAuthoringPath = WriteModelWithoutField(repositoryModelsRoot, installedModelsRoot, "Department", "UpdatedAt");
         var personAuthoringPath = CopyModel(repositoryModelsRoot, installedModelsRoot, "Person");
@@ -185,7 +185,7 @@ public class RuntimeViewMaterializerTests : IDisposable
     [Fact]
     public void Project_RealAuthorizationRole_ProducesSharedCanonicalRuntimeContract()
     {
-        var sourcePath = Path.Combine(FindRepositoryRoot(), "modules", "Authorization", "metadata", "models", "Role.model.json");
+        var sourcePath = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(FindRepositoryRoot(), "Authorization"), "metadata", "models", "Role.model.json");
         var authoring = File.ReadAllBytes(sourcePath);
         var runtimeBytes = new ModelRuntimeMetadataProjector().Project(authoring, sourcePath);
         var contractPath = Path.Combine(FindRepositoryRoot(), "tests", "Kernel.Tests", "Fixtures", "AuthorizationRoleRuntime.contract.json");
@@ -196,7 +196,7 @@ public class RuntimeViewMaterializerTests : IDisposable
     [Fact]
     public void Project_RealAuditBusinessChange_ProducesSharedCanonicalRuntimeContract()
     {
-        var sourcePath = Path.Combine(FindRepositoryRoot(), "modules", "Audit", "metadata", "models", "BusinessChange.model.json");
+        var sourcePath = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(FindRepositoryRoot(), "Audit"), "metadata", "models", "BusinessChange.model.json");
         var authoring = File.ReadAllBytes(sourcePath);
         var runtimeBytes = new ModelRuntimeMetadataProjector().Project(authoring, sourcePath);
         var contractPath = Path.Combine(FindRepositoryRoot(), "tests", "Kernel.Tests", "Fixtures", "AuditBusinessChangeRuntime.contract.json");
@@ -208,9 +208,7 @@ public class RuntimeViewMaterializerTests : IDisposable
     public void Project_RealIdentityAccount_ProducesSharedCanonicalRuntimeContract()
     {
         var sourcePath = Path.Combine(
-            FindRepositoryRoot(),
-            "modules",
-            "Identity",
+            ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(FindRepositoryRoot(), "Identity"),
             "metadata",
             "models",
             "IdentityAccount.model.json");
@@ -919,7 +917,7 @@ public class RuntimeViewMaterializerTests : IDisposable
     private string CreatePlatformPackageWithLanguages()
     {
         var packageRoot = _testData.CreateValidPackageWithMetadataAndResources("Platform", "1.0.0", "zhs");
-        var modulesRoot = Path.Combine(packageRoot, "modules", "Platform", "metadata");
+        var modulesRoot = Path.Combine(Path.Combine(packageRoot, "modules", "Platform"), "metadata");
         Directory.CreateDirectory(Path.Combine(modulesRoot, "dictionaries"));
         File.WriteAllText(
             Path.Combine(modulesRoot, "languages.json"),
@@ -939,7 +937,7 @@ public class RuntimeViewMaterializerTests : IDisposable
 
     private static void AddLocalizationMetadata(string packageRoot, string moduleId, bool includeEnglishTranslation)
     {
-        var dictionariesRoot = Path.Combine(packageRoot, "modules", moduleId, "metadata", "dictionaries");
+        var dictionariesRoot = Path.Combine(Path.Combine(packageRoot, "modules", moduleId), "metadata", "dictionaries");
         Directory.CreateDirectory(dictionariesRoot);
 
         File.WriteAllText(
@@ -998,7 +996,7 @@ public class RuntimeViewMaterializerTests : IDisposable
 
         File.WriteAllText(
             Path.Combine(dictionariesRoot, "ValueLists.dic.json"),
-            File.ReadAllText(Path.Combine(FindRepositoryRoot(), "modules", "ConfigCenter", "metadata", "dictionaries", "ValueLists.dic.json")));
+            File.ReadAllText(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(FindRepositoryRoot(), "ConfigCenter"), "metadata", "dictionaries", "ValueLists.dic.json")));
     }
 
     private static string FindRepositoryRoot()

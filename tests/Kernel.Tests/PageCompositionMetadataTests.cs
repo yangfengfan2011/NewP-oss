@@ -19,7 +19,7 @@ public sealed class PageCompositionMetadataTests
     [InlineData("binding")]
     public void WorkspaceDetailContributions_ValidateOwnedAuthoringBeforeStaging(string kind)
     {
-        var root = Path.Combine(RepositoryRoot(), "modules/Workspace");
+        var root = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(RepositoryRoot(), "Workspace");
         var documents = Directory.GetFiles(Path.Combine(root, "metadata"), "*.json", SearchOption.AllDirectories).Select(path => JsonNode.Parse(File.ReadAllText(path))!).ToArray();
         var bindings = JsonNode.Parse(File.ReadAllText(Path.Combine(root, "newp.plugin.json")))!["frontend"]!["bindings"]!.AsArray().Select(value => value!.GetValue<string>()).ToHashSet(StringComparer.Ordinal);
         var entries = documents.Single(document => document["view"]?["key"]?.GetValue<string>() == "workspace.references.list")["view"]!["detailContributions"]!.AsArray();
@@ -37,7 +37,7 @@ public sealed class PageCompositionMetadataTests
     public void Document_RuntimeModelMatchesTheSharedCreateAndDetailConsumerFixture()
     {
         var root = RepositoryRoot();
-        var path = Path.Combine(root, "modules/Document/metadata/models/Document.model.json");
+        var path = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root, "Document"), "metadata/models/Document.model.json");
         var authoring = File.ReadAllBytes(path);
         var projected = new ICP.Platform.Modeling.Projection.ModelRuntimeMetadataProjector().Project(authoring, path);
         var fixture = File.ReadAllBytes(Path.Combine(root, "tests/Kernel.Tests/Fixtures/DocumentRuntime.contract.json"));
@@ -49,7 +49,7 @@ public sealed class PageCompositionMetadataTests
     public void Part_RuntimeModelMatchesTheSharedCreateAndDetailConsumerFixture()
     {
         var root = RepositoryRoot();
-        var path = Path.Combine(root, "modules/Part/metadata/models/Part.model.json");
+        var path = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root, "Part"), "metadata/models/Part.model.json");
         var authoring = File.ReadAllBytes(path);
         var projected = new ICP.Platform.Modeling.Projection.ModelRuntimeMetadataProjector().Project(authoring, path);
         var fixture = File.ReadAllBytes(Path.Combine(root, "tests/Kernel.Tests/Fixtures/PartRuntime.contract.json"));
@@ -61,7 +61,7 @@ public sealed class PageCompositionMetadataTests
     public void WorkspaceFolder_RuntimeModelMatchesTheSharedDetailConsumerFixture()
     {
         var root = RepositoryRoot();
-        var path = Path.Combine(root, "modules/Workspace/metadata/models/WorkspaceFolder.model.json");
+        var path = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root, "Workspace"), "metadata/models/WorkspaceFolder.model.json");
         var authoring = File.ReadAllBytes(path);
         var projected = new ICP.Platform.Modeling.Projection.ModelRuntimeMetadataProjector().Project(authoring, path);
         var fixture = File.ReadAllBytes(Path.Combine(root, "tests/Kernel.Tests/Fixtures/WorkspaceFolderRuntime.contract.json"));
@@ -90,7 +90,7 @@ public sealed class PageCompositionMetadataTests
         {
             var modulesRoot = Directory.CreateDirectory(Path.Combine(temporary.FullName, "modules")).FullName;
             var moduleRoot = Directory.CreateDirectory(Path.Combine(modulesRoot, "Organization")).FullName;
-            var sourceRoot = Path.Combine(repository, "modules", "Organization");
+            var sourceRoot = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository, "Organization");
             foreach (var file in Directory.GetFiles(Path.Combine(sourceRoot, "metadata"), "*", SearchOption.AllDirectories))
             {
                 var target = Path.Combine(moduleRoot, Path.GetRelativePath(sourceRoot, file));
@@ -117,7 +117,7 @@ public sealed class PageCompositionMetadataTests
             var install = Path.Combine(temporary.FullName, "install");
             var materializer = new RuntimeViewMaterializer(new InstalledPluginStateStore(install), new FrontendRuntimeManifestBuilder(), source);
             using var stage = materializer.Stage(install, plan);
-            var runtime = JsonNode.Parse(File.ReadAllText(Path.Combine(stage.StagedRuntimeRoot, "modules/Organization/metadata/views/OrganizationStructure.view.json")));
+            var runtime = JsonNode.Parse(File.ReadAllText(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(stage.StagedRuntimeRoot, "Organization"), "metadata/views/OrganizationStructure.view.json")));
             var contract = JsonNode.Parse(File.ReadAllText(Path.Combine(repository, "tests/Kernel.Tests/Fixtures/OrganizationTreeActions.contract.json")));
             Assert.True(JsonNode.DeepEquals(contract, runtime));
         }
@@ -144,7 +144,7 @@ public sealed class PageCompositionMetadataTests
     public void RealOrganizationAuthoring_UsesCanonicalReaderWithoutViewPageIdentities()
     {
         var root = RepositoryRoot();
-        var source = Path.Combine(root, "modules", "Organization");
+        var source = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root, "Organization");
         var temporary = Directory.CreateTempSubdirectory("NewPPageComposition_");
         try
         {
@@ -204,12 +204,12 @@ public sealed class PageCompositionMetadataTests
     }
     private static void Validate(JsonNode[] documents) => PageCompositionMetadataValidator.Validate(
         documents.Select(document => JsonSerializer.Deserialize<JsonElement>(document.ToJsonString())), null);
-    private static JsonNode[] ReadDocuments() => Directory.GetFiles(Path.Combine(RepositoryRoot(), "modules/Organization/metadata"), "*.json", SearchOption.AllDirectories)
+    private static JsonNode[] ReadDocuments() => Directory.GetFiles(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(RepositoryRoot(), "Organization"), "metadata"), "*.json", SearchOption.AllDirectories)
         .Select(path => JsonNode.Parse(File.ReadAllText(path))!).ToArray();
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "modules/Organization/newp.plugin.json"))) directory = directory.Parent;
+        while (directory is not null && !File.Exists(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(directory.FullName, "Organization"), "newp.plugin.json"))) directory = directory.Parent;
         return directory!.FullName;
     }
 }

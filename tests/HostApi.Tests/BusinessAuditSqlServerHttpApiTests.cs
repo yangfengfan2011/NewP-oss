@@ -1440,7 +1440,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         candidates = [.. candidates, .. new ModuleCapsuleCandidateReader().ReadBuiltIn(probeModulesRoot)];
         // 下一次启动的正式声明候选；不在活动目录中原位切换开关。
         var owner = Array.FindIndex(candidates, candidate => candidate.ModuleId == "Authorization");
-        var authoring = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(hostRoot, "modules", "Authorization", "plugin.json")))!;
+        var authoring = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(hostRoot, "Authorization"), "plugin.json")))!;
         foreach (var action in authoring["dataActions"]!.AsArray())
         {
             var key = action!["key"]!.GetValue<string>();

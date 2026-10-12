@@ -1,3 +1,4 @@
+using ICP.Platform.Modeling.Metadata;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -25,12 +26,13 @@ public class ModuleMetadataStore
             : Path.GetFullPath(runtimeRoot);
     }
 
+    // 读取当前可见 metadata，保持 runtime 优先与仓库新根回退。
     public string ResolveMetadataDirectory(string moduleId, string sourcePath)
     {
         // 读取时优先命中 runtime 根，再回退到仓库根；
         // 这样调用方拿到的是“当前可见元数据”，而不是固定绑死某一个物理目录。
         var effectiveRoot = ResolvePreferredMetadataRoot(moduleId, sourcePath) ?? _repositoryRoot;
-        return Path.Combine(effectiveRoot, "modules", moduleId, "metadata", sourcePath);
+        return Path.Combine(ModuleAuthoringPaths.ResolveModuleRoot(effectiveRoot, moduleId), "metadata", sourcePath);
     }
 
     public string ResolveMetadataFilePath(string moduleId, string sourcePath, string sourceFile)
@@ -55,12 +57,13 @@ public class ModuleMetadataStore
             relativeFilePath);
     }
 
+    // 写入优先回到仓库实际 authoring 根。
     public string ResolveAuthoringMetadataDirectory(string moduleId, string sourcePath)
     {
         // authoring 写入默认优先回到仓库根；只有仓库根不存在该模块元数据时，
         // 才允许以 runtime 根作为现存来源做兼容读取/写入。
         var effectiveRoot = ResolvePreferredAuthoringRoot(moduleId, sourcePath);
-        return Path.Combine(effectiveRoot, "modules", moduleId, "metadata", sourcePath);
+        return Path.Combine(ModuleAuthoringPaths.ResolveModuleRoot(effectiveRoot, moduleId), "metadata", sourcePath);
     }
 
     public string ResolvePlatformMetadataFilePath(string fileName)
@@ -86,6 +89,7 @@ public class ModuleMetadataStore
             relativeFilePath);
     }
 
+    // 定位运行时输出中的单个 metadata 文件。
     public string? ResolveRuntimeMetadataFilePath(string moduleId, string sourcePath, string sourceFile)
     {
         if (string.IsNullOrWhiteSpace(_runtimeRoot))
@@ -93,7 +97,7 @@ public class ModuleMetadataStore
             return null;
         }
 
-        return Path.Combine(_runtimeRoot, "modules", moduleId, "metadata", sourcePath, sourceFile);
+        return Path.Combine(ModuleAuthoringPaths.ResolveModuleRoot(_runtimeRoot, moduleId), "metadata", sourcePath, sourceFile);
     }
 
     public string? ResolveRuntimeMetadataRelativeFilePath(string moduleId, string relativeFilePath)
@@ -106,6 +110,7 @@ public class ModuleMetadataStore
         return ResolveMetadataRelativePath(_runtimeRoot, moduleId, relativeFilePath);
     }
 
+    // 定位按模块身份组织的运行时 metadata 输出。
     public string? ResolveRuntimeMetadataDirectory(string moduleId, string sourcePath)
     {
         if (string.IsNullOrWhiteSpace(_runtimeRoot))
@@ -113,7 +118,7 @@ public class ModuleMetadataStore
             return null;
         }
 
-        return Path.Combine(_runtimeRoot, "modules", moduleId, "metadata", sourcePath);
+        return Path.Combine(ModuleAuthoringPaths.ResolveModuleRoot(_runtimeRoot, moduleId), "metadata", sourcePath);
     }
 
     public IReadOnlyList<string> EnumerateMetadataFiles(string moduleId, string sourcePath, string searchPattern)
@@ -174,11 +179,12 @@ public class ModuleMetadataStore
         throw new DirectoryNotFoundException("Unable to locate repository root for metadata storage.");
     }
 
+    // 按 runtime 与 repository 顺序选择实际包含 metadata 的根。
     private string? ResolvePreferredMetadataRoot(string moduleId, string sourcePath)
     {
         foreach (var root in EnumerateMetadataRoots())
         {
-            var sourceDirectory = Path.Combine(root, "modules", moduleId, "metadata", sourcePath);
+            var sourceDirectory = Path.Combine(ModuleAuthoringPaths.ResolveModuleRoot(root, moduleId), "metadata", sourcePath);
             if (Directory.Exists(sourceDirectory))
             {
                 return root;
@@ -187,7 +193,7 @@ public class ModuleMetadataStore
 
         foreach (var root in EnumerateMetadataRoots())
         {
-            var metadataDirectory = Path.Combine(root, "modules", moduleId, "metadata");
+            var metadataDirectory = Path.Combine(ModuleAuthoringPaths.ResolveModuleRoot(root, moduleId), "metadata");
             if (Directory.Exists(metadataDirectory))
             {
                 return root;
@@ -215,16 +221,19 @@ public class ModuleMetadataStore
         return _repositoryRoot;
     }
 
+    // 检查指定根下的真实模块 metadata 路径。
     private static bool MetadataPathExists(string root, string moduleId, string sourcePath)
     {
-        return Directory.Exists(Path.Combine(root, "modules", moduleId, "metadata", sourcePath));
+        return Directory.Exists(Path.Combine(ModuleAuthoringPaths.ResolveModuleRoot(root, moduleId), "metadata", sourcePath));
     }
 
+    // 检查指定根是否包含该模块的 metadata。
     private static bool MetadataRootExists(string root, string moduleId)
     {
-        return Directory.Exists(Path.Combine(root, "modules", moduleId, "metadata"));
+        return Directory.Exists(Path.Combine(ModuleAuthoringPaths.ResolveModuleRoot(root, moduleId), "metadata"));
     }
 
+    // 在模块 metadata 边界内解析相对路径，拒绝越界。
     private static string ResolveMetadataRelativePath(string root, string moduleId, string relativeFilePath)
     {
         if (Path.IsPathRooted(relativeFilePath))
@@ -232,7 +241,7 @@ public class ModuleMetadataStore
             throw new InvalidOperationException($"Metadata relative file path must not be rooted: {relativeFilePath}");
         }
 
-        var metadataRoot = Path.GetFullPath(Path.Combine(root, "modules", moduleId, "metadata"));
+        var metadataRoot = Path.GetFullPath(Path.Combine(ModuleAuthoringPaths.ResolveModuleRoot(root, moduleId), "metadata"));
         var candidatePath = Path.GetFullPath(Path.Combine(metadataRoot, relativeFilePath));
         if (!candidatePath.StartsWith(metadataRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
             && !string.Equals(candidatePath, metadataRoot, StringComparison.OrdinalIgnoreCase))

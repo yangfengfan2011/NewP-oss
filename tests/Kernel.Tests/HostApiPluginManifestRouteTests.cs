@@ -348,6 +348,10 @@ public class HostApiPluginManifestRouteTests : IAsyncLifetime
         }
 
         var externalStateBeforeDisabledStartup = SnapshotExternalPluginState(installRoot);
+        var lifecyclePath = Path.Combine(installRoot, "lifecycle", "v2", "state.json");
+        using var beforeLifecycle = JsonDocument.Parse(File.ReadAllBytes(lifecyclePath));
+        var recordedDesired = beforeLifecycle.RootElement.GetProperty("desiredModules").GetRawText();
+        var externalActiveSnapshot = beforeLifecycle.RootElement.GetProperty("activeSnapshotId").GetString();
         await using (var disabledHost = await StartHostAsync(
                          installRoot,
                          externalPluginsEnabled: false))
@@ -360,6 +364,9 @@ public class HostApiPluginManifestRouteTests : IAsyncLifetime
         AssertExternalPluginStateUnchanged(
             externalStateBeforeDisabledStartup,
             SnapshotExternalPluginState(installRoot));
+        using var disabledLifecycle = JsonDocument.Parse(File.ReadAllBytes(lifecyclePath));
+        Assert.Equal(recordedDesired, disabledLifecycle.RootElement.GetProperty("desiredModules").GetRawText());
+        Assert.NotEqual(externalActiveSnapshot, disabledLifecycle.RootElement.GetProperty("activeSnapshotId").GetString());
 
         await using (var reenabledHost = await StartHostAsync(
                          installRoot,
@@ -368,13 +375,23 @@ public class HostApiPluginManifestRouteTests : IAsyncLifetime
             var files = await ReadActiveModuleAsync(reenabledHost, "Files");
             Assert.Equal(externalFrontendUrl, files.GetProperty("frontend").GetProperty("url").GetString());
         }
+        using var reenabledLifecycle = JsonDocument.Parse(File.ReadAllBytes(lifecyclePath));
+        Assert.Equal(recordedDesired, reenabledLifecycle.RootElement.GetProperty("desiredModules").GetRawText());
+        Assert.Equal(externalActiveSnapshot, reenabledLifecycle.RootElement.GetProperty("activeSnapshotId").GetString());
+        Console.WriteLine("EXTERNAL_SWITCH_LIFECYCLE: " + JsonSerializer.Serialize(new
+        {
+            before = beforeLifecycle.RootElement,
+            disabled = disabledLifecycle.RootElement,
+            reenabled = reenabledLifecycle.RootElement
+        }));
     }
 
     private static IReadOnlyDictionary<string, PersistedFileSnapshot> SnapshotExternalPluginState(
         string installRoot)
     {
         var snapshot = new Dictionary<string, PersistedFileSnapshot>(StringComparer.Ordinal);
-        foreach (var rootName in new[] { "packages", "state", "lifecycle" })
+        // 同一生命周期根的 active/LKG 随真实 Host 提交；库存保持，recorded desired 单独核对。
+        foreach (var rootName in new[] { "packages", "state" })
         {
             var root = Path.Combine(installRoot, rootName);
             if (!Directory.Exists(root))

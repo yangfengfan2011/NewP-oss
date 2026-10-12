@@ -15,6 +15,35 @@ public class PluginOpsIntegrationTests : IDisposable
     private readonly UnifiedPluginPackageTestData _testData = new();
     private readonly List<string> _tempRoots = new();
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Compile_ExternalDisabledKeepsDistributionMembersDespiteInstalledAliases(bool desiredEnabled)
+    {
+        var installRoot = CreateTempRoot("plugin_ops_disabled_aliases");
+        CopyHostDistribution(installRoot);
+        var baseline = CompileSelectedCandidate(installRoot, externalPluginsEnabled: false);
+        var store = new InstalledPluginStateStore(installRoot);
+        var installer = new UnifiedPluginPackageInstaller(store);
+        foreach (var id in new[] { "Audit", "Files" })
+            Assert.Equal("Installed", installer.Install(_testData.CreateValidPackage(id, "2.0.0"), installRoot).Status);
+        var manager = new PluginLifecycleManager(new PluginLifecycleStateStore(installRoot, new PluginLifecycleTestDeployment()));
+        var inventory = InstalledPluginInventoryAdapter.Create(store);
+        Assert.True(manager.RequestDesired(inventory, [new("Audit", "2.0.0", desiredEnabled), new("Files", "2.0.0", desiredEnabled)]).IsSuccess);
+        var desiredPath = Path.Combine(installRoot, "lifecycle", "v2", "state.json");
+        var desired = File.ReadAllBytes(desiredPath);
+        var recorded = manager.ReadRecordedDesired(inventory);
+
+        // 真实发行 Capsule 的必需成员不能因不可消费的 ordinary external 同 ID 库存而消失。
+        var plan = CompileSelectedCandidate(installRoot, externalPluginsEnabled: false);
+        Assert.Equal(baseline.CanonicalBytes, plan.CanonicalBytes);
+        foreach (var id in new[] { "Audit", "Files" })
+            Assert.True(Assert.Single(plan.Modules, module => module.ModuleId == id).Provenance.AuthenticatesBuiltIn(
+                Assert.Single(plan.Modules, module => module.ModuleId == id)));
+        Assert.Equal(desired, File.ReadAllBytes(desiredPath));
+        Assert.Equal(recorded, manager.ReadRecordedDesired(InstalledPluginInventoryAdapter.Create(store)));
+    }
+
     [Fact]
     public void Install_UnselectedVersions_PreservesDesiredPackageAndCompleteCompositionUntilExplicitPrune()
     {
@@ -55,15 +84,15 @@ public class PluginOpsIntegrationTests : IDisposable
     }
 
     // 复用正式选定候选消费者；反射仅跨越保护builtin签发的内部构造入口，不构造手工计划或装载夹具代码。
-    private static CanonicalModulePlan CompileSelectedCandidate(string installRoot)
+    private static CanonicalModulePlan CompileSelectedCandidate(string installRoot, bool externalPluginsEnabled = true)
     {
         var hostRoot = Path.Combine(installRoot, "host-distribution");
         var source = TrustedBuiltInModuleSource.CreateForHostDistribution(hostRoot, Path.Combine(hostRoot, "modules"));
         var inspector = new StandardDataPackageInspector(new PlatformApiHostCatalog(PlatformApiReleaseIdentity.Version,
             [PlatformApiReleaseIdentity.StandardDataProfile], [new(PlatformApiReleaseIdentity.Version, PlatformApiReleaseIdentity.ReleaseDigest)]));
         var constructor = typeof(StandardDataCandidatePlanCompiler).GetConstructor(BindingFlags.Instance | BindingFlags.NonPublic, null,
-            [typeof(TrustedBuiltInModuleSource), typeof(StandardDataPackageInspector), typeof(IEnumerable<string>)], null)!;
-        var compiler = (StandardDataCandidatePlanCompiler)constructor.Invoke([source, inspector, null]);
+            [typeof(TrustedBuiltInModuleSource), typeof(StandardDataPackageInspector), typeof(IEnumerable<string>), typeof(string), typeof(bool)], null)!;
+        var compiler = (StandardDataCandidatePlanCompiler)constructor.Invoke([source, inspector, null, installRoot, externalPluginsEnabled]);
         var inventory = InstalledPluginInventoryAdapter.Create(new InstalledPluginStateStore(installRoot));
         return compiler.Compile(inventory, new PluginLifecycleManager(new PluginLifecycleStateStore(installRoot, new PluginLifecycleTestDeployment())).Resolve(inventory));
     }
@@ -100,7 +129,7 @@ public class PluginOpsIntegrationTests : IDisposable
             [
                 "--package", replacementPackageRoot,
                 "--install-root", installRoot
-            ]);
+            ], externalPluginsEnabled: true);
 
         Assert.True(result.ExitCode == 0, result.StdOut + result.StdErr);
         Assert.Contains("install:PendingRestart", result.StdOut, StringComparison.OrdinalIgnoreCase);
@@ -246,6 +275,21 @@ public class PluginOpsIntegrationTests : IDisposable
 
     private sealed record PluginOpsResult(int ExitCode, string StdOut, string StdErr);
 
+    private static string CopyHostDistribution(string installRoot)
+    {
+        var repoRoot = FindRepositoryRoot();
+        var hostRoot = Path.Combine(installRoot, "host-distribution");
+        var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
+        var hostSource = Path.Combine(repoRoot, "apps", "host-api", "bin", configuration, "net10.0");
+        foreach (var file in Directory.EnumerateFiles(hostSource, "*", SearchOption.AllDirectories))
+        {
+            var target = Path.Combine(hostRoot, Path.GetRelativePath(hostSource, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target, overwrite: true);
+        }
+        return hostRoot;
+    }
+
     private static class PluginOpsProcess
     {
         public static PluginOpsResult Run(string command, IReadOnlyList<string> options, bool externalPluginsEnabled = false)
@@ -276,15 +320,7 @@ public class PluginOpsIntegrationTests : IDisposable
             process.StartInfo.ArgumentList.Add("--");
             process.StartInfo.ArgumentList.Add(command);
             var installRoot = options[options.ToList().IndexOf("--install-root") + 1];
-            var hostRoot = Path.Combine(installRoot, "host-distribution");
-            var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
-            var hostSource = Path.Combine(repoRoot, "apps", "host-api", "bin", configuration, "net10.0");
-            foreach (var file in Directory.EnumerateFiles(hostSource, "*", SearchOption.AllDirectories))
-            {
-                var target = Path.Combine(hostRoot, Path.GetRelativePath(hostSource, file));
-                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                File.Copy(file, target, overwrite: true);
-            }
+            var hostRoot = CopyHostDistribution(installRoot);
             process.StartInfo.ArgumentList.Add("--host-path");
             process.StartInfo.ArgumentList.Add(Path.Combine(hostRoot, "HostApi.dll"));
             process.StartInfo.Environment["Platform__ExternalPluginsEnabled"] = externalPluginsEnabled ? "true" : "false";

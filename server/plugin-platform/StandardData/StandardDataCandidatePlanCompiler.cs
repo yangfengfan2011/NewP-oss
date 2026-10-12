@@ -50,18 +50,6 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
     {
         var candidates = new List<ModuleCapsuleCandidate>();
         var builtInCandidates = _builtInModuleSource is null ? [] : _candidateReader.ReadTrustedBuiltIn(_builtInModuleSource);
-        var selectedDesiredModuleIds = state.DesiredModules
-            .Select(static item => item.ModuleId)
-            .ToHashSet(StringComparer.Ordinal);
-        if (_builtInModuleSource is not null)
-        {
-            // 同 ID 的已安装 desired 版本是内建模块的显式升级候选；
-            // 仅排除大小写完全一致的内建项，大小写折叠冲突仍交给 Canonical 编译器拒绝。
-            candidates.AddRange(builtInCandidates
-                .Where(candidate => !_excludedBuiltInModuleIds.Contains(candidate.ModuleId))
-                .Where(candidate => !selectedDesiredModuleIds.Contains(candidate.ModuleId)));
-        }
-
         foreach (var desired in state.DesiredModules
                      .OrderBy(static item => item.ModuleId, StringComparer.Ordinal))
         {
@@ -142,6 +130,13 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
 
             candidates.Add(BuildCandidate(packageRoot, inspection) with { Enabled = desired.Enabled });
         }
+
+        // 只有实际消费的选择遮蔽发行默认项；关闭普通外部后不能撤去同 ID 的基础成员。
+        // 保留精确大小写匹配，大小写折叠冲突继续由 Canonical 编译器拒绝。
+        var selectedCandidateModuleIds = candidates.Select(candidate => candidate.ModuleId).ToHashSet(StringComparer.Ordinal);
+        candidates.AddRange(builtInCandidates
+            .Where(candidate => !_excludedBuiltInModuleIds.Contains(candidate.ModuleId))
+            .Where(candidate => !selectedCandidateModuleIds.Contains(candidate.ModuleId)));
 
         var compilation = _compiler.Compile("plugin-activation", candidates, _builtInModuleSource?.PlatformCompositionModuleId);
         if (!compilation.IsSuccess || compilation.Plan is null)

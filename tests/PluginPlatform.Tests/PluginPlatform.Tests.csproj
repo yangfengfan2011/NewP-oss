@@ -23,6 +23,8 @@
     <ProjectReference Include="..\..\server\plugin-platform\PluginPlatform.csproj" />
     <ProjectReference Include="..\..\server\modules\Part\PartModule.csproj" />
     <ProjectReference Include="..\..\server\modules\Part\Migrations.SqlServer\Part.SqlServerMigrations.csproj" />
+    <ProjectReference Include="..\..\server\modules\Workspace\WorkspaceModule.csproj" />
+    <ProjectReference Include="..\..\server\modules\Workspace\Migrations.SqlServer\Workspace.SqlServerMigrations.csproj" />
   </ItemGroup>
 
 </Project>

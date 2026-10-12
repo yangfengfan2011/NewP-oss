@@ -11,11 +11,43 @@ using ICP.Platform.PluginPlatform.Lifecycle;
 using ICP.Platform.PluginPlatform.StandardData;
 using Xunit;
 using ICP.Platform.Testing;
+using System.Reflection;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
+using ICP.Platform.Kernel.ModuleLoading;
 
 namespace ICP.Platform.PluginPlatform.Tests;
 
 public sealed class ComponentBundleTests
 {
+    [Fact]
+    public void RealWorkspace_SharedReferencesMatchControlledReleaseAndExistingHostBoundary()
+    {
+        using var release = JsonDocument.Parse(PlatformRuntimeReleaseIdentity.Descriptor);
+        var shared = release.RootElement.GetProperty("backend").GetProperty("assemblies");
+        var expected = new HashSet<string>(StringComparer.Ordinal)
+            { "Microsoft.Data.SqlClient", "PlatformAuthorization", "PlatformQuery", "Authorization.Contracts", "Microsoft.EntityFrameworkCore.Abstractions" };
+        // PlatformQuery 是 Workspace 使用的 PlatformCrud 的真实传递共享引用。
+        foreach (var assembly in new[] { "WorkspaceModule.dll", "PlatformCrud.dll", "Workspace.SqlServerMigrations.dll" })
+        {
+            using var stream = File.OpenRead(Path.Combine(AppContext.BaseDirectory, assembly));
+            using var pe = new PEReader(stream);
+            var metadata = pe.GetMetadataReader();
+            foreach (var handle in metadata.AssemblyReferences)
+            {
+                var reference = metadata.GetAssemblyReference(handle);
+                var name = metadata.GetString(reference.Name);
+                if (!expected.Remove(name)) continue;
+                var identity = new AssemblyName(name) { Version = reference.Version };
+                identity.SetPublicKeyToken(metadata.GetBlobBytes(reference.PublicKeyOrToken));
+                Assert.True(VerifiedAssemblyIdentityPolicy.IsHostPlatformSharedDependency(identity), name);
+                Assert.True(shared.TryGetProperty(name, out var declared), name);
+                Assert.Equal(reference.Version.ToString(), declared.GetString());
+            }
+        }
+        Assert.Empty(expected);
+    }
+
     [Fact]
     public void OrdinaryInstall_AndDescriptiveSourceFieldsCannotGrantNativeTrust()
     {

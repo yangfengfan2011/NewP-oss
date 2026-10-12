@@ -17,7 +17,12 @@
       "PlatformCrud": "1.0.0.0",
       "PlatformPersistence": "1.0.0.0",
       "PlatformPersistence.EfCore": "1.0.0.0",
+      "PlatformAuthorization": "1.0.0.0",
+      "PlatformQuery": "1.0.0.0",
+      "Authorization.Contracts": "1.0.0.0",
+      "Microsoft.Data.SqlClient": "6.0.0.0",
       "Microsoft.EntityFrameworkCore": "10.0.1.0",
+      "Microsoft.EntityFrameworkCore.Abstractions": "10.0.1.0",
       "Microsoft.EntityFrameworkCore.Relational": "10.0.1.0",
       "Microsoft.EntityFrameworkCore.SqlServer": "10.0.1.0"
     }

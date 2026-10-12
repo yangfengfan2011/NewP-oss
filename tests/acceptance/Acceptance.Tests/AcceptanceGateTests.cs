@@ -344,6 +344,53 @@ public sealed class AcceptanceGateTests
             .RunAsync(CancellationToken.None);
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_COMPONENT_ACCEPTANCE", "固定原生发行物、正式旧 Part SQL 输入与安装后连续性")]
+    public async Task NativeComponentPartApi_UsesFixedRelease()
+    {
+        var (root, runId) = PrepareRun("native-component-part-api");
+        var fixture = PublishedComponentAcceptanceFixture.FromEnvironment(RepositoryRoot, root, runId);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false,
+            publishedFixture: fixture, includeBrowser: false).RunAsync(CancellationToken.None);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_COMPONENT_ACCEPTANCE", "固定原生发行物使用同一正式 Part 页面驱动")]
+    public async Task NativeComponentPart_UsesFixedReleaseAndFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-component-part");
+        var fixture = PublishedComponentAcceptanceFixture.FromEnvironment(RepositoryRoot, root, runId);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false,
+            publishedFixture: fixture, browserJourney: async (page, token) =>
+            {
+                var driver = new StandardMetadataPageDriver(page, "零组件", "/parts", "/api/part/parts", "新建零组件");
+                Task CaptureAsync(string name) => page.ScreenshotAsync(new()
+                { Path = Path.Combine(root, name), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                await driver.OpenAsync();
+                await CaptureAsync("part-existing-list.png");
+                var oldProperties = await driver.OpenPropertiesAsync(fixture.ExistingCode, fixture.ExistingName);
+                await CaptureAsync("part-existing-properties.png");
+                await page.SetViewportSizeAsync(900, 1000);
+                await CaptureAsync("part-existing-properties-narrow.png");
+                await page.SetViewportSizeAsync(1440, 1000);
+                await driver.OpenFullDetailAsync(oldProperties, fixture.ExistingName);
+                await CaptureAsync("part-existing-detail.png");
+                await page.SetViewportSizeAsync(900, 1000);
+                await CaptureAsync("part-existing-detail-narrow.png");
+                await page.SetViewportSizeAsync(1440, 1000);
+                await driver.OpenAsync();
+                var create = await driver.OpenCreateAsync();
+                await CaptureAsync("part-create.png");
+                await page.SetViewportSizeAsync(900, 1000);
+                await CaptureAsync("part-create-narrow.png");
+                await page.SetViewportSizeAsync(1440, 1000);
+                var code = "ACC-NATIVE-P-" + runId[..8];
+                var name = "独立安装页面零组件 " + runId[..8];
+                await driver.SaveCreateAsync(create, code, name);
+                await CaptureAsync("part-created-list.png");
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
+                    new { early271 = true, url = page.Url, actor = "ordinary", createdObject = code }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact(RunEnvironmentVariable, "正式 Document 迁移、普通账号标准创建及 Drawer/独立只读属性 driver")]
     public async Task DocumentCreation_UsesFormalDriver()
     {

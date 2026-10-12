@@ -27,11 +27,24 @@ internal static class FormalIdentityBootstrap
             "Release",
             "net10.0",
             "HostApi.dll");
+        return await RunPublishedAsync(repositoryRoot, hostDll, ResolveHostWorkingDirectory(repositoryRoot),
+            resourceRoot, environment, cancellationToken);
+    }
+
+    // 固定发行物仍走同一正式维护命令和真实 console，不回退到仓库开发 Host。
+    internal static async Task<FormalIdentityBootstrapResult> RunPublishedAsync(
+        string repositoryRoot,
+        string hostDll,
+        string hostWorkingDirectory,
+        string resourceRoot,
+        IReadOnlyDictionary<string, string?> environment,
+        CancellationToken cancellationToken)
+    {
         var process = await WindowsInteractiveConsole.RunAsync(
             "dotnet.exe",
             [hostDll, "identity", "bootstrap-local-admin"],
             repositoryRoot,
-            ResolveHostWorkingDirectory(repositoryRoot),
+            hostWorkingDirectory,
             resourceRoot,
             environment,
             cancellationToken);

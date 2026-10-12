@@ -12,7 +12,9 @@ namespace ICP.Platform.Acceptance;
 internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string runDirectory, string runId, bool includeSpaceLifecycle = true,
     Func<IPage, CancellationToken, Task>? browserJourney = null,
     Func<AcceptanceFeatureCatalog, IReadOnlyList<FeaturePoint>>? selectFeatures = null,
-    Func<HttpClient, AcceptanceFeatureCatalog, WorkspaceAcceptanceActor, CancellationToken, Task>? prepareJourney = null)
+    Func<HttpClient, AcceptanceFeatureCatalog, WorkspaceAcceptanceActor, CancellationToken, Task>? prepareJourney = null,
+    PublishedComponentAcceptanceFixture? publishedFixture = null,
+    bool includeBrowser = true)
     : AcceptanceRunner(repositoryRoot, runDirectory, runId)
 {
     private ReusableSqlServerDatabase? _databaseLease;
@@ -24,6 +26,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
     private int _shellPort;
     private WorkspaceAcceptanceActor? _actor;
     private string? _entryPosition;
+    private string? _publishedShellOrigin;
     private string PartCode => $"WS-P-{_runId[..8]}";
     private string PartName => $"混合零组件旅程 {_runId[..8]}";
     private string DocumentCode => $"WS-D-{_runId[..8]}";
@@ -32,13 +35,20 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
     protected override async Task RunScenariosAsync(CancellationToken token)
     {
         await RunScenarioAsync("workspace.formal-initialization", PrepareAsync, token);
-        await RunScenarioAsync("workspace.browser", RunBrowserAsync, token);
+        if (includeBrowser) await RunScenarioAsync("workspace.browser", RunBrowserAsync, token);
         if (browserJourney is null && includeSpaceLifecycle) await RunScenarioAsync("workspace.process-restart", VerifyProcessRestartAsync, token);
     }
 
     // 空 schema 只由正式 Host bootstrap/migration 建立，普通 actor 的初次个人初始化留给真实页面入口。
     private async Task PrepareAsync(CancellationToken token)
     {
+        if (publishedFixture is not null)
+        {
+            var target = await publishedFixture.PrepareAsync(RegisterSecret, AddConnectionSecrets, Sanitize, token);
+            _actor = target.Actor;
+            _publishedShellOrigin = target.ShellOrigin;
+            return;
+        }
         _databaseLease = await ReusableSqlServerDatabase.AcquireAsync(_repositoryRoot, token);
         _connection = _databaseLease.ConnectionString;
         AddConnectionSecrets(_connection, new SqlConnectionStringBuilder(_connection).Password);
@@ -115,19 +125,29 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
         var page = await context.NewPageAsync();
         var errors = new ConcurrentQueue<string>();
         var failedResponses = new ConcurrentQueue<IResponse>();
+        var frontendResponses = new ConcurrentQueue<object>();
         page.PageError += (_, error) => errors.Enqueue(error);
         page.RequestFailed += (_, request) => errors.Enqueue($"{request.Method} {request.Url}: {request.Failure}");
         page.Response += (_, response) => { if (response.Status >= 400) failedResponses.Enqueue(response); };
+        if (publishedFixture is not null) page.Response += (_, response) =>
+        {
+            var path = new Uri(response.Url).AbsolutePath;
+            if (path.StartsWith("/plugins/runtime/", StringComparison.Ordinal)
+                || path.StartsWith("/shared-runtime/", StringComparison.Ordinal))
+                frontendResponses.Enqueue(new { path, response.Status });
+        };
         page.SetDefaultTimeout(30_000);
         page.SetDefaultNavigationTimeout(120_000);
         var driver = new WorkspacePageDriver(page);
         try
         {
             token.ThrowIfCancellationRequested();
-            await new ShellPageDriver(page, $"http://127.0.0.1:{_shellPort}").LoginAsync(actor.ECode, actor.Password);
+            await new ShellPageDriver(page, _publishedShellOrigin ?? $"http://127.0.0.1:{_shellPort}").LoginAsync(actor.ECode, actor.Password);
             if (browserJourney is not null)
             {
                 await browserJourney(page, token);
+                if (publishedFixture is not null)
+                    await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "frontend-load.json"), frontendResponses.ToArray(), token);
                 return;
             }
             await driver.OpenAsync();
@@ -275,6 +295,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
 
     protected override async Task<AcceptanceCleanupResult> TeardownAsync(CancellationToken token)
     {
+        if (publishedFixture is not null) return await publishedFixture.TeardownAsync(token);
         try { return await TeardownResourcesAsync(token); }
         finally
         {

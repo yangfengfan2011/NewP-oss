@@ -18,9 +18,13 @@ public sealed class DocumentModelMetadataProvider : IModelDefinitionProvider
     public IReadOnlyList<ModelDefinition> GetDefinitions()
     {
         var storage = new JsonStorageTypeMapLoader().LoadFromFile(Path.Combine(MetadataRoot(), "server/platform-modeling/metadata/storage-types.json"));
-        var document = GetDocument();
-        new ModelMetadataValidator().Validate(document, storage);
-        return [new ModelMetadataProjector().Project(document, storage, "SqlServer") with { OwnerModuleId = "Document" }];
+        var moduleRoot = ModuleAuthoringPaths.ResolveModuleRoot(MetadataRoot(), "Document");
+        return new[] { "Document", "DocumentVersion", "DocumentIteration" }.Select(name =>
+        {
+            var document = new JsonModelMetadataDocumentLoader().LoadFromFile(Path.Combine(moduleRoot, "metadata/models", name + ".model.json"));
+            new ModelMetadataValidator().Validate(document, storage);
+            return new ModelMetadataProjector().Project(document, storage, "SqlServer") with { OwnerModuleId = "Document" };
+        }).ToArray();
     }
 
     // 正式输出带有同一 authoring；设计时再向上查找仓库输入，显示仍消费已编译计划。

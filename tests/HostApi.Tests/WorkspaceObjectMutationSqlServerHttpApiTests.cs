@@ -15,6 +15,106 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class WorkspaceObjectMutationSqlServerHttpApiTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "Document真实改码同步规范快照，重复码标准冲突与双侧回滚")]
+    public async Task DocumentCodeEdit_CopiesCanonicalSnapshotAndDuplicateCodeKeepsBothSides()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
+        using var admin = await fixture.LoginAdministratorAsync();
+        var root = await RootAsync(fixture, admin);
+        var document = await CreateAsync(fixture, admin, root, "documents", "createDocument", "code-before");
+        await CreateAsync(fixture, admin, root, "documents", "createDocument", "code-existing");
+        using var notCanonical = await SendAsync(fixture, admin, "edit", HttpMethod.Put, $"/api/workspace/content/{document.Link}",
+            new { position = root, values = new { ECODE = "  code-after  " } });
+        Assert.Equal(HttpStatusCode.BadRequest, notCanonical.StatusCode);
+        Assert.Equal("StandardCrud.ShortTextNotNormalized", JsonSerializer.Deserialize<JsonElement>(await notCanonical.Content.ReadAsStringAsync()).GetProperty("code").GetString());
+        using var edited = await SendAsync(fixture, admin, "edit", HttpMethod.Put, $"/api/workspace/content/{document.Link}",
+            new { position = root, values = new { ECODE = "code-after", ENAME = "名称已编辑", Description = "快照" } });
+        Assert.True(edited.StatusCode == HttpStatusCode.OK, await edited.Content.ReadAsStringAsync());
+        using (var scope = fixture.Services.CreateScope())
+        {
+            var identity = await scope.ServiceProvider.GetRequiredService<ICP.Platform.Modules.Document.DocumentInitialIdentity>().ReadCurrentAsync(document.Id);
+            Assert.Equal("code-after", identity.Master["ECODE"]); Assert.Equal("名称已编辑", identity.Master["ENAME"]);
+            foreach (var field in new[] { "ECODE", "ENAME", "Description", "UpdatedBy", "UpdatedAt" }) Assert.Equal(identity.Master[field], identity.Iteration[field]);
+        }
+        using var duplicate = await SendAsync(fixture, admin, "edit", HttpMethod.Put, $"/api/workspace/content/{document.Link}",
+            new { position = root, values = new { ECODE = "code-existing", ENAME = "不可提交" } });
+        Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
+        Assert.Equal("StandardCrud.PersistenceConflict", JsonSerializer.Deserialize<JsonElement>(await duplicate.Content.ReadAsStringAsync()).GetProperty("code").GetString());
+        using var retainedScope = fixture.Services.CreateScope();
+        var retained = await retainedScope.ServiceProvider.GetRequiredService<ICP.Platform.Modules.Document.DocumentInitialIdentity>().ReadCurrentAsync(document.Id);
+        Assert.Equal("code-after", retained.Master["ECODE"]); Assert.Equal("名称已编辑", retained.Master["ENAME"]);
+        Assert.Equal(retained.Master["ECODE"], retained.Iteration["ECODE"]); Assert.Equal(retained.Master["ENAME"], retained.Iteration["ENAME"]);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "真实图文档指针损坏及后项批删失败保持master和快照原子")]
+    public async Task DocumentIdentity_CorruptionAndLaterMixedDeleteFailureRollBackAllOwnedRows()
+    {
+        var fault = new DeleteFault { FailSecondDocument = true };
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
+            services.AddDbContext<EfPlatformDbContext>((_, options) => options.AddInterceptors(fault)), includeWorkspace: true);
+        using var admin = await fixture.LoginAdministratorAsync();
+        var root = await RootAsync(fixture, admin);
+        var document = await CreateAsync(fixture, admin, root, "documents", "createDocument", "identity-doc");
+        var otherDocument = await CreateAsync(fixture, admin, root, "documents", "createDocument", "identity-other");
+        var part = await CreateAsync(fixture, admin, root, "parts", "createPart", "identity-part");
+        var secondPart = await CreateAsync(fixture, admin, root, "parts", "createPart", "identity-second-part");
+        string versionId, otherVersionId, iterationId;
+        using (var initialScope = fixture.Services.CreateScope())
+        {
+            var identities = initialScope.ServiceProvider.GetRequiredService<ICP.Platform.Modules.Document.DocumentInitialIdentity>();
+            var current = await identities.ReadCurrentAsync(document.Id);
+            var other = await identities.ReadCurrentAsync(otherDocument.Id);
+            versionId = (string)current.Version["EID"]!; otherVersionId = (string)other.Version["EID"]!;
+            iterationId = (string)current.Iteration["EID"]!;
+            var db = initialScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+            Assert.Null(db.Model.FindEntityType("Part")!.FindProperty("LatestVersionId"));
+            Assert.Null(db.Model.FindEntityType("WorkspaceFolder")!.FindProperty("LatestVersionId"));
+            await db.Set<Dictionary<string, object?>>("Document").Where(row => EF.Property<string>(row, "EID") == document.Id)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(row => EF.Property<string>(row, "LatestVersionId"), otherVersionId));
+        }
+        using var forged = await SendAsync(fixture, admin, "edit", HttpMethod.Put, $"/api/workspace/content/{document.Link}",
+            new { position = root, values = new { LatestVersionId = versionId } });
+        Assert.Equal(HttpStatusCode.BadRequest, forged.StatusCode);
+        using var corrupt = await SendAsync(fixture, admin, "edit", HttpMethod.Put, $"/api/workspace/content/{document.Link}",
+            new { position = root, values = new { ENAME = "must-rollback" } });
+        Assert.Equal(HttpStatusCode.InternalServerError, corrupt.StatusCode);
+        using var corruptDelete = await SendAsync(fixture, admin, "delete", HttpMethod.Delete, $"/api/workspace/content/{document.Link}", new { position = root });
+        Assert.Equal(HttpStatusCode.InternalServerError, corruptDelete.StatusCode);
+        using (var readScope = fixture.Services.CreateScope())
+        {
+            var db = readScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+            var master = await db.Set<Dictionary<string, object?>>("Document").SingleAsync(row => EF.Property<string>(row, "EID") == document.Id);
+            var iteration = await db.Set<Dictionary<string, object?>>("DocumentIteration").SingleAsync(row => EF.Property<string>(row, "EID") == iterationId);
+            Assert.Equal("identity-doc", master["ENAME"]); Assert.Equal(master["ENAME"], iteration["ENAME"]);
+            await db.Set<Dictionary<string, object?>>("Document").Where(row => EF.Property<string>(row, "EID") == document.Id)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(row => EF.Property<string>(row, "LatestVersionId"), versionId));
+        }
+        fault.Enabled = true;
+        using var failed = await SendAsync(fixture, admin, "deleteObjects", HttpMethod.Post, "/api/workspace/content/delete",
+            new { position = root, linkIds = new[] { document.Link, otherDocument.Link, part.Link, secondPart.Link } });
+        Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
+        fault.Enabled = false;
+        Assert.True(fault.DocumentDeleted, (await failed.Content.ReadAsStringAsync()).Split("HEADERS", StringSplitOptions.None)[0]);
+        using (var retainedScope = fixture.Services.CreateScope())
+        {
+            var current = await retainedScope.ServiceProvider.GetRequiredService<ICP.Platform.Modules.Document.DocumentInitialIdentity>().ReadCurrentAsync(document.Id);
+            Assert.Equal(versionId, current.Version["EID"]); Assert.Equal(iterationId, current.Iteration["EID"]);
+            var db = retainedScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+            foreach (var target in new[] { document, otherDocument, part, secondPart })
+            {
+                Assert.True(await db.Set<Dictionary<string, object?>>(target.Model).AnyAsync(row => EF.Property<string>(row, "EID") == target.Id));
+                Assert.True(await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AnyAsync(row => EF.Property<string>(row, "LID") == target.Link));
+            }
+        }
+        using var single = await SendAsync(fixture, admin, "delete", HttpMethod.Delete, $"/api/workspace/content/{document.Link}", new { position = root });
+        Assert.True(single.StatusCode == HttpStatusCode.OK, (await single.Content.ReadAsStringAsync()).Split("HEADERS", StringSplitOptions.None)[0]);
+        using var finalScope = fixture.Services.CreateScope();
+        var finalDb = finalScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        Assert.False(await finalDb.Set<Dictionary<string, object?>>("DocumentVersion").AnyAsync(row => EF.Property<string>(row, "EID") == versionId));
+        Assert.False(await finalDb.Set<Dictionary<string, object?>>("DocumentIteration").AnyAsync(row => EF.Property<string>(row, "EID") == iterationId));
+        Assert.NotNull(await finalScope.ServiceProvider.GetRequiredService<ICP.Platform.Modules.Document.DocumentInitialIdentity>().ReadCurrentAsync(otherDocument.Id));
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "真实混合内容编辑、共享引用清理和批量删除")]
     public async Task EditAndDelete_UsesOwningRulesAndDeletesAllReferences()
     {
@@ -74,6 +174,12 @@ public sealed class WorkspaceObjectMutationSqlServerHttpApiTests
             Assert.Equal(before["CreatedAt"], after["CreatedAt"]);
             Assert.Equal(before["CreatedBy"], after["CreatedBy"]);
             Assert.True((DateTime)after["UpdatedAt"]! >= (DateTime)before["UpdatedAt"]!);
+            if (target.Model == "Document")
+            {
+                var identity = await afterScope.ServiceProvider.GetRequiredService<ICP.Platform.Modules.Document.DocumentInitialIdentity>().ReadCurrentAsync(target.Id);
+                foreach (var field in new[] { "ECODE", "ENAME", "Description", "UpdatedBy", "UpdatedAt" })
+                    Assert.Equal(after[field], identity.Iteration[field]);
+            }
         }
         using var duplicate = await SendAsync(fixture, admin, "edit", HttpMethod.Put, $"/api/workspace/content/{part.Link}",
             new { position = root, values = new { ECODE = "other-part", ENAME = "duplicate" } });
@@ -104,6 +210,8 @@ public sealed class WorkspaceObjectMutationSqlServerHttpApiTests
             Assert.False(await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AnyAsync(row => EF.Property<string>(row, "CEID") == target.Id));
         }
         Assert.True(await db.Set<Dictionary<string, object?>>("Part").AnyAsync(row => EF.Property<string>(row, "EID") == anotherPart.Id));
+        Assert.False(await db.Set<Dictionary<string, object?>>("DocumentVersion").AnyAsync());
+        Assert.False(await db.Set<Dictionary<string, object?>>("DocumentIteration").AnyAsync());
         using var single = await SendAsync(fixture, admin, "delete", HttpMethod.Delete, $"/api/workspace/content/{anotherPart.Link}", new { position = root });
         Assert.Equal(HttpStatusCode.OK, single.StatusCode);
     }
@@ -327,16 +435,30 @@ public sealed class WorkspaceObjectMutationSqlServerHttpApiTests
     private sealed class DeleteFault : DbCommandInterceptor
     {
         public bool Enabled { get; set; }
+        public bool FailSecondDocument { get; init; }
+        public bool DocumentDeleted { get; private set; }
+        private int DocumentDeletes { get; set; }
         public int EntityDeletes { get; private set; }
         public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
         {
-            if (Enabled && command.CommandText.Contains("DELETE", StringComparison.Ordinal) && command.CommandText.Contains("[Part]", StringComparison.Ordinal) && ++EntityDeletes == 2) throw new InvalidOperationException("WORKSPACE_DELETE_FAILURE");
+            RecordDelete(command);
             return ValueTask.FromResult(result);
         }
         public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
-            if (Enabled && command.CommandText.Contains("DELETE", StringComparison.Ordinal) && command.CommandText.Contains("[Part]", StringComparison.Ordinal) && ++EntityDeletes == 2) throw new InvalidOperationException("WORKSPACE_DELETE_FAILURE");
+            RecordDelete(command);
             return ValueTask.FromResult(result);
+        }
+        private void RecordDelete(DbCommand command)
+        {
+            if (!Enabled || !command.CommandText.Contains("DELETE", StringComparison.Ordinal)) return;
+            if (command.CommandText.Contains("[Document]", StringComparison.Ordinal))
+            {
+                DocumentDeleted = true;
+                if (++DocumentDeletes == 2 && FailSecondDocument) throw new InvalidOperationException("WORKSPACE_DELETE_FAILURE");
+            }
+            if (!FailSecondDocument && command.CommandText.Contains("[Part]", StringComparison.Ordinal) && ++EntityDeletes == 2)
+                throw new InvalidOperationException("WORKSPACE_DELETE_FAILURE");
         }
     }
 }

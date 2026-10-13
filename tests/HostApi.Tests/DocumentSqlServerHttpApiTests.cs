@@ -39,6 +39,17 @@ public sealed class DocumentSqlServerHttpApiTests
         Assert.False(string.IsNullOrWhiteSpace(fields.GetProperty("UpdatedAt_DisplayValue").GetString()));
         var read = Entry(fixture);
         var id = result.GetProperty("fields").GetProperty("EID").GetString();
+        using (var scope = fixture.Services.CreateScope())
+        {
+            var identity = await scope.ServiceProvider.GetRequiredService<ICP.Platform.Modules.Document.DocumentInitialIdentity>().ReadCurrentAsync(id!);
+            Assert.Equal(1L, identity.Version["VersionOrdinal"]);
+            Assert.Equal("1", identity.Version["VersionLabel"]);
+            Assert.Equal("new", identity.Version["State"]);
+            Assert.Equal(1L, identity.Iteration["IterationOrdinal"]);
+            Assert.Equal("generic", identity.Iteration["DatasetTypeKey"]);
+            foreach (var field in new[] { "ECODE", "ENAME", "Description", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt" })
+                Assert.Equal(identity.Master[field], identity.Iteration[field]);
+        }
         var detail = await FeatureHttpTestRequests.ReadAsync(admin, read, "/api/document/documents/" + id);
         Assert.Equal(500, detail.GetProperty("fields").GetProperty("Description").GetString()!.Length);
         var candidates = await FeatureHttpTestRequests.ReadAsync(admin, read, "/api/document/documents?keyword=DOC-001&fields=EID,ECODE,ENAME&pageSize=1");
@@ -71,7 +82,8 @@ public sealed class DocumentSqlServerHttpApiTests
             (new { ECODE = "EMPTY-NAME", ENAME = " \t " }, "ENAME", "Document.NameRequired"),
             (new { ECODE = "TOO-LONG", ENAME = "超长", Description = new string('字', 501) }, "Description", "Document.DescriptionTooLong"),
             (new { ECODE = "AUDIT", ENAME = "审计伪造", CreatedBy = "other" }, "CreatedBy", "StandardCrud.ServerOwnedFieldReadOnly"),
-            (new { ECODE = "ID", ENAME = "主键伪造", EID = "chosen-id" }, "EID", "StandardCrud.ServerOwnedFieldReadOnly")
+            (new { ECODE = "ID", ENAME = "主键伪造", EID = "chosen-id" }, "EID", "StandardCrud.ServerOwnedFieldReadOnly"),
+            (new { ECODE = "VERSION", ENAME = "版本伪造", LatestVersionId = "chosen-version" }, "LatestVersionId", "StandardCrud.ServerOwnedFieldReadOnly")
         })
         {
             using var denied = await FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post, "/api/document/documents", values);
@@ -83,6 +95,9 @@ public sealed class DocumentSqlServerHttpApiTests
         Assert.Equal(0, (await FeatureHttpTestRequests.ReadAsync(admin, Entry(fixture), "/api/document/documents")).GetProperty("total").GetInt32());
         var responses = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => FeatureHttpTestRequests.SendAsync(admin, create,
             HttpMethod.Post, "/api/document/documents", new { ECODE = "RACE", ENAME = "同名允许" })));
+        foreach (var response in responses)
+            Assert.True(response.StatusCode is HttpStatusCode.Created or HttpStatusCode.Conflict,
+                $"{response.StatusCode}: {(await response.Content.ReadAsStringAsync()).Split("HEADERS", StringSplitOptions.None)[0]}");
         Assert.Single(responses, response => response.StatusCode == HttpStatusCode.Created);
         Assert.Equal(3, responses.Count(response => response.StatusCode == HttpStatusCode.Conflict));
         foreach (var response in responses)
@@ -175,6 +190,10 @@ public sealed class DocumentSqlServerHttpApiTests
         fault.Enabled = false;
         Assert.Equal(0, (await FeatureHttpTestRequests.ReadAsync(admin, Entry(fixture), "/api/document/documents?keyword=ROLLBACK")).GetProperty("total").GetInt32());
         Assert.True(fault.FailedInsideTransaction);
+        using var scope = fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        Assert.False(await db.Set<Dictionary<string, object?>>("DocumentVersion").AnyAsync());
+        Assert.False(await db.Set<Dictionary<string, object?>>("DocumentIteration").AnyAsync());
     }
 
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "图文档和零组件同码由各自资源、模型和数据库唯一索引独立保护")]

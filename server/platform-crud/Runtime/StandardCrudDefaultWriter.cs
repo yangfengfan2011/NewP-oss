@@ -420,8 +420,8 @@ public sealed class StandardCrudDefaultWriter
         ReasonKey = "standardCrud.notFound"
     };
 
-    // 数据库约束是校验后的最终并发裁决；公共边界只暴露稳定冲突，不返回 provider 细节。
-    internal static StandardCrudError PersistenceConflict(StandardCrudDescriptor descriptor) => new()
+    /// <summary>所属行为在受控 Flush 遇到已确认数据库约束冲突时复用标准 409，不暴露 provider 细节。</summary>
+    public static StandardCrudError PersistenceConflict(StandardCrudDescriptor descriptor) => new()
     {
         StatusCode = 409,
         Code = "StandardCrud.PersistenceConflict",

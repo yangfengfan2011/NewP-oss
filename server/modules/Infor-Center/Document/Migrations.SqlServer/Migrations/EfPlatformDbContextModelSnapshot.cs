@@ -22,7 +22,7 @@ namespace ICP.Platform.Modules.Document.Migrations.SqlServer.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
-            modelBuilder.Entity("Document/Document", b =>
+            modelBuilder.Entity("Document", b =>
                 {
                     b.Property<string>("EID")
                         .HasMaxLength(128)
@@ -55,6 +55,11 @@ namespace ICP.Platform.Modules.Document.Migrations.SqlServer.Migrations
                         .HasColumnType("nvarchar(256)")
                         .HasColumnName("ENAME");
 
+                    b.Property<string>("LatestVersionId")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("LatestVersionId");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("UpdatedAt");
@@ -76,6 +81,171 @@ namespace ICP.Platform.Modules.Document.Migrations.SqlServer.Migrations
                         .HasDatabaseName("UX_Document_EID");
 
                     b.ToTable("Document", "dbo");
+                });
+
+            modelBuilder.Entity("DocumentIteration", b =>
+                {
+                    b.Property<string>("EID")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("EID");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CreatedAt");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("CreatedBy");
+
+                    b.Property<string>("DatasetTypeKey")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("DatasetTypeKey");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("Description");
+
+                    b.Property<string>("ECODE")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("ECODE");
+
+                    b.Property<string>("ENAME")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("ENAME");
+
+                    b.Property<long>("IterationOrdinal")
+                        .HasColumnType("bigint")
+                        .HasColumnName("IterationOrdinal");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("Kind");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("UpdatedAt");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("UpdatedBy");
+
+                    b.Property<string>("VersionId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("VersionId");
+
+                    b.HasKey("EID");
+
+                    b.HasIndex("EID")
+                        .IsUnique()
+                        .HasDatabaseName("UX_DocumentIteration_EID");
+
+                    b.HasIndex("VersionId", "IterationOrdinal")
+                        .IsUnique()
+                        .HasDatabaseName("UX_DocumentIteration_Ordinal");
+
+                    b.ToTable("DocumentIteration", "dbo");
+                });
+
+            modelBuilder.Entity("DocumentVersion", b =>
+                {
+                    b.Property<string>("EID")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("EID");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CreatedAt");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("CreatedBy");
+
+                    b.Property<string>("CurrentIterationId")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("CurrentIterationId");
+
+                    b.Property<string>("DocumentId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("DocumentId");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("State");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("UpdatedAt");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("UpdatedBy");
+
+                    b.Property<string>("VersionLabel")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("VersionLabel");
+
+                    b.Property<long>("VersionOrdinal")
+                        .HasColumnType("bigint")
+                        .HasColumnName("VersionOrdinal");
+
+                    b.HasKey("EID");
+
+                    b.HasIndex("EID")
+                        .IsUnique()
+                        .HasDatabaseName("UX_DocumentVersion_EID");
+
+                    b.HasIndex("DocumentId", "VersionOrdinal")
+                        .IsUnique()
+                        .HasDatabaseName("UX_DocumentVersion_Ordinal");
+
+                    b.ToTable("DocumentVersion", "dbo");
+                });
+
+            modelBuilder.Entity("DocumentIteration", b =>
+                {
+                    b.HasOne("DocumentVersion", null)
+                        .WithMany()
+                        .HasForeignKey("VersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_DocumentIteration_DocumentVersion");
+                });
+
+            modelBuilder.Entity("DocumentVersion", b =>
+                {
+                    b.HasOne("Document", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_DocumentVersion_Document");
                 });
 #pragma warning restore 612, 618
         }

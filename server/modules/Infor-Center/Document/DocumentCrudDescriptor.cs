@@ -15,10 +15,11 @@ public static class DocumentCrudDescriptor
         return new()
         {
             ResourceKey = "document.document", ModuleId = "Document", ModelName = "Document", Route = "api/document/documents",
+            RequiresCreationRecord = true, RequiresUpdateRecord = true,
             IdField = "EID", DisplayField = "ENAME", FieldSet = fieldSet, DeletePolicy = StandardCrudDeletePolicy.Hard,
             Authorization = StandardCrudAuthorization.ByFeature("document.document", StandardCrudOperation.List, StandardCrudOperation.Detail, StandardCrudOperation.Create),
             OptionLabelFields = ["ECODE", "ENAME"], SortableFields = ["ECODE", "ENAME", "UpdatedAt"], DefaultSortField = "ECODE",
-            FieldPolicies = new ModelStandardCrudFieldPolicyProjector().Project(metadata.GetDocument(), metadata.GetDefinitions().Single(), fieldSet),
+            FieldPolicies = new ModelStandardCrudFieldPolicyProjector().Project(metadata.GetDocument(), metadata.GetDefinitions().Single(model => model.LogicalKey == "Document"), fieldSet),
             RequiredFields = [new() { Field = "ECODE", Scope = StandardCrudRequiredFieldScope.CreateAndUpdate, ErrorCode = "Document.CodeRequired", Message = "编码不能为空。", ReasonKey = "Document.CodeRequired" },
                 new() { Field = "ENAME", Scope = StandardCrudRequiredFieldScope.CreateAndUpdate, ErrorCode = "Document.NameRequired", Message = "名称不能为空。", ReasonKey = "Document.NameRequired" }],
         };

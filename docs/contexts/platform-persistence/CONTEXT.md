@@ -65,7 +65,7 @@ _Avoid_: Provider Target 逻辑顺序、兼容性 ordinal、重排列目标
 _Avoid_: 仅按操作类型放行、仅凭 migration id 推断旧对象、重算旧摘要
 
 **迁移数据前置条件（Migration Data Precondition）**：
-Host 在全局迁移锁内、当前 migration 操作与 history 前执行的只读数据检查。它只裁决当前 step 是否可以执行，不猜测回填值、不增加数据库永久 `DEFAULT`，也不自动改变目标 nullability。
+Host 在全局迁移锁内、当前 migration 操作与 history 前执行的只读数据检查。它只裁决当前 step 是否可以执行，不猜测回填值、不增加数据库永久 `DEFAULT`，也不自动改变目标 nullability。新增 nullable 列也可通过 `EmptyTableMigrationPrecondition.RequireEmptyTable` 显式要求同 owner 的旧表为空；标记只接受 `true`，在该 step 的任何 DDL/history 前沿用 `TableNotEmpty` 拒绝，不开放 SQL、跨 owner 清理或自动删数据。没有标记的既有迁移行为保持不变。
 _Avoid_: 自动修复、DDL 后补查、隐式 nullability 降级
 
 **Required 字段迁移（Required Field Transition）**：

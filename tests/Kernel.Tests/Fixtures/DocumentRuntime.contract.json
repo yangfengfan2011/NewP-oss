@@ -81,6 +81,22 @@
         }
       },
       {
+        "name": "LatestVersionId",
+        "storage": {
+          "type": "guid",
+          "nullable": true
+        },
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
         "name": "EID",
         "form": {
           "create": {

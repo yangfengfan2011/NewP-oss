@@ -180,7 +180,9 @@ $env:NEWP_ACCEPTANCE_WORKSPACE_DELIVERY_INPUT = $workspaceDeliveryInput
 
 输入登记会核对裁剪 Host 无三成员程序集、声明目录及 deps 引用，Shell 无对应构建期实现。正式 fixture 使用同一安装根、`ExternalPluginsEnabled=false`、`/plugins/runtime/assets` 与现有 production-shell-server 代理；保留候选/目标前后摘要、原始命令、SQL/API 快照、页面诊断及清理/凭据扫描。父级完整验证在最终冻结后重新执行上述准备，不能把 child 的旧输入当成最终输入；普通完整验证不要求 clean。
 
-开发时可只开最低层或最短页面入口，二者默认明确 skip；完整 Workspace Gate 仍由父级集中执行。页面入口沿正式 driver 走进入、旧列表/属性、一次创建和结果，不重复已通过的父成员生命周期循环：
+Document 初版身份升级采用已确认的开发数据清理前提：固定 baseline 真实建立旧 Document 后，候选 Host 必须在新 step 的 DDL/history 前因非空旧 Document 拒绝。fixture 只清理自身创建的旧 Document 及其 Workspace 入向引用，然后在原 catalog 重试正式 Host 升级；Part、Folder、Identity 与旧历史前缀保持，升级后重新创建 Document 验证完整首版链。该过程不证明旧 Document 数据连续，也不重置整库。
+
+开发时可只开最低层或最短页面入口，二者默认明确 skip；完整 Workspace Gate 仍由父级集中执行。页面入口沿正式 driver 走进入、旧列表/属性、图文档创建、属性、编辑、删除和结果，不重复已通过的父成员生命周期循环：
 
 ```powershell
 $env:NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE = '1'

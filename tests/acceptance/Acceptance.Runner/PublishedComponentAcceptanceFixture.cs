@@ -76,6 +76,7 @@ internal sealed class PublishedComponentAcceptanceFixture(
     private static string RequiredPath(string variable) => Path.GetFullPath(Environment.GetEnvironmentVariable(variable)
         ?? throw new InvalidOperationException($"固定发行物验收需要 {variable}。"));
 
+    // 真实 baseline 先建立业务；Document 按已确认开发清理前提升级，其余 owner 保持旧事实。
     internal async Task<PublishedWorkspaceTarget> PrepareAsync(Action<string> registerSecret,
         Action<string, string?> addConnectionSecrets, Func<string?, string> sanitize, CancellationToken token)
     {
@@ -165,13 +166,32 @@ internal sealed class PublishedComponentAcceptanceFixture(
             await RunOfflineAsync("enable", ["--module-id", "InforCenter", "--version", "1.0.0"], token);
             await RunOfflineAsync("enable", ["--module-id", "Part", "--version", "1.0.0"], token);
         }
+        if (workspaceDelivery)
+        {
+            await VerifyDocumentUpgradeGuardAsync(oldId, baseline, token);
+            await ClearOwnedLegacyDocumentAsync(token);
+            baseline = await ReadContinuityAsync(oldId, token);
+            await WriteAsync("sql-after-explicit-document-cleanup.json", baseline, token);
+        }
         await StartHostAsync(hostRoot, "installed-host", token);
         var after = await ReadContinuityAsync(oldId, token);
         await WriteAsync("sql-after.json", after, token);
-        if (baseline != after) throw new InvalidOperationException("独立安装改变了旧 Part 行、物理映射或已提交迁移账本。");
+        VerifyPreservedPredecessor(baseline, after);
         using var installed = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
         await WorkspaceAcceptanceFixture.LoginAsync(installed, actor, token);
         var installedFeatures = await AcceptanceFeatureCatalog.LoadAsync(installed, token);
+        if (workspaceDelivery)
+        {
+            VerifyDocumentModelEvolution(_baselineOwners!, await ReadModelOwnersAsync(installed, token));
+            _baselineOwners = await ReadModelOwnersAsync(installed, token);
+            var roots = await WorkspaceAcceptanceFixture.SendAsync(installed, HttpMethod.Get, "/api/workspace/spaces", null,
+                installedFeatures.Behavior("Workspace", "workspace.spaces.access").Position, token);
+            var root = roots.EnumerateArray().Single(item => string.Equals(item.GetProperty("spaceKind").GetString(), "public", StringComparison.OrdinalIgnoreCase));
+            var position = new WorkspaceFolderPosition(root.GetProperty("spaceId").GetString()!, root.GetProperty("rootFolderId").GetString()!, root.GetProperty("rootFolderId").GetString()!, []);
+            _oldDocumentId = await CreateWorkspaceObjectAsync(installed, installedFeatures, root, position, "Document", "documents", ExistingDocumentCode, ExistingDocumentName, token);
+            baseline = await ReadContinuityAsync(oldId, token);
+            await WriteAsync("sql-post-upgrade-document.json", baseline, token);
+        }
         var detail = await ReadOldPartAsync(installed, installedFeatures, oldId, token);
         var runtime = await WorkspaceAcceptanceFixture.SendAsync(installed, HttpMethod.Get,
             "/plugins/active-module-runtime.json", null, null, token);
@@ -486,7 +506,71 @@ internal sealed class PublishedComponentAcceptanceFixture(
     }
 
     private sealed record Continuity(string PhysicalMapping, string PartRow, string History, string DocumentRow = "",
-        string WorkspaceFolders = "", string WorkspaceSpaces = "", string Links = "");
+        string WorkspaceFolders = "", string WorkspaceSpaces = "", string Links = "", string IdentityAccounts = "");
+
+    // 本批只追加 Document schema frontier；已有 owner 的全部历史行和非 Document 数据必须原样保留。
+    private static void VerifyPreservedPredecessor(Continuity before, Continuity after)
+    {
+        if (before with { History = after.History } != after)
+            throw new InvalidOperationException("图文档升级改变了清理范围外的数据或物理映射。");
+        using var oldHistory = JsonDocument.Parse(before.History);
+        using var newHistory = JsonDocument.Parse(after.History);
+        var previous = oldHistory.RootElement.EnumerateArray().ToArray();
+        var current = newHistory.RootElement.EnumerateArray().ToArray();
+        if (current.Length < previous.Length || previous.Where((row, index) => !JsonElement.DeepEquals(row, current[index])).Any()
+            || current.Skip(previous.Length).Any(row => row.GetProperty("OwnerModuleId").GetString() != "Document"))
+            throw new InvalidOperationException("图文档升级改写了已发布迁移历史或追加了其他 owner。");
+    }
+
+    // 本 child 的新模型只属于 Document；Part 与 Workspace 的旧装配不能随之演进。
+    private static void VerifyDocumentModelEvolution(string before, string after)
+    {
+        using var oldOwners = JsonDocument.Parse(before); using var newOwners = JsonDocument.Parse(after);
+        foreach (var oldOwner in oldOwners.RootElement.EnumerateArray())
+        {
+            var owner = oldOwner.GetProperty("owner").GetString();
+            var current = newOwners.RootElement.EnumerateArray().Single(row => row.GetProperty("owner").GetString() == owner);
+            if (owner == "Document")
+            {
+                if (!current.GetProperty("models").EnumerateArray().Select(row => row.GetString()).SequenceEqual(["Document", "DocumentIteration", "DocumentVersion"]))
+                    throw new InvalidOperationException("Document 初版模型装配不完整。");
+            }
+            else if (!JsonElement.DeepEquals(oldOwner, current)) throw new InvalidOperationException("非 Document 模型 owner 发生漂移。");
+        }
+    }
+
+    // 使用真实旧 Document 证明空表 guard 在该 step 的 DDL/history 前拒绝；失败后仍可精确清理并重试。
+    private async Task VerifyDocumentUpgradeGuardAsync(string partId, Continuity baseline, CancellationToken token)
+    {
+        _environment["ASPNETCORE_URLS"] = HostOrigin;
+        _host = StartProcess("dotnet", [Path.Combine(hostRoot, "HostApi.dll")], hostRoot, "document-nonempty-guard");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+        timeout.CancelAfter(TimeSpan.FromSeconds(180));
+        await _host.Process.WaitForExitAsync(timeout.Token);
+        var output = _sanitize(await _host.Output + await _host.Error);
+        if (_host.Process.ExitCode == 0 || !output.Contains("PERSISTENCE_MIGRATION_TABLE_NOT_EMPTY", StringComparison.Ordinal))
+            throw new InvalidOperationException("非空旧 Document 未由正式迁移空表前提拒绝；读取脱敏 Host 日志。");
+        await StopHostAsync(CancellationToken.None);
+        var rejected = await ReadContinuityAsync(partId, token);
+        if (baseline != rejected) throw new InvalidOperationException("Document 空表前提失败推进了数据或历史。");
+        var schema = await ReadSqlJsonAsync("SELECT COL_LENGTH(N'dbo.Document',N'LatestVersionId') pointerLength, OBJECT_ID(N'dbo.DocumentVersion') versionTable, OBJECT_ID(N'dbo.DocumentIteration') iterationTable FOR JSON PATH, INCLUDE_NULL_VALUES;", null, token);
+        using var document = JsonDocument.Parse(schema);
+        if (document.RootElement[0].EnumerateObject().Any(property => property.Value.ValueKind != JsonValueKind.Null))
+            throw new InvalidOperationException("空表前提失败后 Document 新 DDL 已发生。");
+        await WriteAsync("document-empty-table-rejection.json", new { rejected, schema, failure = "PERSISTENCE_MIGRATION_TABLE_NOT_EMPTY" }, token);
+    }
+
+    // 仅删除此 fixture 创建且已获准丢弃的旧 Document 与对应入向引用；不重置 catalog 或其他业务数据。
+    private async Task ClearOwnedLegacyDocumentAsync(CancellationToken token)
+    {
+        await using var connection = new SqlConnection(_database!.ConnectionString); await connection.OpenAsync(token);
+        await using var transaction = await connection.BeginTransactionAsync(token);
+        await using var command = connection.CreateCommand(); command.Transaction = (SqlTransaction)transaction;
+        command.CommandText = "DELETE FROM dbo.WorkspaceFolderContent WHERE ChildModelKey=N'Document' AND CEID=@id; DELETE FROM dbo.Document WHERE EID=@id AND ECODE=@code;";
+        command.Parameters.AddWithValue("@id", _oldDocumentId!); command.Parameters.AddWithValue("@code", ExistingDocumentCode);
+        if (await command.ExecuteNonQueryAsync(token) != 2) throw new InvalidOperationException("精确旧 Document 清理未命中自身一对象一引用。");
+        await transaction.CommitAsync(token);
+    }
 
     private async Task<Continuity> ReadContinuityAsync(string oldId, CancellationToken token)
     {
@@ -507,7 +591,8 @@ internal sealed class PublishedComponentAcceptanceFixture(
             await ReadSqlJsonAsync("SELECT * FROM dbo.Document WHERE EID=@id FOR JSON PATH;", _oldDocumentId, token),
             await ReadSqlJsonAsync("SELECT * FROM dbo.WorkspaceFolder ORDER BY EID FOR JSON PATH;", null, token),
             await ReadSqlJsonAsync("SELECT * FROM dbo.WorkspaceSpace ORDER BY EID FOR JSON PATH;", null, token),
-            await ReadSqlJsonAsync("SELECT * FROM dbo.WorkspaceFolderContent ORDER BY LID FOR JSON PATH;", null, token));
+            await ReadSqlJsonAsync("SELECT * FROM dbo.WorkspaceFolderContent ORDER BY LID FOR JSON PATH;", null, token),
+            await ReadSqlJsonAsync("SELECT * FROM dbo.IdentityAccount ORDER BY EID FOR JSON PATH;", null, token));
     }
 
     // SQL FOR JSON 会拆成多行传输；完整拼接后才比较，不能用 ExecuteScalar 丢弃后续账本。

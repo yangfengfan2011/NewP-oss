@@ -5,5 +5,5 @@
   "hostVersion": { "min": "1.1.0", "max": "2.0.0" },
   "backend": { "behaviorKey": "document.backend" },
   "frontend": { "behaviorKey": "document.frontend", "entry": "document", "bindingMode": "behavior-bindings", "bindings": ["document.document.list", "document.document.detail"] },
-  "persistence": { "models": ["metadata/models/Document.model.json"], "migrations": { "sqlServer": { "assembly": "migrations/Document.SqlServerMigrations.dll", "manifest": "migrations/Document.SqlServerMigrations.json" } } }
+  "persistence": { "models": ["metadata/models/Document.model.json", "metadata/models/DocumentVersion.model.json", "metadata/models/DocumentIteration.model.json"], "migrations": { "sqlServer": { "assembly": "migrations/Document.SqlServerMigrations.dll", "manifest": "migrations/Document.SqlServerMigrations.json" } } }
 }

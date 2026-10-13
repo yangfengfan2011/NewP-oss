@@ -305,6 +305,7 @@ internal sealed class ProviderMigrationOperationValidator(
         };
     }
 
+    // 新增列按 canonical target 验证；显式空表标记仅复用 owner 自有表的既定数据前提。
     private ProviderTargetSnapshot ReverseAddColumn(
         ModuleMigrationStream stream,
         AddColumnOperation operation,
@@ -325,7 +326,10 @@ internal sealed class ProviderMigrationOperationValidator(
                 $"column '{operation.Name}' differs ({DescribeColumnDiff(operation, expected)})");
         }
 
-        if (!operation.IsNullable)
+        var emptyTableMarker = operation.FindAnnotation(EmptyTableMigrationPrecondition.AnnotationName);
+        if (emptyTableMarker is not null && emptyTableMarker.Value is not true)
+            throw new InvalidOperationException("empty-table precondition marker must be true");
+        if (!operation.IsNullable || emptyTableMarker is not null)
         {
             preconditions.Add(new ProviderMigrationDataPrecondition(
                 PersistenceMigrationFailureCodes.TableNotEmpty,

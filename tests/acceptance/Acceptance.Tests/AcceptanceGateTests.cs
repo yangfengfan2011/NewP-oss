@@ -100,6 +100,14 @@ public sealed class AcceptanceGateTests
                     await page.SetViewportSizeAsync(1440, 1000);
                 });
                 await CaptureAsync("workspace-created-content.png");
+                var documentName = "归组图文档旅程 " + runId[..8];
+                await driver.OpenOwnedPropertiesAsync(documentName, "/documents");
+                await CaptureAsync("workspace-document-properties.png");
+                await driver.ReturnToPublicContentAsync();
+                await driver.EditObjectAsync(documentName, documentName + " 已编辑");
+                await CaptureAsync("workspace-document-edited.png");
+                await driver.DeleteSelectedAsync(documentName + " 已编辑");
+                await CaptureAsync("workspace-document-deleted.png");
                 await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
                     new { url = page.Url, actor = "ordinary", journey = "workspace-published-components" }, token);
             }).RunAsync(CancellationToken.None);

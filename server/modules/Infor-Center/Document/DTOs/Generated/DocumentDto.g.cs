@@ -17,4 +17,5 @@ public sealed class DocumentDto
     public string Name { get => DisplayName; init => DisplayName = value; }
     public string Code { get; init; }
     public string? Description { get; init; }
+    public string? LatestVersionId { get; init; }
 }

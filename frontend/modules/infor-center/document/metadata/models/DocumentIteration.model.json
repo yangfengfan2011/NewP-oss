@@ -1,0 +1,137 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "DocumentIteration": {
+    "kind": "Entity",
+    "fields": [
+      {
+        "name": "VersionId",
+        "storage": {
+          "type": "guid"
+        },
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "IterationOrdinal",
+        "storage": {
+          "type": "int"
+        },
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "Kind",
+        "storage": {
+          "type": "string"
+        },
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "DatasetTypeKey",
+        "storage": {
+          "type": "string"
+        },
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "ECODE",
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "ENAME",
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "Description",
+        "storage": {
+          "type": "text",
+          "nullable": true
+        },
+        "uiType": "text",
+        "form": {
+          "create": {
+            "mode": "hidden"
+          },
+          "edit": {
+            "mode": "hidden"
+          }
+        }
+      }
+    ],
+    "indexes": [
+      {
+        "name": "UX_DocumentIteration_Ordinal",
+        "fields": [
+          "VersionId",
+          "IterationOrdinal"
+        ],
+        "unique": true
+      }
+    ],
+    "foreignKeys": [
+      {
+        "name": "FK_DocumentIteration_DocumentVersion",
+        "fields": [
+          "VersionId"
+        ],
+        "principalModuleId": "Document",
+        "principalModel": "DocumentVersion",
+        "principalFields": [
+          "EID"
+        ],
+        "onDelete": "Restrict"
+      }
+    ],
+    "builtinFields": [
+      "ECODE",
+      "ENAME"
+    ]
+  }
+}

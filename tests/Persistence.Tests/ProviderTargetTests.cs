@@ -18,6 +18,38 @@ namespace ICP.Platform.Persistence.Tests;
 
 public sealed class ProviderTargetTests
 {
+    [Theory]
+    [InlineData("absent")]
+    [InlineData("true")]
+    [InlineData("false")]
+    [InlineData("text")]
+    [InlineData("cross-owner")]
+    public void NullableColumn_ExplicitEmptyTablePreconditionIsClosedAndOwnerScoped(string kind)
+    {
+        const string id = "20261013000000_Example_EmptyTable";
+        var table = Target(kind == "cross-owner" ? "Other" : "Example", "Asset") with
+        { Columns = [TargetColumn("Id"), TargetColumn("Pointer") with { IsNullable = true }] };
+        var target = new ProviderTargetSnapshot(ProviderTargetSchemaVersions.TargetV1, PersistenceProvider.SqlServer, [table]);
+        var operation = new AddColumnOperation
+        { Name = "Pointer", Table = "Asset", Schema = "dbo", ClrType = typeof(string), ColumnType = "nvarchar(128)", IsNullable = true, MaxLength = 128 };
+        if (kind != "absent") operation.AddAnnotation(EmptyTableMigrationPrecondition.AnnotationName,
+            kind == "text" ? "true" : kind != "false");
+        var migration = new ExplicitOperationsMigration(id, [operation]);
+        IReadOnlyList<ValidatedProviderMigration> Validate() => new ProviderMigrationOperationValidator(Plan(target), target)
+            .Validate(Stream(id), [new ProviderMigrationCandidate(Step(id), migration)]);
+        if (kind is "false" or "text" or "cross-owner")
+        { Assert.Throws<ProviderOperationValidationException>(() => Validate()); return; }
+        var result = Assert.Single(Validate());
+        if (kind == "absent") Assert.Empty(result.Preconditions);
+        else
+        {
+            var precondition = Assert.Single(result.Preconditions);
+            Assert.Equal(PersistenceMigrationFailureCodes.TableNotEmpty, precondition.FailureCode);
+            Assert.Equal("Asset", precondition.Table);
+            Assert.Null(precondition.Column);
+        }
+    }
+
     [Fact]
     public async Task Read_ProjectsProviderModelWithoutFormDefaultsOrChangingModelDigestV1()
     {

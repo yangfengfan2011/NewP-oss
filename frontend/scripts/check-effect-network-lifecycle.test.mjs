@@ -14,13 +14,13 @@ import { effectNetworkLifecycleAllowlist } from './effect-network-lifecycle.allo
 
 test('the real Workspace edit-values POST is a reviewed read query at its exact effect callsite', () => {
   const findings = analyzeEffectNetworkLifecycleSource({
-    file: 'modules/workspace/src/WorkspaceObjectEditInput.tsx',
-    source: readFileSync(new URL('../modules/workspace/src/WorkspaceObjectEditInput.tsx', import.meta.url), 'utf8'),
+    file: 'modules/infor-center/workspace/src/WorkspaceObjectEditInput.tsx',
+    source: readFileSync(new URL('../modules/infor-center/workspace/src/WorkspaceObjectEditInput.tsx', import.meta.url), 'utf8'),
   });
   assert.equal(findings.length, 1);
   const finding = findings[0];
   assert.equal(finding.classification, 'read-query');
-  assert.equal(finding.id, 'modules/workspace/src/WorkspaceObjectEditInput.tsx::WorkspaceObjectEditInput::useEffect::platformFetch');
+  assert.equal(finding.id, 'modules/infor-center/workspace/src/WorkspaceObjectEditInput.tsx::WorkspaceObjectEditInput::useEffect::platformFetch');
   assert.deepEqual(evaluateEffectNetworkLifecycle({ findings, allowlist: [] }).diagnostics,
     [{ code: 'EFFECT_NETWORK_NOT_ALLOWLISTED', id: finding.id }]);
   const reviewed = effectNetworkLifecycleAllowlist.filter(entry => entry.id === finding.id);

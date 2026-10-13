@@ -1,7 +1,7 @@
 export const effectNetworkLifecycleAllowlist = [
   {
-    id: 'modules/workspace/src/WorkspaceObjectEditInput.tsx::WorkspaceObjectEditInput::useEffect::platformFetch',
-    file: 'modules/workspace/src/WorkspaceObjectEditInput.tsx',
+    id: 'modules/infor-center/workspace/src/WorkspaceObjectEditInput.tsx::WorkspaceObjectEditInput::useEffect::platformFetch',
+    file: 'modules/infor-center/workspace/src/WorkspaceObjectEditInput.tsx',
     enclosingFunction: 'WorkspaceObjectEditInput',
     hook: 'useEffect',
     triggerChain: 'platformFetch',

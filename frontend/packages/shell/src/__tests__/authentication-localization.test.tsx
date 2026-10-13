@@ -47,6 +47,37 @@ const json = (data: unknown, status = 200) => new Response(JSON.stringify(data),
 describe('browser language preference', () => {
   function Probe() { const { currentLanguage } = useLocalization(); return <><LanguageSelect /><output>{currentLanguage}</output></>; }
   const provider = (defaultLanguage = 'zhs') => <LocalizationProvider {...bootstrap} defaultLanguage={defaultLanguage} storageKey="icp.language"><Probe /></LocalizationProvider>;
+  it('keeps keyboard selection, dismissal and mouse selection available in the Ant Design control', async () => {
+    await render(provider());
+    const combobox = container.querySelector<HTMLInputElement>('[role="combobox"]')!;
+    const pressKey = async (key: string, keyCode: number) => {
+      await act(async () => {
+        combobox.dispatchEvent(new KeyboardEvent('keydown', { key, keyCode, bubbles: true }));
+      });
+    };
+    expect(combobox.getAttribute('aria-expanded')).toBe('false');
+    expect(combobox.getAttribute('aria-label')).toBe('语言');
+    await act(async () => combobox.focus());
+    await pressKey('ArrowDown', 40);
+    expect(combobox.getAttribute('aria-expanded')).toBe('true');
+    expect(Array.from(document.querySelectorAll('.ant-select-item-option-content'), option => option.textContent))
+      .toEqual(['简体中文', 'English']);
+    await pressKey('ArrowDown', 40);
+    await pressKey('Enter', 13);
+    expect(combobox.getAttribute('aria-expanded')).toBe('false');
+    expect(combobox.getAttribute('aria-label')).toBe('Language');
+    expect(container.querySelector('.ant-select-selection-item')?.textContent).toBe('English');
+    expect(container.querySelector('output')?.textContent).toBe('en');
+    expect(localStorage.getItem('icp.language')).toBe('en');
+    await pressKey('ArrowDown', 40);
+    await pressKey('Escape', 27);
+    expect(combobox.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('output')?.textContent).toBe('en');
+    await selectLanguage('zhs');
+    expect(container.querySelector('.ant-select-selection-item')?.textContent).toBe('简体中文');
+    expect(container.querySelector('output')?.textContent).toBe('zhs');
+    expect(localStorage.getItem('icp.language')).toBe('zhs');
+  });
   it('uses the platform default, ignores browser locale and restores a saved choice on remount', async () => {
     vi.spyOn(navigator, 'language', 'get').mockReturnValue('en-US');
     await render(provider());

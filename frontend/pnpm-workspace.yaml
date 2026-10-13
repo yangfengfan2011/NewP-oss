@@ -7,3 +7,4 @@ allowBuilds:
   esbuild: true
 patchedDependencies:
   '@ant-design/pro-descriptions@2.6.10': patches/@ant-design__pro-descriptions@2.6.10.patch
+  antd@5.29.3: patches/antd@5.29.3.patch

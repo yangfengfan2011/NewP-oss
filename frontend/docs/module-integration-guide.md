@@ -88,6 +88,8 @@ View 的两个动作分别配置 `key: authorize` / `viewAuthorization`，共同
 
 ## 验证
 
+工作区对锁定的 `antd@5.29.3` 使用[默认语言依赖补丁](../patches/antd@5.29.3.patch)，让 Empty、ConfigProvider 的 Form 默认消息及 Modal 默认词条各自消费独立对象，避免认证语言选择器静态带入日期 locale。全量 `en_US` 继续引用同一组对象，ESM/CJS、词条内容、覆盖规则和控件呈现保持一致；模块不自行复制词条或替换控件。升级 Ant Design 时重新核对上游实现，复跑 Shell 的 `authentication-localization`、`antd-empty-locale`、`antd-default-locale`、`antd-locale-provider` 测试及原构建图检查；只有上游同样满足依赖边界和兼容行为后才移除补丁。
+
 - 模块构建证明 TypeScript binding 与依赖完整。
 - Canonical Module Plan 测试证明 binding 缺失或 owner 冲突会拒绝整份候选。
 - Shell 测试证明单入口失败不会产生部分提交。

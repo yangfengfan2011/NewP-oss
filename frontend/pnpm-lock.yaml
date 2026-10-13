@@ -6,6 +6,7 @@ settings:
 
 patchedDependencies:
   '@ant-design/pro-descriptions@2.6.10': c10773237bd5bfcae2fc7191303e8cf2020c42ace42d667ab89d9c88f3e41f8a
+  antd@5.29.3: 6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123
 
 importers:
 
@@ -131,7 +132,7 @@ importers:
         version: link:../../../packages/sdk
       antd:
         specifier: ^5.29.3
-        version: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -168,7 +169,7 @@ importers:
         version: link:../../../packages/ui
       antd:
         specifier: ^5.29.3
-        version: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -202,7 +203,7 @@ importers:
         version: link:../../../packages/ui
       antd:
         specifier: ^5.29.3
-        version: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -230,7 +231,7 @@ importers:
         version: link:../../../packages/ui
       antd:
         specifier: ^5.29.3
-        version: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -301,7 +302,7 @@ importers:
         version: link:../ui
       antd:
         specifier: ^5.29.3
-        version: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -341,10 +342,10 @@ importers:
         version: 6.2.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@ant-design/pro-components':
         specifier: ^2.8.10
-        version: 2.8.10(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 2.8.10(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@ant-design/pro-descriptions':
         specifier: ^2.6.10
-        version: 2.6.10(patch_hash=c10773237bd5bfcae2fc7191303e8cf2020c42ace42d667ab89d9c88f3e41f8a)(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 2.6.10(patch_hash=c10773237bd5bfcae2fc7191303e8cf2020c42ace42d667ab89d9c88f3e41f8a)(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@icp-platform/core':
         specifier: workspace:*
         version: link:../core
@@ -353,7 +354,7 @@ importers:
         version: link:../sdk
       antd:
         specifier: ^5.29.3
-        version: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -2759,14 +2760,14 @@ snapshots:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
-  '@ant-design/pro-card@2.10.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@ant-design/pro-card@2.10.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@ant-design/cssinjs': 1.24.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@ant-design/icons': 5.6.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-provider': 2.16.2(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-utils': 2.18.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-provider': 2.16.2(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-utils': 2.18.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@babel/runtime': 7.29.2
-      antd: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      antd: 5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
       rc-resize-observer: 1.4.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       rc-util: 5.44.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -2774,34 +2775,34 @@ snapshots:
     transitivePeerDependencies:
       - react-dom
 
-  '@ant-design/pro-components@2.8.10(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@ant-design/pro-components@2.8.10(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
-      '@ant-design/pro-card': 2.10.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-descriptions': 2.6.10(patch_hash=c10773237bd5bfcae2fc7191303e8cf2020c42ace42d667ab89d9c88f3e41f8a)(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-field': 3.1.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-form': 2.32.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-layout': 7.22.7(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-list': 2.6.10(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-provider': 2.16.2(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-skeleton': 2.2.1(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-table': 3.21.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-utils': 2.18.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-card': 2.10.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-descriptions': 2.6.10(patch_hash=c10773237bd5bfcae2fc7191303e8cf2020c42ace42d667ab89d9c88f3e41f8a)(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-field': 3.1.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-form': 2.32.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-layout': 7.22.7(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-list': 2.6.10(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-provider': 2.16.2(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-skeleton': 2.2.1(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-table': 3.21.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-utils': 2.18.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@babel/runtime': 7.29.2
-      antd: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      antd: 5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
     transitivePeerDependencies:
       - rc-field-form
 
-  '@ant-design/pro-descriptions@2.6.10(patch_hash=c10773237bd5bfcae2fc7191303e8cf2020c42ace42d667ab89d9c88f3e41f8a)(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@ant-design/pro-descriptions@2.6.10(patch_hash=c10773237bd5bfcae2fc7191303e8cf2020c42ace42d667ab89d9c88f3e41f8a)(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
-      '@ant-design/pro-field': 3.1.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-form': 2.32.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-provider': 2.16.2(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-skeleton': 2.2.1(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-utils': 2.18.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-field': 3.1.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-form': 2.32.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-provider': 2.16.2(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-skeleton': 2.2.1(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-utils': 2.18.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@babel/runtime': 7.29.2
-      antd: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      antd: 5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       rc-resize-observer: 0.2.6(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       rc-util: 5.44.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react: 18.3.1
@@ -2809,14 +2810,14 @@ snapshots:
       - rc-field-form
       - react-dom
 
-  '@ant-design/pro-field@3.1.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@ant-design/pro-field@3.1.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@ant-design/icons': 5.6.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-provider': 2.16.2(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-utils': 2.18.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-provider': 2.16.2(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-utils': 2.18.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@babel/runtime': 7.29.2
       '@chenshuai2144/sketch-color': 1.0.9(react@18.3.1)
-      antd: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      antd: 5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
       dayjs: 1.11.20
       lodash: 4.18.1
@@ -2827,16 +2828,16 @@ snapshots:
     transitivePeerDependencies:
       - react-dom
 
-  '@ant-design/pro-form@2.32.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@ant-design/pro-form@2.32.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@ant-design/icons': 5.6.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-field': 3.1.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-provider': 2.16.2(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-utils': 2.18.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-field': 3.1.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-provider': 2.16.2(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-utils': 2.18.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@babel/runtime': 7.29.2
       '@chenshuai2144/sketch-color': 1.0.9(react@18.3.1)
       '@umijs/use-params': 1.0.9(react@18.3.1)
-      antd: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      antd: 5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
       dayjs: 1.11.20
       lodash: 4.18.1
@@ -2847,16 +2848,16 @@ snapshots:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
-  '@ant-design/pro-layout@7.22.7(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@ant-design/pro-layout@7.22.7(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@ant-design/cssinjs': 1.24.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@ant-design/icons': 5.6.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-provider': 2.16.2(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-utils': 2.18.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-provider': 2.16.2(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-utils': 2.18.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@babel/runtime': 7.29.2
       '@umijs/route-utils': 4.0.3
       '@umijs/use-params': 1.0.9(react@18.3.1)
-      antd: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      antd: 5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
       lodash: 4.18.1
       lodash-es: 4.18.1
@@ -2868,16 +2869,16 @@ snapshots:
       swr: 2.5.1(react@18.3.1)
       warning: 4.0.3
 
-  '@ant-design/pro-list@2.6.10(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@ant-design/pro-list@2.6.10(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@ant-design/cssinjs': 1.24.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@ant-design/icons': 5.6.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-card': 2.10.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-field': 3.1.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-table': 3.21.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-utils': 2.18.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-card': 2.10.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-field': 3.1.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-table': 3.21.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-utils': 2.18.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@babel/runtime': 7.29.2
-      antd: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      antd: 5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
       dayjs: 1.11.20
       rc-resize-observer: 1.4.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -2887,40 +2888,40 @@ snapshots:
     transitivePeerDependencies:
       - rc-field-form
 
-  '@ant-design/pro-provider@2.16.2(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@ant-design/pro-provider@2.16.2(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@ant-design/cssinjs': 1.24.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@babel/runtime': 7.29.2
       '@ctrl/tinycolor': 3.6.1
-      antd: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      antd: 5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       dayjs: 1.11.20
       rc-util: 5.44.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
       swr: 2.5.1(react@18.3.1)
 
-  '@ant-design/pro-skeleton@2.2.1(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@ant-design/pro-skeleton@2.2.1(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@babel/runtime': 7.29.2
-      antd: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      antd: 5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
-  '@ant-design/pro-table@3.21.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@ant-design/pro-table@3.21.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@ant-design/cssinjs': 1.24.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@ant-design/icons': 5.6.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-card': 2.10.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-field': 3.1.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-form': 2.32.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-provider': 2.16.2(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-utils': 2.18.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-card': 2.10.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-field': 3.1.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-form': 2.32.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(rc-field-form@2.7.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-provider': 2.16.2(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-utils': 2.18.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@babel/runtime': 7.29.2
       '@dnd-kit/core': 6.3.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@dnd-kit/modifiers': 6.0.1(@dnd-kit/core@6.3.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)
       '@dnd-kit/sortable': 7.0.2(@dnd-kit/core@6.3.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)
       '@dnd-kit/utilities': 3.2.2(react@18.3.1)
-      antd: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      antd: 5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
       dayjs: 1.11.20
       lodash: 4.18.1
@@ -2931,12 +2932,12 @@ snapshots:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
-  '@ant-design/pro-utils@2.18.0(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@ant-design/pro-utils@2.18.0(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@ant-design/icons': 5.6.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@ant-design/pro-provider': 2.16.2(antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ant-design/pro-provider': 2.16.2(antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@babel/runtime': 7.29.2
-      antd: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      antd: 5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
       dayjs: 1.11.20
       lodash: 4.18.1
@@ -3684,7 +3685,7 @@ snapshots:
 
   ansi-styles@5.2.0: {}
 
-  antd@5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
+  antd@5.29.3(patch_hash=6ed407ec3dae292b111383b36a9f7995c20fba2eac27f3af19128b871c3fe123)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       '@ant-design/colors': 7.2.1
       '@ant-design/cssinjs': 1.24.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

@@ -8,7 +8,7 @@
 - `src/pages/TemplatePage.tsx`：最小页面实现；
 - `package.json`：仅依赖前端 SDK。
 
-模块身份、显示名、路由、菜单和权限不在 TypeScript 中声明，它们由 `modules/<ModuleId>/newp.plugin.json` 与 `modules/<ModuleId>/metadata/**` 拥有。注册阶段不得静态 import 页面；`RouteCapabilityRuntime` 只在授权路由命中后调用 loader。
+模块身份、显示名、路由、菜单和权限不在 TypeScript 中声明，它们由 `<组件源码根>/newp.plugin.json` 与 `<组件源码根>/metadata/**` 拥有。注册阶段不得静态 import 页面；`RouteCapabilityRuntime` 只在授权路由命中后调用 loader。
 
 ## 推荐方式
 
@@ -16,7 +16,7 @@
 pwsh -NoProfile -File .\scripts\new-module.ps1 -ModuleName ExampleModule -DisplayName "示例模块"
 ```
 
-脚手架会同时生成前端 binding、后端 binding 和根 Capsule，避免手工维护三者之间的 key 对应关系。
+脚手架会同时生成前端 binding、后端 binding 和根 Capsule，避免手工维护三者之间的 key 对应关系。`-Group` 默认 `Example`，也可选 `Platform` 或 `Infor-Center`；有父 Capsule 时同步登记成员。
 
 ## 按需扩展
 

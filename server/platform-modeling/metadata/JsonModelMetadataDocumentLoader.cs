@@ -121,8 +121,7 @@ public sealed class JsonModelMetadataDocumentLoader : IModelMetadataDocumentLoad
             if (string.Equals(metadataDirectory.Name, "metadata", StringComparison.OrdinalIgnoreCase)
                 && metadataDirectory.Parent is not null
                 && (File.Exists(Path.Combine(metadataDirectory.Parent.FullName, "newp.plugin.json"))
-                    || metadataDirectory.Parent.Parent?.Name == "modules"
-                    && metadataDirectory.Parent.Parent.Parent?.Name == "frontend"))
+                    || IsFrontendAuthoringDirectory(metadataDirectory.Parent)))
             {
                 return ModuleAuthoringPaths.ReadModuleId(metadataDirectory.Parent.FullName);
             }
@@ -152,6 +151,14 @@ public sealed class JsonModelMetadataDocumentLoader : IModelMetadataDocumentLoad
         }
 
         throw new InvalidOperationException($"无法从路径提取 moduleId: {path}");
+    }
+
+    // 历史 metadata 可以位于分组目录内；只在源码 frontend/modules 范围恢复 slug owner。
+    private static bool IsFrontendAuthoringDirectory(DirectoryInfo directory)
+    {
+        for (DirectoryInfo? current = directory; current is not null; current = current.Parent)
+            if (current.Name == "modules" && current.Parent?.Name == "frontend") return true;
+        return false;
     }
 
     private static string GetModelFileStem(string path)

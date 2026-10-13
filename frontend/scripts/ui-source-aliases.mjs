@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 // UI 叶入口在组件包内编译；仅公开 exports 可以解析，根入口不得吞掉子路径。
 export function createUiSourceAliases() {
-  const root = fileURLToPath(new URL('../packages/ui/', import.meta.url));
+  const root = fileURLToPath(new URL('../packages/ui', import.meta.url));
   const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
   return Object.entries(pkg.exports).map(([subpath, entry]) => {
     const target = typeof entry === 'string' ? entry : entry.import;

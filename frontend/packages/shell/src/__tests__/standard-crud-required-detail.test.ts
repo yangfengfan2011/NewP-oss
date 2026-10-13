@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { FrontendModule } from '@icp-platform/sdk';
 import organizationRuntimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
-import { companyStandardCrudResource } from '../../../../modules/organization/src/standard-crud/companyStandardCrudResource';
+import { companyStandardCrudResource } from '../../../../modules/platform/organization/src/standard-crud/companyStandardCrudResource';
 import { resolveStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';
 import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';
 import type { RuntimeViewDocument } from '../metadata/runtimeMetadataManifest';

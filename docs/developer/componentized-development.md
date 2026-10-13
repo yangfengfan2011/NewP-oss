@@ -27,11 +27,11 @@ pwsh -NoProfile -File .\scripts\new-module.ps1 -ModuleName ExampleModule -Displa
 生成结果包括：
 
 ```text
-frontend/modules/example-module/        Capsule、metadata 与前端 binding
-server/modules/ExampleModule/           后端 binding 与实现
+frontend/modules/example/example-module/     Capsule、metadata 与前端 binding
+server/modules/Example/ExampleModule/        后端 binding 与实现
 ```
 
-内建模块由通用构建入口发现，不再编辑 HostApi 或 Shell 接线。`-SkipIntegration` 保留命令兼容，不省略 Capsule 或两侧 binding。
+`-Group` 可选 `Example`（默认）、`Platform`、`Infor-Center`；前端分组目录使用对应的小写名称。内建模块由通用构建入口发现，不再编辑 HostApi 或 Shell 接线。父目录已有 Capsule 时，脚手架将新模块登记到该 Capsule 的 `composition.members`；普通分组目录不生成额外身份。`-SkipIntegration` 保留命令兼容，不省略 Capsule、两侧 binding 或成员登记。
 
 ### 3. 实现局部能力
 
@@ -57,9 +57,21 @@ server/modules/ExampleModule/           后端 binding 与实现
 
 ## 可移动组件源码根与构建
 
-组件身份来自 `newp.plugin.json`，源码根可以平面存放，也可以移到组合组件目录内；后端实现与迁移工程始终位于 `server/modules/<ModuleId>`。`composition.members` 是唯一成员关系事实源。发现器按最近 Capsule 根核对嵌套 owner，不要求中间目录叫 `members`；开始嵌套后，父组件的全部直属成员必须位于该源码边界内。既有平面组合仍可开发；以组合根发起的完整集合检查要求其声明后代都实际嵌套。缺失、重复、自含、多父、环或声明与目录不一致直接拒绝。
+前后端模块目录只保留三个顶层分组，成员实现与迁移工程随所属分组存放：
+
+| 分组 | 前端目录 | 后端目录 | 成员 |
+| --- | --- | --- | --- |
+| Example | `frontend/modules/example/` | `server/modules/Example/` | Demo、ModuleTemplateSample 与演示／冒烟资产 |
+| Platform | `frontend/modules/platform/` | `server/modules/Platform/` | Identity、Authentication、Authorization、Organization、Audit、ConfigCenter、MetadataConfigCenter、Files、PluginOps 的实际贡献 |
+| Infor-Center | `frontend/modules/infor-center/` | `server/modules/Infor-Center/` | Workspace、Part、Document |
+
+Example 自身的实现仍在分组根内；纯分组或仅有声明／metadata 的组件不补造工程。目录归组不改变组件 ID、程序集名、npm 包名、behavior key、数据 owner 或迁移历史。Platform 的平台角色与组合声明仍由现有 Host 清单拥有，普通 `platform` 分组目录不新增 Capsule。
+
+组件身份来自 `newp.plugin.json`，`composition.members` 是唯一成员关系事实源。发现器按最近 Capsule 根核对嵌套 owner，不要求中间目录叫 `members`；开始嵌套后，父组件的全部直属成员必须位于该源码边界内。普通中间目录只归组源码；以组合根发起的完整集合检查要求其声明后代都实际嵌套。缺失、重复、自含、多父、环或声明与目录不一致直接拒绝。
 
 `ComponentSourceCatalog` 复用正式 Canonical 编译器校验身份与组合图；模块资源嵌入、Host metadata/迁移资源链接、模型读取、DTO 和前端入口都消费按身份发现的当前根。MSBuild 通过项目依赖构建 `server/tools/component-source-build`，在短生命周期 CLI 中生成本轮 `obj` 映射，再用内建任务读取。映射只表示当前构建的路径，不是可提交的第二份组件或成员表。项目引用显式传递调用方配置，构建工具路径来自真实 `GetTargetPath` 输出。Host 发布目录保持 `modules/<ModuleId>`；父组件自有文件枚举在独立成员根处停止。
+
+Host 发现内建后端工程时，以候选 `.csproj` 的直接目录识别 owner；`Contracts` 和 `Migrations.<provider>` 是当前辅助工程目录约定，归属其上一级组件 owner，其他工程使用直接目录的 owner。`NewpExcludedModuleIds` 仅匹配显式组件 ID，不按祖先目录通配：裁剪父组件不会连带裁剪其目录下独立的子组件；需要裁剪完整集合时显式列出各组件 ID。
 
 核对当前组件和完整归组集合：
 
@@ -68,13 +80,13 @@ dotnet run --project server/tools/component-source-build/ComponentSource.Build.c
 dotnet build apps/host-api/HostApi.csproj -c Release -p:NewpComponentRoot=InforCenter
 ```
 
-主仓 Workspace、Part、Document 已实际位于 `frontend/modules/infor-center/{workspace,part,document}`；上述命令消费完整嵌套集合。三成员后端和迁移仍在原位，普通归组不改单个工程的相对引用或 Host/Shell 接线。前端 workspace 使用递归模块发现，Vite 与 `build-frontend-plugin.mjs` 通过同一 Catalog CLI 获取稳定 entry key 对应的真实源码入口；新增或调整测试配置时，从 workspace 根解析共享包，不按组件嵌套深度维护相对路径。
+主仓 Workspace、Part、Document 位于 `frontend/modules/infor-center/{workspace,part,document}`，后端与迁移位于 `server/modules/Infor-Center/{Workspace,Part,Document}`；上述命令消费完整嵌套集合。Catalog 在 `server/modules` 内按独立工程所在的 owner 目录递归定位后端，再核对声明的程序集；缺失或重复 owner 直接拒绝。迁移目录时同步修复实际工程引用和 solution 路径，Host/Shell 继续使用通用发现。父后端工程排除嵌套独立工程的源码和资源，避免将子模块编译进父程序集。前端 workspace 使用递归模块发现，Vite 与 `build-frontend-plugin.mjs` 通过同一 Catalog CLI 获取稳定 entry key 对应的真实源码入口；新增或调整测试配置时，从 workspace 根解析共享包，不按组件嵌套深度维护相对路径。
 
 源码根和位置无关构建已落地。回退需同时恢复通用构建入口与工程资源配置，已实际归组的目录按其 JSON 关系还原；不改写模型、manifest、已提交迁移或数据库历史。
 
 ## 聚合发行构建与静态核验
 
-正式入口 `server/tools/component-bundle` 按同一 `ComponentSourceCatalog` 取得完整归组，构建原位 owner 工程与现有前端 plugin builder，再从实际产物生成索引。纯组合可以只拥有声明，不补造后端、前端、模型或迁移入口。输出目录和 ZIP 必须是新的目标；所有命令均不写安装库存、desired、active 或 authoring。
+正式入口 `server/tools/component-bundle` 按同一 `ComponentSourceCatalog` 取得完整归组，构建按身份定位的 owner 工程与现有前端 plugin builder，再从实际产物生成索引。纯组合可以只拥有声明，不补造后端、前端、模型或迁移入口。输出目录和 ZIP 必须是新的目标；所有命令均不写安装库存、desired、active 或 authoring。
 
 ```powershell
 dotnet run --project server/tools/component-bundle/ComponentBundle.csproj -c Release -- build . InforCenter <新的暂存目录>

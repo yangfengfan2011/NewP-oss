@@ -90,7 +90,7 @@ public sealed class SettingDefinitionSourceFilesTests
         {
             var tempRoot = Path.Combine(Path.GetTempPath(), "metadata-config-center-source-files-tests", Guid.NewGuid().ToString("N"));
             var platformMetadataRoot = Path.Combine(tempRoot, "server", "platform", "metadata");
-            var moduleMetadataRoot = Path.Combine(Path.Combine(tempRoot, "frontend", "modules", "config-center"), "metadata");
+            var moduleMetadataRoot = Path.Combine(Path.Combine(tempRoot, "frontend", "modules", "platform", "config-center"), "metadata");
 
             Directory.CreateDirectory(platformMetadataRoot);
             Directory.CreateDirectory(moduleMetadataRoot);

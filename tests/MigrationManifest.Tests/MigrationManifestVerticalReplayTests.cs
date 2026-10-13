@@ -483,17 +483,20 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
 
     private void InitializeIsolatedOrganizationRepository(string repositoryRoot, string module = "Organization")
     {
+        var backendRoot = ICP.Platform.Kernel.ModulePlanning.ComponentSourceCatalog.ResolveBackendRoot(repositoryRoot, module);
+        foreach (var project in Directory.EnumerateFiles(backendRoot, "*.csproj"))
+            CopyFile(project, Path.Combine(_fixtureRoot, "server", "modules", module, Path.GetFileName(project)));
         CopyDirectory(
             ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repositoryRoot, module),
             Path.Combine(_fixtureRoot, "frontend", "modules", ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ToSlug(module)));
         CopyDirectory(
-            Path.Combine(repositoryRoot, "server", "modules", module, "Migrations.SqlServer", "Migrations"),
+            Path.Combine(backendRoot, "Migrations.SqlServer", "Migrations"),
             Path.Combine(_fixtureRoot, "server", "modules", module, "Migrations.SqlServer", "Migrations"));
         CopyDirectory(
-            Path.Combine(repositoryRoot, "server", "modules", module, "Migrations.SqlServer", "bin", "Release", "net10.0"),
+            Path.Combine(backendRoot, "Migrations.SqlServer", "bin", "Release", "net10.0"),
             Path.Combine(_fixtureRoot, "server", "modules", module, "Migrations.SqlServer", "bin", "Release", "net10.0"));
         CopyFile(
-            Path.Combine(repositoryRoot, "server", "modules", module, "Migrations.SqlServer", module + ".SqlServerMigrations.csproj"),
+            Path.Combine(backendRoot, "Migrations.SqlServer", module + ".SqlServerMigrations.csproj"),
             Path.Combine(_fixtureRoot, "server", "modules", module, "Migrations.SqlServer", module + ".SqlServerMigrations.csproj"));
         CopyFile(
             Path.Combine(repositoryRoot, "server", "platform-modeling", "metadata", "storage-types.json"),
@@ -864,7 +867,7 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
     private static IReadOnlyList<string> GetProtectedAssetPaths(string repositoryRoot) =>
     [
         Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repositoryRoot, "Organization"), "migrations", "Organization.SqlServerMigrations.json"),
-        Path.Combine(repositoryRoot, "server", "modules", "Organization", "Migrations.SqlServer", "bin", "Release", "net10.0", "Organization.SqlServerMigrations.dll"),
+        Path.Combine(ICP.Platform.Kernel.ModulePlanning.ComponentSourceCatalog.ResolveBackendRoot(repositoryRoot, "Organization"), "Migrations.SqlServer", "bin", "Release", "net10.0", "Organization.SqlServerMigrations.dll"),
         Path.Combine(repositoryRoot, "apps", "host-api", "bin", "Release", "net10.0", "modules", "Organization", "migrations", "Organization.SqlServerMigrations.json"),
         Path.Combine(repositoryRoot, "apps", "host-api", "bin", "Release", "net10.0", "modules", "Organization", "migrations", "Organization.SqlServerMigrations.dll")
     ];

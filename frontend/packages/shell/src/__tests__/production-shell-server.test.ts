@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 
-const repositoryRoot = fileURLToPath(new URL('../../../../../', import.meta.url))
+const repositoryRoot = fileURLToPath(new URL('../../../../..', import.meta.url))
 const serverPath = join(repositoryRoot, 'scripts', 'performance', 'production-shell-server.mjs')
 const temporaryRoots: string[] = []
 const childProcesses: ChildProcess[] = []

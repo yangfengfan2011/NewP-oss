@@ -5,9 +5,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider, useLocalization } from '@icp-platform/core';
 import model from '../../../../../tests/Kernel.Tests/Fixtures/AuditBusinessChangeRuntime.contract.json';
-import detail from '../../../../modules/audit/metadata/views/BusinessChangeDetail.view.json';
-import dictionary from '../../../../modules/audit/metadata/dictionaries/BusinessChangeView.dic.json';
-import { businessChangeResource } from '../../../../modules/audit/src/businessChangeResource';
+import detail from '../../../../modules/platform/audit/metadata/views/BusinessChangeDetail.view.json';
+import dictionary from '../../../../modules/platform/audit/metadata/dictionaries/BusinessChangeView.dic.json';
+import { businessChangeResource } from '../../../../modules/platform/audit/src/businessChangeResource';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 

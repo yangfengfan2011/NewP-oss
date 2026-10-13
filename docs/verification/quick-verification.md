@@ -68,7 +68,7 @@ owner 提供改变的行为、受影响的消费者与测试资产、候选及�
 `finalize` 会把普通仓库当前 `HEAD` 中已跟踪的 manifest 作为已发布前缀事实，逐字段拒绝历史节点改写。隔离根没有自己的 Git worktree 时，必须先保留冻结的 Host Release manifest 副本作为同一前缀事实；缺少该副本会失败，且只能在 finalize 完成后再刷新 Host 副本。
 
 ```powershell
-dotnet build .\server\modules\<Module>\Migrations.SqlServer\<Module>.SqlServerMigrations.csproj -c Release
+dotnet build .\server\modules\<Group>\<Module>\Migrations.SqlServer\<Module>.SqlServerMigrations.csproj -c Release
 dotnet run --project .\server\tools\migration-manifest\MigrationManifest.csproj -c Release -- finalize --module <Module> --provider SqlServer --migration <MigrationId> --compatibility <Compatibility>
 dotnet build .\apps\host-api\HostApi.csproj -c Release
 dotnet run --project .\server\tools\migration-manifest\MigrationManifest.csproj -c Release --no-build --no-restore -- check --all --no-build

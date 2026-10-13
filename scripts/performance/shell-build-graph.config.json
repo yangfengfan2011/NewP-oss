@@ -14,24 +14,24 @@
     },
     "moduleBindingEager": {
       "roots": [
-        { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" }
+        { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/index\\.ts$" }
       ]
     },
     "authenticatedHome": {
       "roots": [
         { "manifestKey": "index.html" },
         { "sourceRegex": "(?:^|/)src/App\\.tsx$" },
-        { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" }
+        { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/index\\.ts$" }
       ]
     },
     "personnelRoute": {
       "roots": [
         { "manifestKey": "index.html" },
         { "sourceRegex": "(?:^|/)src/App\\.tsx$" },
-        { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" },
+        { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/index\\.ts$" },
         {
-          "dynamicImportsOf": { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" },
-          "match": { "sourceRegex": "(?:^|/)modules/[^/]+/src/standard-crud/[^/]+StandardCrudResource\\.primary\\.ts$" }
+          "dynamicImportsOf": { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/index\\.ts$" },
+          "match": { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/standard-crud/[^/]+StandardCrudResource\\.primary\\.ts$" }
         },
         {
           "dynamicImportsOf": { "sourceContains": "src/capabilities/StandardRouteCapabilityAdapters.tsx" },
@@ -43,16 +43,16 @@
   },
   "targetCapabilityAssets": [
     {
-      "dynamicImportsOf": { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" },
-      "match": { "sourceRegex": "(?:^|/)modules/[^/]+/src/standard-crud/[^/]+StandardCrudResource\\.primary\\.ts$" }
+      "dynamicImportsOf": { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/index\\.ts$" },
+      "match": { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/standard-crud/[^/]+StandardCrudResource\\.primary\\.ts$" }
     },
     {
-      "dynamicImportsOf": { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" },
-      "match": { "sourceRegex": "(?:^|/)modules/[^/]+/src/standard-crud/[^/]+StandardCrudResource\\.recovery\\.ts$" }
+      "dynamicImportsOf": { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/index\\.ts$" },
+      "match": { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/standard-crud/[^/]+StandardCrudResource\\.recovery\\.ts$" }
     }
   ],
   "bindingEntries": [
-    { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" }
+    { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/index\\.ts$" }
   ],
   "forbiddenDependencies": [
     {
@@ -76,7 +76,7 @@
     },
     {
       "id": "business-module-page",
-      "sourceRegex": "(?:^|/)modules/[^/]+/src/(?:pages|components|standard-crud)/",
+      "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/(?:pages|components|standard-crud)/",
       "scenarios": ["anonymous", "authenticatedShell"],
       "attribution": "shell-initial"
     },
@@ -124,19 +124,19 @@
     },
     {
       "id": "module-binding-eager-business-page",
-      "sourceRegex": "(?:^|/)modules/[^/]+/src/(?:pages|components|services|standard-crud)/",
+      "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/(?:pages|components|services|standard-crud)/",
       "scenarios": ["moduleBindingEager"],
       "attribution": "module-binding-eager"
     },
     {
       "id": "retired-frontend-module",
-      "sourceRegex": "(?:^|/)modules/(?:config-center|demo|files|metadata-config-center|module-template-sample|plugin-ops)/src/",
+      "sourceRegex": "(?:^|/)modules/(?:[^/]+/)*(?:config-center|demo|files|metadata-config-center|module-template-sample|plugin-ops)/src/",
       "scenarios": ["moduleBindingEager"],
       "attribution": "retired-frontend"
     },
     {
       "id": "retired-organization-page",
-      "sourceRegex": "(?:^|/)modules/organization/src/(?:pages/(?:OrganizationTreePage|PositionManagementPage)|components/OrganizationTreePanel)\\.tsx$",
+      "sourceRegex": "(?:^|/)modules/platform/organization/src/(?:pages/(?:OrganizationTreePage|PositionManagementPage)|components/OrganizationTreePanel)\\.tsx$",
       "scenarios": ["moduleBindingEager"],
       "attribution": "retired-frontend"
     }
@@ -155,7 +155,7 @@
         ],
         "sourceRegex": "/node_modules/\\.pnpm/@ant-design\\+pro-form@[^/]+/node_modules/@ant-design/pro-form/es/BaseForm/createField\\.js$",
         "forbiddenSources": [
-          { "sourceRegex": "(?:^|/)modules/[^/]+/src/" },
+          { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/" },
           { "sourceRegex": "(?:^|/)(?:packages/)?shell/src/pages/StandardCrudDetail" },
           { "sourceRegex": "(?:^|/)(?:packages/)?ui/src/(?:crud-detail|crud-form)\\.ts$" }
         ],

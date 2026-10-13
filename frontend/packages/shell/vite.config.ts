@@ -51,7 +51,7 @@ function newpFrontendEntryRegistry(): Plugin {
     }
   }
 
-  const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url))
+  const repositoryRoot = fileURLToPath(new URL('../../..', import.meta.url))
   const excluded = (process.env.NEWP_EXCLUDED_MODULE_IDS ?? '').split(',').map((id) => id.trim()).filter(Boolean)
   for (const [entry, path] of Object.entries(discoverFrontendEntries(repositoryRoot, excluded))) {
     addEntry(entry, path)

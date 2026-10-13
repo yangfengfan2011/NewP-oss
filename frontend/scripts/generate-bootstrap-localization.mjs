@@ -2,15 +2,15 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 
-const root = fileURLToPath(new URL('../../', import.meta.url));
+const root = fileURLToPath(new URL('../..', import.meta.url));
 const read = path => JSON.parse(readFileSync(resolve(root, path), 'utf8').replace(/^\uFEFF/, ''));
 const languages = read('frontend/modules/platform/metadata/languages.json');
 const catalogs = Object.fromEntries(languages.supportedLanguages.map(language => [language.code, {}]));
 // 只携带认证、语言入口及恢复所需词条；业务词典仍由活动 runtime 按原边界装载。
 const sources = [
-  ['Platform', 'PlatformAuthentication'], ['Platform', 'AuthenticationErrors'],
-  ['Identity', 'AuthenticationErrors'], ['Platform', 'Persistence'],
-  ['Platform', 'Platform', ['Language', 'MutationOutcomeUnknown', 'Diagnostics', 'UnexpectedError', 'Unauthorized', 'Forbidden', 'MutationConflict', 'ValidationFailed']],
+  ['platform', 'PlatformAuthentication'], ['platform', 'AuthenticationErrors'],
+  ['platform/identity', 'AuthenticationErrors'], ['platform', 'Persistence'],
+  ['platform', 'Platform', ['Language', 'MutationOutcomeUnknown', 'Diagnostics', 'UnexpectedError', 'Unauthorized', 'Forbidden', 'MutationConflict', 'ValidationFailed']],
 ];
 for (const [module, name, keys] of sources) {
   const path = `frontend/modules/${module.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}/metadata/dictionaries/${name}.dic.json`;

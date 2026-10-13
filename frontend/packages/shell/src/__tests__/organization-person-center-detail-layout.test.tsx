@@ -1,4 +1,4 @@
-import personMessages from '../../../../modules/organization/metadata/dictionaries/Organization.Person.dic.json';
+import personMessages from '../../../../modules/platform/organization/metadata/dictionaries/Organization.Person.dic.json';
 import './authorizedFeatureUiFixture';
 // @vitest-environment jsdom
 
@@ -7,11 +7,11 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
-import organizationModule from '../../../../modules/organization/src/index';
-import PersonDetailPage from '../../../../modules/organization/src/pages/PersonDetailPage';
-import personDetailDictionary from '../../../../modules/organization/metadata/dictionaries/PersonDetailView.dic.json';
+import organizationModule from '../../../../modules/platform/organization/src/index';
+import PersonDetailPage from '../../../../modules/platform/organization/src/pages/PersonDetailPage';
+import personDetailDictionary from '../../../../modules/platform/organization/metadata/dictionaries/PersonDetailView.dic.json';
 import organizationRuntimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
-import personDetailViewDocument from '../../../../modules/organization/metadata/views/PersonDetail.view.json';
+import personDetailViewDocument from '../../../../modules/platform/organization/metadata/views/PersonDetail.view.json';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 
@@ -26,8 +26,8 @@ const personDetailCatalog = Object.fromEntries(
 
 let personResource: StandardCrudResourceRegistration;
 
-vi.mock('../../../../modules/organization/src/services/organizationService', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../../modules/organization/src/services/organizationService')>();
+vi.mock('../../../../modules/platform/organization/src/services/organizationService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../modules/platform/organization/src/services/organizationService')>();
 
   return {
     ...actual,

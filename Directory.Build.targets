@@ -1,13 +1,20 @@
 <Project>
   <PropertyGroup>
     <NewpRepositoryRoot>$(MSBuildThisFileDirectory)</NewpRepositoryRoot>
-    <NewpModuleProjectRoot>$([MSBuild]::NormalizePath('$(NewpRepositoryRoot)', 'server', 'modules'))</NewpModuleProjectRoot>
+    <NewpModuleProjectRoot>$([MSBuild]::NormalizeDirectory('$(NewpRepositoryRoot)', 'server', 'modules'))</NewpModuleProjectRoot>
     <NewpHostProject>$([MSBuild]::NormalizePath('$(NewpRepositoryRoot)', 'apps', 'host-api', 'HostApi.csproj'))</NewpHostProject>
-    <NewpProjectParent>$([System.IO.Path]::GetDirectoryName('$(MSBuildProjectDirectory)'))</NewpProjectParent>
-    <NewpIsModuleProject Condition="'$(NewpProjectParent)' == '$(NewpModuleProjectRoot)'">true</NewpIsModuleProject>
+    <NewpIsModuleProject Condition="$([System.String]::Copy('$(MSBuildProjectDirectory)').StartsWith('$(NewpModuleProjectRoot)'))">true</NewpIsModuleProject>
     <NewpIsHostProject>false</NewpIsHostProject>
     <NewpIsHostProject Condition="'$(MSBuildProjectFullPath)' == '$(NewpHostProject)'">true</NewpIsHostProject>
   </PropertyGroup>
+  <!-- 嵌套工程拥有自己的源码与资源，父工程的 SDK 默认 glob 不得跨越工程边界。 -->
+  <ItemGroup Condition="'$(NewpIsModuleProject)' == 'true'">
+    <NewpNestedProject Include="**/*.csproj" Exclude="$(MSBuildProjectFile);**/obj/**;**/bin/**" />
+    <Compile Remove="@(NewpNestedProject->'%(RelativeDir)**/*.cs')" />
+    <EmbeddedResource Remove="@(NewpNestedProject->'%(RelativeDir)**/*')" />
+    <None Remove="@(NewpNestedProject->'%(RelativeDir)**/*')" />
+    <Content Remove="@(NewpNestedProject->'%(RelativeDir)**/*')" />
+  </ItemGroup>
   <!-- solution 未逐个登记的原位工程仍继承调用方配置，不能回落到 Debug 消费另一份产物。 -->
   <PropertyGroup Condition="'$(NewpIsModuleProject)' == 'true' or '$(NewpIsHostProject)' == 'true'">
     <ShouldUnsetParentConfigurationAndPlatform>false</ShouldUnsetParentConfigurationAndPlatform>

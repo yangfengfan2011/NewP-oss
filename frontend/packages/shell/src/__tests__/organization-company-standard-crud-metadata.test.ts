@@ -1,8 +1,8 @@
-import detailViewDocument from '../../../../modules/organization/metadata/views/CompanyDetail.view.json';
+import detailViewDocument from '../../../../modules/platform/organization/metadata/views/CompanyDetail.view.json';
 import { describe, expect, it } from 'vitest';
-import { companyStandardCrudResource } from '../../../../modules/organization/src/standard-crud/companyStandardCrudResource';
-import companyModelDocument from '../../../../modules/organization/metadata/models/Company.model.json';
-import companyListViewDocument from '../../../../modules/organization/metadata/views/CompanyList.view.json';
+import { companyStandardCrudResource } from '../../../../modules/platform/organization/src/standard-crud/companyStandardCrudResource';
+import companyModelDocument from '../../../../modules/platform/organization/metadata/models/Company.model.json';
+import companyListViewDocument from '../../../../modules/platform/organization/metadata/views/CompanyList.view.json';
 import organizationRuntimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
 import {
   buildStandardCrudListSchema,

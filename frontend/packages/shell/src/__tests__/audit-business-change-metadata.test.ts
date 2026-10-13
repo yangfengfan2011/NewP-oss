@@ -1,11 +1,11 @@
-import navigation from '../../../../modules/audit/metadata/navigation/Audit.nav.json';
-import auditBindings from '../../../../modules/audit/src';
+import navigation from '../../../../modules/platform/audit/metadata/navigation/Audit.nav.json';
+import auditBindings from '../../../../modules/platform/audit/src';
 import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';
 import { expect, it } from 'vitest';
 import model from '../../../../../tests/Kernel.Tests/Fixtures/AuditBusinessChangeRuntime.contract.json';
-import list from '../../../../modules/audit/metadata/views/BusinessChangeList.view.json';
-import detail from '../../../../modules/audit/metadata/views/BusinessChangeDetail.view.json';
-import { businessChangeResource } from '../../../../modules/audit/src/businessChangeResource';
+import list from '../../../../modules/platform/audit/metadata/views/BusinessChangeList.view.json';
+import detail from '../../../../modules/platform/audit/metadata/views/BusinessChangeDetail.view.json';
+import { businessChangeResource } from '../../../../modules/platform/audit/src/businessChangeResource';
 import { buildStandardCrudListSchema, resolveStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';
 
 it('compiles the real Audit filters and read-only list through the shared consumer', () => {

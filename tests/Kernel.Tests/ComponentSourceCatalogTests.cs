@@ -6,6 +6,22 @@ namespace ICP.Platform.Kernel.Tests;
 
 public sealed class ComponentSourceCatalogTests
 {
+    [Fact]
+    public void NestedBackendProjects_ResolveOwnerAndRejectAmbiguousCopies()
+    {
+        using var input = new RealComponentInput("part");
+        var owner = Path.Combine(input.Root, "server", "modules", "Infor-Center", "Part");
+        Directory.CreateDirectory(owner);
+        var project = Path.Combine(owner, "PartModule.csproj");
+        File.WriteAllText(project, "<Project><PropertyGroup><AssemblyName>PartModule</AssemblyName></PropertyGroup></Project>");
+        var catalog = ComponentSourceCatalog.Discover(input.Root);
+        Assert.Equal(project, catalog.ResolveProject(input.Root, "Part", "../../PartModule.dll"));
+        var duplicate = Path.Combine(input.Root, "server", "modules", "Other", "Part");
+        Directory.CreateDirectory(duplicate);
+        File.Copy(project, Path.Combine(duplicate, "PartModule.csproj"));
+        Assert.Throws<InvalidOperationException>(() => catalog.ResolveProject(input.Root, "Part", "../../PartModule.dll"));
+    }
+
     [Theory]
     [InlineData("part")]
     [InlineData("members/part")]
@@ -17,7 +33,7 @@ public sealed class ComponentSourceCatalogTests
         Assert.Equal(["InforCenter", "Part"], catalog.GetGroup("InforCenter").Select(component => component.ModuleId));
         Assert.Equal(input.PartRoot, catalog.Get("Part").Root);
         Assert.Equal("InforCenter", catalog.Get("Part").ParentModuleId);
-        Assert.Equal(Path.Combine(input.Repository, "server", "modules", "Part", "PartModule.csproj"),
+        Assert.Equal(Path.Combine(input.Repository, "server", "modules", "Infor-Center", "Part", "PartModule.csproj"),
             catalog.ResolveProject(input.Repository, "Part", "../../PartModule.dll"));
         Assert.Equal(["newp.plugin.json"], catalog.EnumerateOwnFiles("InforCenter").Select(Path.GetFileName));
         Assert.Contains(catalog.EnumerateOwnFiles("Part"), path => path.EndsWith("Part.model.json", StringComparison.Ordinal));

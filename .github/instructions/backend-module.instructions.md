@@ -46,6 +46,6 @@ server/modules/<ModuleName>/
 
 ## 参考示例
 
-- 最简示例：`server/modules/Demo/`
-- 完整示例：`server/modules/Authorization/`
+- 最简示例：`server/modules/Example/Demo/`
+- 完整示例：`server/modules/Platform/Authorization/`
 - 模板：`server/templates/backend-module-template/`

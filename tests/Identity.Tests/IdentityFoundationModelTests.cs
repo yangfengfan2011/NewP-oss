@@ -109,7 +109,7 @@ public sealed class IdentityFoundationModelTests
     {
         var root = FindRepositoryRoot();
         using var listView = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(root, @"frontend\modules\identity\metadata\views\AccountList.view.json"),
+            Path.Combine(root, @"frontend\modules\platform\identity\metadata\views\AccountList.view.json"),
             Encoding.UTF8));
         var view = listView.RootElement.GetProperty("view");
 
@@ -135,7 +135,7 @@ public sealed class IdentityFoundationModelTests
         });
 
         using var navigation = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(root, @"frontend\modules\identity\metadata\navigation\Identity.nav.json"),
+            Path.Combine(root, @"frontend\modules\platform\identity\metadata\navigation\Identity.nav.json"),
             Encoding.UTF8));
         var accountEntry = navigation.RootElement.GetProperty("navigation").GetProperty("items").EnumerateArray()
             .Single(item => item.GetProperty("key").GetString() == "identity.accounts");
@@ -144,7 +144,7 @@ public sealed class IdentityFoundationModelTests
         Assert.True(accountEntry.GetProperty("localAdministratorOnly").GetBoolean());
 
         using var capsule = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(root, @"frontend\modules\identity\newp.plugin.json"),
+            Path.Combine(root, @"frontend\modules\platform\identity\newp.plugin.json"),
             Encoding.UTF8));
         Assert.Equal(
             ["identity.account.list", "identity.account.detail"],
@@ -152,7 +152,7 @@ public sealed class IdentityFoundationModelTests
                 .Select(binding => binding.GetString()));
 
         using var detailView = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(root, @"frontend\modules\identity\metadata\views\AccountDetail.view.json"),
+            Path.Combine(root, @"frontend\modules\platform\identity\metadata\views\AccountDetail.view.json"),
             Encoding.UTF8));
         var detail = detailView.RootElement.GetProperty("view");
         Assert.Equal("identity.account.detail", detail.GetProperty("key").GetString());

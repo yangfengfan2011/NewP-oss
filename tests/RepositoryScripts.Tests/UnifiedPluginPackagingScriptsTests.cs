@@ -21,8 +21,11 @@ public class UnifiedPluginPackagingScriptsTests(ITestOutputHelper output) : IDis
         Assert.Contains("--disable-build-servers", script, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void NewModule_GeneratesCanonicalBuiltInCapsule()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("Platform")]
+    [InlineData("Infor-Center")]
+    public void NewModule_GeneratesCanonicalBuiltInCapsule(string? group)
     {
         var repoRoot = FindRepositoryRoot();
         var fixtureRoot = Path.Combine(Path.GetTempPath(), $"newp-new-module-{Guid.NewGuid():N}");
@@ -38,6 +41,27 @@ public class UnifiedPluginPackagingScriptsTests(ITestOutputHelper output) : IDis
         CopyTemplateTree(
             Path.Combine(repoRoot, "frontend", "templates", "frontend-module-template"),
             Path.Combine(fixtureRoot, "frontend", "templates", "frontend-module-template"));
+
+        var groupName = group ?? "Example";
+        var groupSlug = groupName.ToLowerInvariant();
+        var groupRoot = Path.Combine(fixtureRoot, "frontend", "modules", groupSlug);
+        Directory.CreateDirectory(groupRoot);
+        var parentModuleId = groupName == "Infor-Center" ? "InforCenter" : "Example";
+        var parentCapsulePath = Path.Combine(groupRoot, "newp.plugin.json");
+        if (groupName != "Platform")
+        {
+            var parentCapsule = new
+            {
+                moduleId = parentModuleId,
+                version = "1.0.0",
+                description = "Existing parent content",
+                composition = new { members = new[] { "Existing" } }
+            };
+            File.WriteAllText(parentCapsulePath, JsonSerializer.Serialize(parentCapsule) + "\r\n", new UTF8Encoding(false));
+            var existingRoot = Path.Combine(groupRoot, "existing");
+            Directory.CreateDirectory(existingRoot);
+            File.WriteAllText(Path.Combine(existingRoot, "newp.plugin.json"), """{"moduleId":"Existing","version":"1.0.0"}""");
+        }
 
         var hostProjectPath = Path.Combine(fixtureRoot, "apps", "host-api", "HostApi.csproj");
         Directory.CreateDirectory(Path.GetDirectoryName(hostProjectPath)!);
@@ -59,19 +83,19 @@ public class UnifiedPluginPackagingScriptsTests(ITestOutputHelper output) : IDis
 
         var hostProjectBefore = File.ReadAllText(hostProjectPath);
         var scriptPath = Path.Combine(fixtureRoot, "scripts", "new-module.ps1");
+        List<string> arguments = ["-ModuleName", "CanonicalSample", "-DisplayName", "规范样例"];
+        if (group is not null)
+            arguments.AddRange(["-Group", group]);
         var result = RunPowerShellScript(
             fixtureRoot,
             scriptPath,
-            [
-                "-ModuleName", "CanonicalSample",
-                "-DisplayName", "规范样例"
-            ]);
+            arguments);
 
         Assert.True(
             result.ExitCode == 0,
             $"Expected exit code 0 but got {result.ExitCode}.\nSTDOUT:\n{result.StdOut}\nSTDERR:\n{result.StdErr}");
 
-        var capsuleRoot = Path.Combine(fixtureRoot, "frontend", "modules", "canonical-sample");
+        var capsuleRoot = Path.Combine(groupRoot, "canonical-sample");
         var manifestPath = Path.Combine(capsuleRoot, "newp.plugin.json");
         var navigationPath = Path.Combine(
             capsuleRoot,
@@ -81,6 +105,22 @@ public class UnifiedPluginPackagingScriptsTests(ITestOutputHelper output) : IDis
         Assert.True(File.Exists(manifestPath));
         Assert.True(File.Exists(navigationPath));
         Assert.False(Directory.Exists(Path.Combine(fixtureRoot, "apps", "host-api", "modules", "CanonicalSample")));
+        var discovered = ComponentSourceCatalog.Discover(fixtureRoot);
+        Assert.Equal(capsuleRoot, discovered.Get("CanonicalSample").Root);
+        Assert.Equal(groupName == "Platform" ? null : parentModuleId, discovered.Get("CanonicalSample").ParentModuleId);
+        if (groupName != "Platform")
+        {
+            using var parent = JsonDocument.Parse(File.ReadAllText(parentCapsulePath));
+            Assert.Equal("Existing parent content", parent.RootElement.GetProperty("description").GetString());
+            Assert.Equal(new[] { "Existing", "CanonicalSample" }, parent.RootElement.GetProperty("composition")
+                .GetProperty("members").EnumerateArray().Select(static member => member.GetString()));
+            Assert.False(File.ReadAllBytes(parentCapsulePath).AsSpan().StartsWith(Encoding.UTF8.Preamble));
+            Assert.DoesNotContain("\n", File.ReadAllText(parentCapsulePath).Replace("\r\n", string.Empty), StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.False(File.Exists(parentCapsulePath));
+        }
 
         using (var manifestDocument = JsonDocument.Parse(File.ReadAllText(manifestPath)))
         {
@@ -128,25 +168,26 @@ public class UnifiedPluginPackagingScriptsTests(ITestOutputHelper output) : IDis
         Assert.Equal("canonical-sample.read", point.BehaviorKey);
 
         var backendProject = File.ReadAllText(
-            Path.Combine(fixtureRoot, "server", "modules", "CanonicalSample", "CanonicalSample.csproj"));
+            Path.Combine(fixtureRoot, "server", "modules", groupName, "CanonicalSample", "CanonicalSample.csproj"));
         Assert.DoesNotContain("EmbeddedResource", backendProject, StringComparison.Ordinal);
         Assert.DoesNotContain("newp.plugin.json", backendProject, StringComparison.Ordinal);
-        Assert.Contains(@"..\..\platform-authorization\PlatformAuthorization.csproj", backendProject, StringComparison.Ordinal);
+        Assert.Contains(@"..\..\..\sdk\Sdk.csproj", backendProject, StringComparison.Ordinal);
+        Assert.Contains(@"..\..\..\platform-authorization\PlatformAuthorization.csproj", backendProject, StringComparison.Ordinal);
 
         var backendModule = File.ReadAllText(
-            Path.Combine(fixtureRoot, "server", "modules", "CanonicalSample", "CanonicalSampleModule.cs"));
+            Path.Combine(fixtureRoot, "server", "modules", groupName, "CanonicalSample", "CanonicalSampleModule.cs"));
         Assert.Contains("class CanonicalSampleModule : ModuleCapsuleBindingBase", backendModule, StringComparison.Ordinal);
         Assert.Contains("BehaviorKey => \"canonical-sample.backend\"", backendModule, StringComparison.Ordinal);
         Assert.DoesNotContain("ModuleId =>", backendModule, StringComparison.Ordinal);
 
         var controller = File.ReadAllText(
-            Path.Combine(fixtureRoot, "server", "modules", "CanonicalSample", "Controllers", "CanonicalSampleController.cs"));
+            Path.Combine(fixtureRoot, "server", "modules", groupName, "CanonicalSample", "Controllers", "CanonicalSampleController.cs"));
         Assert.Contains("[RequireFeature(\"canonical-sample.read\")]", controller, StringComparison.Ordinal);
         Assert.Contains("[EndpointModule(\"CanonicalSample\")]", controller, StringComparison.Ordinal);
         Assert.DoesNotContain("ModuleId =", controller, StringComparison.Ordinal);
 
         var frontendBinding = File.ReadAllText(
-            Path.Combine(fixtureRoot, "frontend", "modules", "canonical-sample", "src", "index.ts"));
+            Path.Combine(capsuleRoot, "src", "index.ts"));
         Assert.Contains("FrontendBehaviorBindings", frontendBinding, StringComparison.Ordinal);
         Assert.Contains("behaviorKey: 'canonical-sample.frontend'", frontendBinding, StringComparison.Ordinal);
         Assert.Contains("routeCapabilities:", frontendBinding, StringComparison.Ordinal);
@@ -162,9 +203,9 @@ public class UnifiedPluginPackagingScriptsTests(ITestOutputHelper output) : IDis
         Assert.DoesNotContain("permissions:", frontendBinding, StringComparison.Ordinal);
 
         var frontendPrimaryEntry = File.ReadAllText(
-            Path.Combine(fixtureRoot, "frontend", "modules", "canonical-sample", "src", "CanonicalSamplePage.primary.ts"));
+            Path.Combine(capsuleRoot, "src", "CanonicalSamplePage.primary.ts"));
         var frontendRecoveryEntry = File.ReadAllText(
-            Path.Combine(fixtureRoot, "frontend", "modules", "canonical-sample", "src", "CanonicalSamplePage.recovery.ts"));
+            Path.Combine(capsuleRoot, "src", "CanonicalSamplePage.recovery.ts"));
         Assert.Contains("export function primary()", frontendPrimaryEntry, StringComparison.Ordinal);
         Assert.Contains("createElement(CanonicalSamplePage)", frontendPrimaryEntry, StringComparison.Ordinal);
         Assert.Contains("export function recovery()", frontendRecoveryEntry, StringComparison.Ordinal);
@@ -172,6 +213,29 @@ public class UnifiedPluginPackagingScriptsTests(ITestOutputHelper output) : IDis
 
         var hostProject = File.ReadAllText(hostProjectPath);
         Assert.Equal(hostProjectBefore, hostProject);
+
+        if (groupName == "Example")
+        {
+            // 有自身实现的父组件必须保持工程边界，新增成员不能被父工程的默认 glob 编译。
+            CopyFile(Path.Combine(repoRoot, "Directory.Build.targets"), Path.Combine(fixtureRoot, "Directory.Build.targets"));
+            var parentProjectRoot = Path.Combine(fixtureRoot, "server", "modules", groupName);
+            var parentProjectPath = Path.Combine(parentProjectRoot, "Example.csproj");
+            File.WriteAllText(parentProjectPath, """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>""");
+            File.WriteAllText(Path.Combine(parentProjectRoot, "Parent.cs"), "public sealed class Parent {}");
+            var evaluationScriptPath = Path.Combine(fixtureRoot, "inspect-parent.ps1");
+            File.WriteAllText(evaluationScriptPath, """
+                param([string]$ProjectPath)
+                dotnet msbuild $ProjectPath -nologo '-getItem:Compile,EmbeddedResource,None,Content'
+                exit $LASTEXITCODE
+                """);
+            var evaluation = RunPowerShellScript(fixtureRoot, evaluationScriptPath, ["-ProjectPath", parentProjectPath]);
+            Assert.True(evaluation.ExitCode == 0, evaluation.StdErr);
+            using var evaluated = JsonDocument.Parse(evaluation.StdOut);
+            var items = evaluated.RootElement.GetProperty("Items");
+            Assert.Equal("Parent.cs", Assert.Single(items.GetProperty("Compile").EnumerateArray()).GetProperty("Identity").GetString());
+            foreach (var itemType in items.EnumerateObject())
+                Assert.DoesNotContain(itemType.Value.EnumerateArray(), item => item.GetProperty("Identity").GetString()!.Contains("CanonicalSample", StringComparison.Ordinal));
+        }
     }
 
     [Fact]

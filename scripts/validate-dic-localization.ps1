@@ -76,7 +76,7 @@ if ($supportedLanguages.Count -eq 0) {
 $modulesRoot = Join-Path $resolvedRoot "frontend/modules"
 $dictionaryFiles = @()
 if (Test-Path -LiteralPath $modulesRoot) {
-    $dictionaryFiles = @(Get-ChildItem -LiteralPath $modulesRoot -Directory | ForEach-Object {
+    $dictionaryFiles = @(Get-ChildItem -LiteralPath $modulesRoot -Directory -Recurse | ForEach-Object {
         $dictionaryRoot = Join-Path $_.FullName "metadata/dictionaries"
         if (Test-Path -LiteralPath $dictionaryRoot) {
             Get-ChildItem -LiteralPath $dictionaryRoot -Filter "*.dic.json" -File -Recurse

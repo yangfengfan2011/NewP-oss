@@ -5,7 +5,7 @@ import type { Root } from 'react-dom/client';
 import { createLocalizedRoot as createRoot } from './localizedTestRoot';
 import { afterEach, expect, it, vi } from 'vitest';
 import { LanguageSelect, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
-import { companyStandardCrudResource } from '../../../../modules/organization/src/standard-crud/companyStandardCrudResource';
+import { companyStandardCrudResource } from '../../../../modules/platform/organization/src/standard-crud/companyStandardCrudResource';
 import { platformTestCatalogs } from './localizationTestCatalogs';
 import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime';
 

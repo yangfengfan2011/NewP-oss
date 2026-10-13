@@ -20,10 +20,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\server\modules\Organization\OrganizationModule.csproj" />
-    <ProjectReference Include="..\..\server\modules\Organization\Migrations.SqlServer\Organization.SqlServerMigrations.csproj" />
-    <ProjectReference Include="..\..\server\modules\Identity\IdentityModule.csproj" />
-    <ProjectReference Include="..\..\server\modules\Authentication\AuthenticationModule.csproj" />
+    <ProjectReference Include="..\..\server\modules\Platform\Organization\OrganizationModule.csproj" />
+    <ProjectReference Include="..\..\server\modules\Platform\Organization\Migrations.SqlServer\Organization.SqlServerMigrations.csproj" />
+    <ProjectReference Include="..\..\server\modules\Platform\Identity\IdentityModule.csproj" />
+    <ProjectReference Include="..\..\server\modules\Platform\Authentication\AuthenticationModule.csproj" />
     <ProjectReference Include="..\..\server\platform-crud\PlatformCrud.csproj" />
     <ProjectReference Include="..\..\server\platform-persistence-composition\PlatformPersistence.Composition.csproj" />
     <ProjectReference Include="..\..\server\platform-persistence-efcore.migrations.sqlserver\PlatformPersistence.EfCore.SqlServerMigrations.csproj" />

@@ -1,4 +1,4 @@
-import personMessages from '../../../../modules/organization/metadata/dictionaries/Organization.Person.dic.json';
+import personMessages from '../../../../modules/platform/organization/metadata/dictionaries/Organization.Person.dic.json';
 import './authorizedFeatureUiFixture';
 // @vitest-environment jsdom
 
@@ -8,13 +8,13 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
-import organizationModule from '../../../../modules/organization/src/index';
-import PersonListPage from '../../../../modules/organization/src/pages/PersonListPage';
-import personDetailDictionary from '../../../../modules/organization/metadata/dictionaries/PersonDetailView.dic.json';
-import personListDictionary from '../../../../modules/organization/metadata/dictionaries/PersonListView.dic.json';
+import organizationModule from '../../../../modules/platform/organization/src/index';
+import PersonListPage from '../../../../modules/platform/organization/src/pages/PersonListPage';
+import personDetailDictionary from '../../../../modules/platform/organization/metadata/dictionaries/PersonDetailView.dic.json';
+import personListDictionary from '../../../../modules/platform/organization/metadata/dictionaries/PersonListView.dic.json';
 import organizationRuntimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
-import personDetailViewDocument from '../../../../modules/organization/metadata/views/PersonDetail.view.json';
-import personListViewDocument from '../../../../modules/organization/metadata/views/PersonList.view.json';
+import personDetailViewDocument from '../../../../modules/platform/organization/metadata/views/PersonDetail.view.json';
+import personListViewDocument from '../../../../modules/platform/organization/metadata/views/PersonList.view.json';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 
@@ -51,8 +51,8 @@ const serviceMocks = vi.hoisted(() => ({
   })),
 }));
 
-vi.mock('../../../../modules/organization/src/services/organizationService', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../../modules/organization/src/services/organizationService')>();
+vi.mock('../../../../modules/platform/organization/src/services/organizationService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../modules/platform/organization/src/services/organizationService')>();
 
   return {
     ...actual,
@@ -455,8 +455,8 @@ describe('organization person center list layout', () => {
 
   it('single-flights the real narrow company lookup while the StrictMode list still loads', async () => {
     const actualService = await vi.importActual<
-      typeof import('../../../../modules/organization/src/services/organizationService')
-    >('../../../../modules/organization/src/services/organizationService');
+      typeof import('../../../../modules/platform/organization/src/services/organizationService')
+    >('../../../../modules/platform/organization/src/services/organizationService');
     serviceMocks.getCompanyLookup.mockImplementation(actualService.getCompanyLookup);
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;

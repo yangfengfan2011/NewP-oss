@@ -22,7 +22,7 @@ public static class ModuleAuthoringPaths
     {
         var catalog = ComponentSourceCatalog.Discover(root);
         return catalog.Components.SingleOrDefault(component => component.ModuleId == moduleId)?.Root
-            ?? Path.Combine(root, "frontend", "modules", ToSlug(moduleId));
+            ?? ComponentSourceCatalog.ResolveLegacyFrontendRoot(root, ToSlug(moduleId));
     }
 
     /// <summary>枚举真实组件根和既有无 Capsule 的 metadata owner，运行时输出保持平面。</summary>
@@ -32,7 +32,7 @@ public static class ModuleAuthoringPaths
         if (!Directory.Exists(authoringRoot))
             return Directory.Exists(Path.Combine(root, "modules")) ? Directory.EnumerateDirectories(Path.Combine(root, "modules")) : [];
         var catalog = ComponentSourceCatalog.Discover(root);
-        return catalog.Components.Select(component => component.Root).Concat(Directory.EnumerateDirectories(authoringRoot)
+        return catalog.Components.Select(component => component.Root).Concat(ComponentSourceCatalog.EnumerateSourceDirectories(authoringRoot)
             .Where(directory => !File.Exists(Path.Combine(directory, "newp.plugin.json")) && Directory.Exists(Path.Combine(directory, "metadata")))).Order(StringComparer.Ordinal);
     }
 

@@ -56,6 +56,6 @@ frontend/modules/<module-name>/
 
 ## 参考示例
 
-- 最简示例：`frontend/modules/demo/`
-- 完整示例：`frontend/modules/authorization/`
+- 最简示例：`frontend/modules/example/demo/`
+- 完整示例：`frontend/modules/platform/authorization/`
 - 模板：`frontend/templates/frontend-module-template/`

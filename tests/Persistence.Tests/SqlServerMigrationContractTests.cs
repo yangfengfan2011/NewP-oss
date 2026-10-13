@@ -11,7 +11,7 @@ public sealed class SqlServerMigrationContractTests
         var migrationPaths = new[]
         {
             Path.Combine(repositoryRoot, "server", "platform-persistence-efcore.migrations.sqlserver", "Migrations", "20260812144154_PlatformFoundation.cs"),
-            Path.Combine(repositoryRoot, "server", "modules", "Organization", "Migrations.SqlServer", "Migrations", "20260812144235_Organization_000001_Foundation.cs")
+            Path.Combine(repositoryRoot, "server", "modules", "Platform", "Organization", "Migrations.SqlServer", "Migrations", "20260812144235_Organization_000001_Foundation.cs")
         };
 
         foreach (var migrationPath in migrationPaths)

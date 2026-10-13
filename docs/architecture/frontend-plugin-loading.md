@@ -50,7 +50,7 @@ Shell 按以下顺序启动：
 
 原生 URL 只公开包内 `frontend` 子树，包括已验证的懒加载 chunk 与资源；后端、metadata 和迁移由各自消费者读取。Shell 构建提供 `/shared-runtime` 与 HTML import map，使原生入口消费同一 SDK、Core、React 与 React DOM 模块实例。Shell 与正式组件 builder 使用同一受控平台运行时发行声明，构建时核对实际解析依赖的精确版本；普通外部 authoring 仍保持既有公开 profile 边界。
 
-新增内建模块不修改 Shell 业务列表。迁移期 legacy 模块在 `apps/host-api/frontend/modules/<module-slug>/plugin.json` 提供 transport 声明；完成 capsule cutover 的模块以 `frontend/modules/<module-slug>/newp.plugin.json` 为根 authoring owner。Organization 是首个 behavior-binding adopter。
+新增内建模块不修改 Shell 业务列表。迁移期 legacy 模块在 `apps/host-api/frontend/modules/<module-slug>/plugin.json` 提供 transport 声明；完成 capsule cutover 的模块以 `<组件源码根>/newp.plugin.json` 为根 authoring owner。Organization 是首个 behavior-binding adopter。
 
 ## 所有权边界
 

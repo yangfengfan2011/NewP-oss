@@ -8,12 +8,12 @@ import { AuthorizationProvider, LanguageSelect, LocalizationProvider, PlatformQu
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { PlatformRequestLocaleBridge } from '../localization/PlatformRequestLocaleBridge';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
-import { personStandardCrudResource } from '../../../../modules/organization/src/standard-crud/personStandardCrudResource';
-import personModel from '../../../../modules/organization/metadata/models/Person.model.json';
-import personList from '../../../../modules/organization/metadata/views/PersonList.view.json';
-import personDetail from '../../../../modules/organization/metadata/views/PersonDetail.view.json';
-import personDictionary from '../../../../modules/organization/metadata/dictionaries/PersonListView.dic.json';
-import errorDictionary from '../../../../modules/organization/metadata/dictionaries/Organization.Person.dic.json';
+import { personStandardCrudResource } from '../../../../modules/platform/organization/src/standard-crud/personStandardCrudResource';
+import personModel from '../../../../modules/platform/organization/metadata/models/Person.model.json';
+import personList from '../../../../modules/platform/organization/metadata/views/PersonList.view.json';
+import personDetail from '../../../../modules/platform/organization/metadata/views/PersonDetail.view.json';
+import personDictionary from '../../../../modules/platform/organization/metadata/dictionaries/PersonListView.dic.json';
+import errorDictionary from '../../../../modules/platform/organization/metadata/dictionaries/Organization.Person.dic.json';
 import platformDictionary from '../../../../modules/platform/metadata/dictionaries/Platform.dic.json';
 
 vi.unmock('@icp-platform/core');

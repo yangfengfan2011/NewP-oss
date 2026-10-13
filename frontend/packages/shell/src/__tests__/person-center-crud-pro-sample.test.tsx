@@ -7,12 +7,12 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry, type FrontendModule, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
-import baseOrganizationModule from '../../../../modules/organization/src/index';
-import personDetailDictionary from '../../../../modules/organization/metadata/dictionaries/PersonDetailView.dic.json';
-import personListDictionary from '../../../../modules/organization/metadata/dictionaries/PersonListView.dic.json';
+import baseOrganizationModule from '../../../../modules/platform/organization/src/index';
+import personDetailDictionary from '../../../../modules/platform/organization/metadata/dictionaries/PersonDetailView.dic.json';
+import personListDictionary from '../../../../modules/platform/organization/metadata/dictionaries/PersonListView.dic.json';
 import organizationRuntimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
-import personDetailViewDocument from '../../../../modules/organization/metadata/views/PersonDetail.view.json';
-import personListViewDocument from '../../../../modules/organization/metadata/views/PersonList.view.json';
+import personDetailViewDocument from '../../../../modules/platform/organization/metadata/views/PersonDetail.view.json';
+import personListViewDocument from '../../../../modules/platform/organization/metadata/views/PersonList.view.json';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 
@@ -70,8 +70,8 @@ let organizationModule: FrontendModule;
 let personResource: StandardCrudResourceRegistration;
 let currentLocationSearch = '';
 
-vi.mock('../../../../modules/organization/src/services/organizationService', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../../modules/organization/src/services/organizationService')>();
+vi.mock('../../../../modules/platform/organization/src/services/organizationService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../modules/platform/organization/src/services/organizationService')>();
 
   return {
     ...actual,

@@ -10,12 +10,12 @@ import { formatStandardCrudActionReason } from '../standard-crud/standardCrudAct
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
-import { personStandardCrudResource } from '../../../../modules/organization/src/standard-crud/personStandardCrudResource';
+import { personStandardCrudResource } from '../../../../modules/platform/organization/src/standard-crud/personStandardCrudResource';
 import models from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
-import listView from '../../../../modules/organization/metadata/views/PersonList.view.json';
-import detailView from '../../../../modules/organization/metadata/views/PersonDetail.view.json';
-import listDictionary from '../../../../modules/organization/metadata/dictionaries/PersonListView.dic.json';
-import detailDictionary from '../../../../modules/organization/metadata/dictionaries/PersonDetailView.dic.json';
+import listView from '../../../../modules/platform/organization/metadata/views/PersonList.view.json';
+import detailView from '../../../../modules/platform/organization/metadata/views/PersonDetail.view.json';
+import listDictionary from '../../../../modules/platform/organization/metadata/dictionaries/PersonListView.dic.json';
+import detailDictionary from '../../../../modules/platform/organization/metadata/dictionaries/PersonDetailView.dic.json';
 import platformDictionary from '../../../../modules/platform/metadata/dictionaries/Platform.dic.json';
 
 const catalogs = Object.fromEntries(['zhs', 'en'].map(language => [language, Object.fromEntries([

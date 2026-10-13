@@ -29,8 +29,8 @@ apps/host-api/                       Host 组合与启动
 server/kernel/                       模块计划、包和运行时投影内核
 server/plugin-platform/              外部插件生命周期
 server/platform-persistence*/        持久化计划、EF 与 provider adapter
-frontend/modules/<module-slug>/     Capsule、metadata 与前端实现
-server/modules/<ModuleId>/           后端行为实现
+frontend/modules/<group-slug>/       三个顶层分组与其成员 Capsule、metadata、前端实现
+server/modules/<Group>/              三个顶层分组与其成员后端行为实现
 frontend/packages/shell/             Shell 与活动目录消费
 ```
 

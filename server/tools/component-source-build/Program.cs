@@ -29,7 +29,8 @@ try
                 using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
                 if (catalog.Components.Any(component => component.ModuleId == document.RootElement.GetProperty("moduleId").GetString())) continue;
                 var id = document.RootElement.GetProperty("moduleId").GetString()!;
-                AddFrontend(document.RootElement, Path.Combine(repository, "frontend", "modules", Slug(id)), manifestPath, entries);
+                if (excluded.Contains(id)) continue;
+                AddFrontend(document.RootElement, ComponentSourceCatalog.ResolveLegacyFrontendRoot(repository, Slug(id)), manifestPath, entries);
             }
         }
         Console.WriteLine(JsonSerializer.Serialize(entries));

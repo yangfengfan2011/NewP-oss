@@ -22,14 +22,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\\Persistence.MigrationFixtures\\Persistence.MigrationFixtures.csproj" />
-    <ProjectReference Include="..\\..\\apps\\host-api\\HostApi.csproj" />
-    <ProjectReference Include="..\\..\\server\\platform-persistence-efcore\\PlatformPersistence.EfCore.csproj" />
-    <ProjectReference Include="..\\..\\server\\platform-persistence\\PlatformPersistence.csproj" />
-    <ProjectReference Include="..\\..\\server\\modules\\Identity\\Migrations.SqlServer\\Identity.SqlServerMigrations.csproj" />
-    <ProjectReference Include="..\\..\\server\\modules\\Organization\\Migrations.SqlServer\\Organization.SqlServerMigrations.csproj" />
-    <ProjectReference Include="..\\..\\server\\modules\\Authentication\\Migrations.SqlServer\\Authentication.SqlServerMigrations.csproj" />
-    <ProjectReference Include="..\\..\\server\\modules\\Example\\Migrations.SqlServer\\Example.SqlServerMigrations.csproj" />
+    <ProjectReference Include="..\Persistence.MigrationFixtures\Persistence.MigrationFixtures.csproj" />
+    <ProjectReference Include="..\..\apps\host-api\HostApi.csproj" />
+    <ProjectReference Include="..\..\server\platform-persistence-efcore\PlatformPersistence.EfCore.csproj" />
+    <ProjectReference Include="..\..\server\platform-persistence\PlatformPersistence.csproj" />
+    <ProjectReference Include="..\..\server\modules\Platform\Identity\Migrations.SqlServer\Identity.SqlServerMigrations.csproj" />
+    <ProjectReference Include="..\..\server\modules\Platform\Organization\Migrations.SqlServer\Organization.SqlServerMigrations.csproj" />
+    <ProjectReference Include="..\..\server\modules\Platform\Authentication\Migrations.SqlServer\Authentication.SqlServerMigrations.csproj" />
+    <ProjectReference Include="..\..\server\modules\Example\Migrations.SqlServer\Example.SqlServerMigrations.csproj" />
   </ItemGroup>
 
 </Project>

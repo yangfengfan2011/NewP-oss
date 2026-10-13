@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ICP.Platform.Modules.Organization</RootNamespace>
+    <AssemblyName>OrganizationModule</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="Contracts\Organization.Contracts.csproj" />
+    <ProjectReference Include="..\Authorization\Contracts\Authorization.Contracts.csproj" />
+    <ProjectReference Include="..\Audit\Contracts\Audit.Contracts.csproj" />
+    <ProjectReference Include="..\Authentication\Contracts\Authentication.Contracts.csproj" />
+    <ProjectReference Include="..\Identity\Contracts\Identity.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\sdk\Sdk.csproj" />
+    <ProjectReference Include="..\..\..\platform-authorization\PlatformAuthorization.csproj" />
+    <ProjectReference Include="..\..\..\platform-crud\PlatformCrud.csproj" />
+    <ProjectReference Include="..\..\..\platform-modeling\PlatformModeling.csproj" />
+    <ProjectReference Include="..\..\..\platform-persistence\PlatformPersistence.csproj" />
+    <ProjectReference Include="..\..\..\platform-persistence-efcore\PlatformPersistence.EfCore.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Migrations.SqlServer\**\*.cs" />
+    <Compile Remove="Contracts\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>Organization.Tests</_Parameter1>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>HostApi.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+</Project>

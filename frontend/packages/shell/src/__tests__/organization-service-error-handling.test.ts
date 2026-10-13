@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { deletePerson } from '../../../../modules/organization/src/services/organizationService';
+import { deletePerson } from '../../../../modules/platform/organization/src/services/organizationService';
 
 describe('organizationService error handling', () => {
   afterEach(() => {

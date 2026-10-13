@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\server\modules\Audit\AuditModule.csproj" />
+    <ProjectReference Include="..\..\server\modules\Platform\Audit\AuditModule.csproj" />
   </ItemGroup>
 
 </Project>

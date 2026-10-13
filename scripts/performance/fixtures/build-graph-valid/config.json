@@ -12,8 +12,8 @@
         "index.html",
         "src/module.ts",
         {
-          "dynamicImportsOf": { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" },
-          "match": { "sourceRegex": "(?:^|/)modules/[^/]+/src/standard-crud/[^/]+StandardCrudResource\\.tsx$" }
+          "dynamicImportsOf": { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/index\\.ts$" },
+          "match": { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/standard-crud/[^/]+StandardCrudResource\\.tsx$" }
         }
       ],
       "relativeTo": "authenticatedHome"
@@ -21,8 +21,8 @@
   },
   "targetCapabilityAssets": [
     {
-      "dynamicImportsOf": { "sourceRegex": "(?:^|/)modules/[^/]+/src/index\\.ts$" },
-      "match": { "sourceRegex": "(?:^|/)modules/[^/]+/src/standard-crud/[^/]+StandardCrudResource\\.tsx$" }
+      "dynamicImportsOf": { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/index\\.ts$" },
+      "match": { "sourceRegex": "(?:^|/)modules/(?:[^/]+/)+src/standard-crud/[^/]+StandardCrudResource\\.tsx$" }
     }
   ],
   "bindingEntries": ["src/module.ts"],

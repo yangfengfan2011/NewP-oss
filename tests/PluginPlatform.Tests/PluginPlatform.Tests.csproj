@@ -21,10 +21,10 @@
   <ItemGroup>
     <Compile Include="../TestSupport/Components/ComponentBundleTestInput.cs" Link="TestSupport/ComponentBundleTestInput.cs" />
     <ProjectReference Include="..\..\server\plugin-platform\PluginPlatform.csproj" />
-    <ProjectReference Include="..\..\server\modules\Part\PartModule.csproj" />
-    <ProjectReference Include="..\..\server\modules\Part\Migrations.SqlServer\Part.SqlServerMigrations.csproj" />
-    <ProjectReference Include="..\..\server\modules\Workspace\WorkspaceModule.csproj" />
-    <ProjectReference Include="..\..\server\modules\Workspace\Migrations.SqlServer\Workspace.SqlServerMigrations.csproj" />
+    <ProjectReference Include="..\..\server\modules\Infor-Center\Part\PartModule.csproj" />
+    <ProjectReference Include="..\..\server\modules\Infor-Center\Part\Migrations.SqlServer\Part.SqlServerMigrations.csproj" />
+    <ProjectReference Include="..\..\server\modules\Infor-Center\Workspace\WorkspaceModule.csproj" />
+    <ProjectReference Include="..\..\server\modules\Infor-Center\Workspace\Migrations.SqlServer\Workspace.SqlServerMigrations.csproj" />
   </ItemGroup>
 
 </Project>

@@ -43,7 +43,7 @@ public class AuthorizationGeneratedDtoTests
 
     private static void AssertMatchesGeneratedFileSignatures(string moduleId, IReadOnlyDictionary<string, string> signatures)
     {
-        var generatedDirectory = Path.Combine(GetRepositoryRoot(), "server", "modules", moduleId, "DTOs", "Generated");
+        var generatedDirectory = Path.Combine(ICP.Platform.Kernel.ModulePlanning.ComponentSourceCatalog.ResolveBackendRoot(GetRepositoryRoot(), moduleId), "DTOs", "Generated");
         var expectedKeys = new[] { "PermissionDto", "RoleDto", "RolePermissionDto", "UserRoleDto" };
 
         foreach (var key in expectedKeys)

@@ -15,12 +15,12 @@
 
 每个内建模块的可提交 authoring 真源位于：
 
-- `frontend/modules/<module-slug>/newp.plugin.json`：唯一拥有 module id、显示名、版本、宿主兼容范围、依赖和 backend / frontend behavior key；
-- `frontend/modules/<module-slug>/metadata/**`：拥有导航、路由、视图、模型、权限引用和本地化等静态声明；
-- `server/modules/<ModuleId>/**`：后端行为实现；
-- `frontend/modules/<module-slug>/**`：前端行为实现。
+- `<组件源码根>/newp.plugin.json`：唯一拥有 module id、显示名、版本、宿主兼容范围、依赖和 backend / frontend behavior key；
+- `<组件源码根>/metadata/**`：拥有导航、路由、视图、模型、权限引用和本地化等静态声明；
+- `server/modules/<Group>/<ModuleId>/**`：后端行为实现；
+- `<组件源码根>/**`：前端行为实现。
 
-初始声明与 metadata 目录采用现有小写连字符 slug；组件身份仍来自 Capsule。组件源码根允许按组合 JSON 嵌套，最近 Capsule 根界定目录 owner；发现与构建契约见[内建模块开发指南](../developer/componentized-development.md#可移动组件源码根与构建)。仅有声明或 metadata 的模块保留实际贡献，不补建空前端包。后端工程与迁移工程保持原位，Host 发布输出仍是 `modules/<ModuleId>/`。尚无 Capsule 的历史 metadata 根沿用既有目录命名约定恢复 owner；该兼容不授予组件身份或发行资格。
+初始声明与 metadata 目录采用现有小写连字符 slug；组件身份仍来自 Capsule。组件源码根允许按组合 JSON 嵌套，最近 Capsule 根界定目录 owner；发现与构建契约见[内建模块开发指南](../developer/componentized-development.md#可移动组件源码根与构建)。仅有声明或 metadata 的模块保留实际贡献，不补建空前端包。前后端成员分别归入 `example/platform/infor-center` 与 `Example/Platform/Infor-Center`；后端工程按组件身份递归定位，迁移工程随 owner 目录移动。Host 发布输出仍是 `modules/<ModuleId>/`。尚无 Capsule 的历史 metadata 根沿用既有目录命名约定恢复 owner；该兼容不授予组件身份或发行资格。
 
 C# 和 TypeScript 只把稳定 behavior key 绑定到实现，不得重新声明 Capsule 已拥有的身份，也不得平行维护路由、菜单或权限。`ModuleCapsuleBindingBase` 与 `FrontendBehaviorBindings` 是当前标准绑定入口。
 
@@ -117,10 +117,10 @@ Shell 不维护业务模块清单，不通过源码目录推断活动模块，�
 
 内建模块脚手架必须生成：
 
-- `frontend/modules/<module-slug>/newp.plugin.json` 与最小 metadata；
+- `<组件源码根>/newp.plugin.json` 与最小 metadata；
 - 继承 `ModuleCapsuleBindingBase` 的后端 behavior binding；
 - `FrontendBehaviorBindings` 前端实现；
-- 通用构建入口可发现的原位后端工程与组件源码根。
+- 通用构建入口可发现的归组后端工程与组件源码根；父目录有 Capsule 时同步登记其 `composition.members`。
 
 脚手架不得生成新的 `apps/host-api/frontend/modules/<module-slug>/plugin.json`、`legacy-module` 前端声明或 Shell 内部注册表。该 Host 目录只允许承载尚未完成 Capsule cutover 的历史兼容清单。
 

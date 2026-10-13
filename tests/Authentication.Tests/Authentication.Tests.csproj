@@ -20,10 +20,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\server\modules\Authentication\Contracts\Authentication.Contracts.csproj" />
-    <ProjectReference Include="..\..\server\modules\Authentication\AuthenticationModule.csproj" />
-    <ProjectReference Include="..\..\server\modules\Identity\Contracts\Identity.Contracts.csproj" />
-    <ProjectReference Include="..\..\server\modules\Identity\IdentityModule.csproj" />
+    <ProjectReference Include="..\..\server\modules\Platform\Authentication\Contracts\Authentication.Contracts.csproj" />
+    <ProjectReference Include="..\..\server\modules\Platform\Authentication\AuthenticationModule.csproj" />
+    <ProjectReference Include="..\..\server\modules\Platform\Identity\Contracts\Identity.Contracts.csproj" />
+    <ProjectReference Include="..\..\server\modules\Platform\Identity\IdentityModule.csproj" />
     <ProjectReference Include="..\..\server\platform-crud\PlatformCrud.csproj" />
     <ProjectReference Include="..\..\server\platform-persistence\PlatformPersistence.csproj" />
     <ProjectReference Include="..\..\server\platform-persistence-efcore\PlatformPersistence.EfCore.csproj" />

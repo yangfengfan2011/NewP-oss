@@ -1,11 +1,11 @@
 # 模型 DTO 同步
 
-`ModelDtoSync` 从 `frontend/modules/<module-slug>/metadata/models/*.model.json` 读取当前模型，经 SQL Server 类型投影生成：
+`ModelDtoSync` 从 `<组件源码根>/metadata/models/*.model.json` 读取当前模型，经 SQL Server 类型投影生成：
 
-- `server/modules/<ModuleId>/DTOs/Generated/<Model>Dto.g.cs`
+- `<后端 owner 目录>/DTOs/Generated/<Model>Dto.g.cs`
 - 同目录的受管 DTO 签名 provider
 
-这些文件是生成物，不接受手工修改。
+前端源码根与归组后的后端 owner 目录均按组件身份由 Catalog 定位。这些文件是生成物，不接受手工修改。
 
 ## 生成
 

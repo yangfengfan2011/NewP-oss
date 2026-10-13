@@ -34,7 +34,7 @@
 
 不要仅凭目录名把每个 package 或工程自动视为领域上下文。NewP 的一个逻辑上下文可能同时覆盖：
 
-- `server/modules/<ModuleId>/`
+- `server/modules/` 下按组件身份定位的后端 owner 目录
 - `frontend/modules/` 下组件源码根的 `metadata/`（由 `ComponentSourceCatalog` 按身份定位；slug 与嵌套布局见[组件开发指南](../developer/componentized-development.md)）
 - 对应的前端注册或页面
 - `docs/contexts/<context>/CONTEXT.md` 中已确认的术语与边界（如已建立）

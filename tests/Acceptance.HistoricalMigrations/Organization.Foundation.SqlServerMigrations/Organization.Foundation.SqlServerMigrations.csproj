@@ -11,7 +11,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../../server/platform-persistence-efcore/PlatformPersistence.EfCore.csproj" />
-    <Compile Include="../../../server/modules/Organization/Migrations.SqlServer/Migrations/20260812144235_Organization_000001_Foundation.cs" Link="Migrations/20260812144235_Organization_000001_Foundation.cs" />
-    <Compile Include="../../../server/modules/Organization/Migrations.SqlServer/Migrations/20260812144235_Organization_000001_Foundation.Designer.cs" Link="Migrations/20260812144235_Organization_000001_Foundation.Designer.cs" />
+    <Compile Include="../../../server/modules/Platform/Organization/Migrations.SqlServer/Migrations/20260812144235_Organization_000001_Foundation.cs" Link="Migrations/20260812144235_Organization_000001_Foundation.cs" />
+    <Compile Include="../../../server/modules/Platform/Organization/Migrations.SqlServer/Migrations/20260812144235_Organization_000001_Foundation.Designer.cs" Link="Migrations/20260812144235_Organization_000001_Foundation.Designer.cs" />
   </ItemGroup>
 </Project>

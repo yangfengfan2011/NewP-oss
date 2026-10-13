@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process'
 import { gzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it } from 'vitest'
 
-const repositoryRoot = fileURLToPath(new URL('../../../../../', import.meta.url))
+const repositoryRoot = fileURLToPath(new URL('../../../../..', import.meta.url))
 const analyzerPath = join(repositoryRoot, 'scripts', 'performance', 'analyze-shell-build.mjs')
 const fixtureRoot = join(repositoryRoot, 'scripts', 'performance', 'fixtures', 'build-graph-valid')
 const cssFixtureRoot = join(repositoryRoot, 'scripts', 'performance', 'fixtures', 'build-graph-css')
@@ -265,7 +265,7 @@ describe('Shell production build graph CLI', () => {
     const outputRoot = mkdtempSync(join(tmpdir(), 'newp-build-graph-'))
     temporaryRoots.push(outputRoot)
     const proTableSource = '../../node_modules/.pnpm/@ant-design+pro-table@3.21.0/node_modules/@ant-design/pro-table/es/index.js'
-    const forbiddenSource = '../../modules/organization/src/pages/LegacyPage.tsx'
+    const forbiddenSource = '../../modules/platform/organization/src/pages/LegacyPage.tsx'
 
     const runCase = (
       name: string,
@@ -299,11 +299,11 @@ describe('Shell production build graph CLI', () => {
         id: 'standard-list-table-runtime',
         scenario: 'personnelRoute',
         targetRoots: [{
-          dynamicImportsOf: { sourceRegex: '(?:^|/)modules/[^/]+/src/index\\.ts$' },
-          match: { sourceRegex: '(?:^|/)modules/[^/]+/src/standard-crud/[^/]+StandardCrudResource\\.tsx$' },
+          dynamicImportsOf: { sourceRegex: '(?:^|/)modules/(?:[^/]+/)+src/index\\.ts$' },
+          match: { sourceRegex: '(?:^|/)modules/(?:[^/]+/)+src/standard-crud/[^/]+StandardCrudResource\\.tsx$' },
         }],
         sourceContains: '/node_modules/.pnpm/@ant-design+pro-table@',
-        forbiddenSources: [{ sourceRegex: '(?:^|/)modules/[^/]+/src/pages/' }],
+        forbiddenSources: [{ sourceRegex: '(?:^|/)modules/(?:[^/]+/)+src/pages/' }],
         maxMinifiedBytes: 200,
       }]
       mutate?.({ root, manifest, config, sourceMap })

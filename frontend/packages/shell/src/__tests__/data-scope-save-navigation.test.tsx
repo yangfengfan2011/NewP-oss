@@ -8,7 +8,7 @@ import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import { PageEntry } from '../composition/PageOutlet';
 import { ShellRouter } from '../navigation/ShellRouter';
-import DataScopeRulesPage from '../../../../modules/authorization/src/DataScopeRulesPage';
+import DataScopeRulesPage from '../../../../modules/platform/authorization/src/DataScopeRulesPage';
 
 const fetcher = vi.hoisted(() => vi.fn());
 vi.mock('@icp-platform/core', async importOriginal => ({ ...await importOriginal<object>(),

@@ -7,7 +7,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
-import organizationBindings from '../../../../modules/organization/src';
+import organizationBindings from '../../../../modules/platform/organization/src';
 import runtimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { buildPageEntriesFromNavDocuments } from '../navigation/pageEntryAdapter';
@@ -33,7 +33,7 @@ async function click(text: string) {
 }
 it('loads the real personnel capability through an old address, keeps embedded queries local, and opens its explicitly owned full detail', async () => {
   vi.spyOn(window, 'matchMedia').mockImplementation(query => ({ matches: true, media: query, onchange: null, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => true }));
-  const folder = resolve(__dirname, '../../../../modules/organization/metadata');
+  const folder = resolve(__dirname, '../../../../modules/platform/organization/metadata');
   const read = (name: string) => readdirSync(resolve(folder, name)).map(file => JSON.parse(readFileSync(resolve(folder, name, file), 'utf8').replace(/^\uFEFF/, '')));
   const metadata: RuntimeMetadataState = { manifest: { modules: [] }, navDocuments: read('navigation'), viewDocuments: read('views'), modelDocuments: Object.values(runtimeModels) as RuntimeMetadataState['modelDocuments'] };
   const catalog: Record<string, string> = {};

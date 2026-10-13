@@ -5,9 +5,9 @@ import { describe, expect, it } from 'vitest';
 import type { FrontendModule, TreeProviderBinding } from '@icp-platform/sdk';
 import { resolvePageInput, validateCompositionCandidate } from '../composition/compositionRegistry';
 import type { RuntimeMetadataState } from '../metadata/runtimeMetadataManifest';
-import organization from '../../../../modules/organization/src';
+import organization from '../../../../modules/platform/organization/src';
 // 真实资源装配归测试收集阶段；绑定断言仍使用正式 capability loader 与编译入口。
-import '../../../../modules/organization/src/standard-crud/departmentStandardCrudResource.primary';
+import '../../../../modules/platform/organization/src/standard-crud/departmentStandardCrudResource.primary';
 
 const root = resolve(__dirname, '../../../../..');
 const componentRoots = Object.values(discoverFrontendEntries(root)).map(entryPath => dirname(dirname(entryPath)))

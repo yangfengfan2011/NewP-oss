@@ -1,10 +1,10 @@
 import { expect, it } from 'vitest';
-import navigation from '../../../../modules/authorization/metadata/navigation/Authorization.nav.json';
-import bindings from '../../../../modules/authorization/src';
+import navigation from '../../../../modules/platform/authorization/metadata/navigation/Authorization.nav.json';
+import bindings from '../../../../modules/platform/authorization/src';
 import model from '../../../../../tests/Kernel.Tests/Fixtures/AuthorizationRoleRuntime.contract.json';
-import list from '../../../../modules/authorization/metadata/views/RoleList.view.json';
-import detail from '../../../../modules/authorization/metadata/views/RoleDetail.view.json';
-import { roleResource } from '../../../../modules/authorization/src/roleResource';
+import list from '../../../../modules/platform/authorization/metadata/views/RoleList.view.json';
+import detail from '../../../../modules/platform/authorization/metadata/views/RoleDetail.view.json';
+import { roleResource } from '../../../../modules/platform/authorization/src/roleResource';
 import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';
 import { buildStandardCrudListSchema, resolveStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';
 import { buildStandardCrudFormSchemaFromModel } from '../standard-crud/standardCrudMetadataForm';

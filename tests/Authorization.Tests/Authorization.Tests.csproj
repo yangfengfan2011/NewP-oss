@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\server\modules\Authorization\AuthorizationModule.csproj" />
+    <ProjectReference Include="..\..\server\modules\Platform\Authorization\AuthorizationModule.csproj" />
   </ItemGroup>
 
 </Project>

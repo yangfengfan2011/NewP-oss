@@ -5,9 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { Outlet, useParams } from 'react-router-dom';
 import { ModuleRegistry, type AuthUser } from '@icp-platform/sdk';
-import organizationBindings from '../../../../modules/organization/src';
+import organizationBindings from '../../../../modules/platform/organization/src';
 // 真实资源装配归测试收集阶段；权限用例仍检查正式 loader 的调用边界，不计模块转换耗时。
-import '../../../../modules/organization/src/standard-crud/personStandardCrudResource.primary';
+import '../../../../modules/platform/organization/src/standard-crud/personStandardCrudResource.primary';
 import App from '../App';
 import { createStandardCrudTestDataAdapter } from './standardCrudTestDataAdapter';
 

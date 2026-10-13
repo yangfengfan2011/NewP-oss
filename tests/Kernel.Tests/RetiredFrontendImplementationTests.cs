@@ -11,12 +11,12 @@ public sealed class RetiredFrontendImplementationTests
         var frontendModulesRoot = Path.Combine(repositoryRoot, "frontend", "modules");
         var retiredModuleDirectories = new[]
         {
-            "config-center",
-            "demo",
-            "files",
-            "metadata-config-center",
-            "module-template-sample",
-            "plugin-ops"
+            Path.Combine("platform", "config-center"),
+            Path.Combine("example", "demo"),
+            Path.Combine("platform", "files"),
+            Path.Combine("platform", "metadata-config-center"),
+            Path.Combine("example", "module-template-sample"),
+            Path.Combine("platform", "plugin-ops")
         };
         var remainingSources = new List<string>();
 
@@ -44,13 +44,13 @@ public sealed class RetiredFrontendImplementationTests
         foreach (var relativePath in new[]
                  {
                      // 正式 Audit/Authorization 已重新接入 Standard CRUD，只禁止历史自定义页面。
-                     Path.Combine("frontend", "modules", "audit", "src", "pages", "AccessLogs.tsx"),
-                     Path.Combine("frontend", "modules", "audit", "src", "pages", "OperationLogs.tsx"),
-                     Path.Combine("frontend", "modules", "authorization", "src", "pages", "PermissionList.tsx"),
-                     Path.Combine("frontend", "modules", "authorization", "src", "pages", "RoleManagement.tsx"),
-                     Path.Combine("frontend", "modules", "organization", "src", "pages", "OrganizationTreePage.tsx"),
-                     Path.Combine("frontend", "modules", "organization", "src", "pages", "PositionManagementPage.tsx"),
-                     Path.Combine("frontend", "modules", "organization", "src", "components", "OrganizationTreePanel.tsx")
+                     Path.Combine("frontend", "modules", "platform", "audit", "src", "pages", "AccessLogs.tsx"),
+                     Path.Combine("frontend", "modules", "platform", "audit", "src", "pages", "OperationLogs.tsx"),
+                     Path.Combine("frontend", "modules", "platform", "authorization", "src", "pages", "PermissionList.tsx"),
+                     Path.Combine("frontend", "modules", "platform", "authorization", "src", "pages", "RoleManagement.tsx"),
+                     Path.Combine("frontend", "modules", "platform", "organization", "src", "pages", "OrganizationTreePage.tsx"),
+                     Path.Combine("frontend", "modules", "platform", "organization", "src", "pages", "PositionManagementPage.tsx"),
+                     Path.Combine("frontend", "modules", "platform", "organization", "src", "components", "OrganizationTreePanel.tsx")
                  })
         {
             var path = Path.Combine(repositoryRoot, relativePath);

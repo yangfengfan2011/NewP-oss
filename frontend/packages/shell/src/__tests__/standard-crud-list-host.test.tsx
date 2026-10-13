@@ -17,9 +17,9 @@ import exampleRecordListViewDocument from '../../../../modules/example/metadata/
 import exampleRecordDetailViewDocument from '../../../../modules/example/metadata/views/ExampleRecordDetail.view.json';
 import exampleRecordModelDocument from '../../../../modules/example/metadata/models/ExampleRecord.model.json';
 import exampleRecordListDictionary from '../../../../modules/example/metadata/dictionaries/ExampleRecordListView.dic.json';
-import companyListViewDocument from '../../../../modules/organization/metadata/views/CompanyList.view.json';
-import companyModelDocument from '../../../../modules/organization/metadata/models/Company.model.json';
-import { companyStandardCrudResource } from '../../../../modules/organization/src/standard-crud/companyStandardCrudResource';
+import companyListViewDocument from '../../../../modules/platform/organization/metadata/views/CompanyList.view.json';
+import companyModelDocument from '../../../../modules/platform/organization/metadata/models/Company.model.json';
+import { companyStandardCrudResource } from '../../../../modules/platform/organization/src/standard-crud/companyStandardCrudResource';
 import { createExampleRecordStandardCrudResource } from '../../../../modules/example/src/standard-crud/exampleRecordStandardCrudResource';
 import platformDictionary from '../../../../modules/platform/metadata/dictionaries/Platform.dic.json';
 

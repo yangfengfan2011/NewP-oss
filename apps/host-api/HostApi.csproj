@@ -37,11 +37,19 @@
   </ItemGroup>
   <ItemGroup>
     <!-- 原位工程按 owner 目录发现；归组不新增逐组件 Host 接线。 -->
-    <ProjectReference Include="../../server/modules/**/*.csproj" Exclude="../../server/modules/**/obj/**;../../server/modules/**/bin/**" />
+    <NewpModuleProject Include="../../server/modules/**/*.csproj" Exclude="../../server/modules/**/obj/**;../../server/modules/**/bin/**">
+      <OwnerDirectory>$([System.IO.Path]::GetDirectoryName('%(FullPath)'))</OwnerDirectory>
+      <!-- Contracts 与 Migrations.* 是组件的辅助工程目录；其他工程直接归属所在目录。 -->
+      <OwnerDirectory Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(OwnerDirectory)', '[/\\](Contracts|Migrations\.[^/\\]+)$'))">$([System.IO.Path]::GetDirectoryName('%(OwnerDirectory)'))</OwnerDirectory>
+      <NewpModuleOwner>$([System.IO.Path]::GetFileName('%(OwnerDirectory)'))</NewpModuleOwner>
+    </NewpModuleProject>
+    <ProjectReference Include="@(NewpModuleProject)" />
   </ItemGroup>
   <!-- 发行裁剪按显式组件身份进行；不得将未交付实现预装到独立安装验证目标。 -->
   <ItemGroup Condition="'$(NewpExcludedModuleIds)' != ''">
-    <NewpExcludedModule Include="$(NewpExcludedModuleIds.Split(','))" />
-    <ProjectReference Remove="@(NewpExcludedModule->'../../server/modules/%(Identity)/**/*.csproj')" />
+    <NewpExcludedModule Include="$(NewpExcludedModuleIds.Split(','))">
+      <NewpModuleOwner>$([System.String]::Copy('%(Identity)').Trim())</NewpModuleOwner>
+    </NewpExcludedModule>
+    <ProjectReference Remove="@(NewpExcludedModule)" MatchOnMetadata="NewpModuleOwner" MatchOnMetadataOptions="CaseSensitive" />
   </ItemGroup>
 </Project>

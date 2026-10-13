@@ -27,25 +27,6 @@ function Get-ProjectProperty {
     return ($value | Select-Object -Last 1).Trim()
 }
 
-function Resolve-BackendProjectPath {
-    param(
-        [Parameter(Mandatory = $true)][string]$RepoRoot,
-        [Parameter(Mandatory = $true)][string]$ModuleName
-    )
-
-    $moduleDirectory = Join-Path $RepoRoot "server/modules/$ModuleName"
-    if (-not (Test-Path -LiteralPath $moduleDirectory)) {
-        throw "Backend module directory not found: $moduleDirectory"
-    }
-
-    $projectFile = Get-ChildItem -Path $moduleDirectory -Filter "*.csproj" | Select-Object -First 1
-    if (-not $projectFile) {
-        throw "No .csproj file found under '$moduleDirectory'."
-    }
-
-    return $projectFile.FullName
-}
-
 # The formal Catalog owns source identities and nesting; one invocation supplies all package reads.
 function Resolve-ComponentSource {
     param(
@@ -617,7 +598,10 @@ Write-Host "Module: $ModuleName" -ForegroundColor Cyan
 Write-Host "Configuration: $Configuration" -ForegroundColor Cyan
 
 $componentSource = Resolve-ComponentSource -RepoRoot $repoRoot -ModuleName $ModuleName
-$backendProjectPath = Resolve-BackendProjectPath -RepoRoot $repoRoot -ModuleName $componentSource.ModuleId
+$backendProjectPath = $componentSource.BackendProject
+if ([string]::IsNullOrWhiteSpace($backendProjectPath) -or -not (Test-Path -LiteralPath $backendProjectPath)) {
+    throw "Backend project not found for '$($componentSource.ModuleId)'."
+}
 $frontendModulePath = Resolve-FrontendModulePath -ComponentSource $componentSource
 
 Write-Host "Backend project: $backendProjectPath" -ForegroundColor Cyan

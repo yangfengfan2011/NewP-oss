@@ -9,7 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\kernel\Kernel.csproj" />
-    <ProjectReference Include="..\\platform-modeling\\PlatformModeling.csproj" />
+    <ProjectReference Include="..\platform-modeling\PlatformModeling.csproj" />
   </ItemGroup>
 
 </Project>

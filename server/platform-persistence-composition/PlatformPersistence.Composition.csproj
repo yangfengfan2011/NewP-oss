@@ -12,11 +12,11 @@
     <ProjectReference Include="..\kernel\Kernel.csproj" />
     <ProjectReference Include="..\platform-modeling\PlatformModeling.csproj" />
     <ProjectReference Include="..\platform-persistence\PlatformPersistence.csproj" />
-    <ProjectReference Include="..\modules\ConfigCenter\ConfigCenter.csproj" />
-    <ProjectReference Include="..\modules\Authorization\AuthorizationModule.csproj" />
-    <ProjectReference Include="..\modules\Organization\OrganizationModule.csproj" />
-    <ProjectReference Include="..\modules\Identity\IdentityModule.csproj" />
-    <ProjectReference Include="..\modules\Authentication\AuthenticationModule.csproj" />
+    <ProjectReference Include="..\modules\Platform\ConfigCenter\ConfigCenter.csproj" />
+    <ProjectReference Include="..\modules\Platform\Authorization\AuthorizationModule.csproj" />
+    <ProjectReference Include="..\modules\Platform\Organization\OrganizationModule.csproj" />
+    <ProjectReference Include="..\modules\Platform\Identity\IdentityModule.csproj" />
+    <ProjectReference Include="..\modules\Platform\Authentication\AuthenticationModule.csproj" />
   </ItemGroup>
 
 </Project>

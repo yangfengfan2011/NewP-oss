@@ -113,10 +113,10 @@ public class SettingDefinitionAuthoringServiceTests
         {
             var sourceRoot = FindRepositoryRoot();
             var tempRoot = Path.Combine(Path.GetTempPath(), "metadata-config-center-tests", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(Path.Combine(tempRoot, "frontend", "modules", "config-center"));
+            Directory.CreateDirectory(Path.Combine(tempRoot, "frontend", "modules", "platform", "config-center"));
 
             var sourceMetadata = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(sourceRoot, "ConfigCenter"), "metadata");
-            var targetMetadata = Path.Combine(Path.Combine(tempRoot, "frontend", "modules", "config-center"), "metadata");
+            var targetMetadata = Path.Combine(Path.Combine(tempRoot, "frontend", "modules", "platform", "config-center"), "metadata");
             CopyDirectory(sourceMetadata, targetMetadata);
 
             string? runtimeRoot = null;

@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { organizationBindings } from '../../../../modules/organization/src';
+import { organizationBindings } from '../../../../modules/platform/organization/src';
 import { buildMenusFromNavDocuments } from '../metadata/navigationAdapter';
 import { buildPageEntriesFromNavDocuments } from '../navigation/pageEntryAdapter';
 import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';
@@ -9,7 +9,7 @@ import { validateCompositionCandidate, resolvePageInput } from '../composition/c
 import type { RuntimeMetadataState } from '../metadata/runtimeMetadataManifest';
 import type { FrontendModule, TabView } from '@icp-platform/sdk';
 
-const folder = resolve(__dirname, '../../../../modules/organization/metadata');
+const folder = resolve(__dirname, '../../../../modules/platform/organization/metadata');
 const read = (name: string) => readdirSync(resolve(folder, name)).map(file => JSON.parse(readFileSync(resolve(folder, name, file), 'utf8').replace(/^\uFEFF/, '')));
 const metadata: RuntimeMetadataState = { manifest: { modules: [] }, navDocuments: read('navigation'), viewDocuments: read('views'), modelDocuments: read('models') };
 const modules: FrontendModule[] = [{ ...organizationBindings, metadata: { moduleId: 'Organization', displayName: 'Organization', version: '1' } }];

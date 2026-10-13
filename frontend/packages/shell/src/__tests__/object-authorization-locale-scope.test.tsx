@@ -9,7 +9,7 @@ import { CurrentPermissionScope } from '../components/CurrentPermissionScope';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { PlatformRequestLocaleBridge } from '../localization/PlatformRequestLocaleBridge';
 import { StandardCrudActionReviewDialog } from '../standard-crud/StandardCrudActionReviewDialog';
-import dictionary from '../../../../modules/authorization/metadata/dictionaries/DataScope.dic.json';
+import dictionary from '../../../../modules/platform/authorization/metadata/dictionaries/DataScope.dic.json';
 import platformDictionary from '../../../../modules/platform/metadata/dictionaries/Platform.dic.json';
 
 vi.unmock('@icp-platform/core');

@@ -11,7 +11,7 @@ import { expect, it } from 'vitest';
 import config from '../../vite.config';
 
 it('links all production native bridges and shares their exports with the Shell module graph', async () => {
-  const shellRoot = fileURLToPath(new URL('../../', import.meta.url));
+  const shellRoot = fileURLToPath(new URL('../..', import.meta.url));
   const require = createRequire(join(shellRoot, 'package.json'));
   const shell = typeof config === 'function' ? config({ command: 'build', mode: 'production' }) : config;
   const bridge = (shell.plugins ?? []).flat().find(plugin => plugin && plugin.name === 'newp-native-shared-runtime');

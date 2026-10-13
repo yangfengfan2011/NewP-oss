@@ -47,6 +47,7 @@ public class ConfigCenterModelMetadataProviderTests
             repositoryRoot,
             "server",
             "modules",
+            "Platform",
             "ConfigCenter",
             "metadata",
             "models",

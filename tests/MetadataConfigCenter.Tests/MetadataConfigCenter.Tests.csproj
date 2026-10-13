@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\server\modules\MetadataConfigCenter\MetadataConfigCenter.csproj" />
+    <ProjectReference Include="..\..\server\modules\Platform\MetadataConfigCenter\MetadataConfigCenter.csproj" />
   </ItemGroup>
 
 </Project>

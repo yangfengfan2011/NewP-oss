@@ -44,7 +44,9 @@ function Resolve-ProjectPath {
         throw "Either -ModuleName or -ProjectPath is required."
     }
 
-    $moduleDirectory = Join-Path $RepoRoot "server/modules/$ModuleName"
+    $moduleDirectories = @(Get-ChildItem -LiteralPath (Join-Path $RepoRoot 'server/modules') -Directory -Recurse | Where-Object { $_.Name -ceq $ModuleName -and @(Get-ChildItem -LiteralPath $_.FullName -Filter '*.csproj' -File).Count -gt 0 })
+    if ($moduleDirectories.Count -ne 1) { throw "Expected one backend owner directory for '$ModuleName'." }
+    $moduleDirectory = $moduleDirectories[0].FullName
     $projectFile = Get-ChildItem -Path $moduleDirectory -Filter "*.csproj" | Select-Object -First 1
     if (-not $projectFile) {
         throw "No .csproj file found under '$moduleDirectory'."

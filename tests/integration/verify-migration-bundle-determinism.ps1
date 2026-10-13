@@ -30,21 +30,21 @@ $projects = @(
     },
     @{
         Name = 'Organization'
-        Project = 'server\modules\Organization\Migrations.SqlServer\Organization.SqlServerMigrations.csproj'
-        Dll = 'server\modules\Organization\Migrations.SqlServer\bin\Debug\net10.0\Organization.SqlServerMigrations.dll'
-        Manifest = 'frontend\modules\organization\migrations\Organization.SqlServerMigrations.json'
+        Project = 'server\modules\Platform\Organization\Migrations.SqlServer\Organization.SqlServerMigrations.csproj'
+        Dll = 'server\modules\Platform\Organization\Migrations.SqlServer\bin\Debug\net10.0\Organization.SqlServerMigrations.dll'
+        Manifest = 'frontend\modules\platform\organization\migrations\Organization.SqlServerMigrations.json'
     },
     @{
         Name = 'Identity'
-        Project = 'server\modules\Identity\Migrations.SqlServer\Identity.SqlServerMigrations.csproj'
-        Dll = 'server\modules\Identity\Migrations.SqlServer\bin\Debug\net10.0\Identity.SqlServerMigrations.dll'
-        Manifest = 'frontend\modules\identity\migrations\Identity.SqlServerMigrations.json'
+        Project = 'server\modules\Platform\Identity\Migrations.SqlServer\Identity.SqlServerMigrations.csproj'
+        Dll = 'server\modules\Platform\Identity\Migrations.SqlServer\bin\Debug\net10.0\Identity.SqlServerMigrations.dll'
+        Manifest = 'frontend\modules\platform\identity\migrations\Identity.SqlServerMigrations.json'
     },
     @{
         Name = 'Authentication'
-        Project = 'server\modules\Authentication\Migrations.SqlServer\Authentication.SqlServerMigrations.csproj'
-        Dll = 'server\modules\Authentication\Migrations.SqlServer\bin\Debug\net10.0\Authentication.SqlServerMigrations.dll'
-        Manifest = 'frontend\modules\authentication\migrations\Authentication.SqlServerMigrations.json'
+        Project = 'server\modules\Platform\Authentication\Migrations.SqlServer\Authentication.SqlServerMigrations.csproj'
+        Dll = 'server\modules\Platform\Authentication\Migrations.SqlServer\bin\Debug\net10.0\Authentication.SqlServerMigrations.dll'
+        Manifest = 'frontend\modules\platform\authentication\migrations\Authentication.SqlServerMigrations.json'
     },
     @{
         Name = 'Example'

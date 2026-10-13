@@ -7,6 +7,24 @@ namespace ICP.Platform.Modeling.Tests;
 public sealed class ModuleAuthoringPathsTests
 {
     [Fact]
+    public void NestedLegacyMetadata_ResolvesAndEnumeratesItsOwnOwner()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "NewP-nested-authoring-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var owner = Path.Combine(root, "frontend", "modules", "platform", "config-center");
+            Directory.CreateDirectory(Path.Combine(owner, "metadata"));
+            Assert.Equal(owner, ModuleAuthoringPaths.ResolveModuleRoot(root, "ConfigCenter"));
+            Assert.Equal([owner], ModuleAuthoringPaths.EnumerateModuleRoots(root));
+            var model = Path.Combine(owner, "metadata", "models", "ConfigItem.model.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(model)!);
+            File.Copy(Path.Combine(ModuleAuthoringPaths.ResolveModuleRoot(FindRepository(), "ConfigCenter"), "metadata", "models", "ConfigItem.model.json"), model);
+            Assert.Equal("ConfigCenter", new JsonModelMetadataDocumentLoader().LoadFromFile(model).ModuleId);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public void RealPartRegroupedUnderInforCenter_ResolvesItsOwnAuthoringRoot()
     {
         var repository = FindRepository();

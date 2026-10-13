@@ -55,7 +55,7 @@ internal sealed class ComponentBundleTestInput : IDisposable
                 ["resource.mjs"] = new { imports = Array.Empty<string>(), sharedImports = Array.Empty<string>(), assets = Array.Empty<string>() }
             }
         }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
-        var migrationSource = Directory.GetFiles(Path.Combine(SourceRepository, "server", "modules", "Part", "Migrations.SqlServer"), "20261008102916_Part_000001_Metadata.cs", SearchOption.AllDirectories).Single();
+        var migrationSource = Directory.GetFiles(Path.Combine(SourceRepository, "server", "modules", "Infor-Center", "Part", "Migrations.SqlServer"), "20261008102916_Part_000001_Metadata.cs", SearchOption.AllDirectories).Single();
         Artifacts.Add("Part", new(Path.Combine(AppContext.BaseDirectory, "PartModule.dll"), frontend,
             new Dictionary<string, string> { ["migrations/Part.SqlServerMigrations.dll"] = Path.Combine(AppContext.BaseDirectory, "Part.SqlServerMigrations.dll") },
             new Dictionary<string, string> { ["migrations/sources/sqlServer/20261008102916_Part_000001_Metadata.cs"] = migrationSource }));

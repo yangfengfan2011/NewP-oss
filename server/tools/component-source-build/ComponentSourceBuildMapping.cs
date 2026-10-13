@@ -45,7 +45,7 @@ internal static class ComponentSourceBuildMapping
         if (host)
         {
             var sourceRoot = Path.Combine(repositoryRoot, "frontend", "modules");
-            foreach (var directory in Directory.EnumerateDirectories(sourceRoot).Where(directory => !File.Exists(Path.Combine(directory, "newp.plugin.json"))))
+            foreach (var directory in ComponentSourceCatalog.EnumerateSourceDirectories(sourceRoot).Where(directory => !File.Exists(Path.Combine(directory, "newp.plugin.json"))))
             {
                 var metadata = Path.Combine(directory, "metadata");
                 if (!Directory.Exists(metadata)) continue;

@@ -87,10 +87,10 @@ public class SettingDefinitionApplyServiceTests
             // Windows 的用户临时目录可能被安全软件短暂占用，干扰本测试要验证的目录级原子回滚。
             // 改用已忽略的仓库 artifacts 目录，确保正向和回滚 move 处在同一工作卷。
             var tempRoot = Path.Combine(sourceRoot, "artifacts", "test-temp", "metadata-config-center-apply-tests", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(Path.Combine(tempRoot, "frontend", "modules", "config-center"));
+            Directory.CreateDirectory(Path.Combine(tempRoot, "frontend", "modules", "platform", "config-center"));
 
             var sourceMetadata = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(sourceRoot, "ConfigCenter"), "metadata");
-            var targetMetadata = Path.Combine(Path.Combine(tempRoot, "frontend", "modules", "config-center"), "metadata");
+            var targetMetadata = Path.Combine(Path.Combine(tempRoot, "frontend", "modules", "platform", "config-center"), "metadata");
             CopyDirectory(sourceMetadata, targetMetadata);
 
             string? runtimeRoot = null;

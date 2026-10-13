@@ -7,8 +7,8 @@ import { StandardCrudField } from '@icp-platform/ui/crud';
 import { LocalizedBusinessBoundary, RuntimeLocalizationProvider } from '../localization/RuntimeLocalizationProvider';
 import { useLocalizedStandardCrudRegistration } from '../standard-crud/useLocalizedStandardCrudRegistration';
 import { buildStandardCrudFormSchemaFromModel } from '../standard-crud/standardCrudMetadataForm';
-import { personStandardCrudResource } from '../../../../modules/organization/src/standard-crud/personStandardCrudResource';
-import personModel from '../../../../modules/organization/metadata/models/Person.model.json';
+import { personStandardCrudResource } from '../../../../modules/platform/organization/src/standard-crud/personStandardCrudResource';
+import personModel from '../../../../modules/platform/organization/metadata/models/Person.model.json';
 
 function PersonnelEmploymentField() {
   const registration = useLocalizedStandardCrudRegistration(personStandardCrudResource);

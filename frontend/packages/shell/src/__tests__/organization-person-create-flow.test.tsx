@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { LocalizationProvider } from '@icp-platform/core';
-import PersonCreatePage from '../../../../modules/organization/src/pages/PersonCreatePage';
+import PersonCreatePage from '../../../../modules/platform/organization/src/pages/PersonCreatePage';
 
 const localizationProps = {
   defaultLanguage: 'zhs',

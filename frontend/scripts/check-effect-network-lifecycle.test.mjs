@@ -230,7 +230,7 @@ test('treats an effect-owned request callback as a read query sink', () => {
 
 test('reports an aliased API client function imported into an effect helper', () => {
   const findings = analyzeEffectNetworkLifecycleSource({
-    file: 'modules/identity/src/SecurityEventsProbe.tsx',
+    file: 'modules/platform/identity/src/SecurityEventsProbe.tsx',
     source: `import { useEffect } from 'react';
       import { listAccountSecurityEvents as listEvents } from './api/identityClient';
 
@@ -248,7 +248,7 @@ test('reports an aliased API client function imported into an effect helper', ()
 
   assert.deepEqual(findings.map(({ id, classification }) => ({ id, classification })), [
     {
-      id: 'modules/identity/src/SecurityEventsProbe.tsx::SecurityEventsProbe::useEffect::loadPage>listEvents',
+      id: 'modules/platform/identity/src/SecurityEventsProbe.tsx::SecurityEventsProbe::useEffect::loadPage>listEvents',
       classification: 'read-query',
     },
   ]);
@@ -369,7 +369,7 @@ test('classifies explicit data adapter, client, service, and provider member sin
 
 test('uses imported API symbol semantics even when the local name is aliased', () => {
   const findings = analyzeEffectNetworkLifecycleSource({
-    file: 'modules/identity/src/CommandProbe.tsx',
+    file: 'modules/platform/identity/src/CommandProbe.tsx',
     source: `import { useEffect } from 'react';
       import { setAccountStatus as executeCommand, run as opaqueCall } from './api/identityClient';
 
@@ -714,8 +714,8 @@ test('reports only approved shared-loader entrypoints from loader modules', () =
 
 test('never permits a write command through the allowlist', () => {
   const finding = {
-    id: 'modules/identity/src/Command.tsx::Command::useEffect::client.create',
-    file: 'modules/identity/src/Command.tsx',
+    id: 'modules/platform/identity/src/Command.tsx::Command::useEffect::client.create',
+    file: 'modules/platform/identity/src/Command.tsx',
     enclosingFunction: 'Command',
     hook: 'useEffect',
     triggerChain: 'client.create',
@@ -1047,7 +1047,7 @@ test('matches the reviewed current-tree baseline with no effect write commands',
   assert.deepEqual(effectFindings.map(({ id }) => id).sort(), effectNetworkLifecycleAllowlist.map(({ id }) => id).sort());
   assert.deepEqual(queryLoadFindings.map(({ id, classification }) => ({ id, classification })), [
     {
-      id: 'modules/identity/src/standard-crud/IdentityAccountSecurityEventsSummary.tsx::query::usePlatformQuery.load::listAccountSecurityEvents',
+      id: 'modules/platform/identity/src/standard-crud/IdentityAccountSecurityEventsSummary.tsx::query::usePlatformQuery.load::listAccountSecurityEvents',
       classification: 'read-query',
     },
     {

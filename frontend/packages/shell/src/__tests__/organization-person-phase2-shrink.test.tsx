@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { mapPersonDetailView, mapPersonListItem } from '../../../../modules/organization/src/services/organizationService';
-import { personStandardCrudResource } from '../../../../modules/organization/src/standard-crud/personStandardCrudResource';
-import personListViewDocument from '../../../../modules/organization/metadata/views/PersonList.view.json';
-import personDetailViewDocument from '../../../../modules/organization/metadata/views/PersonDetail.view.json';
-import organizationNavDocument from '../../../../modules/organization/metadata/navigation/Organization.nav.json';
+import { mapPersonDetailView, mapPersonListItem } from '../../../../modules/platform/organization/src/services/organizationService';
+import { personStandardCrudResource } from '../../../../modules/platform/organization/src/standard-crud/personStandardCrudResource';
+import personListViewDocument from '../../../../modules/platform/organization/metadata/views/PersonList.view.json';
+import personDetailViewDocument from '../../../../modules/platform/organization/metadata/views/PersonDetail.view.json';
+import organizationNavDocument from '../../../../modules/platform/organization/metadata/navigation/Organization.nav.json';
 
 describe('organization person standard CRUD phase 2 registration', () => {
   it('shrinks registration to metadata-first runtime hooks only', () => {

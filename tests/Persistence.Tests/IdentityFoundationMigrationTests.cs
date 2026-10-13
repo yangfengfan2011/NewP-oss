@@ -133,10 +133,10 @@ public sealed class IdentityFoundationMigrationTests
     {
         var repositoryRoot = FindRepositoryRoot();
         var identityPath = Assert.Single(Directory.GetFiles(
-            Path.Combine(repositoryRoot, "server", "modules", "Identity", "Migrations.SqlServer", "Migrations"),
+            Path.Combine(repositoryRoot, "server", "modules", "Platform", "Identity", "Migrations.SqlServer", "Migrations"),
             "*_Foundation.cs"));
         var authenticationPath = Assert.Single(Directory.GetFiles(
-            Path.Combine(repositoryRoot, "server", "modules", "Authentication", "Migrations.SqlServer", "Migrations"),
+            Path.Combine(repositoryRoot, "server", "modules", "Platform", "Authentication", "Migrations.SqlServer", "Migrations"),
             "*_Foundation.cs"));
         var source = File.ReadAllText(identityPath) + File.ReadAllText(authenticationPath);
 
@@ -232,7 +232,7 @@ public sealed class IdentityFoundationMigrationTests
     {
         var repositoryRoot = FindRepositoryRoot();
         var coreDirectory = Path.Combine(repositoryRoot, "server", "platform-persistence-efcore.migrations.sqlserver", "Migrations");
-        var organizationDirectory = Path.Combine(repositoryRoot, "server", "modules", "Organization", "Migrations.SqlServer", "Migrations");
+        var organizationDirectory = Path.Combine(repositoryRoot, "server", "modules", "Platform", "Organization", "Migrations.SqlServer", "Migrations");
 
         Assert.Empty(Directory.GetFiles(coreDirectory, "*_Organization_*.cs"));
         var sourcePath = Assert.Single(Directory.GetFiles(organizationDirectory, "*_Foundation.cs"));
@@ -260,6 +260,7 @@ public sealed class IdentityFoundationMigrationTests
             repositoryRoot,
             "server",
             "modules",
+            "Platform",
             "Organization",
             "Migrations.SqlServer",
             "Migrations",
@@ -340,6 +341,7 @@ public sealed class IdentityFoundationMigrationTests
             repositoryRoot,
             "server",
             "modules",
+            "Platform",
             "Organization",
             "Migrations.SqlServer",
             "Migrations",
@@ -358,6 +360,7 @@ public sealed class IdentityFoundationMigrationTests
             repositoryRoot,
             "server",
             "modules",
+            "Platform",
             "Organization",
             "Migrations.SqlServer",
             "Migrations",
@@ -380,6 +383,7 @@ public sealed class IdentityFoundationMigrationTests
             repositoryRoot,
             "server",
             "modules",
+            "Platform",
             "Organization",
             "Migrations.SqlServer",
             "Migrations",
@@ -421,6 +425,7 @@ public sealed class IdentityFoundationMigrationTests
             repositoryRoot,
             "server",
             "modules",
+            "Platform",
             "Organization",
             "Migrations.SqlServer",
             "Migrations",
@@ -448,6 +453,7 @@ public sealed class IdentityFoundationMigrationTests
             repositoryRoot,
             "server",
             "modules",
+            "Platform",
             "Organization",
             "Migrations.SqlServer",
             "Migrations",
@@ -576,6 +582,7 @@ public sealed class IdentityFoundationMigrationTests
             repositoryRoot,
             "server",
             "modules",
+            "Platform",
             "Organization",
             "Migrations.SqlServer",
             "Migrations",
@@ -681,10 +688,7 @@ public sealed class IdentityFoundationMigrationTests
         var root = document.RootElement;
         var migration = Assert.Single(root.GetProperty("migrations").EnumerateArray());
         var sourcePath = Path.Combine(
-            repositoryRoot,
-            "server",
-            "modules",
-            moduleId,
+            ICP.Platform.Kernel.ModulePlanning.ComponentSourceCatalog.ResolveBackendRoot(repositoryRoot, moduleId),
             "Migrations.SqlServer",
             "Migrations",
             migrationSourceName);
@@ -700,10 +704,7 @@ public sealed class IdentityFoundationMigrationTests
     private static void AssertPathMap(string repositoryRoot, string moduleId, string expectedPathMap)
     {
         var projectPath = Path.Combine(
-            repositoryRoot,
-            "server",
-            "modules",
-            moduleId,
+            ICP.Platform.Kernel.ModulePlanning.ComponentSourceCatalog.ResolveBackendRoot(repositoryRoot, moduleId),
             "Migrations.SqlServer",
             $"{moduleId}.SqlServerMigrations.csproj");
         var project = File.ReadAllText(projectPath);
@@ -714,10 +715,7 @@ public sealed class IdentityFoundationMigrationTests
     private static void AssertSourceRevisionIsExcluded(string repositoryRoot, string moduleId)
     {
         var projectPath = Path.Combine(
-            repositoryRoot,
-            "server",
-            "modules",
-            moduleId,
+            ICP.Platform.Kernel.ModulePlanning.ComponentSourceCatalog.ResolveBackendRoot(repositoryRoot, moduleId),
             "Migrations.SqlServer",
             $"{moduleId}.SqlServerMigrations.csproj");
         var project = File.ReadAllText(projectPath);

@@ -139,9 +139,9 @@ public class ModelDtoSyncRunnerTests
 
             var driftedFiles = ModuleDtoSyncRunner.Check(repositoryRoot);
 
-            Assert.Contains("server/modules/Authorization/DTOs/Generated/RoleDto.g.cs", driftedFiles);
-            Assert.Contains("server/modules/Authorization/DTOs/Generated/UnexpectedDto.g.cs", driftedFiles);
-            Assert.Contains("server/modules/Identity/DTOs/Generated/IdentityAccountDto.g.cs", driftedFiles);
+            Assert.Contains("server/modules/Platform/Authorization/DTOs/Generated/RoleDto.g.cs", driftedFiles);
+            Assert.Contains("server/modules/Platform/Authorization/DTOs/Generated/UnexpectedDto.g.cs", driftedFiles);
+            Assert.Contains("server/modules/Platform/Identity/DTOs/Generated/IdentityAccountDto.g.cs", driftedFiles);
             Assert.Equal("drifted", File.ReadAllText(changedPath));
             Assert.False(File.Exists(missingPath));
         }
@@ -185,7 +185,7 @@ public class ModelDtoSyncRunnerTests
 
     private static string GeneratedPath(string repositoryRoot, string moduleId, string fileName)
     {
-        return Path.Combine(repositoryRoot, "server", "modules", moduleId, "DTOs", "Generated", fileName);
+        return Path.Combine(repositoryRoot, "server", "modules", "Platform", moduleId, "DTOs", "Generated", fileName);
     }
 
     private static void DeleteTemporaryRepositoryRoot(string repositoryRoot)

@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\server\modules\ModuleTemplateSample\ModuleTemplateSample.csproj" />
+    <ProjectReference Include="..\..\server\modules\Example\ModuleTemplateSample\ModuleTemplateSample.csproj" />
   </ItemGroup>
 
 </Project>

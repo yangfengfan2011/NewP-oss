@@ -9,20 +9,20 @@
     "authenticatedHome": {
       "roots": [
         { "manifestKey": "index.html" },
-        { "sourceRegex": "modules/(?:demo|audit)/src/index\\.ts$" }
+        { "sourceRegex": "modules/(?:example/demo|platform/audit)/src/index\\.ts$" }
       ]
     },
     "personnelRoute": {
       "roots": [
         { "manifestKey": "index.html" },
-        { "sourceRegex": "modules/(?:demo|audit)/src/index\\.ts$" },
-        { "sourceContains": "modules/organization/src/standard-crud/personStandardCrudResource.tsx" }
+        { "sourceRegex": "modules/(?:example/demo|platform/audit)/src/index\\.ts$" },
+        { "sourceContains": "modules/platform/organization/src/standard-crud/personStandardCrudResource.tsx" }
       ],
       "relativeTo": "authenticatedHome"
     }
   },
   "bindingEntries": [
-    { "sourceRegex": "modules/(?:demo|audit)/src/index\\.ts$" }
+    { "sourceRegex": "modules/(?:example/demo|platform/audit)/src/index\\.ts$" }
   ],
   "forbiddenDependencies": [
     {

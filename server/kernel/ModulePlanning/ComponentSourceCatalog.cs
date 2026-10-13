@@ -65,7 +65,7 @@ public sealed class ComponentSourceCatalog
     /// <summary>从声明的程序集名匹配原位 owner 工程；缺失或多重匹配直接拒绝。</summary>
     public string ResolveProject(string repositoryRoot, string moduleId, string assemblyPath)
     {
-        var ownerRoot = Path.Combine(Path.GetFullPath(repositoryRoot), "server", "modules", moduleId);
+        var ownerRoot = ResolveBackendRoot(repositoryRoot, moduleId);
         var assemblyName = Path.GetFileNameWithoutExtension(assemblyPath);
         var matches = Directory.Exists(ownerRoot)
             ? Directory.EnumerateFiles(ownerRoot, "*.csproj", SearchOption.AllDirectories)
@@ -75,6 +75,45 @@ public sealed class ComponentSourceCatalog
         if (matches.Length != 1)
             throw new InvalidOperationException($"COMPONENT_PROJECT_MISMATCH: module='{moduleId}', capsule='{Get(moduleId).CapsulePath}', assembly='{assemblyPath}', owner='{ownerRoot}': expected one project, found {matches.Length}.");
         return matches[0];
+    }
+
+    /// <summary>按独立工程所在的 owner 目录定位后端，不把分组目录写进组件身份。</summary>
+    public static string ResolveBackendRoot(string repositoryRoot, string moduleId)
+    {
+        var roots = EnumerateSourceDirectories(Path.Combine(Path.GetFullPath(repositoryRoot), "server", "modules"))
+            .Where(path => Path.GetFileName(path) == moduleId && Directory.EnumerateFiles(path, "*.csproj").Any()).ToArray();
+        if (roots.Length != 1)
+            throw new InvalidOperationException($"COMPONENT_PROJECT_MISMATCH: module='{moduleId}' expected one backend owner root, found {roots.Length}.");
+        return roots[0];
+    }
+
+    /// <summary>枚举源码目录，跳过构建产物与链接，支持任意分组深度。</summary>
+    public static IEnumerable<string> EnumerateSourceDirectories(string root)
+    {
+        if (!Directory.Exists(root)) yield break;
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.TryPop(out var directory))
+        {
+            yield return directory;
+            foreach (var child in Directory.EnumerateDirectories(directory).OrderDescending(StringComparer.Ordinal))
+                if (!GeneratedDirectories.Contains(Path.GetFileName(child)) && (File.GetAttributes(child) & FileAttributes.ReparsePoint) == 0)
+                    pending.Push(child);
+        }
+    }
+
+    /// <summary>历史 metadata 与前端入口按原 slug 定位；普通分组目录不授予组件身份。</summary>
+    public static string ResolveLegacyFrontendRoot(string repositoryRoot, string slug)
+    {
+        var root = Path.Combine(Path.GetFullPath(repositoryRoot), "frontend", "modules");
+        var matches = EnumerateSourceDirectories(root).Where(path => Path.GetFileName(path) == slug
+            && (Directory.Exists(Path.Combine(path, "metadata")) || File.Exists(Path.Combine(path, "src", "index.ts")))).ToArray();
+        return matches.Length switch
+        {
+            0 => Path.Combine(root, slug),
+            1 => matches[0],
+            _ => throw new InvalidOperationException($"COMPONENT_SOURCE_AMBIGUOUS: legacy slug='{slug}' has multiple roots.")
+        };
     }
 
     /// <summary>读取实际工程属性，避免从源码目录层级推断产物名或目标框架。</summary>

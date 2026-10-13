@@ -4,6 +4,9 @@ param(
 
     [string]$DisplayName,
 
+    [ValidateSet("Example", "Platform", "Infor-Center")]
+    [string]$Group = "Example",
+
     [switch]$SkipIntegration,
 
     [switch]$ExternalPlugin,
@@ -155,6 +158,7 @@ $backendTemplateRoot = Join-Path $repoRoot 'server\templates\backend-module-temp
 $externalTemplateRoot = Join-Path $repoRoot 'server\templates\external-plugin-template'
 $frontendTemplateRoot = Join-Path $frontendRoot 'templates\frontend-module-template'
 $moduleSlug = Convert-ToKebabCase -Value $ModuleName
+$groupSlug = $Group.ToLowerInvariant()
 $frontendBindingsVariable = "$(Convert-ToCamelCase -Value $moduleSlug)Bindings"
 $frontendPageName = "$($ModuleName)Page"
 $backendBehaviorKey = "$moduleSlug.backend"
@@ -170,8 +174,8 @@ if ($ExternalPlugin) {
     $frontendTargetRoot = $null
     $capsuleTargetRoot = $null
 } else {
-    $backendTargetRoot = Join-Path $repoRoot "server\modules\$ModuleName"
-    $frontendTargetRoot = Join-Path $frontendRoot "modules\$moduleSlug"
+    $backendTargetRoot = Join-Path $repoRoot "server\modules\$Group\$ModuleName"
+    $frontendTargetRoot = Join-Path $frontendRoot "modules\$groupSlug\$moduleSlug"
     $capsuleTargetRoot = $frontendTargetRoot
 }
 
@@ -199,13 +203,37 @@ if (-not $ExternalPlugin -and (Test-Path -LiteralPath $capsuleTargetRoot)) {
     throw "Capsule target already exists: $capsuleTargetRoot"
 }
 
+$parentCapsulePath = Join-Path $frontendRoot "modules\$groupSlug\newp.plugin.json"
+$parentCapsuleContent = $null
+$parentCapsuleEncoding = $null
+if (Test-Path -LiteralPath $parentCapsulePath) {
+    # 只有实际 Capsule 才拥有成员关系；Platform 等普通分组目录不生成额外身份。
+    $parentBytes = [System.IO.File]::ReadAllBytes($parentCapsulePath)
+    $parentHasBom = $parentBytes.Length -ge 3 -and $parentBytes[0] -eq 0xEF -and $parentBytes[1] -eq 0xBB -and $parentBytes[2] -eq 0xBF
+    $parentCapsuleEncoding = [System.Text.UTF8Encoding]::new($parentHasBom)
+    $parentText = [System.IO.File]::ReadAllText($parentCapsulePath)
+    $parentNewLine = if ($parentText.Contains("`r`n")) { "`r`n" } else { "`n" }
+    $parentCapsule = $parentText | ConvertFrom-Json -AsHashtable
+    if ($parentCapsule.moduleId -eq $ModuleName) {
+        throw "ModuleName must differ from its parent component '$($parentCapsule.moduleId)'."
+    }
+    if (-not $parentCapsule.Contains('composition')) {
+        $parentCapsule.composition = @{ members = @() }
+    }
+    if (@($parentCapsule.composition.members) -contains $ModuleName) {
+        throw "Parent component already declares member '$ModuleName'."
+    }
+    $parentCapsule.composition.members = @($parentCapsule.composition.members) + $ModuleName
+    $parentCapsuleContent = (($parentCapsule | ConvertTo-Json -Depth 64) -replace '\r?\n', $parentNewLine) + $parentNewLine
+}
+
 Write-Host '=== Generate module scaffold ===' -ForegroundColor Green
 Write-Host "ModuleName: $ModuleName" -ForegroundColor Cyan
 Write-Host "DisplayName: $DisplayName" -ForegroundColor Cyan
 Write-Host "BackendTarget: $backendTargetRoot" -ForegroundColor Cyan
 if (-not $ExternalPlugin) {
-    Write-Host "FrontendTarget: frontend/modules/$moduleSlug" -ForegroundColor Cyan
-    Write-Host "CapsuleTarget: frontend/modules/$moduleSlug" -ForegroundColor Cyan
+    Write-Host "FrontendTarget: frontend/modules/$groupSlug/$moduleSlug" -ForegroundColor Cyan
+    Write-Host "CapsuleTarget: frontend/modules/$groupSlug/$moduleSlug" -ForegroundColor Cyan
 }
 
 if ($ExternalPlugin) {
@@ -296,6 +324,7 @@ Update-FileContent -Path $backendProjectPath -Transform {
             '<AssemblyName>TemplateModule</AssemblyName>',
             "<AssemblyName>$($ModuleName)Module</AssemblyName>"
         )
+        $content = $content.Replace('Include="..\..\', 'Include="..\..\..\')
         # 内建工程由通用构建发现器按 Capsule 身份嵌入声明，归组后无需工程相对路径。
         $content = [regex]::Replace($content, '(?s)    <EmbeddedResource[^>]*>.*?</EmbeddedResource>\r?\n', '')
     }
@@ -500,6 +529,10 @@ if ($ExternalPlugin) {
     }
 }
 
+if ($null -ne $parentCapsuleContent) {
+    [System.IO.File]::WriteAllText($parentCapsulePath, $parentCapsuleContent, $parentCapsuleEncoding)
+}
+
 Write-Host ''
 Write-Host '=== Scaffold generated ===' -ForegroundColor Green
 Write-Host "Backend module: $backendTargetRoot" -ForegroundColor Green
@@ -507,8 +540,8 @@ if ($ExternalPlugin) {
     Write-Host 'Mode: external plugin template (backend only)' -ForegroundColor Cyan
     Write-Host 'No Host or frontend integration was performed.' -ForegroundColor Yellow
 } else {
-    Write-Host "Frontend module: frontend/modules/$moduleSlug" -ForegroundColor Green
-    Write-Host "Authoring capsule: frontend/modules/$moduleSlug/newp.plugin.json" -ForegroundColor Green
+    Write-Host "Frontend module: frontend/modules/$groupSlug/$moduleSlug" -ForegroundColor Green
+    Write-Host "Authoring capsule: frontend/modules/$groupSlug/$moduleSlug/newp.plugin.json" -ForegroundColor Green
     Write-Host 'Host assets and project references are discovered by the shared component build entry.' -ForegroundColor Cyan
     Write-Host 'Do not modify other Host/Shell internals for normal module integration unless a separate design approves it.' -ForegroundColor Yellow
 }

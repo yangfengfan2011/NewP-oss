@@ -85,6 +85,7 @@ public class EfOrganizationRepositoryTests
             repositoryRoot,
             "server",
             "modules",
+            "Platform",
             "Organization",
             "Migrations.SqlServer",
             "Migrations",
@@ -130,6 +131,7 @@ public class EfOrganizationRepositoryTests
             repositoryRoot,
             "server",
             "modules",
+            "Platform",
             "Organization",
             "Migrations.SqlServer",
             "Migrations",
@@ -187,7 +189,7 @@ public class EfOrganizationRepositoryTests
     {
         var migration = ReadMigration(
             GetRepositoryRoot(),
-            Path.Combine("modules", "Organization", "Migrations.SqlServer"),
+            Path.Combine("modules", "Platform", "Organization", "Migrations.SqlServer"),
             "Organization_000001_Foundation");
 
         Assert.Contains("AccountEID = table.Column<string>", migration, StringComparison.Ordinal);

@@ -235,13 +235,13 @@ public sealed class DeferredModuleMigrationSqlServerTests
         var moduleRoot = Path.Combine(root, "frontend", "modules", ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ToSlug(module));
         CopyDirectory(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(fixture.RepositoryRoot, module), moduleRoot);
         var projectRoot = Path.Combine(root, "server", "modules", module, "Migrations.SqlServer");
-        CopyDirectory(Path.Combine(fixture.RepositoryRoot, "server", "modules", module, "Migrations.SqlServer", "Migrations"), Path.Combine(projectRoot, "Migrations"));
+        CopyDirectory(Path.Combine(ICP.Platform.Kernel.ModulePlanning.ComponentSourceCatalog.ResolveBackendRoot(fixture.RepositoryRoot, module), "Migrations.SqlServer", "Migrations"), Path.Combine(projectRoot, "Migrations"));
         var projectName = module + ".SqlServerMigrations.csproj";
         var projectPath = Path.Combine(projectRoot, projectName);
-        var project = XDocument.Load(Path.Combine(fixture.RepositoryRoot, "server", "modules", module, "Migrations.SqlServer", projectName));
+        var project = XDocument.Load(Path.Combine(ICP.Platform.Kernel.ModulePlanning.ComponentSourceCatalog.ResolveBackendRoot(fixture.RepositoryRoot, module), "Migrations.SqlServer", projectName));
         project.Save(projectPath);
         var className = module + "_000002_NameIndex";
-        CopyFile(Path.Combine(fixture.RepositoryRoot, "server", "modules", module, "Migrations.SqlServer", module + "DesignTimeDbContextFactory.cs"), Path.Combine(projectRoot, module + "DesignTimeDbContextFactory.cs"));
+        CopyFile(Path.Combine(ICP.Platform.Kernel.ModulePlanning.ComponentSourceCatalog.ResolveBackendRoot(fixture.RepositoryRoot, module), "Migrations.SqlServer", module + "DesignTimeDbContextFactory.cs"), Path.Combine(projectRoot, module + "DesignTimeDbContextFactory.cs"));
         var modelPath = Path.Combine(moduleRoot, "metadata", "models", module + ".model.json");
         var model = JsonNode.Parse(File.ReadAllText(modelPath))!;
         model[module]!["indexes"]!.AsArray().Add(new JsonObject { ["name"] = "IX_" + module + "_ENAME", ["fields"] = new JsonArray("ENAME"), ["unique"] = false });
@@ -250,7 +250,7 @@ public sealed class DeferredModuleMigrationSqlServerTests
         var capsule = JsonNode.Parse(File.ReadAllText(capsulePath))!;
         capsule["version"] = "1.1.0";
         File.WriteAllText(capsulePath, capsule.ToJsonString());
-        var productionModule = Path.Combine(fixture.RepositoryRoot, "server", "modules", module);
+        var productionModule = ICP.Platform.Kernel.ModulePlanning.ComponentSourceCatalog.ResolveBackendRoot(fixture.RepositoryRoot, module);
         var isolatedModule = Path.GetDirectoryName(projectRoot)!;
         foreach (var path in Directory.EnumerateFiles(productionModule, "*.cs", SearchOption.AllDirectories))
         {

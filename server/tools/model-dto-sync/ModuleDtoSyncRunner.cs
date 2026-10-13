@@ -4,6 +4,7 @@ using ICP.Platform.Modeling.DisplayPlanning;
 using ICP.Platform.Modeling.Metadata;
 using ICP.Platform.Modeling.Projection;
 using ICP.Platform.Modeling.Validation;
+using ICP.Platform.Kernel.ModulePlanning;
 
 namespace ICP.Platform.Tools.ModelDtoSync;
 
@@ -117,7 +118,7 @@ public static class ModuleDtoSyncRunner
                             $"{diagnostic.Code}: {diagnostic.ModelName}.{diagnostic.FieldName}: {diagnostic.Message}")));
                 }
 
-                var outputDirectory = Path.Combine(outputRepositoryRoot, "server", "modules", moduleId, "DTOs", "Generated");
+                var outputDirectory = ResolveGeneratedDirectory(outputRepositoryRoot, metadataRepositoryRoot, moduleId);
                 var outputPath = Path.Combine(outputDirectory, definition.Name + "Dto.g.cs");
                 var enumClrTypeMap = LoadEnumClrTypeMap(moduleRoot, definition.Name);
                 var sourceCode = GeneratedCodeWriter.WrapInNamespace(
@@ -140,13 +141,18 @@ public static class ModuleDtoSyncRunner
 
         foreach (var module in signaturesByModule.OrderBy(static item => item.Key, StringComparer.Ordinal))
         {
-            var outputDirectory = Path.Combine(outputRepositoryRoot, "server", "modules", module.Key, "DTOs", "Generated");
+            var outputDirectory = ResolveGeneratedDirectory(outputRepositoryRoot, metadataRepositoryRoot, module.Key);
             writtenFiles.Add(signatureWriter.Write(outputDirectory, module.Key, module.Value));
         }
 
         return writtenFiles;
     }
 
+    // 临时检查输出镜像真实后端相对路径，避免重新生成平铺组件目录。
+    private static string ResolveGeneratedDirectory(string outputRoot, string metadataRoot, string moduleId) =>
+        Path.Combine(outputRoot, Path.GetRelativePath(metadataRoot, ComponentSourceCatalog.ResolveBackendRoot(metadataRoot, moduleId)), "DTOs", "Generated");
+
+    // 递归发现受管理的 DTO 目录，不进入构建产物。
     private static IEnumerable<string> EnumerateManagedGeneratedFiles(string repositoryRoot)
     {
         var modulesRoot = Path.Combine(repositoryRoot, "server", "modules");
@@ -155,7 +161,7 @@ public static class ModuleDtoSyncRunner
             return Array.Empty<string>();
         }
 
-        return Directory.EnumerateDirectories(modulesRoot)
+        return ComponentSourceCatalog.EnumerateSourceDirectories(modulesRoot)
             .Select(moduleRoot => Path.Combine(moduleRoot, "DTOs", "Generated"))
             .Where(Directory.Exists)
             .SelectMany(generatedRoot => Directory.EnumerateFiles(generatedRoot, "*.g.cs", SearchOption.TopDirectoryOnly));

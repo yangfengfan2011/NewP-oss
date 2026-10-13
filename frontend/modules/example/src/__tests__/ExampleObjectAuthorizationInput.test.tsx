@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ObjectAuthorizationInput } from '@icp-platform/ui';
-import dictionaryText from '../../../../modules/authorization/metadata/dictionaries/DataScope.dic.json?raw';
+import dictionaryText from '../../../../modules/platform/authorization/metadata/dictionaries/DataScope.dic.json?raw';
 
 const fetcher = vi.hoisted(() => vi.fn());
 vi.mock('@icp-platform/core', async original => ({ ...await original<typeof import('@icp-platform/core')>(), platformFetch: fetcher }));

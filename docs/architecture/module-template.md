@@ -8,10 +8,10 @@
 
 ## 标准结构
 
-一个内建模块在前端与声明根和原位后端目录中共同组成：
+一个内建成员模块由同一分组下的前端与声明根、后端目录共同组成：
 
 ```text
-frontend/modules/<module-slug>/
+frontend/modules/<group-slug>/<module-slug>/
 ├── newp.plugin.json
 ├── metadata/
 │   ├── navigation/
@@ -22,7 +22,7 @@ frontend/modules/<module-slug>/
 ├── package.json
 └── README.md
 
-server/modules/<ModuleId>/
+server/modules/<Group>/<ModuleId>/
 ├── <ModuleId>Module.cs
 ├── <ModuleId>.csproj
 ├── Controllers/
@@ -40,20 +40,20 @@ server/modules/<ModuleId>/
 pwsh -NoProfile -File .\scripts\new-module.ps1 -ModuleName ExampleModule -DisplayName "示例模块"
 ```
 
-只生成 authoring 与实现、暂不接入 HostApi：
+兼容旧命令的生成方式：
 
 ```powershell
 pwsh -NoProfile -File .\scripts\new-module.ps1 -ModuleName ExampleModule -DisplayName "示例模块" -SkipIntegration
 ```
 
-`-SkipIntegration` 不会省略 Capsule 或 behavior binding。
+`-Group` 可选 `Example`（默认）、`Platform`、`Infor-Center`，前端目录使用其小写形式。父目录有 Capsule 时，脚手架同步登记 `composition.members`。`-SkipIntegration` 不会省略 Capsule、behavior binding 或成员登记，也不修改 HostApi 接线。
 
 ## 模板目录
 
 - 后端模板：`server/templates/backend-module-template/`
 - 前端模板：`frontend/templates/frontend-module-template/`
 
-后端模板中的 `capsule/` 让模板项目可独立构建；脚手架生成模块时会把它的实际资产合并到 `frontend/modules/<module-slug>/`，并更新嵌入资源路径。
+后端模板中的 `capsule/` 让模板项目可独立构建；脚手架生成模块时会把它的实际资产合并到 `frontend/modules/<group-slug>/<module-slug>/`，并由通用构建入口按组件身份嵌入声明。
 
 ## 必改项
 
@@ -76,7 +76,7 @@ pwsh -NoProfile -File .\scripts\new-module.ps1 -ModuleName ExampleModule -Displa
 ## 最小验证
 
 ```powershell
-dotnet build .\server\modules\ExampleModule\ExampleModule.csproj
+dotnet build .\server\modules\Example\ExampleModule\ExampleModule.csproj
 ```
 
 ```bash

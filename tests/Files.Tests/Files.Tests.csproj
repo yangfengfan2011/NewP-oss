@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\server\modules\Files\FilesModule.csproj" />
+    <ProjectReference Include="..\..\server\modules\Platform\Files\FilesModule.csproj" />
   </ItemGroup>
 
 </Project>

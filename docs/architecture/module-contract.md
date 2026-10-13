@@ -39,7 +39,7 @@ SQL Server Host 和发行离线入口在读取 active/LKG 时，按同一 provid
 
 Model authoring 的技术名称是平台范围内唯一的引用身份，例如 `Part`、`Document`、`WorkspaceFolder` 和 `IdentityAccount`。Canonical Module Plan 的 `ModelKeys` 与运行时 `ModelDefinition.LogicalKey` 直接采用同一声明名称；名字按大小写不敏感规则拒绝重名，引用使用声明的规范大小写，不接受旧 `ModuleId/ModelName` 别名。组件归组不改变名称，当前不支持技术名改名或模型 owner 转移。
 
-`OwnerModuleId` 独立声明唯一拥有者。EF shared-type entity、外键目标、Link 的 `linkedTypes`、固定端点、公共列映射、显示、CRUD、授权、缓存及 PageRef 输入共用全局名称；Workspace 的 `ChildModelKey` 和个人空间 `SubjectModelKey` 也保存该名称。同一对象 ID 在不同模型中仍是不同对象，Link 的 LID 保持独立关系身份。资源键、behavior key、功能位置、路由和物理 schema/table 不由模型键派生，也不随身份切换改名。
+`OwnerModuleId` 独立声明唯一拥有者。EF shared-type entity、外键目标、Link 的 `linkedTypes`、固定端点、公共列映射、显示、CRUD、授权、缓存及 PageRef 输入共用全局名称；Workspace 的 `ChildModelKey` 也保存该名称；个人空间以 `SubjectId` 固定关联账号，不另存主体模型键。同一对象 ID 在不同模型中仍是不同对象，Link 的 LID 保持独立关系身份。资源键、behavior key、功能位置、路由和物理 schema/table 不由模型键派生，也不随身份切换改名。
 
 归属从正式编译模型目录解析，资源 owner、真实主键、活动集合、平台基础或显式业务依赖及实际服务端授权继续独立验证。外键显式声明的 `principalModuleId` 保留为独立归属约束，不再拼入目标模型键。
 

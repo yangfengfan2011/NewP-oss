@@ -165,7 +165,7 @@ public sealed class WorkspaceSqlServerHttpApiTests
         Assert.Equal(3, await stored.Set<Dictionary<string, object?>>("WorkspaceFolder").CountAsync());
         var own = await stored.Set<Dictionary<string, object?>>("WorkspaceSpace").AsNoTracking()
             .SingleAsync(r => EF.Property<string>(r, "EID") == personalA.GetProperty("spaceId").GetString());
-        Assert.Equal("IdentityAccount", own["SubjectModelKey"]);
+        Assert.False(own.ContainsKey("SubjectModelKey"));
         Assert.Equal(first.AccountId, own["SubjectId"]);
     }
 

@@ -22,7 +22,7 @@ namespace ICP.Platform.Modules.Workspace.Migrations.SqlServer.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
-            modelBuilder.Entity("Workspace/WorkspaceFolder", b =>
+            modelBuilder.Entity("WorkspaceFolder", b =>
                 {
                     b.Property<string>("EID")
                         .HasMaxLength(128)
@@ -77,7 +77,7 @@ namespace ICP.Platform.Modules.Workspace.Migrations.SqlServer.Migrations
                     b.ToTable("WorkspaceFolder", "dbo");
                 });
 
-            modelBuilder.Entity("Workspace/WorkspaceFolderContent", b =>
+            modelBuilder.Entity("WorkspaceFolderContent", b =>
                 {
                     b.Property<string>("LID")
                         .HasMaxLength(128)
@@ -149,7 +149,7 @@ namespace ICP.Platform.Modules.Workspace.Migrations.SqlServer.Migrations
                     b.ToTable("WorkspaceFolderContent", "dbo");
                 });
 
-            modelBuilder.Entity("Workspace/WorkspaceSpace", b =>
+            modelBuilder.Entity("WorkspaceSpace", b =>
                 {
                     b.Property<string>("EID")
                         .HasMaxLength(128)
@@ -189,11 +189,6 @@ namespace ICP.Platform.Modules.Workspace.Migrations.SqlServer.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("SubjectId");
 
-                    b.Property<string>("SubjectModelKey")
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
-                        .HasColumnName("SubjectModelKey");
-
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("UpdatedAt");
@@ -214,16 +209,16 @@ namespace ICP.Platform.Modules.Workspace.Migrations.SqlServer.Migrations
                         .IsUnique()
                         .HasDatabaseName("UX_WorkspaceSpace_Root");
 
-                    b.HasIndex("SpaceKind", "SubjectModelKey", "SubjectId")
+                    b.HasIndex("SpaceKind", "SubjectId")
                         .IsUnique()
                         .HasDatabaseName("UX_WorkspaceSpace_Subject");
 
                     b.ToTable("WorkspaceSpace", "dbo");
                 });
 
-            modelBuilder.Entity("Workspace/WorkspaceFolderContent", b =>
+            modelBuilder.Entity("WorkspaceFolderContent", b =>
                 {
-                    b.HasOne("Workspace/WorkspaceFolder", null)
+                    b.HasOne("WorkspaceFolder", null)
                         .WithMany()
                         .HasForeignKey("PEID")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -231,9 +226,9 @@ namespace ICP.Platform.Modules.Workspace.Migrations.SqlServer.Migrations
                         .HasConstraintName("FK_WorkspaceFolderContent_Parent");
                 });
 
-            modelBuilder.Entity("Workspace/WorkspaceSpace", b =>
+            modelBuilder.Entity("WorkspaceSpace", b =>
                 {
-                    b.HasOne("Workspace/WorkspaceFolder", null)
+                    b.HasOne("WorkspaceFolder", null)
                         .WithMany()
                         .HasForeignKey("RootFolderId")
                         .OnDelete(DeleteBehavior.Restrict)

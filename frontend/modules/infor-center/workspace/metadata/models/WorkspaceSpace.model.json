@@ -5,12 +5,11 @@
     "fields": [
       { "name": "ENAME", "uiType": "text", "form": { "create": { "mode": "hidden" }, "edit": { "mode": "readonly" } } },
       { "name": "SpaceKind", "storage": { "type": "string" }, "uiType": "text", "form": { "create": { "mode": "hidden" }, "edit": { "mode": "hidden" } } },
-      { "name": "SubjectModelKey", "storage": { "type": "string", "nullable": true }, "uiType": "text", "form": { "create": { "mode": "hidden" }, "edit": { "mode": "hidden" } } },
       { "name": "SubjectId", "storage": { "type": "guid", "nullable": true }, "uiType": "text", "form": { "create": { "mode": "hidden" }, "edit": { "mode": "hidden" } } },
       { "name": "RootFolderId", "storage": { "type": "guid" }, "uiType": "text", "form": { "create": { "mode": "hidden" }, "edit": { "mode": "hidden" } } }
     ],
     "indexes": [
-      { "name": "UX_WorkspaceSpace_Subject", "fields": ["SpaceKind", "SubjectModelKey", "SubjectId"], "unique": true, "includeNullValues": true },
+      { "name": "UX_WorkspaceSpace_Subject", "fields": ["SpaceKind", "SubjectId"], "unique": true, "includeNullValues": true },
       { "name": "UX_WorkspaceSpace_Root", "fields": ["RootFolderId"], "unique": true }
     ],
     "foreignKeys": [{ "name": "FK_WorkspaceSpace_Root", "fields": ["RootFolderId"], "principalModuleId": "Workspace", "principalModel": "WorkspaceFolder", "principalFields": ["EID"], "onDelete": "Restrict" }]

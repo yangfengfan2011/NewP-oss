@@ -16,7 +16,6 @@ public sealed class WorkspaceSpaces(EfPlatformDbContext db, IPlatformTransaction
 {
     private const string SpaceModel = "WorkspaceSpace";
     private const string FolderModel = "WorkspaceFolder";
-    private const string AccountModel = "IdentityAccount";
 
     /// <summary>只查询公共空间及可信当前账号的个人空间，GET 不创建记录。</summary>
     public async Task<IReadOnlyList<WorkspaceSpaceRoot>> ListAsync(string actorId, CancellationToken token = default)
@@ -56,7 +55,7 @@ public sealed class WorkspaceSpaces(EfPlatformDbContext db, IPlatformTransaction
             db.Set<Dictionary<string, object?>>(SpaceModel).Add(new()
             {
                 ["EID"] = spaceId, ["ENAME"] = name, ["SpaceKind"] = kind,
-                ["SubjectModelKey"] = personal ? AccountModel : null, ["SubjectId"] = personal ? actorId : null,
+                ["SubjectId"] = personal ? actorId : null,
                 ["RootFolderId"] = rootId
             });
             return new(spaceId, kind, rootId, name);
@@ -91,8 +90,8 @@ public sealed class WorkspaceSpaces(EfPlatformDbContext db, IPlatformTransaction
 
     // 两个根是固定有界集合；范围在数据库先过滤，调用方不能提交主体或关闭该条件。
     internal static IQueryable<Dictionary<string, object?>> Admitted(EfPlatformDbContext db, string actorId) => db.Set<Dictionary<string, object?>>(SpaceModel).AsNoTracking().Where(r =>
-        EF.Property<string>(r, "SpaceKind") == "Public" && EF.Property<string?>(r, "SubjectModelKey") == null && EF.Property<string?>(r, "SubjectId") == null
-        || EF.Property<string>(r, "SpaceKind") == "Personal" && EF.Property<string?>(r, "SubjectModelKey") == AccountModel && EF.Property<string?>(r, "SubjectId") == actorId);
+        EF.Property<string>(r, "SpaceKind") == "Public" && EF.Property<string?>(r, "SubjectId") == null
+        || EF.Property<string>(r, "SpaceKind") == "Personal" && EF.Property<string?>(r, "SubjectId") == actorId);
 
     // Workspace 只读自己拥有的动态模型，不绑定另一个模块的 EF 实现。
     private IQueryable<Dictionary<string, object?>> SpaceRows() => db.Set<Dictionary<string, object?>>(SpaceModel).AsNoTracking();
@@ -101,8 +100,8 @@ public sealed class WorkspaceSpaces(EfPlatformDbContext db, IPlatformTransaction
     internal static async Task<WorkspaceSpaceRoot> ValidateRootAsync(EfPlatformDbContext db, Dictionary<string, object?> space, CancellationToken token)
     {
         var kind = (string)space["SpaceKind"]!;
-        if (!(kind == "Public" && space["SubjectModelKey"] is null && space["SubjectId"] is null)
-            && !(kind == "Personal" && space["SubjectModelKey"] as string == AccountModel && space["SubjectId"] is string { Length: > 0 }))
+        if (!(kind == "Public" && space["SubjectId"] is null)
+            && !(kind == "Personal" && space["SubjectId"] is string { Length: > 0 }))
             throw new InvalidOperationException("工作空间主体配对无效。");
         var spaceId = (string)space["EID"]!;
         var rootId = (string)space["RootFolderId"]!;

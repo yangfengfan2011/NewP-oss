@@ -10,6 +10,6 @@ public sealed class WorkspaceBaseDtoSignatureProvider
         {
             ["WorkspaceFolderContentDto"] = "sha256:15238a00a59c6b5427fdbc8351db9d4b1c2459f01be111a6e1c93474da0255fc",
             ["WorkspaceFolderDto"] = "sha256:c5d0c848ddeeee4f9eb88da1ddb9cbffbf0c68f3af931395f354291ce8dc9474",
-            ["WorkspaceSpaceDto"] = "sha256:d5df5b77836e67e83be106df0c358a4421973a6630956a18d330af3948fa5603",
+            ["WorkspaceSpaceDto"] = "sha256:ada2110ea4cfece35a4acecaa0a9cb7367a24608460908c8694df6aa39f574e9",
         };
 }

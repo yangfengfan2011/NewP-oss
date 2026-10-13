@@ -3,3 +3,4 @@ codegraph.db
 *.db-wal
 daemon.pid
 daemon.log
+writer.pid

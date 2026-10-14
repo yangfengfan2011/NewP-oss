@@ -8,10 +8,14 @@ using System.Text;
 using System.Text.Json;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Authorization.DTOs;
+using ICP.Platform.Modules.Files;
+using ICP.Platform.Modules.Files.Contracts;
 using ICP.Platform.Modules.Files.Services;
+using ICP.Platform.Modules.Files.Storage;
 using ICP.Platform.Modules.Workspace;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Testing;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -226,6 +230,215 @@ public sealed class DocumentFilesSqlServerHttpApiTests
         var finalDb = finalScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
         Assert.Equal(0, await finalDb.Set<Dictionary<string, object?>>("Document").CountAsync());
         Assert.Single(await finalDb.Set<Dictionary<string, object?>>("FileUploadLease").Where(row => EF.Property<string>(row, "State") == "staged").ToArrayAsync());
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "合法multipart的所有文件超限均由Files返回413，已知长度与非seek请求一致")]
+    public async Task MultipartInput_FileLimitProduces413ForKnownAndNonSeekableBodies()
+    {
+        const int maximum = 1024;
+        await using var fixture = await SmallUploadFixtureAsync(maximum);
+        using var admin = await fixture.LoginAdministratorAsync();
+        var position = await RootAsync(fixture, admin);
+        var outcomes = new List<(bool UnknownLength, int Length, HttpStatusCode Status, string? Code)>();
+        foreach (var unknownLength in new[] { false, true })
+        foreach (var length in new[] { maximum, maximum + 1, maximum + 2, maximum * 2 })
+        {
+            using HttpContent content = unknownLength
+                ? new StreamContent(new ForwardOnlyUploadStream(new byte[length]))
+                : new ByteArrayContent(new byte[length]);
+            using var request = UploadRequest(fixture, position, new { ECODE = $"LIMIT-{unknownLength}-{length}", ENAME = "单文件字节边界" }, content, "main.pdf");
+            Assert.Equal(!unknownLength, request.Content!.Headers.ContentLength.HasValue);
+            using var response = await admin.SendAsync(request);
+            var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+            outcomes.Add((unknownLength, length, response.StatusCode, body.TryGetProperty("code", out var code) ? code.GetString() : null));
+        }
+        // 一轮保留全部边界信号，避免+2的首个失败掩盖未知长度分支。
+        Assert.All(outcomes, outcome =>
+        {
+            var expected = outcome.Length == maximum ? HttpStatusCode.OK : HttpStatusCode.RequestEntityTooLarge;
+            Assert.True(outcome.Status == expected, $"unknownLength={outcome.UnknownLength}, length={outcome.Length}: expected {expected}, actual {outcome.Status}/{outcome.Code}");
+            if (outcome.Length > maximum) Assert.Equal("Files.UploadTooLarge", outcome.Code);
+        });
+        using var scope = fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        var files = await db.Set<Dictionary<string, object?>>("FileRecord").ToArrayAsync();
+        Assert.Equal(8, files.Length);
+        var ready = files.Where(row => Equals(row["State"], "ready")).ToArray();
+        Assert.Equal(2, ready.Length);
+        Assert.All(ready, row => Assert.Equal((long)maximum, row["Length"]));
+        Assert.Equal(2, await db.Set<Dictionary<string, object?>>("FileUploadLease").CountAsync(row => EF.Property<string>(row, "State") == "staged"));
+        Assert.Empty(await db.Set<Dictionary<string, object?>>("FileUsage").ToArrayAsync());
+        Assert.Empty(await db.Set<Dictionary<string, object?>>("Document").ToArrayAsync());
+        Assert.Equal(2, Directory.EnumerateFiles(fixture.StorageRoot).Count(path => !path.EndsWith(".part", StringComparison.Ordinal)));
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "小文件限额不取代独立JSON预算，非法framing和header仍400，总请求超限仍413")]
+    public async Task MultipartInput_SmallFileLimitPreservesJsonFramingAndEnvelopeBudgets()
+    {
+        const int maximum = 1024;
+        await using var fixture = await SmallUploadFixtureAsync(maximum);
+        using var admin = await fixture.LoginAdministratorAsync();
+        var position = await RootAsync(fixture, admin);
+        var positionJson = JsonSerializer.Serialize(position);
+        var valuesJson = JsonSerializer.Serialize(new { ECODE = "SMALL-LIMIT", ENAME = "独立元数据预算" });
+        using (var request = MultipartRequest(fixture, [("position", positionJson), ("values", valuesJson + new string(' ', 2048))], [1], "main.pdf"))
+        using (var response = await admin.SendAsync(request))
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using (var request = MultipartRequest(fixture, [("position", positionJson), ("values", valuesJson + new string(' ', 65537))], [1], "main.pdf"))
+        using (var response = await admin.SendAsync(request))
+            await ProblemAsync(response, HttpStatusCode.RequestEntityTooLarge, "Files.UploadTooLarge");
+        foreach (var oversizedHeader in new[] { false, true })
+        {
+            using var content = new ByteArrayContent([1]);
+            if (oversizedHeader) content.Headers.Add("X-Upload-Test", new string('x', 65537));
+            else for (var index = 0; index < 17; index++) content.Headers.Add($"X-Upload-Test-{index}", "x");
+            using var request = UploadRequest(fixture, position, new { ECODE = "HEADER-LIMIT", ENAME = "头预算" }, content, "main.pdf");
+            using var response = await admin.SendAsync(request);
+            await ProblemAsync(response, HttpStatusCode.BadRequest, "REQUEST_VALIDATION_FAILED");
+        }
+        const string boundary = "document-limit-boundary";
+        var prefix = $"--{boundary}\r\nContent-Disposition: form-data; name=\"position\"\r\n\r\n{positionJson}\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"values\"\r\n\r\n{valuesJson}\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"main.pdf\"\r\nContent-Type: application/pdf\r\n\r\nx";
+        using (var request = RawMultipartRequest(fixture, boundary, new ByteArrayContent(Encoding.UTF8.GetBytes(prefix))))
+        using (var response = await admin.SendAsync(request))
+            await ProblemAsync(response, HttpStatusCode.BadRequest, "REQUEST_VALIDATION_FAILED");
+        var envelope = Encoding.UTF8.GetBytes(prefix + $"\r\n--{boundary}--\r\n" + new string(' ', maximum + 131073));
+        foreach (var unknownLength in new[] { false, true })
+        {
+            using HttpContent content = unknownLength
+                ? new StreamContent(new ForwardOnlyUploadStream(envelope)) : new ByteArrayContent(envelope);
+            using var request = RawMultipartRequest(fixture, boundary, content);
+            Assert.Equal(!unknownLength, request.Content!.Headers.ContentLength.HasValue);
+            using var response = await admin.SendAsync(request);
+            await ProblemAsync(response, unknownLength ? HttpStatusCode.BadRequest : HttpStatusCode.RequestEntityTooLarge,
+                unknownLength ? "REQUEST_VALIDATION_FAILED" : "Files.UploadTooLarge");
+        }
+        using var scope = fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        Assert.Single(await db.Set<Dictionary<string, object?>>("FileUploadLease").Where(row => EF.Property<string>(row, "State") == "staged").ToArrayAsync());
+        Assert.Single(await db.Set<Dictionary<string, object?>>("FileRecord").Where(row => EF.Property<string>(row, "State") == "ready").ToArrayAsync());
+        Assert.Empty(await db.Set<Dictionary<string, object?>>("FileUsage").ToArrayAsync());
+        Assert.Empty(await db.Set<Dictionary<string, object?>>("Document").ToArrayAsync());
+        // 真实框架 HTTP 拒绝不是普通输入 IOException；覆盖 section header 和 section body 两个读取边界。
+        var raw = Encoding.UTF8.GetBytes(prefix + $"\r\n--{boundary}--\r\n");
+        var bodyOffset = Encoding.UTF8.GetByteCount($"--{boundary}\r\nContent-Disposition: form-data; name=\"position\"\r\n\r\n") + 1;
+        foreach (var rejectAt in new[] { 0, bodyOffset })
+        {
+            using var input = new ForwardOnlyUploadStream(raw, rejectAt);
+            var context = new DefaultHttpContext();
+            context.Request.ContentType = $"multipart/form-data; boundary={boundary}";
+            context.Request.Body = input;
+            var controller = new WorkspaceDocumentUploadsController(scope.ServiceProvider.GetRequiredService<WorkspaceContents>(),
+                scope.ServiceProvider.GetRequiredService<IFileLifecycleService>(), Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkspaceDocumentUploadsController>.Instance)
+            { ControllerContext = new() { HttpContext = context } };
+            var failure = await Assert.ThrowsAsync<BadHttpRequestException>(() => controller.Stage(CancellationToken.None));
+            Assert.Same(input.Rejection, failure);
+            Assert.Equal(StatusCodes.Status413PayloadTooLarge, failure.StatusCode);
+            Assert.Contains(rejectAt == 0 ? "ReadSectionAsync" : "MultipartInputStream.ReadAsync", failure.StackTrace);
+        }
+    }
+
+    private static Task<BusinessAuditHostFixture> SmallUploadFixtureAsync(long maximum) => BusinessAuditHostFixture.CreateAsync(services =>
+    {
+        services.Remove(Assert.Single(services, descriptor => descriptor.ServiceType == typeof(IHostedService) && descriptor.ImplementationType == typeof(FileCleanupWorker)));
+        services.PostConfigure<FilesOptions>(options => options.MaxUploadSizeBytes = maximum);
+    }, includeWorkspace: true);
+
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "截断JSON、header及file仅翻译输入解析IO，真实存储写IO继续500")]
+    public async Task MultipartInput_TruncatedSectionsAre400AndStorageIoRemains500()
+    {
+        StorageWriteFailure? storage = null;
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
+        {
+            services.Remove(Assert.Single(services, descriptor => descriptor.ServiceType == typeof(IHostedService) && descriptor.ImplementationType == typeof(FileCleanupWorker)));
+            services.AddSingleton<IFileContentStore>(provider => storage = new StorageWriteFailure(provider.GetRequiredService<LocalStorageProvider>(),
+                provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<FilesOptions>>().Value.StorageRoot));
+        }, includeWorkspace: true);
+        using var admin = await fixture.LoginAdministratorAsync();
+        var position = await RootAsync(fixture, admin);
+        var positionJson = JsonSerializer.Serialize(position);
+        var values = new { ECODE = "TRUNCATED", ENAME = "输入解析边界" };
+        var valuesJson = JsonSerializer.Serialize(values);
+        const string boundary = "truncated-input-boundary";
+        var positionHeader = $"--{boundary}\r\nContent-Disposition: form-data; name=\"position\"\r\n";
+        var positionPart = positionHeader + $"\r\n{positionJson}\r\n";
+        var valuesHeader = $"--{boundary}\r\nContent-Disposition: form-data; name=\"values\"\r\n\r\n";
+        var outcomes = new List<(string Section, HttpStatusCode Status, string? Code)>();
+        foreach (var (section, raw) in new[]
+        {
+            ("header", positionHeader), ("position", positionHeader + $"\r\n{positionJson}"),
+            ("values", positionPart + valuesHeader + valuesJson),
+            ("file", positionPart + valuesHeader + valuesJson + $"\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"main.pdf\"\r\n\r\nx")
+        })
+        {
+            using var request = RawMultipartRequest(fixture, boundary, new ByteArrayContent(Encoding.UTF8.GetBytes(raw)));
+            using var response = await admin.SendAsync(request);
+            var body = response.StatusCode == HttpStatusCode.BadRequest ? await response.Content.ReadFromJsonAsync<JsonElement>() : default;
+            outcomes.Add((section, response.StatusCode, body.ValueKind == JsonValueKind.Object && body.TryGetProperty("code", out var code) ? code.GetString() : null));
+        }
+        // 同一真实Local先完成part写入，再以CreateNew碰撞制造存储IOException；它不属于输入解析错误。
+        using (var request = UploadRequest(fixture, position, values, new ByteArrayContent([1, 2, 3]), "main.pdf"))
+        using (var response = await admin.SendAsync(request))
+            Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Equal(1, storage!.WriteFailures);
+        Assert.All(outcomes, outcome =>
+        {
+            Assert.True(outcome.Status == HttpStatusCode.BadRequest, $"{outcome.Section}: expected BadRequest, actual {outcome.Status}");
+            Assert.Equal("REQUEST_VALIDATION_FAILED", outcome.Code);
+        });
+        using var scope = fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        Assert.Empty(await db.Set<Dictionary<string, object?>>("FileRecord").Where(row => EF.Property<string>(row, "State") == "ready").ToArrayAsync());
+        Assert.Empty(await db.Set<Dictionary<string, object?>>("FileUploadLease").Where(row => EF.Property<string>(row, "State") == "staged").ToArrayAsync());
+        Assert.Empty(await db.Set<Dictionary<string, object?>>("FileUsage").ToArrayAsync());
+        Assert.Empty(await db.Set<Dictionary<string, object?>>("Document").ToArrayAsync());
+    }
+
+    private sealed class StorageWriteFailure(LocalStorageProvider inner, string root) : IFileContentStore
+    {
+        public int WriteFailures { get; private set; }
+        public async Task<FileContentMeasurement> WritePartialAsync(string key, Stream source, long maximumBytes, CancellationToken token)
+        {
+            var measurement = await inner.WritePartialAsync(key, source, maximumBytes, token);
+            try { using var collision = new FileStream(Path.Combine(root, key + ".part"), FileMode.CreateNew, FileAccess.Write); }
+            catch (IOException) { WriteFailures++; throw; }
+            return measurement;
+        }
+        public Task CompleteAsync(string key, CancellationToken token) => inner.CompleteAsync(key, token);
+        public Task<Stream> OpenAsync(string key, CancellationToken token) => inner.OpenAsync(key, token);
+        public Task DeleteContentAsync(string key, CancellationToken token) => inner.DeleteContentAsync(key, token);
+    }
+
+    private static HttpRequestMessage RawMultipartRequest(BusinessAuditHostFixture fixture, string boundary, HttpContent content)
+    {
+        content.Headers.ContentType = MediaTypeHeaderValue.Parse($"multipart/form-data; boundary={boundary}");
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/document-uploads") { Content = content };
+        request.Headers.Add("X-NewP-Feature", Point(fixture, "workspace.folder.createDocument").Position);
+        return request;
+    }
+
+    private sealed class ForwardOnlyUploadStream(byte[] bytes, int? rejectAt = null) : Stream
+    {
+        private readonly MemoryStream _source = new(bytes, writable: false);
+        public BadHttpRequestException? Rejection { get; } = rejectAt.HasValue ? new("Request body limit probe.", StatusCodes.Status413PayloadTooLarge) : null;
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override int Read(byte[] buffer, int offset, int count) => _source.Read(buffer, offset, ReadCount(count));
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken token = default) => _source.ReadAsync(buffer[..ReadCount(buffer.Length)], token);
+        private int ReadCount(int requested)
+        {
+            if (!rejectAt.HasValue) return requested;
+            var remaining = rejectAt.Value - (int)_source.Position;
+            if (remaining <= 0) throw Rejection!;
+            return Math.Min(requested, remaining);
+        }
+        public override void Flush() => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        protected override void Dispose(bool disposing) { if (disposing) _source.Dispose(); base.Dispose(disposing); }
     }
 
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "真实暂存的主体、用途、到期、取消与消费状态不能被保存入口绕过")]

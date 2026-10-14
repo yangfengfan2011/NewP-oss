@@ -34,7 +34,7 @@ public sealed partial class WorkspaceDocumentUploadsController(WorkspaceContents
             var boundary = HeaderUtilities.RemoveQuotes(media.Boundary).Value;
             if (string.IsNullOrEmpty(boundary) || boundary.Length > 128) throw new JsonException("Multipart boundary is invalid.");
             using var body = new WorkspaceUploadRequestStream(Request.Body, checked(files.MaxUploadSizeBytes + 131072));
-            var reader = new MultipartReader(boundary, body) { HeadersLengthLimit = MetadataBudget, HeadersCountLimit = 16, BodyLengthLimit = files.MaxUploadSizeBytes + 1 };
+            var reader = new MultipartReader(boundary, body) { HeadersLengthLimit = MetadataBudget, HeadersCountLimit = 16 };
             var positionPart = await RequireSectionAsync(reader, "position", false, token);
             var positionBytes = await ReadJsonBytesAsync(positionPart.Body, MetadataBudget, token);
             using var positionJson = JsonDocument.Parse(positionBytes);
@@ -48,7 +48,7 @@ public sealed partial class WorkspaceDocumentUploadsController(WorkspaceContents
             var error = await contents.ValidateDocumentUploadAsync(Actor(), position, values, fileName, filePart.ContentType ?? "application/octet-stream", token);
             if (error is not null) return Results.Json(error, statusCode: error.StatusCode);
             staged = await files.StageAsync(filePart.Body, fileName, filePart.ContentType, "document.fileLink", token);
-            if (await reader.ReadNextSectionAsync(token) is not null) throw new JsonException("Unexpected multipart section.");
+            if (await ReadSectionAsync(reader, token) is not null) throw new JsonException("Unexpected multipart section.");
             // final boundary 后的 epilogue 仍计入真实请求开销，chunked 也不能绕过预算。
             await body.CopyToAsync(Stream.Null, token);
             if (body.BytesRead - staged.Length - positionBytes.Length - valuesBytes.Length > MetadataBudget)
@@ -88,13 +88,54 @@ public sealed partial class WorkspaceDocumentUploadsController(WorkspaceContents
     // 每项具有精确名称和文件形状，顺序与重复校验先于下一项消费。
     private static async Task<MultipartSection> RequireSectionAsync(MultipartReader reader, string name, bool isFile, CancellationToken token)
     {
-        var part = await reader.ReadNextSectionAsync(token);
+        var part = await ReadSectionAsync(reader, token);
         if (part is null || !ContentDispositionHeaderValue.TryParse(part.ContentDisposition, out var disposition)
             || !disposition.DispositionType.Equals("form-data", StringComparison.OrdinalIgnoreCase)
             || HeaderUtilities.RemoveQuotes(disposition.Name).Value != name
             || (disposition.FileName.HasValue || disposition.FileNameStar.HasValue) != isFile)
             throw new JsonException("Multipart section is missing or out of order.");
+        part.Body = new MultipartInputStream(part.Body);
         return part;
+    }
+
+    // 只翻译解析器的输入读取异常；Files 写盘和改名不在此边界内。
+    private static async Task<MultipartSection?> ReadSectionAsync(MultipartReader reader, CancellationToken token)
+    {
+        try { return await reader.ReadNextSectionAsync(token); }
+        catch (IOException exception) when (exception is not BadHttpRequestException)
+        { throw new InvalidDataException("Invalid multipart section framing.", exception); }
+    }
+
+    // 只转换截断输入；宿主 HTTP 拒绝、存储 I/O 故障和取消保留原结果。
+    private sealed class MultipartInputStream(Stream source) : Stream
+    {
+        public override bool CanRead => source.CanRead;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        /// <inheritdoc/>
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            try { return source.Read(buffer, offset, count); }
+            catch (IOException exception) when (exception is not BadHttpRequestException)
+            { throw new InvalidDataException("Invalid multipart body framing.", exception); }
+        }
+        /// <inheritdoc/>
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken token = default)
+        {
+            try { return await source.ReadAsync(buffer, token); }
+            catch (IOException exception) when (exception is not BadHttpRequestException)
+            { throw new InvalidDataException("Invalid multipart body framing.", exception); }
+        }
+        /// <inheritdoc/>
+        public override void Flush() => throw new NotSupportedException();
+        /// <inheritdoc/>
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        /// <inheritdoc/>
+        public override void SetLength(long value) => throw new NotSupportedException();
+        /// <inheritdoc/>
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     // 只有有界 JSON 可缓冲；在解析前检测合计 UTF-8 字节预算。

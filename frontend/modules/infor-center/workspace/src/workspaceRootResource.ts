@@ -1,7 +1,8 @@
 import { platformFetch } from '@icp-platform/core';
 import { createElement, lazy, Suspense } from 'react';
 import { readStandardCrudRequestError, StandardCrudRequestError, type StandardCrudActionInputRenderContext, type StandardCrudDetail, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
-import { documentBusinessValues, type WorkspaceDocumentDraft } from './workspaceDocumentUpload';
+import type { WorkspaceDocumentDraft } from './workspaceDocumentUpload';
+import { WorkspaceDocumentSession } from './workspaceDocumentSession';
 import { workspacePosition } from './workspacePosition';
 
 interface LinkRow { linkId: string; associatedObject: { modelKey: string; id: string }; fields: Record<string, unknown> }
@@ -45,30 +46,10 @@ const resource: StandardCrudResourceRegistration = {
     createPart: async ({ input, queryScope, featurePosition }) => referenceCommand('POST', '/api/workspace/content/parts',
       { position: workspacePosition(queryScope), values: input }, featurePosition),
     createDocument: Object.assign(async ({ input, queryScope, featurePosition }: import('@icp-platform/sdk').StandardCrudActionContext) => {
-      const draft = input as WorkspaceDocumentDraft;
-      if (draft.submission?.begin() === false) throw new Error('本次保存已经开始，请先核对结果。');
-      try {
-        const response = await platformFetch('/api/workspace/content/documents', { method: 'POST',
-          headers: { ...headers(featurePosition), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ position: workspacePosition(queryScope), values: documentBusinessValues(draft),
-            ...(draft.mainUploadId ? { uploads: { mainUploadId: draft.mainUploadId,
-              ...(draft.attachmentUploadIds?.length ? { attachmentUploadIds: draft.attachmentUploadIds } : {}) } } : {}) }) });
-        if (!response.ok) throw await readStandardCrudRequestError(response);
-        let payload: unknown;
-        try { payload = await response.json(); }
-        catch (cause) {
-          // 已收到成功状态但回执未读完整，不能重放保存或取消可能已确认的主文件。
-          throw new StandardCrudRequestError('操作结果尚未确认，请先查询实际结果，再决定是否重试。', response.status, {}, {
-            code: 'Platform.MutationOutcomeUnknown', reasonKey: 'Platform.MutationOutcomeUnknown',
-          }, undefined, cause);
-        }
-        draft.submission?.committed();
-        return { operation: 'action' as const, payload, change: { operation: 'update' as const, id: '' } };
-      } catch (error) {
-        const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : '';
-        draft.submission?.failed(code === 'Platform.MutationOutcomeUnknown' || code === 'Persistence.CommitOutcomeUnknown');
-        throw error;
-      }
+      const draft = typeof input === 'object' && input !== null ? input as WorkspaceDocumentDraft : undefined;
+      if (!(draft?.session instanceof WorkspaceDocumentSession)) throw new Error('缺少有效的上传会话，请重新打开。');
+      const payload = await draft.session.submit(draft, queryScope, featurePosition);
+      return { operation: 'action' as const, payload, change: { operation: 'update' as const, id: '' } };
     }, {
       // 重复代码已确定未消费暂存；修正字段后可由用户再次保存，其他409沿共享冲突生命周期。
       isCorrectableInputError: (failure: unknown) => failure instanceof StandardCrudRequestError && failure.status === 409

@@ -1,12 +1,10 @@
 import { platformFetch, platformUpload } from '@icp-platform/core';
-import { readStandardCrudRequestError } from '@icp-platform/sdk';
+import { readStandardCrudRequestError, StandardCrudRequestError } from '@icp-platform/sdk';
 import { workspacePosition } from './workspacePosition';
+import type { WorkspaceDocumentSession } from './workspaceDocumentSession';
 
-export interface DocumentSubmissionLifecycle { begin(): boolean; committed(): void; failed(unknown: boolean): void }
 export interface WorkspaceDocumentDraft extends Record<string, unknown> {
-  mainUploadId?: string;
-  attachmentUploadIds?: string[];
-  submission?: DocumentSubmissionLifecycle;
+  session?: WorkspaceDocumentSession;
 }
 export interface DocumentStage { uploadId: string; fileId: string; fileName: string; length: number; contentType: string; expiresAt: string }
 
@@ -33,4 +31,20 @@ export async function cancelDocumentStage(uploadId: string, featurePosition?: st
   const response = await platformFetch(`/api/workspace/content/document-uploads/${encodeURIComponent(uploadId)}`,
     { method: 'DELETE', headers: featurePosition ? { 'X-NewP-Feature': featurePosition } : {} });
   if (!response.ok) throw await readStandardCrudRequestError(response);
+}
+
+/** 显式保存只投影业务字段与上传身份；成功回执读不完整仍保留未知提交语义。 */
+export async function saveDocument(values: unknown, uploads: { mainUploadId: string; attachmentUploadIds: string[] },
+  scope: Record<string, unknown> | undefined, featurePosition?: string): Promise<unknown> {
+  const response = await platformFetch('/api/workspace/content/documents', { method: 'POST',
+    headers: { ...(featurePosition ? { 'X-NewP-Feature': featurePosition } : {}), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ position: workspacePosition(scope), values: documentBusinessValues(values),
+      uploads: { mainUploadId: uploads.mainUploadId, ...(uploads.attachmentUploadIds.length ? { attachmentUploadIds: uploads.attachmentUploadIds } : {}) } }) });
+  if (!response.ok) throw await readStandardCrudRequestError(response);
+  try { return await response.json() as unknown; }
+  catch (cause) {
+    throw new StandardCrudRequestError('操作结果尚未确认，请先查询实际结果，再决定是否重试。', response.status, {}, {
+      code: 'Platform.MutationOutcomeUnknown', reasonKey: 'Platform.MutationOutcomeUnknown',
+    }, undefined, cause);
+  }
 }

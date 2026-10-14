@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, useState } from 'react';
+import { act, StrictMode, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { invalidatePlatformAntiforgeryToken, LocalizationProvider } from '@icp-platform/core';
@@ -59,7 +59,7 @@ it('reports real progress, keeps save disabled until staged and cancels an uncom
   expect(element.querySelector('[role=progressbar]')).toBeNull();
   expect(state).toHaveBeenLastCalledWith({ dirty: true, ready: false });
   await act(async () => finish(staged));
-  expect(element.textContent).toContain('保存后生效'); expect(currentDraft.mainUploadId).toBe(staged.uploadId);
+  expect(element.textContent).toContain('保存后生效'); expect(currentDraft.session?.getSnapshot().choices.find(choice => choice.role === 'main')?.staged?.uploadId).toBe(staged.uploadId);
   expect(state).toHaveBeenLastCalledWith({ dirty: true, ready: true });
   await act(async () => root.unmount()); roots.splice(0);
   expect(cancelDocumentStage).toHaveBeenCalledWith(staged.uploadId, 'create-position');
@@ -72,7 +72,7 @@ it('aborts a cancelled writer and disposes its late token without enabling save'
   const signal = vi.mocked(stageDocumentFile).mock.calls[0][4];
   const cancel = [...element.querySelectorAll('button')].find(button => button.textContent === '取消上传')!;
   await act(async () => cancel.click()); expect(signal.aborted).toBe(true);
-  await act(async () => finish(staged)); expect(currentDraft.mainUploadId).toBeUndefined();
+  await act(async () => finish(staged)); expect(currentDraft.session?.getSnapshot().choices.find(choice => choice.role === 'main')?.staged?.uploadId).toBeUndefined();
   expect(cancelDocumentStage).toHaveBeenCalledWith(staged.uploadId, 'create-position');
   expect(state).toHaveBeenLastCalledWith({ dirty: true, ready: false });
 });
@@ -84,7 +84,7 @@ it('isolates late response after position change and clears the old upload choic
   const signal = vi.mocked(stageDocumentFile).mock.calls[0][4];
   await act(async () => root.render(<Harness queryScope={{ ...scope, rootFolderId: 'other' }} />));
   expect(signal.aborted).toBe(true);
-  await act(async () => finish(staged)); expect(currentDraft.mainUploadId).toBeUndefined();
+  await act(async () => finish(staged)); expect(currentDraft.session?.getSnapshot().choices.find(choice => choice.role === 'main')?.staged?.uploadId).toBeUndefined();
   expect(state).toHaveBeenLastCalledWith({ dirty: true, ready: false });
 });
 
@@ -120,5 +120,22 @@ it('shows upload failure and keeps the real save unavailable', async () => {
   vi.mocked(stageDocumentFile).mockRejectedValue(new Error('upload failed'));
   const { element } = await mount(); await choose(element);
   expect(element.querySelector('[role=alert],.ant-alert')).not.toBeNull();
-  expect(currentDraft.mainUploadId).toBeUndefined(); expect(state).toHaveBeenLastCalledWith({ dirty: true, ready: false });
+  expect(currentDraft.session?.getSnapshot().choices.find(choice => choice.role === 'main')?.staged?.uploadId).toBeUndefined(); expect(state).toHaveBeenLastCalledWith({ dirty: true, ready: false });
+});
+
+it('keeps the live session across rerenders after StrictMode replay and rejects its handle after closing', async () => {
+  vi.mocked(stageDocumentFile).mockResolvedValue(staged);
+  const { root, element } = await mount();
+  await act(async () => root.render(<StrictMode><Harness /></StrictMode>));
+  const session = currentDraft.session!;
+  expect(session.getSnapshot().closed).toBe(false);
+  await choose(element);
+  await act(async () => root.render(<StrictMode><Harness /></StrictMode>));
+  expect(currentDraft.session).toBe(session);
+  expect(session.canSubmit()).toBe(true);
+  const request = vi.fn(); vi.stubGlobal('fetch', request);
+  await act(async () => root.unmount()); roots.splice(0);
+  await expect(resource.actionHandlers!.createDocument({ input: currentDraft, queryScope: scope, featurePosition: 'create-position' })).rejects.toThrow('上传会话');
+  expect(request).not.toHaveBeenCalled();
+  expect(cancelDocumentStage).toHaveBeenCalledTimes(1);
 });

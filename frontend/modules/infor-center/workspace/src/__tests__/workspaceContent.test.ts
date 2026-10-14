@@ -54,3 +54,10 @@ it('edits and batch deletes through the current occurrence using LIDs', async ()
     { position: { spaceId: 'public', rootFolderId: 'root', linkIds: [] }, linkIds: ['a', 'b'] },
   ]);
 });
+it('rejects document creation without a session before sending any request', async () => {
+  const request = vi.fn(async () => new Response(JSON.stringify({ requestToken: 'token', succeeded: true })));
+  vi.stubGlobal('fetch', request);
+  await expect(resource.actionHandlers!.createDocument({ input: { ECODE: 'D', ENAME: '图文档' },
+    queryScope: { spaceId: 'public', rootFolderId: 'root', linkIds: '[]' } })).rejects.toThrow('上传会话');
+  expect(request).not.toHaveBeenCalled();
+});

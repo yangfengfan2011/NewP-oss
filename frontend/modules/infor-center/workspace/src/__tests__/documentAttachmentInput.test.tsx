@@ -48,7 +48,7 @@ it('uploads main and selected attachments one at a time and publishes their sele
   expect(state).toHaveBeenLastCalledWith({ dirty: true, ready: false });
   await act(async () => pending[0](stage('main.pdf', '1')));
   expect(stageDocumentFile).toHaveBeenCalledTimes(2);
-  expect(currentDraft.mainUploadId).toBe(stage('main.pdf', '1').uploadId);
+  expect(currentDraft.session?.getSnapshot().choices.find(choice => choice.role === 'main')?.staged?.uploadId).toBe(stage('main.pdf', '1').uploadId);
   expect(state).toHaveBeenLastCalledWith({ dirty: true, ready: false });
   const firstProgress = vi.mocked(stageDocumentFile).mock.calls[1][5];
   await act(async () => firstProgress(1, 4));
@@ -56,7 +56,7 @@ it('uploads main and selected attachments one at a time and publishes their sele
   await act(async () => pending[1](stage('first.pdf', '2')));
   expect(stageDocumentFile).toHaveBeenCalledTimes(3);
   await act(async () => pending[2](stage('second.pdf', '3')));
-  expect(currentDraft.attachmentUploadIds).toEqual([stage('first.pdf', '2').uploadId, stage('second.pdf', '3').uploadId]);
+  expect(currentDraft.session?.getSnapshot().choices.filter(choice => choice.role === 'attachment' && choice.staged).map(choice => choice.staged!.uploadId)).toEqual([stage('first.pdf', '2').uploadId, stage('second.pdf', '3').uploadId]);
   expect(state).toHaveBeenLastCalledWith({ dirty: true, ready: true });
   expect(element.querySelector('[role=group][aria-label="附件 second.pdf"]')?.textContent).toContain('附件已上传，保存后生效。');
 });
@@ -73,7 +73,7 @@ it('keeps a failed attachment in its chosen position and permits retry without r
   await act(async () => retry.click());
   expect(stageDocumentFile).toHaveBeenCalledTimes(4);
   expect(vi.mocked(stageDocumentFile).mock.calls.map(call => call[0].name)).toEqual(['main.pdf', 'first.pdf', 'second.pdf', 'first.pdf']);
-  expect(currentDraft.attachmentUploadIds).toEqual([stage('first.pdf', '2').uploadId, stage('second.pdf', '3').uploadId]);
+  expect(currentDraft.session?.getSnapshot().choices.filter(choice => choice.role === 'attachment' && choice.staged).map(choice => choice.staged!.uploadId)).toEqual([stage('first.pdf', '2').uploadId, stage('second.pdf', '3').uploadId]);
   expect(state).toHaveBeenLastCalledWith({ dirty: true, ready: true });
 });
 
@@ -88,7 +88,7 @@ it('removes a pending attachment, cancels its late token and continues the next 
   expect(signal.aborted).toBe(true); expect(stageDocumentFile).toHaveBeenCalledTimes(2);
   await act(async () => complete(stage('first.pdf', '2')));
   expect(stageDocumentFile).toHaveBeenCalledTimes(3);
-  expect(currentDraft.attachmentUploadIds).toEqual([stage('second.pdf', '3').uploadId]);
+  expect(currentDraft.session?.getSnapshot().choices.filter(choice => choice.role === 'attachment' && choice.staged).map(choice => choice.staged!.uploadId)).toEqual([stage('second.pdf', '3').uploadId]);
   expect(cancelDocumentStage).toHaveBeenCalledWith(stage('first.pdf', '2').uploadId, 'create-position');
   expect(state).toHaveBeenLastCalledWith({ dirty: true, ready: true });
   await act(async () => root.unmount()); roots.splice(0);
@@ -105,7 +105,7 @@ it('isolates the whole selection and a late attachment after its position change
   await select(element, [file('first.pdf'), file('never-started.pdf')], true);
   const signal = vi.mocked(stageDocumentFile).mock.calls[1][4];
   await act(async () => root.render(<Harness queryScope={{ ...scope, rootFolderId: 'other-root' }} />));
-  expect(signal.aborted).toBe(true); expect(currentDraft.mainUploadId).toBeUndefined(); expect(currentDraft.attachmentUploadIds).toEqual([]);
+  expect(signal.aborted).toBe(true); expect(currentDraft.session?.getSnapshot().choices.find(choice => choice.role === 'main')?.staged?.uploadId).toBeUndefined(); expect(currentDraft.session?.getSnapshot().choices.filter(choice => choice.role === 'attachment' && choice.staged).map(choice => choice.staged!.uploadId)).toEqual([]);
   await act(async () => complete(stage('first.pdf', '2')));
   expect(stageDocumentFile).toHaveBeenCalledTimes(2); expect(element.textContent).not.toContain('first.pdf');
   expect(cancelDocumentStage).toHaveBeenCalledWith(stage('main.pdf', '1').uploadId, 'create-position');
@@ -117,7 +117,7 @@ it('rejects an oversized selection before starting any of its uploads', async ()
   const { element } = await mount();
   await select(element, Array.from({ length: 101 }, (_, index) => file(`${index}.pdf`)), true);
   expect(stageDocumentFile).not.toHaveBeenCalled(); expect(element.textContent).toContain('最多可选择100个附件');
-  expect(currentDraft.attachmentUploadIds).toEqual([]); expect(state).toHaveBeenLastCalledWith({ dirty: true, ready: false });
+  expect(currentDraft.session?.getSnapshot().choices.filter(choice => choice.role === 'attachment' && choice.staged).map(choice => choice.staged!.uploadId)).toEqual([]); expect(state).toHaveBeenLastCalledWith({ dirty: true, ready: false });
 });
 
 it.each(['committed', 'unknown'] as const)('posts the selected collection once and preserves all leases on %s close', async outcome => {

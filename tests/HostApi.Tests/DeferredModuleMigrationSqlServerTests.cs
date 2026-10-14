@@ -39,15 +39,70 @@ public sealed class DeferredModuleMigrationSqlServerTests
         command.CommandText = "SELECT @@SPID;";
         var sessionId = Convert.ToInt32(await command.ExecuteScalarAsync());
         var startup = fixture.StartAsync();
+        var observation = Stopwatch.StartNew();
+        JsonElement? databaseStage = null;
+        // 先在既有启动预算内确认所属 Host 到达本 catalog；SQL 会话不是锁成功的判据。
+        while (observation.Elapsed < TimeSpan.FromSeconds(90))
+        {
+            if (startup.IsCompleted)
+            {
+                await startup;
+                Assert.Fail("The real Host completed startup before its database stage could be observed.");
+            }
+            var stage = await fixture.ReadOwnedHostDatabaseStageAsync();
+            if (stage.GetProperty("sessions").GetArrayLength() > 0) { databaseStage = stage; break; }
+            await Task.Delay(50);
+        }
+        Assert.True(databaseStage.HasValue, "The owned Host did not reach its database stage within the existing startup budget.");
+        await File.WriteAllTextAsync(Path.Combine(fixture.EvidenceRoot, "migration-lock-database-phase.json"),
+            JsonSerializer.Serialize(new { fixture.OwnedHostProcessId, elapsedSeconds = observation.Elapsed.TotalSeconds, databaseStage }));
         var deadline = DateTime.UtcNow.AddSeconds(10);
         var waiting = false;
         while (!waiting && DateTime.UtcNow < deadline)
         {
-            waiting = await Scalar(fixture, $"SELECT COUNT(*) FROM sys.dm_exec_requests WHERE blocking_session_id={sessionId} AND database_id=DB_ID() AND wait_type LIKE N'LCK_M_%';") > 0;
+            waiting = await Scalar(fixture, $"SELECT COUNT(*) FROM sys.dm_exec_requests r JOIN sys.dm_exec_sessions s ON s.session_id=r.session_id WHERE s.host_process_id={fixture.OwnedHostProcessId} AND r.blocking_session_id={sessionId} AND r.database_id=DB_ID() AND r.wait_type=N'LCK_M_X';") > 0;
             if (!waiting) await Task.Delay(50);
         }
-        Assert.True(waiting, "The real Host did not reach the held SQL migration lock.");
+        Exception? diagnosticFailure = null;
+        if (!waiting)
+        {
+            try
+            {
+                // 原窗口已失败；额外观察只诊断实际 SQL 阶段，不能把后来出现的等待改记为通过。
+                command.CommandText = "SELECT @@SPID AS sessionId, APPLOCK_MODE(N'public', N'NewP.PersistenceBootstrap', N'Transaction') AS lockMode FOR JSON PATH;";
+                var lockAtDeadline = Convert.ToString(await command.ExecuteScalarAsync());
+                var samples = new List<object>();
+                var stage = await fixture.ReadOwnedHostDatabaseStageAsync();
+                samples.Add(new { elapsedSeconds = observation.Elapsed.TotalSeconds, stage });
+                var observedLater = false;
+                while (observation.Elapsed < TimeSpan.FromSeconds(90) && !startup.IsCompleted)
+                {
+                    stage = await fixture.ReadOwnedHostDatabaseStageAsync();
+                    if (samples.Count < 64) samples.Add(new { elapsedSeconds = observation.Elapsed.TotalSeconds, stage });
+                    observedLater = stage.GetProperty("sessions").EnumerateArray().Any(session =>
+                        session.GetProperty("blockingSessionId").GetInt32() == sessionId &&
+                        session.GetProperty("waitType").GetString()!.StartsWith("LCK_M_", StringComparison.Ordinal));
+                    if (observedLater) break;
+                    await Task.Delay(100);
+                }
+                var lockAfterObservation = Convert.ToString(await command.ExecuteScalarAsync());
+                await File.WriteAllTextAsync(Path.Combine(fixture.EvidenceRoot, "migration-lock-deadline-diagnostic.json"),
+                    JsonSerializer.Serialize(new { fixture.OwnedHostProcessId, originalWindowSeconds = 10,
+                        waitingWithinOriginalWindow = waiting, observedLater, startup.Status,
+                        lockAtDeadline, lockAfterObservation, samples, finalStage = stage,
+                        elapsedSeconds = observation.Elapsed.TotalSeconds }));
+            }
+            catch (Exception failure) { diagnosticFailure = failure; }
+        }
+        try { Assert.True(waiting, "The real Host did not reach the held SQL migration lock."); }
+        catch (Exception checkpointFailure) when (diagnosticFailure is not null)
+        {
+            await fixture.RecordCheckpointDiagnosticFailureAsync(checkpointFailure, diagnosticFailure);
+            throw;
+        }
         Assert.False(startup.IsCompleted);
+        Assert.True(await Scalar(fixture, $"SELECT COUNT(*) FROM sys.dm_tran_locks WHERE request_session_id={sessionId} AND resource_database_id=DB_ID() AND resource_type=N'APPLICATION' AND request_mode=N'X' AND request_status=N'GRANT';") > 0);
+        Assert.True(await Scalar(fixture, $"SELECT COUNT(*) FROM sys.dm_tran_locks l JOIN sys.dm_exec_sessions s ON s.session_id=l.request_session_id WHERE s.host_process_id={fixture.OwnedHostProcessId} AND l.resource_database_id=DB_ID() AND l.resource_type=N'APPLICATION' AND l.request_mode=N'X' AND l.request_status=N'WAIT';") > 0);
         Assert.Equal(before, await History(fixture));
         Assert.Equal(0, await Scalar(fixture, "SELECT COUNT(*) FROM sys.indexes WHERE name=N'IX_Document_ENAME';"));
         await transaction.CommitAsync();

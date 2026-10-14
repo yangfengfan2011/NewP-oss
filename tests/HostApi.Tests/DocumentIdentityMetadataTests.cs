@@ -9,7 +9,7 @@ public sealed class DocumentIdentityMetadataTests
     public void Authoring_LoadsOwnedInitialIdentityAndKeepsBusinessCrudOnMaster()
     {
         var definitions = new DocumentModelMetadataProvider().GetDefinitions();
-        Assert.Equal(new[] { "Document", "DocumentIteration", "DocumentVersion" }, definitions.Select(model => model.LogicalKey).Order());
+        Assert.Equal(new[] { "Document", "DocumentFileLink", "DocumentIteration", "DocumentVersion" }, definitions.Select(model => model.LogicalKey).Order());
         Assert.All(definitions, model => Assert.Equal("Document", model.OwnerModuleId));
         var descriptor = DocumentCrudDescriptor.Create();
         Assert.Equal("Document", descriptor.ModelName);

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ICP.Platform.Modules.Document.Contracts;
 using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.LinkQueries;
@@ -16,7 +17,8 @@ namespace ICP.Platform.Modules.Workspace;
 /// <summary>集中编排 Workspace 完整图命令、位置校验和引用规则；所属对象规则仍通过正式行为执行。</summary>
 public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions positions, IPlatformTransactionExecutor transactions,
     IDataScopeObjectDecisionProvider decisions, IPlatformObjectIdGenerator ids, IEntityAuditValueProvider audit, LinkQueryCatalog catalog,
-    WorkspaceFolderScope folderScope, LinkQueryReader reader, IStandardCrudService crud, IStandardCrudResourceRegistry resources)
+    WorkspaceFolderScope folderScope, LinkQueryReader reader, IStandardCrudService crud, IStandardCrudResourceRegistry resources,
+    IDocumentFiles documentFiles)
 {
     /// <summary>在有效位置内创建实体与 Link，同父名称比较及并发串行化由 SQL Server 事务锁保护。</summary>
     public ValueTask<string> CreateFolderAsync(string actorId, WorkspacePosition position, IReadOnlyDictionary<string, JsonElement> values, CancellationToken token)
@@ -123,13 +125,25 @@ public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions
         var path = await WritablePositionAsync(actor, position, cancellationToken);
         if (!catalog.Get("workspace.content").Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == model))
             throw new LinkQueryException(400, "Workspace.InvalidEndpoint");
-        var result = await operations.ExecuteAsync(resource, ObjectOperationAction.Create, null, values, cancellationToken);
+        var result = model == "Document"
+            ? await documentFiles.CreateWithFilesAsync(values, context.Values.GetValueOrDefault("Uploads") as DocumentUploadSet, cancellationToken)
+            : await operations.ExecuteAsync(resource, ObjectOperationAction.Create, null, values, cancellationToken);
         if (!result.Succeeded) return result;
         var id = result.Detail?.Fields.GetValueOrDefault("EID") as string
             ?? throw new InvalidOperationException("Created object identity is missing.");
         RegisterCreatedReference(path.FolderId, model, id);
         // 不执行展示读取；事务完成后由独立列表读取决定新对象的可见性。
         return StandardCrudMutationResult.Success();
+    }
+
+    /// <summary>上传前只读重验完整位置、父 edit 与正式 Document 候选，不取得图锁或创建对象。</summary>
+    public async Task<StandardCrudError?> ValidateDocumentUploadAsync(string actorId, WorkspacePosition position,
+        IReadOnlyDictionary<string, JsonElement> input, string fileName, string contentType, CancellationToken token)
+    {
+        await WritablePositionAsync(actorId, position, token);
+        if (!catalog.Get("workspace.content").Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == "Document"))
+            throw new LinkQueryException(400, "Workspace.InvalidEndpoint");
+        return await documentFiles.ValidateUploadAsync(ReadValues(input, "Document"), fileName, contentType, token);
     }
 
     // 锁后位置只解析一次；目标规则、所属行为和全部引用清理在同一对象操作事务内完成。

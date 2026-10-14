@@ -1,11 +1,13 @@
 import { platformFetch } from '@icp-platform/core';
 import { createElement, lazy, Suspense } from 'react';
-import { readStandardCrudRequestError, type StandardCrudActionInputRenderContext, type StandardCrudDetail, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
+import { readStandardCrudRequestError, StandardCrudRequestError, type StandardCrudActionInputRenderContext, type StandardCrudDetail, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
+import { documentBusinessValues, type WorkspaceDocumentDraft } from './workspaceDocumentUpload';
 
 interface LinkRow { linkId: string; associatedObject: { modelKey: string; id: string }; fields: Record<string, unknown> }
 const headers = (featurePosition?: string): Record<string, string> => featurePosition ? { 'X-NewP-Feature': featurePosition } : {};
 const WorkspaceObjectCreateInput = lazy(() => import('./WorkspaceObjectCreateInput'));
 const WorkspaceObjectEditInput = lazy(() => import('./WorkspaceObjectEditInput'));
+const WorkspaceDocumentCreateInput = lazy(() => import('./WorkspaceDocumentCreateInput'));
 function positionFromScope(scope?: Record<string, unknown>) {
   if (typeof scope?.spaceId !== 'string' || typeof scope.rootFolderId !== 'string' || typeof scope.linkIds !== 'string') throw new Error('缺少工作空间出现位置');
   return { spaceId: scope.spaceId, rootFolderId: scope.rootFolderId, linkIds: JSON.parse(scope.linkIds) as unknown };
@@ -30,7 +32,7 @@ const resource: StandardCrudResourceRegistration = {
       createElement(Suspense, { fallback: null }, createElement(WorkspaceObjectEditInput, context)), { presentation: 'drawer' as const }),
     confirmDelete: () => null,
     createObject: Object.assign((context: StandardCrudActionInputRenderContext) =>
-      createElement(Suspense, { fallback: null }, createElement(WorkspaceObjectCreateInput, context)), { presentation: 'drawer' as const }),
+      createElement(Suspense, { fallback: null }, createElement(context.action.key === 'createDocument' ? WorkspaceDocumentCreateInput : WorkspaceObjectCreateInput, context)), { presentation: 'drawer' as const }),
   },
   actionHandlers: {
     editObject: async ({ id, input, queryScope, featurePosition }) => {
@@ -45,8 +47,31 @@ const resource: StandardCrudResourceRegistration = {
       { position: positionFromScope(queryScope), linkIds: (selectedRows ?? []).map(row => String(row.LID)) }, featurePosition),
     createPart: async ({ input, queryScope, featurePosition }) => referenceCommand('POST', '/api/workspace/content/parts',
       { position: positionFromScope(queryScope), values: input }, featurePosition),
-    createDocument: async ({ input, queryScope, featurePosition }) => referenceCommand('POST', '/api/workspace/content/documents',
-      { position: positionFromScope(queryScope), values: input }, featurePosition),
+    createDocument: async ({ input, queryScope, featurePosition }) => {
+      const draft = input as WorkspaceDocumentDraft;
+      draft.submission?.begin();
+      try {
+        const response = await platformFetch('/api/workspace/content/documents', { method: 'POST',
+          headers: { ...headers(featurePosition), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ position: positionFromScope(queryScope), values: documentBusinessValues(draft),
+            ...(draft.mainUploadId ? { uploads: { mainUploadId: draft.mainUploadId } } : {}) }) });
+        if (!response.ok) throw await readStandardCrudRequestError(response);
+        let payload: unknown;
+        try { payload = await response.json(); }
+        catch (cause) {
+          // 已收到成功状态但回执未读完整，不能重放保存或取消可能已确认的主文件。
+          throw new StandardCrudRequestError('操作结果尚未确认，请先查询实际结果，再决定是否重试。', response.status, {}, {
+            code: 'Platform.MutationOutcomeUnknown', reasonKey: 'Platform.MutationOutcomeUnknown',
+          }, undefined, cause);
+        }
+        draft.submission?.committed();
+        return { operation: 'action' as const, payload, change: { operation: 'update' as const, id: '' } };
+      } catch (error) {
+        const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : '';
+        draft.submission?.failed(code === 'Platform.MutationOutcomeUnknown' || code === 'Persistence.CommitOutcomeUnknown');
+        throw error;
+      }
+    },
     remove: async ({ id, queryScope, featurePosition }) => {
       if (!id) throw new Error('缺少引用标识');
       return referenceCommand('DELETE', `/api/workspace/content/references/${encodeURIComponent(id)}`, { position: positionFromScope(queryScope) }, featurePosition);

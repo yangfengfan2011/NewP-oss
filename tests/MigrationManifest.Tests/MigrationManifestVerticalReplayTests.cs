@@ -171,6 +171,56 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
     }
 
     [Fact]
+    public void FilesFirstStream_InIsolatedRepository_FinalizesTwiceAndChecksFrozenInputs()
+    {
+        InitializeIsolatedOrganizationRepository(FindRepositoryRoot(), "Files");
+        InitializeIsolatedGitRepository();
+        var manifestPath = Path.Combine(_fixtureRoot, "frontend", "modules", "files", "migrations", "Files.SqlServerMigrations.json");
+        var original = MigrationManifestIntegrity.Parse(File.ReadAllBytes(manifestPath));
+        var first = Assert.Single(original.Migrations);
+        File.WriteAllBytes(manifestPath, MigrationManifestIntegrity.SerializeCanonical(original with
+        {
+            Migrations = [],
+            ModelDigest = new string('0', 64),
+            BundleChecksum = new string('0', 64)
+        }));
+        var application = new MigrationManifestApplication(_fixtureRoot);
+        Assert.True(application.Finalize("Files", "SqlServer", first.MigrationId, first.Compatibility).Changed);
+        var bytes = File.ReadAllBytes(manifestPath);
+        Assert.False(application.Finalize("Files", "SqlServer", first.MigrationId, first.Compatibility).Changed);
+        Assert.Equal(bytes, File.ReadAllBytes(manifestPath));
+        var hostRoot = Path.Combine(_fixtureRoot, "apps", "host-api", "bin", "Release", "net10.0", "modules", "Files", "migrations");
+        File.Copy(manifestPath, Path.Combine(hostRoot, "Files.SqlServerMigrations.json"), true);
+        var assetPaths = new[]
+        {
+            manifestPath,
+            Path.Combine(_fixtureRoot, "server", "modules", "Files", "Migrations.SqlServer", "bin", "Release", "net10.0", "Files.SqlServerMigrations.dll"),
+            Path.Combine(hostRoot, "Files.SqlServerMigrations.json"),
+            Path.Combine(hostRoot, "Files.SqlServerMigrations.dll")
+        };
+        var hashes = assetPaths.Select(path => Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path)))).ToArray();
+        var git = CaptureGitSnapshot();
+        var check = application.CheckAll(noBuild: true);
+        Assert.Equal(1, check.CheckedBundles);
+        Assert.Equal(git, CaptureGitSnapshot());
+        Assert.Equal(hashes, assetPaths.Select(path => Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path)))));
+        _output.WriteLine(JsonSerializer.Serialize(new
+        {
+            module = "Files",
+            provider = "SqlServer",
+            migration = first.MigrationId,
+            first.Compatibility,
+            firstFinalize = "finalized",
+            secondFinalize = "already finalized",
+            manifestSha256 = hashes[0],
+            check.CheckedBundles,
+            check.ProviderResults,
+            git,
+            assets = hashes
+        }));
+    }
+
+    [Fact]
     public void WorkspaceTail_FinalizesTwiceAndChecksFrozenInputs()
     {
         InitializeIsolatedOrganizationRepository(FindRepositoryRoot(), "Workspace");

@@ -9,7 +9,7 @@
 - [Organization](./docs/contexts/organization/CONTEXT.md) — 管理公司、部门、岗位、人员档案及人员与用户账号的永久绑定
 - [Workspace](./docs/contexts/workspace/CONTEXT.md) — 管理公共/个人空间、出现位置准入及真实文件夹内容，采用通用 Link 查询
 - [Part](./docs/contexts/part/CONTEXT.md) — 独立零组件元数据的最小创建、标准候选读取与只读属性
-- [Document](./docs/contexts/document/CONTEXT.md) — 独立图文档元数据的最小创建、标准候选读取与只读属性
+- [Document](./docs/contexts/document/CONTEXT.md) — 图文档主身份、初始版本/版次、所属文件关联与安全读取下载
 - [Object Operations](./docs/contexts/object-operations/CONTEXT.md) — 提供可按职责复用的对象操作、默认 CRUD 行为与对象拥有者声明的横切扩展点
 - [Standard CRUD](./docs/contexts/standard-crud/CONTEXT.md) — 管理共享 CRUD 宿主使用的字段、表单、列表与详情展示契约
 - [View Composition](./docs/contexts/view-composition/CONTEXT.md) — 定义页面引用、视图配置及树与标签页组合的已确认目标契约，落地状态见 ADR-0046
@@ -22,6 +22,8 @@
 
 - **Workspace → Authorization**：Workspace 贡献自己的稳定数据资源身份，读取根时交集正式读取计划与空间准入；专用资源不因此开放普通 CRUD。
 - **Workspace → View Composition / Standard CRUD**：模块 Provider 和输入 resolver 提供真实双根及 Folder EID，共享树与只读详情拥有布局、生命周期与显示投影。
+- **Workspace → Document.Contracts / Files.Contracts**：Workspace 拥有完整出现位置、上传 DTO 与准入重验；Document 拥有文件创建和业务关联，Files 拥有独立接收及取消。Workspace 不读取两者私有表。
+- **Document → Files.Contracts**：Document 从真实 FileLink 和当前身份派生文件使用，负责业务 create/read/download/delete 资格；Files 登记使用并拥有私有内容、暂存与回收，状态和配置见 [Files README](./server/modules/Platform/Files/README.md)。确认和释放共享原业务事务，不独立保存或提交。
 
 - **Organization → Object Operations**：Organization 的公司、部门、岗位、人员普通 CRUD 复用默认对象行为及其既有扩展能力；人员启用、停用与永久账号绑定由 Organization 业务服务拥有，不声明对象动作或横切开放点。
 - **Object Operations → Platform Persistence**：对象操作执行其必需规则、已开放的前后横切及声明的跨对象调用，并复用唯一事务执行器、可信审计值和缓存提交机制；专用业务服务可直接复用同一事务与审计能力，统一规则不要求统一入口。

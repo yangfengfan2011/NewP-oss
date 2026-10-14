@@ -25,13 +25,19 @@ public sealed class DataActionCatalogTests
         var compiler = new CanonicalModulePlanCompiler();
         var original = compiler.Compile("order", candidates);
         Assert.True(original.IsSuccess);
-        Assert.Equal(new[] { "read", "create", "edit", "delete", "authorize" },
+        Assert.Equal(new[] { "read", "create", "edit", "delete", "authorize", "download" },
             original.Plan!.DataActionCatalog.Select(action => action.Key));
+        Assert.All(original.Plan.DataActionCatalog.Where(action => action.Key != "download"), action => Assert.Equal("Authorization", action.ModuleId));
+        var download = Assert.Single(original.Plan.DataActionCatalog, action => action.Key == "download");
+        Assert.Equal(new DataActionDeclaration("Document", "download", "下载", "data.download", RequiresRead: true), download);
         var reversed = compiler.Compile("order", candidates.Select(candidate =>
             candidate with { DataActions = candidate.DataActions.Reverse().ToArray() }));
         Assert.True(reversed.IsSuccess);
-        Assert.Equal(original.Plan.DataActionCatalog.Select(action => action.Key).Reverse(),
+        // 反转各 owner 的贡献，不能越过模块边界反转整个合并目录。
+        Assert.Equal(new[] { "authorize", "delete", "edit", "create", "read", "download" },
             reversed.Plan!.DataActionCatalog.Select(action => action.Key));
+        Assert.Equal(original.Plan.DataActionCatalog.Select(action => action.ModuleId), reversed.Plan.DataActionCatalog.Select(action => action.ModuleId));
+        Assert.Equal(download, Assert.Single(reversed.Plan.DataActionCatalog, action => action.ModuleId == "Document"));
         Assert.NotEqual(original.Plan.PlanHash, reversed.Plan.PlanHash);
     }
     [Fact]

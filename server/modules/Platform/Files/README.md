@@ -1,127 +1,50 @@
-# Files 模块
+# Files 平台文件服务
 
-文件管理模块,提供文件上传、下载、存储抽象能力。
+Files 的正式身份、模型和迁移来自 `frontend/modules/platform/files/newp.plugin.json` 及其 authoring。后端只绑定 `files.backend`，前端能力关闭。
 
-## 功能特性
+业务模块仅引用 `Contracts/Files.Contracts.csproj` 并消费 `IFileLifecycleService`。Files 自有 `FileRecord`、`FileUploadLease` 和 `FileUsage` 三个 Entity 及独立 SQL Server migration stream；业务模块拥有实际文件关联、角色和格式规则。
 
-- 文件上传/下载
-- 文件元数据管理
-- 存储提供者抽象(支持本地存储,可扩展至对象存储)
-- 软删除和物理删除
-- 文件哈希校验
-- 业务实体关联
-- 权限集成
-- 审计挂钩点
+## 上传与事务
 
-## 后端架构
+`StageAsync` 先在独立短事务中持久化 receiving intent 和已知私有键。提交确认后才写 `.part`，单遍计数和 SHA256，不要求输入流可 seek，不整体缓冲。写句柄关闭后完成不可覆盖的本地改名，再由第二短事务提交 ready/staged。
 
-### 核心组件
+上传失败或提交结果未知时，在原事务退出后的新 scope 重读持久事实。只有仍 receiving 的失败进入回收；未知结果已经 staged 时保留合法 lease，已经 confirmed 且使用 active 时保留内容。
 
-- **IStorageProvider**: 存储提供者抽象接口
-- **IFileService**: 文件服务接口
-- **IFileMetadataRepository**: 文件元数据仓储接口
-- **LocalStorageProvider**: 本地文件系统存储实现
-- **FileService**: 文件服务实现
-- **InMemoryFileMetadataRepository**: 内存元数据仓储(演示用)
+`ConfirmUsageAsync` 和 `ReleaseUsageAsync` 要求已有平台事务，只登记共享 tracker 的变更，不能自行 Flush、Save 或提交。业务 owner 在确认返回后填齐关联的 UsageId，再由外层统一保存和提交。相同已 confirmed 的活跃目标只返回原使用，不能换目标或复活 released 使用。
 
-### API 端点
+## 用途与读取
 
-- `POST /api/files/upload` - 上传文件
-- `GET /api/files/{fileId}/download` - 下载文件
-- `GET /api/files/{fileId}` - 获取文件信息
-- `GET /api/files` - 查询文件列表
-- `DELETE /api/files/{fileId}` - 删除文件(软删除)
-- `DELETE /api/files/{fileId}/permanent` - 永久删除文件
+用途 owner 贡献 `IFileOwnerPolicy` 和 `FileOwnerPolicyRequirement`。启动时必需 policy 缺失、重复 key 或重复 requirement 都拒绝装配。Files 负责 actor、lease、持久状态和双向使用配对；用途 policy 负责实际业务资格、关联及首次创建证明。
 
-### 权限点
+安全元数据按 `MaxReadBatchSize` 分批读取，同用途 policy 批量验证。开流另行判定 read/download；可信目标的持久关联损坏、物理内容缺失或长度不匹配是明确故障。返回流由调用方释放，请求取消也关闭真实文件句柄。
 
-- `Files.Upload` - 上传文件
-- `Files.Download` - 下载文件
-- `Files.Delete` - 删除文件
-- `Files.View` - 查看文件
+原 `/api/files` 产品端点继续 `DenyAll`。历史 `IFileService` 及内存仓储只保留该冻结 Controller 的依赖，不作为业务生命周期消费面。没有 StorageKey、裸 FileId 或静态路径下载入口。
 
-## 前端组件
+## Local 存储与回收
 
-### 组件
+当前只支持 Local 和单 Host。配置的私有根必须显式为绝对路径，根及其祖先不能经文件系统链接逃逸，不能放在 `wwwroot` 或当前 Host 公开的 `Platform:PluginInstallRoot/runtime/modules`、`Platform:PluginInstallRoot/public` 根及其子目录。配置校验也只读解析公开根的链接目标，阻止公开根指向私有内容；发行根内其他私有目录不因名称或父路径误拒。服务器生成扁平键，CreateNew 和不可覆盖改名保护既有字节。
 
-- **FileUpload**: 文件上传组件
-- **FileList**: 文件列表组件
-- **FilesHome**: 文件管理主页
+进程级 singleton `FileIoGate` 覆盖全部 writer 句柄、改名和删除。取消和到期先用短事务标记 pending，退出事务后 abort writer，再等待同键 gate；不能持数据库事务等 I/O。Files 使用文件身份的事务锁，业务图锁先于 Files 锁。
 
-### 服务
+`FileCleanupWorker` 在启动和周期执行有界恢复；`FileCleanupService.RunOnceAsync` 为相同扫描的确定性入口。它只处理数据库已登记的键，不扫描存储根。active usage 和合法未确认 lease 阻止回收；最后 release 的候选不等待 confirmed lease 的 TTL。I/O 失败保留 pending 重试，删除成功保留文件及使用 tombstone。confirmed lease 保留消费历史。
 
-- **fileService**: 文件服务客户端
+## 配置
 
-### 使用示例
+`FilesOptions` 从 `Files` 配置段绑定并启动校验：
 
-```tsx
-import FileUpload from '@icp-modules/files/components/FileUpload';
-import FileList from '@icp-modules/files/components/FileList';
+| 参数 | 默认值 |
+| --- | --- |
+| StorageRoot | 必填绝对私有目录 |
+| MaxUploadSizeBytes | 104857600 |
+| UploadLeaseHours | 24 |
+| CleanupIntervalMinutes | 5 |
+| CleanupBatchSize | 100 |
+| MaxReadBatchSize | 128，范围 1–1024 |
 
-function MyComponent() {
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+大小、租期和批量必须为正；请求上限需要为额外 multipart 预算保留空间，租期必须能表示为 UTC DateTime，周期必须在 PeriodicTimer 底层可表示范围内。配置校验只读检查根及祖先，不创建目录。格式、附件数量与版次规则由业务 owner 配置和执行。
 
-  return (
-    <div>
-      <FileUpload
-        entityType="Order"
-        entityId="12345"
-        onUploadSuccess={() => setRefreshTrigger(prev => prev + 1)}
-      />
-      <FileList
-        entityType="Order"
-        entityId="12345"
-        refreshTrigger={refreshTrigger}
-      />
-    </div>
-  );
-}
-```
+## 验证与回退
 
-## 扩展存储提供者
+Files.Tests 覆盖真实 Local I/O、非 seek 和大小边界、路径及链接、配置、gate、事务登记和持久状态恢复。SQLite 状态测试不替代真实业务 owner 的 SQL Server 锁、HTTP 授权、正式 Host 迁移及 OS 重启证据。
 
-实现 `IStorageProvider` 接口即可添加新的存储后端:
-
-```csharp
-public class S3StorageProvider : IStorageProvider
-{
-    public string ProviderName => "S3";
-    
-    public async Task<string> SaveAsync(Stream fileStream, string fileName, CancellationToken cancellationToken)
-    {
-        // 实现 S3 上传逻辑
-    }
-    
-    // 实现其他接口方法...
-}
-```
-
-在 `FilesModule.ConfigureServices` 中注册:
-
-```csharp
-services.AddSingleton<IStorageProvider, S3StorageProvider>();
-```
-
-## 配置项
-
-- `Files.MaxUploadSize` - 最大上传文件大小(MB)
-- `Files.AllowedExtensions` - 允许的文件扩展名
-- `Files.StorageProvider` - 存储提供者类型
-
-## 测试
-
-运行测试:
-
-```bash
-dotnet test tests/Files.Tests
-```
-
-## 待完成事项
-
-- [ ] 数据库持久化元数据仓储实现
-- [ ] 对象存储(OSS/S3)提供者实现
-- [ ] 文件预览功能
-- [ ] 缩略图生成
-- [ ] 大文件分片上传
-- [ ] 断点续传
-- [ ] 文件去重优化
+回退关闭业务文件入口，保留已发布迁移、记录、使用和存储内容。不能用旧 Host、Down 或清空存储根回退；已经物理删除的字节需要从备份恢复。

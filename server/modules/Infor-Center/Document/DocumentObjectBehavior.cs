@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Modules.Document;
 
-/// <summary>保持标准创建与更新；无文件删除在所属事务先解除自有下级。</summary>
+/// <summary>保持标准创建与更新；删除在所属事务先释放使用并解除自有下级。</summary>
 public sealed class DocumentObjectBehavior : ObjectBehaviorBase
 {
     private readonly EfPlatformDbContext _db;
@@ -17,16 +17,17 @@ public sealed class DocumentObjectBehavior : ObjectBehaviorBase
     private readonly IStandardCrudResourceRegistry _resources;
     private readonly IPlatformTransactionExecutor _transactions;
     private readonly DocumentInitialIdentity _identity;
+    private readonly DocumentFiles _files;
     public static ObjectBehaviorDefinition BehaviorDefinition { get; } = new("document.document", "Document", "Document",
         [ObjectOperationAction.Create, ObjectOperationAction.Update, ObjectOperationAction.Delete], [],
         ["EID", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt", "LatestVersionId"]);
 
     /// <summary>复用标准 writer 的字段、授权和错误裁决，清理保持 Document 所有权。</summary>
     public DocumentObjectBehavior(IStandardCrudResourceRegistry resources, StandardCrudDefaultWriter writer, EfPlatformDbContext db,
-        IStandardCrudRepository repository, IPlatformTransactionExecutor transactions, DocumentInitialIdentity identity)
+        IStandardCrudRepository repository, IPlatformTransactionExecutor transactions, DocumentInitialIdentity identity, DocumentFiles files)
         : base(BehaviorDefinition, resources, writer)
     {
-        _db = db; _repository = repository; _resources = resources; _transactions = transactions; _identity = identity;
+        _db = db; _repository = repository; _resources = resources; _transactions = transactions; _identity = identity; _files = files;
     }
 
     /// <inheritdoc/>
@@ -82,6 +83,9 @@ public sealed class DocumentObjectBehavior : ObjectBehaviorBase
             return await base.DeleteAsync(context, cancellationToken);
         // Workspace 已先裁决位置/read/delete；拥有者在解除任何下级前验证完整当前身份链。
         await _identity.ReadCurrentAsync(context.TargetId, cancellationToken);
+        await _files.ReleaseAsync(context.TargetId, cancellationToken);
+        // 正式 Link FK 必须先解除；使用释放与关联删除仍在同一事务，失败由外层整体回滚。
+        await _transactions.FlushAsync(cancellationToken);
         var versions = _db.Set<Dictionary<string, object?>>("DocumentVersion")
             .Where(row => EF.Property<string>(row, "DocumentId") == context.TargetId);
         var versionIds = versions.Select(row => EF.Property<string>(row, "EID"));

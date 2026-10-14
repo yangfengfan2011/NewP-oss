@@ -524,6 +524,10 @@ try {
         "DevSupervisor__WorktreeId" = $identity.WorktreeId
         "DevSupervisor__RunId" = $runId
         "DevSupervisor__EndpointTokenFingerprint" = $endpointTokenFingerprint
+        # Files 内容跨停启持久；只声明本 worktree 的私有 root，不随 run 临时目录清理。
+        "Files__StorageRoot" = if ([string]::IsNullOrWhiteSpace($env:Files__StorageRoot)) {
+            [IO.Path]::GetFullPath((Join-Path $devRoot "files"))
+        } else { $env:Files__StorageRoot }
     }
     if (-not [string]::IsNullOrWhiteSpace($env:NEWP_DEV_SQLSERVER_CONNECTION_STRING)) {
         $hostEnvironment["ConnectionStrings__SqlServer"] = $env:NEWP_DEV_SQLSERVER_CONNECTION_STRING

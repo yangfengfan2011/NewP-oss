@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Document.Contracts</AssemblyName><RootNamespace>ICP.Platform.Modules.Document.Contracts</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../../platform-crud/PlatformCrud.csproj" />
+    <ProjectReference Include="../../../Platform/Files/Contracts/Files.Contracts.csproj" />
+  </ItemGroup>
+</Project>

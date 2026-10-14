@@ -18,7 +18,9 @@ public sealed class DocumentInitialIdentity(EfPlatformDbContext db, IPlatformObj
     {
         RequireTransaction();
         cancellationToken.ThrowIfCancellationRequested();
-        var master = db.Set<Dictionary<string, object?>>("Document").Local.Single(row => Equals(row["EID"], created["EID"]));
+        // 共享 Dictionary CLR 类型的 Local 可能包含其他 Model；真实模型身份先于字段读取。
+        var master = (Dictionary<string, object?>)db.ChangeTracker.Entries().Single(entry => entry.Metadata.Name == "Document"
+            && Equals(entry.Property("EID").CurrentValue, created["EID"])).Entity;
         var version = AuditRow(created, ids.NewId("DocumentVersion"));
         var iteration = AuditRow(created, ids.NewId("DocumentIteration"));
         version["DocumentId"] = created["EID"];

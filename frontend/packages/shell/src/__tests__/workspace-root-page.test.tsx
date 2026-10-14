@@ -6,6 +6,7 @@ import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
+import * as core from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
 const { default: workspace } = await loadComponentSource<{ default: FrontendBehaviorBindings }>('Workspace', 'index.ts');
 const { default: part } = await loadComponentSource<{ default: FrontendBehaviorBindings }>('Part', 'index.ts');
@@ -36,6 +37,7 @@ import '../composition/StandardTreePage';
 import '../pages/StandardCrudListPageHost';
 import '../pages/StandardCrudDetailPageHost';
 await loadComponentSource('Workspace', 'workspaceRootResource.ts');
+await loadComponentSource('Workspace', 'WorkspaceDocumentCreateInput.tsx');
 import '@ant-design/pro-descriptions';
 
 vi.unmock('@icp-platform/core');
@@ -205,11 +207,26 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
         input.dispatchEvent(new Event('input', { bubbles: true }));
       });
     }
+    const uploadId = 'FileUploadLease_0123456789abcdef0123456789abcdef';
+    const upload = vi.spyOn(core, 'platformUpload').mockResolvedValue(new Response(JSON.stringify({ uploadId,
+      fileId: 'FileRecord_internal', fileName: 'main.pdf', length: 4, contentType: 'application/pdf', expiresAt: '2026-10-14T00:00:00Z' })));
+    onTestFinished(() => upload.mockRestore());
+    await act(async () => {
+      const input = document.querySelector<HTMLInputElement>('.ant-drawer input[type="file"]')!;
+      Object.defineProperty(input, 'files', { configurable: true, value: [new File(['main'], 'main.pdf', { type: 'application/pdf' })] });
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await vi.waitFor(async () => {
+      await act(async () => undefined);
+      expect(document.querySelector<HTMLButtonElement>('.ant-drawer-footer .ant-btn-primary')!.disabled).toBe(false);
+    });
     const confirm = document.querySelector<HTMLButtonElement>('.ant-drawer-footer .ant-btn-primary')!;
     await act(async () => { confirm.click(); confirm.click(); });
     await vi.waitFor(() => expect(references).toHaveLength(1));
     await vi.waitFor(() => expect(loadedReads()).toBeGreaterThanOrEqual(beforeAddReads + 5));
-    expect(references[0]).toEqual({ method: 'POST', body: { position: { spaceId: 'public', rootFolderId: 'public-root', linkIds: [] }, values: { ECODE: 'NEW-DOC', ENAME: '新建图文档' } } });
+    expect(references[0]).toEqual({ method: 'POST', body: { position: { spaceId: 'public', rootFolderId: 'public-root', linkIds: [] },
+      values: { ECODE: 'NEW-DOC', ENAME: '新建图文档' }, uploads: { mainUploadId: uploadId } } });
+    expect(upload).toHaveBeenCalledTimes(1);
     await vi.waitFor(() => expect(container.textContent).toContain('已保存，刷新失败'));
     await act(async () => [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === '刷新')!.click());
     await vi.waitFor(() => expect(container.querySelector('tr[data-row-key="shared-folder-link"]')).not.toBeNull());

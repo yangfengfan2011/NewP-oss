@@ -143,6 +143,53 @@ public sealed class WorkspacePageDriverTests
         await new WorkspacePageDriver(page).FillObjectCreationAsync(page.GetByRole(AriaRole.Dialog), "P-1", "新建对象");
         await Assertions.Expect(page.GetByRole(AriaRole.Button, new() { Name = "保存并关闭" })).ToBeEnabledAsync();
     }
+    [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "真实 Chromium 验证正式单main driver 在暂存完成后才等待保存，无服务器或端口")]
+    public async Task DocumentCreation_StagesMainBeforeWaitingForSave()
+    {
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new()
+        {
+            Headless = true,
+            ExecutablePath = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_CHROMIUM_EXECUTABLE")
+                ?? @"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        });
+        var page = await browser.NewPageAsync();
+        var stages = 0;
+        await page.RouteAsync("http://workspace.test/**", async route =>
+        {
+            if (route.Request.Method == "POST")
+            {
+                stages++;
+                await route.FulfillAsync(new() { Status = 200, ContentType = "application/json", Body = "{}" });
+                return;
+            }
+            await route.FulfillAsync(new() { ContentType = "text/html", Body = """
+                <meta charset="utf-8"><div class="ant-drawer-content" role="dialog" aria-label="新建图文档">
+                  <div class="ant-form-item"><label for="ECODE">编码</label><input id="ECODE"></div>
+                  <div class="ant-form-item"><label for="ENAME">名称</label><input id="ENAME"></div>
+                  <label for="main">主文件</label><input id="main" type="file" hidden>
+                  <button id="choose">选择主文件</button><button id="save" disabled>保存并关闭</button>
+                </div>
+                <script>
+                  window.chooseCount=0;
+                  document.querySelector('#choose').onclick=()=>{ window.chooseCount++; document.querySelector('#main').click(); };
+                  document.querySelector('#main').onchange=async()=>{
+                    if(!document.querySelector('#ECODE').value || !document.querySelector('#ENAME').value) throw new Error('Fields must precede Stage');
+                    await fetch('/api/workspace/content/document-uploads',{method:'POST'});
+                    document.querySelector('#save').disabled=false;
+                  };
+                </script>
+                """ });
+        });
+        await page.GotoAsync("http://workspace.test/");
+        await new WorkspacePageDriver(page).FillDocumentCreationAsync(page.GetByRole(AriaRole.Dialog), "D-1", "带主文件图文档", WorkspacePageDriver.SmallMainFile());
+        Assert.Equal(1, stages);
+        Assert.Equal(1, await page.EvaluateAsync<int>("window.chooseCount"));
+        await Assertions.Expect(page.GetByRole(AriaRole.Button, new() { Name = "选择主文件", Exact = true })).ToBeVisibleAsync();
+        await Assertions.Expect(page.GetByLabel("主文件", new() { Exact = true })).ToBeHiddenAsync();
+        await Assertions.Expect(page.GetByRole(AriaRole.Button, new() { Name = "保存并关闭" })).ToBeEnabledAsync();
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "真实 Chromium 验证正式 driver 的多加载指示器等待，无服务器或端口")]
     public async Task SelectedRoot_WaitsUntilBothVisibleLoadingIndicatorsHaveFinished()
     {

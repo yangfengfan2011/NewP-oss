@@ -192,3 +192,65 @@ export async function platformFetch(
   invalidatePlatformAntiforgeryToken();
   return send(await getRequestToken());
 }
+
+export interface PlatformUploadOptions {
+  headers?: HeadersInit;
+  signal?: AbortSignal;
+  /** 原生 transport 的实际上传字节；未提供总量时 total 为 undefined。 */
+  onProgress?: (loaded: number, total?: number) => void;
+}
+
+/** 单个 multipart 写入的进度入口；复用平台防伪、locale 与未知提交结果规则。 */
+export async function platformUpload(input: string | URL, body: FormData, options: PlatformUploadOptions = {}): Promise<Response> {
+  const origin = typeof window === 'undefined' ? 'http://localhost' : window.location.origin;
+  const url = new URL(input, origin);
+  if (url.origin !== origin) throw new Error('Platform uploads require the current origin.');
+  const send = async (token: string): Promise<Response> => {
+    options.signal?.throwIfAborted();
+    const headers = new Headers(options.headers);
+    headers.set(ANTIFORGERY_HEADER, token);
+    const locale = requestLocaleState().provider?.();
+    if (locale) headers.set(REQUEST_LOCALE_HEADER, locale);
+    // 浏览器独占 multipart boundary；不能由业务调用方伪造它。
+    headers.delete('Content-Type');
+    const response = await new Promise<Response>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      const cleanup = () => {
+        xhr.removeEventListener('load', loaded); xhr.removeEventListener('error', unknown);
+        xhr.removeEventListener('timeout', unknown); xhr.removeEventListener('abort', aborted);
+        xhr.upload.removeEventListener('progress', progress); options.signal?.removeEventListener('abort', abort);
+      };
+      const loaded = () => {
+        cleanup();
+        const responseHeaders = new Headers();
+        for (const line of xhr.getAllResponseHeaders().split('\r\n')) {
+          const colon = line.indexOf(':');
+          if (colon > 0) responseHeaders.append(line.slice(0, colon).trim(), line.slice(colon + 1).trim());
+        }
+        resolve(new Response(xhr.status === 204 ? null : xhr.response as Blob, { status: xhr.status, statusText: xhr.statusText, headers: responseHeaders }));
+      };
+      const unknown = () => {
+        cleanup();
+        reject(new StandardCrudRequestError('操作结果尚未确认，请先查询实际结果，再决定是否重试。', 0, {}, {
+          code: MUTATION_OUTCOME_UNKNOWN_CODE, reasonKey: MUTATION_OUTCOME_UNKNOWN_CODE,
+        }));
+      };
+      const aborted = () => { cleanup(); reject(new DOMException('Upload cancelled.', 'AbortError')); };
+      const abort = () => xhr.abort();
+      const progress = (event: ProgressEvent) => options.onProgress?.(event.loaded, event.lengthComputable ? event.total : undefined);
+      xhr.open('POST', url.toString()); xhr.withCredentials = true; xhr.responseType = 'blob';
+      headers.forEach((value, key) => xhr.setRequestHeader(key, value));
+      xhr.addEventListener('load', loaded); xhr.addEventListener('error', unknown);
+      xhr.addEventListener('timeout', unknown); xhr.addEventListener('abort', aborted);
+      xhr.upload.addEventListener('progress', progress); options.signal?.addEventListener('abort', abort, { once: true });
+      if (options.signal?.aborted) { aborted(); return; }
+      try { xhr.send(body); }
+      catch (error) { cleanup(); reject(error); }
+    });
+    return observeAccessResponse(response, url.pathname, true);
+  };
+  const response = await send(await getRequestToken());
+  if (!await isPreBusinessAntiforgeryFailure(response)) return response;
+  invalidatePlatformAntiforgeryToken();
+  return send(await getRequestToken());
+}

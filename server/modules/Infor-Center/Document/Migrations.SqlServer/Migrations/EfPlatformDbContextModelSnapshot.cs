@@ -83,6 +83,89 @@ namespace ICP.Platform.Modules.Document.Migrations.SqlServer.Migrations
                     b.ToTable("Document", "dbo");
                 });
 
+            modelBuilder.Entity("DocumentFileLink", b =>
+                {
+                    b.Property<string>("LID")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("LID");
+
+                    b.Property<string>("CEID")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("CEID");
+
+                    b.Property<string>("FileUsageId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("FileUsageId");
+
+                    b.Property<DateTime>("LCreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("LCreatedAt");
+
+                    b.Property<string>("LCreatedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("LCreatedBy");
+
+                    b.Property<DateTime?>("LUpdatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("LUpdatedAt");
+
+                    b.Property<string>("LUpdatedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("LUpdatedBy");
+
+                    b.Property<long>("Ordinal")
+                        .HasColumnType("bigint")
+                        .HasColumnName("Ordinal");
+
+                    b.Property<string>("PEID")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("PEID");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("Role")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<string>("__ordinal_Role")
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasComputedColumnSql("isnull(CONVERT([nvarchar](64),hashbytes('SHA2_256',CONVERT([varbinary](max),[Role])),(2)),N'')", true);
+
+                    b.HasKey("LID");
+
+                    b.HasIndex("CEID")
+                        .HasDatabaseName("IX_DocumentFileLink_CEID");
+
+                    b.HasIndex("LID")
+                        .IsUnique()
+                        .HasDatabaseName("UX_DocumentFileLink_LID");
+
+                    b.HasIndex("PEID")
+                        .HasDatabaseName("IX_DocumentFileLink_PEID");
+
+                    b.HasIndex("PEID", "CEID")
+                        .IsUnique()
+                        .HasDatabaseName("UX_DocumentFileLink_File");
+
+                    b.HasIndex("PEID", "Ordinal")
+                        .IsUnique()
+                        .HasDatabaseName("UX_DocumentFileLink_Ordinal");
+
+                    b.ToTable("DocumentFileLink", "dbo");
+                });
+
             modelBuilder.Entity("DocumentIteration", b =>
                 {
                     b.Property<string>("EID")
@@ -226,6 +309,16 @@ namespace ICP.Platform.Modules.Document.Migrations.SqlServer.Migrations
                         .HasDatabaseName("UX_DocumentVersion_Ordinal");
 
                     b.ToTable("DocumentVersion", "dbo");
+                });
+
+            modelBuilder.Entity("DocumentFileLink", b =>
+                {
+                    b.HasOne("DocumentIteration", null)
+                        .WithMany()
+                        .HasForeignKey("PEID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_DocumentFileLink_DocumentIteration");
                 });
 
             modelBuilder.Entity("DocumentIteration", b =>

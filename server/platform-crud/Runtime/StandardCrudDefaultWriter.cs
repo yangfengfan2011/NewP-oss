@@ -62,21 +62,10 @@ public sealed class StandardCrudDefaultWriter
                 descriptor,
                 token => CreateAsync(descriptor, values, token).AsTask(),
                 cancellationToken);
-        var preparation = await _rules.PrepareCreateAsync(descriptor, values, cancellationToken);
+        var preparation = await PrepareCreateCandidateAsync(descriptor, values, cancellationToken);
         if (!preparation.Succeeded)
             return StandardCrudMutationResult.Failure(preparation.Error!);
-        IReadOnlyDictionary<string, object?> allowed = preparation.Values!;
-        if (_dataScope is not null)
-        {
-            if (_objectIds is null) throw new InvalidOperationException("DATA_SCOPE_OBJECT_ID_GENERATOR_REQUIRED");
-            var candidate = new Dictionary<string, object?>(allowed, StringComparer.Ordinal)
-            {
-                [descriptor.IdField] = _objectIds.NewId(descriptor.ModelName)
-            };
-            if (!await _dataScope.IsCandidateAllowedAsync(descriptor.ResourceKey, candidate, "create", cancellationToken))
-                return StandardCrudMutationResult.Failure(ScopeDenied(descriptor));
-            allowed = candidate;
-        }
+        IReadOnlyDictionary<string, object?> allowed = preparation.Detail!.Fields;
 
         IReadOnlyDictionary<string, object?> created;
         try
@@ -118,6 +107,27 @@ public sealed class StandardCrudDefaultWriter
         {
             Fields = created
         });
+    }
+
+    /// <summary>只读预检正式创建候选；复用字段、可信审计及数据 create 裁决，不登记对象或开启写事务。</summary>
+    /// <remarks>内部候选包含本次服务端身份，仅供业务预检；不能公开它或把成功当作后续提交的凭证。</remarks>
+    public async Task<StandardCrudMutationResult> PrepareCreateCandidateAsync(StandardCrudDescriptor descriptor,
+        IReadOnlyDictionary<string, object?> values, CancellationToken cancellationToken = default)
+    {
+        var preparation = await _rules.PrepareCreateAsync(descriptor, values, cancellationToken);
+        if (!preparation.Succeeded) return StandardCrudMutationResult.Failure(preparation.Error!);
+        IReadOnlyDictionary<string, object?> candidate = preparation.Values!;
+        if (_dataScope is not null)
+        {
+            if (_objectIds is null) throw new InvalidOperationException("DATA_SCOPE_OBJECT_ID_GENERATOR_REQUIRED");
+            candidate = new Dictionary<string, object?>(candidate, StringComparer.Ordinal)
+            {
+                [descriptor.IdField] = _objectIds.NewId(descriptor.ModelName)
+            };
+            if (!await _dataScope.IsCandidateAllowedAsync(descriptor.ResourceKey, candidate, "create", cancellationToken))
+                return StandardCrudMutationResult.Failure(ScopeDenied(descriptor));
+        }
+        return StandardCrudMutationResult.Success(new StandardCrudDetail { Fields = candidate });
     }
 
     // 默认更新核心在对象事务内直接保护旧值、校验最终输入并登记业务审计，避免形成第二个事务 owner。

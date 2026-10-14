@@ -26,6 +26,10 @@ WorkspaceFolderContent 是正式 Link，父端由 authoring 固定为 WorkspaceF
 
 文件夹内创建由 Workspace 的 createPart/createDocument 功能动作准入，并交集当前完整位置、父文件夹 edit 与所属对象 create 数据范围。Workspace 对象行为静态声明调用 part.part/document.document 的 create，统一执行器在一个事务与审计作用域内保存所属实体和内容 Link；字段规范化、校验、唯一约束及对象审计仍由所属模块标准行为负责。创建回执不包含对象标识，后续列表读取独立裁决；刷新失败不能重放创建。已有引用 API 保留为独立功能授权能力，不再贡献页面按钮。回退这两个创建入口不删除已创建实体或关系。
 
+图文档主文件上传使用专属手工 multipart 入口：先读取严格 Position 和 values JSON，再把单个 file 流交给 Files.Contracts。接收前验证完整出现位置、祖先 read、当前父 edit 与 Document.Contracts 的候选 create；最终保存取得原文件夹图锁后再次验证，暂存成功不是权限或位置凭证。最终 JSON 使用专属 DTO，仅传业务字段和 mainUploadId，不接受 actor、owner、File/Usage 身份、角色或次序。非空附件集合由 Document 显式拒绝且不消费，旧 raw Files 入口保持冻结。
+
+上传和取消属于独立 Files 生命周期操作；一次保存经 Document.Contracts 把 Document 图、文件使用确认及初始目录 Link 纳入原对象事务。Workspace 不读取 Document 或 Files 私有表，也不自行 Flush 文件使用。主文件输入显示实际 transport 进度，上传成功只代表暂存；关闭或切换位置/主体中断旧上传，迟到响应不能恢复旧选择。已开始保存但结果未知时隔离该选择，禁止自动重发保存或取消可能已确认的使用。
+
 出现位置由 SpaceId、RootFolderId 与有序 LID 链组成。位置解析批量读取该链，核对空间准入、唯一根归属、父子衔接、无重复节点及每层对象读取资格。正向内容查询、树直属层、已知路径恢复和全部内容写入均执行该检查；可读的裸 Folder EID 不能代替出现位置。
 
 文件夹独立详情、单选候选与 Link 端点共享强制范围：对象可读，且来源空间可准入，或存在一条从可准入根出发、祖先皆可读的路径。OriginSpaceId 不公开且不可修改；私人来源的普通文件夹可以通过公共引用共享，移除最后公共路径后重新计算范围。来源主体仍能发现失去全部引用的文件夹并重新添加，所有正式空间根排除于候选。候选以 EID 去重，Link 查询仍逐 LID 返回。

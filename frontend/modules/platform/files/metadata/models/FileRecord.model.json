@@ -1,0 +1,133 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "FileRecord": {
+    "indexes": [
+      {
+        "name": "UX_FileRecord_StorageKey",
+        "unique": true,
+        "fields": [
+          "StorageKey"
+        ]
+      },
+      {
+        "name": "IX_FileRecord_State",
+        "unique": false,
+        "fields": [
+          "State",
+          "EID"
+        ]
+      }
+    ],
+    "fields": [
+      {
+        "name": "StorageProviderKey",
+        "storage": {
+          "type": "string"
+        },
+        "uiType": "text",
+        "form": {
+          "edit": {
+            "mode": "hidden"
+          },
+          "create": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "StorageKey",
+        "storage": {
+          "type": "string"
+        },
+        "uiType": "text",
+        "form": {
+          "edit": {
+            "mode": "hidden"
+          },
+          "create": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "FileName",
+        "storage": {
+          "type": "string"
+        },
+        "uiType": "text",
+        "form": {
+          "edit": {
+            "mode": "hidden"
+          },
+          "create": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "ContentType",
+        "storage": {
+          "type": "string"
+        },
+        "uiType": "text",
+        "form": {
+          "edit": {
+            "mode": "hidden"
+          },
+          "create": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "Length",
+        "storage": {
+          "type": "long",
+          "nullable": true
+        },
+        "uiType": "text",
+        "form": {
+          "edit": {
+            "mode": "hidden"
+          },
+          "create": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "Sha256",
+        "storage": {
+          "type": "string",
+          "nullable": true
+        },
+        "uiType": "text",
+        "form": {
+          "edit": {
+            "mode": "hidden"
+          },
+          "create": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "State",
+        "storage": {
+          "type": "string"
+        },
+        "uiType": "text",
+        "form": {
+          "edit": {
+            "mode": "hidden"
+          },
+          "create": {
+            "mode": "hidden"
+          }
+        }
+      }
+    ],
+    "kind": "Entity"
+  }
+}

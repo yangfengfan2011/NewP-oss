@@ -49,7 +49,7 @@ public sealed class AcceptanceGateTests
     {
         var (root, runId) = PrepareRun("workspace");
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId,
-            publishedFixture: PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId)).RunAsync(CancellationToken.None);
+            publishedFixture: PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseFileRecovery: true)).RunAsync(CancellationToken.None);
     }
 
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "三成员固定发行物与旧 Workspace/Part/Document 行、Link、历史连续性")]
@@ -67,6 +67,16 @@ public sealed class AcceptanceGateTests
         var (root, runId) = PrepareRun("native-workspace-uninstall");
         var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
             exerciseCompositionLifecycle: false, exerciseUninstallRecovery: true);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false,
+            publishedFixture: fixture, includeBrowser: false).RunAsync(CancellationToken.None);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "正式 Host 在同 SQL/root 重启后保留文件使用并恢复 receiving/staged/pending")]
+    public async Task NativeWorkspaceFiles_RestartsAndRecoversRegisteredContent()
+    {
+        var (root, runId) = PrepareRun("native-workspace-files");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, exerciseFileRecovery: true);
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false,
             publishedFixture: fixture, includeBrowser: false).RunAsync(CancellationToken.None);
     }
@@ -92,7 +102,7 @@ public sealed class AcceptanceGateTests
                 await CaptureAsync("workspace-properties-narrow.png");
                 await driver.ClosePropertiesAsync(properties);
                 await page.SetViewportSizeAsync(1440, 1000);
-                await driver.CreateObjectAsync("图文档", "ACC-WS-D-" + runId[..8], "归组图文档旅程 " + runId[..8], async _ =>
+                await driver.CreateDocumentWithMainAsync("ACC-WS-D-" + runId[..8], "归组图文档旅程 " + runId[..8], WorkspacePageDriver.SmallMainFile(), async _ =>
                 {
                     await CaptureAsync("workspace-create.png");
                     await page.SetViewportSizeAsync(900, 1000);
@@ -102,6 +112,7 @@ public sealed class AcceptanceGateTests
                 await CaptureAsync("workspace-created-content.png");
                 var documentName = "归组图文档旅程 " + runId[..8];
                 await driver.OpenOwnedPropertiesAsync(documentName, "/documents");
+                await driver.DownloadMainFileAsync(Path.Combine(root, "workspace-main-download.pdf"));
                 await CaptureAsync("workspace-document-properties.png");
                 await driver.ReturnToPublicContentAsync();
                 await driver.EditObjectAsync(documentName, documentName + " 已编辑");
@@ -188,7 +199,8 @@ public sealed class AcceptanceGateTests
                 var document = features.Behavior("Document", "document.document.read");
                 return [entry, features.Action(entry, "create", "list.pageActions", "folder"),
                     features.Action(entry, "add", "list.custom", "folder"), features.Action(entry, "remove", "list.rowActions", "folder"),
-                    part, document, features.Action(entry, "createPart", "list.pageActions", "folder"), features.Action(entry, "createDocument", "list.pageActions", "folder")];
+                    part, document, features.Behavior("Document", "document.document.download"),
+                    features.Action(entry, "createPart", "list.pageActions", "folder"), features.Action(entry, "createDocument", "list.pageActions", "folder")];
             },
             prepareJourney: async (administrator, features, actor, token) =>
             {
@@ -220,13 +232,14 @@ public sealed class AcceptanceGateTests
                 await driver.OpenAsync();
                 await driver.SelectRootAsync("公共空间");
                 await driver.CreateObjectAsync("零组件", partCode, partName, dialog => CapturePairAsync("part-create", dialog));
-                await driver.CreateObjectAsync("图文档", documentCode, documentName, dialog => CapturePairAsync("document-create", dialog));
+                await driver.CreateDocumentWithMainAsync(documentCode, documentName, WorkspacePageDriver.SmallMainFile(), dialog => CapturePairAsync("document-create", dialog));
                 await new StandardCrudPageDriver(page).WaitForRowAsync(folderName);
                 await CapturePairAsync("mixed-content");
                 await driver.OpenOwnedPropertiesAsync(partName, "/parts");
                 await CapturePairAsync("mixed-part-properties");
                 await driver.ReturnToPublicContentAsync();
                 await driver.OpenOwnedPropertiesAsync(documentName, "/documents");
+                await driver.DownloadMainFileAsync(Path.Combine(root, "workspace-main-download.pdf"));
                 await CapturePairAsync("mixed-document-properties");
                 await driver.ReturnToPublicContentAsync();
                 await driver.RemoveReferenceAsync(partName, dialog => CapturePairAsync("mixed-remove-reference", dialog));

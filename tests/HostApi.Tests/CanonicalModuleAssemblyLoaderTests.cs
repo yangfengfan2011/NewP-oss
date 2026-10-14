@@ -166,21 +166,22 @@ public sealed class CanonicalModuleAssemblyLoaderTests : IDisposable
     public void Load_VerifiedImageWithSameIdentityAndMvidButDifferentIl_CannotReuseDefaultAssembly()
     {
         var modulesRoot = Path.Combine(_root, "modules");
-        var packageRoot = Path.Combine(modulesRoot, "Files");
+        var packageRoot = Path.Combine(modulesRoot, "Audit");
         Directory.CreateDirectory(packageRoot);
-        var entryPath = Path.Combine(_root, "FilesModule.dll");
-        var alteredImage = File.ReadAllBytes(typeof(ICP.Platform.Modules.Files.FilesModule).Assembly.Location);
+        var entryPath = Path.Combine(_root, "AuditModule.dll");
+        var alteredImage = File.ReadAllBytes(typeof(AuditModule).Assembly.Location);
         ReplaceAllUtf16(alteredImage, "1.0.0", "9.0.0");
+        ReplaceAllUtf8(alteredImage, "1.0.0", "9.0.0");
         File.WriteAllBytes(entryPath, alteredImage);
         File.WriteAllText(
             Path.Combine(packageRoot, "plugin.json"),
             """
             {
               "schemaVersion": "1.0",
-              "moduleId": "Files",
+              "moduleId": "Audit",
               "displayName": "审计日志",
               "version": "1.0.0",
-              "entryAssembly": "../../FilesModule.dll",
+              "entryAssembly": "../../AuditModule.dll",
               "dependencies": []
             }
             """);
@@ -193,6 +194,174 @@ public sealed class CanonicalModuleAssemblyLoaderTests : IDisposable
             new CanonicalModuleAssemblyLoader(_root).Load(plan));
 
         Assert.Contains("does not match", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Load_AcceptedNativeContractsAbsentFromHost_SharesSignedTypeAcrossOwners()
+    {
+        const string contractName = "Contract.Contracts";
+        Assert.DoesNotContain(System.Runtime.Loader.AssemblyLoadContext.Default.Assemblies,
+            assembly => assembly.GetName().Name == contractName);
+        var contract = File.ReadAllBytes(typeof(ICP.Platform.Modules.Document.Contracts.IDocumentFiles).Assembly.Location);
+        ReplaceAllUtf8(contract, "Document.Contracts", contractName);
+        var document = File.ReadAllBytes(typeof(ICP.Platform.Modules.Document.DocumentModule).Assembly.Location);
+        var workspace = File.ReadAllBytes(typeof(ICP.Platform.Modules.Workspace.WorkspaceModule).Assembly.Location);
+        ReplaceAllUtf8(document, "Document.Contracts", contractName);
+        ReplaceAllUtf8(workspace, "Document.Contracts", contractName);
+        CopyHostFileContract();
+        var plan = NativePlan(
+            ("Document", document, contractName, contract),
+            ("Workspace", workspace, contractName, contract));
+        // 签发后的旁文件修改不能替换实际消费的 Contracts 字节。
+        foreach (var module in plan.Modules)
+            File.WriteAllBytes(Path.Combine(module.PackageRoot, "backend", contractName + ".dll"), [0]);
+
+        var assemblies = new CanonicalModuleAssemblyLoader(_root, new TrustedDefaultModuleAssemblyRegistry()).Load(plan);
+
+        var fileInterface = assemblies.Single(assembly => assembly.GetName().Name == "DocumentModule")
+            .GetType("ICP.Platform.Modules.Document.DocumentFiles", throwOnError: true)!.GetInterfaces()
+            .Single(type => type.Name == "IDocumentFiles");
+        var parameter = assemblies.Single(assembly => assembly.GetName().Name == "WorkspaceModule")
+            .GetType("ICP.Platform.Modules.Workspace.WorkspaceContents", throwOnError: true)!.GetConstructors()
+            .SelectMany(constructor => constructor.GetParameters()).Single(parameter => parameter.ParameterType.Name == "IDocumentFiles");
+        Assert.Same(fileInterface, parameter.ParameterType);
+        Assert.Equal(contractName, fileInterface.Assembly.GetName().Name);
+        Assert.Same(System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(assemblies[0]),
+            System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(assemblies[1]));
+    }
+
+    [Fact]
+    public void Load_AcceptedNativeContractsWithConflictingBytes_RejectsBeforeLoadingModules()
+    {
+        var contract = File.ReadAllBytes(typeof(ICP.Platform.Modules.Document.Contracts.IDocumentFiles).Assembly.Location);
+        var changed = contract.ToArray();
+        changed[^1] ^= 1;
+        var plan = NativePlan(
+            ("Document", File.ReadAllBytes(typeof(ICP.Platform.Modules.Document.DocumentModule).Assembly.Location), "Document.Contracts", contract),
+            ("Workspace", File.ReadAllBytes(typeof(ICP.Platform.Modules.Workspace.WorkspaceModule).Assembly.Location), "Document.Contracts", changed));
+
+        var error = Assert.Throws<InvalidDataException>(() => new CanonicalModuleAssemblyLoader(_root).Load(plan));
+
+        Assert.Contains("conflicting", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Load_AcceptedNativeContractDifferentFromHostImage_RejectsSharedType()
+    {
+        var contract = File.ReadAllBytes(typeof(ICP.Platform.Modules.Files.Contracts.IFileLifecycleService).Assembly.Location);
+        var changed = contract.ToArray();
+        // 相同 identity/MVID 的不同 IL/常量映像也不能混用。
+        changed[^1] ^= 1;
+        Directory.CreateDirectory(_root);
+        File.WriteAllBytes(Path.Combine(_root, "Files.Contracts.dll"), changed);
+        var plan = NativePlan(("Document", File.ReadAllBytes(typeof(ICP.Platform.Modules.Document.DocumentModule).Assembly.Location), "Files.Contracts", contract));
+
+        var error = Assert.Throws<InvalidDataException>(() => new CanonicalModuleAssemblyLoader(_root).Load(plan));
+
+        Assert.Contains("Host", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Load_AcceptedNativeContractWithUnregisteredDefaultSameMvid_UsesSignedImage()
+    {
+        const string contractName = "Preloadx.Contracts";
+        var signed = File.ReadAllBytes(typeof(ICP.Platform.Modules.Document.Contracts.IDocumentFiles).Assembly.Location);
+        ReplaceAllUtf8(signed, "Document.Contracts", contractName);
+        var malicious = signed.ToArray();
+        ReplaceAllUtf16(malicious, "DocumentFileItem", "DocumentFileIteM");
+        using var stream = new MemoryStream(malicious);
+        var preloaded = System.Runtime.Loader.AssemblyLoadContext.Default.LoadFromStream(stream);
+        var document = File.ReadAllBytes(typeof(ICP.Platform.Modules.Document.DocumentModule).Assembly.Location);
+        ReplaceAllUtf8(document, "Document.Contracts", contractName);
+        CopyHostFileContract();
+        // 即使 Host 磁盘旁放回 genuine 字节，也不能为恶意内存体补办装载证明。
+        File.WriteAllBytes(Path.Combine(_root, contractName + ".dll"), signed);
+        var plan = NativePlan(("Document", document, contractName, signed));
+
+        var assembly = Assert.Single(new CanonicalModuleAssemblyLoader(_root, new TrustedDefaultModuleAssemblyRegistry()).Load(plan));
+
+        var actual = assembly.GetType("ICP.Platform.Modules.Document.DocumentFiles", throwOnError: true)!
+            .GetInterfaces().Single(type => type.Name == "IDocumentFiles").Assembly;
+        Assert.NotSame(preloaded, actual);
+        Assert.Equal(preloaded.ManifestModule.ModuleVersionId, actual.ManifestModule.ModuleVersionId);
+        var item = actual.GetType("ICP.Platform.Modules.Preloadx.Contracts.DocumentFileItem", throwOnError: true)!;
+        Assert.StartsWith("DocumentFileItem", Activator.CreateInstance(item, "link", "main", 0L, "main.pdf", 1L, "application/pdf")!.ToString());
+    }
+
+    [Fact]
+    public void Load_AcceptedNativeContractsWithGenuineHostPreload_SharesActualConsumerTypes()
+    {
+        CopyHostFileContract();
+        var contract = File.ReadAllBytes(typeof(ICP.Platform.Modules.Document.Contracts.IDocumentFiles).Assembly.Location);
+        File.WriteAllBytes(Path.Combine(_root, "Document.Contracts.dll"), contract);
+        var plan = NativePlan(
+            ("Files", File.ReadAllBytes(typeof(ICP.Platform.Modules.Files.FilesModule).Assembly.Location), "Files.Contracts",
+                File.ReadAllBytes(typeof(ICP.Platform.Modules.Files.Contracts.IFileLifecycleService).Assembly.Location)),
+            ("Document", File.ReadAllBytes(typeof(ICP.Platform.Modules.Document.DocumentModule).Assembly.Location), "Document.Contracts", contract),
+            ("Workspace", File.ReadAllBytes(typeof(ICP.Platform.Modules.Workspace.WorkspaceModule).Assembly.Location), "Document.Contracts", contract));
+
+        var assemblies = new CanonicalModuleAssemblyLoader(_root, new TrustedDefaultModuleAssemblyRegistry()).Load(plan);
+
+        var document = assemblies.Single(assembly => assembly.GetName().Name == "DocumentModule")
+            .GetType("ICP.Platform.Modules.Document.DocumentFiles", throwOnError: true)!;
+        var files = assemblies.Single(assembly => assembly.GetName().Name == "FilesModule")
+            .GetType("ICP.Platform.Modules.Files.Services.FileLifecycleService", throwOnError: true)!;
+        var workspace = assemblies.Single(assembly => assembly.GetName().Name == "WorkspaceModule")
+            .GetType("ICP.Platform.Modules.Workspace.WorkspaceContents", throwOnError: true)!;
+        Assert.Same(files.GetInterfaces().Single(type => type.Name == "IFileLifecycleService"),
+            document.GetConstructors().SelectMany(constructor => constructor.GetParameters())
+                .Single(parameter => parameter.ParameterType.Name == "IFileLifecycleService").ParameterType);
+        Assert.Same(document.GetInterfaces().Single(type => type.Name == "IDocumentFiles"),
+            workspace.GetConstructors().SelectMany(constructor => constructor.GetParameters())
+                .Single(parameter => parameter.ParameterType.Name == "IDocumentFiles").ParameterType);
+    }
+
+    [Fact]
+    public void Load_AcceptedNativeContractAddedAfterSnapshot_IsNotProbed()
+    {
+        CopyHostFileContract();
+        var plan = NativePlan(("Document", File.ReadAllBytes(typeof(ICP.Platform.Modules.Document.DocumentModule).Assembly.Location),
+            "Files.Contracts", File.ReadAllBytes(typeof(ICP.Platform.Modules.Files.Contracts.IFileLifecycleService).Assembly.Location)));
+        File.WriteAllBytes(Path.Combine(plan.Modules[0].PackageRoot, "backend", "Document.Contracts.dll"),
+            File.ReadAllBytes(typeof(ICP.Platform.Modules.Document.Contracts.IDocumentFiles).Assembly.Location));
+
+        var error = Assert.Throws<System.Reflection.ReflectionTypeLoadException>(() =>
+            new CanonicalModuleAssemblyLoader(_root, new TrustedDefaultModuleAssemblyRegistry()).Load(plan));
+
+        Assert.Contains(error.LoaderExceptions, failure => failure!.Message.Contains("Document.Contracts", StringComparison.Ordinal));
+    }
+
+    private void CopyHostFileContract()
+    {
+        Directory.CreateDirectory(_root);
+        File.Copy(typeof(ICP.Platform.Modules.Files.Contracts.IFileLifecycleService).Assembly.Location,
+            Path.Combine(_root, "Files.Contracts.dll"));
+    }
+
+    private CanonicalModulePlan NativePlan(params (string Owner, byte[] Module, string ContractName, byte[] Contract)[] modules)
+    {
+        var modulesRoot = Path.Combine(_root, "modules");
+        Directory.CreateDirectory(modulesRoot);
+        var source = TrustedBuiltInModuleSource.CreateForHost(_root, modulesRoot);
+        var candidates = new List<ModuleCapsuleCandidate>();
+        foreach (var module in modules)
+        {
+            var root = Path.Combine(_root, "accepted", module.Owner);
+            Directory.CreateDirectory(Path.Combine(root, "backend"));
+            File.WriteAllBytes(Path.Combine(root, "backend", module.Owner + "Module.dll"), module.Module);
+            File.WriteAllBytes(Path.Combine(root, "backend", module.ContractName + ".dll"), module.Contract);
+            if (module.ContractName != "Files.Contracts")
+                File.WriteAllBytes(Path.Combine(root, "backend", "Files.Contracts.dll"),
+                    File.ReadAllBytes(typeof(ICP.Platform.Modules.Files.Contracts.IFileLifecycleService).Assembly.Location));
+            File.WriteAllText(Path.Combine(root, "plugin.json"), System.Text.Json.JsonSerializer.Serialize(new
+            {
+                schemaVersion = "1.0", moduleId = module.Owner, displayName = module.Owner, version = "1.0.0",
+                entryAssembly = "backend/" + module.Owner + "Module.dll", dependencies = Array.Empty<string>()
+            }));
+            source.RegisterAcceptedNativeModule(root, VerifiedModuleArtifactSnapshot.Capture(root));
+            candidates.Add(new ModuleCapsuleCandidateReader().ReadTrustedNativeModule(root, source));
+        }
+        return Assert.IsType<CanonicalModulePlan>(new CanonicalModulePlanCompiler().Compile("native-contracts", candidates).Plan);
     }
 
     private static void ReplaceAllUtf16(byte[] image, string oldValue, string newValue)

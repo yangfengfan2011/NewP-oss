@@ -9,6 +9,36 @@ public sealed class LocalizationRuntimeManifestBuilderTests : IDisposable
     private readonly List<string> _tempRoots = new();
 
     [Fact]
+    public void Build_CurrentDocumentDictionary_ProjectsFileUploadAndDownloadCatalogs()
+    {
+        var repository = new DirectoryInfo(AppContext.BaseDirectory);
+        var relativePath = Path.Combine("frontend", "modules", "infor-center", "document", "metadata", "dictionaries", "Document.dic.json");
+        while (repository is not null && !File.Exists(Path.Combine(repository.FullName, relativePath)))
+            repository = repository.Parent;
+        Assert.NotNull(repository);
+        var runtimeRoot = CreateRuntimeRoot();
+        WriteLanguages(runtimeRoot);
+        // 保留 authoring 原始成员，真实 builder 必须发现同一文件内重复键，不能先转成 Dictionary 覆盖。
+        WriteMetadataFile(runtimeRoot, "Document", "Document.dic.json", File.ReadAllText(Path.Combine(repository.FullName, relativePath)));
+
+        using var manifest = JsonDocument.Parse(new LocalizationRuntimeManifestBuilder().Build(runtimeRoot));
+
+        var catalogs = manifest.RootElement.GetProperty("catalogs");
+        var chinese = catalogs.GetProperty("zhs");
+        Assert.Equal("文件", chinese.GetProperty("Document.Block_Files").GetString());
+        Assert.Equal("主文件", chinese.GetProperty("Document.MainFile").GetString());
+        Assert.Equal("选择主文件", chinese.GetProperty("Document.SelectMainFile").GetString());
+        Assert.Equal("上传进度", chinese.GetProperty("Document.UploadProgress").GetString());
+        Assert.Equal("取消上传", chinese.GetProperty("Document.CancelUpload").GetString());
+        Assert.Equal("主文件已上传，保存后生效。", chinese.GetProperty("Document.Staged").GetString());
+        Assert.Equal("下载", chinese.GetProperty("Document.Download").GetString());
+        var english = catalogs.GetProperty("en");
+        Assert.Equal("Choose main file", english.GetProperty("Document.SelectMainFile").GetString());
+        Assert.Equal("Main file", english.GetProperty("Document.MainFile").GetString());
+        Assert.Equal("Download", english.GetProperty("Document.Download").GetString());
+    }
+
+    [Fact]
     public void Build_WhenDicFileLivesOutsideDictionariesDirectory_StillProjectsCatalog()
     {
         var runtimeRoot = CreateRuntimeRoot();

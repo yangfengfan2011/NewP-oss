@@ -6,6 +6,7 @@ import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider, useParams } from 'react-router-dom';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
+import * as core from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
 const { default: workspace } = await loadComponentSource<{ default: FrontendBehaviorBindings }>('Workspace', 'index.ts');
 const { default: part } = await loadComponentSource<{ default: FrontendBehaviorBindings }>('Part', 'index.ts');
@@ -45,6 +46,7 @@ import '../pages/StandardCrudListDrawerRuntime';
 import '../pages/StandardCrudListOverlayRuntime';
 import '@ant-design/pro-descriptions';
 await loadComponentSource('Workspace', 'WorkspaceObjectEditInput.tsx');
+await loadComponentSource('Workspace', 'WorkspaceDocumentCreateInput.tsx');
 
 vi.unmock('@icp-platform/core');
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -141,6 +143,17 @@ async function renderMixedProperties(type: 'part' | 'document') {
 }
 
 it.each(['part', 'document'] as const)('creates %s with draft confirmation and one formal save', async type => {
+  const uploadId = 'FileUploadLease_0123456789abcdef0123456789abcdef';
+  const upload = type === 'document' ? vi.spyOn(core, 'platformUpload').mockImplementation(async (path, body, options) => {
+    expect(path).toBe('/api/workspace/content/document-uploads');
+    expect(JSON.parse(String(body.get('position')))).toEqual({ spaceId: 'public', rootFolderId: 'root', linkIds: ['shared-link'] });
+    expect(JSON.parse(String(body.get('values')))).toEqual({ ECODE: 'NEW-CODE', ENAME: '文件夹内新对象' });
+    expect(new Headers(options?.headers).get('X-NewP-Feature')).toBe('workspace-createDocument');
+    expect(body.get('file')).toBeInstanceOf(File);
+    return new Response(JSON.stringify({ uploadId, fileId: 'FileRecord_internal', fileName: 'main.pdf', length: 4,
+      contentType: 'application/pdf', expiresAt: '2026-10-14T00:00:00Z' }));
+  }) : undefined;
+  onTestFinished(() => upload?.mockRestore());
   const { container, writes } = await renderMixedProperties(type);
   expect(container.textContent).not.toContain('添加已有对象');
   expect([...container.querySelectorAll('button')].some(button => button.textContent === '新建零组件')).toBe(false);
@@ -164,8 +177,21 @@ it.each(['part', 'document'] as const)('creates %s with draft confirmation and o
   await act(async () => [...document.querySelectorAll<HTMLButtonElement>('.ant-modal button')].find(button => button.textContent === '继续编辑')!.click());
   await vi.waitFor(() => expect((document.querySelector('.ant-modal-wrap') as HTMLElement)?.style.display).toBe('none'));
   expect(document.querySelector<HTMLInputElement>('.ant-drawer input[id="ECODE"]')?.value).toBe('NEW-CODE');
+  if (type === 'document') {
+    await act(async () => {
+      const input = document.querySelector<HTMLInputElement>('.ant-drawer input[type="file"]')!;
+      Object.defineProperty(input, 'files', { configurable: true, value: [new File(['main'], 'main.pdf', { type: 'application/pdf' })] });
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await vi.waitFor(async () => {
+      await act(async () => undefined);
+      expect(document.querySelector<HTMLButtonElement>('.ant-drawer-footer .ant-btn-primary')!.disabled).toBe(false);
+    });
+  }
   await act(async () => document.querySelector<HTMLButtonElement>('.ant-drawer-footer .ant-btn-primary')!.click());
-  await vi.waitFor(() => expect(writes).toEqual([{ position: { spaceId: 'public', rootFolderId: 'root', linkIds: ['shared-link'] }, values: { ECODE: 'NEW-CODE', ENAME: '文件夹内新对象' } }]));
+  await vi.waitFor(() => expect(writes).toEqual([{ position: { spaceId: 'public', rootFolderId: 'root', linkIds: ['shared-link'] },
+    values: { ECODE: 'NEW-CODE', ENAME: '文件夹内新对象' }, ...(type === 'document' ? { uploads: { mainUploadId: uploadId } } : {}) }]));
+  if (upload) expect(upload).toHaveBeenCalledTimes(1);
   await vi.waitFor(() => expect(document.querySelector('.ant-drawer')).toBeNull());
 });
 

@@ -195,10 +195,62 @@ internal sealed class WorkspacePageDriver(IPage page)
     /// <summary>复用标准字段定位，等待必填字段就绪后交给统一 Drawer 保存驱动。</summary>
     internal async Task FillObjectCreationAsync(ILocator dialog, string code, string name)
     {
+        await FillObjectFieldsAsync(dialog, code, name);
+        await WaitForObjectSaveAsync(dialog);
+    }
+
+    // 带文件 Drawer 在 Stage 完成前禁用保存；字段填写不能提前等待保存按钮。
+    private static async Task FillObjectFieldsAsync(ILocator dialog, string code, string name)
+    {
         await StandardCrudPageDriver.FillDrawerFieldAsync(dialog, "编码", code);
         await StandardCrudPageDriver.FillDrawerFieldAsync(dialog, "名称", name);
-        await Assertions.Expect(dialog.GetByRole(AriaRole.Button, new() { Name = StandardCrudPageDriver.SaveAndCloseLabel, Exact = true }))
+    }
+
+    private static Task WaitForObjectSaveAsync(ILocator dialog) =>
+        Assertions.Expect(dialog.GetByRole(AriaRole.Button, new() { Name = StandardCrudPageDriver.SaveAndCloseLabel, Exact = true }))
             .ToBeEnabledAsync(new() { Timeout = 30_000 });
+
+    /// <summary>正式主文件输入依次贯通 Stage 与一次保存；内容语义在 API/IO 层验证。</summary>
+    internal async Task CreateDocumentWithMainAsync(string code, string name, FilePayload mainFile, Func<ILocator, Task>? capture = null)
+    {
+        var crud = new StandardCrudPageDriver(page);
+        var drawer = await crud.OpenCreateDrawerAsync("新建图文档", "新建");
+        await FillDocumentCreationAsync(drawer, code, name, mainFile);
+        if (capture is not null) await capture(drawer);
+        await crud.SaveAndCloseAsync(drawer, new("POST", "/api/workspace/content/documents", 200, "新建图文档"));
+        await crud.WaitForRowAsync(name);
+    }
+
+    /// <summary>填写字段后通过真实主文件控件暂存，最后才等待保存可用。</summary>
+    internal async Task FillDocumentCreationAsync(ILocator drawer, string code, string name, FilePayload mainFile)
+    {
+        await FillObjectFieldsAsync(drawer, code, name);
+        var responseTask = page.WaitForResponseAsync(response => response.Request.Method == "POST"
+            && new Uri(response.Url).AbsolutePath == "/api/workspace/content/document-uploads");
+        var chooser = await page.RunAndWaitForFileChooserAsync(() =>
+            drawer.GetByRole(AriaRole.Button, new() { Name = "选择主文件", Exact = true }).ClickAsync());
+        await chooser.SetFilesAsync(mainFile);
+        var response = await responseTask;
+        if (!response.Ok) throw new InvalidOperationException($"主文件暂存请求失败：{response.Status} {await response.TextAsync()}");
+        await WaitForObjectSaveAsync(drawer);
+    }
+
+    /// <summary>使用同一小文件走页面主文件路径，不在浏览器断言 hash、长度或持久状态。</summary>
+    internal static FilePayload SmallMainFile() => new()
+    {
+        Name = "workspace-main.pdf", MimeType = "application/pdf",
+        Buffer = System.Text.Encoding.UTF8.GetBytes("%PDF-1.4\nWorkspace acceptance main file\n%%EOF\n")
+    };
+
+    /// <summary>从 Document 属性的正式下载按钮等待 attachment 下载；不回退到裸文件路径。</summary>
+    internal async Task DownloadMainFileAsync(string outputPath)
+    {
+        await page.GetByText("文件", new() { Exact = true }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        var downloadTask = page.WaitForDownloadAsync();
+        await page.GetByRole(AriaRole.Button, new() { Name = "下载", Exact = true }).ClickAsync();
+        var download = await downloadTask;
+        if (await download.FailureAsync() is { } failure) throw new InvalidOperationException("主文件下载失败：" + failure);
+        await download.SaveAsAsync(outputPath);
     }
     /// <summary>混合内容名称链接使用所属模块详情路由，不在操作菜单重复提供入口。</summary>
     internal async Task OpenOwnedPropertiesAsync(string name, string route)

@@ -5,6 +5,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { LanguageSelect, LocalizationProvider, PlatformQueryProvider, useLocalization } from '@icp-platform/core';
+import * as core from '@icp-platform/core';
 import { StandardCrudForm } from '@icp-platform/ui/crud-form';
 import { useStandardCrudLookupRuntime } from '../standard-crud/standardCrudLookupRuntime';
 import type { StandardCrudFieldDefinition } from '@icp-platform/sdk';
@@ -17,6 +18,7 @@ const documentDictionary = readComponentJson('Document', 'metadata/dictionaries/
 const { default: workspaceResource } = await loadComponentSource<{ default: StandardCrudResourceRegistration }>('Workspace', 'workspaceRootResource.ts');
 // 装载真实模块输入，避免冷转换落入交互测试预算；错误仍由标准动作与Lookup呈现。
 await loadComponentSource('Workspace', 'WorkspaceObjectCreateInput.tsx');
+await loadComponentSource('Workspace', 'WorkspaceDocumentCreateInput.tsx');
 
 vi.unmock('@icp-platform/core');
 
@@ -24,6 +26,11 @@ const catalogs = Object.fromEntries(['zhs', 'en'].map(language => [language, Obj
 
 it.each(['createPart', 'createDocument'] as const)('retranslates the real Workspace %s error while retaining the candidate draft and without replaying commands', async scenario => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const uploadId = 'FileUploadLease_0123456789abcdef0123456789abcdef';
+  const upload = scenario === 'createDocument' ? vi.spyOn(core, 'platformUpload').mockResolvedValue(new Response(JSON.stringify({
+    uploadId, fileId: 'FileRecord_internal', fileName: 'main.pdf', length: 4, contentType: 'application/pdf', expiresAt: '2026-10-14T00:00:00Z'
+  }))) : undefined;
+  onTestFinished(() => upload?.mockRestore());
   const path = '/api/workspace/content/' + (scenario === 'createPart' ? 'parts' : 'documents');
   const requests: { path: string; method: string; body?: unknown }[] = [];
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -60,6 +67,17 @@ it.each(['createPart', 'createDocument'] as const)('retranslates the real Worksp
       input.dispatchEvent(new Event('input', { bubbles: true }));
     });
   }
+  if (scenario === 'createDocument') {
+    await act(async () => {
+      const input = document.querySelector<HTMLInputElement>('.ant-drawer input[type="file"]')!;
+      Object.defineProperty(input, 'files', { configurable: true, value: [new File(['main'], 'main.pdf', { type: 'application/pdf' })] });
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await vi.waitFor(async () => {
+      await act(async () => undefined);
+      expect(document.querySelector<HTMLButtonElement>('.ant-drawer-footer .ant-btn-primary')!.disabled).toBe(false);
+    });
+  }
   await act(async () => document.querySelector<HTMLButtonElement>('.ant-drawer-footer .ant-btn-primary')!.click());
   const chinese = '没有编辑当前文件夹内容的权限。';
   const english = 'You do not have permission to edit the contents of this folder.';
@@ -69,7 +87,9 @@ it.each(['createPart', 'createDocument'] as const)('retranslates the real Worksp
   await vi.waitFor(() => expect(document.body.textContent).toContain(english));
   expect(document.querySelector('.ant-drawer')).toBe(modal);
   expect(document.querySelector<HTMLInputElement>('.ant-drawer input[id="ENAME"]')?.value).toBe('保留的业务草稿');
-  expect(requests.filter(request => request.method === 'POST')).toEqual([{ path, method: 'POST', body: { position: { spaceId: 'public', rootFolderId: 'root', linkIds: [] }, values: { ECODE: 'DRAFT', ENAME: '保留的业务草稿' } } }]);
+  expect(requests.filter(request => request.method === 'POST')).toEqual([{ path, method: 'POST', body: { position: { spaceId: 'public', rootFolderId: 'root', linkIds: [] },
+    values: { ECODE: 'DRAFT', ENAME: '保留的业务草稿' }, ...(scenario === 'createDocument' ? { uploads: { mainUploadId: uploadId } } : {}) } }]);
+  if (upload) expect(upload).toHaveBeenCalledTimes(1);
   expect(refresh).not.toHaveBeenCalled();
 });
 

@@ -4,6 +4,8 @@
     "sections": [
       { "key": "basic", "titleKey": "Basic", "fields": ["ECODE", "ENAME", "Description"] },
       { "key": "audit", "titleKey": "Audit", "fields": ["CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"] }
-    ]
+    ],
+    "summaryBlocks": ["files"],
+    "featureActions": [{ "key": "download", "titleKey": "Download", "behaviorKey": "document.document.download" }]
   }
 }

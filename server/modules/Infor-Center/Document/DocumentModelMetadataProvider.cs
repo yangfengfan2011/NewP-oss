@@ -19,7 +19,7 @@ public sealed class DocumentModelMetadataProvider : IModelDefinitionProvider
     {
         var storage = new JsonStorageTypeMapLoader().LoadFromFile(Path.Combine(MetadataRoot(), "server/platform-modeling/metadata/storage-types.json"));
         var moduleRoot = ModuleAuthoringPaths.ResolveModuleRoot(MetadataRoot(), "Document");
-        return new[] { "Document", "DocumentVersion", "DocumentIteration" }.Select(name =>
+        return new[] { "Document", "DocumentVersion", "DocumentIteration", "DocumentFileLink" }.Select(name =>
         {
             var document = new JsonModelMetadataDocumentLoader().LoadFromFile(Path.Combine(moduleRoot, "metadata/models", name + ".model.json"));
             new ModelMetadataValidator().Validate(document, storage);

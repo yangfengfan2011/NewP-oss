@@ -1,5 +1,6 @@
 using ICP.Platform.Testing;
 using System.Diagnostics;
+using System.Data.Common;
 using System.Net;
 using System.Net.Http.Json;
 using System.Net.Sockets;
@@ -37,12 +38,15 @@ internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
     private Process? _host;
     private Task[] _captures = [];
     private int _phase;
+    private int _ownedHostProcessId;
     private readonly HashSet<string> _databaseTriggers = new(StringComparer.Ordinal);
     internal string RepositoryRoot { get; }
     internal string EvidenceRoot { get; }
     internal string HostRoot => Path.Combine(_temporaryRoot, "host");
     internal string PluginRoot => Path.Combine(_temporaryRoot, "plugins");
+    internal string StorageRoot => Path.Combine(_temporaryRoot, "storage");
     internal string HostUrl { get; }
+    internal int OwnedHostProcessId => _ownedHostProcessId;
     internal string ConnectionString { get; }
     internal string AdministratorPassword { get; } = "Feature-205-" + Guid.NewGuid().ToString("N") + "!";
     internal HttpClient Administrator { get; private set; } = null!;
@@ -123,11 +127,13 @@ internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
         start.Environment["ConnectionStrings__SqlServer"] = ConnectionString;
         start.Environment["Platform__PluginInstallRoot"] = PluginRoot;
         start.Environment["Platform__ExternalPluginsEnabled"] = ExternalPluginsEnabled ? "true" : "false";
+        start.Environment["Files__StorageRoot"] = StorageRoot;
         start.Environment["Authentication__Host__KeyRingPath"] = Path.Combine(_temporaryRoot, "keys");
         start.Environment["Authentication__Host__AllowInsecureDevelopmentCookie"] = "true";
         start.Environment["Identity__Credentials__UseSharedDevelopmentCredential"] = "false";
         start.Environment["Logging__LogLevel__Default"] = "Warning";
         _host = Process.Start(start) ?? throw new InvalidOperationException("Host failed to start.");
+        _ownedHostProcessId = _host.Id;
         var phase = ++_phase;
         _captures = [CaptureAsync(_host.StandardOutput, $"host-{phase}.stdout.log"), CaptureAsync(_host.StandardError, $"host-{phase}.stderr.log")];
         using var client = new HttpClient { BaseAddress = new Uri(HostUrl), Timeout = TimeSpan.FromSeconds(2) };
@@ -157,6 +163,86 @@ internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
             await Task.Delay(150);
         }
         throw new TimeoutException("Host startup exceeded 90 seconds.");
+    }
+
+    // 仅窄读本夹具所属 Host 在当前 catalog 的会话/请求，不记录 SQL 原文、参数或其他进程。
+    internal Task<JsonElement> ReadOwnedHostDatabaseStageAsync()
+    {
+        var ownedHost = _host;
+        bool exited;
+        try { exited = ownedHost is null || ownedHost.HasExited; }
+        catch (InvalidOperationException) { exited = true; }
+        return ReadDatabaseStageAsync(ConnectionString, OwnedHostProcessId, exited);
+    }
+
+    // 最低层 SQL 探针复用正式采样的同一条 SQL、列转换与空结果行为。
+    internal static async Task<JsonElement> ReadDatabaseStageAsync(string connectionString, int ownedProcessId, bool exited)
+    {
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT CAST(DB_ID() AS int);
+            SELECT CAST(s.session_id AS int) AS sessionId, CAST(s.database_id AS int) AS databaseId, s.status AS sessionStatus,
+                   COALESCE(r.command, N'') AS command, COALESCE(r.status, N'') AS requestStatus,
+                   COALESCE(r.wait_type, N'') AS waitType, COALESCE(r.wait_time, 0) AS waitMilliseconds,
+                   COALESCE(r.blocking_session_id, 0) AS blockingSessionId,
+                   CAST(CASE WHEN t.text LIKE N'%sp_getapplock%' THEN 1 ELSE 0 END AS bit) AS isAppLockRequest,
+                   CAST(CASE WHEN t.text LIKE N'%__NewPMigrationHistory%' THEN 1 ELSE 0 END AS bit) AS isHistoryRequest
+            FROM sys.dm_exec_sessions AS s
+            LEFT JOIN sys.dm_exec_requests AS r ON r.session_id = s.session_id
+            OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) AS t
+            WHERE s.host_process_id = @ownedProcessId AND s.is_user_process = 1 AND s.database_id = DB_ID()
+            ORDER BY s.session_id;
+            """;
+        command.Parameters.AddWithValue("@ownedProcessId", ownedProcessId);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        var databaseId = reader.GetInt32(0);
+        Assert.True(await reader.NextResultAsync());
+        var columns = reader.GetColumnSchema().Select(column => new
+        {
+            column.ColumnName, column.DataTypeName, clrType = column.DataType?.FullName, column.AllowDBNull
+        }).ToArray();
+        var sessions = new List<object>();
+        while (await reader.ReadAsync())
+        {
+            sessions.Add(new
+            {
+                sessionId = reader.GetInt32(0),
+                databaseId = reader.GetInt32(1),
+                sessionStatus = reader.GetString(2),
+                command = reader.GetString(3),
+                requestStatus = reader.GetString(4),
+                waitType = reader.GetString(5),
+                waitMilliseconds = reader.GetInt32(6),
+                blockingSessionId = reader.GetInt32(7),
+                isAppLockRequest = reader.GetBoolean(8),
+                isHistoryRequest = reader.GetBoolean(9)
+            });
+        }
+        return JsonSerializer.SerializeToElement(new
+
+        {
+            processId = ownedProcessId,
+            exited,
+            catalog = connection.Database,
+            databaseId,
+            columns,
+            sessions
+        });
+    }
+
+    // 诊断不能覆盖原 checkpoint 异常；同时留下 xUnit Data 之外可读取的私有异常栈。
+    internal async Task RecordCheckpointDiagnosticFailureAsync(Exception checkpointFailure, Exception diagnosticFailure)
+    {
+        checkpointFailure.Data["CheckpointDiagnosticFailure"] = diagnosticFailure;
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(EvidenceRoot, "checkpoint-diagnostic-error.json"),
+                JsonSerializer.Serialize(new { OwnedHostProcessId, diagnostic = diagnosticFailure.ToString() }));
+        }
+        catch (Exception dumpFailure) { checkpointFailure.Data["CheckpointDiagnosticDumpFailure"] = dumpFailure; }
     }
 
     internal async Task StopAsync()

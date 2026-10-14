@@ -58,6 +58,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
         _environment["NEWP_DEV_SQLSERVER_CONNECTION_STRING"] = _connection;
         _environment["Platform__PluginInstallRoot"] = Path.Combine(_runDirectory, "resources", "plugins");
         _environment["Authentication__Host__KeyRingPath"] = Path.Combine(_runDirectory, "resources", "key-ring");
+        _environment["Files__StorageRoot"] = Path.Combine(_runDirectory, "resources", "storage");
         _environment["Authentication__Host__CookieName"] = WorkspaceAcceptanceFixture.CookieName;
         _environment["Authentication__Host__AllowInsecureDevelopmentCookie"] = "true";
         _environment["Identity__LocalAdministrator__ECODE"] = "admin";
@@ -84,7 +85,8 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             grantedFeatures = [entry, features.Action(entry, "create", "list.pageActions", "folder"),
                 features.Action(entry, "createPart", "list.pageActions", "folder"), features.Action(entry, "createDocument", "list.pageActions", "folder"), features.Action(entry, "remove", "list.rowActions", "folder"),
                 features.Action(entry, "edit", "list.rowActions", "folder"), features.Action(entry, "delete", "list.rowActions", "folder"),
-                features.Action(entry, "deleteObjects", "list.pageActions", "folder"), part, document];
+                features.Action(entry, "deleteObjects", "list.pageActions", "folder"), part, document,
+                features.Behavior("Document", "document.document.download")];
         }
         if (browserJourney is null)
         {
@@ -163,7 +165,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             var folderName = $"工作空间旅程文件夹 {_runId[..8]}";
             await driver.CreateFolderAsync(folderName);
             await driver.CreateObjectAsync("零组件", PartCode, PartName);
-            await driver.CreateObjectAsync("图文档", DocumentCode, DocumentName);
+            await driver.CreateDocumentWithMainAsync(DocumentCode, DocumentName, WorkspacePageDriver.SmallMainFile());
             await driver.ExpandRootToFolderAsync("公共空间", folderName);
             var folderAddress = await driver.SelectTreePathAsync("公共空间", folderName);
             await driver.SelectRootAsync("个人空间");
@@ -184,6 +186,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             await driver.CloseDirectReferencesAsync(references);
             await driver.ReturnToPublicContentAsync();
             await driver.OpenOwnedPropertiesAsync(DocumentName, "/documents");
+            await driver.DownloadMainFileAsync(Path.Combine(_runDirectory, "workspace-main-download.pdf"));
             await driver.ReturnToPublicContentAsync();
             await driver.RemoveReferenceAsync(PartName);
             await driver.CreateObjectAsync("零组件", PartCode + "-NEXT", PartName + " 新建");

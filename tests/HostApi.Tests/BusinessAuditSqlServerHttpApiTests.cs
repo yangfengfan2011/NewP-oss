@@ -1341,9 +1341,11 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
     private readonly string _connection;
     private readonly ReusableSqlServerDatabase _database;
     private readonly string _root = Path.Combine(Path.GetTempPath(), "newp-audit-" + Guid.NewGuid().ToString("N"));
+    private readonly Action<IServiceCollection>? _configureServices;
     private WebApplication _app = null!;
     internal StoreFault Fault { get; } = new();
     internal IServiceProvider Services => _app.Services;
+    internal string StorageRoot => Path.Combine(_root, "storage");
     private string _temporaryCredential = "";
     internal string ActorId { get; private set; } = "";
     internal IReadOnlyList<FeaturePoint> FeatureCatalog { get; private set; } = [];
@@ -1351,22 +1353,25 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
     private bool _includeWorkspace;
     private bool _includePart;
     private bool _includeDocument;
-    private BusinessAuditHostFixture(ReusableSqlServerDatabase database)
+    private bool _includeFiles;
+    private BusinessAuditHostFixture(ReusableSqlServerDatabase database, Action<IServiceCollection>? configureServices)
     {
         _database = database;
         _connection = database.ConnectionString;
+        _configureServices = configureServices;
     }
     internal static async Task<BusinessAuditHostFixture> CreateAsync(Action<IServiceCollection>? configureServices = null,
-        IReadOnlyDictionary<string, bool>? actionStates = null, bool useRequestPresentation = false, bool includeWorkspace = false, bool includePart = false, bool includeDocument = false)
+        IReadOnlyDictionary<string, bool>? actionStates = null, bool useRequestPresentation = false, bool includeWorkspace = false, bool includePart = false, bool includeDocument = false, bool includeFiles = false)
     {
-        var fixture = new BusinessAuditHostFixture(await ReusableSqlServerDatabase.AcquireAsync());
+        var fixture = new BusinessAuditHostFixture(await ReusableSqlServerDatabase.AcquireAsync(), configureServices);
         fixture._useRequestPresentation = useRequestPresentation;
         fixture._includeWorkspace = includeWorkspace;
         fixture._includePart = includePart || includeWorkspace;
         fixture._includeDocument = includeDocument || includeWorkspace;
+        fixture._includeFiles = includeFiles || fixture._includeDocument;
         try
         {
-            await fixture.StartAsync(configureServices, actionStates: actionStates);
+            await fixture.StartAsync(actionStates: actionStates);
             using var scope = fixture._app.Services.CreateScope();
             var result = await scope.ServiceProvider.GetRequiredService<IIdentityLocalAdministratorMaintenanceService>().BootstrapAsync(new(
                 "admin", "审计管理员", "审计集成准备", new(IdentityMaintenanceActors.LocalMaintenance, IdentitySecurityActorKind.LocalMaintenance, Guid.NewGuid().ToString("N"))));
@@ -1380,7 +1385,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
     {
         await _app.StopAsync();
         await _app.DisposeAsync();
-        await StartAsync(null, enabled);
+        await StartAsync(enabled);
     }
     internal async Task RestartWithActionAsync(string actionKey, bool enabled)
     {
@@ -1390,9 +1395,9 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
     {
         await _app.StopAsync();
         await _app.DisposeAsync();
-        await StartAsync(null, actionStates: actionStates);
+        await StartAsync(actionStates: actionStates);
     }
-    private async Task StartAsync(Action<IServiceCollection>? configureServices, bool readEnabled = true,
+    private async Task StartAsync(bool readEnabled = true,
         IReadOnlyDictionary<string, bool>? actionStates = null)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
@@ -1402,6 +1407,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
             ["Authentication:Host:KeyRingPath"] = Path.Combine(_root, "keys"),
             ["Authentication:Host:CookieName"] = "ICP.Platform.BusinessAuditTest",
             ["Authentication:Host:AllowInsecureDevelopmentCookie"] = "true",
+            ["Files:StorageRoot"] = StorageRoot,
             ["Identity:Credentials:UseSharedDevelopmentCredential"] = "false",
             ["Logging:LogLevel:Default"] = "Warning"
         });
@@ -1413,7 +1419,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
             typeof(AuditModule).Assembly,
             typeof(OrganizationModule).Assembly,
             typeof(ObjectOperationExtensionProbeModule).Assembly
-        }.Concat(_includeWorkspace ? [typeof(ICP.Platform.Modules.Workspace.WorkspaceModule).Assembly] : []).Concat(_includePart ? [typeof(ICP.Platform.Modules.Part.PartModule).Assembly] : []).Concat(_includeDocument ? [typeof(ICP.Platform.Modules.Document.DocumentModule).Assembly] : []).ToArray();
+        }.Concat(_includeWorkspace ? [typeof(ICP.Platform.Modules.Workspace.WorkspaceModule).Assembly] : []).Concat(_includePart ? [typeof(ICP.Platform.Modules.Part.PartModule).Assembly] : []).Concat(_includeDocument ? [typeof(ICP.Platform.Modules.Document.DocumentModule).Assembly] : []).Concat(_includeFiles ? [typeof(ICP.Platform.Modules.Files.FilesModule).Assembly] : []).ToArray();
         builder.Services.AddModuleSystem(options =>
         {
             foreach (var assembly in moduleAssemblies)
@@ -1422,7 +1428,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
             }
         });
         var productionModuleIds = new[] { "Identity", "Authentication", "Authorization", "Audit", "Organization" }
-            .Concat(_includeWorkspace ? ["InforCenter", "Workspace"] : []).Concat(_includePart ? ["Part"] : []).Concat(_includeDocument ? ["Document"] : []).ToArray();
+            .Concat(_includeWorkspace ? ["InforCenter", "Workspace"] : []).Concat(_includePart ? ["Part"] : []).Concat(_includeDocument ? ["Document"] : []).Concat(_includeFiles ? ["Files"] : []).ToArray();
         var hostRoot = Path.GetDirectoryName(typeof(AuthController).Assembly.Location)!;
         var trust = TrustedBuiltInModuleSource.CreateForHost(hostRoot, Path.Combine(hostRoot, "modules"));
         var candidates = new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(trust)
@@ -1483,7 +1489,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
             .Concat(AuthorizationModelDefinitions.All.Select(m => m with { OwnerModuleId = "Authorization" }))
             .Concat(OrganizationModelDefinitions.All.Select(m => m with { OwnerModuleId = "Organization" }))
             .Concat(new AuditModelMetadataProvider().GetDefinitions().Select(m => m with { OwnerModuleId = "Audit" }))
-            .Concat(_includeWorkspace ? new ICP.Platform.Modules.Workspace.WorkspaceModelMetadataProvider().GetDefinitions() : []).Concat(_includePart ? new ICP.Platform.Modules.Part.PartModelMetadataProvider().GetDefinitions() : []).Concat(_includeDocument ? new ICP.Platform.Modules.Document.DocumentModelMetadataProvider().GetDefinitions() : []).ToArray();
+            .Concat(_includeWorkspace ? new ICP.Platform.Modules.Workspace.WorkspaceModelMetadataProvider().GetDefinitions() : []).Concat(_includePart ? new ICP.Platform.Modules.Part.PartModelMetadataProvider().GetDefinitions() : []).Concat(_includeDocument ? new ICP.Platform.Modules.Document.DocumentModelMetadataProvider().GetDefinitions() : []).Concat(_includeFiles ? new ICP.Platform.Modules.Files.FilesModelMetadataProvider().GetDefinitions() : []).ToArray();
         var plan = new CompiledPersistencePlan("business-audit-test", "snapshot", "hash", default, "digest", [], models, []);
         builder.Services.AddSingleton(plan);
         builder.Services.AddDbContext<EfPlatformDbContext>((sp, options) => options.UseSqlServer(_connection)
@@ -1494,8 +1500,11 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         // 名称故障注入放在稳定查询契约，避免数据库拦截器因缓存接入而不再触发。
         builder.Services.AddSingleton<ICP.Platform.Organization.Contracts.IOrganizationQuery>(sp =>
             new FaultedOrganizationQuery(sp.GetRequiredService<ICP.Platform.Modules.Organization.Caching.OrganizationCache>(), Fault));
-        configureServices?.Invoke(builder.Services);
+        // 每次 Host 重启都复用首次配置；故障注入和 Files 选项不能随动作开关悄悄消失。
+        _configureServices?.Invoke(builder.Services);
         if (_includeWorkspace) builder.Services.AddControllers().AddApplicationPart(typeof(ICP.Platform.Modules.Workspace.WorkspaceModule).Assembly);
+        if (_includeDocument) builder.Services.AddControllers().AddApplicationPart(typeof(ICP.Platform.Modules.Document.DocumentModule).Assembly);
+        if (_includeFiles) builder.Services.AddControllers().AddApplicationPart(typeof(ICP.Platform.Modules.Files.FilesModule).Assembly);
         _app = builder.Build();
         _app.Use(async (context, next) => { using var activity = new Activity("business-audit-http").Start(); await next(); });
         _app.UseRouting();
@@ -1677,7 +1686,12 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
     {
         try
         {
-            if (_app is not null) await _app.DisposeAsync();
+            if (_app is not null)
+            {
+                // 先通知 ApplicationStopping 并等待服务停止，再释放其取消令牌与依赖。
+                try { await _app.StopAsync(); }
+                finally { await _app.DisposeAsync(); }
+            }
         }
         finally
         {

@@ -7,7 +7,7 @@ namespace ICP.Platform.Kernel.Tests;
 public sealed class DocumentFeatureProjectionTests
 {
     [Fact]
-    public void StandardDocument_ExposesOnlyReadCreateAndRegisteredObjectAuthorization()
+    public void StandardDocument_ExposesOnlyReadCreateDownloadAndRegisteredObjectAuthorization()
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(root.FullName, "Document"), "newp.plugin.json"))) root = root.Parent;
@@ -20,7 +20,10 @@ public sealed class DocumentFeatureProjectionTests
         var create = Assert.Single(catalog, point => point.BehaviorKey == "document.document.create");
         Assert.Equal("Document/navigation:document.documents/surface:list.pageActions/action:create", create.Position);
         Assert.Equal(new[] { entry.Position }, create.EntryDependencies);
-        Assert.Equal(new[] { "document.document.authorize", "document.document.create", "document.document.read" }, catalog.Select(point => point.BehaviorKey).Order(StringComparer.Ordinal));
-        FeatureCatalogCompiler.ValidateSelection(catalog, [entry.Position, create.Position]);
+        var download = Assert.Single(catalog, point => point.BehaviorKey == "document.document.download");
+        Assert.Equal("Document/navigation:document.documents/surface:detail.custom/action:download", download.Position);
+        Assert.Equal(new[] { entry.Position }, download.EntryDependencies);
+        Assert.Equal(new[] { "document.document.authorize", "document.document.create", "document.document.download", "document.document.read" }, catalog.Select(point => point.BehaviorKey).Order(StringComparer.Ordinal));
+        FeatureCatalogCompiler.ValidateSelection(catalog, [entry.Position, create.Position, download.Position]);
     }
 }

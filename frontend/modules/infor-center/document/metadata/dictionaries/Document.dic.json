@@ -1,5 +1,23 @@
 {
   "Document": {
+    "Files": { "zhs": "文件", "en": "Files" },
+    "Block_Files": { "zhs": "文件", "en": "Files" },
+    "Download": { "zhs": "下载", "en": "Download" },
+    "MainFile": { "zhs": "主文件", "en": "Main file" },
+    "Attachment": { "zhs": "附件", "en": "Attachment" },
+    "UploadProgress": { "zhs": "上传进度", "en": "Upload progress" },
+    "Staged": { "zhs": "主文件已上传，保存后生效。", "en": "Main file uploaded. Save to create the document." },
+    "CancelUpload": { "zhs": "取消上传", "en": "Cancel upload" },
+    "SaveOutcomeUnknown": { "zhs": "保存结果尚未确认，请关闭后刷新列表核对；本次文件不会自动取消或重复保存。", "en": "Save outcome is unknown. Close and refresh the list to check; this file will not be cancelled or saved again automatically." },
+    "FilesLoading": { "zhs": "文件加载中", "en": "Loading files" },
+    "RetryFiles": { "zhs": "重试读取", "en": "Retry reading" },
+    "NoFiles": { "zhs": "暂无文件", "en": "No files" },
+    "FileRole": { "zhs": "用途", "en": "Role" },
+    "FileName": { "zhs": "文件名", "en": "File name" },
+    "FileLength": { "zhs": "字节数", "en": "Bytes" },
+    "InvalidUploadSet": { "zhs": "请选择一个有效主文件。", "en": "Select one valid main file." },
+    "ExtensionNotAllowed": { "zhs": "该文件扩展名不允许用于图文档。", "en": "This file extension is not allowed for documents." },
+    "DownloadDenied": { "zhs": "无权下载此图文档的文件。", "en": "Downloading this document file is not allowed." },
     "Title": {
       "en": "Documents",
       "zhs": "图文档"
@@ -91,6 +109,18 @@
     "NameRequired": {
       "zhs": "名称不能为空。",
       "en": "Name is required."
+    },
+    "SelectMainFile": {
+      "zhs": "选择主文件",
+      "en": "Choose main file"
+    },
+    "NoMainFile": {
+      "zhs": "尚未选择主文件",
+      "en": "No main file selected"
+    },
+    "Uploading": {
+      "zhs": "正在上传…",
+      "en": "Uploading…"
     }
   },
   "type": "dic",

@@ -6,6 +6,7 @@ using ICP.Platform.Crud.LinkQueries;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.ObjectOperations;
 using ICP.Platform.Sdk.Http;
+using ICP.Platform.Modules.Files.Contracts;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -70,7 +71,18 @@ public sealed class WorkspaceContentsController(WorkspaceContents contents, Work
 
     /// <summary>在当前文件夹内创建真实图文档，不通过两个 HTTP 写入拼接。</summary>
     [HttpPost("content/documents"), RequireFeature("workspace.folder.createDocument")]
-    public Task<IResult> CreateDocument(CreateFolderInput input, CancellationToken token) => CreateObjectAsync(input, WorkspaceObjectCreation.CreateDocument, token);
+    public async Task<IResult> CreateDocument(CreateWorkspaceDocumentInput input, CancellationToken token)
+    {
+        try
+        {
+            if (input.Position is null || input.Values is null) return Results.ValidationProblem(new Dictionary<string, string[]> { ["input"] = ["Position and values are required."] }, title: "REQUEST_VALIDATION_FAILED", extensions: new Dictionary<string, object?> { ["code"] = "REQUEST_VALIDATION_FAILED" });
+            var result = await operations.ExecuteAsync(WorkspaceObjectCreation.BehaviorDefinition.ObjectKey, WorkspaceObjectCreation.CreateDocument, null,
+                new Dictionary<string, object?> { ["ActorId"] = Actor(), ["Position"] = input.Position, ["Values"] = input.Values, ["Uploads"] = input.Uploads }, token);
+            return result.Succeeded ? Results.Ok(new { succeeded = true }) : Results.Json(result.Error, statusCode: result.Error!.StatusCode);
+        }
+        catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (FileLifecycleException exception) { return WorkspaceDocumentUploadsController.FileProblem(exception); }
+    }
 
     // 唯一执行器提交后只返回成功回执；业务校验保留所属模块的标准字段错误。
     private async Task<IResult> CreateObjectAsync(CreateFolderInput input, ObjectOperationAction action, CancellationToken token)

@@ -58,8 +58,13 @@ public sealed class PersistenceDeploymentRecoverySqlServerTests
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "首次部署部分提交保留身份，拒绝缺失资产与未完成owner停用，再按真实历史恢复")]
     public async Task FirstDeployment_PartialUpReservesIdentityAndRecoversWithoutSuccessfulSnapshot()
     {
+        string[] publishedDocumentPrefix = [];
         await using var fixture = await FeatureCatalogHostFixture.CreateAsync([], async prepared =>
         {
+            // 冻结正式发行副本的完整前缀，不用当前模型或固定行数猜已发布历史。
+            var manifestPath = Path.Combine(prepared.HostRoot, "modules", "Document", "migrations", "Document.SqlServerMigrations.json");
+            publishedDocumentPrefix = JsonNode.Parse(File.ReadAllText(manifestPath))!["migrations"]!.AsArray()
+                .Select(step => step!["migrationId"]!.GetValue<string>()).ToArray();
             await DeferredModuleMigrationSqlServerTests.PrepareUpgrade(prepared, "Document", DocumentTail);
             Select(prepared, "Document", true);
             await prepared.CreateDatabaseTriggerAsync("TR_RecoveryIndexFailure", """
@@ -70,7 +75,13 @@ public sealed class PersistenceDeploymentRecoverySqlServerTests
         }, expectInitialStartupFailure: true);
         Assert.Contains("RECOVERY_INDEX_FAILURE", fixture.LastError);
         var before = await History(fixture);
-        Assert.Equal(1, await Scalar(fixture, "SELECT COUNT(*) FROM dbo.__NewPMigrationHistory WHERE OwnerModuleId=N'Document';"));
+        var documentHistory = before.Select(row => JsonNode.Parse(row)!)
+            .Where(row => row["OwnerModuleId"]!.GetValue<string>() == "Document")
+            .Select(row => row["MigrationId"]!.GetValue<string>()).ToArray();
+        Assert.Equal(publishedDocumentPrefix, documentHistory);
+        Assert.DoesNotContain(DocumentTail, documentHistory);
+        Assert.Equal(0, await Scalar(fixture, $"SELECT COUNT(*) FROM dbo.__EFMigrationsHistory WHERE MigrationId=N'{DocumentTail}';"));
+        Assert.Equal(0, await Scalar(fixture, "SELECT COUNT(*) FROM sys.indexes WHERE name=N'IX_Document_ENAME';"));
         Assert.Equal(1, await Scalar(fixture, "SELECT COUNT(*) FROM sys.tables WHERE name=N'Part';"));
         var state = State(fixture);
         Assert.Null(state["successful"]);
@@ -256,7 +267,39 @@ public sealed class PersistenceDeploymentRecoverySqlServerTests
                 WAITFOR DELAY '00:00:20';
             """);
         var startup = fixture.StartAsync(expectFailure: true);
-        await Until(async () => await Scalar(fixture, $"SELECT COUNT(*) FROM dbo.__NewPMigrationHistory WHERE MigrationId=N'{PartTail}';") == 1);
+        var observation = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            await Until(async () => await Scalar(fixture, $"SELECT COUNT(*) FROM dbo.__NewPMigrationHistory WHERE MigrationId=N'{PartTail}';") == 1);
+        }
+        catch (TimeoutException checkpointFailure)
+        {
+            try
+            {
+                // 保留原 20 秒失败；同一所属 Host 的后续阶段仅作为排错快照。
+                var samples = new List<object>();
+                var stage = await fixture.ReadOwnedHostDatabaseStageAsync();
+                var committedLater = false;
+                samples.Add(new { elapsedSeconds = observation.Elapsed.TotalSeconds, committedLater, stage });
+                while (observation.Elapsed < TimeSpan.FromSeconds(90) && !startup.IsCompleted)
+                {
+                    stage = await fixture.ReadOwnedHostDatabaseStageAsync();
+                    committedLater = await Scalar(fixture, $"SELECT COUNT(*) FROM dbo.__NewPMigrationHistory WHERE MigrationId=N'{PartTail}';") == 1;
+                    if (samples.Count < 64) samples.Add(new { elapsedSeconds = observation.Elapsed.TotalSeconds, committedLater, stage });
+                    if (committedLater) break;
+                    await Task.Delay(100);
+                }
+                await File.WriteAllTextAsync(Path.Combine(fixture.EvidenceRoot, "recovery-kill-deadline-diagnostic.json"),
+                    JsonSerializer.Serialize(new { fixture.OwnedHostProcessId, originalWindowSeconds = 20,
+                        committedWithinOriginalWindow = false, committedLater, startup.Status,
+                        samples, finalStage = stage, elapsedSeconds = observation.Elapsed.TotalSeconds }));
+            }
+            catch (Exception diagnosticFailure)
+            {
+                await fixture.RecordCheckpointDiagnosticFailureAsync(checkpointFailure, diagnosticFailure);
+            }
+            throw;
+        }
         var prefix = await History(fixture);
         Assert.Equal(PartTail, JsonNode.Parse(prefix[^1])!["MigrationId"]!.GetValue<string>());
         await fixture.InterruptStartupAsync();

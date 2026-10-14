@@ -55,7 +55,7 @@ Host 发布物的 `module-composition.json` 只通过 `platformCompositionModule
 
 Link 端点与对象动作扩展通过 `ModuleDependencyPolicy` 消费同一活动计划：目标为必需平台基础或来源显式声明的业务依赖时可引用，两端必须活动；资源与目标 owner、主键、对象开放动作和用户授权仍独立校验。Workspace 仅声明 Part、Document 两项业务硬依赖，可以省略 Identity、Authentication、Authorization 基础依赖。停用或缺失业务目标仍拒绝，不用组合归属替代能力依赖。
 
-PluginOps 参与基础候选，其 Capsule 继续关闭前端。ConfigCenter、MetadataConfigCenter、Files 等既有冻结入口保持关闭，运行时插件写操作继续遵守 ADR-0032 的 `501 / PLUGIN_RUNTIME_OPERATIONS_UNSUPPORTED`。可选组件的祖先屏蔽和保留持久化生命周期见上文及 ADR-0055。
+PluginOps 参与基础候选，其 Capsule 继续关闭前端。ConfigCenter、MetadataConfigCenter 等既有冻结入口保持关闭；Files 的正式生命周期由 owner Contracts 提供，旧 raw upload/download 入口保持原拒绝契约。运行时插件写操作继续遵守 ADR-0032 的 `501 / PLUGIN_RUNTIME_OPERATIONS_UNSUPPORTED`。可选组件的祖先屏蔽和保留持久化生命周期见上文及 ADR-0055。
 
 ## Runtime contract
 
@@ -67,6 +67,10 @@ PluginOps 参与基础候选，其 Capsule 继续关闭前端。ConfigCenter、M
 - feature catalog 与 model indexes。
 
 所有投影由同一启动期计划生成并记录 `snapshotId` / `planHash`。冲突或引用缺失必须在该次启动中拒绝整份 candidate；不得依赖加载顺序覆盖、warning 后跳过或部分注册。当前不支持进程存活期间改变插件集合，因此跨请求投影 identity 核对、运行中原子切换与回滚不属于本契约；见 ADR-0032。
+
+已接纳原生模块的入口同级 `backend/*.Contracts.dll` 只从本次活动 Canonical Plan 的已验证快照读取。重复副本及 Host 同名工件必须保持精确程序集身份、MVID 与完整字节一致，未签发旁文件不参与解析。新共享契约沿启动期可信装载登记器一次装入 Default；若 Default 已有登记器不能证明的预载体，该轮主体和新契约共同使用一个受控隔离上下文，保持跨 owner 接口的同一 Type 身份。Host 磁盘副本不能替代实际装载证明，已有 Host 稳定共享契约边界保持不变；不支持运行中增加契约或从任意包路径补齐依赖。
+
+Host 与组件包采用同一正式发行构建形态，入口由[组件化开发指南](../developer/componentized-development.md#原生发行的离线接纳与独立消费)唯一说明。平台 API 发行身份相同仍须核对实际共享契约映像；不混用普通构建产物，不通过旁路复制程序集修复不一致。
 
 ## 功能位置授权
 

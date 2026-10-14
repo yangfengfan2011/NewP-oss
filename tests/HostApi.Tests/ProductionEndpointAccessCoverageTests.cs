@@ -50,6 +50,7 @@ public sealed class ProductionEndpointAccessCoverageTests
             .AddApplicationPart(typeof(IdentityAccountsController).Assembly)
             .AddApplicationPart(typeof(PersonOrganizationLookupsController).Assembly)
             .AddApplicationPart(typeof(ICP.Platform.Modules.Workspace.WorkspaceSpacesController).Assembly)
+            .AddApplicationPart(typeof(ICP.Platform.Modules.Document.DocumentFilesController).Assembly)
             .AddApplicationPart(typeof(ExampleModule).Assembly);
         builder.Services.AddStandardCrudKernel();
         builder.Services.AddStandardCrudResource(PersonCrudDescriptorFactory.Create());
@@ -71,9 +72,22 @@ public sealed class ProductionEndpointAccessCoverageTests
         Assert.All(partEndpoints.Where(endpoint => endpoint.Metadata.GetOrderedMetadata<HttpMethodMetadata>().Single().HttpMethods.Any(method => method is "PUT" or "DELETE")),
             endpoint => Assert.NotNull(endpoint.Metadata.GetMetadata<DenyAllAttribute>()));
         var documentEndpoints = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints).OfType<RouteEndpoint>()
-            .Where(endpoint => endpoint.RoutePattern.RawText?.StartsWith("/api/document/documents", StringComparison.Ordinal) == true).ToArray();
-        Assert.Equal(new[] { "document.document.create", "document.document.read" }, documentEndpoints.SelectMany(endpoint => endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>())
+            .Where(endpoint => endpoint.RoutePattern.RawText?.TrimStart('/').StartsWith("api/document/documents", StringComparison.Ordinal) == true).ToArray();
+        Assert.Equal(new[] { "document.document.create", "document.document.download", "document.document.read" }, documentEndpoints.SelectMany(endpoint => endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>())
             .Select(feature => feature.BehaviorKey).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal));
+        var documentFileEndpoints = documentEndpoints.Where(endpoint => endpoint.RoutePattern.RawText!.Contains("/files", StringComparison.Ordinal)).ToArray();
+        Assert.Equal(new[] { "api/document/documents/{documentId}/files", "api/document/documents/{documentId}/files/{fileLinkId}/content" },
+            documentFileEndpoints.Select(endpoint => endpoint.RoutePattern.RawText!.TrimStart('/')).Order(StringComparer.Ordinal));
+        Assert.All(documentFileEndpoints, endpoint =>
+        {
+            Assert.Equal(new[] { "GET" }, endpoint.Metadata.GetOrderedMetadata<HttpMethodMetadata>().Single().HttpMethods);
+            Assert.Equal("Document", Assert.Single(endpoint.Metadata.GetOrderedMetadata<EndpointModuleAttribute>()).ModuleId);
+            Assert.Equal(endpoint.RoutePattern.RawText!.EndsWith("/content", StringComparison.Ordinal) ? "document.document.download" : "document.document.read",
+                Assert.Single(endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>()).BehaviorKey);
+            Assert.Null(endpoint.Metadata.GetMetadata<IAllowAnonymous>());
+        });
+        Assert.Contains(documentEndpoints, endpoint => endpoint.Metadata.GetOrderedMetadata<HttpMethodMetadata>().Single().HttpMethods.Contains("PUT"));
+        Assert.Contains(documentEndpoints, endpoint => endpoint.Metadata.GetOrderedMetadata<HttpMethodMetadata>().Single().HttpMethods.Contains("DELETE"));
         Assert.All(documentEndpoints.Where(endpoint => endpoint.Metadata.GetOrderedMetadata<HttpMethodMetadata>().Single().HttpMethods.Any(method => method is "PUT" or "DELETE")),
             endpoint => Assert.NotNull(endpoint.Metadata.GetMetadata<DenyAllAttribute>()));
         var manifestEndpoints = ((IEndpointRouteBuilder)app).DataSources

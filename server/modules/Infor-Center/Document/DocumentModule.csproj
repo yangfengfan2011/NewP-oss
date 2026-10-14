@@ -11,9 +11,12 @@
     <ProjectReference Include="../../../platform-modeling/PlatformModeling.csproj" />
     <ProjectReference Include="../../../platform-crud/PlatformCrud.csproj" />
     <ProjectReference Include="../../../platform-persistence-efcore/PlatformPersistence.EfCore.csproj" />
+    <ProjectReference Include="Contracts/Document.Contracts.csproj" />
+    <ProjectReference Include="../../Platform/Files/Contracts/Files.Contracts.csproj" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
   <ItemGroup>
     <Compile Remove="Migrations.SqlServer/**/*.cs" />
+    <Compile Remove="Contracts/**/*.cs" />
   </ItemGroup>
 </Project>

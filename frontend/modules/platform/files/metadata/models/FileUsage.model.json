@@ -1,0 +1,101 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "FileUsage": {
+    "indexes": [
+      {
+        "name": "UX_FileUsage_Owner",
+        "unique": true,
+        "fields": [
+          "OwnerKey",
+          "OwnerObjectId"
+        ]
+      },
+      {
+        "name": "IX_FileUsage_Active",
+        "unique": false,
+        "fields": [
+          "FileId",
+          "State"
+        ]
+      }
+    ],
+    "fields": [
+      {
+        "name": "FileId",
+        "storage": {
+          "type": "guid"
+        },
+        "uiType": "text",
+        "form": {
+          "edit": {
+            "mode": "hidden"
+          },
+          "create": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "OwnerKey",
+        "storage": {
+          "type": "string"
+        },
+        "uiType": "text",
+        "form": {
+          "edit": {
+            "mode": "hidden"
+          },
+          "create": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "OwnerObjectId",
+        "storage": {
+          "type": "guid"
+        },
+        "uiType": "text",
+        "form": {
+          "edit": {
+            "mode": "hidden"
+          },
+          "create": {
+            "mode": "hidden"
+          }
+        }
+      },
+      {
+        "name": "State",
+        "storage": {
+          "type": "string"
+        },
+        "uiType": "text",
+        "form": {
+          "edit": {
+            "mode": "hidden"
+          },
+          "create": {
+            "mode": "hidden"
+          }
+        }
+      }
+    ],
+    "foreignKeys": [
+      {
+        "principalModel": "FileRecord",
+        "principalFields": [
+          "EID"
+        ],
+        "fields": [
+          "FileId"
+        ],
+        "onDelete": "Restrict",
+        "principalModuleId": "Files",
+        "name": "FK_FileUsage_FileRecord"
+      }
+    ],
+    "kind": "Entity"
+  }
+}

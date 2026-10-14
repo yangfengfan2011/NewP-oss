@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -18,11 +19,11 @@ internal sealed record WorkspaceDeliveryInput(JsonElement Candidate, string Base
     string ShellRoot, string PackagePath, string HostIdentity, string ShellIdentity, string PackageSha256);
 
 // 正式 baseline 建立旧数据；裁剪的固定发行物通过原生包消费同一 catalog。
-internal sealed class PublishedComponentAcceptanceFixture(
+internal sealed partial class PublishedComponentAcceptanceFixture(
     string repositoryRoot, string runDirectory, string runId,
     string baselineHostRoot, string hostRoot, string shellRoot, string packagePath,
     bool workspaceDelivery = false, WorkspaceDeliveryInput? deliveryInput = null, bool exerciseCompositionLifecycle = true,
-    bool exerciseUninstallRecovery = false)
+    bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false)
 {
     private readonly Dictionary<string, string?> _environment = new();
     private ReusableSqlServerDatabase? _database;
@@ -33,6 +34,7 @@ internal sealed class PublishedComponentAcceptanceFixture(
     private int _hostPort;
     private string Resources => Path.Combine(runDirectory, "resources");
     private string InstallRoot => Path.Combine(Resources, "plugins");
+    private string StorageRoot => Path.Combine(Resources, "storage");
     private string HostOrigin => $"http://127.0.0.1:{_hostPort}";
     internal string ExistingCode => "ACC-OLD-P-" + runId[..8];
     internal string ExistingName => "独立安装旧零组件 " + runId[..8];
@@ -46,14 +48,15 @@ internal sealed class PublishedComponentAcceptanceFixture(
     internal string HostIdentity => $"published:{_host?.Process.Id}:{runId}";
 
     internal static PublishedComponentAcceptanceFixture FromWorkspaceDelivery(string repositoryRoot, string runDirectory, string runId,
-        bool exerciseCompositionLifecycle = true, bool exerciseUninstallRecovery = false)
+        bool exerciseCompositionLifecycle = true, bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false)
     {
         var path = RequiredPath("NEWP_ACCEPTANCE_WORKSPACE_DELIVERY_INPUT");
         var input = JsonSerializer.Deserialize<WorkspaceDeliveryInput>(File.ReadAllText(path), AcceptanceJson.Options)
             ?? throw new InvalidOperationException("Workspace delivery input was empty.");
         return new(repositoryRoot, runDirectory, runId, input.BaselineHostRoot, input.HostRoot,
             input.ShellRoot, input.PackagePath, workspaceDelivery: true, deliveryInput: input,
-            exerciseCompositionLifecycle: exerciseCompositionLifecycle, exerciseUninstallRecovery: exerciseUninstallRecovery);
+            exerciseCompositionLifecycle: exerciseCompositionLifecycle, exerciseUninstallRecovery: exerciseUninstallRecovery,
+            exerciseFileRecovery: exerciseFileRecovery);
     }
 
     // 只登记受控构建的输入与来源；不产出裁决，也不授予包信任。Gate 仍走正式安装/Host。
@@ -104,6 +107,7 @@ internal sealed class PublishedComponentAcceptanceFixture(
         _environment["Platform__ExternalPluginsEnabled"] = "false";
         _environment["Platform__FrontendPluginBaseUrl"] = "/plugins/runtime/assets";
         _environment["Authentication__Host__KeyRingPath"] = Path.Combine(Resources, "key-ring");
+        _environment["Files__StorageRoot"] = StorageRoot;
         _environment["Authentication__Host__CookieName"] = WorkspaceAcceptanceFixture.CookieName;
         _environment["Authentication__Host__AllowInsecureDevelopmentCookie"] = "true";
         _environment["Identity__LocalAdministrator__ECODE"] = "admin";
@@ -176,12 +180,13 @@ internal sealed class PublishedComponentAcceptanceFixture(
         await StartHostAsync(hostRoot, "installed-host", token);
         var after = await ReadContinuityAsync(oldId, token);
         await WriteAsync("sql-after.json", after, token);
-        VerifyPreservedPredecessor(baseline, after);
+        VerifyPreservedPredecessor(baseline, after, "Document", "Files");
         using var installed = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
         await WorkspaceAcceptanceFixture.LoginAsync(installed, actor, token);
         var installedFeatures = await AcceptanceFeatureCatalog.LoadAsync(installed, token);
         if (workspaceDelivery)
         {
+            granted.Add(installedFeatures.Behavior("Document", "document.document.download"));
             VerifyDocumentModelEvolution(_baselineOwners!, await ReadModelOwnersAsync(installed, token));
             _baselineOwners = await ReadModelOwnersAsync(installed, token);
             var roots = await WorkspaceAcceptanceFixture.SendAsync(installed, HttpMethod.Get, "/api/workspace/spaces", null,
@@ -204,10 +209,11 @@ internal sealed class PublishedComponentAcceptanceFixture(
             await VerifyWorkspaceApiContinuityAsync(installed, installedFeatures, oldId, "workspace-api-continuity.json", token);
         await WriteAsync("api-continuity.json", new { oldId, detail, runtime, externalPluginsEnabled = false }, token);
         if (workspaceDelivery && exerciseUninstallRecovery) await ExerciseUninstallRecoveryAsync(oldId, baseline, token);
-        if (workspaceDelivery && exerciseCompositionLifecycle)
+        if (workspaceDelivery)
         {
-            await VerifyCompositionLifecycleAsync(actor, oldId, installedFeatures.Behavior("Part", "part.part.read").Position, baseline, token);
-            // 活动功能被正式删除后普通授权永久作废（ADR-0048）；页面另走原有限授权准备流程。
+            if (exerciseCompositionLifecycle)
+                await VerifyCompositionLifecycleAsync(actor, oldId, installedFeatures.Behavior("Part", "part.part.read").Position, baseline, token);
+            // 新 download 位置不来自旧角色授权；生命周期删除后也不重放旧授权，页面使用明确有限的新角色。
             using var pageAdministrator = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
             await WorkspaceAcceptanceFixture.LoginAsync(pageAdministrator, _administrator!, token);
             var pageFeatures = await AcceptanceFeatureCatalog.LoadAsync(pageAdministrator, token);
@@ -216,6 +222,7 @@ internal sealed class PublishedComponentAcceptanceFixture(
             await WriteAsync("page-actor-preparation.json", new { previousActorId, pageActorId = actor.AccountId,
                 oldGrantsRestored = false, preparation = "formal-limited-role", grantedPositions = pageFeatures.GrantSet(granted.ToArray()) }, token);
         }
+        if (exerciseFileRecovery) await VerifyFileProcessRecoveryAsync(actor, token);
         var targetAfter = ReadTargetIdentity();
         await WriteAsync("target-after.json", targetAfter, token);
         if (before != targetAfter) throw new InvalidOperationException("安装期间固定 Host/Shell 发行物发生变化。");
@@ -256,7 +263,7 @@ internal sealed class PublishedComponentAcceptanceFixture(
     {
         var runtime = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get, "/plugins/active-module-runtime.json", null, null, token);
         return JsonSerializer.Serialize(runtime.GetProperty("modules").EnumerateArray()
-            .Where(module => new[] { "Workspace", "Part", "Document" }.Contains(module.GetProperty("moduleId").GetString()))
+            .Where(module => new[] { "Workspace", "Part", "Document", "Files" }.Contains(module.GetProperty("moduleId").GetString()))
             .Select(module => new { owner = module.GetProperty("moduleId").GetString(), models = module.GetProperty("modelKeys").EnumerateArray().Select(key => key.GetString()).Order(StringComparer.Ordinal).ToArray() })
             .OrderBy(module => module.owner, StringComparer.Ordinal));
     }
@@ -508,8 +515,8 @@ internal sealed class PublishedComponentAcceptanceFixture(
     private sealed record Continuity(string PhysicalMapping, string PartRow, string History, string DocumentRow = "",
         string WorkspaceFolders = "", string WorkspaceSpaces = "", string Links = "", string IdentityAccounts = "");
 
-    // 本批只追加 Document schema frontier；已有 owner 的全部历史行和非 Document 数据必须原样保留。
-    private static void VerifyPreservedPredecessor(Continuity before, Continuity after)
+    // Files 依赖可能先升级；只允许本轮明确 owner 的新尾，旧历史与既有业务数据仍逐行保持。
+    private static void VerifyPreservedPredecessor(Continuity before, Continuity after, params string[] allowedNewOwners)
     {
         if (before with { History = after.History } != after)
             throw new InvalidOperationException("图文档升级改变了清理范围外的数据或物理映射。");
@@ -518,11 +525,11 @@ internal sealed class PublishedComponentAcceptanceFixture(
         var previous = oldHistory.RootElement.EnumerateArray().ToArray();
         var current = newHistory.RootElement.EnumerateArray().ToArray();
         if (current.Length < previous.Length || previous.Where((row, index) => !JsonElement.DeepEquals(row, current[index])).Any()
-            || current.Skip(previous.Length).Any(row => row.GetProperty("OwnerModuleId").GetString() != "Document"))
+            || current.Skip(previous.Length).Any(row => !allowedNewOwners.Contains(row.GetProperty("OwnerModuleId").GetString(), StringComparer.Ordinal)))
             throw new InvalidOperationException("图文档升级改写了已发布迁移历史或追加了其他 owner。");
     }
 
-    // 本 child 的新模型只属于 Document；Part 与 Workspace 的旧装配不能随之演进。
+    // Files 与 Document 新模型分别归自身；Part 与 Workspace 的旧装配不能随之演进。
     private static void VerifyDocumentModelEvolution(string before, string after)
     {
         using var oldOwners = JsonDocument.Parse(before); using var newOwners = JsonDocument.Parse(after);
@@ -532,11 +539,15 @@ internal sealed class PublishedComponentAcceptanceFixture(
             var current = newOwners.RootElement.EnumerateArray().Single(row => row.GetProperty("owner").GetString() == owner);
             if (owner == "Document")
             {
-                if (!current.GetProperty("models").EnumerateArray().Select(row => row.GetString()).SequenceEqual(["Document", "DocumentIteration", "DocumentVersion"]))
+                if (!current.GetProperty("models").EnumerateArray().Select(row => row.GetString()).SequenceEqual(["Document", "DocumentFileLink", "DocumentIteration", "DocumentVersion"]))
                     throw new InvalidOperationException("Document 初版模型装配不完整。");
             }
+            else if (owner == "Files") continue;
             else if (!JsonElement.DeepEquals(oldOwner, current)) throw new InvalidOperationException("非 Document 模型 owner 发生漂移。");
         }
+        var files = newOwners.RootElement.EnumerateArray().Single(row => row.GetProperty("owner").GetString() == "Files");
+        if (!files.GetProperty("models").EnumerateArray().Select(row => row.GetString()).SequenceEqual(["FileRecord", "FileUploadLease", "FileUsage"]))
+            throw new InvalidOperationException("Files 正式模型装配不完整。");
     }
 
     // 使用真实旧 Document 证明空表 guard 在该 step 的 DDL/history 前拒绝；失败后仍可精确清理并重试。
@@ -552,7 +563,8 @@ internal sealed class PublishedComponentAcceptanceFixture(
             throw new InvalidOperationException("非空旧 Document 未由正式迁移空表前提拒绝；读取脱敏 Host 日志。");
         await StopHostAsync(CancellationToken.None);
         var rejected = await ReadContinuityAsync(partId, token);
-        if (baseline != rejected) throw new InvalidOperationException("Document 空表前提失败推进了数据或历史。");
+        // Document step 必须零推进；已完成的 Files 依赖 stream 允许合法追加，不放宽旧前缀检查。
+        VerifyPreservedPredecessor(baseline, rejected, "Files");
         var schema = await ReadSqlJsonAsync("SELECT COL_LENGTH(N'dbo.Document',N'LatestVersionId') pointerLength, OBJECT_ID(N'dbo.DocumentVersion') versionTable, OBJECT_ID(N'dbo.DocumentIteration') iterationTable FOR JSON PATH, INCLUDE_NULL_VALUES;", null, token);
         using var document = JsonDocument.Parse(schema);
         if (document.RootElement[0].EnumerateObject().Any(property => property.Value.ValueKind != JsonValueKind.Null))
@@ -677,7 +689,7 @@ internal sealed class PublishedComponentAcceptanceFixture(
             throw new InvalidOperationException($"正式 plugin-deploy {operation} 返回 {exitCode}，期望 {expectedFailureCode ?? "成功"}。");
     }
 
-    private sealed record OwnedProcess(Process Process, Task<string> Output, Task<string> Error, string LogName);
+    private sealed record OwnedProcess(Process Process, Task<string> Output, Task<string> Error, string LogName, ConcurrentQueue<string> Lines);
 
     private OwnedProcess StartProcess(string file, IReadOnlyList<string> arguments, string cwd, string logName)
     {
@@ -686,8 +698,23 @@ internal sealed class PublishedComponentAcceptanceFixture(
         foreach (var argument in arguments) start.ArgumentList.Add(argument);
         foreach (var pair in _environment) start.Environment[pair.Key] = pair.Value;
         var process = Process.Start(start) ?? throw new InvalidOperationException($"无法启动固定发行物 {file}。");
-        return new(process, process.StandardOutput.ReadToEndAsync(), process.StandardError.ReadToEndAsync(),
-            string.Concat(logName.Select(character => char.IsLetterOrDigit(character) || character is '-' or '_' ? character : '_')));
+        var lines = new ConcurrentQueue<string>();
+        return new(process, CaptureOutputAsync(process.StandardOutput, lines, _sanitize), CaptureOutputAsync(process.StandardError, lines, _sanitize),
+            string.Concat(logName.Select(character => char.IsLetterOrDigit(character) || character is '-' or '_' ? character : '_')), lines);
+    }
+
+    // 同一输出既用于最终脱敏日志，也让故障旅程等待已发生的事件，而不是靠固定延时猜测。
+    private static async Task<string> CaptureOutputAsync(StreamReader reader, ConcurrentQueue<string> lines, Func<string?, string> sanitize)
+    {
+        var output = new StringBuilder();
+        while (await reader.ReadLineAsync() is { } line)
+        {
+            output.AppendLine(line);
+            var safe = sanitize(line);
+            lines.Enqueue(safe.Length <= 4096 ? safe : safe[..4096]);
+            while (lines.Count > 256) lines.TryDequeue(out _);
+        }
+        return output.ToString();
     }
 
     private async Task StopHostAsync(CancellationToken token)
@@ -707,7 +734,7 @@ internal sealed class PublishedComponentAcceptanceFixture(
             await File.WriteAllTextAsync(Path.Combine(runDirectory, owned.LogName + ".stdout.log"), _sanitize(await owned.Output), token);
             await File.WriteAllTextAsync(Path.Combine(runDirectory, owned.LogName + ".stderr.log"), _sanitize(await owned.Error), token);
         }
-        finally { owned.Process.Dispose(); }
+        finally { owned.Lines.Clear(); owned.Process.Dispose(); }
     }
 
     internal async Task<AcceptanceCleanupResult> TeardownAsync(CancellationToken token)

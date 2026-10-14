@@ -130,7 +130,7 @@ dotnet <目标Host目录>/HostApi.dll plugin-deploy enable-bundle --package <同
 目标发行可通过通用身份参数排除待装实现，后续安装和消费不重建这些目标文件：
 
 ```powershell
-dotnet publish apps/host-api/HostApi.csproj -c Release -t:Rebuild -p:NewpExcludedModuleIds=InforCenter%2cWorkspace%2cPart%2cDocument -o <新目标Host目录>
+dotnet publish apps/host-api/HostApi.csproj -c Release -t:Rebuild -p:DebugType=none -p:DebugSymbols=false -p:IncludeSourceRevisionInInformationalVersion=false -p:NewpExcludedModuleIds=InforCenter%2cWorkspace%2cPart%2cDocument -o <新目标Host目录>
 $env:NEWP_EXCLUDED_MODULE_IDS = 'InforCenter,Workspace,Part,Document'
 pnpm --dir frontend --filter @icp-platform/shell exec vite build --outDir <新目标Shell目录>
 Remove-Item Env:NEWP_EXCLUDED_MODULE_IDS
@@ -139,6 +139,8 @@ Remove-Item Env:NEWP_EXCLUDED_MODULE_IDS
 MSBuild 命令中的 `%2c` 转义逗号，避免将组件列表拆成多个属性。三成员正式包已贯通未预装它们的固定 Host/Shell：真实 Workspace、Part、Document API、旧业务行/内容 Link/迁移历史与 Workspace 页面消费连续。安装先完成整批校验与暂存，再以 `native-install.pending` 持久记录原库存字节及每个目录/receipt的先前所有权。提交期间进程中断，下一次正式离线命令或Host启动在同一安装根独占租约内、读取库存前恢复完整旧集合；恢复自身中断可重入。journal只在全部提交或全部恢复完成后移除；损坏、旧版仅摘要标记或无法恢复时保留journal与材料并以 `COMPONENT_BUNDLE_INSTALL_INCOMPLETE` 失败关闭，不能手工删除标记绕过。重复安装幂等，原选择、无关库存与Persistence pending/成功记录及恢复归档保持；文件恢复不连接数据库，也不代替数据库前沿恢复。整包选版和独立升级已沿固定 Host 重启及真实 Part API 验证；三成员归组、消费及显式集合退出/重装恢复已完成；真实部分迁移提交后叠加原生文件安装中断与恢复，SQL pending、成功事实、可信资产和历史保持，最终按真实数据库前沿恢复。父 #267 的完整审查与最终验证仍集中执行。
 
 创建固定目标时，restore 和 publish 必须使用同一排除集合；上述命令完成 restore 并重建 Host，避免复用其他组合生成的 deps/MVC ApplicationPart 引用。目标固定后，安装、选版和重启只操作安装根；二进制身份比较以安装前后同一固定目标为准。
+
+正式 Host publish 与 `component-bundle build` 使用同一无调试路径、无仓库提交号的 Release 形态；三个显式 MSBuild 参数同时传递给项目引用。原生包与 Host 共有的 Contracts 必须保持精确身份、MVID 及完整字节一致，仅有相同平台 API 发行身份不替代此校验。不要混用普通 Release 构建与正式发行产物，也不要通过复制 DLL 或放宽装载校验修复不一致；按上述入口重新构建受影响的发行物。开发调试及 migration authoring 配置保持原样。
 
 整包卸载由调用方明确列出组件 ID，不从 ZIP、组合关系或依赖自动推导集合。停服后运行 `dotnet <发行Host>/HostApi.dll plugin-deploy uninstall --file <组件ID数组JSON> --Platform:PluginInstallRoot <安装根>`；例如 `["InforCenter","Workspace","Part","Document"]`。已有 `uninstall --module-id <id>` 与集合入口使用相同预检；PowerShell wrapper 对应 `-Action uninstall -CandidatePath <JSON>` 或原 `-ModuleId <id>`，两者互斥。空集合、重复或不可用 ID 都拒绝整批。先检查平台必需保护，再用正式 Canonical 编译器验证删除后的完整候选；保留的包外组合引用即使停用仍阻止卸载，活动依赖也不能通过隐式停用、扩大或缩减集合解决。全部语义和路径检查通过后才删除指定代码/installed 库存并一次保存剩余 desired，随后完整重启才生效。
 
@@ -168,7 +170,7 @@ $workspaceDeliveryInput = Join-Path $deliveryRoot 'input.json'
 dotnet run --project server/tools/component-bundle/ComponentBundle.csproj -c Release -- build $repo InforCenter $stage
 dotnet run --project server/tools/component-bundle/ComponentBundle.csproj -c Release --no-build --no-restore -- pack $stage $package
 dotnet run --project server/tools/component-bundle/ComponentBundle.csproj -c Release --no-build --no-restore -- inspect $package
-dotnet publish apps/host-api/HostApi.csproj -c Release -t:Rebuild -p:NewpExcludedModuleIds=InforCenter%2cWorkspace%2cPart%2cDocument -o $hostRoot
+dotnet publish apps/host-api/HostApi.csproj -c Release -t:Rebuild -p:DebugType=none -p:DebugSymbols=false -p:IncludeSourceRevisionInInformationalVersion=false -p:NewpExcludedModuleIds=InforCenter%2cWorkspace%2cPart%2cDocument -o $hostRoot
 $env:NEWP_EXCLUDED_MODULE_IDS = 'InforCenter,Workspace,Part,Document'
 try { pnpm --dir frontend --filter @icp-platform/shell exec vite build --outDir $shellRoot }
 finally { Remove-Item Env:NEWP_EXCLUDED_MODULE_IDS -ErrorAction SilentlyContinue }

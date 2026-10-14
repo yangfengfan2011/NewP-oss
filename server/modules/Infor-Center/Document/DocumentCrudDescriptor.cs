@@ -16,6 +16,7 @@ public static class DocumentCrudDescriptor
         {
             ResourceKey = "document.document", ModuleId = "Document", ModelName = "Document", Route = "api/document/documents",
             RequiresCreationRecord = true, RequiresUpdateRecord = true,
+            SummaryBlockKeys = ["files"],
             IdField = "EID", DisplayField = "ENAME", FieldSet = fieldSet, DeletePolicy = StandardCrudDeletePolicy.Hard,
             Authorization = StandardCrudAuthorization.ByFeature("document.document", StandardCrudOperation.List, StandardCrudOperation.Detail, StandardCrudOperation.Create),
             OptionLabelFields = ["ECODE", "ENAME"], SortableFields = ["ECODE", "ENAME", "UpdatedAt"], DefaultSortField = "ECODE",

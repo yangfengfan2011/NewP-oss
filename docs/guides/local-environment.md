@@ -19,6 +19,8 @@
 
 Host 与 Shell 默认地址分别为 `http://127.0.0.1:5000` 和 `http://127.0.0.1:3000`。开发服务器只监听 IPv4 loopback；访问 `localhost` 时 Shell 会重定向到 `127.0.0.1`，避免系统优先尝试未监听的 `::1`。启动失败时先读取 `.codex-temp/dev/runs/<run>/result.json`、`stages.jsonl` 和对应 stderr 日志。
 
+Files 要求显式绝对私有 `Files:StorageRoot`。`dev.ps1` 优先沿用进程中已设置的 `Files__StorageRoot`，否则固定使用当前 worktree 的 `.codex-temp/dev/files`；`stop-dev.ps1` 只停所属进程，保留该内容目录。更换 root 前先停止开发 Host，重启必须继续使用同数据库、同 root。直接 `dotnet run` 或正式发布入口由调用者显式配置该值，模块不按发行物路径、`AppContext` 或 `wwwroot` 产生默认 root。回退新入口仍保留数据库文件身份与内容，不把代码回退当作字节恢复。
+
 ## 本地 SQL Server
 
 开发 Host 优先使用 `NEWP_DEV_SQLSERVER_CONNECTION_STRING`，未设置时由 Host 正常加载 `apps/host-api/appsettings.Development.json`。已经配置本地连接时无需为每次启动重复设置环境变量。

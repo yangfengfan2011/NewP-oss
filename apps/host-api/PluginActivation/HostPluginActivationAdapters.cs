@@ -165,6 +165,24 @@ public sealed class TrustedDefaultModuleAssemblyRegistry
     private readonly Dictionary<string, TrustedDefaultModuleAssembly> _assemblies =
         new(StringComparer.OrdinalIgnoreCase);
 
+    // 新共享契约也需要实际装载证明；Host 磁盘副本不能为未知预载内存体补办证明。
+    internal bool CanLoadVerifiedImage(VerifiedAssemblyIdentity identity, byte[] image)
+    {
+        var name = identity.AssemblyName.Name ?? throw new InvalidDataException("Verified shared contract has no name.");
+        lock (_gate)
+        {
+            if (_assemblies.TryGetValue(name, out var registered))
+            {
+                if (!registered.Image.AsSpan().SequenceEqual(image)
+                    || !CanonicalModuleAssemblyLoader.MatchesIdentity(registered.Assembly, identity))
+                    throw new InvalidDataException($"Trusted Default module registry contains conflicting bytes for '{name}'.");
+                return true;
+            }
+            return !AssemblyLoadContext.Default.Assemblies.Any(assembly =>
+                string.Equals(assembly.GetName().Name, name, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
     internal Assembly? LoadAtTrustedComposition(
         string owner,
         VerifiedAssemblyIdentity identity,
@@ -249,9 +267,19 @@ public sealed class CanonicalModuleAssemblyLoader
             .Where(static module => !string.IsNullOrWhiteSpace(module.BackendEntry))
             .Select(ReadModuleImage)
             .ToArray();
-        var context = new VerifiedModuleAssemblyLoadContext(images, _distributionRoot);
+        var contracts = ReadNativeContracts(images);
+        var registry = _trustedDefaultRegistry ?? new TrustedDefaultModuleAssemblyRegistry();
+        var useDefault = contracts.All(contract => registry.CanLoadVerifiedImage(contract.Identity, contract.Bytes));
+        var shared = new Dictionary<string, Assembly>(StringComparer.OrdinalIgnoreCase);
+        if (useDefault)
+            foreach (var contract in contracts)
+                shared.Add(contract.Identity.AssemblyName.Name!, registry.LoadAtTrustedComposition(
+                    contract.Identity.AssemblyName.Name!, contract.Identity, contract.Bytes)
+                    ?? throw new InvalidDataException("Verified shared contract was preloaded during trusted composition."));
+        // 任何新契约缺少 Default 证明时，整轮主体与新契约共用一个隔离 ALC，避免 DI Type 分裂。
+        var context = new VerifiedModuleAssemblyLoadContext(images, contracts, shared, _distributionRoot);
         return images
-            .Select(image => LoadModule(image, context))
+            .Select(image => LoadModule(image, context, useDefault))
             .DistinctBy(static assembly => assembly.FullName, StringComparer.Ordinal)
             .ToArray();
     }
@@ -279,15 +307,54 @@ public sealed class CanonicalModuleAssemblyLoader
             ? module.Provenance.GetAuthenticatedBuiltInSnapshot(module)!
                 .ReadDistributionFile(module.BackendEntry!)
             : PathContainment.ReadContainedFile(boundary, path);
-        return new VerifiedModuleImage(module, image, isBuiltIn);
+        return new VerifiedModuleImage(module, image, isBuiltIn, nativePackage);
+    }
+
+    // 原生接纳已核完整文件集合；仅从活动 snapshot 的入口同级读取 Contracts，不探测旁文件。
+    private IReadOnlyList<VerifiedDependencyImage> ReadNativeContracts(IReadOnlyList<VerifiedModuleImage> images)
+    {
+        var contracts = images.Where(image => image.IsNative).SelectMany(image =>
+        {
+            var snapshot = image.Module.Provenance.GetAuthenticatedBuiltInSnapshot(image.Module)!;
+            var directory = Path.GetDirectoryName(image.Module.BackendEntry!)!.Replace('\\', '/');
+            return snapshot.EnumerateFiles(directory)
+                .Where(path => string.Equals(Path.GetDirectoryName(path)?.Replace('\\', '/'), directory, StringComparison.OrdinalIgnoreCase)
+                    && path.EndsWith(".Contracts.dll", StringComparison.OrdinalIgnoreCase))
+                .Select(path =>
+                {
+                    var bytes = snapshot.ReadFile(path);
+                    var identity = VerifiedAssemblyIdentityReader.Read(bytes);
+                    if (!string.Equals(Path.GetFileName(path), identity.AssemblyName.Name + ".dll", StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidDataException("Verified shared contract filename differs from its assembly identity.");
+                    return new VerifiedDependencyImage(identity, bytes);
+                });
+        }).GroupBy(contract => contract.Identity.AssemblyName.Name!, StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                var copies = group.Distinct(VerifiedDependencyImageComparer.Instance).ToArray();
+                if (copies.Length != 1)
+                    throw new InvalidDataException($"Verified native shared contracts contain conflicting images for '{group.Key}'.");
+                var contract = copies[0];
+                var hostPath = Path.Combine(_distributionRoot, group.Key + ".dll");
+                if (File.Exists(hostPath) && !PathContainment.ReadContainedFile(_distributionRoot, hostPath).AsSpan().SequenceEqual(contract.Bytes))
+                    throw new InvalidDataException($"Verified native shared contract '{group.Key}' differs from its Host distribution image.");
+                if (AssemblyLoadContext.Default.Assemblies.Any(assembly =>
+                    string.Equals(assembly.GetName().Name, group.Key, StringComparison.OrdinalIgnoreCase)
+                    && !MatchesIdentity(assembly, contract.Identity)))
+                    throw new InvalidDataException($"Verified native shared contract '{group.Key}' conflicts with a loaded Host identity.");
+                return contract;
+            }).ToArray();
+        // 已批准的 Host 稳定契约保留既有共享规则；这里只扩展本次签发的新 Contracts。
+        return contracts.Where(contract => !VerifiedAssemblyIdentityPolicy.IsHostPlatformSharedDependency(contract.Identity.AssemblyName)).ToArray();
     }
 
     private Assembly LoadModule(
         VerifiedModuleImage image,
-        VerifiedModuleAssemblyLoadContext context)
+        VerifiedModuleAssemblyLoadContext context,
+        bool useDefault)
     {
         var identity = VerifiedAssemblyIdentityReader.Read(image.Bytes);
-        var assembly = image.IsBuiltIn
+        var assembly = image.IsBuiltIn && useDefault
             ? _trustedDefaultRegistry?.LoadAtTrustedComposition(
                 image.Module.ModuleId,
                 identity,
@@ -325,20 +392,21 @@ public sealed class CanonicalModuleAssemblyLoader
         : AssemblyLoadContext
     {
         private readonly IReadOnlyDictionary<string, VerifiedDependencyImage> _verifiedImages;
+        private readonly IReadOnlyDictionary<string, Assembly> _sharedContracts;
         private readonly string _distributionRoot;
 
         internal VerifiedModuleAssemblyLoadContext(
             IReadOnlyList<VerifiedModuleImage> images,
+            IReadOnlyList<VerifiedDependencyImage> contracts,
+            IReadOnlyDictionary<string, Assembly> sharedContracts,
             string distributionRoot)
             : base(isCollectible: false)
         {
             _distributionRoot = distributionRoot;
+            _sharedContracts = sharedContracts;
             _verifiedImages = images
-                .Select(image => new
-                {
-                    Identity = VerifiedAssemblyIdentityReader.Read(image.Bytes),
-                    image.Bytes,
-                })
+                .Select(image => new VerifiedDependencyImage(VerifiedAssemblyIdentityReader.Read(image.Bytes), image.Bytes))
+                .Concat(contracts)
                 .GroupBy(static image => image.Identity.AssemblyName.Name!, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(
                     static group => group.Key,
@@ -381,6 +449,7 @@ public sealed class CanonicalModuleAssemblyLoader
                     throw new FileLoadException($"Verified module dependency '{assemblyName.FullName}' does not match the planned image identity.");
                 }
 
+                if (_sharedContracts.TryGetValue(name, out var shared)) return shared;
                 return LoadVerifiedImage(name, image.Bytes);
             }
 
@@ -447,7 +516,7 @@ public sealed class CanonicalModuleAssemblyLoader
 
     private sealed record VerifiedDependencyImage(VerifiedAssemblyIdentity Identity, byte[] Bytes);
 
-    private sealed record VerifiedModuleImage(CanonicalModulePlanModule Module, byte[] Bytes, bool IsBuiltIn);
+    private sealed record VerifiedModuleImage(CanonicalModulePlanModule Module, byte[] Bytes, bool IsBuiltIn, bool IsNative);
 
     private sealed class ByteArrayComparer : IEqualityComparer<byte[]>
     {

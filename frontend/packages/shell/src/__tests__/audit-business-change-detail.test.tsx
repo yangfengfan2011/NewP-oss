@@ -10,6 +10,8 @@ import dictionary from '../../../../modules/platform/audit/metadata/dictionaries
 import { businessChangeResource } from '../../../../modules/platform/audit/src/businessChangeResource';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
+// 只读呈现验证不计入 ProDescriptions 的冷装载时间。
+import '@ant-design/pro-descriptions';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 function QueryScope({ children }: { children: ReactNode }) { const { currentLanguage } = useLocalization(); return <PlatformQueryProvider scopeKey={currentLanguage}>{children}</PlatformQueryProvider>; }

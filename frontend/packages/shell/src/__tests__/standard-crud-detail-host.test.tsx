@@ -2,7 +2,7 @@ import { platformTestCatalogs } from './localizationTestCatalogs';
 import './authorizedFeatureUiFixture';
 // @vitest-environment jsdom
 
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { LanguageSelect, LocalizationProvider, PlatformQueryProvider, useLocalization } from '@icp-platform/core';
@@ -19,7 +19,8 @@ import { createEmbeddedHostEnvironment } from './standardCrudHostEnvironmentTest
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-beforeAll(async () => { await import('../pages/StandardCrudDetailEditor'); });
+// 收集阶段预载真实模块，冷装载不占交互断言或hook预算。
+await import('../pages/StandardCrudDetailEditor');
 
 function DetailTestQueryScope({ children, bilingual }: { children: React.ReactNode; bilingual: boolean }) {
   const { currentLanguage } = useLocalization();

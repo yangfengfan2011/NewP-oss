@@ -3,7 +3,7 @@ import './authorizedFeatureUiFixture';
 import { act, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
-import { beforeAll, expect, it, onTestFinished, vi } from 'vitest';
+import { expect, it, onTestFinished, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import organizationBindings from '../../../../modules/platform/organization/src';
@@ -14,16 +14,14 @@ import detail from '../../../../modules/platform/organization/metadata/views/Dep
 import runtimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
 vi.mock('@icp-platform/core', async original => ({ ...await original<typeof import('@icp-platform/core')>(), platformFetch: (...args: Parameters<typeof fetch>) => fetch(...args) }));
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-// 此测试验证删除后的读取收敛；在 setup 载入真实组件，冷启动仍由正式 Gate 覆盖。
-beforeAll(async () => {
-  await Promise.all([
-    import('../pages/StandardCrudDetailPageHost'),
-    import('../pages/StandardCrudListPageHost'),
-    import('../pages/StandardCrudListDrawerRuntime'),
-    import('../pages/StandardCrudListOverlayRuntime'),
-    organizationBindings.standardCrudCapabilities!.find(binding => binding.targetKey === 'organization.department.list')!.load(),
-  ]);
-});
+// 此测试验证删除后的读取收敛；收集阶段预载真实组件，冷启动仍由正式 Gate 覆盖。
+await Promise.all([
+  import('../pages/StandardCrudDetailPageHost'),
+  import('../pages/StandardCrudListPageHost'),
+  import('../pages/StandardCrudListDrawerRuntime'),
+  import('../pages/StandardCrudListOverlayRuntime'),
+  organizationBindings.standardCrudCapabilities!.find(binding => binding.targetKey === 'organization.department.list')!.load(),
+]);
 it('settles after one confirmed delete with the real embedded detail host and Organization REST adapter', async () => {
   const fields = { EID: 'd', CompanyId: 'c', CompanyId_DisplayValue: 'Company', ParentDepartmentId: null, ParentDepartmentId_DisplayValue: null, ECODE: 'D', ENAME: 'Department', IsEnabled: true, SortOrder: '001', CreatedAt: '2026-09-08T00:00:00Z', CreatedBy: 'system', UpdatedBy: 'system', UpdatedAt: '2026-09-08T00:00:00Z' };
   const requests: string[] = [];

@@ -16,6 +16,9 @@ import { renderPageEntry } from '../navigation/pageRouteRenderer';
 import { RouteCapabilityOutlet } from '../capabilities/RouteCapabilityOutlet';
 import type { RuntimeMetadataState } from '../metadata/runtimeMetadataManifest';
 
+// 先装载实际人员 capability，交互仍通过真实路由与受控注册执行。
+await organizationBindings.standardCrudCapabilities!.find(binding => binding.targetKey === 'organization.person.list')!.load();
+
 vi.mock('@icp-platform/core', async original => ({ ...await original<typeof import('@icp-platform/core')>(), platformFetch: (input: RequestInfo | URL, init?: RequestInit) => fetch(input, init) }));
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let root: Root;

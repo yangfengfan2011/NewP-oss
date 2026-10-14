@@ -4,7 +4,7 @@ import './authorizedFeatureUiFixture';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import organizationBindings from '../../../../modules/platform/organization/src';
@@ -66,16 +66,15 @@ const structurePersonLinkUserPosition = organizationFeatures.find((point) => poi
   && point.staticScope === 'person')?.position
   ?? failFeaturePoint('structure/person/detail.custom/linkUser');
 
-beforeAll(async () => {
-  await Promise.all([
-    import('../composition/StandardTreePage'),
-    import('../pages/StandardCrudListPageHost'),
-    import('../pages/StandardCrudListDrawerRuntime'),
-    organizationBindings.standardCrudCapabilities?.find(
-      (binding) => binding.targetKey === 'organization.company.list',
-    )?.load(),
-  ]);
-});
+// 收集阶段预载真实模块，冷装载不占交互断言或hook预算。
+await Promise.all([
+  import('../composition/StandardTreePage'),
+  import('../pages/StandardCrudListPageHost'),
+  import('../pages/StandardCrudListDrawerRuntime'),
+  organizationBindings.standardCrudCapabilities?.find(
+    (binding) => binding.targetKey === 'organization.company.list',
+  )?.load(),
+]);
 
 describe('Organization feature placements in real Shell hosts', () => {
   it('opens the real company drawer from the tree toolbar and carries the tree action position', async () => {

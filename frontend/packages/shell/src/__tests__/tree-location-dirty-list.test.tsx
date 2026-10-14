@@ -3,7 +3,7 @@ import './authorizedFeatureUiFixture';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
-import { beforeAll, expect, it, onTestFinished, vi } from 'vitest';
+import { expect, it, onTestFinished, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import organizationBindings from '../../../../modules/platform/organization/src';
@@ -15,15 +15,13 @@ import detail from '../../../../modules/platform/organization/metadata/views/Dep
 import runtimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
 vi.mock('@icp-platform/core', async original => ({ ...await original<typeof import('@icp-platform/core')>(), platformFetch: (...args: Parameters<typeof fetch>) => fetch(...args) }));
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-// 本例验证定位落地时的表单保护；setup 加载真实模块，不把冷编译计入交互断言。
-beforeAll(async () => {
-  await Promise.all([
-    import('../pages/StandardCrudListPageHost'),
-    import('../pages/StandardCrudListDrawerRuntime'),
-    import('../pages/StandardCrudListOverlayRuntime'),
-    organizationBindings.standardCrudCapabilities!.find(binding => binding.targetKey === 'organization.department.list')!.load(),
-  ]);
-});
+// 本例验证定位落地时的表单保护；收集阶段预载真实模块，不把冷编译计入交互断言。
+await Promise.all([
+  import('../pages/StandardCrudListPageHost'),
+  import('../pages/StandardCrudListDrawerRuntime'),
+  import('../pages/StandardCrudListOverlayRuntime'),
+  organizationBindings.standardCrudCapabilities!.find(binding => binding.targetKey === 'organization.department.list')!.load(),
+]);
 
 it.each(['cancel', 'submitting'])('checks shared List lifecycle again when a pending tree path lands: %s retains the original form', async scenario => {
   const nodes = ['c', 'other'].map(id => ({ nodeKey: id, nodeType: 'company', label: id, hasChildren: false, context: { id, companyId: id } }));

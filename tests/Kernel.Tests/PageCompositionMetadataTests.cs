@@ -99,7 +99,9 @@ public sealed class PageCompositionMetadataTests
             var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(sourceRoot, "newp.plugin.json")))!;
             manifest["dependencies"] = new JsonArray();
             File.WriteAllText(Path.Combine(moduleRoot, "plugin.json"), manifest.ToJsonString());
-            File.WriteAllText(Path.Combine(temporary.FullName, "OrganizationModule.dll"), "fixture assembly");
+            // 可信候选签发会读取 PE 引用；使用当前真实模块，不以文本冒充程序集。
+            File.Copy(typeof(ICP.Platform.Modules.Organization.OrganizationModule).Assembly.Location,
+                Path.Combine(temporary.FullName, "OrganizationModule.dll"));
             var treePath = Path.Combine(moduleRoot, "metadata/views/OrganizationStructure.view.json");
             var tree = JsonNode.Parse(File.ReadAllText(treePath))!;
             tree["view"]!["treeActions"]!.AsArray().Add(JsonNode.Parse("""{"key":"secondCreate","labelKey":"Department","viewKey":"organization.department.list","actionKey":"create"}"""));

@@ -316,7 +316,9 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
         var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(source, "newp.plugin.json")))!;
         manifest["dependencies"] = new JsonArray();
         File.WriteAllText(Path.Combine(module, "plugin.json"), manifest.ToJsonString());
-        File.WriteAllText(Path.Combine(root, "OrganizationModule.dll"), "fixture assembly");
+        // 可信候选签发读取真实模块 PE 引用，SQL 旅程与正式输入保持一致。
+        File.Copy(typeof(ICP.Platform.Modules.Organization.OrganizationModule).Assembly.Location,
+            Path.Combine(root, "OrganizationModule.dll"));
         var trust = TrustedBuiltInModuleSource.CreateForHost(root, Path.Combine(root, "modules"));
         var candidate = Assert.Single(new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(trust));
         var plan = Assert.IsType<CanonicalModulePlan>(new CanonicalModulePlanCompiler().Compile("relation-tree", [candidate]).Plan);

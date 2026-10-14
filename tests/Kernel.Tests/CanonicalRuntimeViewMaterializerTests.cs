@@ -373,7 +373,9 @@ public sealed class CanonicalRuntimeViewMaterializerTests : IDisposable
         var metadataRoot = Path.Combine(moduleRoot, "metadata");
         Directory.CreateDirectory(Path.Combine(metadataRoot, "navigation"));
         Directory.CreateDirectory(Path.Combine(metadataRoot, "models"));
-        File.WriteAllText(Path.Combine(_root, "OrganizationModule.dll"), "fixture assembly");
+        // 可信候选签发会读取 PE 引用；使用当前真实模块，不以文本冒充程序集。
+        File.Copy(typeof(ICP.Platform.Modules.Organization.OrganizationModule).Assembly.Location,
+            Path.Combine(_root, "OrganizationModule.dll"));
         File.WriteAllText(
             Path.Combine(moduleRoot, "plugin.json"),
             """

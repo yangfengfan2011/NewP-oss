@@ -331,6 +331,109 @@ public sealed class CanonicalModuleAssemblyLoaderTests : IDisposable
         Assert.Contains(error.LoaderExceptions, failure => failure!.Message.Contains("Document.Contracts", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void Load_OrdinaryBuiltInContractsWithPreloadAndFreshRegistries_SharesActualConsumerTypes()
+    {
+        var modules = new[]
+        {
+            typeof(ICP.Platform.Modules.Files.FilesModule).Assembly,
+            typeof(ICP.Platform.Modules.Document.DocumentModule).Assembly,
+            typeof(ICP.Platform.Modules.Workspace.WorkspaceModule).Assembly
+        };
+        // 无引用的旁文件不进入候选闭包；Default 中已有真实模块和契约也没有本登记器的证明。
+        var plan = BuiltInPlan(modules);
+        var previous = Array.Empty<System.Reflection.Assembly>();
+        for (var startup = 0; startup < 2; startup++)
+        {
+            var assemblies = new CanonicalModuleAssemblyLoader(_root, new TrustedDefaultModuleAssemblyRegistry()).Load(plan);
+            var files = assemblies.Single(assembly => assembly.GetName().Name == "FilesModule")
+                .GetType("ICP.Platform.Modules.Files.Services.FileLifecycleService", throwOnError: true)!;
+            var document = assemblies.Single(assembly => assembly.GetName().Name == "DocumentModule")
+                .GetType("ICP.Platform.Modules.Document.DocumentFiles", throwOnError: true)!;
+            var workspace = assemblies.Single(assembly => assembly.GetName().Name == "WorkspaceModule")
+                .GetType("ICP.Platform.Modules.Workspace.WorkspaceContents", throwOnError: true)!;
+            var filesContract = files.GetInterfaces().Single(type => type.Name == "IFileLifecycleService");
+            var documentContract = document.GetInterfaces().Single(type => type.Name == "IDocumentFiles");
+            Assert.Same(filesContract, document.GetConstructors().SelectMany(constructor => constructor.GetParameters())
+                .Single(parameter => parameter.ParameterType.Name == "IFileLifecycleService").ParameterType);
+            Assert.Same(documentContract, workspace.GetConstructors().SelectMany(constructor => constructor.GetParameters())
+                .Single(parameter => parameter.ParameterType.Name == "IDocumentFiles").ParameterType);
+            Assert.NotSame(typeof(ICP.Platform.Modules.Files.Contracts.IFileLifecycleService), filesContract);
+            Assert.NotSame(typeof(ICP.Platform.Modules.Document.Contracts.IDocumentFiles), documentContract);
+            var context = System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(assemblies[0]);
+            Assert.NotSame(System.Runtime.Loader.AssemblyLoadContext.Default, context);
+            Assert.All(assemblies, assembly => Assert.Same(context, System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(assembly)));
+            Assert.Same(context, System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(filesContract.Assembly));
+            Assert.Same(context, System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(documentContract.Assembly));
+            foreach (var assembly in previous)
+                Assert.NotSame(assembly, assemblies.Single(current => current.GetName().Name == assembly.GetName().Name));
+            previous = assemblies.ToArray();
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ReadTrustedBuiltIn_ReferencedContractMissingOrMismatched_RejectsBeforePlan(bool missing)
+    {
+        var modulesRoot = WriteBuiltInImages([typeof(ICP.Platform.Modules.Files.FilesModule).Assembly]);
+        var contractPath = Path.Combine(_root, "Files.Contracts.dll");
+        if (missing) File.Delete(contractPath);
+        else File.Copy(typeof(CanonicalModuleAssemblyLoaderTests).Assembly.Location, contractPath, overwrite: true);
+        var source = TrustedBuiltInModuleSource.CreateForHost(_root, modulesRoot);
+
+        var error = Record.Exception(() => new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(source));
+
+        if (missing) Assert.Equal(contractPath, Assert.IsType<FileNotFoundException>(error).FileName);
+        else Assert.Contains("Files.Contracts", Assert.IsType<InvalidDataException>(error).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Load_OrdinaryBuiltInContractChangedAfterSnapshot_RejectsBeforeLoadingModules()
+    {
+        var plan = BuiltInPlan([typeof(ICP.Platform.Modules.Files.FilesModule).Assembly]);
+        var path = Path.Combine(_root, "Files.Contracts.dll");
+        var changed = File.ReadAllBytes(path);
+        changed[^1] ^= 1;
+        File.WriteAllBytes(path, changed);
+
+        var error = Assert.Throws<InvalidDataException>(() =>
+            new CanonicalModuleAssemblyLoader(_root, new TrustedDefaultModuleAssemblyRegistry()).Load(plan));
+
+        Assert.Contains("Host", error.Message, StringComparison.Ordinal);
+    }
+
+    private CanonicalModulePlan BuiltInPlan(System.Reflection.Assembly[] modules)
+    {
+        var modulesRoot = WriteBuiltInImages(modules);
+        var source = TrustedBuiltInModuleSource.CreateForHost(_root, modulesRoot);
+        var candidates = new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(source);
+        return Assert.IsType<CanonicalModulePlan>(new CanonicalModulePlanCompiler().Compile("builtin-contracts", candidates).Plan);
+    }
+
+    private string WriteBuiltInImages(System.Reflection.Assembly[] modules)
+    {
+        var modulesRoot = Path.Combine(_root, "modules");
+        Directory.CreateDirectory(modulesRoot);
+        File.WriteAllBytes(Path.Combine(_root, "Unreferenced.Contracts.dll"), [0]);
+        foreach (var assembly in modules)
+        {
+            var owner = assembly.GetName().Name!.Replace("Module", string.Empty, StringComparison.Ordinal);
+            var moduleRoot = Path.Combine(modulesRoot, owner);
+            Directory.CreateDirectory(moduleRoot);
+            File.Copy(assembly.Location, Path.Combine(_root, assembly.GetName().Name + ".dll"));
+            File.WriteAllText(Path.Combine(moduleRoot, "plugin.json"), System.Text.Json.JsonSerializer.Serialize(new
+            {
+                schemaVersion = "1.0", moduleId = owner, displayName = owner, version = "1.0.0",
+                entryAssembly = "../../" + assembly.GetName().Name + ".dll", dependencies = Array.Empty<string>()
+            }));
+        }
+        File.Copy(typeof(ICP.Platform.Modules.Files.Contracts.IFileLifecycleService).Assembly.Location,
+            Path.Combine(_root, "Files.Contracts.dll"));
+        File.Copy(typeof(ICP.Platform.Modules.Document.Contracts.IDocumentFiles).Assembly.Location,
+            Path.Combine(_root, "Document.Contracts.dll"));
+        return modulesRoot;
+    }
     private void CopyHostFileContract()
     {
         Directory.CreateDirectory(_root);

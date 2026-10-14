@@ -201,6 +201,10 @@ public sealed class ModuleCapsuleCandidateReaderTests : IDisposable
             }
         }
 
+        // 真实 Document/Workspace 入口的 owner Contracts 也是当前发行输入，不能只复制主体。
+        foreach (var contract in new[] { "Files.Contracts.dll", "Document.Contracts.dll" })
+            File.Copy(Path.Combine(AppContext.BaseDirectory, contract), Path.Combine(_root, contract));
+
         if (utf8Bom)
         {
             // 编码是 authoring 输入的一部分；覆盖正式可信快照及普通候选读取，不改仓库源文件。

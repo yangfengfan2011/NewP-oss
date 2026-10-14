@@ -261,13 +261,14 @@ public sealed class CanonicalModuleAssemblyLoader
         _trustedDefaultRegistry = trustedDefaultRegistry;
     }
 
+    // 从同一签发计划组合主体与合同；Default 缺少证明时整轮共用隔离上下文。
     public IReadOnlyList<Assembly> Load(CanonicalModulePlan plan)
     {
         var images = plan.Modules
             .Where(static module => !string.IsNullOrWhiteSpace(module.BackendEntry))
             .Select(ReadModuleImage)
             .ToArray();
-        var contracts = ReadNativeContracts(images);
+        var contracts = ReadVerifiedContracts(images);
         var registry = _trustedDefaultRegistry ?? new TrustedDefaultModuleAssemblyRegistry();
         var useDefault = contracts.All(contract => registry.CanLoadVerifiedImage(contract.Identity, contract.Bytes));
         var shared = new Dictionary<string, Assembly>(StringComparer.OrdinalIgnoreCase);
@@ -310,13 +311,17 @@ public sealed class CanonicalModuleAssemblyLoader
         return new VerifiedModuleImage(module, image, isBuiltIn, nativePackage);
     }
 
-    // 原生接纳已核完整文件集合；仅从活动 snapshot 的入口同级读取 Contracts，不探测旁文件。
-    private IReadOnlyList<VerifiedDependencyImage> ReadNativeContracts(IReadOnlyList<VerifiedModuleImage> images)
+    // 两种内建来源都只消费签发快照；普通发行按 PE 引用闭包读取，原生包保留已接纳的完整合同集合。
+    private IReadOnlyList<VerifiedDependencyImage> ReadVerifiedContracts(IReadOnlyList<VerifiedModuleImage> images)
     {
-        var contracts = images.Where(image => image.IsNative).SelectMany(image =>
+        var contracts = images.Where(image => image.IsBuiltIn).SelectMany(image =>
         {
             var snapshot = image.Module.Provenance.GetAuthenticatedBuiltInSnapshot(image.Module)!;
-            var directory = Path.GetDirectoryName(image.Module.BackendEntry!)!.Replace('\\', '/');
+            var directory = (Path.GetDirectoryName(image.Module.BackendEntry!) ?? string.Empty).Replace('\\', '/');
+            if (!image.IsNative)
+                return VerifiedAssemblyIdentityReader.ReadOwnerContractClosure(image.Bytes,
+                    name => snapshot.ReadDistributionFile(Path.Combine(directory, name + ".dll")))
+                    .Select(contract => new VerifiedDependencyImage(contract.Identity, contract.Bytes));
             return snapshot.EnumerateFiles(directory)
                 .Where(path => string.Equals(Path.GetDirectoryName(path)?.Replace('\\', '/'), directory, StringComparison.OrdinalIgnoreCase)
                     && path.EndsWith(".Contracts.dll", StringComparison.OrdinalIgnoreCase))
@@ -333,15 +338,15 @@ public sealed class CanonicalModuleAssemblyLoader
             {
                 var copies = group.Distinct(VerifiedDependencyImageComparer.Instance).ToArray();
                 if (copies.Length != 1)
-                    throw new InvalidDataException($"Verified native shared contracts contain conflicting images for '{group.Key}'.");
+                    throw new InvalidDataException($"Verified shared contracts contain conflicting images for '{group.Key}'.");
                 var contract = copies[0];
                 var hostPath = Path.Combine(_distributionRoot, group.Key + ".dll");
                 if (File.Exists(hostPath) && !PathContainment.ReadContainedFile(_distributionRoot, hostPath).AsSpan().SequenceEqual(contract.Bytes))
-                    throw new InvalidDataException($"Verified native shared contract '{group.Key}' differs from its Host distribution image.");
+                    throw new InvalidDataException($"Verified shared contract '{group.Key}' differs from its Host distribution image.");
                 if (AssemblyLoadContext.Default.Assemblies.Any(assembly =>
                     string.Equals(assembly.GetName().Name, group.Key, StringComparison.OrdinalIgnoreCase)
                     && !MatchesIdentity(assembly, contract.Identity)))
-                    throw new InvalidDataException($"Verified native shared contract '{group.Key}' conflicts with a loaded Host identity.");
+                    throw new InvalidDataException($"Verified shared contract '{group.Key}' conflicts with a loaded Host identity.");
                 return contract;
             }).ToArray();
         // 已批准的 Host 稳定契约保留既有共享规则；这里只扩展本次签发的新 Contracts。

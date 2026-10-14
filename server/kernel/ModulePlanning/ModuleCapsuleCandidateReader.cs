@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ICP.Platform.Kernel.ModuleLoading;
 using ICP.Platform.Kernel.PluginPackages;
 
 namespace ICP.Platform.Kernel.ModulePlanning;
@@ -82,11 +83,19 @@ public sealed class ModuleCapsuleCandidateReader
         var backendEntry = OptionalString(root, "entryAssembly");
         if (backendEntry is not null && trustedSource is not null)
         {
-            snapshot = snapshot!.WithDistributionFile(
-                backendEntry,
-                trustedSource.IsAcceptedNativeRoot(moduleRoot)
-                    ? snapshot.ReadFile(backendEntry)
-                    : trustedSource.CaptureDistributionFile(Path.Combine(moduleRoot, backendEntry)));
+            var native = trustedSource.IsAcceptedNativeRoot(moduleRoot);
+            var entryImage = native
+                ? snapshot!.ReadFile(backendEntry)
+                : trustedSource.CaptureDistributionFile(Path.Combine(moduleRoot, backendEntry));
+            snapshot = snapshot!.WithDistributionFile(backendEntry, entryImage);
+            if (!native)
+            {
+                // 普通内建模块的引用闭包在签发前捕获；装载阶段不能按邻文件补齐依赖。
+                var directory = Path.GetDirectoryName(backendEntry) ?? string.Empty;
+                foreach (var contract in VerifiedAssemblyIdentityReader.ReadOwnerContractClosure(entryImage,
+                             name => trustedSource.CaptureDistributionFile(Path.Combine(moduleRoot, directory, name + ".dll"))))
+                    snapshot = snapshot.WithDistributionFile(Path.Combine(directory, contract.Identity.AssemblyName.Name + ".dll"), contract.Bytes);
+            }
         }
         var dependencies = ReadStringArray(root, "dependencies");
 

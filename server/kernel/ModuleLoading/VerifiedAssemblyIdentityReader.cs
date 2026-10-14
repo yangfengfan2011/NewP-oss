@@ -51,6 +51,71 @@ internal static class VerifiedAssemblyIdentityReader
             metadata.GetGuid(metadata.GetModuleDefinition().Mvid));
     }
 
+    // 只遍历 PE 中精确引用的 owner Contracts；同名版本冲突拒绝，visited 使循环引用终止。
+    internal static IReadOnlyList<(VerifiedAssemblyIdentity Identity, byte[] Bytes)> ReadOwnerContractClosure(
+        ReadOnlyMemory<byte> entryImage,
+        Func<string, byte[]> readContract)
+    {
+        var pending = new Queue<ReadOnlyMemory<byte>>();
+        var contracts = new Dictionary<string, (VerifiedAssemblyIdentity Identity, byte[] Bytes)>(StringComparer.OrdinalIgnoreCase);
+        pending.Enqueue(entryImage);
+        while (pending.TryDequeue(out var image))
+        {
+            foreach (var requested in ReadOwnerContractReferences(image))
+            {
+                var name = requested.Name!;
+                if (contracts.TryGetValue(name, out var existing))
+                {
+                    if (!VerifiedAssemblyIdentityPolicy.MatchesExact(existing.Identity.AssemblyName, requested))
+                        throw new InvalidDataException($"Referenced shared contract '{requested.FullName}' conflicts with another reference.");
+                    continue;
+                }
+                var bytes = readContract(name);
+                var identity = Read(bytes);
+                if (!VerifiedAssemblyIdentityPolicy.MatchesExact(identity.AssemblyName, requested))
+                    throw new InvalidDataException($"Referenced shared contract '{requested.FullName}' differs from its captured image identity.");
+                contracts.Add(name, (identity, bytes));
+                pending.Enqueue(bytes);
+            }
+        }
+        return contracts.Values.ToArray();
+    }
+
+    // 读取引用身份而不执行 PE；平台稳定共享依赖沿既有策略，其他合同只允许简单文件名。
+    private static IReadOnlyList<AssemblyName> ReadOwnerContractReferences(ReadOnlyMemory<byte> image)
+    {
+        using var stream = MemoryMarshal.TryGetArray(image, out var segment)
+            ? new MemoryStream(segment.Array!, segment.Offset, segment.Count, writable: false)
+            : new MemoryStream(image.ToArray(), writable: false);
+        using var peReader = new PEReader(stream);
+        var metadata = peReader.GetMetadataReader();
+        var references = new List<AssemblyName>();
+        foreach (var handle in metadata.AssemblyReferences)
+        {
+            var reference = metadata.GetAssemblyReference(handle);
+            var name = new AssemblyName
+            {
+                Name = metadata.GetString(reference.Name),
+                Version = reference.Version,
+                CultureName = reference.Culture.IsNil ? null : metadata.GetString(reference.Culture)
+            };
+            if (!reference.PublicKeyOrToken.IsNil)
+            {
+                var key = metadata.GetBlobBytes(reference.PublicKeyOrToken);
+                if (reference.Flags.HasFlag(AssemblyFlags.PublicKey)) name.SetPublicKey(key);
+                else name.SetPublicKeyToken(key);
+            }
+            if (reference.Flags.HasFlag(AssemblyFlags.Retargetable)) name.Flags |= AssemblyNameFlags.Retargetable;
+            if (reference.Flags.HasFlag(AssemblyFlags.WindowsRuntime)) name.ContentType = AssemblyContentType.WindowsRuntime;
+            if (!name.Name!.EndsWith(".Contracts", StringComparison.OrdinalIgnoreCase)
+                || VerifiedAssemblyIdentityPolicy.IsHostPlatformSharedDependency(name)) continue;
+            if (name.Name.IndexOfAny(['/', '\\', ':']) >= 0)
+                throw new InvalidDataException($"Referenced shared contract '{name.FullName}' is not a simple assembly filename.");
+            references.Add(name);
+        }
+        return references;
+    }
+
 #pragma warning disable SYSLIB0037
     // 按 PE 机器类型映射程序集架构，I386 另由 Requires32Bit 区分 X86 与 MSIL。
     private static ProcessorArchitecture ReadProcessorArchitecture(PEHeaders headers) =>

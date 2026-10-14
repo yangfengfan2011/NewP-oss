@@ -297,7 +297,11 @@ public sealed class WorkspaceReverseSqlServerHttpApiTests(ITestOutputHelper outp
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
 
-    private static FeaturePoint Point(BusinessAuditHostFixture fixture, string behavior) => Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == behavior);
+    // 原 HTTP 场景消费列表位置；树菜单的同一行为拥有独立功能位置。
+    private static FeaturePoint Point(BusinessAuditHostFixture fixture, string behavior) => Assert.Single(fixture.FeatureCatalog,
+        point => point.BehaviorKey == behavior && (behavior is not ("workspace.folder.remove" or "workspace.folder.editObject")
+            || point.ModuleId == "Workspace" && point.StaticScope == "folder" && point.ActionScope == "list.rowActions"
+                && point.Key == (behavior == "workspace.folder.remove" ? "remove" : "edit")));
     private static object Position(JsonElement root, params string[] links) => new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = root.GetProperty("rootFolderId").GetString(), linkIds = links };
     private static string Forward(string id, object position)
     {

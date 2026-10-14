@@ -274,7 +274,11 @@ public sealed class WorkspaceMixedSqlServerHttpApiTests(ITestOutputHelper output
         Assert.Equal(new[] { "A-part", "B-folder", "C-document" }, result.GetProperty("items").EnumerateArray().Select(row => row.GetProperty("fields").GetProperty("Name").GetString()));
     }
 
-    private static FeaturePoint Point(BusinessAuditHostFixture fixture, string behavior) => Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == behavior);
+    // 原 HTTP 场景消费列表位置；树菜单的同一行为拥有独立功能位置。
+    private static FeaturePoint Point(BusinessAuditHostFixture fixture, string behavior) => Assert.Single(fixture.FeatureCatalog,
+        point => point.BehaviorKey == behavior && (behavior is not ("workspace.folder.remove" or "workspace.folder.editObject")
+            || point.ModuleId == "Workspace" && point.StaticScope == "folder" && point.ActionScope == "list.rowActions"
+                && point.Key == (behavior == "workspace.folder.remove" ? "remove" : "edit")));
     private static async Task<JsonElement> Post(HttpClient client, FeaturePoint point, string path, object? body)
     {
         using var response = await FeatureHttpTestRequests.SendAsync(client, point, HttpMethod.Post, path, body);

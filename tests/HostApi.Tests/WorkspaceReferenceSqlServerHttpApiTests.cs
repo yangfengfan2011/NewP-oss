@@ -254,7 +254,11 @@ public sealed class WorkspaceReferenceSqlServerHttpApiTests(ITestOutputHelper ou
         Assert.Equal(id, Assert.Single((await FeatureHttpTestRequests.ReadAsync(owner, entry, ListUrl(personal))).GetProperty("items").EnumerateArray()).GetProperty("associatedObject").GetProperty("id").GetString());
     }
 
-    private static FeaturePoint Point(BusinessAuditHostFixture fixture, string behavior) => Assert.Single(fixture.FeatureCatalog, p => p.BehaviorKey == behavior);
+    // 原 HTTP 场景消费列表位置；树菜单的同一行为拥有独立功能位置。
+    private static FeaturePoint Point(BusinessAuditHostFixture fixture, string behavior) => Assert.Single(fixture.FeatureCatalog,
+        point => point.BehaviorKey == behavior && (behavior is not ("workspace.folder.remove" or "workspace.folder.editObject")
+            || point.ModuleId == "Workspace" && point.StaticScope == "folder" && point.ActionScope == "list.rowActions"
+                && point.Key == (behavior == "workspace.folder.remove" ? "remove" : "edit")));
     private static object Position(JsonElement root) => new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = root.GetProperty("rootFolderId").GetString(), linkIds = Array.Empty<string>() };
     private static object ChildPosition(JsonElement root, string[] linkIds) => new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = root.GetProperty("rootFolderId").GetString(), linkIds };
     private static string LinkTo(JsonElement list, string id) => Assert.Single(list.GetProperty("items").EnumerateArray(), row => row.GetProperty("associatedObject").GetProperty("id").GetString() == id).GetProperty("linkId").GetString()!;

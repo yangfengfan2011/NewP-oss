@@ -1003,7 +1003,11 @@ public sealed class DocumentFilesSqlServerHttpApiTests
         return ((string)master["EID"]!, (string)version["CurrentIterationId"]!);
     }
 
-    internal static FeaturePoint Point(BusinessAuditHostFixture fixture, string behavior) => Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == behavior);
+    // 原 HTTP 场景消费列表位置；树菜单的同一行为拥有独立功能位置。
+    internal static FeaturePoint Point(BusinessAuditHostFixture fixture, string behavior) => Assert.Single(fixture.FeatureCatalog,
+        point => point.BehaviorKey == behavior && (behavior is not ("workspace.folder.remove" or "workspace.folder.editObject")
+            || point.ModuleId == "Workspace" && point.StaticScope == "folder" && point.ActionScope == "list.rowActions"
+                && point.Key == (behavior == "workspace.folder.remove" ? "remove" : "edit")));
     internal static async Task<WorkspacePosition> RootAsync(BusinessAuditHostFixture fixture, HttpClient admin)
     {
         using var response = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.spaces.access"), HttpMethod.Post, "/api/workspace/spaces/public/initialize");

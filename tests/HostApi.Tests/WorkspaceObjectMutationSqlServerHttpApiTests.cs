@@ -402,7 +402,11 @@ public sealed class WorkspaceObjectMutationSqlServerHttpApiTests
 
     private sealed record Position(string SpaceId, string RootFolderId, string[] LinkIds);
     private sealed record Target(string Model, string Id, string Link);
-    private static FeaturePoint Point(BusinessAuditHostFixture fixture, string action) => Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "workspace.folder." + (action == "edit" ? "editObject" : action == "delete" ? "deleteObject" : action));
+    // 原 HTTP 场景消费列表位置；树菜单的同一行为拥有独立功能位置。
+    private static FeaturePoint Point(BusinessAuditHostFixture fixture, string action) => Assert.Single(fixture.FeatureCatalog,
+        point => point.BehaviorKey == "workspace.folder." + (action == "edit" ? "editObject" : action == "delete" ? "deleteObject" : action)
+            && (action is not ("edit" or "remove") || point.ModuleId == "Workspace" && point.StaticScope == "folder"
+                && point.ActionScope == "list.rowActions" && point.Key == action));
     private static Task<HttpResponseMessage> SendAsync(BusinessAuditHostFixture fixture, HttpClient client, string action, HttpMethod method, string path, object body) =>
         FeatureHttpTestRequests.SendAsync(client, Point(fixture, action), method, path, body);
     private static async Task<Position> RootAsync(BusinessAuditHostFixture fixture, HttpClient admin)

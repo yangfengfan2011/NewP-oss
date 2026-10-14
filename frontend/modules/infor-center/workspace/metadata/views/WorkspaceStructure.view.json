@@ -3,6 +3,10 @@
   "view": {
     "key": "workspace.structure", "mode": "tree", "dicKey": "Workspace", "titleKey": "Title",
     "providerKey": "workspace.spaces", "searchEnabled": false,
-    "nodeTypes": [{ "key": "folder", "titleKey": "Folder", "pageRef": { "pageKey": "platform.list", "parameters": { "viewKey": "workspace.folder.list" }, "inputResolverKey": "workspace.folder.content" } }]
+    "nodeTypes": [{ "key": "folder", "titleKey": "Folder", "pageRef": { "pageKey": "platform.list", "parameters": { "viewKey": "workspace.folder.list" }, "inputResolverKey": "workspace.folder.content" },
+      "contextMenu": [
+        { "key": "edit", "labelKey": "Edit", "actionKey": "edit", "viewKey": "workspace.folder.list", "inputResolverKey": "workspace.folder.reference" },
+        { "key": "remove", "labelKey": "RemoveReference", "actionKey": "remove", "viewKey": "workspace.folder.list", "inputResolverKey": "workspace.folder.reference" }
+      ] }]
   }
 }

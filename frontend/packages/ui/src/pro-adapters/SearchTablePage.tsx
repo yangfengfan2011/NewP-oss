@@ -55,6 +55,8 @@ export function createSearchTableRequest<TFilter extends Record<string, unknown>
 }
 
 export interface SearchTablePageProps<TRow> {
+  /** owning Host 提供行交互；表格不解释对象动作。 */
+  onRow?: (row: TRow) => import('react').HTMLAttributes<HTMLElement>;
   rowKey: string | ((row: TRow) => string);
   columns: ProColumns<TRow>[];
   /** @deprecated 仓库内正式采用者使用 controlledResult；删除需独立的 versioned public-contract 决策。 */
@@ -112,6 +114,7 @@ function remapColumnState(
 }
 
 export function SearchTablePage<TRow extends Record<string, unknown>>({
+  onRow,
   rowKey,
   columns,
   request,
@@ -270,6 +273,7 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         key={`${effectiveQuery.sortBy ?? 'none'}:${effectiveQuery.sortDirection ?? 'none'}`}
         className={className}
         rowKey={rowKey}
+        onRow={onRow}
         columns={tableColumns}
         dataSource={effectiveData}
         loading={effectiveLoading}

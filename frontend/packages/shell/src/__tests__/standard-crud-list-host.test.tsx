@@ -416,6 +416,96 @@ describe('StandardCrudListPageHost', () => {
     ]);
   }
 
+  it.each(['mouse', 'keyboard'] as const)('uses the pointed row and its existing input/confirmation chain from %s without consuming selection', async trigger => {
+    const handler = vi.fn(async (_context: unknown) => undefined);
+    const list = vi.fn(async () => ({ items: [{ id: 'one', ENAME: '甲' }, { id: 'two', ENAME: '乙' }], total: 2 }));
+    mockStandardCrudModule({ dataAdapter: { list, getRowId: (row: { id: string }) => row.id },
+      actionHandlers: { review: handler, batch: vi.fn() },
+      actionInputRenderers: { draft: context => <span>复核目标：{String((context.row as { ENAME: string }).ENAME)}</span> } });
+    const view = { ...personListViewDocument, view: { ...personListViewDocument.view,
+      pageActions: [{ key: 'batch', labelKey: 'BatchReview', handlerKey: 'batch', requiresSelection: true }],
+      rowActions: [{ key: 'review', labelKey: 'RowReview', handlerKey: 'review', inputKey: 'draft', confirmMessageKey: 'ConfirmReview' }],
+      rowContextMenu: ['review'],
+    } } as unknown as typeof personListViewDocument;
+    await renderHost({ 'PersonListView.BatchReview': '批量复核', 'PersonListView.RowReview': '行复核',
+      'PersonListView.ConfirmReview': '确认复核所指行？' }, view);
+    await vi.waitFor(() => expect(container.querySelector('tr[data-row-key="two"]')).not.toBeNull());
+    await act(async () => container.querySelector<HTMLInputElement>('tr[data-row-key="one"] input[type="checkbox"]')!.click());
+    const row = container.querySelector<HTMLElement>('tr[data-row-key="two"]')!;
+    row.focus();
+    await act(async () => row.dispatchEvent(trigger === 'mouse'
+      ? new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 140, clientY: 180 })
+      : new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true, cancelable: true })));
+    await vi.waitFor(() => expect(document.querySelector('[role="menuitem"]')?.textContent).toContain('行复核'));
+    await act(async () => document.querySelector<HTMLElement>('[role="menuitem"]')!.click());
+    await vi.waitFor(() => expect(document.querySelector('.ant-modal-body')?.textContent).toContain('复核目标：乙'));
+    expect(document.querySelector('.ant-modal-body')?.textContent).toContain('确认复核所指行？');
+    expect(handler).not.toHaveBeenCalled();
+    await act(async () => document.querySelector<HTMLButtonElement>('.ant-modal-footer .ant-btn-primary')!.click());
+    await vi.waitFor(() => expect(handler).toHaveBeenCalledOnce());
+    expect(handler.mock.calls[0][0]).toMatchObject({ id: 'two', row: { id: 'two', ENAME: '乙' } });
+    expect((handler.mock.calls[0][0] as { selectedRows?: unknown }).selectedRows).toBeUndefined();
+    await vi.waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+  });
+
+  it.each(['page', 'permission', 'inactive', 'data'] as const)('invalidates an open row menu on %s changes', async change => {
+    const handler = vi.fn(); let name = '甲';
+    mockStandardCrudModule({ dataAdapter: { list: async () => ({ items: [{ id: 'one', ENAME: name }], total: 1 }), getRowId: (row: { id: string }) => row.id }, actionHandlers: { review: handler } });
+    const view = { ...personListViewDocument, view: { ...personListViewDocument.view, pageActions: [],
+      rowActions: [{ key: 'review', labelKey: 'Review', handlerKey: 'review' }], rowContextMenu: ['review'] } } as unknown as typeof personListViewDocument;
+    const embedded = change === 'inactive' ? createEmbeddedHostEnvironment({}) : undefined;
+    const host = await renderHost({ 'PersonListView.Review': '复核' }, view, '/organization/persons', {
+      embedded, feature: { entry: 'entry', positions: ['entry', 'review'], points: [
+        { key: 'review', kind: 'action', position: 'review', parentPosition: 'entry', actionScope: 'list.rowActions' },
+      ] },
+    });
+    await vi.waitFor(() => expect(container.querySelector('tr[data-row-key="one"]')).not.toBeNull());
+    await act(async () => container.querySelector('tr[data-row-key="one"]')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
+    await vi.waitFor(() => expect(document.querySelector('[role="menuitem"]')).not.toBeNull());
+    const oldItem = document.querySelector<HTMLElement>('[role="menuitem"]')!;
+    if (change === 'page') await act(async () => testNavigate!('?page=2'));
+    else if (change === 'permission') await host.setFeaturePositions(['entry']);
+    else if (change === 'inactive') { embedded!.lifecycle.active = false; await host.setFeaturePositions(); }
+    else { name = '变化'; await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="刷新"]')!.click()); }
+    await vi.waitFor(() => expect(document.querySelector('.ant-dropdown:not(.ant-dropdown-hidden)')).toBeNull());
+    await act(async () => oldItem.click());
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('preserves native context menus for an unconfigured view and input controls', async () => {
+    mockStandardCrudModule({ dataAdapter: { list: async () => ({ items: [{ id: 'one', ENAME: '甲' }], total: 1 }), getRowId: (row: { id: string }) => row.id } });
+    await renderHost();
+    await vi.waitFor(() => expect(container.querySelector('tr[data-row-key="one"]')).not.toBeNull());
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    await act(async () => container.querySelector('tr[data-row-key="one"]')!.dispatchEvent(event));
+    expect(event.defaultPrevented).toBe(false);
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+  });
+
+  it.each(['right-click', 'more'] as const)('invalidates the %s row menu when the authenticated actor changes', async entry => {
+    const handler = vi.fn();
+    let user: AuthUser = { id: 'user-1', ecode: 'one', ename: 'One', revision: 1, mustChangePassword: false,
+      isLocalAdministrator: false, featurePositions: ['entry', 'review'], timeZoneId: 'Asia/Taipei' };
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(user)));
+    mockStandardCrudModule({ dataAdapter: { list: async () => ({ items: [{ id: 'one', ENAME: '甲' }], total: 1 }), getRowId: (row: { id: string }) => row.id }, actionHandlers: { review: handler } });
+    const view = { ...personListViewDocument, view: { ...personListViewDocument.view, pageActions: [],
+      rowActions: [{ key: 'review', labelKey: 'Review', handlerKey: 'review' }], rowContextMenu: ['review'] } } as unknown as typeof personListViewDocument;
+    await renderHost({ 'PersonListView.Review': '复核' }, view, '/organization/persons', { authenticatedUser: user,
+      feature: { entry: 'entry', points: [{ key: 'review', kind: 'action', position: 'review', parentPosition: 'entry', actionScope: 'list.rowActions' }] } });
+    await vi.waitFor(() => expect(container.querySelector('tr[data-row-key="one"]')).not.toBeNull());
+    await act(async () => entry === 'right-click'
+      ? container.querySelector('tr[data-row-key="one"]')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }))
+      : container.querySelector<HTMLButtonElement>('.np-row-actions-more')!.click());
+    await vi.waitFor(() => expect(document.querySelector('[role="menuitem"]')).not.toBeNull());
+    const oldItem = document.querySelector<HTMLElement>('[role="menuitem"]')!;
+    user = { ...user, id: 'user-2' };
+    vi.mocked(globalThis.fetch).mockResolvedValue(new Response(JSON.stringify(user)));
+    await act(async () => refreshTestIdentity!());
+    await vi.waitFor(() => expect(document.querySelector('.ant-dropdown:not(.ant-dropdown-hidden)')).toBeNull());
+    await act(async () => oldItem.click());
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it.each([
     { scope: 'list.pageActions', standardAction: undefined },
     { scope: 'list.rowActions', standardAction: undefined },

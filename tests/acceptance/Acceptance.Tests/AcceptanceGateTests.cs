@@ -148,6 +148,35 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通账号通过固定发行物的树和列表右键菜单编辑真实文件夹与图文档")]
+    public async Task NativeWorkspaceContextMenus_UseFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-workspace-context-menus");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseCompositionLifecycle: false);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
+            browserJourney: async (page, token) =>
+            {
+                var driver = new WorkspacePageDriver(page);
+                Task CaptureAsync(string name) => page.ScreenshotAsync(new()
+                { Path = Path.Combine(root, name), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                var folder = "菜单文件夹 " + runId[..8];
+                var document = "菜单图文档 " + runId[..8];
+                await driver.OpenAsync();
+                await driver.SelectRootAsync("公共空间");
+                await driver.CreateFolderAsync(folder);
+                await driver.ExpandRootToFolderAsync("公共空间", folder);
+                await driver.SelectTreePathAsync("公共空间", folder);
+                await driver.CreateDocumentWithFilesAsync("MENU-D-" + runId[..8], document, WorkspacePageDriver.SmallMainFile());
+                await driver.EditObjectFromContextMenuAsync(document, document + " 已编辑", () => CaptureAsync("list-context-menu.png"));
+                await driver.EditFolderFromTreeContextMenuAsync(folder, folder + " 已编辑", () => CaptureAsync("tree-context-menu.png"));
+                await CaptureAsync("context-menu-saved.png");
+                await page.SetViewportSizeAsync(900, 1000);
+                await CaptureAsync("context-menu-saved-narrow.png");
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
+                    new { url = page.Url, actor = "ordinary", journey = "workspace-context-menus" }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact(RunEnvironmentVariable, "真实 Link 迁移、普通账号创建文件夹与共享树/列表/属性 driver")]
     public async Task WorkspaceFolderCreation_UsesFormalDriver()
     {

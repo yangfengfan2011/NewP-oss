@@ -2,6 +2,7 @@ import type { FrontendModule, PageInput, PageRef, TabView, TreeView } from '@icp
 import type { RuntimeMetadataState } from '../metadata/runtimeMetadataManifest';
 import { relationTreeProviderKey } from './relationTreeProvider';
 import { resolveDetailContributions } from '../standard-crud/detailContributionRegistry';
+import { resolveRowContextMenu } from '../metadata/standardCrudSchemaResolver';
 
 const modes: Record<string, string> = { 'platform.tree': 'tree', 'platform.tabs': 'tab', 'platform.list': 'list', 'platform.detail': 'detail' };
 export function resolvePageInput(ref: PageRef, modules: FrontendModule[], context?: PageInput['context']): PageInput {
@@ -27,6 +28,9 @@ export function validateCompositionCandidate(modules: FrontendModule[], metadata
   }
   const views = new Map(metadata.viewDocuments.map(document => [String(document.view.key), document.view]));
   if (views.size !== metadata.viewDocuments.length) throw new Error('重复 View key');
+  for (const [key, view] of views) if (view.mode === 'list' || view.mode === undefined) {
+    resolveRowContextMenu(view.rowContextMenu, view.rowActions as { key: string }[] ?? [], key);
+  }
   const check = (ref: PageRef, chain: Set<string>) => {
     if (!ref || typeof ref.pageKey !== 'string') throw new Error('缺少 PageRef.pageKey');
     const resolver = modules.flatMap(module => module.pageInputResolvers ?? []).find(item => item.key === ref.inputResolverKey);

@@ -20,6 +20,30 @@ describe('Standard CRUD detail query', () => {
     vi.restoreAllMocks();
   });
 
+  it('isolates the same action record by scope, aborts the old request, and ignores its late result', async () => {
+    let finishOld!: (detail: StandardCrudLoadedDetail) => void;
+    const old = new Promise<StandardCrudLoadedDetail>(resolve => { finishOld = resolve; });
+    const latest = { normalized: { fields: { ENAME: 'new parent' }, summaries: {} }, value: {} };
+    const get = vi.fn().mockReturnValueOnce(old).mockResolvedValueOnce(latest);
+    let current!: StandardCrudDetailQueryResult<unknown>;
+    const adapter = { get, list: vi.fn(), getRowId: () => 'same-link' };
+    function Subscriber({ parent }: { parent: string }) {
+      current = useStandardCrudDetailQuery({ resourceKey: 'workspace.folder', id: 'same-link', dataAdapter: adapter,
+        featurePosition: 'tree-edit', queryScope: { linkIds: parent } });
+      return null;
+    }
+    container = document.createElement('div'); document.body.append(container); root = createRoot(container);
+    await act(async () => root.render(<PlatformQueryProvider scopeKey="actor"><Subscriber parent='["a"]' /></PlatformQueryProvider>));
+    const oldSignal = get.mock.calls[0][1].signal as AbortSignal;
+    await act(async () => root.render(<PlatformQueryProvider scopeKey="actor"><Subscriber parent='["b"]' /></PlatformQueryProvider>));
+    // Core 以短暂宽限期兼容 StrictMode 重订阅；范围切换最终取消真正失去消费者的请求。
+    await vi.waitFor(() => expect(oldSignal.aborted).toBe(true));
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(get.mock.calls[1][1]).toMatchObject({ queryScope: { linkIds: '["b"]' }, featurePosition: 'tree-edit' });
+    await act(async () => finishOld({ normalized: { fields: { ENAME: 'old parent' }, summaries: {} }, value: {} }));
+    expect(current.detail).toBe(latest);
+  });
+
   it('settles one explicit reload even when its loader returns the same detail object', async () => {
     const detail = { normalized: { fields: { EID: 'Person_1' }, summaries: {} }, value: {} };
     let complete!: () => void;

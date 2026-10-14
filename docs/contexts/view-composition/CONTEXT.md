@@ -18,6 +18,10 @@ Tree View 的 `searchEnabled` 缺省为 true；显式 false 时不挂载搜索�
 
 Tree View 的 `treeActions` 与节点 `contextMenu` 都是可选数组，缺省为空并按声明顺序展示。每项用 `viewKey` 指向已有 List View，并在 `standardAction` 与稳定 `actionKey` 中二选一；`actionKey` 引用该资源既有 ActionSchema 的 key，不重定义 handler、权限、确认或输入。目标身份及创建范围由可选 `inputResolverKey` 提供。候选校验拒绝重复 key、缺失／歧义动作及不匹配的资源 binding；实际资源装载继续核对 handler/input 注册。菜单先完成选择保护，标准 Host 随后复用同一 Drawer、行操作确认、Action Review Dialog 和共享执行。模块专用动作仍按原 handler key 执行并使用原服务端领域裁决。
 
+树与标准列表共用共享 UI `ContextActionMenu` 的鼠标／键盘打开、关闭与焦点恢复；无菜单及输入编辑区域保留浏览器行为。Provider 节点可选 `contextMenuKeys` 只收窄节点类型已声明的菜单 key，空数组不显示菜单，未知 key 不能贡献新动作；缺省保持声明集合。该投影不授予功能或业务资格，也不改变 nodeType 和已有功能位置。树在选择／未保存内容保护通过后才打开目标菜单，执行前核对当前节点、主体、范围与活动状态；目标切换关闭菜单并拒绝旧隐藏项。
+
+树菜单保留既有 `contextMenu` 静态呈现位置，列表保留 `list.rowActions` 位置，角色须分别获得所需位置。功能编译先按引用解析原 List View 的唯一动作，再从该动作的 `standardAction/handlerKey` 派生执行行为及其表单 Lookup／`readBehaviors`；引用 key 不等于执行行为。不同位置仍绑定同一真实 endpoint，不能为菜单另造行为或遗漏附加读取。
+
 ## Language
 
 自定义导航可以通过 `featureKey` 保留自己的主行为，并用 PageRef 组合标准 Tree/List/Detail。候选编译器将这些标准页面的读取行为及业务动作派生到同一入口；初始化命令仍绑定导航原有主行为，派生读取不能用于 POST。动作位置保留 node-type、surface 和入口依赖，不复制第二份功能目录。

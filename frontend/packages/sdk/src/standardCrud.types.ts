@@ -396,6 +396,8 @@ export interface StandardCrudListReadContext extends StandardCrudFeatureRequestC
 
 /** 详情取消信号不进入查询 key；功能位置参与缓存隔离但不改变资源标识或 URL。 */
 export interface StandardCrudDetailReadContext extends StandardCrudFeatureRequestContext {
+  /** 组合动作的模块定位范围；宿主隔离请求，模块解释输入，服务端仍须重验资格。 */
+  queryScope?: Record<string, string | null>;
   signal?: AbortSignal;
 }
 

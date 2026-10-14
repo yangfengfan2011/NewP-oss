@@ -50,6 +50,8 @@ WorkspaceFolderContent 是正式 Link，父端由 authoring 固定为 WorkspaceF
 
 ## 对象编辑与删除
 
+普通文件夹树节点贡献已有编辑与移除引用动作，右侧内容 List View 通过 `rowContextMenu` 引用已有编辑、删除与移除。根仍使用 `folder` nodeType 和既有功能位置；Provider 仅以 `contextMenuKeys: []` 收窄根菜单。`workspace.folder.reference` 从完整节点位置取末端 LID 作为动作 recordId，其源父位置为链去掉末端 LID；空链根及非法链拒绝。`referenceObjectId` 只供共享动作读取真实 Folder EID，并保留动作 row 的 LID/ObjectModelKey；它不进入写入 DTO，也不替代 edit-values、PUT 或移除命令对真实关系端点和完整源父位置的重验。普通实体详情继续按 EID 读取。
+
 内容行编辑通过当前完整位置与 LID 重新读取可编辑字段，在共享 Drawer 修改。文件夹编辑名称及说明；零组件、图文档编辑编码、名称及说明。服务端从真实关系推导 EID 和模型，不接受客户端替换类型；完整位置、父文件夹 edit、端点 read 与目标 edit/delete 数据权限每次重验。空间根继续禁止编辑和删除。
 
 Part/Document 通过所属标准 update/delete 行为执行字段规则、编码唯一性和可信审计；其普通 HTTP 更新/删除仍不开放。Workspace 文件夹改名在同一图锁下检查所有真实直接父文件夹的同名冲突，不返回不可见路径。实体编辑不改变 Link 审计。

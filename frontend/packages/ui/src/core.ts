@@ -51,6 +51,8 @@ export type { TableWrapProps, TableColumn } from './patterns/TableWrap';
 export { StatusBadge } from './patterns/StatusBadge';
 export type { StatusBadgeProps, StatusBadgeVariant } from './patterns/StatusBadge';
 
+export { ContextActionMenu, isNativeContextMenuTarget } from './components/ContextActionMenu';
+export type { ContextActionMenuProps } from './components/ContextActionMenu';
 export { FormInline } from './patterns/FormInline';
 export type { FormInlineProps } from './patterns/FormInline';
 

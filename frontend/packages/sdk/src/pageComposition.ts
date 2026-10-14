@@ -14,6 +14,8 @@ export interface TreeNodeDescriptor {
   code?: string; isEnabled?: boolean; context?: Record<string, unknown>;
   /** 合成节点的本地化标题；label 保留 Provider 的显示回退值。 */
   labelKey?: string;
+  /** 可选的菜单呈现子集；只引用节点类型已声明 key，不授予动作资格。空数组表示无菜单。 */
+  contextMenuKeys?: readonly string[];
 }
 export interface PageInput {
   parameters: Record<string, unknown>; context?: TreeNodeDescriptor;

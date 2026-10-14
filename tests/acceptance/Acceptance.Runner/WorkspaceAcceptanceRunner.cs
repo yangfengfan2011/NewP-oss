@@ -85,6 +85,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             grantedFeatures = [entry, features.Action(entry, "create", "list.pageActions", "folder"),
                 features.Action(entry, "createPart", "list.pageActions", "folder"), features.Action(entry, "createDocument", "list.pageActions", "folder"), features.Action(entry, "remove", "list.rowActions", "folder"),
                 features.Action(entry, "edit", "list.rowActions", "folder"), features.Action(entry, "delete", "list.rowActions", "folder"),
+                features.Action(entry, "edit", "contextMenu", "folder"), features.Action(entry, "remove", "contextMenu", "folder"),
                 features.Action(entry, "deleteObjects", "list.pageActions", "folder"), part, document,
                 features.Behavior("Document", "document.document.download")];
         }
@@ -195,7 +196,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             await driver.ExpandRootToFolderAsync("公共空间", folderName);
             await CapturePresentationAsync(page, "folder-content-narrow.png");
             await driver.EditObjectAsync(folderName, folderName + " 已编辑");
-            await driver.EditObjectAsync(DocumentName, DocumentName + " 已编辑");
+            await driver.EditObjectFromContextMenuAsync(DocumentName, DocumentName + " 已编辑");
             await driver.EditObjectAsync(PartName + " 新建", PartName + " 已编辑");
             await CapturePresentationAsync(page, "folder-content-edited.png");
             await driver.DeleteSelectedAsync(folderName + " 已编辑", DocumentName + " 已编辑", PartName + " 已编辑");

@@ -133,8 +133,7 @@ public static class StandardFeatureMetadataCompiler
                 if (operation is null or "view" or "refresh") continue;
                 Action(owner, scope, Text(action, "key"), Title(Optional(action, "labelKey") ?? Text(action, "key"), Optional(view, "dicKey")),
                     resource + "." + (operation == "edit" ? "update" : operation), Text(view, "mode") + "." + property,
-                    (operation is "create" or "edit" ? LookupBehaviors(view, true).Append(resource + ".read") : [resource + ".read"])
-                        .Concat(action.TryGetProperty("readBehaviors", out var reads) ? reads.EnumerateArray().Select(read => read.GetString()!) : []).ToArray(),
+                    ActionReads(view, action, operation),
                     FullTitleKey(Optional(action, "labelKey") ?? Text(action, "key"), Optional(view, "dicKey")));
             }
         }
@@ -146,13 +145,24 @@ public static class StandardFeatureMetadataCompiler
             foreach (var action in actions.EnumerateArray())
             {
                 var target = views[Text(action, "viewKey")];
-                var operation = Optional(action, "standardAction") ?? Text(action, "actionKey");
+                var standard = Optional(action, "standardAction");
+                var key = standard ?? Text(action, "actionKey");
+                var definition = new[] { "pageActions", "rowActions" }.SelectMany(name => target.TryGetProperty(name, out var entries)
+                    ? entries.EnumerateArray().ToArray() : [])
+                    .Single(item => Optional(item, standard is null ? "key" : "standardAction") == key);
+                var operation = Optional(definition, "standardAction") ?? Optional(definition, "handlerKey")
+                    ?? throw new InvalidOperationException("树动作引用缺少资源执行行为。");
                 Action(owner, scope, Text(action, "key"), Title(Text(action, "labelKey"), dictionary),
-                    Text(target, "resourceKey") + "." + (operation == "edit" ? "update" : operation), property,
-                    operation is "create" or "edit" ? LookupBehaviors(target, true).Append(Text(target, "resourceKey") + ".read").ToArray() : [Text(target, "resourceKey") + ".read"],
+                    Text(target, "resourceKey") + "." + (operation is "view" or "refresh" ? "read" : operation == "edit" ? "update" : operation), property,
+                    ActionReads(target, definition, operation),
                     FullTitleKey(Text(action, "labelKey"), dictionary));
             }
         }
+
+        // 所有呈现位置复用资源动作自己的表单 Lookup 与显式附加读取，不从引用 key 猜测执行行为。
+        string[] ActionReads(JsonElement view, JsonElement action, string operation) =>
+            (operation is "create" or "edit" ? LookupBehaviors(view, true).Append(Text(view, "resourceKey") + ".read") : [Text(view, "resourceKey") + ".read"])
+                .Concat(action.TryGetProperty("readBehaviors", out var reads) ? reads.EnumerateArray().Select(read => read.GetString()!) : []).ToArray();
 
         // Lookup 绑定属于资源 View；同名 provider 在不同资源中不能合并为同一执行行为。
         IReadOnlyList<string> LookupBehaviors(JsonElement view, bool form)

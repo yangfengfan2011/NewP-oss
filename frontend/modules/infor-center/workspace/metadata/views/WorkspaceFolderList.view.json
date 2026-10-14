@@ -18,6 +18,7 @@
       { "key": "deleteObjects", "labelKey": "BatchDelete", "handlerKey": "deleteObjects", "requiresSelection": true, "inputKey": "confirmDelete", "variant": "danger", "confirmMessageKey": "ConfirmDeleteObjects" }],
     "pageActionGroups": [{ "key": "new", "labelKey": "New", "variant": "primary", "actionKeys": ["create", "createPart", "createDocument"] }],
     "featureActions": [{ "key": "add", "titleKey": "AddFolder", "behaviorKey": "workspace.folder.add", "readBehaviors": ["workspace.folder.read"] }],
+    "rowContextMenu": ["edit", "delete", "remove"],
     "rowActions": [{ "key": "edit", "labelKey": "Edit", "handlerKey": "editObject", "inputKey": "editObject" },
       { "key": "delete", "labelKey": "Delete", "handlerKey": "deleteObject", "variant": "danger", "confirmMessageKey": "ConfirmDeleteObjects" },
       { "key": "remove", "labelKey": "RemoveReference", "handlerKey": "remove", "variant": "danger", "confirmMessageKey": "ConfirmRemoveReference" }], "export": { "enabled": false }

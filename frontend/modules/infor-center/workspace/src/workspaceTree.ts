@@ -20,7 +20,7 @@ function headers(scope: Record<string, unknown>) {
 }
 function node(space: SpaceRoot): TreeNodeDescriptor {
   return { nodeKey: `${encodeURIComponent(space.spaceId)}:${encodeURIComponent(space.rootFolderId)}`, nodeType: 'folder',
-    label: space.name, labelKey: `Workspace.${space.spaceKind}`, hasChildren: space.hasChildren ?? false,
+    label: space.name, labelKey: `Workspace.${space.spaceKind}`, hasChildren: space.hasChildren ?? false, contextMenuKeys: [],
     context: { spaceId: space.spaceId, rootFolderId: space.rootFolderId, id: space.rootFolderId, linkIds: [] } };
 }
 
@@ -76,6 +76,16 @@ export function createWorkspaceTreeProvider(fetcher: typeof fetch = platformFetc
 }
 
 export const workspacePageInputs: PageInputResolverBinding[] = [
+  { key: 'workspace.folder.reference', pageKeys: ['platform.list'], resolve: (parameters, context) => {
+    const value = context?.context;
+    if (context?.nodeType !== 'folder' || typeof value?.id !== 'string' || typeof value.spaceId !== 'string' || typeof value.rootFolderId !== 'string'
+      || !Array.isArray(value.linkIds) || value.linkIds.length === 0 || value.linkIds.some(id => typeof id !== 'string' || !id)) {
+      throw new Error('缺少普通文件夹引用位置');
+    }
+    const linkIds = value.linkIds as string[];
+    return { parameters, context, recordId: linkIds[linkIds.length - 1],
+      queryScope: { spaceId: value.spaceId, rootFolderId: value.rootFolderId, linkIds: JSON.stringify(linkIds.slice(0, -1)), referenceObjectId: value.id } };
+  } },
   { key: 'workspace.references.object', pageKeys: ['platform.list'], resolve: parameters => {
     if (typeof parameters.recordId !== 'string' || !parameters.recordId || typeof parameters.anchorModelKey !== 'string') throw new Error('缺少直接引用对象');
     return { parameters, queryScope: { anchorId: parameters.recordId, anchorModelKey: parameters.anchorModelKey } };

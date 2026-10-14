@@ -22,6 +22,20 @@ public static class PageCompositionMetadataValidator
             if (!views.TryAdd(key, view)) throw new JsonException($"Duplicate View: {key}");
         }
         var references = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var view in views.Values.Where(view => Mode(view) == "list"))
+        {
+            if (!view.TryGetProperty("rowContextMenu", out var menu)) continue;
+            if (menu.ValueKind != JsonValueKind.Array) throw new JsonException("Row context menu must be an array of action keys.");
+            var actions = view.TryGetProperty("rowActions", out var rows) && rows.ValueKind == JsonValueKind.Array
+                ? rows.EnumerateArray().ToArray() : [];
+            var keys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var item in menu.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(item.GetString())
+                    || !keys.Add(item.GetString()!) || actions.Count(action => Required(action, "key") == item.GetString()) != 1)
+                    throw new JsonException("Row context menu reference is invalid, missing or duplicate.");
+            }
+        }
         var contributions = new HashSet<string>(StringComparer.Ordinal);
         var contributionTargets = new HashSet<string>(StringComparer.Ordinal);
         foreach (var view in views.Values)

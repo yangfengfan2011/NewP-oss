@@ -1,10 +1,25 @@
 import { expect, it, vi } from 'vitest';
-import { createWorkspaceTreeProvider } from '../workspaceTree';
+import { createWorkspaceTreeProvider, workspacePageInputs } from '../workspaceTree';
 
 const roots = [
   { spaceId: 'public', spaceKind: 'Public', rootFolderId: 'root-public', name: '公共空间' },
   { spaceId: 'mine', spaceKind: 'Personal', rootFolderId: 'root-mine', name: '个人空间' },
 ];
+it('keeps roots under the existing folder feature scope while suppressing node mutation menus', async () => {
+  const request = vi.fn(async () => new Response(JSON.stringify(roots)));
+  const values = await createWorkspaceTreeProvider(request).roots({ kind: 'currentUser', featurePosition: 'read' });
+  expect(values.map(value => [value.nodeType, value.contextMenuKeys])).toEqual([['folder', []], ['folder', []]]);
+});
+
+it('resolves a tree reference to its exact terminal LID and source parent occurrence', () => {
+  const resolve = workspacePageInputs.find(item => item.key === 'workspace.folder.reference')!.resolve;
+  const node = { nodeKey: 'public:root:first:terminal', nodeType: 'folder', label: 'Folder', hasChildren: false,
+    context: { spaceId: 'public', rootFolderId: 'root', id: 'folder-eid', linkIds: ['first', 'terminal'] } };
+  expect(resolve({ viewKey: 'workspace.folder.list' }, node)).toMatchObject({ recordId: 'terminal',
+    queryScope: { spaceId: 'public', rootFolderId: 'root', linkIds: '["first"]', referenceObjectId: 'folder-eid' } });
+  expect(() => resolve({}, { ...node, context: { ...node.context, linkIds: [] } })).toThrow('普通文件夹');
+  expect(() => resolve({}, { ...node, context: { ...node.context, linkIds: ['first', ''] } })).toThrow('普通文件夹');
+});
 it.each([
   ['Public', 'Workspace.PublicUnavailable'],
   ['Personal', 'Workspace.PersonalUnavailable'],

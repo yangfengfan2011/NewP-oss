@@ -75,12 +75,15 @@ const resource: StandardCrudResourceRegistration = {
         ObjectModelKey: row.associatedObject.modelKey, ObjectId: row.associatedObject.id })) };
     },
     get: async (id, context) => {
-      const response = await platformFetch(`/api/workspace/folders/${encodeURIComponent(id)}`, {
+      // 树动作 recordId 是入向 LID；对象读取仍使用 resolver 提供的 EID，写入再重验源位置。
+      const referenceObjectId = context?.queryScope?.referenceObjectId;
+      const response = await platformFetch(`/api/workspace/folders/${encodeURIComponent(typeof referenceObjectId === 'string' ? referenceObjectId : id)}`, {
         signal: context?.signal, headers: headers(context?.featurePosition),
       });
       if (!response.ok) throw await readStandardCrudRequestError(response);
       const payload = await response.json() as { fields: Record<string, unknown> };
-      const detail: StandardCrudDetail = { fields: payload.fields, summaries: {} };
+      const detail: StandardCrudDetail = { fields: typeof referenceObjectId === 'string'
+        ? { ...payload.fields, LID: id, ObjectModelKey: 'WorkspaceFolder', ObjectId: referenceObjectId } : payload.fields, summaries: {} };
       return { normalized: detail, value: detail };
     },
     create: async (values, _before, context) => {

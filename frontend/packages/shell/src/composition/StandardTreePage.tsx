@@ -1,8 +1,8 @@
 import { useFeaturePlacement, type FeaturePlacement } from '../authorization/FeaturePlacementContext';
-import { useContext, useId, useMemo, useState } from 'react';
+import { useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 import Tree from 'antd/es/tree';
 import type { DataNode } from 'antd/es/tree';
-import Dropdown from 'antd/es/dropdown';
+import { ContextActionMenu } from '@icp-platform/ui/core';
 import Button from 'antd/es/button';
 import Card from 'antd/es/card';
 import Breadcrumb from 'antd/es/breadcrumb';
@@ -20,6 +20,7 @@ import { useTreeReadLifecycle } from './useTreeReadLifecycle';
 import { TreeSearch } from './TreeSearch';
 import { createRelationTreeProvider, relationTreeProviderKey } from './relationTreeProvider';
 import { resolvedFeaturePosition } from '../authorization/featurePlacementResolver';
+import { useOptionalAuth } from '../contexts/AuthContext';
 
 /** 公共树管理页面只消费 Provider 节点与 PageRef，不解释业务标识或组织字段。 */
 export default function StandardTreePage({ input, active = true }: PageProps) {
@@ -36,14 +37,24 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
   const treeScope = input.treeScope!;
   const provider = useMemo(() => view.providerKey === relationTreeProviderKey ? createRelationTreeProvider(view, readPosition)
     : ModuleRegistry.getAllModules().flatMap(module => module.treeProviders ?? []).find(item => item.key === view.providerKey)!, [view, readPosition]);
-  const [menuNode, setMenuNode] = useState<string | null>(null);
+  const subjectId = useOptionalAuth()?.user?.id;
+  const [menuNode, setMenuNode] = useState<{ key: string; scope: string; context: string } | null>(null);
+  const menuScope = JSON.stringify([input.treeScope, input.parameters, features.placement, active, subjectId]);
+  const currentMenuScope = useRef(menuScope); currentMenuScope.current = menuScope;
+  useEffect(() => setMenuNode(null), [menuScope]);
   const [editContext, setEditContext] = useState<TreeNodeDescriptor | undefined>();
   const [editPage, setEditPage] = useState<PageRef | null>(null);
   const tree = useTreeReadLifecycle({
     provider, scope: treeScope, instanceId, active, runtime, navigation,
-    onSelectAccepted: () => setEditPage(null),
+    onSelectAccepted: () => { setEditPage(null); setMenuNode(null); },
   });
   const { roots, branches, selected, expanded } = tree.snapshot;
+  const menuExecutable = useRef<{ nodeKey?: string; context?: string; scope: string; references: string[] }>({ scope: menuScope, references: [] });
+  menuExecutable.current = { nodeKey: active ? selected?.nodeKey : undefined, context: JSON.stringify(selected), scope: menuScope,
+    references: (view.nodeTypes.find(type => type.key === selected?.nodeType)?.contextMenu ?? [])
+      .filter(menu => (selected?.contextMenuKeys === undefined || selected.contextMenuKeys.includes(menu.key))
+        && (!features.placement || features.action(menu.key, 'contextMenu', selected?.nodeType).kind === 'allowed'))
+      .map(menu => JSON.stringify(menu)) };
   // 只沿已加载的出现位置回溯；不解析 opaque nodeKey，也不为面包屑读取未展开的树。
   const selectedPath = useMemo(() => {
     if (!selected) return [];
@@ -67,9 +78,26 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
   const data = (nodes: readonly TreeNodeDescriptor[]): DataNode[] => nodes.map(node => {
     const type = view.nodeTypes.find(item => item.key === node.nodeType);
     const title = <span style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }} title={type ? t(`${view.dicKey}.${type.titleKey}`, type.titleKey) : ''}>{node.labelKey ? t(node.labelKey, node.label) : node.label}{node.isEnabled === false ? t('Platform.TreeDisabledSuffix', '（停用）') : ''}</span>;
+    const menus = (type?.contextMenu ?? []).filter(menu => node.contextMenuKeys === undefined || node.contextMenuKeys.includes(menu.key))
+      .map(menu => ({ menu, resolution: features.action(menu.key, 'contextMenu', node.nodeType) }))
+      .filter(({ resolution }) => !features.placement || resolution.kind === 'allowed');
+    const open = active && menuNode?.key === node.nodeKey && menuNode.scope === menuScope
+      && menuNode.context === JSON.stringify(node) && selected?.nodeKey === node.nodeKey;
     return { key: node.nodeKey, isLeaf: branches[node.nodeKey] ? branches[node.nodeKey].length === 0 : !node.hasChildren,
-      title: <Dropdown trigger={['contextMenu']} open={menuNode === node.nodeKey} menu={{ items: (type?.contextMenu ?? []).map(menu => ({ menu, resolution: features.action(menu.key, 'contextMenu', node.nodeType) })).filter(({ resolution }) => !features.placement || resolution.kind === 'allowed').map(({ menu, resolution }) => ({ key: menu.key, label: t(`${view.dicKey}.${menu.labelKey}`, menu.labelKey), onClick: () => tree.select(node.nodeKey, () => { setMenuNode(null); setEditFeature(features.placement ? { ...features.placement, staticScope: node.nodeType, actionPosition: resolvedFeaturePosition(resolution), actionKey: menu.actionKey ?? menu.standardAction } : undefined); setEditContext(node); setEditPage({ pageKey: 'platform.list', parameters: { viewKey: menu.viewKey, presentation: 'drawer', standardAction: menu.standardAction, actionKey: menu.actionKey }, inputResolverKey: menu.inputResolverKey }); }) })) }}
-        onOpenChange={open => { if (open) tree.select(node.nodeKey, () => setMenuNode(node.nodeKey)); else setMenuNode(null); }}>{title}</Dropdown>,
+      title: menus.length ? <ContextActionMenu trigger={['contextMenu']} open={open}
+        keyboardLabel={t('Platform.More', '更多')}
+        menu={{ items: menus.map(({ menu, resolution }) => ({ key: menu.key, label: t(`${view.dicKey}.${menu.labelKey}`, menu.labelKey), onClick: () => {
+          if (!open || menuExecutable.current.scope !== menuScope || menuExecutable.current.nodeKey !== node.nodeKey
+            || menuExecutable.current.context !== JSON.stringify(node) || !menuExecutable.current.references.includes(JSON.stringify(menu))) return;
+          tree.select(node.nodeKey, () => {
+            if (currentMenuScope.current !== menuScope) return;
+            setMenuNode(null); setEditFeature(features.placement ? { ...features.placement, staticScope: node.nodeType, actionPosition: resolvedFeaturePosition(resolution), actionKey: menu.actionKey ?? menu.standardAction } : undefined);
+            setEditContext(node); setEditPage({ pageKey: 'platform.list', parameters: { viewKey: menu.viewKey, presentation: 'drawer', standardAction: menu.standardAction, actionKey: menu.actionKey }, inputResolverKey: menu.inputResolverKey });
+          });
+        } })) }}
+        onOpenChange={next => { if (next) tree.select(node.nodeKey, () => {
+          if (currentMenuScope.current === menuScope) setMenuNode({ key: node.nodeKey, scope: menuScope, context: JSON.stringify(node) });
+        }); else setMenuNode(null); }}>{title}</ContextActionMenu> : title,
       children: branches[node.nodeKey] ? data(branches[node.nodeKey]) : undefined };
   });
   const selectedType = view.nodeTypes.find(type => type.key === selected?.nodeType);

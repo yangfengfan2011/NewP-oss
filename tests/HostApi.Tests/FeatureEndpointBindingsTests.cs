@@ -3,11 +3,40 @@ using ICP.Platform.HostApi.Authorization;
 using ICP.Platform.Kernel.ModulePlanning;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Routing;
+using System.Reflection;
+using System.Text.Json;
+using ICP.Platform.Modules.Workspace;
 using Xunit;
 namespace ICP.Platform.HostApi.Tests;
 
 public sealed class FeatureEndpointBindingsTests
 {
+    [Fact]
+    public void WorkspaceTreeActions_CompileReferencedHandlersAndBindToTheirRealControllerEndpoints()
+    {
+        var repository = new DirectoryInfo(AppContext.BaseDirectory);
+        while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "AGENTS.md"))) repository = repository.Parent;
+        Assert.NotNull(repository);
+        var root = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository.FullName, "Workspace");
+        var documents = Directory.GetFiles(Path.Combine(root, "metadata"), "*.json", SearchOption.AllDirectories)
+            .Select(path => JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(path))).ToArray();
+        var capsule = JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(Path.Combine(root, "newp.plugin.json")));
+        var custom = FeatureCatalogCompiler.Read(capsule, "Workspace");
+        var points = FeatureCatalogCompiler.Compile(StandardFeatureMetadataCompiler.Read("Workspace", documents, custom, true));
+        // 使用真实控制器的模块、功能及 HTTP 方法元数据，复用正式绑定校验而不启动数据库或另造 Host。
+        var endpoints = typeof(WorkspaceContentsController).Assembly.GetTypes().Where(type => type.IsSubclassOf(typeof(ControllerBase)))
+            .SelectMany(type => type.GetMethods().Where(method => method.GetCustomAttribute<RequireFeatureAttribute>() is not null)
+                .Select(method => new Endpoint(_ => Task.CompletedTask, new EndpointMetadataCollection(
+                    type.GetCustomAttribute<EndpointModuleAttribute>()!, method.GetCustomAttribute<RequireFeatureAttribute>()!,
+                    new HttpMethodMetadata(method.GetCustomAttributes<HttpMethodAttribute>().SelectMany(attribute => attribute.HttpMethods))),
+                    type.Name + "." + method.Name))).ToArray();
+        FeatureEndpointBindings.Validate([new DefaultEndpointDataSource(endpoints)], points);
+        Assert.Equal("workspace.folder.editObject", Assert.Single(points, point => point.ActionScope == "contextMenu" && point.Key == "edit").BehaviorKey);
+        Assert.Equal("workspace.folder.remove", Assert.Single(points, point => point.ActionScope == "contextMenu" && point.Key == "remove").BehaviorKey);
+    }
+
     [Fact]
     public void Validate_AcceptsSameBehaviorOwnedByDifferentModules()
     {

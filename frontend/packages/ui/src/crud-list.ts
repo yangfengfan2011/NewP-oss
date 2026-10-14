@@ -3,3 +3,5 @@ export * from './pro-adapters/StandardCrudColumnPreference';
 export * from './pro-adapters/CrudWorkspacePage';
 export * from './pro-adapters/CrudSearchBar';
 export * from './pro-adapters/CrudTableSection';
+export { ContextActionMenu, isNativeContextMenuTarget } from './components/ContextActionMenu';
+export type { ContextActionMenuProps } from './components/ContextActionMenu';

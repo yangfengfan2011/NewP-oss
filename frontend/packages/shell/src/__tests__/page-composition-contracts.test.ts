@@ -24,6 +24,14 @@ const modules: FrontendModule[] = [{ metadata: { moduleId: 'Organization', displ
   pageInputResolvers: ['organization.department.global', 'organization.node.detail', 'organization.company.direct', 'organization.department.direct', 'organization.tree.global'].map(key => ({ key, pageKeys: ['platform.tree', 'platform.list', 'platform.detail'], resolve: parameters => ({ parameters }) })),
 }];
 describe('formal page configuration references', () => {
+  it.each([['missing'], ['edit', 'edit'], ['create'], [{ key: 'edit', handlerKey: 'other' }]])(
+    'rejects invalid row menu references before mounting consumers %#', (...keys) => {
+      const metadata = authoring();
+      const list = metadata.viewDocuments.find(item => item.view.key === 'organization.department.list')!.view;
+      list.rowContextMenu = keys;
+      expect(() => validateCompositionCandidate(modules, metadata)).toThrow('row context menu');
+    },
+  );
   it('accepts disabled search and rejects a non-boolean declaration', () => {
     const metadata = authoring();
     const tree = metadata.viewDocuments.find(item => item.view.mode === 'tree')!.view;

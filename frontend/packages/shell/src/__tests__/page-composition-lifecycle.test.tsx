@@ -38,10 +38,10 @@ async function click(text: string) {
   expect(button, text).toBeDefined();
   await act(async () => button!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
 }
-async function render(browser = false, search = '', tree = false) {
+async function render(browser = false, search = '', tree = false, contextMenuKeys?: readonly string[]) {
   ModuleRegistry.replaceAll([{ metadata: { moduleId: 'forms', displayName: 'Forms', version: '1' }, pages: [{ pageKey: 'form', load: async () => ({ default: FormPage }) }],
     pageInputResolvers: [{ key: 'global', pageKeys: ['platform.tree'], resolve: parameters => ({ parameters, treeScope: {} }) }],
-    treeProviders: [{ key: 'tree', roots: async () => ['one', 'two', 'other'].map(key => ({ nodeKey: key, nodeType: key === 'other' ? 'other' : 'node', label: key, hasChildren: false })), children: async () => [], path: async () => [], search: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }), resolveChange: async () => ({ kind: 'unrelated' }) }],
+    treeProviders: [{ key: 'tree', roots: async () => ['one', 'two', 'other'].map(key => ({ nodeKey: key, nodeType: key === 'other' ? 'other' : 'node', label: key, hasChildren: false, contextMenuKeys })), children: async () => [], path: async () => [], search: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }), resolveChange: async () => ({ kind: 'unrelated' }) }],
   }], 'forms');
   container = document.createElement('div'); document.body.append(container);
   const view = { key: 'tabs', mode: 'tab', dicKey: 'Tabs', defaultTabKey: 'a', tabs: ['a', 'b'].map(key => ({ key, titleKey: key, pageRef: { pageKey: 'form', parameters: { name: key } } })) };
@@ -57,6 +57,29 @@ async function render(browser = false, search = '', tree = false) {
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
 }
 describe('whole composition lifecycle', () => {
+  it.each([{ keys: [] }, { keys: ['unknown'] }])('uses node menu keys only to narrow declared actions: $keys', async ({ keys }) => {
+    await render(false, '', true, keys);
+    const target = [...container.querySelectorAll('.ant-tree-title')].find(node => node.textContent === 'two')!;
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    await act(async () => target.firstElementChild!.dispatchEvent(event));
+    expect(event.defaultPrevented).toBe(false);
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(container.querySelector('.ant-tree-node-selected')?.textContent).toBe('one');
+  });
+
+  it('invalidates a node menu when another node becomes selected and ignores its stale hidden item', async () => {
+    await render(false, '', true);
+    const target = [...container.querySelectorAll('.ant-tree-title')].find(node => node.textContent === 'two')!;
+    await act(async () => target.firstElementChild!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
+    const oldItem = document.querySelector<HTMLElement>('[role="menuitem"]')!;
+    expect(oldItem).not.toBeNull();
+    await act(async () => [...container.querySelectorAll<HTMLElement>('.ant-tree-title')].find(node => node.textContent === 'one')!.click());
+    expect(container.querySelector('.ant-tree-node-selected')?.textContent).toBe('one');
+    await act(async () => oldItem.click());
+    expect(container.querySelector('.ant-tree-node-selected')?.textContent).toBe('one');
+    expect(container.textContent).not.toContain('未找到列表视图元数据');
+  });
+
   it('keeps the active tab within a node group, resets per-node filters, and defaults after a group change without replacing unrelated outer URL state', async () => {
     await render(false, '?external=keep', true);
     await vi.waitFor(async () => {

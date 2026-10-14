@@ -110,6 +110,8 @@ export interface StandardCrudListRuntimeSchema {
   pageActions: StandardCrudRuntimeActionSchema[];
   pageActionGroups?: StandardCrudPageActionGroupSchema[];
   rowActions: StandardCrudRuntimeActionSchema[];
+  /** 只引用当前 List View 的行动作，不另声明执行或权限。 */
+  rowContextMenu?: string[];
   exportModes: string[];
 }
 
@@ -852,6 +854,16 @@ function readPageActionGroups(value: unknown, actions: StandardCrudRuntimeAction
   });
 }
 
+/** 列表菜单只引用本视图唯一的行动作；候选校验与宿主解析共用此规则。 */
+export function resolveRowContextMenu(value: unknown, rowActions: readonly { key: string }[], viewKey: string): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.some(key => typeof key !== 'string' || !key.trim()
+    || rowActions.filter(action => action.key === key).length !== 1) || new Set(value).size !== value.length) {
+    throw new Error(`list view "${viewKey}" has invalid row context menu references`);
+  }
+  return [...value] as string[];
+}
+
 export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
   view: MetadataRecord,
   registration: StandardCrudResourceRegistration<TFilter, TRow, TDetail>,
@@ -920,6 +932,7 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
   };
 
   if (schema.rowActions.some(action => action.requiresSelection)) throw new Error('requiresSelection is only supported on pageActions');
+  schema.rowContextMenu = resolveRowContextMenu(view.rowContextMenu, schema.rowActions, viewKey);
   if (view.pageActionGroups !== undefined) {
     schema.pageActionGroups = readPageActionGroups(view.pageActionGroups, schema.pageActions);
     for (const group of schema.pageActionGroups) assertDictionaryKey(dicKey, group.labelKey, context?.defaultLanguageCatalog);

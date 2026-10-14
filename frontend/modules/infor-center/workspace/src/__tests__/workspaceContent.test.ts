@@ -61,3 +61,21 @@ it('rejects document creation without a session before sending any request', asy
     queryScope: { spaceId: 'public', rootFolderId: 'root', linkIds: '[]' } })).rejects.toThrow('上传会话');
   expect(request).not.toHaveBeenCalled();
 });
+
+it('reads the real folder EID for a tree action but preserves its LID row and parent scope for removal', async () => {
+  const request = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify(
+    String(_input).endsWith('antiforgery-token') ? { requestToken: 'token' } : String(_input).includes('/folders/')
+      ? { fields: { ENAME: 'Folder', Description: null } } : { succeeded: true })));
+  vi.stubGlobal('fetch', request);
+  const queryScope = { spaceId: 'public', rootFolderId: 'root', linkIds: '["parent-link"]', referenceObjectId: 'folder-eid' };
+  const result = await resource.dataAdapter.get!('terminal-link', { queryScope, featurePosition: 'tree-edit' });
+  expect(result.normalized.fields).toEqual({ ENAME: 'Folder', Description: null, LID: 'terminal-link', ObjectModelKey: 'WorkspaceFolder', ObjectId: 'folder-eid' });
+  expect(String(request.mock.calls[0][0])).toBe('/api/workspace/folders/folder-eid');
+  await resource.actionHandlers!.remove({ id: 'terminal-link', row: result.normalized.fields, queryScope, featurePosition: 'tree-remove' });
+  const write = request.mock.calls.find(([input]) => String(input instanceof Request ? input.url : input).includes('/content/references/'))!;
+  const body = write[0] instanceof Request ? await write[0].clone().json() : JSON.parse(String(write[1]?.body));
+  expect(body).toEqual({ position: { spaceId: 'public', rootFolderId: 'root', linkIds: ['parent-link'] } });
+  expect(write[0] instanceof Request ? write[0].method : write[1]?.method).toBe('DELETE');
+  const regular = await resource.dataAdapter.get!('folder-eid', { featurePosition: 'read' });
+  expect(regular.normalized.fields).toEqual({ ENAME: 'Folder', Description: null });
+});

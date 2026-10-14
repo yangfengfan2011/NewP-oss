@@ -217,6 +217,9 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             using var pageAdministrator = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
             await WorkspaceAcceptanceFixture.LoginAsync(pageAdministrator, _administrator!, token);
             var pageFeatures = await AcceptanceFeatureCatalog.LoadAsync(pageAdministrator, token);
+            var pageWorkspace = pageFeatures.Behavior("Workspace", "workspace.spaces.access");
+            foreach (var key in new[] { "edit", "remove" })
+                granted.Add(pageFeatures.Action(pageWorkspace, key, "contextMenu", "folder"));
             var previousActorId = actor.AccountId;
             actor = await WorkspaceAcceptanceFixture.PrepareAsync(pageAdministrator, pageFeatures, "page" + runId, registerSecret, granted, token);
             await WriteAsync("page-actor-preparation.json", new { previousActorId, pageActorId = actor.AccountId,

@@ -11,6 +11,33 @@ public sealed class PageCompositionMetadataTests
 {
     [Theory]
     [InlineData("valid")]
+    [InlineData("missing")]
+    [InlineData("duplicate")]
+    [InlineData("page-action")]
+    [InlineData("inline-definition")]
+    [InlineData("not-array")]
+    public void WorkspaceRowContextMenu_ValidatesRealAuthoringReferences(string kind)
+    {
+        var root = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(RepositoryRoot(), "Workspace");
+        var documents = Directory.GetFiles(Path.Combine(root, "metadata"), "*.json", SearchOption.AllDirectories)
+            .Select(path => JsonNode.Parse(File.ReadAllText(path))!).ToArray();
+        var list = documents.Single(document => document["view"]?["key"]?.GetValue<string>() == "workspace.folder.list")["view"]!;
+        list["rowContextMenu"] = kind switch
+        {
+            "missing" => JsonNode.Parse("""["missing"]"""),
+            "duplicate" => JsonNode.Parse("""["edit","edit"]"""),
+            "page-action" => JsonNode.Parse("""["create"]"""),
+            "inline-definition" => JsonNode.Parse("""[{"key":"edit","handlerKey":"other"}]"""),
+            "not-array" => JsonValue.Create("edit"),
+            _ => JsonNode.Parse("""["edit","delete","remove"]""")
+        };
+        IReadOnlyList<string> Check() => PageCompositionMetadataValidator.Validate(documents.Select(document => JsonSerializer.SerializeToElement(document)), null);
+        if (kind == "valid") Check();
+        else Assert.Throws<JsonException>(() => Check());
+    }
+
+    [Theory]
+    [InlineData("valid")]
     [InlineData("duplicate-key")]
     [InlineData("duplicate-target")]
     [InlineData("navigation")]

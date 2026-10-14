@@ -34,6 +34,8 @@ import {
   CrudSearchBar,
   CrudTableSection,
   CrudWorkspacePage,
+  ContextActionMenu,
+  isNativeContextMenuTarget,
   loadStandardCrudColumnPreference,
   saveStandardCrudColumnPreference,
 } from '@icp-platform/ui/crud-list';
@@ -518,19 +520,32 @@ function renderMetadataTableCell<TRow extends Record<string, unknown>>(
   return value == null ? '' : String(value);
 }
 
-function RowActionButtonGroup({ actions, onConfirmRequested, requested = false, active = true, close }: { actions: RowActionItem[]; onConfirmRequested: (key: string) => void; requested?: boolean; active?: boolean; close?: () => void }) {
+function RowActionButtonGroup({ actions, onConfirmRequested, requested = false, active = true, close, contextMenu, closeContextMenu, contextKey = '' }: {
+  actions: RowActionItem[]; onConfirmRequested: (key: string) => void; requested?: boolean; active?: boolean; close?: () => void;
+  contextMenu?: { actionKeys: string[]; point: { x: number; y: number; focusTarget: HTMLElement } };
+  closeContextMenu?: () => void;
+  contextKey?: string;
+}) {
   const { t } = useLocalization();
   const requestedOnce = useRef(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [openedContext, setOpenedContext] = useState<string | null>(null);
+  const menuOpen = openedContext === contextKey;
+  useEffect(() => setOpenedContext(null), [contextKey]);
+  const menuExecutable = useRef(false);
+  menuExecutable.current = active && (menuOpen || Boolean(contextMenu));
+  const currentActions = useRef(actions); currentActions.current = actions;
   const [eligibilityEpoch, setEligibilityEpoch] = useState(0);
   const inlineActions = actions.filter((action) => action.inline && !action.eligibility).slice(0, 1);
-  const overflowActions = actions.filter((action) => !inlineActions.includes(action));
-  const qualifiedActions = actions.filter((action) => action.eligibility);
+  const overflowActions = contextMenu ? contextMenu.actionKeys.flatMap(key => actions.filter(action => action.key === key))
+    : actions.filter((action) => !inlineActions.includes(action));
+  const qualifiedActions = (contextMenu ? overflowActions : actions).filter((action) => action.eligibility);
+  const contextPoint = contextMenu?.point;
+  useEffect(() => { if (contextPoint) setEligibilityEpoch(current => current + 1); }, [contextPoint]);
   const eligibility = usePlatformQuery<Record<string, StandardCrudActionState>>({
     key: ['standard-crud-row-action-eligibility',
       JSON.stringify(qualifiedActions.map((item) => [item.eligibility?.resourceKey,
         item.eligibility?.objectId, item.key, item.eligibility?.featurePosition])), eligibilityEpoch],
-    enabled: (menuOpen || (requested && active)) && qualifiedActions.length > 0,
+    enabled: active && (menuOpen || Boolean(contextMenu) || requested) && qualifiedActions.length > 0,
     load: async ({ signal }) => {
       const states: Record<string, StandardCrudActionState> = {};
       // 只检查用户展开的一行；关闭菜单或行卸载后由查询生命周期取消未完成请求。
@@ -567,6 +582,8 @@ function RowActionButtonGroup({ actions, onConfirmRequested, requested = false, 
   };
 
   const runOverflowAction = (action: RowActionItem) => {
+    const current = currentActions.current.find(item => item.key === action.key);
+    if (!menuExecutable.current || !current || current.disabled || current.loading) return;
     if (action.eligibility && (eligibility.status !== 'success'
       || !eligibility.data?.[action.key]?.visible || !eligibility.data[action.key]?.available)) return;
     if (!action.confirmMessage) {
@@ -598,12 +615,14 @@ function RowActionButtonGroup({ actions, onConfirmRequested, requested = false, 
           : actionReason(actions[0]) ?? t('Platform.ActionUnavailable', '当前操作不可用。')}<AntdButton onClick={close}>{t('Platform.Close', '关闭')}</AntdButton></div>}
       {!requested && inlineActions.map((action) => renderActionButton(action, 'np-row-action-button'))}
       {!requested && overflowActions.length > 0 ? (
-        <Dropdown
+        <ContextActionMenu
           trigger={['click']}
-          open={menuOpen}
+          open={active && (menuOpen || Boolean(contextMenu))}
+          point={contextMenu?.point}
           onOpenChange={(open) => {
             if (open && !menuOpen) setEligibilityEpoch((current) => current + 1);
-            setMenuOpen(open);
+            closeContextMenu?.();
+            setOpenedContext(open ? contextKey : null);
           }}
           menu={{
             items: [...visibleOverflowActions.map((action) => {
@@ -630,10 +649,10 @@ function RowActionButtonGroup({ actions, onConfirmRequested, requested = false, 
             },
           }}
         >
-          <AntdButton className="np-row-actions-more" type="link">
+          <AntdButton className="np-row-actions-more" type="link" onClick={contextMenu ? () => { closeContextMenu?.(); setOpenedContext(contextKey); } : undefined}>
             {t('Platform.More', '更多')}
           </AntdButton>
-        </Dropdown>
+        </ContextActionMenu>
       ) : null}
     </div>
   );
@@ -956,6 +975,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     id: embeddedActionRequest?.id,
     dataAdapter,
     featurePosition: readPosition,
+    queryScope: host.input.queryScope,
   });
   const embeddedAction = embeddedActionRequest && (!embeddedActionRequest.id || embeddedActionQuery.detail)
     ? { ...embeddedActionRequest, row: (embeddedActionQuery.detail?.normalized.fields ?? {}) as TRow }
@@ -1207,6 +1227,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     [metadataListQuery.data?.items, runtimeRowsQuery.data?.items, schema.columnSource],
   );
   const selectionScope = JSON.stringify([currentSubjectId, readPosition, host.input.queryScope, tableQuery, appliedFilters]);
+  const rowMenuScope = JSON.stringify([selectionScope, schema.viewKey, host.input.instanceId, host.lifecycle.active,
+    features.placement, routePathname, host.address?.search]);
+  const [rowMenu, setRowMenu] = useState<{ row: TRow; scope: string; point: { x: number; y: number; focusTarget: HTMLElement } } | null>(null);
+  useEffect(() => setRowMenu(null), [rowMenuScope, effectiveRows]);
   const [selection, setSelection] = useState<{ scope: string; data: TRow[]; rows: TRow[] } | null>(null);
   // 选择仅属于当前查询快照；切页、换位置、换主体及刷新数据均同步失效。
   const selectedRows = selection?.scope === selectionScope && selection.data === effectiveRows ? selection.rows : [];
@@ -1876,7 +1900,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 <RowActionButtonGroup actions={rowActions} onConfirmRequested={key => {
                   const action = rowActionDefinitions.find(item => item.key === key);
                   if (action) setRowConfirmation({ row, rowId, action });
-                }} />
+                }} active={host.lifecycle.active} contextKey={JSON.stringify([rowMenuScope, row])}
+                  contextMenu={rowMenu?.row === row && rowMenu.scope === rowMenuScope && !effectiveLoading
+                    && effectiveRows.includes(row) ? { actionKeys: schema.rowContextMenu ?? [], point: rowMenu.point } : undefined}
+                  closeContextMenu={() => setRowMenu(null)} />
               </div>
             </div>
           );
@@ -2116,6 +2143,21 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const content = (
     <div className="np-standard-crud-table">
       <CrudTableSection<TRow>
+        onRow={schema.rowContextMenu?.length ? row => ({
+          tabIndex: 0,
+          onContextMenu: event => {
+            if (isNativeContextMenuTarget(event.target) || effectiveLoading || !host.lifecycle.active) return;
+            event.preventDefault(); event.stopPropagation();
+            setRowMenu({ row, scope: rowMenuScope, point: { x: event.clientX, y: event.clientY, focusTarget: event.currentTarget } });
+          },
+          onKeyDown: event => {
+            if (isNativeContextMenuTarget(event.target) || effectiveLoading || !host.lifecycle.active) return;
+            if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+            event.preventDefault(); event.stopPropagation();
+            const bounds = event.currentTarget.getBoundingClientRect();
+            setRowMenu({ row, scope: rowMenuScope, point: { x: bounds.left, y: bounds.bottom, focusTarget: event.currentTarget } });
+          },
+        }) : undefined}
         headerTitle={headerActions}
         selectableRows={visibleHeaderActions.some(action => action.requiresSelection)}
         selection={{ keys: effectiveLoading ? [] : selectedRows.map(dataAdapter.getRowId), disabled: effectiveLoading || headerPending || rowInputAction !== null,

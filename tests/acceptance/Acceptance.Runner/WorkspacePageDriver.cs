@@ -87,6 +87,51 @@ internal sealed class WorkspacePageDriver(IPage page)
         var row = await crud.WaitForRowAsync(name);
         await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
         await page.GetByRole(AriaRole.Menuitem, new() { Name = "编辑", Exact = true }).ClickAsync();
+        await SaveObjectEditAsync(newName);
+        await crud.WaitForRowAsync(newName);
+    }
+
+    /// <summary>通过正式列表鼠标菜单编辑所指行，保留与原行入口相同的保存交接。</summary>
+    internal async Task EditObjectFromContextMenuAsync(string name, string newName, Func<Task>? capture = null)
+    {
+        var crud = new StandardCrudPageDriver(page);
+        var row = await crud.WaitForRowAsync(name);
+        await row.ClickAsync(new() { Button = MouseButton.Right });
+        var edit = page.GetByRole(AriaRole.Menuitem, new() { Name = "编辑", Exact = true });
+        await edit.WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        await CaptureContextMenuAsync(capture);
+        await edit.ClickAsync();
+        await SaveObjectEditAsync(newName);
+        await crud.WaitForRowAsync(newName);
+    }
+
+    /// <summary>从正式树节点菜单编辑文件夹，保存后仍选中同一出现位置。</summary>
+    internal async Task EditFolderFromTreeContextMenuAsync(string name, string newName, Func<Task>? capture = null)
+    {
+        var tree = page.GetByRole(AriaRole.Complementary, new() { Name = "结构树", Exact = true });
+        await tree.GetByText(name, new() { Exact = true }).ClickAsync(new() { Button = MouseButton.Right });
+        var edit = page.GetByRole(AriaRole.Menuitem, new() { Name = "编辑", Exact = true });
+        await edit.WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        await CaptureContextMenuAsync(capture);
+        await edit.ClickAsync();
+        await SaveObjectEditAsync(newName);
+        await WaitForContentAsync(newName);
+    }
+
+    // 可见布局早于 Ant 入场动画完成；呈现采样等待真实动画，而不是用固定延时猜时机。
+    private async Task CaptureContextMenuAsync(Func<Task>? capture)
+    {
+        if (capture is null) return;
+        var popup = page.Locator(".ant-dropdown:visible");
+        await Assertions.Expect(popup).ToHaveCSSAsync("opacity", "1");
+        await popup.EvaluateAsync("async element => { await new Promise(requestAnimationFrame); await Promise.all(element.getAnimations({subtree:true}).map(animation => animation.finished.catch(() => {}))); }");
+        await capture();
+    }
+
+    // 列表和树复用真实输入与保存按钮；不复制另一套 API 写入或确认流程。
+    private async Task SaveObjectEditAsync(string newName)
+    {
+        var crud = new StandardCrudPageDriver(page);
         var drawer = await crud.WaitForVisibleDrawerAsync("编辑对象");
         await StandardCrudPageDriver.FillDrawerFieldAsync(drawer, "名称", newName);
         var responseTask = page.WaitForResponseAsync(response => response.Request.Method == "PUT"
@@ -94,7 +139,6 @@ internal sealed class WorkspacePageDriver(IPage page)
         await crud.SaveAndCloseWithoutResponseAsync(drawer);
         var response = await responseTask;
         if (!response.Ok) throw new InvalidOperationException($"编辑对象失败：{response.Status} {await response.TextAsync()}");
-        await crud.WaitForRowAsync(newName);
     }
 
     /// <summary>勾选当前页多个真实内容行，确认后等待一次批量写入及列表刷新。</summary>

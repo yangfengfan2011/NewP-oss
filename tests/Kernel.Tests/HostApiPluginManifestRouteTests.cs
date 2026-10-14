@@ -770,6 +770,7 @@ public class HostApiPluginManifestRouteTests : IAsyncLifetime
             process.StartInfo.ArgumentList.Add("--urls");
             process.StartInfo.ArgumentList.Add(baseAddress);
             process.StartInfo.Environment["Platform__PluginInstallRoot"] = installRoot;
+            process.StartInfo.Environment["Files__StorageRoot"] = Path.Combine(installRoot, "storage");
             if (externalPluginsEnabled.HasValue)
             {
                 process.StartInfo.Environment["Platform__ExternalPluginsEnabled"] =

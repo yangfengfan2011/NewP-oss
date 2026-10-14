@@ -85,6 +85,7 @@ public class ValueListControllerMessageContractTests : IClassFixture<ValueListCo
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseSetting("Platform:PluginInstallRoot", _installRoot);
+            builder.UseSetting("Files:StorageRoot", Path.Combine(_installRoot, "storage"));
             builder.UseSetting("Platform:SkipAuthorizationCatalogInitialization", "true");
             builder.UseEnvironment("Testing");
             builder.ConfigureServices(services =>
@@ -111,6 +112,7 @@ public class ValueListControllerMessageContractTests : IClassFixture<ValueListCo
 
         public new void Dispose()
         {
+            // 当前 WebApplicationFactory 完成 Host.StopAsync/Dispose 后才清理所属目录。
             base.Dispose();
             if (Directory.Exists(_installRoot))
             {

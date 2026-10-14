@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Runtime.ExceptionServices;
 using System.Text.RegularExpressions;
 using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Modules.Files.Contracts;
@@ -63,10 +64,31 @@ public sealed partial class FileLifecycleService(FileStateStore state, IPlatform
     /// <inheritdoc/>
     public async Task<IReadOnlyList<StagedFileInfo>> ReadOwnedStagedAsync(IReadOnlyList<string> uploadIds, string ownerKey, CancellationToken token = default)
     {
-        ValidateBatch(uploadIds);
+        ValidateReadIds(uploadIds);
         Policy(ownerKey);
         var actor = Actor();
         foreach (var id in uploadIds) ValidateUploadId(id);
+        token.ThrowIfCancellationRequested();
+        var staged = new List<StagedFileInfo>(uploadIds.Count);
+        ExceptionDispatchInfo? unavailableState = null;
+        foreach (var batch in uploadIds.Chunk(MaxReadBatchSize))
+        {
+            token.ThrowIfCancellationRequested();
+            try { staged.AddRange(await ReadOwnedStagedBatchAsync(batch, ownerKey, actor, token)); }
+            // 本人状态冲突延后到整集合身份核验结束；取消和持久故障不降级或吞掉。
+            catch (FileLifecycleException exception) when (exception.StatusCode == 409
+                && exception.Code is "Files.UploadExpired" or "Files.UploadCancelled" or "Files.UploadAlreadyConfirmed")
+            { unavailableState ??= ExceptionDispatchInfo.Capture(exception); }
+        }
+        token.ThrowIfCancellationRequested();
+        unavailableState?.Throw();
+        return staged;
+    }
+
+    // 每批只物化配置上限内的 lease 与文件，先核 actor/用途再读状态，按输入次序返回。
+    private async Task<IReadOnlyList<StagedFileInfo>> ReadOwnedStagedBatchAsync(IReadOnlyList<string> uploadIds, string ownerKey,
+        string actor, CancellationToken token)
+    {
         var leases = await state.Leases.AsNoTracking().Where(row => uploadIds.Contains(EF.Property<string>(row, "EID"))
             && EF.Property<string>(row, "ActorId") == actor && EF.Property<string>(row, "UsageOwnerKey") == ownerKey).ToListAsync(token);
         if (leases.Count != uploadIds.Count) throw Unavailable();
@@ -242,8 +264,14 @@ public sealed partial class FileLifecycleService(FileStateStore state, IPlatform
     // 界限在查询前执行，包含重复保护；空文件列表可合法返回空。
     private void ValidateBatch(IReadOnlyList<string> idsToRead)
     {
-        if (idsToRead.Count > MaxReadBatchSize || idsToRead.Any(string.IsNullOrWhiteSpace)
-            || idsToRead.Distinct(StringComparer.Ordinal).Count() != idsToRead.Count) throw new FileLifecycleException(400, "Files.InvalidReadBatch");
+        if (idsToRead.Count > MaxReadBatchSize) throw new FileLifecycleException(400, "Files.InvalidReadBatch");
+        ValidateReadIds(idsToRead);
+    }
+    // 完整暂存集合与单批元数据共用身份形状检查；集合总量由业务 owner 约束。
+    private static void ValidateReadIds(IReadOnlyList<string> idsToRead)
+    {
+        if (idsToRead.Any(string.IsNullOrWhiteSpace) || idsToRead.Distinct(StringComparer.Ordinal).Count() != idsToRead.Count)
+            throw new FileLifecycleException(400, "Files.InvalidReadBatch");
     }
     // 已获 owner 资格后身份不匹配是持久损坏，不伪装成不可见目标。
     private static void CheckUsage(IReadOnlyDictionary<string, object?> usage, FileUsageReference reference)
@@ -272,7 +300,7 @@ public sealed partial class FileLifecycleService(FileStateStore state, IPlatform
         && parsed.MediaType is { Length: > 0 and <= 256 } media && !media.Contains('*') ? media.ToLowerInvariant() : "application/octet-stream";
 
     // 仅接受当前上传 lease 的正式平台身份形状。
-    [GeneratedRegex("^FileUploadLease_[0-9a-f]{32}$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex("\\AFileUploadLease_[0-9a-f]{32}\\z", RegexOptions.CultureInvariant)]
     private static partial Regex UploadIdPattern();
     // 接收完成后必须持有单遍计算的大写 SHA256。
     [GeneratedRegex("^[0-9A-F]{64}$", RegexOptions.CultureInvariant)]

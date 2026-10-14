@@ -16,7 +16,11 @@ Files 的正式身份、模型和迁移来自 `frontend/modules/platform/files/n
 
 用途 owner 贡献 `IFileOwnerPolicy` 和 `FileOwnerPolicyRequirement`。启动时必需 policy 缺失、重复 key 或重复 requirement 都拒绝装配。Files 负责 actor、lease、持久状态和双向使用配对；用途 policy 负责实际业务资格、关联及首次创建证明。
 
-安全元数据按 `MaxReadBatchSize` 分批读取，同用途 policy 批量验证。开流另行判定 read/download；可信目标的持久关联损坏、物理内容缺失或长度不匹配是明确故障。返回流由调用方释放，请求取消也关闭真实文件句柄。
+`ReadOwnedStagedAsync` 接收完整暂存集合，由 Files 按 `MaxReadBatchSize` 内部分批查询并按输入次序返回。空白、重复及非法 token 在查询前拒绝；空集合仍核验 actor 和登记用途。集合内他人或错用途 token 的不可见结果优先于本人过期、取消或已消费冲突，取消及持久故障继续传播。此预读不预留或消费暂存，最终 Confirm 仍在原业务事务内锁定并重验。
+
+Files 不另设暂存集合总量上限；业务 owner 约束整个输入（当前 Document 最多 101 项），完整结果及身份校验占用 O(N) 空间。`MaxReadBatchSize` 限制内部每次数据库读取，不能据此声称整个调用具有固定内存或总工作量上界。
+
+安全元数据 `ReadUsageMetadataAsync` 仍限制单次输入不超过 `MaxReadBatchSize`，超界拒绝，由调用方分批，同用途 policy 批量验证。开流另行判定 read/download；可信目标的持久关联损坏、物理内容缺失或长度不匹配是明确故障。返回流由调用方释放，请求取消也关闭真实文件句柄。
 
 原 `/api/files` 产品端点继续 `DenyAll`。历史 `IFileService` 及内存仓储只保留该冻结 Controller 的依赖，不作为业务生命周期消费面。没有 StorageKey、裸 FileId 或静态路径下载入口。
 

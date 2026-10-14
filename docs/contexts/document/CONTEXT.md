@@ -18,7 +18,7 @@ Document 的 LatestVersionId 与 DocumentVersion 的 CurrentIterationId 是服�
 
 **文件关联（DocumentFileLink）**属于 Document，父端是实际 DocumentIteration，子端是 Files 的 FileRecord；它具有独立 LID，必须保存 FileUsageId。显式 uploads 包含一个 main 和零至一百个 attachment；main 的 Ordinal=0，附件按请求次序为 1..N，所有关联身份由服务端填写。附件列表可空或省略，空 main、非 canonical token、主附件全局重复及超过当前新建配置上限的集合均拒绝；省略 uploads 保留 metadata-only 创建。主附件全部先登记为真实 Added Link，再按服务器 FileId、UploadId 排序确认，显示次序不参与 Files 事务锁序。
 
-Document.Contracts 的文件创建复用原所属 Create，在同一业务事务内建立主对象、首版、regular 版次、实际 Added FileLink 和 Files 使用；创建证明绑定本次实际版次及事务。Files.Contracts 的 Confirm 只登记共享 tracker，全部关联填齐 FileUsageId 后才允许首次 Flush；Release 同样不独立提交。集合预读与安全元数据读取均按 Files 自有 MaxReadBatchSize 分批；整集合身份或用途不可见优先于本人暂存失效，资格检查完成前不登记业务写入。上传预检复用标准字段、审计及完整候选 create 裁决，只返回验证结果，不能公开候选身份或代替保存时重验。业务提交结果未知时保留持久使用与内容，不自动重放保存或盲目取消暂存。
+Document.Contracts 的文件创建复用原所属 Create，在同一业务事务内建立主对象、首版、regular 版次、实际 Added FileLink 和 Files 使用；创建证明绑定本次实际版次及事务。Files.Contracts 的 Confirm 只登记共享 tracker，全部关联填齐 FileUsageId 后才允许首次 Flush；Release 同样不独立提交。Document 将已按业务规则限量的完整暂存集合一次交给 Files，由 Files 按自有 MaxReadBatchSize 内部分批并统一裁决，整集合身份或用途不可见优先于本人暂存失效；安全元数据仍由 Document 按该上限分批读取。Files 不另设集合总量上限，预读不预留使用，资格检查完成前不登记业务写入，最终 Confirm 仍重验。上传预检复用标准字段、审计及完整候选 create 裁决，只返回验证结果，不能公开候选身份或代替保存时重验。业务提交结果未知时保留持久使用与内容，不自动重放保存或盲目取消暂存。
 
 属性文件列表沿当前身份和真实关联批量读取安全元数据，最多 101 项，按 Ordinal/LID 稳定读取。只公开 FileLink 身份、角色、次序及文件显示信息，不公开 File/Usage 身份或存储键。新建附件配置调低不改变既有合法集合的读取、下载或释放。read 允许而 download 拒绝时仍可看列表；下载分别重验正式功能与数据 download 资格，并核对 Document/版次/FileLink/Usage/File 回链。不可读或错目标安全拒绝；已授权的关联损坏、空或重复使用身份及内容缺失保持明确故障。存储配置、接收意图、取消、TTL 与回收状态的唯一事实见 [Files README](../../../server/modules/Platform/Files/README.md)。
 

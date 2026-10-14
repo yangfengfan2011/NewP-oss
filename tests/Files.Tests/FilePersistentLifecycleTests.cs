@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Text.RegularExpressions;
 using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Modeling.Metadata;
 using ICP.Platform.Modeling.Projection;
@@ -22,6 +23,64 @@ namespace ICP.Platform.Tests.Files;
 /// <summary>持久状态最低层故障证明；真实 Document policy/HTTP/SQL/进程证明由纵向资产承担。</summary>
 public sealed class FilePersistentLifecycleTests
 {
+    [Fact]
+    public async Task StagedSetReadsBeyondBatchSizeInInputOrderWithBoundedQueriesAndNoWrites()
+    {
+        var probe = new StagedReadProbe();
+        await using var fixture = await LifecycleFixture.CreateAsync(batchSize: 2, stagedReadProbe: probe);
+        var staged = new List<StagedFileInfo>();
+        for (var index = 0; index < 5; index++) staged.Add(await fixture.StageAsync([(byte)index]));
+        var input = staged.AsEnumerable().Reverse().ToArray();
+        using var scope = fixture.Services.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IFileLifecycleService>();
+        var saves = fixture.Faults.Saves;
+        probe.Armed = true;
+        var actual = await service.ReadOwnedStagedAsync(input.Select(item => item.UploadId).ToArray(), OwnerPolicy.Key);
+        Assert.Equal(input, actual);
+        Assert.Equal(new[] { 2, 2, 1 }, probe.LeaseBatchSizes);
+        Assert.Equal(new[] { 2, 2, 1 }, probe.FileBatchSizes);
+        Assert.Equal(saves, fixture.Faults.Saves);
+        Assert.Empty(scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().ChangeTracker.Entries());
+    }
+
+    [Fact]
+    public async Task StagedSetValidatesWholeInputBeforeQueriesAndMetadataRetainsBatchLimit()
+    {
+        var probe = new StagedReadProbe();
+        await using var fixture = await LifecycleFixture.CreateAsync(batchSize: 1, stagedReadProbe: probe);
+        var first = await fixture.StageAsync([1]); var second = await fixture.StageAsync([2]);
+        using var scope = fixture.Services.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IFileLifecycleService>();
+        probe.Armed = true;
+        foreach (var invalid in new[] { new[] { first.UploadId, second.UploadId, first.UploadId }, new[] { first.UploadId, " " }, new[] { first.UploadId, null! } })
+            await AssertUploadFailureAsync(() => service.ReadOwnedStagedAsync(invalid, OwnerPolicy.Key), 400, "Files.InvalidReadBatch");
+        foreach (var invalid in new[] { "invalid-token", second.UploadId.ToUpperInvariant(), second.UploadId + "\n" })
+            await AssertUploadFailureAsync(() => service.ReadOwnedStagedAsync([first.UploadId, invalid], OwnerPolicy.Key), 404, "Files.UploadUnavailable");
+        await AssertUploadFailureAsync(() => service.ReadUsageMetadataAsync([
+            new("FileUsage_" + new string('1', 32), first.FileId, new(OwnerPolicy.Key, "one")),
+            new("FileUsage_" + new string('2', 32), second.FileId, new(OwnerPolicy.Key, "two"))]), 400, "Files.InvalidReadBatch");
+        Assert.Equal(0, probe.Commands);
+        Assert.Empty(await service.ReadOwnedStagedAsync([], OwnerPolicy.Key));
+        Assert.Equal("Files.OwnerPolicyMissing", (await Assert.ThrowsAsync<InvalidOperationException>(() => service.ReadOwnedStagedAsync([], "unknown-owner"))).Message);
+        fixture.Stamp.Unavailable = true;
+        await Assert.ThrowsAsync<EntityAuditStampUnavailableException>(() => service.ReadOwnedStagedAsync([], OwnerPolicy.Key));
+    }
+
+    [Fact]
+    public async Task StagedSetPropagatesCancellationDuringReadWithoutReturningPartialResults()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var probe = new StagedReadProbe { CancelAfterFileRead = cancellation };
+        await using var fixture = await LifecycleFixture.CreateAsync(batchSize: 1, stagedReadProbe: probe);
+        var first = await fixture.StageAsync([1]); var second = await fixture.StageAsync([2]);
+        using var scope = fixture.Services.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IFileLifecycleService>();
+        probe.Armed = true;
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.ReadOwnedStagedAsync([first.UploadId, second.UploadId], OwnerPolicy.Key, cancellation.Token));
+        Assert.True(cancellation.IsCancellationRequested);
+        Assert.Single(probe.FileBatchSizes);
+    }
+
     [Fact]
     public async Task MetadataReadBoundsDuplicateReverseLeasesBeforeMaterializationAndRejectsCrossFileCorruption()
     {
@@ -74,30 +133,33 @@ public sealed class FilePersistentLifecycleTests
     }
 
     [Theory]
-    [InlineData(false, false, false)]
-    [InlineData(false, false, true)]
-    [InlineData(false, true, false)]
-    [InlineData(false, true, true)]
-    [InlineData(true, false, false)]
-    [InlineData(true, false, true)]
-    [InlineData(true, true, false)]
-    [InlineData(true, true, true)]
-    public async Task MixedBatchHidesOwnExpiredOrConfirmedStateUntilEveryActorAndPurposeMatches(bool confirmed, bool wrongPurpose, bool reverse)
+    [MemberData(nameof(StagedSetIdentityCases))]
+    public async Task StagedSetHidesOwnStateUntilEveryActorAndPurposeMatches(int batchSize, string state, bool wrongPurpose, bool reverse)
     {
-        await using var fixture = await LifecycleFixture.CreateAsync();
+        await using var fixture = await LifecycleFixture.CreateAsync(batchSize: batchSize);
         var own = await fixture.StageAsync([1]);
         var hidden = await fixture.StageAsync([2]);
-        if (confirmed) await fixture.ConfirmAsync(own.UploadId, new(OwnerPolicy.Key, "original-owner"));
-        else fixture.Clock.Advance(TimeSpan.FromHours(24));
         using var scope = fixture.Services.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IFileLifecycleService>();
+        if (state == "confirmed") await fixture.ConfirmAsync(own.UploadId, new(OwnerPolicy.Key, "original-owner"));
+        else if (state == "cancelled") await service.CancelStageAsync(own.UploadId);
+        else fixture.Clock.Advance(TimeSpan.FromHours(24));
         var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
         var hiddenLease = await db.Set<Dictionary<string, object?>>("FileUploadLease").SingleAsync(row => EF.Property<string>(row, "EID") == hidden.UploadId);
         hiddenLease[wrongPurpose ? "UsageOwnerKey" : "ActorId"] = "another-identity";
         await db.SaveChangesAsync();
         var uploads = reverse ? new[] { hidden.UploadId, own.UploadId } : new[] { own.UploadId, hidden.UploadId };
-        var service = scope.ServiceProvider.GetRequiredService<IFileLifecycleService>();
         await AssertUploadFailureAsync(() => service.ReadOwnedStagedAsync(uploads, OwnerPolicy.Key), 404, "Files.UploadUnavailable");
+        var expected = state switch { "confirmed" => "Files.UploadAlreadyConfirmed", "cancelled" => "Files.UploadCancelled", _ => "Files.UploadExpired" };
+        await AssertUploadFailureAsync(() => service.ReadOwnedStagedAsync([own.UploadId], OwnerPolicy.Key), 409, expected);
     }
+
+    public static IEnumerable<object[]> StagedSetIdentityCases() =>
+        from batchSize in new[] { 1, 2 }
+        from state in new[] { "expired", "confirmed", "cancelled" }
+        from wrongPurpose in new[] { false, true }
+        from reverse in new[] { false, true }
+        select new object[] { batchSize, state, wrongPurpose, reverse };
 
     [Fact]
     public async Task ForeignActorCannotObserveInvalidReadyMetadata_ButOwnedCorruptionStillFailsClearly()
@@ -412,22 +474,25 @@ public sealed class FilePersistentLifecycleTests
         public MutableClock Clock { get; } = new();
         public FaultInterceptor Faults { get; } = new();
         public ContentFaultStore ContentFaults { get; private set; } = null!;
+        public StampProvider Stamp { get; private set; } = null!;
         public string StorageRoot => Path.Combine(_root, "private");
 
-        public static async Task<LifecycleFixture> CreateAsync(bool includeDocumentModels = false, LeaseMaterializationProbe? readProbe = null)
+        public static async Task<LifecycleFixture> CreateAsync(bool includeDocumentModels = false, LeaseMaterializationProbe? readProbe = null,
+            int batchSize = 128, StagedReadProbe? stagedReadProbe = null)
         {
             var fixture = new LifecycleFixture();
             Directory.CreateDirectory(fixture._root);
             var services = new ServiceCollection();
-            var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Files:StorageRoot"] = fixture.StorageRoot }).Build();
+            var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+                { ["Files:StorageRoot"] = fixture.StorageRoot, ["Files:MaxReadBatchSize"] = batchSize.ToString(System.Globalization.CultureInfo.InvariantCulture) }).Build();
             services.AddSingleton<IConfiguration>(configuration);
             services.AddSingleton<TimeProvider>(fixture.Clock);
-            services.AddSingleton<IEntityAuditStampProvider>(new StampProvider(fixture.Clock));
+            services.AddSingleton<IEntityAuditStampProvider>(fixture.Stamp = new StampProvider(fixture.Clock));
             services.AddScoped<IEntityAuditValueProvider, EntityAuditValueProvider>();
             services.AddLogging();
             var filesDefinitions = new FilesModelMetadataProvider().GetDefinitions();
             var definitions = includeDocumentModels ? filesDefinitions.Concat(DocumentDefinitions()).ToArray() : filesDefinitions;
-            IInterceptor[] readObservers = readProbe is null ? [] : [readProbe];
+            IInterceptor[] readObservers = new IInterceptor?[] { readProbe, stagedReadProbe }.OfType<IInterceptor>().ToArray();
             services.AddScoped(provider => new EfPlatformDbContext(new DbContextOptionsBuilder<EfPlatformDbContext>()
                 .UseSqlite("Data Source=" + Path.Combine(fixture._root, "state.sqlite"))
                 .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>()
@@ -519,6 +584,34 @@ public sealed class FilePersistentLifecycleTests
         }
     }
 
+    private sealed class StagedReadProbe : DbCommandInterceptor
+    {
+        public bool Armed { get; set; }
+        public int Commands { get; private set; }
+        public List<int> LeaseBatchSizes { get; } = [];
+        public List<int> FileBatchSizes { get; } = [];
+        public CancellationTokenSource? CancelAfterFileRead { get; init; }
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            if (Armed)
+            {
+                Commands++;
+                var fragments = command.Parameters.Cast<DbParameter>().Select(parameter => parameter.Value).OfType<string>().Prepend(command.CommandText);
+                var ids = fragments.SelectMany(fragment => Regex.Matches(fragment, "File(?:UploadLease|Record)_[0-9a-f]{32}").Select(match => match.Value)).Distinct(StringComparer.Ordinal).ToArray();
+                if (command.CommandText.Contains("\"FileUploadLease\"", StringComparison.Ordinal)) LeaseBatchSizes.Add(ids.Length);
+                if (command.CommandText.Contains("\"FileRecord\"", StringComparison.Ordinal)) FileBatchSizes.Add(ids.Length);
+            }
+            return ValueTask.FromResult(result);
+        }
+        public override ValueTask<DbDataReader> ReaderExecutedAsync(DbCommand command, CommandExecutedEventData eventData,
+            DbDataReader result, CancellationToken cancellationToken = default)
+        {
+            if (Armed && command.CommandText.Contains("\"FileRecord\"", StringComparison.Ordinal)) CancelAfterFileRead?.Cancel();
+            return ValueTask.FromResult(result);
+        }
+    }
+
     private sealed class MutableClock : TimeProvider
     {
         private DateTimeOffset _now = new(2026, 10, 14, 0, 0, 0, TimeSpan.Zero);
@@ -526,7 +619,10 @@ public sealed class FilePersistentLifecycleTests
         public void Advance(TimeSpan elapsed) => _now += elapsed;
     }
     private sealed class StampProvider(MutableClock clock) : IEntityAuditStampProvider
-    { public EntityAuditStamp GetCurrent() => new("actor", clock.GetUtcNow().UtcDateTime); }
+    {
+        public bool Unavailable { get; set; }
+        public EntityAuditStamp GetCurrent() => Unavailable ? throw new EntityAuditStampUnavailableException() : new("actor", clock.GetUtcNow().UtcDateTime);
+    }
     private sealed class OwnerPolicy : IFileOwnerPolicy
     {
         public const string Key = "tests.fileState";

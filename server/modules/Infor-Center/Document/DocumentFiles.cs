@@ -1,4 +1,3 @@
-using System.Runtime.ExceptionServices;
 using System.Text.RegularExpressions;
 using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Crud.Abstractions;
@@ -47,7 +46,7 @@ public sealed partial class DocumentFiles(EfPlatformDbContext db, DocumentInitia
             if (uploadIds.Any(id => string.IsNullOrEmpty(id) || !UploadId().IsMatch(id))
                 || uploadIds.Distinct(StringComparer.Ordinal).Count() != uploadIds.Length)
                 return InvalidUploadSet();
-            staged = await ReadStagedSetAsync(uploadIds, cancellationToken);
+            staged = await files.ReadOwnedStagedAsync(uploadIds, DocumentFileOwnerPolicy.Key, cancellationToken);
             if (staged.Select(item => item.FileId).Distinct(StringComparer.Ordinal).Count() != staged.Count) return InvalidUploadSet();
         }
         var result = await operations().ExecuteAsync("document.document", ObjectOperationAction.Create, null, values, cancellationToken);
@@ -73,22 +72,6 @@ public sealed partial class DocumentFiles(EfPlatformDbContext db, DocumentInitia
             item.Link["FileUsageId"] = confirmed.UsageId;
         }
         return result;
-    }
-
-    // Files 单批先核身份后核状态；跨批同样先收齐身份裁决，不能向混入他人 token 的请求暴露本人状态。
-    private async Task<IReadOnlyList<StagedFileInfo>> ReadStagedSetAsync(string[] uploadIds, CancellationToken token)
-    {
-        var staged = new List<StagedFileInfo>(uploadIds.Length);
-        ExceptionDispatchInfo? unavailableState = null;
-        foreach (var batch in uploadIds.Chunk(files.MaxReadBatchSize))
-        {
-            try { staged.AddRange(await files.ReadOwnedStagedAsync(batch, DocumentFileOwnerPolicy.Key, token)); }
-            catch (FileLifecycleException exception) when (exception.StatusCode == 409
-                && exception.Code is "Files.UploadExpired" or "Files.UploadCancelled" or "Files.UploadAlreadyConfirmed")
-            { unavailableState ??= ExceptionDispatchInfo.Capture(exception); }
-        }
-        unavailableState?.Throw();
-        return staged;
     }
 
     /// <inheritdoc/>

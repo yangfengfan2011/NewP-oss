@@ -14,11 +14,16 @@ public sealed record FileUsageContent(Stream FileStream, string FileName, string
 /// <summary>独立上传及业务事务内使用登记的稳定消费面。</summary>
 public interface IFileLifecycleService
 {
+    /// <summary>暂存集合内部每批查询及安全元数据单次输入的上限，不是暂存集合总量上限。</summary>
     int MaxReadBatchSize { get; }
     long MaxUploadSizeBytes { get; }
     /// <summary>先持久接收意图再流式写入，actor 取自可信服务端上下文。</summary>
     Task<StagedFileInfo> StageAsync(Stream stream, string fileName, string? contentType, string ownerKey, CancellationToken token = default);
-    /// <summary>按当前 actor 和登记用途读取未消费且未到期的真实文件身份。</summary>
+    /// <summary>
+    /// 按当前 actor 和登记用途读取完整暂存集合，内部按 MaxReadBatchSize 分批，按输入次序返回。
+    /// 空集合仍核验 actor 与用途；空白或重复身份拒绝。整集合身份不可见优先于本人过期、取消或已消费冲突。
+    /// 集合总量由业务 owner 约束，结果占用 O(N) 空间；此读取不预留使用，Confirm 仍须在原业务事务内重验。
+    /// </summary>
     Task<IReadOnlyList<StagedFileInfo>> ReadOwnedStagedAsync(IReadOnlyList<string> uploadIds, string ownerKey, CancellationToken token = default);
     /// <summary>在已有平台事务内登记使用；不会保存、Flush 或独立提交。</summary>
     Task<ConfirmedFileUsage> ConfirmUsageAsync(string uploadId, FileOwnerReference owner, CancellationToken token = default);

@@ -271,8 +271,14 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
         var probe = new CollectionSqlFault();
         await using var fixture = await FixtureAsync(probe, batchSize: 7); using var admin = await fixture.LoginAdministratorAsync(); var position = await RootAsync(fixture, admin);
         var staged = await StageThroughFilesAsync(fixture, 101);
+        probe.ObserveStagedReads = true;
         using var saved = await SaveAsync(fixture, admin, position, Values("SET-MAXIMUM"), staged);
+        probe.ObserveStagedReads = false;
         Assert.True(saved.StatusCode == HttpStatusCode.OK, await saved.Content.ReadAsStringAsync());
+        Assert.Equal(15, probe.StagedLeaseBatchSizes.Count); Assert.Equal(101, probe.StagedLeaseBatchSizes.Sum());
+        Assert.Equal(15, probe.StagedFileBatchSizes.Count); Assert.Equal(101, probe.StagedFileBatchSizes.Sum());
+        Assert.All(probe.StagedLeaseBatchSizes.Concat(probe.StagedFileBatchSizes), size => Assert.InRange(size, 1, 7));
+        output.WriteLine($"Staged set SQL: returned={staged.Length}; Files.MaxReadBatchSize=7; leaseQueries={probe.StagedLeaseBatchSizes.Count}; fileQueries={probe.StagedFileBatchSizes.Count}; largestLeaseBatch={probe.StagedLeaseBatchSizes.Max()}; largestFileBatch={probe.StagedFileBatchSizes.Max()}.");
         fixture.Services.GetRequiredService<IOptions<DocumentOptions>>().Value.MaxAttachmentsPerDocument = 0;
         var document = Assert.Single(await RowsAsync(fixture, "Document"));
         probe.ObserveMetadataReads = true;
@@ -466,6 +472,9 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
         public int ObservedReleasedUsages { get; private set; }
         public int ObservedAddedLinks { get; private set; }
         public bool ObserveMetadataReads { get; set; }
+        public bool ObserveStagedReads { get; set; }
+        public List<int> StagedLeaseBatchSizes { get; } = [];
+        public List<int> StagedFileBatchSizes { get; } = [];
         public int MetadataCommands { get; private set; }
         public List<int> UsageReadBatchSizes { get; } = [];
         public int RecordReads { get; private set; }
@@ -479,6 +488,17 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
         { Observe(command, eventData); return ValueTask.FromResult(result); }
         private void Observe(DbCommand command, CommandEventData data)
         {
+            // 首次业务插入结束预读观察窗口，避免把 Confirm 的锁内重读计为集合批读。
+            if (ObserveStagedReads && command.CommandText.Contains("[Document]", StringComparison.Ordinal)
+                && (command.CommandText.Contains("INSERT", StringComparison.Ordinal) || command.CommandText.Contains("MERGE", StringComparison.Ordinal)))
+                ObserveStagedReads = false;
+            if (ObserveStagedReads)
+            {
+                var fragments = command.Parameters.Cast<DbParameter>().Select(parameter => parameter.Value).OfType<string>().Prepend(command.CommandText);
+                var count = fragments.SelectMany(fragment => Regex.Matches(fragment, "File(?:UploadLease|Record)_[0-9a-f]{32}").Select(match => match.Value)).Distinct(StringComparer.Ordinal).Count();
+                if (command.CommandText.Contains("[FileUploadLease]", StringComparison.Ordinal)) StagedLeaseBatchSizes.Add(count);
+                if (command.CommandText.Contains("[FileRecord]", StringComparison.Ordinal)) StagedFileBatchSizes.Add(count);
+            }
             if (ObserveMetadataReads)
             {
                 MetadataCommands++;

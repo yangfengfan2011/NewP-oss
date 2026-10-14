@@ -1,7 +1,20 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import resource from '../workspaceRootResource';
+import { StandardCrudRequestError } from '@icp-platform/sdk';
 
 afterEach(() => { vi.unstubAllGlobals(); });
+it('only classifies the confirmed duplicate-code field conflict as correctable input', () => {
+  const classify = resource.actionHandlers!.createDocument.isCorrectableInputError!;
+  const problem = { code: 'Document.CodeDuplicated', fieldErrors: [{ field: 'ECODE', code: 'Document.CodeDuplicated' }] };
+  const duplicate = new StandardCrudRequestError('duplicate', 409, { ECODE: 'duplicate' }, problem);
+  expect(classify(duplicate)).toBe(true);
+  expect(duplicate.status).toBe(409);
+  expect(duplicate.problem).toBe(problem);
+  expect(classify(new StandardCrudRequestError('duplicate', 400, { ECODE: 'duplicate' }, problem))).toBe(false);
+  expect(classify(new StandardCrudRequestError('duplicate', 409, { ECODE: 'duplicate' }, { code: 'Document.CodeDuplicated' }))).toBe(false);
+  expect(classify(new StandardCrudRequestError('changed', 409, {}, { code: 'Files.UploadExpired' }))).toBe(false);
+  expect(classify(new Error('transport unavailable'))).toBe(false);
+});
 it('resolves the same EID to the registered owning detail view without confusing LID', () => {
   const target = resource.dataAdapter.getDetailTarget;
   expect(target).toBeTypeOf('function');

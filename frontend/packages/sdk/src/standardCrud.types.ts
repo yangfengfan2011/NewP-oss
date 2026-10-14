@@ -279,9 +279,12 @@ export type StandardCrudActionInputRenderer = ((context: StandardCrudActionInput
 };
 
 /** 标准动作处理器；执行流程、错误边界和刷新策略由 Shell 运行时收口。 */
-export type StandardCrudActionHandler<TDetail = unknown, TRow = unknown> = (
+export type StandardCrudActionHandler<TDetail = unknown, TRow = unknown> = ((
   context: StandardCrudActionContext<TDetail, TRow>,
-) => void | StandardCrudOperationResult | Promise<void | StandardCrudOperationResult>;
+) => void | StandardCrudOperationResult | Promise<void | StandardCrudOperationResult>) & {
+  /** Owner 同步识别可修改输入解决的错误；仅使409保留输入，不改变原错误或服务端状态。 */
+  isCorrectableInputError?: (failure: unknown) => boolean;
+};
 
 /** 摘要渲染上下文；模块只接收规范化摘要块和详情数据，不读取 Host 私有状态。 */
 export interface StandardCrudSummaryRendererContext<TData = unknown> {

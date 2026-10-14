@@ -86,7 +86,8 @@ export function useStandardCrudActionExecution<TDetail = unknown, TRow = unknown
       });
       return { status: 'succeeded', ...(result ? { result } : {}) };
     } catch (actionError) {
-      const conflict = actionError instanceof StandardCrudRequestError && actionError.status === 409;
+      const conflict = actionError instanceof StandardCrudRequestError && actionError.status === 409
+        && handler.isCorrectableInputError?.(actionError) !== true;
       setError({
         key,
         message: actionError instanceof Error ? actionError.message : fallbackErrorMessage,

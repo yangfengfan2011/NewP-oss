@@ -47,7 +47,7 @@ const resource: StandardCrudResourceRegistration = {
       { position: positionFromScope(queryScope), linkIds: (selectedRows ?? []).map(row => String(row.LID)) }, featurePosition),
     createPart: async ({ input, queryScope, featurePosition }) => referenceCommand('POST', '/api/workspace/content/parts',
       { position: positionFromScope(queryScope), values: input }, featurePosition),
-    createDocument: async ({ input, queryScope, featurePosition }) => {
+    createDocument: Object.assign(async ({ input, queryScope, featurePosition }: import('@icp-platform/sdk').StandardCrudActionContext) => {
       const draft = input as WorkspaceDocumentDraft;
       if (draft.submission?.begin() === false) throw new Error('本次保存已经开始，请先核对结果。');
       try {
@@ -72,7 +72,12 @@ const resource: StandardCrudResourceRegistration = {
         draft.submission?.failed(code === 'Platform.MutationOutcomeUnknown' || code === 'Persistence.CommitOutcomeUnknown');
         throw error;
       }
-    },
+    }, {
+      // 重复代码已确定未消费暂存；修正字段后可由用户再次保存，其他409沿共享冲突生命周期。
+      isCorrectableInputError: (failure: unknown) => failure instanceof StandardCrudRequestError && failure.status === 409
+        && failure.code === 'Document.CodeDuplicated'
+        && failure.fieldErrorDetails.some(error => error.field === 'ECODE' && error.code === 'Document.CodeDuplicated'),
+    }),
     remove: async ({ id, queryScope, featurePosition }) => {
       if (!id) throw new Error('缺少引用标识');
       return referenceCommand('DELETE', `/api/workspace/content/references/${encodeURIComponent(id)}`, { position: positionFromScope(queryScope) }, featurePosition);

@@ -26,6 +26,7 @@ const list = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderList.
 const detail = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderDetail.view.json');
 const incoming = readComponentJson('Workspace', 'metadata/views/WorkspaceReferencesList.view.json');
 const dictionary = readComponentJson('Workspace', 'metadata/dictionaries/Workspace.dic.json');
+const documentDictionary = readComponentJson('Document', 'metadata/dictionaries/Document.dic.json');
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { PageEntry } from '../composition/PageOutlet';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
@@ -47,6 +48,8 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
   let account = 'a';
   const writes: unknown[] = [];
   const references: unknown[] = [];
+  const documentWrites: unknown[] = [];
+  const cancelledUploads: string[] = [];
   let referencePresent = false;
   let failRefresh = false;
   let failInitialRead = scenario === 'receipt';
@@ -69,8 +72,17 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
     if (path.endsWith('antiforgery-token')) return json({ requestToken: 'token' });
     if (path.endsWith('current-user')) return json(user());
     if (path.startsWith('/api/workspace/folders/candidates')) return json({ items: [{ id: 'shared-folder', name: '已有共享文件夹' }], total: 1, page: 1, pageSize: 20 });
+    if (path.startsWith('/api/workspace/content/document-uploads/') && method === 'DELETE') {
+      cancelledUploads.push(path); return new Response(null, { status: 204 });
+    }
     if ((path === '/api/workspace/content/documents' && method === 'POST') || (path.startsWith('/api/workspace/content/references') && method === 'DELETE')) {
-      references.push({ method, body: input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body)) });
+      const body = input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body));
+      if (method === 'POST') {
+        documentWrites.push(body);
+        if (documentWrites.length === 1) return new Response(JSON.stringify({ statusCode: 409, code: 'Document.CodeDuplicated', reasonKey: 'Document.CodeDuplicated', message: '图文档编码必须唯一。',
+          fieldErrors: [{ field: 'ECODE', code: 'Document.CodeDuplicated', message: '图文档编码必须唯一。' }], args: {} }), { status: 409, headers: { 'Content-Type': 'application/json' } });
+      }
+      references.push({ method, body });
       referencePresent = method === 'POST'; failRefresh = true;
       return json({ succeeded: true });
     }
@@ -124,7 +136,8 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
   }
   const container = document.createElement('div'); document.body.append(container);
   const root = createRoot(container);
-  const catalogs = { zhs: Object.fromEntries(Object.entries(dictionary.Workspace).map(([key, value]) => [`Workspace.${key}`, value.zhs])) };
+  const catalogs = { zhs: { ...Object.fromEntries(Object.entries(dictionary.Workspace).map(([key, value]) => [`Workspace.${key}`, value.zhs])),
+    ...Object.fromEntries(Object.entries(documentDictionary.Document).map(([key, value]) => [`Document.${key}`, value.zhs])) } };
   const router = createMemoryRouter([{ path: '/workspace', element:
     <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={catalogs}>
       <AuthProvider initialUser={user()}><AuthorizationProvider featurePositions={user().featurePositions}><PlatformQueryProvider scopeKey="workspace-test">
@@ -208,12 +221,22 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
       });
     }
     const uploadId = 'FileUploadLease_0123456789abcdef0123456789abcdef';
-    const upload = vi.spyOn(core, 'platformUpload').mockResolvedValue(new Response(JSON.stringify({ uploadId,
-      fileId: 'FileRecord_internal', fileName: 'main.pdf', length: 4, contentType: 'application/pdf', expiresAt: '2026-10-14T00:00:00Z' })));
+    const attachmentId = 'FileUploadLease_1123456789abcdef0123456789abcdef';
+    const upload = vi.spyOn(core, 'platformUpload').mockImplementation(async (_path, body) => {
+      const attachment = (body as FormData).get('file') instanceof File && ((body as FormData).get('file') as File).name === 'attachment.pdf';
+      return new Response(JSON.stringify({ uploadId: attachment ? attachmentId : uploadId,
+        fileId: 'FileRecord_internal', fileName: attachment ? 'attachment.pdf' : 'main.pdf', length: 4, contentType: 'application/pdf', expiresAt: '2026-10-15T00:00:00Z' }));
+    });
     onTestFinished(() => upload.mockRestore());
     await act(async () => {
       const input = document.querySelector<HTMLInputElement>('.ant-drawer input[type="file"]')!;
       Object.defineProperty(input, 'files', { configurable: true, value: [new File(['main'], 'main.pdf', { type: 'application/pdf' })] });
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await vi.waitFor(async () => { await act(async () => undefined); expect(document.body.textContent).toContain('主文件已上传'); });
+    await act(async () => {
+      const input = document.querySelectorAll<HTMLInputElement>('.ant-drawer input[type="file"]')[1];
+      Object.defineProperty(input, 'files', { configurable: true, value: [new File(['attachment'], 'attachment.pdf', { type: 'application/pdf' })] });
       input.dispatchEvent(new Event('change', { bubbles: true }));
     });
     await vi.waitFor(async () => {
@@ -221,12 +244,39 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
       expect(document.querySelector<HTMLButtonElement>('.ant-drawer-footer .ant-btn-primary')!.disabled).toBe(false);
     });
     const confirm = document.querySelector<HTMLButtonElement>('.ant-drawer-footer .ant-btn-primary')!;
+    const beforeConflictReads = publicListReads();
     await act(async () => { confirm.click(); confirm.click(); });
+    await vi.waitFor(() => expect(documentWrites).toHaveLength(1));
+    await act(async () => undefined);
+    expect(document.querySelector('.ant-drawer input[id="ECODE"]')).not.toBeNull();
+    expect(document.body.textContent).toContain('图文档编码必须唯一。');
+    expect(document.body.textContent).toContain('主文件已上传');
+    expect(document.body.textContent).toContain('附件已上传');
+    expect(cancelledUploads).toEqual([]);
+    expect(publicListReads()).toBe(beforeConflictReads);
+    expect(upload).toHaveBeenCalledTimes(2);
+    expect(references).toEqual([]);
+    await act(async () => {
+      const input = document.querySelector<HTMLInputElement>('.ant-drawer input[id="ECODE"]')!;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'CORRECTED-DOC');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await vi.waitFor(async () => {
+      await act(async () => undefined);
+      expect(document.querySelector<HTMLButtonElement>('.ant-drawer-footer .ant-btn-primary')!.disabled).toBe(false);
+    });
+    await act(async () => document.querySelector<HTMLButtonElement>('.ant-drawer-footer .ant-btn-primary')!.click());
     await vi.waitFor(() => expect(references).toHaveLength(1));
+    expect(documentWrites).toEqual([
+      { position: { spaceId: 'public', rootFolderId: 'public-root', linkIds: [] }, values: { ECODE: 'NEW-DOC', ENAME: '新建图文档' }, uploads: { mainUploadId: uploadId, attachmentUploadIds: [attachmentId] } },
+      { position: { spaceId: 'public', rootFolderId: 'public-root', linkIds: [] }, values: { ECODE: 'CORRECTED-DOC', ENAME: '新建图文档' }, uploads: { mainUploadId: uploadId, attachmentUploadIds: [attachmentId] } },
+    ]);
+    expect(cancelledUploads).toEqual([]);
+    await vi.waitFor(() => expect(publicListReads()).toBe(beforeConflictReads + 1));
     await vi.waitFor(() => expect(loadedReads()).toBeGreaterThanOrEqual(beforeAddReads + 5));
     expect(references[0]).toEqual({ method: 'POST', body: { position: { spaceId: 'public', rootFolderId: 'public-root', linkIds: [] },
-      values: { ECODE: 'NEW-DOC', ENAME: '新建图文档' }, uploads: { mainUploadId: uploadId } } });
-    expect(upload).toHaveBeenCalledTimes(1);
+      values: { ECODE: 'CORRECTED-DOC', ENAME: '新建图文档' }, uploads: { mainUploadId: uploadId, attachmentUploadIds: [attachmentId] } } });
+    expect(upload).toHaveBeenCalledTimes(2);
     await vi.waitFor(() => expect(container.textContent).toContain('已保存，刷新失败'));
     await act(async () => [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === '刷新')!.click());
     await vi.waitFor(() => expect(container.querySelector('tr[data-row-key="shared-folder-link"]')).not.toBeNull());

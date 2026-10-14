@@ -445,4 +445,24 @@ describe('standard CRUD action runtime', () => {
     expect(document.body.querySelector('input[aria-label="原因"]')).toBeNull();
     expect(container.textContent).toContain('记录已发生变化，未覆盖服务器上的最新数据。请重新加载后再编辑。');
   });
+
+  it.each([true, false])('only retains input for a 409 explicitly classified by its handler (correctable=%s)', async correctable => {
+    const refresh = vi.fn();
+    const failure = new StandardCrudRequestError('输入冲突', 409, { Code: '重复代码' }, { code: 'Example.CodeConflict' });
+    const classify = vi.fn((error: unknown) => correctable && error === failure);
+    const handler = Object.assign(vi.fn().mockRejectedValue(failure), { isCorrectableInputError: classify });
+    await renderActions({
+      actions: [{ key: 'secure', labelKey: '安全操作', inputKey: 'reason' }], handlers: { secure: handler },
+      actionInputs: { reason: () => <input aria-label="原因" defaultValue="保留草稿" /> }, refresh,
+    });
+    await clickActionButton('安全操作');
+    await clickPopconfirmButton('确认');
+    await act(async () => undefined);
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(classify).toHaveBeenCalledWith(failure);
+    expect(failure.status).toBe(409);
+    expect(failure.fieldErrors).toEqual({ Code: '重复代码' });
+    expect(document.body.querySelector('input[aria-label="原因"]') !== null).toBe(correctable);
+    expect(refresh).toHaveBeenCalledTimes(correctable ? 0 : 1);
+  });
 });

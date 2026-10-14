@@ -7,7 +7,7 @@ import { act, StrictMode, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
 import { AuthorizationProvider, LanguageSelect, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
-import { ModuleRegistry, createStandardCrudRestDataAdapter, type AuthUser } from '@icp-platform/sdk';
+import { ModuleRegistry, StandardCrudRequestError, createStandardCrudRestDataAdapter, type AuthUser } from '@icp-platform/sdk';
 import { AuthProvider, useAuth, useOptionalAuth } from '../contexts/AuthContext';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { StandardCrudHostEnvironmentContext, type StandardCrudHostEnvironment } from '../standard-crud/standardCrudHostEnvironment';
@@ -478,6 +478,32 @@ describe('StandardCrudListPageHost', () => {
     expect(handler.mock.calls[0]?.[0]).toMatchObject({ input: 'keep my draft', featurePosition: scope === 'list.pageActions' ? 'page-review' : 'row-review',
       ...(scope === 'list.pageActions' ? { selectedRows: [{ id: 'one', ENAME: '甲' }] } : { id: 'one', row: { id: 'one', ENAME: '甲' } }) });
     expect(scope === 'list.pageActions' ? rowHandler : pageHandler).not.toHaveBeenCalled();
+  });
+
+  it('still closes a list input action and refreshes on an unclassified lifecycle 409 with field errors', async () => {
+    const list = vi.fn(async () => ({ items: [], total: 0 }));
+    const failure = new StandardCrudRequestError('快照已变更', 409, { Code: '当前值已变更' }, { code: 'Example.StateConflict' });
+    const handler = vi.fn().mockRejectedValue(failure);
+    mockStandardCrudModule({ dataAdapter: { list, getRowId: () => '' }, actionHandlers: { review: handler },
+      actionInputRenderers: { draft: () => <input aria-label="Lifecycle draft" defaultValue="旧快照" /> } });
+    const view = { ...personListViewDocument, view: { ...personListViewDocument.view, rowActions: [],
+      pageActions: [{ key: 'review', labelKey: 'Review', handlerKey: 'review', inputKey: 'draft' }],
+    } } as unknown as typeof personListViewDocument;
+    await renderHost({ 'PersonListView.Review': '复核' }, view, '/organization/persons', {
+      feature: { entry: 'entry', positions: ['entry', 'page-review'], points: [
+        { key: 'review', kind: 'action', position: 'page-review', parentPosition: 'entry', actionScope: 'list.pageActions' },
+      ] },
+    });
+    await vi.waitFor(() => expect(list).toHaveBeenCalled());
+    await act(async () => [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === '复核')!.click());
+    await vi.waitFor(() => expect(document.querySelector('input[aria-label="Lifecycle draft"]')).not.toBeNull());
+    const reads = list.mock.calls.length;
+    await act(async () => document.querySelector<HTMLButtonElement>('.ant-modal-footer .ant-btn-primary')!.click());
+    await vi.waitFor(() => expect(document.querySelector('input[aria-label="Lifecycle draft"]')).toBeNull());
+    await vi.waitFor(() => expect(list).toHaveBeenCalledTimes(reads + 1));
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(failure.status).toBe(409);
+    expect(failure.fieldErrors).toEqual({ Code: '当前值已变更' });
   });
 
   it('invalidates a revoked page input action without borrowing the same-named row grant or reviving its draft', async () => {

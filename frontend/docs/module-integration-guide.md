@@ -52,6 +52,8 @@ Shell 会导入并校验整份目录，全部成功后通过 `ModuleRegistry.rep
 
 `actionHandlers` 可以返回不透明的 `StandardCrudOperationResult`。Shell 只把该结果交给模块注册的 `operationResultPresenter`，不检查、持久或重放 payload。模块 presenter 拥有具体结果形状、展示、复制与关闭销毁时机。动作发生并发冲突时，Shell 刷新最新快照并结束旧确认流程，不自动重放写入。
 
+已确定可由用户修正输入的409错误，所属 handler 可附带同步纯判断 `isCorrectableInputError(failure)`。只有该 handler 明确返回 `true` 时，共享宿主保留输入及原错误，等待用户修正后再次提交；它不改变 HTTP 状态、原错误事实或提交结果，不自动重放。未声明或未匹配的409继续刷新并结束旧确认流程，生命周期冲突不能作为普通字段错误忽略。
+
 ## 标准路径的位置授权
 
 标准功能声明与派生规则见 [Module Contract](../../docs/architecture/module-contract.md#功能位置授权)。Shell 消费活动目录中的完整 position，并按导航、Tab 和树的静态节点类型传递所属入口。独立详情使用声明的入口，重定向采用目标入口，Drawer 沿用发起动作的位置；模块不从 URL、Referer、点击历史或记录 ID 推导位置。

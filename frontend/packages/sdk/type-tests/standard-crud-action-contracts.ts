@@ -36,3 +36,13 @@ void genericState;
 void genericAction;
 void localizedState;
 void moduleActionHandler;
+
+const correctableInputHandler: StandardCrudActionHandler = Object.assign(async () => undefined, {
+  isCorrectableInputError: (failure: unknown) => failure instanceof Error,
+});
+// @ts-expect-error 错误分类为同步纯判断，不能在共享错误边界中再次发起异步工作。
+const asynchronousClassification: StandardCrudActionHandler = Object.assign(async () => undefined, {
+  isCorrectableInputError: async (_failure: unknown) => true,
+});
+void correctableInputHandler;
+void asynchronousClassification;

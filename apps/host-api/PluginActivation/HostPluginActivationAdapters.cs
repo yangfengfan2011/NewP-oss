@@ -353,6 +353,7 @@ public sealed class CanonicalModuleAssemblyLoader
         return contracts.Where(contract => !VerifiedAssemblyIdentityPolicy.IsHostPlatformSharedDependency(contract.Identity.AssemblyName)).ToArray();
     }
 
+    // 优先复用具有映像证明的 Default 主体，否则隔离装载；随后核对实际模块身份。
     private Assembly LoadModule(
         VerifiedModuleImage image,
         VerifiedModuleAssemblyLoadContext context,
@@ -400,6 +401,7 @@ public sealed class CanonicalModuleAssemblyLoader
         private readonly IReadOnlyDictionary<string, Assembly> _sharedContracts;
         private readonly string _distributionRoot;
 
+        // 固定本轮主体、合同与共享类型映像；同名的不同内容在构造时拒绝。
         internal VerifiedModuleAssemblyLoadContext(
             IReadOnlyList<VerifiedModuleImage> images,
             IReadOnlyList<VerifiedDependencyImage> contracts,

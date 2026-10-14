@@ -49,7 +49,7 @@ public sealed class AcceptanceGateTests
     {
         var (root, runId) = PrepareRun("workspace");
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId,
-            publishedFixture: PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseFileRecovery: true)).RunAsync(CancellationToken.None);
+            publishedFixture: PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseFileRecovery: true, exerciseFileRecoveryMechanisms: true)).RunAsync(CancellationToken.None);
     }
 
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "三成员固定发行物与旧 Workspace/Part/Document 行、Link、历史连续性")]
@@ -76,7 +76,17 @@ public sealed class AcceptanceGateTests
     {
         var (root, runId) = PrepareRun("native-workspace-files");
         var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
-            exerciseCompositionLifecycle: false, exerciseFileRecovery: true);
+            exerciseCompositionLifecycle: false, exerciseFileRecovery: true, exerciseFileRecoveryMechanisms: true);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false,
+            publishedFixture: fixture, includeBrowser: false).RunAsync(CancellationToken.None);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "正式 Host 同库同 root 重启保留主文件与附件集合身份及逐文件下载")]
+    public async Task NativeWorkspaceFileCollection_RestartsWithSavedIdentityAndBytes()
+    {
+        var (root, runId) = PrepareRun("native-workspace-file-collection");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, exerciseFileRecovery: true, exerciseFileRecoveryMechanisms: false);
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false,
             publishedFixture: fixture, includeBrowser: false).RunAsync(CancellationToken.None);
     }
@@ -102,18 +112,32 @@ public sealed class AcceptanceGateTests
                 await CaptureAsync("workspace-properties-narrow.png");
                 await driver.ClosePropertiesAsync(properties);
                 await page.SetViewportSizeAsync(1440, 1000);
-                await driver.CreateDocumentWithMainAsync("ACC-WS-D-" + runId[..8], "归组图文档旅程 " + runId[..8], WorkspacePageDriver.SmallMainFile(), async _ =>
+                var attachments = WorkspacePageDriver.SmallAttachmentFiles();
+                await driver.CreateDocumentWithFilesAsync("ACC-WS-D-" + runId[..8], "归组图文档旅程 " + runId[..8], WorkspacePageDriver.SmallMainFile(), async _ =>
                 {
                     await CaptureAsync("workspace-create.png");
                     await page.SetViewportSizeAsync(900, 1000);
                     await CaptureAsync("workspace-create-narrow.png");
                     await page.SetViewportSizeAsync(1440, 1000);
-                });
+                }, attachments: attachments);
                 await CaptureAsync("workspace-created-content.png");
                 var documentName = "归组图文档旅程 " + runId[..8];
                 await driver.OpenOwnedPropertiesAsync(documentName, "/documents");
-                await driver.DownloadMainFileAsync(Path.Combine(root, "workspace-main-download.pdf"));
+                foreach (var file in new[] { WorkspacePageDriver.SmallMainFile() }.Concat(attachments))
+                    await driver.DownloadFileAsync(file.Name, Path.Combine(root, "download-" + file.Name));
                 await CaptureAsync("workspace-document-properties.png");
+                // 完整详情无遮挡时使用既有 Shell 语言控件，轻量核对集合面板的两种语言布局。
+                await driver.SelectLanguageAsync("English");
+                await page.GetByRole(AriaRole.Region, new() { Name = "Files", Exact = true })
+                    .GetByRole(AriaRole.Button, new() { Name = "Download", Exact = true }).First
+                    .WaitForAsync(new() { State = WaitForSelectorState.Visible });
+                await CaptureAsync("workspace-document-properties-en.png");
+                await page.SetViewportSizeAsync(900, 1000);
+                await CaptureAsync("workspace-document-properties-en-narrow.png");
+                await page.SetViewportSizeAsync(1440, 1000);
+                await driver.SelectLanguageAsync("简体中文");
+                await page.GetByRole(AriaRole.Region, new() { Name = "文件", Exact = true })
+                    .WaitForAsync(new() { State = WaitForSelectorState.Visible });
                 await driver.ReturnToPublicContentAsync();
                 await driver.EditObjectAsync(documentName, documentName + " 已编辑");
                 await CaptureAsync("workspace-document-edited.png");
@@ -232,14 +256,16 @@ public sealed class AcceptanceGateTests
                 await driver.OpenAsync();
                 await driver.SelectRootAsync("公共空间");
                 await driver.CreateObjectAsync("零组件", partCode, partName, dialog => CapturePairAsync("part-create", dialog));
-                await driver.CreateDocumentWithMainAsync(documentCode, documentName, WorkspacePageDriver.SmallMainFile(), dialog => CapturePairAsync("document-create", dialog));
+                var attachments = WorkspacePageDriver.SmallAttachmentFiles();
+                await driver.CreateDocumentWithFilesAsync(documentCode, documentName, WorkspacePageDriver.SmallMainFile(), dialog => CapturePairAsync("document-create", dialog), attachments);
                 await new StandardCrudPageDriver(page).WaitForRowAsync(folderName);
                 await CapturePairAsync("mixed-content");
                 await driver.OpenOwnedPropertiesAsync(partName, "/parts");
                 await CapturePairAsync("mixed-part-properties");
                 await driver.ReturnToPublicContentAsync();
                 await driver.OpenOwnedPropertiesAsync(documentName, "/documents");
-                await driver.DownloadMainFileAsync(Path.Combine(root, "workspace-main-download.pdf"));
+                foreach (var file in new[] { WorkspacePageDriver.SmallMainFile() }.Concat(attachments))
+                    await driver.DownloadFileAsync(file.Name, Path.Combine(root, "download-" + file.Name));
                 await CapturePairAsync("mixed-document-properties");
                 await driver.ReturnToPublicContentAsync();
                 await driver.RemoveReferenceAsync(partName, dialog => CapturePairAsync("mixed-remove-reference", dialog));

@@ -23,7 +23,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     string repositoryRoot, string runDirectory, string runId,
     string baselineHostRoot, string hostRoot, string shellRoot, string packagePath,
     bool workspaceDelivery = false, WorkspaceDeliveryInput? deliveryInput = null, bool exerciseCompositionLifecycle = true,
-    bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false)
+    bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false, bool exerciseFileRecoveryMechanisms = true)
 {
     private readonly Dictionary<string, string?> _environment = new();
     private ReusableSqlServerDatabase? _database;
@@ -48,7 +48,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     internal string HostIdentity => $"published:{_host?.Process.Id}:{runId}";
 
     internal static PublishedComponentAcceptanceFixture FromWorkspaceDelivery(string repositoryRoot, string runDirectory, string runId,
-        bool exerciseCompositionLifecycle = true, bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false)
+        bool exerciseCompositionLifecycle = true, bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false, bool exerciseFileRecoveryMechanisms = true)
     {
         var path = RequiredPath("NEWP_ACCEPTANCE_WORKSPACE_DELIVERY_INPUT");
         var input = JsonSerializer.Deserialize<WorkspaceDeliveryInput>(File.ReadAllText(path), AcceptanceJson.Options)
@@ -56,7 +56,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         return new(repositoryRoot, runDirectory, runId, input.BaselineHostRoot, input.HostRoot,
             input.ShellRoot, input.PackagePath, workspaceDelivery: true, deliveryInput: input,
             exerciseCompositionLifecycle: exerciseCompositionLifecycle, exerciseUninstallRecovery: exerciseUninstallRecovery,
-            exerciseFileRecovery: exerciseFileRecovery);
+            exerciseFileRecovery: exerciseFileRecovery, exerciseFileRecoveryMechanisms: exerciseFileRecoveryMechanisms);
     }
 
     // 只登记受控构建的输入与来源；不产出裁决，也不授予包信任。Gate 仍走正式安装/Host。

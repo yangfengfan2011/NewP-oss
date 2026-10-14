@@ -91,8 +91,8 @@ public sealed class DocumentFilesSqlServerHttpApiTests
         Assert.Equal("released", (await finalDb.Set<Dictionary<string, object?>>("FileUsage").SingleAsync())["State"]);
     }
 
-    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "严格Document DTO与单main集合错误不消费真实暂存，旧metadata-only仍初始化")]
-    public async Task CreateInput_RejectsMalformedAndAttachmentSetsWithoutConsumingMain()
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "严格Document DTO与非法集合不消费真实暂存，空附件与metadata-only保持兼容")]
+    public async Task CreateInput_RejectsMalformedAndInvalidSetsWithoutConsumingMain()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
@@ -106,7 +106,6 @@ public sealed class DocumentFilesSqlServerHttpApiTests
             new { mainUploadId = uploadId.ToUpperInvariant() }, new { mainUploadId = uploadId + "\n" },
             new { mainUploadId = staged.GetProperty("fileId").GetString() },
             new { mainUploadId = uploadId, attachmentUploadIds = new[] { uploadId } },
-            new { mainUploadId = uploadId, attachmentUploadIds = new[] { "FileUploadLease_0123456789abcdef0123456789abcdef" } },
             new { mainUploadId = uploadId, attachmentUploadIds = Enumerable.Repeat(uploadId, 101).ToArray() }
         };
         foreach (var uploads in uploadSets)
@@ -115,6 +114,9 @@ public sealed class DocumentFilesSqlServerHttpApiTests
             var problem = await ProblemAsync(response, HttpStatusCode.BadRequest, "Document.InvalidUploadSet");
             Assert.Contains(problem.GetProperty("fieldErrors").EnumerateArray(), field => field.GetProperty("field").GetString() == "uploads");
         }
+        using (var unavailable = await CreateDocumentAsync(fixture, admin, new { position, values,
+            uploads = new { mainUploadId = uploadId, attachmentUploadIds = new[] { "FileUploadLease_0123456789abcdef0123456789abcdef" } } }))
+            await ProblemAsync(unavailable, HttpStatusCode.NotFound, "Files.UploadUnavailable");
         var malformed = new object[]
         {
             new { position, values, uploads = new { attachmentUploadIds = Array.Empty<string>() } },
@@ -138,9 +140,26 @@ public sealed class DocumentFilesSqlServerHttpApiTests
             foreach (var model in new[] { "Document", "DocumentVersion", "DocumentIteration", "DocumentFileLink", "FileUsage", "WorkspaceFolderContent" })
                 Assert.Equal(0, await db.Set<Dictionary<string, object?>>(model).CountAsync());
         }
-        using var accepted = await CreateDocumentAsync(fixture, admin, new { position, values,
-            uploads = new { mainUploadId = uploadId, attachmentUploadIds = Array.Empty<string>() } });
-        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+        // 集合已开放，空数组、显式null及省略附件都仍表示仅主文件；每次使用独立合法暂存。
+        foreach (var variant in new[] { "empty", "null", "omitted" })
+        {
+            var acceptedValues = new { ECODE = variant == "empty" ? values.ECODE : "STRICT-" + variant.ToUpperInvariant(), ENAME = values.ENAME };
+            var acceptedUploadId = variant == "empty" ? uploadId
+                : (await StageAsync(fixture, admin, position, acceptedValues, [1, 2, 3])).GetProperty("uploadId").GetString()!;
+            object acceptedUploads = variant switch
+            {
+                "empty" => new { mainUploadId = acceptedUploadId, attachmentUploadIds = Array.Empty<string>() },
+                "null" => new { mainUploadId = acceptedUploadId, attachmentUploadIds = (string[]?)null },
+                _ => new { mainUploadId = acceptedUploadId }
+            };
+            using var accepted = await CreateDocumentAsync(fixture, admin, new { position, values = acceptedValues, uploads = acceptedUploads });
+            Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+            var acceptedFacts = await ReadCreatedAsync(fixture, acceptedValues.ECODE);
+            var acceptedFiles = await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "document.document.read"), $"/api/document/documents/{acceptedFacts.DocumentId}/files");
+            var main = Assert.Single(acceptedFiles.GetProperty("files").EnumerateArray());
+            Assert.Equal("main", main.GetProperty("role").GetString());
+            Assert.Equal(0L, main.GetProperty("ordinal").GetInt64());
+        }
         using var legacy = await CreateDocumentAsync(fixture, admin, new { position, values = new { ECODE = "LEGACY-01", ENAME = "无文件创建" }, uploads = (object?)null });
         Assert.Equal(HttpStatusCode.OK, legacy.StatusCode);
         var facts = await ReadCreatedAsync(fixture, "LEGACY-01");

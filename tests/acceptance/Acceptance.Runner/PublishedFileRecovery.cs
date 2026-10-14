@@ -12,6 +12,7 @@ namespace ICP.Platform.Acceptance;
 internal sealed partial class PublishedComponentAcceptanceFixture
 {
     private sealed record RecoveryFile(string FileId, string UploadId, string FileState, string LeaseState, string StorageKey);
+    private sealed record SavedRecoveryFile(string FileName, byte[] Bytes);
 
     private async Task VerifyFileProcessRecoveryAsync(WorkspaceAcceptanceActor actor, CancellationToken token)
     {
@@ -25,28 +26,44 @@ internal sealed partial class PublishedComponentAcceptanceFixture
         var roots = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get, "/api/workspace/spaces", null, entry, token);
         var root = roots.EnumerateArray().Single(row => row.GetProperty("spaceKind").GetString()!.Equals("public", StringComparison.OrdinalIgnoreCase));
         var position = new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = root.GetProperty("rootFolderId").GetString(), linkIds = Array.Empty<string>() };
-        await VerifyKestrelUploadBoundaryAsync(client, create, position, token);
+        if (exerciseFileRecoveryMechanisms) await VerifyKestrelUploadBoundaryAsync(client, create, position, token);
         var name = "正式文件重启 " + runId[..8];
         var values = new { ECODE = "OS-MAIN-" + runId[..8], ENAME = name };
-        byte[] bytes = [0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x00, 0xff];
-        var staged = await StageRecoveryFileAsync(client, create, position, values, new ByteArrayContent(bytes), "saved-" + runId[..8] + ".pdf", token);
+        SavedRecoveryFile[] files =
+        [
+            new("saved-main-" + runId[..8] + ".pdf", [0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x00, 0xff]),
+            new("saved-attachment-a-" + runId[..8] + ".pdf", [0x25, 0x50, 0x44, 0x46, 0x00, 0x41]),
+            new("saved-attachment-b-" + runId[..8] + ".pdf", [0x25, 0x50, 0x44, 0x46, 0xff, 0x42, 0x0a])
+        ];
+        var uploadIds = new List<string>();
+        foreach (var file in files)
+        {
+            var staged = await StageRecoveryFileAsync(client, create, position, values, new ByteArrayContent(file.Bytes), file.FileName, token);
+            uploadIds.Add(staged.GetProperty("uploadId").GetString()!);
+        }
         await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Post, "/api/workspace/content/documents",
-            new { position, values, uploads = new { mainUploadId = staged.GetProperty("uploadId").GetString() } }, create, token);
+            new { position, values, uploads = new { mainUploadId = uploadIds[0], attachmentUploadIds = uploadIds.Skip(1).ToArray() } }, create, token);
         var content = await WorkspaceAcceptanceFixture.ReadRootContentsAsync(client, root, entry, token);
         var documentId = content.GetProperty("items").EnumerateArray().Single(row => row.GetProperty("fields").GetProperty("Name").GetString() == name)
             .GetProperty("associatedObject").GetProperty("id").GetString()!;
         var before = await ReadSavedFileFactsAsync(documentId, token);
-        await VerifyRecoveryDownloadAsync(client, documentId, read, download, bytes, token);
+        using (var facts = JsonDocument.Parse(before))
+            if (facts.RootElement.GetArrayLength() != files.Length)
+                throw new InvalidOperationException("正式保存没有为全部文件形成完整关联、使用及已确认租约。");
+        await VerifyRecoveryDownloadsAsync(client, documentId, read, download, files, token);
         var previous = HostIdentity;
         await RestartAsync(token);
         if (HostIdentity == previous) throw new InvalidOperationException("文件恢复未启动新的正式 Host 进程。");
         using var restarted = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
         await WorkspaceAcceptanceFixture.LoginAsync(restarted, actor, token);
-        await VerifyRecoveryDownloadAsync(restarted, documentId, read, download, bytes, token);
+        await VerifyRecoveryDownloadsAsync(restarted, documentId, read, download, files, token);
         var after = await ReadSavedFileFactsAsync(documentId, token);
         if (before != after) throw new InvalidOperationException("同库同 root 重启改变了已保存的 Document/文件关联或使用。");
         await WriteAsync("files-saved-process-restart.json", new { previous, restarted = HostIdentity, catalog = ReusableSqlServerDatabase.Catalog,
-            storageRoot = StorageRoot, documentId, before, after, length = bytes.Length, sha256 = Convert.ToHexString(SHA256.HashData(bytes)) }, token);
+            storageRoot = StorageRoot, documentId, before, after,
+            files = files.Select(file => new { file.FileName, length = file.Bytes.Length, sha256 = Convert.ToHexString(SHA256.HashData(file.Bytes)) }) }, token);
+        // 窄集合入口只补新增的保存/重启缺口；完整 Workspace 仍执行全部既有恢复机制。
+        if (!exerciseFileRecoveryMechanisms) return;
 
         await VerifyReceivingProcessInterruptionAsync(restarted, actor, create, position, token);
         using var finalClient = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
@@ -54,7 +71,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture
         await VerifyStagedAndPendingRecoveryAsync(finalClient, actor, create, position, token);
         using var savedClient = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
         await WorkspaceAcceptanceFixture.LoginAsync(savedClient, actor, token);
-        await VerifyRecoveryDownloadAsync(savedClient, documentId, read, download, bytes, token);
+        await VerifyRecoveryDownloadsAsync(savedClient, documentId, read, download, files, token);
         if (before != await ReadSavedFileFactsAsync(documentId, token)) throw new InvalidOperationException("恢复未确认文件时改变了 active 文件使用。");
     }
 
@@ -120,18 +137,24 @@ internal sealed partial class PublishedComponentAcceptanceFixture
         return request;
     }
 
-    private async Task VerifyRecoveryDownloadAsync(HttpClient client, string documentId, string read, string download, byte[] bytes, CancellationToken token)
+    private async Task VerifyRecoveryDownloadsAsync(HttpClient client, string documentId, string read, string download,
+        IReadOnlyList<SavedRecoveryFile> files, CancellationToken token)
     {
         var metadata = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get, $"/api/document/documents/{documentId}/files", null, read, token);
-        var item = metadata.GetProperty("files").EnumerateArray().Single();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/document/documents/{documentId}/files/{item.GetProperty("fileLinkId").GetString()}/content");
-        request.Headers.Add("X-NewP-Feature", download);
-        using var response = await client.SendAsync(request, token);
-        response.EnsureSuccessStatusCode();
-        var received = await response.Content.ReadAsByteArrayAsync(token);
-        if (!bytes.SequenceEqual(received) || response.Content.Headers.ContentLength != bytes.Length
-            || response.Content.Headers.ContentDisposition?.DispositionType != "attachment")
-            throw new InvalidOperationException("正式重启下载字节、长度或 attachment 契约不符。");
+        var items = metadata.GetProperty("files").EnumerateArray().ToArray();
+        if (items.Length != files.Count) throw new InvalidOperationException("正式重启改变了已保存文件集合。");
+        foreach (var file in files)
+        {
+            var item = items.Single(item => item.GetProperty("fileName").GetString() == file.FileName);
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/document/documents/{documentId}/files/{item.GetProperty("fileLinkId").GetString()}/content");
+            request.Headers.Add("X-NewP-Feature", download);
+            using var response = await client.SendAsync(request, token);
+            response.EnsureSuccessStatusCode();
+            var received = await response.Content.ReadAsByteArrayAsync(token);
+            if (!file.Bytes.SequenceEqual(received) || response.Content.Headers.ContentLength != file.Bytes.Length
+                || response.Content.Headers.ContentDisposition?.DispositionType != "attachment")
+                throw new InvalidOperationException($"正式重启下载字节、长度或 attachment 契约不符：{file.FileName}");
+        }
     }
 
     private Task<string> ReadSavedFileFactsAsync(string id, CancellationToken token) => ReadSqlJsonAsync(

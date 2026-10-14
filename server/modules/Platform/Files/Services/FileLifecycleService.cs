@@ -190,7 +190,10 @@ public sealed partial class FileLifecycleService(FileStateStore state, IPlatform
         var fileIds = references.Select(reference => reference.FileId).Distinct(StringComparer.Ordinal).ToArray();
         var usages = await state.Usages.AsNoTracking().Where(row => usageIds.Contains(EF.Property<string>(row, "EID"))).ToDictionaryAsync(row => Text(row, "EID"), token);
         var files = await state.Records.AsNoTracking().Where(row => fileIds.Contains(EF.Property<string>(row, "EID"))).ToDictionaryAsync(row => Text(row, "EID"), token);
-        var leases = await state.Leases.AsNoTracking().Where(row => usageIds.Contains(EF.Property<string>(row, "ConfirmedUsageId"))).ToListAsync(token);
+        // 每个使用只能有一个反向 lease；多取一行损坏哨兵，不能先物化任意数量的重复关联。
+        var leases = await state.Leases.AsNoTracking().Where(row => usageIds.Contains(EF.Property<string>(row, "ConfirmedUsageId")))
+            .Take(usageIds.Length + 1).ToListAsync(token);
+        if (leases.Count > usageIds.Length) throw Corrupted();
         var byUsage = leases.ToLookup(row => Text(row, "ConfirmedUsageId"), StringComparer.Ordinal);
         var result = new Dictionary<string, Dictionary<string, object?>>(StringComparer.Ordinal);
         foreach (var reference in references)

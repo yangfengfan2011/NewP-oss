@@ -1,9 +1,10 @@
 import { platformFetch, platformUpload } from '@icp-platform/core';
 import { readStandardCrudRequestError } from '@icp-platform/sdk';
 
-export interface DocumentSubmissionLifecycle { begin(): void; committed(): void; failed(unknown: boolean): void }
+export interface DocumentSubmissionLifecycle { begin(): boolean; committed(): void; failed(unknown: boolean): void }
 export interface WorkspaceDocumentDraft extends Record<string, unknown> {
   mainUploadId?: string;
+  attachmentUploadIds?: string[];
   submission?: DocumentSubmissionLifecycle;
 }
 export interface DocumentStage { uploadId: string; fileId: string; fileName: string; length: number; contentType: string; expiresAt: string }

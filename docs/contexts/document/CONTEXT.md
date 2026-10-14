@@ -16,11 +16,11 @@ Document 的 LatestVersionId 与 DocumentVersion 的 CurrentIterationId 是服�
 
 文件夹内容入口提供编辑和删除，Workspace 在同一事务清理全部引用；Document 先登记使用释放并清理自有 FileLink，再在数据库清理 Iteration/Version 和 master，后项失败连同先前释放和删除一起回滚。物理内容回收归 Files，业务删除不直接删除字节；独立页面继续只开放创建与读取，启停和导出保持拒绝。标准资源登记要求的对象授权能力使用现有正式功能声明，不引入额外权限系统。
 
-**文件关联（DocumentFileLink）**属于 Document，父端是实际 DocumentIteration，子端是 Files 的 FileRecord；它具有独立 LID，必须保存 FileUsageId。当前只接受一个 main，Role=main、Ordinal=0 及所有关联身份由服务端填写。显式 uploads 使用专属 DTO，空 main、非法身份及非空附件集合均拒绝；省略 uploads 保留 metadata-only 创建。附件集合尚未开放，不能静默丢弃或消费其中任何 token。
+**文件关联（DocumentFileLink）**属于 Document，父端是实际 DocumentIteration，子端是 Files 的 FileRecord；它具有独立 LID，必须保存 FileUsageId。显式 uploads 包含一个 main 和零至一百个 attachment；main 的 Ordinal=0，附件按请求次序为 1..N，所有关联身份由服务端填写。附件列表可空或省略，空 main、非 canonical token、主附件全局重复及超过当前新建配置上限的集合均拒绝；省略 uploads 保留 metadata-only 创建。主附件全部先登记为真实 Added Link，再按服务器 FileId、UploadId 排序确认，显示次序不参与 Files 事务锁序。
 
-Document.Contracts 的文件创建复用原所属 Create，在同一业务事务内建立主对象、首版、regular 版次、实际 Added FileLink 和 Files 使用；创建证明绑定本次实际版次及事务。Files.Contracts 的 Confirm 只登记共享 tracker，返回使用身份后填齐 FileUsageId 才允许 Flush；Release 同样不独立提交。上传预检复用标准字段、审计及完整候选 create 裁决，只返回验证结果，不能公开候选身份或代替保存时重验。业务提交结果未知时保留持久使用与内容，不自动重放保存或盲目取消暂存。
+Document.Contracts 的文件创建复用原所属 Create，在同一业务事务内建立主对象、首版、regular 版次、实际 Added FileLink 和 Files 使用；创建证明绑定本次实际版次及事务。Files.Contracts 的 Confirm 只登记共享 tracker，全部关联填齐 FileUsageId 后才允许首次 Flush；Release 同样不独立提交。集合预读与安全元数据读取均按 Files 自有 MaxReadBatchSize 分批；整集合身份或用途不可见优先于本人暂存失效，资格检查完成前不登记业务写入。上传预检复用标准字段、审计及完整候选 create 裁决，只返回验证结果，不能公开候选身份或代替保存时重验。业务提交结果未知时保留持久使用与内容，不自动重放保存或盲目取消暂存。
 
-属性文件列表沿当前身份和真实关联批量读取安全元数据，只公开 FileLink 身份、角色、次序及文件显示信息，不公开 File/Usage 身份或存储键。read 允许而 download 拒绝时仍可看列表；下载分别重验正式功能与数据 download 资格，并核对 Document/版次/FileLink/Usage/File 回链。不可读或错目标安全拒绝；已授权的关联损坏、内容缺失保持明确故障。存储配置、接收意图、取消、TTL 与回收状态的唯一事实见 [Files README](../../../server/modules/Platform/Files/README.md)。
+属性文件列表沿当前身份和真实关联批量读取安全元数据，最多 101 项，按 Ordinal/LID 稳定读取。只公开 FileLink 身份、角色、次序及文件显示信息，不公开 File/Usage 身份或存储键。新建附件配置调低不改变既有合法集合的读取、下载或释放。read 允许而 download 拒绝时仍可看列表；下载分别重验正式功能与数据 download 资格，并核对 Document/版次/FileLink/Usage/File 回链。不可读或错目标安全拒绝；已授权的关联损坏、空或重复使用身份及内容缺失保持明确故障。存储配置、接收意图、取消、TTL 与回收状态的唯一事实见 [Files README](../../../server/modules/Platform/Files/README.md)。
 
 回退优先撤销 Document 导航与资源接入，保留独立实体及迁移历史。代码回退不自动执行 Down 或清表，旧 Host 不得越过已应用的 schema frontier。
 

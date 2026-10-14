@@ -22,6 +22,41 @@ namespace ICP.Platform.Tests.Files;
 /// <summary>持久状态最低层故障证明；真实 Document policy/HTTP/SQL/进程证明由纵向资产承担。</summary>
 public sealed class FilePersistentLifecycleTests
 {
+    [Fact]
+    public async Task MetadataReadBoundsDuplicateReverseLeasesBeforeMaterializationAndRejectsCrossFileCorruption()
+    {
+        var probe = new LeaseMaterializationProbe();
+        await using var fixture = await LifecycleFixture.CreateAsync(readProbe: probe);
+        var staged = await fixture.StageAsync([1, 2, 3]);
+        var owner = new FileOwnerReference(OwnerPolicy.Key, "original-owner");
+        var usage = await fixture.ConfirmAsync(staged.UploadId, owner);
+        for (var index = 0; index < 3; index++) await fixture.StageAsync([4, 5, 6]);
+        using (var setup = fixture.Services.CreateScope())
+        {
+            var db = setup.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+            var otherLeases = await db.Set<Dictionary<string, object?>>("FileUploadLease")
+                .Where(row => EF.Property<string>(row, "EID") != staged.UploadId).ToListAsync();
+            Assert.Equal(3, otherLeases.Count);
+            foreach (var lease in otherLeases)
+            {
+                // 保留各自真实 FileId/FK，不能靠只查目标 FileId 隐藏重复反向关联。
+                Assert.NotEqual(staged.FileId, lease["FileId"]);
+                lease["ConfirmedUsageId"] = usage.UsageId;
+                lease["State"] = "confirmed";
+            }
+            await db.SaveChangesAsync();
+        }
+        probe.Arm();
+        using var scope = fixture.Services.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IFileLifecycleService>();
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ReadUsageMetadataAsync([new(usage.UsageId, usage.FileId, owner)]));
+        Assert.Equal("Files.PersistentAssociationCorrupted", failure.Message);
+        // 一项真实输入最多物化一项关联加一项损坏哨兵，不能先加载全部再报错。
+        Assert.Equal(2, probe.LeaseRows);
+        Assert.Contains("LIMIT", Assert.IsType<string>(probe.CommandText), StringComparison.Ordinal);
+        Assert.Contains(probe.Parameters, parameter => parameter is int value && value == 2);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -379,7 +414,7 @@ public sealed class FilePersistentLifecycleTests
         public ContentFaultStore ContentFaults { get; private set; } = null!;
         public string StorageRoot => Path.Combine(_root, "private");
 
-        public static async Task<LifecycleFixture> CreateAsync(bool includeDocumentModels = false)
+        public static async Task<LifecycleFixture> CreateAsync(bool includeDocumentModels = false, LeaseMaterializationProbe? readProbe = null)
         {
             var fixture = new LifecycleFixture();
             Directory.CreateDirectory(fixture._root);
@@ -392,10 +427,11 @@ public sealed class FilePersistentLifecycleTests
             services.AddLogging();
             var filesDefinitions = new FilesModelMetadataProvider().GetDefinitions();
             var definitions = includeDocumentModels ? filesDefinitions.Concat(DocumentDefinitions()).ToArray() : filesDefinitions;
+            IInterceptor[] readObservers = readProbe is null ? [] : [readProbe];
             services.AddScoped(provider => new EfPlatformDbContext(new DbContextOptionsBuilder<EfPlatformDbContext>()
                 .UseSqlite("Data Source=" + Path.Combine(fixture._root, "state.sqlite"))
                 .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>()
-                .AddInterceptors(fixture.Faults).Options, definitions, provider.GetRequiredService<IEntityAuditValueProvider>()));
+                .AddInterceptors(fixture.Faults).AddInterceptors(readObservers).Options, definitions, provider.GetRequiredService<IEntityAuditValueProvider>()));
             services.AddScoped<IPlatformTransactionExecutor, EfPlatformTransactionExecutor>();
             services.AddScoped<IFileOwnerPolicy, OwnerPolicy>();
             new FilesModule().ConfigureServices(services);
@@ -455,6 +491,31 @@ public sealed class FilePersistentLifecycleTests
             await Services.DisposeAsync();
             Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
             Directory.Delete(_root, true);
+        }
+    }
+
+    private sealed class LeaseMaterializationProbe : DbCommandInterceptor, IMaterializationInterceptor
+    {
+        private bool _armed;
+        public int LeaseRows { get; private set; }
+        public string? CommandText { get; private set; }
+        public object?[] Parameters { get; private set; } = [];
+        public void Arm() { _armed = true; LeaseRows = 0; CommandText = null; Parameters = []; }
+        public object InitializedInstance(MaterializationInterceptionData materializationData, object entity)
+        {
+            if (_armed && materializationData.EntityType.Name == "FileUploadLease") LeaseRows++;
+            return entity;
+        }
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            if (_armed && command.CommandText.Contains("FileUploadLease", StringComparison.Ordinal)
+                && command.CommandText.Contains("ConfirmedUsageId", StringComparison.Ordinal))
+            {
+                CommandText = command.CommandText;
+                Parameters = command.Parameters.Cast<DbParameter>().Select(parameter => parameter.Value).ToArray();
+            }
+            return ValueTask.FromResult(result);
         }
     }
 

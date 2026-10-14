@@ -49,12 +49,13 @@ const resource: StandardCrudResourceRegistration = {
       { position: positionFromScope(queryScope), values: input }, featurePosition),
     createDocument: async ({ input, queryScope, featurePosition }) => {
       const draft = input as WorkspaceDocumentDraft;
-      draft.submission?.begin();
+      if (draft.submission?.begin() === false) throw new Error('本次保存已经开始，请先核对结果。');
       try {
         const response = await platformFetch('/api/workspace/content/documents', { method: 'POST',
           headers: { ...headers(featurePosition), 'Content-Type': 'application/json' },
           body: JSON.stringify({ position: positionFromScope(queryScope), values: documentBusinessValues(draft),
-            ...(draft.mainUploadId ? { uploads: { mainUploadId: draft.mainUploadId } } : {}) }) });
+            ...(draft.mainUploadId ? { uploads: { mainUploadId: draft.mainUploadId,
+              ...(draft.attachmentUploadIds?.length ? { attachmentUploadIds: draft.attachmentUploadIds } : {}) } } : {}) }) });
         if (!response.ok) throw await readStandardCrudRequestError(response);
         let payload: unknown;
         try { payload = await response.json(); }

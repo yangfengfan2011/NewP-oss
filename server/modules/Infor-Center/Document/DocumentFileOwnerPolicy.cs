@@ -30,7 +30,7 @@ public sealed class DocumentFileOwnerPolicy(EfPlatformDbContext db, DocumentFile
                 && Equals(entry.Property("LID").CurrentValue, owner.Id));
             if (entry is null || entry.State != EntityState.Added || entry.Entity is not Dictionary<string, object?> link
                 || !Equals(link["CEID"], fileId) || link.GetValueOrDefault("PEID") is not string iterationId
-                || !creation.ProvesIteration(iterationId) || !Equals(link["Role"], "main") || !Equals(link["Ordinal"], 0L)
+                || !creation.ProvesIteration(iterationId) || !HasValidRole(link, options.Value.MaxAttachmentsPerDocument)
                 || link.GetValueOrDefault("FileUsageId") is not null)
                 throw new FileLifecycleException(409, "Document.CreationProofRequired");
             return;
@@ -38,6 +38,12 @@ public sealed class DocumentFileOwnerPolicy(EfPlatformDbContext db, DocumentFile
         if (usageId is null) throw new InvalidOperationException("Document.FileAssociationCorrupted");
         await VerifyBatchAsync([new(usageId, fileId, owner)], operation, token);
     }
+
+    // 新建上限使用当前配置；已持久集合的读取、下载与释放不受后续调低配置影响。
+    private static bool HasValidRole(IReadOnlyDictionary<string, object?> link, int maxAttachments) =>
+        Equals(link.GetValueOrDefault("Role"), "main") && Equals(link.GetValueOrDefault("Ordinal"), 0L)
+        || Equals(link.GetValueOrDefault("Role"), "attachment") && link.GetValueOrDefault("Ordinal") is long ordinal
+            && ordinal >= 1 && ordinal <= maxAttachments;
 
     /// <inheritdoc/>
     public async Task VerifyBatchAsync(IReadOnlyList<FileUsageReference> references, FileOwnerOperation operation, CancellationToken token)
@@ -71,7 +77,7 @@ public sealed class DocumentFileOwnerPolicy(EfPlatformDbContext db, DocumentFile
             if (iteration is null || version is null || master is null
                 || !Equals(master["LatestVersionId"], version["EID"]) || !Equals(version["CurrentIterationId"], iteration["EID"])
                 || !Equals(iteration["Kind"], "regular") || !Equals(link["CEID"], reference.FileId)
-                || !Equals(link["FileUsageId"], reference.UsageId) || !Equals(link["Role"], "main") || !Equals(link["Ordinal"], 0L))
+                || !Equals(link["FileUsageId"], reference.UsageId) || !HasValidRole(link, 100))
                 throw new InvalidOperationException("Document.FileAssociationCorrupted");
         }
         if (operation is FileOwnerOperation.Download or FileOwnerOperation.Release)

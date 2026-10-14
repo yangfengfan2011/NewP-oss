@@ -6,6 +6,12 @@ namespace ICP.Platform.Acceptance;
 /// <summary>工作空间唯一正式旅程的页面控件知识；后续内容操作继续扩展此驱动。</summary>
 internal sealed class WorkspacePageDriver(IPage page)
 {
+    /// <summary>通过 Shell 的真实语言控件选择语言；只供原 Native 详情呈现核对使用。</summary>
+    internal async Task SelectLanguageAsync(string language)
+    {
+        await page.Locator(".np-shell-language-select .ant-select-selector").ClickAsync();
+        await page.Locator(".ant-select-dropdown:visible").GetByText(language, new() { Exact = true }).ClickAsync();
+    }
     internal async Task OpenAsync()
     {
         await page.Locator(".np-sidebar-menu").GetByRole(AriaRole.Link, new() { Name = "工作空间", Exact = true }).ClickAsync();
@@ -210,19 +216,19 @@ internal sealed class WorkspacePageDriver(IPage page)
         Assertions.Expect(dialog.GetByRole(AriaRole.Button, new() { Name = StandardCrudPageDriver.SaveAndCloseLabel, Exact = true }))
             .ToBeEnabledAsync(new() { Timeout = 30_000 });
 
-    /// <summary>正式主文件输入依次贯通 Stage 与一次保存；内容语义在 API/IO 层验证。</summary>
-    internal async Task CreateDocumentWithMainAsync(string code, string name, FilePayload mainFile, Func<ILocator, Task>? capture = null)
+    /// <summary>主文件与附件共用正式创建动作一次保存；内容语义在 API/IO 层验证。</summary>
+    internal async Task CreateDocumentWithFilesAsync(string code, string name, FilePayload mainFile, Func<ILocator, Task>? capture = null, IReadOnlyList<FilePayload>? attachments = null)
     {
         var crud = new StandardCrudPageDriver(page);
         var drawer = await crud.OpenCreateDrawerAsync("新建图文档", "新建");
-        await FillDocumentCreationAsync(drawer, code, name, mainFile);
+        await FillDocumentCreationAsync(drawer, code, name, mainFile, attachments);
         if (capture is not null) await capture(drawer);
         await crud.SaveAndCloseAsync(drawer, new("POST", "/api/workspace/content/documents", 200, "新建图文档"));
         await crud.WaitForRowAsync(name);
     }
 
-    /// <summary>填写字段后通过真实主文件控件暂存，最后才等待保存可用。</summary>
-    internal async Task FillDocumentCreationAsync(ILocator drawer, string code, string name, FilePayload mainFile)
+    /// <summary>从可见选择按钮进入真实文件选择器，等待各文件状态后才交给统一保存。</summary>
+    internal async Task FillDocumentCreationAsync(ILocator drawer, string code, string name, FilePayload mainFile, IReadOnlyList<FilePayload>? attachments = null)
     {
         await FillObjectFieldsAsync(drawer, code, name);
         var responseTask = page.WaitForResponseAsync(response => response.Request.Method == "POST"
@@ -232,6 +238,16 @@ internal sealed class WorkspacePageDriver(IPage page)
         await chooser.SetFilesAsync(mainFile);
         var response = await responseTask;
         if (!response.Ok) throw new InvalidOperationException($"主文件暂存请求失败：{response.Status} {await response.TextAsync()}");
+        if (attachments is { Count: > 0 })
+        {
+            var attachmentChooser = await page.RunAndWaitForFileChooserAsync(() =>
+                drawer.GetByRole(AriaRole.Button, new() { Name = "选择附件", Exact = true }).ClickAsync());
+            await attachmentChooser.SetFilesAsync(attachments);
+            foreach (var attachment in attachments)
+                await drawer.GetByRole(AriaRole.Group, new() { Name = "附件 " + attachment.Name, Exact = true })
+                    .GetByText("附件已上传，保存后生效。", new() { Exact = true })
+                    .WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        }
         await WaitForObjectSaveAsync(drawer);
     }
 
@@ -242,14 +258,22 @@ internal sealed class WorkspacePageDriver(IPage page)
         Buffer = System.Text.Encoding.UTF8.GetBytes("%PDF-1.4\nWorkspace acceptance main file\n%%EOF\n")
     };
 
+    /// <summary>正式旅程只选两个小附件；上限、排序和字节断言由 API/SQL 层拥有。</summary>
+    internal static IReadOnlyList<FilePayload> SmallAttachmentFiles() =>
+    [
+        new() { Name = "workspace-attachment-a.pdf", MimeType = "application/pdf", Buffer = System.Text.Encoding.UTF8.GetBytes("%PDF-1.4\nWorkspace attachment A\n%%EOF\n") },
+        new() { Name = "workspace-attachment-b.pdf", MimeType = "application/pdf", Buffer = System.Text.Encoding.UTF8.GetBytes("%PDF-1.4\nWorkspace attachment B\n%%EOF\n") }
+    ];
+
     /// <summary>从 Document 属性的正式下载按钮等待 attachment 下载；不回退到裸文件路径。</summary>
-    internal async Task DownloadMainFileAsync(string outputPath)
+    internal async Task DownloadFileAsync(string fileName, string outputPath)
     {
-        await page.GetByText("文件", new() { Exact = true }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        var row = page.GetByRole(AriaRole.Region, new() { Name = "文件", Exact = true }).GetByRole(AriaRole.Row)
+            .Filter(new() { Has = page.GetByRole(AriaRole.Cell, new() { Name = fileName, Exact = true }) });
         var downloadTask = page.WaitForDownloadAsync();
-        await page.GetByRole(AriaRole.Button, new() { Name = "下载", Exact = true }).ClickAsync();
+        await row.GetByRole(AriaRole.Button, new() { Name = "下载", Exact = true }).ClickAsync();
         var download = await downloadTask;
-        if (await download.FailureAsync() is { } failure) throw new InvalidOperationException("主文件下载失败：" + failure);
+        if (await download.FailureAsync() is { } failure) throw new InvalidOperationException("文件下载失败：" + failure);
         await download.SaveAsAsync(outputPath);
     }
     /// <summary>混合内容名称链接使用所属模块详情路由，不在操作菜单重复提供入口。</summary>

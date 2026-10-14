@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using System.Text.RegularExpressions;
 using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Crud.Abstractions;
@@ -11,6 +12,7 @@ using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.Auditing;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace ICP.Platform.Modules.Document;
 
@@ -19,7 +21,7 @@ public sealed partial class DocumentFiles(EfPlatformDbContext db, DocumentInitia
     DocumentFileCreationScope creation, IFileLifecycleService files, Func<IObjectOperationExecutor> operations,
     IStandardCrudResourceRegistry resources, StandardCrudDefaultWriter writer, IDataScopeObjectDecisionProvider decisions,
     IPlatformTransactionExecutor transactions, IPlatformObjectIdGenerator ids, IEntityAuditValueProvider audit,
-    DocumentFileOwnerPolicy policy) : IDocumentFiles
+    DocumentFileOwnerPolicy policy, IOptions<DocumentOptions> options) : IDocumentFiles
 {
     /// <inheritdoc/>
     public async Task<StandardCrudError?> ValidateUploadAsync(IReadOnlyDictionary<string, object?> values, string fileName,
@@ -36,33 +38,57 @@ public sealed partial class DocumentFiles(EfPlatformDbContext db, DocumentInitia
         DocumentUploadSet? uploads, CancellationToken cancellationToken = default)
     {
         if (!transactions.IsActive || db.Database.CurrentTransaction is null) throw new InvalidOperationException("Document.TransactionRequired");
-        StagedFileInfo? staged = null;
+        IReadOnlyList<StagedFileInfo> staged = [];
         if (uploads is not null)
         {
-            var mainId = uploads.MainUploadId;
-            if (string.IsNullOrEmpty(mainId) || !UploadId().IsMatch(mainId) || uploads.AttachmentUploadIds is { Count: > 0 })
+            var attachments = uploads.AttachmentUploadIds ?? [];
+            if (attachments.Count > options.Value.MaxAttachmentsPerDocument) return InvalidUploadSet();
+            var uploadIds = new[] { uploads.MainUploadId }.Concat(attachments).ToArray();
+            if (uploadIds.Any(id => string.IsNullOrEmpty(id) || !UploadId().IsMatch(id))
+                || uploadIds.Distinct(StringComparer.Ordinal).Count() != uploadIds.Length)
                 return InvalidUploadSet();
-            staged = (await files.ReadOwnedStagedAsync([mainId], DocumentFileOwnerPolicy.Key, cancellationToken)).Single();
+            staged = await ReadStagedSetAsync(uploadIds, cancellationToken);
+            if (staged.Select(item => item.FileId).Distinct(StringComparer.Ordinal).Count() != staged.Count) return InvalidUploadSet();
         }
         var result = await operations().ExecuteAsync("document.document", ObjectOperationAction.Create, null, values, cancellationToken);
-        if (!result.Succeeded || staged is null) return result;
+        if (!result.Succeeded || staged.Count == 0) return result;
         var current = await identities.ReadCurrentAsync((string)result.Detail!.Fields["EID"]!, cancellationToken);
         using var proof = creation.Begin(current);
         var stamp = audit.Current();
-        var link = new Dictionary<string, object?>
+        var links = staged.Select((item, ordinal) => new Dictionary<string, object?>
         {
-            ["LID"] = ids.NewId("DocumentFileLink"), ["PEID"] = current.Iteration["EID"], ["CEID"] = staged.FileId,
-            ["Role"] = "main", ["Ordinal"] = 0L,
+            ["LID"] = ids.NewId("DocumentFileLink"), ["PEID"] = current.Iteration["EID"], ["CEID"] = item.FileId,
+            ["Role"] = ordinal == 0 ? "main" : "attachment", ["Ordinal"] = (long)ordinal,
             ["LCreatedBy"] = stamp.ActorId, ["LCreatedAt"] = stamp.OccurredAtUtc,
             ["LUpdatedBy"] = stamp.ActorId, ["LUpdatedAt"] = stamp.OccurredAtUtc
-        };
-        db.Set<Dictionary<string, object?>>("DocumentFileLink").Add(link);
-        // Added Link 暂未填 UsageId 时禁止 Flush；Confirm 只登记，完整 owner 填齐后由外层保存。
-        var confirmed = await files.ConfirmUsageAsync(staged.UploadId,
-            new(DocumentFileOwnerPolicy.Key, (string)link["LID"]!), cancellationToken);
-        if (confirmed.FileId != staged.FileId) throw new InvalidOperationException("Document.FileAssociationCorrupted");
-        link["FileUsageId"] = confirmed.UsageId;
+        }).ToArray();
+        db.Set<Dictionary<string, object?>>("DocumentFileLink").AddRange(links);
+        // 显示次序与 Files.<FileId> 锁序分离；全部真实 Link 保持 Added，填齐所有 UsageId 前禁止 Flush。
+        foreach (var item in staged.Select((file, ordinal) => (File: file, Link: links[ordinal]))
+            .OrderBy(item => item.File.FileId, StringComparer.Ordinal).ThenBy(item => item.File.UploadId, StringComparer.Ordinal))
+        {
+            var confirmed = await files.ConfirmUsageAsync(item.File.UploadId,
+                new(DocumentFileOwnerPolicy.Key, (string)item.Link["LID"]!), cancellationToken);
+            if (confirmed.FileId != item.File.FileId) throw new InvalidOperationException("Document.FileAssociationCorrupted");
+            item.Link["FileUsageId"] = confirmed.UsageId;
+        }
         return result;
+    }
+
+    // Files 单批先核身份后核状态；跨批同样先收齐身份裁决，不能向混入他人 token 的请求暴露本人状态。
+    private async Task<IReadOnlyList<StagedFileInfo>> ReadStagedSetAsync(string[] uploadIds, CancellationToken token)
+    {
+        var staged = new List<StagedFileInfo>(uploadIds.Length);
+        ExceptionDispatchInfo? unavailableState = null;
+        foreach (var batch in uploadIds.Chunk(files.MaxReadBatchSize))
+        {
+            try { staged.AddRange(await files.ReadOwnedStagedAsync(batch, DocumentFileOwnerPolicy.Key, token)); }
+            catch (FileLifecycleException exception) when (exception.StatusCode == 409
+                && exception.Code is "Files.UploadExpired" or "Files.UploadCancelled" or "Files.UploadAlreadyConfirmed")
+            { unavailableState ??= ExceptionDispatchInfo.Capture(exception); }
+        }
+        unavailableState?.Throw();
+        return staged;
     }
 
     /// <inheritdoc/>
@@ -127,7 +153,10 @@ public sealed partial class DocumentFiles(EfPlatformDbContext db, DocumentInitia
         var query = db.Set<Dictionary<string, object?>>("DocumentFileLink").Where(row => EF.Property<string>(row, "PEID") == iterationId);
         if (!tracking) query = query.AsNoTracking();
         var links = await query.OrderBy(row => EF.Property<long>(row, "Ordinal")).ThenBy(row => EF.Property<string>(row, "LID")).Take(102).ToArrayAsync(token);
-        if (links.Length > 101 || links.Any(link => !Equals(link["Role"], "main") || !Equals(link["Ordinal"], 0L)) || links.Length > 1)
+        if (links.Length > 101 || links.Where((link, ordinal) => !Equals(link["Ordinal"], (long)ordinal)
+            || !Equals(link["Role"], ordinal == 0 ? "main" : "attachment")).Any()
+            || links.Select(link => link.GetValueOrDefault("FileUsageId")).OfType<string>()
+                .Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal).Count() != links.Length)
             throw new InvalidOperationException("Document.FileAssociationCorrupted");
         return links;
     }
@@ -135,14 +164,15 @@ public sealed partial class DocumentFiles(EfPlatformDbContext db, DocumentInitia
     // 引用只从已读取的真实 Link 派生；缺失必填持久身份是完整性故障。
     private static FileUsageReference Reference(Dictionary<string, object?> link) =>
         link.GetValueOrDefault("FileUsageId") is string usageId && link.GetValueOrDefault("CEID") is string fileId
+            && !string.IsNullOrWhiteSpace(usageId) && !string.IsNullOrWhiteSpace(fileId)
             ? new(usageId, fileId, new(DocumentFileOwnerPolicy.Key, (string)link["LID"]!))
             : throw new InvalidOperationException("Document.FileAssociationCorrupted");
 
-    // 当票单 main，附件显式拒绝且不读取或消费其中任一 token。
+    // 形状错误在读取暂存或建立业务事实前拒绝，不能把显式空 main 降级为 metadata-only。
     private static StandardCrudMutationResult InvalidUploadSet() => StandardCrudMutationResult.Failure(new()
     {
-        StatusCode = 400, Code = "Document.InvalidUploadSet", ReasonKey = "Document.InvalidUploadSet", Message = "请选择一个有效主文件。",
-        FieldErrors = [new("uploads", "Document.InvalidUploadSet", "请选择一个有效主文件。")]
+        StatusCode = 400, Code = "Document.InvalidUploadSet", ReasonKey = "Document.InvalidUploadSet", Message = "请选择一个有效主文件，附件须符合数量限制且不能重复。",
+        FieldErrors = [new("uploads", "Document.InvalidUploadSet", "请选择一个有效主文件，附件须符合数量限制且不能重复。")]
     });
 
     // 本票局部 lease 身份规则，保持服务端生成器的 ordinal 字符串语义。

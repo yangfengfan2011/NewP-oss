@@ -165,7 +165,8 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             var folderName = $"工作空间旅程文件夹 {_runId[..8]}";
             await driver.CreateFolderAsync(folderName);
             await driver.CreateObjectAsync("零组件", PartCode, PartName);
-            await driver.CreateDocumentWithMainAsync(DocumentCode, DocumentName, WorkspacePageDriver.SmallMainFile());
+            var attachments = WorkspacePageDriver.SmallAttachmentFiles();
+            await driver.CreateDocumentWithFilesAsync(DocumentCode, DocumentName, WorkspacePageDriver.SmallMainFile(), attachments: attachments);
             await driver.ExpandRootToFolderAsync("公共空间", folderName);
             var folderAddress = await driver.SelectTreePathAsync("公共空间", folderName);
             await driver.SelectRootAsync("个人空间");
@@ -186,7 +187,8 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             await driver.CloseDirectReferencesAsync(references);
             await driver.ReturnToPublicContentAsync();
             await driver.OpenOwnedPropertiesAsync(DocumentName, "/documents");
-            await driver.DownloadMainFileAsync(Path.Combine(_runDirectory, "workspace-main-download.pdf"));
+            foreach (var file in new[] { WorkspacePageDriver.SmallMainFile() }.Concat(attachments))
+                await driver.DownloadFileAsync(file.Name, Path.Combine(_runDirectory, "download-" + file.Name));
             await driver.ReturnToPublicContentAsync();
             await driver.RemoveReferenceAsync(PartName);
             await driver.CreateObjectAsync("零组件", PartCode + "-NEXT", PartName + " 新建");

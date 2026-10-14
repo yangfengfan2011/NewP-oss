@@ -190,6 +190,127 @@ public sealed class WorkspacePageDriverTests
         await Assertions.Expect(page.GetByRole(AriaRole.Button, new() { Name = "保存并关闭" })).ToBeEnabledAsync();
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "真实 Chromium 验证附件多选及同名下载按钮按文件行限定，无服务器或端口")]
+    public async Task DocumentCollection_UsesVisibleMultipleChooserAndDownloadsEachFileRow()
+    {
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new()
+        {
+            Headless = true,
+            ExecutablePath = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_CHROMIUM_EXECUTABLE")
+                ?? @"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        });
+        var page = await browser.NewPageAsync();
+        var stages = 0;
+        await page.RouteAsync("http://workspace.test/**", async route =>
+        {
+            if (route.Request.Method == "POST")
+            {
+                stages++;
+                await route.FulfillAsync(new() { Status = 200, ContentType = "application/json", Body = "{}" });
+                return;
+            }
+            if (new Uri(route.Request.Url).AbsolutePath.EndsWith("/content", StringComparison.Ordinal))
+            {
+                await route.FulfillAsync(new() { Status = 200, ContentType = "application/octet-stream", Body = "driver fixture",
+                    Headers = new Dictionary<string, string> { ["Content-Disposition"] = "attachment; filename=driver-download.txt" } });
+                return;
+            }
+            await route.FulfillAsync(new() { ContentType = "text/html", Body = """
+                <meta charset="utf-8"><div class="ant-drawer-content" role="dialog" aria-label="新建图文档">
+                  <div class="ant-form-item"><label for="ECODE">编码</label><input id="ECODE"></div>
+                  <div class="ant-form-item"><label for="ENAME">名称</label><input id="ENAME"></div>
+                  <label for="main">主文件</label><input id="main" type="file" hidden>
+                  <button id="choose-main">选择主文件</button>
+                  <label for="attachments">附件</label><input id="attachments" type="file" multiple hidden>
+                  <button id="choose-attachments">选择附件</button><div id="attachment-rows"></div>
+                  <button id="save" disabled>保存并关闭</button>
+                </div>
+                <section aria-label="文件"><table><tbody id="downloads"></tbody></table></section>
+                <script>
+                  window.attachmentChooseCount=0;
+                  const addDownload = name => {
+                    const row=document.createElement('tr');
+                    const nameCell=document.createElement('td'); nameCell.textContent=name;
+                    const actionCell=document.createElement('td');
+                    const button=document.createElement('button'); button.textContent='下载';
+                    button.onclick=()=>{ const link=document.createElement('a'); link.href='/files/'+encodeURIComponent(name)+'/content'; link.click(); };
+                    actionCell.append(button); row.append(nameCell,actionCell); document.querySelector('#downloads').append(row);
+                  };
+                  document.querySelector('#choose-main').onclick=()=>document.querySelector('#main').click();
+                  document.querySelector('#choose-attachments').onclick=()=>{ window.attachmentChooseCount++; document.querySelector('#attachments').click(); };
+                  document.querySelector('#main').onchange=async event=>{
+                    await fetch('/api/workspace/content/document-uploads',{method:'POST'});
+                    addDownload(event.target.files[0].name);
+                  };
+                  document.querySelector('#attachments').onchange=async event=>{
+                    for(const file of event.target.files) {
+                      const row=document.createElement('div'); row.role='group'; row.setAttribute('aria-label','附件 '+file.name);
+                      document.querySelector('#attachment-rows').append(row);
+                      await fetch('/api/workspace/content/document-uploads',{method:'POST'});
+                      row.textContent='附件已上传，保存后生效。'; addDownload(file.name);
+                    }
+                    document.querySelector('#save').disabled=false;
+                  };
+                </script>
+                """ });
+        });
+        await page.GotoAsync("http://workspace.test/");
+        var attachments = WorkspacePageDriver.SmallAttachmentFiles();
+        var driver = new WorkspacePageDriver(page);
+        await driver.FillDocumentCreationAsync(page.GetByRole(AriaRole.Dialog), "D-2", "集合图文档", WorkspacePageDriver.SmallMainFile(), attachments);
+        Assert.Equal(3, stages);
+        Assert.Equal(1, await page.EvaluateAsync<int>("window.attachmentChooseCount"));
+        await Assertions.Expect(page.GetByLabel("附件", new() { Exact = true })).ToBeHiddenAsync();
+        var output = Path.Combine(Path.GetTempPath(), "NewPDriverCollection_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(output);
+        try
+        {
+            foreach (var file in new[] { WorkspacePageDriver.SmallMainFile() }.Concat(attachments))
+            {
+                var path = Path.Combine(output, file.Name);
+                await driver.DownloadFileAsync(file.Name, path);
+                Assert.True(File.Exists(path));
+            }
+        }
+        finally { Directory.Delete(output, recursive: true); }
+    }
+    [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "真实 Chromium 复现 AntD 选中项遮挡内部输入，语言选择使用可点击外框")]
+    public async Task LanguageSelection_ClicksSelectSurfaceWithOverlaidReadOnlyInput()
+    {
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new()
+        {
+            Headless = true,
+            ExecutablePath = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_CHROMIUM_EXECUTABLE")
+                ?? @"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        });
+        var page = await browser.NewPageAsync();
+        page.SetDefaultTimeout(1_000);
+        await page.SetContentAsync("""
+            <style>
+              .ant-select-selector {position:relative;width:120px;height:32px;border:1px solid #999;}
+              input {position:absolute;inset:0;width:100%;height:100%;box-sizing:border-box;}
+              .ant-select-selection-item {position:absolute;inset:0;display:flex;align-items:center;background:white;}
+            </style>
+            <header><div class="np-shell-language-select"><div class="ant-select-selector">
+              <input role="combobox" aria-label="语言" readonly>
+              <span class="ant-select-selection-item">简体中文</span>
+            </div></div></header>
+            <div class="ant-select-dropdown" hidden><div>English</div><div>简体中文</div></div>
+            <script>
+              const menu=document.querySelector('.ant-select-dropdown');
+              const selected=document.querySelector('.ant-select-selection-item');
+              document.querySelector('.ant-select-selector').onclick=()=>menu.hidden=false;
+              menu.querySelectorAll('div').forEach(option=>option.onclick=()=>{ selected.textContent=option.textContent; menu.hidden=true; });
+            </script>
+            """);
+        var driver = new WorkspacePageDriver(page);
+        await driver.SelectLanguageAsync("English");
+        await Assertions.Expect(page.Locator(".ant-select-selection-item")).ToHaveTextAsync("English");
+        await driver.SelectLanguageAsync("简体中文");
+        await Assertions.Expect(page.Locator(".ant-select-selection-item")).ToHaveTextAsync("简体中文");
+    }
     [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "真实 Chromium 验证正式 driver 的多加载指示器等待，无服务器或端口")]
     public async Task SelectedRoot_WaitsUntilBothVisibleLoadingIndicatorsHaveFinished()
     {

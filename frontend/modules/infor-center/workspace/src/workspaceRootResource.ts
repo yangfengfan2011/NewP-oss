@@ -2,16 +2,13 @@ import { platformFetch } from '@icp-platform/core';
 import { createElement, lazy, Suspense } from 'react';
 import { readStandardCrudRequestError, StandardCrudRequestError, type StandardCrudActionInputRenderContext, type StandardCrudDetail, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { documentBusinessValues, type WorkspaceDocumentDraft } from './workspaceDocumentUpload';
+import { workspacePosition } from './workspacePosition';
 
 interface LinkRow { linkId: string; associatedObject: { modelKey: string; id: string }; fields: Record<string, unknown> }
 const headers = (featurePosition?: string): Record<string, string> => featurePosition ? { 'X-NewP-Feature': featurePosition } : {};
 const WorkspaceObjectCreateInput = lazy(() => import('./WorkspaceObjectCreateInput'));
 const WorkspaceObjectEditInput = lazy(() => import('./WorkspaceObjectEditInput'));
 const WorkspaceDocumentCreateInput = lazy(() => import('./WorkspaceDocumentCreateInput'));
-function positionFromScope(scope?: Record<string, unknown>) {
-  if (typeof scope?.spaceId !== 'string' || typeof scope.rootFolderId !== 'string' || typeof scope.linkIds !== 'string') throw new Error('缺少工作空间出现位置');
-  return { spaceId: scope.spaceId, rootFolderId: scope.rootFolderId, linkIds: JSON.parse(scope.linkIds) as unknown };
-}
 async function referenceCommand(method: string, path: string, body: unknown, featurePosition?: string) {
   const response = await platformFetch(path, { method, headers: { ...headers(featurePosition), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!response.ok) throw await readStandardCrudRequestError(response);
@@ -37,23 +34,23 @@ const resource: StandardCrudResourceRegistration = {
   actionHandlers: {
     editObject: async ({ id, input, queryScope, featurePosition }) => {
       if (!id) throw new Error('缺少引用标识');
-      return referenceCommand('PUT', `/api/workspace/content/${encodeURIComponent(id)}`, { position: positionFromScope(queryScope), values: input }, featurePosition);
+      return referenceCommand('PUT', `/api/workspace/content/${encodeURIComponent(id)}`, { position: workspacePosition(queryScope), values: input }, featurePosition);
     },
     deleteObject: async ({ id, queryScope, featurePosition }) => {
       if (!id) throw new Error('缺少引用标识');
-      return referenceCommand('DELETE', `/api/workspace/content/${encodeURIComponent(id)}`, { position: positionFromScope(queryScope) }, featurePosition);
+      return referenceCommand('DELETE', `/api/workspace/content/${encodeURIComponent(id)}`, { position: workspacePosition(queryScope) }, featurePosition);
     },
     deleteObjects: async ({ selectedRows, queryScope, featurePosition }) => referenceCommand('POST', '/api/workspace/content/delete',
-      { position: positionFromScope(queryScope), linkIds: (selectedRows ?? []).map(row => String(row.LID)) }, featurePosition),
+      { position: workspacePosition(queryScope), linkIds: (selectedRows ?? []).map(row => String(row.LID)) }, featurePosition),
     createPart: async ({ input, queryScope, featurePosition }) => referenceCommand('POST', '/api/workspace/content/parts',
-      { position: positionFromScope(queryScope), values: input }, featurePosition),
+      { position: workspacePosition(queryScope), values: input }, featurePosition),
     createDocument: Object.assign(async ({ input, queryScope, featurePosition }: import('@icp-platform/sdk').StandardCrudActionContext) => {
       const draft = input as WorkspaceDocumentDraft;
       if (draft.submission?.begin() === false) throw new Error('本次保存已经开始，请先核对结果。');
       try {
         const response = await platformFetch('/api/workspace/content/documents', { method: 'POST',
           headers: { ...headers(featurePosition), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ position: positionFromScope(queryScope), values: documentBusinessValues(draft),
+          body: JSON.stringify({ position: workspacePosition(queryScope), values: documentBusinessValues(draft),
             ...(draft.mainUploadId ? { uploads: { mainUploadId: draft.mainUploadId,
               ...(draft.attachmentUploadIds?.length ? { attachmentUploadIds: draft.attachmentUploadIds } : {}) } } : {}) }) });
         if (!response.ok) throw await readStandardCrudRequestError(response);
@@ -80,7 +77,7 @@ const resource: StandardCrudResourceRegistration = {
     }),
     remove: async ({ id, queryScope, featurePosition }) => {
       if (!id) throw new Error('缺少引用标识');
-      return referenceCommand('DELETE', `/api/workspace/content/references/${encodeURIComponent(id)}`, { position: positionFromScope(queryScope) }, featurePosition);
+      return referenceCommand('DELETE', `/api/workspace/content/references/${encodeURIComponent(id)}`, { position: workspacePosition(queryScope) }, featurePosition);
     },
   },
   dataAdapter: {

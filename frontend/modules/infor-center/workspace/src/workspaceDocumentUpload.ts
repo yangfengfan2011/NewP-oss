@@ -1,5 +1,6 @@
 import { platformFetch, platformUpload } from '@icp-platform/core';
 import { readStandardCrudRequestError } from '@icp-platform/sdk';
+import { workspacePosition } from './workspacePosition';
 
 export interface DocumentSubmissionLifecycle { begin(): boolean; committed(): void; failed(unknown: boolean): void }
 export interface WorkspaceDocumentDraft extends Record<string, unknown> {
@@ -13,11 +14,6 @@ export interface DocumentStage { uploadId: string; fileId: string; fileName: str
 export function documentBusinessValues(input: unknown): Record<string, unknown> {
   const record = typeof input === 'object' && input !== null ? input as Record<string, unknown> : {};
   return Object.fromEntries(['ECODE', 'ENAME', 'Description'].filter(key => key in record).map(key => [key, record[key]]));
-}
-
-export function workspacePosition(scope?: Record<string, unknown>) {
-  if (typeof scope?.spaceId !== 'string' || typeof scope.rootFolderId !== 'string' || typeof scope.linkIds !== 'string') throw new Error('缺少工作空间出现位置');
-  return { spaceId: scope.spaceId, rootFolderId: scope.rootFolderId, linkIds: JSON.parse(scope.linkIds) as unknown };
 }
 
 /** 显式用户选择触发单上传，正式 transport 提供真实进度与取消。 */

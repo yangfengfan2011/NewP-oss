@@ -124,36 +124,7 @@ public class ValueListControllerMessageContractTests : IClassFixture<ValueListCo
         {
             using var shutdown = new CancellationTokenSource(_shutdownTimeout);
             await base.DisposeAsync();
-            // StopAsync 完成后，Program 的 app.Run 调用栈才退出并释放 Main 所有的部署锁。
-            // 只在既有 shutdown 预算内等本夹具的锁释放，随后严格清理私有目录。
-            while (!DeploymentLockReleased())
-            {
-                await Task.Delay(10, shutdown.Token);
-            }
-
-            if (Directory.Exists(_installRoot))
-            {
-                Directory.Delete(_installRoot, recursive: true);
-            }
-        }
-
-        private bool DeploymentLockReleased()
-        {
-            var path = Path.Combine(_installRoot, "host-deployment.lock");
-            if (!File.Exists(path))
-            {
-                return true;
-            }
-
-            try
-            {
-                using var lease = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
-                return true;
-            }
-            catch (IOException failure) when ((failure.HResult & 0xffff) is 32 or 33)
-            {
-                return false;
-            }
+            await HostDeploymentRootCleanup.DeleteAsync(_installRoot, shutdown.Token);
         }
     }
 

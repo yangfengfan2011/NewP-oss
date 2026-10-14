@@ -1,9 +1,15 @@
 // @vitest-environment jsdom
+import { transferableAbortController } from 'node:util';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { DocumentFilesPanel } from '../DocumentFilesPanel';
+
+// 真实 platformFetch 使用 Node Request；只为本文件的 jsdom 查询提供其原生 signal realm。
+beforeEach(() => {
+  vi.stubGlobal('AbortController', class { constructor() { return transferableAbortController(); } });
+});
 
 const roots: { root: Root; element: HTMLElement }[] = [];
 const files = { documentId: 'doc-1', versionId: 'version-1', iterationId: 'iteration-1', downloadAllowed: true,

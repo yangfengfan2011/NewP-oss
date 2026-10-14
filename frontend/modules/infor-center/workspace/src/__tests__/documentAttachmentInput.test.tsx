@@ -7,7 +7,6 @@ import WorkspaceDocumentCreateInput from '../WorkspaceDocumentCreateInput';
 import resource from '../workspaceRootResource';
 import { cancelDocumentStage, stageDocumentFile, type DocumentStage, type WorkspaceDocumentDraft } from '../workspaceDocumentUpload';
 
-vi.mock('@icp-platform/core', async importOriginal => await importOriginal<typeof import('@icp-platform/core')>());
 vi.mock('../workspaceDocumentUpload', async importOriginal => ({
   ...await importOriginal<typeof import('../workspaceDocumentUpload')>(),
   stageDocumentFile: vi.fn(), cancelDocumentStage: vi.fn().mockResolvedValue(undefined),

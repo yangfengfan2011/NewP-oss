@@ -11,7 +11,7 @@ while (!existsSync(join(frontendRoot, 'pnpm-workspace.yaml'))) {
   frontendRoot = parent;
 }
 export default defineConfig({
-  test: { setupFiles: [join(frontendRoot, 'packages/shell/src/__tests__/setupAntd.ts')] },
+  test: { setupFiles: [join(frontendRoot, 'test-support/setupAntd.ts')] },
   resolve: { alias: [
     { find: '@icp-platform/core', replacement: join(frontendRoot, 'packages/core/src/index.ts') },
     { find: '@icp-platform/sdk', replacement: join(frontendRoot, 'packages/sdk/src/index.ts') },

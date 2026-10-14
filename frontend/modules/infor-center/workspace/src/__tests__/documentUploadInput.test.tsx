@@ -8,8 +8,6 @@ import WorkspaceDocumentCreateInput from '../WorkspaceDocumentCreateInput';
 import resource from '../workspaceRootResource';
 import { cancelDocumentStage, stageDocumentFile, type DocumentStage, type WorkspaceDocumentDraft } from '../workspaceDocumentUpload';
 
-// 该用例贯通正式保存协议；共享AntD准备中的fetch简化mock不提供未知提交语义。
-vi.mock('@icp-platform/core', async importOriginal => await importOriginal<typeof import('@icp-platform/core')>());
 vi.mock('../workspaceDocumentUpload', async importOriginal => ({
   ...await importOriginal<typeof import('../workspaceDocumentUpload')>(),
   stageDocumentFile: vi.fn(), cancelDocumentStage: vi.fn().mockResolvedValue(undefined),

@@ -4,6 +4,8 @@ using ICP.Platform.Persistence.Abstractions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
@@ -75,6 +77,7 @@ public class ValueListControllerMessageContractTests : IClassFixture<ValueListCo
     public class TestWebApplicationFactory : WebApplicationFactory<Program>, IDisposable
     {
         private readonly string _installRoot;
+        private TimeSpan _shutdownTimeout = new HostOptions().ShutdownTimeout;
 
         public TestWebApplicationFactory()
         {
@@ -110,13 +113,46 @@ public class ValueListControllerMessageContractTests : IClassFixture<ValueListCo
             });
         }
 
-        public new void Dispose()
+        protected override IHost CreateHost(IHostBuilder builder)
         {
-            // 当前 WebApplicationFactory 完成 Host.StopAsync/Dispose 后才清理所属目录。
-            base.Dispose();
+            var host = base.CreateHost(builder);
+            _shutdownTimeout = host.Services.GetRequiredService<IOptions<HostOptions>>().Value.ShutdownTimeout;
+            return host;
+        }
+
+        public override async ValueTask DisposeAsync()
+        {
+            using var shutdown = new CancellationTokenSource(_shutdownTimeout);
+            await base.DisposeAsync();
+            // StopAsync 完成后，Program 的 app.Run 调用栈才退出并释放 Main 所有的部署锁。
+            // 只在既有 shutdown 预算内等本夹具的锁释放，随后严格清理私有目录。
+            while (!DeploymentLockReleased())
+            {
+                await Task.Delay(10, shutdown.Token);
+            }
+
             if (Directory.Exists(_installRoot))
             {
                 Directory.Delete(_installRoot, recursive: true);
+            }
+        }
+
+        private bool DeploymentLockReleased()
+        {
+            var path = Path.Combine(_installRoot, "host-deployment.lock");
+            if (!File.Exists(path))
+            {
+                return true;
+            }
+
+            try
+            {
+                using var lease = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                return true;
+            }
+            catch (IOException failure) when ((failure.HResult & 0xffff) is 32 or 33)
+            {
+                return false;
             }
         }
     }

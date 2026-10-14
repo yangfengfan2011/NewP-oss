@@ -308,11 +308,12 @@ public class HostApiPluginManifestRouteTests : IAsyncLifetime
     public async Task RequiredPlatformMemberDisabled_RejectsBeforeAnySqlTablesAndPreservesDesiredChoice()
     {
         var installRoot = CreateTempRoot();
-        var packageRoot = _testData.CreateValidPackage("Files", "1.0.0");
-        EnableInstalledPackage(packageRoot, installRoot, "Files");
+        // 用无迁移且无下游依赖的必需模块，直接验证 required 判定先于 SQL 初始化。
+        var packageRoot = _testData.CreateValidPackage("MetadataConfigCenter", "1.0.0");
+        EnableInstalledPackage(packageRoot, installRoot, "MetadataConfigCenter");
         var inventory = InstalledPluginInventoryAdapter.Create(new InstalledPluginStateStore(installRoot));
         var lifecycle = new PluginLifecycleManager(new PluginLifecycleStateStore(installRoot, new PluginLifecycleTestDeployment()));
-        Assert.True(lifecycle.RequestDisable(inventory, "Files").IsSuccess);
+        Assert.True(lifecycle.RequestDisable(inventory, "MetadataConfigCenter").IsSuccess);
         _database = await ReusableSqlServerDatabase.AcquireAsync();
         await using var connection = new SqlConnection(_database.ConnectionString);
         await connection.OpenAsync();
@@ -324,7 +325,7 @@ public class HostApiPluginManifestRouteTests : IAsyncLifetime
 
         Assert.Contains("MODULE_REQUIRED_DISABLED", error.Message);
         Assert.Equal(0, Convert.ToInt32(await command.ExecuteScalarAsync()));
-        var desired = Assert.Single(lifecycle.Resolve(inventory).DesiredModules, module => module.ModuleId == "Files");
+        var desired = Assert.Single(lifecycle.Resolve(inventory).DesiredModules, module => module.ModuleId == "MetadataConfigCenter");
         Assert.False(desired.Enabled);
         Assert.Equal("1.0.0", desired.Version);
     }
@@ -333,17 +334,17 @@ public class HostApiPluginManifestRouteTests : IAsyncLifetime
     public async Task ExternalPluginLifecycle_WhenDisabledThenReenabled_RestoresExistingActiveState()
     {
         var installRoot = CreateTempRoot();
-        // 此用例只验证外部开关；使用无迁移的现有模块，避免伪造 Audit 包撤去已发布迁移。
-        var packageRoot = _testData.CreateValidPackage("Files", "1.0.0");
-        EnableInstalledPackage(packageRoot, installRoot, "Files");
+        // 此用例只验证外部开关；MetadataConfigCenter 无迁移，保持现有模块的迁移历史完整。
+        var packageRoot = _testData.CreateValidPackage("MetadataConfigCenter", "1.0.0");
+        EnableInstalledPackage(packageRoot, installRoot, "MetadataConfigCenter");
 
         string externalFrontendUrl;
         await using (var enabledHost = await StartHostAsync(
                          installRoot,
                          externalPluginsEnabled: true))
         {
-            var files = await ReadActiveModuleAsync(enabledHost, "Files");
-            externalFrontendUrl = files.GetProperty("frontend").GetProperty("url").GetString()!;
+            var metadataConfigCenter = await ReadActiveModuleAsync(enabledHost, "MetadataConfigCenter");
+            externalFrontendUrl = metadataConfigCenter.GetProperty("frontend").GetProperty("url").GetString()!;
             Assert.False(string.IsNullOrWhiteSpace(externalFrontendUrl));
         }
 
@@ -356,8 +357,8 @@ public class HostApiPluginManifestRouteTests : IAsyncLifetime
                          installRoot,
                          externalPluginsEnabled: false))
         {
-            var files = await ReadActiveModuleAsync(disabledHost, "Files");
-            Assert.Equal(JsonValueKind.Null, files.GetProperty("frontend").ValueKind);
+            var metadataConfigCenter = await ReadActiveModuleAsync(disabledHost, "MetadataConfigCenter");
+            Assert.Equal(JsonValueKind.Null, metadataConfigCenter.GetProperty("frontend").ValueKind);
             var audit = await ReadActiveModuleAsync(disabledHost, "Audit");
             Assert.Equal(JsonValueKind.Object, audit.GetProperty("frontend").ValueKind);
         }
@@ -372,8 +373,8 @@ public class HostApiPluginManifestRouteTests : IAsyncLifetime
                          installRoot,
                          externalPluginsEnabled: true))
         {
-            var files = await ReadActiveModuleAsync(reenabledHost, "Files");
-            Assert.Equal(externalFrontendUrl, files.GetProperty("frontend").GetProperty("url").GetString());
+            var metadataConfigCenter = await ReadActiveModuleAsync(reenabledHost, "MetadataConfigCenter");
+            Assert.Equal(externalFrontendUrl, metadataConfigCenter.GetProperty("frontend").GetProperty("url").GetString());
         }
         using var reenabledLifecycle = JsonDocument.Parse(File.ReadAllBytes(lifecyclePath));
         Assert.Equal(recordedDesired, reenabledLifecycle.RootElement.GetProperty("desiredModules").GetRawText());
@@ -664,7 +665,7 @@ public class HostApiPluginManifestRouteTests : IAsyncLifetime
         var moduleAssemblyPath = moduleId switch
         {
             "Audit" => typeof(ICP.Platform.Modules.Audit.AuditModule).Assembly.Location,
-            "Files" => typeof(ICP.Platform.Modules.Files.FilesModule).Assembly.Location,
+            "MetadataConfigCenter" => typeof(ICP.Platform.Modules.MetadataConfigCenter.MetadataConfigCenterModule).Assembly.Location,
             "Organization" => typeof(ICP.Platform.Modules.Organization.OrganizationModule).Assembly.Location,
             _ => throw new InvalidOperationException($"No test module assembly is registered for '{moduleId}'.")
         };

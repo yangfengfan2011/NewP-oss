@@ -1047,6 +1047,10 @@ test('matches the reviewed current-tree baseline with no effect write commands',
   assert.deepEqual(effectFindings.map(({ id }) => id).sort(), effectNetworkLifecycleAllowlist.map(({ id }) => id).sort());
   assert.deepEqual(queryLoadFindings.map(({ id, classification }) => ({ id, classification })), [
     {
+      id: 'modules/infor-center/document/src/DocumentFilesPanel.tsx::query::usePlatformQuery.load::readFiles>platformFetch',
+      classification: 'read-query',
+    },
+    {
       id: 'modules/platform/identity/src/standard-crud/IdentityAccountSecurityEventsSummary.tsx::query::usePlatformQuery.load::listAccountSecurityEvents',
       classification: 'read-query',
     },
@@ -1091,7 +1095,7 @@ test('runs as a standalone current-tree gate', () => {
   });
 
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /6 reviewed effect findings, 7 platform query loads, 0 write commands/);
+  assert.match(result.stdout, /6 reviewed effect findings, 8 platform query loads, 0 write commands/);
 });
 
 test('keeps repeated sink call sites distinct without using line numbers in ids', () => {

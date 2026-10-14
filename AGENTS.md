@@ -23,7 +23,7 @@
 
 ## 检索与上下文
 
-- 代码调研默认直接使用 `codegraph explore "<问题或符号>"` 定位源码与调用路径；从仓库外或跨 checkout 查询时，显式使用 `codegraph explore -p "D:\Work\Git\NewP" "<问题或符号>"`，MCP 的 `projectPath` 同样指向当前仓库绝对路径。按需使用 `codegraph node`、`codegraph impact` 或 `codegraph affected`。
+- 代码调研默认直接使用 `codegraph explore "<问题或符号>"` 定位源码与调用路径；从仓库外或跨 checkout 查询时，显式使用 `codegraph explore -p "<当前仓库绝对路径>" "<问题或符号>"`，MCP 的 `projectPath` 同样指向当前仓库绝对路径。按需使用 `codegraph node`、`codegraph impact` 或 `codegraph affected`。
 - 已返回的源码视为已读；“already shown”引用复用当前上下文中的原文，原文缺失或仅有摘要时再定向读取。出现 staleness 提示时核对列出的文件；auto-sync disabled 时直接核对可能变化的源码。
 - 正常查询使用现有索引，不把 `status`、`sync` 或 `index` 作为每次调查的前置步骤；升级后的重建提示或同步故障按实际诊断处理。
 - 文档、配置、字面文本及 CodeGraph 未覆盖的内容，或查询未得到所需结果时，使用 `rg` 兜底；宽范围检索必须限制目录、结果数量或匹配类型。

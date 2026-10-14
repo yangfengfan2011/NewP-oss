@@ -33,6 +33,18 @@ const resource: StandardCrudResourceRegistration = {
       createElement(Suspense, { fallback: null }, createElement(context.action.key === 'createDocument' ? WorkspaceDocumentCreateInput : WorkspaceObjectCreateInput, context)), { presentation: 'drawer' as const }),
   },
   actionHandlers: {
+    reorder: async ({ action, id, queryScope, featurePosition }) => {
+      if (!id || !action || !['moveUp', 'moveDown'].includes(action.key)) throw new Error('无效文件夹排序动作');
+      const result = await referenceCommand('POST', '/api/workspace/content/tree-order', {
+        parentPosition: workspacePosition(queryScope), linkId: id, direction: action.key === 'moveUp' ? 'up' : 'down',
+      }, featurePosition);
+      const receipt = result.payload as { moved: boolean; boundary: string | null };
+      if (!receipt.moved && (receipt.boundary === 'first' || receipt.boundary === 'last')) return {
+        operation: 'action', payload: receipt, noChange: true,
+        notice: { reasonKey: receipt.boundary === 'first' ? 'Workspace.TreeOrderFirst' : 'Workspace.TreeOrderLast' },
+      };
+      return result;
+    },
     editObject: async ({ id, input, queryScope, featurePosition }) => {
       if (!id) throw new Error('缺少引用标识');
       return referenceCommand('PUT', `/api/workspace/content/${encodeURIComponent(id)}`, { position: workspacePosition(queryScope), values: input }, featurePosition);

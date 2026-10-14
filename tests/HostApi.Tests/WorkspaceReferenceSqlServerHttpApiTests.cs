@@ -53,7 +53,13 @@ public sealed class WorkspaceReferenceSqlServerHttpApiTests(ITestOutputHelper ou
             var folder = await folders.AsNoTracking().SingleAsync(row => EF.Property<string>(row, "ENAME") == "真实来源种子");
             var link = await links.AsNoTracking().SingleAsync();
             void Folder(string id, string name) => folders.Add(new(folder) { ["EID"] = id, ["ENAME"] = name });
-            void Edge(string parent, string child) => links.Add(new(link) { ["LID"] = Guid.NewGuid().ToString("N"), ["PEID"] = parent, ["CEID"] = child });
+            var ordinalByParent = new Dictionary<string, long>();
+            void Edge(string parent, string child)
+            {
+                var ordinal = ordinalByParent.GetValueOrDefault(parent) + 1;
+                ordinalByParent[parent] = ordinal;
+                links.Add(new(link) { ["LID"] = Guid.NewGuid().ToString("N"), ["PEID"] = parent, ["CEID"] = child, ["TreeOrdinal"] = ordinal });
+            }
             for (var i = 0; i < 27; i++) { Folder("sibling" + i, "兄弟" + i.ToString("D2")); Edge(root.GetProperty("rootFolderId").GetString()!, "sibling" + i); }
             for (var level = 0; level < 20; level++)
                 for (var side = 0; side < 2; side++)

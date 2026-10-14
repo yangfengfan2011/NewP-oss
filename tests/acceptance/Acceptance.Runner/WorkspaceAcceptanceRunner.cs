@@ -86,6 +86,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
                 features.Action(entry, "createPart", "list.pageActions", "folder"), features.Action(entry, "createDocument", "list.pageActions", "folder"), features.Action(entry, "remove", "list.rowActions", "folder"),
                 features.Action(entry, "edit", "list.rowActions", "folder"), features.Action(entry, "delete", "list.rowActions", "folder"),
                 features.Action(entry, "edit", "contextMenu", "folder"), features.Action(entry, "remove", "contextMenu", "folder"),
+                features.Action(entry, "moveUp", "contextMenu", "folder"), features.Action(entry, "moveDown", "contextMenu", "folder"),
                 features.Action(entry, "deleteObjects", "list.pageActions", "folder"), part, document,
                 features.Behavior("Document", "document.document.download")];
         }
@@ -164,7 +165,13 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
                 await driver.SelectRootAsync("公共空间");
             }
             var folderName = $"工作空间旅程文件夹 {_runId[..8]}";
+            var siblingName = $"工作空间排序相邻文件夹 {_runId[..8]}";
+            await driver.CreateFolderAsync(siblingName);
             await driver.CreateFolderAsync(folderName);
+            await driver.ExpandRootToFolderAsync("公共空间", folderName);
+            await driver.ReorderFolderAsync(folderName, "up");
+            await driver.ReorderFolderAsync(folderName, "down");
+            await driver.SelectRootAsync("公共空间");
             await driver.CreateObjectAsync("零组件", PartCode, PartName);
             var attachments = WorkspacePageDriver.SmallAttachmentFiles();
             await driver.CreateDocumentWithFilesAsync(DocumentCode, DocumentName, WorkspacePageDriver.SmallMainFile(), attachments: attachments);
@@ -199,7 +206,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             await driver.EditObjectFromContextMenuAsync(DocumentName, DocumentName + " 已编辑");
             await driver.EditObjectAsync(PartName + " 新建", PartName + " 已编辑");
             await CapturePresentationAsync(page, "folder-content-edited.png");
-            await driver.DeleteSelectedAsync(folderName + " 已编辑", DocumentName + " 已编辑", PartName + " 已编辑");
+            await driver.DeleteSelectedAsync(siblingName, folderName + " 已编辑", DocumentName + " 已编辑", PartName + " 已编辑");
             await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "browser.json"),
                 new { url = page.Url, actor = "ordinary", createdFolder = folderName, includeSpaceLifecycle }, token);
         }

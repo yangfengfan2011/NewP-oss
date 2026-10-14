@@ -61,7 +61,7 @@ internal sealed class ProviderMigrationOperationValidator(
         for (var migrationIndex = candidates.Count - 1; migrationIndex >= 0; migrationIndex--)
         {
             var candidate = candidates[migrationIndex];
-            ValidateRequiredFieldBackfillStepShape(candidate);
+            ValidateBackfillStepShape(candidate);
             var to = current;
             var preconditions = new List<ProviderMigrationDataPrecondition>();
             for (var operationIndex = candidate.Migration.UpOperations.Count - 1; operationIndex >= 0; operationIndex--)
@@ -90,7 +90,8 @@ internal sealed class ProviderMigrationOperationValidator(
                 RequiredFieldBackfills = candidate.Migration.UpOperations
                     .OfType<RequiredFieldBackfillOperation>()
                     .Select(ProjectRequiredFieldBackfillFact)
-                    .ToArray()
+                    .ToArray(),
+                RelationOrdinalBackfills = candidate.Migration.UpOperations.OfType<RelationOrdinalBackfillOperation>().Select(operation => operation.Fact).ToArray()
             };
             results[migrationIndex] = new ValidatedProviderMigration(
                 candidate.Step,
@@ -104,11 +105,11 @@ internal sealed class ProviderMigrationOperationValidator(
         return results;
     }
 
-    // 回填必须独占 data-backfill step，避免把结构收紧或其他命令藏进同一历史事务。
-    private static void ValidateRequiredFieldBackfillStepShape(ProviderMigrationCandidate candidate)
+    // 受控回填必须独占 data-backfill step，避免把结构变化或任意命令藏进同一历史事务。
+    private static void ValidateBackfillStepShape(ProviderMigrationCandidate candidate)
     {
         var backfillCount = candidate.Migration.UpOperations
-            .Count(static operation => operation is RequiredFieldBackfillOperation);
+            .Count(static operation => operation is RequiredFieldBackfillOperation or RelationOrdinalBackfillOperation);
         var isBackfillStep = string.Equals(
             candidate.Step.Compatibility,
             "data-backfill",
@@ -125,7 +126,7 @@ internal sealed class ProviderMigrationOperationValidator(
             throw new ProviderOperationValidationException(
                 candidate.Step.MigrationId,
                 nameof(RequiredFieldBackfillOperation),
-                "required-field backfill must be the only operation kind in a data-backfill step");
+                "structured backfill must be the only operation kind in a data-backfill step");
         }
     }
 
@@ -169,6 +170,7 @@ internal sealed class ProviderMigrationOperationValidator(
                 DropIndexOperation dropIndex => ReverseDropIndex(stream, dropIndex, current),
                 RenameIndexOperation renameIndex => ReverseRenameIndex(stream, renameIndex, current),
                 RequiredFieldBackfillOperation backfill => ReverseRequiredFieldBackfill(stream, backfill, current),
+                RelationOrdinalBackfillOperation ordinal => ReverseRelationOrdinalBackfill(stream, ordinal, current),
                 _ => throw Invalid(step)
             };
         }
@@ -512,6 +514,37 @@ internal sealed class ProviderMigrationOperationValidator(
             throw new InvalidOperationException("backfill literal type differs from the provider target column");
         }
 
+        return current;
+    }
+
+    // 仅同 owner 的真实 Link/Entity 配对可排名；所有物理列都必须匹配正式模型和当前 provider target。
+    private ProviderTargetSnapshot ReverseRelationOrdinalBackfill(ModuleMigrationStream stream, RelationOrdinalBackfillOperation operation, ProviderTargetSnapshot current)
+    {
+        var fact = operation.Fact;
+        if (plan.Provider != PersistenceProvider.SqlServer || fact.OwnerModuleId != stream.ModuleId)
+            throw new InvalidOperationException("relation ordinal backfill owner/provider differs from the migration stream");
+        var source = FindOwnedTable(stream, current, fact.Schema, fact.Table);
+        var target = FindOwnedTable(stream, current, fact.Schema, fact.TargetTable);
+        var link = plan.Models.Single(model => model.SchemaName == fact.Schema && model.TableName == fact.Table && model.OwnerModuleId == stream.ModuleId);
+        var entity = plan.Models.Single(model => model.SchemaName == fact.Schema && model.TableName == fact.TargetTable && model.OwnerModuleId == stream.ModuleId);
+        var directory = link.LinkQuery;
+        if (link.Kind != ICP.Platform.Modeling.ModelKind.Link || entity.Kind != ICP.Platform.Modeling.ModelKind.Entity
+            || directory is null || directory.Parent.FixedModelKey is null || directory.Child.TypeField is null
+            || entity.LogicalKey != fact.ChildModelKey || !link.LinkedTypes.Any(pair => pair.Parent == directory.Parent.FixedModelKey && pair.Child == entity.LogicalKey)
+            || link.Fields.Single(field => field.Name == directory.Parent.ReferenceField).StoreName != fact.ParentColumn
+            || link.Fields.Single(field => field.Name == directory.Child.ReferenceField).StoreName != fact.ChildColumn
+            || link.Fields.Single(field => field.Name == directory.Child.TypeField).StoreName != fact.TypeColumn
+            || source.PrimaryKey?.Columns.Count != 1 || source.PrimaryKey.Columns[0] != fact.LinkIdColumn
+            || target.PrimaryKey?.Columns.Count != 1 || target.PrimaryKey.Columns[0] != fact.TargetIdColumn)
+            throw new InvalidOperationException("relation ordinal backfill does not match the owned Link/Entity directory");
+        var ordinal = source.Columns.Single(column => column.Name == fact.Column);
+        if (!ordinal.IsNullable || ordinal.ClrType != typeof(long).FullName || ordinal.ComputedColumnSql is not null
+            || source.Columns.Single(column => column.Name == fact.ParentColumn).ClrType != typeof(string).FullName
+            || source.Columns.Single(column => column.Name == fact.ChildColumn).ClrType != typeof(string).FullName
+            || source.Columns.Single(column => column.Name == fact.TypeColumn).ClrType != typeof(string).FullName
+            || target.Columns.Single(column => column.Name == fact.TargetNameColumn).ClrType != typeof(string).FullName
+            || target.Columns.Single(column => column.Name == fact.TargetNameColumn).IsNullable)
+            throw new InvalidOperationException("relation ordinal backfill column types or NULL-only phase are invalid");
         return current;
     }
 

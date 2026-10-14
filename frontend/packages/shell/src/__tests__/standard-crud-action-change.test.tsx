@@ -2,6 +2,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
+import { LocalizationProvider } from '@icp-platform/core';
 import { useStandardCrudActionExecution } from '../standard-crud/useStandardCrudActionExecution';
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 it('hands off delete once and separates synchronization failures from a successful action', async () => {
@@ -11,7 +12,7 @@ it('hands off delete once and separates synchronization failures from a successf
   function Harness() { execution = useStandardCrudActionExecution({ refresh: vi.fn(), onCommitted: committed, resourceKey: 'directory' }); return null; }
   const container = document.createElement('div'); const root = createRoot(container);
   try {
-    await act(async () => root.render(<Harness />));
+    await act(async () => root.render(<LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={{ zhs: {} }}><Harness /></LocalizationProvider>));
     let result: unknown;
     await act(async () => { result = await execution.execute({ key: 'delete', handler, context: { id: 'd' } }); });
     expect(result).toMatchObject({ status: 'succeeded' }); expect(handler).toHaveBeenCalledTimes(1);

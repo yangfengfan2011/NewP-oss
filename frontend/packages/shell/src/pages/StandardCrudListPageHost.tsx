@@ -1672,11 +1672,11 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const actionDrawerActionKey = presentation.kind === 'action-drawer' ? presentation.actionKey : undefined;
   useEffect(() => {
     if (presentation.kind !== 'action-drawer') return;
-    const action = [...schema.pageActions, ...schema.rowActions].find(item => actionDrawerActionKey ? item.key === actionDrawerActionKey : item.standardAction === actionDrawerStandardAction);
+    const action = [...schema.pageActions, ...schema.rowActions, ...(schema.featureActions ?? [])].find(item => actionDrawerActionKey ? item.key === actionDrawerActionKey : item.standardAction === actionDrawerStandardAction);
     if (!action || !allowAction(action)) { setEmbeddedActionError('Platform.ActionUnavailable'); return; }
     if (action.standardAction === 'create') { void openCreateDrawer(); return; }
     const id = host.input.recordId;
-    if (!id && schema.rowActions.includes(action)) { setEmbeddedActionError('Platform.MissingRecordContext'); return; }
+    if (!id && (schema.rowActions.includes(action) || schema.featureActions?.includes(action))) { setEmbeddedActionError('Platform.MissingRecordContext'); return; }
     if (action.standardAction === 'edit' && id) { void openEditDrawer(id); return; }
     if (action.standardAction === 'view' && id) { void openViewDrawer(id); return; }
     setEmbeddedActionRequest({ action, id: id ?? '' });
@@ -1776,7 +1776,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
               const outcome = await actionExecution.execute({
                 key: pendingKey,
                 handler: deleteHandler,
-                context: { id: rowId, row, featurePosition: featureResolution.position },
+                context: { action, id: rowId, row, featurePosition: featureResolution.position },
                 refreshOnConflict: false,
                 fallbackErrorMessage: '删除标准资源失败',
               });
@@ -1813,7 +1813,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             const outcome = await actionExecution.execute({
               key: pendingKey,
               handler,
-              context: { id: rowId, row, queryScope: host.input.queryScope, featurePosition: featureResolution.position },
+              context: { action, id: rowId, row, queryScope: host.input.queryScope, featurePosition: featureResolution.position },
             });
             if (outcome.status === 'succeeded') host.lifecycle.close?.();
             return outcome.status === 'succeeded';
@@ -2020,7 +2020,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         setRowInputAction({ action, actionScope: 'list.pageActions', rowId: '', pendingKey: action.key, label: action.labelKey, selectedRows: action.requiresSelection ? [...selectedRows] : undefined });
       } else {
         void actionExecution.execute({ key: action.key, handler,
-          context: { queryScope: host.input.queryScope, featurePosition: feature.position, selectedRows: action.requiresSelection ? [...selectedRows] : undefined } });
+          context: { action, queryScope: host.input.queryScope, featurePosition: feature.position, selectedRows: action.requiresSelection ? [...selectedRows] : undefined } });
       }
     });
   }
@@ -2398,7 +2398,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 const outcome = await actionExecution.execute({
                   key: pendingKey,
                   handler,
-                  context: { id: rowId, row, selectedRows: rowInputAction.selectedRows, input: rowInputValue, queryScope: host.input.queryScope, featurePosition: rowInputFeatureResolution.position },
+                  context: { action: rowInputAction.action, id: rowId, row, selectedRows: rowInputAction.selectedRows, input: rowInputValue, queryScope: host.input.queryScope, featurePosition: rowInputFeatureResolution.position },
                 });
                 if (outcome.status === 'succeeded') {
                   setRowInputAction(null);

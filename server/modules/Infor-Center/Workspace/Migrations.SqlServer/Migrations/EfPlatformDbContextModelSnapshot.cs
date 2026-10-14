@@ -120,6 +120,10 @@ namespace ICP.Platform.Modules.Workspace.Migrations.SqlServer.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("PEID");
 
+                    b.Property<long?>("TreeOrdinal")
+                        .HasColumnType("bigint")
+                        .HasColumnName("TreeOrdinal");
+
                     b.Property<string>("__ordinal_ChildModelKey")
                         .IsRequired()
                         .ValueGeneratedOnAddOrUpdate()
@@ -138,6 +142,11 @@ namespace ICP.Platform.Modules.Workspace.Migrations.SqlServer.Migrations
 
                     b.HasIndex("PEID")
                         .HasDatabaseName("IX_WorkspaceFolderContent_PEID");
+
+                    b.HasIndex("PEID", "TreeOrdinal")
+                        .IsUnique()
+                        .HasDatabaseName("UX_WorkspaceFolderContent_TreeOrdinal")
+                        .HasFilter("[TreeOrdinal] IS NOT NULL");
 
                     b.HasIndex("PEID", "__ordinal_ChildModelKey", "CEID")
                         .IsUnique()

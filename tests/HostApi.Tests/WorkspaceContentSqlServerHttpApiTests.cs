@@ -241,12 +241,40 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         var tree = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, ChildrenUrl(root));
         var treeRow = Assert.Single(tree.GetProperty("items").EnumerateArray());
         Assert.Equal(1, tree.GetProperty("total").GetInt32()); Assert.False(treeRow.GetProperty("hasChildren").GetBoolean());
+        // 排序复用同一强制端点交集：被排除节点不能被选中，也不能作为可读邻居换位。
+        var second = await CreateAsync(admin, create, root, "第二个允许的文件夹");
+        var secondId = second.GetProperty("id").GetString()!;
+        constraint.ScopeIds = [.. constraint.ScopeIds!, secondId];
+        var sort = Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "workspace.folder.reorder" && point.Key == "moveUp" && point.ActionScope == "contextMenu");
+        var candidates = (await FeatureHttpTestRequests.ReadAsync(admin, entry, ChildrenUrl(root))).GetProperty("items").EnumerateArray().ToArray();
+        var secondLink = Assert.Single(candidates, row => row.GetProperty("associatedObject").GetProperty("id").GetString() == secondId).GetProperty("linkId").GetString()!;
+        string excludedLink; long excludedOrdinal;
+        using (var scope = fixture.Services.CreateScope())
+        {
+            var row = await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("WorkspaceFolderContent")
+                .SingleAsync(row => EF.Property<string>(row, "CEID") == excluded.GetProperty("id").GetString()! && EF.Property<string>(row, "PEID") == root.RootFolderId);
+            excludedLink = (string)row["LID"]!; excludedOrdinal = (long)row["TreeOrdinal"]!;
+        }
+        var parentPosition = new { spaceId = root.SpaceId, rootFolderId = root.RootFolderId, linkIds = root.LinkIds };
+        using (var rejected = await FeatureHttpTestRequests.SendAsync(admin, sort, HttpMethod.Post, "/api/workspace/content/tree-order", new { parentPosition, linkId = excludedLink, direction = "up" }))
+            Assert.Equal(HttpStatusCode.NotFound, rejected.StatusCode);
+        using (var moved = await FeatureHttpTestRequests.SendAsync(admin, sort, HttpMethod.Post, "/api/workspace/content/tree-order", new { parentPosition, linkId = secondLink, direction = "up" }))
+        {
+            Assert.Equal(HttpStatusCode.OK, moved.StatusCode);
+            Assert.True((await moved.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("moved").GetBoolean());
+        }
+        var sorted = await FeatureHttpTestRequests.ReadAsync(admin, entry, ChildrenUrl(root));
+        Assert.Equal(new[] { secondId, allowed.GetProperty("id").GetString()! }, sorted.GetProperty("items").EnumerateArray().Select(row => row.GetProperty("associatedObject").GetProperty("id").GetString()).ToArray());
+        using (var scope = fixture.Services.CreateScope())
+            Assert.Equal(excludedOrdinal, (long)(await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("WorkspaceFolderContent")
+                .AsNoTracking().SingleAsync(row => EF.Property<string>(row, "LID") == excludedLink))["TreeOrdinal"]!);
         constraint.ExcludeRoot = true;
         using var deniedAnchor = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, ListUrl(root, root.RootFolderId));
         Assert.Equal(HttpStatusCode.NotFound, deniedAnchor.StatusCode); constraint.ExcludeRoot = false;
         var searched = await ListAsync(ordinary, entry, root, root.RootFolderId, "&keyword=" + Uri.EscapeDataString("被范围排除")); Assert.Equal(0, searched.GetProperty("total").GetInt32());
         constraint.Fail = true;
         using var failed = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, ListUrl(root, root.RootFolderId)); Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
+        constraint.ScopeIds = [root.RootFolderId, allowed.GetProperty("id").GetString()!, excluded.GetProperty("id").GetString()!];
         constraint.Fail = false; constraint.CannotTranslate = true;
         using var untranslatable = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, ListUrl(root, root.RootFolderId)); Assert.Equal(HttpStatusCode.InternalServerError, untranslatable.StatusCode);
         constraint.CannotTranslate = false;
@@ -263,7 +291,7 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         {
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
             var example = await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AsNoTracking().SingleAsync();
-            db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").Add(new(example) { ["LID"] = "broken-link", ["CEID"] = "missing-entity" }); await db.SaveChangesAsync();
+            db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").Add(new(example) { ["LID"] = "broken-link", ["CEID"] = "missing-entity", ["TreeOrdinal"] = 2L }); await db.SaveChangesAsync();
         }
         var list = await ListAsync(admin, entry, root, root.RootFolderId, "&pageSize=1"); Assert.Equal(1, list.GetProperty("total").GetInt32()); Assert.Single(list.GetProperty("items").EnumerateArray());
         Assert.Equal((2, 2), await CountsAsync(fixture));

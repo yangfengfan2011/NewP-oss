@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Workspace.TreeOrderBaseline.SqlServerMigrations</AssemblyName>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../server/platform-persistence-efcore/PlatformPersistence.EfCore.csproj" />
+    <Compile Include="../../server/modules/Infor-Center/Workspace/Migrations.SqlServer/Migrations/*000001*.cs" Link="Migrations/%(Filename)%(Extension)" />
+    <Compile Include="../../server/modules/Infor-Center/Workspace/Migrations.SqlServer/Migrations/*000002*.cs" Link="Migrations/%(Filename)%(Extension)" />
+    <Compile Include="../../server/modules/Infor-Center/Workspace/Migrations.SqlServer/Migrations/*000003*.cs" Link="Migrations/%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

@@ -110,6 +110,8 @@ export interface StandardCrudListRuntimeSchema {
   pageActions: StandardCrudRuntimeActionSchema[];
   pageActionGroups?: StandardCrudPageActionGroupSchema[];
   rowActions: StandardCrudRuntimeActionSchema[];
+  /** 非呈现功能目录中显式绑定 handler 的动作只供受控引用执行。 */
+  featureActions?: StandardCrudRuntimeActionSchema[];
   /** 只引用当前 List View 的行动作，不另声明执行或权限。 */
   rowContextMenu?: string[];
   exportModes: string[];
@@ -925,6 +927,7 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
     pageActions: readRecordArray(view.pageActions)
       .map(readAction)
       .filter((action) => action.key.length > 0),
+    featureActions: readRecordArray(view.featureActions).filter(action => typeof action.handlerKey === 'string').map(readAction),
     rowActions: readRecordArray(view.rowActions)
       .map(readAction)
       .filter((action) => action.key.length > 0),
@@ -932,6 +935,9 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
   };
 
   if (schema.rowActions.some(action => action.requiresSelection)) throw new Error('requiresSelection is only supported on pageActions');
+  for (const definition of readRecordArray(view.featureActions).filter(action => typeof action.handlerKey === 'string')) {
+    if (definition.behaviorKey !== `${registration.resourceKey}.${String(definition.handlerKey)}`) throw new Error('referenced action behavior differs from its handler');
+  }
   schema.rowContextMenu = resolveRowContextMenu(view.rowContextMenu, schema.rowActions, viewKey);
   if (view.pageActionGroups !== undefined) {
     schema.pageActionGroups = readPageActionGroups(view.pageActionGroups, schema.pageActions);
@@ -983,7 +989,7 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
       throw new Error(`model column "${column.key}" must declare field`);
     }
   }
-  assertLocalizedActions(dicKey, [...schema.pageActions, ...schema.rowActions], context?.defaultLanguageCatalog);
+  assertLocalizedActions(dicKey, [...schema.pageActions, ...schema.rowActions, ...(schema.featureActions ?? [])], context?.defaultLanguageCatalog);
 
   for (const action of schema.rowActions) {
     assertActionVisibility(action, modelFields);
@@ -1013,7 +1019,7 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
     assertStandardCrudModelDataSources(model, registration);
   }
 
-  for (const action of [...schema.pageActions, ...schema.rowActions]) {
+  for (const action of [...schema.pageActions, ...schema.rowActions, ...(schema.featureActions ?? [])]) {
     assertAction(action, registration);
   }
   assertQuery(schema.query, schema.advancedFilter, model);

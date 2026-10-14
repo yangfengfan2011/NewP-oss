@@ -120,7 +120,8 @@ public sealed class WorkspaceFolderScope(EfPlatformDbContext db, IDataScopeReadP
         try
         {
             await using var command = connection.CreateCommand(); command.CommandText = sql; command.Transaction = db.Database.CurrentTransaction?.GetDbTransaction();
-            foreach (var parameter in parameters) command.Parameters.Add(parameter);
+            // 范围可在同一操作内执行多条命令；参数副本归当前 command，原范围保留 provider 类型和值。
+            foreach (var parameter in parameters) command.Parameters.Add((DbParameter)((ICloneable)parameter).Clone());
             await using var reader = await command.ExecuteReaderAsync(token); return await consume(reader);
         }
         finally { if (close) await connection.CloseAsync(); }

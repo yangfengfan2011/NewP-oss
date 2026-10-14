@@ -123,6 +123,8 @@ public sealed record ProviderTransitionSnapshot(
     /// 按 migration operation 顺序保存不改变结构的 Required 字段回填事实。
     /// </summary>
     public IReadOnlyList<ProviderRequiredFieldBackfillFact> RequiredFieldBackfills { get; init; } = [];
+    /// <summary>同 owner 关系的受控次序回填事实；空集合保持旧历史字节。</summary>
+    public IReadOnlyList<ProviderRelationOrdinalBackfillFact> RelationOrdinalBackfills { get; init; } = [];
 }
 
 /// <summary>
@@ -135,6 +137,11 @@ public sealed record ProviderRequiredFieldBackfillFact(
     string Column,
     string ClrType,
     string Literal);
+
+/// <summary>固定父分组、名称及关系主键排名的不可变输入；没有任意查询或更新表达式。</summary>
+public sealed record ProviderRelationOrdinalBackfillFact(string OwnerModuleId, string Schema, string Table, string Column,
+    string ParentColumn, string LinkIdColumn, string ChildColumn, string TypeColumn, string ChildModelKey,
+    string TargetTable, string TargetIdColumn, string TargetNameColumn);
 
 /// <summary>
 /// Drop 操作缺少旧 facet 时携带的版本化旧对象描述；仅与 <see cref="ProviderTransitionDescriptorCodec"/> 配套生成。
@@ -401,14 +408,22 @@ public static class ProviderTargetDigest
             throw new InvalidOperationException("Provider Transition contains an invalid required-field backfill fact.");
         }
 
+        if (transition.RelationOrdinalBackfills is null || transition.RelationOrdinalBackfills.Any(fact =>
+            new[] { fact.OwnerModuleId, fact.Schema, fact.Table, fact.Column, fact.ParentColumn, fact.LinkIdColumn,
+                fact.ChildColumn, fact.TypeColumn, fact.ChildModelKey, fact.TargetTable, fact.TargetIdColumn, fact.TargetNameColumn }.Any(string.IsNullOrWhiteSpace)))
+            throw new InvalidOperationException("Provider Transition contains an invalid relation ordinal backfill fact.");
+
         var canonical = transition with
         {
             From = Normalize(transition.From),
             To = Normalize(transition.To),
-            RequiredFieldBackfills = transition.RequiredFieldBackfills.ToArray()
+            RequiredFieldBackfills = transition.RequiredFieldBackfills.ToArray(),
+            RelationOrdinalBackfills = transition.RelationOrdinalBackfills.ToArray()
         };
         // 无回填的既有 Transition v1 保持原 canonical 字节，新增事实不能重写冻结历史前缀。
-        var canonicalBytes = canonical.RequiredFieldBackfills.Count == 0
+        var canonicalBytes = canonical.RelationOrdinalBackfills.Count != 0
+            ? JsonSerializer.SerializeToUtf8Bytes(canonical, JsonOptions)
+            : canonical.RequiredFieldBackfills.Count == 0
             ? JsonSerializer.SerializeToUtf8Bytes(new
             {
                 canonical.SchemaVersion,
@@ -417,7 +432,10 @@ public static class ProviderTargetDigest
                 canonical.From,
                 canonical.To
             }, JsonOptions)
-            : JsonSerializer.SerializeToUtf8Bytes(canonical, JsonOptions);
+            : JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                canonical.SchemaVersion, canonical.ModuleId, canonical.MigrationId, canonical.From, canonical.To, canonical.RequiredFieldBackfills
+            }, JsonOptions);
         return Hash(canonicalBytes);
     }
 

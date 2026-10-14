@@ -102,6 +102,47 @@ internal static class TestPersistencePlan
             streams);
     }
 
+    // 完整冻结的 Workspace authoring 由历史 fixture 读取；不从当前模型删除字段来伪造旧阶段。
+    internal static CompiledPersistencePlan CreateWorkspaceTreeOrder(bool historical)
+    {
+        var repository = FindRepositoryRoot();
+        var foundation = CreateCurrentSqlServer();
+        IReadOnlyList<ModelDefinition> owned;
+        ModuleMigrationStream stream;
+        if (historical)
+        {
+            var baseline = Path.Combine(repository, "tests/Persistence.Tests/Fixtures/WorkspaceTreeOrderBaseline");
+            var fixture = Path.Combine(baseline, "modules/Workspace");
+            var storage = new ICP.Platform.Modeling.Metadata.JsonStorageTypeMapLoader().LoadFromFile(Path.Combine(baseline, "storage-types.json"));
+            owned = new[] { "WorkspaceFolder", "WorkspaceSpace", "WorkspaceFolderContent" }.Select(name =>
+            {
+                var document = new ICP.Platform.Modeling.Metadata.JsonModelMetadataDocumentLoader().LoadFromFile(Path.Combine(fixture, "metadata/models", name + ".model.json"));
+                new ICP.Platform.Modeling.Validation.ModelMetadataValidator().Validate(document, storage);
+                return new ICP.Platform.Modeling.Projection.ModelMetadataProjector().Project(document, storage, "SqlServer") with { OwnerModuleId = "Workspace" };
+            }).ToArray();
+            const string digest = "3d17f4e95d4dda309ffd1bd2e27eed959068da9bb005e13458b10ba5f2e63707";
+            if (PersistenceModelDigest.Compute(owned) != digest) throw new InvalidOperationException("Frozen Workspace baseline model digest drifted.");
+            var manifestPath = Path.Combine(fixture, "migrations/Workspace.SqlServerMigrations.json");
+            var manifest = JsonSerializer.Deserialize<FoundationManifest>(File.ReadAllBytes(manifestPath), new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+            var steps = manifest.Migrations.Select(m => new CompiledMigrationStep(m.Sequence, m.MigrationId, m.PreviousContentDigest, m.ContentDigest, m.FromModelDigest, m.ToModelDigest, m.Compatibility)).ToArray();
+            var assemblyPath = Path.Combine(AppContext.BaseDirectory, "Workspace.TreeOrderBaseline.SqlServerMigrations.dll");
+            var bytes = File.ReadAllBytes(assemblyPath);
+            stream = new("Workspace", PersistenceProvider.SqlServer, assemblyPath, manifestPath,
+                Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes)), digest, steps[^1].MigrationId, false, steps)
+                { AssemblyImage = new VerifiedArtifactImage(bytes) };
+        }
+        else
+        {
+            owned = new ICP.Platform.Modules.Workspace.WorkspaceModelMetadataProvider().GetDefinitions();
+            stream = LoadModuleStream("Workspace", "Workspace.SqlServerMigrations.json",
+                typeof(ICP.Platform.Modules.Workspace.Migrations.SqlServer.WorkspaceDesignTimeDbContextFactory).Assembly.Location, owned);
+        }
+        var models = foundation.Models.Concat(owned).ToArray();
+        var planDigest = PersistenceModelDigest.Compute(models);
+        return foundation with { CandidateId = historical ? "workspace-order-historical" : "workspace-order-current", SnapshotId = planDigest,
+            ModulePlanHash = planDigest, PlanDigest = planDigest, CanonicalBytes = [], Models = models, Streams = [.. foundation.Streams, stream] };
+    }
+
     private static CompiledPersistencePlan CreateSqlServerPlan()
     {
         var models = PlatformFoundationModelSource.GetDefinitions()

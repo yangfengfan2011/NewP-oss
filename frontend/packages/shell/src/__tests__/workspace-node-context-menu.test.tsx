@@ -20,7 +20,8 @@ const list = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderList.
 const detail = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderDetail.view.json');
 const dictionary = readComponentJson('Workspace', 'metadata/dictionaries/Workspace.dic.json');
 
-it.each(['edit', 'remove'] as const)('executes the real Workspace tree %s action against its incoming LID and parent occurrence', async action => {
+it.each([['edit', 'zhs'], ['remove', 'zhs'], ['moveUp', 'zhs'], ['moveDown', 'zhs'], ['moveUp', 'en'], ['moveDown', 'en']] as const)('executes the real Workspace tree %s action in %s against its incoming LID and parent occurrence', async (action, language) => {
+  const rootName = language === 'en' ? 'Public space' : '公共空间';
   let name = '原目录'; let present = true;
   const writes: { path: string; method: string; body: unknown }[] = [];
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -43,24 +44,25 @@ it.each(['edit', 'remove'] as const)('executes the real Workspace tree %s action
     if (url.pathname === '/api/links/workspace.content') return json({ items: [], total: 0, page: 1, pageSize: 20 });
     if (url.pathname === '/api/workspace/folders/folder-eid') return json({ fields: { ENAME: name, Description: '原说明' } });
     if (url.pathname === '/api/workspace/content/incoming-link/edit-values') return json({ fields: { ENAME: name, Description: '原说明' } });
-    if (method === 'PUT' || method === 'DELETE') {
+    if (method === 'PUT' || method === 'DELETE' || url.pathname.endsWith('/tree-order')) {
       const body = input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body));
       writes.push({ path: url.pathname, method, body });
       if (method === 'PUT') name = body.values.ENAME;
-      else present = false;
+      else if (method === 'DELETE') present = false;
+      else return json({ moved: false, boundary: action === 'moveUp' ? 'first' : 'last' });
       return json({ succeeded: true });
     }
     throw new Error(`Unexpected request ${method} ${url.pathname}`);
   });
   vi.stubGlobal('fetch', request);
   ModuleRegistry.replaceAll([{ metadata: { moduleId: 'Workspace', displayName: 'Workspace', version: '1' }, ...workspace }], 'node-menu');
-  const catalog = Object.fromEntries(Object.entries(dictionary.Workspace).map(([key, value]) => [`Workspace.${key}`, value.zhs]));
+  const catalog = Object.fromEntries(Object.entries(dictionary.Workspace).map(([key, value]) => [`Workspace.${key}`, value[language]]));
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
   const router = createMemoryRouter([{ path: '/workspace', element:
-    <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={{ zhs: catalog }}>
-      <AuthorizationProvider featurePositions={['entry', 'tree-edit', 'tree-remove']}><PlatformQueryProvider scopeKey="node-menu">
+    <LocalizationProvider defaultLanguage={language} supportedLanguages={[{ code: language, displayName: language }]} catalogs={{ [language]: catalog }}>
+      <AuthorizationProvider featurePositions={['entry', 'tree-edit', 'tree-remove', 'tree-moveUp', 'tree-moveDown']}><PlatformQueryProvider scopeKey="node-menu">
         <RuntimeMetadataProvider value={{ manifest: { modules: [{ moduleId: 'Workspace', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [],
-          features: [{ key: 'workspace', position: 'entry', kind: 'navigation' }, ...['edit', 'remove'].map(key => ({
+          features: [{ key: 'workspace', position: 'entry', kind: 'navigation' }, ...['edit', 'remove', 'moveUp', 'moveDown'].map(key => ({
             key, position: `tree-${key}`, kind: 'action', parentPosition: 'entry', staticScope: 'folder', actionScope: 'contextMenu',
           }))] }] }, navDocuments: [], modelDocuments: [folder, content], viewDocuments: [tree, list, detail] }}>
           <PageEntry page={{ pageKey: 'platform.tree', parameters: { viewKey: tree.view.key, featurePosition: 'entry' }, inputResolverKey: 'workspace.tree.current' }} />
@@ -70,7 +72,7 @@ it.each(['edit', 'remove'] as const)('executes the real Workspace tree %s action
   try {
     await act(async () => root.render(<RouterProvider router={router} />));
     await vi.waitFor(() => expect(container.querySelector('.ant-tree-switcher:not(.ant-tree-switcher-noop)')).not.toBeNull());
-    const rootLabel = [...container.querySelectorAll('.ant-tree-title')].find(item => item.textContent === '公共空间')!;
+    const rootLabel = [...container.querySelectorAll('.ant-tree-title')].find(item => item.textContent === rootName)!;
     const native = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
     await act(async () => rootLabel.firstElementChild!.dispatchEvent(native));
     expect(native.defaultPrevented).toBe(false);
@@ -80,7 +82,8 @@ it.each(['edit', 'remove'] as const)('executes the real Workspace tree %s action
     const target = [...container.querySelectorAll('.ant-tree-title')].find(item => item.textContent === '原目录')!;
     await act(async () => target.firstElementChild!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 40, clientY: 80 })));
     await vi.waitFor(() => expect(document.querySelector('[role="menuitem"]')).not.toBeNull());
-    await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent === (action === 'edit' ? '编辑' : '移除引用'))!.click());
+    const readsBeforeAction = request.mock.calls.filter(([input, init]) => (init?.method ?? 'GET') === 'GET' && !String(input).includes('antiforgery')).length;
+    await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent === (language === 'en' ? { edit: 'Edit', remove: 'Remove reference', moveUp: 'Move up', moveDown: 'Move down' }[action] : { edit: '编辑', remove: '移除引用', moveUp: '上移', moveDown: '下移' }[action]))!.click());
     if (action === 'edit') {
       await vi.waitFor(() => expect(document.querySelector('.ant-drawer textarea')).not.toBeNull());
       expect(document.querySelector('.ant-drawer-title')?.textContent).toBe('编辑');
@@ -88,7 +91,7 @@ it.each(['edit', 'remove'] as const)('executes the real Workspace tree %s action
       const input = document.getElementById(label.htmlFor) as HTMLInputElement;
       await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '已编辑目录'); input.dispatchEvent(new Event('input', { bubbles: true })); });
       await act(async () => document.querySelector<HTMLButtonElement>('.ant-drawer-footer .ant-btn-primary')!.click());
-    } else {
+    } else if (action === 'remove') {
       await vi.waitFor(() => expect(document.querySelector('.ant-modal-title')?.textContent).toContain('移除当前文件夹中的这条引用？'));
       expect(writes).toHaveLength(0);
       await act(async () => document.querySelector<HTMLButtonElement>('.ant-modal-footer .ant-btn-primary')!.click());
@@ -96,9 +99,16 @@ it.each(['edit', 'remove'] as const)('executes the real Workspace tree %s action
     await vi.waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0]).toEqual(action === 'edit'
       ? { path: '/api/workspace/content/incoming-link', method: 'PUT', body: { position: { spaceId: 'public', rootFolderId: 'root', linkIds: [] }, values: { ENAME: '已编辑目录', Description: '原说明' } } }
-      : { path: '/api/workspace/content/references/incoming-link', method: 'DELETE', body: { position: { spaceId: 'public', rootFolderId: 'root', linkIds: [] } } });
-    await vi.waitFor(() => expect(container.querySelector('.ant-tree')?.textContent).toContain(action === 'edit' ? '已编辑目录' : '公共空间'));
+      : action === 'remove' ? { path: '/api/workspace/content/references/incoming-link', method: 'DELETE', body: { position: { spaceId: 'public', rootFolderId: 'root', linkIds: [] } } }
+      : { path: '/api/workspace/content/tree-order', method: 'POST', body: { parentPosition: { spaceId: 'public', rootFolderId: 'root', linkIds: [] }, linkId: 'incoming-link', direction: action === 'moveUp' ? 'up' : 'down' } });
+    await vi.waitFor(() => expect(container.querySelector('.ant-tree')?.textContent).toContain(action === 'edit' ? '已编辑目录' : rootName));
     if (action === 'remove') await vi.waitFor(() => expect(container.querySelector('.ant-tree')?.textContent).not.toContain('原目录'));
+    if (action === 'moveUp' || action === 'moveDown') {
+      await vi.waitFor(() => expect(document.querySelector('.ant-message-notice-content')?.textContent).toContain(language === 'en' ? action === 'moveUp' ? 'This is the first readable folder.' : 'This is the last readable folder.' : action === 'moveUp' ? '已是第一个可读文件夹。' : '已是最后一个可读文件夹。'));
+      expect(container.querySelector('.ant-tree')).not.toBeNull();
+      // 动作读取一次目标详情；no-op 成功不会刷新树、列表或路径。
+      expect(request.mock.calls.filter(([input, init]) => (init?.method ?? 'GET') === 'GET' && !String(input).includes('antiforgery')).length).toBe(readsBeforeAction + 1);
+    }
     expect(request.mock.calls.some(([input]) => String(input instanceof Request ? input.url : input).includes('/folders/incoming-link'))).toBe(false);
   } finally {
     await act(async () => root.unmount()); router.dispose(); container.remove(); vi.unstubAllGlobals(); ModuleRegistry.replaceAll([], 'node-menu-clean');

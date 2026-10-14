@@ -2,6 +2,26 @@ import { describe, expect, it, vi } from 'vitest';
 import type { StandardCrudOperationResult } from '@icp-platform/sdk';
 import { handoffStandardCrudSuccess } from '../standard-crud/standardCrudSuccessHandoff';
 
+it('hands off a confirmed no-change receipt without publishing a change or rereading', async () => {
+  const onResult = vi.fn(); const onCommitted = vi.fn(); const refresh = vi.fn();
+  const result = { operation: 'action' as const, payload: { moved: false, boundary: 'first' },
+    noChange: true as const, notice: { reasonKey: 'Workspace.TreeOrderFirst' } };
+  await handoffStandardCrudSuccess({ owner: { kind: 'action', resourceKey: 'workspace.folder' }, result,
+    onResult, onCommitted, refresh, onSynchronizationError: vi.fn() });
+  expect(onResult).toHaveBeenCalledWith(result);
+  expect(onCommitted).not.toHaveBeenCalled(); expect(refresh).not.toHaveBeenCalled();
+});
+
+it('reports a contradictory no-change flag while preserving the actual committed change', async () => {
+  const onCommitted = vi.fn(); const refresh = vi.fn(); const report = vi.fn();
+  await handoffStandardCrudSuccess({ owner: { kind: 'action', resourceKey: 'directory' },
+    result: { operation: 'action', payload: {}, noChange: true, change: { operation: 'update', id: 'real' } },
+    onCommitted, refresh, onSynchronizationError: report });
+  expect(report).toHaveBeenCalledTimes(1);
+  expect(onCommitted).toHaveBeenCalledWith({ resourceKey: 'directory', operation: 'update', id: 'real' });
+  expect(refresh).not.toHaveBeenCalled();
+});
+
 it('registers the original result before publishing one owner-qualified change without fallback', async () => {
   const result: StandardCrudOperationResult = {
     operation: 'action', payload: { receipt: 'opaque' },

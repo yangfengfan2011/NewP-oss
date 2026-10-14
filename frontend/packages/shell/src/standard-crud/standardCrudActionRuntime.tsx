@@ -91,7 +91,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
     const outcome = await actionExecution.execute({
       key: action.key,
       handler,
-      context: { ...context, ...(featurePosition ? { featurePosition } : {}), ...(action.inputKey ? { input } : {}) },
+      context: { ...context, action, ...(featurePosition ? { featurePosition } : {}), ...(action.inputKey ? { input } : {}) },
       refreshOnSuccess: action.standardAction !== 'edit',
       refreshOnConflict: action.standardAction !== 'delete',
     });

@@ -23,6 +23,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Persistence.MigrationFixtures\Persistence.MigrationFixtures.csproj" />
+    <ProjectReference Include="../Persistence.WorkspaceMigrationBaseline/Persistence.WorkspaceMigrationBaseline.csproj" />
+    <ProjectReference Include="../../server/modules/Infor-Center/Workspace/Migrations.SqlServer/Workspace.SqlServerMigrations.csproj" />
     <ProjectReference Include="..\..\apps\host-api\HostApi.csproj" />
     <ProjectReference Include="..\..\server\platform-persistence-efcore\PlatformPersistence.EfCore.csproj" />
     <ProjectReference Include="..\..\server\platform-persistence\PlatformPersistence.csproj" />

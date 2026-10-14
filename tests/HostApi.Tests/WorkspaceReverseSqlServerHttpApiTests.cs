@@ -24,12 +24,12 @@ public sealed class WorkspaceReverseSqlServerHttpApiTests(ITestOutputHelper outp
         using var admin = await fixture.LoginAdministratorAsync(); var entry = Point(fixture, "workspace.spaces.access");
         var root = await Post(admin, entry, "/api/workspace/spaces/public/initialize");
         var part = await Post(admin, Point(fixture, "part.part.create"), "/api/part/parts", new { ECODE = "CORRUPT-REVERSE", ENAME = "真实零组件" });
-        var id = part.GetProperty("fields").GetProperty("EID").GetString()!;
+        var partId = part.GetProperty("fields").GetProperty("EID").GetString()!;
         var document = await Post(admin, Point(fixture, "document.document.create"), "/api/document/documents", new { ECODE = "CORRUPT-REVERSE", ENAME = "同ID真实图文档" });
-        var documentId = document.GetProperty("fields").GetProperty("EID").GetString()!;
+        var id = document.GetProperty("fields").GetProperty("EID").GetString()!;
         using (var scope = fixture.Services.CreateScope())
-            await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("Document")
-                .Where(row => EF.Property<string>(row, "EID") == documentId).ExecuteUpdateAsync(update => update.SetProperty(row => EF.Property<string>(row, "EID"), id));
+            await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("Part")
+                .Where(row => EF.Property<string>(row, "EID") == partId).ExecuteUpdateAsync(update => update.SetProperty(row => EF.Property<string>(row, "EID"), id));
         foreach (var model in new[] { "Part", "Document" })
             await Post(admin, Point(fixture, "workspace.folder.add"), "/api/workspace/content/references", new { position = Position(root), target = new { modelKey = model, id } });
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "ReverseCorrupt", "反向完整性", "reverse-corrupt", "反向完整性账号", entry, Point(fixture, "part.part.read"), Point(fixture, "document.document.read"));
@@ -109,19 +109,20 @@ public sealed class WorkspaceReverseSqlServerHttpApiTests(ITestOutputHelper outp
         }
         var child = await Post(admin, Point(fixture, "workspace.folder.create"), "/api/workspace/content/folders", new { position = childPosition, values = new { ENAME = "真实子文件夹" } });
         targets.Add(("WorkspaceFolder", child.GetProperty("id").GetString()!));
-        // 三个正式模型共享同一主键字面值，反向查询仍必须按规范模型键区分锚点与对应 LID。
+        // 保留正式 Document 身份及版本外键，其余无版本模型共享该主键字面值以验证类型隔离。
+        var sharedId = targets.Single(target => target.Model == "Document").Id;
         using (var scope = fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-            foreach (var target in targets)
+            foreach (var target in targets.Where(target => target.Model != "Document"))
             {
                 await db.Set<Dictionary<string, object?>>(target.Model).Where(row => EF.Property<string>(row, "EID") == target.Id)
-                    .ExecuteUpdateAsync(update => update.SetProperty(row => EF.Property<string>(row, "EID"), "shared-endpoint-id"));
+                    .ExecuteUpdateAsync(update => update.SetProperty(row => EF.Property<string>(row, "EID"), sharedId));
                 await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").Where(row => EF.Property<string>(row, "ChildModelKey") == target.Model && EF.Property<string>(row, "CEID") == target.Id)
-                    .ExecuteUpdateAsync(update => update.SetProperty(row => EF.Property<string>(row, "CEID"), "shared-endpoint-id"));
+                    .ExecuteUpdateAsync(update => update.SetProperty(row => EF.Property<string>(row, "CEID"), sharedId));
             }
         }
-        targets = targets.Select(target => (target.Model, "shared-endpoint-id")).ToList();
+        targets = targets.Select(target => (target.Model, sharedId)).ToList();
         var forward = await FeatureHttpTestRequests.ReadAsync(admin, entry, Forward(parentId, childPosition));
         foreach (var (model, id) in targets)
         {
@@ -137,11 +138,11 @@ public sealed class WorkspaceReverseSqlServerHttpApiTests(ITestOutputHelper outp
             Assert.DoesNotContain("spaceId", reverse.GetRawText(), StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("breadcrumb", reverse.GetRawText(), StringComparison.OrdinalIgnoreCase);
         }
-        constraint.ExcludedId = "shared-endpoint-id";
-        using (var excludedAnchor = await FeatureHttpTestRequests.SendAsync(admin, entry, HttpMethod.Get, Reverse("Part", "shared-endpoint-id"))) Assert.Equal(HttpStatusCode.NotFound, excludedAnchor.StatusCode);
-        Assert.Equal(1, (await FeatureHttpTestRequests.ReadAsync(admin, entry, Reverse("Document", "shared-endpoint-id"))).GetProperty("total").GetInt32());
+        constraint.ExcludedId = sharedId;
+        using (var excludedAnchor = await FeatureHttpTestRequests.SendAsync(admin, entry, HttpMethod.Get, Reverse("Part", sharedId))) Assert.Equal(HttpStatusCode.NotFound, excludedAnchor.StatusCode);
+        Assert.Equal(1, (await FeatureHttpTestRequests.ReadAsync(admin, entry, Reverse("Document", sharedId))).GetProperty("total").GetInt32());
         constraint.Fail = true;
-        using var failed = await FeatureHttpTestRequests.SendAsync(admin, entry, HttpMethod.Get, Reverse("Part", "shared-endpoint-id")); Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
+        using var failed = await FeatureHttpTestRequests.SendAsync(admin, entry, HttpMethod.Get, Reverse("Part", sharedId)); Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
     }
 
     private sealed class AnchorBusinessConstraint : ILinkQueryEndpointConstraint
@@ -232,7 +233,7 @@ public sealed class WorkspaceReverseSqlServerHttpApiTests(ITestOutputHelper outp
             {
                 var parentId = "reverse-parent-" + index.ToString("D2");
                 folders.Add(new(seed) { ["EID"] = parentId, ["ENAME"] = "并列父名称" });
-                links.Add(new(edge) { ["LID"] = "reverse-link-" + index.ToString("D2"), ["PEID"] = parentId, ["CEID"] = id, ["ChildModelKey"] = "Part" });
+                links.Add(new(edge) { ["LID"] = "reverse-link-" + index.ToString("D2"), ["PEID"] = parentId, ["CEID"] = id, ["ChildModelKey"] = "Part", ["TreeOrdinal"] = null });
             }
             await db.SaveChangesAsync();
             await folders.Where(row => EF.Property<string>(row, "ENAME") == "并列父名称").ExecuteUpdateAsync(update =>

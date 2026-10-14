@@ -1,6 +1,13 @@
 {
   "schemaVersion": "1.0", "type": "dic",
   "Workspace": {
+    "MoveUp": {"zhs": "上移", "en": "Move up"},
+    "MoveDown": {"zhs": "下移", "en": "Move down"},
+    "InvalidTreeOrderInput": {"zhs": "树排序请求无效，请在正常树中选择一个普通文件夹。", "en": "Select one ordinary folder in the normal tree to reorder."},
+    "TreeOrderUnavailable": {"zhs": "文件夹次序尚未正确初始化，请联系管理员。", "en": "Folder order is not initialized correctly. Contact an administrator."},
+    "TreeOrderExhausted": {"zhs": "内部文件夹次序已耗尽，本次追加未写入，请联系管理员。", "en": "Internal folder order values are exhausted. Nothing was appended. Contact an administrator."},
+    "TreeOrderFirst": {"zhs": "已是第一个可读文件夹。", "en": "This is the first readable folder."},
+    "TreeOrderLast": {"zhs": "已是最后一个可读文件夹。", "en": "This is the last readable folder."},
     "Title": { "zhs": "工作空间", "en": "Workspace" },
     "Folder": { "zhs": "文件夹", "en": "Folder" },
     "DirectReferences": { "zhs": "直接引用文件夹", "en": "Direct referencing folders" },

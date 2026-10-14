@@ -17,14 +17,18 @@ interface StandardCrudSuccessHandoff {
 export async function handoffStandardCrudSuccess({
   owner, result, onResult, onCommitted, refresh, onSynchronizationError,
 }: StandardCrudSuccessHandoff): Promise<void> {
+  const unchanged = result?.noChange === true && result.operation === 'action' && !result.change;
+  // 非法回执仍按实际 change 更新消费者；不能因为无变更标记丢失已经成功的写入。
+  if (result?.noChange && !unchanged) onSynchronizationError(new Error('Invalid no-change action receipt.'));
   const followUps = [
     () => { if (result) onResult?.(result); },
     async () => {
-      if (result?.change && (owner.kind === 'mutation' || owner.resourceKey)) {
+      if (!unchanged && result?.change && (owner.kind === 'mutation' || owner.resourceKey)) {
         await onCommitted?.({ ...result.change, resourceKey: owner.resourceKey! });
       }
     },
     () => {
+      if (unchanged) return;
       const hasHandoff = result?.change && onCommitted
         && (owner.kind === 'mutation' || owner.resourceKey);
       if (!hasHandoff && (owner.kind === 'mutation' || owner.refreshOnSuccess !== false)) refresh();

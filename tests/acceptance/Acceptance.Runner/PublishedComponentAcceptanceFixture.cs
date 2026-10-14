@@ -180,7 +180,8 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         await StartHostAsync(hostRoot, "installed-host", token);
         var after = await ReadContinuityAsync(oldId, token);
         await WriteAsync("sql-after.json", after, token);
-        VerifyPreservedPredecessor(baseline, after, "Document", "Files");
+        if (workspaceDelivery) VerifyPreservedPredecessor(baseline, after, "Document", "Files", "Workspace");
+        else VerifyPreservedPredecessor(baseline, after, "Document", "Files");
         using var installed = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
         await WorkspaceAcceptanceFixture.LoginAsync(installed, actor, token);
         var installedFeatures = await AcceptanceFeatureCatalog.LoadAsync(installed, token);
@@ -218,7 +219,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             await WorkspaceAcceptanceFixture.LoginAsync(pageAdministrator, _administrator!, token);
             var pageFeatures = await AcceptanceFeatureCatalog.LoadAsync(pageAdministrator, token);
             var pageWorkspace = pageFeatures.Behavior("Workspace", "workspace.spaces.access");
-            foreach (var key in new[] { "edit", "remove" })
+            foreach (var key in new[] { "edit", "remove", "moveUp", "moveDown" })
                 granted.Add(pageFeatures.Action(pageWorkspace, key, "contextMenu", "folder"));
             var previousActorId = actor.AccountId;
             actor = await WorkspaceAcceptanceFixture.PrepareAsync(pageAdministrator, pageFeatures, "page" + runId, registerSecret, granted, token);
@@ -515,12 +516,17 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             throw new InvalidOperationException("父恢复意外重放已删除的普通角色功能授权。");
     }
 
-    private sealed record Continuity(string PhysicalMapping, string PartRow, string History, string DocumentRow = "",
+    internal sealed record Continuity(string PhysicalMapping, string PartRow, string History, string DocumentRow = "",
         string WorkspaceFolders = "", string WorkspaceSpaces = "", string Links = "", string IdentityAccounts = "");
 
-    // Files 依赖可能先升级；只允许本轮明确 owner 的新尾，旧历史与既有业务数据仍逐行保持。
-    private static void VerifyPreservedPredecessor(Continuity before, Continuity after, params string[] allowedNewOwners)
+    // 只允许明确 owner 的新尾；Workspace 仅新增关系次序，所有旧列与历史前缀仍逐行保持。
+    internal static void VerifyPreservedPredecessor(Continuity before, Continuity after, params string[] allowedNewOwners)
     {
+        if (allowedNewOwners.Contains("Workspace", StringComparer.Ordinal))
+        {
+            VerifyTreeOrderBackfillPreservesLinks(before.Links, after.Links);
+            after = after with { Links = before.Links };
+        }
         if (before with { History = after.History } != after)
             throw new InvalidOperationException("图文档升级改变了清理范围外的数据或物理映射。");
         using var oldHistory = JsonDocument.Parse(before.History);
@@ -530,6 +536,36 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         if (current.Length < previous.Length || previous.Where((row, index) => !JsonElement.DeepEquals(row, current[index])).Any()
             || current.Skip(previous.Length).Any(row => !allowedNewOwners.Contains(row.GetProperty("OwnerModuleId").GetString(), StringComparer.Ordinal)))
             throw new InvalidOperationException("图文档升级改写了已发布迁移历史或追加了其他 owner。");
+        var workspaceTail = current.Skip(previous.Length).Where(row => row.GetProperty("OwnerModuleId").GetString() == "Workspace")
+            .Select(row => row.GetProperty("MigrationId").GetString()).ToArray();
+        if (allowedNewOwners.Contains("Workspace", StringComparer.Ordinal) && !workspaceTail.SequenceEqual(
+                ["20261014142253_Workspace_000004_TreeOrder", "20261014142313_Workspace_000005_TreeOrderBackfill"]))
+            throw new InvalidOperationException("Workspace 未按已确认的扩展与回填尾迁移升级。");
+    }
+
+    // 精确允许旧文件夹关系获得非空唯一次序；不忽略关系身份、审计列或其他数据变化。
+    private static void VerifyTreeOrderBackfillPreservesLinks(string before, string after)
+    {
+        using var previous = JsonDocument.Parse(before);
+        using var current = JsonDocument.Parse(after);
+        var positions = new HashSet<(string Parent, long Ordinal)>();
+        var preserved = new List<Dictionary<string, JsonElement>>();
+        foreach (var row in current.RootElement.EnumerateArray())
+        {
+            var hasOrdinal = row.TryGetProperty("TreeOrdinal", out var ordinal);
+            if (row.GetProperty("ChildModelKey").GetString() == "WorkspaceFolder")
+            {
+                if (!hasOrdinal || !ordinal.TryGetInt64(out var value) || value <= 0
+                    || !positions.Add((row.GetProperty("PEID").GetString()!, value)))
+                    throw new InvalidOperationException("Workspace 旧文件夹关系缺少有效且同父唯一的回填次序。");
+            }
+            else if (hasOrdinal && ordinal.ValueKind != JsonValueKind.Null)
+                throw new InvalidOperationException("Workspace 业务对象关系不应参与树次序。");
+            preserved.Add(row.EnumerateObject().Where(property => property.Name != "TreeOrdinal")
+                .ToDictionary(property => property.Name, property => property.Value));
+        }
+        if (!JsonElement.DeepEquals(previous.RootElement, JsonSerializer.SerializeToElement(preserved)))
+            throw new InvalidOperationException("Workspace 次序回填改变了既有关系或审计数据。");
     }
 
     // Files 与 Document 新模型分别归自身；Part 与 Workspace 的旧装配不能随之演进。

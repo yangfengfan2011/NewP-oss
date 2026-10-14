@@ -1,5 +1,9 @@
-import { useCallback, useContext, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { EntryNavigationContext } from '../navigation/entryNavigation';
+import { CompositionContext } from '../composition/pageCompositionRuntime';
+import { useLocalization } from '@icp-platform/core';
+import { useOptionalAuth } from '../contexts/AuthContext';
+import message from 'antd/es/message';
 import { StandardCrudRequestError } from '@icp-platform/sdk';
 import { handoffStandardCrudSuccess } from './standardCrudSuccessHandoff';
 import type {
@@ -47,6 +51,13 @@ export function useStandardCrudActionExecution<TDetail = unknown, TRow = unknown
   const [synchronizationError, setSynchronizationError] = useState<string | null>(null);
   const [synchronizationFailure, setSynchronizationFailure] = useState<{ failure: unknown } | null>(null);
   const navigateEntry = useContext(EntryNavigationContext);
+  const composition = useContext(CompositionContext);
+  const { t } = useLocalization();
+  const subject = useOptionalAuth()?.user?.id;
+  const noticeScope = useMemo(() => ({ composition, subject }), [composition, subject]);
+  const currentNoticeScope = useRef(noticeScope); currentNoticeScope.current = noticeScope;
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const pendingRef = useRef(false);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [error, setError] = useState<StandardCrudActionExecutionError | null>(null);
@@ -63,6 +74,7 @@ export function useStandardCrudActionExecution<TDetail = unknown, TRow = unknown
       return { status: 'ignored' };
     }
 
+    const submittedNoticeScope = currentNoticeScope.current;
     pendingRef.current = true;
     setPendingKey(key);
     setError(null);
@@ -78,7 +90,14 @@ export function useStandardCrudActionExecution<TDetail = unknown, TRow = unknown
       setSynchronizationFailure(null);
       await handoffStandardCrudSuccess({
         owner: { kind: 'action', resourceKey, refreshOnSuccess },
-        result, onResult, onCommitted, refresh,
+        result, onCommitted, refresh,
+        onResult: value => {
+          if (value.notice && mounted.current && submittedNoticeScope === currentNoticeScope.current) {
+            if (composition?.notice) composition.notice(value.notice.reasonKey);
+            else void message.info(t(value.notice.reasonKey, value.notice.reasonKey));
+          }
+          onResult?.(value);
+        },
         onSynchronizationError: failure => {
           setSynchronizationFailure({ failure });
           setSynchronizationError('已保存，刷新失败。请重新加载。');
@@ -102,7 +121,7 @@ export function useStandardCrudActionExecution<TDetail = unknown, TRow = unknown
       pendingRef.current = false;
       setPendingKey(null);
     }
-  }, [navigateEntry, onCommitted, onResult, refresh, resourceKey]);
+  }, [composition, navigateEntry, onCommitted, onResult, refresh, resourceKey, t]);
 
   const clearError = useCallback(() => setError(null), []);
 

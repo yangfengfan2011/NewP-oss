@@ -31,21 +31,33 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
     /// <summary>引用写入复用正式端点目录和读取范围；没有任何 Link 的独立对象也能重新准入。</summary>
     public async Task<bool> IsEndpointReadableAsync(string resourceKey, LinkObjectReference target, CancellationToken token = default)
     {
+        if (string.IsNullOrWhiteSpace(target.Id)) throw new LinkQueryException(400, "LinkQuery.InvalidType", "target");
+        var scope = await ReadEndpointScopeAsync(resourceKey, target.ModelKey, "linkTarget", token);
+        var parameters = scope.Parameters.ToList();
+        var id = Parameter(target.Id, parameters);
+        return await ExecuteAsync(scope.Preparation + "\nSELECT 1 WHERE " + id + " IN (" + scope.IdsQuery + ")",
+            parameters, async reader => await reader.ReadAsync(token), token);
+    }
+
+    /// <summary>可信模块复用正式端点读取交集；范围名由代码分配，不接受请求 SQL 或排序表达式。</summary>
+    public async Task<LinkQuerySqlScope> ReadEndpointScopeAsync(string resourceKey, string modelKey, string scopeName, CancellationToken token = default)
+    {
+        if (scopeName.Length == 0 || scopeName.Any(character => !char.IsAsciiLetterOrDigit(character)))
+            throw new ArgumentException("Invalid trusted scope name.", nameof(scopeName));
         var definition = catalog.Get(resourceKey);
-        if (!definition.Endpoints.TryGetValue(target.ModelKey, out var endpoint) || string.IsNullOrWhiteSpace(target.Id))
-            throw new LinkQueryException(400, "LinkQuery.InvalidType", "target");
+        if (!definition.Endpoints.TryGetValue(modelKey, out var endpoint)) throw new LinkQueryException(400, "LinkQuery.InvalidType", "target");
         var parameters = new List<DbParameter>();
         var rows = await EndpointRowsAsync(endpoint, token);
-        var query = SqlFor(rows.Where(row => EF.Property<string>(row, endpoint.IdField) == target.Id)
-            .Select(row => EF.Property<string>(row, endpoint.IdField)), parameters);
+        var query = SqlFor(rows.Select(row => EF.Property<string>(row, endpoint.IdField)), parameters);
         LinkQuerySqlScope? scope = null;
         if (endpoint.ConstraintKey is { } key)
-            scope = await constraints.Single(c => c.Key == key).ReadSqlScopeAsync(endpoint, "linkTarget", token);
-        if (scope is not null) parameters.AddRange(scope.Parameters);
-        var id = Parameter(target.Id, parameters);
-        var sql = (scope?.Preparation ?? "") + "\nSELECT 1 WHERE " + id + " IN (" + query + ")"
-            + (scope is null ? "" : " AND " + id + " IN (" + scope.IdsQuery + ")");
-        return await ExecuteAsync(sql, parameters, async reader => await reader.ReadAsync(token), token);
+            scope = await constraints.Single(c => c.Key == key).ReadSqlScopeAsync(endpoint, scopeName, token);
+        if (scope is not null)
+        {
+            parameters.AddRange(scope.Parameters);
+            query += " INTERSECT SELECT ScopeId FROM (" + scope.IdsQuery + ") scopeKeys(ScopeId)";
+        }
+        return new(scope?.Preparation ?? "", query, parameters);
     }
 
     /// <summary>受信任树适配读取一层全部节点；不能由 HTTP 请求关闭分页，也不预取整树。</summary>

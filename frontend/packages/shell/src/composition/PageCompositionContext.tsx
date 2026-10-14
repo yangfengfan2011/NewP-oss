@@ -2,6 +2,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState, type Rea
 import { CompositionContext, type CompositionRuntime, type CompositionChange } from './pageCompositionRuntime';
 import { useBlocker } from 'react-router-dom';
 import Modal from 'antd/es/modal';
+import useMessage from 'antd/es/message/useMessage';
 import Alert from 'antd/es/alert';
 import Button from 'antd/es/button';
 import { useLocalization } from '@icp-platform/core';
@@ -15,6 +16,10 @@ export function PageComposition({ children }: { children: ReactNode }) {
 }
 function CompositionOwner({ children }: { children: ReactNode }) {
   const { t } = useLocalization();
+  const [messageApi, messageHolder] = useMessage();
+  const noticeText = useRef(t); noticeText.current = t;
+  // 翻译变化不能重建组合 runtime，否则已选对象的草稿会随上下文身份变化丢失。
+  const notice = useCallback((reasonKey: string) => { void messageApi.info({ key: 'standard-crud-action-notice', content: noticeText.current(reasonKey, reasonKey), duration: 5 }); }, [messageApi]);
   const states = useRef(new Map<string, PageLifecycleState & { discard?: () => void; save?: () => Promise<boolean> }>());
   const savingLeave = useRef(false);
   const [saving, setSaving] = useState(false);
@@ -62,6 +67,7 @@ function CompositionOwner({ children }: { children: ReactNode }) {
     await drain();
   }, [drain]);
   const runtime = useMemo<CompositionRuntime>(() => ({
+    notice,
     report: (id, state, discard, save) => { if (state) states.current.set(id, { ...state, discard, save }); else states.current.delete(id); void drain(); },
     leave: (proceed) => {
       if ([...states.current.values()].some(state => state.submitting)) return;
@@ -70,7 +76,7 @@ function CompositionOwner({ children }: { children: ReactNode }) {
     },
     subscribe: (id, read) => { readers.current.set(id, read); return () => { readers.current.delete(id); }; },
     committed,
-  }), [committed, drain]);
+  }), [committed, drain, notice]);
   const canSave = [...states.current.values()].filter(state => state.dirty).every(state => !!state.save);
   const cancelLeave = () => { if (savingLeave.current) return; pendingLeave?.cancel?.(); setPendingLeave(null); };
   const discardLeave = () => {
@@ -88,6 +94,7 @@ function CompositionOwner({ children }: { children: ReactNode }) {
     finally { savingLeave.current = false; setSaving(false); }
   };
   return <CompositionContext.Provider value={runtime}>
+    {messageHolder}
     {error && <Alert type="warning" message={t(error, error === 'Platform.SavedRefreshFailed' ? '已保存，刷新失败：当前组合待同步。' : '保存失败，当前页面和未保存输入已保留。')} action={<Button onClick={() => runtime.leave(() => { void retryRead.current?.(); })}>{t('Platform.RetryRead', '重试读取')}</Button>} />}
     {children}
     <Modal open={pendingLeave !== null} title={<StandardCrudDialogTitle>{t('Platform.CompositionDiscardTitle', '放弃未保存的修改？')}</StandardCrudDialogTitle>} closable={!saving} onCancel={cancelLeave}

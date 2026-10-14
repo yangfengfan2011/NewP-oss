@@ -133,8 +133,8 @@ public static class PageCompositionMetadataValidator
                 var standard = reference.TryGetProperty("standardAction", out _);
                 if (standard == reference.TryGetProperty("actionKey", out _)) throw new JsonException("Tree action requires exactly one action reference.");
                 var target = Required(reference, standard ? "standardAction" : "actionKey");
-                var matches = new[] { "pageActions", "rowActions" }.SelectMany(name => list.TryGetProperty(name, out var items) ? items.EnumerateArray().ToArray() : [])
-                    .Where(action => action.TryGetProperty(standard ? "standardAction" : "key", out var value) && value.GetString() == target).ToArray();
+                var matches = new[] { "pageActions", "rowActions", "featureActions" }.SelectMany(name => list.TryGetProperty(name, out var items) ? items.EnumerateArray().ToArray() : [])
+                    .Where(action => (action.TryGetProperty("handlerKey", out _) || action.TryGetProperty("standardAction", out _)) && action.TryGetProperty(standard ? "standardAction" : "key", out var value) && value.GetString() == target).ToArray();
                 if (matches.Length != 1) throw new JsonException("Tree action reference is missing or ambiguous.");
             }
         }

@@ -76,5 +76,12 @@ public sealed class WorkspaceFeatureProjectionTests
             Assert.Equal(row.BehaviorKey, node.BehaviorKey); Assert.Equal(row.ReadBehaviors, node.ReadBehaviors);
             Assert.Equal("Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:" + key, node.Position);
         }
+        foreach (var key in new[] { "moveUp", "moveDown" })
+        {
+            var node = Assert.Single(catalog, point => point.Key == key && point.ActionScope == "contextMenu");
+            Assert.Equal("folder", node.StaticScope); Assert.Equal("workspace.folder.reorder", node.BehaviorKey);
+            Assert.Contains("workspace.folder.read", node.ReadBehaviors);
+            Assert.DoesNotContain(catalog, point => point.Key == key && point.ActionScope is "list.rowActions" or "list.pageActions");
+        }
     }
 }

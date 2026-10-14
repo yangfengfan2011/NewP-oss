@@ -339,6 +339,12 @@ internal sealed class ModuleMigrationExecutor(
         var providerOperations = new List<MigrationOperation>();
         foreach (var operation in operations)
         {
+            if (operation is RelationOrdinalBackfillOperation ordinal)
+            {
+                AppendProviderCommands(generator, providerOperations, model, commands);
+                commands.Add(new GeneratedMigrationCommand(RenderRelationOrdinalBackfill(ordinal, typeMappingSource), TransactionSuppressed: false));
+                continue;
+            }
             if (operation is not RequiredFieldBackfillOperation backfill)
             {
                 providerOperations.Add(operation);
@@ -385,6 +391,24 @@ internal sealed class ModuleMigrationExecutor(
         var valueLiteral = typeMapping.GenerateSqlLiteral(operation.Value);
         var column = QuoteIdentifier(operation.Column);
         return $"UPDATE {QuoteTable(operation.Schema, operation.Table)} SET {column} = {valueLiteral} WHERE {column} IS NULL;";
+    }
+
+    // 固定同 owner JOIN 和 ROW_NUMBER 形状；名称比较沿数据库，只回填声明子类型的 NULL 次序。
+    private static string RenderRelationOrdinalBackfill(RelationOrdinalBackfillOperation operation, IRelationalTypeMappingSource mappings)
+    {
+        var f = operation.Fact;
+        var table = QuoteTable(f.Schema, f.Table); var target = QuoteTable(f.Schema, f.TargetTable);
+        var ordinal = QuoteIdentifier(f.Column); var type = QuoteIdentifier(f.TypeColumn); var child = QuoteIdentifier(f.ChildColumn);
+        var parent = QuoteIdentifier(f.ParentColumn); var link = QuoteIdentifier(f.LinkIdColumn);
+        var id = QuoteIdentifier(f.TargetIdColumn); var name = QuoteIdentifier(f.TargetNameColumn);
+        var model = mappings.FindMapping(typeof(string))!.GenerateSqlLiteral(f.ChildModelKey);
+        return $"""
+            IF EXISTS(SELECT 1 FROM {table} l WHERE l.{type}={model} AND NOT EXISTS(SELECT 1 FROM {target} f WHERE f.{id}=l.{child}))
+                THROW 51001, 'Relation ordinal backfill target is unavailable.', 1;
+            WITH Ranked AS (SELECT l.{link} AS LinkId, ROW_NUMBER() OVER(PARTITION BY l.{parent} ORDER BY f.{name},l.{link}) AS Ordinal
+                FROM {table} l JOIN {target} f ON f.{id}=l.{child} WHERE l.{type}={model})
+            UPDATE l SET {ordinal}=r.Ordinal FROM {table} l JOIN Ranked r ON r.LinkId=l.{link} WHERE l.{ordinal} IS NULL;
+            """;
     }
 
     private async Task<UnifiedMigrationHistoryReconciliation> ReconcileHistoryAsync(CancellationToken cancellationToken)

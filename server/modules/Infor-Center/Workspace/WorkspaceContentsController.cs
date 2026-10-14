@@ -16,7 +16,7 @@ namespace ICP.Platform.Modules.Workspace;
 /// <summary>正式创建仅接受当前出现位置与可写字段；所有业务规则仍在应用服务。</summary>
 [ApiController, Route("api/workspace"), EndpointModule("Workspace"), PlatformRequestValidation]
 public sealed class WorkspaceContentsController(WorkspaceContents contents, WorkspaceSpaces spaces, WorkspacePositions positions,
-    LinkQueryReader links, ILogger<WorkspaceContentsController> logger, WorkspaceFolderScope folderScope, IObjectOperationExecutor operations) : ControllerBase
+    ILogger<WorkspaceContentsController> logger, WorkspaceFolderScope folderScope, IObjectOperationExecutor operations, WorkspaceTreeOrder treeOrder) : ControllerBase
 {
     public sealed record CreateFolderInput(WorkspacePosition Position, Dictionary<string, JsonElement> Values);
     public sealed record AddReferenceInput(WorkspacePosition Position, LinkObjectReference Target);
@@ -110,6 +110,27 @@ public sealed class WorkspaceContentsController(WorkspaceContents contents, Work
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
     }
 
+    /// <summary>正式排序权限独立于列表位置；服务器不接受客户端邻居、序号或批量选择。</summary>
+    [HttpPost("content/tree-order"), RequireFeature("workspace.folder.reorder")]
+    public async Task<IResult> Reorder(JsonElement input, CancellationToken token)
+    {
+        try
+        {
+            if (input.ValueKind != JsonValueKind.Object || input.EnumerateObject().Count() != 3
+                || !input.TryGetProperty("parentPosition", out var parent) || !input.TryGetProperty("linkId", out var linkId)
+                || !input.TryGetProperty("direction", out var direction) || parent.ValueKind != JsonValueKind.Object
+                || parent.EnumerateObject().Count() != 3 || !parent.TryGetProperty("spaceId", out var space)
+                || !parent.TryGetProperty("rootFolderId", out var root) || !parent.TryGetProperty("linkIds", out var chain)
+                || space.ValueKind != JsonValueKind.String || root.ValueKind != JsonValueKind.String || chain.ValueKind != JsonValueKind.Array
+                || chain.EnumerateArray().Any(item => item.ValueKind != JsonValueKind.String)
+                || linkId.ValueKind != JsonValueKind.String || direction.ValueKind != JsonValueKind.String)
+                throw new LinkQueryException(400, "Workspace.InvalidTreeOrderInput");
+            var position = new WorkspacePosition(space.GetString()!, root.GetString()!, chain.EnumerateArray().Select(item => item.GetString()!).ToArray());
+            return Results.Ok(await contents.ReorderAsync(Actor(), position, linkId.GetString()!, direction.GetString()!, token));
+        }
+        catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+    }
+
     /// <summary>移除所选关系始终带当前完整位置，裸父或对象 EID 不能替代 LID。</summary>
     [HttpDelete("content/references/{linkId}"), RequireFeature("workspace.folder.remove")]
     public async Task<IResult> RemoveReference(string linkId, RemoveReferenceInput input, CancellationToken token)
@@ -177,8 +198,7 @@ public sealed class WorkspaceContentsController(WorkspaceContents contents, Work
             var scope = new Dictionary<string, string?> { ["spaceId"] = spaceId, ["rootFolderId"] = rootFolderId, ["linkIds"] = linkIds };
             if (Request.Query.Any(q => !scope.ContainsKey(q.Key) || q.Value.Count != 1)) throw new LinkQueryException(400, "Workspace.InvalidPosition");
             var path = await positions.ResolveAsync(Actor(), WorkspacePositions.FromScope(scope), token);
-            return Results.Ok(await links.ReadDirectLayerAsync("workspace.content", new("forward", new(WorkspacePositions.FolderModel, path.FolderId),
-                new StandardCrudListQuery(Fields: ["LID", "Name"], SortBy: "Name", SortDirection: "asc", QueryScope: scope), [WorkspacePositions.FolderModel]), token));
+            return Results.Ok(await treeOrder.ReadChildrenAsync(Actor(), path.FolderId, token));
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
     }

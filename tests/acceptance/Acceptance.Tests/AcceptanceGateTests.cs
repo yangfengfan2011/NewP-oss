@@ -177,6 +177,34 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通账号在固定发行物中通过正式树菜单单选上下移并看到刷新")]
+    public async Task NativeWorkspaceTreeOrder_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-workspace-tree-order");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseCompositionLifecycle: false);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
+            browserJourney: async (page, token) =>
+            {
+                var driver = new WorkspacePageDriver(page);
+                Task CaptureAsync(string name) => page.ScreenshotAsync(new()
+                { Path = Path.Combine(root, name), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                var previous = "排序相邻文件夹 " + runId[..8];
+                var target = "排序目标文件夹 " + runId[..8];
+                await driver.OpenAsync();
+                await driver.SelectRootAsync("公共空间");
+                await driver.CreateFolderAsync(previous);
+                await driver.CreateFolderAsync(target);
+                await driver.ExpandRootToFolderAsync("公共空间", target);
+                await driver.ReorderFolderAsync(target, "up", () => CaptureAsync("tree-order-menu.png"));
+                await driver.ReorderFolderAsync(target, "down");
+                await CaptureAsync("tree-order-saved.png");
+                await page.SetViewportSizeAsync(900, 1000);
+                await CaptureAsync("tree-order-saved-narrow.png");
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
+                    new { url = page.Url, actor = "ordinary", journey = "workspace-tree-order" }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact(RunEnvironmentVariable, "真实 Link 迁移、普通账号创建文件夹与共享树/列表/属性 driver")]
     public async Task WorkspaceFolderCreation_UsesFormalDriver()
     {

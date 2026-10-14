@@ -57,7 +57,7 @@ public sealed class LinkQueryDisplaySqlServerHttpApiTests
             var links = db.Set<Dictionary<string, object?>>("WorkspaceFolderContent");
             // 构造通用 Link 的读取样本；Person 实体仍由正式创建入口写入，Workspace 命令不新增人员接入能力。
             var seed = await links.AsNoTracking().FirstAsync(row => EF.Property<string>(row, "PEID") == rootId);
-            links.Add(new(seed) { ["LID"] = Guid.NewGuid().ToString("N"), ["CEID"] = personId, ["ChildModelKey"] = "Person" });
+            links.Add(new(seed) { ["LID"] = Guid.NewGuid().ToString("N"), ["CEID"] = personId, ["ChildModelKey"] = "Person", ["TreeOrdinal"] = null });
             await db.SaveChangesAsync();
         }
         var queryScope = Uri.EscapeDataString(JsonSerializer.Serialize(new { spaceId, rootFolderId = rootId, linkIds = "[]" }));

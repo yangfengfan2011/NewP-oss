@@ -18,7 +18,7 @@ namespace ICP.Platform.Modules.Workspace;
 public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions positions, IPlatformTransactionExecutor transactions,
     IDataScopeObjectDecisionProvider decisions, IPlatformObjectIdGenerator ids, IEntityAuditValueProvider audit, LinkQueryCatalog catalog,
     WorkspaceFolderScope folderScope, LinkQueryReader reader, IStandardCrudService crud, IStandardCrudResourceRegistry resources,
-    IDocumentFiles documentFiles)
+    IDocumentFiles documentFiles, WorkspaceTreeOrder treeOrder)
 {
     /// <summary>在有效位置内创建实体与 Link，同父名称比较及并发串行化由 SQL Server 事务锁保护。</summary>
     public ValueTask<string> CreateFolderAsync(string actorId, WorkspacePosition position, IReadOnlyDictionary<string, JsonElement> values, CancellationToken token)
@@ -51,7 +51,7 @@ public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions
                 throw new LinkQueryException(400, "Workspace.InvalidEndpoint");
             folders.Add(candidate);
             await transactions.FlushAsync(cancellation);
-            RegisterCreatedReference(path.FolderId, WorkspacePositions.FolderModel, id);
+            await RegisterCreatedReferenceAsync(path.FolderId, WorkspacePositions.FolderModel, id, cancellation);
             return id;
         }, token);
     }
@@ -81,9 +81,22 @@ public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions
                     throw new LinkQueryException(409, "Workspace.SiblingNameConflict", "ENAME");
                 if (await WouldCycleAsync(path.FolderId, target.Id, cancellation)) throw new LinkQueryException(409, "Workspace.CycleForbidden");
             }
-            RegisterCreatedReference(path.FolderId, target.ModelKey, target.Id);
+            await RegisterCreatedReferenceAsync(path.FolderId, target.ModelKey, target.Id, cancellation);
             return true;
         }, token);
+
+    /// <summary>树排序只接受完整父位置与单条关系，父写入和两端读取在同一图锁事务内重验。</summary>
+    public ValueTask<WorkspaceTreeOrderResult> ReorderAsync(string actorId, WorkspacePosition parentPosition, string linkId, string direction, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(linkId) || direction is not ("up" or "down")) throw new LinkQueryException(400, "Workspace.InvalidTreeOrderInput");
+        return transactions.ExecuteAsync<WorkspaceTreeOrderResult>(async cancellation =>
+        {
+            using var operation = audit.BeginOperation();
+            await LockGraphAsync(cancellation);
+            var path = await WritablePositionAsync(actorId, parentPosition, cancellation);
+            return await treeOrder.ReorderAsync(actorId, path.FolderId, linkId, direction == "up", cancellation);
+        }, token);
+    }
 
     /// <summary>移除只删除指定 LID；关系当前父端、目标读取与有效出现位置均由提交时事实决定。</summary>
     public ValueTask<bool> RemoveAsync(string actorId, WorkspacePosition position, string linkId, CancellationToken token) =>
@@ -131,7 +144,7 @@ public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions
         if (!result.Succeeded) return result;
         var id = result.Detail?.Fields.GetValueOrDefault("EID") as string
             ?? throw new InvalidOperationException("Created object identity is missing.");
-        RegisterCreatedReference(path.FolderId, model, id);
+        await RegisterCreatedReferenceAsync(path.FolderId, model, id, cancellationToken);
         // 不执行展示读取；事务完成后由独立列表读取决定新对象的可见性。
         return StandardCrudMutationResult.Success();
     }
@@ -281,13 +294,14 @@ public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions
     }
 
     /// <summary>仅消费同事务内所属行为返回的真实身份；关系审计复用本次对象操作的时间和主体。</summary>
-    private void RegisterCreatedReference(string parentId, string modelKey, string objectId)
+    private async Task RegisterCreatedReferenceAsync(string parentId, string modelKey, string objectId, CancellationToken token)
     {
         if (!transactions.IsActive) throw new InvalidOperationException("Workspace creation requires an active transaction.");
         var stamp = audit.Current();
         db.Set<Dictionary<string, object?>>(WorkspacePositions.ContentModel).Add(new()
         {
             ["LID"] = ids.NewId("WorkspaceFolderContent"), ["PEID"] = parentId, ["CEID"] = objectId, ["ChildModelKey"] = modelKey,
+            ["TreeOrdinal"] = modelKey == WorkspacePositions.FolderModel ? await treeOrder.NextOrdinalAsync(parentId, token) : (long?)null,
             ["LCreatedBy"] = stamp.ActorId, ["LCreatedAt"] = stamp.OccurredAtUtc, ["LUpdatedBy"] = stamp.ActorId, ["LUpdatedAt"] = stamp.OccurredAtUtc
         });
     }

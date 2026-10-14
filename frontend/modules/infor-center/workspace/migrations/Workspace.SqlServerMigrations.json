@@ -2,8 +2,8 @@
   "schemaVersion": "1.0",
   "provider": "SqlServer",
   "moduleId": "Workspace",
-  "modelDigest": "3d17f4e95d4dda309ffd1bd2e27eed959068da9bb005e13458b10ba5f2e63707",
-  "bundleChecksum": "91800b3d9e80c8757a735841ec74ffbe71180d2dd979b30bc1cdb1bb550ece0a",
+  "modelDigest": "7b6bf257c8b49ab7421936833251e612eb4b52b6ccba0721663f82ff8ef5f5a5",
+  "bundleChecksum": "1224ea9cacb49957548743fdcd7426485c21e29f36ce874f8acc355d7a1df914",
   "migrations": [
     {
       "sequence": "000001",
@@ -31,6 +31,24 @@
       "fromModelDigest": "39f73f9996aeeff67e1d915b0c37085b00137588fe0bef27c003bdd941296286",
       "toModelDigest": "3d17f4e95d4dda309ffd1bd2e27eed959068da9bb005e13458b10ba5f2e63707",
       "compatibility": "backup-restore-only"
+    },
+    {
+      "sequence": "000004",
+      "migrationId": "20261014142253_Workspace_000004_TreeOrder",
+      "previousContentDigest": "c17ec74e890c970f6e7234fdf9a3977e612d8f3851b343fc305a39d3ec290d9d",
+      "contentDigest": "f8f1e2d73a803e78d80a7176e0ce4678b1efe722f5f8dae68d979b01d0b63a6f",
+      "fromModelDigest": "3d17f4e95d4dda309ffd1bd2e27eed959068da9bb005e13458b10ba5f2e63707",
+      "toModelDigest": "7b6bf257c8b49ab7421936833251e612eb4b52b6ccba0721663f82ff8ef5f5a5",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000005",
+      "migrationId": "20261014142313_Workspace_000005_TreeOrderBackfill",
+      "previousContentDigest": "f8f1e2d73a803e78d80a7176e0ce4678b1efe722f5f8dae68d979b01d0b63a6f",
+      "contentDigest": "0b6f2aab1fe3a5131d4d5a0986c2846600ac29d402755d6ef3c66c5a2ef41660",
+      "fromModelDigest": "7b6bf257c8b49ab7421936833251e612eb4b52b6ccba0721663f82ff8ef5f5a5",
+      "toModelDigest": "7b6bf257c8b49ab7421936833251e612eb4b52b6ccba0721663f82ff8ef5f5a5",
+      "compatibility": "data-backfill"
     }
   ]
 }

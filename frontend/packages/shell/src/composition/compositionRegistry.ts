@@ -69,7 +69,8 @@ export function validateCompositionCandidate(modules: FrontendModule[], metadata
           if (!action.key || !action.labelKey || Boolean(action.actionKey) === Boolean(action.standardAction)) throw new Error('树动作需要唯一的动作引用');
           check({ pageKey: 'platform.list', parameters: { viewKey: action.viewKey }, inputResolverKey: action.inputResolverKey }, next);
           const target = views.get(action.viewKey)!;
-          const definitions = [...(target.pageActions as Array<Record<string, unknown>> ?? []), ...(target.rowActions as Array<Record<string, unknown>> ?? [])];
+          const definitions = [...(target.pageActions as Array<Record<string, unknown>> ?? []), ...(target.rowActions as Array<Record<string, unknown>> ?? []),
+            ...(target.featureActions as Array<Record<string, unknown>> ?? []).filter(item => item.handlerKey)];
           const matches = definitions.filter(item => action.actionKey ? item.key === action.actionKey : item.standardAction === action.standardAction);
           if (matches.length !== 1) throw new Error('树动作引用不存在或不唯一');
           const registered = modules.flatMap(module => module.standardCrudResources ?? []).find(resource => resource.listViewKey === action.viewKey);

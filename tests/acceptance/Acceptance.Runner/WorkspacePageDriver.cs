@@ -118,6 +118,35 @@ internal sealed class WorkspacePageDriver(IPage page)
         await WaitForContentAsync(newName);
     }
 
+    /// <summary>沿树菜单提交单条关系换位，等待正式树和列表读取消费已提交变化。</summary>
+    internal async Task ReorderFolderAsync(string name, string direction, Func<Task>? capture = null)
+    {
+        var label = direction switch { "up" => "上移", "down" => "下移", _ => throw new ArgumentException("Unsupported tree direction.", nameof(direction)) };
+        var tree = page.GetByRole(AriaRole.Complementary, new() { Name = "结构树", Exact = true });
+        await tree.GetByText(name, new() { Exact = true }).ClickAsync(new() { Button = MouseButton.Right });
+        await WaitForContentAsync(name);
+        var action = page.GetByRole(AriaRole.Menuitem, new() { Name = label, Exact = true });
+        await action.WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        await CaptureContextMenuAsync(capture);
+        var written = false;
+        var treeRead = page.WaitForResponseAsync(response => written && response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath == "/api/workspace/content/children");
+        var listRead = page.WaitForResponseAsync(response => written && response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath == "/api/links/workspace.content");
+        var write = page.WaitForResponseAsync(response =>
+        {
+            if (response.Request.Method != "POST" || new Uri(response.Url).AbsolutePath != "/api/workspace/content/tree-order") return false;
+            written = true;
+            return true;
+        });
+        await action.ClickAsync();
+        var response = await write;
+        if (!response.Ok) throw new InvalidOperationException($"文件夹换位失败：{response.Status} {await response.TextAsync()}");
+        foreach (var read in await Task.WhenAll(treeRead, listRead))
+            if (!read.Ok) throw new InvalidOperationException($"文件夹换位后读取失败：{read.Status} {await read.TextAsync()}");
+        await WaitForContentAsync(name);
+    }
+
     // 可见布局早于 Ant 入场动画完成；呈现采样等待真实动画，而不是用固定延时猜时机。
     private async Task CaptureContextMenuAsync(Func<Task>? capture)
     {

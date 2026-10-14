@@ -4,6 +4,8 @@ import type { PageLifecycleState, ResourceChange } from '@icp-platform/sdk';
 export type CompositionChange = ResourceChange & { originTreeId?: string };
 export const TreeInstanceContext = createContext<string | undefined>(undefined);
 export interface CompositionRuntime {
+  /** 外层组合拥有提示的生命周期，子动作关闭后提示仍可见。 */
+  notice?: (reasonKey: string) => void;
   report: (id: string, state: PageLifecycleState | null, discard?: () => void, save?: () => Promise<boolean>) => void;
   leave: (proceed: () => void) => void;
   subscribe: (id: string, read: (change: CompositionChange) => Promise<void>) => () => void;

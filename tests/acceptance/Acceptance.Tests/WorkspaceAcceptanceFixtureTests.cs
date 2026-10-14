@@ -10,6 +10,60 @@ namespace ICP.Platform.Acceptance.Tests;
 public sealed class WorkspaceAcceptanceFixtureTests
 {
     [Fact]
+    public void PublishedUpgrade_AllowsOnlyTreeOrdinalBackfillAndTheConfirmedWorkspaceTails()
+    {
+        var (before, after) = TreeOrderUpgrade();
+        PublishedComponentAcceptanceFixture.VerifyPreservedPredecessor(before, after, "Workspace");
+        Assert.Throws<InvalidOperationException>(() => PublishedComponentAcceptanceFixture.VerifyPreservedPredecessor(before, after, "Files"));
+    }
+
+    [Theory]
+    [InlineData("identity")]
+    [InlineData("audit")]
+    [InlineData("missing-ordinal")]
+    [InlineData("business-ordinal")]
+    [InlineData("history-prefix")]
+    [InlineData("unexpected-tail")]
+    [InlineData("other-data")]
+    public void PublishedUpgrade_StillRejectsChangesOutsideTheConfirmedBackfill(string corruption)
+    {
+        var (before, after) = TreeOrderUpgrade();
+        after = corruption switch
+        {
+            "identity" => after with { Links = after.Links.Replace("folder-link", "replacement-link", StringComparison.Ordinal) },
+            "audit" => after with { Links = after.Links.Replace("original-actor", "different-actor", StringComparison.Ordinal) },
+            "missing-ordinal" => after with { Links = after.Links.Replace(",\"TreeOrdinal\":1", "", StringComparison.Ordinal) },
+            "business-ordinal" => after with { Links = after.Links.Replace("\"ChildModelKey\":\"Part\"", "\"ChildModelKey\":\"Part\",\"TreeOrdinal\":2", StringComparison.Ordinal) },
+            "history-prefix" => after with { History = after.History.Replace("old-prefix", "changed-prefix", StringComparison.Ordinal) },
+            "unexpected-tail" => after with { History = after.History.Replace("20261014142313_Workspace_000005_TreeOrderBackfill", "unexpected-migration", StringComparison.Ordinal) },
+            "other-data" => after with { PartRow = "changed-object" },
+            _ => throw new ArgumentOutOfRangeException(nameof(corruption))
+        };
+        Assert.Throws<InvalidOperationException>(() => PublishedComponentAcceptanceFixture.VerifyPreservedPredecessor(before, after, "Workspace"));
+    }
+
+    private static (PublishedComponentAcceptanceFixture.Continuity Before, PublishedComponentAcceptanceFixture.Continuity After) TreeOrderUpgrade()
+    {
+        const string links = """
+            [{"LID":"folder-link","PEID":"parent","ChildModelKey":"WorkspaceFolder","LUpdatedBy":"original-actor"},
+             {"LID":"part-link","PEID":"parent","ChildModelKey":"Part","LUpdatedBy":"original-actor"}]
+            """;
+        var before = new PublishedComponentAcceptanceFixture.Continuity("mapping", "object", """
+            [{"OwnerModuleId":"Workspace","MigrationId":"old-prefix"}]
+            """, Links: links);
+        var after = before with
+        {
+            Links = links.Replace("\"ChildModelKey\":\"WorkspaceFolder\"", "\"ChildModelKey\":\"WorkspaceFolder\",\"TreeOrdinal\":1", StringComparison.Ordinal),
+            History = """
+                [{"OwnerModuleId":"Workspace","MigrationId":"old-prefix"},
+                 {"OwnerModuleId":"Workspace","MigrationId":"20261014142253_Workspace_000004_TreeOrder"},
+                 {"OwnerModuleId":"Workspace","MigrationId":"20261014142313_Workspace_000005_TreeOrderBackfill"}]
+                """
+        };
+        return (before, after);
+    }
+
+    [Fact]
     public async Task EmptyCommand_PreservesNoBodyAndCarriesFeatureAndAntiforgeryHeaders()
     {
         var commands = 0;

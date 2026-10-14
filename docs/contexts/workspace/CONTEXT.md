@@ -58,6 +58,16 @@ Part/Document 通过所属标准 update/delete 行为执行字段规则、编码
 
 删除对象会原子清理其全部入向引用；移除引用仍只移除当前 LID。批量入口只提交当前页勾选的 1–100 个不同 LID，混合类型在同一对象操作事务中执行，任一权限拒绝或写入失败整批回滚。任何删除前先检查整批文件夹是否非空；非空文件夹必须先清空，不能借同批其他对象的删除绕过。引用清理与同名冲突在 SQL 执行，不完整物化入向关系。边界与回退见 [ADR-0054](../../adr/0054-workspace-object-edit-delete-and-list-selection.md)。
 
+## 文件夹树次序
+
+`WorkspaceFolderContent.TreeOrdinal` 是服务端拥有的 nullable Int64，只对文件夹关系赋值；Part/Document 保持 NULL。`(PEID, TreeOrdinal)` 的过滤唯一索引保护非空次序。旧关系通过模块 migration 按真实父分组、文件夹名称和 LID 排名回填，保留旧数据；初始化后改名不重新排列。所有文件夹 create/add 与后续引用命令在同一图锁事务内消费 `WorkspaceTreeOrder.NextOrdinalAsync`，追加到真实父分支末尾；溢出明确拒绝并回滚，不形成业务数量上限。
+
+直属树读取在数据库交集正式读取范围，按 TreeOrdinal、LID 返回文件夹并计算可读子存在性。右侧列表仍消费自己的 Link 查询排序、筛选与分页，不能按树次序返回，也不公开次序列。树菜单通过 List View 的非呈现 `featureActions` 引用 `moveUp`/`moveDown`，正式功能位置为 `contextMenu`、`staticScope=folder`，共用 `workspace.folder.reorder` 行为；根不贡献这些菜单，搜索结果不能作为排序入口。
+
+`POST /api/workspace/content/tree-order` 只接受 `parentPosition`、单个 `linkId`、`direction(up|down)`，不接受未知成员、重复成员、任意邻居或序号。图锁后重验空间、完整父链、父 edit、所选与相邻文件夹 read；所选文件夹 edit 不是排序条件。交换两条可读关系的原次序，隐藏关系不变。唯一索引换位的临时 NULL 仅在事务内部存在；最终两条关系使用同一操作的 LUpdatedBy/LUpdatedAt，实体审计字段不变。共享父的全部出现位置同步，不同父的入向关系独立。
+
+首尾返回 `moved=false` 与 `boundary=first|last`，没有关系或审计写入。正式 handler 消费为中英文提示和已确认 `noChange` 回执，不刷新树或列表；正常换位通过既有 unknown change 刷新已加载出现位置与当前列表。回退关闭排序功能位置或 Workspace 导航，保留关系数据；已提交 migration 不自动 Down，恢复旧 frontier 使用经过验证的迁移前备份。
+
 ## 直接引用文件夹
 
 Workspace 在自己的反向 List View 声明三类正式详情的只读贡献，复用共享详情入口、PageRef 与标准列表，Part/Document 不反向依赖 Workspace。目标详情先执行所属读取准入；入口另要求 Workspace 导航资格，其缺失不影响原详情。反向 GET 使用同一 workspace.content 协议，不要求或接受出现位置；锚点及父文件夹各自执行正式读取与强制范围，父列筛选、计数、稳定排序和分页均在 SQL 内完成。

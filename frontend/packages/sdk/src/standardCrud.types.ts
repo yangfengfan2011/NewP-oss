@@ -33,6 +33,10 @@ export type StandardCrudOperationKind = 'create' | 'update' | 'action';
 
 /** 操作结果保持不透明；只有声明支持该结果的模块 presenter 才能解释 payload。 */
 export interface StandardCrudOperationResult {
+  /** 已确认成功且没有写入；不能与 change 同时出现，也不表示失败或未知结果。 */
+  noChange?: true;
+  /** 正式词典中的成功提示；共享宿主负责翻译和通知生命周期。 */
+  notice?: { reasonKey: string };
   /** 只引用已注册导航入口；Shell 解析路径并执行目标入口的正常准入。 */
   navigation?: { entryKey: string; parameters?: Record<string, string> };
   change?: Omit<import("./pageComposition").ResourceChange, "resourceKey">;
@@ -222,6 +226,8 @@ export interface StandardCrudActionDefinition {
 
 /** 标准动作上下文；Shell 只向模块处理器提供当前资源数据，不暴露页面状态与失效策略。 */
 export interface StandardCrudActionContext<TDetail = unknown, TRow = unknown> extends StandardCrudFeatureRequestContext {
+  /** 当前受控入口已校验的动作；旧调用方可以省略，不能作为服务端授权凭证。 */
+  action?: StandardCrudActionDefinition;
   /** 当前页面定位输入；服务端仍须独立验证，不能作为授权凭证。 */
   queryScope?: Record<string, unknown>;
   id?: string;

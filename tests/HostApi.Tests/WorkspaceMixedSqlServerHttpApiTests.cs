@@ -90,7 +90,7 @@ public sealed class WorkspaceMixedSqlServerHttpApiTests(ITestOutputHelper output
         {
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>(); var links = db.Set<Dictionary<string, object?>>("WorkspaceFolderContent");
             var seed = await links.AsNoTracking().FirstAsync();
-            links.Add(new(seed) { ["LID"] = "missing-part", ["ChildModelKey"] = "Part", ["CEID"] = "no-target" }); await db.SaveChangesAsync();
+            links.Add(new(seed) { ["LID"] = "missing-part", ["ChildModelKey"] = "Part", ["CEID"] = "no-target", ["TreeOrdinal"] = null }); await db.SaveChangesAsync();
         }
         var missing = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, Url(root) + "&pageSize=1"); Assert.Equal(3, missing.GetProperty("total").GetInt32());
         using (var scope = fixture.Services.CreateScope())
@@ -161,7 +161,7 @@ public sealed class WorkspaceMixedSqlServerHttpApiTests(ITestOutputHelper output
                     var entity = new Dictionary<string, object?>(seed) { ["EID"] = id, ["ENAME"] = "mix-" + index.ToString("D2"), ["UpdatedAt"] = new DateTime(2026, 10, 8, 0, 0, 0, DateTimeKind.Utc) };
                     if (type != "WorkspaceFolder") entity["ECODE"] = "CODE-" + index.ToString("D2");
                     entities.Add(entity);
-                    links.Add(new(link) { ["LID"] = relationPrefixes[type] + "-" + index.ToString("D2"), ["CEID"] = id, ["ChildModelKey"] = type });
+                    links.Add(new(link) { ["LID"] = relationPrefixes[type] + "-" + index.ToString("D2"), ["CEID"] = id, ["ChildModelKey"] = type, ["TreeOrdinal"] = type == "WorkspaceFolder" ? index + 2L : (long?)null });
                 }
             }
             await db.SaveChangesAsync();

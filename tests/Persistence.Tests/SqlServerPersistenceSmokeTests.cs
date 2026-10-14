@@ -105,6 +105,64 @@ public sealed class SqlServerPersistenceSmokeTests
     public Task SqlServerExampleRequiredField_BackfillsHistoricalPrefixWithoutPermanentDefaultAndRestartsReady() =>
         RunCatalogScenarioAsync("requiredfield", VerifyExampleRequiredFieldLifecycleAsync);
 
+    [EnvironmentGatedFact(RunEnvironmentVariable, "真实Workspace旧历史前缀保留数据，正式Host迁移初始化树关系次序并在重启后保持")]
+    public Task SqlServerWorkspaceTreeOrder_BackfillsFrozenHistoricalPrefixAndRestartsReady() =>
+        RunCatalogScenarioAsync("workspaceorder", VerifyWorkspaceTreeOrderUpgradeAsync);
+
+    private static async Task VerifyWorkspaceTreeOrderUpgradeAsync(string adminConnectionString, string catalog, WorktreeDatabaseIdentity identity)
+    {
+        var connection = BuildCatalogConnectionString(adminConnectionString, catalog);
+        var configuration = BuildSqlServerConfiguration(connection);
+        var oldPlan = TestPersistencePlan.CreateWorkspaceTreeOrder(historical: true);
+        await using (var historical = BuildHostApplication(configuration, "Production", oldPlan))
+        {
+            await historical.ApplyPlatformPersistenceAsync();
+            Assert.Equal(ReadinessState.Ready, (await ReadPersistenceReadinessAsync(historical)).State);
+        }
+        await ExecuteNonQueryAsync(connection, """
+            INSERT INTO [dbo].[WorkspaceFolder] ([EID],[ENAME],[Description],[OriginSpaceId],[CreatedBy],[CreatedAt],[UpdatedBy],[UpdatedAt]) VALUES
+            (N'root',N'Root',N'preserved',N'public',N'legacy','2026-01-01',N'legacy','2026-01-01'),
+            (N'other',N'Other',N'preserved',N'public',N'legacy','2026-01-01',N'legacy','2026-01-01'),
+            (N'z',N'Z',N'preserved',N'public',N'legacy','2026-01-01',N'legacy','2026-01-01'),
+            (N'a1',N'A',N'preserved',N'public',N'legacy','2026-01-01',N'legacy','2026-01-01'),
+            (N'a2',N'A',N'preserved',N'public',N'legacy','2026-01-01',N'legacy','2026-01-01');
+            INSERT INTO [dbo].[WorkspaceSpace] ([EID],[ENAME],[RootFolderId],[SpaceKind],[SubjectId],[CreatedBy],[CreatedAt],[UpdatedBy],[UpdatedAt])
+                VALUES(N'public',N'Public',N'root',N'Public',NULL,N'legacy','2026-01-01',N'legacy','2026-01-01');
+            INSERT INTO [dbo].[WorkspaceFolderContent] ([LID],[PEID],[CEID],[ChildModelKey],[LCreatedBy],[LCreatedAt],[LUpdatedBy],[LUpdatedAt]) VALUES
+            (N'root-z',N'root',N'z',N'WorkspaceFolder',N'legacy','2026-01-01',N'legacy','2026-01-01'),
+            (N'root-a2',N'root',N'a2',N'WorkspaceFolder',N'legacy','2026-01-01',N'legacy','2026-01-01'),
+            (N'root-a1',N'root',N'a1',N'WorkspaceFolder',N'legacy','2026-01-01',N'legacy','2026-01-01'),
+            (N'other-z',N'other',N'z',N'WorkspaceFolder',N'legacy','2026-01-01',N'legacy','2026-01-01'),
+            (N'part',N'root',N'legacy-part',N'Part',N'legacy','2026-01-01',N'legacy','2026-01-01'),
+            (N'document',N'root',N'legacy-document',N'Document',N'legacy','2026-01-01',N'legacy','2026-01-01');
+            """);
+        var oldHistory = await ReadAppliedMigrationsAsync(connection);
+        var currentPlan = TestPersistencePlan.CreateWorkspaceTreeOrder(historical: false);
+        await using (var current = BuildHostApplication(configuration, "Production", currentPlan))
+        {
+            await current.ApplyPlatformPersistenceAsync();
+            Assert.Equal(ReadinessState.Ready, (await ReadPersistenceReadinessAsync(current)).State);
+        }
+        Assert.Equal("root-a1:1,root-a2:2,root-z:3", await ExecuteScalarAsync(connection,
+            "SELECT STRING_AGG(CONCAT(LID,':',TreeOrdinal),',') WITHIN GROUP(ORDER BY TreeOrdinal,LID) FROM dbo.WorkspaceFolderContent WHERE PEID=N'root' AND ChildModelKey=N'WorkspaceFolder'"));
+        Assert.Equal(1L, await ExecuteScalarAsync(connection, "SELECT TreeOrdinal FROM dbo.WorkspaceFolderContent WHERE LID=N'other-z'"));
+        Assert.Equal(2, await ExecuteScalarAsync(connection, "SELECT COUNT(*) FROM dbo.WorkspaceFolderContent WHERE ChildModelKey IN(N'Part',N'Document') AND TreeOrdinal IS NULL"));
+        Assert.Equal(5, await ExecuteScalarAsync(connection, "SELECT COUNT(*) FROM dbo.WorkspaceFolder WHERE Description=N'preserved' AND UpdatedAt='2026-01-01' AND UpdatedBy=N'legacy'"));
+        Assert.Equal(6, await ExecuteScalarAsync(connection, "SELECT COUNT(*) FROM dbo.WorkspaceFolderContent WHERE LUpdatedAt='2026-01-01' AND LUpdatedBy=N'legacy'"));
+        Assert.Equal(0, await ExecuteScalarAsync(connection, "SELECT COUNT(*) FROM sys.default_constraints WHERE parent_object_id=OBJECT_ID(N'dbo.WorkspaceFolderContent')"));
+        var currentHistory = await ReadAppliedMigrationsAsync(connection);
+        Assert.Equal(oldHistory, currentHistory.Take(oldHistory.Length));
+        Assert.Equal(oldHistory.Length + 2, currentHistory.Length);
+        await using (var restarted = BuildHostApplication(configuration, "Development", currentPlan))
+        {
+            await restarted.ApplyPlatformPersistenceAsync();
+            Assert.Equal(ReadinessState.Ready, (await ReadPersistenceReadinessAsync(restarted)).State);
+        }
+        Assert.Equal(currentHistory, await ReadAppliedMigrationsAsync(connection));
+        Assert.Equal("root-a1:1,root-a2:2,root-z:3", await ExecuteScalarAsync(connection,
+            "SELECT STRING_AGG(CONCAT(LID,':',TreeOrdinal),',') WITHIN GROUP(ORDER BY TreeOrdinal,LID) FROM dbo.WorkspaceFolderContent WHERE PEID=N'root' AND ChildModelKey=N'WorkspaceFolder'"));
+    }
+
     [Theory]
     [InlineData(1)]
     [InlineData(2)]

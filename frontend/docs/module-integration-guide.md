@@ -113,3 +113,9 @@ corepack pnpm --dir frontend --filter @icp-platform/shell test
 准备阶段核对来源绑定/导航归属、目标详情能力及模型、唯一 key/目标、PageRef 和 resolver，任一缺失或歧义拒绝候选。运行时仅从通过详情契约的真实对象注入 `recordId`，由 resolver 形成该列表的 queryScope；标题来自来源 View 词典。入口按来源导航授权，目标详情读取位置保留所属身份；无来源资格时不显示入口或发起关联读取。服务器仍独立验证锚点与关联对象资格。
 
 共享宿主在 Drawer 和独立详情使用同一入口，以 Modal/PageOutlet 装载标准列表；它不接受任意组件或 URL。每个 Modal 使用独立组合与列表状态，真实对象或资格变化释放旧读取，关闭回到原详情。多个纯内嵌列表可以复用同一 Drawer 详情 View；拥有独立详情路由的 capability 仍必须唯一，不因此生成额外路由。
+
+## 非呈现引用动作与成功回执
+
+List View 已有 `featureActions` 保持非呈现功能目录。只有显式声明 `handlerKey` 与 `labelKey` 的项可被树等受控入口作为可执行动作引用；纯功能项保持原行为。可执行项的 `behaviorKey` 必须与资源和 handler 派生的行为一致，沿原注册点校验 handler/input，不能复制成列表页/行动作或贡献列表按钮。树引用独立编译自己的 contextMenu 功能位置，handler 获得当前已校验的可选 `StandardCrudActionContext.action`；客户端定义仍不是服务端权限凭证。
+
+已确认成功且没有写入的动作可以返回 `StandardCrudOperationResult.noChange=true`，并用 `notice.reasonKey` 引用正式词典。共享成功交接仍处理原回执，只跳过变更发布和读取刷新；notice 由外层组合的现有消息 holder 显示，关闭子动作后仍可见，过期、已卸载或切换主体/组合的结果不发布到新上下文。该标记不能表示失败或未知结果；与实际 change 冲突时报告成功同步故障并保留实际变更刷新。普通成功动作保留既有 change/refresh 生命周期。

@@ -64,11 +64,11 @@ public sealed class WorkspacePageDriverTests
                 await route.FulfillAsync(new() { Status = 200, ContentType = "application/json", Body = "{}" });
             else await route.FulfillAsync(new() { ContentType = "text/html", Body = """
                 <meta charset="utf-8"><section aria-label="节点内容">
-                <button id="batch">批量删除</button><table><tbody class="ant-table-tbody">
+                <button id="batch">删除</button><table><tbody class="ant-table-tbody">
                 <tr class="ant-table-row"><td><input type="checkbox"></td><td>甲对象</td></tr>
                 <tr class="ant-table-row"><td><input type="checkbox"></td><td>乙对象</td></tr>
                 </tbody></table></section>
-                <div role="dialog" aria-label="批量删除" hidden><button id="confirm">确 认</button></div>
+                <div role="dialog" aria-label="删除" hidden><button id="confirm">确 认</button></div>
                 <script>
                 document.querySelector('#batch').onclick=()=>{
                   if(document.querySelectorAll('input:checked').length===2) document.querySelector('[role=dialog]').hidden=false;

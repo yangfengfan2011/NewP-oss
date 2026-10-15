@@ -219,7 +219,7 @@ it('keeps toolbar cut selection through validation and clears pending after succ
 
 it('confirms a fixed current-page batch removal and clears selection after success without replaying a failed refresh', async () => {
   const page = await mount({ failRefresh: true });
-  await page.copyRows(['Document', 'Part'], '批量移除引用');
+  await page.copyRows(['Document', 'Part'], '移除');
   await waitFor(() => expect(document.querySelector('[role=dialog]')?.textContent).toContain('保留对象及文件'));
   expect(page.writes).toEqual([]);
   const confirm = () => [...document.querySelectorAll<HTMLButtonElement>('[role=dialog] button')].find(item => item.textContent?.replace(/\s/g, '') === '确认')!;
@@ -229,7 +229,7 @@ it('confirms a fixed current-page batch removal and clears selection after succe
     position: { spaceId: 'public', rootFolderId: 'root', linkIds: ['A-link'] }, linkIds: ['Document-lid', 'Part-lid'],
   } });
   await waitFor(() => expect(document.querySelector('[role=dialog]')).toBeNull());
-  await waitFor(() => expect(page.button('批量移除引用')?.disabled).toBe(true)); expect(page.writes).toHaveLength(1);
+  await waitFor(() => expect(page.button('移除')?.disabled).toBe(true)); expect(page.writes).toHaveLength(1);
 });
 
 it('replaces a cut with a new copy and restores the existing paste and cut labels', async () => {

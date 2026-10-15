@@ -84,7 +84,7 @@ it.each(['standard', 'stable', 'handler', 'input', 'denied', 'disabled', 'create
     await waitFor(() => Boolean(container.querySelector('.ant-tree-title')));
     if (scenario === 'denied') {
       expect(container.querySelector('[role=toolbar][aria-label="树操作"]')).toBeNull();
-      await act(async () => container.querySelector('.ant-tree-title')!.firstElementChild!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
+      await act(async () => container.querySelector(scenario === 'disabled' ? '.ant-tree-switcher' : '[role=treeitem]')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
       expect(document.querySelector('[role=menuitem]')).toBeNull();
       expect(requests.filter(item => item.startsWith('DELETE'))).toHaveLength(0);
       expect(document.querySelector('[role=dialog]')).toBeNull();
@@ -99,7 +99,7 @@ it.each(['standard', 'stable', 'handler', 'input', 'denied', 'disabled', 'create
       expect(requests.filter(item => item.startsWith('DELETE'))).toHaveLength(0);
       return;
     }
-    await act(async () => container.querySelector('.ant-tree-title')!.firstElementChild!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
+    await act(async () => container.querySelector(scenario === 'disabled' ? '.ant-tree-switcher' : '[role=treeitem]')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
     await waitFor(() => Boolean(document.querySelector('[role=menuitem]')));
     if (scenario === 'disabled') {
       await waitFor(() => document.querySelector('[role=menuitem] [title]')?.getAttribute('title') === 'Unavailable');

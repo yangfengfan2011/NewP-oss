@@ -292,7 +292,7 @@ internal sealed class WorkspacePageDriver(IPage page)
     {
         var crud = new StandardCrudPageDriver(page);
         foreach (var name in names) await (await crud.WaitForRowAsync(name)).GetByRole(AriaRole.Checkbox).CheckAsync();
-        await crud.ClickPageActionAsync("批量移除引用");
+        await crud.ClickPageActionAsync("移除");
         var dialog = crud.ConfirmDialogWithText("仅从当前文件夹移除所选引用，保留对象及文件，确定继续？");
         await dialog.WaitForAsync(new() { State = WaitForSelectorState.Visible });
         if (capture is not null)
@@ -302,7 +302,7 @@ internal sealed class WorkspacePageDriver(IPage page)
             await dialog.EvaluateAsync("async element => { await new Promise(requestAnimationFrame); await Promise.all(element.getAnimations({subtree:true}).map(animation => animation.finished.catch(() => {}))); }");
             await capture(dialog);
         }
-        await crud.ConfirmAsync(dialog, new("POST", "/api/workspace/content/references/remove", 200, "批量移除引用"));
+        await crud.ConfirmAsync(dialog, new("POST", "/api/workspace/content/references/remove", 200, "移除"));
         foreach (var name in names) await crud.TableRow(name).WaitForAsync(new() { State = WaitForSelectorState.Hidden });
     }
 
@@ -338,8 +338,8 @@ internal sealed class WorkspacePageDriver(IPage page)
             var row = await crud.WaitForRowAsync(name);
             await row.GetByRole(AriaRole.Checkbox).CheckAsync();
         }
-        await crud.ClickPageActionAsync("批量删除");
-        var dialog = page.GetByRole(AriaRole.Dialog, new() { Name = "批量删除", Exact = true });
+        await crud.ClickPageActionAsync("删除");
+        var dialog = page.GetByRole(AriaRole.Dialog, new() { Name = "删除", Exact = true });
         await crud.ConfirmAsync(dialog, new("POST", "/api/workspace/content/delete", 200, "批量删除对象"));
         foreach (var name in names)
             await page.GetByRole(AriaRole.Region, new() { Name = "节点内容", Exact = true }).Locator("tr.ant-table-row")

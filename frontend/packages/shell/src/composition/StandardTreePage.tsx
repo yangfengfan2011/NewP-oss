@@ -2,7 +2,7 @@ import { useFeaturePlacement, type FeaturePlacement } from '../authorization/Fea
 import { useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import Tree from 'antd/es/tree';
 import type { DataNode } from 'antd/es/tree';
-import { ContextActionMenu } from '@icp-platform/ui/core';
+import { ContextActionMenu, isNativeContextMenuTarget } from '@icp-platform/ui/core';
 import Button from 'antd/es/button';
 import Card from 'antd/es/card';
 import Breadcrumb from 'antd/es/breadcrumb';
@@ -49,7 +49,7 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
   const actionInstance = useMemo(() => new ActionInstanceScope(), [subjectId]);
   useLayoutEffect(() => actionInstance.activate(), [actionInstance]);
   useSyncExternalStore(actionInstance.subscribe, actionInstance.getSnapshot, actionInstance.getSnapshot);
-  const [menuNode, setMenuNode] = useState<{ key: string; scope: string; context: string } | null>(null);
+  const [menuNode, setMenuNode] = useState<{ key: string; scope: string; context: string; point?: { x: number; y: number; focusTarget: HTMLElement } } | null>(null);
   const menuScope = JSON.stringify([input.treeScope, input.parameters, features.placement, active, subjectId]);
   const currentMenuScope = useRef(menuScope); currentMenuScope.current = menuScope;
   useEffect(() => setMenuNode(null), [menuScope]);
@@ -138,9 +138,9 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
       .filter(({ resolution, state }) => (!features.placement || resolution.kind === 'allowed') && state.visible !== false);
     const open = active && menuNode?.key === node.nodeKey && menuNode.scope === menuScope
       && menuNode.context === JSON.stringify(node) && selected?.nodeKey === node.nodeKey;
-    return { key: node.nodeKey, 'aria-label': nodeLabel, isLeaf: branches[node.nodeKey] ? branches[node.nodeKey].length === 0 : !node.hasChildren,
+    return { key: node.nodeKey, 'aria-label': nodeLabel, 'data-tree-node-key': node.nodeKey, isLeaf: branches[node.nodeKey] ? branches[node.nodeKey].length === 0 : !node.hasChildren,
       title: menus.length ? <ContextActionMenu trigger={['contextMenu']} open={open}
-        keyboardLabel={nodeLabel}
+        keyboardLabel={nodeLabel} point={open ? menuNode?.point : undefined}
         menu={{ items: menus.map(({ menu, resolution, state }) => ({ key: menu.key, disabled: state.available === false,
           label: <span title={state.available === false ? formatStandardCrudActionReason(state, t) ?? t('Platform.ActionStateUnavailable', '当前状态不允许执行该操作。') : undefined}>{state.labelKey ? t(state.labelKey, '') : t(`${view.dicKey}.${menu.labelKey}`, menu.labelKey)}</span>, onClick: () => {
           if (!open || menuExecutable.current.scope !== menuScope || menuExecutable.current.nodeKey !== node.nodeKey
@@ -172,12 +172,29 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
       {tree.locationError != null && <div role="alert">{t('Platform.TreeLocationFailed', '定位读取失败：{message}', { message: formatRequestError(tree.locationError, t) })}<Button onClick={() => tree.retry({ kind: 'location' })}>{t('Platform.TreeRetryLocation', '重试定位')}</Button></div>}
       {tree.locationNotice && <div role="status">{t(tree.locationNotice, '目标节点已不存在')}</div>}
       {Object.entries(tree.branchErrors).map(([key, message]) => <div key={key} role="alert">{t('Platform.TreeBranchFailed', '分支读取失败：{message}', { message: formatRequestError(message, t) })}<Button onClick={() => tree.retry({ kind: 'branch', nodeKey: key })}>{t('Platform.TreeRetryBranch', '重试分支')}</Button></div>)}
+      <div onContextMenuCapture={event => {
+        if (isNativeContextMenuTarget(event.target)) return;
+        const row = (event.target as Element).closest<HTMLElement>('[data-tree-node-key]');
+        const key = row?.dataset.treeNodeKey;
+        const node = [...roots, ...Object.values(branches).flat()].find(item => item.nodeKey === key);
+        if (!active || !row || !node) return;
+        const menus = view.nodeTypes.find(type => type.key === node.nodeType)?.contextMenu ?? [];
+        if (!menus.some(menu => (node.contextMenuKeys === undefined || node.contextMenuKeys.includes(menu.key))
+          && (!features.placement || features.action(menu.key, 'contextMenu', node.nodeType).kind === 'allowed'))) return;
+        event.preventDefault(); event.stopPropagation();
+        row.tabIndex = -1;
+        const point = { x: event.clientX, y: event.clientY, focusTarget: row };
+        tree.select(node.nodeKey, () => {
+          if (currentMenuScope.current === menuScope) setMenuNode({ key: node.nodeKey, scope: menuScope, context: JSON.stringify(node), point });
+        });
+      }}>
       <ConfigProvider theme={{ components: { Tree: { titleHeight: token.controlHeight, nodeSelectedBg: token.colorPrimaryBg, nodeSelectedColor: token.colorPrimaryText } } }}>
       <Tree blockNode showLine={{ showLeafIcon: false }} switcherIcon={<DownOutlined aria-hidden="true" />} treeData={data(roots)} selectedKeys={selected ? [selected.nodeKey] : []} expandedKeys={[...expanded]}
         onExpand={keys => tree.expand(keys.map(String))}
         onSelect={keys => { if (keys.length) tree.select(String(keys[0])); }}
         loadData={node => tree.loadBranch(String(node.key))} />
       </ConfigProvider>
+      </div>
       {!roots.length && !tree.error && <p>{t('Platform.TreeEmpty', '暂无节点')}</p>}
       </Card>
     </aside>

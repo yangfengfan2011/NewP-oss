@@ -304,7 +304,7 @@ public sealed class AcceptanceGateTests
                 var localizedResponse = await localizedRead;
                 if (!localizedResponse.Ok) throw new InvalidOperationException($"切换语言后的列表读取失败：{localizedResponse.Status}");
                 await localizedResponse.FinishedAsync();
-                await page.GetByRole(AriaRole.Button, new() { Name = "Remove selected references", Exact = true })
+                await page.GetByRole(AriaRole.Button, new() { Name = "Remove", Exact = true })
                     .WaitForAsync(new() { State = WaitForSelectorState.Visible });
                 await Assertions.Expect(page.Locator(".np-tree-content .ant-spin-spinning")).ToHaveCountAsync(0);
                 await CaptureAsync("references-removed-en.png");

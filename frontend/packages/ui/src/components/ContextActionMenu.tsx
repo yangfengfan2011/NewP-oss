@@ -1,6 +1,6 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { cloneElement, isValidElement, useEffect, useRef, type MutableRefObject, type ReactNode, type RefAttributes } from 'react';
 import Dropdown from 'antd/es/dropdown';
-import type { MenuProps } from 'antd/es/menu';
+import Menu, { type MenuProps, type MenuRef } from 'antd/es/menu';
 
 /** 编辑控件保留浏览器的原生菜单；对象表面的快捷入口由 owning Host 决定。 */
 export function isNativeContextMenuTarget(target: EventTarget | null): boolean {
@@ -18,9 +18,29 @@ export interface ContextActionMenuProps {
   keyboardLabel?: string;
 }
 
+// rc-dropdown 的 autoFocus 会在关闭后继续执行；只为当前打开的真实 Menu 安排可取消聚焦。
+function FocusableMenu({ children, open, currentOpen }: { children: ReactNode; open: boolean; currentOpen: MutableRefObject<boolean> }) {
+  const menuRef = useRef<MenuRef>(null);
+  useEffect(() => {
+    if (!open) return;
+    let frames = 3;
+    let request: number;
+    const focus = () => {
+      if (!currentOpen.current) return;
+      if (--frames > 0) request = requestAnimationFrame(focus);
+      else menuRef.current?.focus();
+    };
+    request = requestAnimationFrame(focus);
+    return () => cancelAnimationFrame(request);
+  }, [open, currentOpen]);
+  return isValidElement<RefAttributes<MenuRef>>(children) && children.type === Menu
+    ? cloneElement(children, { ref: menuRef }) : children;
+}
+
 /** 树与列表共享菜单布局、键盘打开、Escape 关闭和焦点恢复；动作执行仍由 Host 拥有。 */
 export function ContextActionMenu({ children, menu, open, onOpenChange, trigger = ['click'], point, keyboardLabel }: ContextActionMenuProps) {
   const anchor = useRef<HTMLSpanElement>(null);
+  const currentOpen = useRef(open); currentOpen.current = open;
   const openedFrom = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (!open) return;
@@ -28,6 +48,7 @@ export function ContextActionMenu({ children, menu, open, onOpenChange, trigger 
     const escape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.preventDefault(); event.stopPropagation();
+      currentOpen.current = false;
       onOpenChange(false);
       openedFrom.current?.focus();
     };
@@ -35,6 +56,7 @@ export function ContextActionMenu({ children, menu, open, onOpenChange, trigger 
     return () => document.removeEventListener('keydown', escape, true);
   }, [open, onOpenChange, point]);
   const close = (next: boolean) => {
+    currentOpen.current = next;
     onOpenChange(next);
     if (!next && (document.activeElement === document.body || document.activeElement?.closest('[role="menu"]'))) {
       openedFrom.current?.focus();
@@ -42,7 +64,8 @@ export function ContextActionMenu({ children, menu, open, onOpenChange, trigger 
   };
   return <>
     {point ? children : null}
-    <Dropdown trigger={trigger} open={open} onOpenChange={close} autoFocus
+    <Dropdown trigger={trigger} open={open} onOpenChange={close} autoFocus={false}
+      popupRender={node => <FocusableMenu open={open} currentOpen={currentOpen}>{node}</FocusableMenu>}
       menu={{ ...menu, onClick: info => { info.domEvent.stopPropagation(); close(false); menu.onClick?.(info); } }}>
       <span ref={anchor} tabIndex={keyboardLabel ? 0 : undefined} aria-label={keyboardLabel}
         aria-haspopup="menu" aria-expanded={open}

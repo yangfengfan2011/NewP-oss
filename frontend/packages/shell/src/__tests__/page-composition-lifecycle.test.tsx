@@ -60,6 +60,16 @@ async function render(browser = false, search = '', tree = false, contextMenuKey
 }
 describe('whole composition lifecycle', () => {
   it('keeps menu-bearing root names equal to their localized labels while keyboard menus restore each root focus', async () => {
+    let nextFrame = 0;
+    const frames = new Map<number, FrameRequestCallback>();
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { const id = ++nextFrame; frames.set(id, callback); return id; });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
+    const advanceFrames = async () => {
+      for (let frame = 0; frame < 4; frame++) await act(async () => {
+        const callbacks = [...frames.values()]; frames.clear();
+        callbacks.forEach(callback => callback(performance.now()));
+      });
+    };
     await render(false, '', true, undefined, true);
     const names = ['公共根', 'two（停用）', 'other'];
     expect(container.querySelectorAll('[role="treeitem"]')).toHaveLength(3);
@@ -76,6 +86,7 @@ describe('whole composition lifecycle', () => {
       expect(document.querySelector('[role="menuitem"]')?.textContent).toBe('Edit');
       await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
       expect(trigger.getAttribute('aria-expanded')).toBe('false');
+      await advanceFrames();
       expect(document.activeElement).toBe(trigger);
       expect(node!.getAttribute('aria-label')).toBe(name);
     }

@@ -9,6 +9,26 @@ public sealed class LocalizationRuntimeManifestBuilderTests : IDisposable
     private readonly List<string> _tempRoots = new();
 
     [Fact]
+    public void Build_CopyActionOwnersContributeComplementaryLocalizedTitlesWithoutPlatformSpecialCases()
+    {
+        var repository = new DirectoryInfo(AppContext.BaseDirectory);
+        while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "AGENTS.md"))) repository = repository.Parent;
+        Assert.NotNull(repository);
+        var runtime = CreateRuntimeRoot(); WriteLanguages(runtime);
+        foreach (var (owner, chinese, english) in new[] { ("Workspace", "复制文件夹引用", "Copy folder references"), ("Part", "复制零组件引用", "Copy part references"), ("Document", "复制图文档引用", "Copy document references") })
+        {
+            var root = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository.FullName, owner);
+            WriteMetadataFile(runtime, owner, "DataScope.dic.json", File.ReadAllText(Path.Combine(root, "metadata", "dictionaries", "DataScope.dic.json")));
+            using var manifest = JsonDocument.Parse(new LocalizationRuntimeManifestBuilder().Build(runtime));
+            var key = "DataScope.Action_" + owner.ToLowerInvariant() + "Copy";
+            Assert.Equal(chinese, manifest.RootElement.GetProperty("catalogs").GetProperty("zhs").GetProperty(key).GetString());
+            Assert.Equal(english, manifest.RootElement.GetProperty("catalogs").GetProperty("en").GetProperty(key).GetString());
+        }
+        using var complete = JsonDocument.Parse(new LocalizationRuntimeManifestBuilder().Build(runtime));
+        Assert.Equal(3, complete.RootElement.GetProperty("catalogs").GetProperty("en").EnumerateObject().Count());
+    }
+
+    [Fact]
     public void Build_CurrentDocumentDictionary_ProjectsFileUploadAndDownloadCatalogs()
     {
         var repository = new DirectoryInfo(AppContext.BaseDirectory);

@@ -112,6 +112,7 @@ public sealed class AcceptanceGateTests
                 await CaptureAsync("workspace-properties-narrow.png");
                 await driver.ClosePropertiesAsync(properties);
                 await page.SetViewportSizeAsync(1440, 1000);
+                var folderAddress = await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
                 var attachments = WorkspacePageDriver.SmallAttachmentFiles();
                 await driver.CreateDocumentWithFilesAsync("ACC-WS-D-" + runId[..8], "归组图文档旅程 " + runId[..8], WorkspacePageDriver.SmallMainFile(), async _ =>
                 {
@@ -138,7 +139,7 @@ public sealed class AcceptanceGateTests
                 await driver.SelectLanguageAsync("简体中文");
                 await page.GetByRole(AriaRole.Region, new() { Name = "文件", Exact = true })
                     .WaitForAsync(new() { State = WaitForSelectorState.Visible });
-                await driver.ReturnToPublicContentAsync();
+                await driver.RestorePositionAsync(folderAddress, "公共空间", fixture.ExistingFolderName);
                 await driver.EditObjectAsync(documentName, documentName + " 已编辑");
                 await CaptureAsync("workspace-document-edited.png");
                 await driver.DeleteSelectedAsync(documentName + " 已编辑");
@@ -202,6 +203,61 @@ public sealed class AcceptanceGateTests
                 await CaptureAsync("tree-order-saved-narrow.png");
                 await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
                     new { url = page.Url, actor = "ordinary", journey = "workspace-tree-order" }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通账号通过正式树/行菜单和当前页工具栏复制并连续粘贴引用")]
+    public async Task NativeWorkspaceCopyPaste_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-workspace-copy-paste");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseCompositionLifecycle: false);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
+            browserJourney: async (page, token) =>
+            {
+                var driver = new WorkspacePageDriver(page);
+                Task CaptureAsync(string name) => page.ScreenshotAsync(new()
+                { Path = Path.Combine(root, name), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                var source = "复制来源 A " + runId[..8];
+                var targetB = "粘贴目录 B " + runId[..8];
+                var targetC = "粘贴目录 C " + runId[..8];
+                var copiedFolder = "树复制文件夹 " + runId[..8];
+                var document = "复制图文档 " + runId[..8];
+                var part = "工具栏复制零组件 " + runId[..8];
+                await driver.OpenAsync();
+                await driver.SelectRootAsync("公共空间");
+                foreach (var name in new[] { source, targetB, targetC, copiedFolder }) await driver.CreateFolderAsync(name);
+                await driver.ExpandRootToFolderAsync("公共空间", copiedFolder);
+                await driver.CopyFolderFromTreeContextMenuAsync(copiedFolder, () => CaptureAsync("clipboard-tree-menu.png"));
+                await driver.SelectTreePathAsync("公共空间", targetB);
+                await driver.PasteReferencesAsync(copiedFolder);
+                await driver.SelectTreePathAsync("公共空间", source);
+                await driver.CreateDocumentWithFilesAsync("COPY-D-" + runId[..8], document, WorkspacePageDriver.SmallMainFile(),
+                    attachments: WorkspacePageDriver.SmallAttachmentFiles());
+                await driver.CreateObjectAsync("零组件", "COPY-P-" + runId[..8], part);
+                await driver.CopyReferenceFromContextMenuAsync(document, () => CaptureAsync("clipboard-row-menu.png"));
+                await driver.SelectTreePathAsync("公共空间", targetB);
+                await driver.PasteReferencesAsync(document);
+                await driver.SelectTreePathAsync("公共空间", targetC);
+                await driver.PasteReferencesAsync(document);
+                await driver.SelectTreePathAsync("公共空间", source);
+                await driver.CopySelectedAsync(part);
+                await driver.SelectTreePathAsync("公共空间", targetC);
+                await driver.PasteReferencesAsync(part);
+                await CaptureAsync("clipboard-pasted.png");
+                var localizedRead = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+                    && new Uri(response.Url).AbsolutePath == "/api/links/workspace.content");
+                await driver.SelectLanguageAsync("English");
+                var localizedResponse = await localizedRead;
+                if (!localizedResponse.Ok) throw new InvalidOperationException($"切换语言后的列表读取失败：{localizedResponse.Status}");
+                await localizedResponse.FinishedAsync();
+                await page.GetByRole(AriaRole.Button, new() { Name = "Paste references", Exact = true })
+                    .WaitForAsync(new() { State = WaitForSelectorState.Visible });
+                await new StandardCrudPageDriver(page).WaitForRowAsync(document);
+                await new StandardCrudPageDriver(page).WaitForRowAsync(part);
+                await Assertions.Expect(page.Locator(".np-tree-content .ant-spin-spinning")).ToHaveCountAsync(0);
+                await CaptureAsync("clipboard-pasted-en.png");
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
+                    new { url = page.Url, actor = "ordinary", journey = "workspace-copy-paste" }, token);
             }).RunAsync(CancellationToken.None);
     }
 
@@ -312,19 +368,21 @@ public sealed class AcceptanceGateTests
                 }
                 await driver.OpenAsync();
                 await driver.SelectRootAsync("公共空间");
+                var folderAddress = await driver.SelectTreePathAsync("公共空间", folderName);
+                await driver.CreateFolderAsync(folderName + " 子文件夹");
                 await driver.CreateObjectAsync("零组件", partCode, partName, dialog => CapturePairAsync("part-create", dialog));
                 var attachments = WorkspacePageDriver.SmallAttachmentFiles();
                 await driver.CreateDocumentWithFilesAsync(documentCode, documentName, WorkspacePageDriver.SmallMainFile(), dialog => CapturePairAsync("document-create", dialog), attachments);
-                await new StandardCrudPageDriver(page).WaitForRowAsync(folderName);
+                await new StandardCrudPageDriver(page).WaitForRowAsync(folderName + " 子文件夹");
                 await CapturePairAsync("mixed-content");
                 await driver.OpenOwnedPropertiesAsync(partName, "/parts");
                 await CapturePairAsync("mixed-part-properties");
-                await driver.ReturnToPublicContentAsync();
+                await driver.RestorePositionAsync(folderAddress, "公共空间", folderName);
                 await driver.OpenOwnedPropertiesAsync(documentName, "/documents");
                 foreach (var file in new[] { WorkspacePageDriver.SmallMainFile() }.Concat(attachments))
                     await driver.DownloadFileAsync(file.Name, Path.Combine(root, "download-" + file.Name));
                 await CapturePairAsync("mixed-document-properties");
-                await driver.ReturnToPublicContentAsync();
+                await driver.RestorePositionAsync(folderAddress, "公共空间", folderName);
                 await driver.RemoveReferenceAsync(partName, dialog => CapturePairAsync("mixed-remove-reference", dialog));
                 await driver.CreateObjectAsync("零组件", partCode + "-NEXT", partName + " 新建");
                 await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"), new { url = page.Url, actor = "ordinary", readdedObject = partName }, token);

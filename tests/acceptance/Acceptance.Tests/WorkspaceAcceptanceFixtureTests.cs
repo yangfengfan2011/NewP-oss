@@ -265,6 +265,7 @@ public sealed class WorkspaceAcceptanceFixtureTests
             """);
         // 浏览器已经删除全部直接内容；模拟正式创建回执不携带 Part/Document 身份。
         var items = new List<object>();
+        var folderItems = new List<object>();
         var writes = 0;
         using var client = new HttpClient(new AsyncHandler(async (request, token) =>
         {
@@ -280,11 +281,13 @@ public sealed class WorkspaceAcceptanceFixtureTests
                 Assert.Equal("forward", query["direction"]);
                 Assert.Equal("WorkspaceFolder", query["anchorModelKey"]);
                 using var scope = JsonDocument.Parse(query["queryScope"]!);
-                var isPublic = query["anchorId"] == "public-root";
+                var isFolder = query["anchorId"] == "folder-EID";
+                var isPublic = isFolder || query["anchorId"] == "public-root";
                 Assert.Equal(isPublic ? "public-space" : "personal-space", scope.RootElement.GetProperty("spaceId").GetString());
-                Assert.Equal(query["anchorId"], scope.RootElement.GetProperty("rootFolderId").GetString());
-                Assert.Equal("[]", scope.RootElement.GetProperty("linkIds").GetString());
-                return Json(HttpStatusCode.OK, JsonSerializer.Serialize(new { items = isPublic ? items : [], total = isPublic ? items.Count : 0 }));
+                Assert.Equal(isPublic ? "public-root" : "personal-root", scope.RootElement.GetProperty("rootFolderId").GetString());
+                Assert.Equal(isFolder ? "[\"create-LID\"]" : "[]", scope.RootElement.GetProperty("linkIds").GetString());
+                var contents = isFolder ? folderItems : isPublic ? items : [];
+                return Json(HttpStatusCode.OK, JsonSerializer.Serialize(new { items = contents, total = contents.Count }));
             }
             Assert.Equal(HttpMethod.Post, request.Method);
             Assert.Equal("fixture-token", Assert.Single(request.Headers.GetValues("X-CSRF-TOKEN")));
@@ -300,27 +303,27 @@ public sealed class WorkspaceAcceptanceFixtureTests
             var position = body.RootElement.GetProperty("position");
             Assert.Equal("public-space", position.GetProperty("spaceId").GetString());
             Assert.Equal("public-root", position.GetProperty("rootFolderId").GetString());
-            Assert.Empty(position.GetProperty("linkIds").EnumerateArray());
+            Assert.Equal(action == "create" ? [] : new[] { "create-LID" }, position.GetProperty("linkIds").EnumerateArray().Select(value => value.GetString()).ToArray());
             var values = body.RootElement.GetProperty("values");
             Assert.False(string.IsNullOrWhiteSpace(values.GetProperty("ENAME").GetString()));
             if (action != "create") Assert.False(string.IsNullOrWhiteSpace(values.GetProperty("ECODE").GetString()));
-            items.Add(new { linkId = action + "-LID", associatedObject = new { modelKey = model, id } });
+            (action == "create" ? items : folderItems).Add(new { linkId = action + "-LID", associatedObject = new { modelKey = model, id } });
             writes++;
             return Json(HttpStatusCode.OK, action == "create" ? "{\"id\":\"folder-EID\",\"fields\":{}}" : "{\"succeeded\":true}");
         })) { BaseAddress = new Uri("http://127.0.0.1:5000") };
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => WorkspaceAcceptanceFixture.ReadRestartContentAsync(
-            client, roots.RootElement, "entry", CancellationToken.None));
-        await WorkspaceAcceptanceFixture.PrepareRestartContentAsync(client, features, roots.RootElement, "12345678-run", CancellationToken.None);
-        var before = await WorkspaceAcceptanceFixture.ReadRestartContentAsync(client, roots.RootElement, "entry", CancellationToken.None);
-        var after = await WorkspaceAcceptanceFixture.ReadRestartContentAsync(client, roots.RootElement, "entry", CancellationToken.None);
+            client, roots.RootElement, "entry", new("public-space", "public-root", "folder-EID", ["create-LID"]), CancellationToken.None));
+        var sampleFolder = await WorkspaceAcceptanceFixture.PrepareRestartContentAsync(client, features, roots.RootElement, "12345678-run", CancellationToken.None);
+        var before = await WorkspaceAcceptanceFixture.ReadRestartContentAsync(client, roots.RootElement, "entry", sampleFolder, CancellationToken.None);
+        var after = await WorkspaceAcceptanceFixture.ReadRestartContentAsync(client, roots.RootElement, "entry", sampleFolder, CancellationToken.None);
 
         Assert.Equal(3, writes);
         var expected = new[]
         {
             "public-space:" + JsonSerializer.Serialize(new[] { "create-LID", "WorkspaceFolder", "folder-EID" }),
-            "public-space:" + JsonSerializer.Serialize(new[] { "createPart-LID", "Part", "part-EID" }),
-            "public-space:" + JsonSerializer.Serialize(new[] { "createDocument-LID", "Document", "document-EID" })
+            "public-space:folder-EID:" + JsonSerializer.Serialize(new[] { "createPart-LID", "Part", "part-EID" }),
+            "public-space:folder-EID:" + JsonSerializer.Serialize(new[] { "createDocument-LID", "Document", "document-EID" })
         };
         Assert.Equal(expected.Order(StringComparer.Ordinal), before);
         Assert.Equal(before, after);
@@ -343,7 +346,7 @@ public sealed class WorkspaceAcceptanceFixtureTests
             })))) { BaseAddress = new Uri("http://127.0.0.1:5000") };
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => WorkspaceAcceptanceFixture.ReadRestartContentAsync(
-            client, roots.RootElement, "entry", CancellationToken.None));
+            client, roots.RootElement, "entry", new("space", "root", "folder-EID", ["folder-LID"]), CancellationToken.None));
 
         Assert.Contains(failure, exception.Message);
     }

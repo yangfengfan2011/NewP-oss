@@ -22,6 +22,8 @@ Document.Contracts 的文件创建复用原所属 Create，在同一业务事务
 
 属性文件列表沿当前身份和真实关联批量读取安全元数据，最多 101 项，按 Ordinal/LID 稳定读取。只公开 FileLink 身份、角色、次序及文件显示信息，不公开 File/Usage 身份或存储键。新建附件配置调低不改变既有合法集合的读取、下载或释放。read 允许而 download 拒绝时仍可看列表；下载分别重验正式功能与数据 download 资格，并核对 Document/版次/FileLink/Usage/File 回链。不可读或错目标安全拒绝；已授权的关联损坏、空或重复使用身份及内容缺失保持明确故障。存储配置、接收意图、取消、TTL 与回收状态的唯一事实见 [Files README](../../../server/modules/Platform/Files/README.md)。
 
+所属对象独立声明 `documentCopy` 数据动作（`data.document.copy`），要求 read，只供引用复制资格裁决，不克隆实体或执行 update/delete。显示词条由本 owner 的 DataScope 词典提供，Workspace 通过正式对象资格接口消费，目录关系与剪贴板仍归 Workspace。
+
 回退优先撤销 Document 导航与资源接入，保留独立实体及迁移历史。代码回退不自动执行 Down 或清表，旧 Host 不得越过已应用的 schema frontier。
 
 本批迁移依次在已发布 metadata migration 后追加 InitialIdentity 和 FileLink，不重写历史。开发阶段已确认丢弃旧 Document 及其 Workspace 引用；InitialIdentity 迁移通过显式空表前提拒绝非空旧 Document，不自动清数据或留下缺失身份的旧行。清理必须精确限定经确认可丢弃的 Document/引用，保留 Part、Folder、其他业务及有效 history 前缀。正式 Host 负责新 schema 与 history，代码回退不执行 Down。

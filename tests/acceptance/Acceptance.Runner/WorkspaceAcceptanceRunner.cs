@@ -87,6 +87,10 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
                 features.Action(entry, "edit", "list.rowActions", "folder"), features.Action(entry, "delete", "list.rowActions", "folder"),
                 features.Action(entry, "edit", "contextMenu", "folder"), features.Action(entry, "remove", "contextMenu", "folder"),
                 features.Action(entry, "moveUp", "contextMenu", "folder"), features.Action(entry, "moveDown", "contextMenu", "folder"),
+                features.Action(entry, "copy", "contextMenu", "folder"), features.Action(entry, "paste", "contextMenu", "folder"),
+                features.Action(entry, "clearClipboard", "contextMenu", "folder"), features.Action(entry, "copy", "list.rowActions", "folder"),
+                features.Action(entry, "copySelected", "list.pageActions", "folder"), features.Action(entry, "paste", "list.pageActions", "folder"),
+                features.Action(entry, "clearClipboard", "list.pageActions", "folder"),
                 features.Action(entry, "deleteObjects", "list.pageActions", "folder"), part, document,
                 features.Behavior("Document", "document.document.download")];
         }
@@ -172,14 +176,6 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             await driver.ReorderFolderAsync(folderName, "up");
             await driver.ReorderFolderAsync(folderName, "down");
             await driver.SelectRootAsync("公共空间");
-            await driver.CreateObjectAsync("零组件", PartCode, PartName);
-            var attachments = WorkspacePageDriver.SmallAttachmentFiles();
-            await driver.CreateDocumentWithFilesAsync(DocumentCode, DocumentName, WorkspacePageDriver.SmallMainFile(), attachments: attachments);
-            await driver.ExpandRootToFolderAsync("公共空间", folderName);
-            var folderAddress = await driver.SelectTreePathAsync("公共空间", folderName);
-            await driver.SelectRootAsync("个人空间");
-            await driver.RestorePositionAsync(folderAddress, "公共空间", folderName);
-            await driver.SelectRootAsync("公共空间");
             await CapturePresentationAsync(page, "folder-content.png");
             var properties = await driver.OpenFolderPropertiesAsync(folderName);
             await CapturePresentationAsync(page, "folder-properties.png");
@@ -190,23 +186,34 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             await driver.ClosePropertiesAsync(referencingFolder);
             await driver.CloseDirectReferencesAsync(references);
             await driver.ClosePropertiesAsync(properties);
+            var folderAddress = await driver.SelectTreePathAsync("公共空间", folderName);
+            await driver.CreateObjectAsync("零组件", PartCode, PartName);
+            var attachments = WorkspacePageDriver.SmallAttachmentFiles();
+            await driver.CreateDocumentWithFilesAsync(DocumentCode, DocumentName, WorkspacePageDriver.SmallMainFile(), attachments: attachments);
+            await driver.SelectRootAsync("个人空间");
+            await driver.RestorePositionAsync(folderAddress, "公共空间", folderName);
             await driver.OpenOwnedPropertiesAsync(PartName, "/parts");
-            references = await driver.OpenDirectReferencesAsync(page.GetByRole(AriaRole.Main), "公共空间");
+            references = await driver.OpenDirectReferencesAsync(page.GetByRole(AriaRole.Main), folderName);
             await driver.CloseDirectReferencesAsync(references);
-            await driver.ReturnToPublicContentAsync();
+            await driver.RestorePositionAsync(folderAddress, "公共空间", folderName);
             await driver.OpenOwnedPropertiesAsync(DocumentName, "/documents");
             foreach (var file in new[] { WorkspacePageDriver.SmallMainFile() }.Concat(attachments))
                 await driver.DownloadFileAsync(file.Name, Path.Combine(_runDirectory, "download-" + file.Name));
-            await driver.ReturnToPublicContentAsync();
+            await driver.RestorePositionAsync(folderAddress, "公共空间", folderName);
+            await driver.CopyReferenceFromContextMenuAsync(DocumentName);
+            await driver.SelectTreePathAsync("公共空间", siblingName);
+            await driver.PasteReferencesAsync(DocumentName);
+            await driver.SelectTreePathAsync("公共空间", folderName);
             await driver.RemoveReferenceAsync(PartName);
             await driver.CreateObjectAsync("零组件", PartCode + "-NEXT", PartName + " 新建");
-            await driver.ExpandRootToFolderAsync("公共空间", folderName);
             await CapturePresentationAsync(page, "folder-content-narrow.png");
-            await driver.EditObjectAsync(folderName, folderName + " 已编辑");
             await driver.EditObjectFromContextMenuAsync(DocumentName, DocumentName + " 已编辑");
             await driver.EditObjectAsync(PartName + " 新建", PartName + " 已编辑");
             await CapturePresentationAsync(page, "folder-content-edited.png");
-            await driver.DeleteSelectedAsync(siblingName, folderName + " 已编辑", DocumentName + " 已编辑", PartName + " 已编辑");
+            await driver.DeleteSelectedAsync(DocumentName + " 已编辑", PartName + " 已编辑");
+            await driver.SelectRootAsync("公共空间");
+            await driver.EditObjectAsync(folderName, folderName + " 已编辑");
+            await driver.DeleteSelectedAsync(siblingName, folderName + " 已编辑");
             await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "browser.json"),
                 new { url = page.Url, actor = "ordinary", createdFolder = folderName, includeSpaceLifecycle }, token);
         }
@@ -240,8 +247,8 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
         await WorkspaceAcceptanceFixture.LoginAsync(beforeClient, actor, token);
         var before = await WorkspaceAcceptanceFixture.SendAsync(beforeClient, HttpMethod.Get, "/api/workspace/spaces", null, _entryPosition, token);
         var features = await AcceptanceFeatureCatalog.LoadAsync(beforeClient, token);
-        await WorkspaceAcceptanceFixture.PrepareRestartContentAsync(beforeClient, features, before, _runId, token);
-        var beforeContents = await WorkspaceAcceptanceFixture.ReadRestartContentAsync(beforeClient, before, _entryPosition!, token);
+        var sampleFolder = await WorkspaceAcceptanceFixture.PrepareRestartContentAsync(beforeClient, features, before, _runId, token);
+        var beforeContents = await WorkspaceAcceptanceFixture.ReadRestartContentAsync(beforeClient, before, _entryPosition!, sampleFolder, token);
         var previousRun = publishedFixture?.HostIdentity ?? _devRun;
         if (publishedFixture is not null) await publishedFixture.RestartAsync(token);
         else
@@ -265,7 +272,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
         var expected = RootIdentities(before);
         if (expected.Length != 2 || !expected.SequenceEqual(RootIdentities(afterRead)) || !expected.SequenceEqual(RootIdentities(afterEnsure)))
             throw new InvalidOperationException("真实 Host 进程重启后空间或根身份发生漂移。");
-        var afterContents = await WorkspaceAcceptanceFixture.ReadRestartContentAsync(afterClient, afterEnsure, _entryPosition!, token);
+        var afterContents = await WorkspaceAcceptanceFixture.ReadRestartContentAsync(afterClient, afterEnsure, _entryPosition!, sampleFolder, token);
         if (!beforeContents.SequenceEqual(afterContents)) throw new InvalidOperationException("真实 Host 进程重启后混合引用或正式根内容查询发生漂移。");
         await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "process-restart.json"),
             new { catalog = ReusableSqlServerDatabase.Catalog, previousRun, restartedRun = publishedFixture?.HostIdentity ?? _devRun, rootIdentities = expected, contentIdentities = afterContents }, token);

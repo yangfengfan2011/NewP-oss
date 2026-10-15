@@ -1,9 +1,16 @@
 import { platformFetch } from '@icp-platform/core';
 import { createElement, lazy, Suspense } from 'react';
-import { readStandardCrudRequestError, StandardCrudRequestError, type StandardCrudActionInputRenderContext, type StandardCrudDetail, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
+import { readStandardCrudRequestError, StandardCrudRequestError, type StandardCrudActionInstance, type StandardCrudActionInputRenderContext, type StandardCrudDetail, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import type { WorkspaceDocumentDraft } from './workspaceDocumentUpload';
 import { WorkspaceDocumentSession } from './workspaceDocumentSession';
 import { workspacePosition } from './workspacePosition';
+import { WorkspaceClipboardSession } from './workspaceClipboard';
+
+const clipboardOwner = Symbol('workspace.clipboard');
+function clipboard(instance: StandardCrudActionInstance | undefined): WorkspaceClipboardSession {
+  if (!instance?.active) throw new StandardCrudRequestError('Workspace.ClipboardUnavailable', 409, {}, { code: 'Workspace.ClipboardUnavailable' });
+  return instance.getOrCreate(clipboardOwner, () => new WorkspaceClipboardSession(() => instance.changed()), session => session.close());
+}
 
 interface LinkRow { linkId: string; associatedObject: { modelKey: string; id: string }; fields: Record<string, unknown> }
 const headers = (featurePosition?: string): Record<string, string> => featurePosition ? { 'X-NewP-Feature': featurePosition } : {};
@@ -33,6 +40,19 @@ const resource: StandardCrudResourceRegistration = {
       createElement(Suspense, { fallback: null }, createElement(context.action.key === 'createDocument' ? WorkspaceDocumentCreateInput : WorkspaceObjectCreateInput, context)), { presentation: 'drawer' as const }),
   },
   actionHandlers: {
+    copy: async ({ action, instance, id, selectedRows, queryScope, featurePosition }) => {
+      const session = clipboard(instance);
+      if (action?.key === 'clearClipboard') {
+        if (!session.clear()) throw new StandardCrudRequestError('Workspace.ClipboardBusy', 409, {}, { code: 'Workspace.ClipboardBusy' });
+        return { operation: 'action', payload: null, noChange: true, notice: { reasonKey: 'Workspace.ClipboardCleared' } };
+      }
+      const copied = await session.copy(workspacePosition(queryScope), id ? [id] : (selectedRows ?? []).map(row => String(row.LID)), featurePosition);
+      return { operation: 'action', payload: null, noChange: true, ...(copied ? { notice: { reasonKey: 'Workspace.Copied' } } : {}) };
+    },
+    paste: async ({ instance, queryScope, featurePosition }) => {
+      const receipt = await clipboard(instance).paste(workspacePosition(queryScope), featurePosition);
+      return { operation: 'action', payload: receipt, change: { operation: 'update', id: '' }, notice: { reasonKey: 'Workspace.Pasted' } };
+    },
     reorder: async ({ action, id, queryScope, featurePosition }) => {
       if (!id || !action || !['moveUp', 'moveDown'].includes(action.key)) throw new Error('无效文件夹排序动作');
       const result = await referenceCommand('POST', '/api/workspace/content/tree-order', {
@@ -72,6 +92,17 @@ const resource: StandardCrudResourceRegistration = {
       if (!id) throw new Error('缺少引用标识');
       return referenceCommand('DELETE', `/api/workspace/content/references/${encodeURIComponent(id)}`, { position: workspacePosition(queryScope) }, featurePosition);
     },
+  },
+  actionStateResolver: ({ action, instance, queryScope }) => {
+    const root = queryScope?.linkIds === '[]';
+    if (root && ['createPart', 'createDocument'].includes(action.key)) return { visible: false, available: false, reasonKey: 'Workspace.RootOnlyFolders' };
+    const state = instance?.active ? clipboard(instance).getSnapshot() : undefined;
+    if (state?.phase === 'pasting' || state?.phase === 'validating') return { visible: true, available: false, reasonKey: 'Workspace.ClipboardBusy' };
+    if (!['copy', 'copySelected', 'paste', 'clearClipboard'].includes(action.key)) return { visible: true, available: true };
+    if (!state) return { visible: true, available: false, reasonKey: 'Workspace.ClipboardUnavailable' };
+    if (action.key === 'paste' && state.phase === 'unknown') return { visible: true, available: false, reasonKey: 'Workspace.ClipboardOutcomeUnknown' };
+    if (['paste', 'clearClipboard'].includes(action.key) && !state.clipboard) return { visible: true, available: false, reasonKey: 'Workspace.ClipboardUnavailable' };
+    return { visible: true, available: true };
   },
   dataAdapter: {
     list: async (query = {}, context) => {

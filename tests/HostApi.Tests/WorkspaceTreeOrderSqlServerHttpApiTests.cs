@@ -184,11 +184,12 @@ public sealed class WorkspaceTreeOrderSqlServerHttpApiTests
                 "/api/workspace/content/tree-order", new { parentPosition = position, linkId = id, direction = "up" });
             Assert.Equal(HttpStatusCode.NotFound, rejected.StatusCode);
         }
+        var partPosition = root with { LinkIds = [linkId] };
         using (var createdPart = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.createPart"), HttpMethod.Post,
-            "/api/workspace/content/parts", new { position = root, values = new { ECODE = "ORDER-PART", ENAME = "业务对象" } })) Assert.Equal(HttpStatusCode.OK, createdPart.StatusCode);
+            "/api/workspace/content/parts", new { position = partPosition, values = new { ECODE = "ORDER-PART", ENAME = "业务对象" } })) Assert.Equal(HttpStatusCode.OK, createdPart.StatusCode);
         var partLink = (string)(await Rows(fixture, "WorkspaceFolderContent")).Single(row => (string)row["ChildModelKey"]! == "Part")["LID"]!;
         using (var business = await FeatureHttpTestRequests.SendAsync(admin, OrderPoint(fixture, "up"), HttpMethod.Post,
-            "/api/workspace/content/tree-order", new { parentPosition = root, linkId = partLink, direction = "up" })) Assert.Equal(HttpStatusCode.NotFound, business.StatusCode);
+            "/api/workspace/content/tree-order", new { parentPosition = partPosition, linkId = partLink, direction = "up" })) Assert.Equal(HttpStatusCode.NotFound, business.StatusCode);
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "TreeRead", "树读取", "tree-read", "读取账号", entry, OrderPoint(fixture, "up"));
         using var ordinary = actor.Client;
         await Rule(admin, fixture, "SelectedUnreadable", first.GetProperty("id").GetString()!, new() { ["read"] = "deny" });

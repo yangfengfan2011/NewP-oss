@@ -101,6 +101,16 @@ it.each(['standard', 'stable', 'handler', 'input', 'denied', 'disabled', 'create
     }
     await act(async () => container.querySelector('.ant-tree-title')!.firstElementChild!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
     await waitFor(() => Boolean(document.querySelector('[role=menuitem]')));
+    if (scenario === 'disabled') {
+      await waitFor(() => document.querySelector('[role=menuitem] [title]')?.getAttribute('title') === 'Unavailable');
+      const disabled = document.querySelector<HTMLElement>('[role=menuitem]')!;
+      expect(disabled.classList.contains('ant-dropdown-menu-item-disabled')).toBe(true);
+      await act(async () => disabled.click());
+      expect(requests).toEqual([]);
+      expect(document.querySelector('[role=dialog]')).toBeNull();
+      return;
+    }
+    await waitFor(() => !document.querySelector('[role=menuitem]')?.classList.contains('ant-dropdown-menu-item-disabled'));
     await act(async () => (document.querySelector('[role=menuitem]') as HTMLElement).click());
     if (readCancelled) {
       await waitFor(() => requests.some(item => item === 'GET /api/organization/departments/d'));
@@ -111,12 +121,6 @@ it.each(['standard', 'stable', 'handler', 'input', 'denied', 'disabled', 'create
       expect(container.querySelector('.ant-tree-node-selected')?.textContent).toBe('Other');
       expect(document.querySelector('[role=dialog]')).toBeNull();
       expect(requests.filter(item => item.startsWith('DELETE'))).toHaveLength(0);
-      return;
-    }
-    if (scenario === 'disabled') {
-      await waitFor(() => Boolean(document.querySelector('[role=alert]')));
-      expect(requests.filter(item => item.startsWith('DELETE'))).toHaveLength(0);
-      expect(document.querySelector('[role=dialog]')).toBeNull();
       return;
     }
     await waitFor(() => Boolean(document.querySelector('[role=dialog]')));

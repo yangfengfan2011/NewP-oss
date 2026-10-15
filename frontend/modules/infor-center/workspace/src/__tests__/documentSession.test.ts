@@ -8,7 +8,7 @@ vi.mock('../workspaceDocumentUpload', async importOriginal => ({
   ...await importOriginal<typeof import('../workspaceDocumentUpload')>(),
   stageDocumentFile: vi.fn(), cancelDocumentStage: vi.fn(), saveDocument: vi.fn(),
 }));
-const scope = { spaceId: 'public', rootFolderId: 'root', linkIds: '[]' };
+const scope = { spaceId: 'public', rootFolderId: 'root', linkIds: '["content-folder-link"]' };
 const fields = { ECODE: 'DOC', ENAME: '图文档' };
 const staged = (name: string): DocumentStage => ({ uploadId: `upload-${name}`, fileId: `file-${name}`, fileName: name,
   length: 1, contentType: 'application/pdf', expiresAt: '2026-10-15T00:00:00Z' });

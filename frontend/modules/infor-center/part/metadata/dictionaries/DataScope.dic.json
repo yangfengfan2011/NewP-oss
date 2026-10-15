@@ -1,0 +1,6 @@
+{
+  "schemaVersion": "1.0", "type": "dic",
+  "DataScope": {
+    "Action_partCopy": { "zhs": "复制零组件引用", "en": "Copy part references" }
+  }
+}

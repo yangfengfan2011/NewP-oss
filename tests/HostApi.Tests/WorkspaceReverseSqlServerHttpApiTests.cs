@@ -23,6 +23,11 @@ public sealed class WorkspaceReverseSqlServerHttpApiTests(ITestOutputHelper outp
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync(); var entry = Point(fixture, "workspace.spaces.access");
         var root = await Post(admin, entry, "/api/workspace/spaces/public/initialize");
+        var parentPosition = await DocumentFilesSqlServerHttpApiTests.ContentAsync(fixture, admin);
+        using var parentScope = fixture.Services.CreateScope();
+        var parentLink = await parentScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("WorkspaceFolderContent")
+            .AsNoTracking().SingleAsync(row => EF.Property<string>(row, "LID") == parentPosition.LinkIds[0]);
+        var parentId = (string)parentLink["CEID"]!;
         var part = await Post(admin, Point(fixture, "part.part.create"), "/api/part/parts", new { ECODE = "CORRUPT-REVERSE", ENAME = "真实零组件" });
         var partId = part.GetProperty("fields").GetProperty("EID").GetString()!;
         var document = await Post(admin, Point(fixture, "document.document.create"), "/api/document/documents", new { ECODE = "CORRUPT-REVERSE", ENAME = "同ID真实图文档" });
@@ -31,10 +36,10 @@ public sealed class WorkspaceReverseSqlServerHttpApiTests(ITestOutputHelper outp
             await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("Part")
                 .Where(row => EF.Property<string>(row, "EID") == partId).ExecuteUpdateAsync(update => update.SetProperty(row => EF.Property<string>(row, "EID"), id));
         foreach (var model in new[] { "Part", "Document" })
-            await Post(admin, Point(fixture, "workspace.folder.add"), "/api/workspace/content/references", new { position = Position(root), target = new { modelKey = model, id } });
+            await Post(admin, Point(fixture, "workspace.folder.add"), "/api/workspace/content/references", new { position = parentPosition, target = new { modelKey = model, id } });
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "ReverseCorrupt", "反向完整性", "reverse-corrupt", "反向完整性账号", entry, Point(fixture, "part.part.read"), Point(fixture, "document.document.read"));
         using var ordinary = actor.Client;
-        var forwardUrl = Forward(root.GetProperty("rootFolderId").GetString()!, Position(root));
+        var forwardUrl = Forward(parentId, Position(root, parentPosition.LinkIds[0]));
         var forward = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, forwardUrl); Assert.Equal(2, forward.GetProperty("total").GetInt32());
         string partLink = "";
         foreach (var model in new[] { "Part", "Document" })

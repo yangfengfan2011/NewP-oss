@@ -23,7 +23,7 @@ public sealed class WorkspaceFeatureProjectionTests
         target["readBehaviors"] = new JsonArray("tree:workspace.structure");
         if (standard) target["standardAction"] = "edit";
         var tree = documents.Single(document => document["view"]?["key"]?.GetValue<string>() == "workspace.structure")["view"]!;
-        var reference = tree["nodeTypes"]![0]!["contextMenu"]![0]!.AsObject();
+        var reference = tree["nodeTypes"]![0]!["contextMenu"]!.AsArray().Single(item => item!["key"]!.GetValue<string>() == "edit")!.AsObject();
         if (standard) { reference.Remove("actionKey"); reference["standardAction"] = "edit"; }
         var capsule = JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(Path.Combine(root, "newp.plugin.json")));
         var points = FeatureCatalogCompiler.Compile(StandardFeatureMetadataCompiler.Read("Workspace",
@@ -82,6 +82,14 @@ public sealed class WorkspaceFeatureProjectionTests
             Assert.Equal("folder", node.StaticScope); Assert.Equal("workspace.folder.reorder", node.BehaviorKey);
             Assert.Contains("workspace.folder.read", node.ReadBehaviors);
             Assert.DoesNotContain(catalog, point => point.Key == key && point.ActionScope is "list.rowActions" or "list.pageActions");
+        }
+        foreach (var (key, surface, behavior) in new[] { ("copySelected", "list.pageActions", "copy"), ("copy", "list.rowActions", "copy"),
+            ("copy", "contextMenu", "copy"), ("paste", "list.pageActions", "paste"), ("paste", "contextMenu", "paste"),
+            ("clearClipboard", "list.pageActions", "copy"), ("clearClipboard", "contextMenu", "copy") })
+        {
+            var action = Assert.Single(catalog, point => point.ModuleId == "Workspace" && point.StaticScope == "folder" && point.Key == key && point.ActionScope == surface);
+            Assert.Equal("workspace.folder." + behavior, action.BehaviorKey);
+            Assert.Contains("workspace.folder.read", action.ReadBehaviors);
         }
     }
 }

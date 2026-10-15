@@ -20,7 +20,7 @@ function headers(scope: Record<string, unknown>) {
 }
 function node(space: SpaceRoot): TreeNodeDescriptor {
   return { nodeKey: `${encodeURIComponent(space.spaceId)}:${encodeURIComponent(space.rootFolderId)}`, nodeType: 'folder',
-    label: space.name, labelKey: `Workspace.${space.spaceKind}`, hasChildren: space.hasChildren ?? false, contextMenuKeys: [],
+    label: space.name, labelKey: `Workspace.${space.spaceKind}`, hasChildren: space.hasChildren ?? false, contextMenuKeys: ['paste', 'clearClipboard'],
     context: { spaceId: space.spaceId, rootFolderId: space.rootFolderId, id: space.rootFolderId, linkIds: [] } };
 }
 

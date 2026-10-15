@@ -1,6 +1,18 @@
 {
   "schemaVersion": "1.0", "type": "dic",
   "Workspace": {
+    "Copy": { "zhs": "复制", "en": "Copy" },
+    "PasteReferences": { "zhs": "粘贴引用", "en": "Paste references" },
+    "ClearClipboard": { "zhs": "清空剪贴板", "en": "Clear clipboard" },
+    "Copied": { "zhs": "已复制引用，可在其他文件夹粘贴。", "en": "References copied. You can paste them into another folder." },
+    "Pasted": { "zhs": "引用已粘贴。", "en": "References pasted." },
+    "ClipboardCleared": { "zhs": "剪贴板已清空。", "en": "Clipboard cleared." },
+    "ClipboardUnavailable": { "zhs": "请先从当前页或树节点复制合法引用。", "en": "First copy valid references from this page or a tree node." },
+    "ClipboardBusy": { "zhs": "复制或粘贴正在处理，请等待结果。", "en": "Copy or paste is being processed. Wait for the result." },
+    "ClipboardOutcomeUnknown": { "zhs": "本次粘贴结果未知，请核对目标内容。清空剪贴板或重新复制后才能再次粘贴。", "en": "The paste outcome is unknown. Check the target contents, then clear the clipboard or copy a fresh selection before pasting again." },
+    "InvalidClipboardInput": { "zhs": "复制粘贴请求无效，请重新选择来源。", "en": "The copy or paste request is invalid. Select the source again." },
+    "ObjectCopyDenied": { "zhs": "没有复制所选对象引用的权限。", "en": "You do not have permission to copy the selected object references." },
+    "RootOnlyFolders": { "zhs": "空间根仅接收文件夹，请选择普通文件夹放置零组件或图文档。", "en": "Space roots accept folders only. Select an ordinary folder for parts or documents." },
     "MoveUp": {"zhs": "上移", "en": "Move up"},
     "MoveDown": {"zhs": "下移", "en": "Move down"},
     "InvalidTreeOrderInput": {"zhs": "树排序请求无效，请在正常树中选择一个普通文件夹。", "en": "Select one ordinary folder in the normal tree to reorder."},

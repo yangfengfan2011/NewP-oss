@@ -63,19 +63,21 @@ internal static class WorkspaceAcceptanceFixture
         var rootId = root.GetProperty("rootFolderId").GetString()!;
         var code = "WS-COMPOSITION-" + runId[..8];
         var name = "组合 API 零组件 " + runId[..8];
+        var position = await CreateFolderAtPositionAsync(client, features,
+            new(root.GetProperty("spaceId").GetString()!, rootId, rootId, []), "组合 API 文件夹 " + runId[..8], token);
         var receipt = await SendAsync(client, HttpMethod.Post, "/api/workspace/content/parts",
-            new { position = new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = rootId, linkIds = Array.Empty<string>() },
+            new { position = position.CommandPosition,
                 values = new { ECODE = code, ENAME = name } },
             features.Action(entry, "createPart", "list.pageActions", "folder").Position, token);
         if (!receipt.GetProperty("succeeded").GetBoolean() || receipt.TryGetProperty("id", out _))
             throw new InvalidOperationException("组合后的真实 Part 创建未返回受控成功回执。");
-        var contents = await ReadRootContentsAsync(client, root, entry.Position, token);
+        var contents = await ReadContentsAtPositionAsync(client, position, entry.Position, token);
         var row = contents.GetProperty("items").EnumerateArray().Single(item => item.GetProperty("fields").GetProperty("Name").GetString() == name);
         var target = row.GetProperty("associatedObject");
         var id = target.GetProperty("id").GetString()!;
         if (target.GetProperty("modelKey").GetString() != "Part"
             || row.GetProperty("parent").GetProperty("modelKey").GetString() != "WorkspaceFolder"
-            || row.GetProperty("parent").GetProperty("id").GetString() != rootId
+            || row.GetProperty("parent").GetProperty("id").GetString() != position.FolderId
             || string.IsNullOrEmpty(row.GetProperty("linkId").GetString()))
             throw new InvalidOperationException("组合后的内容 Link 未保留 Workspace/Part 端点与真实身份。");
         var detail = await SendAsync(client, HttpMethod.Get, "/api/part/parts/" + Uri.EscapeDataString(id), null,
@@ -194,10 +196,7 @@ internal static class WorkspaceAcceptanceFixture
             new { position = parent.CommandPosition, values = new { ENAME = name } },
             features.Action(entry, "create", "list.pageActions", "folder").Position, token);
         var id = created.GetProperty("id").GetString()!;
-        var queryScope = JsonSerializer.Serialize(new { spaceId = parent.SpaceId, rootFolderId = parent.RootFolderId, linkIds = JsonSerializer.Serialize(parent.LinkIds) });
-        var contents = await SendAsync(ordinary, HttpMethod.Get,
-            $"/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId={Uri.EscapeDataString(parent.FolderId)}&queryScope={Uri.EscapeDataString(queryScope)}&pageSize=20",
-            null, entry.Position, token);
+        var contents = await ReadContentsAtPositionAsync(ordinary, parent, entry.Position, token);
         var link = contents.GetProperty("items").EnumerateArray().Single(item => item.GetProperty("associatedObject").GetProperty("id").GetString() == id);
         return parent with { FolderId = id, LinkIds = [.. parent.LinkIds, link.GetProperty("linkId").GetString()!] };
     }
@@ -228,7 +227,7 @@ internal static class WorkspaceAcceptanceFixture
     }
 
     // 重启场景独立拥有三类样本，不借用浏览器旅程可能已经删除的对象；沿用普通主体的 Workspace 创建权限。
-    internal static async Task PrepareRestartContentAsync(HttpClient ordinary, AcceptanceFeatureCatalog features,
+    internal static async Task<WorkspaceFolderPosition> PrepareRestartContentAsync(HttpClient ordinary, AcceptanceFeatureCatalog features,
         JsonElement roots, string runId, CancellationToken token)
     {
         var entry = features.Behavior("Workspace", "workspace.spaces.access");
@@ -236,21 +235,22 @@ internal static class WorkspaceAcceptanceFixture
         var rootId = root.GetProperty("rootFolderId").GetString()!;
         var position = new WorkspaceFolderPosition(root.GetProperty("spaceId").GetString()!, rootId, rootId, []);
         var suffix = runId[..8];
-        await CreateFolderAtPositionAsync(ordinary, features, position, $"重启文件夹 {suffix}", token);
+        var folder = await CreateFolderAtPositionAsync(ordinary, features, position, $"重启文件夹 {suffix}", token);
         foreach (var (action, path, code, name) in new[]
         {
             ("createPart", "/api/workspace/content/parts", $"WS-R-P-{suffix}", $"重启零组件 {suffix}"),
             ("createDocument", "/api/workspace/content/documents", $"WS-R-D-{suffix}", $"重启图文档 {suffix}")
         })
             await SendAsync(ordinary, HttpMethod.Post, path,
-                new { position = position.CommandPosition, values = new { ECODE = code, ENAME = name } },
+                new { position = folder.CommandPosition, values = new { ECODE = code, ENAME = name } },
                 features.Action(entry, action, "list.pageActions", "folder").Position, token);
         // 创建回执不含实体或关系身份；重启前后的快照只消费正式 Link 查询。
+        return folder;
     }
 
-    // 两个根的完整内容与三类非空样本共同构成重启证据，不能用部分页或两个空列表证明持久性。
+    // 根只接收文件夹；同时读取样本普通文件夹内的业务引用，不用空根或部分页证明持久性。
     internal static async Task<string[]> ReadRestartContentAsync(HttpClient client, JsonElement roots, string entryPosition,
-        CancellationToken token)
+        WorkspaceFolderPosition sampleFolder, CancellationToken token)
     {
         var identities = new List<string>();
         var models = new HashSet<string>(StringComparer.Ordinal);
@@ -266,6 +266,15 @@ internal static class WorkspaceAcceptanceFixture
             foreach (var item in contents.GetProperty("items").EnumerateArray())
                 models.Add(item.GetProperty("associatedObject").GetProperty("modelKey").GetString()!);
         }
+        var samples = await ReadContentsAtPositionAsync(client, sampleFolder, entryPosition, token);
+        if (samples.GetProperty("total").GetInt32() != samples.GetProperty("items").GetArrayLength())
+            throw new InvalidOperationException("正式重启样本未在一页完整返回，不能以部分关系快照证明持久性。");
+        var sampleModels = samples.GetProperty("items").EnumerateArray()
+            .Select(item => item.GetProperty("associatedObject").GetProperty("modelKey").GetString()!).ToHashSet(StringComparer.Ordinal);
+        if (!sampleModels.SetEquals(["Part", "Document"]))
+            throw new InvalidOperationException("正式重启样本缺少已建立的三类型混合引用。");
+        models.UnionWith(sampleModels);
+        identities.AddRange(ContentIdentities(samples).Select(identity => sampleFolder.SpaceId + ":" + sampleFolder.FolderId + ":" + identity));
         if (!models.SetEquals(["WorkspaceFolder", "Part", "Document"]))
             throw new InvalidOperationException("正式重启样本缺少已建立的三类型混合引用。");
         return identities.Order(StringComparer.Ordinal).ToArray();
@@ -281,9 +290,15 @@ internal static class WorkspaceAcceptanceFixture
     internal static Task<JsonElement> ReadRootContentsAsync(HttpClient client, JsonElement root, string entryPosition, CancellationToken token)
     {
         var rootId = root.GetProperty("rootFolderId").GetString()!;
-        var scope = JsonSerializer.Serialize(new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = rootId, linkIds = "[]" });
+        return ReadContentsAtPositionAsync(client, new(root.GetProperty("spaceId").GetString()!, rootId, rootId, []), entryPosition, token);
+    }
+
+    // 普通目录与根共用完整位置和正式 Link 查询，调用者不自行拼接或省略祖先链。
+    internal static Task<JsonElement> ReadContentsAtPositionAsync(HttpClient client, WorkspaceFolderPosition position, string entryPosition, CancellationToken token)
+    {
+        var scope = JsonSerializer.Serialize(new { spaceId = position.SpaceId, rootFolderId = position.RootFolderId, linkIds = JsonSerializer.Serialize(position.LinkIds) });
         return SendAsync(client, HttpMethod.Get,
-            $"/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId={Uri.EscapeDataString(rootId)}&queryScope={Uri.EscapeDataString(scope)}&pageSize=20",
+            $"/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId={Uri.EscapeDataString(position.FolderId)}&queryScope={Uri.EscapeDataString(scope)}&pageSize=20",
             null, entryPosition, token);
     }
 

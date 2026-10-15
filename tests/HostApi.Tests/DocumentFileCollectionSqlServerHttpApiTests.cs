@@ -35,7 +35,7 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
         var save = new CompleteCollectionSave();
         await using var fixture = await FixtureAsync(save, 2);
         using var admin = await fixture.LoginAdministratorAsync();
-        var position = await RootAsync(fixture, admin);
+        var position = await ContentAsync(fixture, admin);
         var values = new { ECODE = "COLLECTION-01", ENAME = "三文件图文档" };
         byte[][] contents = [[0x25, 0x50, 0x44, 0x46, 1], [2, 3, 4], [5, 6, 7, 8]];
         var staged = new JsonElement[3];
@@ -61,7 +61,7 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
         var leases = await db.Set<Dictionary<string, object?>>("FileUploadLease").AsNoTracking().ToArrayAsync();
         var files = await db.Set<Dictionary<string, object?>>("FileRecord").AsNoTracking().ToArrayAsync();
         Assert.Equal(3, links.Length); Assert.Equal(3, usages.Length); Assert.Equal(3, leases.Length); Assert.Equal(3, files.Length);
-        Assert.Equal(master["EID"], (await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AsNoTracking().SingleAsync())["CEID"]);
+        Assert.Equal(master["EID"], (await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AsNoTracking().SingleAsync(row => EF.Property<string>(row, "ChildModelKey") == "Document"))["CEID"]);
         var documentId = (string)master["EID"]!;
         var list = await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "document.document.read"), $"/api/document/documents/{documentId}/files");
         var publicFiles = list.GetProperty("files").EnumerateArray().ToArray();
@@ -95,7 +95,7 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
     public async Task UploadSet_RejectsGlobalDuplicatesCanonicalVariantsAndConfiguredOverflowWithoutConsumption()
     {
         await using var fixture = await FixtureAsync(maxAttachments: 2);
-        using var admin = await fixture.LoginAdministratorAsync(); var position = await RootAsync(fixture, admin);
+        using var admin = await fixture.LoginAdministratorAsync(); var position = await ContentAsync(fixture, admin);
         var values = Values("SET-SHAPE"); var staged = await StageThreeAsync(fixture, admin, position, values);
         var main = Token(staged[0]); var first = Token(staged[1]); var second = Token(staged[2]);
         object[] invalid = [
@@ -124,7 +124,7 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
     public async Task SmallBatches_WholeSetIdentityPrecedesExpiredOrCancelledStateInEitherRequestOrder()
     {
         await using var fixture = await FixtureAsync(batchSize: 1);
-        using var admin = await fixture.LoginAdministratorAsync(); var position = await RootAsync(fixture, admin);
+        using var admin = await fixture.LoginAdministratorAsync(); var position = await ContentAsync(fixture, admin);
         var values = Values("SET-IDENTITY"); var staged = await StageThreeAsync(fixture, admin, position, values);
         await ChangeAsync(fixture, "FileUploadLease", "EID", Token(staged[0]), "ExpiresAt", DateTime.UtcNow.AddMinutes(-1));
         foreach (var state in new[] { "expired", "cancelled" })
@@ -158,7 +158,7 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
     public async Task SecondAndLastConfirmationFailure_RollsBackAllFactsAndAllowsSameSetRetry()
     {
         var fault = new CollectionSqlFault(); await using var fixture = await FixtureAsync(fault);
-        using var admin = await fixture.LoginAdministratorAsync(); var position = await RootAsync(fixture, admin);
+        using var admin = await fixture.LoginAdministratorAsync(); var position = await ContentAsync(fixture, admin);
         var values = Values("SET-CONFIRM-FAIL"); var staged = await StageThreeAsync(fixture, admin, position, values);
         // 请求特意反向排列FileId，真实SQL applock仍必须按Files身份排序，而显示顺序保持请求。
         staged = staged.OrderByDescending(item => item.GetProperty("fileId").GetString(), StringComparer.Ordinal).ToArray();
@@ -183,7 +183,7 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
     [EnvironmentGatedFact(SqlGate, "两个不同图文档同时消费相同集合时只允许一个整体提交")]
     public async Task ConcurrentDifferentTargets_ConsumeTheSameSetOnceWithoutPartialDocuments()
     {
-        await using var fixture = await FixtureAsync(); using var admin = await fixture.LoginAdministratorAsync(); var position = await RootAsync(fixture, admin);
+        await using var fixture = await FixtureAsync(); using var admin = await fixture.LoginAdministratorAsync(); var position = await ContentAsync(fixture, admin);
         var staged = await StageThreeAsync(fixture, admin, position, Values("SET-RACE-STAGE"));
         var first = SaveAsync(fixture, admin, position, Values("SET-RACE-A"), staged);
         var second = SaveAsync(fixture, admin, position, Values("SET-RACE-B"), staged.Reverse().ToArray());
@@ -205,7 +205,7 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
     public async Task DuplicateCodeAndWorkspaceReferenceFailure_LeaveTheEntireSetAvailable()
     {
         var fault = new CollectionSqlFault(); await using var fixture = await FixtureAsync(fault);
-        using var admin = await fixture.LoginAdministratorAsync(); var position = await RootAsync(fixture, admin);
+        using var admin = await fixture.LoginAdministratorAsync(); var position = await ContentAsync(fixture, admin);
         using (var existing = await RawSaveAsync(fixture, admin, position, Values("SET-DUPLICATE"), null)) Assert.Equal(HttpStatusCode.OK, existing.StatusCode);
         var staged = await StageThreeAsync(fixture, admin, position, Values("SET-RETRY"));
         using (var duplicate = await SaveAsync(fixture, admin, position, Values("SET-DUPLICATE"), staged))
@@ -227,7 +227,7 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
     public async Task CancellationBeforeCommit_RollsBackTheWholeCollectionAndAllowsRetry()
     {
         var control = new CollectionCommitControl { Pause = true };
-        await using var fixture = await FixtureAsync(control); using var admin = await fixture.LoginAdministratorAsync(); var position = await RootAsync(fixture, admin);
+        await using var fixture = await FixtureAsync(control); using var admin = await fixture.LoginAdministratorAsync(); var position = await ContentAsync(fixture, admin);
         var staged = await StageThreeAsync(fixture, admin, position, Values("SET-CANCEL"));
         using var cancellation = new CancellationTokenSource();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/documents")
@@ -250,7 +250,7 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
     public async Task UnknownAfterCommit_PreservesTheCompleteCollection()
     {
         var control = new CollectionCommitControl { ThrowAfterCommit = true };
-        await using var fixture = await FixtureAsync(control); using var admin = await fixture.LoginAdministratorAsync(); var position = await RootAsync(fixture, admin);
+        await using var fixture = await FixtureAsync(control); using var admin = await fixture.LoginAdministratorAsync(); var position = await ContentAsync(fixture, admin);
         var staged = await StageThreeAsync(fixture, admin, position, Values("SET-UNKNOWN")); control.Armed = true;
         HttpResponseMessage? response = null;
         try { response = await SaveAsync(fixture, admin, position, Values("SET-UNKNOWN"), staged); }
@@ -269,7 +269,7 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
     public async Task MaximumCollection_ReadsAll101InSmallBatchesAndSurvivesLowerCreationLimit()
     {
         var probe = new CollectionSqlFault();
-        await using var fixture = await FixtureAsync(probe, batchSize: 7); using var admin = await fixture.LoginAdministratorAsync(); var position = await RootAsync(fixture, admin);
+        await using var fixture = await FixtureAsync(probe, batchSize: 7); using var admin = await fixture.LoginAdministratorAsync(); var position = await ContentAsync(fixture, admin);
         var staged = await StageThroughFilesAsync(fixture, 101);
         probe.ObserveStagedReads = true;
         using var saved = await SaveAsync(fixture, admin, position, Values("SET-MAXIMUM"), staged);
@@ -304,7 +304,7 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
     [EnvironmentGatedFact(SqlGate, "同图文档附件Usage互换、File互换与孤立回链不能通过read/download配对")]
     public async Task SameDocumentAssociationSwapsAndOrphanUsage_FailExplicitly()
     {
-        await using var fixture = await FixtureAsync(); using var admin = await fixture.LoginAdministratorAsync(); var position = await RootAsync(fixture, admin);
+        await using var fixture = await FixtureAsync(); using var admin = await fixture.LoginAdministratorAsync(); var position = await ContentAsync(fixture, admin);
         var staged = await StageThreeAsync(fixture, admin, position, Values("SET-PAIR"));
         using (var saved = await SaveAsync(fixture, admin, position, Values("SET-PAIR"), staged)) Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
         var document = Assert.Single(await RowsAsync(fixture, "Document")); var id = (string)document["EID"]!;
@@ -337,7 +337,7 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
     public async Task OwnAndMixedBulkDelete_RollBackEveryUsageThenCleanupReleasedOnly()
     {
         var fault = new CollectionSqlFault(); await using var fixture = await FixtureAsync(fault);
-        using var admin = await fixture.LoginAdministratorAsync(); var position = await RootAsync(fixture, admin);
+        using var admin = await fixture.LoginAdministratorAsync(); var position = await ContentAsync(fixture, admin);
         foreach (var code in new[] { "SET-DELETE-A", "SET-DELETE-B" })
         {
             var staged = await StageThreeAsync(fixture, admin, position, Values(code));
@@ -416,7 +416,10 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
     }
     private static async Task<Dictionary<string, object?>[]> RowsAsync(BusinessAuditHostFixture fixture, string model)
     {
-        using var scope = fixture.Services.CreateScope(); return await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>(model).AsNoTracking().ToArrayAsync();
+        await AssertContentContainerUnchangedAsync(fixture);
+        using var scope = fixture.Services.CreateScope(); var rows = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>(model).AsNoTracking();
+        if (model == "WorkspaceFolderContent") rows = rows.Where(row => EF.Property<string>(row, "ChildModelKey") != "WorkspaceFolder");
+        return await rows.ToArrayAsync();
     }
     private static async Task ChangeAsync(BusinessAuditHostFixture fixture, string model, string keyField, string key, string field, object? value)
     {

@@ -118,6 +118,7 @@ export type {
   StandardCrudColumnSet,
   StandardCrudDataAdapter,
   StandardCrudActionContext,
+  StandardCrudActionInstance,
   StandardCrudActionDefinition,
   StandardCrudActionHandler,
   StandardCrudActionInputRenderer,

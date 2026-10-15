@@ -147,6 +147,71 @@ internal sealed class WorkspacePageDriver(IPage page)
         await WaitForContentAsync(name);
     }
 
+    /// <summary>从当前行的正式右键菜单复制引用；不读取或断言业务对象身份。</summary>
+    internal async Task CopyReferenceFromContextMenuAsync(string name, Func<Task>? capture = null)
+    {
+        var row = await new StandardCrudPageDriver(page).WaitForRowAsync(name);
+        await row.ClickAsync(new() { Button = MouseButton.Right });
+        var action = page.GetByRole(AriaRole.Menuitem, new() { Name = "复制", Exact = true });
+        await action.WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        await Assertions.Expect(action).ToBeEnabledAsync();
+        await CaptureContextMenuAsync(capture);
+        await CopyReferencesAsync(() => action.ClickAsync());
+    }
+
+    /// <summary>树菜单复制所指文件夹引用，保持与右侧列表相同的实例剪贴板。</summary>
+    internal async Task CopyFolderFromTreeContextMenuAsync(string name, Func<Task>? capture = null)
+    {
+        var tree = page.GetByRole(AriaRole.Complementary, new() { Name = "结构树", Exact = true });
+        await tree.GetByText(name, new() { Exact = true }).ClickAsync(new() { Button = MouseButton.Right });
+        await WaitForContentAsync(name);
+        var action = page.GetByRole(AriaRole.Menuitem, new() { Name = "复制", Exact = true });
+        await action.WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        await Assertions.Expect(action).ToBeEnabledAsync();
+        await CaptureContextMenuAsync(capture);
+        await CopyReferencesAsync(() => action.ClickAsync());
+    }
+
+    /// <summary>从当前页勾选集合执行正式工具栏复制。</summary>
+    internal async Task CopySelectedAsync(params string[] names)
+    {
+        var crud = new StandardCrudPageDriver(page);
+        foreach (var name in names) await (await crud.WaitForRowAsync(name)).GetByRole(AriaRole.Checkbox).CheckAsync();
+        await CopyReferencesAsync(() => page.GetByRole(AriaRole.Region, new() { Name = "节点内容", Exact = true })
+            .GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^复\s*制$") }).ClickAsync());
+    }
+
+    private async Task CopyReferencesAsync(Func<Task> trigger)
+    {
+        var responseTask = page.WaitForResponseAsync(response => response.Request.Method == "POST"
+            && new Uri(response.Url).AbsolutePath == "/api/workspace/content/clipboard/validate");
+        await trigger();
+        var response = await responseTask;
+        if (!response.Ok) throw new InvalidOperationException($"复制引用预检失败：{response.Status} {await response.TextAsync()}");
+        await response.FinishedAsync();
+        await Assertions.Expect(page.Locator(".ant-drawer-content:visible")).ToHaveCountAsync(0);
+    }
+
+    /// <summary>在当前目录沿工具栏粘贴，等一次提交及正式列表读取后看到结果。</summary>
+    internal async Task PasteReferencesAsync(params string[] names)
+    {
+        var crud = new StandardCrudPageDriver(page);
+        var written = false;
+        var read = page.WaitForResponseAsync(response => written && response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath == "/api/links/workspace.content");
+        var write = page.WaitForResponseAsync(response =>
+        {
+            if (response.Request.Method != "POST" || new Uri(response.Url).AbsolutePath != "/api/workspace/content/paste") return false;
+            written = true; return true;
+        });
+        await crud.ClickPageActionAsync("粘贴引用");
+        var response = await write;
+        if (!response.Ok) throw new InvalidOperationException($"粘贴引用失败：{response.Status} {await response.TextAsync()}");
+        var refreshed = await read;
+        if (!refreshed.Ok) throw new InvalidOperationException($"粘贴后的读取失败：{refreshed.Status} {await refreshed.TextAsync()}");
+        foreach (var name in names) await crud.WaitForRowAsync(name);
+    }
+
     // 可见布局早于 Ant 入场动画完成；呈现采样等待真实动画，而不是用固定延时猜时机。
     private async Task CaptureContextMenuAsync(Func<Task>? capture)
     {

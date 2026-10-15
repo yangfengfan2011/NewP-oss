@@ -56,7 +56,7 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
         var control = new FaultControl();
         await using var fixture = await CreateFixtureAsync(control);
         using var admin = await fixture.LoginAdministratorAsync();
-        var position = await RootAsync(fixture, admin);
+        var position = await ContentAsync(fixture, admin);
         control.Transactions.ArmStageFailure(phase, afterCommit);
         using var request = UploadRequest(fixture, position, Values($"STAGE-{phase}-{afterCommit}"), new ByteArrayContent(Bytes), "main.pdf");
         var result = await HttpOutcomeAsync(() => admin.SendAsync(request));
@@ -101,7 +101,7 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
         var control = new FaultControl();
         await using var fixture = await CreateFixtureAsync(control);
         using var admin = await fixture.LoginAdministratorAsync();
-        var position = await RootAsync(fixture, admin);
+        var position = await ContentAsync(fixture, admin);
         control.Io.BarrierPoint = point;
         using var request = UploadRequest(fixture, position, Values($"BARRIER-{point}-{expire}"), new ByteArrayContent(Bytes), "main.pdf");
         var upload = HttpOutcomeAsync(() => admin.SendAsync(request));
@@ -160,7 +160,7 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
         var control = new FaultControl();
         await using var fixture = await CreateFixtureAsync(control);
         using var admin = await fixture.LoginAdministratorAsync();
-        var position = await RootAsync(fixture, admin);
+        var position = await ContentAsync(fixture, admin);
         var staged = await StageAsync(fixture, admin, position, Values("CONFIRM-WINS"), Bytes);
         var initial = Assert.Single((await ObserveAsync(fixture)).Files);
         var fileId = (string)initial["EID"]!;
@@ -212,7 +212,7 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
         var control = new FaultControl();
         await using var fixture = await CreateFixtureAsync(control);
         using var admin = await fixture.LoginAdministratorAsync();
-        var position = await RootAsync(fixture, admin);
+        var position = await ContentAsync(fixture, admin);
         var staged = await StageAsync(fixture, admin, position, Values("CLEANUP-WINS"), Bytes);
         var fileId = (string)Assert.Single((await ObserveAsync(fixture)).Files)["EID"]!;
         await ExpireAsync(fixture, staged.GetProperty("uploadId").GetString()!);
@@ -249,7 +249,7 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
         {
             var db = observation.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
             foreach (var model in new[] { "Document", "DocumentVersion", "DocumentIteration", "DocumentFileLink", "WorkspaceFolderContent", "FileUsage" })
-                Assert.Equal(0, await db.Set<Dictionary<string, object?>>(model).AsNoTracking().CountAsync());
+                Assert.Equal(model == "WorkspaceFolderContent" ? 1 : 0, await db.Set<Dictionary<string, object?>>(model).AsNoTracking().CountAsync());
         }
         Assert.Equal(1, await CleanupAsync(fixture));
         Assert.Empty(Directory.EnumerateFiles(fixture.StorageRoot));
@@ -261,7 +261,7 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
         var control = new FaultControl();
         await using var fixture = await CreateFixtureAsync(control);
         using var admin = await fixture.LoginAdministratorAsync();
-        var position = await RootAsync(fixture, admin);
+        var position = await ContentAsync(fixture, admin);
         var staged = await StageAsync(fixture, admin, position, Values("RELEASE-RETRY"), Bytes);
         Assert.Equal(0, await CleanupAsync(fixture));
         var initial = Assert.Single((await ObserveAsync(fixture)).Files);
@@ -273,7 +273,7 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
         using (var scope = fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
-            contentLinkId = (string)(await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AsNoTracking().SingleAsync())["LID"]!;
+            contentLinkId = (string)(await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AsNoTracking().SingleAsync(row => EF.Property<string>(row, "ChildModelKey") == "Document"))["LID"]!;
         }
         using (var deleted = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.deleteObject"), HttpMethod.Delete,
                    "/api/workspace/content/" + contentLinkId, new { position })) Assert.Equal(HttpStatusCode.OK, deleted.StatusCode);
@@ -298,7 +298,7 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
         var control = new FaultControl();
         await using var fixture = await CreateFixtureAsync(control);
         using var admin = await fixture.LoginAdministratorAsync();
-        var position = await RootAsync(fixture, admin);
+        var position = await ContentAsync(fixture, admin);
         var staged = await StageAsync(fixture, admin, position, Values("CONFIRM-REPEAT"), Bytes);
         var uploadId = staged.GetProperty("uploadId").GetString()!;
         using (var created = await CreateDocumentAsync(fixture, admin, position, "CONFIRM-REPEAT", uploadId))
@@ -318,7 +318,7 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
             Assert.Equal(expected.UsageId, actualLink["FileUsageId"]);
             Assert.Equal(expected.FileId, actualLink["CEID"]);
             originalOwner = new(DocumentFileOwnerPolicy.Key, (string)actualLink["LID"]!);
-            contentLinkId = (string)(await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AsNoTracking().SingleAsync())["LID"]!;
+            contentLinkId = (string)(await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AsNoTracking().SingleAsync(row => EF.Property<string>(row, "ChildModelKey") == "Document"))["LID"]!;
         }
         // confirmed 的 ExpiresAt 只是历史；真实关联仍 active 时不得把重复确认当到期 token。
         await ExpireAsync(fixture, uploadId);
@@ -396,6 +396,7 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
     {
         using var scope = fixture.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        await AssertContentContainerUnchangedAsync(fixture);
         return new(await db.Set<Dictionary<string, object?>>("FileRecord").AsNoTracking().ToArrayAsync(),
             await db.Set<Dictionary<string, object?>>("FileUploadLease").AsNoTracking().ToArrayAsync(),
             await db.Set<Dictionary<string, object?>>("FileUsage").AsNoTracking().ToArrayAsync());

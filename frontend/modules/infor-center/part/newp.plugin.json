@@ -4,6 +4,7 @@
   "dependencies": ["Identity", "Authentication", "Authorization"],
   "hostVersion": { "min": "1.1.0", "max": "2.0.0" },
   "backend": { "behaviorKey": "part.backend" },
+  "dataActions": [{ "key": "partCopy", "title": "复制零组件引用", "behaviorKey": "data.part.copy", "requiresRead": true }],
   "frontend": { "behaviorKey": "part.frontend", "entry": "part", "bindingMode": "behavior-bindings", "bindings": ["part.part.list", "part.part.detail"] },
   "persistence": { "models": ["metadata/models/Part.model.json"], "migrations": { "sqlServer": { "assembly": "migrations/Part.SqlServerMigrations.dll", "manifest": "migrations/Part.SqlServerMigrations.json" } } }
 }

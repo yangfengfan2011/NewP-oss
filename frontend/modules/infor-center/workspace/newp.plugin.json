@@ -9,6 +9,7 @@
   "hostVersion": { "min": "1.1.0", "max": "2.0.0" },
   "backend": { "behaviorKey": "workspace.backend" },
   "features": [{ "key": "workspace", "kind": "navigation", "title": "工作空间", "titleKey": "Workspace.Title", "behaviorKey": "workspace.spaces.access" }],
+  "dataActions": [{ "key": "workspaceCopy", "title": "复制文件夹引用", "behaviorKey": "data.workspace.copy", "requiresRead": true }],
   "frontend": {
     "behaviorKey": "workspace.frontend", "entry": "workspace", "bindingMode": "behavior-bindings",
     "bindings": ["workspace.spaces", "workspace.tree.current", "workspace.folder.content", "workspace.folder.reference", "workspace.folder.list", "workspace.references.list", "workspace.references.object"]

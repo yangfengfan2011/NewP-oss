@@ -106,6 +106,25 @@ it('cancels obsolete focus during reopen and unmount while retaining the row foc
   } finally { if (mounted) await act(async () => root.unmount()); container.remove(); target.remove(); vi.unstubAllGlobals(); }
 });
 
+it('contains disabled, enabled and stale portal clicks without selecting the owning row', async () => {
+  const select = vi.fn(); const execute = vi.fn();
+  function Harness() {
+    const [open, setOpen] = useState(false);
+    return <div onClick={select}><ContextActionMenu open={open} onOpenChange={setOpen} keyboardLabel="Object actions"
+      trigger={['contextMenu']} menu={{ items: [{ key: 'disabled', label: 'Unavailable', disabled: true }, { key: 'edit', label: 'Edit' }], onClick: execute }}><span>Object</span></ContextActionMenu></div>;
+  }
+  const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+  try {
+    await act(async () => root.render(<Harness />));
+    await act(async () => container.querySelector<HTMLElement>('[aria-label="Object actions"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ContextMenu', bubbles: true })));
+    const disabled = [...document.querySelectorAll<HTMLElement>('[role=menuitem]')].find(item => item.textContent === 'Unavailable')!;
+    await act(async () => disabled.click()); expect(select).not.toHaveBeenCalled(); expect(execute).not.toHaveBeenCalled();
+    await act(async () => [...document.querySelectorAll<HTMLElement>('[role=menuitem]')].find(item => item.textContent === 'Edit')!.click());
+    expect(execute).toHaveBeenCalledOnce(); expect(select).not.toHaveBeenCalled();
+    await act(async () => disabled.click()); expect(select).not.toHaveBeenCalled(); expect(execute).toHaveBeenCalledOnce();
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});
+
 it.each(['input', 'textarea', 'a', 'contenteditable'])('preserves the native menu within %s', async kind => {
   function Harness() {
     const [open, setOpen] = useState(false);

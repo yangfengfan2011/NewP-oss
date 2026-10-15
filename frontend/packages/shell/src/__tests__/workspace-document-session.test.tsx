@@ -14,7 +14,7 @@ await loadComponentSource('Workspace', 'WorkspaceDocumentCreateInput.tsx');
 await import('@icp-platform/ui/crud-form');
 
 it.each(['committed', 'unknown'] as const)('unmounts the real input on authority change while its pending save settles as %s', async outcome => {
-  const scope = { spaceId: 'public', rootFolderId: 'root', linkIds: '[]' };
+  const scope = { spaceId: 'public', rootFolderId: 'root', linkIds: '["content-folder-link"]' };
   const uploads = vi.spyOn(core, 'platformUpload').mockResolvedValue(new Response(JSON.stringify({
     uploadId: 'FileUploadLease_11111111111111111111111111111111', fileName: 'main.pdf', fileId: 'private', length: 1,
     contentType: 'application/pdf', expiresAt: '2026-10-15T00:00:00Z',

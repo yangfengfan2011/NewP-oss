@@ -37,7 +37,7 @@ public sealed class WorkspaceMixedSqlServerHttpApiTests(ITestOutputHelper output
         }, includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync(); var entry = Point(fixture, "workspace.spaces.access"); var add = Point(fixture, "workspace.folder.add"); var remove = Point(fixture, "workspace.folder.remove");
         var partRead = Point(fixture, "part.part.read"); var documentRead = Point(fixture, "document.document.read");
-        var root = await Post(admin, entry, "/api/workspace/spaces/public/initialize", null); var position = Position(root);
+        var root = await ContentRoot(fixture, admin); var position = Position(root);
         var targets = new List<(string Model, string Route, FeaturePoint Read, string Id)>();
         foreach (var (model, route, create, read) in new[] { ("Part", "/api/part/parts", "part.part.create", partRead), ("Document", "/api/document/documents", "document.document.create", documentRead) })
         {
@@ -89,18 +89,19 @@ public sealed class WorkspaceMixedSqlServerHttpApiTests(ITestOutputHelper output
         using (var scope = fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>(); var links = db.Set<Dictionary<string, object?>>("WorkspaceFolderContent");
-            var seed = await links.AsNoTracking().FirstAsync();
+            var parentId = root.GetProperty("contentFolderId").GetString()!;
+            var seed = await links.AsNoTracking().FirstAsync(row => EF.Property<string>(row, "PEID") == parentId);
             links.Add(new(seed) { ["LID"] = "missing-part", ["ChildModelKey"] = "Part", ["CEID"] = "no-target", ["TreeOrdinal"] = null }); await db.SaveChangesAsync();
         }
         var missing = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, Url(root) + "&pageSize=1"); Assert.Equal(3, missing.GetProperty("total").GetInt32());
         using (var scope = fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>(); var links = db.Set<Dictionary<string, object?>>("WorkspaceFolderContent");
-            Assert.Equal(5, await links.CountAsync());
+            Assert.Equal(6, await links.CountAsync());
             var corrupt = await links.SingleAsync(row => EF.Property<string>(row, "LID") == "missing-part"); corrupt["ChildModelKey"] = "Unknown/Type"; await db.SaveChangesAsync();
         }
         using (var corrupt = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, Url(root) + "&types=Part")) Assert.Equal(HttpStatusCode.InternalServerError, corrupt.StatusCode);
-        using (var scope = fixture.Services.CreateScope()) Assert.Equal(5, await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("WorkspaceFolderContent").CountAsync());
+        using (var scope = fixture.Services.CreateScope()) Assert.Equal(6, await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("WorkspaceFolderContent").CountAsync());
     }
 
     private static async Task Rule(BusinessAuditHostFixture fixture, HttpClient admin, string key, string resource, string id)
@@ -249,17 +250,17 @@ public sealed class WorkspaceMixedSqlServerHttpApiTests(ITestOutputHelper output
         }
     }
 
-    private static object Position(JsonElement root) => new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = root.GetProperty("rootFolderId").GetString(), linkIds = Array.Empty<string>() };
-    private static string Url(JsonElement root) => "/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId=" + Uri.EscapeDataString(root.GetProperty("rootFolderId").GetString()!)
-        + "&queryScope=" + Uri.EscapeDataString(JsonSerializer.Serialize(new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = root.GetProperty("rootFolderId").GetString(), linkIds = "[]" }));
+    private static object Position(JsonElement root) => new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = root.GetProperty("rootFolderId").GetString(), linkIds = root.TryGetProperty("linkIds", out var links) ? links.EnumerateArray().Select(id => id.GetString()!).ToArray() : Array.Empty<string>() };
+    private static string Url(JsonElement root) => "/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId=" + Uri.EscapeDataString((root.TryGetProperty("contentFolderId", out var contentFolder) ? contentFolder : root.GetProperty("rootFolderId")).GetString()!)
+        + "&queryScope=" + Uri.EscapeDataString(JsonSerializer.Serialize(new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = root.GetProperty("rootFolderId").GetString(), linkIds = root.TryGetProperty("linkIds", out var links) ? links.GetRawText() : "[]" }));
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "三类正式业务输入经同一Link查询进入混合列表")]
     public async Task ThreeRealModels_AddAndReadThroughOneContentResource()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true, includePart: true, includeDocument: true);
         using var admin = await fixture.LoginAdministratorAsync();
         var entry = Point(fixture, "workspace.spaces.access");
-        var root = await Post(admin, entry, "/api/workspace/spaces/public/initialize", null);
-        var position = new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = root.GetProperty("rootFolderId").GetString(), linkIds = Array.Empty<string>() };
+        var root = await ContentRoot(fixture, admin);
+        var position = new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = root.GetProperty("rootFolderId").GetString(), linkIds = root.GetProperty("linkIds").EnumerateArray().Select(item => item.GetString()!).ToArray() };
         await Post(admin, Point(fixture, "workspace.folder.create"), "/api/workspace/content/folders", new { position, values = new { ENAME = "B-folder" } });
         foreach (var (model, route, behavior, name) in new[] { ("Part", "/api/part/parts", "part.part.create", "A-part"), ("Document", "/api/document/documents", "document.document.create", "C-document") })
         {
@@ -267,13 +268,22 @@ public sealed class WorkspaceMixedSqlServerHttpApiTests(ITestOutputHelper output
             var id = created.GetProperty("fields").GetProperty("EID").GetString();
             await Post(admin, Point(fixture, "workspace.folder.add"), "/api/workspace/content/references", new { position, target = new { modelKey = model, id } });
         }
-        var scope = JsonSerializer.Serialize(new { position.spaceId, position.rootFolderId, linkIds = "[]" });
-        var url = "/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId=" + Uri.EscapeDataString(position.rootFolderId!) + "&queryScope=" + Uri.EscapeDataString(scope) + "&sortBy=Name&sortDirection=asc";
+        var scope = JsonSerializer.Serialize(new { position.spaceId, position.rootFolderId, linkIds = JsonSerializer.Serialize(position.linkIds) });
+        var url = "/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId=" + Uri.EscapeDataString(root.GetProperty("contentFolderId").GetString()!) + "&queryScope=" + Uri.EscapeDataString(scope) + "&sortBy=Name&sortDirection=asc";
         var result = await FeatureHttpTestRequests.ReadAsync(admin, entry, url);
         Assert.Equal(3, result.GetProperty("total").GetInt32());
         Assert.Equal(new[] { "A-part", "B-folder", "C-document" }, result.GetProperty("items").EnumerateArray().Select(row => row.GetProperty("fields").GetProperty("Name").GetString()));
     }
 
+    private static async Task<JsonElement> ContentRoot(BusinessAuditHostFixture fixture, HttpClient admin)
+    {
+        var position = await DocumentFilesSqlServerHttpApiTests.ContentAsync(fixture, admin);
+        using var scope = fixture.Services.CreateScope();
+        var row = await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("WorkspaceFolderContent")
+            .AsNoTracking().SingleAsync(row => EF.Property<string>(row, "LID") == position.LinkIds[0]);
+        return JsonSerializer.SerializeToElement(new { spaceId = position.SpaceId, rootFolderId = position.RootFolderId,
+            linkIds = position.LinkIds, contentFolderId = (string)row["CEID"]! });
+    }
     // 原 HTTP 场景消费列表位置；树菜单的同一行为拥有独立功能位置。
     private static FeaturePoint Point(BusinessAuditHostFixture fixture, string behavior) => Assert.Single(fixture.FeatureCatalog,
         point => point.BehaviorKey == behavior && (behavior is not ("workspace.folder.remove" or "workspace.folder.editObject")

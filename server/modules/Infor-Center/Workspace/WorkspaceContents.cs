@@ -15,7 +15,7 @@ using Microsoft.EntityFrameworkCore;
 namespace ICP.Platform.Modules.Workspace;
 
 /// <summary>集中编排 Workspace 完整图命令、位置校验和引用规则；所属对象规则仍通过正式行为执行。</summary>
-public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions positions, IPlatformTransactionExecutor transactions,
+public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions positions, IPlatformTransactionExecutor transactions,
     IDataScopeObjectDecisionProvider decisions, IPlatformObjectIdGenerator ids, IEntityAuditValueProvider audit, LinkQueryCatalog catalog,
     WorkspaceFolderScope folderScope, LinkQueryReader reader, IStandardCrudService crud, IStandardCrudResourceRegistry resources,
     IDocumentFiles documentFiles, WorkspaceTreeOrder treeOrder)
@@ -63,25 +63,8 @@ public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions
             using var operation = audit.BeginOperation();
             await LockGraphAsync(cancellation);
             var path = await WritablePositionAsync(actorId, position, cancellation);
-            var definition = catalog.Get("workspace.content");
-            if (string.IsNullOrWhiteSpace(target.Id) || !definition.Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == target.ModelKey))
-                throw new LinkQueryException(400, "Workspace.InvalidEndpoint", "target");
-            if (!await reader.IsEndpointReadableAsync("workspace.content", target, cancellation)) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
-            if (target.ModelKey == WorkspacePositions.FolderModel && await db.Set<Dictionary<string, object?>>("WorkspaceSpace").AnyAsync(space => EF.Property<string>(space, "RootFolderId") == target.Id, cancellation))
-                throw new LinkQueryException(409, "Workspace.RootReferenceForbidden");
-            var links = db.Set<Dictionary<string, object?>>(WorkspacePositions.ContentModel);
-            if (await links.AnyAsync(link => EF.Property<string>(link, "PEID") == path.FolderId && EF.Property<string>(link, "ChildModelKey") == target.ModelKey
-                && EF.Property<string>(link, "CEID") == target.Id, cancellation)) throw new LinkQueryException(409, "Workspace.DuplicateReference");
-            if (target.ModelKey == WorkspacePositions.FolderModel)
-            {
-                var folders = db.Set<Dictionary<string, object?>>(WorkspacePositions.FolderModel);
-                var name = await folders.Where(folder => EF.Property<string>(folder, "EID") == target.Id).Select(folder => EF.Property<string>(folder, "ENAME")).SingleAsync(cancellation);
-                if (await links.AnyAsync(link => EF.Property<string>(link, "PEID") == path.FolderId && EF.Property<string>(link, "ChildModelKey") == WorkspacePositions.FolderModel
-                    && folders.Any(folder => EF.Property<string>(folder, "EID") == EF.Property<string>(link, "CEID") && EF.Property<string>(folder, "ENAME") == name), cancellation))
-                    throw new LinkQueryException(409, "Workspace.SiblingNameConflict", "ENAME");
-                if (await WouldCycleAsync(path.FolderId, target.Id, cancellation)) throw new LinkQueryException(409, "Workspace.CycleForbidden");
-            }
-            await RegisterCreatedReferenceAsync(path.FolderId, target.ModelKey, target.Id, cancellation);
+            RequireContainer(position, path, target.ModelKey);
+            await AddTargetReferenceAsync(path.FolderId, target, cancellation);
             return true;
         }, token);
 
@@ -136,6 +119,7 @@ public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions
         }
         await LockGraphAsync(cancellationToken);
         var path = await WritablePositionAsync(actor, position, cancellationToken);
+        RequireContainer(position, path, model);
         if (!catalog.Get("workspace.content").Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == model))
             throw new LinkQueryException(400, "Workspace.InvalidEndpoint");
         var result = model == "Document"
@@ -153,7 +137,8 @@ public sealed class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions
     public async Task<StandardCrudError?> ValidateDocumentUploadAsync(string actorId, WorkspacePosition position,
         IReadOnlyDictionary<string, JsonElement> input, string fileName, string contentType, CancellationToken token)
     {
-        await WritablePositionAsync(actorId, position, token);
+        var path = await WritablePositionAsync(actorId, position, token);
+        RequireContainer(position, path, "Document");
         if (!catalog.Get("workspace.content").Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == "Document"))
             throw new LinkQueryException(400, "Workspace.InvalidEndpoint");
         return await documentFiles.ValidateUploadAsync(ReadValues(input, "Document"), fileName, contentType, token);

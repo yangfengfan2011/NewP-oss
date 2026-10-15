@@ -8,7 +8,7 @@ const roots = [
 it('keeps roots under the existing folder feature scope while suppressing node mutation menus', async () => {
   const request = vi.fn(async () => new Response(JSON.stringify(roots)));
   const values = await createWorkspaceTreeProvider(request).roots({ kind: 'currentUser', featurePosition: 'read' });
-  expect(values.map(value => [value.nodeType, value.contextMenuKeys])).toEqual([['folder', []], ['folder', []]]);
+  expect(values.map(value => [value.nodeType, value.contextMenuKeys])).toEqual([['folder', ['paste', 'clearClipboard']], ['folder', ['paste', 'clearClipboard']]]);
 });
 
 it('resolves a tree reference to its exact terminal LID and source parent occurrence', () => {

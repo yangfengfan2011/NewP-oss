@@ -32,7 +32,7 @@ public sealed class DocumentFilesSqlServerHttpApiTests
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
-        var position = await RootAsync(fixture, admin);
+        var position = await ContentAsync(fixture, admin);
         byte[] bytes = [0x25, 0x50, 0x44, 0x46, 0x2D, 0x0A, 0x00, 0xFF];
         var values = new { ECODE = "MAIN-01", ENAME = "主文件图文档", Description = "真实流" };
         var staged = await StageAsync(fixture, admin, position, values, bytes);
@@ -70,7 +70,7 @@ public sealed class DocumentFilesSqlServerHttpApiTests
             Assert.Equal("active", usage["State"]);
             Assert.Equal("confirmed", lease["State"]);
             Assert.Equal(usage["EID"], lease["ConfirmedUsageId"]);
-            var ws = await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").SingleAsync();
+            var ws = await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").SingleAsync(row => EF.Property<string>(row, "ChildModelKey") == "Document");
             Assert.Equal(documentId, ws["CEID"]);
             contentLinkId = (string)ws["LID"]!;
         }
@@ -91,7 +91,7 @@ public sealed class DocumentFilesSqlServerHttpApiTests
         using var finalScope = fixture.Services.CreateScope();
         var finalDb = finalScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
         foreach (var model in new[] { "Document", "DocumentVersion", "DocumentIteration", "DocumentFileLink", "WorkspaceFolderContent" })
-            Assert.Equal(0, await finalDb.Set<Dictionary<string, object?>>(model).CountAsync());
+            Assert.Equal(model == "WorkspaceFolderContent" ? 1 : 0, await finalDb.Set<Dictionary<string, object?>>(model).CountAsync());
         Assert.Equal("released", (await finalDb.Set<Dictionary<string, object?>>("FileUsage").SingleAsync())["State"]);
     }
 
@@ -100,7 +100,7 @@ public sealed class DocumentFilesSqlServerHttpApiTests
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
-        var position = await RootAsync(fixture, admin);
+        var position = await ContentAsync(fixture, admin);
         var values = new { ECODE = "STRICT-01", ENAME = "严格上传集合" };
         var staged = await StageAsync(fixture, admin, position, values, [1, 2, 3]);
         var uploadId = staged.GetProperty("uploadId").GetString()!;
@@ -142,7 +142,7 @@ public sealed class DocumentFilesSqlServerHttpApiTests
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
             Assert.Equal("staged", (await db.Set<Dictionary<string, object?>>("FileUploadLease").SingleAsync())["State"]);
             foreach (var model in new[] { "Document", "DocumentVersion", "DocumentIteration", "DocumentFileLink", "FileUsage", "WorkspaceFolderContent" })
-                Assert.Equal(0, await db.Set<Dictionary<string, object?>>(model).CountAsync());
+                Assert.Equal(model == "WorkspaceFolderContent" ? 1 : 0, await db.Set<Dictionary<string, object?>>(model).CountAsync());
         }
         // 集合已开放，空数组、显式null及省略附件都仍表示仅主文件；每次使用独立合法暂存。
         foreach (var variant in new[] { "empty", "null", "omitted" })
@@ -176,7 +176,7 @@ public sealed class DocumentFilesSqlServerHttpApiTests
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
-        var position = await RootAsync(fixture, admin);
+        var position = await ContentAsync(fixture, admin);
         var positionJson = JsonSerializer.Serialize(position);
         var valuesJson = JsonSerializer.Serialize(new { ECODE = "MULTIPART-01", ENAME = "完整准入" });
         var badParts = new[]
@@ -238,7 +238,7 @@ public sealed class DocumentFilesSqlServerHttpApiTests
         const int maximum = 1024;
         await using var fixture = await SmallUploadFixtureAsync(maximum);
         using var admin = await fixture.LoginAdministratorAsync();
-        var position = await RootAsync(fixture, admin);
+        var position = await ContentAsync(fixture, admin);
         var outcomes = new List<(bool UnknownLength, int Length, HttpStatusCode Status, string? Code)>();
         foreach (var unknownLength in new[] { false, true })
         foreach (var length in new[] { maximum, maximum + 1, maximum + 2, maximum * 2 })
@@ -278,7 +278,7 @@ public sealed class DocumentFilesSqlServerHttpApiTests
         const int maximum = 1024;
         await using var fixture = await SmallUploadFixtureAsync(maximum);
         using var admin = await fixture.LoginAdministratorAsync();
-        var position = await RootAsync(fixture, admin);
+        var position = await ContentAsync(fixture, admin);
         var positionJson = JsonSerializer.Serialize(position);
         var valuesJson = JsonSerializer.Serialize(new { ECODE = "SMALL-LIMIT", ENAME = "独立元数据预算" });
         using (var request = MultipartRequest(fixture, [("position", positionJson), ("values", valuesJson + new string(' ', 2048))], [1], "main.pdf"))
@@ -354,7 +354,7 @@ public sealed class DocumentFilesSqlServerHttpApiTests
                 provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<FilesOptions>>().Value.StorageRoot));
         }, includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
-        var position = await RootAsync(fixture, admin);
+        var position = await ContentAsync(fixture, admin);
         var positionJson = JsonSerializer.Serialize(position);
         var values = new { ECODE = "TRUNCATED", ENAME = "输入解析边界" };
         var valuesJson = JsonSerializer.Serialize(values);
@@ -446,7 +446,7 @@ public sealed class DocumentFilesSqlServerHttpApiTests
     {
         await using var fixture = await ControlledFixtureAsync();
         using var admin = await fixture.LoginAdministratorAsync();
-        var position = await RootAsync(fixture, admin);
+        var position = await ContentAsync(fixture, admin);
         var actor = await ActorAsync(fixture, admin, "LeaseWriter");
         using var ordinary = actor.Client;
         var values = new { ECODE = "LEASE-01", ENAME = "暂存身份边界" };
@@ -519,7 +519,8 @@ public sealed class DocumentFilesSqlServerHttpApiTests
             "/api/workspace/content/references/" + folder.Position.LinkIds[0], new { position = root })) Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
         using (var vanished = await SaveMainAsync(fixture, ordinary, folder.Position, values, uploadId)) Assert.Equal(HttpStatusCode.NotFound, vanished.StatusCode);
         Assert.Equal("staged", Assert.Single((await ObserveBusinessAsync(fixture)).Leases)["State"]);
-        using var corrected = await SaveMainAsync(fixture, ordinary, root, new { ECODE = "POSITION-CORRECTED", ENAME = "已修正位置和字段" }, uploadId);
+        var correctedFolder = await CreateFolderPositionAsync(fixture, admin, root, "修正保存目录");
+        using var corrected = await SaveMainAsync(fixture, ordinary, correctedFolder.Position, new { ECODE = "POSITION-CORRECTED", ENAME = "已修正位置和字段" }, uploadId);
         Assert.Equal(HttpStatusCode.OK, corrected.StatusCode);
         Assert.Single((await ObserveBusinessAsync(fixture)).Documents);
     }
@@ -529,7 +530,7 @@ public sealed class DocumentFilesSqlServerHttpApiTests
     {
         await using var fixture = await ControlledFixtureAsync();
         using var admin = await fixture.LoginAdministratorAsync();
-        var position = await RootAsync(fixture, admin);
+        var position = await ContentAsync(fixture, admin);
         var first = await CreateMainAsync(fixture, admin, position, "PERMISSION-01", [1, 2, 3]);
         var second = await CreateMainAsync(fixture, admin, position, "PERMISSION-02", [4, 5, 6]);
         var actor = await ActorAsync(fixture, admin, "FileReader");
@@ -580,7 +581,7 @@ public sealed class DocumentFilesSqlServerHttpApiTests
     {
         await using var fixture = await ControlledFixtureAsync();
         using var admin = await fixture.LoginAdministratorAsync();
-        var position = await RootAsync(fixture, admin);
+        var position = await ContentAsync(fixture, admin);
         var first = await CreateMainAsync(fixture, admin, position, "PAIR-01", [1, 2, 3]);
         var second = await CreateMainAsync(fixture, admin, position, "PAIR-02", [4, 5, 6]);
         foreach (var (model, keyField, key, field, invalid, original, error) in new[]
@@ -622,7 +623,7 @@ public sealed class DocumentFilesSqlServerHttpApiTests
             var fault = new BusinessCommitFault(afterCommit);
             await using var fixture = await ControlledFixtureAsync(fault);
             using var admin = await fixture.LoginAdministratorAsync();
-            var position = await RootAsync(fixture, admin);
+            var position = await ContentAsync(fixture, admin);
             var values = new { ECODE = "COMMIT-" + afterCommit, ENAME = "业务提交结果" };
             byte[] bytes = [1, 2, 3, 4];
             var staged = await StageAsync(fixture, admin, position, values, bytes);
@@ -667,7 +668,7 @@ public sealed class DocumentFilesSqlServerHttpApiTests
         var fault = new BusinessCommitFault(false) { PauseBeforeCommit = true };
         await using var fixture = await ControlledFixtureAsync(fault);
         using var admin = await fixture.LoginAdministratorAsync();
-        var position = await RootAsync(fixture, admin);
+        var position = await ContentAsync(fixture, admin);
         var values = new { ECODE = "CANCEL-COMMIT", ENAME = "提交前取消" };
         byte[] bytes = [1, 2, 3, 4];
         var staged = await StageAsync(fixture, admin, position, values, bytes);
@@ -716,7 +717,7 @@ public sealed class DocumentFilesSqlServerHttpApiTests
         var fault = new BusinessCommandFault { FailReferenceInsert = true };
         await using var fixture = await ControlledFixtureAsync(fault);
         using var admin = await fixture.LoginAdministratorAsync();
-        var position = await RootAsync(fixture, admin);
+        var position = await ContentAsync(fixture, admin);
         var values = new { ECODE = "REFERENCE-01", ENAME = "目录关联原子保存" };
         var staged = await StageAsync(fixture, admin, position, values, [1, 2, 3]);
         var uploadId = staged.GetProperty("uploadId").GetString()!;
@@ -740,7 +741,7 @@ public sealed class DocumentFilesSqlServerHttpApiTests
         var fault = new BusinessCommandFault();
         await using var fixture = await ControlledFixtureAsync(fault);
         using var admin = await fixture.LoginAdministratorAsync();
-        var position = await RootAsync(fixture, admin);
+        var position = await ContentAsync(fixture, admin);
         var first = await CreateMainAsync(fixture, admin, position, "DELETE-01", [1, 2, 3]);
         var second = await CreateMainAsync(fixture, admin, position, "DELETE-02", [4, 5, 6]);
         fault.ArmDelete(1);
@@ -845,11 +846,12 @@ public sealed class DocumentFilesSqlServerHttpApiTests
     {
         using var scope = fixture.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+        await AssertContentContainerUnchangedAsync(fixture);
         return new(await db.Set<Dictionary<string, object?>>("Document").AsNoTracking().ToArrayAsync(),
             await db.Set<Dictionary<string, object?>>("DocumentVersion").AsNoTracking().ToArrayAsync(),
             await db.Set<Dictionary<string, object?>>("DocumentIteration").AsNoTracking().ToArrayAsync(),
             await db.Set<Dictionary<string, object?>>("DocumentFileLink").AsNoTracking().ToArrayAsync(),
-            await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AsNoTracking().ToArrayAsync(),
+            await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AsNoTracking().Where(row => EF.Property<string>(row, "ChildModelKey") == "Document").ToArrayAsync(),
             await db.Set<Dictionary<string, object?>>("FileRecord").AsNoTracking().ToArrayAsync(),
             await db.Set<Dictionary<string, object?>>("FileUploadLease").AsNoTracking().ToArrayAsync(),
             await db.Set<Dictionary<string, object?>>("FileUsage").AsNoTracking().ToArrayAsync());
@@ -1014,6 +1016,31 @@ public sealed class DocumentFilesSqlServerHttpApiTests
         Assert.True(response.StatusCode == HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         var root = await response.Content.ReadFromJsonAsync<JsonElement>();
         return new(root.GetProperty("spaceId").GetString()!, root.GetProperty("rootFolderId").GetString()!, []);
+    }
+
+    private sealed record ContentContainer(string LinkId, string Snapshot);
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<BusinessAuditHostFixture, ContentContainer> ContentContainers = new();
+
+    // 新上传/保存沿正式普通文件夹准备；根本身仍由RootAsync服务祖先与失效场景。
+    internal static async Task<WorkspacePosition> ContentAsync(BusinessAuditHostFixture fixture, HttpClient admin)
+    {
+        var root = await RootAsync(fixture, admin);
+        var container = await CreateFolderPositionAsync(fixture, admin, root, "Document consumer container");
+        using var scope = fixture.Services.CreateScope();
+        var link = await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("WorkspaceFolderContent")
+            .AsNoTracking().SingleAsync(row => EF.Property<string>(row, "LID") == container.Position.LinkIds[0]);
+        ContentContainers.Add(fixture, new(container.Position.LinkIds[0], JsonSerializer.Serialize(link.OrderBy(pair => pair.Key).ToDictionary())));
+        return container.Position;
+    }
+
+    // 业务Link计数不包含准备目录，同时以完整身份/次序/审计快照证明它未被业务操作误删或修改。
+    internal static async Task AssertContentContainerUnchangedAsync(BusinessAuditHostFixture fixture)
+    {
+        if (!ContentContainers.TryGetValue(fixture, out var container)) return;
+        using var scope = fixture.Services.CreateScope();
+        var link = await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("WorkspaceFolderContent")
+            .AsNoTracking().SingleAsync(row => EF.Property<string>(row, "LID") == container.LinkId);
+        Assert.Equal(container.Snapshot, JsonSerializer.Serialize(link.OrderBy(pair => pair.Key).ToDictionary()));
     }
     internal static async Task<JsonElement> StageAsync(BusinessAuditHostFixture fixture, HttpClient client, WorkspacePosition position,
         object values, byte[] bytes, string name = "main.pdf")

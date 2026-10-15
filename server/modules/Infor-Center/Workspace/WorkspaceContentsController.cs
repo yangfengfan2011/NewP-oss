@@ -23,6 +23,52 @@ public sealed class WorkspaceContentsController(WorkspaceContents contents, Work
     public sealed record RemoveReferenceInput(WorkspacePosition Position);
     public sealed record DeleteObjectsInput(WorkspacePosition Position, string[] LinkIds);
 
+    /// <summary>只读复制预检使用正式copy功能，快照仅用于本次页面交互，不生成持久凭证。</summary>
+    [HttpPost("content/clipboard/validate"), RequireFeature("workspace.folder.copy")]
+    public async Task<IResult> ValidateClipboard(JsonElement input, CancellationToken token)
+    {
+        try
+        {
+            var request = ReadClipboardInput(input, false);
+            return Results.Ok(await contents.ValidateClipboardAsync(Actor(), request.Mode, request.SourcePosition, request.LinkIds, token));
+        }
+        catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+    }
+
+    /// <summary>粘贴仅接受来源与目标完整位置和LID，提交后的展示读取不参与写入回执。</summary>
+    [HttpPost("content/paste"), RequireFeature("workspace.folder.paste")]
+    public async Task<IResult> Paste(JsonElement input, CancellationToken token)
+    {
+        try
+        {
+            var request = ReadClipboardInput(input, true);
+            await contents.PasteAsync(Actor(), request.Mode, request.SourcePosition, request.LinkIds, request.TargetPosition!, token);
+            return Results.Ok(new { succeeded = true });
+        }
+        catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+    }
+
+    private sealed record ClipboardInput(string Mode, WorkspacePosition SourcePosition, string[] LinkIds, WorkspacePosition? TargetPosition);
+
+    // 两个命令共用严格形状，未知/重复成员和伪造类型、对象身份不能作为后续写入输入。
+    private static ClipboardInput ReadClipboardInput(JsonElement input, bool paste)
+    {
+        try
+        {
+            if (input.ValueKind != JsonValueKind.Object) throw new JsonException();
+            var fields = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+            foreach (var member in input.EnumerateObject())
+                if (member.Name is not ("mode" or "sourcePosition" or "linkIds") && (!paste || member.Name != "targetPosition")
+                    || !fields.TryAdd(member.Name, member.Value)) throw new JsonException();
+            if (fields.Count != (paste ? 4 : 3) || !fields.TryGetValue("mode", out var mode) || mode.ValueKind != JsonValueKind.String
+                || !fields.TryGetValue("sourcePosition", out var source) || !fields.TryGetValue("linkIds", out var ids)
+                || ids.ValueKind != JsonValueKind.Array || ids.EnumerateArray().Any(id => id.ValueKind != JsonValueKind.String)) throw new JsonException();
+            return new(mode.GetString()!, WorkspaceDocumentPositionConverter.Read(source), ids.EnumerateArray().Select(id => id.GetString()!).ToArray(),
+                paste ? WorkspaceDocumentPositionConverter.Read(fields["targetPosition"]) : null);
+        }
+        catch (JsonException) { throw new LinkQueryException(400, "Workspace.InvalidClipboardInput"); }
+    }
+
     /// <summary>编辑装载重新验证当前出现位置与对象 edit 资格。</summary>
     [HttpPost("content/{linkId}/edit-values"), RequireFeature("workspace.folder.editObject")]
     public async Task<IResult> EditValues(string linkId, RemoveReferenceInput input, CancellationToken token)

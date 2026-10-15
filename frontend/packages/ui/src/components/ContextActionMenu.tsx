@@ -65,7 +65,7 @@ export function ContextActionMenu({ children, menu, open, onOpenChange, trigger 
   return <>
     {point ? children : null}
     <Dropdown trigger={trigger} open={open} onOpenChange={close} autoFocus={false}
-      popupRender={node => <FocusableMenu open={open} currentOpen={currentOpen}>{node}</FocusableMenu>}
+      popupRender={node => <div onClick={event => event.stopPropagation()}><FocusableMenu open={open} currentOpen={currentOpen}>{node}</FocusableMenu></div>}
       menu={{ ...menu, onClick: info => { info.domEvent.stopPropagation(); close(false); menu.onClick?.(info); } }}>
       <span ref={anchor} tabIndex={keyboardLabel ? 0 : undefined} aria-label={keyboardLabel}
         aria-haspopup="menu" aria-expanded={open}

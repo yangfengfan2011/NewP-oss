@@ -1,8 +1,10 @@
 import { createContext } from 'react';
 import type { PageLifecycleState, ResourceChange } from '@icp-platform/sdk';
+import type { ActionInstanceScope } from './ActionInstanceScope';
 
 export type CompositionChange = ResourceChange & { originTreeId?: string };
 export const TreeInstanceContext = createContext<string | undefined>(undefined);
+export const ActionInstanceContext = createContext<ActionInstanceScope | undefined>(undefined);
 export interface CompositionRuntime {
   /** 外层组合拥有提示的生命周期，子动作关闭后提示仍可见。 */
   notice?: (reasonKey: string) => void;

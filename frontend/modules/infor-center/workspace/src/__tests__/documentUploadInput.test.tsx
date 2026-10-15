@@ -12,7 +12,7 @@ vi.mock('../workspaceDocumentUpload', async importOriginal => ({
   ...await importOriginal<typeof import('../workspaceDocumentUpload')>(),
   stageDocumentFile: vi.fn(), cancelDocumentStage: vi.fn().mockResolvedValue(undefined),
 }));
-const scope = { spaceId: 'space', rootFolderId: 'root', linkIds: '[]' };
+const scope = { spaceId: 'space', rootFolderId: 'root', linkIds: '["content-folder-link"]' };
 const staged: DocumentStage = { uploadId: 'FileUploadLease_11111111111111111111111111111111', fileId: 'private', fileName: 'main.pdf', length: 4, contentType: 'application/pdf', expiresAt: '2026-10-15T00:00:00Z' };
 const roots: { root: Root; element: HTMLElement }[] = [];
 let currentDraft: WorkspaceDocumentDraft;
@@ -106,7 +106,7 @@ it.each(['before-response', 'body-read', 'truncated-json'] as const)('retains un
   });
   const saves = request.mock.calls.filter(([input]) => String(input instanceof Request ? input.url : input).includes('/api/workspace/content/documents'));
   expect(saves).toHaveLength(1);
-  expect(await (saves[0][0] as Request).clone().json()).toEqual({ position: { spaceId: 'space', rootFolderId: 'root', linkIds: [] },
+  expect(await (saves[0][0] as Request).clone().json()).toEqual({ position: { spaceId: 'space', rootFolderId: 'root', linkIds: ['content-folder-link'] },
     values: { ECODE: 'FILE', ENAME: '图文档' }, uploads: { mainUploadId: staged.uploadId } });
   expect(element.textContent).toContain('保存结果尚未确认');
   expect([...element.querySelectorAll('button')].find(button => button.textContent === '选择主文件')?.disabled).toBe(true);

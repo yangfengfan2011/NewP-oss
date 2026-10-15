@@ -94,7 +94,8 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
     if (path === '/api/workspace/spaces') return json(spaces());
     if (path.startsWith('/api/workspace/content/path?')) {
       const root = new URL(path, 'http://localhost').searchParams.get('rootFolderId')!;
-      return json({ folderId: root, folderIds: [root], names: [root === 'public-root' ? '公共空间' : '个人空间'] });
+      const chain = JSON.parse(new URL(path, 'http://localhost').searchParams.get('linkIds')!) as string[];
+      return json({ folderId: chain.length ? 'a-folder' : root, folderIds: [root, ...chain.map(() => 'a-folder')], names: [root === 'public-root' ? '公共空间' : '个人空间', ...chain.map(() => '父A')] });
     }
     if (path.startsWith('/api/workspace/content/children?')) {
       if (scenario !== 'success' || !writes.length) return json({ items: [], total: 0, page: 1, pageSize: 0 });
@@ -108,7 +109,7 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
       if (failInitialRead) { failInitialRead = false; return new Response('initial read unavailable', { status: 503 }); }
       const id = new URL(path, 'http://localhost').searchParams.get('anchorId');
       if (id === 'a-root') return new Promise<Response>(resolve => { completeOld = resolve; });
-      if (id === 'public-root' && scenario === 'success') {
+      if ((id === 'public-root' || id === 'a-folder') && scenario === 'success') {
         if (failRefresh) { failRefresh = false; return new Response('read unavailable', { status: 503 }); }
         return json(referencePresent ? contents('shared-folder', '已有共享文件夹') : writes.length
           ? contents('created-folder', '创建后可读') : { items: [], total: 0, page: 1, pageSize: 20 });
@@ -168,9 +169,9 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
     expect(fetcher.mock.calls.some(([input]) => String(input instanceof Request ? input.url : input).endsWith('/folders/public-root-folder'))).toBe(true);
     await act(async () => document.querySelector<HTMLButtonElement>('.ant-drawer-close')!.click());
   }
-  const publicListReads = () => fetcher.mock.calls.filter(([input]) => {
+  const publicListReads = (anchorId = 'public-root') => fetcher.mock.calls.filter(([input]) => {
     const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost');
-    return url.pathname === '/api/links/workspace.content' && url.searchParams.get('anchorId') === 'public-root';
+    return url.pathname === '/api/links/workspace.content' && url.searchParams.get('anchorId') === anchorId;
   }).length;
   const readsBeforeCreate = publicListReads();
   const openNewMenu = async () => {
@@ -209,6 +210,9 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
     await vi.waitFor(() => expect([...container.querySelectorAll('.ant-tree-title')].filter(element => element.textContent === '共享后代')).toHaveLength(2));
     const loadedReads = () => fetcher.mock.calls.filter(([input]) => String(input instanceof Request ? input.url : input).startsWith('/api/workspace/content/children?')).length;
     const beforeAddReads = loadedReads();
+    await act(async () => [...container.querySelectorAll<HTMLElement>('.ant-tree-title')].find(item => item.textContent === '父A')!.click());
+    await vi.waitFor(() => expect(container.querySelector('.np-tree-context-header h2')?.textContent).toBe('父A'));
+    const folderListReads = () => publicListReads('a-folder');
     await openNewMenu();
     const createObject = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent === '新建图文档');
     expect(createObject).toBeDefined(); await act(async () => createObject!.click());
@@ -244,7 +248,7 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
       expect(document.querySelector<HTMLButtonElement>('.ant-drawer-footer .ant-btn-primary')!.disabled).toBe(false);
     });
     const confirm = document.querySelector<HTMLButtonElement>('.ant-drawer-footer .ant-btn-primary')!;
-    const beforeConflictReads = publicListReads();
+    const beforeConflictReads = folderListReads();
     await act(async () => { confirm.click(); confirm.click(); });
     await vi.waitFor(() => expect(documentWrites).toHaveLength(1));
     await act(async () => undefined);
@@ -253,7 +257,7 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
     expect(document.body.textContent).toContain('主文件已上传');
     expect(document.body.textContent).toContain('附件已上传');
     expect(cancelledUploads).toEqual([]);
-    expect(publicListReads()).toBe(beforeConflictReads);
+    expect(folderListReads()).toBe(beforeConflictReads);
     expect(upload).toHaveBeenCalledTimes(2);
     expect(references).toEqual([]);
     await act(async () => {
@@ -268,13 +272,13 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
     await act(async () => document.querySelector<HTMLButtonElement>('.ant-drawer-footer .ant-btn-primary')!.click());
     await vi.waitFor(() => expect(references).toHaveLength(1));
     expect(documentWrites).toEqual([
-      { position: { spaceId: 'public', rootFolderId: 'public-root', linkIds: [] }, values: { ECODE: 'NEW-DOC', ENAME: '新建图文档' }, uploads: { mainUploadId: uploadId, attachmentUploadIds: [attachmentId] } },
-      { position: { spaceId: 'public', rootFolderId: 'public-root', linkIds: [] }, values: { ECODE: 'CORRECTED-DOC', ENAME: '新建图文档' }, uploads: { mainUploadId: uploadId, attachmentUploadIds: [attachmentId] } },
+      { position: { spaceId: 'public', rootFolderId: 'public-root', linkIds: ['a'] }, values: { ECODE: 'NEW-DOC', ENAME: '新建图文档' }, uploads: { mainUploadId: uploadId, attachmentUploadIds: [attachmentId] } },
+      { position: { spaceId: 'public', rootFolderId: 'public-root', linkIds: ['a'] }, values: { ECODE: 'CORRECTED-DOC', ENAME: '新建图文档' }, uploads: { mainUploadId: uploadId, attachmentUploadIds: [attachmentId] } },
     ]);
     expect(cancelledUploads).toEqual([]);
-    await vi.waitFor(() => expect(publicListReads()).toBe(beforeConflictReads + 1));
+    await vi.waitFor(() => expect(folderListReads()).toBe(beforeConflictReads + 1));
     await vi.waitFor(() => expect(loadedReads()).toBeGreaterThanOrEqual(beforeAddReads + 5));
-    expect(references[0]).toEqual({ method: 'POST', body: { position: { spaceId: 'public', rootFolderId: 'public-root', linkIds: [] },
+    expect(references[0]).toEqual({ method: 'POST', body: { position: { spaceId: 'public', rootFolderId: 'public-root', linkIds: ['a'] },
       values: { ECODE: 'CORRECTED-DOC', ENAME: '新建图文档' }, uploads: { mainUploadId: uploadId, attachmentUploadIds: [attachmentId] } } });
     expect(upload).toHaveBeenCalledTimes(2);
     await vi.waitFor(() => expect(container.textContent).toContain('已保存，刷新失败'));
@@ -288,7 +292,7 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
     await vi.waitFor(() => expect(document.body.textContent).toContain('移除当前文件夹中的这条引用？'));
     await act(async () => document.querySelector<HTMLButtonElement>('.ant-modal-footer .ant-btn-primary')!.click());
     await vi.waitFor(() => expect(references).toHaveLength(2));
-    expect(references[1]).toEqual({ method: 'DELETE', body: { position: { spaceId: 'public', rootFolderId: 'public-root', linkIds: [] } } });
+    expect(references[1]).toEqual({ method: 'DELETE', body: { position: { spaceId: 'public', rootFolderId: 'public-root', linkIds: ['a'] } } });
     await vi.waitFor(() => expect(container.textContent).toContain('已保存，刷新失败'));
     await act(async () => [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === '刷新')!.click());
     await vi.waitFor(() => expect(container.querySelector('tr[data-row-key="shared-folder-link"]')).toBeNull());

@@ -22,7 +22,7 @@ Workspace 拥有公共空间、当前账号个人空间及其根文件夹。入�
 
 WorkspaceFolderContent 是正式 Link，父端由 authoring 固定为 WorkspaceFolder，子端由必填 ChildModelKey 判别；允许组合只来自 linkedTypes。正式目录登记 WorkspaceFolder、Part、Document 三个真实端点；读取/显示契约来自其所属模块，Workspace 显式依赖 Part 与 Document。LID、PEID、CEID 与关系审计由服务端填写；关系不保存 SpaceId、父位置、名称或对象审计影子值。
 
-零组件和图文档不提供独立侧栏菜单；用户选择文件夹后，从“新建”父按钮选择新建文件夹、零组件或图文档，统一使用共享右侧 Drawer 和“保存并关闭”，页面不再提供“添加已有对象”。内容列表的名称作为属性入口，操作菜单提供编辑、删除及移除引用；所属模块的 routeOnly 路由及功能位置继续服务于详情准入与属性打开。
+零组件和图文档不提供独立侧栏菜单；用户选择文件夹后，从“新建”父按钮选择新建文件夹、零组件或图文档，统一使用共享右侧 Drawer 和“保存并关闭”，页面不再提供“添加已有对象”。内容列表的名称作为属性入口，操作菜单提供复制引用、编辑、删除及移除引用；所属模块的 routeOnly 路由及功能位置继续服务于详情准入与属性打开。
 
 文件夹内创建由 Workspace 的 createPart/createDocument 功能动作准入，并交集当前完整位置、父文件夹 edit 与所属对象 create 数据范围。Workspace 对象行为静态声明调用 part.part/document.document 的 create，统一执行器在一个事务与审计作用域内保存所属实体和内容 Link；字段规范化、校验、唯一约束及对象审计仍由所属模块标准行为负责。创建回执不包含对象标识，后续列表读取独立裁决；刷新失败不能重放创建。已有引用 API 保留为独立功能授权能力，不再贡献页面按钮。回退这两个创建入口不删除已创建实体或关系。
 
@@ -48,9 +48,19 @@ WorkspaceFolderContent 是正式 Link，父端由 authoring 固定为 WorkspaceF
 
 右侧消费通用 Link 查询及共享 Standard CRUD List View。公共字段目录来自 Link authoring，字段白名单、条件、授权与端点强制条件在数据库计数和分页前执行；列表以 LID 标识行，打开属性使用规范模型键及真实对象 EID：Folder 使用共享 Drawer，Part/Document 由受控 View 绑定解析正式所属路由并重新准入，不把 LID 传给实体详情。对象类型筛选、编码/名称关键词、名称/编码/更新时间排序、分页、列设置及刷新复用标准列表。树直属层与 hasChildren 共用查询规划，仅完整读取当前文件夹层，不受右列表筛选影响。unknown-change 交接给既有组合协调器，刷新已加载范围，读取故障不改变已提交事实。
 
+## 复制引用与根接收
+
+新进入空间根的所有内容只能是文件夹：文件夹内创建 Part/Document、添加引用及批量粘贴都在服务端统一拒绝根目标；Document 上传预检在任何文件 IO 前拒绝根位置。普通文件夹仍接收 Folder、Part、Document。已有根 Part/Document 不自动删除或迁移，继续沿原读取、编辑、下载、移除及复制到普通文件夹路径；没有 Workspace 位置的所属对象直接创建不受此准入规则影响。
+
+树复制绑定当前普通文件夹出现位置的单个末端 LID；行菜单绑定实际点击行；页工具栏 `copySelected` 只采样当前页 1–100 个不同 LID，必须同父。`POST /api/workspace/content/clipboard/validate` 只接受 copy 模式、完整 sourcePosition 及 linkIds；重验完整祖先 read、源关系端点及对象所属 copy 数据资格，不要求源父 edit。三个 owner 分别声明 `workspaceCopy`、`partCopy`、`documentCopy`，均 requiresRead；行为分别是 `data.workspace.copy`、`data.part.copy`、`data.document.copy`，词条由各 owner 互补贡献到既有 DataScope 词典。只读预检在本请求复用已有 scoped 连接，结束或取消归还自己打开的连接，不建立事务或缓存授权结果。
+
+`POST /api/workspace/content/paste` 额外接受完整 targetPosition；在一次文件夹图锁事务内重验全部源资格、目标链与父 edit，再按 snapshot 次序新增引用。Folder 沿 `WorkspaceTreeOrder.NextOrdinalAsync` 追加，Part/Document 的 TreeOrdinal 保持 NULL。新引用有新 LID，原 LID、EID、Document 版次、主附件关联、Files usage 和字节保持不变。重复、同名、环路、批内冲突、并发竞争及提交前失败整批回滚；输入中的客户端值不替代任何服务端重验。
+
+剪贴板只属于当前树/页面实例，由 Workspace 私有类型化会话拥有，右侧列表与树菜单共享。切换目录保留；主体变化、reload 或实际销毁清空。copy 预检成功才替换旧 snapshot；迟到响应不能覆盖新选择或复活已结束实例。已知失败保留可修正 snapshot，成功 copy/paste 仍保留；paste 结果未知时明确提示并锁住旧 snapshot，不自动重放，缺失合法成功回执也按未知处理。已提交后的刷新失败只重试读取。clearClipboard 是复用正式 copy 功能资格的本地动作，没有虚构 HTTP 清空端点；明确清空或成功新 copy 可替换未知状态。同一实例会话的状态同时用于树菜单、列表菜单及工具栏，预检/粘贴期间其他写入和输入开启入口禁用；未知结果仍允许明确清空或重新复制，菜单预览不准备输入或发送写入。尚不实施 cut 或批量移除。
+
 ## 对象编辑与删除
 
-普通文件夹树节点贡献已有编辑与移除引用动作，右侧内容 List View 通过 `rowContextMenu` 引用已有编辑、删除与移除。根仍使用 `folder` nodeType 和既有功能位置；Provider 仅以 `contextMenuKeys: []` 收窄根菜单。`workspace.folder.reference` 从完整节点位置取末端 LID 作为动作 recordId，其源父位置为链去掉末端 LID；空链根及非法链拒绝。`referenceObjectId` 只供共享动作读取真实 Folder EID，并保留动作 row 的 LID/ObjectModelKey；它不进入写入 DTO，也不替代 edit-values、PUT 或移除命令对真实关系端点和完整源父位置的重验。普通实体详情继续按 EID 读取。
+普通文件夹树节点贡献已有编辑与移除引用动作，右侧内容 List View 通过 `rowContextMenu` 引用已有编辑、删除与移除。根仍使用 `folder` nodeType 和既有功能位置；Provider 以 `contextMenuKeys: ["paste", "clearClipboard"]` 收窄根菜单，根不能复制或排序。`workspace.folder.reference` 从完整节点位置取末端 LID 作为动作 recordId，其源父位置为链去掉末端 LID；空链根及非法链拒绝。`referenceObjectId` 只供共享动作读取真实 Folder EID，并保留动作 row 的 LID/ObjectModelKey；它不进入写入 DTO，也不替代 edit-values、PUT 或移除命令对真实关系端点和完整源父位置的重验。普通实体详情继续按 EID 读取。
 
 内容行编辑通过当前完整位置与 LID 重新读取可编辑字段，在共享 Drawer 修改。文件夹编辑名称及说明；零组件、图文档编辑编码、名称及说明。服务端从真实关系推导 EID 和模型，不接受客户端替换类型；完整位置、父文件夹 edit、端点 read 与目标 edit/delete 数据权限每次重验。空间根继续禁止编辑和删除。
 

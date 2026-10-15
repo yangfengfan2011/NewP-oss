@@ -11,7 +11,7 @@ vi.mock('../workspaceDocumentUpload', async importOriginal => ({
   ...await importOriginal<typeof import('../workspaceDocumentUpload')>(),
   stageDocumentFile: vi.fn(), cancelDocumentStage: vi.fn().mockResolvedValue(undefined),
 }));
-const scope = { spaceId: 'space', rootFolderId: 'root', linkIds: '[]' };
+const scope = { spaceId: 'space', rootFolderId: 'root', linkIds: '["content-folder-link"]' };
 const roots: { root: Root; element: HTMLElement }[] = [];
 let currentDraft: WorkspaceDocumentDraft;
 const state = vi.fn();

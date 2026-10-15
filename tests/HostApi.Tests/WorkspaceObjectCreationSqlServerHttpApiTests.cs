@@ -84,7 +84,8 @@ public sealed class WorkspaceObjectCreationSqlServerHttpApiTests
             services.AddSingleton<IDataScopeObjectDecisionProvider>(decisions);
         }, includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
-        var position = await RootAsync(admin, Point(fixture, "workspace.spaces.access"));
+        var container = await DocumentFilesSqlServerHttpApiTests.ContentAsync(fixture, admin);
+        var position = new Position(container.SpaceId, container.RootFolderId, container.LinkIds.ToArray());
         foreach (var (kind, model, action) in Targets)
         {
             var create = Point(fixture, "workspace.folder." + action);
@@ -105,7 +106,8 @@ public sealed class WorkspaceObjectCreationSqlServerHttpApiTests
             using var scope = fixture.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
             Assert.Equal(0, await db.Set<Dictionary<string, object?>>(model).CountAsync());
-            Assert.Equal(0, await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").CountAsync());
+            Assert.Equal(1, await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").CountAsync());
+            await DocumentFilesSqlServerHttpApiTests.AssertContentContainerUnchangedAsync(fixture);
         }
     }
 

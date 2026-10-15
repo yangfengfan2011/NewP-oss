@@ -190,7 +190,7 @@ public sealed class WorkspaceObjectMutationSqlServerHttpApiTests
         Assert.Equal(HttpStatusCode.BadRequest, forged.StatusCode);
         using var longDescription = await SendAsync(fixture, admin, "edit", HttpMethod.Put, $"/api/workspace/content/{document.Link}", new { position = root, values = new { Description = new string('x', 501) } });
         Assert.Equal(HttpStatusCode.BadRequest, longDescription.StatusCode);
-        var otherPosition = root with { LinkIds = [other.Link] };
+        var otherPosition = root with { LinkIds = [.. root.LinkIds, other.Link] };
         foreach (var target in new[] { folder, part, document })
         {
             using var added = await SendAsync(fixture, admin, "add", HttpMethod.Post, "/api/workspace/content/references",
@@ -281,7 +281,7 @@ public sealed class WorkspaceObjectMutationSqlServerHttpApiTests
         var part = await CreateAsync(fixture, admin, root, "parts", "createPart", "keep");
         var otherPart = await CreateAsync(fixture, admin, root, "parts", "createPart", "also-keep");
         using var shared = await SendAsync(fixture, admin, "add", HttpMethod.Post, "/api/workspace/content/references",
-            new { position = root with { LinkIds = [folder.Link] }, target = new { modelKey = part.Model, id = part.Id } });
+            new { position = root with { LinkIds = [.. root.LinkIds, folder.Link] }, target = new { modelKey = part.Model, id = part.Id } });
         Assert.Equal(HttpStatusCode.OK, shared.StatusCode);
         var body = new { position = root, linkIds = new[] { part.Link, folder.Link } };
         using var nonEmpty = await SendAsync(fixture, admin, "deleteObjects", HttpMethod.Post, "/api/workspace/content/delete", body);
@@ -323,7 +323,7 @@ public sealed class WorkspaceObjectMutationSqlServerHttpApiTests
             using var admin = await fixture.LoginAdministratorAsync();
             var root = await RootAsync(fixture, admin);
             var parent = await CreateAsync(fixture, admin, root, "folders", "create", "parent");
-            var position = root with { LinkIds = [parent.Link] };
+            var position = root with { LinkIds = [.. root.LinkIds, parent.Link] };
             var target = await CreateAsync(fixture, admin, position, "parts", "createPart", "target");
             using var beforeScope = fixture.Services.CreateScope();
             var before = await beforeScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>()
@@ -414,7 +414,9 @@ public sealed class WorkspaceObjectMutationSqlServerHttpApiTests
         using var response = await FeatureHttpTestRequests.SendAsync(admin, Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "workspace.spaces.access"), HttpMethod.Post, "/api/workspace/spaces/public/initialize");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var root = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
-        return new(root.GetProperty("spaceId").GetString()!, root.GetProperty("rootFolderId").GetString()!, []);
+        var rootPosition = new Position(root.GetProperty("spaceId").GetString()!, root.GetProperty("rootFolderId").GetString()!, []);
+        var container = await CreateAsync(fixture, admin, rootPosition, "folders", "create", "对象行为消费目录");
+        return rootPosition with { LinkIds = [container.Link] };
     }
     private static async Task<Target> CreateAsync(BusinessAuditHostFixture fixture, HttpClient admin, Position position, string kind, string action, string name)
     {

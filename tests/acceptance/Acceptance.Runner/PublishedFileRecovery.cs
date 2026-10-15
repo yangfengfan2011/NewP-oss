@@ -25,7 +25,10 @@ internal sealed partial class PublishedComponentAcceptanceFixture
         var download = features.Behavior("Document", "document.document.download").Position;
         var roots = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get, "/api/workspace/spaces", null, entry, token);
         var root = roots.EnumerateArray().Single(row => row.GetProperty("spaceKind").GetString()!.Equals("public", StringComparison.OrdinalIgnoreCase));
-        var position = new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = root.GetProperty("rootFolderId").GetString(), linkIds = Array.Empty<string>() };
+        var rootId = root.GetProperty("rootFolderId").GetString()!;
+        var folder = await WorkspaceAcceptanceFixture.CreateFolderAtPositionAsync(client, features,
+            new(root.GetProperty("spaceId").GetString()!, rootId, rootId, []), "文件恢复目录 " + runId[..8], token);
+        var position = folder.CommandPosition;
         if (exerciseFileRecoveryMechanisms) await VerifyKestrelUploadBoundaryAsync(client, create, position, token);
         var name = "正式文件重启 " + runId[..8];
         var values = new { ECODE = "OS-MAIN-" + runId[..8], ENAME = name };
@@ -43,7 +46,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture
         }
         await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Post, "/api/workspace/content/documents",
             new { position, values, uploads = new { mainUploadId = uploadIds[0], attachmentUploadIds = uploadIds.Skip(1).ToArray() } }, create, token);
-        var content = await WorkspaceAcceptanceFixture.ReadRootContentsAsync(client, root, entry, token);
+        var content = await WorkspaceAcceptanceFixture.ReadContentsAtPositionAsync(client, folder, entry, token);
         var documentId = content.GetProperty("items").EnumerateArray().Single(row => row.GetProperty("fields").GetProperty("Name").GetString() == name)
             .GetProperty("associatedObject").GetProperty("id").GetString()!;
         var before = await ReadSavedFileFactsAsync(documentId, token);

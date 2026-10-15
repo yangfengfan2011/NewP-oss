@@ -224,8 +224,19 @@ export interface StandardCrudActionDefinition {
   inputKey?: string;
 }
 
-/** 标准动作上下文；Shell 只向模块处理器提供当前资源数据，不暴露页面状态与失效策略。 */
+/** 实例动作状态的受控容器；模块拥有值，宿主只管理生命周期。 */
+export interface StandardCrudActionInstance {
+  /** 仅当前页面实例和主体有效；结束后的异步工作不能重新取得状态。 */
+  readonly active: boolean;
+  /** 按模块稳定owner token持有类型化内存状态，实例销毁时调用模块的释放函数。 */
+  getOrCreate<T>(owner: symbol, create: () => T, dispose: (value: T) => void): T;
+  /** 通知本实例的动作呈现重新读取状态；不刷新数据或执行网络写入。 */
+  changed(): void;
+}
+
+/** 标准动作上下文；Shell只提供当前资源与受控实例，不暴露刷新策略，实例状态不是服务端资格或HTTP输入。 */
 export interface StandardCrudActionContext<TDetail = unknown, TRow = unknown> extends StandardCrudFeatureRequestContext {
+  instance?: StandardCrudActionInstance;
   /** 当前受控入口已校验的动作；旧调用方可以省略，不能作为服务端授权凭证。 */
   action?: StandardCrudActionDefinition;
   /** 当前页面定位输入；服务端仍须独立验证，不能作为授权凭证。 */
@@ -249,7 +260,7 @@ export interface StandardCrudActionState {
 
 /** 动作状态 resolver 只接收动作声明和当前数据快照，不把模块字段或表达式引入公共契约。 */
 export type StandardCrudActionStateResolver<TDetail = unknown, TRow = unknown> = (
-  context: Pick<StandardCrudActionContext<TDetail, TRow>, 'detail' | 'row'> & { action: StandardCrudActionDefinition },
+  context: Pick<StandardCrudActionContext<TDetail, TRow>, 'detail' | 'row' | 'queryScope' | 'instance'> & { action: StandardCrudActionDefinition },
 ) => StandardCrudActionState;
 
 /** 异步对象资格由资源 owner 按正式功能位置读取；明确拒绝可隐藏动作，依赖故障必须传播。 */

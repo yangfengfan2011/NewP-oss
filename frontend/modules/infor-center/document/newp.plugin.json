@@ -4,7 +4,7 @@
   "dependencies": ["Identity", "Authentication", "Authorization", "Files"],
   "hostVersion": { "min": "1.1.0", "max": "2.0.0" },
   "backend": { "behaviorKey": "document.backend" },
-  "dataActions": [{ "key": "download", "title": "下载", "behaviorKey": "data.download", "requiresRead": true }],
+  "dataActions": [{ "key": "documentCopy", "title": "复制图文档引用", "behaviorKey": "data.document.copy", "requiresRead": true }, { "key": "download", "title": "下载", "behaviorKey": "data.download", "requiresRead": true }],
   "frontend": { "behaviorKey": "document.frontend", "entry": "document", "bindingMode": "behavior-bindings", "bindings": ["document.document.list", "document.document.detail"] },
   "persistence": { "models": ["metadata/models/Document.model.json", "metadata/models/DocumentVersion.model.json", "metadata/models/DocumentIteration.model.json", "metadata/models/DocumentFileLink.model.json"], "migrations": { "sqlServer": { "assembly": "migrations/Document.SqlServerMigrations.dll", "manifest": "migrations/Document.SqlServerMigrations.json" } } }
 }

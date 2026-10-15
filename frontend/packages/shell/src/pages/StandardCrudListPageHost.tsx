@@ -1,6 +1,6 @@
 import { useFeaturePlacement } from '../authorization/FeaturePlacementContext';
 import { resolvedFeaturePosition, type FeatureResolution } from '../authorization/featurePlacementResolver';
-import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
+import { Component, lazy, Suspense, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { formatRequestError, useLocalization, usePlatformQuery } from '@icp-platform/core';
 import { DownOutlined, DownloadOutlined } from '@ant-design/icons';
@@ -79,6 +79,9 @@ import { formatStandardCrudActionReason } from '../standard-crud/standardCrudAct
 import { useStandardCrudMutationExecution } from '../standard-crud/useStandardCrudMutationExecution';
 import { useStandardCrudHostEnvironment, type StandardCrudHostAddress } from '../standard-crud/standardCrudHostEnvironment';
 
+import { ActionInstanceContext } from '../composition/pageCompositionRuntime';
+const noInstanceSubscription = () => () => undefined;
+const noInstanceSnapshot = () => 0;
 type MetadataRecord = Record<string, unknown>;
 
 const loadStandardCrudListOverlayRuntime = () => import('./StandardCrudListOverlayRuntime');
@@ -817,6 +820,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   detailRoutePath?: string;
 }): ReactElement {
   const registration = useLocalizedStandardCrudRegistration(sourceRegistration);
+  const actionInstance = useContext(ActionInstanceContext);
+  useSyncExternalStore(actionInstance?.subscribe ?? noInstanceSubscription, actionInstance?.getSnapshot ?? noInstanceSnapshot);
   // Router hook 无条件调用；是否真正拥有地址由宿主环境决定。
   const routeLocation = useLocation();
   const navigate = useNavigate();
@@ -1703,7 +1708,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       .map(({ action, featureResolution }) => ({
         action,
         featureResolution,
-        actionState: registration.actionStateResolver?.({ action, row }),
+        actionState: registration.actionStateResolver?.({ action, row, instance: actionInstance, queryScope: host.input.queryScope }),
       }))
       .filter(({ actionState }) => actionState?.visible !== false)
       .map(({ action, actionState, featureResolution }): RowActionItem => {
@@ -1776,7 +1781,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
               const outcome = await actionExecution.execute({
                 key: pendingKey,
                 handler: deleteHandler,
-                context: { action, id: rowId, row, featurePosition: featureResolution.position },
+                context: { instance: actionInstance, action, id: rowId, row, featurePosition: featureResolution.position },
                 refreshOnConflict: false,
                 fallbackErrorMessage: '删除标准资源失败',
               });
@@ -1813,7 +1818,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             const outcome = await actionExecution.execute({
               key: pendingKey,
               handler,
-              context: { action, id: rowId, row, queryScope: host.input.queryScope, featurePosition: featureResolution.position },
+              context: { instance: actionInstance, action, id: rowId, row, queryScope: host.input.queryScope, featurePosition: featureResolution.position },
             });
             if (outcome.status === 'succeeded') host.lifecycle.close?.();
             return outcome.status === 'succeeded';
@@ -1939,7 +1944,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
 
   const visiblePageActions = schema.pageActions
     .map(action => ({ action, featureResolution: resolveActionFeature(action, 'list.pageActions') }))
-    .filter(({ featureResolution }) => featureResolution.kind === 'allowed');
+    .filter(({ featureResolution }) => featureResolution.kind === 'allowed')
+    .filter(({ action }) => registration.actionStateResolver?.({ action, instance: actionInstance, queryScope: host.input.queryScope })?.visible !== false);
   const visibleHeaderActions = visiblePageActions
     .filter(({ action }) => action.standardAction === 'create' || Boolean(action.handlerKey))
     .map(({ action }) => action);
@@ -2009,6 +2015,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   // 分组只改变入口呈现；每次执行仍以子动作的当前权限和原有生命周期为准。
   function runHeaderAction(action: StandardCrudRuntimeActionSchema): void {
     if (actionExecution.pendingKey !== null || mutationExecution.pending || (action.requiresSelection && (effectiveLoading || selectedRows.length === 0))) return;
+    const state = registration.actionStateResolver?.({ action, instance: actionInstance, queryScope: host.input.queryScope });
+    if (state?.visible === false || state?.available === false) return;
     const feature = resolveActionFeature(action, 'list.pageActions');
     if (feature.kind !== 'allowed') return;
     if (action.standardAction === 'create') { void openCreateDrawer(); return; }
@@ -2020,7 +2028,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         setRowInputAction({ action, actionScope: 'list.pageActions', rowId: '', pendingKey: action.key, label: action.labelKey, selectedRows: action.requiresSelection ? [...selectedRows] : undefined });
       } else {
         void actionExecution.execute({ key: action.key, handler,
-          context: { action, queryScope: host.input.queryScope, featurePosition: feature.position, selectedRows: action.requiresSelection ? [...selectedRows] : undefined } });
+          context: { instance: actionInstance, action, queryScope: host.input.queryScope, featurePosition: feature.position, selectedRows: action.requiresSelection ? [...selectedRows] : undefined } });
       }
     });
   }
@@ -2040,7 +2048,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     {headerEntries.map(({ key, group, actions }) => group ? (
       <Dropdown key={key} trigger={['click']} disabled={headerPending} menu={{
         items: actions.map(action => ({ key: action.key, label: t(`${schema.dicKey}.${action.labelKey}`, action.labelKey),
-          disabled: headerPending || (action.requiresSelection && (effectiveLoading || selectedRows.length === 0)), danger: action.variant === 'danger' })),
+          disabled: headerPending || registration.actionStateResolver?.({ action, instance: actionInstance, queryScope: host.input.queryScope })?.available === false || (action.requiresSelection && (effectiveLoading || selectedRows.length === 0)), danger: action.variant === 'danger' })),
         onClick: ({ key: childKey }) => { const action = actions.find(child => child.key === childKey); if (action) runHeaderAction(action); },
       }}>
         <AntdButton type={group.variant === 'primary' ? 'primary' : 'default'} danger={group.variant === 'danger'}
@@ -2050,7 +2058,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       </Dropdown>
     ) : (
       <AntdButton key={key} type={actions[0].variant === 'primary' ? 'primary' : 'default'} size="middle"
-        danger={actions[0].variant === 'danger'} disabled={headerPending || (actions[0].requiresSelection && (effectiveLoading || selectedRows.length === 0))} onClick={() => runHeaderAction(actions[0])}>
+        danger={actions[0].variant === 'danger'} disabled={headerPending || registration.actionStateResolver?.({ action: actions[0], instance: actionInstance, queryScope: host.input.queryScope })?.available === false || (actions[0].requiresSelection && (effectiveLoading || selectedRows.length === 0))} onClick={() => runHeaderAction(actions[0])}>
         {t(`${schema.dicKey}.${actions[0].labelKey}`, actions[0].labelKey)}
       </AntdButton>
     ))}
@@ -2398,7 +2406,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 const outcome = await actionExecution.execute({
                   key: pendingKey,
                   handler,
-                  context: { action: rowInputAction.action, id: rowId, row, selectedRows: rowInputAction.selectedRows, input: rowInputValue, queryScope: host.input.queryScope, featurePosition: rowInputFeatureResolution.position },
+                  context: { instance: actionInstance, action: rowInputAction.action, id: rowId, row, selectedRows: rowInputAction.selectedRows, input: rowInputValue, queryScope: host.input.queryScope, featurePosition: rowInputFeatureResolution.position },
                 });
                 if (outcome.status === 'succeeded') {
                   setRowInputAction(null);

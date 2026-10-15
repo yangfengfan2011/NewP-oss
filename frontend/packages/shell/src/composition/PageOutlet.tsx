@@ -11,6 +11,7 @@ import { PageComposition } from './PageCompositionContext';
 import { createAddressNavigation } from './compositionNavigation';
 import './composition.css';
 import { useOptionalAuth } from '../contexts/AuthContext';
+import { loadStandardListRegistration } from './standardListRegistration';
 import { FeaturePlacementContext, type FeaturePlacement } from '../authorization/FeaturePlacementContext';
 const TreePage = lazy(() => import('./StandardTreePage'));
 const TabPage = lazy(() => import('./StandardTabPage'));
@@ -97,9 +98,7 @@ function StandardPage({ pageKey, input, reportState, close, active }: PageProps 
     const listKey = pageKey === 'platform.list' ? viewKey
       : metadata?.viewDocuments.find(document => document.view.mode === 'list' && document.view.detailViewKey === viewKey)?.view.key;
     const modules = ModuleRegistry.getAllModules();
-    const registered = modules.flatMap(module => module.standardCrudResources ?? []).find(resource => resource.listViewKey === listKey);
-    const binding = modules.flatMap(module => module.standardCrudCapabilities ?? []).find(item => item.kind === 'standard-list' && item.targetKey === listKey);
-    const load = registered ? Promise.resolve({ default: registered }) : binding?.load();
+    const load = loadStandardListRegistration(modules, listKey);
     if (!load) setError(new Error('未找到标准页面资源绑定'));
     else void load.then(result => { if (active) setRegistration(result.default); }, failure => { if (active) setError(failure); });
     return () => { active = false; };

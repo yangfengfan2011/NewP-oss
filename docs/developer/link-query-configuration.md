@@ -37,6 +37,6 @@
 
 ## 标准列表与回退
 
-List View 的 querySource 绑定上述 Link 模型/资源；公共列使用 projection，字段及排序继续按同一正式目录校验。共享列表请求 LID，Adapter 的 getRowId 提供关系身份，getDetailId 可提供当前目标资源真实 EID；异构 Adapter 的 getDetailTarget 只返回已登记 detailViewKey 与真实主键，宿主验证完整详情能力并解析唯一正式路由；不接受任意 URL，目标详情重新执行自身准入。listFieldRenderers 仅呈现已声明公共字段，不放开请求白名单或 display 筛选排序。创建和写后回执继续沿共享 Mutation Execution，不以刷新失败重放写入。
+List View 的 querySource 绑定上述 Link 模型/资源；公共列使用 projection，字段及排序继续按同一正式目录校验。共享列表请求 LID，Adapter 的 getRowId 提供关系身份，getDetailId 可提供当前目标资源真实 EID；异构 Adapter 的 getDetailTarget 只返回已登记 detailViewKey 与真实主键，宿主验证完整详情能力并解析唯一正式路由；不接受任意 URL，目标详情重新执行自身准入。名称列可通过 Adapter 的 `getRowActivationTarget` 返回 `tree-node` 与完整 `nodeKey`，由所属树的定位生命周期读取路径并同步选中状态和地址；缺省仍查看详情，显式属性动作保持原行为。Workspace 文件夹使用当前根、父链及行 LID 组成精确出现位置，Part / Document 保留详情路由；不以实体 EID 猜测共享对象的路径。listFieldRenderers 仅呈现已声明公共字段，不放开请求白名单或 display 筛选排序。创建和写后回执继续沿共享 Mutation Execution，不以刷新失败重放写入。
 
 撤回采用时关闭入口并撤销新增查询登记，保留实体、Link 和 migration history；不自动 Down、清表或让旧 Host 越过 migration frontier。新增目录不授权通用写入、实体删除、重命名或任意图查询。

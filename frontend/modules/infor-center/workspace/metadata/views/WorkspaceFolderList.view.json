@@ -27,7 +27,7 @@
       { "key": "moveUp", "titleKey": "MoveUp", "labelKey": "MoveUp", "behaviorKey": "workspace.folder.reorder", "handlerKey": "reorder", "readBehaviors": ["workspace.folder.read"] },
       { "key": "moveDown", "titleKey": "MoveDown", "labelKey": "MoveDown", "behaviorKey": "workspace.folder.reorder", "handlerKey": "reorder", "readBehaviors": ["workspace.folder.read"] },{ "key": "add", "titleKey": "AddFolder", "behaviorKey": "workspace.folder.add", "readBehaviors": ["workspace.folder.read"] }],
     "rowContextMenu": ["copy", "cut", "edit", "delete", "remove"],
-    "rowActions": [{ "key": "copy", "labelKey": "Copy", "handlerKey": "copy" }, { "key": "cut", "labelKey": "Cut", "handlerKey": "cut" }, { "key": "edit", "labelKey": "Edit", "handlerKey": "editObject", "inputKey": "editObject" },
+    "rowActions": [{ "key": "view", "labelKey": "OpenProperties", "standardAction": "view" }, { "key": "copy", "labelKey": "Copy", "handlerKey": "copy" }, { "key": "cut", "labelKey": "Cut", "handlerKey": "cut" }, { "key": "edit", "labelKey": "Edit", "handlerKey": "editObject", "inputKey": "editObject" },
       { "key": "delete", "labelKey": "Delete", "handlerKey": "deleteObject", "variant": "danger", "confirmMessageKey": "ConfirmDeleteObjects" },
       { "key": "remove", "labelKey": "RemoveReference", "handlerKey": "remove", "variant": "danger", "confirmMessageKey": "ConfirmRemoveReference" }], "export": { "enabled": false }
   }

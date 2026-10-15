@@ -3,6 +3,7 @@ import type { PageLifecycleState, ResourceChange } from '@icp-platform/sdk';
 import type { ActionInstanceScope } from './ActionInstanceScope';
 
 export type CompositionChange = ResourceChange & { originTreeId?: string };
+export const TreeNodeActivationContext = createContext<((nodeKey: string) => void) | null>(null);
 export const TreeInstanceContext = createContext<string | undefined>(undefined);
 export const ActionInstanceContext = createContext<ActionInstanceScope | undefined>(undefined);
 export interface CompositionRuntime {

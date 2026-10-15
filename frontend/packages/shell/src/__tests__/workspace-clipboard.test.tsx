@@ -45,7 +45,7 @@ async function waitForActive(check: () => void | Promise<void>, signal: AbortSig
 }
 const waitFor = (check: () => void | Promise<void>) => waitForActive(check, testLifetime.signal);
 
-async function mount(options: { validate?: (body: Record<string, unknown>) => Promise<Response>; paste?: (body: Record<string, unknown>) => Promise<Response>; failRefresh?: boolean;
+async function mount(options: { folderRow?: boolean; validate?: (body: Record<string, unknown>) => Promise<Response>; paste?: (body: Record<string, unknown>) => Promise<Response>; failRefresh?: boolean;
   grants?: readonly string[]; remove?: (body: Record<string, unknown>) => Promise<Response>;
   menuLoad?: (load: () => Promise<{ default: StandardCrudResourceRegistration }>, call: number) => Promise<{ default: StandardCrudResourceRegistration }> } = {}) {
   const lifetime = new AbortController();
@@ -69,12 +69,12 @@ async function mount(options: { validate?: (body: Record<string, unknown>) => Pr
       { spaceId: 'mine', spaceKind: 'Personal', rootFolderId: 'personal-root', name: '个人空间' },
     ]));
     const nodeKey = url.searchParams.get('nodeKey') ?? ''; const { linkIds: links } = workspaceTreePosition(nodeKey);
-    if (url.pathname.endsWith('/children')) return json(workspaceTreeChildren(nodeKey, links.length ? [] : ['A', 'B', 'C'].map(name => ({ linkId: `${name}-link`, associatedObject: { id: name }, fields: { Name: name }, hasChildren: false }))));
+    if (url.pathname.endsWith('/children')) return json(workspaceTreeChildren(nodeKey, links.length ? (options.folderRow && links.length === 1 ? [{ linkId: 'WorkspaceFolder-lid', associatedObject: { id: 'WorkspaceFolder' }, fields: { Name: 'WorkspaceFolder' }, hasChildren: false }] : []) : ['A', 'B', 'C'].map(name => ({ linkId: `${name}-link`, associatedObject: { id: name }, fields: { Name: name }, hasChildren: false }))));
     if (url.pathname.endsWith('/path')) return json(workspaceTreePath(nodeKey, ['root', ...links.map(id => id.split('-')[0])], ['公共空间', ...links.map(id => id.split('-')[0])]));
     if (url.pathname === '/api/links/workspace.content') {
       if (failedRead) { failedRead = false; return json({ code: 'HTTP_503' }, 503); }
       const source = url.searchParams.get('anchorId') === 'A';
-      const items = source ? ['Document', 'Part'].map(modelKey => ({ linkId: `${modelKey}-lid`, associatedObject: { modelKey, id: `${modelKey}-eid` },
+      const items = source ? [...(options.folderRow ? ['WorkspaceFolder'] : []), 'Document', 'Part'].map(modelKey => ({ linkId: `${modelKey}-lid`, associatedObject: { modelKey, id: `${modelKey}-eid` },
         fields: { Name: `${modelKey} source`, ObjectType: modelKey, UpdatedAt: '2026-10-14T00:00:00Z' } })) : [];
       return json({ items, total: items.length, page: 1, pageSize: 20 });
     }
@@ -148,7 +148,7 @@ async function mount(options: { validate?: (body: Record<string, unknown>) => Pr
     await act(async () => title.firstElementChild!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 60, clientY: 80 })));
     await waitFor(() => expect(document.querySelector('[role=menuitem]')).not.toBeNull());
   };
-  return { container, writes, request, select, button, copyRows, cleanup, openTreeMenu, waitFor };
+  return { router, container, writes, request, select, button, copyRows, cleanup, openTreeMenu, waitFor };
 }
 
 it('ends an outstanding fixture wait when its mounted page is disposed', async () => {
@@ -406,4 +406,16 @@ it('keeps a committed clipboard after refresh failure and retries only reading',
   await waitFor(() => expect(page.container.textContent).toContain('已保存，刷新失败'));
   await act(async () => page.button('刷新').click()); await waitFor(() => expect(page.container.textContent).not.toContain('已保存，刷新失败'));
   expect(page.writes.filter(item => item.path.endsWith('/paste'))).toHaveLength(1); expect(page.button('粘贴引用').disabled).toBe(false);
+});
+
+it('opens a folder name at its exact tree occurrence without reading a details drawer', async () => {
+  const page = await mount({ folderRow: true });
+  await page.select('A');
+  await page.waitFor(() => expect(page.container.querySelector('tbody')?.textContent).toContain('WorkspaceFolder source'));
+  const name = [...page.container.querySelectorAll<HTMLButtonElement>('tbody button')].find(button => button.textContent === 'WorkspaceFolder source')!;
+  await act(async () => name.click());
+  await page.waitFor(() => expect(page.container.querySelector('.np-tree-context-header h2')?.textContent).toBe('WorkspaceFolder'));
+  expect(new URLSearchParams(page.router.state.location.search).get('node')).toBe('public:root:A-link:WorkspaceFolder-lid');
+  expect(document.querySelector('.ant-drawer')).toBeNull();
+  expect(page.request.mock.calls.some(([input]) => String(input instanceof Request ? input.url : input).includes('/api/workspace/folders/'))).toBe(false);
 });

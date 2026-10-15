@@ -152,6 +152,12 @@ const resource: StandardCrudResourceRegistration = {
       return { operation: 'create', payload, change: { operation: 'create', id: '' } };
     },
     getRowId: row => String(row.LID),
+    getRowActivationTarget: (row, context) => {
+      if (row.ObjectModelKey !== 'WorkspaceFolder') return undefined;
+      if (typeof row.LID !== 'string' || !row.LID) throw new Error('缺少文件夹引用标识');
+      const position = workspacePosition(context.queryScope);
+      return { kind: 'tree-node', nodeKey: [position.spaceId, position.rootFolderId, ...position.linkIds, row.LID].map(encodeURIComponent).join(':') };
+    },
     getDetailId: row => {
       if (row.ObjectModelKey !== 'WorkspaceFolder' || typeof row.ObjectId !== 'string') throw new Error('未登记的文件夹属性端点');
       return row.ObjectId;

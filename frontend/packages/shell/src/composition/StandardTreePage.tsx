@@ -14,7 +14,7 @@ import theme from 'antd/es/theme';
 import { formatRequestError, useLocalization } from '@icp-platform/core';
 import { ModuleRegistry, type PageProps, type PageRef, type TreeNodeDescriptor, type TreeView, type TreeActionReference, type StandardCrudActionState, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { useRuntimeMetadata } from '../metadata/runtimeMetadataContext';
-import { ActionInstanceContext, CompositionContext, TreeInstanceContext, TreeNavigationContext } from './pageCompositionRuntime';
+import { ActionInstanceContext, TreeNodeActivationContext, CompositionContext, TreeInstanceContext, TreeNavigationContext } from './pageCompositionRuntime';
 import { ActionInstanceScope } from './ActionInstanceScope';
 import { PageOutlet } from './PageOutlet';
 import { useTreeReadLifecycle } from './useTreeReadLifecycle';
@@ -198,7 +198,7 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
       {!roots.length && !tree.error && <p>{t('Platform.TreeEmpty', '暂无节点')}</p>}
       </Card>
     </aside>
-    <section aria-label={t('Platform.TreeContent', '节点内容')} className="np-tree-content">
+    <TreeNodeActivationContext.Provider value={tree.locate}><section aria-label={t('Platform.TreeContent', '节点内容')} className="np-tree-content">
       {selected && <header className="np-tree-context-header">
         <Breadcrumb aria-label={t('PlatformShell.Breadcrumb', '面包屑')} items={selectedPath.map((node, index) => ({ key: node.nodeKey,
           title: index === selectedPath.length - 1 ? <span>{node.labelKey ? t(node.labelKey, node.label) : node.label}</span>
@@ -211,6 +211,6 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
       {selected && selectedType ? <PageOutlet key={`${selectedType.key}:${tree.contentEpoch}`} page={selectedType.pageRef} featurePlacement={features.placement ? { ...features.placement, staticScope: selectedType.key } : undefined} context={selected} navigation={navigation ? { tabKey: navigation.nodeTab, selectTab: key => runtime.leave(() => navigation.locate(selected.nodeKey, key)) } : null} /> : <p>{t('Platform.TreeSelectNode', '请选择节点')}</p>}
       {editPage && <PageOutlet key={`editor:${editContext?.nodeKey ?? "root"}:${String(editPage.parameters?.actionKey ?? editPage.parameters?.standardAction)}`} page={editPage} featurePlacement={editFeature} context={editContext} close={() => setEditPage(null)} />}
       </div>
-    </section>
+    </section></TreeNodeActivationContext.Provider>
   </div></ActionInstanceContext.Provider></TreeInstanceContext.Provider>;
 }

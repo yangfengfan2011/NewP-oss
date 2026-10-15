@@ -99,6 +99,12 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
       return json(workspaceTreePath(new URL(path, 'http://localhost').searchParams.get('nodeKey')!, [root, ...chain.map(() => 'a-folder')], [root === 'public-root' ? '公共空间' : '个人空间', ...chain.map(() => '父A')]));
     }
     if (path.startsWith('/api/trees/workspace.structure/children?')) {
+      if (scenario === 'receipt') {
+        const key = new URL(path, 'http://localhost').searchParams.get('nodeKey')!;
+        const position = workspaceTreePosition(key);
+        return json(workspaceTreeChildren(key, position.rootFolderId === 'public-root' && !position.linkIds.length
+          ? [{ linkId: 'public-root-folder-link', associatedObject: { id: 'public-root-folder' }, fields: { Name: '公共根内容' }, hasChildren: false }] : []));
+      }
       if (scenario !== 'success' || !writes.length) return json([]);
       const chain = workspaceTreePosition(new URL(path, 'http://localhost').searchParams.get('nodeKey')!).linkIds;
       const node = (linkId: string, id: string, name: string, hasChildren = true) => ({ linkId, associatedObject: { id }, fields: { Name: name }, hasChildren });
@@ -166,9 +172,11 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
   expect(container.querySelector('.ant-table')).not.toBeNull();
   if (scenario === 'receipt') {
     await act(async () => container.querySelector<HTMLButtonElement>('.np-standard-crud-cell-action')!.click());
-    await vi.waitFor(() => expect(document.body.textContent).toContain('公共对象属性'));
-    expect(fetcher.mock.calls.some(([input]) => String(input instanceof Request ? input.url : input).endsWith('/folders/public-root-folder'))).toBe(true);
-    await act(async () => document.querySelector<HTMLButtonElement>('.ant-drawer-close')!.click());
+    await vi.waitFor(() => expect(container.querySelector('.np-tree-context-header h2')?.textContent).toBe('公共根内容'));
+    expect(document.querySelector('.ant-drawer')).toBeNull();
+    expect(fetcher.mock.calls.some(([input]) => String(input instanceof Request ? input.url : input).endsWith('/folders/public-root-folder'))).toBe(false);
+    await act(async () => container.querySelector<HTMLButtonElement>('.np-tree-breadcrumb-link')!.click());
+    await vi.waitFor(() => expect(container.querySelector('.np-tree-context-header h2')?.textContent).toBe('公共空间'));
   }
   const publicListReads = (anchorId = 'public-root') => fetcher.mock.calls.filter(([input]) => {
     const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost');

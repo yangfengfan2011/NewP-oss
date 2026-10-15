@@ -20,12 +20,12 @@ it('validates Link projection fields against the formal query directory and requ
   expect(() => buildStandardCrudListSchema({ ...list.view, querySource: { kind: 'table', model: 'WorkspaceFolderContent', resourceKey: 'workspace.content' } }, resource, context)).toThrow('unsupported query source');
 });
 
-it('groups existing creation actions without replacing their identities and opens properties from Name', () => {
+it('groups existing creation actions without replacing their identities and exposes the Name activation entry', () => {
   const schema = buildStandardCrudListSchema(list.view, resource, { modelDocuments: [folder, content] });
-  expect(schema.pageActions.map(action => action.key)).toEqual(['copySelected', 'cutSelected', 'paste', 'clearClipboard', 'create', 'createPart', 'createDocument', 'removeSelected', 'deleteObjects']);
+  expect(schema.pageActions.map(action => action.key)).toEqual(['create', 'createPart', 'createDocument', 'copySelected', 'cutSelected', 'paste', 'clearClipboard', 'removeSelected', 'deleteObjects']);
   expect(schema.pageActionGroups).toEqual([{ key: 'new', labelKey: 'New', variant: 'primary', actionKeys: ['create', 'createPart', 'createDocument'] }]);
   expect(schema.columns.find(column => column.field === 'Name')?.standardAction).toBe('view');
-  expect(schema.rowActions.map(action => action.key)).toEqual(['copy', 'cut', 'edit', 'delete', 'remove']);
+  expect(schema.rowActions.map(action => action.key)).toEqual(['view', 'copy', 'cut', 'edit', 'delete', 'remove']);
   expect(schema.pageActions.find(action => action.key === 'deleteObjects')?.requiresSelection).toBe(true);
 });
 

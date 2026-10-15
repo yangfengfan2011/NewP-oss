@@ -79,3 +79,16 @@ it('reads the real folder EID for a tree action but preserves its LID row and pa
   const regular = await resource.dataAdapter.get!('folder-eid', { featurePosition: 'read' });
   expect(regular.normalized.fields).toEqual({ ENAME: 'Folder', Description: null });
 });
+
+it('activates folders by their exact incoming link path while other types retain details', () => {
+  const target = resource.dataAdapter.getRowActivationTarget!;
+  expect(target).toBeTypeOf('function');
+  const row = { LID: 'child:link', ObjectModelKey: 'WorkspaceFolder', ObjectId: 'shared-eid' };
+  expect(target(row, { queryScope: { spaceId: 'public', rootFolderId: 'root', linkIds: '["parent-A"]' } }))
+    .toEqual({ kind: 'tree-node', nodeKey: 'public:root:parent-A:child%3Alink' });
+  expect(target(row, { queryScope: { spaceId: 'public', rootFolderId: 'root', linkIds: '["parent-B"]' } }))
+    .toEqual({ kind: 'tree-node', nodeKey: 'public:root:parent-B:child%3Alink' });
+  expect(target({ ...row, ObjectModelKey: 'Part' }, {})).toBeUndefined();
+  expect(target({ ...row, ObjectModelKey: 'Document' }, {})).toBeUndefined();
+  expect(() => target({ ...row, LID: '' }, { queryScope: { spaceId: 'public', rootFolderId: 'root', linkIds: '[]' } })).toThrow();
+});

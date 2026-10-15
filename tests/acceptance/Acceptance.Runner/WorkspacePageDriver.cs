@@ -355,7 +355,7 @@ internal sealed class WorkspacePageDriver(IPage page)
         await tree.GetByText(folderName, new() { Exact = true }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
     }
 
-    /// <summary>文件夹属性从内容行的名称链接打开，继续使用真实实体读取。</summary>
+    /// <summary>文件夹名称用于定位树；只读属性从内容行的更多菜单打开，继续使用真实实体读取。</summary>
     internal async Task<ILocator> OpenFolderPropertiesAsync(string name)
     {
         var crud = new StandardCrudPageDriver(page);
@@ -363,7 +363,8 @@ internal sealed class WorkspacePageDriver(IPage page)
         var responseTask = page.WaitForResponseAsync(response => response.Request.Method == "GET"
             && new Uri(response.Url).AbsolutePath.StartsWith("/api/workspace/folders/", StringComparison.Ordinal)
             && new Uri(response.Url).AbsolutePath != "/api/workspace/folders/candidates");
-        await row.GetByRole(AriaRole.Button, new() { Name = name, Exact = true }).ClickAsync();
+        await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
+        await page.GetByRole(AriaRole.Menuitem, new() { Name = "打开属性", Exact = true }).ClickAsync();
         var response = await responseTask;
         if (!response.Ok) throw new InvalidOperationException($"文件夹属性请求失败：{response.Status} {await response.TextAsync()}");
         return await WaitForFolderDrawerAsync(name);

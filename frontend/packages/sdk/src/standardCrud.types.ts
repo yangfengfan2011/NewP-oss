@@ -459,6 +459,8 @@ export interface StandardCrudDataAdapter<TRow = Record<string, unknown>, TDetail
   remove?: (id: string, before?: Record<string, unknown>, context?: StandardCrudFeatureRequestContext) => Promise<StandardCrudOperationResult | void>;
   exportList?: (request: StandardCrudExportRequest, context?: StandardCrudFeatureRequestContext) => Promise<StandardCrudExportResponse>;
   getRowId: (row: TRow) => string;
+  /** 名称列打开时可定位所属树的精确出现位置；缺省继续查看属性，不改变显式详情动作。 */
+  getRowActivationTarget?: (row: TRow, context: { queryScope?: Record<string, string | null> }) => { kind: 'tree-node'; nodeKey: string } | undefined;
   /** 只读属性打开可使用关联对象主键；行选择和关系动作仍使用 getRowId。 */
   getDetailId?: (row: TRow) => string;
   /** 异构行只返回已登记的详情 View 与真实主键；宿主解析正式路由并重新执行目标准入。 */

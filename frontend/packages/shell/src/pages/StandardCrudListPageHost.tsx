@@ -79,7 +79,7 @@ import { formatStandardCrudActionReason } from '../standard-crud/standardCrudAct
 import { useStandardCrudMutationExecution } from '../standard-crud/useStandardCrudMutationExecution';
 import { useStandardCrudHostEnvironment, type StandardCrudHostAddress } from '../standard-crud/standardCrudHostEnvironment';
 
-import { ActionInstanceContext } from '../composition/pageCompositionRuntime';
+import { ActionInstanceContext, TreeNodeActivationContext } from '../composition/pageCompositionRuntime';
 const noInstanceSubscription = () => () => undefined;
 const noInstanceSnapshot = () => 0;
 type MetadataRecord = Record<string, unknown>;
@@ -825,6 +825,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   // Router hook 无条件调用；是否真正拥有地址由宿主环境决定。
   const routeLocation = useLocation();
   const navigate = useNavigate();
+  const activateTreeNode = useContext(TreeNodeActivationContext);
   const routePathname = routeLocation.pathname;
   const routeSearch = routeLocation.search;
   const routeAddress = useMemo<StandardCrudHostAddress>(() => ({
@@ -1847,13 +1848,21 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     }
     navigate(route.path.replace(':id', encodeURIComponent(target.id)));
   }
+  function activateRow(row: TRow): void {
+    try {
+      const target = dataAdapter.getRowActivationTarget?.(row, { queryScope: host.input.queryScope });
+      if (!target) { openRowProperties(row); return; }
+      if (target.kind === 'tree-node' && target.nodeKey && activateTreeNode) { activateTreeNode(target.nodeKey); return; }
+      void messageApi.error(t('Platform.ActionUnavailable', '当前操作不可用。'));
+    } catch (error) { void messageApi.error(formatRequestError(error, t)); }
+  }
   const metadataColumns = resolvedColumns.map((column) => {
     const renderColumn = column.standardAction === 'view'
       ? (row: TRow) => (
         <AntdButton
           className="np-standard-crud-cell-action"
           type="link"
-          onClick={() => confirmDiscardIfNeeded(() => { openRowProperties(row); })}
+          onClick={() => confirmDiscardIfNeeded(() => { activateRow(row); })}
         >
           {String(readRowActionValue(row, column.field) ?? '-')}
         </AntdButton>

@@ -1,3 +1,4 @@
+using System.Globalization;
 using ICP.Platform.Crud.LinkQueries;
 using ICP.Platform.Modules.Audit.Contracts;
 
@@ -25,6 +26,14 @@ public sealed class WorkspaceReferenceAudit(IBusinessAuditRecorder recorder)
                 new("PEID", null, BusinessAuditValue.Reference("workspace.folder", targetParentId)),
                 new("ChildModelKey", null, BusinessAuditValue.Text(endpoint.ModelKey)),
                 new("CEID", null, BusinessAuditValue.Reference(endpoint.ModelKey, endpoint.Id))]), cancellationToken);
+
+    /// <summary>既有关系换位保留父与端点上下文，只记录真实旧次序到最终新次序，不登记事务内借位的 NULL。</summary>
+    public ValueTask ReorderedAsync(string linkId, string parentId, LinkObjectReference endpoint, long before, long after,
+        CancellationToken cancellationToken) => recorder.RegisterAsync(new("workspace.reference.reordered", "workspace.content", linkId,
+            [new("PEID", BusinessAuditValue.Reference("workspace.folder", parentId), BusinessAuditValue.Reference("workspace.folder", parentId)),
+                new("ChildModelKey", BusinessAuditValue.Text(endpoint.ModelKey), BusinessAuditValue.Text(endpoint.ModelKey)),
+                new("CEID", BusinessAuditValue.Reference(endpoint.ModelKey, endpoint.Id), BusinessAuditValue.Reference(endpoint.ModelKey, endpoint.Id)),
+                new("TreeOrdinal", BusinessAuditValue.Text(before.ToString(CultureInfo.InvariantCulture)), BusinessAuditValue.Text(after.ToString(CultureInfo.InvariantCulture)))]), cancellationToken);
 
     /// <summary>单条和批量移除均以确切旧 LID 为目标，字段记录旧关系事实到显式空值，不表示删除对象。</summary>
     public ValueTask RemovedAsync(string linkId, string parentId, LinkObjectReference endpoint, CancellationToken cancellationToken) =>

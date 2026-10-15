@@ -7,6 +7,8 @@ using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Modules.Authorization.DTOs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Storage;
+using ICP.Platform.Modules.Audit.Contracts;
 using Microsoft.Extensions.DependencyInjection;
 using System.Data.Common;
 using Xunit;
@@ -47,15 +49,18 @@ public sealed class WorkspaceTreeOrderSqlServerHttpApiTests
         var defaultList = await List(admin, entry, root);
         var filteredPage = await List(admin, entry, root, "&sortBy=Name&sortDirection=desc&pageSize=1&Name%3Acontains=A");
         var beforeBoundary = await Snapshot(fixture, "WorkspaceFolderContent");
+        var originalReferences = await Rows(fixture, "WorkspaceFolderContent");
         var first = await Move(admin, fixture, root, links[0], "up");
         Assert.False(first.GetProperty("moved").GetBoolean()); Assert.Equal("first", first.GetProperty("boundary").GetString());
         Assert.Equal(beforeBoundary, await Snapshot(fixture, "WorkspaceFolderContent"));
         var last = await Move(admin, fixture, root, links[2], "down");
         Assert.False(last.GetProperty("moved").GetBoolean()); Assert.Equal("last", last.GetProperty("boundary").GetString());
         Assert.Equal(beforeBoundary, await Snapshot(fixture, "WorkspaceFolderContent"));
+        Assert.Equal(audit, await Snapshot(fixture, "BusinessChange"));
         Assert.True((await Move(admin, fixture, root, links[2], "up")).GetProperty("moved").GetBoolean());
         Assert.Equal(new[] { "Z", "M", "A" }, Names(await Children(admin, entry, root)));
-        Assert.Equal(objects, await Snapshot(fixture, "WorkspaceFolder")); Assert.Equal(audit, await Snapshot(fixture, "BusinessChange"));
+        Assert.Equal(objects, await Snapshot(fixture, "WorkspaceFolder"));
+        await AssertReorderedFacts(fixture, admin, originalReferences, await Rows(fixture, "WorkspaceFolderContent"));
         Assert.Equal(defaultList.GetRawText(), (await List(admin, entry, root)).GetRawText());
         Assert.Equal(filteredPage.GetRawText(), (await List(admin, entry, root, "&sortBy=Name&sortDirection=desc&pageSize=1&Name%3Acontains=A")).GetRawText());
         await fixture.RestartWithActionsAsync(new Dictionary<string, bool>());
@@ -84,15 +89,18 @@ public sealed class WorkspaceTreeOrderSqlServerHttpApiTests
         Assert.True((await Move(ordinary, fixture, root, selected, "up")).GetProperty("moved").GetBoolean());
         Assert.Equal(new[] { "C", "A" }, Names(await Children(ordinary, entry, root)));
         var after = await Rows(fixture, "WorkspaceFolderContent");
+        await AssertReorderedFacts(fixture, admin, before, after);
         var hidden = all[1].GetProperty("linkId").GetString();
         Assert.Equal(before.Single(row => (string)row["LID"]! == hidden)["TreeOrdinal"], after.Single(row => (string)row["LID"]! == hidden)["TreeOrdinal"]);
         Assert.All(after.Where(row => (string)row["LID"]! != hidden), row => Assert.Equal(actor.AccountId, row["LUpdatedBy"]));
         await Rule(admin, fixture, "ParentNoEdit", root.RootFolderId, new() { ["edit"] = "deny" });
+        var changesBeforeDenied = await Snapshot(fixture, "BusinessChange");
         using var refused = await FeatureHttpTestRequests.SendAsync(ordinary, OrderPoint(fixture, "down"), HttpMethod.Post,
             "/api/workspace/content/tree-order", new { parentPosition = root, linkId = selected, direction = "down" });
         Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
         Assert.Equal("Workspace.ParentWriteDenied", (await refused.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
         Assert.Equal(JsonSerializer.Serialize(after), JsonSerializer.Serialize(await Rows(fixture, "WorkspaceFolderContent")));
+        Assert.Equal(changesBeforeDenied, await Snapshot(fixture, "BusinessChange"));
     }
 
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "真实共享父的关系同步，异父引用独立，create与add都追加到同级末尾")]
@@ -109,7 +117,9 @@ public sealed class WorkspaceTreeOrderSqlServerHttpApiTests
         await Add(admin, fixture, qPosition, p.GetProperty("id").GetString()!);
         Assert.Equal(new[] { "Z", "A", "P" }, Names(await Children(admin, entry, qPosition)));
         var pRows = (await Children(admin, entry, pPosition)).GetProperty("items").EnumerateArray().ToArray();
+        var referencesBefore = await Rows(fixture, "WorkspaceFolderContent");
         await Move(admin, fixture, pPosition, pRows[1].GetProperty("linkId").GetString()!, "up");
+        await AssertReorderedFacts(fixture, admin, referencesBefore, await Rows(fixture, "WorkspaceFolderContent"));
         var alternateP = qPosition with { LinkIds = [.. qPosition.LinkIds,
             (await Children(admin, entry, qPosition)).GetProperty("items")[2].GetProperty("linkId").GetString()!] };
         Assert.Equal(new[] { "A", "Z" }, Names(await Children(admin, entry, alternateP)));
@@ -131,12 +141,142 @@ public sealed class WorkspaceTreeOrderSqlServerHttpApiTests
         Assert.Equal(new[] { "C", "A", "B" }, Names(await Children(admin, entry, root)));
         var before = await Snapshot(fixture, "WorkspaceFolderContent");
         var objects = await Snapshot(fixture, "WorkspaceFolder");
+        var changesBeforeFailure = await Snapshot(fixture, "BusinessChange");
         fault.Enabled = true;
         using var failed = await FeatureHttpTestRequests.SendAsync(admin, OrderPoint(fixture, "down"), HttpMethod.Post,
             "/api/workspace/content/tree-order", new { parentPosition = root, linkId = link, direction = "down" });
         Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode); Assert.Equal(2, fault.Writes); fault.Enabled = false;
         Assert.Equal(before, await Snapshot(fixture, "WorkspaceFolderContent")); Assert.Equal(objects, await Snapshot(fixture, "WorkspaceFolder"));
+        Assert.Equal(changesBeforeFailure, await Snapshot(fixture, "BusinessChange"));
         Assert.Equal(new[] { "C", "A", "B" }, Names(await Children(admin, entry, root)));
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "排序审计登记、第二条登记、存储和保存故障时原关系、对象和业务记录整体回滚")]
+    public async Task Reorder_AuditRegistrationAndSaveFailuresRollBackEveryFact()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
+        using var admin = await fixture.LoginAdministratorAsync(); var root = await Initialize(admin, Point(fixture, "workspace.spaces.access"));
+        await Create(admin, fixture, root, "A"); await Create(admin, fixture, root, "B");
+        var before = await Rows(fixture, "WorkspaceFolderContent");
+        var selected = (string)before.Single(row => Equals(row["TreeOrdinal"], 2L))["LID"]!;
+        var references = JsonSerializer.Serialize(before); var objects = await Snapshot(fixture, "WorkspaceFolder");
+        var changes = await Snapshot(fixture, "BusinessChange");
+        foreach (var mode in new[] { "register", "second-registration", "write", "save" })
+        {
+            var registered = 0; fixture.Fault.Mode = mode;
+            if (mode == "second-registration") fixture.Fault.AfterRegister = (change, _) => {
+                if (change.EventType == "workspace.reference.reordered" && ++registered == 2)
+                    throw new InvalidOperationException("Injected second reorder audit registration failure.");
+                return Task.CompletedTask;
+            };
+            try
+            {
+                using var failed = await FeatureHttpTestRequests.SendAsync(admin, OrderPoint(fixture, "up"), HttpMethod.Post,
+                    "/api/workspace/content/tree-order", new { parentPosition = root, linkId = selected, direction = "up" });
+                Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
+            }
+            finally { fixture.Fault.Mode = ""; fixture.Fault.AfterRegister = null; }
+            if (mode == "second-registration") Assert.Equal(2, registered);
+            Assert.Equal(references, await Snapshot(fixture, "WorkspaceFolderContent"));
+            Assert.Equal(objects, await Snapshot(fixture, "WorkspaceFolder")); Assert.Equal(changes, await Snapshot(fixture, "BusinessChange"));
+        }
+        await Move(admin, fixture, root, selected, "up");
+        await AssertReorderedFacts(fixture, admin, before, await Rows(fixture, "WorkspaceFolderContent"));
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "两条排序记录与最终次序已实际写入同SQL事务后，故障或请求取消仍全部回滚")]
+    public async Task Reorder_RollsBackWrittenAuditAndOrdinalsOnFailureOrCancellation()
+    {
+        var control = new ReorderCommitControl();
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
+            services.AddDbContext<EfPlatformDbContext>((_, options) => options.AddInterceptors(control)), includeWorkspace: true);
+        using var admin = await fixture.LoginAdministratorAsync(); var root = await Initialize(admin, Point(fixture, "workspace.spaces.access"));
+        await Create(admin, fixture, root, "A"); await Create(admin, fixture, root, "B");
+        var before = await Rows(fixture, "WorkspaceFolderContent");
+        control.SelectedLinkId = (string)before.Single(row => Equals(row["TreeOrdinal"], 2L))["LID"]!;
+        var references = JsonSerializer.Serialize(before); var objects = await Snapshot(fixture, "WorkspaceFolder");
+        var changes = await Snapshot(fixture, "BusinessChange");
+        control.Fail = true;
+        using (var failed = await FeatureHttpTestRequests.SendAsync(admin, OrderPoint(fixture, "up"), HttpMethod.Post,
+            "/api/workspace/content/tree-order", new { parentPosition = root, linkId = control.SelectedLinkId, direction = "up" }))
+            Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
+        control.Fail = false;
+        Assert.Equal(2, control.WrittenChanges); Assert.Equal(1L, control.WrittenOrdinal);
+        Assert.Equal(references, await Snapshot(fixture, "WorkspaceFolderContent")); Assert.Equal(objects, await Snapshot(fixture, "WorkspaceFolder"));
+        Assert.Equal(changes, await Snapshot(fixture, "BusinessChange"));
+        control.Pause = true;
+        using var cancellation = new CancellationTokenSource();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/tree-order") {
+            Content = JsonContent.Create(new { parentPosition = root, linkId = control.SelectedLinkId, direction = "up" }) };
+        request.Headers.Add("X-NewP-Feature", OrderPoint(fixture, "up").Position);
+        var pending = admin.SendAsync(request, cancellation.Token);
+        try
+        {
+            await control.Reached.Task.WaitAsync(TimeSpan.FromSeconds(20)); cancellation.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await pending);
+            await control.RolledBack.Task.WaitAsync(TimeSpan.FromSeconds(20));
+        }
+        finally { cancellation.Cancel(); control.Resume.TrySetResult(); try { (await pending).Dispose(); } catch (OperationCanceledException) { } }
+        control.Pause = false;
+        Assert.Equal(2, control.WrittenChanges); Assert.Equal(1L, control.WrittenOrdinal);
+        Assert.Equal(references, await Snapshot(fixture, "WorkspaceFolderContent")); Assert.Equal(objects, await Snapshot(fixture, "WorkspaceFolder"));
+        Assert.Equal(changes, await Snapshot(fixture, "BusinessChange"));
+        await Move(admin, fixture, root, control.SelectedLinkId, "up");
+        await AssertReorderedFacts(fixture, admin, before, await Rows(fixture, "WorkspaceFolderContent"));
+    }
+
+    private sealed class ReorderCommitControl : SaveChangesInterceptor, IDbTransactionInterceptor
+    {
+        public bool Fail; public bool Pause; public string SelectedLinkId = "";
+        public int WrittenChanges; public long? WrittenOrdinal;
+        public TaskCompletionSource Reached { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Resume { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource RolledBack { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public override async ValueTask<int> SavedChangesAsync(SaveChangesCompletedEventData eventData, int result, CancellationToken token = default)
+        {
+            if (!Fail && !Pause) return result;
+            var transaction = eventData.Context!.Database.CurrentTransaction!.GetDbTransaction();
+            await using var command = transaction.Connection!.CreateCommand(); command.Transaction = transaction;
+            command.CommandText = "SELECT (SELECT COUNT(*) FROM [BusinessChange] WHERE [EventType]='workspace.reference.reordered'), (SELECT TreeOrdinal FROM [WorkspaceFolderContent] WHERE LID=@selected)";
+            var parameter = command.CreateParameter(); parameter.ParameterName = "@selected"; parameter.Value = SelectedLinkId; command.Parameters.Add(parameter);
+            await using (var rows = await command.ExecuteReaderAsync(token))
+            {
+                Assert.True(await rows.ReadAsync(token)); WrittenChanges = rows.GetInt32(0);
+                WrittenOrdinal = rows.IsDBNull(1) ? null : rows.GetInt64(1);
+            }
+            // 两次临时换位 Flush 还没有审计；只在最终事实已写入原 SQL 事务后制造故障或取消。
+            if (WrittenChanges != 2) return result;
+            if (Fail) throw new InvalidOperationException("Injected reorder failure after SQL audit writes.");
+            Reached.TrySetResult(); await Resume.Task.WaitAsync(token); return result;
+        }
+        public Task TransactionRolledBackAsync(DbTransaction transaction, TransactionEndEventData eventData, CancellationToken token = default)
+        { if (Pause) RolledBack.TrySetResult(); return Task.CompletedTask; }
+    }
+
+    private static async Task AssertReorderedFacts(BusinessAuditHostFixture fixture, HttpClient reader,
+        Dictionary<string, object?>[] before, Dictionary<string, object?>[] after)
+    {
+        var changed = before.Where(old => !Equals(old["TreeOrdinal"], after.Single(row => Equals(row["LID"], old["LID"]))["TreeOrdinal"])).ToArray();
+        Assert.Equal(2, changed.Length);
+        var changes = (await Rows(fixture, "BusinessChange")).Where(row => Equals(row["EventType"], "workspace.reference.reordered")).ToArray();
+        Assert.Equal(2, changes.Length); Assert.Single(changes.Select(change => change["TraceId"]).Distinct());
+        Assert.Single(changes.Select(change => change["OccurredAt"]).Distinct());
+        foreach (var old in changed)
+        {
+            var current = after.Single(row => Equals(row["LID"], old["LID"]));
+            var change = Assert.Single(changes, row => Equals(row["TargetId"], old["LID"]));
+            Assert.Equal("workspace.content", change["Resource"]); Assert.Equal(current["LUpdatedBy"], change["ActorId"]);
+            Assert.Equal(current["LUpdatedAt"], change["OccurredAt"]); Assert.False(string.IsNullOrWhiteSpace(change["TraceId"] as string));
+            var fields = JsonSerializer.Deserialize<BusinessAuditField[]>((string)change["FieldsJson"]!)!;
+            Assert.Equal(new[] { "PEID", "ChildModelKey", "CEID", "TreeOrdinal" }, fields.Select(field => field.Field));
+            Assert.Equal(new[] { "workspace.folder", "text", "WorkspaceFolder", "text" }, fields.Select(field => field.After.Kind));
+            Assert.All(fields, field => Assert.Equal(field.After.Kind, field.Before!.Kind));
+            Assert.Equal(new[] { (string)old["PEID"]!, (string)old["ChildModelKey"]!, (string)old["CEID"]!, Convert.ToString(old["TreeOrdinal"], System.Globalization.CultureInfo.InvariantCulture) }, fields.Select(field => field.Before!.Value));
+            Assert.Equal(new[] { (string)current["PEID"]!, (string)current["ChildModelKey"]!, (string)current["CEID"]!, Convert.ToString(current["TreeOrdinal"], System.Globalization.CultureInfo.InvariantCulture) }, fields.Select(field => field.After.Value));
+            var detail = await FeatureHttpTestRequests.ReadAsync(reader, Point(fixture, "audit.change.read"), "/api/audit/business-changes/" + change["EID"]);
+            Assert.Equal(old["LID"], detail.GetProperty("fields").GetProperty("TargetId").GetString());
+            Assert.Equal(4, detail.GetProperty("summaries").GetProperty("changes").GetProperty("data").GetArrayLength());
+        }
     }
 
     private sealed class SwapFault : DbCommandInterceptor
@@ -199,6 +339,7 @@ public sealed class WorkspaceTreeOrderSqlServerHttpApiTests
         using (var wrongFeature = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Post,
             "/api/workspace/content/tree-order", new { parentPosition = root, linkId, direction = "up" })) Assert.Equal(HttpStatusCode.Forbidden, wrongFeature.StatusCode);
         Assert.Equal(before, await Snapshot(fixture, "WorkspaceFolderContent"));
+        Assert.DoesNotContain(await Rows(fixture, "BusinessChange"), row => Equals(row["EventType"], "workspace.reference.reordered"));
         using (var renamed = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.editObject"), HttpMethod.Put,
             "/api/workspace/content/" + linkId, new { position = root, values = new { ENAME = "B" } })) Assert.Equal(HttpStatusCode.OK, renamed.StatusCode);
         Assert.Equal(new[] { "B", "A" }, Names(await Children(admin, entry, root)));

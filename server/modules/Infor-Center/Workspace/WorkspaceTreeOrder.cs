@@ -10,7 +10,7 @@ namespace ICP.Platform.Modules.Workspace;
 public sealed record WorkspaceTreeOrderResult(bool Moved, string? Boundary);
 
 /// <summary>次序只属于父到文件夹的真实关系；列表和对象审计不消费此规则。</summary>
-public sealed class WorkspaceTreeOrder(EfPlatformDbContext db, WorkspaceFolderScope scope, IPlatformTransactionExecutor transactions, IEntityAuditValueProvider audit, LinkQueryReader reader)
+public sealed class WorkspaceTreeOrder(EfPlatformDbContext db, WorkspaceFolderScope scope, IPlatformTransactionExecutor transactions, IEntityAuditValueProvider audit, LinkQueryReader reader, WorkspaceReferenceAudit referenceAudit)
 {
     private DbSet<Dictionary<string, object?>> Links => db.Set<Dictionary<string, object?>>(WorkspacePositions.ContentModel);
 
@@ -69,6 +69,8 @@ public sealed class WorkspaceTreeOrder(EfPlatformDbContext db, WorkspaceFolderSc
         var stamp = audit.Current();
         selected["LUpdatedBy"] = neighbor["LUpdatedBy"] = stamp.ActorId;
         selected["LUpdatedAt"] = neighbor["LUpdatedAt"] = stamp.OccurredAtUtc;
+        await referenceAudit.ReorderedAsync(linkId, parentId, new(WorkspacePositions.FolderModel, (string)selected["CEID"]!), ordinal, neighborOrdinal, token);
+        await referenceAudit.ReorderedAsync(neighborId, parentId, new(WorkspacePositions.FolderModel, (string)neighbor["CEID"]!), neighborOrdinal, ordinal, token);
         return new(true, null);
     }
 }

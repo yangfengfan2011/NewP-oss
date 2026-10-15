@@ -22,7 +22,7 @@ public sealed class LocalizationRuntimeManifestBuilderTests : IDisposable
         }
         using var manifest = JsonDocument.Parse(new LocalizationRuntimeManifestBuilder().Build(runtime));
         foreach (var (field, chinese, english) in new[] { ("SourceLID", "来源引用", "Source reference"), ("SourcePEID", "来源文件夹", "Source folder"),
-            ("PEID", "父文件夹", "Parent folder"), ("ChildModelKey", "引用对象类型", "Referenced object type"), ("CEID", "引用对象", "Referenced object") })
+            ("PEID", "父文件夹", "Parent folder"), ("ChildModelKey", "引用对象类型", "Referenced object type"), ("CEID", "引用对象", "Referenced object"), ("TreeOrdinal", "树次序", "Tree order") })
         {
             var key = "BusinessChangeView.ChangeField_" + field;
             Assert.Equal(chinese, manifest.RootElement.GetProperty("catalogs").GetProperty("zhs").GetProperty(key).GetString());

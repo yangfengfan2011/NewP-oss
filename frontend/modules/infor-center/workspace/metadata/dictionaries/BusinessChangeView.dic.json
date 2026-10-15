@@ -5,6 +5,7 @@
     "ChangeField_SourcePEID": { "zhs": "来源文件夹", "en": "Source folder" },
     "ChangeField_PEID": { "zhs": "父文件夹", "en": "Parent folder" },
     "ChangeField_ChildModelKey": { "zhs": "引用对象类型", "en": "Referenced object type" },
-    "ChangeField_CEID": { "zhs": "引用对象", "en": "Referenced object" }
+    "ChangeField_CEID": { "zhs": "引用对象", "en": "Referenced object" },
+    "ChangeField_TreeOrdinal": { "zhs": "树次序", "en": "Tree order" }
   }
 }

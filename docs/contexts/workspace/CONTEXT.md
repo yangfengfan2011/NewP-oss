@@ -84,6 +84,8 @@ Part/Document 通过所属标准 update/delete 行为执行字段规则、编码
 
 `POST /api/workspace/content/tree-order` 只接受 `parentPosition`、单个 `linkId`、`direction(up|down)`，不接受未知成员、重复成员、任意邻居或序号。图锁后重验空间、完整父链、父 edit、所选与相邻文件夹 read；所选文件夹 edit 不是排序条件。交换两条可读关系的原次序，隐藏关系不变。唯一索引换位的临时 NULL 仅在事务内部存在；最终两条关系使用同一操作的 LUpdatedBy/LUpdatedAt，实体审计字段不变。共享父的全部出现位置同步，不同父的入向关系独立。
 
+真实换位通过既有 WorkspaceReferenceAudit 为两条原 LID 分别登记 `workspace.reference.reordered`，保留父与端点上下文和 TreeOrdinal 真实旧值到最终新值；不记录临时 NULL。次序使用现有 text 值及不受区域设置影响的 Int64 原值，字段中英标签由 Workspace 自有 BusinessChangeView 词典贡献。关系、统一操作盖章及业务记录由原事务一起保存提交，审计登记、存储或提交前取消失败均整体回滚。
+
 首尾返回 `moved=false` 与 `boundary=first|last`，没有关系或审计写入。正式 handler 消费为中英文提示和已确认 `noChange` 回执，不刷新树或列表；正常换位通过既有 unknown change 刷新已加载出现位置与当前列表。回退关闭排序功能位置或 Workspace 导航，保留关系数据；已提交 migration 不自动 Down，恢复旧 frontier 使用经过验证的迁移前备份。
 
 ## 直接引用文件夹

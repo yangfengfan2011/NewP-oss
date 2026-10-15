@@ -10,6 +10,23 @@ namespace ICP.Platform.Kernel.Tests;
 public sealed class PageCompositionMetadataTests
 {
     [Theory]
+    [InlineData("true", "true", "180", true)]
+    [InlineData("false", "false", "120", true)]
+    [InlineData("\"true\"", "true", "180", false)]
+    [InlineData("true", "1", "180", false)]
+    [InlineData("true", "true", "0", false)]
+    [InlineData("true", "true", "-20", false)]
+    public void ColumnResizing_ValidatesMetadata(string enabled, string resizable, string width, bool valid)
+    {
+        var document = JsonNode.Parse("""{"view":{"key":"test","mode":"list","columns":[{"key":"name"}]}}""")!;
+        document["view"]!["columnResize"] = JsonNode.Parse(enabled);
+        document["view"]!["columns"]![0]!["resizable"] = JsonNode.Parse(resizable);
+        document["view"]!["columns"]![0]!["width"] = JsonNode.Parse(width);
+        void Check() => PageCompositionMetadataValidator.Validate([JsonSerializer.SerializeToElement(document)], null);
+        if (valid) Check(); else Assert.Throws<JsonException>(Check);
+    }
+
+    [Theory]
     [InlineData("valid")]
     [InlineData("empty-column")]
     [InlineData("unknown-model")]

@@ -70,6 +70,7 @@
     "DiscardDraft": { "zhs": "放弃修改", "en": "Discard changes" },
     "DiscardDraftTitle": { "zhs": "放弃未保存的草稿？", "en": "Discard unsaved draft?" },
     "Export": { "zhs": "导出", "en": "Export" },
+    "ResizeColumn": { "zhs": "调整列宽", "en": "Resize column" },
     "More": { "zhs": "更多", "en": "More" },
     "Processing": { "zhs": "处理中...", "en": "Processing..." },
     "ReadingCurrentValue": { "zhs": "正在读取当前值", "en": "Reading current value" },

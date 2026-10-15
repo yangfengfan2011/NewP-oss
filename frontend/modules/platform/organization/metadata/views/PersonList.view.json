@@ -98,6 +98,7 @@
         }
       ]
     },
+    "columnResize": true,
     "columns": [
       {
         "key": "personNo",

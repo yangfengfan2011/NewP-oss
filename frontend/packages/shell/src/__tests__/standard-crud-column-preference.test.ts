@@ -77,3 +77,14 @@ describe('standard CRUD column preference', () => {
     expect(loadStandardCrudColumnPreference(storage, 'subject-1', 'organization.person.list', defaults)).toEqual(defaults);
   });
 });
+
+it('persists personal widths, rejects invalid widths and resets to current metadata', () => {
+  const storage = new MemoryStorage();
+  const defaults = { name: { order: 0, width: 180 }, code: { order: 1 } };
+  saveStandardCrudColumnPreference(storage, 'one', 'view', { name: { order: 0, width: 260 }, code: { width: -2 } });
+  expect(loadStandardCrudColumnPreference(storage, 'one', 'view', defaults).name.width).toBe(260);
+  expect(loadStandardCrudColumnPreference(storage, 'two', 'view', defaults).name.width).toBe(180);
+  expect(loadStandardCrudColumnPreference(storage, 'one', 'other', defaults).name.width).toBe(180);
+  expect(loadStandardCrudColumnPreference(storage, 'one', 'view', defaults).code.width).toBeUndefined();
+  expect(resetStandardCrudColumnPreference(storage, 'one', 'view', defaults)).toEqual(defaults);
+});

@@ -121,3 +121,19 @@ corepack pnpm --dir frontend --filter @icp-platform/shell test
 List View 已有 `featureActions` 保持非呈现功能目录。只有显式声明 `handlerKey` 与 `labelKey` 的项可被树等受控入口作为可执行动作引用；纯功能项保持原行为。可执行项的 `behaviorKey` 必须与资源和 handler 派生的行为一致，沿原注册点校验 handler/input，不能复制成列表页/行动作或贡献列表按钮。树引用独立编译自己的 contextMenu 功能位置，handler 获得当前已校验的可选 `StandardCrudActionContext.action`；客户端定义仍不是服务端权限凭证。
 
 已确认成功且没有写入的动作可以返回 `StandardCrudOperationResult.noChange=true`，并用 `notice.reasonKey` 引用正式词典。共享成功交接仍处理原回执，只跳过变更发布和读取刷新；notice 由外层组合的现有消息 holder 显示，关闭子动作后仍可见，过期、已卸载或切换主体/组合的结果不发布到新上下文。该标记不能表示失败或未知结果；与实际 change 冲突时报告成功同步故障并保留实际变更刷新。普通成功动作保留既有 change/refresh 生命周期。
+
+## 标准列表列宽拖动
+
+List View 的 `columnResize: true` 开启数据列的表头拖动；省略或 `false` 不提供拖动入口。列的 `width` 是初始宽度，省略时沿用表格自动布局；单列 `resizable: false` 可禁止拖动。勾选框、序号和操作列由共享表格固定，不参与拖动。本契约不包含 `minWidth`、`maxWidth`。
+
+```json
+{
+  "columnResize": true,
+  "columns": [
+    { "key": "name", "field": "Name", "source": "projection", "labelKey": "Name", "width": 180 },
+    { "key": "type", "field": "ObjectType", "source": "projection", "labelKey": "ObjectType", "resizable": false }
+  ]
+}
+```
+
+宽度复用 `icp.standard-crud.columns` 的当前账号与 View 隔离偏好，保存于当前浏览器 localStorage；不跨设备同步，不写回元数据。拖动仅预览，松开提交；取消拖动丢弃预览。分隔线支持键盘左右方向键调整，且不触发表头排序。列设置的重置使用当前元数据默认值，恢复初始宽度（未声明宽度的列恢复自动布局）、显隐与顺序。关闭 `columnResize` 时忽略宽度覆盖并隐藏手柄，既有个人偏好保留。

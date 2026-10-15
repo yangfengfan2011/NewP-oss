@@ -5,6 +5,7 @@
     "querySource": { "kind": "link", "model": "WorkspaceFolderContent", "resourceKey": "workspace.content" },
     "dicKey": "Workspace", "titleKey": "Folder", "descriptionKey": "RootDescription", "detailViewKey": "workspace.folder.detail",
     "query": { "fields": [{ "key": "ObjectType", "labelKey": "ObjectType", "source": "model", "field": "ObjectType", "dataSourceKey": "workspace.content.types", "operator": "=" }, { "key": "keyword", "labelKey": "Keyword", "source": "preset", "preset": "keyword", "operator": "like" }], "defaultPageSize": 20, "defaultSort": { "field": "UpdatedAt", "direction": "desc" } },
+    "columnResize": true,
     "columns": [
       { "key": "type", "labelKey": "ObjectType", "source": "projection", "field": "ObjectType" },
       { "key": "code", "labelKey": "Code", "source": "projection", "field": "Code", "sortable": true },

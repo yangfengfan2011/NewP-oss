@@ -1,5 +1,6 @@
 export interface StandardCrudColumnStateItem {
   show?: boolean;
+  width?: number;
   order?: number;
   disable?: boolean;
 }
@@ -40,6 +41,8 @@ export function loadStandardCrudColumnPreference(
       }
       const item = value as Record<string, unknown>;
       restored[key] = {
+        ...(typeof item.width === 'number' && Number.isFinite(item.width) && item.width > 0
+          ? { width: item.width } : defaults[key]?.width !== undefined ? { width: defaults[key].width } : {}),
         ...(defaults[key]?.disable === true
           ? { show: true }
           : typeof item.show === 'boolean' ? { show: item.show } : {}),

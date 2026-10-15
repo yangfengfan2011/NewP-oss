@@ -213,3 +213,19 @@
   overflow-y: auto !important;
   scrollbar-gutter: stable;
 }
+
+.np-column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  bottom: 0;
+  width: 8px;
+  z-index: 2;
+  cursor: col-resize;
+  touch-action: none;
+}
+.np-column-resize-handle:hover,
+.np-column-resize-handle:focus-visible {
+  background: rgba(22, 119, 255, 0.25);
+  outline: 1px solid #1677ff;
+}

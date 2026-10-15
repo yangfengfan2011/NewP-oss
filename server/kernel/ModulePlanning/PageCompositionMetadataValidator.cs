@@ -24,6 +24,7 @@ public static class PageCompositionMetadataValidator
         var references = new HashSet<string>(StringComparer.Ordinal);
         foreach (var view in views.Values.Where(view => Mode(view) == "list"))
         {
+            ValidateColumnResizing(view);
             RowActionSetMetadataValidator.Validate(view, all);
             if (!view.TryGetProperty("rowContextMenu", out var menu)) continue;
             if (menu.ValueKind != JsonValueKind.Array) throw new JsonException("Row context menu must be an array of action keys.");
@@ -163,4 +164,20 @@ public static class PageCompositionMetadataValidator
         element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value)
         && value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString())
             ? value.GetString()! : throw new JsonException($"Missing composition property: {name}");
+    /// <summary>列宽拖动开关与单列覆盖必须是布尔值，声明宽度必须为有限正数。</summary>
+    private static void ValidateColumnResizing(JsonElement view)
+    {
+        if (view.TryGetProperty("columnResize", out var enabled) && enabled.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            throw new JsonException("columnResize must be boolean.");
+        if (!view.TryGetProperty("columns", out var columns) || columns.ValueKind != JsonValueKind.Array) return;
+        foreach (var column in columns.EnumerateArray())
+        {
+            if (column.TryGetProperty("resizable", out var resizable) && resizable.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                throw new JsonException("column resizable must be boolean.");
+            if (column.TryGetProperty("width", out var width)
+                && (width.ValueKind != JsonValueKind.Number || !width.TryGetDouble(out var value) || !double.IsFinite(value) || value <= 0))
+                throw new JsonException("column width must be positive.");
+        }
+    }
+
 }

@@ -157,6 +157,7 @@ interface ResolvedStandardCrudListColumn {
   source: 'model' | 'projection' | 'runtime';
   valueKind?: StandardCrudRuntimeColumn['valueKind'];
   width?: number;
+  resizable?: boolean;
   sortable?: boolean;
   hideable?: boolean;
   responsivePriority?: 'high' | 'medium' | 'low';
@@ -876,6 +877,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           title: t(`${schema.dicKey}.${column.labelKey}`, column.labelKey),
           source: column.source,
           width: column.width,
+          resizable: column.resizable,
           sortable: column.sortable,
           hideable: column.hideable,
           responsivePriority: column.responsivePriority,
@@ -897,6 +899,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const defaultColumnState = useMemo<StandardCrudColumnState>(() => Object.fromEntries([
     ...resolvedColumns.map((column, index) => [column.key, {
       order: index,
+      ...(column.width !== undefined ? { width: column.width } : {}),
       ...(column.hideable === false ? { disable: true } : {}),
     }]),
     ...(shouldRenderActionColumn ? [['actions', { order: resolvedColumns.length, disable: true }]] : []),
@@ -1880,7 +1883,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       key: column.key,
       dataIndex: column.field,
       title: column.title,
-      width: column.width,
+      width: schema.columnResize && column.resizable !== false ? columnState[column.key]?.width ?? column.width : column.width,
       fixed: undefined,
       sorter: column.sortable === true,
       responsive: resolveResponsiveBreakpoints(column.responsivePriority),
@@ -2207,6 +2210,13 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         request={tableRequest}
         query={tableQuery}
         onQueryChange={handleTableQueryChange}
+        resizableColumnKeys={schema.columnResize ? resolvedColumns.filter(column => column.resizable !== false).map(column => column.key) : []}
+        onColumnWidthChange={(key, width) => {
+          if (!schema.columnResize || !resolvedColumns.some(column => column.key === key && column.resizable !== false)) return;
+          const next = { ...columnState, [key]: { ...columnState[key], width } };
+          setColumnState(next);
+          if (typeof window !== 'undefined') saveStandardCrudColumnPreference(window.localStorage, currentSubjectId, schema.viewKey, next);
+        }}
         columnState={columnState}
         defaultColumnState={defaultColumnState}
         onColumnStateChange={(next) => {

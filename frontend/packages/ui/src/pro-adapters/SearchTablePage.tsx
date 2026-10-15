@@ -13,6 +13,7 @@ import { Pagination } from 'antd';
 import { useLocalization } from '@icp-platform/core';
 import type { StandardCrudColumnState } from './StandardCrudColumnPreference';
 import { StandardCrudListState } from './StandardCrudListState';
+import { ResizableHeaderCell } from './ResizableHeaderCell';
 
 export interface SearchTableResult<TRow> {
   items: TRow[];
@@ -59,6 +60,8 @@ export interface SearchTablePageProps<TRow> {
   /** owning Host 提供行交互；表格不解释对象动作。 */
   onRow?: (row: TRow) => import('react').HTMLAttributes<HTMLElement>;
   rowKey: string | ((row: TRow) => string);
+  resizableColumnKeys?: readonly string[];
+  onColumnWidthChange?: (key: string, width: number) => void;
   columns: ProColumns<TRow>[];
   /** @deprecated 仓库内正式采用者使用 controlledResult；删除需独立的 versioned public-contract 决策。 */
   request: (params: Record<string, unknown>) => Promise<{ data: TRow[]; total: number; success: boolean }>;
@@ -117,6 +120,8 @@ function remapColumnState(
 export function SearchTablePage<TRow extends Record<string, unknown>>({
   onRow,
   rowKey,
+  resizableColumnKeys,
+  onColumnWidthChange,
   columns,
   request,
   headerTitle,
@@ -138,6 +143,7 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
   const { t, currentLanguage, supportedLanguages } = useLocalization();
   const english = supportedLanguages.find(language => language.code === currentLanguage)?.locale?.startsWith('en') === true;
   const tablePageRef = useRef<HTMLDivElement>(null);
+  const [resizingColumn, setResizingColumn] = useState<{ key: string; width: number }>();
   const [bodyHeight, setBodyHeight] = useState<number>();
   const [data, setData] = useState<TRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -260,6 +266,18 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         const preferenceKey = typeof column.key === 'string' ? column.key : field;
         return {
           ...column,
+          width: resizingColumn?.key === preferenceKey ? resizingColumn.width : column.width,
+          onHeaderCell: (renderedColumn) => ({
+            ...column.onHeaderCell?.(renderedColumn),
+            ...(resizableColumnKeys?.includes(preferenceKey) && onColumnWidthChange ? {
+              resizeLabel: `${String(column.title ?? preferenceKey)} ${t('Platform.ResizeColumn', '调整列宽')}`,
+              resizeWidth: resizingColumn?.key === preferenceKey ? resizingColumn.width : typeof column.width === 'number' ? column.width : undefined,
+              onResizeWidth: (width: number | undefined, commit: boolean) => {
+                if (commit && width !== undefined) onColumnWidthChange(preferenceKey, width);
+                setResizingColumn(width === undefined || commit ? undefined : { key: preferenceKey, width });
+              },
+            } : {}),
+          }),
           key: sortKeyAliases.get(preferenceKey) ?? preferenceKey,
           sorter: column.sorter === true,
           defaultSortOrder: field === effectiveQuery.sortBy
@@ -268,7 +286,7 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         } as ProColumns<TRow>;
       }),
     ];
-  }, [columns, effectiveQuery.sortBy, effectiveQuery.sortDirection, rowNumberStart, sortKeyAliases, t]);
+  }, [columns, effectiveQuery.sortBy, effectiveQuery.sortDirection, rowNumberStart, sortKeyAliases, t, resizingColumn, resizableColumnKeys, onColumnWidthChange]);
 
   // 只在标准列表的有界容器内计算表体高度，表头、工具栏和分页不参与数据滚动。
   useLayoutEffect(() => {
@@ -325,6 +343,7 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         } : undefined}
         tableAlertRender={false}
         tableAlertOptionRender={false}
+        components={{ header: { cell: ResizableHeaderCell } }}
         tableLayout="fixed"
         scroll={{ x: 'max-content', ...(bodyHeight !== undefined ? { y: bodyHeight } : {}) }}
         locale={{

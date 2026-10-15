@@ -73,3 +73,12 @@ it.each(['unknown-model', 'missing-model', 'missing-action', 'duplicate', 'missi
     if (kind === 'resolver') delete registration.dataAdapter.getRowModelKey;
     expect(() => buildStandardCrudListSchema(view, registration, { modelDocuments: [folder, content] })).toThrow();
   });
+
+it('reads the column resizing switch and validates per-column overrides', () => {
+  const context = { modelDocuments: [folder, content] };
+  const schema = buildStandardCrudListSchema({ ...list.view, columns: list.view.columns.map((column: object) => ({ ...column, resizable: false })) }, resource, context);
+  expect(schema.columnResize).toBe(true);
+  expect(schema.columns.every(column => column.resizable === false)).toBe(true);
+  expect(() => buildStandardCrudListSchema({ ...list.view, columnResize: 'true' }, resource, context)).toThrow();
+  expect(() => buildStandardCrudListSchema({ ...list.view, columns: [{ ...list.view.columns[0], resizable: 'true' }] }, resource, context)).toThrow();
+});

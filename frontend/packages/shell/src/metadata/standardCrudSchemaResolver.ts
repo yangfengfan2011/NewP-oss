@@ -60,6 +60,7 @@ export interface StandardCrudRuntimeColumnSchema {
   source: 'model' | 'projection';
   field: string;
   width?: number;
+  resizable?: boolean;
   sortable?: boolean;
   hideable?: boolean;
   responsivePriority?: 'high' | 'medium' | 'low';
@@ -113,6 +114,7 @@ export interface StandardCrudListRuntimeSchema {
   /** 非呈现功能目录中显式绑定 handler 的动作只供受控引用执行。 */
   featureActions?: StandardCrudRuntimeActionSchema[];
   /** 只引用当前 List View 的行动作，不另声明执行或权限。 */
+  columnResize?: boolean;
   rowContextMenu?: string[];
   rowActionColumn?: 'default' | 'menu';
   rowActionSets?: Record<string, { column: string[]; contextMenu: string[] }>;
@@ -323,6 +325,8 @@ function readAdvancedFilter(value: unknown, model: MetadataRecord = {}): Standar
 function readColumn(value: MetadataRecord): StandardCrudRuntimeColumnSchema {
   const source = readString(value.source);
   const field = readString(value.field);
+  if (value.resizable !== undefined && typeof value.resizable !== 'boolean') throw new Error('column resizable must be boolean');
+  if (value.width !== undefined && (typeof value.width !== 'number' || !Number.isFinite(value.width) || value.width <= 0)) throw new Error('column width must be positive');
   const width = typeof value.width === 'number' ? value.width : undefined;
   const sortable = typeof value.sortable === 'boolean' ? value.sortable : undefined;
   const hideable = typeof value.hideable === 'boolean' ? value.hideable : undefined;
@@ -340,6 +344,7 @@ function readColumn(value: MetadataRecord): StandardCrudRuntimeColumnSchema {
     source: source === 'projection' ? 'projection' : 'model',
     field,
     ...(width !== undefined ? { width } : {}),
+    ...(typeof value.resizable === 'boolean' ? { resizable: value.resizable } : {}),
     ...(sortable !== undefined ? { sortable } : {}),
     ...(hideable !== undefined ? { hideable } : {}),
     ...(responsivePriority ? { responsivePriority } : {}),
@@ -873,6 +878,7 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
   registration: StandardCrudResourceRegistration<TFilter, TRow, TDetail>,
   context?: StandardCrudSchemaResolverContext,
 ): StandardCrudListRuntimeSchema {
+  if (view.columnResize !== undefined && typeof view.columnResize !== 'boolean') throw new Error('columnResize must be boolean');
   const queryRecord = readRecord(view.query);
   const exportConfig = readRecord(view.export);
   const detailViewKey = readString(view.detailViewKey, registration.detailViewKey ?? '');
@@ -912,6 +918,7 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
 
   const schema: StandardCrudListRuntimeSchema = {
     viewKey,
+    columnResize: view.columnResize === true,
     resourceKey: registration.resourceKey,
     ...(linkModel ? { idField: 'LID' } : {}),
     dicKey,

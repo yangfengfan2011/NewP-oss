@@ -45,6 +45,7 @@ async function waitForActive(check: () => void | Promise<void>, signal: AbortSig
 const waitFor = (check: () => void | Promise<void>) => waitForActive(check, testLifetime.signal);
 
 async function mount(options: { validate?: (body: Record<string, unknown>) => Promise<Response>; paste?: (body: Record<string, unknown>) => Promise<Response>; failRefresh?: boolean;
+  grants?: readonly string[]; remove?: (body: Record<string, unknown>) => Promise<Response>;
   menuLoad?: (load: () => Promise<{ default: StandardCrudResourceRegistration }>, call: number) => Promise<{ default: StandardCrudResourceRegistration }> } = {}) {
   const lifetime = new AbortController();
   const waitFor = (check: () => void | Promise<void>) => waitForActive(check, lifetime.signal);
@@ -56,7 +57,7 @@ async function mount(options: { validate?: (body: Record<string, unknown>) => Pr
   const writes: Array<{ path: string; body: Record<string, unknown> }> = [];
   let actor = 'actor'; let failedRead = false;
   const user = () => ({ id: actor, ecode: actor, ename: actor, revision: 1, mustChangePassword: false, isLocalAdministrator: false,
-    timeZoneId: 'Asia/Taipei', featurePositions: ['entry', ...actions.map(action => action.position)] });
+    timeZoneId: 'Asia/Taipei', featurePositions: ['entry', ...actions.map(action => action.position).filter(position => !options.grants || options.grants.includes(position))] });
   const request = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost');
     if (url.pathname.includes('antiforgery-token')) return json({ requestToken: 'token' });
@@ -77,7 +78,13 @@ async function mount(options: { validate?: (body: Record<string, unknown>) => Pr
       return json({ items, total: items.length, page: 1, pageSize: 20 });
     }
     if (url.pathname.startsWith('/api/workspace/folders/')) return json({ fields: { ENAME: 'A' } });
-    if (url.pathname.endsWith('/clipboard/validate') || url.pathname.endsWith('/paste')) {
+    if (url.pathname.endsWith('/references/remove')) {
+      const body = input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body));
+      writes.push({ path: url.pathname, body });
+      if (options.remove) return controlledResponse(() => options.remove!(body));
+      failedRead = options.failRefresh === true; return json({ succeeded: true });
+    }
+    if (url.pathname.endsWith('/clipboard/validate') || url.pathname.endsWith('/clipboard/cut/validate') || url.pathname.endsWith('/paste')) {
       const body = input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body));
       writes.push({ path: url.pathname, body });
       if (url.pathname.endsWith('/paste')) {
@@ -85,7 +92,7 @@ async function mount(options: { validate?: (body: Record<string, unknown>) => Pr
         failedRead = options.failRefresh === true; return json({ succeeded: true });
       }
       if (options.validate) return controlledResponse(() => options.validate!(body));
-      return json(url.pathname.endsWith('/paste') ? { succeeded: true } : { mode: 'copy', sourcePosition: body.sourcePosition, items: body.linkIds.map((linkId: string) => ({ linkId })) });
+      return json(url.pathname.endsWith('/paste') ? { succeeded: true } : { mode: body.mode, sourcePosition: body.sourcePosition, items: body.linkIds.map((linkId: string) => ({ linkId })) });
     }
     throw new Error(`Unexpected request ${url.pathname}`);
   });
@@ -103,7 +110,7 @@ async function mount(options: { validate?: (body: Record<string, unknown>) => Pr
   function SwitchActor() { const auth = useAuth(); return <button data-current-actor={auth.user?.id} onClick={() => { actor = 'next'; void auth.retrySessionValidation(); }}>Switch actor</button>; }
   const router = createMemoryRouter([{ path: '/workspace', element:
     <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={{ zhs: catalog }}>
-      <AuthProvider initialUser={user()}><AuthorizationProvider featurePositions={['entry', ...actions.map(action => action.position)]}><PlatformQueryProvider scopeKey="clipboard-test">
+      <AuthProvider initialUser={user()}><AuthorizationProvider featurePositions={user().featurePositions}><PlatformQueryProvider scopeKey="clipboard-test">
         <RuntimeMetadataProvider value={{ manifest: { modules: [{ moduleId: 'Workspace', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [],
           features: [{ key: 'workspace', position: 'entry', kind: 'navigation' }, ...actions] }] }, navDocuments: [], modelDocuments: [folder, content], viewDocuments: [tree, list, detail] }}>
           <SwitchActor /><PageEntry page={{ pageKey: 'platform.tree', parameters: { viewKey: tree.view.key, featurePosition: 'entry' }, inputResolverKey: 'workspace.tree.current' }} />
@@ -129,10 +136,10 @@ async function mount(options: { validate?: (body: Record<string, unknown>) => Pr
   const select = async (name: string) => { await act(async () => [...container.querySelectorAll<HTMLElement>('.ant-tree-title')].find(item => item.textContent === name)!.click()); await waitFor(() => expect(container.querySelector('.np-tree-context-header h2')?.textContent).toBe(name)); };
   const toolbar = () => container.querySelector('.np-tree-content-body')!;
   const button = (name: string) => [...toolbar().querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent?.replace(/\s/g, '') === name)!;
-  const copyRows = async (types: string[]) => {
+  const copyRows = async (types: string[], action = '复制') => {
     await select('A'); await waitFor(() => expect(container.querySelector('tbody')?.textContent).toContain('Document source'));
     await act(async () => { for (const type of types) [...container.querySelectorAll<HTMLTableRowElement>('tbody tr')].find(row => row.textContent?.includes(`${type} source`))!.querySelector<HTMLInputElement>('input[type=checkbox]')!.click(); });
-    await waitFor(() => expect(button('复制').disabled).toBe(false)); await act(async () => button('复制').click());
+    await waitFor(() => expect(button(action).disabled).toBe(false)); await act(async () => button(action).click());
   };
   const openTreeMenu = async (name: string) => {
     await select(name);
@@ -150,6 +157,91 @@ it('ends an outstanding fixture wait when its mounted page is disposed', async (
   const outcome = expect(waiting).rejects.toThrow('Clipboard page disposed');
   await page.cleanup(); await outcome;
   expect(diagnostic.mock.calls.some(args => String(args[0]).includes('overlapping act()'))).toBe(false);
+});
+
+it('shows pending cut through existing granted actions across folders and clears on a confirmed same-parent success', async () => {
+  const page = await mount({ grants: ['tree-cut', 'tree-paste', 'page-paste'], paste: async () => json({ succeeded: true, noChange: true }) });
+  await page.openTreeMenu('A');
+  const menu = (label: string) => [...document.querySelectorAll<HTMLElement>('[role=menuitem]')].find(item => item.textContent === label)!;
+  await waitFor(() => expect(menu('剪切')?.classList.contains('ant-dropdown-menu-item-disabled')).toBe(false));
+  await act(async () => menu('剪切').click());
+  await waitFor(() => expect(page.writes).toHaveLength(1));
+  expect(page.writes[0]).toEqual({ path: '/api/workspace/content/clipboard/cut/validate', body: {
+    mode: 'cut', sourcePosition: { spaceId: 'public', rootFolderId: 'root', linkIds: [] }, linkIds: ['A-link'],
+  } });
+  await page.select('B');
+  await waitFor(() => expect(page.button('粘贴引用（待移动）')?.disabled).toBe(false));
+  expect(page.button('剪切（待移动）')).toBeUndefined();
+  await page.openTreeMenu('B');
+  await waitFor(() => expect(menu('剪切（待移动）')?.classList.contains('ant-dropdown-menu-item-disabled')).toBe(false));
+  await act(async () => menu('粘贴引用（待移动）').click());
+  await waitFor(() => expect(page.button('粘贴引用')?.disabled).toBe(true));
+  expect(page.writes).toHaveLength(2);
+  expect(document.body.textContent).toContain('位置未改变');
+});
+
+it('cuts the clicked row instead of another checked row and retains pending state on unknown outcome until explicit clear', async () => {
+  const page = await mount({ paste: async () => json({ code: 'Persistence.CommitOutcomeUnknown' }, 409) });
+  await page.select('A'); await waitFor(() => expect(page.container.querySelector('tbody')?.textContent).toContain('Document source'));
+  const rows = [...page.container.querySelectorAll<HTMLTableRowElement>('tbody tr')];
+  await act(async () => rows.find(row => row.textContent?.includes('Part source'))!.querySelector<HTMLInputElement>('input[type=checkbox]')!.click());
+  await act(async () => rows.find(row => row.textContent?.includes('Document source'))!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 60, clientY: 80 })));
+  const menu = (label: string) => [...document.querySelectorAll<HTMLElement>('[role=menuitem]')].find(item => item.textContent === label)!;
+  await waitFor(() => expect(menu('剪切')?.classList.contains('ant-dropdown-menu-item-disabled')).toBe(false));
+  await act(async () => menu('剪切').click());
+  await waitFor(() => expect(page.writes).toHaveLength(1));
+  expect(page.writes[0].body.linkIds).toEqual(['Document-lid']);
+  await page.select('B'); await waitFor(() => expect(page.button('粘贴引用（待移动）')?.disabled).toBe(false));
+  await act(async () => page.button('粘贴引用（待移动）').click());
+  await waitFor(() => expect(page.button('粘贴引用（待移动）')?.disabled).toBe(true));
+  await page.openTreeMenu('B');
+  await waitFor(() => expect(menu('粘贴引用（待移动）')?.classList.contains('ant-dropdown-menu-item-disabled')).toBe(true));
+  expect(menu('粘贴引用（待移动）').querySelector('[title]')?.getAttribute('title')).toContain('核对源和目标');
+  await act(async () => menu('粘贴引用（待移动）').click()); expect(page.writes).toHaveLength(2);
+  await act(async () => menu('清空剪贴板').click());
+  await waitFor(() => expect(page.button('粘贴引用')?.disabled).toBe(true)); expect(page.writes).toHaveLength(2);
+});
+
+it('keeps toolbar cut selection through validation and clears pending after successful move even when the next read fails', async () => {
+  const page = await mount({ failRefresh: true });
+  await page.copyRows(['Document', 'Part'], '剪切');
+  await waitFor(() => expect(page.writes).toHaveLength(1));
+  expect(page.writes[0].body.linkIds).toEqual(['Document-lid', 'Part-lid']);
+  await page.select('B'); await waitFor(() => expect(page.button('粘贴引用（待移动）')?.disabled).toBe(false));
+  await act(async () => page.button('粘贴引用（待移动）').click());
+  await waitFor(() => expect(page.button('粘贴引用')?.disabled).toBe(true));
+  expect(page.button('粘贴引用（待移动）')).toBeUndefined(); expect(page.writes).toHaveLength(2);
+  await page.openTreeMenu('B');
+  await waitFor(() => expect([...document.querySelectorAll<HTMLElement>('[role=menuitem]')].some(item => item.textContent === '剪切')).toBe(true));
+  expect(page.writes).toHaveLength(2);
+});
+
+it('confirms a fixed current-page batch removal and clears selection after success without replaying a failed refresh', async () => {
+  const page = await mount({ failRefresh: true });
+  await page.copyRows(['Document', 'Part'], '批量移除引用');
+  await waitFor(() => expect(document.querySelector('[role=dialog]')?.textContent).toContain('保留对象及文件'));
+  expect(page.writes).toEqual([]);
+  const confirm = () => [...document.querySelectorAll<HTMLButtonElement>('[role=dialog] button')].find(item => item.textContent?.replace(/\s/g, '') === '确认')!;
+  await act(async () => confirm().click());
+  await waitFor(() => expect(page.writes).toHaveLength(1));
+  expect(page.writes[0]).toEqual({ path: '/api/workspace/content/references/remove', body: {
+    position: { spaceId: 'public', rootFolderId: 'root', linkIds: ['A-link'] }, linkIds: ['Document-lid', 'Part-lid'],
+  } });
+  await waitFor(() => expect(document.querySelector('[role=dialog]')).toBeNull());
+  await waitFor(() => expect(page.button('批量移除引用')?.disabled).toBe(true)); expect(page.writes).toHaveLength(1);
+});
+
+it('replaces a cut with a new copy and restores the existing paste and cut labels', async () => {
+  const page = await mount(); await page.openTreeMenu('A');
+  const menu = () => [...document.querySelectorAll<HTMLElement>('[role=menuitem]')].find(item => item.textContent === '剪切')!;
+  await waitFor(() => expect(menu()?.classList.contains('ant-dropdown-menu-item-disabled')).toBe(false));
+  await act(async () => menu().click());
+  await waitFor(() => expect(page.button('粘贴引用（待移动）')?.disabled).toBe(false));
+  await page.copyRows(['Part']); await waitFor(() => expect(page.writes).toHaveLength(2));
+  await waitFor(() => expect(page.button('粘贴引用')?.disabled).toBe(false));
+  expect(page.button('剪切（待移动）')).toBeUndefined(); expect(page.button('剪切')).toBeDefined();
+  await page.select('B'); await act(async () => page.button('粘贴引用').click());
+  await waitFor(() => expect(page.writes).toHaveLength(3)); expect(page.writes[2].body.mode).toBe('copy');
 });
 
 it('projects empty and ready clipboard states into tree menus without preparing an action or writing during preview', async () => {

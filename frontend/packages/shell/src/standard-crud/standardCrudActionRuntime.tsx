@@ -65,6 +65,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
     const state = actionStateResolver?.({ action, detail: context.detail, row: context.row });
     return {
       ...action,
+      displayLabel: state?.labelKey ? t(state.labelKey, '') : action.labelKey,
       featureResolution: featureResolutionForAction(action),
       runtimeDisabled: action.runtimeDisabled === true || state?.available === false,
       disabledReason: action.disabledReason ?? formatStandardCrudActionReason(state, t),
@@ -128,7 +129,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
             disabled={disabled}
             onConfirm={() => requestAction(action)}
           >
-            {actionExecution.pendingKey === action.key ? t('Platform.Processing', '处理中...') : action.labelKey}
+            {actionExecution.pendingKey === action.key ? t('Platform.Processing', '处理中...') : action.displayLabel}
           </CrudDangerAction>
           {action.runtimeDisabled && action.disabledReason ? (
             <span role="status" data-action-disabled-reason={action.key}>{action.disabledReason}</span>
@@ -140,7 +141,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
     return (
       <div key={action.key} data-action-key={action.key}>
         <Button size="sm" variant={action.variant} disabled={disabled} onClick={() => requestAction(action)}>
-          {actionExecution.pendingKey === action.key ? t('Platform.Processing', '处理中...') : action.labelKey}
+          {actionExecution.pendingKey === action.key ? t('Platform.Processing', '处理中...') : action.displayLabel}
         </Button>
         {action.runtimeDisabled && action.disabledReason ? (
           <span role="status" data-action-disabled-reason={action.key}>{action.disabledReason}</span>

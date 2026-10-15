@@ -36,6 +36,7 @@ const resource: StandardCrudResourceRegistration = {
     editObject: Object.assign((context: StandardCrudActionInputRenderContext) =>
       createElement(Suspense, { fallback: null }, createElement(WorkspaceObjectEditInput, context)), { presentation: 'drawer' as const }),
     confirmDelete: () => null,
+    confirmReferences: () => null,
     createObject: Object.assign((context: StandardCrudActionInputRenderContext) =>
       createElement(Suspense, { fallback: null }, createElement(context.action.key === 'createDocument' ? WorkspaceDocumentCreateInput : WorkspaceObjectCreateInput, context)), { presentation: 'drawer' as const }),
   },
@@ -49,9 +50,16 @@ const resource: StandardCrudResourceRegistration = {
       const copied = await session.copy(workspacePosition(queryScope), id ? [id] : (selectedRows ?? []).map(row => String(row.LID)), featurePosition);
       return { operation: 'action', payload: null, noChange: true, ...(copied ? { notice: { reasonKey: 'Workspace.Copied' } } : {}) };
     },
+    cut: async ({ instance, id, selectedRows, queryScope, featurePosition }) => {
+      const session = clipboard(instance);
+      const selected = await session.cut(workspacePosition(queryScope), id ? [id] : (selectedRows ?? []).map(row => String(row.LID)), featurePosition);
+      return { operation: 'action', payload: null, noChange: true, ...(selected ? { notice: { reasonKey: 'Workspace.CutReady' } } : {}) };
+    },
     paste: async ({ instance, queryScope, featurePosition }) => {
-      const receipt = await clipboard(instance).paste(workspacePosition(queryScope), featurePosition);
-      return { operation: 'action', payload: receipt, change: { operation: 'update', id: '' }, notice: { reasonKey: 'Workspace.Pasted' } };
+      const session = clipboard(instance); const mode = session.getSnapshot().clipboard?.mode;
+      const receipt = await session.paste(workspacePosition(queryScope), featurePosition);
+      return { operation: 'action', payload: receipt, ...(receipt.noChange ? { noChange: true as const } : { change: { operation: 'update' as const, id: '' } }),
+        notice: { reasonKey: receipt.noChange ? 'Workspace.PositionUnchanged' : mode === 'cut' ? 'Workspace.Moved' : 'Workspace.Pasted' } };
     },
     reorder: async ({ action, id, queryScope, featurePosition }) => {
       if (!id || !action || !['moveUp', 'moveDown'].includes(action.key)) throw new Error('无效文件夹排序动作');
@@ -92,17 +100,21 @@ const resource: StandardCrudResourceRegistration = {
       if (!id) throw new Error('缺少引用标识');
       return referenceCommand('DELETE', `/api/workspace/content/references/${encodeURIComponent(id)}`, { position: workspacePosition(queryScope) }, featurePosition);
     },
+    removeSelected: async ({ selectedRows, queryScope, featurePosition }) => referenceCommand('POST', '/api/workspace/content/references/remove',
+      { position: workspacePosition(queryScope), linkIds: (selectedRows ?? []).map(row => String(row.LID)) }, featurePosition),
   },
   actionStateResolver: ({ action, instance, queryScope }) => {
     const root = queryScope?.linkIds === '[]';
     if (root && ['createPart', 'createDocument'].includes(action.key)) return { visible: false, available: false, reasonKey: 'Workspace.RootOnlyFolders' };
     const state = instance?.active ? clipboard(instance).getSnapshot() : undefined;
-    if (state?.phase === 'pasting' || state?.phase === 'validating') return { visible: true, available: false, reasonKey: 'Workspace.ClipboardBusy' };
-    if (!['copy', 'copySelected', 'paste', 'clearClipboard'].includes(action.key)) return { visible: true, available: true };
+    const label = state?.clipboard?.mode === 'cut' && ['cut', 'cutSelected', 'paste'].includes(action.key)
+      ? { labelKey: action.key === 'paste' ? 'Workspace.PastePending' : 'Workspace.CutPending' } : {};
+    if (state?.phase === 'pasting' || state?.phase === 'validating') return { visible: true, available: false, reasonKey: 'Workspace.ClipboardBusy', ...label };
+    if (!['copy', 'copySelected', 'cut', 'cutSelected', 'paste', 'clearClipboard'].includes(action.key)) return { visible: true, available: true };
     if (!state) return { visible: true, available: false, reasonKey: 'Workspace.ClipboardUnavailable' };
-    if (action.key === 'paste' && state.phase === 'unknown') return { visible: true, available: false, reasonKey: 'Workspace.ClipboardOutcomeUnknown' };
+    if (action.key === 'paste' && state.phase === 'unknown') return { visible: true, available: false, reasonKey: 'Workspace.ClipboardOutcomeUnknown', ...label };
     if (['paste', 'clearClipboard'].includes(action.key) && !state.clipboard) return { visible: true, available: false, reasonKey: 'Workspace.ClipboardUnavailable' };
-    return { visible: true, available: true };
+    return { visible: true, available: true, ...label };
   },
   dataAdapter: {
     list: async (query = {}, context) => {

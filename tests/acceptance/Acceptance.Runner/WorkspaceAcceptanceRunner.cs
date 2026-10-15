@@ -91,6 +91,8 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
                 features.Action(entry, "clearClipboard", "contextMenu", "folder"), features.Action(entry, "copy", "list.rowActions", "folder"),
                 features.Action(entry, "copySelected", "list.pageActions", "folder"), features.Action(entry, "paste", "list.pageActions", "folder"),
                 features.Action(entry, "clearClipboard", "list.pageActions", "folder"),
+                features.Action(entry, "cut", "contextMenu", "folder"), features.Action(entry, "cut", "list.rowActions", "folder"),
+                features.Action(entry, "cutSelected", "list.pageActions", "folder"), features.Action(entry, "removeSelected", "list.pageActions", "folder"),
                 features.Action(entry, "deleteObjects", "list.pageActions", "folder"), part, document,
                 features.Behavior("Document", "document.document.download")];
         }
@@ -179,8 +181,6 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             await CapturePresentationAsync(page, "folder-content.png");
             var properties = await driver.OpenFolderPropertiesAsync(folderName);
             await CapturePresentationAsync(page, "folder-properties.png");
-            await page.SetViewportSizeAsync(900, 1000);
-            await CapturePresentationAsync(page, "folder-properties-narrow.png");
             var references = await driver.OpenDirectReferencesAsync(properties, "公共空间");
             var referencingFolder = await driver.OpenReferencingFolderPropertiesAsync(references, "公共空间");
             await driver.ClosePropertiesAsync(referencingFolder);
@@ -206,7 +206,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             await driver.SelectTreePathAsync("公共空间", folderName);
             await driver.RemoveReferenceAsync(PartName);
             await driver.CreateObjectAsync("零组件", PartCode + "-NEXT", PartName + " 新建");
-            await CapturePresentationAsync(page, "folder-content-narrow.png");
+            await CapturePresentationAsync(page, "folder-content-before-edit.png");
             await driver.EditObjectFromContextMenuAsync(DocumentName, DocumentName + " 已编辑");
             await driver.EditObjectAsync(PartName + " 新建", PartName + " 已编辑");
             await CapturePresentationAsync(page, "folder-content-edited.png");

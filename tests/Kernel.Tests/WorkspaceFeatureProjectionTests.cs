@@ -84,6 +84,7 @@ public sealed class WorkspaceFeatureProjectionTests
             Assert.DoesNotContain(catalog, point => point.Key == key && point.ActionScope is "list.rowActions" or "list.pageActions");
         }
         foreach (var (key, surface, behavior) in new[] { ("copySelected", "list.pageActions", "copy"), ("copy", "list.rowActions", "copy"),
+            ("cutSelected", "list.pageActions", "cut"), ("cut", "list.rowActions", "cut"), ("cut", "contextMenu", "cut"), ("removeSelected", "list.pageActions", "removeSelected"),
             ("copy", "contextMenu", "copy"), ("paste", "list.pageActions", "paste"), ("paste", "contextMenu", "paste"),
             ("clearClipboard", "list.pageActions", "copy"), ("clearClipboard", "contextMenu", "copy") })
         {

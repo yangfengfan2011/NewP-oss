@@ -19,7 +19,7 @@ using Xunit.Abstractions;
 
 namespace ICP.Platform.HostApi.Tests;
 
-public sealed class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputHelper output)
+public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputHelper output)
 {
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "只读预检失败或取消归还自己打开的连接，已有调用方连接及关系保持不变")]
     public async Task Qualification_ReturnsItsConnectionOnFailureAndCancellationWithoutClosingTheCallerConnection()
@@ -84,7 +84,7 @@ public sealed class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputHelper ou
         var cost = new ClipboardCost();
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(services => services.AddDbContext<EfPlatformDbContext>((_, options) => options.AddInterceptors(cost)), includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync(); var root = await Root(fixture, admin);
-        var a = await Folder(fixture, admin, root, "容量来源"); var b = await Folder(fixture, admin, root, "容量目标");
+        var a = await Folder(fixture, admin, root, "容量来源"); var b = await Folder(fixture, admin, root, "容量目标"); var c = await Folder(fixture, admin, root, "移动目标");
         await Command(fixture, admin, "workspace.folder.createPart", "/api/workspace/content/parts", new { position = a, values = new { ECODE = "COPY-MAX-000", ENAME = "真实Part种子" } });
         using (var scope = fixture.Services.CreateScope())
         {
@@ -132,6 +132,22 @@ public sealed class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputHelper ou
             warmQualification, warmSql, warmTiming, warmQualificationWallSeconds = warmClock.Elapsed.TotalSeconds,
             paste, pasteSql, pasteTiming, pasteWallSeconds = pasteClock.Elapsed.TotalSeconds,
             boundary = "One page <=100; per-object endpoint/read/copy decisions remain visible in command totals; no new capacity or SLA." }));
+        timing.Begin(); cost.Begin(); var cutQualificationClock = Stopwatch.StartNew();
+        await Command(fixture, admin, "workspace.folder.cut", "/api/workspace/content/clipboard/cut/validate", new { mode = "cut", sourcePosition = a, linkIds = selection });
+        cutQualificationClock.Stop(); var cutQualification = cost.End(); var cutQualificationSql = timing.End();
+        timing.Begin(); cost.Begin(); var cutClock = Stopwatch.StartNew();
+        await Command(fixture, admin, "workspace.folder.paste", "/api/workspace/content/paste", new { mode = "cut", sourcePosition = a, linkIds = selection, targetPosition = c });
+        cutClock.Stop(); var cut = cost.End(); var cutSql = timing.End();
+        links = await Rows(fixture, "WorkspaceFolderContent"); var moved = links.Where(row => Equals(row["PEID"], FolderId(c, links))).Select(row => (string)row["LID"]!).ToArray();
+        Assert.Equal(100, moved.Length); Assert.DoesNotContain(links, row => Equals(row["PEID"], parentId));
+        timing.Begin(); cost.Begin(); var removeClock = Stopwatch.StartNew();
+        await Command(fixture, admin, "workspace.folder.removeSelected", "/api/workspace/content/references/remove", new { position = c, linkIds = moved });
+        removeClock.Stop(); var remove = cost.End(); var removeSql = timing.End();
+        Assert.Equal(100, (await Rows(fixture, "Part")).Length);
+        Assert.Equal(0, cutQualification.BusinessEntities); Assert.Equal(0, cut.BusinessEntities); Assert.Equal(0, remove.BusinessEntities);
+        output.WriteLine(JsonSerializer.Serialize(new { selection = 100, cutQualification, cutQualificationSql, cutQualificationWallSeconds = cutQualificationClock.Elapsed.TotalSeconds,
+            cut, cutSql, cutWallSeconds = cutClock.Elapsed.TotalSeconds, remove, removeSql, removeWallSeconds = removeClock.Elapsed.TotalSeconds,
+            boundary = "SqlClient diagnostic totals cover EF and raw commands; <=100 ordered narrow source projections; no business entities materialized; per-object decisions retained, no new SLA." }));
     }
 
     // SqlClient事件同时覆盖EF及Link reader直接执行的命令；仅记录次数和耗时，不保留SQL或参数。
@@ -185,7 +201,8 @@ public sealed class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputHelper ou
             if (!_active) return; _commands++;
             if (command.CommandText.Contains("Workspace.FolderGraph", StringComparison.Ordinal)) _locks++;
             if (command.CommandText.Contains("INSERT INTO [dbo].[WorkspaceFolderContent]", StringComparison.Ordinal)
-                || command.CommandText.Contains("MERGE [dbo].[WorkspaceFolderContent]", StringComparison.Ordinal)) _writes++;
+                || command.CommandText.Contains("MERGE [dbo].[WorkspaceFolderContent]", StringComparison.Ordinal)
+                || command.CommandText.Contains("DELETE FROM", StringComparison.Ordinal) && command.CommandText.Contains("WorkspaceFolderContent", StringComparison.Ordinal)) _writes++;
             else if (command.CommandText.Contains("SELECT", StringComparison.Ordinal)) _reads++;
         }
     }
@@ -458,7 +475,7 @@ public sealed class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputHelper ou
     }
 
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "真实主文件及附件图文档A→B→C只新增引用，保留版本、关联、Files使用和字节")]
-    public async Task CopyDocumentAcrossThreeFolders_PreservesAllObjectAndFileFacts()
+    public async Task CopyCutAndRemoveDocumentReferences_PreserveAllObjectAndFileFacts()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
@@ -518,6 +535,26 @@ public sealed class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputHelper ou
             var ordinal = file.GetProperty("ordinal").GetInt32(); Assert.Equal(new byte[] { (byte)ordinal, (byte)(ordinal + 1) }, await downloaded.Content.ReadAsByteArrayAsync());
         }
         foreach (var model in models) Assert.Equal(before[model], Snapshot(await Rows(fixture, model)));
+        // 同父legacy根Document剪切也必须零写；随后移动及移除最后引用保留全部文件链。
+        var legacyBefore = Snapshot(await Rows(fixture, "WorkspaceFolderContent"));
+        var noOp = await Command(fixture, admin, "workspace.folder.paste", "/api/workspace/content/paste", new { mode = "cut", sourcePosition = rootPosition, linkIds = new[] { sourceId }, targetPosition = rootPosition });
+        Assert.True(noOp.GetProperty("noChange").GetBoolean()); Assert.Equal(legacyBefore, Snapshot(await Rows(fixture, "WorkspaceFolderContent")));
+        foreach (var position in new[] { b, c })
+        {
+            links = await Rows(fixture, "WorkspaceFolderContent");
+            var id = (string)links.Single(row => Equals(row["PEID"], FolderId(position, links)) && Equals(row["ChildModelKey"], "Document"))["LID"]!;
+            await Command(fixture, admin, "workspace.folder.removeSelected", "/api/workspace/content/references/remove", new { position, linkIds = new[] { id } });
+        }
+        await Command(fixture, admin, "workspace.folder.cut", "/api/workspace/content/clipboard/cut/validate", new { mode = "cut", sourcePosition = rootPosition, linkIds = new[] { sourceId } });
+        await Command(fixture, admin, "workspace.folder.paste", "/api/workspace/content/paste", new { mode = "cut", sourcePosition = rootPosition, linkIds = new[] { sourceId }, targetPosition = b });
+        links = await Rows(fixture, "WorkspaceFolderContent");
+        var movedDocument = Assert.Single(links, row => Equals(row["ChildModelKey"], "Document"));
+        Assert.NotEqual(sourceId, movedDocument["LID"]); Assert.Equal(documentId, movedDocument["CEID"]);
+        Assert.Equal(FolderId(b, links), movedDocument["PEID"]);
+        await Command(fixture, admin, "workspace.folder.removeSelected", "/api/workspace/content/references/remove", new { position = b, linkIds = new[] { (string)movedDocument["LID"]! } });
+        Assert.DoesNotContain(await Rows(fixture, "WorkspaceFolderContent"), row => Equals(row["ChildModelKey"], "Document"));
+        foreach (var model in models) Assert.Equal(before[model], Snapshot(await Rows(fixture, model)));
+        foreach (var (name, bytes) in bytesBefore) Assert.Equal(bytes, await File.ReadAllBytesAsync(Path.Combine(fixture.StorageRoot, name!)));
     }
 
     private static string Snapshot(Dictionary<string, object?>[] rows) => JsonSerializer.Serialize(rows.Select(row => row.OrderBy(pair => pair.Key).ToDictionary()).OrderBy(row => JsonSerializer.Serialize(row)));
@@ -531,7 +568,8 @@ public sealed class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputHelper ou
     }
     private static FeaturePoint Point(BusinessAuditHostFixture fixture, string behavior) => Assert.Single(fixture.FeatureCatalog,
         point => point.ModuleId == (behavior.StartsWith("document.", StringComparison.Ordinal) ? "Document" : "Workspace")
-            && point.BehaviorKey == behavior && (behavior != "workspace.folder.copy" || point.Key == "copySelected") && (behavior == "workspace.spaces.access" || point.ActionScope == "list.pageActions" || behavior == "workspace.folder.add" && point.ActionScope == "list.custom"));
+            && point.BehaviorKey == behavior && (behavior != "workspace.folder.copy" || point.Key == "copySelected")
+            && (behavior != "workspace.folder.cut" || point.Key == "cutSelected") && (behavior == "workspace.spaces.access" || point.ActionScope == "list.pageActions" || behavior == "workspace.folder.add" && point.ActionScope == "list.custom"));
     private static FeaturePoint RowPoint(BusinessAuditHostFixture fixture, string key) => Assert.Single(fixture.FeatureCatalog,
         point => point.ModuleId == "Workspace" && point.StaticScope == "folder" && point.ActionScope == "list.rowActions" && point.Key == key);
     private static async Task<JsonElement> Command(BusinessAuditHostFixture fixture, HttpClient client, string behavior, string path, object? body = null)

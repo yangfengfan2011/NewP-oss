@@ -9,6 +9,21 @@ const target = { spaceId: 'public', rootFolderId: 'root', linkIds: ['target-pare
 const validated = (ids: string[]) => new Response(JSON.stringify({ mode: 'copy', sourcePosition: source, items: ids.map(linkId => ({ linkId })) }));
 afterEach(() => { vi.resetAllMocks(); });
 
+it.each([false, true])('cut uses its own qualification and clears only a confirmed success (noChange=%s)', async noChange => {
+  const session = new WorkspaceClipboardSession(vi.fn());
+  vi.mocked(platformFetch).mockResolvedValueOnce(validated(['lid']));
+  await session.cut(source, ['lid'], 'cut-feature');
+  expect(platformFetch).toHaveBeenLastCalledWith('/api/workspace/content/clipboard/cut/validate', expect.objectContaining({
+    headers: expect.objectContaining({ 'X-NewP-Feature': 'cut-feature' }), body: JSON.stringify({ mode: 'cut', sourcePosition: source, linkIds: ['lid'] }),
+  }));
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ code: 'Workspace.ObjectWriteDenied' }), { status: 403 }));
+  await expect(session.paste(target, 'paste')).rejects.toThrow();
+  expect(session.getSnapshot()).toMatchObject({ phase: 'idle', clipboard: { mode: 'cut', linkIds: ['lid'] } });
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ succeeded: true, noChange })));
+  expect(await session.paste(target, 'paste')).toEqual({ succeeded: true, noChange });
+  expect(session.getSnapshot()).toEqual({ phase: 'idle' });
+});
+
 it('replaces only after a successful qualification and preserves both source and validated selection order', async () => {
   const session = new WorkspaceClipboardSession(vi.fn());
   vi.mocked(platformFetch).mockResolvedValueOnce(validated(['b', 'a']));
@@ -24,13 +39,13 @@ it('discards delayed older validation and never revives a closed session', async
   const changed = vi.fn(); const session = new WorkspaceClipboardSession(changed);
   let finish!: (value: Response) => void;
   vi.mocked(platformFetch).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })).mockResolvedValueOnce(validated(['new']));
-  const older = session.copy(source, ['old'], 'copy');
+  const older = session.cut(source, ['old'], 'cut');
   await session.copy(source, ['new'], 'copy');
   finish(validated(['old'])); expect(await older).toBe(false);
   expect(session.getSnapshot().clipboard?.linkIds).toEqual(['new']);
   let finishClosed!: (value: Response) => void;
   vi.mocked(platformFetch).mockImplementationOnce(() => new Promise(resolve => { finishClosed = resolve; }));
-  const closed = session.copy(source, ['late'], 'copy'); session.close();
+  const closed = session.cut(source, ['late'], 'cut'); session.close();
   const count = changed.mock.calls.length;
   finishClosed(validated(['late'])); expect(await closed).toBe(false);
   expect(session.getSnapshot().clipboard).toBeUndefined(); expect(changed).toHaveBeenCalledTimes(count);
@@ -47,9 +62,9 @@ it.each([400, 403, 404, 409])('retains a correctable explicit %s failure and kee
   expect(session.getSnapshot()).toMatchObject({ phase: 'idle', clipboard: { linkIds: ['lid'] } });
 });
 
-it.each(['network', 'server', 'commit'])('locks an unknown %s result, blocks replay and permits only explicit clear or resampling afterward', async failure => {
+it.each((['copy', 'cut'] as const).flatMap(mode => ['network', 'server', 'commit'].map(failure => [mode, failure] as const)))('locks an unknown %s %s result, blocks replay and permits only explicit clear or resampling afterward', async (mode, failure) => {
   const session = new WorkspaceClipboardSession(vi.fn());
-  vi.mocked(platformFetch).mockResolvedValueOnce(validated(['lid'])); await session.copy(source, ['lid'], 'copy');
+  vi.mocked(platformFetch).mockResolvedValueOnce(validated(['lid'])); await session[mode](source, ['lid'], mode);
   if (failure === 'network') vi.mocked(platformFetch).mockRejectedValueOnce(new TypeError('Connection lost'));
   else vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ code: failure === 'commit' ? 'Persistence.CommitOutcomeUnknown' : 'HTTP_500' }), { status: failure === 'commit' ? 409 : 500 }));
   await expect(session.paste(target, 'paste')).rejects.toThrow();
@@ -86,7 +101,7 @@ it('preserves an unknown lock after failed resampling and unlocks only a success
   expect(session.getSnapshot()).toMatchObject({ phase: 'idle', clipboard: { linkIds: ['new'] } });
 });
 
-it.each([{}, { succeeded: false }, null])('treats a malformed 2xx paste receipt as unknown (%j)', async receipt => {
+it.each([{}, { succeeded: false }, { succeeded: true, noChange: 'true' }, null])('treats a malformed 2xx paste receipt as unknown (%j)', async receipt => {
   const session = new WorkspaceClipboardSession(vi.fn());
   vi.mocked(platformFetch).mockResolvedValueOnce(validated(['lid'])); await session.copy(source, ['lid'], 'copy');
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify(receipt)));

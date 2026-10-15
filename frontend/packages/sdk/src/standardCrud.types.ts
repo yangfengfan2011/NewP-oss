@@ -252,6 +252,8 @@ export interface StandardCrudActionContext<TDetail = unknown, TRow = unknown> ex
 export interface StandardCrudActionState {
   visible: boolean;
   available: boolean;
+  /** 完整词典键覆盖当前呈现标签；不改变动作身份、功能位置或执行输入。 */
+  labelKey?: string;
   /** 旧调用方的说明；提供 reasonKey 后仅保留作诊断，不作为译文兜底。 */
   reason?: string;
   reasonKey?: string;

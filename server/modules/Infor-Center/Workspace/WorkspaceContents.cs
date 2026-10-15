@@ -83,20 +83,22 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
 
     /// <summary>移除只删除指定 LID；关系当前父端、目标读取与有效出现位置均由提交时事实决定。</summary>
     public ValueTask<bool> RemoveAsync(string actorId, WorkspacePosition position, string linkId, CancellationToken token) =>
-        transactions.ExecuteAsync<bool>(async cancellation =>
+        RemoveReferencesAsync(actorId, position, [linkId], token);
+
+    /// <summary>单条和一页批量移除共用完整位置、父edit及端点read；只删除确切LID，不消费对象delete或Files。</summary>
+    public ValueTask<bool> RemoveReferencesAsync(string actorId, WorkspacePosition position, string[] linkIds, CancellationToken token)
+    {
+        ValidateSelection(linkIds);
+        return transactions.ExecuteAsync<bool>(async cancellation =>
         {
             await LockGraphAsync(cancellation);
             var path = await WritablePositionAsync(actorId, position, cancellation);
-            var links = db.Set<Dictionary<string, object?>>(WorkspacePositions.ContentModel);
-            var link = await links.SingleOrDefaultAsync(row => EF.Property<string>(row, "LID") == linkId && EF.Property<string>(row, "PEID") == path.FolderId, cancellation);
-            if (link is null) throw new LinkQueryException(404, "Workspace.ReferenceUnavailable");
-            var target = new LinkObjectReference((string)link["ChildModelKey"]!, (string)link["CEID"]!);
-            var definition = catalog.Get("workspace.content");
-            if (!definition.Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == target.ModelKey)
-                || !await reader.IsEndpointReadableAsync("workspace.content", target, cancellation)) throw new LinkQueryException(404, "Workspace.ReferenceUnavailable");
-            links.Remove(link);
+            await ResolveClipboardTargetsAsync(path.FolderId, linkIds, "remove", cancellation);
+            await Links.Where(row => linkIds.Contains(EF.Property<string>(row, "LID"))
+                && EF.Property<string>(row, "PEID") == path.FolderId).ExecuteDeleteAsync(cancellation);
             return true;
         }, token);
+    }
 
     // 已登记对象行为进入后由此完整创建所属对象与引用，调用方不再拼接准备和关系登记。
     internal async ValueTask<StandardCrudMutationResult> CreateObjectAsync(ObjectOperationContext context,

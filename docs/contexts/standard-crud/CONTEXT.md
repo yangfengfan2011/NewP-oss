@@ -48,6 +48,8 @@ _Avoid_: 动态行 Provider、第二列表 API seam
 
 **Standard CRUD 动作执行（Standard CRUD Action Execution）**：
 共享宿主对单条模块业务动作的确认、输入、互斥执行、结果交接和数据刷新过程。模块拥有业务副作用与输入语义，但不拥有呈现面刷新或冲突重放策略。
+
+资源动作状态可用可选 `labelKey`（完整词典键）覆盖当前显示标签。列表页动作、行菜单、树上下文菜单和通用动作运行时一致消费；覆盖仅改变本地化呈现，不改变 action key、handler、正式功能位置、授权或提交输入。未提供时保留声明标签。
 _Avoid_: 模块刷新回调、Operation artifact、业务命令编排器
 
 **Standard CRUD 变更执行（Standard CRUD Mutation Execution）**：

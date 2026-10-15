@@ -92,7 +92,7 @@ it.each([['edit', 'zhs'], ['remove', 'zhs'], ['moveUp', 'zhs'], ['moveDown', 'zh
       await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '已编辑目录'); input.dispatchEvent(new Event('input', { bubbles: true })); });
       await act(async () => document.querySelector<HTMLButtonElement>('.ant-drawer-footer .ant-btn-primary')!.click());
     } else if (action === 'remove') {
-      await vi.waitFor(() => expect(document.querySelector('.ant-modal-title')?.textContent).toContain('移除当前文件夹中的这条引用？'));
+      await vi.waitFor(() => expect(document.querySelector('.ant-modal-title')?.textContent).toContain('仅从当前文件夹移除这条引用，保留对象及文件，确定继续？'));
       expect(writes).toHaveLength(0);
       await act(async () => document.querySelector<HTMLButtonElement>('.ant-modal-footer .ant-btn-primary')!.click());
     }

@@ -30,6 +30,20 @@ public sealed class WorkspaceContentsController(WorkspaceContents contents, Work
         try
         {
             var request = ReadClipboardInput(input, false);
+            if (request.Mode != "copy") throw new LinkQueryException(400, "Workspace.InvalidClipboardInput");
+            return Results.Ok(await contents.ValidateClipboardAsync(Actor(), request.Mode, request.SourcePosition, request.LinkIds, token));
+        }
+        catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+    }
+
+    /// <summary>剪切预检绑定自己的正式功能，客户端mode或复制功能位置不能替代cut资格。</summary>
+    [HttpPost("content/clipboard/cut/validate"), RequireFeature("workspace.folder.cut")]
+    public async Task<IResult> ValidateCutClipboard(JsonElement input, CancellationToken token)
+    {
+        try
+        {
+            var request = ReadClipboardInput(input, false);
+            if (request.Mode != "cut") throw new LinkQueryException(400, "Workspace.InvalidClipboardInput");
             return Results.Ok(await contents.ValidateClipboardAsync(Actor(), request.Mode, request.SourcePosition, request.LinkIds, token));
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
@@ -42,8 +56,7 @@ public sealed class WorkspaceContentsController(WorkspaceContents contents, Work
         try
         {
             var request = ReadClipboardInput(input, true);
-            await contents.PasteAsync(Actor(), request.Mode, request.SourcePosition, request.LinkIds, request.TargetPosition!, token);
-            return Results.Ok(new { succeeded = true });
+            return Results.Ok(await contents.PasteAsync(Actor(), request.Mode, request.SourcePosition, request.LinkIds, request.TargetPosition!, token));
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
     }
@@ -185,6 +198,19 @@ public sealed class WorkspaceContentsController(WorkspaceContents contents, Work
         {
             if (input.Position is null) throw new LinkQueryException(400, "Workspace.InvalidReferenceInput");
             await contents.RemoveAsync(Actor(), input.Position, linkId, token);
+            return Results.Ok(new { succeeded = true });
+        }
+        catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+    }
+
+    /// <summary>整批只移除当前父中的引用，业务对象、其他入向关系及文件保留。</summary>
+    [HttpPost("content/references/remove"), RequireFeature("workspace.folder.removeSelected")]
+    public async Task<IResult> RemoveReferences(DeleteObjectsInput input, CancellationToken token)
+    {
+        try
+        {
+            if (input.Position is null || input.LinkIds is null) throw new LinkQueryException(400, "Workspace.InvalidReferenceInput");
+            await contents.RemoveReferencesAsync(Actor(), input.Position, input.LinkIds, token);
             return Results.Ok(new { succeeded = true });
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }

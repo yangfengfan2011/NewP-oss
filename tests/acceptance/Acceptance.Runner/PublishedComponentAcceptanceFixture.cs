@@ -223,11 +223,12 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             await WorkspaceAcceptanceFixture.LoginAsync(pageAdministrator, _administrator!, token);
             var pageFeatures = await AcceptanceFeatureCatalog.LoadAsync(pageAdministrator, token);
             var pageWorkspace = pageFeatures.Behavior("Workspace", "workspace.spaces.access");
-            foreach (var key in new[] { "edit", "remove", "moveUp", "moveDown", "copy", "paste", "clearClipboard" })
+            foreach (var key in new[] { "edit", "remove", "moveUp", "moveDown", "copy", "cut", "paste", "clearClipboard" })
                 granted.Add(pageFeatures.Action(pageWorkspace, key, "contextMenu", "folder"));
-            foreach (var key in new[] { "copySelected", "paste", "clearClipboard" })
+            foreach (var key in new[] { "copySelected", "cutSelected", "removeSelected", "paste", "clearClipboard" })
                 granted.Add(pageFeatures.Action(pageWorkspace, key, "list.pageActions", "folder"));
             granted.Add(pageFeatures.Action(pageWorkspace, "copy", "list.rowActions", "folder"));
+            granted.Add(pageFeatures.Action(pageWorkspace, "cut", "list.rowActions", "folder"));
             var previousActorId = actor.AccountId;
             actor = await WorkspaceAcceptanceFixture.PrepareAsync(pageAdministrator, pageFeatures, "page" + runId, registerSecret, granted, token);
             await WriteAsync("page-actor-preparation.json", new { previousActorId, pageActorId = actor.AccountId,

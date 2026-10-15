@@ -5,6 +5,7 @@ namespace ICP.Platform.Modules.Workspace;
 
 public sealed record WorkspaceClipboardItem(string LinkId);
 public sealed record WorkspaceClipboardSnapshot(string Mode, WorkspacePosition SourcePosition, IReadOnlyList<WorkspaceClipboardItem> Items);
+public sealed record WorkspacePasteResult(bool Succeeded, bool NoChange);
 
 public sealed partial class WorkspaceContents
 {
@@ -12,14 +13,15 @@ public sealed partial class WorkspaceContents
     public async Task<WorkspaceClipboardSnapshot> ValidateClipboardAsync(string actor, string mode, WorkspacePosition sourcePosition,
         string[] linkIds, CancellationToken token)
     {
-        RequireCopySelection(mode, linkIds);
+        RequireClipboardSelection(mode, linkIds);
         var openedHere = db.Database.GetDbConnection().State != System.Data.ConnectionState.Open;
         try
         {
             // 一页资格检查共享请求连接；不创建事务或缓存裁决，避免每个正式读接口反复开关连接。
             if (openedHere) await db.Database.OpenConnectionAsync(token);
-            var source = await positions.ResolveAsync(actor, sourcePosition, token);
-            await ResolveCopyTargetsAsync(source.FolderId, linkIds, token);
+            var source = mode == "cut" ? await WritablePositionAsync(actor, sourcePosition, token)
+                : await positions.ResolveAsync(actor, sourcePosition, token);
+            await ResolveClipboardTargetsAsync(source.FolderId, linkIds, mode, token);
             return new(mode, sourcePosition, linkIds.Select(id => new WorkspaceClipboardItem(id)).ToArray());
         }
         finally
@@ -28,18 +30,21 @@ public sealed partial class WorkspaceContents
         }
     }
 
-    /// <summary>源完整路径、关系和所属copy资格与目标父edit在同一图锁事务重验，整批只新增引用。</summary>
-    public ValueTask<bool> PasteAsync(string actor, string mode, WorkspacePosition sourcePosition, string[] linkIds,
+    /// <summary>图锁内重验完整位置及模式对应资格；剪切精确移除源LID，所有关系变化共享同一事务。</summary>
+    public ValueTask<WorkspacePasteResult> PasteAsync(string actor, string mode, WorkspacePosition sourcePosition, string[] linkIds,
         WorkspacePosition targetPosition, CancellationToken token)
     {
-        RequireCopySelection(mode, linkIds);
-        return transactions.ExecuteAsync<bool>(async cancellation =>
+        RequireClipboardSelection(mode, linkIds);
+        return transactions.ExecuteAsync<WorkspacePasteResult>(async cancellation =>
         {
             using var operation = audit.BeginOperation();
             await LockGraphAsync(cancellation);
-            var source = await positions.ResolveAsync(actor, sourcePosition, cancellation);
-            var targets = await ResolveCopyTargetsAsync(source.FolderId, linkIds, cancellation);
+            var source = mode == "cut" ? await WritablePositionAsync(actor, sourcePosition, cancellation)
+                : await positions.ResolveAsync(actor, sourcePosition, cancellation);
+            var targets = await ResolveClipboardTargetsAsync(source.FolderId, linkIds, mode, cancellation);
             var target = await WritablePositionAsync(actor, targetPosition, cancellation);
+            // 同一真实父的剪切只确认资格，不走新落入规则或关系重建，包括历史根下业务对象。
+            if (mode == "cut" && source.FolderId == target.FolderId) return new(true, true);
             foreach (var item in targets) RequireContainer(targetPosition, target, item.ModelKey);
             // 名称按真实数据库collation比较，覆盖整批内部冲突，不能用客户端或CLR名称比较代替。
             var folders = targets.Where(item => item.ModelKey == WorkspacePositions.FolderModel).Select(item => item.Id).ToArray();
@@ -48,12 +53,14 @@ public sealed partial class WorkspaceContents
                 throw new LinkQueryException(409, "Workspace.SiblingNameConflict", "ENAME");
             // 至多一页100项，保持选择次序；同事务未保存关系由正式NextOrdinalAsync参与末尾计算。
             foreach (var item in targets) await AddTargetReferenceAsync(target.FolderId, item, cancellation);
-            return true;
+            if (mode == "cut") await Links.Where(row => linkIds.Contains(EF.Property<string>(row, "LID"))
+                && EF.Property<string>(row, "PEID") == source.FolderId).ExecuteDeleteAsync(cancellation);
+            return new(true, false);
         }, token);
     }
 
-    // 真实关系按请求顺序返回；不按类型排序、不接受客户端EID，也不把源父edit变成copy条件。
-    private async Task<LinkObjectReference[]> ResolveCopyTargetsAsync(string parentId, string[] linkIds, CancellationToken token)
+    // 真实关系按请求顺序返回；copy用独立copy动作，cut用既有edit，remove只需读取。
+    private async Task<LinkObjectReference[]> ResolveClipboardTargetsAsync(string parentId, string[] linkIds, string mode, CancellationToken token)
     {
         var rows = await Links.AsNoTracking().Where(row => linkIds.Contains(EF.Property<string>(row, "LID"))
                 && EF.Property<string>(row, "PEID") == parentId)
@@ -66,7 +73,8 @@ public sealed partial class WorkspaceContents
         {
             var resource = Resource(target.ModelKey);
             if (!await reader.IsEndpointReadableAsync("workspace.content", target, token)) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
-            if (!await decisions.IsAllowedAsync(resource, target.Id, CopyAction(target.ModelKey), token)) throw new LinkQueryException(403, "Workspace.ObjectCopyDenied");
+            if (mode != "remove" && !await decisions.IsAllowedAsync(resource, target.Id, mode == "cut" ? "edit" : CopyAction(target.ModelKey), token))
+                throw new LinkQueryException(403, mode == "cut" ? "Workspace.ObjectWriteDenied" : "Workspace.ObjectCopyDenied");
             if (target.ModelKey == WorkspacePositions.FolderModel && await db.Set<Dictionary<string, object?>>("WorkspaceSpace")
                 .AnyAsync(row => EF.Property<string>(row, "RootFolderId") == target.Id, token)) throw new LinkQueryException(409, "Workspace.RootReferenceForbidden");
         }
@@ -87,10 +95,10 @@ public sealed partial class WorkspaceContents
             throw new LinkQueryException(400, "Workspace.RootOnlyFolders");
     }
 
-    // 未实施cut只接受copy；模式不能被忽略或静默降级，选择边界沿现有一页规则。
-    private static void RequireCopySelection(string mode, string[] linkIds)
+    // 模式不能被忽略或静默降级，选择边界沿现有一页规则。
+    private static void RequireClipboardSelection(string mode, string[] linkIds)
     {
-        if (mode != "copy") throw new LinkQueryException(400, "Workspace.InvalidClipboardInput");
+        if (mode is not ("copy" or "cut")) throw new LinkQueryException(400, "Workspace.InvalidClipboardInput");
         ValidateSelection(linkIds);
     }
 

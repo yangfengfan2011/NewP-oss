@@ -12,16 +12,19 @@
       { "key": "updatedBy", "labelKey": "Field_UpdatedBy", "source": "projection", "field": "UpdatedBy" },
       { "key": "updatedAt", "labelKey": "Field_UpdatedAt", "source": "projection", "field": "UpdatedAt", "sortable": true }
     ],
-    "pageActions": [{ "key": "copySelected", "labelKey": "Copy", "handlerKey": "copy", "requiresSelection": true }, { "key": "paste", "labelKey": "PasteReferences", "handlerKey": "paste" }, { "key": "clearClipboard", "labelKey": "ClearClipboard", "handlerKey": "copy" },{ "key": "create", "labelKey": "CreateFolder", "standardAction": "create", "variant": "primary" },
+    "pageActions": [{ "key": "copySelected", "labelKey": "Copy", "handlerKey": "copy", "requiresSelection": true },
+      { "key": "cutSelected", "labelKey": "Cut", "handlerKey": "cut", "requiresSelection": true },
+      { "key": "paste", "labelKey": "PasteReferences", "handlerKey": "paste" }, { "key": "clearClipboard", "labelKey": "ClearClipboard", "handlerKey": "copy" },{ "key": "create", "labelKey": "CreateFolder", "standardAction": "create", "variant": "primary" },
       { "key": "createPart", "labelKey": "CreatePart", "handlerKey": "createPart", "inputKey": "createObject" },
       { "key": "createDocument", "labelKey": "CreateDocument", "handlerKey": "createDocument", "inputKey": "createObject" },
+      { "key": "removeSelected", "labelKey": "RemoveSelected", "handlerKey": "removeSelected", "requiresSelection": true, "inputKey": "confirmReferences", "variant": "danger", "confirmMessageKey": "ConfirmRemoveReferences" },
       { "key": "deleteObjects", "labelKey": "BatchDelete", "handlerKey": "deleteObjects", "requiresSelection": true, "inputKey": "confirmDelete", "variant": "danger", "confirmMessageKey": "ConfirmDeleteObjects" }],
     "pageActionGroups": [{ "key": "new", "labelKey": "New", "variant": "primary", "actionKeys": ["create", "createPart", "createDocument"] }],
     "featureActions": [
       { "key": "moveUp", "titleKey": "MoveUp", "labelKey": "MoveUp", "behaviorKey": "workspace.folder.reorder", "handlerKey": "reorder", "readBehaviors": ["workspace.folder.read"] },
       { "key": "moveDown", "titleKey": "MoveDown", "labelKey": "MoveDown", "behaviorKey": "workspace.folder.reorder", "handlerKey": "reorder", "readBehaviors": ["workspace.folder.read"] },{ "key": "add", "titleKey": "AddFolder", "behaviorKey": "workspace.folder.add", "readBehaviors": ["workspace.folder.read"] }],
-    "rowContextMenu": ["copy", "edit", "delete", "remove"],
-    "rowActions": [{ "key": "copy", "labelKey": "Copy", "handlerKey": "copy" }, { "key": "edit", "labelKey": "Edit", "handlerKey": "editObject", "inputKey": "editObject" },
+    "rowContextMenu": ["copy", "cut", "edit", "delete", "remove"],
+    "rowActions": [{ "key": "copy", "labelKey": "Copy", "handlerKey": "copy" }, { "key": "cut", "labelKey": "Cut", "handlerKey": "cut" }, { "key": "edit", "labelKey": "Edit", "handlerKey": "editObject", "inputKey": "editObject" },
       { "key": "delete", "labelKey": "Delete", "handlerKey": "deleteObject", "variant": "danger", "confirmMessageKey": "ConfirmDeleteObjects" },
       { "key": "remove", "labelKey": "RemoveReference", "handlerKey": "remove", "variant": "danger", "confirmMessageKey": "ConfirmRemoveReference" }], "export": { "enabled": false }
   }

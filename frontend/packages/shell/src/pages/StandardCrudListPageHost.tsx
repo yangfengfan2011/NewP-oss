@@ -1713,7 +1713,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       .filter(({ actionState }) => actionState?.visible !== false)
       .map(({ action, actionState, featureResolution }): RowActionItem => {
         const pendingKey = `${action.key}:${rowId}`;
-        const label = t(`${schema.dicKey}.${action.labelKey}`, action.labelKey);
+        const label = actionState?.labelKey ? t(actionState.labelKey, '') : t(`${schema.dicKey}.${action.labelKey}`, action.labelKey);
         const metadataDisabledReason = resolveRowActionDisabledReason(
           action,
           row as Record<string, unknown>,
@@ -2044,10 +2044,14 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       actions: group.actionKeys.flatMap(key => visibleHeaderActions.filter(child => child.key === key)) });
   }
   const headerPending = actionExecution.pendingKey !== null || mutationExecution.pending;
+  const headerActionLabel = (action: StandardCrudRuntimeActionSchema): string => {
+    const state = registration.actionStateResolver?.({ action, instance: actionInstance, queryScope: host.input.queryScope });
+    return state?.labelKey ? t(state.labelKey, '') : t(`${schema.dicKey}.${action.labelKey}`, action.labelKey);
+  };
   const headerActions = headerEntries.length > 0 ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
     {headerEntries.map(({ key, group, actions }) => group ? (
       <Dropdown key={key} trigger={['click']} disabled={headerPending} menu={{
-        items: actions.map(action => ({ key: action.key, label: t(`${schema.dicKey}.${action.labelKey}`, action.labelKey),
+        items: actions.map(action => ({ key: action.key, label: headerActionLabel(action),
           disabled: headerPending || registration.actionStateResolver?.({ action, instance: actionInstance, queryScope: host.input.queryScope })?.available === false || (action.requiresSelection && (effectiveLoading || selectedRows.length === 0)), danger: action.variant === 'danger' })),
         onClick: ({ key: childKey }) => { const action = actions.find(child => child.key === childKey); if (action) runHeaderAction(action); },
       }}>
@@ -2059,7 +2063,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     ) : (
       <AntdButton key={key} type={actions[0].variant === 'primary' ? 'primary' : 'default'} size="middle"
         danger={actions[0].variant === 'danger'} disabled={headerPending || registration.actionStateResolver?.({ action: actions[0], instance: actionInstance, queryScope: host.input.queryScope })?.available === false || (actions[0].requiresSelection && (effectiveLoading || selectedRows.length === 0))} onClick={() => runHeaderAction(actions[0])}>
-        {t(`${schema.dicKey}.${actions[0].labelKey}`, actions[0].labelKey)}
+        {headerActionLabel(actions[0])}
       </AntdButton>
     ))}
   </div> : undefined;

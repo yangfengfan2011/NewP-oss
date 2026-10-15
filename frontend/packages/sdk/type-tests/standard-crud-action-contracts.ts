@@ -24,6 +24,7 @@ const localizedState: StandardCrudActionState = {
   available: false,
   reason: 'Owner guard diagnostic',
   reasonKey: 'Example.OwnerProtected',
+  labelKey: 'Example.ActionPending',
   args: { owner: 'Admin', count: 1 },
 };
 

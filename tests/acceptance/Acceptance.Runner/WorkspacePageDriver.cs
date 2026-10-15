@@ -194,6 +194,13 @@ internal sealed class WorkspacePageDriver(IPage page)
 
     /// <summary>在当前目录沿工具栏粘贴，等一次提交及正式列表读取后看到结果。</summary>
     internal async Task PasteReferencesAsync(params string[] names)
+        => await PasteReferencesAsync("粘贴引用", names);
+
+    /// <summary>剪切使用同一粘贴动作的待移动文案，成功后仍沿正式读取交接。</summary>
+    internal async Task PasteCutReferencesAsync(params string[] names)
+        => await PasteReferencesAsync("粘贴引用（待移动）", names);
+
+    private async Task PasteReferencesAsync(string actionLabel, IReadOnlyList<string> names)
     {
         var crud = new StandardCrudPageDriver(page);
         var written = false;
@@ -204,12 +211,59 @@ internal sealed class WorkspacePageDriver(IPage page)
             if (response.Request.Method != "POST" || new Uri(response.Url).AbsolutePath != "/api/workspace/content/paste") return false;
             written = true; return true;
         });
-        await crud.ClickPageActionAsync("粘贴引用");
+        await crud.ClickPageActionAsync(actionLabel);
         var response = await write;
         if (!response.Ok) throw new InvalidOperationException($"粘贴引用失败：{response.Status} {await response.TextAsync()}");
         var refreshed = await read;
         if (!refreshed.Ok) throw new InvalidOperationException($"粘贴后的读取失败：{refreshed.Status} {await refreshed.TextAsync()}");
         foreach (var name in names) await crud.WaitForRowAsync(name);
+    }
+
+    /// <summary>从实际树节点标记剪切，预检完成前不进入粘贴步骤。</summary>
+    internal async Task CutFolderFromTreeContextMenuAsync(string name, Func<Task>? capture = null)
+    {
+        var tree = page.GetByRole(AriaRole.Complementary, new() { Name = "结构树", Exact = true });
+        await tree.GetByText(name, new() { Exact = true }).ClickAsync(new() { Button = MouseButton.Right });
+        await WaitForContentAsync(name);
+        var action = page.GetByRole(AriaRole.Menuitem, new() { Name = "剪切", Exact = true });
+        await Assertions.Expect(action).ToBeEnabledAsync();
+        await CaptureContextMenuAsync(capture);
+        await CutReferencesAsync(() => action.ClickAsync());
+    }
+
+    /// <summary>只取当前内容页勾选集合，由正式工具栏执行一次剪切预检。</summary>
+    internal async Task CutSelectedAsync(params string[] names)
+    {
+        var crud = new StandardCrudPageDriver(page);
+        foreach (var name in names) await (await crud.WaitForRowAsync(name)).GetByRole(AriaRole.Checkbox).CheckAsync();
+        await CutReferencesAsync(() => page.GetByRole(AriaRole.Region, new() { Name = "节点内容", Exact = true })
+            .GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^剪\s*切$") }).ClickAsync());
+    }
+
+    private async Task CutReferencesAsync(Func<Task> trigger)
+    {
+        var pending = page.WaitForResponseAsync(response => response.Request.Method == "POST"
+            && new Uri(response.Url).AbsolutePath == "/api/workspace/content/clipboard/cut/validate");
+        await trigger();
+        var response = await pending;
+        if (!response.Ok) throw new InvalidOperationException($"剪切预检失败：{response.Status} {await response.TextAsync()}");
+        await response.FinishedAsync();
+        await page.GetByRole(AriaRole.Region, new() { Name = "节点内容", Exact = true })
+            .GetByRole(AriaRole.Button, new() { Name = "粘贴引用（待移动）", Exact = true })
+            .WaitForAsync(new() { State = WaitForSelectorState.Visible });
+    }
+
+    /// <summary>经明确保留对象与文件的确认后移除所选引用，等待原行离开列表。</summary>
+    internal async Task RemoveSelectedReferencesAsync(string[] names, Func<ILocator, Task>? capture = null)
+    {
+        var crud = new StandardCrudPageDriver(page);
+        foreach (var name in names) await (await crud.WaitForRowAsync(name)).GetByRole(AriaRole.Checkbox).CheckAsync();
+        await crud.ClickPageActionAsync("批量移除引用");
+        var dialog = crud.ConfirmDialogWithText("仅从当前文件夹移除所选引用，保留对象及文件，确定继续？");
+        await dialog.WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        if (capture is not null) await capture(dialog);
+        await crud.ConfirmAsync(dialog, new("POST", "/api/workspace/content/references/remove", 200, "批量移除引用"));
+        foreach (var name in names) await crud.TableRow(name).WaitForAsync(new() { State = WaitForSelectorState.Hidden });
     }
 
     // 可见布局早于 Ant 入场动画完成；呈现采样等待真实动画，而不是用固定延时猜时机。
@@ -438,7 +492,7 @@ internal sealed class WorkspacePageDriver(IPage page)
         var row = await crud.WaitForRowAsync(name);
         await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
         await page.GetByRole(AriaRole.Menuitem, new() { Name = "移除引用", Exact = true }).ClickAsync();
-        var dialog = crud.ConfirmDialogWithText("移除当前文件夹中的这条引用？");
+        var dialog = crud.ConfirmDialogWithText("仅从当前文件夹移除这条引用，保留对象及文件，确定继续？");
         await dialog.WaitForAsync(new() { State = WaitForSelectorState.Visible });
         return dialog;
     }

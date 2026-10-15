@@ -261,6 +261,58 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通账号通过正式树和工具栏剪切移动并确认批量移除引用")]
+    public async Task NativeWorkspaceCutAndRemove_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-workspace-cut-remove");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseCompositionLifecycle: false);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
+            browserJourney: async (page, token) =>
+            {
+                var driver = new WorkspacePageDriver(page);
+                Task CaptureAsync(string name) => page.ScreenshotAsync(new()
+                { Path = Path.Combine(root, name), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                var folder = "待移动文件夹 " + runId[..8];
+                var targetB = "移动目录 B " + runId[..8];
+                var targetC = "移动目录 C " + runId[..8];
+                var document = "移动图文档 " + runId[..8];
+                var part = "移动零组件 " + runId[..8];
+                await driver.OpenAsync();
+                await driver.SelectRootAsync("公共空间");
+                foreach (var name in new[] { folder, targetB, targetC }) await driver.CreateFolderAsync(name);
+                await driver.SelectTreePathAsync("公共空间", folder);
+                await driver.CreateDocumentWithFilesAsync("CUT-D-" + runId[..8], document, WorkspacePageDriver.SmallMainFile(),
+                    attachments: WorkspacePageDriver.SmallAttachmentFiles());
+                await driver.CreateObjectAsync("零组件", "CUT-P-" + runId[..8], part);
+                await driver.CutFolderFromTreeContextMenuAsync(folder, () => CaptureAsync("cut-tree-menu.png"));
+                await driver.SelectTreePathAsync("公共空间", targetB);
+                await CaptureAsync("cut-pending.png");
+                await driver.PasteCutReferencesAsync(folder);
+                await driver.SelectTreePathAsync("公共空间", targetB, folder);
+                await driver.CutSelectedAsync(document, part);
+                await driver.SelectTreePathAsync("公共空间", targetC);
+                await driver.PasteCutReferencesAsync(document, part);
+                await CaptureAsync("cut-pasted.png");
+                await driver.RemoveSelectedReferencesAsync([document, part], async dialog =>
+                {
+                    await dialog.EvaluateAsync("async element => { await new Promise(requestAnimationFrame); await Promise.all(element.getAnimations({subtree:true}).map(animation => animation.finished.catch(() => {}))); }");
+                    await CaptureAsync("remove-references-confirm.png");
+                });
+                var localizedRead = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+                    && new Uri(response.Url).AbsolutePath == "/api/links/workspace.content");
+                await driver.SelectLanguageAsync("English");
+                var localizedResponse = await localizedRead;
+                if (!localizedResponse.Ok) throw new InvalidOperationException($"切换语言后的列表读取失败：{localizedResponse.Status}");
+                await localizedResponse.FinishedAsync();
+                await page.GetByRole(AriaRole.Button, new() { Name = "Remove selected references", Exact = true })
+                    .WaitForAsync(new() { State = WaitForSelectorState.Visible });
+                await Assertions.Expect(page.Locator(".np-tree-content .ant-spin-spinning")).ToHaveCountAsync(0);
+                await CaptureAsync("references-removed-en.png");
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
+                    new { url = page.Url, actor = "ordinary", journey = "workspace-cut-remove" }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact(RunEnvironmentVariable, "真实 Link 迁移、普通账号创建文件夹与共享树/列表/属性 driver")]
     public async Task WorkspaceFolderCreation_UsesFormalDriver()
     {

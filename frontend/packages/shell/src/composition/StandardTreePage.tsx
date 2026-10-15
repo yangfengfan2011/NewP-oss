@@ -142,7 +142,7 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
       title: menus.length ? <ContextActionMenu trigger={['contextMenu']} open={open}
         keyboardLabel={nodeLabel}
         menu={{ items: menus.map(({ menu, resolution, state }) => ({ key: menu.key, disabled: state.available === false,
-          label: <span title={state.available === false ? formatStandardCrudActionReason(state, t) ?? t('Platform.ActionStateUnavailable', '当前状态不允许执行该操作。') : undefined}>{t(`${view.dicKey}.${menu.labelKey}`, menu.labelKey)}</span>, onClick: () => {
+          label: <span title={state.available === false ? formatStandardCrudActionReason(state, t) ?? t('Platform.ActionStateUnavailable', '当前状态不允许执行该操作。') : undefined}>{state.labelKey ? t(state.labelKey, '') : t(`${view.dicKey}.${menu.labelKey}`, menu.labelKey)}</span>, onClick: () => {
           if (!open || menuExecutable.current.scope !== menuScope || menuExecutable.current.nodeKey !== node.nodeKey
             || menuExecutable.current.context !== JSON.stringify(node) || !menuExecutable.current.references.includes(JSON.stringify(menu))) return;
           const current = currentMenuState.current(menu, node);

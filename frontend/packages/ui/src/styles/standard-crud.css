@@ -229,3 +229,14 @@
   background: rgba(22, 119, 255, 0.25);
   outline: 1px solid #1677ff;
 }
+
+/* 只计算数据行；悬停和选中状态优先，固定列使用不透明底色避免横向滚动时透字。 */
+.np-crud-table-section .ant-table-tbody > tr:nth-child(even of .ant-table-row):not(.ant-table-row-selected):not(:hover) > td.ant-table-cell:not(.ant-table-cell-row-hover) {
+  background: linear-gradient(var(--np-crud-subtle), var(--np-crud-subtle)), var(--np-crud-row-base);
+}
+
+/* 悬停使用主题浅蓝，与灰色底纹区分；选中行继续使用组件自身的状态颜色。 */
+.np-crud-table-section .ant-table-tbody > tr.ant-table-row:not(.ant-table-row-selected):hover > td.ant-table-cell,
+.np-crud-table-section .ant-table-tbody > tr.ant-table-row:not(.ant-table-row-selected) > td.ant-table-cell-row-hover {
+  background: color-mix(in srgb, var(--np-crud-row-hover) 65%, var(--np-crud-row-base));
+}

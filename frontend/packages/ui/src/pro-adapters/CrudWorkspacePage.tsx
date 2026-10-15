@@ -50,6 +50,8 @@ export function CrudWorkspacePage({
   );
   return <div className={`np-crud-workspace${embedded ? ' np-crud-embedded' : ''}`} style={{
     '--np-crud-subtle': token.colorFillAlter,
+    '--np-crud-row-base': token.colorBgContainer,
+    '--np-crud-row-hover': token.colorPrimaryBg,
     '--np-crud-radius': `${token.borderRadius}px`,
   } as CSSProperties}>
     {embedded ? content : <Card size="small" className="np-crud-workspace-panel">{content}</Card>}

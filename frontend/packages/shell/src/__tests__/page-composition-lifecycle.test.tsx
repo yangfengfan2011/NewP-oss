@@ -38,14 +38,16 @@ async function click(text: string) {
   expect(button, text).toBeDefined();
   await act(async () => button!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
 }
-async function render(browser = false, search = '', tree = false, contextMenuKeys?: readonly string[]) {
+async function render(browser = false, search = '', tree = false, contextMenuKeys?: readonly string[], presentationLabels = false) {
   ModuleRegistry.replaceAll([{ metadata: { moduleId: 'forms', displayName: 'Forms', version: '1' }, pages: [{ pageKey: 'form', load: async () => ({ default: FormPage }) }],
     pageInputResolvers: [{ key: 'global', pageKeys: ['platform.tree'], resolve: parameters => ({ parameters, treeScope: {} }) }],
-    treeProviders: [{ key: 'tree', roots: async () => ['one', 'two', 'other'].map(key => ({ nodeKey: key, nodeType: key === 'other' ? 'other' : 'node', label: key, hasChildren: false, contextMenuKeys })), children: async () => [], path: async () => [], search: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }), resolveChange: async () => ({ kind: 'unrelated' }) }],
+    treeProviders: [{ key: 'tree', roots: async () => ['one', 'two', 'other'].map(key => ({ nodeKey: key, nodeType: key === 'other' ? 'other' : 'node', label: key,
+      labelKey: presentationLabels && key === 'one' ? 'Tabs.RootLabel' : undefined,
+      isEnabled: presentationLabels && key === 'two' ? false : undefined, hasChildren: false, contextMenuKeys })), children: async () => [], path: async () => [], search: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }), resolveChange: async () => ({ kind: 'unrelated' }) }],
   }], 'forms');
   container = document.createElement('div'); document.body.append(container);
   const view = { key: 'tabs', mode: 'tab', dicKey: 'Tabs', defaultTabKey: 'a', tabs: ['a', 'b'].map(key => ({ key, titleKey: key, pageRef: { pageKey: 'form', parameters: { name: key } } })) };
-  const element = <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }, { code: 'en', displayName: 'English' }]} catalogs={{ zhs: platformTestCatalogs.zhs, en: { ...platformTestCatalogs.en, 'Tabs.a': 'Information', 'Tabs.b': 'Children', 'Tabs.node': 'Company' } }}><SwitchLanguage />
+  const element = <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '简体中文' }, { code: 'en', displayName: 'English' }]} catalogs={{ zhs: { ...platformTestCatalogs.zhs, 'Tabs.RootLabel': '公共根' }, en: { ...platformTestCatalogs.en, 'Tabs.a': 'Information', 'Tabs.b': 'Children', 'Tabs.node': 'Company', 'Tabs.RootLabel': 'Public root' } }}><SwitchLanguage />
     <RuntimeMetadataProvider value={{ manifest: { modules: [] }, navDocuments: [], modelDocuments: [], viewDocuments: [{ type: 'view', view },
       { type: 'view', view: { ...view, key: 'other-tabs' } },
       { type: 'view', view: { key: 'tree', mode: 'tree', dicKey: 'Tabs', providerKey: 'tree', nodeTypes: ['node', 'other'].map(key => ({ key, titleKey: key, contextMenu: [{ key: 'edit', labelKey: 'Edit', standardAction: 'edit', viewKey: 'list', inputResolverKey: 'node' }], pageRef: { pageKey: 'platform.tabs', parameters: { viewKey: key === 'node' ? 'tabs' : 'other-tabs' } } })) } },
@@ -57,6 +59,31 @@ async function render(browser = false, search = '', tree = false, contextMenuKey
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
 }
 describe('whole composition lifecycle', () => {
+  it('keeps menu-bearing root names equal to their localized labels while keyboard menus restore each root focus', async () => {
+    await render(false, '', true, undefined, true);
+    const names = ['公共根', 'two（停用）', 'other'];
+    expect(container.querySelectorAll('[role="treeitem"]')).toHaveLength(3);
+    for (const [index, name] of names.entries()) {
+      const node = [...container.querySelectorAll<HTMLElement>('[role="treeitem"]')].find(item => item.getAttribute('aria-label') === name);
+      expect(node, `treeitem accessible name: ${name}`).toBeDefined();
+      expect(node!.querySelector('.ant-tree-title')?.textContent).toBe(name);
+      const trigger = node!.querySelector<HTMLElement>('[tabindex="0"][aria-haspopup="menu"]')!;
+      expect(trigger.getAttribute('aria-label')).toBe(name);
+      trigger.focus();
+      await act(async () => trigger.dispatchEvent(new KeyboardEvent('keydown', {
+        key: index === 0 ? 'ContextMenu' : 'F10', shiftKey: index !== 0, bubbles: true, cancelable: true,
+      })));
+      expect(document.querySelector('[role="menuitem"]')?.textContent).toBe('Edit');
+      await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+      expect(document.activeElement).toBe(trigger);
+      expect(node!.getAttribute('aria-label')).toBe(name);
+    }
+    await click('English');
+    expect(container.querySelector('[role="treeitem"][aria-label="Public root"]')).not.toBeNull();
+    expect(container.querySelector('[role="treeitem"][aria-label="two (Disabled)"]')).not.toBeNull();
+  });
+
   it.each([{ keys: [] }, { keys: ['unknown'] }])('uses node menu keys only to narrow declared actions: $keys', async ({ keys }) => {
     await render(false, '', true, keys);
     const target = [...container.querySelectorAll('.ant-tree-title')].find(node => node.textContent === 'two')!;

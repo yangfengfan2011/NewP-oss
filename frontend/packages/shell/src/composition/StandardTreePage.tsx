@@ -77,15 +77,16 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
   }, [roots, branches, selected]);
   const data = (nodes: readonly TreeNodeDescriptor[]): DataNode[] => nodes.map(node => {
     const type = view.nodeTypes.find(item => item.key === node.nodeType);
-    const title = <span style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }} title={type ? t(`${view.dicKey}.${type.titleKey}`, type.titleKey) : ''}>{node.labelKey ? t(node.labelKey, node.label) : node.label}{node.isEnabled === false ? t('Platform.TreeDisabledSuffix', '（停用）') : ''}</span>;
+    const nodeLabel = (node.labelKey ? t(node.labelKey, node.label) : node.label) + (node.isEnabled === false ? t('Platform.TreeDisabledSuffix', '（停用）') : '');
+    const title = <span style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }} title={type ? t(`${view.dicKey}.${type.titleKey}`, type.titleKey) : ''}>{nodeLabel}</span>;
     const menus = (type?.contextMenu ?? []).filter(menu => node.contextMenuKeys === undefined || node.contextMenuKeys.includes(menu.key))
       .map(menu => ({ menu, resolution: features.action(menu.key, 'contextMenu', node.nodeType) }))
       .filter(({ resolution }) => !features.placement || resolution.kind === 'allowed');
     const open = active && menuNode?.key === node.nodeKey && menuNode.scope === menuScope
       && menuNode.context === JSON.stringify(node) && selected?.nodeKey === node.nodeKey;
-    return { key: node.nodeKey, isLeaf: branches[node.nodeKey] ? branches[node.nodeKey].length === 0 : !node.hasChildren,
+    return { key: node.nodeKey, 'aria-label': nodeLabel, isLeaf: branches[node.nodeKey] ? branches[node.nodeKey].length === 0 : !node.hasChildren,
       title: menus.length ? <ContextActionMenu trigger={['contextMenu']} open={open}
-        keyboardLabel={t('Platform.More', '更多')}
+        keyboardLabel={nodeLabel}
         menu={{ items: menus.map(({ menu, resolution }) => ({ key: menu.key, label: t(`${view.dicKey}.${menu.labelKey}`, menu.labelKey), onClick: () => {
           if (!open || menuExecutable.current.scope !== menuScope || menuExecutable.current.nodeKey !== node.nodeKey
             || menuExecutable.current.context !== JSON.stringify(node) || !menuExecutable.current.references.includes(JSON.stringify(menu))) return;

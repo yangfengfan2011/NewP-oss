@@ -2,6 +2,9 @@ using System.Text.Json.Nodes;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Persistence.Composition;
 using ICP.Platform.Persistence.Planning;
+using ICP.Platform.Persistence.EfCore;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Xunit;
 
 namespace ICP.Platform.Persistence.Tests;
@@ -118,6 +121,48 @@ public sealed class PersistenceDeploymentTests : IDisposable
         Assert.NotEmpty(Assert.Single(storage.Models, model => model.Name == "WorkspaceFolderContent").ForeignKeys);
         Assert.Equal(deployed.Streams.Single(stream => stream.ModuleId == "Workspace").ModelDigest, storage.Streams.Single(stream => stream.ModuleId == "Workspace").ModelDigest);
         Assert.DoesNotContain(masked.FeatureCatalog, point => point.ModuleId == "Workspace");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RecoveredRealWorkspace_ValidatesRetainedMigrationsWithoutPublishingItsCapabilities(bool maskParent)
+    {
+        var modules = ReadFormalCandidate();
+        var deployed = Compile(modules);
+        using (var store = new PersistenceDeploymentStore(_root, deployed.Provider, "SERVER|CATALOG"))
+        {
+            store.PrepareCandidate(modules, deployed);
+            store.CompleteCandidate(deployed);
+        }
+        using var restarted = new PersistenceDeploymentStore(_root, deployed.Provider, "SERVER|CATALOG");
+        var recovered = restarted.ReadRecoveryCandidate()!;
+        var link = Assert.Single(recovered.Models, model => model.Name == "WorkspaceFolderContent");
+        // 正式恢复只保存持久化声明，不依赖活动查询目录或重新发布已停用模块的能力。
+        Assert.Null(link.LinkQuery);
+        Assert.Empty(link.LinkedTypes);
+        Assert.NotEmpty(link.ForeignKeys);
+        var selected = ReadFormalCandidate(candidate =>
+            (maskParent ? candidate.ModuleId == "InforCenter" : candidate.ModuleId is "Workspace" or "Document")
+                ? candidate with { Enabled = false } : candidate);
+        var retained = Compile(selected, recovered);
+        Assert.DoesNotContain(selected.Modules, module => module.ModuleId is "Workspace" or "Document");
+        Assert.Equal(!maskParent, selected.Modules.Any(module => module.ModuleId == "Part"));
+        Assert.DoesNotContain(selected.FeatureCatalog, point => point.ModuleId == "Workspace");
+        Assert.Equal(maskParent ? new[] { "Document", "Part", "Workspace" } : new[] { "Document", "Workspace" }, retained.RetainedModuleIds);
+        Assert.Equal(deployed.Models.Select(model => (model.Name, model.OwnerModuleId, model.TableName)), retained.Models.Select(model => (model.Name, model.OwnerModuleId, model.TableName)));
+        Assert.Equal(deployed.Streams.Single(stream => stream.ModuleId == "Workspace").Migrations,
+            retained.Streams.Single(stream => stream.ModuleId == "Workspace").Migrations);
+        var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
+            .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>()
+            .UseSqlServer("Server=invalid;Database=never-connect;Integrated Security=True").Options;
+        using var activeDb = new EfPlatformDbContext(options, deployed);
+        using var retainedDb = new EfPlatformDbContext(options, retained);
+        var activeHistory = new ModuleMigrationExecutor(activeDb, deployed).ValidateBeforeConnection();
+        var retainedHistory = new ModuleMigrationExecutor(retainedDb, retained).ValidateBeforeConnection();
+        Assert.Equal(activeHistory.Select(entry => entry with { PlanDigest = "" }),
+            retainedHistory.Select(entry => entry with { PlanDigest = "" }));
+        Assert.Equal(5, retainedHistory.Count(entry => entry.OwnerModuleId == "Workspace"));
     }
 
     // 从真实 Host 发布物读取、签发并编译本次声明，不用手工 Canonical 或持久化 plan 代替 formal 链。

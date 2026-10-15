@@ -1,4 +1,6 @@
+using System.Text.Json;
 using ICP.Platform.Modeling;
+using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Modules.Workspace;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Persistence.EfCore.Migrations;
@@ -84,6 +86,93 @@ public sealed class RelationOrdinalBackfillTests
         Assert.Equal(result.TransitionDigest, ProviderTargetDigest.Compute(result.Transition));
         Assert.NotEqual(result.TransitionDigest, ProviderTargetDigest.Compute(result.Transition with
         { RelationOrdinalBackfills = [fact with { TargetNameColumn = "Description" }] }));
+    }
+
+    [Theory]
+    [InlineData("link-kind")]
+    [InlineData("entity-kind")]
+    [InlineData("parent-field")]
+    [InlineData("child-field")]
+    [InlineData("discriminator-text")]
+    [InlineData("discriminator-reference")]
+    [InlineData("ordinal-audit")]
+    [InlineData("name-audit")]
+    [InlineData("parent-fk-missing")]
+    [InlineData("parent-fk-owner")]
+    [InlineData("parent-fk-key")]
+    [InlineData("parent-fk-model")]
+    [InlineData("provider-parent-fk-missing")]
+    [InlineData("provider-parent-fk-owner")]
+    [InlineData("provider-parent-fk-column")]
+    [InlineData("provider-parent-fk-table")]
+    [InlineData("provider-parent-fk-key")]
+    [InlineData("provider-discriminator-nullable")]
+    [InlineData("provider-child-type")]
+    [InlineData("provider-ordinal-computed")]
+    public void RecoveredRealWorkspaceBackfill_RejectsInvalidStorageDeclarationsAndMappings(string violation)
+    {
+        var models = JsonSerializer.Deserialize<ModelDefinition[]>(JsonSerializer.Serialize(new WorkspaceModelMetadataProvider().GetDefinitions()))!;
+        var plan = new CompiledPersistencePlan("candidate", "snapshot", "module", PersistenceProvider.SqlServer, "digest", [], models, []);
+        using var db = new EfPlatformDbContext(new DbContextOptionsBuilder<EfPlatformDbContext>()
+            .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>()
+            .UseSqlServer("Server=invalid;Database=unused;Integrated Security=True").Options, plan);
+        var target = new EfProviderTargetSource(db, plan).Read();
+        var link = Assert.Single(models, model => model.Name == "WorkspaceFolderContent");
+        Assert.Null(link.LinkQuery);
+        Assert.Empty(link.LinkedTypes);
+        var entity = Assert.Single(models, model => model.Name == "WorkspaceFolder");
+        var parentKey = Assert.Single(link.ForeignKeys);
+        link = violation switch
+        {
+            "link-kind" => link with { Kind = ModelKind.Entity },
+            "parent-field" => link with { Fields = link.Fields.Select(field => field.Name == "PEID" ? field with { ValueType = FieldValueType.Text } : field).ToArray() },
+            "child-field" => link with { Fields = link.Fields.Select(field => field.Name == "CEID" ? field with { Kind = FieldKind.Scalar } : field).ToArray() },
+            // 同一物理字符串列去掉稳定 ordinal 身份后，只是普通必填文本，不能充当 discriminator。
+            "discriminator-text" => link with { Fields = link.Fields.Select(field => field.Name == "ChildModelKey" ? field with { OrdinalKey = false } : field).ToArray() },
+            "discriminator-reference" => link with { Fields = link.Fields.Select(field => field.Name == "ChildModelKey" ? field with { Kind = FieldKind.Reference } : field).ToArray() },
+            "ordinal-audit" => link with { Fields = link.Fields.Select(field => field.Name == "TreeOrdinal" ? field with { Kind = FieldKind.Audit, IsAuditField = true } : field).ToArray() },
+            "parent-fk-missing" => link with { ForeignKeys = [] },
+            "parent-fk-owner" => link with { ForeignKeys = [parentKey with { PrincipalOwnerModuleId = "Other" }] },
+            "parent-fk-key" => link with { ForeignKeys = [parentKey with { PrincipalFields = ["ENAME"] }] },
+            "parent-fk-model" => link with { ForeignKeys = [parentKey with { PrincipalModelKey = "WorkspaceSpace" }] },
+            _ => link
+        };
+        entity = violation switch
+        {
+            "entity-kind" => entity with { Kind = ModelKind.Link },
+            "name-audit" => entity with { Fields = entity.Fields.Select(field => field.Name == "ENAME" ? field with { Kind = FieldKind.Audit, IsAuditField = true } : field).ToArray() },
+            _ => entity
+        };
+        plan = plan with { Models = models.Select(model => model.Name == link.Name ? link : model.Name == entity.Name ? entity : model).ToArray() };
+        var source = Assert.Single(target.Tables, table => table.Name == link.TableName);
+        var providerKey = Assert.Single(source.ForeignKeys);
+        var modifiedKey = violation switch
+        {
+            "provider-parent-fk-owner" => providerKey with { PrincipalOwnerModuleId = "Other" },
+            "provider-parent-fk-column" => providerKey with { Columns = ["CEID"] },
+            "provider-parent-fk-table" => providerKey with { PrincipalTable = "WorkspaceSpace" },
+            "provider-parent-fk-key" => providerKey with { PrincipalColumns = ["ENAME"] },
+            _ => providerKey
+        };
+        source = source with
+        {
+            ForeignKeys = violation == "provider-parent-fk-missing" ? [] : [modifiedKey],
+            Columns = source.Columns.Select(column => (violation, column.Name) switch
+            {
+                ("provider-discriminator-nullable", "ChildModelKey") => column with { IsNullable = true },
+                ("provider-child-type", "CEID") => column with { ClrType = typeof(long).FullName! },
+                ("provider-ordinal-computed", "TreeOrdinal") => column with { ComputedColumnSql = "1" },
+                _ => column
+            }).ToArray()
+        };
+        target = target with { Tables = target.Tables.Select(table => table.Name == source.Name ? source : table).ToArray() };
+        const string id = "20261014000001_Workspace_000005_TreeOrderBackfill";
+        var step = new CompiledMigrationStep("000005", id, null, new string('a', 64), new string('b', 64), new string('c', 64), "data-backfill");
+        var stream = new ModuleMigrationStream("Workspace", PersistenceProvider.SqlServer, "unused", "unused", "bundle", "model", id, false, [step]);
+        var builder = new MigrationBuilder("SqlServer");
+        builder.BackfillRelationOrdinal("Workspace", "WorkspaceFolderContent", "TreeOrdinal", "PEID", "LID", "CEID", "ChildModelKey", "WorkspaceFolder", "WorkspaceFolder", "EID", "ENAME");
+        var migration = new OperationsMigration(builder.Operations);
+        Assert.Throws<ProviderOperationValidationException>(() => new ProviderMigrationOperationValidator(plan, target).Validate(stream, [new(step, migration)]));
     }
 
     private sealed class OperationsMigration(IReadOnlyList<Microsoft.EntityFrameworkCore.Migrations.Operations.MigrationOperation> operations) : Migration

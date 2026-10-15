@@ -138,6 +138,6 @@ _Avoid_: 自动升级被替换旧库、删除旧对象后继续、永久兼容�
 
 ## 受控关系次序回填
 
-`RelationOrdinalBackfillOperation` 只表达同 owner 的正式 Link→Entity：按真实父分组，以目标名称和关系主键确定 ROW_NUMBER，再仅更新声明子类型的 NULL 次序列。模块拥有字段和排序语义；平台在连接前核对 owner、Link/Entity 类型、正式 linkedTypes/端点列、主键、nullable Int64 目标与名称列，执行器只渲染固定的 JOIN/排名/NULL 回填形状。缺失目标或唯一冲突使该 migration 事务失败，不修复或静默跳过。它不接受任意 SQL、查询表达式、回调、跨 owner 写入或数据库永久 DEFAULT。
+`RelationOrdinalBackfillOperation` 只表达同 owner 的正式 Link→Entity：按真实父分组，以目标名称和关系主键确定 ROW_NUMBER，再仅更新声明子类型的 NULL 次序列。模块拥有字段和排序语义；平台在连接前核对 owner、Link/Entity 类型、持久化 Link 固定身份/端点列、ordinalKey 子类型列、同 owner Entity 父外键的声明与 provider 映射、主键、nullable Int64 目标与名称列，执行器只渲染固定的 JOIN/排名/NULL 回填形状。缺失目标或唯一冲突使该 migration 事务失败，不修复或静默跳过。停用 owner 的可信成功部署恢复资产与活动 authoring 使用同一校验，不依赖仅供当前能力使用的 LinkQuery/LinkedTypes，不改变既有资产序列化或历史摘要。它不接受任意 SQL、查询表达式、回调、跨 owner 写入或数据库永久 DEFAULT。
 
 该操作独占受控 `data-backfill` step，全部输入形成 Provider Transition 的内容事实。没有关系回填的既有 v1 canonical 字节（包括已发布标量 RequiredFieldBackfill）保持不变，旧 manifest 前缀不改写。Workspace 是真实消费者：新增 nullable TreeOrdinal/索引后，在独立新尾回填旧树次序。schema 与数据回填仍各自与统一 history 共事务；平台不自动 Down，回退使用已验证的数据库恢复流程。

@@ -1,4 +1,6 @@
 using System.Text.Json;
+using ICP.Platform.Modeling;
+using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Persistence.Planning;
 using ICP.Platform.Persistence.ProviderTargets;
 using ICP.Platform.Persistence.EfCore.Migrations;
@@ -517,7 +519,7 @@ internal sealed class ProviderMigrationOperationValidator(
         return current;
     }
 
-    // 仅同 owner 的真实 Link/Entity 配对可排名；所有物理列都必须匹配正式模型和当前 provider target。
+    // 恢复资产只保留持久化声明；排名校验不能依赖停用 owner 已退出的活动查询目录。
     private ProviderTargetSnapshot ReverseRelationOrdinalBackfill(ModuleMigrationStream stream, RelationOrdinalBackfillOperation operation, ProviderTargetSnapshot current)
     {
         var fact = operation.Fact;
@@ -527,25 +529,68 @@ internal sealed class ProviderMigrationOperationValidator(
         var target = FindOwnedTable(stream, current, fact.Schema, fact.TargetTable);
         var link = plan.Models.Single(model => model.SchemaName == fact.Schema && model.TableName == fact.Table && model.OwnerModuleId == stream.ModuleId);
         var entity = plan.Models.Single(model => model.SchemaName == fact.Schema && model.TableName == fact.TargetTable && model.OwnerModuleId == stream.ModuleId);
-        var directory = link.LinkQuery;
-        if (link.Kind != ICP.Platform.Modeling.ModelKind.Link || entity.Kind != ICP.Platform.Modeling.ModelKind.Entity
-            || directory is null || directory.Parent.FixedModelKey is null || directory.Child.TypeField is null
-            || entity.LogicalKey != fact.ChildModelKey || !link.LinkedTypes.Any(pair => pair.Parent == directory.Parent.FixedModelKey && pair.Child == entity.LogicalKey)
-            || link.Fields.Single(field => field.Name == directory.Parent.ReferenceField).StoreName != fact.ParentColumn
-            || link.Fields.Single(field => field.Name == directory.Child.ReferenceField).StoreName != fact.ChildColumn
-            || link.Fields.Single(field => field.Name == directory.Child.TypeField).StoreName != fact.TypeColumn
+        var parent = link.Fields.Single(field => field.Name == "PEID");
+        var child = link.Fields.Single(field => field.Name == "CEID");
+        var linkId = link.Fields.Single(field => field.Name == "LID");
+        var entityId = entity.Fields.Single(field => field.Name == "EID");
+        var discriminator = link.Fields.Single(field => field.StoreName == fact.TypeColumn);
+        var ordinalField = link.Fields.Single(field => field.StoreName == fact.Column);
+        var name = entity.Fields.Single(field => field.StoreName == fact.TargetNameColumn);
+        if (link.Kind != ModelKind.Link || entity.Kind != ModelKind.Entity || entity.LogicalKey != fact.ChildModelKey
+            || !IsRelationReference(parent) || parent.StoreName != fact.ParentColumn
+            || !IsRelationReference(child) || child.StoreName != fact.ChildColumn
+            || !IsObjectIdentity(linkId) || linkId.StoreName != fact.LinkIdColumn
+            || !IsObjectIdentity(entityId) || entityId.StoreName != fact.TargetIdColumn
+            || discriminator.Kind != FieldKind.Scalar || discriminator.ValueType != FieldValueType.Text
+            || !discriminator.Required || !discriminator.OrdinalKey || discriminator.IsAuditField || discriminator.IsPrimaryKey
+            || ordinalField.Kind != FieldKind.Scalar || ordinalField.ValueType != FieldValueType.Integer
+            || ordinalField.Required || ordinalField.IsAuditField || ordinalField.IsPrimaryKey
+            || name.Kind != FieldKind.Scalar || name.ValueType != FieldValueType.Text || !name.Required || name.IsAuditField || name.IsPrimaryKey
             || source.PrimaryKey?.Columns.Count != 1 || source.PrimaryKey.Columns[0] != fact.LinkIdColumn
             || target.PrimaryKey?.Columns.Count != 1 || target.PrimaryKey.Columns[0] != fact.TargetIdColumn)
-            throw new InvalidOperationException("relation ordinal backfill does not match the owned Link/Entity directory");
+            throw new InvalidOperationException("relation ordinal backfill does not match the owned Link/Entity storage declarations");
+        ValidateRelationOrdinalParent(stream, current, source, link, parent);
         var ordinal = source.Columns.Single(column => column.Name == fact.Column);
         if (!ordinal.IsNullable || ordinal.ClrType != typeof(long).FullName || ordinal.ComputedColumnSql is not null
-            || source.Columns.Single(column => column.Name == fact.ParentColumn).ClrType != typeof(string).FullName
-            || source.Columns.Single(column => column.Name == fact.ChildColumn).ClrType != typeof(string).FullName
-            || source.Columns.Single(column => column.Name == fact.TypeColumn).ClrType != typeof(string).FullName
-            || target.Columns.Single(column => column.Name == fact.TargetNameColumn).ClrType != typeof(string).FullName
-            || target.Columns.Single(column => column.Name == fact.TargetNameColumn).IsNullable)
+            || new[] { fact.ParentColumn, fact.ChildColumn, fact.LinkIdColumn, fact.TypeColumn }
+                .Any(name => !IsRequiredStoredText(source.Columns.Single(column => column.Name == name)))
+            || !IsRequiredStoredText(target.Columns.Single(column => column.Name == fact.TargetIdColumn))
+            || !IsRequiredStoredText(target.Columns.Single(column => column.Name == fact.TargetNameColumn)))
             throw new InvalidOperationException("relation ordinal backfill column types or NULL-only phase are invalid");
         return current;
+    }
+
+    // 固定 Link 两端引用必须保持平台声明的身份类型，不能用普通文本或审计字段替代。
+    private static bool IsRelationReference(FieldDefinition field) =>
+        field.Kind == FieldKind.Reference && field.ValueType == FieldValueType.ObjectId
+        && field.Required && !field.IsPrimaryKey && !field.IsAuditField;
+
+    // Link/Entity 的逻辑身份和 provider 单列主键必须同时匹配。
+    private static bool IsObjectIdentity(FieldDefinition field) =>
+        field.Kind == FieldKind.Scalar && field.ValueType == FieldValueType.ObjectId
+        && field.Required && field.IsPrimaryKey && !field.IsAuditField;
+
+    // 身份、子类型和名称必须是实际存储的必填文本，不能由 NULL 或计算列替代。
+    private static bool IsRequiredStoredText(ProviderColumnTarget column) =>
+        column.ClrType == typeof(string).FullName && !column.IsNullable && column.ComputedColumnSql is null;
+
+    // 父分组必须由同 owner Entity 的正式单列外键约束，声明与物理映射缺一不可。
+    private void ValidateRelationOrdinalParent(ModuleMigrationStream stream, ProviderTargetSnapshot current, ProviderTableTarget source, ModelDefinition link, FieldDefinition parent)
+    {
+        var foreignKey = link.ForeignKeys.Single(key => key.Fields.SequenceEqual([parent.Name]));
+        var principal = plan.Models.Single(model => model.LogicalKey == foreignKey.PrincipalModelKey && model.OwnerModuleId == stream.ModuleId);
+        var principalId = principal.Fields.Single(field => field.Name == "EID");
+        var target = FindOwnedTable(stream, current, principal.SchemaName, principal.TableName);
+        if (principal.Kind != ModelKind.Entity || !IsObjectIdentity(principalId)
+            || foreignKey.PrincipalOwnerModuleId is { } owner && owner != stream.ModuleId
+            || !foreignKey.PrincipalFields.SequenceEqual([principalId.Name])
+            || target.PrimaryKey?.Columns.Count != 1 || target.PrimaryKey.Columns[0] != principalId.StoreName
+            || !IsRequiredStoredText(target.Columns.Single(column => column.Name == principalId.StoreName))
+            || !source.ForeignKeys.Any(key => key.Name == foreignKey.Name
+                && key.Columns.SequenceEqual([parent.StoreName]) && key.PrincipalOwnerModuleId == principal.OwnerModuleId
+                && key.PrincipalSchema == principal.SchemaName && key.PrincipalTable == principal.TableName
+                && key.PrincipalColumns.SequenceEqual([principalId.StoreName])))
+            throw new InvalidOperationException("relation ordinal backfill parent foreign key differs from its owned Entity storage mapping");
     }
 
     private ProviderTargetSnapshot ReverseAddPrimaryKey(

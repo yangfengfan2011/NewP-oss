@@ -142,12 +142,16 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
         cutClock.Stop(); var cut = cost.End(); var cutSql = timing.End();
         links = await Rows(fixture, "WorkspaceFolderContent"); var moved = links.Where(row => Equals(row["PEID"], FolderId(c, links))).Select(row => (string)row["LID"]!).ToArray();
         Assert.Equal(100, moved.Length); Assert.DoesNotContain(links, row => Equals(row["PEID"], parentId));
+        Assert.Equal(100, (await Rows(fixture, "BusinessChange")).Count(row => Equals(row["EventType"], "workspace.reference.moved")));
+        Assert.True(cut.AuditWrites > 0); Assert.Equal(0, cutQualification.AuditWrites);
         timing.Begin(); cost.Begin(); var removeClock = Stopwatch.StartNew();
         await Command(fixture, admin, "workspace.folder.removeSelected", "/api/workspace/content/references/remove", new { position = c, linkIds = moved });
         removeClock.Stop(); var remove = cost.End(); var removeSql = timing.End();
         Assert.Equal(100, (await Rows(fixture, "Part")).Length);
+        Assert.Equal(100, (await Rows(fixture, "BusinessChange")).Count(row => Equals(row["EventType"], "workspace.reference.removed")));
+        Assert.True(remove.AuditWrites > 0);
         Assert.Equal(0, cutQualification.BusinessEntities); Assert.Equal(0, cut.BusinessEntities); Assert.Equal(0, remove.BusinessEntities);
-        output.WriteLine(JsonSerializer.Serialize(new { selection = 100, cutQualification, cutQualificationSql, cutQualificationWallSeconds = cutQualificationClock.Elapsed.TotalSeconds,
+        output.WriteLine(JsonSerializer.Serialize(new { selection = 100, persistedMoveChanges = 100, persistedRemoveChanges = 100, cutQualification, cutQualificationSql, cutQualificationWallSeconds = cutQualificationClock.Elapsed.TotalSeconds,
             cut, cutSql, cutWallSeconds = cutClock.Elapsed.TotalSeconds, remove, removeSql, removeWallSeconds = removeClock.Elapsed.TotalSeconds,
             boundary = "SqlClient diagnostic totals cover EF and raw commands; <=100 ordered narrow source projections; no business entities materialized; per-object decisions retained, no new SLA." }));
     }
@@ -686,8 +690,10 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
         foreach (var model in models) Assert.Equal(before[model], Snapshot(await Rows(fixture, model)));
         // 同父legacy根Document剪切也必须零写；随后移动及移除最后引用保留全部文件链。
         var legacyBefore = Snapshot(await Rows(fixture, "WorkspaceFolderContent"));
+        var legacyAuditBefore = Snapshot(await Rows(fixture, "BusinessChange"));
         var noOp = await Command(fixture, admin, "workspace.folder.paste", "/api/workspace/content/paste", new { mode = "cut", sourcePosition = rootPosition, linkIds = new[] { sourceId }, targetPosition = rootPosition });
         Assert.True(noOp.GetProperty("noChange").GetBoolean()); Assert.Equal(legacyBefore, Snapshot(await Rows(fixture, "WorkspaceFolderContent")));
+        Assert.Equal(legacyAuditBefore, Snapshot(await Rows(fixture, "BusinessChange")));
         foreach (var position in new[] { b, c })
         {
             links = await Rows(fixture, "WorkspaceFolderContent");
@@ -702,6 +708,8 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
         Assert.Equal(FolderId(b, links), movedDocument["PEID"]);
         await Command(fixture, admin, "workspace.folder.removeSelected", "/api/workspace/content/references/remove", new { position = b, linkIds = new[] { (string)movedDocument["LID"]! } });
         Assert.DoesNotContain(await Rows(fixture, "WorkspaceFolderContent"), row => Equals(row["ChildModelKey"], "Document"));
+        Assert.Single(await Rows(fixture, "BusinessChange"), row => Equals(row["EventType"], "workspace.reference.moved") && Equals(row["TargetId"], movedDocument["LID"]));
+        Assert.Equal(3, (await Rows(fixture, "BusinessChange")).Count(row => Equals(row["EventType"], "workspace.reference.removed")));
         foreach (var model in models) Assert.Equal(before[model], Snapshot(await Rows(fixture, model)));
         foreach (var (name, bytes) in bytesBefore) Assert.Equal(bytes, await File.ReadAllBytesAsync(Path.Combine(fixture.StorageRoot, name!)));
     }

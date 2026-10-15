@@ -30,7 +30,7 @@ public sealed partial class WorkspaceContents
         }
     }
 
-    /// <summary>图锁内重验完整位置及模式对应资格；复制登记真实关系业务记录，剪切精确移除源LID，均共享原事务。</summary>
+    /// <summary>图锁内重验完整位置及模式对应资格；复制或真实移动登记关系业务记录，剪切精确移除源LID，均共享原事务。</summary>
     public ValueTask<WorkspacePasteResult> PasteAsync(string actor, string mode, WorkspacePosition sourcePosition, string[] linkIds,
         WorkspacePosition targetPosition, CancellationToken token)
     {
@@ -56,6 +56,7 @@ public sealed partial class WorkspaceContents
             {
                 var linkId = await AddTargetReferenceAsync(target.FolderId, targets[index], cancellation);
                 if (mode == "copy") await referenceAudit.CopiedAsync(linkIds[index], source.FolderId, linkId, target.FolderId, targets[index], cancellation);
+                else await referenceAudit.MovedAsync(linkIds[index], source.FolderId, linkId, target.FolderId, targets[index], cancellation);
             }
             if (mode == "cut") await Links.Where(row => linkIds.Contains(EF.Property<string>(row, "LID"))
                 && EF.Property<string>(row, "PEID") == source.FolderId).ExecuteDeleteAsync(cancellation);

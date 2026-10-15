@@ -7,6 +7,7 @@ using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Storage;
 using System.Data.Common;
 using Xunit;
 
@@ -24,6 +25,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var x = await Folder(fixture, admin, a, "X"); var y = await Folder(fixture, admin, a, "Y");
         var ids = new[] { x.LinkIds[^1], y.LinkIds[^1] };
         var before = Snapshot(await Rows(fixture, "WorkspaceFolderContent")); var objects = Snapshot(await Rows(fixture, "WorkspaceFolder"));
+        var changesBefore = Snapshot(await Rows(fixture, "BusinessChange")); control.DeletedLinkIds = ids;
         foreach (var removing in new[] { false, true })
         {
             var behavior = removing ? "workspace.folder.removeSelected" : "workspace.folder.paste";
@@ -31,7 +33,8 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             object body = removing ? new { position = a, linkIds = ids } : new { mode = "cut", sourcePosition = a, linkIds = ids, targetPosition = b };
             control.Fail = true;
             using (var failure = await Send(fixture, admin, behavior, path, body)) Assert.Equal(HttpStatusCode.InternalServerError, failure.StatusCode);
-            control.Fail = false; Assert.Equal(before, Snapshot(await Rows(fixture, "WorkspaceFolderContent")));
+            control.Fail = false; Assert.Equal(2, control.WrittenChanges); Assert.Equal(0, control.RemainingSourceReferences);
+            Assert.Equal(before, Snapshot(await Rows(fixture, "WorkspaceFolderContent"))); Assert.Equal(changesBefore, Snapshot(await Rows(fixture, "BusinessChange")));
             control.ArmPause();
             using var cancellation = new CancellationTokenSource();
             using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/" + path) { Content = JsonContent.Create(body) };
@@ -45,24 +48,78 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             }
             finally { cancellation.Cancel(); control.Resume.TrySetResult(); try { (await pending).Dispose(); } catch (OperationCanceledException) { } control.Pause = false; }
             Assert.Equal(before, Snapshot(await Rows(fixture, "WorkspaceFolderContent"))); Assert.Equal(objects, Snapshot(await Rows(fixture, "WorkspaceFolder")));
+            Assert.Equal(2, control.WrittenChanges); Assert.Equal(0, control.RemainingSourceReferences);
+            Assert.Equal(changesBefore, Snapshot(await Rows(fixture, "BusinessChange")));
         }
         await Command(fixture, admin, "workspace.folder.paste", "/api/workspace/content/paste", new { mode = "cut", sourcePosition = a, linkIds = ids, targetPosition = b });
         var rows = await Rows(fixture, "WorkspaceFolderContent"); var movedIds = rows.Where(row => Equals(row["PEID"], FolderId(b, rows))).Select(row => (string)row["LID"]!).ToArray();
         Assert.Equal(2, movedIds.Length);
+        Assert.Equal(2, (await Rows(fixture, "BusinessChange")).Count(row => Equals(row["EventType"], "workspace.reference.moved")));
         await Command(fixture, admin, "workspace.folder.removeSelected", "/api/workspace/content/references/remove", new { position = b, linkIds = movedIds });
         Assert.Equal(objects, Snapshot(await Rows(fixture, "WorkspaceFolder")));
+        Assert.Equal(2, (await Rows(fixture, "BusinessChange")).Count(row => Equals(row["EventType"], "workspace.reference.removed")));
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "cut及移除在登记第2条审计时故障、审计写入或保存失败时关系和记录整体回滚")]
+    public async Task CutAndRemove_AuditRegistrationAndSaveFailuresRollBackEveryFact()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
+        using var admin = await fixture.LoginAdministratorAsync(); var root = await Root(fixture, admin);
+        var a = await Folder(fixture, admin, root, "A"); var b = await Folder(fixture, admin, root, "B");
+        var x = await Folder(fixture, admin, a, "X"); var y = await Folder(fixture, admin, a, "Y");
+        var ids = new[] { x.LinkIds[^1], y.LinkIds[^1] };
+        var references = Snapshot(await Rows(fixture, "WorkspaceFolderContent")); var objects = Snapshot(await Rows(fixture, "WorkspaceFolder"));
+        var changes = Snapshot(await Rows(fixture, "BusinessChange"));
+        foreach (var removing in new[] { false, true })
+        {
+            var behavior = removing ? "workspace.folder.removeSelected" : "workspace.folder.paste";
+            var path = removing ? "references/remove" : "paste";
+            object body = removing ? new { position = a, linkIds = ids } : new { mode = "cut", sourcePosition = a, linkIds = ids, targetPosition = b };
+            foreach (var mode in new[] { "register", "write", "save", "second-registration" })
+            {
+                var registered = 0; fixture.Fault.Mode = mode;
+                if (mode == "second-registration") fixture.Fault.AfterRegister = (change, _) => {
+                    if (change.EventType == (removing ? "workspace.reference.removed" : "workspace.reference.moved") && ++registered == 2)
+                        throw new InvalidOperationException("Injected second reference audit registration failure.");
+                    return Task.CompletedTask;
+                };
+                try
+                {
+                    using var failed = await Send(fixture, admin, behavior, path, body);
+                    Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
+                }
+                finally { fixture.Fault.Mode = ""; fixture.Fault.AfterRegister = null; }
+                if (mode == "second-registration") Assert.Equal(2, registered);
+                Assert.Equal(references, Snapshot(await Rows(fixture, "WorkspaceFolderContent")));
+                Assert.Equal(objects, Snapshot(await Rows(fixture, "WorkspaceFolder"))); Assert.Equal(changes, Snapshot(await Rows(fixture, "BusinessChange")));
+            }
+        }
     }
 
     private sealed class ReferenceCommitControl : SaveChangesInterceptor, IDbTransactionInterceptor
     {
         public bool Fail { get; set; }
         public bool Pause { get; set; }
+        public string[] DeletedLinkIds { get; set; } = [];
+        public int WrittenChanges { get; private set; }
+        public int RemainingSourceReferences { get; private set; }
         public TaskCompletionSource Reached { get; private set; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Resume { get; private set; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource RolledBack { get; private set; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public void ArmPause() { Reached = new(TaskCreationOptions.RunContinuationsAsynchronously); Resume = new(TaskCreationOptions.RunContinuationsAsynchronously); RolledBack = new(TaskCreationOptions.RunContinuationsAsynchronously); Pause = true; }
         public override async ValueTask<int> SavedChangesAsync(SaveChangesCompletedEventData eventData, int result, CancellationToken token = default)
         {
+            if (Fail || Pause)
+            {
+                // 从当前SQL事务观察已写记录与已删关系，不能用仅登记或ChangeTracker状态代替原子保存事实。
+                var transaction = eventData.Context!.Database.CurrentTransaction!.GetDbTransaction();
+                await using var command = transaction.Connection!.CreateCommand(); command.Transaction = transaction;
+                command.CommandText = "SELECT (SELECT COUNT(*) FROM [BusinessChange] WHERE [EventType] IN ('workspace.reference.moved','workspace.reference.removed')), (SELECT COUNT(*) FROM [WorkspaceFolderContent] WHERE [LID] IN (@first,@second))";
+                var first = command.CreateParameter(); first.ParameterName = "@first"; first.Value = DeletedLinkIds[0]; command.Parameters.Add(first);
+                var second = command.CreateParameter(); second.ParameterName = "@second"; second.Value = DeletedLinkIds[1]; command.Parameters.Add(second);
+                await using var reader = await command.ExecuteReaderAsync(token); Assert.True(await reader.ReadAsync(token));
+                WrittenChanges = reader.GetInt32(0); RemainingSourceReferences = reader.GetInt32(1);
+            }
             if (Fail) throw new InvalidOperationException("Injected reference mutation failure after SQL writes.");
             if (Pause) { Reached.TrySetResult(); await Resume.Task.WaitAsync(token); }
             return result;
@@ -103,12 +160,15 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var links = await Rows(fixture, "WorkspaceFolderContent"); var gid = FolderId(g, links);
         await Command(fixture, admin, "workspace.folder.add", "/api/workspace/content/references", new { position = b, target = new { modelKey = "WorkspaceFolder", id = gid } });
         var before = Snapshot(await Rows(fixture, "WorkspaceFolderContent")); var folders = Snapshot(await Rows(fixture, "WorkspaceFolder"));
+        var auditBefore = Snapshot(await Rows(fixture, "BusinessChange"));
         // 首个RED使用已有paste功能：尚未支持cut时应在真实端点失败，而非仅缺少声明。
         var unchanged = await Command(fixture, admin, "workspace.folder.paste", "/api/workspace/content/paste", new { mode = "cut", sourcePosition = a, linkIds = new[] { g.LinkIds[^1] }, targetPosition = a });
         Assert.True(unchanged.GetProperty("noChange").GetBoolean());
         Assert.Equal(before, Snapshot(await Rows(fixture, "WorkspaceFolderContent")));
+        Assert.Equal(auditBefore, Snapshot(await Rows(fixture, "BusinessChange")));
         await Command(fixture, admin, "workspace.folder.cut", "/api/workspace/content/clipboard/cut/validate", new { mode = "cut", sourcePosition = a, linkIds = new[] { g.LinkIds[^1] } });
         Assert.Equal(before, Snapshot(await Rows(fixture, "WorkspaceFolderContent")));
+        Assert.Equal(auditBefore, Snapshot(await Rows(fixture, "BusinessChange")));
         var moved = await Command(fixture, admin, "workspace.folder.paste", "/api/workspace/content/paste", new { mode = "cut", sourcePosition = a, linkIds = new[] { g.LinkIds[^1] }, targetPosition = c });
         Assert.False(moved.GetProperty("noChange").GetBoolean());
         links = await Rows(fixture, "WorkspaceFolderContent");
@@ -117,8 +177,17 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         Assert.Contains(links, row => Equals(row["PEID"], FolderId(c, links)) && Equals(row["CEID"], gid));
         Assert.Contains(links, row => Equals(row["PEID"], gid) && Equals(row["ChildModelKey"], "Part"));
         Assert.Equal(folders, Snapshot(await Rows(fixture, "WorkspaceFolder")));
+        var movedReference = links.Single(row => Equals(row["PEID"], FolderId(c, links)) && Equals(row["CEID"], gid));
+        var movedChange = Assert.Single(await Rows(fixture, "BusinessChange"), row => Equals(row["EventType"], "workspace.reference.moved"));
+        Assert.Equal(movedReference["LID"], movedChange["TargetId"]);
+        Assert.Equal("workspace.content", movedChange["Resource"]); Assert.Equal(fixture.ActorId, movedChange["ActorId"]);
+        Assert.Equal(movedReference["LCreatedAt"], movedChange["OccurredAt"]); Assert.False(string.IsNullOrWhiteSpace(movedChange["TraceId"] as string));
+        var movedFields = JsonSerializer.Deserialize<ICP.Platform.Modules.Audit.Contracts.BusinessAuditField[]>((string)movedChange["FieldsJson"]!)!;
+        Assert.Equal(new[] { "SourceLID", "SourcePEID", "PEID", "ChildModelKey", "CEID" }, movedFields.Select(field => field.Field));
+        Assert.Equal(new[] { g.LinkIds[^1], FolderId(a, links), FolderId(c, links), "WorkspaceFolder", gid }, movedFields.Select(field => field.After.Value));
         using var stale = await Send(fixture, admin, "workspace.folder.paste", "paste", new { mode = "cut", sourcePosition = a, linkIds = new[] { g.LinkIds[^1] }, targetPosition = b });
         await Problem(stale, HttpStatusCode.NotFound, "Workspace.ReferenceUnavailable");
+        Assert.Single(await Rows(fixture, "BusinessChange"), row => Equals(row["EventType"], "workspace.reference.moved"));
     }
 
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "cut只接受正式cut预检功能且不借用copy数据动作，提交及同父no-op每次重验源父/目标父/端点及完整路径")]
@@ -181,10 +250,12 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             .Where(row => businessIds.Contains(EF.Property<string>(row, "LID"))).ExecuteUpdateAsync(set => set.SetProperty(row => EF.Property<string>(row, "PEID"), root.RootFolderId));
         before = Snapshot(await Rows(fixture, "WorkspaceFolderContent"));
         var folderBefore = Snapshot(await Rows(fixture, "WorkspaceFolder")); var partBefore = Snapshot(await Rows(fixture, "Part")); var documentBefore = Snapshot(await Rows(fixture, "Document"));
+        var changesBefore = Snapshot(await Rows(fixture, "BusinessChange"));
         var receipt = await Command(fixture, admin, "workspace.folder.paste", "/api/workspace/content/paste", new { mode = "cut", sourcePosition = root, linkIds = businessIds, targetPosition = root });
         Assert.True(receipt.GetProperty("noChange").GetBoolean());
         Assert.Equal(before, Snapshot(await Rows(fixture, "WorkspaceFolderContent"))); Assert.Equal(folderBefore, Snapshot(await Rows(fixture, "WorkspaceFolder")));
         Assert.Equal(partBefore, Snapshot(await Rows(fixture, "Part"))); Assert.Equal(documentBefore, Snapshot(await Rows(fixture, "Document")));
+        Assert.Equal(changesBefore, Snapshot(await Rows(fixture, "BusinessChange")));
         await Command(fixture, admin, "workspace.folder.paste", "/api/workspace/content/paste", new { mode = "cut", sourcePosition = root, linkIds = businessIds, targetPosition = b });
         rows = await Rows(fixture, "WorkspaceFolderContent"); Assert.DoesNotContain(rows, row => businessIds.Contains((string)row["LID"]!));
         Assert.Equal(2, rows.Count(row => Equals(row["PEID"], FolderId(b, rows))));
@@ -202,21 +273,44 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         await Command(fixture, admin, "workspace.folder.add", "/api/workspace/content/references", new { position = b, target = new { modelKey = "WorkspaceFolder", id = aid } });
         var sharedA = b with { LinkIds = [.. b.LinkIds, (string)(await Rows(fixture, "WorkspaceFolderContent")).Single(row => Equals(row["PEID"], FolderId(b, rows)) && Equals(row["CEID"], aid))["LID"]!] };
         rows = await Rows(fixture, "WorkspaceFolderContent"); var ids = rows.Where(row => Equals(row["PEID"], aid)).Select(row => (string)row["LID"]!).ToArray();
+        var removedReferences = rows.Where(row => ids.Contains((string)row["LID"]!)).ToArray();
         var part = rows.Single(row => Equals(row["PEID"], aid) && Equals(row["ChildModelKey"], "Part"));
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "RemoveActor", "移除账号", "remove-actor", "移除账号", Point(fixture, "workspace.spaces.access"), Point(fixture, "workspace.folder.removeSelected"));
         using var user = actor.Client;
         foreach (var action in new[] { "edit", "delete", "partCopy" }) await Rule(fixture, admin, "NoObject" + action, "part.part", (string)part["CEID"]!, action, "deny");
         foreach (var action in new[] { "edit", "delete", "workspaceCopy" }) await Rule(fixture, admin, "NoFolder" + action, "workspace.folder", gid, action, "deny");
         var before = Snapshot(rows); var folders = Snapshot(await Rows(fixture, "WorkspaceFolder")); var parts = Snapshot(await Rows(fixture, "Part"));
+        var changesBefore = Snapshot(await Rows(fixture, "BusinessChange"));
         using (var stale = await Send(fixture, user, "workspace.folder.removeSelected", "references/remove", new { position = a, linkIds = ids.Concat(["missing"]).ToArray() })) await Problem(stale, HttpStatusCode.NotFound, "Workspace.ReferenceUnavailable");
         Assert.Equal(before, Snapshot(await Rows(fixture, "WorkspaceFolderContent")));
+        Assert.Equal(changesBefore, Snapshot(await Rows(fixture, "BusinessChange")));
         await Rule(fixture, admin, "HiddenEndpoint", "part.part", (string)part["CEID"]!, "read", "deny");
+        changesBefore = Snapshot(await Rows(fixture, "BusinessChange"));
         using (var hidden = await Send(fixture, user, "workspace.folder.removeSelected", "references/remove", new { position = a, linkIds = ids })) await Problem(hidden, HttpStatusCode.NotFound, "Workspace.TargetUnavailable");
         Assert.Equal(before, Snapshot(await Rows(fixture, "WorkspaceFolderContent")));
+        Assert.Equal(changesBefore, Snapshot(await Rows(fixture, "BusinessChange")));
         await Rule(fixture, admin, "HiddenEndpoint", "part.part", (string)part["CEID"]!, "read", "allow");
         await Command(fixture, user, "workspace.folder.removeSelected", "/api/workspace/content/references/remove", new { position = sharedA, linkIds = ids });
         rows = await Rows(fixture, "WorkspaceFolderContent"); Assert.DoesNotContain(rows, row => Equals(row["PEID"], aid));
         Assert.Contains(rows, row => Equals(row["PEID"], gid)); Assert.Equal(2, rows.Count(row => Equals(row["CEID"], aid)));
+        Assert.Equal(folders, Snapshot(await Rows(fixture, "WorkspaceFolder"))); Assert.Equal(parts, Snapshot(await Rows(fixture, "Part")));
+        var changes = (await Rows(fixture, "BusinessChange")).Where(row => Equals(row["EventType"], "workspace.reference.removed")).ToArray();
+        Assert.Equal(2, changes.Length);
+        foreach (var reference in removedReferences)
+        {
+            var change = Assert.Single(changes, row => Equals(row["TargetId"], reference["LID"]));
+            Assert.Equal("workspace.content", change["Resource"]); Assert.Equal(actor.AccountId, change["ActorId"]);
+            Assert.False(string.IsNullOrWhiteSpace(change["TraceId"] as string));
+            var fields = JsonSerializer.Deserialize<ICP.Platform.Modules.Audit.Contracts.BusinessAuditField[]>((string)change["FieldsJson"]!)!;
+            Assert.Equal(new[] { "PEID", "ChildModelKey", "CEID" }, fields.Select(field => field.Field));
+            Assert.Equal(new[] { (string)reference["PEID"]!, (string)reference["ChildModelKey"]!, (string)reference["CEID"]! }, fields.Select(field => field.Before!.Value));
+            Assert.All(fields, field => Assert.Null(field.After.Value));
+            var detail = await FeatureHttpTestRequests.ReadAsync(admin, Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "audit.change.read"), "/api/audit/business-changes/" + change["EID"]);
+            Assert.Equal(reference["LID"], detail.GetProperty("fields").GetProperty("TargetId").GetString());
+            Assert.Equal(3, detail.GetProperty("summaries").GetProperty("changes").GetProperty("data").GetArrayLength());
+        }
+        using (var single = await FeatureHttpTestRequests.SendAsync(admin, RowPoint(fixture, "remove"), HttpMethod.Delete, "/api/workspace/content/references/" + sharedA.LinkIds[^1], new { position = b })) Assert.Equal(HttpStatusCode.OK, single.StatusCode);
+        Assert.Single(await Rows(fixture, "BusinessChange"), row => Equals(row["EventType"], "workspace.reference.removed") && Equals(row["TargetId"], sharedA.LinkIds[^1]));
         Assert.Equal(folders, Snapshot(await Rows(fixture, "WorkspaceFolder"))); Assert.Equal(parts, Snapshot(await Rows(fixture, "Part")));
     }
 }

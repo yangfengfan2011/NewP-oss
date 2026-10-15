@@ -15,4 +15,21 @@ public sealed class WorkspaceReferenceAudit(IBusinessAuditRecorder recorder)
                 new("PEID", null, BusinessAuditValue.Reference("workspace.folder", targetParentId)),
                 new("ChildModelKey", null, BusinessAuditValue.Text(endpoint.ModelKey)),
                 new("CEID", null, BusinessAuditValue.Reference(endpoint.ModelKey, endpoint.Id))]), cancellationToken);
+
+    /// <summary>真实移动以新 LID 为目标，保留被删除的源 LID、源父及目标关系事实；原事务决定记录是否生效。</summary>
+    public ValueTask MovedAsync(string sourceLinkId, string sourceParentId, string targetLinkId, string targetParentId,
+        LinkObjectReference endpoint, CancellationToken cancellationToken) => recorder.RegisterAsync(new(
+            "workspace.reference.moved", "workspace.content", targetLinkId,
+            [new("SourceLID", null, BusinessAuditValue.Reference("workspace.content", sourceLinkId)),
+                new("SourcePEID", null, BusinessAuditValue.Reference("workspace.folder", sourceParentId)),
+                new("PEID", null, BusinessAuditValue.Reference("workspace.folder", targetParentId)),
+                new("ChildModelKey", null, BusinessAuditValue.Text(endpoint.ModelKey)),
+                new("CEID", null, BusinessAuditValue.Reference(endpoint.ModelKey, endpoint.Id))]), cancellationToken);
+
+    /// <summary>单条和批量移除均以确切旧 LID 为目标，字段记录旧关系事实到显式空值，不表示删除对象。</summary>
+    public ValueTask RemovedAsync(string linkId, string parentId, LinkObjectReference endpoint, CancellationToken cancellationToken) =>
+        recorder.RegisterAsync(new("workspace.reference.removed", "workspace.content", linkId,
+            [new("PEID", BusinessAuditValue.Reference("workspace.folder", parentId), BusinessAuditValue.Reference("workspace.folder", null)),
+                new("ChildModelKey", BusinessAuditValue.Text(endpoint.ModelKey), BusinessAuditValue.Text(null)),
+                new("CEID", BusinessAuditValue.Reference(endpoint.ModelKey, endpoint.Id), BusinessAuditValue.Reference(endpoint.ModelKey, null))]), cancellationToken);
 }

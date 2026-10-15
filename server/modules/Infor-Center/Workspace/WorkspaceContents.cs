@@ -85,17 +85,20 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
     public ValueTask<bool> RemoveAsync(string actorId, WorkspacePosition position, string linkId, CancellationToken token) =>
         RemoveReferencesAsync(actorId, position, [linkId], token);
 
-    /// <summary>单条和一页批量移除共用完整位置、父edit及端点read；只删除确切LID，不消费对象delete或Files。</summary>
+    /// <summary>单条和一页批量移除共用完整位置、父edit及端点read；确切LID删除及旧关系业务记录共享原事务，不消费对象delete或Files。</summary>
     public ValueTask<bool> RemoveReferencesAsync(string actorId, WorkspacePosition position, string[] linkIds, CancellationToken token)
     {
         ValidateSelection(linkIds);
         return transactions.ExecuteAsync<bool>(async cancellation =>
         {
+            using var operation = audit.BeginOperation();
             await LockGraphAsync(cancellation);
             var path = await WritablePositionAsync(actorId, position, cancellation);
-            await ResolveClipboardTargetsAsync(path.FolderId, linkIds, "remove", cancellation);
+            var targets = await ResolveClipboardTargetsAsync(path.FolderId, linkIds, "remove", cancellation);
             await Links.Where(row => linkIds.Contains(EF.Property<string>(row, "LID"))
                 && EF.Property<string>(row, "PEID") == path.FolderId).ExecuteDeleteAsync(cancellation);
+            for (var index = 0; index < targets.Length; index++)
+                await referenceAudit.RemovedAsync(linkIds[index], path.FolderId, targets[index], cancellation);
             return true;
         }, token);
     }

@@ -77,7 +77,11 @@ public sealed partial class LinkTreeReader(EfPlatformDbContext db, LinkTreeCatal
         if (string.IsNullOrWhiteSpace(position.RootKey) || string.IsNullOrWhiteSpace(position.RootObjectId) || position.LinkIds is null
             || position.LinkIds.Any(string.IsNullOrWhiteSpace) || position.LinkIds.Distinct(StringComparer.Ordinal).Count() != position.LinkIds.Count)
             throw new LinkQueryException(400, "Platform.TreeInvalidPosition");
-        var plan = Compile(definition); var root = (await ReadRootsAsync(plan, position, token)).SingleOrDefault()
+        var plan = Compile(definition);
+        // SQL 等值可能接受大小写或尾空格别名；精确位置仍须逐字匹配可信根身份。
+        var root = (await ReadRootsAsync(plan, position, token)).SingleOrDefault(candidate =>
+            string.Equals(candidate.Key, position.RootKey, StringComparison.Ordinal)
+            && string.Equals(candidate.Id, position.RootObjectId, StringComparison.Ordinal))
             ?? throw new LinkQueryException(404, "Platform.TreePositionUnavailable");
         var relation = plan.Link.Metadata;
         var eligible = await sourceReads.TreeRowsAsync(plan.Link, token);

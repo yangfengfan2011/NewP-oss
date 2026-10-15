@@ -442,6 +442,85 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
         Assert.Equal(before, Snapshot(await Rows(fixture, "WorkspaceFolderContent")));
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "公共和个人根的尾空格/大小写别名在共同精确位置入口拒绝，不得绕过根落入或上传预检")]
+    public async Task RootIdentity_AliasesCannotBypassRootIngressThroughExactPositions()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
+        using var admin = await fixture.LoginAdministratorAsync();
+        var root = await Root(fixture, admin);
+        var mine = await Command(fixture, admin, "workspace.spaces.access", "/api/workspace/spaces/personal/ensure");
+        var personal = new WorkspacePosition(mine.GetProperty("spaceId").GetString()!, mine.GetProperty("rootFolderId").GetString()!, []);
+        var source = await Folder(fixture, admin, root, "根身份来源");
+        await Command(fixture, admin, "workspace.folder.createPart", "/api/workspace/content/parts",
+            new { position = source, values = new { ECODE = "ROOT-IDENTITY-SOURCE", ENAME = "普通目录仍可创建" } });
+        var links = await Rows(fixture, "WorkspaceFolderContent");
+        var part = Assert.Single(links, row => Equals(row["ChildModelKey"], "Part"));
+        var facts = new[] { "WorkspaceFolder", "WorkspaceFolderContent", "Part", "Document" };
+        var before = new Dictionary<string, string>(); foreach (var model in facts) before[model] = Snapshot(await Rows(fixture, model));
+        var canonicalRoots = await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.spaces.access"), "/api/trees/workspace.structure/roots?scope=currentUser");
+        Assert.Equal(2, canonicalRoots.GetArrayLength());
+        Assert.All(canonicalRoots.EnumerateArray(), node =>
+        {
+            var position = ICP.Platform.Crud.Runtime.LinkTreeNodeKey.Decode(node.GetProperty("nodeKey").GetString()!);
+            Assert.Equal(position.RootObjectId, node.GetProperty("context").GetProperty("rootFolderId").GetString());
+        });
+        var search = await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.spaces.access"), "/api/trees/workspace.structure/search?scope=currentUser&keyword=" + Uri.EscapeDataString("根身份来源"));
+        var found = ICP.Platform.Crud.Runtime.LinkTreeNodeKey.Decode(Assert.Single(search.GetProperty("items").EnumerateArray()).GetProperty("node").GetProperty("nodeKey").GetString()!);
+        Assert.Equal(root.SpaceId, found.RootKey); Assert.Equal(root.RootFolderId, found.RootObjectId);
+        foreach (var position in new[] { root, personal })
+        {
+            foreach (var (url, _) in ReadRequests(position))
+            {
+                using var canonical = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.spaces.access"), HttpMethod.Get, url);
+                Assert.Equal(HttpStatusCode.OK, canonical.StatusCode);
+            }
+            Assert.NotEqual(position.RootFolderId, position.RootFolderId.ToUpperInvariant());
+            Assert.NotEqual(position.SpaceId, position.SpaceId.ToUpperInvariant());
+            foreach (var alias in new[] { position with { RootFolderId = position.RootFolderId + " " }, position with { RootFolderId = position.RootFolderId.ToUpperInvariant() },
+                position with { SpaceId = position.SpaceId + " " }, position with { SpaceId = position.SpaceId.ToUpperInvariant() } })
+            {
+                foreach (var (url, code) in ReadRequests(alias))
+                {
+                    using var read = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.spaces.access"), HttpMethod.Get, url);
+                    await Problem(read, HttpStatusCode.NotFound, code);
+                }
+                foreach (var (kind, action) in new[] { ("parts", "createPart"), ("documents", "createDocument") })
+                {
+                    using var created = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder." + action), HttpMethod.Post,
+                        "/api/workspace/content/" + kind, new { position = alias, values = new { ECODE = "ROOT-ALIAS", ENAME = "根身份别名禁止落入" } });
+                    await Problem(created, HttpStatusCode.NotFound, "Workspace.PositionUnavailable");
+                }
+                using (var added = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.add"), HttpMethod.Post,
+                    "/api/workspace/content/references", new { position = alias, target = new { modelKey = "Part", id = part["CEID"] } }))
+                    await Problem(added, HttpStatusCode.NotFound, "Workspace.PositionUnavailable");
+                foreach (var mode in new[] { "copy", "cut" })
+                {
+                    using var paste = await Send(fixture, admin, "workspace.folder.paste", "paste", new { mode, sourcePosition = source, linkIds = new[] { (string)part["LID"]! }, targetPosition = alias });
+                    await Problem(paste, HttpStatusCode.NotFound, "Workspace.PositionUnavailable");
+                }
+                using var multipart = new MultipartFormDataContent();
+                multipart.Add(new StringContent(JsonSerializer.Serialize(alias, new JsonSerializerOptions(JsonSerializerDefaults.Web))), "position");
+                multipart.Add(new StringContent("{\"ECODE\":\"ROOT-ALIAS-UPLOAD\",\"ENAME\":\"根别名上传\"}"), "values");
+                multipart.Add(new ByteArrayContent([1, 2, 3]), "file", "alias.pdf");
+                using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/document-uploads") { Content = multipart };
+                request.Headers.Add("X-NewP-Feature", Point(fixture, "workspace.folder.createDocument").Position);
+                using var upload = await admin.SendAsync(request);
+                await Problem(upload, HttpStatusCode.NotFound, "Workspace.PositionUnavailable");
+            }
+        }
+        foreach (var model in facts) Assert.Equal(before[model], Snapshot(await Rows(fixture, model)));
+        Assert.Empty(await Rows(fixture, "FileRecord")); Assert.Empty(await Rows(fixture, "FileUploadLease")); Assert.Empty(Directory.GetFiles(fixture.StorageRoot));
+
+        static (string Url, string Code)[] ReadRequests(WorkspacePosition position)
+        {
+            var key = Uri.EscapeDataString(ICP.Platform.Crud.Runtime.LinkTreeNodeKey.Encode(new(position.SpaceId, position.RootFolderId, position.LinkIds)));
+            var query = "?spaceId=" + Uri.EscapeDataString(position.SpaceId) + "&rootFolderId=" + Uri.EscapeDataString(position.RootFolderId) + "&linkIds=%5B%5D";
+            return [("/api/trees/workspace.structure/path?scope=currentUser&nodeKey=" + key, "Platform.TreePositionUnavailable"),
+                ("/api/trees/workspace.structure/children?scope=currentUser&nodeKey=" + key, "Platform.TreePositionUnavailable"),
+                ("/api/workspace/content/path" + query, "Workspace.PositionUnavailable"), ("/api/workspace/content/children" + query, "Workspace.PositionUnavailable")];
+        }
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "空间根在新建、直接add及上传I/O前拒绝业务对象，独立对象创建仍可用")]
     public async Task Root_RejectsBusinessCreationReferenceAndUploadBeforeFileIo()
     {

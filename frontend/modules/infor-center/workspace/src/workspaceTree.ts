@@ -1,38 +1,16 @@
 import { platformFetch } from '@icp-platform/core';
-import { readStandardCrudRequestError, StandardCrudRequestError, TreeNodeNotFoundError, type PageInputResolverBinding, type TreeNodeDescriptor, type TreeProviderBinding } from '@icp-platform/sdk';
+import { createTreeQueryTransport, readStandardCrudRequestError, StandardCrudRequestError, type PageInputResolverBinding, type TreeProviderBinding } from '@icp-platform/sdk';
 
-interface SpaceRoot { spaceId: string; spaceKind: 'Public' | 'Personal'; rootFolderId: string; name: string; hasChildren?: boolean }
-interface Position { spaceId: string; rootFolderId: string; linkIds: string[] }
-function position(key: string): Position {
-  try {
-    const parts = key.split(':').map(decodeURIComponent);
-    if (parts.length < 2 || parts.some(part => !part)) throw new Error();
-    return { spaceId: parts[0], rootFolderId: parts[1], linkIds: parts.slice(2) };
-  } catch { throw new TreeNodeNotFoundError('无效工作空间出现位置'); }
-}
-function keyFor(value: Position): string { return [value.spaceId, value.rootFolderId, ...value.linkIds].map(encodeURIComponent).join(':'); }
-function positionQuery(value: Position): string { return new URLSearchParams({ spaceId: value.spaceId, rootFolderId: value.rootFolderId, linkIds: JSON.stringify(value.linkIds) }).toString(); }
 const api = '/api/workspace/spaces';
 function headers(scope: Record<string, unknown>) {
   if (scope.kind !== 'currentUser' || typeof scope.featurePosition !== 'string'
     || Object.keys(scope).some(key => !['kind', 'featurePosition'].includes(key))) throw new Error('缺少工作空间当前账号范围');
   return { 'X-NewP-Feature': scope.featurePosition };
 }
-function node(space: SpaceRoot): TreeNodeDescriptor {
-  return { nodeKey: `${encodeURIComponent(space.spaceId)}:${encodeURIComponent(space.rootFolderId)}`, nodeType: 'folder',
-    label: space.name, labelKey: `Workspace.${space.spaceKind}`, hasChildren: space.hasChildren ?? false, contextMenuKeys: ['paste', 'clearClipboard'],
-    context: { spaceId: space.spaceId, rootFolderId: space.rootFolderId, id: space.rootFolderId, linkIds: [] } };
-}
-
 /** 准备状态只归本次页面范围；成功后的读取重试不会重放个人空间命令。 */
 export function createWorkspaceTreeProvider(fetcher: typeof fetch = platformFetch): TreeProviderBinding {
   const prepared = new WeakMap<Record<string, unknown>, Promise<void>>();
-  const read = async <T,>(path: string, scope: Record<string, unknown>, signal?: AbortSignal): Promise<T> => {
-    const response = await fetcher(path, { headers: headers(scope), signal });
-    if (response.status === 404) throw new TreeNodeNotFoundError('工作空间出现位置已不存在');
-    if (!response.ok) throw await readStandardCrudRequestError(response);
-    return response.json() as Promise<T>;
-  };
+  const query = createTreeQueryTransport('workspace.structure', fetcher);
   const prepare = (scope: Record<string, unknown>) => {
     let pending = prepared.get(scope);
     if (!pending) {
@@ -49,28 +27,14 @@ export function createWorkspaceTreeProvider(fetcher: typeof fetch = platformFetc
     roots: async (scope, signal) => {
       await prepare(scope);
       signal?.throwIfAborted();
-      const spaces = await read<SpaceRoot[]>(api, scope, signal);
-      if (!spaces.some(space => space.spaceKind === 'Public')) throw new StandardCrudRequestError('公共空间尚未初始化或不可读取。', 503, {}, { reasonKey: 'Workspace.PublicUnavailable' });
-      if (!spaces.some(space => space.spaceKind === 'Personal')) throw new StandardCrudRequestError('个人空间尚未初始化或不可读取，请重试或联系管理员。', 503, {}, { reasonKey: 'Workspace.PersonalUnavailable' });
-      return spaces.map(node);
+      const roots = await query.roots(scope, signal);
+      if (!roots.some(root => root.labelKey === 'Workspace.Public')) throw new StandardCrudRequestError('公共空间尚未初始化或不可读取。', 503, {}, { reasonKey: 'Workspace.PublicUnavailable' });
+      if (!roots.some(root => root.labelKey === 'Workspace.Personal')) throw new StandardCrudRequestError('个人空间尚未初始化或不可读取，请重试或联系管理员。', 503, {}, { reasonKey: 'Workspace.PersonalUnavailable' });
+      return roots;
     },
-    children: async (scope, key, signal) => {
-      const parent = position(key);
-      const result = await read<{ items: Array<{ linkId: string; associatedObject: { id: string }; fields: { Name: string }; hasChildren: boolean }> }>(
-        `/api/workspace/content/children?${positionQuery(parent)}`, scope, signal);
-      return result.items.map(row => {
-        const value = { ...parent, linkIds: [...parent.linkIds, row.linkId] };
-        return { nodeKey: keyFor(value), nodeType: 'folder', label: row.fields.Name, hasChildren: row.hasChildren,
-          context: { ...value, id: row.associatedObject.id } };
-      });
-    },
-    path: async (scope, key, signal) => {
-      const value = position(key);
-      const result = await read<{ folderIds: string[]; names: string[] }>(`/api/workspace/content/path?${positionQuery(value)}`, scope, signal);
-      if (result.folderIds.length !== value.linkIds.length + 1 || result.folderIds[0] !== value.rootFolderId) throw new TreeNodeNotFoundError('工作空间出现位置已过期');
-      return result.names.map((label, index) => ({ nodeKey: keyFor({ ...value, linkIds: value.linkIds.slice(0, index) }), label }));
-    },
-    search: async () => { throw new StandardCrudRequestError('工作空间未启用树搜索。', 400, {}, { reasonKey: 'Workspace.SearchDisabled' }); },
+    children: query.children,
+    path: query.path,
+    search: query.search,
     resolveChange: async change => ({ kind: change.resourceKey === 'workspace.folder' || change.resourceKey === 'workspace.content' ? 'unknown' : 'unrelated' }),
   };
 }

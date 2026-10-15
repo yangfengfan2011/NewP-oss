@@ -17,6 +17,7 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
         services.AddScoped<WorkspacePositions>();
         services.AddScoped<WorkspaceContents>();
         services.AddScoped<WorkspaceTreeOrder>();
+        services.AddScoped<ICP.Platform.Crud.Runtime.ILinkTreeRootPolicy, WorkspaceTreeRoots>();
         // 写行为执行时再解析含展示服务的内容应用服务，避免对象执行器与 Link reader 的构造循环。
         services.AddObjectBehavior<WorkspaceObjectCreation>(this, WorkspaceObjectCreation.BehaviorDefinition,
             (provider, _) => new(() => provider.GetRequiredService<WorkspaceContents>(),
@@ -27,6 +28,7 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
         services.AddScoped<WorkspaceFolderScope>();
         services.AddScoped<ICP.Platform.Crud.LinkQueries.ILinkQueryEndpointConstraint>(provider => provider.GetRequiredService<WorkspaceFolderScope>());
         services.AddScoped<ICP.Platform.Crud.LinkQueries.ILinkQuerySourcePolicy, WorkspaceContentQueryPolicy>();
+        services.AddScoped<ICP.Platform.Crud.LinkQueries.ILinkTreeSourceReadPolicy, WorkspaceContentReadPredicate>();
         services.AddSingleton<WorkspaceFolderReadDescriptor>();
         services.AddSingleton(new DataScopeResource("workspace.folder", ModuleId, "WorkspaceFolder", "EID"));
     }

@@ -53,6 +53,43 @@ internal sealed class WorkspacePageDriver(IPage page)
         return page.Url;
     }
 
+    /// <summary>按完整可见路径收窄同名搜索结果，点击后等待正式位置重验与内容交接。</summary>
+    internal async Task<string> SearchAndSelectFolderAsync(string keyword, string[] labels, Func<Task>? capture = null)
+    {
+        var input = page.GetByRole(AriaRole.Textbox, new() { Name = "搜索节点", Exact = true });
+        // 清空后重新输入也覆盖再次搜索同一词，不依赖旧浮层是否仍处于焦点。
+        await input.FillAsync("");
+        var searched = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath == "/api/trees/workspace.structure/search");
+        await input.FillAsync(keyword);
+        var response = await searched;
+        if (!response.Ok) throw new InvalidOperationException($"文件夹搜索失败：{response.Status} {await response.TextAsync()}");
+        await response.FinishedAsync();
+        var result = page.Locator("[aria-label='搜索结果']")
+            .GetByRole(AriaRole.Button, new() { Name = "定位节点 " + labels[^1], Exact = true })
+            .Filter(new() { Has = page.GetByText(string.Join(" / ", labels), new() { Exact = true }) });
+        await Assertions.Expect(result).ToHaveCountAsync(1);
+        await Assertions.Expect(result).ToBeVisibleAsync();
+        if (capture is not null) await capture();
+        var resolved = page.WaitForResponseAsync(reply => reply.Request.Method == "GET"
+            && new Uri(reply.Url).AbsolutePath == "/api/trees/workspace.structure/path");
+        await result.ClickAsync();
+        var path = await resolved;
+        if (!path.Ok) throw new InvalidOperationException($"搜索结果定位失败：{path.Status} {await path.TextAsync()}");
+        await WaitForContentAsync(labels[^1]);
+        await new StandardTreePageDriver(page).WaitForBreadcrumbAsync(labels);
+        return page.Url;
+    }
+
+    // rc-tree 5.13以class呈现选中态而未输出aria-selected；按实际选中出现收窄，不能用First猜父链。
+    private ILocator FolderTreeNode(string name, bool selectedOnly)
+    {
+        var nodes = page.GetByRole(AriaRole.Complementary, new() { Name = "结构树", Exact = true })
+            .GetByRole(AriaRole.Treeitem, new() { Name = name, Exact = true });
+        if (selectedOnly) nodes = nodes.And(page.Locator(".ant-tree-treenode-selected"));
+        return nodes.GetByText(name, new() { Exact = true });
+    }
+
     internal async Task RestorePositionAsync(string address, params string[] labels)
     {
         await page.GotoAsync(address);
@@ -119,18 +156,17 @@ internal sealed class WorkspacePageDriver(IPage page)
     }
 
     /// <summary>沿树菜单提交单条关系换位，等待正式树和列表读取消费已提交变化。</summary>
-    internal async Task ReorderFolderAsync(string name, string direction, Func<Task>? capture = null)
+    internal async Task ReorderFolderAsync(string name, string direction, Func<Task>? capture = null, bool selectedOnly = false)
     {
         var label = direction switch { "up" => "上移", "down" => "下移", _ => throw new ArgumentException("Unsupported tree direction.", nameof(direction)) };
-        var tree = page.GetByRole(AriaRole.Complementary, new() { Name = "结构树", Exact = true });
-        await tree.GetByText(name, new() { Exact = true }).ClickAsync(new() { Button = MouseButton.Right });
+        await FolderTreeNode(name, selectedOnly).ClickAsync(new() { Button = MouseButton.Right });
         await WaitForContentAsync(name);
         var action = page.GetByRole(AriaRole.Menuitem, new() { Name = label, Exact = true });
         await action.WaitForAsync(new() { State = WaitForSelectorState.Visible });
         await CaptureContextMenuAsync(capture);
         var written = false;
         var treeRead = page.WaitForResponseAsync(response => written && response.Request.Method == "GET"
-            && new Uri(response.Url).AbsolutePath == "/api/workspace/content/children");
+            && new Uri(response.Url).AbsolutePath == "/api/trees/workspace.structure/children");
         var listRead = page.WaitForResponseAsync(response => written && response.Request.Method == "GET"
             && new Uri(response.Url).AbsolutePath == "/api/links/workspace.content");
         var write = page.WaitForResponseAsync(response =>
@@ -160,10 +196,9 @@ internal sealed class WorkspacePageDriver(IPage page)
     }
 
     /// <summary>树菜单复制所指文件夹引用，保持与右侧列表相同的实例剪贴板。</summary>
-    internal async Task CopyFolderFromTreeContextMenuAsync(string name, Func<Task>? capture = null)
+    internal async Task CopyFolderFromTreeContextMenuAsync(string name, Func<Task>? capture = null, bool selectedOnly = false)
     {
-        var tree = page.GetByRole(AriaRole.Complementary, new() { Name = "结构树", Exact = true });
-        await tree.GetByText(name, new() { Exact = true }).ClickAsync(new() { Button = MouseButton.Right });
+        await FolderTreeNode(name, selectedOnly).ClickAsync(new() { Button = MouseButton.Right });
         await WaitForContentAsync(name);
         var action = page.GetByRole(AriaRole.Menuitem, new() { Name = "复制", Exact = true });
         await action.WaitForAsync(new() { State = WaitForSelectorState.Visible });
@@ -220,10 +255,9 @@ internal sealed class WorkspacePageDriver(IPage page)
     }
 
     /// <summary>从实际树节点标记剪切，预检完成前不进入粘贴步骤。</summary>
-    internal async Task CutFolderFromTreeContextMenuAsync(string name, Func<Task>? capture = null)
+    internal async Task CutFolderFromTreeContextMenuAsync(string name, Func<Task>? capture = null, bool selectedOnly = false)
     {
-        var tree = page.GetByRole(AriaRole.Complementary, new() { Name = "结构树", Exact = true });
-        await tree.GetByText(name, new() { Exact = true }).ClickAsync(new() { Button = MouseButton.Right });
+        await FolderTreeNode(name, selectedOnly).ClickAsync(new() { Button = MouseButton.Right });
         await WaitForContentAsync(name);
         var action = page.GetByRole(AriaRole.Menuitem, new() { Name = "剪切", Exact = true });
         await Assertions.Expect(action).ToBeEnabledAsync();
@@ -261,7 +295,13 @@ internal sealed class WorkspacePageDriver(IPage page)
         await crud.ClickPageActionAsync("批量移除引用");
         var dialog = crud.ConfirmDialogWithText("仅从当前文件夹移除所选引用，保留对象及文件，确定继续？");
         await dialog.WaitForAsync(new() { State = WaitForSelectorState.Visible });
-        if (capture is not null) await capture(dialog);
+        if (capture is not null)
+        {
+            // 可见边框早于Modal入场完成，只有呈现采样需要等实际淡入状态。
+            await Assertions.Expect(dialog).ToHaveCSSAsync("opacity", "1");
+            await dialog.EvaluateAsync("async element => { await new Promise(requestAnimationFrame); await Promise.all(element.getAnimations({subtree:true}).map(animation => animation.finished.catch(() => {}))); }");
+            await capture(dialog);
+        }
         await crud.ConfirmAsync(dialog, new("POST", "/api/workspace/content/references/remove", 200, "批量移除引用"));
         foreach (var name in names) await crud.TableRow(name).WaitForAsync(new() { State = WaitForSelectorState.Hidden });
     }

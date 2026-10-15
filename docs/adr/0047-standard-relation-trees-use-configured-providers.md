@@ -28,3 +28,15 @@ status: accepted
 ## 后续决定（2026-09-11）
 
 组织专用树 API（`/api/organization/tree/*`）、`OrganizationTreeReader` 与 `Organization.Tree.Read` 策略已退役。核实结果：前端与验收旅程均只消费 `/api/trees/organization.structure/*`，旧端点没有受支持的调用方，也没有版本化兼容承诺；标准端点测试保留权限拒绝、四类读取及部分参数校验证据，不表示两套 API 的参数契约完全等价。标准树搜索要求显式提供 `page` 与 `pageSize`，不沿用旧 API 缺省为 1/20 的行为。上文回退段中「现有组织专用 API 保持原有行为」不再适用；回退标准 Provider 时需恢复该 API 的实现与前端 Provider。`DepartmentHierarchyQuery` 承担父级候选与防环校验，职责不同，继续由 Organization 独立拥有。
+
+## 后续决定：Link 出现树（2026-10-15）
+
+同一标准树目录和四个 API 增加 `linkSource`，与 FK 的 `relationSource` 互斥。Link 来源声明本模块正式 Link 资源、一个自关联 Entity 类型、公共文本列、关系 Int64 次序字段及可信根策略键。平台验证真实目录、字段、节点与根菜单引用、唯一策略及来源读取支持；未满足条件不能启用。FK 现有身份和查询规则保持原有合同。
+
+平台负责根、直属、精确路径及名称搜索，模块根策略只贡献参数化只读根集合、固定范围和安全上下文，不接受客户端主体或执行表达式。源关系使用普通 Link 的同一 read-plan、Customizer 及策略交集；声明源策略的 Link 必须另有唯一同键 `ILinkTreeSourceReadPolicy`，以真实查询定义提供无位置请求的等价读取谓词。需要 anchor 上下文且无法等价下推的来源不支持树读取，不能省略策略或伪造 Validate 请求。端点读取范围由两路 reader 共用窄服务，位置核心不反向依赖完整源策略。
+
+一次出现以根键、根对象及完整有序 LID 链标识，同一对象的不同父链和不同根各自保留。搜索先在 SQL Server 的一致只读事务中计算合法可达 DAG 的命中权重，再只构造当前页路径；不枚举所有路径到应用，也不以分页推断完整计数成本有界。根次序与逐层关系次序决定先序，循环、损坏、计数表示溢出及超时明确失败。精确路径按提交的链逐层重验，不调用全图搜索或替换为其他出现路径。
+
+Workspace 是首个真实采用者：空间准入、根身份、对象强制范围及次序写入仍归模块；`WorkspacePositions` 和旧 children/path API 薄适配共用平台内核。SDK 提供显式传 fetch 的标准 transport；标准 Provider 与 Workspace 进入包装共同消费。包装只显式执行 personal/ensure 后调用通用 roots，其余查询直接委托，读取内核没有隐式写入。通用 Link 树可直接使用 `platform.relations`。根沿原 nodeType 投影可选 `rootContextMenuKeys`，平台不解释动作业务名称。
+
+非目标为异构任意图、同级分页、全路径导出、数据库结构/闭包/缓存和新容量保证。回退需一起恢复 Workspace 原查询、位置服务与 Provider；不修改关系数据或次序。旧 Workspace children/path 的退出条件是所有受支持调用方迁到通用路由；适配期间只有一个读取真源，不新增私有 search API。

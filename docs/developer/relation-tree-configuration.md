@@ -46,7 +46,7 @@
 
 特殊数据来源、动态范围或复杂业务规则可保留自己的 `providerKey` 与 `TreeProviderBinding`，实现 `roots / children / search / path / resolveChange`，并在胶囊中声明该 binding。自定义 Provider 不同时声明 `relationSource`；它继续拥有数据查询、节点身份、权限、范围及变更位置解释。通用树宿主和节点 PageRef 无需替换。
 
-标准配置当前面向内建模块、SQL Server 和已注册 CRUD 资源；不提供跨模块表访问、外部插件树配置、多父级或同级分页。决策及回退边界见 [ADR-0047](../adr/0047-standard-relation-trees-use-configured-providers.md)。
+上述 FK 配置面向内建模块、SQL Server 和已注册 CRUD 资源；不提供跨模块表访问、外部插件树配置、多父级或同级分页。Link 多父树使用下述独立来源声明。决策及回退边界见 [ADR-0047](../adr/0047-standard-relation-trees-use-configured-providers.md)。
 
 ## 查询生成与性能复跑
 
@@ -62,3 +62,35 @@ dotnet test tests/Organization.Tests/Organization.Tests.csproj -c Release --filt
 ```
 
 默认使用本机 SQL Server LocalDB；已有环境可通过测试约定的 `NEWP_ORGANIZATION_SQLSERVER_ADMIN_CONNECTION` 提供连接。测试会创建并清理独占数据库。阶段测量报告与原始日志保留在 `.codex-temp`，不作为长期容量保证。
+
+## Link 多父出现树
+
+真实采用配置见 [WorkspaceStructure.view.json](../../frontend/modules/infor-center/workspace/metadata/views/WorkspaceStructure.view.json)。`linkSource` 与 `relationSource` 互斥，不混用 FK 的身份及排序规则：
+
+```json
+"linkSource": {
+  "resourceKey": "workspace.content",
+  "nodeType": "folder",
+  "modelKey": "WorkspaceFolder",
+  "labelColumn": "Name",
+  "orderField": "TreeOrdinal",
+  "rootPolicyKey": "workspace.spaces",
+  "rootContextMenuKeys": ["paste", "clearClipboard"]
+}
+```
+
+资源必须归当前模块，正式 Link 的 linkedTypes 包含指定 Entity 的自关联组合。唯一 nodeType 与声明对应；`labelColumn` 是 Link 已公开且映射到该 Entity 字符串字段的 Text 列，`orderField` 是 Link 物理 Int64 字段。其他合法内容类型不入树，不能通过 ID 文本冒充自关联端点。可选根菜单键只引用节点已声明菜单，重复、未知字段、互斥来源、缺失/重复根策略和不兼容字段在启用前失败关闭。
+
+后端登记唯一 `ILinkTreeRootPolicy`，公开 Key、固定 ScopeKind（global/currentUser）、`BuildAsync(LinkTreeDefinition, CancellationToken)` 和 `CreateContext(rootKey, rootObjectId)`。Build 返回 `LinkTreeRootSql(Preparation, RootsQuery, Parameters)`；查询列固定为 RootKey、RootObjectId、Label、可空 LabelKey、RootOrder。准备 SQL 只读且不输出结果集；根及上下文来自可信策略，不接受请求 actor。上下文不可覆盖平台 id/linkIds/rootKey/rootObjectId。每条根与每层端点都交集正式对象 read。
+
+源关系资格共用 `LinkSourceReadScopes`：正式源数据 read、普通 Link Customizer 条件及来源策略谓词相交后，所有树边都消费同一 LID 查询。存在源 PolicyKey 时，必须有唯一同键 `ILinkTreeSourceReadPolicy`，以正式 LinkQueryDefinition 构造等价无位置谓词；明确的 null 只表示没有额外关系过滤。需要位置上下文且无法等价下推的来源不得启用此树，不调用位置型 Validate 伪造读取资格。
+
+前端通常使用 `providerKey: "platform.relations"`。有显式进入命令的业务可保留受控 Provider 包装并声明同一个 linkSource，通过 SDK `createTreeQueryTransport(viewKey, fetcher, featurePosition?)` 委托四个读取；业务包装负责进入命令和 resolveChange，不重复查询实现。标准 Link Provider 对未知关系变化保守协调，模块包装可按其资源过滤无关变化。已知关系或排序变化会使打开的搜索从第一页重读。
+
+路由仍是 `/api/trees/{viewKey}/{roots,children,path,search}`，功能位置为 `tree:{viewKey}` 的既有调用资格。scope 必须等于根策略声明；children/path 只接受 nodeKey。nodeKey 沿 `encodeURIComponent(rootKey):encodeURIComponent(rootObjectId):...LID` 编码，对浏览器消费者仍不透明。SearchItem 为 `{ node, path: [{ nodeKey, label, labelKey? }] }`，SearchPage 为 `{ items, total, page, pageSize }`。根 LabelKey 参加本地化，业务名称保持原文。
+
+Link search 只按普通出现节点名称包含匹配，不搜索根出现本身或编码；可信策略的根可以重叠，某对象同时是另一根下的普通出现时仍独立匹配和计数；keyword 先 Trim，空词返回空页，最多 256 个 UTF-16 code units，名称包含比较使用 `Latin1_General_100_CI_AS_SC`：大小写不敏感、重音敏感，支持补充字符；不规范化业务名称，也不改变数据库/字段或树次序的排序规则。`%_[]~` 是字面值。page 默认 1、pageSize 默认 20，范围分别为正 Int32 和 1–100；未知或重复参数拒绝。返回顺序为实际根顺序、逐层 orderField/LID 的树先序，祖先命中先于后代，每个完整出现链独立计数。
+
+搜索在同一个 Serializable 只读事务中建立授权后节点/边集合、计算 DAG 子树权重及完整 total，再构造最多 pageSize 条路径。临时 SQL 集合按图规模占用数据库资源；完整计数仍须处理相关图，固定往返和20条输出不能证明其成本有界。应用不物化全部路径。循环/损坏返回 409 `Platform.TreeGraphInvalid`；数据库超时、计算资源或精确 total 表示范围用尽返回 503 `Platform.TreeSearchIncomplete`，不返回截断或近似 total；取消直接传到数据库。未定义业务路径容量上限或性能 SLA。
+
+点击结果经 Provider.path 重验同一完整链，再展开必要祖先及选择内容；撤权、移除或移动导致旧链失效时不能跳另一父链。共享离开保护照常处理草稿；改词、关闭、清空、翻页、主体切换及页面失活会取消旧读取，迟到响应不能覆盖当前结果。根/直属读取按层返回，不把整图送往浏览器。

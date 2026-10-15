@@ -79,6 +79,19 @@ it('changes selection and opens its presentation only after the composition allo
   expect(openEditor).toHaveBeenCalledOnce();
 });
 
+it('invalidates search only once for each related change and preserves unrelated results', async () => {
+  const provider = providerWith([node('root')]);
+  provider.resolveChange = async change => ({ kind: change.resourceKey === 'related' ? 'unknown' : 'unrelated' });
+  const tree = await renderLifecycle(provider);
+  await act(async () => tree.publish({ resourceKey: 'other', operation: 'update', id: 'x' }));
+  expect(tree.read().searchEpoch).toBe(0);
+  const change: CompositionChange = { resourceKey: 'related', operation: 'update', id: 'x' };
+  await act(async () => tree.publish(change));
+  expect(tree.read().searchEpoch).toBe(1);
+  await act(async () => tree.publish(change));
+  expect(tree.read().searchEpoch).toBe(1);
+});
+
 it('treats an unreachable location as missing while keeping read failures visible', async () => {
   const provider = providerWith([node('root')]);
   provider.path = async () => { throw new TreeNodeNotFoundError('unreachable'); };

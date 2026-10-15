@@ -19,10 +19,9 @@ using Microsoft.Extensions.Logging;
 namespace ICP.Platform.Crud.LinkQueries;
 
 /// <summary>统一 Link 规划：真实读取范围与公共条件先下推，各类型 UNION ALL 后统一计数、排序、分页。</summary>
-public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog catalog, IDataScopeReadPlanProvider readPlans,
+public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog catalog,
     IEnumerable<ILinkQuerySourcePolicy> policies, IEnumerable<ILinkQueryEndpointConstraint> constraints,
-    IStandardCrudResourceRegistry resources, IEnumerable<IStandardCrudQueryCustomizer> customizers,
-    DisplayValueProjection displays, ILogger<LinkQueryReader> logger, IRuntimeTextCatalog? texts = null, IRequestPresentationContextAccessor? presentation = null)
+    DisplayValueProjection displays, ILogger<LinkQueryReader> logger, LinkEndpointReadScopes endpointScopes, LinkSourceReadScopes sourceScopes, IRuntimeTextCatalog? texts = null, IRequestPresentationContextAccessor? presentation = null)
 {
     /// <summary>公开查询只返回一页关系；关系身份与端点身份始终独立。</summary>
     public Task<LinkQueryResult> QueryAsync(string resourceKey, LinkQueryRequest request, CancellationToken token = default) =>
@@ -40,25 +39,8 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
     }
 
     /// <summary>可信模块复用正式端点读取交集；范围名由代码分配，不接受请求 SQL 或排序表达式。</summary>
-    public async Task<LinkQuerySqlScope> ReadEndpointScopeAsync(string resourceKey, string modelKey, string scopeName, CancellationToken token = default)
-    {
-        if (scopeName.Length == 0 || scopeName.Any(character => !char.IsAsciiLetterOrDigit(character)))
-            throw new ArgumentException("Invalid trusted scope name.", nameof(scopeName));
-        var definition = catalog.Get(resourceKey);
-        if (!definition.Endpoints.TryGetValue(modelKey, out var endpoint)) throw new LinkQueryException(400, "LinkQuery.InvalidType", "target");
-        var parameters = new List<DbParameter>();
-        var rows = await EndpointRowsAsync(endpoint, token);
-        var query = SqlFor(rows.Select(row => EF.Property<string>(row, endpoint.IdField)), parameters);
-        LinkQuerySqlScope? scope = null;
-        if (endpoint.ConstraintKey is { } key)
-            scope = await constraints.Single(c => c.Key == key).ReadSqlScopeAsync(endpoint, scopeName, token);
-        if (scope is not null)
-        {
-            parameters.AddRange(scope.Parameters);
-            query += " INTERSECT SELECT ScopeId FROM (" + scope.IdsQuery + ") scopeKeys(ScopeId)";
-        }
-        return new(scope?.Preparation ?? "", query, parameters);
-    }
+    public Task<LinkQuerySqlScope> ReadEndpointScopeAsync(string resourceKey, string modelKey, string scopeName, CancellationToken token = default) =>
+        endpointScopes.ReadAsync(resourceKey, modelKey, scopeName, token);
 
     /// <summary>受信任树适配读取一层全部节点；不能由 HTTP 请求关闭分页，也不预取整树。</summary>
     public Task<LinkQueryResult> ReadDirectLayerAsync(string resourceKey, LinkQueryRequest request, CancellationToken token = default) =>
@@ -120,20 +102,8 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
         var platformRequest = new PlatformQueryRequest(requested, request.Query.Page, request.Query.PageSize, request.Query.SortBy, request.Query.SortDirection, conditions);
         var fieldPlan = PlatformQueryFieldPlanner.Build(queryDescriptor, platformRequest);
         var (sortField, sortDirection) = PlatformQueryFieldPlanner.ResolveSort(queryDescriptor, platformRequest);
-        var sourceRows = db.Set<Dictionary<string, object?>>(definition.Model.LogicalKey).AsNoTracking();
-        if (definition.Metadata.PolicyKey is { } sourcePolicy && await GetPolicy(sourcePolicy).ReadPredicateAsync(token) is { } predicate)
-            sourceRows = sourceRows.Where(predicate);
-        if (definition.HasDataScopeResource)
-        {
-            var sourcePlan = await readPlans.GetReadPlanAsync(resourceKey, token);
-            if (sourcePlan.Predicate is not null) sourceRows = sourceRows.Where(sourcePlan.Predicate);
-        }
-        var sourceResource = resources.FindByResourceKey(resourceKey);
-        if (sourceResource is not null)
-        {
-            var sourceConditions = customizers.SingleOrDefault(c => c.ResourceKey == resourceKey)?.BuildConditions(sourceResource, new()) ?? [];
-            sourceRows = ApplyEntityConditions(sourceRows, definition.Model.LogicalKey, sourceConditions);
-        }
+        var sourcePredicate = definition.Metadata.PolicyKey is { } sourcePolicy ? await GetPolicy(sourcePolicy).ReadPredicateAsync(token) : null;
+        var sourceRows = await sourceScopes.RowsAsync(definition, sourcePredicate, token);
         var sourceSql = SqlFor(sourceRows.Select(row => EF.Property<string>(row, "LID")), parameters);
         var linkEntity = Entity(definition.Model.LogicalKey);
         var linkTable = Table(linkEntity);
@@ -240,18 +210,7 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
     }
 
     // 端点授权与显式业务条件共同进入数据库，不继承独立列表的临时查询。
-    private async Task<IQueryable<Dictionary<string, object?>>> EndpointRowsAsync(LinkQueryEndpoint endpoint, CancellationToken token)
-    {
-        var rows = db.Set<Dictionary<string, object?>>(endpoint.Model.LogicalKey).AsNoTracking();
-        var plan = await readPlans.GetReadPlanAsync(endpoint.ResourceKey, token);
-        if (plan.Predicate is not null) rows = rows.Where(plan.Predicate);
-        if (endpoint.ConstraintKey is { } key)
-        {
-            var constraint = constraints.SingleOrDefault(c => c.Key == key) ?? throw new InvalidOperationException("LINK_QUERY_ENDPOINT_CONSTRAINT_MISSING");
-            rows = rows.Where(await constraint.ReadPredicateAsync(endpoint, token) ?? throw new InvalidOperationException("LINK_QUERY_ENDPOINT_CONSTRAINT_MISSING"));
-        }
-        return rows;
-    }
+    private Task<IQueryable<Dictionary<string, object?>>> EndpointRowsAsync(LinkQueryEndpoint endpoint, CancellationToken token) => endpointScopes.RowsAsync(endpoint, token);
 
     // 公共筛选值沿标准条件结构；未声明列、操作或值类型拒绝而不是忽略。
     private static IReadOnlyList<PlatformQueryCondition> BuildConditions(LinkQueryDefinition definition, StandardCrudListQuery query)
@@ -312,12 +271,6 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
         var byId = result.ToDictionary(r => r.LinkId, StringComparer.Ordinal);
         return rows.Select(r => byId[r.LinkId]).ToArray();
     }
-
-    // 已有源 QueryCustomizer 与统一 EF 条件翻译保留在数据库侧，错误继续传播。
-    private IQueryable<Dictionary<string, object?>> ApplyEntityConditions(IQueryable<Dictionary<string, object?>> rows, string model,
-        IReadOnlyList<StandardCrudQueryCondition> conditions) => EfPlatformQueryExecutor.ApplyConditions(rows,
-        new PlatformQueryDescriptor { ResourceKey = model, ModelName = model, IdField = "LID", AllowedModelFields = db.PersistencePlan.Models.Single(m => m.LogicalKey == model).Fields.Select(f => f.Name).ToArray() },
-        Entity(model), conditions.Select(c => new PlatformQueryCondition(c.Field, c.Operator, c.Value, c.GroupKey, c.GroupOperator)).ToArray());
 
     // EF 输出参数通过已存在的 SQL token 重命名器隔离，保留数据库类型及参数化值。
     private static string SqlFor(IQueryable<string> rows, List<DbParameter> parameters)

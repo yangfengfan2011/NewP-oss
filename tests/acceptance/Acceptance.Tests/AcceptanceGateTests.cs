@@ -313,6 +313,56 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通账号搜索全部可读出现路径并使用正式driver定位同名文件夹")]
+    public async Task NativeWorkspaceSearch_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-workspace-search");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseCompositionLifecycle: false);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
+            browserJourney: async (page, token) =>
+            {
+                var driver = new WorkspacePageDriver(page);
+                Task CaptureAsync(string name) => page.ScreenshotAsync(new()
+                { Path = Path.Combine(root, name), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                var target = "搜索目标目录 " + runId[..8];
+                var folder = fixture.ExistingFolderName;
+                await driver.OpenAsync();
+                await driver.SelectRootAsync("公共空间");
+                await driver.CreateFolderAsync(target);
+                await driver.SearchAndSelectFolderAsync(folder, ["公共空间", folder]);
+                await driver.CopyFolderFromTreeContextMenuAsync(folder, selectedOnly: true);
+                await driver.SelectTreePathAsync("公共空间", target);
+                await driver.PasteReferencesAsync(folder);
+                var address = await driver.SearchAndSelectFolderAsync(folder, ["公共空间", target, folder],
+                    () => CaptureAsync("search-distinct-paths.png"));
+                await new StandardCrudPageDriver(page).WaitForRowAsync(fixture.ExistingDocumentName);
+                await CaptureAsync("search-located-content.png");
+                // 两条同名出现位置已展开；正式动作明确使用搜索选中的那条。
+                await driver.CopyFolderFromTreeContextMenuAsync(folder, selectedOnly: true);
+                var localizedRead = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+                    && new Uri(response.Url).AbsolutePath == "/api/links/workspace.content");
+                await driver.SelectLanguageAsync("English");
+                var localizedResponse = await localizedRead;
+                if (!localizedResponse.Ok) throw new InvalidOperationException($"切换语言后的列表读取失败：{localizedResponse.Status}");
+                await localizedResponse.FinishedAsync();
+                await new StandardCrudPageDriver(page).WaitForRowAsync(fixture.ExistingDocumentName);
+                var englishSearch = page.GetByRole(AriaRole.Textbox, new() { Name = "Search nodes", Exact = true });
+                await englishSearch.FillAsync("");
+                var searchRead = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+                    && new Uri(response.Url).AbsolutePath == "/api/trees/workspace.structure/search");
+                await englishSearch.FillAsync(folder);
+                var searchResponse = await searchRead;
+                if (!searchResponse.Ok) throw new InvalidOperationException($"英文搜索读取失败：{searchResponse.Status}");
+                await searchResponse.FinishedAsync();
+                await page.Locator("[aria-label='Search results']")
+                    .GetByRole(AriaRole.Button, new() { Name = "Locate node " + folder, Exact = true }).First
+                    .WaitForAsync(new() { State = WaitForSelectorState.Visible });
+                await CaptureAsync("search-distinct-paths-en.png");
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
+                    new { url = address, actor = "ordinary", journey = "workspace-search-path" }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact(RunEnvironmentVariable, "真实 Link 迁移、普通账号创建文件夹与共享树/列表/属性 driver")]
     public async Task WorkspaceFolderCreation_UsesFormalDriver()
     {

@@ -7,6 +7,46 @@ namespace ICP.Platform.Acceptance.Tests;
 
 public sealed class WorkspacePageDriverTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "正式树动作driver按rc-tree真实选中class区分同名出现，无服务器或端口")]
+    public async Task SelectedFolderAction_UsesTheSelectedOccurrenceWithoutAriaSelected()
+    {
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new()
+        {
+            Headless = true,
+            ExecutablePath = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_CHROMIUM_EXECUTABLE")
+                ?? @"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        });
+        var page = await browser.NewPageAsync();
+        page.SetDefaultTimeout(1_000);
+        await page.RouteAsync("http://workspace.test/**", async route =>
+        {
+            if (route.Request.Method == "POST")
+                await route.FulfillAsync(new() { ContentType = "application/json", Body = "{}" });
+            else await route.FulfillAsync(new() { ContentType = "text/html", Body = """
+                <meta charset="utf-8"><aside aria-label="结构树"><div role="tree">
+                  <div role="treeitem" aria-label="共享目录" id="first"><span>共享目录</span></div>
+                  <div role="treeitem" aria-label="共享目录" id="selected" class="ant-tree-treenode-selected"><span>共享目录</span></div>
+                </div></aside>
+                <section aria-label="节点内容"><h2>共享目录</h2><table class="ant-table"><tr><td>内容</td></tr></table></section>
+                <div role="menu" hidden><button role="menuitem">复制</button></div>
+                <script>
+                  document.querySelectorAll('[role=treeitem] span').forEach(title=>title.oncontextmenu=event=>{
+                    event.preventDefault(); window.contextTarget=title.parentElement.id;
+                    document.querySelector('[role=menu]').hidden=false;
+                  });
+                  document.querySelector('[role=menuitem]').onclick=async()=>{
+                    await fetch('/api/workspace/content/clipboard/validate',{method:'POST'});
+                    document.querySelector('[role=menu]').hidden=true;
+                  };
+                </script>
+                """ });
+        });
+        await page.GotoAsync("http://workspace.test/");
+        await new WorkspacePageDriver(page).CopyFolderFromTreeContextMenuAsync("共享目录", selectedOnly: true);
+        Assert.Equal("selected", await page.EvaluateAsync<string>("window.contextTarget"));
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "批量删除 driver 复用共享确认按钮的 AntD 空格兼容定位，无服务器或端口")]
     public async Task BatchDelete_UsesSharedSpacedConfirmationButton()
     {

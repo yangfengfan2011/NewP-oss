@@ -50,7 +50,7 @@ export type TreeChange = { kind: 'unrelated' } | { kind: 'unknown' } | {
 };
 /** Provider 明确目标不存在；与权限、网络及路径损坏失败区分。 */
 export class TreeNodeNotFoundError extends Error {}
-export interface TreeNodePathItem { nodeKey: string; label: string }
+export interface TreeNodePathItem { nodeKey: string; label: string; labelKey?: string }
 export interface TreeProviderBinding {
   key: string;
   roots: (treeScope: Record<string, unknown>, signal?: AbortSignal) => Promise<TreeNodeDescriptor[]>;
@@ -70,9 +70,16 @@ export interface TreeView {
   /** 缺省开启搜索；关闭后宿主不挂载搜索入口或发起搜索请求。 */
   searchEnabled?: boolean;
   relationSource?: RelationTreeSource;
+  linkSource?: LinkTreeSource;
   treeActions?: TreeActionReference[];
   nodeTypes: { key: string; titleKey: string; pageRef: PageRef;
     contextMenu?: TreeActionReference[] }[];
+}
+
+/** 单一 Entity 自关联 Link 树；映射只来自已签发元数据。 */
+export interface LinkTreeSource {
+  resourceKey: string; nodeType: string; modelKey: string; labelColumn: string; orderField: string; rootPolicyKey: string;
+  rootContextMenuKeys?: string[];
 }
 /** 标准关系树只声明模型字段和父关系，不接受 SQL 或表达式。 */
 export interface RelationTreeSource {

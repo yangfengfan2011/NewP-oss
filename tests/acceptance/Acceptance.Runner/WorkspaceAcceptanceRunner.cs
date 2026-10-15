@@ -171,13 +171,12 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
                 await driver.SelectRootAsync("公共空间");
             }
             var folderName = $"工作空间旅程文件夹 {_runId[..8]}";
-            var siblingName = $"工作空间排序相邻文件夹 {_runId[..8]}";
+            var siblingName = $"工作空间复制目录 {_runId[..8]}";
+            var moveTarget = $"工作空间移动目录 {_runId[..8]}";
+            var orderNeighbor = $"工作空间排序相邻文件夹 {_runId[..8]}";
             await driver.CreateFolderAsync(siblingName);
+            await driver.CreateFolderAsync(moveTarget);
             await driver.CreateFolderAsync(folderName);
-            await driver.ExpandRootToFolderAsync("公共空间", folderName);
-            await driver.ReorderFolderAsync(folderName, "up");
-            await driver.ReorderFolderAsync(folderName, "down");
-            await driver.SelectRootAsync("公共空间");
             await CapturePresentationAsync(page, "folder-content.png");
             var properties = await driver.OpenFolderPropertiesAsync(folderName);
             await CapturePresentationAsync(page, "folder-properties.png");
@@ -200,10 +199,25 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             foreach (var file in new[] { WorkspacePageDriver.SmallMainFile() }.Concat(attachments))
                 await driver.DownloadFileAsync(file.Name, Path.Combine(_runDirectory, "download-" + file.Name));
             await driver.RestorePositionAsync(folderAddress, "公共空间", folderName);
-            await driver.CopyReferenceFromContextMenuAsync(DocumentName);
+            await driver.SearchAndSelectFolderAsync(folderName, ["公共空间", folderName],
+                () => CapturePresentationAsync(page, "folder-search-source.png"));
+            await driver.CopyFolderFromTreeContextMenuAsync(folderName, selectedOnly: true);
             await driver.SelectTreePathAsync("公共空间", siblingName);
-            await driver.PasteReferencesAsync(DocumentName);
-            await driver.SelectTreePathAsync("公共空间", folderName);
+            await driver.PasteReferencesAsync(folderName);
+            await driver.SelectTreePathAsync("公共空间", moveTarget);
+            await driver.CreateFolderAsync(orderNeighbor);
+            var searchedAddress = await driver.SearchAndSelectFolderAsync(folderName, ["公共空间", siblingName, folderName],
+                () => CapturePresentationAsync(page, "folder-search-shared-paths.png"));
+            await driver.CutFolderFromTreeContextMenuAsync(folderName, selectedOnly: true);
+            await driver.SelectTreePathAsync("公共空间", moveTarget);
+            await driver.PasteCutReferencesAsync(folderName);
+            await driver.RestoreMissingPositionAsync(searchedAddress);
+            await driver.SearchAndSelectFolderAsync(folderName, ["公共空间", moveTarget, folderName]);
+            await driver.ReorderFolderAsync(folderName, "up", selectedOnly: true);
+            await driver.SelectTreePathAsync("公共空间", moveTarget);
+            await driver.RemoveSelectedReferencesAsync([folderName, orderNeighbor],
+                _ => CapturePresentationAsync(page, "remove-references-confirm.png"));
+            await driver.SearchAndSelectFolderAsync(folderName, ["公共空间", folderName]);
             await driver.RemoveReferenceAsync(PartName);
             await driver.CreateObjectAsync("零组件", PartCode + "-NEXT", PartName + " 新建");
             await CapturePresentationAsync(page, "folder-content-before-edit.png");
@@ -213,7 +227,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             await driver.DeleteSelectedAsync(DocumentName + " 已编辑", PartName + " 已编辑");
             await driver.SelectRootAsync("公共空间");
             await driver.EditObjectAsync(folderName, folderName + " 已编辑");
-            await driver.DeleteSelectedAsync(siblingName, folderName + " 已编辑");
+            await driver.DeleteSelectedAsync(siblingName, moveTarget, folderName + " 已编辑");
             await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "browser.json"),
                 new { url = page.Url, actor = "ordinary", createdFolder = folderName, includeSpaceLifecycle }, token);
         }

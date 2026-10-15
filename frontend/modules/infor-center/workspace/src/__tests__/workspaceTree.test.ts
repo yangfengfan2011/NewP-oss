@@ -1,10 +1,13 @@
 import { expect, it, vi } from 'vitest';
 import { createWorkspaceTreeProvider, workspacePageInputs } from '../workspaceTree';
 
-const roots = [
+const spaces = [
   { spaceId: 'public', spaceKind: 'Public', rootFolderId: 'root-public', name: '公共空间' },
   { spaceId: 'mine', spaceKind: 'Personal', rootFolderId: 'root-mine', name: '个人空间' },
 ];
+const roots = spaces.map(space => ({ nodeKey: `${space.spaceId}:${space.rootFolderId}`, nodeType: 'folder', label: space.name,
+  labelKey: `Workspace.${space.spaceKind}`, hasChildren: false, contextMenuKeys: ['paste', 'clearClipboard'],
+  context: { spaceId: space.spaceId, rootFolderId: space.rootFolderId, id: space.rootFolderId, linkIds: [] } }));
 it('keeps roots under the existing folder feature scope while suppressing node mutation menus', async () => {
   const request = vi.fn(async () => new Response(JSON.stringify(roots)));
   const values = await createWorkspaceTreeProvider(request).roots({ kind: 'currentUser', featurePosition: 'read' });
@@ -26,7 +29,7 @@ it.each([
 ])('reports a missing %s root after ensure succeeds and retries only reads', async (missingKind, reasonKey) => {
   let unavailable = true;
   const request = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => new Response(JSON.stringify(
-    init?.method === 'POST' ? { initialized: true } : unavailable ? roots.filter(space => space.spaceKind !== missingKind) : roots,
+    init?.method === 'POST' ? { initialized: true } : unavailable ? roots.filter(root => root.labelKey !== `Workspace.${missingKind}`) : roots,
   )));
   const provider = createWorkspaceTreeProvider(request);
   const scope = { kind: 'currentUser', featurePosition: 'workspace-entry' };
@@ -48,18 +51,15 @@ it('prepares the current account once and retries only reads after a successful 
   const scope = { kind: 'currentUser', featurePosition: 'workspace-entry' };
   await expect(provider.roots(scope)).rejects.toThrow('read offline');
   const nodes = await provider.roots(scope);
-  expect(nodes.map(node => node.context)).toEqual(roots.map(space => ({ spaceId: space.spaceId, rootFolderId: space.rootFolderId, id: space.rootFolderId, linkIds: [] })));
+  expect(nodes.map(node => node.context)).toEqual(roots.map(root => root.context));
   expect(request.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
   expect(nodes.map(node => node.nodeKey)).toEqual(['public:root-public', 'mine:root-mine']);
   expect(nodes.every(node => !node.hasChildren)).toBe(true);
   expect(new Headers(request.mock.calls[0][1]?.headers).get('X-NewP-Feature')).toBe('workspace-entry');
-  const count = request.mock.calls.length;
-  await expect(provider.search(scope, 'x', 1, 20)).rejects.toThrow();
-  expect(request).toHaveBeenCalledTimes(count);
 });
 
 it('rejects a stale or forged root occurrence instead of returning another path', async () => {
-  const provider = createWorkspaceTreeProvider(async () => new Response(JSON.stringify({ id: 'current-root', fields: { ENAME: '当前根' } })));
+  const provider = createWorkspaceTreeProvider(async () => new Response('', { status: 404 }));
   await expect(provider.path({ kind: 'currentUser', featurePosition: 'read' }, 'mine:stale-root')).rejects.toThrow();
   await expect(provider.roots({ kind: 'global', subjectId: 'other' })).rejects.toThrow();
 });
@@ -67,11 +67,11 @@ it('rejects a stale or forged root occurrence instead of returning another path'
 it('keeps the complete ordered occurrence chain and loads only the direct folder layer', async () => {
   const request = vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input), 'http://localhost');
-    if (url.pathname.endsWith('/path')) return new Response(JSON.stringify({ folderIds: ['root', 'parent', 'shared'], names: ['公共空间', '父级', '共享文件夹'] }));
-    expect(url.pathname).toBe('/api/workspace/content/children');
-    expect(url.searchParams.get('linkIds')).toBe('["first"]');
-    expect([...url.searchParams.keys()]).toEqual(['spaceId', 'rootFolderId', 'linkIds']);
-    return new Response(JSON.stringify({ items: [{ linkId: 'shared-link', associatedObject: { id: 'shared' }, fields: { Name: '共享文件夹' }, hasChildren: true }] }));
+    if (url.pathname.endsWith('/path')) return new Response(JSON.stringify([{ nodeKey: 'space:root', label: '公共空间' }, { nodeKey: 'space:root:first', label: '父级' }, { nodeKey: 'space:root:first:shared-link', label: '共享文件夹' }]));
+    expect(url.pathname).toBe('/api/trees/workspace.structure/children');
+    expect(url.searchParams.get('nodeKey')).toBe('space:root:first');
+    expect([...url.searchParams.keys()]).toEqual(['scope', 'nodeKey']);
+    return new Response(JSON.stringify([{ nodeKey: 'space:root:first:shared-link', nodeType: 'folder', label: '共享文件夹', hasChildren: true, context: { spaceId: 'space', rootFolderId: 'root', linkIds: ['first', 'shared-link'], id: 'shared' } }]));
   });
   const provider = createWorkspaceTreeProvider(request); const scope = { kind: 'currentUser', featurePosition: 'read' };
   const nodes = await provider.children(scope, 'space:root:first');
@@ -82,13 +82,28 @@ it('keeps the complete ordered occurrence chain and loads only the direct folder
   expect(await provider.resolveChange({ resourceKey: 'workspace.folder', operation: 'create', id: '' }, scope)).toEqual({ kind: 'unknown' });
 });
 
-it('gives shared descendants distinct occurrence keys even when the Entity and terminal LID are the same', async () => {
-  const request = vi.fn(async () => new Response(JSON.stringify({ items: [{ linkId: 'same-link', associatedObject: { id: 'same-child' }, fields: { Name: '共享后代' }, hasChildren: false }] })));
-  const provider = createWorkspaceTreeProvider(request); const scope = { kind: 'currentUser', featurePosition: 'read' };
-  const first = (await provider.children(scope, 'public:root:a:a-shared'))[0];
-  const second = (await provider.children(scope, 'public:root:b:b-shared'))[0];
-  expect(first.context?.id).toBe(second.context?.id);
-  expect(first.nodeKey).toBe('public:root:a:a-shared:same-link');
-  expect(second.nodeKey).toBe('public:root:b:b-shared:same-link');
-  expect(first.nodeKey).not.toBe(second.nodeKey);
+it('searches all occurrences with the trusted feature and preserves every prefix in nodes and paths', async () => {
+  const scope = { kind: 'currentUser', featurePosition: 'workspace-entry' };
+  const controller = new AbortController();
+  const request = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input), 'http://localhost');
+    expect(url.pathname).toBe('/api/trees/workspace.structure/search');
+    expect(Object.fromEntries(url.searchParams)).toEqual({ scope: 'currentUser', keyword: '共享%_', page: '2', pageSize: '20' });
+    expect(init?.signal).toBe(controller.signal);
+    expect(new Headers(init?.headers).get('X-NewP-Feature')).toBe('workspace-entry');
+    return new Response(JSON.stringify({ items: ['a', 'b'].map(prefix => ({
+      node: { nodeKey: `public:root:${prefix}:shared-link`, nodeType: 'folder', label: '共享%_', hasChildren: false,
+        context: { spaceId: 'public', rootFolderId: 'root', linkIds: [prefix, 'shared-link'], id: 'shared' } },
+      path: [{ nodeKey: 'public:root', label: '公共空间', labelKey: 'Workspace.Public' }, { nodeKey: `public:root:${prefix}`, label: prefix },
+        { nodeKey: `public:root:${prefix}:shared-link`, label: '共享%_' }],
+    })), total: 22, page: 2, pageSize: 20 }));
+  });
+  const result = await createWorkspaceTreeProvider(request).search(scope, '共享%_', 2, 20, controller.signal);
+  expect(result.total).toBe(22);
+  expect(result.items.map(item => item.node.nodeKey)).toEqual(['public:root:a:shared-link', 'public:root:b:shared-link']);
+  expect(result.items.map(item => item.path.map(part => part.nodeKey))).toEqual([
+    ['public:root', 'public:root:a', 'public:root:a:shared-link'], ['public:root', 'public:root:b', 'public:root:b:shared-link'],
+  ]);
+  expect(result.items[0].path[0]).toMatchObject({ labelKey: 'Workspace.Public' });
+  expect(result.items[0].node.context).toEqual({ spaceId: 'public', rootFolderId: 'root', linkIds: ['a', 'shared-link'], id: 'shared' });
 });

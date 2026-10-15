@@ -40,7 +40,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     internal string ExistingName => "独立安装旧零组件 " + runId[..8];
     internal string ExistingFolderName => "归组旧文件夹 " + runId[..8];
     private string ExistingDocumentCode => "ACC-OLD-D-" + runId[..8];
-    private string ExistingDocumentName => "归组旧图文档 " + runId[..8];
+    internal string ExistingDocumentName => "归组旧图文档 " + runId[..8];
     private string? _oldDocumentId;
     private string? _oldFolderId;
     private WorkspaceFolderPosition? _documentPosition;

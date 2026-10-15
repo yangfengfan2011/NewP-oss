@@ -55,12 +55,19 @@ export function validateCompositionCandidate(modules: FrontendModule[], metadata
     if (view.mode === 'tree') {
       const tree = view as unknown as TreeView;
       if (tree.searchEnabled !== undefined && typeof tree.searchEnabled !== 'boolean') throw new Error('searchEnabled 必须为布尔值');
-      if (tree.providerKey === relationTreeProviderKey) {
+      if (tree.linkSource) {
+        if (tree.relationSource || tree.nodeTypes.length !== 1 || tree.nodeTypes[0].key !== tree.linkSource.nodeType
+          || ['resourceKey', 'nodeType', 'modelKey', 'labelColumn', 'orderField', 'rootPolicyKey'].some(key => !tree.linkSource?.[key as keyof typeof tree.linkSource])) throw new Error('无效 Link 树配置');
+        if (tree.linkSource.rootContextMenuKeys?.some(key => !tree.nodeTypes[0].contextMenu?.some(menu => menu.key === key))) throw new Error('无效根菜单引用');
+      } else if (tree.providerKey !== relationTreeProviderKey && tree.relationSource) {
+        throw new Error('自定义 Provider 不能声明 relationSource');
+      } else if (tree.providerKey === relationTreeProviderKey) {
         if (!tree.relationSource?.nodes.length
           || tree.relationSource.nodes.length !== tree.nodeTypes.length
           || new Set(tree.relationSource.nodes.map(node => node.key)).size !== tree.nodeTypes.length
           || tree.relationSource.nodes.some(node => !tree.nodeTypes.some(type => type.key === node.key))) throw new Error('无效标准关系树配置');
-      } else if (!modules.some(module => module.treeProviders?.some(provider => provider.key === tree.providerKey))) throw new Error('缺少树 Provider binding');
+      }
+      if (tree.providerKey !== relationTreeProviderKey && !modules.some(module => module.treeProviders?.some(provider => provider.key === tree.providerKey))) throw new Error('缺少树 Provider binding');
       if (!tree.nodeTypes.length || new Set(tree.nodeTypes.map(item => item.key)).size !== tree.nodeTypes.length) throw new Error('重复或缺少节点类型');
       const checkActions = (actions: TreeView['treeActions']) => {
         if (!actions) return;

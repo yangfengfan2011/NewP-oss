@@ -112,7 +112,7 @@ public static class RelationTreeMetadata
             {
                 using var document = JsonDocument.Parse(snapshot.ReadFile(path));
                 if (!document.RootElement.TryGetProperty("view", out var view)
-                    || !view.TryGetProperty("providerKey", out var provider) || provider.GetString() != ProviderKey) continue;
+                    || !view.TryGetProperty("providerKey", out var provider) || provider.GetString() != ProviderKey || view.TryGetProperty("linkSource", out _)) continue;
                 definitions.Add(new(module.ModuleId, view.GetProperty("key").GetString()!, Read(view)));
             }
         }

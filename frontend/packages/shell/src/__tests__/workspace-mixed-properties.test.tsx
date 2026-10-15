@@ -1,3 +1,4 @@
+import { workspaceTreeRoots, workspaceTreePath, workspaceTreeChildren } from '../test-support/workspaceTreeFixtures';
 // @vitest-environment jsdom
 import { loadComponentSource, readComponentJson } from '../../test-support/componentTestInputs';
 import type { FrontendBehaviorBindings, StandardCrudResourceRegistration } from '@icp-platform/sdk';
@@ -62,12 +63,12 @@ async function renderMixedProperties(type: 'part' | 'document') {
     if (url.pathname.endsWith('antiforgery-token')) return json({ requestToken: 'token' });
     if (url.pathname.endsWith('current-user')) return json(user);
     if (url.pathname.endsWith('/personal/ensure')) return json({ initialized: true });
-    if (url.pathname === '/api/workspace/spaces') return json([
+    if (url.pathname === '/api/trees/workspace.structure/roots') return json(workspaceTreeRoots([
       { spaceId: 'public', spaceKind: 'Public', rootFolderId: 'root', name: '公共空间', hasChildren: true },
       { spaceId: 'personal', spaceKind: 'Personal', rootFolderId: 'personal-root', name: '个人空间' },
-    ]);
-    if (url.pathname.endsWith('/path')) return json({ folderIds: ['root', 'shared'], names: ['公共空间', '当前共享文件夹'] });
-    if (url.pathname.endsWith('/children')) return json({ items: [{ linkId: 'shared-link', associatedObject: { id: 'shared' }, fields: { Name: '当前共享文件夹' }, hasChildren: false }] });
+    ]));
+    if (url.pathname.endsWith('/path')) return json(workspaceTreePath(url.searchParams.get('nodeKey')!, ['root', 'shared'], ['公共空间', '当前共享文件夹']));
+    if (url.pathname.endsWith('/children')) return json(workspaceTreeChildren(url.searchParams.get('nodeKey')!, [{ linkId: 'shared-link', associatedObject: { id: 'shared' }, fields: { Name: '当前共享文件夹' }, hasChildren: false }]));
     if (url.pathname === `/api/workspace/content/${type === 'part' ? 'parts' : 'documents'}`) {
       writes.push(input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body)));
       return json({ succeeded: true });

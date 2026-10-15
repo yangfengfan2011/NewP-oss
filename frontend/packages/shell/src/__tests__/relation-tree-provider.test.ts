@@ -3,6 +3,7 @@ import type { TreeView } from '@icp-platform/sdk';
 import { TreeNodeNotFoundError } from '@icp-platform/sdk';
 import { createRelationTreeProvider } from '../composition/relationTreeProvider';
 import organizationTree from '../../../../modules/platform/organization/metadata/views/OrganizationStructure.view.json';
+import workspaceTree from '../../../../modules/infor-center/workspace/metadata/views/WorkspaceStructure.view.json';
 
 const { fetchMock } = vi.hoisted(() => ({ fetchMock: vi.fn() }));
 vi.mock('@icp-platform/core', () => ({ platformFetch: fetchMock }));
@@ -85,4 +86,16 @@ it('reloads the real filtered organization tree while retaining declared parent 
     .toMatchObject({ kind: 'reload', beforeLocation: { parentNodeKey: 'company:c' }, afterLocation: { parentNodeKey: 'department:parent' } });
   expect(await provider.resolveChange({ resourceKey: 'organization.person', operation: 'delete', id: 'p' }, scope))
     .toEqual({ kind: 'unknown' });
+});
+
+it('uses standard Link source reads for the real Workspace view without an entry wrapper', async () => {
+  const provider = createRelationTreeProvider({ ...workspaceTree.view, providerKey: 'platform.relations' } as unknown as TreeView, 'formal-entry');
+  const currentUser = { kind: 'currentUser' }; const signal = new AbortController().signal;
+  const key = 'space:root:parent-link:chosen-link';
+  await provider.roots(currentUser, signal); await provider.children(currentUser, key, signal);
+  await provider.path(currentUser, key, signal); await provider.search(currentUser, '共享', 2, 20, signal);
+  expect(fetchMock.mock.calls.map(([url]) => new URL(url, 'http://localhost').pathname)).toEqual(['roots', 'children', 'path', 'search'].map(operation => `/api/trees/workspace.structure/${operation}`));
+  expect(fetchMock.mock.calls.every(([, options]) => options.headers['X-NewP-Feature'] === 'formal-entry' && options.signal === signal)).toBe(true);
+  expect(new URL(fetchMock.mock.calls[2][0], 'http://localhost').searchParams.get('nodeKey')).toBe(key);
+  expect(await provider.resolveChange({ resourceKey: 'workspace.content', operation: 'delete', id: 'chosen-link' }, currentUser)).toEqual({ kind: 'unknown' });
 });

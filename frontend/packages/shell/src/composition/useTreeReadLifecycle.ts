@@ -31,6 +31,8 @@ export interface TreeReadLifecycle {
   branchErrors: Readonly<Record<string, unknown>>;
   /** 树内创建后重建右侧页面实例的身份。 */
   contentEpoch: number;
+  /** 已知树变化使分页搜索从第一页重新读取，不枚举未加载分支。 */
+  searchEpoch: number;
   select: (nodeKey: string, after?: () => void) => void;
   locate: (nodeKey: string) => void;
   expand: (nodeKeys: readonly string[]) => void;
@@ -62,6 +64,7 @@ export function useTreeReadLifecycle({
   const selectionGeneration = useRef(0);
   const pendingLocation = useRef<Promise<void> | null>(null);
   const [selectionEpoch, setSelectionEpoch] = useState(0);
+  const [searchEpoch, setSearchEpoch] = useState(0);
   const pendingChanges = useRef(new Map<string | symbol, PendingTreeChange>());
   const receivedChanges = useRef(new WeakSet<CompositionChange>());
   const activeRef = useRef(active);
@@ -249,6 +252,7 @@ export function useTreeReadLifecycle({
         impact = await provider.resolveChange(change, treeScope);
       } catch (failure) {
         if (scopeSignal.aborted) return;
+        setSearchEpoch(value => value + 1);
         pendingChanges.current.set(unknownChangeKey, { impact: { kind: 'unknown' }, selectCreated: false });
         if (!activeRef.current) return;
         setError({ failure, saved: true });
@@ -256,6 +260,7 @@ export function useTreeReadLifecycle({
       }
       if (scopeSignal.aborted) return;
       if (impact.kind === 'unrelated') return;
+      setSearchEpoch(value => value + 1);
       const key = impact.kind !== 'unknown' ? impact.nodeKey : unknownChangeKey;
       const previous = pendingChanges.current.get(key);
       const affectedParents = new Set(previous?.affectedParents ?? []);
@@ -330,7 +335,7 @@ export function useTreeReadLifecycle({
 
   return {
     snapshot: { roots, branches, selected, expanded },
-    error, locationError, locationNotice, branchErrors, contentEpoch: selectionEpoch,
+    error, locationError, locationNotice, branchErrors, contentEpoch: selectionEpoch, searchEpoch,
     select,
     locate: key => leave(() => { void readLocation(key); }),
     expand: keys => setExpanded([...keys]),

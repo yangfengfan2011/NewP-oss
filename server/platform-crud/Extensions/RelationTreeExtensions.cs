@@ -2,6 +2,7 @@ using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Runtime;
+using ICP.Platform.Crud.LinkQueries;
 using ICP.Platform.Kernel.ModulePlanning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
@@ -26,6 +27,8 @@ public static class RelationTreeExtensions
         services.AddSingleton(new Catalog(trees, featureTrees));
         services.AddScoped<RelationTreeSql>();
         services.AddScoped<RelationTreeReader>();
+        services.AddSingleton(new LinkTreeCatalog(LinkTreeMetadata.Project(plan)));
+        services.AddScoped<LinkTreeReader>();
         return services;
     }
 
@@ -69,6 +72,41 @@ public static class RelationTreeExtensions
                         return result is null ? Results.NotFound() : Results.Ok(result);
                     }).WithMetadata(new EndpointModuleAttribute(tree.ModuleId)).RequireAuthorization(catalog.FeatureTrees.Contains(tree.ViewKey)
                         ? new RequireFeatureAttribute("tree:" + tree.ViewKey) : new DenyAllAttribute("该关系树没有活动功能声明。"));
+            }
+        }
+        var linkTrees = endpoints.ServiceProvider.GetRequiredService<LinkTreeCatalog>().Definitions;
+        if (trees.Select(tree => tree.ViewKey).Concat(linkTrees.Select(tree => tree.ViewKey)).Distinct(StringComparer.Ordinal).Count() != trees.Count + linkTrees.Count)
+            throw new InvalidOperationException("Duplicate tree query source.");
+        foreach (var tree in linkTrees)
+        {
+            var linkReader = scope.ServiceProvider.GetRequiredService<LinkTreeReader>();
+            linkReader.Validate(tree);
+            var scopeKind = linkReader.ScopeKind(tree);
+            foreach (var operation in new[] { "roots", "children", "path", "search" })
+            {
+                endpoints.MapGet("/api/trees/" + Uri.EscapeDataString(tree.ViewKey) + "/" + operation,
+                    async (HttpContext context, LinkTreeReader reader, CancellationToken token) =>
+                    {
+                        try
+                        {
+                            var query = context.Request.Query;
+                            var allowed = operation switch { "roots" => new[] { "scope" }, "search" => ["scope", "keyword", "page", "pageSize"], _ => ["scope", "nodeKey"] };
+                            if (query.Any(pair => !allowed.Contains(pair.Key, StringComparer.Ordinal) || pair.Value.Count != 1) || query["scope"] != scopeKind)
+                                throw new LinkQueryException(400, "Platform.TreeInvalidQuery");
+                            if (operation == "roots") return Results.Ok(await reader.RootsAsync(tree, token));
+                            if (operation == "search")
+                            {
+                                var page = 1; var size = 20;
+                                if (query.TryGetValue("page", out var pageValue) && !int.TryParse(pageValue, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out page)
+                                    || query.TryGetValue("pageSize", out var sizeValue) && !int.TryParse(sizeValue, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out size))
+                                    throw new LinkQueryException(400, "Platform.TreeInvalidPage");
+                                return Results.Ok(await reader.SearchAsync(tree, query["keyword"].ToString(), page, size, token));
+                            }
+                            var position = LinkTreeNodeKey.Decode(query["nodeKey"].ToString());
+                            return Results.Ok(operation == "children" ? await reader.ChildrenAsync(tree, position, token) : await reader.PathAsync(tree, position, token));
+                        }
+                        catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+                    }).WithMetadata(new EndpointModuleAttribute(tree.ModuleId)).RequireAuthorization(new RequireFeatureAttribute("tree:" + tree.ViewKey));
             }
         }
         return endpoints;

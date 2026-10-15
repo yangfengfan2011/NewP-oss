@@ -16,7 +16,7 @@ namespace ICP.Platform.Modules.Workspace;
 /// <summary>正式创建仅接受当前出现位置与可写字段；所有业务规则仍在应用服务。</summary>
 [ApiController, Route("api/workspace"), EndpointModule("Workspace"), PlatformRequestValidation]
 public sealed class WorkspaceContentsController(WorkspaceContents contents, WorkspaceSpaces spaces, WorkspacePositions positions,
-    ILogger<WorkspaceContentsController> logger, WorkspaceFolderScope folderScope, IObjectOperationExecutor operations, WorkspaceTreeOrder treeOrder) : ControllerBase
+    ILogger<WorkspaceContentsController> logger, WorkspaceFolderScope folderScope, IObjectOperationExecutor operations, ICP.Platform.Crud.Runtime.LinkTreeReader trees) : ControllerBase
 {
     public sealed record CreateFolderInput(WorkspacePosition Position, Dictionary<string, JsonElement> Values);
     public sealed record AddReferenceInput(WorkspacePosition Position, LinkObjectReference Target);
@@ -270,7 +270,15 @@ public sealed class WorkspaceContentsController(WorkspaceContents contents, Work
             var scope = new Dictionary<string, string?> { ["spaceId"] = spaceId, ["rootFolderId"] = rootFolderId, ["linkIds"] = linkIds };
             if (Request.Query.Any(q => !scope.ContainsKey(q.Key) || q.Value.Count != 1)) throw new LinkQueryException(400, "Workspace.InvalidPosition");
             var path = await positions.ResolveAsync(Actor(), WorkspacePositions.FromScope(scope), token);
-            return Results.Ok(await treeOrder.ReadChildrenAsync(Actor(), path.FolderId, token));
+            var nodes = await trees.ChildrenAsync("workspace.structure", new(spaceId, rootFolderId, WorkspacePositions.FromScope(scope).LinkIds), token);
+            var parent = new LinkObjectReference(WorkspacePositions.FolderModel, path.FolderId);
+            var rows = nodes.Select(node =>
+            {
+                var child = new LinkObjectReference(WorkspacePositions.FolderModel, (string)node.Context["id"]!);
+                var lid = ((IReadOnlyList<string>)node.Context["linkIds"]!)[^1];
+                return new LinkQueryRow("workspace.content", lid, parent, child, child, new Dictionary<string, object?> { ["LID"] = lid, ["Name"] = node.Label }, node.HasChildren);
+            }).ToArray();
+            return Results.Ok(new LinkQueryResult(rows, rows.Length, 1, rows.Length, null, null));
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
     }

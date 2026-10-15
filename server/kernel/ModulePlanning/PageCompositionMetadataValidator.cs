@@ -99,8 +99,9 @@ public static class PageCompositionMetadataValidator
                 if (view.TryGetProperty("searchEnabled", out var searchEnabled) && searchEnabled.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
                     throw new JsonException("Tree searchEnabled must be boolean.");
                 var providerKey = Required(view, "providerKey");
-                if (providerKey == RelationTreeMetadata.ProviderKey) RelationTreeMetadata.Read(view);
-                else
+                if (view.TryGetProperty("linkSource", out _)) LinkTreeMetadata.Read(view);
+                else if (providerKey == RelationTreeMetadata.ProviderKey) RelationTreeMetadata.Read(view);
+                if (providerKey != RelationTreeMetadata.ProviderKey)
                 {
                     if (view.TryGetProperty("relationSource", out _)) throw new JsonException("Custom Provider cannot declare relationSource.");
                     Bind(providerKey);

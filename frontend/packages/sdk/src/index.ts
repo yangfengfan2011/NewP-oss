@@ -4,6 +4,7 @@ import type { StandardCrudResourceRegistration } from './standardCrud.types';
 export { createRecoverableCapabilityLoader } from './capabilityLoader';
 export type * from './pageComposition';
 export { TreeNodeNotFoundError } from './pageComposition';
+export { createTreeQueryTransport } from './treeQueryTransport';
 import type { PageBinding, PageInputResolverBinding, TreeProviderBinding } from './pageComposition';
 
 export interface ModuleMetadata {

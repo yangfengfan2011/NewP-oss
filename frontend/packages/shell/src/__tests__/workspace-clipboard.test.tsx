@@ -1,3 +1,4 @@
+import { workspaceTreeRoots, workspaceTreePath, workspaceTreeChildren, workspaceTreePosition } from '../test-support/workspaceTreeFixtures';
 // @vitest-environment jsdom
 import { act, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -63,13 +64,13 @@ async function mount(options: { validate?: (body: Record<string, unknown>) => Pr
     if (url.pathname.includes('antiforgery-token')) return json({ requestToken: 'token' });
     if (url.pathname.endsWith('/current-user')) return json(user());
     if (url.pathname.endsWith('/personal/ensure')) return json({ succeeded: true });
-    if (url.pathname === '/api/workspace/spaces') return json([
+    if (url.pathname === '/api/trees/workspace.structure/roots') return json(workspaceTreeRoots([
       { spaceId: 'public', spaceKind: 'Public', rootFolderId: 'root', name: '公共空间', hasChildren: true },
       { spaceId: 'mine', spaceKind: 'Personal', rootFolderId: 'personal-root', name: '个人空间' },
-    ]);
-    const links = JSON.parse(url.searchParams.get('linkIds') ?? '[]') as string[];
-    if (url.pathname.endsWith('/children')) return json({ items: links.length ? [] : ['A', 'B', 'C'].map(name => ({ linkId: `${name}-link`, associatedObject: { id: name }, fields: { Name: name }, hasChildren: false })) });
-    if (url.pathname.endsWith('/path')) return json({ folderIds: ['root', ...links.map(id => id.split('-')[0])], names: ['公共空间', ...links.map(id => id.split('-')[0])] });
+    ]));
+    const nodeKey = url.searchParams.get('nodeKey') ?? ''; const { linkIds: links } = workspaceTreePosition(nodeKey);
+    if (url.pathname.endsWith('/children')) return json(workspaceTreeChildren(nodeKey, links.length ? [] : ['A', 'B', 'C'].map(name => ({ linkId: `${name}-link`, associatedObject: { id: name }, fields: { Name: name }, hasChildren: false }))));
+    if (url.pathname.endsWith('/path')) return json(workspaceTreePath(nodeKey, ['root', ...links.map(id => id.split('-')[0])], ['公共空间', ...links.map(id => id.split('-')[0])]));
     if (url.pathname === '/api/links/workspace.content') {
       if (failedRead) { failedRead = false; return json({ code: 'HTTP_503' }, 503); }
       const source = url.searchParams.get('anchorId') === 'A';

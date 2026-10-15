@@ -1,3 +1,4 @@
+import { workspaceTreeRoots, workspaceTreePath } from '../test-support/workspaceTreeFixtures';
 // @vitest-environment jsdom
 import { loadComponentSource, readComponentJson } from '../../test-support/componentTestInputs';
 import type { FrontendBehaviorBindings } from '@icp-platform/sdk';
@@ -35,8 +36,8 @@ it.each([
     const method = input instanceof Request ? input.method : init?.method;
     if (url.pathname.endsWith('antiforgery-token')) return json({ requestToken: 'token' });
     if (url.pathname.endsWith('/personal/ensure') && method === 'POST') return json({ initialized: true });
-    if (url.pathname === '/api/workspace/spaces') return json([{ spaceId: 'public', spaceKind: 'Public', rootFolderId: 'public-root', name: '公共空间' }]);
-    if (url.pathname.endsWith('/path')) return json({ folderId: 'public-root', folderIds: ['public-root'], names: ['公共空间'] });
+    if (url.pathname === '/api/trees/workspace.structure/roots') return json(workspaceTreeRoots([{ spaceId: 'public', spaceKind: 'Public', rootFolderId: 'public-root', name: '公共空间' }]));
+    if (url.pathname.endsWith('/path')) return json(workspaceTreePath(url.searchParams.get('nodeKey')!, ['public-root'], ['公共空间']));
     if (url.pathname.startsWith('/api/links/')) return json({ items: [], total: 0, page: 1, pageSize: 20 });
     throw new Error(`Unexpected request ${method} ${url.pathname}`);
   });
@@ -61,7 +62,7 @@ it.each([
   expect(container.textContent).not.toContain('public-root');
   expect(container.querySelector('.ant-tree-title')).toBeNull();
   await act(async () => container.querySelector<HTMLButtonElement>('[role="alert"] button')!.click());
-  expect(fetcher.mock.calls.filter(([input]) => new URL(input instanceof Request ? input.url : String(input), 'http://localhost').pathname === '/api/workspace/spaces')).toHaveLength(2);
+  expect(fetcher.mock.calls.filter(([input]) => new URL(input instanceof Request ? input.url : String(input), 'http://localhost').pathname === '/api/trees/workspace.structure/roots')).toHaveLength(2);
   const writes = fetcher.mock.calls.filter(([input, init]) => (input instanceof Request ? input.method : init?.method) === 'POST');
   expect(writes).toHaveLength(1);
 });

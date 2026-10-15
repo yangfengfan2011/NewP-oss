@@ -1,6 +1,6 @@
 # 通用 Link 查询接入
 
-仅显式声明 `model.linkQuery` 的 Link 采用此能力；旧 Link、Entity 查询及标准关系树保持原协议。真实采用者 WorkspaceFolderContent 支持三类混合内容、跨空间已有对象引用，以及从三类对象属性读取直接引用文件夹。
+仅显式声明 `model.linkQuery` 的 Link 采用此能力；旧 Link、Entity 查询及 FK 关系树保持原协议。正式 Link 自关联来源也可采用平台出现树，见[标准树配置](relation-tree-configuration.md#link-多父出现树)。真实采用者 WorkspaceFolderContent 支持三类混合内容、跨空间已有对象引用，以及从三类对象属性读取直接引用文件夹。
 
 ## Authoring 与准备
 
@@ -29,7 +29,11 @@
 
 条件分组与参数翻译复用 EfPlatformQueryExecutor。各类型形成受控 SQL 分支，合并后统一计数、稳定排序和分页；缺失目标在此前排除，未知存储类型失败关闭。内部只记录损坏类型诊断及按目标范围/筛选排除的聚合数量，不记录隐藏对象标识，不在读取时修复关系。只物化本页，canonical raw/display 成对，非请求安全依赖不输出。用户与时间显示沿用真实 Model planner 和批量 resolver；类型标题来自活动词典。
 
-受信任树通过 ReadDirectLayerAsync 读取一层完整同类型关系及 hasChildren，使用相同源/端点条件，不提供 HTTP 无限列表开关，不预载整树。层规模、实际数据库往返、物化量及 SQL IO/时间由真实数据验证；此契约不声明行数或深度 SLA。
+普通 Link 与平台 Link 树共用 `LinkEndpointReadScopes` 的端点读取交集及 `LinkSourceReadScopes` 的源行交集；前者不依赖完整源策略或位置解析，避免位置服务回调树时构造依赖环。源行包含已登记 data read、同一 Customizer 条件与来源谓词；没有登记真实源资源时仍不虚构 Link 授权资源。普通 Link 继续调用原来源 Validate 与 ReadPredicate，查询/写入规则不变。
+
+树来源若有 PolicyKey，须登记唯一同键 `ILinkTreeSourceReadPolicy.ReadPredicateAsync(LinkQueryDefinition, CancellationToken)`，显式给出无 anchor/位置请求的等价关系读取条件；缺失、重复或不能等价下推的来源在树启用前失败关闭。null 只表示没有额外关系过滤，不表示不支持。平台树的 roots/children/path/search 都消费这一正式 LID 查询；精确链另核对两端真实类型、衔接及每层读取，不能伪造 Validate 请求绕过位置语义。
+
+原 `ReadDirectLayerAsync` 保留普通 Link 的可信层读取能力；平台 LinkTreeReader 独立承担标准出现树，按同一源/端点条件读取一层及 hasChildren，不提供 HTTP 无限列表开关，不预载整树。层规模、实际数据库往返、物化量及 SQL IO/时间由真实数据验证；此契约不声明行数或深度 SLA。
 
 ## 标准列表与回退
 

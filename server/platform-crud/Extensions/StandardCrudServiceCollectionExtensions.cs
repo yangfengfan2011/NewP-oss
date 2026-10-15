@@ -36,6 +36,8 @@ public static class StandardCrudServiceCollectionExtensions
             provider.GetService<ICP.Platform.Persistence.Planning.CompiledPersistencePlan>(), provider.GetRequiredService<IStandardCrudResourceRegistry>(),
             provider.GetServices<ICP.Platform.Authorization.Contracts.DataScopeResource>(), provider.GetService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>()));
         services.TryAddScoped<ICP.Platform.Crud.LinkQueries.LinkQueryReader>();
+        services.TryAddScoped<ICP.Platform.Crud.LinkQueries.LinkEndpointReadScopes>();
+        services.TryAddScoped<ICP.Platform.Crud.LinkQueries.LinkSourceReadScopes>();
         services.TryAddScoped<IEntityAuditValueProvider>(static provider =>
             new EntityAuditValueProvider(provider.GetService<IEntityAuditStampProvider>()));
         services.TryAddSingleton<IStandardCrudResourceRegistry, StandardCrudResourceRegistry>();

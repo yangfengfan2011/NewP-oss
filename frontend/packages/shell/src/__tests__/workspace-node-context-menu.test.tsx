@@ -1,3 +1,4 @@
+import { workspaceTreeRoots, workspaceTreePath, workspaceTreeChildren, workspaceTreePosition } from '../test-support/workspaceTreeFixtures';
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -30,16 +31,16 @@ it.each([['edit', 'zhs'], ['remove', 'zhs'], ['moveUp', 'zhs'], ['moveDown', 'zh
     const method = input instanceof Request ? input.method : init?.method ?? 'GET';
     if (url.pathname.includes('antiforgery-token')) return json({ requestToken: 'test' });
     if (url.pathname.endsWith('/personal/ensure')) return json({ initialized: true });
-    if (url.pathname === '/api/workspace/spaces') return json([
+    if (url.pathname === '/api/trees/workspace.structure/roots') return json(workspaceTreeRoots([
       { spaceId: 'public', spaceKind: 'Public', rootFolderId: 'root', name: '公共空间', hasChildren: present },
       { spaceId: 'mine', spaceKind: 'Personal', rootFolderId: 'personal-root', name: '个人空间' },
-    ]);
-    if (url.pathname.endsWith('/children')) return json({ items: present && url.searchParams.get('linkIds') === '[]'
-      ? [{ linkId: 'incoming-link', associatedObject: { id: 'folder-eid' }, fields: { Name: name }, hasChildren: false }] : [] });
+    ]));
+    if (url.pathname.endsWith('/children')) return json(workspaceTreeChildren(url.searchParams.get('nodeKey')!, present && workspaceTreePosition(url.searchParams.get('nodeKey')!).linkIds.length === 0
+      ? [{ linkId: 'incoming-link', associatedObject: { id: 'folder-eid' }, fields: { Name: name }, hasChildren: false }] : []));
     if (url.pathname.endsWith('/path')) {
-      const links = JSON.parse(url.searchParams.get('linkIds') ?? '[]') as string[];
+      const nodeKey = url.searchParams.get('nodeKey') ?? ''; const { linkIds: links } = workspaceTreePosition(nodeKey);
       if (links.length && !present) return json({}, 404);
-      return json({ folderIds: links.length ? ['root', 'folder-eid'] : ['root'], names: links.length ? ['公共空间', name] : ['公共空间'] });
+      return json(workspaceTreePath(nodeKey, links.length ? ['root', 'folder-eid'] : ['root'], links.length ? ['公共空间', name] : ['公共空间']));
     }
     if (url.pathname === '/api/links/workspace.content') return json({ items: [], total: 0, page: 1, pageSize: 20 });
     if (url.pathname === '/api/workspace/folders/folder-eid') return json({ fields: { ENAME: name, Description: '原说明' } });

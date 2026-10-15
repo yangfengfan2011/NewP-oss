@@ -1,3 +1,4 @@
+import { workspaceTreeRoots, workspaceTreePath, workspaceTreeChildren, workspaceTreePosition } from '../test-support/workspaceTreeFixtures';
 // @vitest-environment jsdom
 import { loadComponentSource, readComponentJson } from '../../test-support/componentTestInputs';
 import type { FrontendBehaviorBindings } from '@icp-platform/sdk';
@@ -91,19 +92,19 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
       return json(scenario === 'success' ? rootDetail('created-folder', '创建后可读', '') : { succeeded: true });
     }
     if (method === 'POST') return json(spaces()[1]);
-    if (path === '/api/workspace/spaces') return json(spaces());
-    if (path.startsWith('/api/workspace/content/path?')) {
-      const root = new URL(path, 'http://localhost').searchParams.get('rootFolderId')!;
-      const chain = JSON.parse(new URL(path, 'http://localhost').searchParams.get('linkIds')!) as string[];
-      return json({ folderId: chain.length ? 'a-folder' : root, folderIds: [root, ...chain.map(() => 'a-folder')], names: [root === 'public-root' ? '公共空间' : '个人空间', ...chain.map(() => '父A')] });
+    if (path.startsWith('/api/trees/workspace.structure/roots?')) return json(workspaceTreeRoots(spaces()));
+    if (path.startsWith('/api/trees/workspace.structure/path?')) {
+      const root = workspaceTreePosition(new URL(path, 'http://localhost').searchParams.get('nodeKey')!).rootFolderId;
+      const chain = workspaceTreePosition(new URL(path, 'http://localhost').searchParams.get('nodeKey')!).linkIds;
+      return json(workspaceTreePath(new URL(path, 'http://localhost').searchParams.get('nodeKey')!, [root, ...chain.map(() => 'a-folder')], [root === 'public-root' ? '公共空间' : '个人空间', ...chain.map(() => '父A')]));
     }
-    if (path.startsWith('/api/workspace/content/children?')) {
-      if (scenario !== 'success' || !writes.length) return json({ items: [], total: 0, page: 1, pageSize: 0 });
-      const chain = JSON.parse(new URL(path, 'http://localhost').searchParams.get('linkIds')!) as string[];
+    if (path.startsWith('/api/trees/workspace.structure/children?')) {
+      if (scenario !== 'success' || !writes.length) return json([]);
+      const chain = workspaceTreePosition(new URL(path, 'http://localhost').searchParams.get('nodeKey')!).linkIds;
       const node = (linkId: string, id: string, name: string, hasChildren = true) => ({ linkId, associatedObject: { id }, fields: { Name: name }, hasChildren });
-      return json({ items: chain.length === 0 ? [node('a', 'a-folder', '父A'), node('b', 'b-folder', '父B'), ...(referencePresent ? [node('root-shared', 'shared-folder', '已有共享文件夹')] : [])]
+      return json(workspaceTreeChildren(new URL(path, 'http://localhost').searchParams.get('nodeKey')!, chain.length === 0 ? [node('a', 'a-folder', '父A'), node('b', 'b-folder', '父B'), ...(referencePresent ? [node('root-shared', 'shared-folder', '已有共享文件夹')] : [])]
         : chain.length === 1 ? [node(`${chain[0]}-shared`, 'shared-folder', '共享文件夹')]
-          : chain.length === 2 ? [node('same-last-link', 'same-descendant', '共享后代', false)] : [] });
+          : chain.length === 2 ? [node('same-last-link', 'same-descendant', '共享后代', false)] : []));
     }
     if (path.startsWith('/api/links/workspace.content?')) {
       if (failInitialRead) { failInitialRead = false; return new Response('initial read unavailable', { status: 503 }); }
@@ -208,7 +209,7 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
     await vi.waitFor(() => expect([...container.querySelectorAll('.ant-tree-title')].filter(element => element.textContent === '共享文件夹')).toHaveLength(2));
     await expand('共享文件夹', 0); await expand('共享文件夹', 1);
     await vi.waitFor(() => expect([...container.querySelectorAll('.ant-tree-title')].filter(element => element.textContent === '共享后代')).toHaveLength(2));
-    const loadedReads = () => fetcher.mock.calls.filter(([input]) => String(input instanceof Request ? input.url : input).startsWith('/api/workspace/content/children?')).length;
+    const loadedReads = () => fetcher.mock.calls.filter(([input]) => String(input instanceof Request ? input.url : input).startsWith('/api/trees/workspace.structure/children?')).length;
     const beforeAddReads = loadedReads();
     await act(async () => [...container.querySelectorAll<HTMLElement>('.ant-tree-title')].find(item => item.textContent === '父A')!.click());
     await vi.waitFor(() => expect(container.querySelector('.np-tree-context-header h2')?.textContent).toBe('父A'));

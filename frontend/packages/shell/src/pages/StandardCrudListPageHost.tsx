@@ -523,11 +523,12 @@ function renderMetadataTableCell<TRow extends Record<string, unknown>>(
   return value == null ? '' : String(value);
 }
 
-function RowActionButtonGroup({ actions, onConfirmRequested, requested = false, active = true, close, contextMenu, closeContextMenu, contextKey = '' }: {
+function RowActionButtonGroup({ actions, onConfirmRequested, requested = false, active = true, close, contextMenu, closeContextMenu, contextKey = '', compact = false }: {
   actions: RowActionItem[]; onConfirmRequested: (key: string) => void; requested?: boolean; active?: boolean; close?: () => void;
   contextMenu?: { actionKeys: string[]; point: { x: number; y: number; focusTarget: HTMLElement } };
   closeContextMenu?: () => void;
   contextKey?: string;
+  compact?: boolean;
 }) {
   const { t } = useLocalization();
   const requestedOnce = useRef(false);
@@ -538,7 +539,7 @@ function RowActionButtonGroup({ actions, onConfirmRequested, requested = false, 
   menuExecutable.current = active && (menuOpen || Boolean(contextMenu));
   const currentActions = useRef(actions); currentActions.current = actions;
   const [eligibilityEpoch, setEligibilityEpoch] = useState(0);
-  const inlineActions = actions.filter((action) => action.inline && !action.eligibility).slice(0, 1);
+  const inlineActions = compact ? [] : actions.filter((action) => action.inline && !action.eligibility).slice(0, 1);
   const overflowActions = contextMenu ? contextMenu.actionKeys.flatMap(key => actions.filter(action => action.key === key))
     : actions.filter((action) => !inlineActions.includes(action));
   const qualifiedActions = (contextMenu ? overflowActions : actions).filter((action) => action.eligibility);
@@ -652,8 +653,8 @@ function RowActionButtonGroup({ actions, onConfirmRequested, requested = false, 
             },
           }}
         >
-          <AntdButton className="np-row-actions-more" type="link" onClick={contextMenu ? () => { closeContextMenu?.(); setOpenedContext(contextKey); } : undefined}>
-            {t('Platform.More', '更多')}
+          <AntdButton className="np-row-actions-more" type="link" aria-label={t('Platform.More', '更多')} title={t('Platform.More', '更多')} onClick={contextMenu ? () => { closeContextMenu?.(); setOpenedContext(contextKey); } : undefined}>
+            {compact ? <span aria-hidden="true" style={{ fontSize: 20, lineHeight: 1 }}>⋯</span> : t('Platform.More', '更多')}
           </AntdButton>
         </ContextActionMenu>
       ) : null}
@@ -1890,6 +1891,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       field: column.field,
       title: t(`${schema.dicKey}.${column.labelKey}`, column.labelKey),
     }));
+  const compactRowMenu = Boolean(schema.rowContextMenu?.length
+    && schema.rowActions.every((action, index) => schema.rowContextMenu?.[index] === action.key)
+    && schema.rowContextMenu.length === schema.rowActions.length);
   const standardColumns = shouldRenderActionColumn
     ? [
       ...metadataColumns,
@@ -1897,7 +1901,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         key: 'actions',
         dataIndex: 'actions',
         title: t('Platform.Actions', '操作'),
-        width: STANDARD_CRUD_ACTION_COLUMN_WIDTH,
+        width: compactRowMenu ? 64 : STANDARD_CRUD_ACTION_COLUMN_WIDTH,
         fixed: 'right' as const,
         sorter: false,
         responsive: undefined,
@@ -1911,7 +1915,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           return (
             <div style={{ display: 'grid', gap: 6 }}>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                <RowActionButtonGroup actions={rowActions} onConfirmRequested={key => {
+                <RowActionButtonGroup actions={rowActions} compact={compactRowMenu} onConfirmRequested={key => {
                   const action = rowActionDefinitions.find(item => item.key === key);
                   if (action) setRowConfirmation({ row, rowId, action });
                 }} active={host.lifecycle.active} contextKey={JSON.stringify([rowMenuScope, row])}

@@ -295,7 +295,7 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
     await vi.waitFor(() => expect(container.querySelector('tr[data-row-key="shared-folder-link"]')).not.toBeNull());
     expect(container.textContent).not.toContain('已保存，刷新失败');
     expect(references).toHaveLength(1);
-    await act(async () => [...container.querySelectorAll<HTMLElement>('.ant-table *')].find(element => element.children.length === 0 && element.textContent === '更多')!.click());
+    await act(async () => container.querySelector<HTMLButtonElement>('.ant-table button[aria-label="更多"]')!.click());
     await vi.waitFor(() => expect(document.body.textContent).toContain('移除引用'));
     await act(async () => [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(element => element.textContent === '移除引用')!.click());
     await vi.waitFor(() => expect(document.body.textContent).toContain('仅从当前文件夹移除这条引用，保留对象及文件，确定继续？'));

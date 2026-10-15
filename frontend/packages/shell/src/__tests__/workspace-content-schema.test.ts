@@ -43,7 +43,7 @@ it.each([
 
 it('projects the real Workspace row menu as references to its existing actions', () => {
   const schema = buildStandardCrudListSchema(list.view, resource, { modelDocuments: [folder, content] });
-  expect(schema.rowContextMenu).toEqual(['copy', 'cut', 'edit', 'delete', 'remove']);
+  expect(schema.rowContextMenu).toEqual(schema.rowActions.map(action => action.key));
 });
 
 it.each([null, 'edit', ['missing'], ['edit', 'edit'], ['create'], [{ key: 'edit', handlerKey: 'other' }]])(

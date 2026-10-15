@@ -419,3 +419,20 @@ it('opens a folder name at its exact tree occurrence without reading a details d
   expect(document.querySelector('.ant-drawer')).toBeNull();
   expect(page.request.mock.calls.some(([input]) => String(input instanceof Request ? input.url : input).includes('/api/workspace/folders/'))).toBe(false);
 });
+
+it('uses a compact accessible button with the same actions as the row context menu', async () => {
+  const page = await mount();
+  await page.select('A');
+  await page.waitFor(() => expect(page.container.querySelector('tbody')?.textContent).toContain('Document source'));
+  const row = [...page.container.querySelectorAll<HTMLTableRowElement>('tbody tr')].find(item => item.textContent?.includes('Document source'))!;
+  const more = row.querySelector<HTMLButtonElement>('.np-row-actions-more')!;
+  expect(more.textContent).toBe('⋯');
+  expect(more.getAttribute('aria-label')).toBe('更多');
+  const labels = () => [...document.querySelectorAll('.ant-dropdown:not(.ant-dropdown-hidden) [role=menuitem]')].map(item => item.textContent);
+  await act(async () => more.click());
+  await page.waitFor(() => expect(labels()).toContain('打开属性'));
+  const buttonActions = labels();
+  await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  await act(async () => row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 100, clientY: 100 })));
+  await page.waitFor(() => expect(labels()).toEqual(buttonActions));
+});

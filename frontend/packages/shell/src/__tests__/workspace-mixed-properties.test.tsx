@@ -230,7 +230,7 @@ it.each(['part', 'document'] as const)('opens the owning %s properties and direc
 it.each(['part', 'document'] as const)('edits %s through the current occurrence and preserves the owning input', async type => {
   const { container, edits } = await renderMixedProperties(type);
   const editableRow = container.querySelector(`tr[data-row-key="${type}-relation"]`)!;
-  await act(async () => [...editableRow.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === '更多')!.click());
+  await act(async () => [...editableRow.querySelectorAll<HTMLButtonElement>('button')].find(button => button.getAttribute('aria-label') === '更多')!.click());
   await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent === '编辑')!.click());
   await vi.waitFor(() => expect(document.querySelector<HTMLInputElement>('.ant-drawer input[id="ENAME"]')?.value).toBe('editable-name'));
   expect(document.querySelector<HTMLTextAreaElement>('.ant-drawer textarea')?.value).toBe('原说明');

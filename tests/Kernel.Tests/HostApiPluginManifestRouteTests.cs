@@ -301,7 +301,7 @@ public class HostApiPluginManifestRouteTests : IAsyncLifetime
         Assert.Equal(["Audit", "Authentication", "Authorization", "ConfigCenter", "Files", "Identity", "MetadataConfigCenter", "Organization", "Platform", "PluginOps"],
             document.RootElement.GetProperty("requiredModuleIds").EnumerateArray().Select(value => value.GetString()));
         var workspace = Assert.Single(modules, module => module.GetProperty("moduleId").GetString() == "Workspace");
-        Assert.Equal(["Document", "Part"], workspace.GetProperty("dependencies").EnumerateArray().Select(value => value.GetString()));
+        Assert.Equal(["Audit", "Document", "Part"], workspace.GetProperty("dependencies").EnumerateArray().Select(value => value.GetString()));
     }
 
     [Fact]

@@ -1133,3 +1133,25 @@ a:hover {
 .np-standard-crud-table tr[data-context-menu-pointer="true"]:focus {
   outline: none;
 }
+
+/* 标准列表占用页面剩余空间，纵向滚动交给表格体；其他页面保留原滚动方式。 */
+.np-app-layout:has(.np-page-content .np-crud-workspace) {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+.np-app-body:has(.np-page-content .np-crud-workspace),
+.np-app-content:has(.np-crud-workspace),
+.np-page-container:has(.np-crud-workspace) {
+  flex: 1;
+  min-height: 0;
+}
+.np-app-content:has(.np-crud-workspace) {
+  overflow: hidden;
+}
+.np-page-content > .sh-page:has(.np-crud-workspace) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}

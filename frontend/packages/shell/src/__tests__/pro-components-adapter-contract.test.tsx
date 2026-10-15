@@ -229,3 +229,40 @@ describe('Pro Components adapter contract', () => {
     container.remove();
   });
 });
+
+it('resizes only the standard table body while reserving toolbar, header and pagination height', async () => {
+  let height = 600;
+  const observers: Array<{ notify: () => void; targets: Set<Element> }> = [];
+  vi.stubGlobal('ResizeObserver', class {
+    targets = new Set<Element>();
+    constructor(callback: () => void) { observers.push({ notify: callback, targets: this.targets }); }
+    observe = (element: Element) => { this.targets.add(element); };
+    unobserve = (element: Element) => { this.targets.delete(element); };
+    disconnect = () => { this.targets.clear(); };
+  });
+  const clientHeight = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('np-search-table-page') ? height : 0;
+  });
+  const bounds = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    const measured = this.matches('.ant-pro-table-list-toolbar') ? 40 : this.matches('.ant-table-thead') ? 30
+      : this.matches('.np-search-table-footer') ? 44 : 0;
+    return { x: 0, y: 0, top: 0, left: 0, right: 800, bottom: measured, width: 800, height: measured, toJSON: () => ({}) };
+  });
+  const container = document.createElement('div'); document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<StrictMode><div className="np-crud-table-section"><SearchTablePage rowKey="id"
+      columns={[{ key: 'name', dataIndex: 'name', title: 'Name' }]} headerTitle="Actions" toolbar={<span>Refresh</span>}
+      request={async () => ({ data: [], total: 0, success: true })}
+      controlledResult={{ data: [{ id: 'one', name: 'One' }], total: 1, loading: false, hasLoaded: true, error: null, onRetry: () => undefined }}
+    /></div></StrictMode>));
+    expect(container.querySelector<HTMLElement>('.ant-table-body')?.style.maxHeight).toBe('486px');
+    height = 400;
+    await act(async () => { observers.filter(observer => [...observer.targets].some(element => element.classList.contains('np-search-table-page'))).forEach(observer => observer.notify()); });
+    expect(container.querySelector<HTMLElement>('.ant-table-body')?.style.maxHeight).toBe('286px');
+    expect(container.querySelector('.ant-table-body .np-search-table-footer')).toBeNull();
+  } finally {
+    await act(async () => root.unmount()); container.remove(); clientHeight.mockRestore(); bounds.mockRestore(); vi.unstubAllGlobals();
+  }
+  expect(observers.every(observer => observer.targets.size === 0)).toBe(true);
+});

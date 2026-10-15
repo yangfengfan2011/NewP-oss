@@ -104,3 +104,36 @@
     padding-inline: 12px;
   }
 }
+
+/* 树、Tab 只传递剩余高度，不承担标准列表的数据滚动。 */
+.np-composed-tabs:has(.np-crud-workspace),
+.np-composed-tabs:has(.np-crud-workspace) > .ant-tabs-content-holder,
+.np-composed-tabs:has(.np-crud-workspace) > .ant-tabs-content-holder > .ant-tabs-content,
+.np-composed-tabs:has(.np-crud-workspace) > .ant-tabs-content-holder > .ant-tabs-content > .ant-tabs-tabpane-active {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.np-tree-workspace:has(.np-crud-workspace) {
+  flex: 1;
+  min-height: 0;
+}
+.np-tree-workspace:has(.np-crud-workspace) > aside {
+  min-height: 0;
+  overflow: auto;
+}
+.np-tree-workspace:has(.np-crud-workspace) > .np-tree-content,
+.np-tree-workspace:has(.np-crud-workspace) > .np-tree-content > .np-tree-content-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.np-tree-workspace:has(.np-crud-workspace) > .np-tree-content > .np-tree-content-body {
+  overflow: auto;
+}
+.np-tree-context-header,
+.np-composed-tabs > .ant-tabs-nav {
+  flex-shrink: 0;
+}

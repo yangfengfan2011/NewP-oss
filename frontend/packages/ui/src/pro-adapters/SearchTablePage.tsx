@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -136,6 +137,8 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
 }: SearchTablePageProps<TRow>) {
   const { t, currentLanguage, supportedLanguages } = useLocalization();
   const english = supportedLanguages.find(language => language.code === currentLanguage)?.locale?.startsWith('en') === true;
+  const tablePageRef = useRef<HTMLDivElement>(null);
+  const [bodyHeight, setBodyHeight] = useState<number>();
   const [data, setData] = useState<TRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -267,8 +270,33 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
     ];
   }, [columns, effectiveQuery.sortBy, effectiveQuery.sortDirection, rowNumberStart, sortKeyAliases, t]);
 
+  // 只在标准列表的有界容器内计算表体高度，表头、工具栏和分页不参与数据滚动。
+  useLayoutEffect(() => {
+    const element = tablePageRef.current;
+    if (!element?.closest('.np-crud-table-section') || typeof ResizeObserver === 'undefined') return;
+    const measure = () => {
+      if (element.clientHeight <= 0) return;
+      const toolbarHeight = element.querySelector('.ant-pro-table-list-toolbar')?.getBoundingClientRect().height ?? 0;
+      const headerHeight = element.querySelector('.ant-table-thead')?.getBoundingClientRect().height ?? 0;
+      const footerHeight = element.querySelector('.np-search-table-footer')?.getBoundingClientRect().height ?? 0;
+      const next = Math.max(1, Math.floor(element.clientHeight - toolbarHeight - headerHeight - footerHeight));
+      setBodyHeight(previous => previous === next ? previous : next);
+    };
+    const observer = new ResizeObserver(measure);
+    const observe = () => {
+      observer.disconnect();
+      observer.observe(element);
+      element.querySelectorAll('.ant-pro-table-list-toolbar, .ant-table-thead, .np-search-table-footer').forEach(node => observer.observe(node));
+      measure();
+    };
+    const mutations = new MutationObserver(observe);
+    mutations.observe(element, { childList: true, subtree: true });
+    observe();
+    return () => { observer.disconnect(); mutations.disconnect(); };
+  }, []);
+
   return (
-    <ProConfigProvider intl={english ? enUSIntl : zhCNIntl}><div className="np-search-table-page">
+    <ProConfigProvider intl={english ? enUSIntl : zhCNIntl}><div ref={tablePageRef} className="np-search-table-page">
       <ProTable<TRow>
         key={`${effectiveQuery.sortBy ?? 'none'}:${effectiveQuery.sortDirection ?? 'none'}`}
         className={className}
@@ -298,7 +326,7 @@ export function SearchTablePage<TRow extends Record<string, unknown>>({
         tableAlertRender={false}
         tableAlertOptionRender={false}
         tableLayout="fixed"
-        scroll={{ x: 'max-content' }}
+        scroll={{ x: 'max-content', ...(bodyHeight !== undefined ? { y: bodyHeight } : {}) }}
         locale={{
           emptyText: (
             <StandardCrudListState

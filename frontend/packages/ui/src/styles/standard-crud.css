@@ -110,6 +110,11 @@
   min-height: 0;
 }
 
+/* 数据行统一压缩纵向留白，保留按钮尺寸和多行内容的自然高度。 */
+.np-crud-table-section .ant-table-wrapper .ant-table-tbody > tr.ant-table-row > td.ant-table-cell {
+  padding-block: 6px;
+}
+
 .np-standard-crud-table .ant-pro-table {
   width: 100%;
 }
@@ -180,4 +185,31 @@
 
 .np-crud-detail.ant-descriptions .ant-descriptions-view > table {
   table-layout: fixed;
+}
+
+.np-crud-workspace-content,
+.np-crud-workspace-panel,
+.np-crud-workspace-panel > .ant-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.np-crud-workspace-filter,
+.np-crud-workspace-header,
+.np-search-table-footer {
+  flex-shrink: 0;
+}
+.np-crud-table-section .np-search-table-page {
+  overflow: hidden;
+}
+.np-crud-table-section .np-search-table-page > .ant-pro-table {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Ant Table 在指定 scroll.y 后内联使用 scroll；仅溢出时显示滚动条，保留表头对齐空间。 */
+.np-crud-table-section .ant-table-wrapper .ant-table-body {
+  overflow-y: auto !important;
+  scrollbar-gutter: stable;
 }

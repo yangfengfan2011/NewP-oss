@@ -6,6 +6,7 @@ using ICP.Platform.Persistence.EfCore.ProviderTargets;
 using ICP.Platform.Persistence.Planning;
 using ICP.Platform.Persistence.ProviderTargets;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Xunit;
 
@@ -38,7 +39,8 @@ public sealed class RelationOrdinalBackfillTests
     {
         var models = new WorkspaceModelMetadataProvider().GetDefinitions();
         var plan = new CompiledPersistencePlan("candidate", "snapshot", "module", PersistenceProvider.SqlServer, "digest", [], models, []);
-        using var db = new EfPlatformDbContext(new DbContextOptionsBuilder<EfPlatformDbContext>().UseSqlServer("Server=invalid;Database=unused;Integrated Security=True").Options, plan);
+        using var db = new EfPlatformDbContext(new DbContextOptionsBuilder<EfPlatformDbContext>()
+            .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().UseSqlServer("Server=invalid;Database=unused;Integrated Security=True").Options, plan);
         var target = new EfProviderTargetSource(db, plan).Read();
         const string id = "20261014000001_Workspace_000005_TreeOrderBackfill";
         var step = new CompiledMigrationStep("000005", id, null, new string('a', 64), new string('b', 64), new string('c', 64), violation == "step" ? "safe-expand" : "data-backfill");
@@ -61,7 +63,13 @@ public sealed class RelationOrdinalBackfillTests
     {
         var models = new WorkspaceModelMetadataProvider().GetDefinitions();
         var plan = new CompiledPersistencePlan("candidate", "snapshot", "module", PersistenceProvider.SqlServer, "digest", [], models, []);
-        using var db = new EfPlatformDbContext(new DbContextOptionsBuilder<EfPlatformDbContext>().UseSqlServer("Server=invalid;Database=unused;Integrated Security=True").Options, plan);
+        var options = new DbContextOptionsBuilder<EfPlatformDbContext>()
+            .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().UseSqlServer("Server=invalid;Database=unused;Integrated Security=True").Options;
+        // 同一 provider/options 先消费已有真实基础计划，Workspace 仍必须得到自己的模型；不依赖测试发现顺序。
+        using var predecessor = new EfPlatformDbContext(options, TestPersistencePlan.CreateCurrentSqlServer());
+        Assert.NotNull(predecessor.Model.FindEntityType("Person"));
+        Assert.Null(predecessor.Model.FindEntityType("WorkspaceFolder"));
+        using var db = new EfPlatformDbContext(options, plan);
         var target = new EfProviderTargetSource(db, plan).Read();
         const string id = "20261014000001_Workspace_000005_TreeOrderBackfill";
         var step = new CompiledMigrationStep("000005", id, null, new string('a', 64), new string('b', 64), new string('c', 64), "data-backfill");

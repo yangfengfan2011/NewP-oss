@@ -9,6 +9,29 @@ public sealed class LocalizationRuntimeManifestBuilderTests : IDisposable
     private readonly List<string> _tempRoots = new();
 
     [Fact]
+    public void Build_WorkspaceReferenceFactsComplementAuditFieldLabelsInBothLanguages()
+    {
+        var repository = new DirectoryInfo(AppContext.BaseDirectory);
+        while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "AGENTS.md"))) repository = repository.Parent;
+        Assert.NotNull(repository);
+        var runtime = CreateRuntimeRoot(); WriteLanguages(runtime);
+        foreach (var owner in new[] { "Audit", "Workspace" })
+        {
+            var root = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository.FullName, owner);
+            WriteMetadataFile(runtime, owner, "BusinessChangeView.dic.json", File.ReadAllText(Path.Combine(root, "metadata", "dictionaries", "BusinessChangeView.dic.json")));
+        }
+        using var manifest = JsonDocument.Parse(new LocalizationRuntimeManifestBuilder().Build(runtime));
+        foreach (var (field, chinese, english) in new[] { ("SourceLID", "来源引用", "Source reference"), ("SourcePEID", "来源文件夹", "Source folder"),
+            ("PEID", "父文件夹", "Parent folder"), ("ChildModelKey", "引用对象类型", "Referenced object type"), ("CEID", "引用对象", "Referenced object") })
+        {
+            var key = "BusinessChangeView.ChangeField_" + field;
+            Assert.Equal(chinese, manifest.RootElement.GetProperty("catalogs").GetProperty("zhs").GetProperty(key).GetString());
+            Assert.Equal(english, manifest.RootElement.GetProperty("catalogs").GetProperty("en").GetProperty(key).GetString());
+        }
+        Assert.True(manifest.RootElement.GetProperty("catalogs").GetProperty("en").TryGetProperty("BusinessChangeView.ChangeField_ENAME", out _));
+    }
+
+    [Fact]
     public void Build_CopyActionOwnersContributeComplementaryLocalizedTitlesWithoutPlatformSpecialCases()
     {
         var repository = new DirectoryInfo(AppContext.BaseDirectory);

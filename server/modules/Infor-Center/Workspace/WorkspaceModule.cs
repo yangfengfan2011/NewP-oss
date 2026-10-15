@@ -16,6 +16,7 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
         services.AddScoped<WorkspaceSpaces>();
         services.AddScoped<WorkspacePositions>();
         services.AddScoped<WorkspaceContents>();
+        services.AddScoped<WorkspaceReferenceAudit>();
         services.AddScoped<WorkspaceTreeOrder>();
         services.AddScoped<ICP.Platform.Crud.Runtime.ILinkTreeRootPolicy, WorkspaceTreeRoots>();
         // 写行为执行时再解析含展示服务的内容应用服务，避免对象执行器与 Link reader 的构造循环。

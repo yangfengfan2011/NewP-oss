@@ -58,6 +58,8 @@ WorkspaceFolderContent 是正式 Link，父端由 authoring 固定为 WorkspaceF
 
 `POST /api/workspace/content/paste` 额外接受完整 targetPosition；使用自己的正式 paste 功能，在一次文件夹图锁事务内按 mode 重验全部源资格、目标链与目标父 edit，再按 snapshot 次序新增引用。cut 同时精确删除指定源 LID，其他入向关系保留；copy 保留源 LID。Folder 沿 `WorkspaceTreeOrder.NextOrdinalAsync` 追加，Part/Document 的 TreeOrdinal 保持 NULL。新引用有新 LID，EID、非空文件夹子内容、Document 版次、主附件关联、Files usage 和字节保持不变。重复、同名、环路、批内冲突、并发竞争及提交前失败整批回滚；输入中的客户端值不替代任何服务端重验。cut 到同一真实父在全部资格重验后返回 `{ succeeded: true, noChange: true }`，无关系、次序或审计写入；此判断先于新落入的根限制，因此旧根 Part/Document 也兼容。copy 同父仍按重复引用拒绝。
 
+成功 copy 逐条通过 Audit.Contracts 登记 `workspace.reference.copied`，资源为 `workspace.content`，目标为本次服务端新 LID；字段只保留来源 LID、来源父以及新关系 PEID、ChildModelKey、CEID 的真实标识。可信主体、UTC 时间和 Trace 由既有 Audit 取得，记录与引用由原平台事务统一保存提交；预检、资格失败、同父 copy 拒绝及事务回滚不留下业务记录。字段标签由 Workspace 互补贡献到既有 BusinessChangeView 中英词典，不依赖对象名称或新履历页面。
+
 剪贴板只属于当前树/页面实例，由 Workspace 私有类型化会话拥有，右侧列表与树菜单共享。切换目录保留；主体变化、reload 或实际销毁清空。copy/cut 预检成功才替换旧 snapshot；迟到响应不能覆盖新选择或复活已结束实例。已知失败保留可修正 snapshot，成功 copy/paste 保留；cut 粘贴确认成功（含 noChange）清空。paste 结果未知时明确提示核对源与目标并锁住旧 snapshot，不自动重放，缺失合法成功回执也按未知处理。已提交后的刷新失败只重试读取。clearClipboard 是复用正式 copy 功能资格的本地动作，没有虚构 HTTP 清空端点；明确清空或成功新 copy/cut 可替换未知状态。同一实例会话的状态同时用于树菜单、列表菜单及工具栏，cut snapshot 存在时在原剪切与粘贴动作标签持续显示“待移动”，不派生新功能位置；预检/粘贴期间其他写入和输入开启入口禁用。菜单预览不准备输入或发送写入。
 
 批量移除使用 `POST /api/workspace/content/references/remove`，输入为完整 position 与当前页 1–100 个不同 LID；正式 `removeSelected` 确认弹层明确保留对象及文件。单条 DELETE 兼容入口委托同一内核：图锁事务内重验完整位置、父 edit 和端点 read 后只删除这些 LID，不要求对象 edit/delete/copy，不调用对象删除或 Files release；最后引用及非空文件夹引用均可移除，一条失败整批回滚。成功后按 unknown-change 刷新同一真实父的已加载出现位置与列表。

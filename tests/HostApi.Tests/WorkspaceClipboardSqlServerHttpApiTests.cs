@@ -127,7 +127,9 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
         Assert.Equal(100, links.Count(row => Equals(row["PEID"], parentId)));
         Assert.Equal(100, links.Count(row => Equals(row["PEID"], FolderId(b, links))));
         Assert.Equal(100, (await Rows(fixture, "Part")).Length); Assert.Equal(1, paste.GraphLocks); Assert.True(paste.Writes > 0); Assert.Equal(0, paste.BusinessEntities);
-        output.WriteLine(JsonSerializer.Serialize(new { selection = 100, sourceLinkProjectionRows = 100, qualifiedSnapshotItems = 100, insertedReferences = 100,
+        Assert.Equal(100, (await Rows(fixture, "BusinessChange")).Count(row => Equals(row["EventType"], "workspace.reference.copied")));
+        Assert.True(paste.AuditWrites > 0);
+        output.WriteLine(JsonSerializer.Serialize(new { selection = 100, sourceLinkProjectionRows = 100, qualifiedSnapshotItems = 100, insertedReferences = 100, persistedCopyChanges = 100,
             qualification, qualificationSql, qualificationTiming, qualificationWallSeconds = qualificationClock.Elapsed.TotalSeconds,
             warmQualification, warmSql, warmTiming, warmQualificationWallSeconds = warmClock.Elapsed.TotalSeconds,
             paste, pasteSql, pasteTiming, pasteWallSeconds = pasteClock.Elapsed.TotalSeconds,
@@ -182,12 +184,12 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
         public void Dispose() { _active = false; foreach (var subscription in _subscriptions) subscription.Dispose(); _all.Dispose(); }
     }
 
-    private sealed record ClipboardCostSnapshot(int Commands, int Reads, int Writes, int GraphLocks, int BusinessEntities);
+    private sealed record ClipboardCostSnapshot(int Commands, int Reads, int Writes, int GraphLocks, int BusinessEntities, int AuditWrites);
     private sealed class ClipboardCost : DbCommandInterceptor, IMaterializationInterceptor
     {
-        private bool _active; private int _commands; private int _reads; private int _writes; private int _locks; private int _entities;
-        public void Begin() { _commands = _reads = _writes = _locks = _entities = 0; _active = true; }
-        public ClipboardCostSnapshot End() { _active = false; return new(_commands, _reads, _writes, _locks, _entities); }
+        private bool _active; private int _commands; private int _reads; private int _writes; private int _locks; private int _entities; private int _auditWrites;
+        public void Begin() { _commands = _reads = _writes = _locks = _entities = _auditWrites = 0; _active = true; }
+        public ClipboardCostSnapshot End() { _active = false; return new(_commands, _reads, _writes, _locks, _entities, _auditWrites); }
         public object InitializedInstance(MaterializationInterceptionData data, object entity)
         { if (_active && data.EntityType.Name is "Part" or "WorkspaceFolder" or "WorkspaceFolderContent") _entities++; return entity; }
         public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData data, InterceptionResult<DbDataReader> result, CancellationToken token = default)
@@ -199,6 +201,8 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
         private void Observe(DbCommand command)
         {
             if (!_active) return; _commands++;
+            if (command.CommandText.Contains("INSERT INTO [dbo].[BusinessChange]", StringComparison.Ordinal)
+                || command.CommandText.Contains("MERGE [dbo].[BusinessChange]", StringComparison.Ordinal)) _auditWrites++;
             if (command.CommandText.Contains("Workspace.FolderGraph", StringComparison.Ordinal)) _locks++;
             if (command.CommandText.Contains("INSERT INTO [dbo].[WorkspaceFolderContent]", StringComparison.Ordinal)
                 || command.CommandText.Contains("MERGE [dbo].[WorkspaceFolderContent]", StringComparison.Ordinal)
@@ -245,10 +249,12 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
         var x = await Folder(fixture, admin, a, "X"); var y = await Folder(fixture, admin, a, "Y");
         var body = new { mode = "copy", sourcePosition = a, linkIds = new[] { x.LinkIds[^1], y.LinkIds[^1] }, targetPosition = b };
         var before = Snapshot(await Rows(fixture, "WorkspaceFolderContent")); var objects = Snapshot(await Rows(fixture, "WorkspaceFolder"));
+        var auditBefore = Snapshot(await Rows(fixture, "BusinessChange"));
         control.Fail = true;
         using (var failed = await Send(fixture, admin, "workspace.folder.paste", "paste", body)) Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
-        Assert.True(control.WrittenReferences >= 2); control.Fail = false;
+        Assert.True(control.WrittenReferences >= 2); Assert.Equal(2, control.WrittenChanges); control.Fail = false;
         Assert.Equal(before, Snapshot(await Rows(fixture, "WorkspaceFolderContent"))); Assert.Equal(objects, Snapshot(await Rows(fixture, "WorkspaceFolder")));
+        Assert.Equal(auditBefore, Snapshot(await Rows(fixture, "BusinessChange")));
         control.Pause = true;
         using var cancellation = new CancellationTokenSource();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/paste") { Content = JsonContent.Create(body) };
@@ -263,7 +269,36 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
         finally { cancellation.Cancel(); control.Resume.TrySetResult(); try { (await pending).Dispose(); } catch (OperationCanceledException) { } }
         control.Pause = false;
         Assert.Equal(before, Snapshot(await Rows(fixture, "WorkspaceFolderContent"))); Assert.Equal(objects, Snapshot(await Rows(fixture, "WorkspaceFolder")));
+        Assert.Equal(2, control.WrittenChanges); Assert.Equal(auditBefore, Snapshot(await Rows(fixture, "BusinessChange")));
         await Command(fixture, admin, "workspace.folder.paste", "/api/workspace/content/paste", body);
+        Assert.Equal(2, (await Rows(fixture, "BusinessChange")).Count(row => Equals(row["EventType"], "workspace.reference.copied")));
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "审计登记、写入和保存失败阻止复制提交，业务记录与新引用一起回滚")]
+    public async Task Copy_AuditFailureRollsBackReferencesAndPreservesSource()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
+        using var admin = await fixture.LoginAdministratorAsync(); var root = await Root(fixture, admin);
+        var a = await Folder(fixture, admin, root, "来源"); var b = await Folder(fixture, admin, root, "目标");
+        var x = await Folder(fixture, admin, a, "X"); var y = await Folder(fixture, admin, a, "Y");
+        var body = new { mode = "copy", sourcePosition = a, linkIds = new[] { x.LinkIds[^1], y.LinkIds[^1] }, targetPosition = b };
+        var references = Snapshot(await Rows(fixture, "WorkspaceFolderContent"));
+        var objects = Snapshot(await Rows(fixture, "WorkspaceFolder")); var changes = Snapshot(await Rows(fixture, "BusinessChange"));
+        foreach (var mode in new[] { "register", "write", "save" })
+        {
+            fixture.Fault.Mode = mode;
+            try
+            {
+                using var failed = await Send(fixture, admin, "workspace.folder.paste", "paste", body);
+                Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
+            }
+            finally { fixture.Fault.Mode = ""; }
+            Assert.Equal(references, Snapshot(await Rows(fixture, "WorkspaceFolderContent")));
+            Assert.Equal(objects, Snapshot(await Rows(fixture, "WorkspaceFolder")));
+            Assert.Equal(changes, Snapshot(await Rows(fixture, "BusinessChange")));
+        }
+        await Command(fixture, admin, "workspace.folder.paste", "/api/workspace/content/paste", body);
+        Assert.Equal(2, (await Rows(fixture, "BusinessChange")).Count(row => Equals(row["EventType"], "workspace.reference.copied")));
     }
 
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "当前版次legacy根Part/Document保持可读可编辑可复制移出可移除，来源个人路径不能被其他主体借用")]
@@ -310,7 +345,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
 
     private sealed class PasteCommitControl : DbTransactionInterceptor
     {
-        public bool Fail; public bool Pause; public int WrittenReferences;
+        public bool Fail; public bool Pause; public int WrittenReferences; public int WrittenChanges;
         public TaskCompletionSource Reached { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Resume { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource RolledBack { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -318,6 +353,10 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
         {
             if (!Fail && !Pause) return result;
             WrittenReferences = eventData.Context!.ChangeTracker.Entries<Dictionary<string, object?>>().Count(entry => entry.Metadata.Name == "WorkspaceFolderContent" && entry.State == EntityState.Unchanged);
+            // 在真实提交前读取当前SQL事务，不能只以Register调用或ChangeTracker代替已写入事实。
+            await using var command = transaction.Connection!.CreateCommand(); command.Transaction = transaction;
+            command.CommandText = "SELECT COUNT(*) FROM [BusinessChange] WHERE [EventType] = 'workspace.reference.copied'";
+            WrittenChanges = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
             if (Fail) throw new InvalidOperationException("Injected Workspace paste commit failure.");
             Reached.TrySetResult(); await Resume.Task.WaitAsync(cancellationToken); return result;
         }
@@ -397,6 +436,8 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
             "/api/workspace/content/clipboard/validate", new { mode = "copy", sourcePosition = a, linkIds = sourceIds });
         Assert.Equal(HttpStatusCode.Forbidden, missingFeature.StatusCode);
         Assert.Equal(2, (await Rows(fixture, "WorkspaceFolderContent")).Count(row => Equals(row["ChildModelKey"], "Part")));
+        var copied = Assert.Single(await Rows(fixture, "BusinessChange"), row => Equals(row["EventType"], "workspace.reference.copied"));
+        Assert.NotEqual(fixture.ActorId, copied["ActorId"]);
     }
 
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "批量按snapshot文件夹相对次序追加，重复、同名、防环及内部冲突整批拒绝")]
@@ -587,9 +628,17 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
         var before = new Dictionary<string, string>();
         foreach (var model in models) before[model] = Snapshot(await Rows(fixture, model));
         var bytesBefore = Directory.GetFiles(fixture.StorageRoot).ToDictionary(path => Path.GetFileName(path)!, File.ReadAllBytes);
+        var auditBefore = Snapshot(await Rows(fixture, "BusinessChange"));
+        using (var invalid = await Send(fixture, admin, "workspace.folder.copy", "clipboard/validate",
+            new { mode = "copy", sourcePosition = a, linkIds = new[] { "missing-reference" } }))
+            await Problem(invalid, HttpStatusCode.NotFound, "Workspace.ReferenceUnavailable");
         var validated = await Command(fixture, admin, "workspace.folder.copy", "/api/workspace/content/clipboard/validate",
             new { mode = "copy", sourcePosition = a, linkIds = new[] { sourceId } });
         Assert.Equal(sourceId, Assert.Single(validated.GetProperty("items").EnumerateArray()).GetProperty("linkId").GetString());
+        using (var sameParent = await Send(fixture, admin, "workspace.folder.paste", "paste",
+            new { mode = "copy", sourcePosition = a, linkIds = new[] { sourceId }, targetPosition = a }))
+            await Problem(sameParent, HttpStatusCode.Conflict, "Workspace.DuplicateReference");
+        Assert.Equal(auditBefore, Snapshot(await Rows(fixture, "BusinessChange")));
         foreach (var target in new[] { b, c })
             await Command(fixture, admin, "workspace.folder.paste", "/api/workspace/content/paste",
                 new { mode = "copy", sourcePosition = a, linkIds = new[] { sourceId }, targetPosition = target });
@@ -597,6 +646,27 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
         Assert.Equal(3, references.Length); Assert.Equal(3, references.Select(row => row["LID"]).Distinct().Count());
         Assert.Contains(references, row => Equals(row["LID"], sourceId)); Assert.All(references, row => Assert.Equal(source["CEID"], row["CEID"]));
         Assert.All(references, row => Assert.Null(row["TreeOrdinal"]));
+        var changes = (await Rows(fixture, "BusinessChange")).Where(row => Equals(row["EventType"], "workspace.reference.copied")).ToArray();
+        Assert.Equal(2, changes.Length);
+        foreach (var reference in references.Where(row => !Equals(row["LID"], sourceId)))
+        {
+            var change = Assert.Single(changes, row => Equals(row["TargetId"], reference["LID"]));
+            Assert.Equal("workspace.content", change["Resource"]);
+            Assert.Equal(reference["LCreatedBy"], change["ActorId"]); Assert.Equal(fixture.ActorId, change["ActorId"]);
+            Assert.Equal(reference["LCreatedAt"], change["OccurredAt"]);
+            Assert.False(string.IsNullOrWhiteSpace(change["TraceId"] as string));
+            var fields = JsonSerializer.Deserialize<ICP.Platform.Modules.Audit.Contracts.BusinessAuditField[]>((string)change["FieldsJson"]!)!;
+            Assert.Equal(new[] { "SourceLID", "SourcePEID", "PEID", "ChildModelKey", "CEID" }, fields.Select(field => field.Field));
+            Assert.All(fields, field => Assert.Null(field.Before));
+            Assert.Equal(sourceId, fields[0].After.Value); Assert.Equal(source["PEID"], fields[1].After.Value);
+            Assert.Equal(reference["PEID"], fields[2].After.Value); Assert.Equal("Document", fields[3].After.Value);
+            Assert.Equal(source["CEID"], fields[4].After.Value);
+            var detail = await FeatureHttpTestRequests.ReadAsync(admin, Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "audit.change.read"),
+                "/api/audit/business-changes/" + change["EID"]);
+            Assert.Equal(reference["LID"], detail.GetProperty("fields").GetProperty("TargetId").GetString());
+            Assert.Equal(5, detail.GetProperty("summaries").GetProperty("changes").GetProperty("data").GetArrayLength());
+            Assert.EndsWith("Z", detail.GetProperty("fields").GetProperty("OccurredAt").GetString());
+        }
         foreach (var model in models) Assert.Equal(before[model], Snapshot(await Rows(fixture, model)));
         Assert.Equal(bytesBefore.Keys.Order(), Directory.GetFiles(fixture.StorageRoot).Select(Path.GetFileName).Order());
         foreach (var (name, bytes) in bytesBefore) Assert.Equal(bytes, await File.ReadAllBytesAsync(Path.Combine(fixture.StorageRoot, name!)));

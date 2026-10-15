@@ -30,7 +30,7 @@ public sealed partial class WorkspaceContents
         }
     }
 
-    /// <summary>图锁内重验完整位置及模式对应资格；剪切精确移除源LID，所有关系变化共享同一事务。</summary>
+    /// <summary>图锁内重验完整位置及模式对应资格；复制登记真实关系业务记录，剪切精确移除源LID，均共享原事务。</summary>
     public ValueTask<WorkspacePasteResult> PasteAsync(string actor, string mode, WorkspacePosition sourcePosition, string[] linkIds,
         WorkspacePosition targetPosition, CancellationToken token)
     {
@@ -52,7 +52,11 @@ public sealed partial class WorkspaceContents
                 .GroupBy(row => EF.Property<string>(row, "ENAME")).AnyAsync(group => group.Count() > 1, cancellation))
                 throw new LinkQueryException(409, "Workspace.SiblingNameConflict", "ENAME");
             // 至多一页100项，保持选择次序；同事务未保存关系由正式NextOrdinalAsync参与末尾计算。
-            foreach (var item in targets) await AddTargetReferenceAsync(target.FolderId, item, cancellation);
+            for (var index = 0; index < targets.Length; index++)
+            {
+                var linkId = await AddTargetReferenceAsync(target.FolderId, targets[index], cancellation);
+                if (mode == "copy") await referenceAudit.CopiedAsync(linkIds[index], source.FolderId, linkId, target.FolderId, targets[index], cancellation);
+            }
             if (mode == "cut") await Links.Where(row => linkIds.Contains(EF.Property<string>(row, "LID"))
                 && EF.Property<string>(row, "PEID") == source.FolderId).ExecuteDeleteAsync(cancellation);
             return new(true, false);
@@ -102,8 +106,8 @@ public sealed partial class WorkspaceContents
         ValidateSelection(linkIds);
     }
 
-    // 单条add与批量paste共享真实端点及完整存储图不变量；调用方已持有图锁。
-    private async Task AddTargetReferenceAsync(string parentId, LinkObjectReference target, CancellationToken cancellation)
+    // 单条add与批量paste共享真实端点及完整存储图不变量，返回新LID供业务记录消费；调用方已持有图锁。
+    private async Task<string> AddTargetReferenceAsync(string parentId, LinkObjectReference target, CancellationToken cancellation)
     {
         var definition = catalog.Get("workspace.content");
         if (string.IsNullOrWhiteSpace(target.Id) || !definition.Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == target.ModelKey))
@@ -123,6 +127,6 @@ public sealed partial class WorkspaceContents
                 throw new LinkQueryException(409, "Workspace.SiblingNameConflict", "ENAME");
             if (await WouldCycleAsync(parentId, target.Id, cancellation)) throw new LinkQueryException(409, "Workspace.CycleForbidden");
         }
-        await RegisterCreatedReferenceAsync(parentId, target.ModelKey, target.Id, cancellation);
+        return await RegisterCreatedReferenceAsync(parentId, target.ModelKey, target.Id, cancellation);
     }
 }

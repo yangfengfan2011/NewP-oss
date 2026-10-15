@@ -18,7 +18,7 @@ namespace ICP.Platform.Modules.Workspace;
 public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions positions, IPlatformTransactionExecutor transactions,
     IDataScopeObjectDecisionProvider decisions, IPlatformObjectIdGenerator ids, IEntityAuditValueProvider audit, LinkQueryCatalog catalog,
     WorkspaceFolderScope folderScope, LinkQueryReader reader, IStandardCrudService crud, IStandardCrudResourceRegistry resources,
-    IDocumentFiles documentFiles, WorkspaceTreeOrder treeOrder)
+    IDocumentFiles documentFiles, WorkspaceTreeOrder treeOrder, WorkspaceReferenceAudit referenceAudit)
 {
     /// <summary>在有效位置内创建实体与 Link，同父名称比较及并发串行化由 SQL Server 事务锁保护。</summary>
     public ValueTask<string> CreateFolderAsync(string actorId, WorkspacePosition position, IReadOnlyDictionary<string, JsonElement> values, CancellationToken token)
@@ -280,17 +280,19 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
         audit.ForUpdate((string)folder["CreatedBy"]!, (DateTime)folder["CreatedAt"]!).ApplyTo(folder);
     }
 
-    /// <summary>仅消费同事务内所属行为返回的真实身份；关系审计复用本次对象操作的时间和主体。</summary>
-    private async Task RegisterCreatedReferenceAsync(string parentId, string modelKey, string objectId, CancellationToken token)
+    /// <summary>登记真实实体的引用并返回服务端新 LID；关系盖章复用当前对象操作的时间和主体。</summary>
+    private async Task<string> RegisterCreatedReferenceAsync(string parentId, string modelKey, string objectId, CancellationToken token)
     {
         if (!transactions.IsActive) throw new InvalidOperationException("Workspace creation requires an active transaction.");
         var stamp = audit.Current();
+        var linkId = ids.NewId("WorkspaceFolderContent");
         db.Set<Dictionary<string, object?>>(WorkspacePositions.ContentModel).Add(new()
         {
-            ["LID"] = ids.NewId("WorkspaceFolderContent"), ["PEID"] = parentId, ["CEID"] = objectId, ["ChildModelKey"] = modelKey,
+            ["LID"] = linkId, ["PEID"] = parentId, ["CEID"] = objectId, ["ChildModelKey"] = modelKey,
             ["TreeOrdinal"] = modelKey == WorkspacePositions.FolderModel ? await treeOrder.NextOrdinalAsync(parentId, token) : (long?)null,
             ["LCreatedBy"] = stamp.ActorId, ["LCreatedAt"] = stamp.OccurredAtUtc, ["LUpdatedBy"] = stamp.ActorId, ["LUpdatedAt"] = stamp.OccurredAtUtc
         });
+        return linkId;
     }
 
     // 所有内容写入按相同顺序取得跨 Host 的事务级图锁，防止互成环及 create/add 同级名竞争。

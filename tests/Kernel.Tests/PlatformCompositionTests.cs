@@ -98,13 +98,14 @@ public sealed class PlatformCompositionTests
             platform.CompositionMembers.Order(StringComparer.Ordinal));
         Assert.Null(platform.BackendEntry);
         Assert.Empty(platform.ModelKeys);
-        Assert.Equal(["Document", "Part"], Assert.Single(candidates, candidate => candidate.ModuleId == "Workspace").Dependencies.Order(StringComparer.Ordinal));
+        Assert.Equal(["Audit", "Document", "Part"], Assert.Single(candidates, candidate => candidate.ModuleId == "Workspace").Dependencies.Order(StringComparer.Ordinal));
         var source = TrustedBuiltInModuleSource.CreateForHostDistribution(AppContext.BaseDirectory, Path.Combine(AppContext.BaseDirectory, "modules"));
         var result = new CanonicalModulePlanCompiler().Compile("real-foundation", candidates, source.PlatformCompositionModuleId);
         Assert.True(result.IsSuccess, string.Join(Environment.NewLine, result.Diagnostics));
         Assert.Equal(["Audit", "Authentication", "Authorization", "ConfigCenter", "Files", "Identity", "MetadataConfigCenter", "Organization", "Platform", "PluginOps"], result.Plan!.RequiredModuleIds);
         Assert.True(ModuleDependencyPolicy.Allows(result.Plan, "Workspace", "Identity"));
         Assert.True(ModuleDependencyPolicy.Allows(result.Plan, "Workspace", "Part"));
+        Assert.True(ModuleDependencyPolicy.Allows(result.Plan, "Workspace", "Audit"));
         Assert.False(ModuleDependencyPolicy.Allows(result.Plan, "Part", "Document"));
         Assert.False(ModuleDependencyPolicy.Allows(result.Plan, "Workspace", "Missing"));
     }

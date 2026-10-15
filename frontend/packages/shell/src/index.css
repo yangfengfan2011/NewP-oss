@@ -1128,3 +1128,8 @@ a:hover {
   .sh-authentication-toolbar { padding: 12px 16px; }
   .sh-authentication-frame .sh-login-brand { flex: none; }
 }
+
+/* 鼠标右键关闭不显示键盘焦点框；键盘操作会清除此标记，保留可见焦点。 */
+.np-standard-crud-table tr[data-context-menu-pointer="true"]:focus {
+  outline: none;
+}

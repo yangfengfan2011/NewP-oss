@@ -14,7 +14,7 @@ export interface ContextActionMenuProps {
   onOpenChange: (open: boolean) => void;
   trigger?: ('click' | 'contextMenu')[];
   /** 表格行的鼠标或键盘位置；不把业务对象交给 UI。 */
-  point?: { x: number; y: number; focusTarget: HTMLElement };
+  point?: { x: number; y: number; focusTarget: HTMLElement; keyboard?: boolean };
   keyboardLabel?: string;
 }
 
@@ -39,6 +39,7 @@ function FocusableMenu({ children, open, currentOpen }: { children: ReactNode; o
 
 /** 树与列表共享菜单布局、键盘打开、Escape 关闭和焦点恢复；动作执行仍由 Host 拥有。 */
 export function ContextActionMenu({ children, menu, open, onOpenChange, trigger = ['click'], point, keyboardLabel }: ContextActionMenuProps) {
+  const keyboardInteraction = point?.keyboard !== false;
   const anchor = useRef<HTMLSpanElement>(null);
   const currentOpen = useRef(open); currentOpen.current = open;
   const openedFrom = useRef<HTMLElement | null>(null);
@@ -50,22 +51,22 @@ export function ContextActionMenu({ children, menu, open, onOpenChange, trigger 
       event.preventDefault(); event.stopPropagation();
       currentOpen.current = false;
       onOpenChange(false);
-      openedFrom.current?.focus();
+      if (keyboardInteraction) openedFrom.current?.focus();
     };
     document.addEventListener('keydown', escape, true);
     return () => document.removeEventListener('keydown', escape, true);
-  }, [open, onOpenChange, point]);
+  }, [open, onOpenChange, point, keyboardInteraction]);
   const close = (next: boolean) => {
     currentOpen.current = next;
     onOpenChange(next);
     if (!next && (document.activeElement === document.body || document.activeElement?.closest('[role="menu"]'))) {
-      openedFrom.current?.focus();
+      if (keyboardInteraction) openedFrom.current?.focus();
     }
   };
   return <>
     {point ? children : null}
     <Dropdown trigger={trigger} open={open} onOpenChange={close} autoFocus={false}
-      popupRender={node => <div onClick={event => event.stopPropagation()}><FocusableMenu open={open} currentOpen={currentOpen}>{node}</FocusableMenu></div>}
+      popupRender={node => <div onClick={event => event.stopPropagation()}><FocusableMenu open={open && keyboardInteraction} currentOpen={currentOpen}>{node}</FocusableMenu></div>}
       menu={{ ...menu, onClick: info => { info.domEvent.stopPropagation(); close(false); menu.onClick?.(info); } }}>
       <span ref={anchor} tabIndex={keyboardLabel ? 0 : undefined} aria-label={keyboardLabel}
         aria-haspopup="menu" aria-expanded={open}

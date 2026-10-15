@@ -143,3 +143,28 @@ it.each(['input', 'textarea', 'a', 'contenteditable'])('preserves the native men
     expect(document.querySelector('[role="menu"]')).toBeNull();
   } finally { await act(async () => root.unmount()); container.remove(); }
 });
+
+it('does not impose keyboard focus when reopening a pointer context menu after Escape', async () => {
+  const advanceFrames = controlAnimationFrames();
+  const target = document.createElement('button'); document.body.append(target);
+  function Harness() {
+    const [open, setOpen] = useState(false);
+    return <><button onClick={() => setOpen(true)}>Open pointer menu</button><ContextActionMenu open={open} onOpenChange={setOpen}
+      point={{ x: 10, y: 20, focusTarget: target, keyboard: false }}
+      menu={{ items: [{ key: 'edit', label: 'Edit' }] }}><span /></ContextActionMenu></>;
+  }
+  const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+  try {
+    await act(async () => root.render(<Harness />));
+    for (let count = 0; count < 2; count++) {
+      target.focus();
+      await act(async () => container.querySelector<HTMLButtonElement>('button')!.click());
+      await advanceFrames();
+      expect(document.activeElement).toBe(target);
+      target.blur();
+      await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+      await advanceFrames();
+      expect(document.activeElement).not.toBe(target);
+    }
+  } finally { await act(async () => root.unmount()); container.remove(); target.remove(); vi.unstubAllGlobals(); }
+});

@@ -525,7 +525,7 @@ function renderMetadataTableCell<TRow extends Record<string, unknown>>(
 
 function RowActionButtonGroup({ actions, onConfirmRequested, requested = false, active = true, close, contextMenu, closeContextMenu, contextKey = '', compact = false, hideTrigger = false }: {
   actions: RowActionItem[]; onConfirmRequested: (key: string) => void; requested?: boolean; active?: boolean; close?: () => void;
-  contextMenu?: { actionKeys: string[]; point: { x: number; y: number; focusTarget: HTMLElement } };
+  contextMenu?: { actionKeys: string[]; point: { x: number; y: number; focusTarget: HTMLElement; keyboard?: boolean } };
   closeContextMenu?: () => void;
   contextKey?: string;
   compact?: boolean;
@@ -1243,7 +1243,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const selectionScope = JSON.stringify([currentSubjectId, readPosition, host.input.queryScope, tableQuery, appliedFilters]);
   const rowMenuScope = JSON.stringify([selectionScope, schema.viewKey, host.input.instanceId, host.lifecycle.active,
     features.placement, routePathname, host.address?.search]);
-  const [rowMenu, setRowMenu] = useState<{ row: TRow; scope: string; point: { x: number; y: number; focusTarget: HTMLElement } } | null>(null);
+  const [rowMenu, setRowMenu] = useState<{ row: TRow; scope: string; point: { x: number; y: number; focusTarget: HTMLElement; keyboard?: boolean } } | null>(null);
   useEffect(() => setRowMenu(null), [rowMenuScope, effectiveRows]);
   const [selection, setSelection] = useState<{ scope: string; data: TRow[]; rows: TRow[] } | null>(null);
   // 选择仅属于当前查询快照；切页、换位置、换主体及刷新数据均同步失效。
@@ -2182,17 +2182,20 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       <CrudTableSection<TRow>
         onRow={schema.rowActionSets || schema.rowContextMenu?.length ? row => rowActionKeys(row, 'contextMenu').length ? ({
           tabIndex: 0,
+          onBlur: event => { delete event.currentTarget.dataset.contextMenuPointer; },
           onContextMenu: event => {
             if (isNativeContextMenuTarget(event.target) || effectiveLoading || !host.lifecycle.active) return;
             event.preventDefault(); event.stopPropagation();
-            setRowMenu({ row, scope: rowMenuScope, point: { x: event.clientX, y: event.clientY, focusTarget: event.currentTarget } });
+            event.currentTarget.dataset.contextMenuPointer = 'true';
+            setRowMenu({ row, scope: rowMenuScope, point: { x: event.clientX, y: event.clientY, focusTarget: event.currentTarget, keyboard: false } });
           },
           onKeyDown: event => {
+            if (event.key !== 'Escape') delete event.currentTarget.dataset.contextMenuPointer;
             if (isNativeContextMenuTarget(event.target) || effectiveLoading || !host.lifecycle.active) return;
             if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
             event.preventDefault(); event.stopPropagation();
             const bounds = event.currentTarget.getBoundingClientRect();
-            setRowMenu({ row, scope: rowMenuScope, point: { x: bounds.left, y: bounds.bottom, focusTarget: event.currentTarget } });
+            setRowMenu({ row, scope: rowMenuScope, point: { x: bounds.left, y: bounds.bottom, focusTarget: event.currentTarget, keyboard: true } });
           },
         }) : {} : undefined}
         headerTitle={headerActions}

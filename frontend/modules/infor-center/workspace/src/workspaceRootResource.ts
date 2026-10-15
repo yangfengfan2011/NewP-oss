@@ -152,6 +152,7 @@ const resource: StandardCrudResourceRegistration = {
       return { operation: 'create', payload, change: { operation: 'create', id: '' } };
     },
     getRowId: row => String(row.LID),
+    getRowModelKey: row => typeof row.ObjectModelKey === 'string' ? row.ObjectModelKey : '',
     getRowActivationTarget: (row, context) => {
       if (row.ObjectModelKey !== 'WorkspaceFolder') return undefined;
       if (typeof row.LID !== 'string' || !row.LID) throw new Error('缺少文件夹引用标识');

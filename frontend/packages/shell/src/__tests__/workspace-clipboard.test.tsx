@@ -45,7 +45,7 @@ async function waitForActive(check: () => void | Promise<void>, signal: AbortSig
 }
 const waitFor = (check: () => void | Promise<void>) => waitForActive(check, testLifetime.signal);
 
-async function mount(options: { folderRow?: boolean; validate?: (body: Record<string, unknown>) => Promise<Response>; paste?: (body: Record<string, unknown>) => Promise<Response>; failRefresh?: boolean;
+async function mount(options: { actionSets?: Record<string, { column: string[]; contextMenu: string[] }>; columnMode?: 'default' | 'menu'; folderRow?: boolean; validate?: (body: Record<string, unknown>) => Promise<Response>; paste?: (body: Record<string, unknown>) => Promise<Response>; failRefresh?: boolean;
   grants?: readonly string[]; remove?: (body: Record<string, unknown>) => Promise<Response>;
   menuLoad?: (load: () => Promise<{ default: StandardCrudResourceRegistration }>, call: number) => Promise<{ default: StandardCrudResourceRegistration }> } = {}) {
   const lifetime = new AbortController();
@@ -113,7 +113,7 @@ async function mount(options: { folderRow?: boolean; validate?: (body: Record<st
     <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={{ zhs: catalog }}>
       <AuthProvider initialUser={user()}><AuthorizationProvider featurePositions={user().featurePositions}><PlatformQueryProvider scopeKey="clipboard-test">
         <RuntimeMetadataProvider value={{ manifest: { modules: [{ moduleId: 'Workspace', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [],
-          features: [{ key: 'workspace', position: 'entry', kind: 'navigation' }, ...actions] }] }, navDocuments: [], modelDocuments: [folder, content], viewDocuments: [tree, list, detail] }}>
+          features: [{ key: 'workspace', position: 'entry', kind: 'navigation' }, ...actions] }] }, navDocuments: [], modelDocuments: [folder, content], viewDocuments: [tree, { ...list, view: { ...list.view, rowActionSets: options.actionSets ?? list.view.rowActionSets, rowActionColumn: options.columnMode ?? list.view.rowActionColumn } }, detail] }}>
           <SwitchActor /><PageEntry page={{ pageKey: 'platform.tree', parameters: { viewKey: tree.view.key, featurePosition: 'entry' }, inputResolverKey: 'workspace.tree.current' }} />
         </RuntimeMetadataProvider>
       </PlatformQueryProvider></AuthorizationProvider></AuthProvider>
@@ -430,9 +430,39 @@ it('uses a compact accessible button with the same actions as the row context me
   expect(more.getAttribute('aria-label')).toBe('更多');
   const labels = () => [...document.querySelectorAll('.ant-dropdown:not(.ant-dropdown-hidden) [role=menuitem]')].map(item => item.textContent);
   await act(async () => more.click());
-  await page.waitFor(() => expect(labels()).toContain('打开属性'));
+  await page.waitFor(() => expect(labels()).toEqual(['复制', '剪切', '编辑', '删除', '移除引用']));
   const buttonActions = labels();
   await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   await act(async () => row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 100, clientY: 100 })));
   await page.waitFor(() => expect(labels()).toEqual(buttonActions));
+});
+
+it.each(['separate', 'context-only', 'column-only', 'default'] as const)('keeps typed action surfaces independent: %s', async mode => {
+  const documentActions = { column: mode === 'context-only' ? [] : ['view'], contextMenu: mode === 'column-only' ? [] : ['copy', 'edit'] };
+  const page = await mount({ columnMode: mode === 'default' ? 'default' : 'menu', actionSets: {
+    WorkspaceFolder: { column: [], contextMenu: [] },
+    Document: documentActions, Part: { column: [], contextMenu: ['cut'] },
+  } });
+  await page.select('A');
+  await page.waitFor(() => expect(page.container.querySelector('tbody')?.textContent).toContain('Document source'));
+  const row = [...page.container.querySelectorAll<HTMLTableRowElement>('tbody tr')].find(item => item.textContent?.includes('Document source'))!;
+  const partRow = [...page.container.querySelectorAll<HTMLTableRowElement>('tbody tr')].find(item => item.textContent?.includes('Part source'))!;
+  expect(partRow.querySelector('.np-row-actions-more')).toBeNull();
+  const labels = () => [...document.querySelectorAll('.ant-dropdown:not(.ant-dropdown-hidden) [role=menuitem]')].map(item => item.textContent);
+  if (mode === 'context-only') {
+    expect(page.container.querySelector('.ant-table-thead')?.textContent).not.toContain('操作');
+  } else {
+    const button = row.querySelector<HTMLButtonElement>('.np-row-actions-more')!;
+    expect(button.textContent).toBe(mode === 'default' ? '更多' : '⋯');
+    await act(async () => button.click());
+    await page.waitFor(() => expect(labels()).toEqual(['打开属性']));
+    await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  }
+  await act(async () => row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 90, clientY: 100 })));
+  await page.waitFor(() => expect(labels()).toEqual(mode === 'column-only' ? [] : ['复制', '编辑']));
+  if (mode !== 'column-only') {
+    await act(async () => (document.querySelector('.ant-dropdown:not(.ant-dropdown-hidden) [role=menuitem]') as HTMLElement).click());
+    await page.waitFor(() => expect(page.writes).toHaveLength(1));
+    expect(page.writes[0].path).toBe('/api/workspace/content/clipboard/validate');
+  }
 });

@@ -43,12 +43,33 @@ it.each([
 
 it('projects the real Workspace row menu as references to its existing actions', () => {
   const schema = buildStandardCrudListSchema(list.view, resource, { modelDocuments: [folder, content] });
-  expect(schema.rowContextMenu).toEqual(schema.rowActions.map(action => action.key));
+  expect(schema.rowActionColumn).toBe('menu');
+  expect(schema.rowContextMenu).toBeUndefined();
+  for (const model of ['WorkspaceFolder', 'Part', 'Document']) {
+    const keys = schema.rowActions.filter(action => model === 'WorkspaceFolder' || action.key !== 'view').map(action => action.key);
+    expect(schema.rowActionSets?.[model]).toEqual({ column: keys, contextMenu: keys });
+  }
 });
 
 it.each([null, 'edit', ['missing'], ['edit', 'edit'], ['create'], [{ key: 'edit', handlerKey: 'other' }]])(
   'rejects malformed, duplicate or non-row context menu references %#', rowContextMenu => {
-    expect(() => buildStandardCrudListSchema({ ...list.view, rowContextMenu }, resource,
+    expect(() => buildStandardCrudListSchema({ ...list.view, rowActionSets: undefined, rowContextMenu }, resource,
       { modelDocuments: [folder, content] })).toThrow('row context menu');
   },
 );
+
+it.each(['unknown-model', 'missing-model', 'missing-action', 'duplicate', 'missing-surface', 'extra-surface', 'conflict', 'presentation', 'resolver'])(
+  'rejects invalid typed action configuration: %s', kind => {
+    const view = structuredClone(list.view);
+    const registration = { ...resource, dataAdapter: { ...resource.dataAdapter } };
+    if (kind === 'unknown-model') view.rowActionSets.Unknown = view.rowActionSets.Part;
+    if (kind === 'missing-model') delete view.rowActionSets.Part;
+    if (kind === 'missing-action') view.rowActionSets.Part.column = ['missing'];
+    if (kind === 'duplicate') view.rowActionSets.Part.contextMenu = ['view', 'view'];
+    if (kind === 'missing-surface') delete view.rowActionSets.Part.column;
+    if (kind === 'extra-surface') view.rowActionSets.Part.other = [];
+    if (kind === 'conflict') view.rowContextMenu = [];
+    if (kind === 'presentation') view.rowActionColumn = ['menu'];
+    if (kind === 'resolver') delete registration.dataAdapter.getRowModelKey;
+    expect(() => buildStandardCrudListSchema(view, registration, { modelDocuments: [folder, content] })).toThrow();
+  });

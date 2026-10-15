@@ -40,3 +40,26 @@
 List View 的 querySource 绑定上述 Link 模型/资源；公共列使用 projection，字段及排序继续按同一正式目录校验。共享列表请求 LID，Adapter 的 getRowId 提供关系身份，getDetailId 可提供当前目标资源真实 EID；异构 Adapter 的 getDetailTarget 只返回已登记 detailViewKey 与真实主键，宿主验证完整详情能力并解析唯一正式路由；不接受任意 URL，目标详情重新执行自身准入。名称列可通过 Adapter 的 `getRowActivationTarget` 返回 `tree-node` 与完整 `nodeKey`，由所属树的定位生命周期读取路径并同步选中状态和地址；缺省仍查看详情，显式属性动作保持原行为。Workspace 文件夹使用当前根、父链及行 LID 组成精确出现位置，Part / Document 保留详情路由；不以实体 EID 猜测共享对象的路径。listFieldRenderers 仅呈现已声明公共字段，不放开请求白名单或 display 筛选排序。创建和写后回执继续沿共享 Mutation Execution，不以刷新失败重放写入。
 
 撤回采用时关闭入口并撤销新增查询登记，保留实体、Link 和 migration history；不自动 Down、清表或让旧 Host 越过 migration frontier。新增目录不授权通用写入、实体删除、重命名或任意图查询。
+
+## 按对象类型配置行动作
+
+Link 列表的 `rowActions` 定义动作身份、名称、处理器及授权位置；`rowActionSets` 按正式关联对象的模型 key 分别选择操作列与右键菜单的动作和顺序，两者可以不同。Adapter 的 `getRowModelKey(row)` 从正式查询结果的关联对象身份返回模型 key，不使用显示名称。共享 Host 不识别具体模块或模型名。
+
+```json
+{
+  "rowActionColumn": "menu",
+  "rowActionSets": {
+    "WorkspaceFolder": { "column": ["view", "edit"], "contextMenu": ["view", "copy", "edit", "remove"] },
+    "Part": { "column": ["view"], "contextMenu": ["view", "copy", "remove"] },
+    "Document": { "column": [], "contextMenu": ["view", "copy", "remove"] }
+  }
+}
+```
+
+- `rowActionColumn` 独立选择操作列呈现：`menu` 为紧凑“⋯”入口，`default` 或省略沿用标准行按钮及“更多”。不再根据两个入口的动作是否相同推断呈现。
+- `column`、`contextMenu` 都必须是数组，空数组隐藏该类型的对应入口；全部类型的 `column` 为空时不生成操作列，右键仍可执行。运行时遇到未配置的模型身份不回退为其他类型的动作。
+- `rowActionSets` 当前用于 Link 列表，必须覆盖其 `linkQuery.endpoints` 中的全部模型，动作引用必须在同一视图的 `rowActions` 中唯一存在；重复、缺失、未知模型、未知入口及错误呈现值拒绝候选。
+- 配置 `rowActionSets` 时不允许同时声明旧的 `rowContextMenu`。未配置时保留普通列表现有规则：操作列消费 `rowActions`，右键菜单消费 `rowContextMenu`。
+- 两个入口复用同一个动作执行、状态判定、资格检查与授权位置。配置只决定呈现，不授予权限；服务端仍执行原有授权与事务校验。
+
+工作空间使用 `menu`：文件夹保留“打开属性”；零组件、图文档的操作列与右键菜单不包含该动作，点击名称仍进入各自详情。其他既有动作保持不变。移除 `rowActionSets`、恢复原 `rowContextMenu` 可以回退类型选择；不涉及数据迁移。

@@ -523,12 +523,13 @@ function renderMetadataTableCell<TRow extends Record<string, unknown>>(
   return value == null ? '' : String(value);
 }
 
-function RowActionButtonGroup({ actions, onConfirmRequested, requested = false, active = true, close, contextMenu, closeContextMenu, contextKey = '', compact = false }: {
+function RowActionButtonGroup({ actions, onConfirmRequested, requested = false, active = true, close, contextMenu, closeContextMenu, contextKey = '', compact = false, hideTrigger = false }: {
   actions: RowActionItem[]; onConfirmRequested: (key: string) => void; requested?: boolean; active?: boolean; close?: () => void;
   contextMenu?: { actionKeys: string[]; point: { x: number; y: number; focusTarget: HTMLElement } };
   closeContextMenu?: () => void;
   contextKey?: string;
   compact?: boolean;
+  hideTrigger?: boolean;
 }) {
   const { t } = useLocalization();
   const requestedOnce = useRef(false);
@@ -653,9 +654,9 @@ function RowActionButtonGroup({ actions, onConfirmRequested, requested = false, 
             },
           }}
         >
-          <AntdButton className="np-row-actions-more" type="link" aria-label={t('Platform.More', '更多')} title={t('Platform.More', '更多')} onClick={contextMenu ? () => { closeContextMenu?.(); setOpenedContext(contextKey); } : undefined}>
+          {hideTrigger ? <span /> : <AntdButton className="np-row-actions-more" type="link" aria-label={t('Platform.More', '更多')} title={t('Platform.More', '更多')} onClick={contextMenu ? () => { closeContextMenu?.(); setOpenedContext(contextKey); } : undefined}>
             {compact ? <span aria-hidden="true" style={{ fontSize: 20, lineHeight: 1 }}>⋯</span> : t('Platform.More', '更多')}
-          </AntdButton>
+          </AntdButton>}
         </ContextActionMenu>
       ) : null}
     </div>
@@ -886,7 +887,13 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     [registration.operationResultPresenters],
   );
   const modelDocument = useMemo(() => findStandardCrudModelDocument(modelDocuments, view.model), [modelDocuments, view]);
-  const shouldRenderActionColumn = schema.rowActions.length > 0;
+  const shouldRenderActionColumn = schema.rowActionSets
+    ? Object.values(schema.rowActionSets).some(set => set.column.length > 0) : schema.rowActions.length > 0;
+  const rowActionKeys = (row: TRow, surface: 'column' | 'contextMenu'): string[] => {
+    if (!schema.rowActionSets) return surface === 'column' ? schema.rowActions.map(action => action.key) : schema.rowContextMenu ?? [];
+    const modelKey = dataAdapter.getRowModelKey?.(row);
+    return modelKey && Object.prototype.hasOwnProperty.call(schema.rowActionSets, modelKey) ? schema.rowActionSets[modelKey][surface] : [];
+  };
   const defaultColumnState = useMemo<StandardCrudColumnState>(() => Object.fromEntries([
     ...resolvedColumns.map((column, index) => [column.key, {
       order: index,
@@ -1891,9 +1898,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       field: column.field,
       title: t(`${schema.dicKey}.${column.labelKey}`, column.labelKey),
     }));
-  const compactRowMenu = Boolean(schema.rowContextMenu?.length
-    && schema.rowActions.every((action, index) => schema.rowContextMenu?.[index] === action.key)
-    && schema.rowContextMenu.length === schema.rowActions.length);
+  const compactRowMenu = schema.rowActionColumn === 'menu';
   const standardColumns = shouldRenderActionColumn
     ? [
       ...metadataColumns,
@@ -1910,7 +1915,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         runtimeValueKind: undefined,
         render: (row: TRow) => {
           const rowId = dataAdapter.getRowId(row);
-          const rowActions = buildRowActions(row, rowActionDefinitions, rowId);
+          const rowActions = buildRowActions(row, rowActionKeys(row, 'column').flatMap(key => rowActionDefinitions.filter(action => action.key === key)), rowId);
 
           return (
             <div style={{ display: 'grid', gap: 6 }}>
@@ -1919,9 +1924,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                   const action = rowActionDefinitions.find(item => item.key === key);
                   if (action) setRowConfirmation({ row, rowId, action });
                 }} active={host.lifecycle.active} contextKey={JSON.stringify([rowMenuScope, row])}
-                  contextMenu={rowMenu?.row === row && rowMenu.scope === rowMenuScope && !effectiveLoading
-                    && effectiveRows.includes(row) ? { actionKeys: schema.rowContextMenu ?? [], point: rowMenu.point } : undefined}
-                  closeContextMenu={() => setRowMenu(null)} />
+                  />
               </div>
             </div>
           );
@@ -2167,8 +2170,17 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
 
   const content = (
     <div className="np-standard-crud-table">
+      {rowMenu && rowMenu.scope === rowMenuScope && !effectiveLoading && effectiveRows.includes(rowMenu.row) &&
+        <RowActionButtonGroup actions={buildRowActions(rowMenu.row, rowActionDefinitions, dataAdapter.getRowId(rowMenu.row))}
+          compact hideTrigger active={host.lifecycle.active} contextKey={JSON.stringify([rowMenuScope, rowMenu.row])}
+          contextMenu={{ actionKeys: rowActionKeys(rowMenu.row, 'contextMenu'), point: rowMenu.point }}
+          closeContextMenu={() => setRowMenu(null)} onConfirmRequested={key => {
+            const action = rowActionDefinitions.find(item => item.key === key);
+            if (action) setRowConfirmation({ row: rowMenu.row, rowId: dataAdapter.getRowId(rowMenu.row), action });
+          }} />}
+
       <CrudTableSection<TRow>
-        onRow={schema.rowContextMenu?.length ? row => ({
+        onRow={schema.rowActionSets || schema.rowContextMenu?.length ? row => rowActionKeys(row, 'contextMenu').length ? ({
           tabIndex: 0,
           onContextMenu: event => {
             if (isNativeContextMenuTarget(event.target) || effectiveLoading || !host.lifecycle.active) return;
@@ -2182,7 +2194,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             const bounds = event.currentTarget.getBoundingClientRect();
             setRowMenu({ row, scope: rowMenuScope, point: { x: bounds.left, y: bounds.bottom, focusTarget: event.currentTarget } });
           },
-        }) : undefined}
+        }) : {} : undefined}
         headerTitle={headerActions}
         selectableRows={visibleHeaderActions.some(action => action.requiresSelection)}
         selection={{ keys: effectiveLoading ? [] : selectedRows.map(dataAdapter.getRowId), disabled: effectiveLoading || headerPending || rowInputAction !== null,

@@ -11,6 +11,39 @@ public sealed class PageCompositionMetadataTests
 {
     [Theory]
     [InlineData("valid")]
+    [InlineData("empty-column")]
+    [InlineData("unknown-model")]
+    [InlineData("missing-model")]
+    [InlineData("missing-action")]
+    [InlineData("duplicate-action")]
+    [InlineData("missing-surface")]
+    [InlineData("conflict")]
+    [InlineData("presentation")]
+    public void WorkspaceActionSets_ValidateModelsAndIndependentSurfaces(string kind)
+    {
+        var root = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(RepositoryRoot(), "Workspace");
+        var documents = Directory.GetFiles(Path.Combine(root, "metadata"), "*.json", SearchOption.AllDirectories)
+            .Select(path => JsonNode.Parse(File.ReadAllText(path))!).ToArray();
+        var list = documents.Single(document => document["view"]?["key"]?.GetValue<string>() == "workspace.folder.list")["view"]!;
+        var sets = list["rowActionSets"]!.AsObject();
+        switch (kind)
+        {
+            case "empty-column": sets["Part"]!["column"] = new JsonArray(); break;
+            case "unknown-model": sets["Unknown"] = sets["Part"]!.DeepClone(); break;
+            case "missing-model": sets.Remove("Part"); break;
+            case "missing-action": sets["Part"]!["column"] = JsonNode.Parse("[\"missing\"]"); break;
+            case "duplicate-action": sets["Part"]!["contextMenu"] = JsonNode.Parse("[\"view\",\"view\"]"); break;
+            case "missing-surface": sets["Part"]!.AsObject().Remove("column"); break;
+            case "conflict": list["rowContextMenu"] = new JsonArray(); break;
+            case "presentation": list["rowActionColumn"] = "automatic"; break;
+        }
+        IReadOnlyList<string> Check() => PageCompositionMetadataValidator.Validate(documents.Select(document => JsonSerializer.SerializeToElement(document)), null);
+        if (kind is "valid" or "empty-column") Check();
+        else Assert.Throws<JsonException>(() => Check());
+    }
+
+    [Theory]
+    [InlineData("valid")]
     [InlineData("missing")]
     [InlineData("duplicate")]
     [InlineData("page-action")]
@@ -22,6 +55,7 @@ public sealed class PageCompositionMetadataTests
         var documents = Directory.GetFiles(Path.Combine(root, "metadata"), "*.json", SearchOption.AllDirectories)
             .Select(path => JsonNode.Parse(File.ReadAllText(path))!).ToArray();
         var list = documents.Single(document => document["view"]?["key"]?.GetValue<string>() == "workspace.folder.list")["view"]!;
+        list.AsObject().Remove("rowActionSets");
         list["rowContextMenu"] = kind switch
         {
             "missing" => JsonNode.Parse("""["missing"]"""),

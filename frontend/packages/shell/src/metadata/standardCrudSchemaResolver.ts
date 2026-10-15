@@ -114,6 +114,8 @@ export interface StandardCrudListRuntimeSchema {
   featureActions?: StandardCrudRuntimeActionSchema[];
   /** 只引用当前 List View 的行动作，不另声明执行或权限。 */
   rowContextMenu?: string[];
+  rowActionColumn?: 'default' | 'menu';
+  rowActionSets?: Record<string, { column: string[]; contextMenu: string[] }>;
   exportModes: string[];
 }
 
@@ -937,6 +939,24 @@ export function buildStandardCrudListSchema<TFilter, TRow, TDetail>(
   if (schema.rowActions.some(action => action.requiresSelection)) throw new Error('requiresSelection is only supported on pageActions');
   for (const definition of readRecordArray(view.featureActions).filter(action => typeof action.handlerKey === 'string')) {
     if (definition.behaviorKey !== `${registration.resourceKey}.${String(definition.handlerKey)}`) throw new Error('referenced action behavior differs from its handler');
+  }
+  if (view.rowActionColumn !== undefined && (typeof view.rowActionColumn !== 'string' || !['default', 'menu'].includes(view.rowActionColumn))) throw new Error('Invalid rowActionColumn');
+  schema.rowActionColumn = view.rowActionColumn as 'default' | 'menu' | undefined;
+  if (view.rowActionSets !== undefined) {
+    if (!linkModel || view.rowContextMenu !== undefined || typeof registration.dataAdapter.getRowModelKey !== 'function')
+      throw new Error('rowActionSets requires a Link list with getRowModelKey and cannot coexist with rowContextMenu');
+    const sets = view.rowActionSets;
+    const models = Object.keys(readRecord(linkQuery.endpoints));
+    if (!sets || typeof sets !== 'object' || Array.isArray(sets) || Object.keys(sets).length !== models.length
+      || Object.keys(sets).some(key => !models.includes(key))) throw new Error('rowActionSets must cover the declared Link endpoint models');
+    schema.rowActionSets = Object.fromEntries(Object.entries(sets).map(([key, value]) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)
+        || Object.keys(value).some(name => !['column', 'contextMenu'].includes(name))) throw new Error('Invalid rowActionSets entry');
+      const entry = value as Record<string, unknown>;
+      if (!Array.isArray(entry.column) || !Array.isArray(entry.contextMenu)) throw new Error('rowActionSets requires column and contextMenu arrays');
+      return [key, { column: resolveRowContextMenu(entry.column, schema.rowActions, viewKey)!,
+        contextMenu: resolveRowContextMenu(entry.contextMenu, schema.rowActions, viewKey)! }];
+    }));
   }
   schema.rowContextMenu = resolveRowContextMenu(view.rowContextMenu, schema.rowActions, viewKey);
   if (view.pageActionGroups !== undefined) {

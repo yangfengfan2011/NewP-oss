@@ -24,6 +24,7 @@ public static class PageCompositionMetadataValidator
         var references = new HashSet<string>(StringComparer.Ordinal);
         foreach (var view in views.Values.Where(view => Mode(view) == "list"))
         {
+            RowActionSetMetadataValidator.Validate(view, all);
             if (!view.TryGetProperty("rowContextMenu", out var menu)) continue;
             if (menu.ValueKind != JsonValueKind.Array) throw new JsonException("Row context menu must be an array of action keys.");
             var actions = view.TryGetProperty("rowActions", out var rows) && rows.ValueKind == JsonValueKind.Array

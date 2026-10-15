@@ -189,6 +189,7 @@ public class HostApiPluginManifestRouteTests : IAsyncLifetime
             "part.part.list",
             "workspace.folder.content",
             "workspace.folder.list",
+            "workspace.folder.reference",
             "workspace.references.list",
             "workspace.references.object",
             "workspace.spaces",

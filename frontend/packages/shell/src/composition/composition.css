@@ -25,6 +25,11 @@
   min-height: 320px;
 }
 
+/* 鼠标菜单关闭后回焦整行；选中底色已标识节点，键盘标题的焦点样式保持不变。 */
+.np-tree-sidebar-card [data-tree-node-key][tabindex="-1"]:focus {
+  outline: none;
+}
+
 .np-tree-content {
   min-width: 0;
   background: var(--np-composition-surface);

@@ -51,18 +51,22 @@ public sealed class DocumentInitialIdentity(EfPlatformDbContext db, IPlatformObj
     }
 
     /// <summary>只沿服务端当前指针与真实回链读取；缺失或损坏不猜任意版次。</summary>
-    public async Task<DocumentCurrentIdentity> ReadCurrentAsync(string documentId, CancellationToken cancellationToken = default)
+    public async Task<DocumentCurrentIdentity> ReadCurrentAsync(string documentId, CancellationToken cancellationToken = default, bool tracking = true)
     {
-        var master = await db.Set<Dictionary<string, object?>>("Document").SingleOrDefaultAsync(
+        var masters = db.Set<Dictionary<string, object?>>("Document").AsQueryable();
+        var versions = db.Set<Dictionary<string, object?>>("DocumentVersion").AsQueryable();
+        var iterations = db.Set<Dictionary<string, object?>>("DocumentIteration").AsQueryable();
+        if (!tracking) { masters = masters.AsNoTracking(); versions = versions.AsNoTracking(); iterations = iterations.AsNoTracking(); }
+        var master = await masters.SingleOrDefaultAsync(
             row => EF.Property<string>(row, "EID") == documentId, cancellationToken);
         if (master is null) throw new InvalidOperationException("Document.IdentityMissing");
         if (master.GetValueOrDefault("LatestVersionId") is not string versionId)
             throw new InvalidOperationException("Document.IdentityCorrupted");
-        var version = await db.Set<Dictionary<string, object?>>("DocumentVersion").SingleOrDefaultAsync(
+        var version = await versions.SingleOrDefaultAsync(
             row => EF.Property<string>(row, "EID") == versionId, cancellationToken);
         if (version is null || !Equals(version["DocumentId"], documentId) || version.GetValueOrDefault("CurrentIterationId") is not string iterationId)
             throw new InvalidOperationException("Document.IdentityCorrupted");
-        var iteration = await db.Set<Dictionary<string, object?>>("DocumentIteration").SingleOrDefaultAsync(
+        var iteration = await iterations.SingleOrDefaultAsync(
             row => EF.Property<string>(row, "EID") == iterationId, cancellationToken);
         if (iteration is null || !Equals(iteration["VersionId"], versionId) || !Equals(iteration["Kind"], "regular"))
             throw new InvalidOperationException("Document.IdentityCorrupted");

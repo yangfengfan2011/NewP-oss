@@ -37,7 +37,7 @@ public interface IFileLifecycleService
     Task ReleaseUsageAsync(FileUsageReference usageReference, CancellationToken token = default);
 }
 
-public enum FileOwnerOperation { Confirm, Read, Download, Release }
+public enum FileOwnerOperation { Confirm, Read, Download, Release, CopySource, ConfirmCopy }
 
 /// <summary>用途拥有者贡献实际业务资格及关联验证，Files 不认识业务类型。</summary>
 public interface IFileOwnerPolicy

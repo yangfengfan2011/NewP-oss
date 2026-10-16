@@ -21,6 +21,7 @@ export default function WorkspaceObjectCopyInput({ instance, queryScope, feature
   const [failure, setFailure] = useState(false);
   const [reread, setReread] = useState(0);
   const [cancelState, setCancelState] = useState<string>();
+  const currentDraft = useRef<ObjectCopyDraft>();
   const latestValues = useRef<Record<string, unknown>>({});
   const baseline = useRef<Record<string, unknown>>();
   const baselineContext = useRef<string>();
@@ -35,7 +36,8 @@ export default function WorkspaceObjectCopyInput({ instance, queryScope, feature
     let opened: ObjectCopyDraft;
     try { opened = session.prepareObjectCopy(JSON.parse(targetKey), featurePosition); }
     catch { setFailure(true); return () => controller.abort(); }
-    setDraft(opened); setPreparation(undefined); setFailure(false);
+    currentDraft.current = opened;
+    setDraft(opened); setPreparation(undefined); setFailure(false); setCancelState(undefined);
     void session.readObjectCopyInput(opened, controller.signal).then(result => {
       const context = JSON.stringify([targetKey, featurePosition]);
       const previous = baselineContext.current === context ? baseline.current : undefined;
@@ -45,31 +47,36 @@ export default function WorkspaceObjectCopyInput({ instance, queryScope, feature
       baselineContext.current = context;
       setPreparation(result); callbacks.current.onChange({ draft: opened, values: next });
     }).catch(() => { if (!controller.signal.aborted) setFailure(true); });
-    return () => { controller.abort(); opened.closed = true; };
+    return () => { controller.abort(); opened.closed = true; if (currentDraft.current === opened) currentDraft.current = undefined; };
   }, [session, targetKey, featurePosition, reread]);
   const dirty = !!preparation && Object.keys(values).some(key => values[key] !== preparation.values[key]);
-  const ready = !!draft && !!preparation && !expired && state?.phase === 'idle' && !submitting
+  const ready = !!draft && !!preparation && !expired && !draft.requiresReconfirmation && cancelState !== 'requested' && state?.phase === 'idle' && !submitting
     && ['ECODE', 'ENAME'].every(key => typeof values[key] === 'string' && String(values[key]).trim().length > 0);
   useEffect(() => { callbacks.current.onDraftStateChange?.({ dirty, ready }); }, [dirty, ready]);
+  const model = preparation?.modelKey ?? 'Part';
   const fields: StandardCrudFieldDefinition[] = [
-    { key: 'ECODE', modelField: 'ECODE', labelKey: t('Part.Code'), kind: 'text', required: true },
-    { key: 'ENAME', modelField: 'ENAME', labelKey: t('Part.Name'), kind: 'text', required: true },
-    { key: 'Description', modelField: 'Description', labelKey: t('Part.Field_Description'), kind: 'textarea' },
+    { key: 'ECODE', modelField: 'ECODE', labelKey: t(`${model}.Code`), kind: 'text', required: true },
+    { key: 'ENAME', modelField: 'ENAME', labelKey: t(`${model}.Name`), kind: 'text', required: true },
+    { key: 'Description', modelField: 'Description', labelKey: t(`${model}.Field_Description`), kind: 'textarea' },
   ];
   return <div style={{ display: 'grid', gap: 16 }}>
-    <Alert showIcon type={expired || state?.phase === 'unknown' ? 'warning' : 'info'} message={t(state?.phase === 'unknown' ? 'Workspace.CopyOutcomeUnknown'
-      : submitting ? 'Workspace.CopySubmitting' : expired ? 'Workspace.CopyInputExpired' : 'Workspace.ObjectCopyDescription')} />
+    <Alert showIcon type={expired || draft?.requiresReconfirmation || state?.phase === 'unknown' ? 'warning' : 'info'} message={t(state?.phase === 'unknown' ? 'Workspace.CopyOutcomeUnknown'
+      : submitting ? 'Workspace.CopySubmitting' : expired ? 'Workspace.CopyInputExpired' : draft?.requiresReconfirmation ? 'Workspace.CopySourceChanged' : 'Workspace.ObjectCopyDescription')} />
     {preparation && <dl style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', gap: '8px 16px', margin: 0 }}>
       <dt>{t('Workspace.FolderCopySource')}</dt><dd style={{ margin: 0, overflowWrap: 'anywhere' }}>{preparation.sourcePath.join(' / ')}</dd>
       <dt>{t('Workspace.FolderCopyTarget')}</dt><dd style={{ margin: 0, overflowWrap: 'anywhere' }}>{preparation.targetPath.join(' / ')}</dd>
     </dl>}
+    {preparation?.modelKey === 'Document' && <Alert showIcon type="info" message={t('Workspace.DocumentCopyFiles')}
+      description={<span>{t('Workspace.CopyFileCount')}: {preparation.fileCount ?? 0} · {t('Document.FileLength')}: {preparation.totalBytes ?? 0}</span>} />}
     {preparation && <StandardCrudForm formId="workspace-object-copy" mode="create" fields={fields} sections={[]} values={values}
       onChange={(key, next) => callbacks.current.onChange({ draft, values: { ...values, [key]: next } })}
       onSubmit={() => undefined} saving={expired || submitting || state?.phase === 'unknown'} showSubmitAction={false} titleForSection={() => t('Workspace.Basic')} />}
     {!submitting && !expired && state?.phase === 'idle' && <Button onClick={() => setReread(count => count + 1)}>{t('Workspace.CopyReconfirm')}</Button>}
-    {submitting && <Button disabled={!!cancelState} onClick={() => {
+    {preparation && !expired && <Button disabled={cancelState === 'requested' || cancelState === 'cancelled' || cancelState === 'committed'} onClick={() => {
+      const cancelling = draft;
       setCancelState('requested');
-      void session?.resolveObjectCopy(true).then(result => setCancelState(result.state)).catch(() => setCancelState('unknown'));
+      void session?.resolveObjectCopy(true).then(result => { if (currentDraft.current === cancelling) setCancelState(result.state); })
+        .catch(() => { if (currentDraft.current === cancelling) setCancelState('unknown'); });
     }}>{t('Workspace.CopyCancel')}</Button>}
     {cancelState && <Alert showIcon message={t(`Workspace.CopyCancel_${cancelState}`)} />}
   </div>;

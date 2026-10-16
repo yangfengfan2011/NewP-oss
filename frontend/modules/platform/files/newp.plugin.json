@@ -20,7 +20,8 @@
     "models": [
       "metadata/models/FileRecord.model.json",
       "metadata/models/FileUploadLease.model.json",
-      "metadata/models/FileUsage.model.json"
+      "metadata/models/FileUsage.model.json",
+      "metadata/models/FileCopyLease.model.json"
     ],
     "migrations": {
       "sqlServer": {

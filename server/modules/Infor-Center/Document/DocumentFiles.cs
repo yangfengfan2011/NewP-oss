@@ -17,10 +17,10 @@ namespace ICP.Platform.Modules.Document;
 
 /// <summary>完整图文档文件操作复用原 Create 与 Files 稳定契约，所有业务关联归本模块。</summary>
 public sealed partial class DocumentFiles(EfPlatformDbContext db, DocumentInitialIdentity identities,
-    DocumentFileCreationScope creation, IFileLifecycleService files, Func<IObjectOperationExecutor> operations,
+    DocumentFileCreationScope creation, IFileLifecycleService files, IFileCopyService copies, Func<IObjectOperationExecutor> operations,
     IStandardCrudResourceRegistry resources, StandardCrudDefaultWriter writer, IDataScopeObjectDecisionProvider decisions,
     IPlatformTransactionExecutor transactions, IPlatformObjectIdGenerator ids, IEntityAuditValueProvider audit,
-    DocumentFileOwnerPolicy policy, IOptions<DocumentOptions> options) : IDocumentFiles
+    DocumentFileOwnerPolicy policy, IOptions<DocumentOptions> options) : IDocumentFiles, IDocumentCopies
 {
     /// <inheritdoc/>
     public async Task<StandardCrudError?> ValidateUploadAsync(IReadOnlyDictionary<string, object?> values, string fileName,

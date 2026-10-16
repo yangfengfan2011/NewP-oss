@@ -47,7 +47,7 @@ public sealed class BusinessAuditHostFixtureTests(ITestOutputHelper output)
             Assert.Equal(12, options.UploadLeaseHours);
             using var scope = fixture.Services.CreateScope();
             var model = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Model;
-            foreach (var name in new[] { "Document", "DocumentVersion", "DocumentIteration", "DocumentFileLink", "FileRecord", "FileUploadLease", "FileUsage" })
+            foreach (var name in new[] { "Document", "DocumentVersion", "DocumentIteration", "DocumentFileLink", "FileRecord", "FileUploadLease", "FileUsage", "FileCopyLease" })
                 Assert.NotNull(model.FindEntityType(name));
         }
     }

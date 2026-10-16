@@ -22,6 +22,114 @@ namespace ICP.Platform.Modules.Files.Migrations.SqlServer.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("FileCopyLease", b =>
+                {
+                    b.Property<string>("EID")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("EID");
+
+                    b.Property<string>("ActorId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("ActorId");
+
+                    b.Property<string>("ConfirmedUsageId")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("ConfirmedUsageId");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CreatedAt");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("CreatedBy");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("ExpiresAt");
+
+                    b.Property<string>("FileId")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("FileId");
+
+                    b.Property<string>("RequestKey")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("RequestKey");
+
+                    b.Property<string>("SourceFileId")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("SourceFileId");
+
+                    b.Property<string>("SourceOwnerId")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("SourceOwnerId");
+
+                    b.Property<string>("SourceOwnerKey")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("SourceOwnerKey");
+
+                    b.Property<string>("SourceUsageId")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("SourceUsageId");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("State");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("UpdatedAt");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("UpdatedBy");
+
+                    b.Property<string>("UsageOwnerKey")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("UsageOwnerKey");
+
+                    b.HasKey("EID");
+
+                    b.HasIndex("EID")
+                        .IsUnique()
+                        .HasDatabaseName("UX_FileCopyLease_EID");
+
+                    b.HasIndex("FileId");
+
+                    b.HasIndex("SourceUsageId");
+
+                    b.HasIndex("ActorId", "RequestKey")
+                        .IsUnique()
+                        .HasDatabaseName("IX_FileCopyLease_Request");
+
+                    b.HasIndex("SourceFileId", "State")
+                        .HasDatabaseName("IX_FileCopyLease_Source");
+
+                    b.HasIndex("State", "ExpiresAt", "EID")
+                        .HasDatabaseName("IX_FileCopyLease_Expiry");
+
+                    b.ToTable("FileCopyLease", "dbo");
+                });
+
             modelBuilder.Entity("FileRecord", b =>
                 {
                     b.Property<string>("EID")
@@ -246,6 +354,27 @@ namespace ICP.Platform.Modules.Files.Migrations.SqlServer.Migrations
                         .HasDatabaseName("UX_FileUsage_Owner");
 
                     b.ToTable("FileUsage", "dbo");
+                });
+
+            modelBuilder.Entity("FileCopyLease", b =>
+                {
+                    b.HasOne("FileRecord", null)
+                        .WithMany()
+                        .HasForeignKey("FileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_FileCopyLease_FileRecord");
+
+                    b.HasOne("FileRecord", null)
+                        .WithMany()
+                        .HasForeignKey("SourceFileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_FileCopyLease_SourceFileRecord");
+
+                    b.HasOne("FileUsage", null)
+                        .WithMany()
+                        .HasForeignKey("SourceUsageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_FileCopyLease_SourceUsage");
                 });
 
             modelBuilder.Entity("FileUploadLease", b =>

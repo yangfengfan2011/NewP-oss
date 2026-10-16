@@ -23,7 +23,7 @@
       {"key": "pasteObjectCopy", "labelKey": "PasteObjectCopy", "handlerKey": "pasteObjectCopy", "inputKey": "copyObject"},
       {"key": "pasteFolderCopy", "labelKey": "PasteFolderCopy", "handlerKey": "pasteFolderCopy", "inputKey": "copyFolder"},
       {"key": "pasteFolderStructure", "labelKey": "PasteFolderStructure", "handlerKey": "pasteFolderStructure", "inputKey": "copyFolder"},
-      {"key": "resolveObjectCopy", "labelKey": "CopyResolve", "handlerKey": "resolveObjectCopy"},
+      {"key": "resolveObjectCopy", "labelKey": "CopyResolve", "handlerKey": "resolveObjectCopy", "inputKey": "recoverObjectCopy", "confirmLabelKey": "CopyCloseAndRefresh"},
       {"key": "clearClipboard", "labelKey": "ClearClipboard", "handlerKey": "copy"},
       {"key": "removeSelected", "labelKey": "RemoveSelected", "handlerKey": "removeSelected", "requiresSelection": true, "inputKey": "confirmReferences", "variant": "danger", "confirmMessageKey": "ConfirmRemoveReferences"},
       {"key": "deleteObjects", "labelKey": "BatchDelete", "handlerKey": "deleteObjects", "requiresSelection": true, "inputKey": "confirmDelete", "variant": "danger", "confirmMessageKey": "ConfirmDeleteObjects"}],

@@ -1,0 +1,146 @@
+{
+  "schemaVersion": "1.0",
+  "FileCopyLease": {
+    "foreignKeys": [
+      {
+        "name": "FK_FileCopyLease_FileRecord",
+        "onDelete": "Restrict",
+        "principalFields": [
+          "EID"
+        ],
+        "fields": [
+          "FileId"
+        ],
+        "principalModuleId": "Files",
+        "principalModel": "FileRecord"
+      },
+      {
+        "name": "FK_FileCopyLease_SourceFileRecord",
+        "onDelete": "Restrict",
+        "principalFields": [
+          "EID"
+        ],
+        "fields": [
+          "SourceFileId"
+        ],
+        "principalModuleId": "Files",
+        "principalModel": "FileRecord"
+      },
+      {
+        "name": "FK_FileCopyLease_SourceUsage",
+        "onDelete": "Restrict",
+        "principalFields": [
+          "EID"
+        ],
+        "fields": [
+          "SourceUsageId"
+        ],
+        "principalModuleId": "Files",
+        "principalModel": "FileUsage"
+      }
+    ],
+    "indexes": [
+      {
+        "name": "IX_FileCopyLease_Request",
+        "fields": [
+          "ActorId",
+          "RequestKey"
+        ],
+        "unique": true
+      },
+      {
+        "name": "IX_FileCopyLease_Source",
+        "fields": [
+          "SourceFileId",
+          "State"
+        ],
+        "unique": false
+      },
+      {
+        "name": "IX_FileCopyLease_Expiry",
+        "fields": [
+          "State",
+          "ExpiresAt",
+          "EID"
+        ],
+        "unique": false
+      }
+    ],
+    "kind": "Entity",
+    "fields": [
+      {
+        "name": "FileId",
+        "storage": {
+          "type": "guid",
+          "nullable": true
+        }
+      },
+      {
+        "name": "SourceFileId",
+        "storage": {
+          "type": "guid",
+          "nullable": true
+        }
+      },
+      {
+        "name": "SourceUsageId",
+        "storage": {
+          "type": "guid",
+          "nullable": true
+        }
+      },
+      {
+        "name": "SourceOwnerId",
+        "storage": {
+          "type": "guid",
+          "nullable": true
+        }
+      },
+      {
+        "name": "ActorId",
+        "storage": {
+          "type": "guid"
+        }
+      },
+      {
+        "name": "RequestKey",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "SourceOwnerKey",
+        "storage": {
+          "type": "string",
+          "nullable": true
+        }
+      },
+      {
+        "name": "UsageOwnerKey",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "State",
+        "storage": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "ExpiresAt",
+        "storage": {
+          "type": "datetime"
+        }
+      },
+      {
+        "name": "ConfirmedUsageId",
+        "storage": {
+          "nullable": true,
+          "type": "guid"
+        }
+      }
+    ]
+  },
+  "type": "model"
+}

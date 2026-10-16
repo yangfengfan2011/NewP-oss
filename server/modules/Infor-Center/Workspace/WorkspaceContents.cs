@@ -18,7 +18,8 @@ namespace ICP.Platform.Modules.Workspace;
 public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspacePositions positions, IPlatformTransactionExecutor transactions,
     IDataScopeObjectDecisionProvider decisions, IPlatformObjectIdGenerator ids, IEntityAuditValueProvider audit, LinkQueryCatalog catalog,
     WorkspaceFolderScope folderScope, LinkQueryReader reader, IStandardCrudService crud, IStandardCrudResourceRegistry resources,
-    IDocumentFiles documentFiles, WorkspaceTreeOrder treeOrder, WorkspaceReferenceAudit referenceAudit)
+    IDocumentFiles documentFiles, IDocumentCopies documentCopies, WorkspaceTreeOrder treeOrder, WorkspaceReferenceAudit referenceAudit,
+    Microsoft.Extensions.Logging.ILogger<WorkspaceContents> logger)
 {
     /// <summary>在有效位置内创建实体与 Link，同父名称比较及并发串行化由 SQL Server 事务锁保护。</summary>
     public ValueTask<string> CreateFolderAsync(string actorId, WorkspacePosition position, IReadOnlyDictionary<string, JsonElement> values, CancellationToken token)

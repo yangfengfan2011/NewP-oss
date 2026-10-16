@@ -149,6 +149,60 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "正式Host进程在Document复制receiving/完成/准备阶段强制中断并重启，确认内容跨停用恢复且测量真实文件成本")]
+    public async Task NativeWorkspaceDocumentCopyRecovery_UsesRealProcessesAndFiles()
+    {
+        var (root, runId) = PrepareRun("native-workspace-document-copy-recovery");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, exerciseDocumentCopyRecovery: true);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture, includeBrowser: false)
+            .RunAsync(CancellationToken.None);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "复用既有中断阶段证据，只定向核对真实文件副本提交后的进程重启、停用恢复与成本")]
+    public async Task NativeWorkspaceDocumentCopyCommittedRecovery_UsesFormalProcesses()
+    {
+        var (root, runId) = PrepareRun("native-workspace-document-copy-committed-recovery");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, exerciseDocumentCopyRecovery: true, exerciseDocumentCopyInterruptions: false);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture, includeBrowser: false)
+            .RunAsync(CancellationToken.None);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "正式Document完整文件副本通过Workspace driver确认、查看下载、编辑删除及双语输入，并清理本轮资源")]
+    public async Task NativeWorkspaceDocumentCopy_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-workspace-document-copy");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseCompositionLifecycle: false);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
+            browserJourney: async (page, token) =>
+            {
+                var driver = new WorkspacePageDriver(page); var suffix = runId[..8];
+                var name = "图文档副本来源 " + suffix; var copied = "完整图文档副本 " + suffix; var target = "图文档副本目标 " + suffix;
+                Task Capture(string file) => page.ScreenshotAsync(new() { Path = Path.Combine(root, file), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                await driver.OpenAsync(); await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName); var sourceAddress = page.Url;
+                await driver.CreateDocumentWithFilesAsync("ACC-DOC-SOURCE-" + suffix, name, WorkspacePageDriver.SmallMainFile(),
+                    _ => Capture("document-create-reference.png"), WorkspacePageDriver.SmallAttachmentFiles());
+                await driver.CopyReferenceFromContextMenuAsync(name);
+                await driver.SelectRootAsync("公共空间"); await driver.CreateFolderAsync(target);
+                var targetAddress = await driver.SelectTreePathAsync("公共空间", target);
+                await driver.PasteObjectCopyAsync("ACC-DOC-COPY-" + suffix, copied, async _ => {
+                    await Capture("document-copy-input-zhs.png"); await page.SetViewportSizeAsync(900, 1000); await Capture("document-copy-input-zhs-narrow.png"); await page.SetViewportSizeAsync(1440, 1000);
+                });
+                await Capture("document-copy-created.png");
+                await driver.SelectLanguageAsync("English"); var english = await driver.OpenObjectCopyAsync(english: true);
+                await Capture("document-copy-input-en.png"); await page.SetViewportSizeAsync(900, 1000); await Capture("document-copy-input-en-narrow.png"); await page.SetViewportSizeAsync(1440, 1000);
+                await new StandardCrudPageDriver(page).CloseDrawerAsync(english); await driver.SelectLanguageAsync("简体中文");
+                await driver.OpenOwnedPropertiesAsync(copied, "/documents"); await driver.DownloadFileAsync(WorkspacePageDriver.SmallMainFile().Name, Path.Combine(root, "copy-main.pdf")); await Capture("document-copy-properties.png");
+                await driver.RestorePositionAsync(targetAddress, "公共空间", target); await driver.EditObjectAsync(copied, copied + " 已编辑"); await driver.DeleteSelectedAsync(copied + " 已编辑");
+                await driver.RestorePositionAsync(sourceAddress, "公共空间", fixture.ExistingFolderName); await driver.OpenOwnedPropertiesAsync(name, "/documents");
+                await driver.DownloadFileAsync(WorkspacePageDriver.SmallMainFile().Name, Path.Combine(root, "source-main.pdf"));
+                await driver.RestorePositionAsync(sourceAddress, "公共空间", fixture.ExistingFolderName); await driver.DeleteSelectedAsync(name);
+                await driver.SelectRootAsync("公共空间"); await driver.DeleteSelectedAsync(target);
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"), new { url = page.Url, journey = "document-object-copy", actor = "ordinary" }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "正式三成员包的单Part真副本、查看、独立编辑删除与双语输入沿唯一Workspace driver贯通")]
     public async Task NativeWorkspaceObjectCopy_UsesFormalDriver()
     {

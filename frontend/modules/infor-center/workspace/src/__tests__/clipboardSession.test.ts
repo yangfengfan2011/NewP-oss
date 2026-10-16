@@ -61,6 +61,77 @@ it.each(['snapshot', 'closed'] as const)('discards a delayed preparation after i
 });
 afterEach(() => { vi.resetAllMocks(); });
 
+it('allows one Document and keeps an interrupted preparation locked until controlled cancellation', async () => {
+  const session = new WorkspaceClipboardSession(vi.fn());
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ linkId: 'document', modelKey: 'Document' }] })));
+  await session.copy(source, ['document'], 'copy');
+  expect(session.canCopyObject()).toBe(true);
+  const draft = session.prepareObjectCopy(target, 'object-copy');
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ operationId: 'document-operation', modelKey: 'Document', fileCount: 3, totalBytes: 12,
+    values: { ECODE: '', ENAME: 'Document' }, sourcePath: ['Source'], targetPath: ['Target'] })));
+  await session.readObjectCopyInput(draft, new AbortController().signal);
+  vi.mocked(platformFetch).mockRejectedValueOnce(new TypeError('lost while preparing'));
+  await expect(session.pasteObjectCopy(draft, { ECODE: 'NEW', ENAME: 'Document' }, target, 'object-copy')).rejects.toThrow();
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ state: 'preparing', succeeded: false })));
+  expect((await session.resolveObjectCopy()).state).toBe('preparing');
+  expect(session.canResolveObjectCopy()).toBe(true);
+  expect(session.canCopyObject()).toBe(false);
+  const count = vi.mocked(platformFetch).mock.calls.length;
+  await expect(session.pasteObjectCopy(draft, { ECODE: 'REPLAY' }, target, 'object-copy')).rejects.toThrow();
+  expect(platformFetch).toHaveBeenCalledTimes(count);
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ state: 'cancelled', succeeded: false })));
+  await session.resolveObjectCopy(true);
+  expect(draft.closed).toBe(true);
+  expect(session.canResolveObjectCopy()).toBe(false);
+  expect(session.canCopyObject()).toBe(true);
+});
+
+it('does not silently copy the first of several Documents', async () => {
+  const session = new WorkspaceClipboardSession(vi.fn());
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ linkId: 'a', modelKey: 'Document' }, { linkId: 'b', modelKey: 'Document' }] })));
+  await session.copy(source, ['a', 'b'], 'copy');
+  expect(session.canCopyObject()).toBe(false);
+  expect(() => session.prepareObjectCopy(target, 'object-copy')).toThrow();
+  expect(platformFetch).toHaveBeenCalledTimes(1);
+});
+
+it.each([false, true])('can cancel a prepared input and locks an unknown cancellation before any business write (unknown=%s)', async unknown => {
+  const session = new WorkspaceClipboardSession(vi.fn());
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ linkId: 'document', modelKey: 'Document' }] })));
+  await session.copy(source, ['document'], 'copy'); const draft = session.prepareObjectCopy(target, 'paste-feature');
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ operationId: 'prepared-input', values: { ECODE: '', ENAME: 'Source' }, sourcePath: ['Source'], targetPath: ['Target'] })));
+  await session.readObjectCopyInput(draft, new AbortController().signal);
+  if (unknown) {
+    vi.mocked(platformFetch).mockRejectedValueOnce(new TypeError('cancellation receipt lost'));
+    await expect(session.resolveObjectCopy(true)).rejects.toThrow();
+    expect(session.getSnapshot().phase).toBe('unknown');
+    const count = vi.mocked(platformFetch).mock.calls.length;
+    await expect(session.pasteObjectCopy(draft, { ECODE: 'NO-REPLAY' }, target, 'paste-feature')).rejects.toThrow();
+    expect(platformFetch).toHaveBeenCalledTimes(count);
+  }
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ state: 'cancelled', succeeded: false })));
+  await session.resolveObjectCopy(true);
+  expect(draft.closed).toBe(true);
+  expect(vi.mocked(platformFetch).mock.calls.some(([url]) => String(url).endsWith('/objects/copy'))).toBe(false);
+});
+
+it('never restores an old selection when an acknowledged cancellation receives its late failure', async () => {
+  const session = new WorkspaceClipboardSession(vi.fn());
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ linkId: 'old', modelKey: 'Document' }] })));
+  await session.copy(source, ['old'], 'copy'); const draft = session.prepareObjectCopy(target, 'paste-feature');
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ operationId: 'cancel-inflight', values: { ECODE: '', ENAME: 'Source' }, sourcePath: ['Source'], targetPath: ['Target'] })));
+  await session.readObjectCopyInput(draft, new AbortController().signal);
+  let fail!: (failure: Error) => void;
+  vi.mocked(platformFetch).mockImplementationOnce(() => new Promise((_, reject) => { fail = reject; }));
+  const pending = session.pasteObjectCopy(draft, { ECODE: 'NEW', ENAME: 'Copy' }, target, 'paste-feature').catch(failure => failure);
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ state: 'cancelled', succeeded: false })));
+  await session.resolveObjectCopy(true);
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ linkId: 'replacement', modelKey: 'Document' }] })));
+  await session.copy(source, ['replacement'], 'copy');
+  fail(new TypeError('late disconnect')); await pending;
+  expect(session.getSnapshot().clipboard?.linkIds).toEqual(['replacement']);
+});
+
 it.each([false, true])('cut uses its own qualification and clears only a confirmed success (noChange=%s)', async noChange => {
   const session = new WorkspaceClipboardSession(vi.fn());
   vi.mocked(platformFetch).mockResolvedValueOnce(validated(['lid']));

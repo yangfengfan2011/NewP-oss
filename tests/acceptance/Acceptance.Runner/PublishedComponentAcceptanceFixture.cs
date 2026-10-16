@@ -23,7 +23,8 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     string repositoryRoot, string runDirectory, string runId,
     string baselineHostRoot, string hostRoot, string shellRoot, string packagePath,
     bool workspaceDelivery = false, WorkspaceDeliveryInput? deliveryInput = null, bool exerciseCompositionLifecycle = true,
-    bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false, bool exerciseFileRecoveryMechanisms = true)
+    bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false, bool exerciseFileRecoveryMechanisms = true,
+    bool exerciseDocumentCopyRecovery = false, bool exerciseDocumentCopyInterruptions = true)
 {
     private readonly Dictionary<string, string?> _environment = new();
     private ReusableSqlServerDatabase? _database;
@@ -49,7 +50,8 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     internal string HostIdentity => $"published:{_host?.Process.Id}:{runId}";
 
     internal static PublishedComponentAcceptanceFixture FromWorkspaceDelivery(string repositoryRoot, string runDirectory, string runId,
-        bool exerciseCompositionLifecycle = true, bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false, bool exerciseFileRecoveryMechanisms = true)
+        bool exerciseCompositionLifecycle = true, bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false, bool exerciseFileRecoveryMechanisms = true,
+        bool exerciseDocumentCopyRecovery = false, bool exerciseDocumentCopyInterruptions = true)
     {
         var path = RequiredPath("NEWP_ACCEPTANCE_WORKSPACE_DELIVERY_INPUT");
         var input = JsonSerializer.Deserialize<WorkspaceDeliveryInput>(File.ReadAllText(path), AcceptanceJson.Options)
@@ -57,7 +59,8 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         return new(repositoryRoot, runDirectory, runId, input.BaselineHostRoot, input.HostRoot,
             input.ShellRoot, input.PackagePath, workspaceDelivery: true, deliveryInput: input,
             exerciseCompositionLifecycle: exerciseCompositionLifecycle, exerciseUninstallRecovery: exerciseUninstallRecovery,
-            exerciseFileRecovery: exerciseFileRecovery, exerciseFileRecoveryMechanisms: exerciseFileRecoveryMechanisms);
+            exerciseFileRecovery: exerciseFileRecovery, exerciseFileRecoveryMechanisms: exerciseFileRecoveryMechanisms,
+            exerciseDocumentCopyRecovery: exerciseDocumentCopyRecovery, exerciseDocumentCopyInterruptions: exerciseDocumentCopyInterruptions);
     }
 
     // 只登记受控构建的输入与来源；不产出裁决，也不授予包信任。Gate 仍走正式安装/Host。
@@ -235,6 +238,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
                 oldGrantsRestored = false, preparation = "formal-limited-role", grantedPositions = pageFeatures.GrantSet(granted.ToArray()) }, token);
         }
         if (exerciseFileRecovery) await VerifyFileProcessRecoveryAsync(actor, token);
+        if (exerciseDocumentCopyRecovery) actor = await VerifyDocumentCopyProcessRecoveryAsync(actor, registerSecret, granted, token);
         var targetAfter = ReadTargetIdentity();
         await WriteAsync("target-after.json", targetAfter, token);
         if (before != targetAfter) throw new InvalidOperationException("安装期间固定 Host/Shell 发行物发生变化。");
@@ -606,7 +610,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             else if (!JsonElement.DeepEquals(oldOwner, current)) throw new InvalidOperationException("非 Document 模型 owner 发生漂移。");
         }
         var files = newOwners.RootElement.EnumerateArray().Single(row => row.GetProperty("owner").GetString() == "Files");
-        if (!files.GetProperty("models").EnumerateArray().Select(row => row.GetString()).SequenceEqual(["FileRecord", "FileUploadLease", "FileUsage"]))
+        if (!files.GetProperty("models").EnumerateArray().Select(row => row.GetString()).SequenceEqual(["FileCopyLease", "FileRecord", "FileUploadLease", "FileUsage"]))
             throw new InvalidOperationException("Files 正式模型装配不完整。");
     }
 

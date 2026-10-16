@@ -18,7 +18,7 @@ namespace ICP.Platform.Modules.Files.Services;
 public sealed partial class FileLifecycleService(FileStateStore state, IPlatformTransactionExecutor transactions,
     IServiceScopeFactory scopes, IFileContentStore storage, FileIoGate gate, IEntityAuditValueProvider audit,
     IPlatformObjectIdGenerator ids, IOptions<FilesOptions> options, IEnumerable<IFileOwnerPolicy> policies,
-    ILogger<FileLifecycleService> logger) : IFileLifecycleService
+    ILogger<FileLifecycleService> logger) : IFileLifecycleService, IFileCopyService
 {
     private readonly IReadOnlyDictionary<string, IFileOwnerPolicy> _policies = policies.ToDictionary(policy => policy.OwnerKey, StringComparer.Ordinal);
     public int MaxReadBatchSize => options.Value.MaxReadBatchSize;
@@ -194,7 +194,7 @@ public sealed partial class FileLifecycleService(FileStateStore state, IPlatform
         if (Text(usage, "State") != "active") throw Corrupted();
         var file = await state.Records.SingleOrDefaultAsync(row => EF.Property<string>(row, "EID") == usageReference.FileId, token) ?? throw Corrupted();
         RequireReady(file);
-        var leases = await state.Leases.AsNoTracking().Where(row => EF.Property<string>(row, "ConfirmedUsageId") == usageReference.UsageId).ToListAsync(token);
+        var leases = await ReadUsageLeasesAsync([usageReference.UsageId], token);
         if (leases.Count != 1 || Text(leases[0], "FileId") != usageReference.FileId || Text(leases[0], "State") != "confirmed") throw Corrupted();
         usage["State"] = "released";
         if (!await state.HasActiveUsageAsync(usageReference.FileId, token) && !await state.HasLegalLeaseAsync(usageReference.FileId, null, token))
@@ -213,8 +213,7 @@ public sealed partial class FileLifecycleService(FileStateStore state, IPlatform
         var usages = await state.Usages.AsNoTracking().Where(row => usageIds.Contains(EF.Property<string>(row, "EID"))).ToDictionaryAsync(row => Text(row, "EID"), token);
         var files = await state.Records.AsNoTracking().Where(row => fileIds.Contains(EF.Property<string>(row, "EID"))).ToDictionaryAsync(row => Text(row, "EID"), token);
         // 每个使用只能有一个反向 lease；多取一行损坏哨兵，不能先物化任意数量的重复关联。
-        var leases = await state.Leases.AsNoTracking().Where(row => usageIds.Contains(EF.Property<string>(row, "ConfirmedUsageId")))
-            .Take(usageIds.Length + 1).ToListAsync(token);
+        var leases = await ReadUsageLeasesAsync(usageIds, token);
         if (leases.Count > usageIds.Length) throw Corrupted();
         var byUsage = leases.ToLookup(row => Text(row, "ConfirmedUsageId"), StringComparer.Ordinal);
         var result = new Dictionary<string, Dictionary<string, object?>>(StringComparer.Ordinal);
@@ -230,6 +229,16 @@ public sealed partial class FileLifecycleService(FileStateStore state, IPlatform
             result.Add(reference.UsageId, file);
         }
         return result;
+    }
+
+    // 每个使用恰有一个上传或复制来源；两种历史同时验证，不将旧lease改写为复制凭据。
+    private async Task<List<Dictionary<string, object?>>> ReadUsageLeasesAsync(string[] usageIds, CancellationToken token)
+    {
+        var uploads = await state.Leases.AsNoTracking().Where(row => usageIds.Contains(EF.Property<string>(row, "ConfirmedUsageId")))
+            .Take(usageIds.Length + 1).ToListAsync(token);
+        var copies = await state.Copies.AsNoTracking().Where(row => usageIds.Contains(EF.Property<string>(row, "ConfirmedUsageId")))
+            .Take(usageIds.Length + 1).ToListAsync(token);
+        return [.. uploads, .. copies];
     }
 
     // 用新 scope 完成上传/恢复短事务，不污染调用方的业务 tracker。

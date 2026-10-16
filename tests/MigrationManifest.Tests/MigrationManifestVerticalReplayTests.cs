@@ -171,18 +171,16 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
     }
 
     [Fact]
-    public void FilesFirstStream_InIsolatedRepository_FinalizesTwiceAndChecksFrozenInputs()
+    public void FilesTail_InIsolatedRepository_FinalizesTwiceAndChecksFrozenInputs()
     {
         InitializeIsolatedOrganizationRepository(FindRepositoryRoot(), "Files");
         InitializeIsolatedGitRepository();
         var manifestPath = Path.Combine(_fixtureRoot, "frontend", "modules", "files", "migrations", "Files.SqlServerMigrations.json");
         var original = MigrationManifestIntegrity.Parse(File.ReadAllBytes(manifestPath));
-        var first = Assert.Single(original.Migrations);
+        var first = original.Migrations.OrderBy(migration => migration.Sequence, StringComparer.Ordinal).Last();
         File.WriteAllBytes(manifestPath, MigrationManifestIntegrity.SerializeCanonical(original with
         {
-            Migrations = [],
-            ModelDigest = new string('0', 64),
-            BundleChecksum = new string('0', 64)
+            Migrations = original.Migrations.Take(original.Migrations.Count - 1).ToArray()
         }));
         var application = new MigrationManifestApplication(_fixtureRoot);
         Assert.True(application.Finalize("Files", "SqlServer", first.MigrationId, first.Compatibility).Changed);
@@ -218,6 +216,26 @@ public sealed class MigrationManifestVerticalReplayTests : IDisposable
             git,
             assets = hashes
         }));
+    }
+
+    [EnvironmentGatedFact(DatabaseEvidenceEnvironmentVariable, "Files正式check保持SQL日志前沿、history、Git与Release资产只读")]
+    public async Task FilesCheck_WithReadOnlyObserver_PreservesDatabaseAndInputs()
+    {
+        InitializeIsolatedOrganizationRepository(FindRepositoryRoot(), "Files");
+        InitializeIsolatedGitRepository();
+        var configuration = ResolveSqlServerObserver(FindRepositoryRoot());
+        await using var observer = await SqlServerDatabaseObserver.OpenAsync(configuration.ConnectionString);
+        var before = await observer.CaptureAsync(); var git = CaptureGitSnapshot();
+        var paths = new[] { Path.Combine(_fixtureRoot, "frontend/modules/files/migrations/Files.SqlServerMigrations.json"),
+            Path.Combine(_fixtureRoot, "server/modules/Files/Migrations.SqlServer/bin/Release/net10.0/Files.SqlServerMigrations.dll"),
+            Path.Combine(_fixtureRoot, "apps/host-api/bin/Release/net10.0/modules/Files/migrations/Files.SqlServerMigrations.json"),
+            Path.Combine(_fixtureRoot, "apps/host-api/bin/Release/net10.0/modules/Files/migrations/Files.SqlServerMigrations.dll") };
+        var assets = SnapshotFiles(paths);
+        var check = new MigrationManifestApplication(_fixtureRoot).CheckAll(noBuild: true);
+        Assert.Equal(1, check.CheckedBundles); Assert.Equal(before, await observer.CaptureAsync());
+        Assert.Equal(git, CaptureGitSnapshot()); Assert.Equal(assets, SnapshotFiles(paths));
+        _output.WriteLine(JsonSerializer.Serialize(new { module = "Files", configuration.Source, check.CheckedBundles, check.ProviderResults,
+            database = before, git, assets }));
     }
 
     [Fact]

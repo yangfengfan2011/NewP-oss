@@ -2,11 +2,19 @@
 
 Document 拥有稳定主身份、初始 DocumentVersion/DocumentIteration 及当前 regular 版次的文件关联，不包含修订、工作副本、BOM 或专业属性。文件字节与使用生命周期由 Files 拥有。`Document` 是真实 Entity，身份和审计由平台维护；`ECODE`、`ENAME` 显式采用 builtin，`Description` 使用可空长文本语义。
 
-图文档编码必填且本模型内唯一，名称必填但不唯一。标准字段策略规范化名称与编码，模块在数据库侧按同一列比较规则预检编码；数据库唯一索引是并发保护事实源，竞争复用标准 409 冲突。说明可缺省，最多 500 字，服务端拒绝超长值。
+图文档编码必填且本模型内唯一，名称必填但不唯一。标准字段策略规范化名称与编码，模块在数据库侧按同一列比较规则预检编码；数据库唯一索引是并发保护事实源，竞争复用标准 409 冲突，真副本在数据库核实同码后定位 ECODE 错误。说明可缺省，最多 500 字，服务端拒绝超长值。
 
 稳定资源 `document.document` 提供 `/api/document/documents` 标准创建和读取，页面 `/documents` 使用共享标准列表与创建 Drawer，`document.document.detail` 提供只读属性 Drawer 和正式 `/documents/:id` 详情。创建提交后不可读或展示失败继续返回不含对象标识的成功回执，客户端只重试读取。
 
 侧栏不提供独立图文档入口；用户从 Workspace 选中文件夹后新建，由 Workspace 在同一对象操作事务内调用 `document.document` 创建行为并建立内容关系。原页面路由保持 routeOnly，详情与权限身份继续由 Document 拥有。
+
+## 完整真副本
+
+`documentObjectCopy` 是独立于引用 `documentCopy` 和 download 的数据动作。Workspace 经 `IDocumentCopies` 核证真实 current version/regular、主对象与 regular 业务字段及完整 FileLink 集合，持久保存 owner 的不透明确认；Workspace 不读 Document/Files 私有表。确认后 current、字段、角色、顺序或任一来源使用变化均拒绝，不猜其他历史或换出现位置。authoring 和实际持久模型的全部字段显式分类；新增字段必须先决定复制、重置或拒绝。
+
+`document.document.copy` 在最终原事务内再次核证确认，复用正常 Create 生成新 master、首版和 regular；不复制旧身份、技术指针、审计或历史。无文件文档仍走同一合同。完整主附件在图事务外逐项流式物理准备，再由本 owner 的真实 Added FileLink 与 copying creation proof 确认独立使用。正常候选校验在准备字节前执行，最终 Create 与权限仍重验。既有合法文件不套用当前上传准入配置，但明确复制资格、来源活跃及回链不变量始终执行。
+
+删除对象只释放自己的独立使用，正常下载继续要求原 read/download；移除 Workspace 引用不释放文件。Files 负责取消、未知准备提交、进程恢复及物理回收，Document 从持久确认推导每个文件 request key；不以请求内存清单恢复。回退关闭真副本动作并保留记录、使用、内容与已发布前向迁移，不能让旧 Host 消费新 frontier 或通过 Down 删除准备事实。
 
 Document 的 LatestVersionId 与 DocumentVersion 的 CurrentIterationId 是服务端 nullable 标量指针；归属使用 DocumentVersion.DocumentId、DocumentIteration.VersionId 的自有 Restrict FK，不建立反向循环 FK。当前只有首版（ordinal 1、label 1、state new）及 regular 版次（ordinal 1、dataset generic）。所有独立与 Workspace 创建共用正式 creation recorder，在原事务维护主对象、首版和快照；所属 Create 负责 Flush 与原仓储规范重读。更新同步当前 regular 的编码、名称、说明及可信更新审计，指针缺失或回链损坏明确失败，不猜其他版次。元数据输入拒绝服务端指针及下级身份。
 

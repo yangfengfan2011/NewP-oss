@@ -8,8 +8,9 @@ namespace ICP.Platform.Modules.Workspace;
 public sealed class WorkspaceObjectCopyBehavior(Func<WorkspaceContents> contents, Func<IObjectOperationExecutor> operations) : IObjectBehavior
 {
     public static readonly ObjectOperationAction CopyPart = new("copyPart");
+    public static readonly ObjectOperationAction CopyDocument = new("copyDocument");
     public static ObjectBehaviorDefinition BehaviorDefinition { get; } = new("workspace.content.copy", "Workspace", "WorkspaceObjectCopy",
-        [CopyPart], [], ["ActorId", "OperationId"], [new(CopyPart, new("part.part.copy", new("copy")))]);
+        [CopyPart, CopyDocument], [], ["ActorId", "OperationId"], [new(CopyPart, new("part.part.copy", new("copy"))), new(CopyDocument, new("document.document.copy", new("copy")))]);
     public ObjectBehaviorDefinition Definition => BehaviorDefinition;
 
     /// <inheritdoc/>

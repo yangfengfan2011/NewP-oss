@@ -24,13 +24,14 @@ public sealed class DocumentFileOwnerPolicy(EfPlatformDbContext db, DocumentFile
     public async Task VerifyAsync(FileOwnerReference owner, string fileId, string? usageId, FileOwnerOperation operation, CancellationToken token)
     {
         if (owner.Key != Key) throw new FileLifecycleException(404, "Files.UsageUnavailable");
-        if (operation == FileOwnerOperation.Confirm && usageId is null)
+        if (operation is FileOwnerOperation.Confirm or FileOwnerOperation.ConfirmCopy && usageId is null)
         {
             var entry = db.ChangeTracker.Entries().SingleOrDefault(entry => entry.Metadata.Name == "DocumentFileLink"
                 && Equals(entry.Property("LID").CurrentValue, owner.Id));
             if (entry is null || entry.State != EntityState.Added || entry.Entity is not Dictionary<string, object?> link
                 || !Equals(link["CEID"], fileId) || link.GetValueOrDefault("PEID") is not string iterationId
-                || !creation.ProvesIteration(iterationId) || !HasValidRole(link, options.Value.MaxAttachmentsPerDocument)
+                || !(operation == FileOwnerOperation.ConfirmCopy ? creation.ProvesCopyIteration(iterationId) : creation.ProvesIteration(iterationId))
+                || !HasValidRole(link, operation == FileOwnerOperation.ConfirmCopy ? 100 : options.Value.MaxAttachmentsPerDocument)
                 || link.GetValueOrDefault("FileUsageId") is not null)
                 throw new FileLifecycleException(409, "Document.CreationProofRequired");
             return;
@@ -63,7 +64,7 @@ public sealed class DocumentFileOwnerPolicy(EfPlatformDbContext db, DocumentFile
         var documentIds = versions.Select(row => (string)row["DocumentId"]!).Distinct().ToArray();
         var masters = await db.Set<Dictionary<string, object?>>("Document").AsNoTracking()
             .Where(row => documentIds.Contains(EF.Property<string>(row, "EID"))).ToArrayAsync(token);
-        if (operation != FileOwnerOperation.Confirm)
+        if (operation is not (FileOwnerOperation.Confirm or FileOwnerOperation.ConfirmCopy))
         {
             var allowed = await readable.GetReadableIdsAsync("document.document", documentIds, token);
             if (allowed.Count != documentIds.Length) throw new FileLifecycleException(404, "Files.UsageUnavailable");
@@ -80,10 +81,11 @@ public sealed class DocumentFileOwnerPolicy(EfPlatformDbContext db, DocumentFile
                 || !Equals(link["FileUsageId"], reference.UsageId) || !HasValidRole(link, 100))
                 throw new InvalidOperationException("Document.FileAssociationCorrupted");
         }
-        if (operation is FileOwnerOperation.Download or FileOwnerOperation.Release)
+        if (operation is FileOwnerOperation.Download or FileOwnerOperation.Release or FileOwnerOperation.CopySource)
             foreach (var documentId in documentIds)
                 if (!await decisions.IsAllowedAsync("document.document", documentId,
-                    operation == FileOwnerOperation.Download ? "download" : "delete", token))
-                    throw new FileLifecycleException(403, operation == FileOwnerOperation.Download ? "Document.DownloadDenied" : "Document.DeleteDenied");
+                    operation == FileOwnerOperation.Download ? "download" : operation == FileOwnerOperation.CopySource ? "documentObjectCopy" : "delete", token))
+                    throw new FileLifecycleException(403, operation == FileOwnerOperation.Download ? "Document.DownloadDenied"
+                        : operation == FileOwnerOperation.CopySource ? "Document.CopyDenied" : "Document.DeleteDenied");
     }
 }

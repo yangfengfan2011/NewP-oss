@@ -102,10 +102,10 @@ public sealed class FileLocalLifecycleTests : IDisposable
     }
 
     [Fact]
-    public void MetadataProvider_ProjectsThreeFilesEntitiesAndOwnerConstraints()
+    public void MetadataProvider_ProjectsFilesEntitiesAndOwnerConstraints()
     {
         var definitions = new FilesModelMetadataProvider().GetDefinitions();
-        Assert.Equal(new[] { "FileRecord", "FileUploadLease", "FileUsage" }, definitions.Select(model => model.LogicalKey));
+        Assert.Equal(new[] { "FileRecord", "FileUploadLease", "FileUsage", "FileCopyLease" }, definitions.Select(model => model.LogicalKey));
         Assert.All(definitions, definition => Assert.Equal("Files", definition.OwnerModuleId));
         Assert.All(definitions, definition => Assert.Contains(definition.Fields, field => field.Name == "CreatedBy"));
     }

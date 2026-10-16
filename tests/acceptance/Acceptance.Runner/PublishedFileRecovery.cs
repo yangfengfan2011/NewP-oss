@@ -166,7 +166,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture
         "u.OwnerKey,u.OwnerObjectId,u.FileId,u.State usageState,f.State fileState,f.Length,f.Sha256,s.EID uploadId,s.State leaseState,s.ConfirmedUsageId " +
         "FROM dbo.Document d JOIN dbo.DocumentVersion v ON v.EID=d.LatestVersionId JOIN dbo.DocumentIteration i ON i.EID=v.CurrentIterationId " +
         "JOIN dbo.DocumentFileLink l ON l.PEID=i.EID JOIN dbo.FileUsage u ON u.EID=l.FileUsageId JOIN dbo.FileRecord f ON f.EID=u.FileId " +
-        "JOIN dbo.FileUploadLease s ON s.ConfirmedUsageId=u.EID WHERE d.EID=@id ORDER BY l.Ordinal,l.LID FOR JSON PATH;", id, token);
+        "JOIN (SELECT EID,State,ConfirmedUsageId FROM dbo.FileUploadLease UNION ALL SELECT EID,State,ConfirmedUsageId FROM dbo.FileCopyLease) s ON s.ConfirmedUsageId=u.EID WHERE d.EID=@id ORDER BY l.Ordinal,l.LID FOR JSON PATH;", id, token);
 
     private async Task VerifyReceivingProcessInterruptionAsync(HttpClient client, WorkspaceAcceptanceActor actor, string create, object position, CancellationToken token)
     {

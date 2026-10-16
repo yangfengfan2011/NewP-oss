@@ -16,9 +16,11 @@ public sealed class DocumentModule : ModuleCapsuleBindingBase
     /// <inheritdoc/>
     public override void ConfigureServices(IServiceCollection services)
     {
+        DocumentCopyFields.RequireAuthoring(new DocumentModelMetadataProvider().GetDefinitions());
         services.AddStandardCrudKernel();
         services.AddStandardCrudResource(DocumentCrudDescriptor.Create());
         services.AddObjectBehavior<DocumentObjectBehavior>(this, DocumentObjectBehavior.BehaviorDefinition);
+        services.AddObjectBehavior<DocumentCopyBehavior>(this, DocumentCopyBehavior.BehaviorDefinition);
         services.AddScoped<DocumentInitialIdentity>();
         services.AddOptions<DocumentOptions>().BindConfiguration("Document")
             .Validate(options => options.MaxAttachmentsPerDocument is >= 0 and <= 100
@@ -32,6 +34,7 @@ public sealed class DocumentModule : ModuleCapsuleBindingBase
         services.AddSingleton(new FileOwnerPolicyRequirement(DocumentFileOwnerPolicy.Key));
         services.AddScoped<DocumentFiles>();
         services.AddScoped<IDocumentFiles>(provider => provider.GetRequiredService<DocumentFiles>());
+        services.AddScoped<IDocumentCopies>(provider => provider.GetRequiredService<DocumentFiles>());
         services.AddScoped<IStandardCrudCreationRecorder>(provider => provider.GetRequiredService<DocumentInitialIdentity>());
         services.AddScoped<IStandardCrudUpdateRecorder>(provider => provider.GetRequiredService<DocumentInitialIdentity>());
         services.AddScoped<IStandardCrudValidator, DocumentCrudValidator>();

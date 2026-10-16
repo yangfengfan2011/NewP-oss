@@ -448,12 +448,16 @@ internal sealed class WorkspacePageDriver(IPage page)
 
     /// <summary>通过正式副本确认填写新编码并等待目标列表消费成功结果。</summary>
     internal async Task PastePartCopyAsync(string code, string name, Func<ILocator, Task>? capture = null)
+        => await PasteObjectCopyAsync(code, name, capture);
+
+    /// <summary>Part和Document共用正式副本确认及保存驱动，等待目标列表消费结果。</summary>
+    internal async Task PasteObjectCopyAsync(string code, string name, Func<ILocator, Task>? capture = null)
     {
         var crud = new StandardCrudPageDriver(page);
         var drawer = await OpenObjectCopyAsync();
         await FillObjectCreationAsync(drawer, code, name);
         if (capture is not null) await capture(drawer);
-        await crud.SaveAndCloseAsync(drawer, new("POST", "/api/workspace/content/objects/copy", 200, "粘贴零组件真副本"));
+        await crud.SaveAndCloseAsync(drawer, new("POST", "/api/workspace/content/objects/copy", 200, "粘贴对象真副本"));
         await crud.WaitForRowAsync(name);
     }
 

@@ -2,6 +2,7 @@ using System.Text.Json;
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Crud.LinkQueries;
+using ICP.Platform.Modules.Files.Contracts;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -20,6 +21,7 @@ public sealed partial class WorkspaceContentsController
                 request.LinkIds, request.TargetPosition!, token));
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (FileLifecycleException exception) { return WorkspaceDocumentUploadsController.FileProblem(exception); }
     }
 
     /// <summary>唯一操作记录绑定来源及目标，提交仅接收正常可写值，成功回执不要求新对象可读。</summary>
@@ -30,13 +32,19 @@ public sealed partial class WorkspaceContentsController
         {
             var id = ReadCopyOperationInput(input, true);
             var values = input.GetProperty("values").Deserialize<Dictionary<string, JsonElement>>()!;
-            var result = await operations.ExecuteAsync(WorkspaceObjectCopyBehavior.BehaviorDefinition.ObjectKey,
-                WorkspaceObjectCopyBehavior.CopyPart, null, new Dictionary<string, object?> {
-                    ["ActorId"] = Actor(), ["OperationId"] = id, ["Values"] = values }, token);
+            var result = await contents.SubmitObjectCopyAsync(Actor(), id, values, operations, token);
             return result.Succeeded ? Results.Ok(new WorkspaceObjectCopyReceipt(true, "committed"))
                 : Results.Json(result.Error, statusCode: result.Error!.StatusCode);
         }
+        catch (OperationCanceledException) when (!token.IsCancellationRequested)
+        {
+            // writer被显式取消/回收中断不等同请求断线；先按持久操作事实返回真实取消或已提交结果。
+            var receipt = await contents.ObjectCopyResultAsync(Actor(), ReadCopyOperationInput(input, true), false, token);
+            return receipt.Succeeded ? Results.Ok(receipt) : LinkQueryEndpointExtensions.Problem(new LinkQueryException(409,
+                receipt.State == "cancelled" ? "Workspace.CopyCancelled" : "Workspace.CopyOutcomeUnknown"));
+        }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (FileLifecycleException exception) { return WorkspaceDocumentUploadsController.FileProblem(exception); }
     }
 
     /// <summary>结果读取只核对本主体持久状态，不重放对象写入或泄露不可读结果。</summary>
@@ -52,6 +60,7 @@ public sealed partial class WorkspaceContentsController
     {
         try { return Results.Ok(await contents.ObjectCopyResultAsync(Actor(), ReadCopyOperationInput(input, false), cancel, token)); }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (FileLifecycleException exception) { return WorkspaceDocumentUploadsController.FileProblem(exception); }
     }
 
     // 不接受任意字段包或授权布尔值；重复JSON成员也拒绝，避免不同解析器产生不同目标。

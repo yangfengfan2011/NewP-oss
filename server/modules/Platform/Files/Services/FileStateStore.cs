@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 namespace ICP.Platform.Modules.Files.Services;
 
 /// <summary>Files 自有持久状态和事务锁；不持有任何文件 I/O 句柄。</summary>
-public sealed class FileStateStore(EfPlatformDbContext db, IPlatformTransactionExecutor transactions, TimeProvider clock, IEntityAuditValueProvider audit)
+public sealed partial class FileStateStore(EfPlatformDbContext db, IPlatformTransactionExecutor transactions, TimeProvider clock, IEntityAuditValueProvider audit)
 {
     public const string RecordModel = "FileRecord";
     public const string LeaseModel = "FileUploadLease";
@@ -128,7 +128,11 @@ public sealed class FileStateStore(EfPlatformDbContext db, IPlatformTransactionE
                 && !Usages.Any(usage => EF.Property<string>(usage, "FileId") == EF.Property<string>(file, "EID") && EF.Property<string>(usage, "State") == "active")
                 && !Leases.Any(lease => EF.Property<string>(lease, "FileId") == EF.Property<string>(file, "EID")
                     && (EF.Property<string>(lease, "State") == "receiving" || EF.Property<string>(lease, "State") == "staged")
-                    && EF.Property<DateTime>(lease, "ExpiresAt") > now)))
+                    && EF.Property<DateTime>(lease, "ExpiresAt") > now)
+                && !Copies.Any(copy => (EF.Property<string>(copy, "FileId") == EF.Property<string>(file, "EID")
+                        || EF.Property<string>(copy, "SourceFileId") == EF.Property<string>(file, "EID"))
+                    && (EF.Property<string>(copy, "State") == "receiving" || EF.Property<string>(copy, "State") == "prepared")
+                    && EF.Property<DateTime>(copy, "ExpiresAt") > now)))
             .OrderBy(file => EF.Property<string>(file, "State") == "cleanupPending" ? 0 : 1)
             .ThenBy(file => EF.Property<DateTime>(file, "CreatedAt")).ThenBy(file => EF.Property<string>(file, "EID"))
             .Take(batchSize).ToListAsync(token);
@@ -147,7 +151,9 @@ public sealed class FileStateStore(EfPlatformDbContext db, IPlatformTransactionE
             var legal = await Leases.AnyAsync(row => EF.Property<string>(row, "FileId") == fileId
                 && EF.Property<DateTime>(row, "ExpiresAt") > now
                 && (EF.Property<string>(row, "State") == "staged" || (hasWriter && EF.Property<string>(row, "State") == "receiving")), inner);
-            if (legal) return false;
+            if (legal || await HasCopySourceLeaseAsync(fileId, inner) || await Copies.AnyAsync(row => EF.Property<string>(row, "FileId") == fileId
+                && EF.Property<DateTime>(row, "ExpiresAt") > now && (EF.Property<string>(row, "State") == "prepared"
+                    || hasWriter && EF.Property<string>(row, "State") == "receiving"), inner)) return false;
             file["State"] = "cleanupPending";
             await MarkLeasesAsync(fileId, "cleanupPending", inner);
             return true;
@@ -184,10 +190,15 @@ public sealed class FileStateStore(EfPlatformDbContext db, IPlatformTransactionE
     }
 
     // 变更有限状态的 lease 使用数据库批量更新；固定审计按本次服务端 stamp 同步。
-    private Task<int> MarkLeasesAsync(string fileId, string state, CancellationToken token)
+    private async Task<int> MarkLeasesAsync(string fileId, string state, CancellationToken token)
     {
         var stamp = audit.Current();
-        return Leases.Where(row => EF.Property<string>(row, "FileId") == fileId
+        var changed = await Leases.Where(row => EF.Property<string>(row, "FileId") == fileId
+            && EF.Property<string>(row, "State") != "confirmed" && EF.Property<string>(row, "State") != "cleaned")
+            .ExecuteUpdateAsync(setters => setters.SetProperty(row => EF.Property<string>(row, "State"), state)
+                .SetProperty(row => EF.Property<string>(row, "UpdatedBy"), stamp.ActorId)
+                .SetProperty(row => EF.Property<DateTime>(row, "UpdatedAt"), stamp.OccurredAtUtc), token);
+        return changed + await Copies.Where(row => EF.Property<string>(row, "FileId") == fileId
             && EF.Property<string>(row, "State") != "confirmed" && EF.Property<string>(row, "State") != "cleaned")
             .ExecuteUpdateAsync(setters => setters.SetProperty(row => EF.Property<string>(row, "State"), state)
                 .SetProperty(row => EF.Property<string>(row, "UpdatedBy"), stamp.ActorId)
@@ -206,13 +217,16 @@ public sealed class FileStateStore(EfPlatformDbContext db, IPlatformTransactionE
     }
 
     // 排除已被本次取消/消费的 lease；confirmed 的 TTL 不是有效未消费租约。
-    internal Task<bool> HasLegalLeaseAsync(string fileId, string? exceptUploadId, CancellationToken token)
+    internal async Task<bool> HasLegalLeaseAsync(string fileId, string? exceptUploadId, CancellationToken token)
     {
         var now = Now;
-        return Leases.AnyAsync(row => EF.Property<string>(row, "FileId") == fileId
+        return await Leases.AnyAsync(row => EF.Property<string>(row, "FileId") == fileId
             && (exceptUploadId == null || EF.Property<string>(row, "EID") != exceptUploadId)
             && (EF.Property<string>(row, "State") == "receiving" || EF.Property<string>(row, "State") == "staged")
-            && EF.Property<DateTime>(row, "ExpiresAt") > now, token);
+            && EF.Property<DateTime>(row, "ExpiresAt") > now, token)
+            || await Copies.AnyAsync(row => (EF.Property<string>(row, "FileId") == fileId || EF.Property<string>(row, "SourceFileId") == fileId)
+                && (EF.Property<string>(row, "State") == "receiving" || EF.Property<string>(row, "State") == "prepared")
+                && EF.Property<DateTime>(row, "ExpiresAt") > now, token);
     }
 
     // 同请求重复 Confirm 可读取本次登记的 tracker，独立恢复必须使用 ReadPairAsync。

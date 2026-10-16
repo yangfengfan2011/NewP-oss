@@ -4,7 +4,7 @@ import { readStandardCrudRequestError, StandardCrudRequestError, type StandardCr
 import type { WorkspaceDocumentDraft } from './workspaceDocumentUpload';
 import { WorkspaceDocumentSession } from './workspaceDocumentSession';
 import { workspacePosition } from './workspacePosition';
-import { workspaceClipboard as clipboard, type FolderCopyDraft, type ObjectCopyDraft } from './workspaceClipboard';
+import { workspaceClipboard as clipboard, type FolderCopyDraft, type ObjectCopyDraft, type ObjectCopyReceipt } from './workspaceClipboard';
 
 interface LinkRow { linkId: string; associatedObject: { modelKey: string; id: string }; fields: Record<string, unknown> }
 const headers = (featurePosition?: string): Record<string, string> => featurePosition ? { 'X-NewP-Feature': featurePosition } : {};
@@ -13,6 +13,7 @@ const WorkspaceObjectEditInput = lazy(() => import('./WorkspaceObjectEditInput')
 const WorkspaceDocumentCreateInput = lazy(() => import('./WorkspaceDocumentCreateInput'));
 const WorkspaceFolderCopyInput = lazy(() => import('./WorkspaceFolderCopyInput'));
 const WorkspaceObjectCopyInput = lazy(() => import('./WorkspaceObjectCopyInput'));
+const WorkspaceObjectCopyRecovery = lazy(() => import('./WorkspaceObjectCopyRecovery'));
 async function referenceCommand(method: string, path: string, body: unknown, featurePosition?: string) {
   const response = await platformFetch(path, { method, headers: { ...headers(featurePosition), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!response.ok) throw await readStandardCrudRequestError(response);
@@ -29,6 +30,7 @@ const resource: StandardCrudResourceRegistration = {
   listFieldRenderers: { ObjectType: ({ row, value }) => createElement('span', null,
     createElement('span', { 'aria-hidden': true }, row.ObjectModelKey === 'WorkspaceFolder' ? '📁 ' : row.ObjectModelKey === 'Part' ? '▦ ' : '▤ '), String(value ?? '')) },
   actionInputRenderers: {
+    recoverObjectCopy: Object.assign((context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceObjectCopyRecovery, context)), { presentation: 'drawer' as const }),
     copyObject: Object.assign((context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceObjectCopyInput, context)), { presentation: 'drawer' as const }),
     copyFolder: (context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceFolderCopyInput, context)),
     editObject: Object.assign((context: StandardCrudActionInputRenderContext) =>
@@ -45,9 +47,10 @@ const resource: StandardCrudResourceRegistration = {
       const receipt = await clipboard(instance).pasteObjectCopy(value.draft, value.values, workspacePosition(queryScope), featurePosition);
       return { operation: 'action' as const, payload: receipt, change: { operation: 'create' as const, id: '' }, notice: { reasonKey: 'Workspace.ObjectCopied' } };
     }, { isCorrectableInputError: (failure: unknown) => failure instanceof StandardCrudRequestError
-      && ['Part.CodeDuplicated', 'StandardCrud.PersistenceConflict', 'Workspace.CopySourceChanged', 'Workspace.CopyOutcomeUnknown'].includes(failure.code ?? '') }),
-    resolveObjectCopy: async ({ instance, featurePosition }) => {
-      const receipt = await clipboard(instance).resolveObjectCopy(false, featurePosition);
+      && ['Part.CodeDuplicated', 'Document.CodeDuplicated', 'StandardCrud.PersistenceConflict', 'Workspace.CopySourceChanged', 'Workspace.CopyOutcomeUnknown'].includes(failure.code ?? '') }),
+    resolveObjectCopy: async ({ instance, featurePosition, input }) => {
+      const recovered = input as ObjectCopyReceipt | undefined;
+      const receipt = recovered?.state === 'committed' || recovered?.state === 'cancelled' ? recovered : await clipboard(instance).resolveObjectCopy(false, featurePosition);
       return { operation: 'action', payload: receipt, ...(receipt.succeeded ? { change: { operation: 'create' as const, id: '' } } : { noChange: true as const }),
         notice: { reasonKey: receipt.succeeded ? 'Workspace.ObjectCopied' : receipt.state === 'cancelled' ? 'Workspace.CopyCancelled' : 'Workspace.CopyNotCommitted' } };
     },

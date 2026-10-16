@@ -84,7 +84,8 @@ public sealed partial class WorkspaceContents
             var resource = Resource(target.ModelKey);
             if (!await reader.IsEndpointReadableAsync("workspace.content", target, token)) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
             if (mode != "remove" && !await decisions.IsAllowedAsync(resource, target.Id, mode == "cut" ? "edit" : CopyAction(target.ModelKey), token)
-                && !(mode == "select-copy" && target.ModelKey == "Part" && await decisions.IsAllowedAsync(resource, target.Id, "partObjectCopy", token)))
+                && !(mode == "select-copy" && target.ModelKey is "Part" or "Document"
+                    && await decisions.IsAllowedAsync(resource, target.Id, target.ModelKey == "Part" ? "partObjectCopy" : "documentObjectCopy", token)))
                 throw new LinkQueryException(403, mode == "cut" ? "Workspace.ObjectWriteDenied" : "Workspace.ObjectCopyDenied");
             if (target.ModelKey == WorkspacePositions.FolderModel && await db.Set<Dictionary<string, object?>>("WorkspaceSpace")
                 .AnyAsync(row => EF.Property<string>(row, "RootFolderId") == target.Id, token)) throw new LinkQueryException(409, "Workspace.RootReferenceForbidden");

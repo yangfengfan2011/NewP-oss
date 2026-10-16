@@ -29,6 +29,7 @@ public sealed class FilesModule : ModuleCapsuleBindingBase
         services.AddSingleton<IFileContentStore>(provider => provider.GetRequiredService<LocalStorageProvider>());
         services.AddScoped<FileStateStore>();
         services.AddScoped<IFileLifecycleService, FileLifecycleService>();
+        services.AddScoped<IFileCopyService>(provider => (FileLifecycleService)provider.GetRequiredService<IFileLifecycleService>());
         services.AddScoped<FileCleanupService>();
         services.AddHostedService<FileCleanupWorker>();
         // DenyAll 的历史 Controller 保留其依赖，业务消费者只能调用稳定生命周期契约。

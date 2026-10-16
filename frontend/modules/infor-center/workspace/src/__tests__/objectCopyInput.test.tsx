@@ -8,6 +8,7 @@ import WorkspaceObjectCopyInput from '../WorkspaceObjectCopyInput';
 import { workspaceClipboard, type ObjectCopyDraft } from '../workspaceClipboard';
 import workspaceDictionary from '../../metadata/dictionaries/Workspace.dic.json';
 import partDictionary from '../../../part/metadata/dictionaries/Part.dic.json';
+import documentDictionary from '../../../document/metadata/dictionaries/Document.dic.json';
 
 vi.mock('@icp-platform/core', async original => ({ ...await original<typeof import('@icp-platform/core')>(), platformFetch: vi.fn() }));
 const roots: { root: Root; element: HTMLElement }[] = [];
@@ -16,33 +17,36 @@ const target = { spaceId: 'public', rootFolderId: 'root', linkIds: '["target"]' 
 const catalogs = { zhs: Object.fromEntries([
   ...Object.entries(workspaceDictionary.Workspace).map(([key, value]) => [`Workspace.${key}`, value.zhs]),
   ...Object.entries(partDictionary.Part).map(([key, value]) => [`Part.${key}`, value.zhs]),
+  ...Object.entries(documentDictionary.Document).map(([key, value]) => [`Document.${key}`, value.zhs]),
 ]) };
 afterEach(async () => { for (const { root, element } of roots.splice(0)) { await act(async () => root.unmount()); element.remove(); } vi.resetAllMocks(); });
 
-async function mount(preparation?: Promise<Response>) {
+async function mount(preparation?: Promise<Response>, modelKey = 'Part') {
   const entries = new Map<symbol, unknown>();
   let active = true;
   const instance: StandardCrudActionInstance = { get active() { return active; }, changed: vi.fn(), getOrCreate: (key, create) => {
     if (!entries.has(key)) entries.set(key, create()); return entries.get(key) as ReturnType<typeof create>;
   } };
   const session = workspaceClipboard(instance);
-  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ linkId: 'part', modelKey: 'Part' }] })));
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ linkId: 'part', modelKey }] })));
   await session.copy(source, ['part'], 'copy');
   vi.mocked(platformFetch).mockImplementation(async () => preparation ?? new Response(JSON.stringify({ operationId: 'first', values: { ECODE: '', ENAME: '原名称', Description: '原说明' }, sourcePath: ['公共空间', '源'], targetPath: ['公共空间', '目标'] })));
   let draft: { draft: ObjectCopyDraft; values: Record<string, unknown> } | undefined;
+  let submission: Promise<unknown> | undefined;
   const draftState = vi.fn();
   function Harness({ scope = target }: { scope?: Record<string, unknown> }) {
     const [value, change] = useState<unknown>(); draft = value as typeof draft;
     const [ready, setReady] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
     return <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={catalogs}>
       <WorkspaceObjectCopyInput instance={instance} action={{ key: 'pasteObjectCopy', labelKey: 'Workspace.PasteObjectCopy' }}
-        featurePosition="object-copy" queryScope={scope} value={value} onChange={change} onDraftStateChange={state => { draftState(state); setReady(state.ready); }} />
-      <button disabled={!ready} onClick={() => { void session.pasteObjectCopy(draft!.draft, draft!.values, { ...source, linkIds: ['target'] }, 'object-copy'); }}>提交</button>
+        featurePosition="object-copy" queryScope={scope} value={value} onChange={change} submitting={submitting} onDraftStateChange={state => { draftState(state); setReady(state.ready); }} />
+      <button disabled={!ready} onClick={() => { setSubmitting(true); submission = session.pasteObjectCopy(draft!.draft, draft!.values, { ...source, linkIds: ['target'] }, 'object-copy').catch(failure => failure).finally(() => setSubmitting(false)); }}>提交</button>
     </LocalizationProvider>;
   }
   const element = document.createElement('div'); document.body.append(element); const root = createRoot(element); roots.push({ element, root });
   await act(async () => root.render(<Harness />));
-  return { element, root, session, instance, Harness, draftState, draft: () => draft!, end: () => { active = false; session.close(); } };
+  return { element, root, session, instance, Harness, draftState, draft: () => draft!, submission: () => submission, end: () => { active = false; session.close(); } };
 }
 async function fill(element: HTMLElement, label: string, value: string) {
   const input = [...element.querySelectorAll('input,textarea')].find(node => node.getAttribute('aria-label') === label
@@ -62,6 +66,37 @@ it('requires a new code, shows the verified paths and preserves user edits while
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ operationId: 'second', values: { ECODE: '', ENAME: '后台新名称', Description: '后台新说明' }, sourcePath: ['公共空间', '源'], targetPath: ['公共空间', '目标'] })));
   await act(async () => [...view.element.querySelectorAll('button')].find(button => button.textContent === '重新核对来源')!.click());
   expect(view.draft().values).toEqual({ ECODE: 'NEW', ENAME: '主动编辑', Description: '后台新说明' });
+});
+
+it('shows every Document file and keeps acknowledged cancellation closed after the in-flight response fails', async () => {
+  const view = await mount(Promise.resolve(new Response(JSON.stringify({ operationId: 'document', modelKey: 'Document', fileCount: 3, totalBytes: 33554432,
+    values: { ECODE: '', ENAME: '图文档源', Description: null }, sourcePath: ['源'], targetPath: ['目标'] }))), 'Document');
+  expect(view.element.textContent).toContain('完整主文件和全部附件');
+  expect(view.element.textContent).toContain('文件数: 3'); expect(view.element.textContent).toContain('33554432');
+  await fill(view.element, '编码', 'DOC-NEW');
+  let fail!: (failure: Error) => void;
+  vi.mocked(platformFetch).mockImplementationOnce(() => new Promise((_, reject) => { fail = reject; }));
+  await act(async () => [...view.element.querySelectorAll('button')].find(button => button.textContent === '提交')!.click());
+  expect(view.element.textContent).toContain('正在准备完整文件');
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ state: 'cancelled', succeeded: false })));
+  await act(async () => [...view.element.querySelectorAll('button')].find(button => button.textContent === '请求取消副本')!.click());
+  expect(view.element.textContent).toContain('已确认取消');
+  await act(async () => { fail(new TypeError('connection closed')); await view.submission(); });
+  expect(view.draft().draft.closed).toBe(true);
+  expect(view.draftState).toHaveBeenLastCalledWith({ dirty: true, ready: false });
+  expect(vi.mocked(platformFetch).mock.calls.filter(([url]) => String(url).endsWith('/objects/copy'))).toHaveLength(1);
+});
+
+it('requires reconfirmation after a source-change rejection and preserves the edited code', async () => {
+  const view = await mount(); await fill(view.element, '编码', 'KEEP-CODE');
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ code: 'Workspace.CopySourceChanged' }), { status: 409 }));
+  await act(async () => { [...view.element.querySelectorAll('button')].find(button => button.textContent === '提交')!.click(); await view.submission(); });
+  expect([...view.element.querySelectorAll('button')].find(button => button.textContent === '提交')!.disabled).toBe(true);
+  expect(view.draft().values.ECODE).toBe('KEEP-CODE');
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ operationId: 'reconfirmed', values: { ECODE: '', ENAME: '重新确认名称', Description: '新说明' }, sourcePath: ['源'], targetPath: ['目标'] })));
+  await act(async () => [...view.element.querySelectorAll('button')].find(button => button.textContent === '重新核对来源')!.click());
+  expect(view.draft().values).toEqual({ ECODE: 'KEEP-CODE', ENAME: '重新确认名称', Description: '新说明' });
+  expect([...view.element.querySelectorAll('button')].find(button => button.textContent === '提交')!.disabled).toBe(false);
 });
 
 it('invalidates the old draft and clears editable inputs when the target or subject changes', async () => {

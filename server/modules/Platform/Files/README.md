@@ -2,7 +2,7 @@
 
 Files 的正式身份、模型和迁移来自 `frontend/modules/platform/files/newp.plugin.json` 及其 authoring。后端只绑定 `files.backend`，前端能力关闭。
 
-业务模块仅引用 `Contracts/Files.Contracts.csproj` 并消费 `IFileLifecycleService`。Files 自有 `FileRecord`、`FileUploadLease` 和 `FileUsage` 三个 Entity 及独立 SQL Server migration stream；业务模块拥有实际文件关联、角色和格式规则。
+业务模块仅引用 `Contracts/Files.Contracts.csproj` 并消费 `IFileLifecycleService`、`IFileCopyService`。Files 自有 `FileRecord`、`FileUploadLease`、`FileCopyLease` 和 `FileUsage` 四个 Entity 及独立 SQL Server migration stream；业务模块拥有实际文件关联、角色和格式规则。
 
 ## 上传与事务
 
@@ -11,6 +11,14 @@ Files 的正式身份、模型和迁移来自 `frontend/modules/platform/files/n
 上传失败或提交结果未知时，在原事务退出后的新 scope 重读持久事实。只有仍 receiving 的失败进入回收；未知结果已经 staged 时保留合法 lease，已经 confirmed 且使用 active 时保留内容。
 
 `ConfirmUsageAsync` 和 `ReleaseUsageAsync` 要求已有平台事务，只登记共享 tracker 的变更，不能自行 Flush、Save 或提交。业务 owner 在确认返回后填齐关联的 UsageId，再由外层统一保存和提交。相同已 confirmed 的活跃目标只返回原使用，不能换目标或复活 released 使用。
+
+## 独立文件副本
+
+`IFileCopyService` 只接受已登记 owner 的真实活跃 `FileUsageReference`，通过 `CopySource` 核证来源，不借用 download。每份副本物理克隆不可变字节，生成独立文件和使用身份，保留安全名称、ContentType，并重新测量 Length/Sha256。新上传格式、大小及附件配置不能作为既有内容的默认复制拒绝；业务复制准入仍由 owner 明确裁决。
+
+`FileCopyLease` 明确绑定 actor、request key、来源 File/Usage/owner 和目标用途，不复用 UploadId。准备在业务事务及图锁外执行，以两个独立短事务记录 receiving 与 prepared；actor+request key 的事务锁使取消先于迟到意图时留下持久 cancelled 墓碑。首次 ConfirmCopy 必须在原业务事务内证明真实 Added 关联；prepared 是技术准备，不代替最终来源/目标授权。相同已确认活跃目标可重读原使用，不能改 owner、换关联或复活 released。
+
+来源删除可以先提交，receiving/prepared 的合法复制租约保护源字节；业务最终确认仍要求来源活跃并重新核证。取消先提交取消事实，再中止并等待目标 writer，不持 SQL 事务等待 I/O。准备提交未知只收敛仍 receiving，已 prepared 不盲删；业务提交未知根据 confirmed usage 与持久业务结果裁决。重启清理只处理有登记键的残留；合法 prepared 保留至取消或到期，已 confirmed 依 active usage 保护。上传与复制租约分别保留来源历史，读取/释放核证恰有一个匹配反向租约。
 
 ## 用途与读取
 

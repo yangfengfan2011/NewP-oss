@@ -13,8 +13,8 @@
 
 - 用户点名或任务触发某个 skill 时，读取该 `SKILL.md` 执行。通用 skill 的默认流程由本仓库的任务状态源、验证分工和授权边界约束；其余步骤沿用 skill。用户本次明确指令优先。
 - 实施任务（包括调用 `$implement`）前，读取 [quick-verification.md](docs/verification/quick-verification.md) 的“执行层级”，确定本次承担单任务、child 还是父级收尾。
-- 派发或关闭 child 前，读取该指南的“Child 完成证据”，核对验证范围与完成证据；恢复完整 verify 前，读取“诊断与审查证据”和“父级收尾”，核对失败收敛与恢复条件。
-- 诊断或审查（包括 `$code-review`）时，读取 [quick-verification.md](docs/verification/quick-verification.md) 的“诊断与审查证据”，按当前依赖与实际消费路径判定问题。
+- 派发或关闭 child 前，读取该指南的“Child 完成证据”，核对验收条件、关键反例及受影响消费者的实际证据；属于本 child 的证据缺口不能留给父级补成完成结论。
+- 诊断、审查（包括 `$code-review`）或验证失败时，读取该指南的“诊断与审查证据”；恢复完整验证按其中的失败收敛条件执行，父级再按“父级收尾”核对候选与最终验收。
 - Skill 配置文件由 `/setup-matt-pocock-skills` 生成并被 skill 运行时读取，不要删除或改名：
   - `docs/agents/issue-tracker.md` — issue 跟踪器约定（GitHub + `gh` CLI）
   - `docs/agents/triage-labels.md` — 分流标签映射
@@ -62,7 +62,7 @@
 
 每条断言放在能给出最精确失败信号的最低层。判据只有一条：**失败时能不能直接定位到行**。
 
-开发与返修默认执行覆盖本次行为变化及实际消费者的最小充分验证，保留未受影响的有效证据。共享依赖、跨模块引用或被某个 Gate 消费，本身不触发完整 Gate；扩大验证须说明低层尚不能证明的具体集成行为。验证选择、失败恢复和最终交付节点遵循 [quick-verification.md](docs/verification/quick-verification.md)；父级最终完整验证仍集中执行。
+开发与返修执行覆盖本次行为变化及实际消费者的最小充分验证，保留未受影响的有效证据。验证范围、child 关闭、失败收敛和父级最终验收统一遵循 [quick-verification.md](docs/verification/quick-verification.md)。
 
 - **静态门禁与编译**：格式、契约同步、引用完整性。秒级反馈。
 - **单元测试**：值的正确性、边界、投影函数、状态机。新增或改变模块能力时必须补足。
@@ -72,8 +72,6 @@
 浏览器层**禁止**断言数据语义、格式或边界，这些一律下沉。每个模块一条冒烟旅程即可：进入 → 列表出数据 → 打开详情 → 提交一次写入 → 看到结果；其余场景在下层验证。
 
 例外：冷启动、首次建库、迁移执行和管理员初始化保留完整验收，它们没有下层替代。
-
-新增任何验收旅程前先回答：这条断言能不能在更低层验证？能，就下沉。
 
 验收闸门是 `tests/acceptance/Acceptance.Tests` 里的普通 xUnit 测试，未设 `NEWP_RUN_ACCEPTANCE=1` 时跳过，因此日常 `dotnet test` 可以放心包含它们。启用后用 `.\scripts\accept.ps1 -Gate <Gate>`（`dotnet test --filter` 的薄封装）。**失败就是异常与栈**，不要再引入失败码、事件流或裁决文件那类中间层——没有消费者的举证只会把失败信号变模糊。场景里写的 JSON 快照是排错转储，不是通过依据。
 

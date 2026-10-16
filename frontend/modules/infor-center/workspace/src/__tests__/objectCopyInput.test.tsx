@@ -154,3 +154,26 @@ it('keeps failed preparation non-submittable and aborts closed preparation witho
   expect(cancelled.element.querySelector('input')).toBeNull();
   expect(vi.mocked(platformFetch).mock.calls.some(([url]) => String(url).endsWith('/objects/copy'))).toBe(false);
 });
+
+it.each(['Part', 'Document'])('locates duplicate code on the single %s field and preserves all edited input', async modelKey => {
+  const view = await mount(Promise.resolve(new Response(JSON.stringify({ operationId: 'single-code-error', modelKey,
+    values: { ECODE: '', ENAME: '原名称', Description: '原说明' }, sourcePath: ['源'], targetPath: ['目标'],
+    ...(modelKey === 'Document' ? { fileCount: 0, totalBytes: 0 } : {}) }))), modelKey);
+  await fill(view.element, '编码', 'DUPLICATED'); await fill(view.element, '名称', '保留名称'); await fill(view.element, '说明', '保留说明');
+  const message = '编码已存在，请填写其他编码';
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ code: `${modelKey}.CodeDuplicated`,
+    fieldErrors: [{ field: 'ECODE', message }] }), { status: 409 }));
+  await act(async () => { [...view.element.querySelectorAll('button')].find(button => button.textContent === '提交')!.click(); await view.submission(); });
+  expect(view.draft().draft.fieldErrors).toEqual({ ECODE: message });
+  expect(view.draft().values).toEqual({ ECODE: 'DUPLICATED', ENAME: '保留名称', Description: '保留说明' });
+  const code = view.element.querySelector<HTMLInputElement>('input[id="ECODE"]')!;
+  expect(code.value).toBe('DUPLICATED');
+  expect(view.element.querySelector<HTMLInputElement>('input[id="ENAME"]')!.value).toBe('保留名称');
+  expect(view.element.querySelector<HTMLTextAreaElement>('textarea[id="Description"]')!.value).toBe('保留说明');
+  expect(code.closest('.ant-form-item')?.textContent).toContain(message);
+  expect(code.closest('.ant-form-item')?.classList.contains('ant-form-item-has-error')).toBe(true);
+  expect(view.element.querySelector('input[id="ENAME"]')?.closest('.ant-form-item')?.classList.contains('ant-form-item-has-error')).toBe(false);
+  const writes = vi.mocked(platformFetch).mock.calls.filter(([url]) => String(url).endsWith('/objects/copy'));
+  expect(writes).toHaveLength(1);
+  expect(JSON.parse(String(writes[0][1]?.body))).toEqual({ operationId: 'single-code-error', values: { ECODE: 'DUPLICATED', ENAME: '保留名称', Description: '保留说明' } });
+});

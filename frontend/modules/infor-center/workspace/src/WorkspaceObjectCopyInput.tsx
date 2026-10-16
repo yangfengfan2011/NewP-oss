@@ -88,6 +88,7 @@ export default function WorkspaceObjectCopyInput({ instance, queryScope, feature
         onChange={(key, next) => callbacks.current.onChange({ draft, values: { items: (rows ?? []).map((row, rowIndex) => rowIndex === index ? { ...row, values: { ...row.values, [key.slice(prefix.length)]: next } } : row) } })}
         onSubmit={() => undefined} saving={expired || submitting || cancelState === 'requested' || state?.phase === 'unknown'} showSubmitAction={false} titleForSection={() => t('Workspace.Basic')} />
     </section>; }) : preparation && <StandardCrudForm formId="workspace-object-copy" mode="create" fields={fields} sections={[]} values={values}
+      fieldErrors={draft?.fieldErrors}
       onChange={(key, next) => callbacks.current.onChange({ draft, values: { ...values, [key]: next } })}
       onSubmit={() => undefined} saving={expired || submitting || state?.phase === 'unknown'} showSubmitAction={false} titleForSection={() => t('Workspace.Basic')} />}
     {!submitting && !expired && state?.phase === 'idle' && <Button onClick={() => setReread(count => count + 1)}>{t('Workspace.CopyReconfirm')}</Button>}

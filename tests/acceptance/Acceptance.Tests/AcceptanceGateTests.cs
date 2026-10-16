@@ -161,6 +161,9 @@ public sealed class AcceptanceGateTests
                 await driver.OpenAsync(); await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
                 await driver.CopyFolderFromTreeContextMenuAsync(fixture.ExistingFolderName, selectedOnly: true);
                 await driver.SelectRootAsync("公共空间");
+                var copyTarget = "副本目标 " + runId[..8];
+                await driver.CreateFolderAsync(copyTarget);
+                await driver.SelectTreePathAsync("公共空间", copyTarget);
                 await driver.PasteFolderCopyAsync("浅副本 " + runId[..8], async () =>
                 {
                     await page.ScreenshotAsync(new() { Path = Path.Combine(root, "copy-input-zhs.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
@@ -193,6 +196,11 @@ public sealed class AcceptanceGateTests
                 await page.SetViewportSizeAsync(900, 1000);
                 await page.ScreenshotAsync(new() { Path = Path.Combine(root, "structure-input-en-narrow.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
                 await dialog.GetByRole(AriaRole.Button, new() { Name = "Cancel", Exact = true }).ClickAsync();
+                await driver.SelectLanguageAsync("简体中文");
+                await driver.RemoveSelectedReferencesAsync(["浅副本 " + runId[..8], "结构副本 " + runId[..8]]);
+                await driver.SelectRootAsync("公共空间");
+                await driver.DeleteSelectedAsync(copyTarget);
+                await page.ScreenshotAsync(new() { Path = Path.Combine(root, "copy-target-deleted.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
             }).RunAsync(CancellationToken.None);
     }
 

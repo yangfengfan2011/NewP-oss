@@ -12,6 +12,39 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "两种新副本使目标非空；仅移除新根引用后才能删除目标，来源与副本对象不删除")]
+    public async Task FolderCopies_RemoveReferencesBeforeDeletingTheirParent()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
+        using var admin = await fixture.LoginAdministratorAsync(); var root = await Root(fixture, admin);
+        var source = await Folder(fixture, admin, root, "清理来源");
+        await Folder(fixture, admin, source, "保留来源子文件夹");
+        var target = await Folder(fixture, admin, root, "待删除父目录");
+        var targetId = FolderId(target, await Rows(fixture, "WorkspaceFolderContent"));
+        await Command(fixture, admin, "workspace.folder.pasteFolderCopy", "/api/workspace/content/folders/copy", new {
+            mode = "copy", sourcePosition = root, linkIds = new[] { source.LinkIds[^1] }, targetPosition = target, name = "清理浅副本" });
+        await Command(fixture, admin, "workspace.folder.pasteFolderStructure", "/api/workspace/content/folders/copy-structure", new {
+            mode = "copy", sourcePosition = root, linkIds = new[] { source.LinkIds[^1] }, targetPosition = target, name = "清理结构副本" });
+        var folders = await Rows(fixture, "WorkspaceFolder"); var links = await Rows(fixture, "WorkspaceFolderContent");
+        var copyIds = folders.Where(row => Equals(row["ENAME"], "清理浅副本") || Equals(row["ENAME"], "清理结构副本")).Select(row => row["EID"]).ToHashSet();
+        Assert.Equal(2, copyIds.Count);
+        var incoming = links.Where(row => Equals(row["PEID"], targetId)).ToArray();
+        Assert.Equal(2, incoming.Length); Assert.All(incoming, row => Assert.Contains(row["CEID"], copyIds));
+        var delete = new { position = root, linkIds = new[] { target.LinkIds[^1] } };
+        using (var rejected = await Send(fixture, admin, "workspace.folder.deleteObjects", "delete", delete))
+            await Problem(rejected, HttpStatusCode.Conflict, "Workspace.FolderNotEmpty");
+        Assert.Equal(Snapshot(folders), Snapshot(await Rows(fixture, "WorkspaceFolder")));
+        Assert.Equal(Snapshot(links), Snapshot(await Rows(fixture, "WorkspaceFolderContent")));
+        await Command(fixture, admin, "workspace.folder.removeSelected", "/api/workspace/content/references/remove", new {
+            position = target, linkIds = incoming.Select(row => (string)row["LID"]!).ToArray() });
+        Assert.Equal(Snapshot(folders), Snapshot(await Rows(fixture, "WorkspaceFolder")));
+        Assert.Equal(Snapshot(links.Where(row => !incoming.Any(edge => Equals(edge["LID"], row["LID"]))).ToArray()), Snapshot(await Rows(fixture, "WorkspaceFolderContent")));
+        await Command(fixture, admin, "workspace.folder.deleteObjects", "/api/workspace/content/delete", delete);
+        Assert.Equal(Snapshot(folders.Where(row => !Equals(row["EID"], targetId)).ToArray()), Snapshot(await Rows(fixture, "WorkspaceFolder")));
+        Assert.Equal(Snapshot(links.Where(row => !incoming.Any(edge => Equals(edge["LID"], row["LID"])) && !Equals(row["LID"], target.LinkIds[^1])).ToArray()),
+            Snapshot(await Rows(fixture, "WorkspaceFolderContent")));
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "cut重建LID原样保留历史NULL、普通false和中性true；结构复制仍遍历中性边并生成普通新边")]
     public async Task ScopeNeutral_CutPreservesAllStatesAndStructureTraversesNeutralEdges()
     {

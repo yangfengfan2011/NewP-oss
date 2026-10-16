@@ -229,6 +229,9 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             await driver.EditObjectAsync(PartName + " 新建", PartName + " 已编辑");
             await CapturePresentationAsync(page, "folder-content-edited.png");
             await driver.DeleteSelectedAsync(DocumentName + " 已编辑", PartName + " 已编辑");
+            // 新副本保留自己的对象图；移除其入向引用后，原目标才恢复既有空目录删除前提。
+            await driver.SelectTreePathAsync("公共空间", siblingName);
+            await driver.RemoveSelectedReferencesAsync(["浅副本 " + _runId[..8], "结构副本 " + _runId[..8]]);
             await driver.SelectRootAsync("公共空间");
             await driver.EditObjectAsync(folderName, folderName + " 已编辑");
             await driver.DeleteSelectedAsync(siblingName, moveTarget, folderName + " 已编辑");

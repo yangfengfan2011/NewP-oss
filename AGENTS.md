@@ -11,14 +11,14 @@
 
 本仓库安装了 mattpocock engineering skills。它们是**按需调用**的工具，不是必须通过的关卡：用户点名或任务明确触发时才使用，不因为「流程规定」而强制运行。
 
-- 用户点名或任务触发某个 skill 时，读取该 `SKILL.md` 执行。通用 skill 的默认流程由本仓库的任务状态源、验证分工和授权边界约束；其余步骤沿用 skill。用户本次明确指令优先。
-- 实施任务（包括调用 `$implement`）前，读取 [quick-verification.md](docs/verification/quick-verification.md) 的“执行层级”，确定本次承担单任务、child 还是父级收尾。
-- 派发或关闭 child 前，读取该指南的“Child 完成证据”，核对验收条件、关键反例及受影响消费者的实际证据；属于本 child 的证据缺口不能留给父级补成完成结论。
+- 用户点名或任务触发某个 skill 时，读取该 `SKILL.md` 执行。通用 skill 的默认流程由本仓库的任务状态源、验证分工和授权边界约束；其余步骤沿用 skill。`implement-spec`、`retro` 的调用条件与仓库适配见 [issue-tracker.md](docs/agents/issue-tracker.md#技能操作映射)。用户本次明确指令优先。
+- 实施任务（包括调用 `$implement` 或 `$implement-spec`）前，读取 [quick-verification.md](docs/verification/quick-verification.md) 的“执行层级”，确定本次承担单任务、child 还是父级收尾。
+- 派发或关闭 child 前，按 [issue-tracker.md](docs/agents/issue-tracker.md) 安排持续 owner 和依赖／资源允许的并行，按验证指南的“Child 完成证据”核对实际覆盖；属于本 child 的证据缺口不能留给父级补成完成结论。
 - 诊断、审查（包括 `$code-review`）或验证失败时，读取该指南的“诊断与审查证据”；恢复完整验证按其中的失败收敛条件执行，父级再按“父级收尾”核对候选与最终验收。
 - Skill 配置文件由 `/setup-matt-pocock-skills` 生成并被 skill 运行时读取，不要删除或改名：
   - `docs/agents/issue-tracker.md` — issue 跟踪器约定（GitHub + `gh` CLI）
   - `docs/agents/triage-labels.md` — 分流标签映射
-  - `docs/agents/domain.md` — 领域文档读取规则
+  - `docs/agents/domain.md` — 领域文档读取与 CONTEXT/GLOSSARY 兼容映射
 - GitHub Issue 的写入授权与生命周期按下文“设计与交付”执行。
 
 ## 检索与上下文
@@ -39,7 +39,7 @@
 - Kernel 提供共享抽象与基础设施；内建模块通过 Contracts、SDK 和 Kernel 抽象协作，不依赖其他模块的具体基础设施实现。
 - 跨模块能力通过稳定契约暴露，各模块拥有自己的数据与持久化边界；后端与前端代码只绑定稳定 behavior key。
 - 平台代码不得出现业务模块名的特判。产品专属页面、临时验证、样例和单模块特例留在对应模块、测试或样例范围内，不固化进 Host、Shell 或平台公共内核。
-- 任务涉及 Host、Shell、Contracts、SDK、插件装配或跨模块能力时，读取 `docs/architecture/componentization-guardrails.md`。涉及领域术语或上下文边界时，读取 `docs/agents/domain.md` 与 `CONTEXT-MAP.md`。
+- 任务涉及 Host、Shell、Contracts、SDK、插件装配或跨模块能力时，读取 `docs/architecture/componentization-guardrails.md`。涉及领域术语、上下文边界，或技能要求 GLOSSARY/GLOSSARY-MAP 时，先按 `docs/agents/domain.md` 的兼容映射定位当前真源。
 
 ## 后端规则
 
@@ -95,7 +95,7 @@
 
 ## 设计与交付
 
-- 不确定方案时，先做出一个可运行的最小切片再判断，不先写设计文档。已跑通的代码比设计稿更可靠。
+- 不确定方案时，先用已确认规格中的关键反例和真实消费者贯通最小切片，再扩展同类功能；不先写设计文档。
 - 平台能力、公共契约、持久化、安全边界和难以回退的变化，在扩大实施前必须有一次真实纵向验证：从真实 authoring 输入贯通到真实 runtime consumer。**纵向验证必须使用真实业务模块，不新建样例模块**——样例模块的验证成本与真实模块相同，但产出零业务价值。
 - 需要留存决策时写 ADR，只记录边界、非目标和回退路径，不记录过程。契约、模块边界或架构变化落地后，同步更新其唯一事实文档或 ADR。
 - 实施前明确目标、范围与验收条件，优先复用已确认规格。需要持久化任务目标与执行状态时使用 GitHub Issue；新建 Spec 或拆 child 按任务需要与用户授权决定，显式调用 `to-spec` 或 `to-tickets` 时按对应 skill 执行。选择规则见 [issue-tracker.md](docs/agents/issue-tracker.md)。

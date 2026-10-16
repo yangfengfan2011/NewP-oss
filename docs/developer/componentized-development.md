@@ -150,11 +150,11 @@ MSBuild 命令中的 `%2c` 转义逗号，避免将组件列表拆成多个属�
 
 ## Workspace 固定发行物验收输入
 
-Workspace Gate 消费正式三成员包，不再用静态 dev 装配替代独立交付。普通验收使用 `accept.ps1 -Gate Workspace` 或 `accept.ps1 -Gate All`；完整验证使用 `verify.ps1 -AcceptanceGate Workspace`，也可在 `-AcceptanceGate` 中显式列出其他命名 Gate，列表包含 Workspace 时同样需要本节输入。先准备与本轮冻结候选对应的新包和平台发行物，再登记输入；开发候选可以 dirty。登记只记录 HEAD/tree/index/status、tracked/untracked 内容摘要及发行资产摘要，不授信、不产出另一套裁决。候选或固定目标变化时，在再次执行前重新准备受影响资产并登记，不能沿用返修前的旧发行物冒充最终候选。
+Workspace Gate 消费正式三成员包，不再用静态 dev 装配替代独立交付。普通验收使用 `accept.ps1 -Gate Workspace` 或 `accept.ps1 -Gate All`；完整验证使用 `verify.ps1 -AcceptanceGate Workspace`，也可在 `-AcceptanceGate` 中显式列出其他命名 Gate，列表包含 Workspace 时同样需要本节输入。先准备与本轮候选对应的正式包和平台发行物，再登记输入；开发候选可以 dirty。登记只记录 HEAD/tree/index/status、tracked/untracked 内容摘要及发行资产摘要，不授信、不产出另一套裁决。候选或固定目标变化时，重新准备受影响资产并登记；仅测试资产或交付记录变化时，核对相关产品源码、构建输入及产物身份未变后，可复用原产品产物，只重建受影响测试资产，并用正式登记入口生成当前候选的新输入。不得复用旧输入或手改其候选字段冒充最终验证。
 
 旧数据由一份已有完整正式部署 Host 的真实 bootstrap/API 建立，随后同一个专用 `NewP_Test` catalog 切换到裁剪目标，正式 `install-native`、`enable-bundle` 后重启。baseline 必须包含三个成员的原实现；它与新目标用途不同。调用方必须提供该已有完整部署 Host 的绝对目录；缺少此历史输入的新环境不能用空库或新裁剪目标替代，也不能伪造已有数据连续性。SQL 管理连接沿用 Acceptance 的 `NEWP_ACCEPTANCE_SQLSERVER_ADMIN_CONNECTION`、`NEWP_DEV_SQLSERVER_CONNECTION_STRING` 和开发配置读取顺序，不把凭据写入交付输入或命令日志。
 
-在仓库根、无其他 build/test/browser 占用时，逐条等待成功后继续。每次使用新的输出目录；Host publish 保留 restore 并 Rebuild，避免复用默认全模块的 obj/deps。下面全部完成后，安装、选版、重启期间不再重建目标：
+在仓库根、无其他 build/test/browser 占用时，逐条等待成功后继续。首次准备执行下列命令；后续按上述影响范围选择构建与登记。重建资产使用新的输出目录；Host publish 保留 restore 并 Rebuild，避免复用默认全模块的 obj/deps。目标固定后，安装、选版、重启期间不再重建：
 
 ```powershell
 $repo = (Get-Location).Path
@@ -180,7 +180,7 @@ $env:NEWP_ACCEPTANCE_WORKSPACE_DELIVERY_INPUT = $workspaceDeliveryInput
 .\scripts\verify.ps1 -AcceptanceGate Workspace
 ```
 
-输入登记会核对裁剪 Host 无三成员程序集、声明目录及 deps 引用，Shell 无对应构建期实现。正式 fixture 使用同一安装根、`ExternalPluginsEnabled=false`、`/plugins/runtime/assets` 与现有 production-shell-server 代理；保留候选/目标前后摘要、原始命令、SQL/API 快照、页面诊断及清理/凭据扫描。父级完整验证在最终冻结后重新执行上述准备，不能把 child 的旧输入当成最终输入；普通完整验证不要求 clean。
+输入登记会核对裁剪 Host 无三成员程序集、声明目录及 deps 引用，Shell 无对应构建期实现。正式 fixture 使用同一安装根、`ExternalPluginsEnabled=false`、`/plugins/runtime/assets` 与现有 production-shell-server 代理；保留候选/目标前后摘要、原始命令、SQL/API 快照、页面诊断及清理/凭据扫描。父级完整验证在最终冻结后按上述影响范围准备资产，并重新登记最终输入；不能把 child 的旧输入当成最终输入，普通完整验证不要求 clean。
 
 Document 初版身份升级采用已确认的开发数据清理前提：固定 baseline 真实建立旧 Document 后，候选 Host 必须在新 step 的 DDL/history 前因非空旧 Document 拒绝。fixture 只清理自身创建的旧 Document 及其 Workspace 入向引用，然后在原 catalog 重试正式 Host 升级；Part、Folder、Identity 与旧历史前缀保持，升级后重新创建 Document 验证完整首版链。该过程不证明旧 Document 数据连续，也不重置整库。
 

@@ -25,7 +25,7 @@ public sealed class DataActionCatalogTests
         var compiler = new CanonicalModulePlanCompiler();
         var original = compiler.Compile("order", candidates);
         Assert.True(original.IsSuccess);
-        Assert.Equal(new[] { "read", "create", "edit", "delete", "authorize", "documentCopy", "download", "partCopy", "workspaceCopy" },
+        Assert.Equal(new[] { "read", "create", "edit", "delete", "authorize", "documentObjectCopy", "documentCopy", "download", "partCopy", "partObjectCopy", "workspaceCopy" },
             original.Plan!.DataActionCatalog.Select(action => action.Key));
         Assert.All(original.Plan.DataActionCatalog.Where(action => new[] { "read", "create", "edit", "delete", "authorize" }.Contains(action.Key)), action => Assert.Equal("Authorization", action.ModuleId));
         foreach (var owner in new[] { "Document", "Part", "Workspace" })
@@ -34,13 +34,19 @@ public sealed class DataActionCatalogTests
             Assert.Equal(owner, action.ModuleId); Assert.True(action.RequiresRead); Assert.True(action.Enabled);
             Assert.Equal("data." + owner.ToLowerInvariant() + ".copy", action.BehaviorKey);
         }
+        foreach (var owner in new[] { "Document", "Part" })
+        {
+            var action = Assert.Single(original.Plan.DataActionCatalog, action => action.Key == owner.ToLowerInvariant() + "ObjectCopy");
+            Assert.Equal(owner, action.ModuleId); Assert.True(action.RequiresRead); Assert.True(action.Enabled);
+            Assert.Equal("data." + owner.ToLowerInvariant() + ".objectCopy", action.BehaviorKey);
+        }
         var download = Assert.Single(original.Plan.DataActionCatalog, action => action.Key == "download");
         Assert.Equal(new DataActionDeclaration("Document", "download", "下载", "data.download", RequiresRead: true), download);
         var reversed = compiler.Compile("order", candidates.Select(candidate =>
             candidate with { DataActions = candidate.DataActions.Reverse().ToArray() }));
         Assert.True(reversed.IsSuccess);
         // 反转各 owner 的贡献，不能越过模块边界反转整个合并目录。
-        Assert.Equal(new[] { "authorize", "delete", "edit", "create", "read", "download", "documentCopy", "partCopy", "workspaceCopy" },
+        Assert.Equal(new[] { "authorize", "delete", "edit", "create", "read", "download", "documentCopy", "documentObjectCopy", "partObjectCopy", "partCopy", "workspaceCopy" },
             reversed.Plan!.DataActionCatalog.Select(action => action.Key));
         Assert.Equal(original.Plan.DataActionCatalog.Select(action => action.ModuleId), reversed.Plan.DataActionCatalog.Select(action => action.ModuleId));
         Assert.Equal(download, Assert.Single(reversed.Plan.DataActionCatalog, action => action.ModuleId == "Document" && action.Key == "download"));

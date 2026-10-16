@@ -48,7 +48,15 @@ public sealed class LocalizationRuntimeManifestBuilderTests : IDisposable
             Assert.Equal(english, manifest.RootElement.GetProperty("catalogs").GetProperty("en").GetProperty(key).GetString());
         }
         using var complete = JsonDocument.Parse(new LocalizationRuntimeManifestBuilder().Build(runtime));
-        Assert.Equal(3, complete.RootElement.GetProperty("catalogs").GetProperty("en").EnumerateObject().Count());
+        foreach (var (key, chinese, english) in new[] {
+            ("DataScope.Action_partObjectCopy", "创建零组件真副本", "Create independent part copy"),
+            ("DataScope.Action_documentObjectCopy", "创建图文档真副本", "Create independent document copies") })
+        {
+            Assert.Equal(chinese, complete.RootElement.GetProperty("catalogs").GetProperty("zhs").GetProperty(key).GetString());
+            Assert.Equal(english, complete.RootElement.GetProperty("catalogs").GetProperty("en").GetProperty(key).GetString());
+        }
+        Assert.Equal(5, complete.RootElement.GetProperty("catalogs").GetProperty("zhs").EnumerateObject().Count());
+        Assert.Equal(5, complete.RootElement.GetProperty("catalogs").GetProperty("en").EnumerateObject().Count());
     }
 
     [Fact]

@@ -81,7 +81,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         await CleanDocumentCopies(fixture); Assert.Equal(3, Directory.EnumerateFiles(fixture.StorageRoot).Count());
     }
 
-    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "无文件Document复制仍创建完整初始身份，严格字段与多选拒绝不会产生文件或成功审计")]
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "无文件Document复制仍创建完整初始身份，严格字段与失效来源拒绝不会产生文件或成功审计")]
     public async Task ObjectCopy_DocumentMetadataOnlyUsesTheSameStrictContract()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
@@ -91,7 +91,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var link = Assert.Single(await Rows(fixture, "WorkspaceFolderContent"), item => Equals(item["ChildModelKey"], "Document"));
         var id = (string)link["LID"]!;
         using (var multiple = await Send(fixture, admin, "workspace.folder.pasteObjectCopy", "objects/copy/prepare", new { mode = "copy", sourcePosition = source, linkIds = new[] { id, Guid.NewGuid().ToString() }, targetPosition = target }))
-            await Problem(multiple, HttpStatusCode.BadRequest, "Workspace.ObjectCopySourceRequired");
+            await Problem(multiple, HttpStatusCode.NotFound, "Workspace.ReferenceUnavailable");
         var operation = await PrepareDocumentCopy(fixture, admin, source, target, id);
         using (var forged = await Send(fixture, admin, "workspace.folder.pasteObjectCopy", "objects/copy", new { operationId = operation, values = new { ECODE = "EMPTY-COPY", ENAME = "空副本", LatestVersionId = "forged" } }))
             await Problem(forged, HttpStatusCode.BadRequest, "Workspace.ServerFieldForbidden");

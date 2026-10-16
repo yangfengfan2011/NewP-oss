@@ -18,19 +18,20 @@ public sealed partial class WorkspaceContents
         var input = JsonSerializer.Deserialize<WorkspaceObjectCopyInput>((string)existing["Input"]!)!;
         if (Equals(existing["State"], "committed")) return StandardCrudMutationResult.Success();
         if (input.SourceModel == "Part") return await Execute(WorkspaceObjectCopyBehavior.CopyPart);
+        var candidates = ReadCopyValues(input, values);
+        var sources = CopySources(input);
         var invalid = await transactions.ExecuteAsync<StandardCrudError?>(async cancellation =>
         {
             using var operation = audit.BeginOperation();
             await LockGraphAsync(cancellation);
             var row = await ReadObjectCopyAsync(actor, operationId, cancellation);
             if (!Equals(row["State"], "ready")) throw new LinkQueryException(409, "Workspace.CopyInProgress");
-            var error = await documentCopies.ValidateCopyCandidateAsync(ReadValues(values, "Document"), cancellation);
-            if (error is not null) return error;
-            var source = await positions.ResolveAsync(actor, input.SourcePosition, cancellation);
-            var endpoint = await ResolveObjectCopySourceAsync(source.FolderId, input.LinkIds, cancellation);
-            if (endpoint.ModelKey != "Document" || endpoint.Id != input.SourceId) throw new LinkQueryException(404, "Workspace.ReferenceUnavailable");
-            var current = await documentCopies.ReadCopySourceAsync(endpoint.Id, cancellation);
-            if (current.Confirmation != input.DocumentConfirmation) throw new LinkQueryException(409, "Workspace.CopySourceChanged");
+            for (var index = 0; index < sources.Length; index++)
+            {
+                var error = await documentCopies.ValidateCopyCandidateAsync(candidates[index], cancellation);
+                if (error is not null) return CopyRowError(input, index, error);
+            }
+            await RequireDocumentSourcesAsync(actor, input, cancellation);
             var target = await WritablePositionAsync(actor, input.TargetPosition, cancellation);
             RequireContainer(input.TargetPosition, target, "Document");
             row["State"] = "preparing";
@@ -42,7 +43,8 @@ public sealed partial class WorkspaceContents
         db.ChangeTracker.Clear();
         try
         {
-            await documentCopies.PrepareCopyFilesAsync(input.DocumentConfirmation!, operationId, token);
+            for (var index = 0; index < sources.Length; index++)
+                await documentCopies.PrepareCopyFilesAsync(sources[index].Confirmation, CopyOperationKey(input, operationId, index), token);
             db.ChangeTracker.Clear();
             var result = await Execute(WorkspaceObjectCopyBehavior.CopyDocument);
             if (!result.Succeeded && result.Error?.Code is not ("Persistence.CommitOutcomeUnknown" or "Platform.MutationOutcomeUnknown"))

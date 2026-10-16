@@ -18,7 +18,7 @@ Files 的正式身份、模型和迁移来自 `frontend/modules/platform/files/n
 
 `FileCopyLease` 明确绑定 actor、request key、来源 File/Usage/owner 和目标用途，不复用 UploadId。准备在业务事务及图锁外执行，以两个独立短事务记录 receiving 与 prepared；actor+request key 的事务锁使取消先于迟到意图时留下持久 cancelled 墓碑。首次 ConfirmCopy 必须在原业务事务内证明真实 Added 关联；prepared 是技术准备，不代替最终来源/目标授权。相同已确认活跃目标可重读原使用，不能改 owner、换关联或复活 released。
 
-来源删除可以先提交，receiving/prepared 的合法复制租约保护源字节；业务最终确认仍要求来源活跃并重新核证。取消先提交取消事实，再中止并等待目标 writer，不持 SQL 事务等待 I/O。准备提交未知只收敛仍 receiving，已 prepared 不盲删；业务提交未知根据 confirmed usage 与持久业务结果裁决。重启清理只处理有登记键的残留；合法 prepared 保留至取消或到期，已 confirmed 依 active usage 保护。上传与复制租约分别保留来源历史，读取/释放核证恰有一个匹配反向租约。
+来源删除可以先提交，receiving/prepared 的合法复制租约保护源字节；业务最终确认仍要求来源活跃并重新核证。取消先提交取消事实，再中止并等待目标 writer，不持 SQL 事务等待 I/O。准备提交未知只收敛仍 receiving，已 prepared 不盲删；业务提交未知根据 confirmed usage 与持久业务结果裁决。重启清理只处理有登记键的残留；合法 prepared 保留至取消或到期，已 confirmed 依 active usage 保护。上传与复制租约分别保留来源历史，读取/释放核证恰有一个匹配反向租约。多查询的来源事实和复制配对读取在同一自有只读连接内完成，finally归还；已由调用者打开的连接保持，不启用全局pool、不扩大事务、不缓存授权，也不将连接跨字节传输持有。
 
 ## 用途与读取
 

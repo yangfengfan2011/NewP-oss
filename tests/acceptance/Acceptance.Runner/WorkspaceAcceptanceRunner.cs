@@ -200,6 +200,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             await driver.RestorePositionAsync(objectCopyAddress, "公共空间", siblingName);
             await driver.EditObjectAsync(PartName + " 副本", PartName + " 副本已编辑");
             await driver.DeleteSelectedAsync(PartName + " 副本已编辑");
+            await driver.DocumentBatchCopyJourneyAsync(folderAddress, folderName, siblingName, DocumentCode, DocumentName, Path.Combine(_runDirectory, "batch-copy-download.pdf"), name => CapturePresentationAsync(page, name));
             await driver.SelectRootAsync("个人空间");
             await driver.RestorePositionAsync(folderAddress, "公共空间", folderName);
             await driver.OpenOwnedPropertiesAsync(PartName, "/parts");

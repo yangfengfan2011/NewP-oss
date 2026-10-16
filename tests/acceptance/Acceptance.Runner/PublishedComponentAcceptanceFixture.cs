@@ -24,7 +24,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     string baselineHostRoot, string hostRoot, string shellRoot, string packagePath,
     bool workspaceDelivery = false, WorkspaceDeliveryInput? deliveryInput = null, bool exerciseCompositionLifecycle = true,
     bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false, bool exerciseFileRecoveryMechanisms = true,
-    bool exerciseDocumentCopyRecovery = false, bool exerciseDocumentCopyInterruptions = true)
+    bool exerciseDocumentCopyRecovery = false, bool exerciseDocumentCopyInterruptions = true, bool exerciseDocumentBatchRecovery = false)
 {
     private readonly Dictionary<string, string?> _environment = new();
     private ReusableSqlServerDatabase? _database;
@@ -51,7 +51,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
 
     internal static PublishedComponentAcceptanceFixture FromWorkspaceDelivery(string repositoryRoot, string runDirectory, string runId,
         bool exerciseCompositionLifecycle = true, bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false, bool exerciseFileRecoveryMechanisms = true,
-        bool exerciseDocumentCopyRecovery = false, bool exerciseDocumentCopyInterruptions = true)
+        bool exerciseDocumentCopyRecovery = false, bool exerciseDocumentCopyInterruptions = true, bool exerciseDocumentBatchRecovery = false)
     {
         var path = RequiredPath("NEWP_ACCEPTANCE_WORKSPACE_DELIVERY_INPUT");
         var input = JsonSerializer.Deserialize<WorkspaceDeliveryInput>(File.ReadAllText(path), AcceptanceJson.Options)
@@ -60,7 +60,8 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             input.ShellRoot, input.PackagePath, workspaceDelivery: true, deliveryInput: input,
             exerciseCompositionLifecycle: exerciseCompositionLifecycle, exerciseUninstallRecovery: exerciseUninstallRecovery,
             exerciseFileRecovery: exerciseFileRecovery, exerciseFileRecoveryMechanisms: exerciseFileRecoveryMechanisms,
-            exerciseDocumentCopyRecovery: exerciseDocumentCopyRecovery, exerciseDocumentCopyInterruptions: exerciseDocumentCopyInterruptions);
+            exerciseDocumentCopyRecovery: exerciseDocumentCopyRecovery, exerciseDocumentCopyInterruptions: exerciseDocumentCopyInterruptions,
+            exerciseDocumentBatchRecovery: exerciseDocumentBatchRecovery);
     }
 
     // 只登记受控构建的输入与来源；不产出裁决，也不授予包信任。Gate 仍走正式安装/Host。
@@ -239,6 +240,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         }
         if (exerciseFileRecovery) await VerifyFileProcessRecoveryAsync(actor, token);
         if (exerciseDocumentCopyRecovery) actor = await VerifyDocumentCopyProcessRecoveryAsync(actor, registerSecret, granted, token);
+        if (exerciseDocumentBatchRecovery) await VerifyDocumentBatchProcessRecoveryAsync(actor, token);
         var targetAfter = ReadTargetIdentity();
         await WriteAsync("target-after.json", targetAfter, token);
         if (before != targetAfter) throw new InvalidOperationException("安装期间固定 Host/Shell 发行物发生变化。");

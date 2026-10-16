@@ -49,7 +49,7 @@ public sealed class AcceptanceGateTests
     {
         var (root, runId) = PrepareRun("workspace");
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId,
-            publishedFixture: PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseFileRecovery: true, exerciseFileRecoveryMechanisms: true)).RunAsync(CancellationToken.None);
+            publishedFixture: PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseFileRecovery: true, exerciseFileRecoveryMechanisms: true, exerciseDocumentBatchRecovery: true)).RunAsync(CancellationToken.None);
     }
 
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "三成员固定发行物与旧 Workspace/Part/Document 行、Link、历史连续性")]
@@ -203,6 +203,58 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "仅补结果呈现采样：实际多文档正式提交结果沿同一driver等待动画并清理，不重放OS或完整旅程")]
+    public async Task NativeWorkspaceDocumentBatchResult_PresentsFormalModal()
+    {
+        var (root, runId) = PrepareRun("native-workspace-document-batch-result");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseCompositionLifecycle: false);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
+            browserJourney: async (page, token) => {
+                var driver = new WorkspacePageDriver(page); var suffix = runId[..8];
+                var source = "结果呈现来源 " + suffix; var first = "结果呈现副本一 " + suffix; var second = "结果呈现副本二 " + suffix;
+                await driver.OpenAsync(); await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
+                await driver.CreateDocumentWithFilesAsync("RESULT-SOURCE-" + suffix, source, WorkspacePageDriver.SmallMainFile());
+                await driver.CopySelectedAsync(fixture.ExistingDocumentName, source);
+                await driver.PasteDocumentCopiesAsync([(fixture.ExistingDocumentName, "RESULT-A-" + suffix, first), (source, "RESULT-B-" + suffix, second)],
+                    captureResult: () => page.ScreenshotAsync(new() { Path = Path.Combine(root, "document-batch-result-stable.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled }));
+                await driver.DeleteSelectedAsync(first, second, source);
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"), new { actor = "ordinary", journey = "document-batch-result-presentation" }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "同一正式旅程分别执行单Part和多Document，集合实际进程中断/重启恢复与双语逐行输入、结果及后续清理")]
+    public Task NativeWorkspaceObjectCopyBatch_UsesFormalDriverAndRecovery() => RunObjectCopyBatchAsync(true);
+
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "复用已有效的OS和Part证据，仅恢复同一正式多Document页面片段及后续清理")]
+    public Task NativeWorkspaceDocumentBatch_UsesFormalDriver() => RunObjectCopyBatchAsync(false);
+
+    // 返修只运行依赖受影响的页面；默认完整Gate仍组合Part和批次恢复，不改变发行物合同。
+    private async Task RunObjectCopyBatchAsync(bool includeRecoveryAndPart)
+    {
+        var (root, runId) = PrepareRun(includeRecoveryAndPart ? "native-workspace-object-copy-batch" : "native-workspace-document-batch");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, exerciseDocumentBatchRecovery: includeRecoveryAndPart);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
+            browserJourney: async (page, token) => {
+                var driver = new WorkspacePageDriver(page); var suffix = runId[..8];
+                var part = "批次旅程零组件 " + suffix; var document = "批次旅程图文档 " + suffix; var target = "批次旅程目标 " + suffix;
+                Task Capture(string name) => page.ScreenshotAsync(new() { Path = Path.Combine(root, name), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                await driver.OpenAsync(); await driver.SelectRootAsync("公共空间"); await driver.CreateFolderAsync(target);
+                await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName); var sourceAddress = page.Url;
+                if (includeRecoveryAndPart) await driver.CreateObjectAsync("零组件", "BATCH-PART-" + suffix, part);
+                await driver.CreateDocumentWithFilesAsync("BATCH-DOC-" + suffix, document, WorkspacePageDriver.SmallMainFile(), attachments: WorkspacePageDriver.SmallAttachmentFiles());
+                if (includeRecoveryAndPart)
+                {
+                    await driver.CopyReferenceFromContextMenuAsync(part); var targetAddress = await driver.SelectTreePathAsync("公共空间", target);
+                    await driver.PastePartCopyAsync("BATCH-PART-COPY-" + suffix, part + " 副本", _ => Capture("batch-part-input.png"));
+                    await driver.OpenOwnedPropertiesAsync(part + " 副本", "/parts"); await driver.RestorePositionAsync(targetAddress, "公共空间", target);
+                    await driver.EditObjectAsync(part + " 副本", part + " 副本已编辑"); await driver.DeleteSelectedAsync(part + " 副本已编辑");
+                }
+                await driver.DocumentBatchCopyJourneyAsync(sourceAddress, fixture.ExistingFolderName, target, "BATCH-DOC-" + suffix, document, Path.Combine(root, "batch-copy-download.pdf"), Capture);
+                await driver.DeleteSelectedAsync(includeRecoveryAndPart ? [part, document] : [document]); await driver.SelectRootAsync("公共空间"); await driver.DeleteSelectedAsync(target);
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"), new { url = page.Url, actor = "ordinary", journey = includeRecoveryAndPart ? "part-and-document-batch-copy" : "document-batch-copy" }, token);
+            }).RunAsync(CancellationToken.None);
+    }
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "正式三成员包的单Part真副本、查看、独立编辑删除与双语输入沿唯一Workspace driver贯通")]
     public async Task NativeWorkspaceObjectCopy_UsesFormalDriver()
     {

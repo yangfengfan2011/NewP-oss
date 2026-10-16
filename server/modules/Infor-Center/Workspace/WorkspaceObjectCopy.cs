@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using ICP.Platform.Crud.LinkQueries;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.ObjectOperations;
@@ -7,10 +8,12 @@ using Microsoft.EntityFrameworkCore;
 namespace ICP.Platform.Modules.Workspace;
 
 public sealed record WorkspaceObjectCopyPreparation(string OperationId, IReadOnlyDictionary<string, object?> Values,
-    IReadOnlyList<string> SourcePath, IReadOnlyList<string> TargetPath, string ModelKey = "Part", int FileCount = 0, long TotalBytes = 0);
-public sealed record WorkspaceObjectCopyReceipt(bool Succeeded, string State);
+    IReadOnlyList<string> SourcePath, IReadOnlyList<string> TargetPath, string ModelKey = "Part", int FileCount = 0, long TotalBytes = 0,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorkspaceDocumentCopyItemPreparation[]? Items = null);
+public sealed record WorkspaceObjectCopyReceipt(bool Succeeded, string State,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorkspaceDocumentCopyItemReceipt[]? Items = null);
 internal sealed record WorkspaceObjectCopyInput(WorkspacePosition SourcePosition, string[] LinkIds, WorkspacePosition TargetPosition,
-    string SourceId, string SourceCode, string SourceName, string? SourceDescription, string SourceModel = "Part", string? DocumentConfirmation = null);
+    string SourceId, string SourceCode, string SourceName, string? SourceDescription, string SourceModel = "Part", string? DocumentConfirmation = null, WorkspaceDocumentCopySource[]? Documents = null);
 
 public sealed partial class WorkspaceContents
 {
@@ -18,8 +21,10 @@ public sealed partial class WorkspaceContents
     public ValueTask<WorkspaceObjectCopyPreparation> PrepareObjectCopyAsync(string actor, string mode, WorkspacePosition sourcePosition,
         string[] linkIds, WorkspacePosition targetPosition, CancellationToken token)
     {
-        if (mode != "copy" || linkIds.Length != 1 || string.IsNullOrWhiteSpace(linkIds[0]))
+        ValidateSelection(linkIds);
+        if (mode != "copy")
             throw new LinkQueryException(400, "Workspace.ObjectCopySourceRequired");
+        if (linkIds.Length > 1) return PrepareDocumentBatchAsync(actor, sourcePosition, linkIds, targetPosition, token);
         return transactions.ExecuteAsync<WorkspaceObjectCopyPreparation>(async cancellation =>
         {
             using var operation = audit.BeginOperation();
@@ -54,6 +59,7 @@ public sealed partial class WorkspaceContents
         var row = await ReadObjectCopyAsync(actor, operationId, cancellation);
         if (Equals(row["State"], "committed")) return StandardCrudMutationResult.Success();
         var prepared = JsonSerializer.Deserialize<WorkspaceObjectCopyInput>((string)row["Input"]!)!;
+        if (prepared.Documents is not null) return await CopyDocumentBatchAsync(actor, operationId, row, prepared, input, operations, cancellation);
         if (!Equals(row["State"], prepared.SourceModel == "Document" ? "preparing" : "ready")) throw new LinkQueryException(409, "Workspace.CopyCancelled");
         var parent = await positions.ResolveAsync(actor, prepared.SourcePosition, cancellation);
         var endpoint = await ResolveObjectCopySourceAsync(parent.FolderId, prepared.LinkIds, cancellation);
@@ -100,10 +106,11 @@ public sealed partial class WorkspaceContents
                 audit.ForUpdate((string)row["CreatedBy"]!, (DateTime)row["CreatedAt"]!).ApplyTo(row);
             }
             var state = (string)row["State"]!;
-            return new(state == "committed", state);
+            return CopyReceipt(input, state);
         }, token);
-        if (cancel && receipt.State == "cancelled" && input?.DocumentConfirmation is { } confirmation)
-            await documentCopies.CancelCopyFilesAsync(confirmation, operationId, token);
+        if (cancel && receipt.State == "cancelled" && input?.SourceModel == "Document")
+            foreach (var (source, index) in CopySources(input).Select((source, index) => (source, index)))
+                await documentCopies.CancelCopyFilesAsync(source.Confirmation, CopyOperationKey(input, operationId, index), token);
         return receipt;
     }
 

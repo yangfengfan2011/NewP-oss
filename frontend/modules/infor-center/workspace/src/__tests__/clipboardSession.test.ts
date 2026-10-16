@@ -86,15 +86,24 @@ it('allows one Document and keeps an interrupted preparation locked until contro
   expect(session.canCopyObject()).toBe(true);
 });
 
-it('does not silently copy the first of several Documents', async () => {
+it('requires every selected Document in the prepared input instead of silently using the first', async () => {
   const session = new WorkspaceClipboardSession(vi.fn());
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ linkId: 'a', modelKey: 'Document' }, { linkId: 'b', modelKey: 'Document' }] })));
   await session.copy(source, ['a', 'b'], 'copy');
-  expect(session.canCopyObject()).toBe(false);
-  expect(() => session.prepareObjectCopy(target, 'object-copy')).toThrow();
-  expect(platformFetch).toHaveBeenCalledTimes(1);
+  expect(session.canCopyObject()).toBe(true);
+  const draft = session.prepareObjectCopy(target, 'object-copy');
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ operationId: 'partial', modelKey: 'Document', values: { ECODE: '', ENAME: 'Only first' }, sourcePath: ['First'], targetPath: ['Target'] })));
+  await expect(session.readObjectCopyInput(draft, new AbortController().signal)).rejects.toThrow();
+  expect(vi.mocked(platformFetch).mock.calls.some(([url]) => String(url).endsWith('/objects/copy'))).toBe(false);
 });
 
+it.each([['Part', 'Part'], ['Part', 'Document'], ['Document', 'WorkspaceFolder']])('retains mixed reference selection but rejects true-copy for %s/%s', async (first, second) => {
+  const session = new WorkspaceClipboardSession(vi.fn());
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ linkId: 'a', modelKey: first }, { linkId: 'b', modelKey: second }] })));
+  await session.copy(source, ['a', 'b'], 'copy');
+  expect(session.getSnapshot().clipboard?.linkIds).toEqual(['a', 'b']); expect(session.canCopyObject()).toBe(false);
+  expect(() => session.prepareObjectCopy(target, 'object-copy')).toThrow();
+});
 it.each([false, true])('can cancel a prepared input and locks an unknown cancellation before any business write (unknown=%s)', async unknown => {
   const session = new WorkspaceClipboardSession(vi.fn());
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ linkId: 'document', modelKey: 'Document' }] })));

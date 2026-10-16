@@ -206,29 +206,32 @@ public sealed partial class FileLifecycleService(FileStateStore state, IPlatform
         FileOwnerOperation operation, CancellationToken token)
     {
         ValidateBatch(references.Select(reference => reference.UsageId).ToArray());
-        foreach (var group in references.GroupBy(reference => reference.Owner.Key, StringComparer.Ordinal))
-            await Policy(group.Key).VerifyBatchAsync(group.ToArray(), operation, token);
-        var usageIds = references.Select(reference => reference.UsageId).ToArray();
-        var fileIds = references.Select(reference => reference.FileId).Distinct(StringComparer.Ordinal).ToArray();
-        var usages = await state.Usages.AsNoTracking().Where(row => usageIds.Contains(EF.Property<string>(row, "EID"))).ToDictionaryAsync(row => Text(row, "EID"), token);
-        var files = await state.Records.AsNoTracking().Where(row => fileIds.Contains(EF.Property<string>(row, "EID"))).ToDictionaryAsync(row => Text(row, "EID"), token);
-        // 每个使用只能有一个反向 lease；多取一行损坏哨兵，不能先物化任意数量的重复关联。
-        var leases = await ReadUsageLeasesAsync(usageIds, token);
-        if (leases.Count > usageIds.Length) throw Corrupted();
-        var byUsage = leases.ToLookup(row => Text(row, "ConfirmedUsageId"), StringComparer.Ordinal);
-        var result = new Dictionary<string, Dictionary<string, object?>>(StringComparer.Ordinal);
-        foreach (var reference in references)
+        return await state.ReadUnitAsync<IReadOnlyDictionary<string, Dictionary<string, object?>>>(async () =>
         {
-            if (!usages.TryGetValue(reference.UsageId, out var usage) || !files.TryGetValue(reference.FileId, out var file)) throw Corrupted();
-            CheckUsage(usage, reference);
-            if (Text(usage, "State") != "active") throw Corrupted();
-            RequireReady(file);
-            var related = byUsage[reference.UsageId].ToArray();
-            if (related.Length != 1 || Text(related[0], "State") != "confirmed" || Text(related[0], "FileId") != reference.FileId
-                || Text(related[0], "UsageOwnerKey") != reference.Owner.Key) throw Corrupted();
-            result.Add(reference.UsageId, file);
-        }
-        return result;
+            foreach (var group in references.GroupBy(reference => reference.Owner.Key, StringComparer.Ordinal))
+                await Policy(group.Key).VerifyBatchAsync(group.ToArray(), operation, token);
+            var usageIds = references.Select(reference => reference.UsageId).ToArray();
+            var fileIds = references.Select(reference => reference.FileId).Distinct(StringComparer.Ordinal).ToArray();
+            var usages = await state.Usages.AsNoTracking().Where(row => usageIds.Contains(EF.Property<string>(row, "EID"))).ToDictionaryAsync(row => Text(row, "EID"), token);
+            var files = await state.Records.AsNoTracking().Where(row => fileIds.Contains(EF.Property<string>(row, "EID"))).ToDictionaryAsync(row => Text(row, "EID"), token);
+            // 每个使用只能有一个反向 lease；多取一行损坏哨兵，不能先物化任意数量的重复关联。
+            var leases = await ReadUsageLeasesAsync(usageIds, token);
+            if (leases.Count > usageIds.Length) throw Corrupted();
+            var byUsage = leases.ToLookup(row => Text(row, "ConfirmedUsageId"), StringComparer.Ordinal);
+            var result = new Dictionary<string, Dictionary<string, object?>>(StringComparer.Ordinal);
+            foreach (var reference in references)
+            {
+                if (!usages.TryGetValue(reference.UsageId, out var usage) || !files.TryGetValue(reference.FileId, out var file)) throw Corrupted();
+                CheckUsage(usage, reference);
+                if (Text(usage, "State") != "active") throw Corrupted();
+                RequireReady(file);
+                var related = byUsage[reference.UsageId].ToArray();
+                if (related.Length != 1 || Text(related[0], "State") != "confirmed" || Text(related[0], "FileId") != reference.FileId
+                    || Text(related[0], "UsageOwnerKey") != reference.Owner.Key) throw Corrupted();
+                result.Add(reference.UsageId, file);
+            }
+            return result;
+        }, token);
     }
 
     // 每个使用恰有一个上传或复制来源；两种历史同时验证，不将旧lease改写为复制凭据。

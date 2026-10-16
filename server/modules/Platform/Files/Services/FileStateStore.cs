@@ -19,6 +19,17 @@ public sealed partial class FileStateStore(EfPlatformDbContext db, IPlatformTran
     internal DbSet<Dictionary<string, object?>> Usages => db.Set<Dictionary<string, object?>>(UsageModel);
     internal DateTime Now => clock.GetUtcNow().UtcDateTime;
 
+    /// <summary>同一只读单元复用自有连接并在失败/取消后归还；不建立事务、不跨字节I/O持有或关闭调用者连接。</summary>
+    internal async Task<T> ReadUnitAsync<T>(Func<Task<T>> action, CancellationToken token)
+    {
+        var openedHere = db.Database.GetDbConnection().State != System.Data.ConnectionState.Open;
+        try
+        {
+            if (openedHere) await db.Database.OpenConnectionAsync(token);
+            return await action();
+        }
+        finally { if (openedHere) await db.Database.CloseConnectionAsync(); }
+    }
     /// <summary>只允许在真实平台事务中取得同文件锁，调用方先取得所属业务锁。</summary>
     public Task LockAsync(string fileId, CancellationToken token)
     {

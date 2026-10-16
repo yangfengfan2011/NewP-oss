@@ -211,6 +211,8 @@ internal sealed class WorkspacePageDriver(IPage page)
     internal async Task CopySelectedAsync(params string[] names)
     {
         var crud = new StandardCrudPageDriver(page);
+        var selectAll = page.GetByRole(AriaRole.Region, new() { Name = "节点内容", Exact = true }).Locator("thead").GetByRole(AriaRole.Checkbox);
+        await selectAll.CheckAsync(); await selectAll.UncheckAsync();
         foreach (var name in names) await (await crud.WaitForRowAsync(name)).GetByRole(AriaRole.Checkbox).CheckAsync();
         await CopyReferencesAsync(() => page.GetByRole(AriaRole.Region, new() { Name = "节点内容", Exact = true })
             .GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^复\s*制$") }).ClickAsync());
@@ -461,6 +463,67 @@ internal sealed class WorkspacePageDriver(IPage page)
         await crud.WaitForRowAsync(name);
     }
 
+    /// <summary>集合每个来源使用自己的正式区域和字段；保存后消费安全结果弹层与目标列表。</summary>
+    internal async Task PasteDocumentCopiesAsync(IReadOnlyList<(string SourceName, string Code, string Name)> rows, Func<ILocator, Task>? capture = null,
+        Func<Task>? captureResult = null)
+    {
+        var crud = new StandardCrudPageDriver(page); var drawer = await OpenDocumentCopiesAsync();
+        for (var index = 0; index < rows.Count; index++)
+        {
+            var row = drawer.GetByRole(AriaRole.Region, new() { Name = $"{index + 1}. {rows[index].SourceName}", Exact = true });
+            await FillObjectFieldsAsync(row, rows[index].Code, rows[index].Name);
+        }
+        await WaitForObjectSaveAsync(drawer);
+        if (capture is not null) await capture(drawer);
+        await crud.SaveAndCloseAsync(drawer, new("POST", "/api/workspace/content/objects/copy", 200, "粘贴图文档集合副本"));
+        var result = page.GetByRole(AriaRole.Dialog, new() { Name = "对象副本结果", Exact = true });
+        await result.WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        if (captureResult is not null)
+        {
+            // 可交互visible早于Modal入场完成；呈现只等待实际opacity/动画，不用固定延时。
+            await Assertions.Expect(result).ToHaveCSSAsync("opacity", "1");
+            await result.EvaluateAsync("async element => { await new Promise(requestAnimationFrame); await Promise.all(element.getAnimations({subtree:true}).map(animation => animation.finished.catch(() => {}))); }");
+            await captureResult();
+        }
+        // Ant的双中文按钮有可访问空格，使用与既有确认驱动相同的精确角色/文本规则。
+        await result.GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^关\s*闭$") }).ClickAsync();
+        await result.WaitForAsync(new() { State = WaitForSelectorState.Detached });
+        foreach (var row in rows) await crud.WaitForRowAsync(row.Name);
+    }
+
+    /// <summary>集合确认等待真实异步字段就绪，不用单对象strict locator或只提交首行。</summary>
+    internal async Task<ILocator> OpenDocumentCopiesAsync(bool english = false)
+    {
+        var drawer = await new StandardCrudPageDriver(page).OpenCreateDrawerAsync(english ? "Paste independent object copy" : "粘贴对象副本");
+        await Assertions.Expect(drawer.GetByLabel(english ? "Code" : "编码", new() { Exact = true }).First).ToBeEnabledAsync();
+        return drawer;
+    }
+
+    /// <summary>父Gate和定向冒烟复用同一集合片段：准备第二源、逐行确认、详情下载、编辑删除及语言/窄容器。</summary>
+    internal async Task DocumentBatchCopyJourneyAsync(string sourceAddress, string sourceFolderName, string targetFolderName,
+        string firstCode, string firstName, string downloadPath, Func<string, Task> capture)
+    {
+        var secondName = firstName + " 第二份"; var firstCopy = firstName + " 独立副本"; var secondCopy = firstName + " 第二份副本";
+        await RestorePositionAsync(sourceAddress, "公共空间", sourceFolderName);
+        await CreateDocumentWithFilesAsync(firstCode + "-B", secondName, SmallMainFile(), _ => capture("document-batch-create-reference.png"), SmallAttachmentFiles());
+        await CopySelectedAsync(firstName, secondName);
+        var targetAddress = await SelectTreePathAsync("公共空间", targetFolderName);
+        await PasteDocumentCopiesAsync([(firstName, firstCode + "-COPY-A", firstCopy), (secondName, firstCode + "-COPY-B", secondCopy)],
+            async drawer => {
+                await capture("document-batch-input-zhs.png"); await page.SetViewportSizeAsync(900, 1000); await capture("document-batch-input-zhs-narrow.png");
+                await drawer.Locator(".ant-drawer-body").EvaluateAsync("node => node.scrollTop = node.scrollHeight"); await capture("document-batch-input-zhs-narrow-bottom.png");
+                await page.SetViewportSizeAsync(1440, 1000);
+            }, () => capture("document-batch-result.png"));
+        await SelectLanguageAsync("English"); var english = await OpenDocumentCopiesAsync(english: true);
+        await capture("document-batch-input-en.png"); await page.SetViewportSizeAsync(900, 1000); await capture("document-batch-input-en-narrow.png");
+        await english.Locator(".ant-drawer-body").EvaluateAsync("node => node.scrollTop = node.scrollHeight"); await capture("document-batch-input-en-narrow-bottom.png");
+        await page.SetViewportSizeAsync(1440, 1000); await new StandardCrudPageDriver(page).CloseDrawerAsync(english); await SelectLanguageAsync("简体中文");
+        await OpenOwnedPropertiesAsync(firstCopy, "/documents"); await DownloadFileAsync(SmallMainFile().Name, downloadPath);
+        await capture("document-batch-properties.png");
+        await RestorePositionAsync(targetAddress, "公共空间", targetFolderName); await EditObjectAsync(firstCopy, firstCopy + " 已编辑");
+        await DeleteSelectedAsync(firstCopy + " 已编辑", secondCopy);
+        await RestorePositionAsync(sourceAddress, "公共空间", sourceFolderName); await DeleteSelectedAsync(secondName);
+    }
     /// <summary>副本输入等待真实异步来源准备；语言仅改变正式可访问名称。</summary>
     internal async Task<ILocator> OpenObjectCopyAsync(bool english = false)
     {

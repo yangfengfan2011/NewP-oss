@@ -13,15 +13,18 @@ public sealed partial class FileStateStore
     /// <summary>request key 只在本主体及目标用途内读取；不能借它读取他人的来源。</summary>
     internal async Task<FileStatePair?> ReadCopyPairAsync(string key, string actor, string owner, bool tracking, CancellationToken token)
     {
-        var query = Copies.Where(row => EF.Property<string>(row, "RequestKey") == key && EF.Property<string>(row, "ActorId") == actor
-            && EF.Property<string>(row, "UsageOwnerKey") == owner);
-        var copy = await (tracking ? query : query.AsNoTracking()).SingleOrDefaultAsync(token);
-        if (copy is null) return null;
-        if (copy.GetValueOrDefault("FileId") is not string fileId)
-            return Text(copy, "State") == "cancelled" ? new(new(), copy) : throw Corrupted();
-        var records = Records.Where(row => EF.Property<string>(row, "EID") == fileId);
-        var file = await (tracking ? records : records.AsNoTracking()).SingleOrDefaultAsync(token) ?? throw Corrupted();
-        return new(file, copy);
+        return await ReadUnitAsync<FileStatePair?>(async () =>
+        {
+            var query = Copies.Where(row => EF.Property<string>(row, "RequestKey") == key && EF.Property<string>(row, "ActorId") == actor
+                && EF.Property<string>(row, "UsageOwnerKey") == owner);
+            var copy = await (tracking ? query : query.AsNoTracking()).SingleOrDefaultAsync(token);
+            if (copy is null) return null;
+            if (copy.GetValueOrDefault("FileId") is not string fileId)
+                return Text(copy, "State") == "cancelled" ? new(new(), copy) : throw Corrupted();
+            var records = Records.Where(row => EF.Property<string>(row, "EID") == fileId);
+            var file = await (tracking ? records : records.AsNoTracking()).SingleOrDefaultAsync(token) ?? throw Corrupted();
+            return new(file, copy);
+        }, token);
     }
 
     /// <summary>持有源文件短锁核证活跃使用，再登记独立目标及明确来源；不等待字节传输。</summary>

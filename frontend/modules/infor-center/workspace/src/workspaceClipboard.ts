@@ -8,9 +8,11 @@ export interface ClipboardState { readonly phase: 'idle' | 'validating' | 'pasti
 export type FolderCopyKind = 'copy' | 'copy-structure';
 export interface FolderCopyDraft { readonly kind: FolderCopyKind; readonly source: WorkspaceClipboard; readonly targetKey: string; readonly featurePosition?: string; closed: boolean }
 export interface FolderCopyPreparation { readonly sourceName: string; readonly sourcePath: readonly string[]; readonly targetPath: readonly string[] }
-export interface ObjectCopyDraft { readonly source: WorkspaceClipboard; readonly targetKey: string; readonly featurePosition?: string; operationId?: string; requiresReconfirmation?: boolean; closed: boolean }
-export interface ObjectCopyPreparation { operationId: string; values: Record<string, unknown>; sourcePath: readonly string[]; targetPath: readonly string[]; modelKey?: 'Part' | 'Document'; fileCount?: number; totalBytes?: number }
-export interface ObjectCopyReceipt { succeeded: boolean; state: 'ready' | 'preparing' | 'committed' | 'cancelled' }
+export interface ObjectCopyDraft { readonly source: WorkspaceClipboard; readonly targetKey: string; readonly featurePosition?: string; operationId?: string; requiresReconfirmation?: boolean; fieldErrors?: Record<string, string>; closed: boolean }
+export interface ObjectCopyValuesRow { sourceLinkId: string; values: Record<string, unknown> }
+export interface ObjectCopyPreparationItem extends ObjectCopyValuesRow { sourcePath: readonly string[]; fileCount: number; totalBytes: number }
+export interface ObjectCopyPreparation { operationId: string; values: Record<string, unknown>; sourcePath: readonly string[]; targetPath: readonly string[]; modelKey?: 'Part' | 'Document'; fileCount?: number; totalBytes?: number; items?: ObjectCopyPreparationItem[] }
+export interface ObjectCopyReceipt { succeeded: boolean; state: 'ready' | 'preparing' | 'committed' | 'cancelled'; items?: Array<{ sourceLinkId: string; succeeded: boolean; state: string }> }
 const clipboardOwner = Symbol('workspace.clipboard');
 export function workspaceClipboard(instance: StandardCrudActionInstance | undefined): WorkspaceClipboardSession {
   if (!instance?.active) throw new StandardCrudRequestError('Workspace.ClipboardUnavailable', 409, {}, { code: 'Workspace.ClipboardUnavailable' });
@@ -63,7 +65,7 @@ export class WorkspaceClipboardSession {
       if (!Array.isArray(receipt.items) || receipt.items.length !== linkIds.length || receipt.items.some((item, index) => item.linkId !== linkIds[index]))
         throw this.failure('Workspace.InvalidClipboardInput');
       this.folderSource = mode === 'copy' && receipt.items.length === 1 && receipt.items[0].modelKey === 'WorkspaceFolder' ? clipboard : undefined;
-      this.objectSource = mode === 'copy' && receipt.items.length === 1 && ['Part', 'Document'].includes(receipt.items[0].modelKey ?? '') ? clipboard : undefined;
+      this.objectSource = mode === 'copy' && (receipt.items.length === 1 && receipt.items[0].modelKey === 'Part' || receipt.items.every(item => item.modelKey === 'Document')) ? clipboard : undefined;
       this.publish({ phase: 'idle', clipboard }); return true;
     } catch (failure) {
       if (this.closed || generation !== this.generation) return false;
@@ -83,8 +85,13 @@ export class WorkspaceClipboardSession {
     this.requireObjectDraft(draft);
     const preparation = await command('objects/copy/prepare', { ...draft.source, targetPosition: JSON.parse(draft.targetKey) as ClipboardPosition }, draft.featurePosition, signal) as ObjectCopyPreparation;
     this.requireObjectDraft(draft);
-    if (!preparation || typeof preparation.operationId !== 'string' || !preparation.values || typeof preparation.values.ENAME !== 'string'
-      || preparation.values.ECODE !== '' || !Array.isArray(preparation.sourcePath) || !Array.isArray(preparation.targetPath)) throw this.failure('Workspace.InvalidClipboardInput');
+    const batch = draft.source.linkIds.length > 1;
+    if (!preparation || typeof preparation.operationId !== 'string' || !preparation.values || !Array.isArray(preparation.sourcePath) || !Array.isArray(preparation.targetPath)
+      || !batch && (typeof preparation.values.ENAME !== 'string' || preparation.values.ECODE !== '')
+      || batch && (preparation.modelKey !== 'Document' || !Array.isArray(preparation.items) || preparation.items.length !== draft.source.linkIds.length
+        || preparation.items.some((item, index) => item.sourceLinkId !== draft.source.linkIds[index] || item.values.ECODE !== '' || typeof item.values.ENAME !== 'string')
+        || JSON.stringify(preparation.values.items) !== JSON.stringify(preparation.items.map(item => ({ sourceLinkId: item.sourceLinkId, values: item.values })))))
+      throw this.failure('Workspace.InvalidClipboardInput');
     draft.operationId = preparation.operationId; draft.requiresReconfirmation = false;
     this.objectOperation = { id: preparation.operationId, featurePosition: draft.featurePosition, draft };
     return preparation;
@@ -112,6 +119,7 @@ export class WorkspaceClipboardSession {
       if (operation.receipt?.state === 'cancelled') {
         throw this.failure('Workspace.CopyCancelled');
       }
+      if (failure instanceof StandardCrudRequestError) draft.fieldErrors = failure.fieldErrors;
       const known = failure instanceof StandardCrudRequestError && failure.status >= 400 && failure.status < 500
         && !['Persistence.CommitOutcomeUnknown', 'Platform.MutationOutcomeUnknown', 'Workspace.CopyOutcomeUnknown'].includes(failure.code ?? '');
       if (known && failure.code === 'Workspace.CopySourceChanged') draft.requiresReconfirmation = true;

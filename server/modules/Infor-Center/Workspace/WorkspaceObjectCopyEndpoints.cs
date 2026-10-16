@@ -33,7 +33,7 @@ public sealed partial class WorkspaceContentsController
             var id = ReadCopyOperationInput(input, true);
             var values = input.GetProperty("values").Deserialize<Dictionary<string, JsonElement>>()!;
             var result = await contents.SubmitObjectCopyAsync(Actor(), id, values, operations, token);
-            return result.Succeeded ? Results.Ok(new WorkspaceObjectCopyReceipt(true, "committed"))
+            return result.Succeeded ? Results.Ok(await contents.ObjectCopyResultAsync(Actor(), id, false, token))
                 : Results.Json(result.Error, statusCode: result.Error!.StatusCode);
         }
         catch (OperationCanceledException) when (!token.IsCancellationRequested)

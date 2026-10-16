@@ -24,21 +24,28 @@ public sealed partial class DocumentFiles
     /// <inheritdoc/>
     public async Task<DocumentCopySource> ReadCopySourceAsync(string documentId, CancellationToken token = default)
     {
-        DocumentCopyFields.RequireRuntime(db);
-        await RequireReadAsync(documentId, token);
-        if (!await decisions.IsAllowedAsync("document.document", documentId, "documentObjectCopy", token)) throw new FileLifecycleException(403, "Document.CopyDenied");
-        var current = await identities.ReadCurrentAsync(documentId, token, tracking: false);
-        foreach (var key in new[] { "ECODE", "ENAME", "Description" })
-            if (!Equals(current.Master.GetValueOrDefault(key), current.Iteration.GetValueOrDefault(key))) throw new InvalidOperationException("Document.IdentityCorrupted");
-        var links = await ReadLinksAsync((string)current.Iteration["EID"]!, false, token);
-        long totalBytes = 0;
-        foreach (var batch in links.Select(Reference).Chunk(files.MaxReadBatchSize))
-            foreach (var item in await files.ReadUsageMetadataAsync(batch, token)) totalBytes = checked(totalBytes + item.Length);
-        var snapshot = new DocumentCopySnapshot(documentId, (string)current.Master["ECODE"]!, (string)current.Master["ENAME"]!, current.Master["Description"] as string,
-            (string)current.Version["EID"]!, (long)current.Version["VersionOrdinal"]!, (string)current.Version["VersionLabel"]!, (string)current.Version["State"]!,
-            (string)current.Iteration["EID"]!, (long)current.Iteration["IterationOrdinal"]!, (string)current.Iteration["DatasetTypeKey"]!,
-            links.Select(link => new DocumentCopyFile((string)link["LID"]!, Reference(link), (string)link["Role"]!, (long)link["Ordinal"]!)).ToArray());
-        return new(JsonSerializer.Serialize(snapshot), snapshot.Code, snapshot.Name, snapshot.Description, snapshot.Files.Length, totalBytes);
+        // 只在这个只读单元保留自有连接；不扩大事务、不缓存授权，也不跨字节I/O占用连接。
+        var openedHere = db.Database.GetDbConnection().State != System.Data.ConnectionState.Open;
+        try
+        {
+            if (openedHere) await db.Database.OpenConnectionAsync(token);
+            DocumentCopyFields.RequireRuntime(db);
+            await RequireReadAsync(documentId, token);
+            if (!await decisions.IsAllowedAsync("document.document", documentId, "documentObjectCopy", token)) throw new FileLifecycleException(403, "Document.CopyDenied");
+            var current = await identities.ReadCurrentAsync(documentId, token, tracking: false);
+            foreach (var key in new[] { "ECODE", "ENAME", "Description" })
+                if (!Equals(current.Master.GetValueOrDefault(key), current.Iteration.GetValueOrDefault(key))) throw new InvalidOperationException("Document.IdentityCorrupted");
+            var links = await ReadLinksAsync((string)current.Iteration["EID"]!, false, token);
+            long totalBytes = 0;
+            foreach (var batch in links.Select(Reference).Chunk(files.MaxReadBatchSize))
+                foreach (var item in await files.ReadUsageMetadataAsync(batch, token)) totalBytes = checked(totalBytes + item.Length);
+            var snapshot = new DocumentCopySnapshot(documentId, (string)current.Master["ECODE"]!, (string)current.Master["ENAME"]!, current.Master["Description"] as string,
+                (string)current.Version["EID"]!, (long)current.Version["VersionOrdinal"]!, (string)current.Version["VersionLabel"]!, (string)current.Version["State"]!,
+                (string)current.Iteration["EID"]!, (long)current.Iteration["IterationOrdinal"]!, (string)current.Iteration["DatasetTypeKey"]!,
+                links.Select(link => new DocumentCopyFile((string)link["LID"]!, Reference(link), (string)link["Role"]!, (long)link["Ordinal"]!)).ToArray());
+            return new(JsonSerializer.Serialize(snapshot), snapshot.Code, snapshot.Name, snapshot.Description, snapshot.Files.Length, totalBytes);
+        }
+        finally { if (openedHere) await db.Database.CloseConnectionAsync(); }
     }
 
     /// <inheritdoc/>

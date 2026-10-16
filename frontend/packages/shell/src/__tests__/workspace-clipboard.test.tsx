@@ -16,6 +16,7 @@ import '../pages/StandardCrudListPageHost';
 import '../pages/StandardCrudListOverlayRuntime';
 const { default: workspace } = await loadComponentSource<{ default: FrontendBehaviorBindings }>('Workspace', 'index.ts');
 await loadComponentSource('Workspace', 'workspaceRootResource.ts');
+await loadComponentSource('Workspace', 'WorkspaceFolderCopyInput.tsx');
 const content = readComponentJson('Workspace', 'metadata/models/WorkspaceFolderContent.model.json');
 const tree = readComponentJson('Workspace', 'metadata/views/WorkspaceStructure.view.json');
 const list = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderList.view.json');
@@ -79,6 +80,11 @@ async function mount(options: { actionSets?: Record<string, { column: string[]; 
       return json({ items, total: items.length, page: 1, pageSize: 20 });
     }
     if (url.pathname.startsWith('/api/workspace/folders/')) return json({ fields: { ENAME: 'A' } });
+    if (url.pathname.endsWith('/folders/copy/prepare')) return json({ sourceName: 'WorkspaceFolder source', sourcePath: ['公共空间', 'A', 'WorkspaceFolder source'], targetPath: ['公共空间', 'B'] });
+    if (url.pathname.endsWith('/folders/copy')) {
+      const body = input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body));
+      writes.push({ path: url.pathname, body }); failedRead = options.failRefresh === true; return json({ succeeded: true });
+    }
     if (url.pathname.endsWith('/references/remove')) {
       const body = input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body));
       writes.push({ path: url.pathname, body });
@@ -93,7 +99,8 @@ async function mount(options: { actionSets?: Record<string, { column: string[]; 
         failedRead = options.failRefresh === true; return json({ succeeded: true });
       }
       if (options.validate) return controlledResponse(() => options.validate!(body));
-      return json(url.pathname.endsWith('/paste') ? { succeeded: true } : { mode: body.mode, sourcePosition: body.sourcePosition, items: body.linkIds.map((linkId: string) => ({ linkId })) });
+      return json(url.pathname.endsWith('/paste') ? { succeeded: true } : { mode: body.mode, sourcePosition: body.sourcePosition, items: body.linkIds.map((linkId: string) => ({ linkId,
+        modelKey: linkId.startsWith('Document') ? 'Document' : linkId.startsWith('Part') ? 'Part' : 'WorkspaceFolder' })) });
     }
     throw new Error(`Unexpected request ${url.pathname}`);
   });
@@ -406,6 +413,23 @@ it('keeps a committed clipboard after refresh failure and retries only reading',
   await waitFor(() => expect(page.container.textContent).toContain('已保存，刷新失败'));
   await act(async () => page.button('刷新').click()); await waitFor(() => expect(page.container.textContent).not.toContain('已保存，刷新失败'));
   expect(page.writes.filter(item => item.path.endsWith('/paste'))).toHaveLength(1); expect(page.button('粘贴引用').disabled).toBe(false);
+});
+
+it('submits the real prepared folder copy once and retries only reading after its committed refresh fails', async () => {
+  const page = await mount({ folderRow: true, failRefresh: true });
+  await page.copyRows(['WorkspaceFolder']); await waitFor(() => expect(page.writes).toHaveLength(1));
+  await page.select('B'); await waitFor(() => expect(page.button('粘贴文件夹副本').disabled).toBe(false));
+  await act(async () => page.button('粘贴文件夹副本').click());
+  await waitFor(() => expect(document.querySelector<HTMLInputElement>('#workspace-copy-name')?.value).toBe('WorkspaceFolder source'));
+  await act(async () => [...document.querySelectorAll<HTMLButtonElement>('.ant-modal button')].find(button => button.textContent?.replace(/\s/g, '') === '确认')!.click());
+  await waitFor(() => expect(page.container.textContent).toContain('已保存，刷新失败'));
+  expect(page.writes.filter(item => item.path.endsWith('/folders/copy'))).toHaveLength(1);
+  expect(page.writes.find(item => item.path.endsWith('/folders/copy'))!.body).toEqual({ mode: 'copy', sourcePosition: { spaceId: 'public', rootFolderId: 'root', linkIds: ['A-link'] },
+    linkIds: ['WorkspaceFolder-lid'], targetPosition: { spaceId: 'public', rootFolderId: 'root', linkIds: ['B-link'] }, name: 'WorkspaceFolder source' });
+  await act(async () => page.button('刷新').click());
+  await waitFor(() => expect(page.container.textContent).not.toContain('已保存，刷新失败'));
+  expect(page.writes.filter(item => item.path.endsWith('/folders/copy'))).toHaveLength(1);
+  expect(page.button('粘贴文件夹副本').disabled).toBe(false);
 });
 
 it('opens a folder name at its exact tree occurrence without reading a details drawer', async () => {

@@ -149,6 +149,37 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "浅副本使用正式固定发行物、Workspace输入和driver完成选源到结果的最短路径")]
+    public async Task NativeWorkspaceFolderCopy_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-workspace-folder-copy");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseCompositionLifecycle: false);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
+            browserJourney: async (page, token) =>
+            {
+                var driver = new WorkspacePageDriver(page);
+                await driver.OpenAsync(); await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
+                await driver.CopyFolderFromTreeContextMenuAsync(fixture.ExistingFolderName, selectedOnly: true);
+                await driver.SelectRootAsync("公共空间");
+                await driver.PasteFolderCopyAsync("浅副本 " + runId[..8], async () =>
+                {
+                    await page.ScreenshotAsync(new() { Path = Path.Combine(root, "copy-input-zhs.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                    await page.SetViewportSizeAsync(900, 1000);
+                    await page.ScreenshotAsync(new() { Path = Path.Combine(root, "copy-input-zhs-narrow.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                    await page.SetViewportSizeAsync(1440, 1000);
+                });
+                await page.ScreenshotAsync(new() { Path = Path.Combine(root, "copy-result.png"), FullPage = true });
+                await driver.SelectLanguageAsync("English");
+                await new StandardCrudPageDriver(page).ClickPageActionAsync("Paste folder copy");
+                var dialog = page.GetByRole(AriaRole.Dialog, new() { Name = "Paste folder copy", Exact = true });
+                await Assertions.Expect(dialog.GetByRole(AriaRole.Textbox, new() { Name = "New folder name", Exact = true })).ToBeEnabledAsync();
+                await page.ScreenshotAsync(new() { Path = Path.Combine(root, "copy-input-en.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                await page.SetViewportSizeAsync(900, 1000);
+                await page.ScreenshotAsync(new() { Path = Path.Combine(root, "copy-input-en-narrow.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                await dialog.GetByRole(AriaRole.Button, new() { Name = "Cancel", Exact = true }).ClickAsync();
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通账号通过固定发行物的树和列表右键菜单编辑真实文件夹与图文档")]
     public async Task NativeWorkspaceContextMenus_UseFormalDriver()
     {

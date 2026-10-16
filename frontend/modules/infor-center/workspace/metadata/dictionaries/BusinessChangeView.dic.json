@@ -1,6 +1,7 @@
 {
   "schemaVersion": "1.0", "type": "dic",
   "BusinessChangeView": {
+    "ChangeField_RootLID": { "zhs": "新根引用", "en": "New root reference" },
     "ChangeField_SourceLID": { "zhs": "来源引用", "en": "Source reference" },
     "ChangeField_SourcePEID": { "zhs": "来源文件夹", "en": "Source folder" },
     "ChangeField_PEID": { "zhs": "父文件夹", "en": "Parent folder" },

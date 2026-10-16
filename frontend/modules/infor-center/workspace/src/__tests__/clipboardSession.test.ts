@@ -6,7 +6,41 @@ import { platformFetch } from '@icp-platform/core';
 vi.mock('@icp-platform/core', () => ({ platformFetch: vi.fn() }));
 const source = { spaceId: 'public', rootFolderId: 'root', linkIds: ['source-parent'] };
 const target = { spaceId: 'public', rootFolderId: 'root', linkIds: ['target-parent'] };
+it('freezes a named copy against changed target, source snapshot, ended instance and unknown outcomes', async () => {
+  const session = new WorkspaceClipboardSession(vi.fn());
+  expect(() => session.prepareFolderCopy(target, 'copy-folder')).toThrow();
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ linkId: 'folder', modelKey: 'WorkspaceFolder' }] })));
+  await session.copy(source, ['folder'], 'copy');
+  const draft = session.prepareFolderCopy(target, 'copy-folder');
+  await expect(session.pasteFolderCopy(draft, 'New', { ...target, linkIds: ['elsewhere'] }, 'copy-folder')).rejects.toThrow();
+  expect(platformFetch).toHaveBeenCalledTimes(1);
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ succeeded: true })));
+  await session.pasteFolderCopy(draft, 'New', target, 'copy-folder');
+  expect(session.getSnapshot().clipboard?.linkIds).toEqual(['folder']);
+  const second = session.prepareFolderCopy(target, 'copy-folder');
+  vi.mocked(platformFetch).mockRejectedValueOnce(new TypeError('lost'));
+  await expect(session.pasteFolderCopy(second, 'Another', target, 'copy-folder')).rejects.toThrow();
+  expect(session.getSnapshot().phase).toBe('unknown');
+  session.close();
+  await expect(session.pasteFolderCopy(second, 'Again', target, 'copy-folder')).rejects.toThrow();
+  expect(platformFetch).toHaveBeenCalledTimes(3);
+});
 const validated = (ids: string[]) => new Response(JSON.stringify({ mode: 'copy', sourcePosition: source, items: ids.map(linkId => ({ linkId })) }));
+it.each(['snapshot', 'closed'] as const)('discards a delayed preparation after its %s identity expires', async reason => {
+  const session = new WorkspaceClipboardSession(vi.fn());
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ linkId: 'folder', modelKey: 'WorkspaceFolder' }] })));
+  await session.copy(source, ['folder'], 'copy'); const draft = session.prepareFolderCopy(target, 'named-copy');
+  let finish!: (response: Response) => void;
+  vi.mocked(platformFetch).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const controller = new AbortController(); const reading = session.readFolderCopyInput(draft, controller.signal);
+  expect(platformFetch).toHaveBeenLastCalledWith('/api/workspace/content/folders/copy/prepare', expect.objectContaining({ signal: controller.signal,
+    headers: expect.objectContaining({ 'X-NewP-Feature': 'named-copy' }), body: JSON.stringify({ mode: 'copy', sourcePosition: source, linkIds: ['folder'], targetPosition: target }) }));
+  if (reason === 'closed') draft.closed = true;
+  else { vi.mocked(platformFetch).mockResolvedValueOnce(validated(['replacement'])); await session.copy(source, ['replacement'], 'copy'); }
+  finish(new Response(JSON.stringify({ sourceName: 'old', sourcePath: ['Public', 'old'], targetPath: ['Public', 'target'] })));
+  await expect(reading).rejects.toThrow();
+  expect(vi.mocked(platformFetch).mock.calls.some(([path]) => String(path).endsWith('/folders/copy'))).toBe(false);
+});
 afterEach(() => { vi.resetAllMocks(); });
 
 it.each([false, true])('cut uses its own qualification and clears only a confirmed success (noChange=%s)', async noChange => {

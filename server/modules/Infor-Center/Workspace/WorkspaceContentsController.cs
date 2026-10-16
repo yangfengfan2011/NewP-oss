@@ -61,6 +61,37 @@ public sealed class WorkspaceContentsController(WorkspaceContents contents, Work
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
     }
 
+    /// <summary>名称输入只读准备返回本次已核证源和目标，不形成随后提交的授权凭证。</summary>
+    [HttpPost("content/folders/copy/prepare"), RequireFeature("workspace.folder.pasteFolderCopy")]
+    public async Task<IResult> PrepareFolderCopy(JsonElement input, CancellationToken token)
+    {
+        try
+        {
+            var request = ReadClipboardInput(input, true);
+            return Results.Ok(await contents.PrepareFolderCopyAsync(Actor(), request.Mode, request.SourcePosition, request.LinkIds, request.TargetPosition!, token));
+        }
+        catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+    }
+
+    /// <summary>单源浅副本仅接受确切来源、目标位置及新根名称；提交后不附加新对象读取要求。</summary>
+    [HttpPost("content/folders/copy"), RequireFeature("workspace.folder.pasteFolderCopy")]
+    public async Task<IResult> CopyFolder(JsonElement input, CancellationToken token)
+    {
+        try
+        {
+            if (input.ValueKind != JsonValueKind.Object) throw new LinkQueryException(400, "Workspace.InvalidClipboardInput");
+            var members = input.EnumerateObject().ToArray();
+            if (members.Length != 5 || members.Select(member => member.Name).Distinct(StringComparer.Ordinal).Count() != 5
+                || members.Any(member => member.Name is not ("mode" or "sourcePosition" or "linkIds" or "targetPosition" or "name"))
+                || !input.TryGetProperty("name", out var name) || name.ValueKind != JsonValueKind.String)
+                throw new LinkQueryException(400, "Workspace.InvalidClipboardInput");
+            var clipboard = JsonSerializer.SerializeToElement(members.Where(member => member.Name != "name").ToDictionary(member => member.Name, member => member.Value));
+            var request = ReadClipboardInput(clipboard, true);
+            return Results.Ok(await contents.CopyFolderAsync(Actor(), request.Mode, request.SourcePosition, request.LinkIds, request.TargetPosition!, name.GetString()!, token));
+        }
+        catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+    }
+
     private sealed record ClipboardInput(string Mode, WorkspacePosition SourcePosition, string[] LinkIds, WorkspacePosition? TargetPosition);
 
     // 两个命令共用严格形状，未知/重复成员和伪造类型、对象身份不能作为后续写入输入。

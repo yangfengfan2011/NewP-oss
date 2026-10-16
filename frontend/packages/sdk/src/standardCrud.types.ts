@@ -273,6 +273,8 @@ export type StandardCrudActionEligibilityResolver<TDetail = unknown, TRow = unkn
 
 /** 模块动作输入渲染上下文；值由 Shell 持有，模块只渲染业务输入并报告变化。 */
 export interface StandardCrudActionInputRenderContext extends StandardCrudFeatureRequestContext {
+  /** 与动作执行共享的当前实例；输入 owner 可固定自己的快照，实例销毁时旧输入失效。 */
+  instance?: StandardCrudActionInstance;
   /** 从活动导航目录取得已允许的读取位置；业务输入不拼接功能位置身份。 */
   navigationFeaturePosition?: (targetKey: string) => string | undefined;
   queryScope?: Record<string, unknown>;

@@ -7,12 +7,14 @@ import Modal from 'antd/es/modal';
 import Button from 'antd/es/button';
 import type {
   StandardCrudActionDefinition,
+  StandardCrudActionInstance,
   StandardCrudActionInputRenderer,
 } from '@icp-platform/sdk';
 
 const ActionFormDrawer = lazy(() => import('@icp-platform/ui/crud-form').then(module => ({ default: module.CrudFormDrawer })));
 
 interface StandardCrudActionReviewDialogProps {
+  instance?: StandardCrudActionInstance;
   open?: boolean;
   action: StandardCrudActionDefinition;
   title: ReactNode;
@@ -38,6 +40,7 @@ export function StandardCrudActionReviewDialog({
   title,
   confirmMessage,
   inputRenderer,
+  instance,
   featurePosition,
   queryScope,
   value,
@@ -76,7 +79,7 @@ export function StandardCrudActionReviewDialog({
   const content = <>
     {confirmMessage ? <p>{confirmMessage}</p> : null}
     {inputRenderer({
-      action, featurePosition,
+      action, featurePosition, instance,
       navigationFeaturePosition: key => {
         const resolution = features.navigation(key);
         return resolution.kind === 'allowed' ? resolution.position : undefined;

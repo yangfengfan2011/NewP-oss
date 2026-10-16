@@ -1,6 +1,17 @@
 {
   "schemaVersion": "1.0", "type": "dic",
   "Workspace": {
+    "PasteFolderCopy": { "zhs": "粘贴文件夹副本", "en": "Paste folder copy" },
+    "FolderCopyShared": { "zhs": "创建一个新文件夹；全部直接子内容仍共享原对象和文件，不递归复制。", "en": "Create a new folder. All direct contents still share the original objects and files; nested folders are not copied." },
+    "FolderCopyName": { "zhs": "新文件夹名称", "en": "New folder name" },
+    "FolderCopySource": { "zhs": "来源", "en": "Source" },
+    "FolderCopyTarget": { "zhs": "目标", "en": "Target" },
+    "FolderCopyLoading": { "zhs": "正在核对来源与目标…", "en": "Checking source and target…" },
+    "FolderCopyLiveContents": { "zhs": "提交时会重新读取来源内容；复制时未保存内容快照。", "en": "Source contents are read again when you submit; copying does not save a content snapshot." },
+    "FolderCopySourceRequired": { "zhs": "请先复制一个普通文件夹。此动作不接受剪切或多个来源。", "en": "First copy one ordinary folder. Cut and multiple sources are not supported." },
+    "FolderCopyUnavailable": { "zhs": "来源内容不可复制或结构无效，本次未创建副本。", "en": "The source contents cannot be copied or its structure is invalid. No copy was created." },
+    "FolderCopyInputExpired": { "zhs": "来源快照或目标已变化，请重新打开副本输入。", "en": "The source snapshot or target has changed. Reopen the copy input." },
+    "FolderCopied": { "zhs": "文件夹副本已创建，子内容仍共享原对象。", "en": "Folder copy created. Its contents still share the original objects." },
     "Copy": { "zhs": "复制", "en": "Copy" },
     "Cut": { "zhs": "剪切", "en": "Cut" },
     "CutPending": { "zhs": "剪切（待移动）", "en": "Cut (pending move)" },

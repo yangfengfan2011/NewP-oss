@@ -178,6 +178,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
           inputRenderer={actionInputs[currentInputAction.inputKey]}
           featurePosition={resolvedFeaturePosition(currentInputAction.featureResolution)}
           queryScope={context.queryScope}
+          instance={context.instance}
           value={inputValue}
           detail={context.detail}
           row={context.row}

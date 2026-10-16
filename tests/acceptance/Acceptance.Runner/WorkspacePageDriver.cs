@@ -231,6 +231,23 @@ internal sealed class WorkspacePageDriver(IPage page)
     internal async Task PasteReferencesAsync(params string[] names)
         => await PasteReferencesAsync("粘贴引用", names);
 
+    /// <summary>从正式名称输入提交浅副本，只证明用户能确认并在目标看到结果。</summary>
+    internal async Task PasteFolderCopyAsync(string name, Func<Task>? capture = null)
+    {
+        var crud = new StandardCrudPageDriver(page);
+        await crud.ClickPageActionAsync("粘贴文件夹副本");
+        var dialog = page.GetByRole(AriaRole.Dialog, new() { Name = "粘贴文件夹副本", Exact = true });
+        await dialog.GetByRole(AriaRole.Textbox, new() { Name = "新文件夹名称", Exact = true }).FillAsync(name);
+        if (capture is not null) await capture();
+        var written = page.WaitForResponseAsync(response => response.Request.Method == "POST"
+            && new Uri(response.Url).AbsolutePath == "/api/workspace/content/folders/copy");
+        await dialog.GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^确\s*认$") }).ClickAsync();
+        var response = await written;
+        if (!response.Ok) throw new InvalidOperationException($"文件夹副本提交失败：{response.Status} {await response.TextAsync()}");
+        await Assertions.Expect(dialog).ToHaveCountAsync(0);
+        await crud.WaitForRowAsync(name);
+    }
+
     /// <summary>剪切使用同一粘贴动作的待移动文案，成功后仍沿正式读取交接。</summary>
     internal async Task PasteCutReferencesAsync(params string[] names)
         => await PasteReferencesAsync("粘贴引用（待移动）", names);

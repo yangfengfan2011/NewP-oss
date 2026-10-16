@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Modules.Workspace;
 
-public sealed record WorkspaceClipboardItem(string LinkId);
+public sealed record WorkspaceClipboardItem(string LinkId, string ModelKey);
 public sealed record WorkspaceClipboardSnapshot(string Mode, WorkspacePosition SourcePosition, IReadOnlyList<WorkspaceClipboardItem> Items);
 public sealed record WorkspacePasteResult(bool Succeeded, bool NoChange);
 
@@ -21,8 +21,8 @@ public sealed partial class WorkspaceContents
             if (openedHere) await db.Database.OpenConnectionAsync(token);
             var source = mode == "cut" ? await WritablePositionAsync(actor, sourcePosition, token)
                 : await positions.ResolveAsync(actor, sourcePosition, token);
-            await ResolveClipboardTargetsAsync(source.FolderId, linkIds, mode, token);
-            return new(mode, sourcePosition, linkIds.Select(id => new WorkspaceClipboardItem(id)).ToArray());
+            var targets = await ResolveClipboardTargetsAsync(source.FolderId, linkIds, mode, token);
+            return new(mode, sourcePosition, linkIds.Select((id, index) => new WorkspaceClipboardItem(id, targets[index].ModelKey)).ToArray());
         }
         finally
         {

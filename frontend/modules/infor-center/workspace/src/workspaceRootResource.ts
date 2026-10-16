@@ -1,22 +1,17 @@
 import { platformFetch } from '@icp-platform/core';
 import { createElement, lazy, Suspense } from 'react';
-import { readStandardCrudRequestError, StandardCrudRequestError, type StandardCrudActionInstance, type StandardCrudActionInputRenderContext, type StandardCrudDetail, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
+import { readStandardCrudRequestError, StandardCrudRequestError, type StandardCrudActionInputRenderContext, type StandardCrudDetail, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import type { WorkspaceDocumentDraft } from './workspaceDocumentUpload';
 import { WorkspaceDocumentSession } from './workspaceDocumentSession';
 import { workspacePosition } from './workspacePosition';
-import { WorkspaceClipboardSession } from './workspaceClipboard';
-
-const clipboardOwner = Symbol('workspace.clipboard');
-function clipboard(instance: StandardCrudActionInstance | undefined): WorkspaceClipboardSession {
-  if (!instance?.active) throw new StandardCrudRequestError('Workspace.ClipboardUnavailable', 409, {}, { code: 'Workspace.ClipboardUnavailable' });
-  return instance.getOrCreate(clipboardOwner, () => new WorkspaceClipboardSession(() => instance.changed()), session => session.close());
-}
+import { workspaceClipboard as clipboard, type FolderCopyDraft } from './workspaceClipboard';
 
 interface LinkRow { linkId: string; associatedObject: { modelKey: string; id: string }; fields: Record<string, unknown> }
 const headers = (featurePosition?: string): Record<string, string> => featurePosition ? { 'X-NewP-Feature': featurePosition } : {};
 const WorkspaceObjectCreateInput = lazy(() => import('./WorkspaceObjectCreateInput'));
 const WorkspaceObjectEditInput = lazy(() => import('./WorkspaceObjectEditInput'));
 const WorkspaceDocumentCreateInput = lazy(() => import('./WorkspaceDocumentCreateInput'));
+const WorkspaceFolderCopyInput = lazy(() => import('./WorkspaceFolderCopyInput'));
 async function referenceCommand(method: string, path: string, body: unknown, featurePosition?: string) {
   const response = await platformFetch(path, { method, headers: { ...headers(featurePosition), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!response.ok) throw await readStandardCrudRequestError(response);
@@ -33,6 +28,7 @@ const resource: StandardCrudResourceRegistration = {
   listFieldRenderers: { ObjectType: ({ row, value }) => createElement('span', null,
     createElement('span', { 'aria-hidden': true }, row.ObjectModelKey === 'WorkspaceFolder' ? '📁 ' : row.ObjectModelKey === 'Part' ? '▦ ' : '▤ '), String(value ?? '')) },
   actionInputRenderers: {
+    copyFolder: (context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceFolderCopyInput, context)),
     editObject: Object.assign((context: StandardCrudActionInputRenderContext) =>
       createElement(Suspense, { fallback: null }, createElement(WorkspaceObjectEditInput, context)), { presentation: 'drawer' as const }),
     confirmDelete: () => null,
@@ -41,6 +37,12 @@ const resource: StandardCrudResourceRegistration = {
       createElement(Suspense, { fallback: null }, createElement(context.action.key === 'createDocument' ? WorkspaceDocumentCreateInput : WorkspaceObjectCreateInput, context)), { presentation: 'drawer' as const }),
   },
   actionHandlers: {
+    pasteFolderCopy: Object.assign(async ({ instance, input, queryScope, featurePosition }: import('@icp-platform/sdk').StandardCrudActionContext) => {
+      const value = input as { draft?: FolderCopyDraft; name?: string } | undefined;
+      if (!value?.draft || typeof value.name !== 'string') throw new StandardCrudRequestError('Workspace.FolderCopyInputExpired', 409, {}, { code: 'Workspace.FolderCopyInputExpired' });
+      const receipt = await clipboard(instance).pasteFolderCopy(value.draft, value.name, workspacePosition(queryScope), featurePosition);
+      return { operation: 'action' as const, payload: receipt, change: { operation: 'update' as const, id: '' }, notice: { reasonKey: 'Workspace.FolderCopied' } };
+    }, { isCorrectableInputError: (failure: unknown) => failure instanceof StandardCrudRequestError && failure.code === 'Workspace.SiblingNameConflict' }),
     copy: async ({ action, instance, id, selectedRows, queryScope, featurePosition }) => {
       const session = clipboard(instance);
       if (action?.key === 'clearClipboard') {
@@ -110,6 +112,7 @@ const resource: StandardCrudResourceRegistration = {
     const label = state?.clipboard?.mode === 'cut' && ['cut', 'cutSelected', 'paste'].includes(action.key)
       ? { labelKey: action.key === 'paste' ? 'Workspace.PastePending' : 'Workspace.CutPending' } : {};
     if (state?.phase === 'pasting' || state?.phase === 'validating') return { visible: true, available: false, reasonKey: 'Workspace.ClipboardBusy', ...label };
+    if (action.key === 'pasteFolderCopy') return { visible: true, available: !!instance?.active && clipboard(instance).canCopyFolder(), reasonKey: state?.phase === 'unknown' ? 'Workspace.ClipboardOutcomeUnknown' : 'Workspace.FolderCopySourceRequired' };
     if (!['copy', 'copySelected', 'cut', 'cutSelected', 'paste', 'clearClipboard'].includes(action.key)) return { visible: true, available: true };
     if (!state) return { visible: true, available: false, reasonKey: 'Workspace.ClipboardUnavailable' };
     if (action.key === 'paste' && state.phase === 'unknown') return { visible: true, available: false, reasonKey: 'Workspace.ClipboardOutcomeUnknown', ...label };

@@ -86,7 +86,8 @@ public sealed class WorkspaceFeatureProjectionTests
         foreach (var (key, surface, behavior) in new[] { ("copySelected", "list.pageActions", "copy"), ("copy", "list.rowActions", "copy"),
             ("cutSelected", "list.pageActions", "cut"), ("cut", "list.rowActions", "cut"), ("cut", "contextMenu", "cut"), ("removeSelected", "list.pageActions", "removeSelected"),
             ("copy", "contextMenu", "copy"), ("paste", "list.pageActions", "paste"), ("paste", "contextMenu", "paste"),
-            ("clearClipboard", "list.pageActions", "copy"), ("clearClipboard", "contextMenu", "copy") })
+            ("clearClipboard", "list.pageActions", "copy"), ("clearClipboard", "contextMenu", "copy"),
+            ("pasteFolderCopy", "list.pageActions", "pasteFolderCopy"), ("pasteFolderCopy", "contextMenu", "pasteFolderCopy") })
         {
             var action = Assert.Single(catalog, point => point.ModuleId == "Workspace" && point.StaticScope == "folder" && point.Key == key && point.ActionScope == surface);
             Assert.Equal("workspace.folder." + behavior, action.BehaviorKey);

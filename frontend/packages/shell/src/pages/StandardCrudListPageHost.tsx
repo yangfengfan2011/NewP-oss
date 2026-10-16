@@ -2428,6 +2428,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 )
               : undefined}
             inputRenderer={registration.actionInputRenderers[rowInputAction.action.inputKey]}
+            instance={actionInstance}
             featurePosition={resolvedFeaturePosition(rowInputFeatureResolution)}
             queryScope={host.input.queryScope}
             value={rowInputValue}

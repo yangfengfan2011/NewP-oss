@@ -7,6 +7,16 @@ namespace ICP.Platform.Modules.Workspace;
 /// <summary>Workspace 显式声明关系业务事实；Audit 取得可信主体、时间和 Trace，原平台事务统一保存提交。</summary>
 public sealed class WorkspaceReferenceAudit(IBusinessAuditRecorder recorder)
 {
+    /// <summary>浅副本记录新建独立文件夹事实；来源使用正式安全引用，不保存名称、路径或旧审计。</summary>
+    public ValueTask FolderCopiedAsync(string sourceLinkId, string sourceFolderId, string folderId, string parentId, string rootLinkId,
+        CancellationToken cancellationToken) => recorder.RegisterAsync(new(
+            "workspace.folder.shallowCopied", "workspace.folder", folderId,
+            [new("SourceLID", null, BusinessAuditValue.Reference("workspace.content", sourceLinkId)),
+                new("RootLID", null, BusinessAuditValue.Reference("workspace.content", rootLinkId)),
+                new("SourcePEID", null, BusinessAuditValue.Reference("workspace.folder", sourceFolderId)),
+                new("PEID", null, BusinessAuditValue.Reference("workspace.folder", parentId)),
+                new("CEID", null, BusinessAuditValue.Reference("workspace.folder", folderId))]), cancellationToken);
+
     /// <summary>从锁内核证的源关系及本次登记的新 LID 记录复制；不保存完整位置、客户端载荷或对象影子字段。</summary>
     public ValueTask CopiedAsync(string sourceLinkId, string sourceParentId, string targetLinkId, string targetParentId,
         LinkObjectReference endpoint, CancellationToken cancellationToken) => recorder.RegisterAsync(new(

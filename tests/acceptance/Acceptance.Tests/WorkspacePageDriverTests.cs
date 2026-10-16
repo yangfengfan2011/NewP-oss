@@ -7,6 +7,53 @@ namespace ICP.Platform.Acceptance.Tests;
 
 public sealed class WorkspacePageDriverTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "两种文件夹复制 driver 等待异步准备并消费各自正式提交端点，无服务器或端口")]
+    public async Task FolderCopies_UseTheirOwnActionAndEndpointAfterPreparation()
+    {
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new()
+        {
+            Headless = true,
+            ExecutablePath = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_CHROMIUM_EXECUTABLE")
+                ?? @"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        });
+        var page = await browser.NewPageAsync();
+        var paths = new List<string>();
+        await page.RouteAsync("http://workspace.test/**", async route =>
+        {
+            if (route.Request.Method == "POST")
+            {
+                paths.Add(new Uri(route.Request.Url).AbsolutePath);
+                await route.FulfillAsync(new() { ContentType = "application/json", Body = "{}" });
+            }
+            else await route.FulfillAsync(new() { ContentType = "text/html", Body = """
+                <meta charset="utf-8"><button data-kind="copy">粘贴文件夹副本</button><button data-kind="copy-structure">粘贴文件夹结构</button>
+                <table><tbody class="ant-table-tbody"></tbody></table>
+                <script>
+                  document.querySelectorAll('[data-kind]').forEach(button=>button.onclick=async()=>{
+                    const dialog=document.createElement('div'); dialog.role='dialog'; dialog.setAttribute('aria-label',button.textContent);
+                    dialog.innerHTML='<label>新文件夹名称<input disabled></label><button>确 认</button>'; document.body.append(dialog);
+                    const input=dialog.querySelector('input');
+                    dialog.querySelector('button').onclick=async()=>{
+                      await fetch('/api/workspace/content/folders/'+button.dataset.kind,{method:'POST'});
+                      const row=document.createElement('tr'); row.className='ant-table-row';
+                      const cell=document.createElement('td'); cell.textContent=input.value; row.append(cell);
+                      document.querySelector('tbody').append(row); dialog.remove();
+                    };
+                    await fetch('/api/workspace/content/folders/'+button.dataset.kind+'/prepare',{method:'POST'});
+                    input.disabled=false;
+                  });
+                </script>
+                """ });
+        });
+        await page.GotoAsync("http://workspace.test/");
+        var driver = new WorkspacePageDriver(page);
+        await driver.PasteFolderCopyAsync("浅副本");
+        await driver.PasteFolderStructureAsync("结构副本");
+        Assert.Equal(new[] { "/api/workspace/content/folders/copy/prepare", "/api/workspace/content/folders/copy",
+            "/api/workspace/content/folders/copy-structure/prepare", "/api/workspace/content/folders/copy-structure" }, paths);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "正式树动作driver按rc-tree真实选中class区分同名出现，无服务器或端口")]
     public async Task SelectedFolderAction_UsesTheSelectedOccurrenceWithoutAriaSelected()
     {

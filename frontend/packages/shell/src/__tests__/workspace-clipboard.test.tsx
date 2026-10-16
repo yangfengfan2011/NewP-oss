@@ -47,7 +47,7 @@ async function waitForActive(check: () => void | Promise<void>, signal: AbortSig
 const waitFor = (check: () => void | Promise<void>) => waitForActive(check, testLifetime.signal);
 
 async function mount(options: { actionSets?: Record<string, { column: string[]; contextMenu: string[] }>; columnMode?: 'default' | 'menu'; folderRow?: boolean; validate?: (body: Record<string, unknown>) => Promise<Response>; paste?: (body: Record<string, unknown>) => Promise<Response>; failRefresh?: boolean;
-  grants?: readonly string[]; remove?: (body: Record<string, unknown>) => Promise<Response>;
+  folderCopy?: (body: Record<string, unknown>) => Promise<Response>; grants?: readonly string[]; remove?: (body: Record<string, unknown>) => Promise<Response>;
   menuLoad?: (load: () => Promise<{ default: StandardCrudResourceRegistration }>, call: number) => Promise<{ default: StandardCrudResourceRegistration }> } = {}) {
   const lifetime = new AbortController();
   const waitFor = (check: () => void | Promise<void>) => waitForActive(check, lifetime.signal);
@@ -80,10 +80,12 @@ async function mount(options: { actionSets?: Record<string, { column: string[]; 
       return json({ items, total: items.length, page: 1, pageSize: 20 });
     }
     if (url.pathname.startsWith('/api/workspace/folders/')) return json({ fields: { ENAME: 'A' } });
-    if (url.pathname.endsWith('/folders/copy/prepare')) return json({ sourceName: 'WorkspaceFolder source', sourcePath: ['公共空间', 'A', 'WorkspaceFolder source'], targetPath: ['公共空间', 'B'] });
-    if (url.pathname.endsWith('/folders/copy')) {
+    if (['/folders/copy/prepare', '/folders/copy-structure/prepare'].some(path => url.pathname.endsWith(path))) return json({ sourceName: 'WorkspaceFolder source', sourcePath: ['公共空间', 'A', 'WorkspaceFolder source'], targetPath: ['公共空间', 'B'] });
+    if (['/folders/copy', '/folders/copy-structure'].some(path => url.pathname.endsWith(path))) {
       const body = input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body));
-      writes.push({ path: url.pathname, body }); failedRead = options.failRefresh === true; return json({ succeeded: true });
+      writes.push({ path: url.pathname, body });
+      if (options.folderCopy) return controlledResponse(() => options.folderCopy!(body));
+      failedRead = options.failRefresh === true; return json({ succeeded: true });
     }
     if (url.pathname.endsWith('/references/remove')) {
       const body = input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body));
@@ -415,21 +417,21 @@ it('keeps a committed clipboard after refresh failure and retries only reading',
   expect(page.writes.filter(item => item.path.endsWith('/paste'))).toHaveLength(1); expect(page.button('粘贴引用').disabled).toBe(false);
 });
 
-it('submits the real prepared folder copy once and retries only reading after its committed refresh fails', async () => {
+it.each(['copy', 'copy-structure'] as const)('submits the real prepared folder copy once and retries only reading after its committed refresh fails', async kind => {
   const page = await mount({ folderRow: true, failRefresh: true });
   await page.copyRows(['WorkspaceFolder']); await waitFor(() => expect(page.writes).toHaveLength(1));
-  await page.select('B'); await waitFor(() => expect(page.button('粘贴文件夹副本').disabled).toBe(false));
-  await act(async () => page.button('粘贴文件夹副本').click());
+  await page.select('B'); await waitFor(() => expect(page.button(kind === 'copy' ? '粘贴文件夹副本' : '粘贴文件夹结构').disabled).toBe(false));
+  await act(async () => page.button(kind === 'copy' ? '粘贴文件夹副本' : '粘贴文件夹结构').click());
   await waitFor(() => expect(document.querySelector<HTMLInputElement>('#workspace-copy-name')?.value).toBe('WorkspaceFolder source'));
   await act(async () => [...document.querySelectorAll<HTMLButtonElement>('.ant-modal button')].find(button => button.textContent?.replace(/\s/g, '') === '确认')!.click());
   await waitFor(() => expect(page.container.textContent).toContain('已保存，刷新失败'));
-  expect(page.writes.filter(item => item.path.endsWith('/folders/copy'))).toHaveLength(1);
-  expect(page.writes.find(item => item.path.endsWith('/folders/copy'))!.body).toEqual({ mode: 'copy', sourcePosition: { spaceId: 'public', rootFolderId: 'root', linkIds: ['A-link'] },
+  expect(page.writes.filter(item => item.path.endsWith(`/folders/${kind}`))).toHaveLength(1);
+  expect(page.writes.find(item => item.path.endsWith(`/folders/${kind}`))!.body).toEqual({ mode: 'copy', sourcePosition: { spaceId: 'public', rootFolderId: 'root', linkIds: ['A-link'] },
     linkIds: ['WorkspaceFolder-lid'], targetPosition: { spaceId: 'public', rootFolderId: 'root', linkIds: ['B-link'] }, name: 'WorkspaceFolder source' });
   await act(async () => page.button('刷新').click());
   await waitFor(() => expect(page.container.textContent).not.toContain('已保存，刷新失败'));
-  expect(page.writes.filter(item => item.path.endsWith('/folders/copy'))).toHaveLength(1);
-  expect(page.button('粘贴文件夹副本').disabled).toBe(false);
+  expect(page.writes.filter(item => item.path.endsWith(`/folders/${kind}`))).toHaveLength(1);
+  expect(page.button(kind === 'copy' ? '粘贴文件夹副本' : '粘贴文件夹结构').disabled).toBe(false);
 });
 
 it('opens a folder name at its exact tree occurrence without reading a details drawer', async () => {
@@ -489,4 +491,18 @@ it.each(['separate', 'context-only', 'column-only', 'default'] as const)('keeps 
     await page.waitFor(() => expect(page.writes).toHaveLength(1));
     expect(page.writes[0].path).toBe('/api/workspace/content/clipboard/validate');
   }
+});
+
+it.each(['copy', 'copy-structure'] as const)('keeps the name after a %s collation conflict without replay or automatic suffix', async kind => {
+  const page = await mount({ folderRow: true, folderCopy: async () => json({ code: 'Workspace.SiblingNameConflict', status: 409 }, 409) });
+  await page.copyRows(['WorkspaceFolder']); await waitFor(() => expect(page.writes).toHaveLength(1)); await page.select('B');
+  const label = kind === 'copy' ? '粘贴文件夹副本' : '粘贴文件夹结构';
+  await waitFor(() => expect(page.button(label).disabled).toBe(false)); await act(async () => page.button(label).click());
+  await waitFor(() => expect(document.querySelector<HTMLInputElement>('#workspace-copy-name')?.value).toBe('WorkspaceFolder source'));
+  await act(async () => [...document.querySelectorAll<HTMLButtonElement>('.ant-modal button')].find(button => button.textContent?.replace(/\s/g, '') === '确认')!.click());
+  await waitFor(() => expect(page.writes.filter(item => item.path.endsWith(`/folders/${kind}`))).toHaveLength(1));
+  await waitFor(() => expect(document.querySelector<HTMLInputElement>('#workspace-copy-name')?.disabled).toBe(false));
+  expect(document.querySelector<HTMLInputElement>('#workspace-copy-name')!.value).toBe('WorkspaceFolder source');
+  expect(document.querySelector('[role=dialog]')).not.toBeNull();
+  expect(page.writes.filter(item => item.path.endsWith(`/folders/${kind}`))).toHaveLength(1);
 });

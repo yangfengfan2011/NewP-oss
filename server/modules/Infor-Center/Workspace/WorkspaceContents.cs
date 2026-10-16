@@ -39,11 +39,8 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
             if (await links.AnyAsync(link => EF.Property<string>(link, "PEID") == path.FolderId && EF.Property<string>(link, "ChildModelKey") == WorkspacePositions.FolderModel
                 && folders.Any(folder => EF.Property<string>(folder, "EID") == EF.Property<string>(link, "CEID") && EF.Property<string>(folder, "ENAME") == name.GetString()), cancellation))
                 throw new LinkQueryException(409, "Workspace.SiblingNameConflict", "ENAME");
-            var id = ids.NewId("WorkspaceFolder");
-            var candidate = new Dictionary<string, object?> { ["EID"] = id, ["ENAME"] = name.GetString(),
-                ["Description"] = description.ValueKind == JsonValueKind.String ? description.GetString() : null, ["OriginSpaceId"] = position.SpaceId };
-            audit.ForCreate().ApplyTo(candidate);
-            if (!await decisions.IsCandidateAllowedAsync("workspace.folder", candidate, "create", cancellation)) throw new LinkQueryException(403, "Workspace.FolderCreateDenied");
+            var candidate = await PrepareFolderCandidateAsync(name.GetString()!, description.ValueKind == JsonValueKind.String ? description.GetString() : null, position.SpaceId, cancellation);
+            var id = (string)candidate["EID"]!;
             // 实际端点及配对必须通过同一受信目录；新对象没有外部写入其类型的机会。
             var definition = catalog.Get("workspace.content");
             if (!definition.Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == WorkspacePositions.FolderModel)
@@ -54,6 +51,18 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
             await RegisterCreatedReferenceAsync(path.FolderId, WorkspacePositions.FolderModel, id, cancellation);
             return id;
         }, token);
+    }
+
+    // 普通创建和结构复制共用字段、目标归属、可信审计及实际候选create；准备不写入或要求新对象read。
+    private async Task<Dictionary<string, object?>> PrepareFolderCandidateAsync(string name, string? description, string spaceId, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name.Length > 256) throw new LinkQueryException(400, "Workspace.InvalidName", "ENAME");
+        if (description?.Length > 500) throw new LinkQueryException(400, "Workspace.DescriptionTooLong", "Description");
+        var candidate = new Dictionary<string, object?> { ["EID"] = ids.NewId(WorkspacePositions.FolderModel), ["ENAME"] = name,
+            ["Description"] = description, ["OriginSpaceId"] = spaceId };
+        audit.ForCreate().ApplyTo(candidate);
+        if (!await decisions.IsCandidateAllowedAsync("workspace.folder", candidate, "create", token)) throw new LinkQueryException(403, "Workspace.FolderCreateDenied");
+        return candidate;
     }
 
     /// <summary>已有对象引用共享真实实体；锁内重验位置、配对与目标读取，文件夹另维护完整图不变量。</summary>

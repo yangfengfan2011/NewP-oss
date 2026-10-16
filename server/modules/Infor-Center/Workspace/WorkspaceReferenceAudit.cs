@@ -17,6 +17,13 @@ public sealed class WorkspaceReferenceAudit(IBusinessAuditRecorder recorder)
                 new("PEID", null, BusinessAuditValue.Reference("workspace.folder", parentId)),
                 new("CEID", null, BusinessAuditValue.Reference("workspace.folder", folderId))]), cancellationToken);
 
+    /// <summary>结构复制每个新对象记录来源和新身份；安全引用不携带原路径、字段或旧历史。
+    /// </summary>
+    public ValueTask StructureCopiedAsync(string sourceId, string folderId, CancellationToken token) => recorder.RegisterAsync(new(
+        "workspace.folder.structureCopied", "workspace.folder", folderId,
+        [new("SourcePEID", null, BusinessAuditValue.Reference("workspace.folder", sourceId)),
+            new("CEID", null, BusinessAuditValue.Reference("workspace.folder", folderId))]), token);
+
     /// <summary>从锁内核证的源关系及本次登记的新 LID 记录复制；不保存完整位置、客户端载荷或对象影子字段。</summary>
     public ValueTask CopiedAsync(string sourceLinkId, string sourceParentId, string targetLinkId, string targetParentId,
         LinkObjectReference endpoint, CancellationToken cancellationToken) => recorder.RegisterAsync(new(

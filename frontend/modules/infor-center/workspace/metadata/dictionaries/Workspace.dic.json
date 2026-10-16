@@ -1,6 +1,9 @@
 {
   "schemaVersion": "1.0", "type": "dic",
   "Workspace": {
+    "PasteFolderStructure": { "zhs": "粘贴文件夹结构", "en": "Paste folder structure" },
+    "FolderStructureOnly": { "zhs": "仅复制文件夹，保留副本内部共享关系；不复制零组件、图文档或文件。", "en": "Copy folders only, preserving shared folders within the new structure. Parts, documents and files are excluded." },
+    "FolderStructureCopied": { "zhs": "独立文件夹结构已创建。", "en": "Independent folder structure created." },
     "PasteFolderCopy": { "zhs": "粘贴文件夹副本", "en": "Paste folder copy" },
     "FolderCopyShared": { "zhs": "创建一个新文件夹；全部直接子内容仍共享原对象和文件，不递归复制。", "en": "Create a new folder. All direct contents still share the original objects and files; nested folders are not copied." },
     "FolderCopyName": { "zhs": "新文件夹名称", "en": "New folder name" },

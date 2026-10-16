@@ -43,6 +43,12 @@ const resource: StandardCrudResourceRegistration = {
       const receipt = await clipboard(instance).pasteFolderCopy(value.draft, value.name, workspacePosition(queryScope), featurePosition);
       return { operation: 'action' as const, payload: receipt, change: { operation: 'update' as const, id: '' }, notice: { reasonKey: 'Workspace.FolderCopied' } };
     }, { isCorrectableInputError: (failure: unknown) => failure instanceof StandardCrudRequestError && failure.code === 'Workspace.SiblingNameConflict' }),
+    pasteFolderStructure: Object.assign(async ({ instance, input, queryScope, featurePosition }: import('@icp-platform/sdk').StandardCrudActionContext) => {
+      const value = input as { draft?: FolderCopyDraft; name?: string } | undefined;
+      if (!value?.draft || typeof value.name !== 'string') throw new StandardCrudRequestError('Workspace.FolderCopyInputExpired', 409, {}, { code: 'Workspace.FolderCopyInputExpired' });
+      const receipt = await clipboard(instance).pasteFolderCopy(value.draft, value.name, workspacePosition(queryScope), featurePosition, 'copy-structure');
+      return { operation: 'action' as const, payload: receipt, change: { operation: 'update' as const, id: '' }, notice: { reasonKey: 'Workspace.FolderStructureCopied' } };
+    }, { isCorrectableInputError: (failure: unknown) => failure instanceof StandardCrudRequestError && failure.code === 'Workspace.SiblingNameConflict' }),
     copy: async ({ action, instance, id, selectedRows, queryScope, featurePosition }) => {
       const session = clipboard(instance);
       if (action?.key === 'clearClipboard') {
@@ -112,7 +118,7 @@ const resource: StandardCrudResourceRegistration = {
     const label = state?.clipboard?.mode === 'cut' && ['cut', 'cutSelected', 'paste'].includes(action.key)
       ? { labelKey: action.key === 'paste' ? 'Workspace.PastePending' : 'Workspace.CutPending' } : {};
     if (state?.phase === 'pasting' || state?.phase === 'validating') return { visible: true, available: false, reasonKey: 'Workspace.ClipboardBusy', ...label };
-    if (action.key === 'pasteFolderCopy') return { visible: true, available: !!instance?.active && clipboard(instance).canCopyFolder(), reasonKey: state?.phase === 'unknown' ? 'Workspace.ClipboardOutcomeUnknown' : 'Workspace.FolderCopySourceRequired' };
+    if (['pasteFolderCopy', 'pasteFolderStructure'].includes(action.key)) return { visible: true, available: !!instance?.active && clipboard(instance).canCopyFolder(), reasonKey: state?.phase === 'unknown' ? 'Workspace.ClipboardOutcomeUnknown' : 'Workspace.FolderCopySourceRequired' };
     if (!['copy', 'copySelected', 'cut', 'cutSelected', 'paste', 'clearClipboard'].includes(action.key)) return { visible: true, available: true };
     if (!state) return { visible: true, available: false, reasonKey: 'Workspace.ClipboardUnavailable' };
     if (action.key === 'paste' && state.phase === 'unknown') return { visible: true, available: false, reasonKey: 'Workspace.ClipboardOutcomeUnknown', ...label };

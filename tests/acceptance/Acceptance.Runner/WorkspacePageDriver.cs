@@ -232,18 +232,26 @@ internal sealed class WorkspacePageDriver(IPage page)
         => await PasteReferencesAsync("粘贴引用", names);
 
     /// <summary>从正式名称输入提交浅副本，只证明用户能确认并在目标看到结果。</summary>
-    internal async Task PasteFolderCopyAsync(string name, Func<Task>? capture = null)
+    internal Task PasteFolderCopyAsync(string name, Func<Task>? capture = null)
+        => PasteNamedFolderAsync("粘贴文件夹副本", "copy", name, capture);
+
+    /// <summary>结构副本使用自己的正式动作和端点，结果数据语义由 SQL 测试验证。</summary>
+    internal Task PasteFolderStructureAsync(string name, Func<Task>? capture = null)
+        => PasteNamedFolderAsync("粘贴文件夹结构", "copy-structure", name, capture);
+
+    /// <summary>两种复制共用名称输入交接；异步准备完成后填写，提交后消费正式列表刷新。</summary>
+    private async Task PasteNamedFolderAsync(string actionLabel, string endpoint, string name, Func<Task>? capture)
     {
         var crud = new StandardCrudPageDriver(page);
-        await crud.ClickPageActionAsync("粘贴文件夹副本");
-        var dialog = page.GetByRole(AriaRole.Dialog, new() { Name = "粘贴文件夹副本", Exact = true });
+        await crud.ClickPageActionAsync(actionLabel);
+        var dialog = page.GetByRole(AriaRole.Dialog, new() { Name = actionLabel, Exact = true });
         await dialog.GetByRole(AriaRole.Textbox, new() { Name = "新文件夹名称", Exact = true }).FillAsync(name);
         if (capture is not null) await capture();
         var written = page.WaitForResponseAsync(response => response.Request.Method == "POST"
-            && new Uri(response.Url).AbsolutePath == "/api/workspace/content/folders/copy");
+            && new Uri(response.Url).AbsolutePath == "/api/workspace/content/folders/" + endpoint);
         await dialog.GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^确\s*认$") }).ClickAsync();
         var response = await written;
-        if (!response.Ok) throw new InvalidOperationException($"文件夹副本提交失败：{response.Status} {await response.TextAsync()}");
+        if (!response.Ok) throw new InvalidOperationException($"{actionLabel}提交失败：{response.Status} {await response.TextAsync()}");
         await Assertions.Expect(dialog).ToHaveCountAsync(0);
         await crud.WaitForRowAsync(name);
     }

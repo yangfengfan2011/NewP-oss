@@ -91,6 +91,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
                 features.Action(entry, "clearClipboard", "contextMenu", "folder"), features.Action(entry, "copy", "list.rowActions", "folder"),
                 features.Action(entry, "copySelected", "list.pageActions", "folder"), features.Action(entry, "paste", "list.pageActions", "folder"),
                 features.Action(entry, "pasteFolderCopy", "list.pageActions", "folder"), features.Action(entry, "pasteFolderCopy", "contextMenu", "folder"),
+                features.Action(entry, "pasteFolderStructure", "list.pageActions", "folder"), features.Action(entry, "pasteFolderStructure", "contextMenu", "folder"),
                 features.Action(entry, "clearClipboard", "list.pageActions", "folder"),
                 features.Action(entry, "cut", "contextMenu", "folder"), features.Action(entry, "cut", "list.rowActions", "folder"),
                 features.Action(entry, "cutSelected", "list.pageActions", "folder"), features.Action(entry, "removeSelected", "list.pageActions", "folder"),
@@ -206,6 +207,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             await driver.SelectTreePathAsync("公共空间", siblingName);
             await driver.PasteReferencesAsync(folderName);
             await driver.PasteFolderCopyAsync("浅副本 " + _runId[..8], () => CapturePresentationAsync(page, "folder-copy-input.png"));
+            await driver.PasteFolderStructureAsync("结构副本 " + _runId[..8], () => CapturePresentationAsync(page, "folder-structure-input.png"));
             await driver.SelectTreePathAsync("公共空间", moveTarget);
             await driver.CreateFolderAsync(orderNeighbor);
             var searchedAddress = await driver.SearchAndSelectFolderAsync(folderName, ["公共空间", siblingName, folderName],

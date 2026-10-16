@@ -66,7 +66,7 @@ WorkspaceFolderContent 是正式 Link，父端由 authoring 固定为 WorkspaceF
 
 批量移除使用 `POST /api/workspace/content/references/remove`，输入为完整 position 与当前页 1–100 个不同 LID；正式 `removeSelected` 确认弹层明确保留对象及文件。单条 DELETE 兼容入口委托同一内核：图锁事务内重验完整位置、父 edit 和端点 read 后只删除这些 LID，不要求对象 edit/delete/copy，不调用对象删除或 Files release；最后引用及非空文件夹引用均可移除，一条失败整批回滚。成功后按 unknown-change 刷新同一真实父的已加载出现位置与列表。
 
-## 文件夹浅副本
+## 文件夹浅副本与结构复制
 
 `pasteFolderCopy` 是独立正式动作；树与列表沿同一实例剪贴板，只允许 copy 模式的单个普通 Folder。名称弹层固定源快照、目标完整位置与功能位置；模块只读 `copy/prepare` 经完整位置与源 read/copy、目标 read/edit 核证后返回安全路径和源名称，弹层明确显示源/目标，默认源名称、不补后缀，并说明提交时重新读取内容。准备结果不包含子内容或提交凭证；关闭、取消及身份变化使迟到只读结果失效。快照替换、位置或主体变化、实例结束后旧输入失效。在途保持输入锁定，明确成功保留 copy 快照；未知结果沿既有剪贴板恢复规则处理，已提交后的刷新失败只重读。中英提示明确直接子内容仍共享原对象和文件。
 
@@ -74,9 +74,15 @@ WorkspaceFolderContent 是正式 Link，父端由 authoring 固定为 WorkspaceF
 
 新根、目标入向引用、直接引用与业务记录由原事务一起提交。`workspace.folder.shallowCopied` 关联新 Folder、新根 LID、来源与目标的安全引用；直接关系沿 `workspace.reference.copied` 留痕，不复制源历史或 ACL。关闭动作可回退入口，保留已经创建且可能被后续编辑的副本；不自动删除副本、Down 或清表。
 
+`pasteFolderStructure` 是独立正式动作，树、列表与根目标共用相同输入和结果生命周期；草稿额外固定复制种类，不能把浅副本输入转成结构动作。`copy-structure/prepare` 独立核证源和目标，默认源名称，不自动补后缀；提示仅复制文件夹并保留副本内部共享关系，仍以提交时读取为准。
+
+`POST /api/workspace/content/folders/copy-structure` 在同一个图锁事务内，只沿 Folder 出向关系分批读取可达图，每个 EID 只排队一次。模块内纯图计划验证端点、重复关系、有效相对次序、连通性和环；每个父的同名比较留在真实 SQL collation。所有范围内 Folder 都要求 read/copy，目标要求完整位置与 read/edit；每个新对象通过普通创建共用的字段、目标 OriginSpaceId、可信审计及实际候选 create。全部计划与资格完成后才写入，不复制源 ACL、Part/Document 引用或文件，不要求排除对象的权限，也不要求新对象能被展示读取。
+
+每个旧 Folder 恰好映射一个新 EID，全部内部边获得新 LID，保留每个新父的相对次序；仅额外追加目标到新根，不带外部入边。源自身或后代可以作为目标，因为本次源集合在写入前固定，新图只引用新 Folder。全部新对象、内部边、目标入边和业务记录由原事务一起提交或回滚；每个新对象登记 `workspace.folder.structureCopied`，新关系沿 `workspace.reference.copied` 保存安全标识。规划成本按不同节点与真实边计量，不展开出现路径；同步容量仍以真实 SQL 测量和用户确认结论为准，不引入业务硬阈值、后台执行或部分成功。回退关闭新增动作并保留已创建副本，不自动删除后续可能已被编辑的数据。
+
 ## 对象编辑与删除
 
-普通文件夹树节点贡献已有编辑与移除引用动作，右侧内容 List View 通过 `rowContextMenu` 引用已有编辑、删除与移除。根仍使用 `folder` nodeType 和既有功能位置；Provider 以 `contextMenuKeys: ["paste", "clearClipboard"]` 收窄根菜单，根不能复制或排序。`workspace.folder.reference` 从完整节点位置取末端 LID 作为动作 recordId，其源父位置为链去掉末端 LID；空链根及非法链拒绝。`referenceObjectId` 只供共享动作读取真实 Folder EID，并保留动作 row 的 LID/ObjectModelKey；它不进入写入 DTO，也不替代 edit-values、PUT 或移除命令对真实关系端点和完整源父位置的重验。普通实体详情继续按 EID 读取。
+普通文件夹树节点贡献已有编辑与移除引用动作，右侧内容 List View 通过 `rowContextMenu` 引用已有编辑、删除与移除。根仍使用 `folder` nodeType 和既有功能位置；Provider 以 `rootContextMenuKeys` 声明的引用粘贴、两种文件夹复制和清空动作 收窄根菜单，根不能复制或排序。`workspace.folder.reference` 从完整节点位置取末端 LID 作为动作 recordId，其源父位置为链去掉末端 LID；空链根及非法链拒绝。`referenceObjectId` 只供共享动作读取真实 Folder EID，并保留动作 row 的 LID/ObjectModelKey；它不进入写入 DTO，也不替代 edit-values、PUT 或移除命令对真实关系端点和完整源父位置的重验。普通实体详情继续按 EID 读取。
 
 内容行编辑通过当前完整位置与 LID 重新读取可编辑字段，在共享 Drawer 修改。文件夹编辑名称及说明；零组件、图文档编辑编码、名称及说明。服务端从真实关系推导 EID 和模型，不接受客户端替换类型；完整位置、父文件夹 edit、端点 read 与目标 edit/delete 数据权限每次重验。空间根继续禁止编辑和删除。
 

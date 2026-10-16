@@ -163,8 +163,9 @@ public sealed class PersistenceDeploymentTests : IDisposable
         Assert.Equal(activeHistory.Select(entry => entry with { PlanDigest = "" }),
             retainedHistory.Select(entry => entry with { PlanDigest = "" }));
         var workspaceHistory = retainedHistory.Where(entry => entry.OwnerModuleId == "Workspace").ToArray();
-        Assert.Equal(6, workspaceHistory.Length);
-        Assert.Equal("20261016054922_Workspace_000006_ScopeNeutral", workspaceHistory[^1].MigrationId);
+        var workspaceStream = Assert.Single(deployed.Streams, stream => stream.ModuleId == "Workspace");
+        Assert.Equal(workspaceStream.Migrations.Select(step => step.MigrationId), workspaceHistory.Select(entry => entry.MigrationId));
+        Assert.Equal(workspaceStream.ExpectedFrontier, workspaceHistory[^1].MigrationId);
     }
 
     // 从真实 Host 发布物读取、签发并编译本次声明，不用手工 Canonical 或持久化 plan 代替 formal 链。

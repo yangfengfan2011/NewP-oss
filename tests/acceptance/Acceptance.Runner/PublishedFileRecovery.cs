@@ -1,3 +1,4 @@
+using System.Data;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
@@ -11,7 +12,7 @@ namespace ICP.Platform.Acceptance;
 // 正式进程、HTTP 与真实 SQL 的文件恢复旅程；不通过测试 Host 或手工建表替代发布输入。
 internal sealed partial class PublishedComponentAcceptanceFixture
 {
-    private sealed record RecoveryFile(string FileId, string UploadId, string FileState, string LeaseState, string StorageKey);
+    internal sealed record RecoveryFile(string FileId, string UploadId, string FileState, string LeaseState, string StorageKey);
     private sealed record SavedRecoveryFile(string FileName, byte[] Bytes);
 
     private async Task VerifyFileProcessRecoveryAsync(WorkspaceAcceptanceActor actor, CancellationToken token)
@@ -87,7 +88,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture
             new { ECODE = "OS-LIMIT-" + runId[..8], ENAME = "真实HTTP上限" }, new StreamContent(acceptedSource), acceptedName, token);
         if (acceptedSource.BytesRead != maximum || accepted.GetProperty("length").GetInt64() != maximum)
             throw new InvalidOperationException("真实Kestrel请求没有将完整100MiB传到文件服务。");
-        var ready = await WaitForRecoveryFileAsync(acceptedName, file => file.FileState == "ready" && file.LeaseState == "staged", token);
+        var ready = await WaitForRecoveryFileAsync(acceptedName, file => file.FileState == "ready" && file.LeaseState == "staged", token, accepted.GetProperty("fileId").GetString());
         var stored = await ReadSqlJsonAsync("SELECT Length,Sha256 FROM dbo.FileRecord WHERE EID=@id FOR JSON PATH;", ready.FileId, token);
         using (var facts = JsonDocument.Parse(stored))
             if (facts.RootElement[0].GetProperty("Length").GetInt64() != maximum)
@@ -190,7 +191,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture
             }
             catch (Exception exception) when (exception is HttpRequestException or OperationCanceledException) { }
             await StartHostAsync(hostRoot, "receiving-recovery-host", token);
-            var deleted = await WaitForRecoveryFileAsync(fileName, file => file.FileState == "deleted" && file.LeaseState == "cleaned", token);
+            var deleted = await WaitForRecoveryFileAsync(fileName, file => file.FileState == "deleted" && file.LeaseState == "cleaned", token, receiving.FileId);
             RequireContentAbsent(deleted);
             await WriteAsync("files-receiving-process-recovery.json", new { previous, restarted = HostIdentity, actorId = actor.AccountId,
                 storageRoot = StorageRoot, receiving, deleted, partialRemoved = true }, token);
@@ -215,9 +216,9 @@ internal sealed partial class PublishedComponentAcceptanceFixture
         var fileName = "staged-" + runId[..8] + ".pdf";
         var staged = await StageRecoveryFileAsync(client, create, position, new { ECODE = "OS-STAGED-" + runId[..8], ENAME = "暂存重启" },
             new ByteArrayContent([1, 2, 3]), fileName, token);
-        var original = await WaitForRecoveryFileAsync(fileName, file => file.LeaseState == "staged", token);
+        var original = await WaitForRecoveryFileAsync(fileName, file => file.LeaseState == "staged", token, staged.GetProperty("fileId").GetString());
         await RestartAsync(token);
-        var retained = await ReadRecoveryFileAsync(fileName, token);
+        var retained = await ReadRecoveryFileAsync(fileName, token, original.FileId);
         if (original != retained || !File.Exists(RecoveryPath(original!.StorageKey))) throw new InvalidOperationException("合法 staged lease 在进程重启时被错误回收。");
         // 等价注入本 fixture lease 的服务器到期事实；不等待24小时、不改用户数据或生产 TTL。
         await using (var connection = new SqlConnection(_database!.ConnectionString))
@@ -229,7 +230,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture
             if (await command.ExecuteNonQueryAsync(token) != 1) throw new InvalidOperationException("暂存到期注入未精确命中自身lease。");
         }
         await RestartAsync(token);
-        var expired = await WaitForRecoveryFileAsync(fileName, file => file.FileState == "deleted" && file.LeaseState == "cleaned", token);
+        var expired = await WaitForRecoveryFileAsync(fileName, file => file.FileState == "deleted" && file.LeaseState == "cleaned", token, original.FileId);
         RequireContentAbsent(expired);
         await WriteAsync("files-staged-process-recovery.json", new { original, retained, expired, storageRoot = StorageRoot }, token);
 
@@ -238,7 +239,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture
         var pendingName = "pending-" + runId[..8] + ".pdf";
         var pendingStage = await StageRecoveryFileAsync(pendingClient, create, position, new { ECODE = "OS-PENDING-" + runId[..8], ENAME = "回收重试" },
             new ByteArrayContent([4, 5, 6]), pendingName, token);
-        var activeStage = await WaitForRecoveryFileAsync(pendingName, file => file.LeaseState == "staged", token);
+        var activeStage = await WaitForRecoveryFileAsync(pendingName, file => file.LeaseState == "staged", token, pendingStage.GetProperty("fileId").GetString());
         RecoveryFile failed;
         using (var held = new FileStream(RecoveryPath(activeStage.StorageKey), FileMode.Open, FileAccess.Read, FileShare.Read))
         {
@@ -246,35 +247,75 @@ internal sealed partial class PublishedComponentAcceptanceFixture
                 "/api/workspace/content/document-uploads/" + pendingStage.GetProperty("uploadId").GetString(), null, create, token);
             await RestartAsync(token);
             await WaitForCleanupFailureAsync(activeStage.FileId, token);
-            failed = await WaitForRecoveryFileAsync(pendingName, file => file.FileState == "cleanupPending", token);
+            failed = await WaitForRecoveryFileAsync(pendingName, file => file.FileState == "cleanupPending", token, activeStage.FileId);
             if (!File.Exists(RecoveryPath(failed.StorageKey))) throw new InvalidOperationException("真实IO失败却提前删除了待回收内容。");
         }
         await RestartAsync(token);
-        var recovered = await WaitForRecoveryFileAsync(pendingName, file => file.FileState == "deleted" && file.LeaseState == "cleaned", token);
+        var recovered = await WaitForRecoveryFileAsync(pendingName, file => file.FileState == "deleted" && file.LeaseState == "cleaned", token, activeStage.FileId);
         RequireContentAbsent(recovered);
         await WriteAsync("files-pending-process-recovery.json", new { failed, recovered, ioFailureObserved = true, storageRoot = StorageRoot }, token);
     }
 
-    private async Task<RecoveryFile?> ReadRecoveryFileAsync(string fileName, CancellationToken token)
+    // 实际SQL观察供正式fixture与定向并发回归共用；连接由各自租约持有。
+    private async Task<RecoveryFile?> ReadRecoveryFileAsync(string fileName, CancellationToken token, string? fileId = null)
     {
-        var json = await ReadSqlJsonAsync("SELECT f.EID fileId,l.EID uploadId,f.State fileState,l.State leaseState,f.StorageKey storageKey " +
-            "FROM dbo.FileRecord f JOIN dbo.FileUploadLease l ON l.FileId=f.EID WHERE f.FileName=@id FOR JSON PATH;", fileName, token);
-        using var document = JsonDocument.Parse(json);
-        var rows = document.RootElement.EnumerateArray().ToArray();
-        if (rows.Length == 0) return null;
-        if (rows.Length != 1) throw new InvalidOperationException("文件恢复样本名称没有唯一命中自身事实。");
-        var row = rows[0];
-        return new(row.GetProperty("fileId").GetString()!, row.GetProperty("uploadId").GetString()!, row.GetProperty("fileState").GetString()!,
-            row.GetProperty("leaseState").GetString()!, row.GetProperty("storageKey").GetString()!);
+        await using var connection = new SqlConnection(_database!.ConnectionString);
+        await connection.OpenAsync(token);
+        return await ReadRecoveryFileAsync(connection, fileName, token, fileId);
     }
 
-    private async Task<RecoveryFile> WaitForRecoveryFileAsync(string fileName, Func<RecoveryFile, bool> ready, CancellationToken token)
+    // 单表身份定位先结束语句，再取与写入相同的事务应用锁；等待时不持跨表数据锁。
+    internal static async Task<RecoveryFile?> ReadRecoveryFileAsync(SqlConnection connection, string fileName, CancellationToken token, string? fileId = null)
+    {
+        if (fileId is null)
+        {
+            await using var identity = connection.CreateCommand();
+            identity.CommandText = "SELECT TOP(2) EID FROM dbo.FileRecord WHERE FileName=@name;";
+            identity.Parameters.AddWithValue("@name", fileName);
+            await using var identities = await identity.ExecuteReaderAsync(token);
+            if (!await identities.ReadAsync(token)) return null;
+            fileId = identities.GetString(0);
+            if (await identities.ReadAsync(token)) throw new InvalidOperationException("文件恢复样本名称没有唯一命中自身事实。");
+        }
+        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, token);
+        await using (var stateLock = new SqlCommand("""
+            DECLARE @result int;
+            EXEC @result=sys.sp_getapplock @Resource=@key, @LockMode=N'Shared', @LockOwner=N'Transaction', @DbPrincipal=N'public', @LockTimeout=-1;
+            IF @result<0 THROW 51000,N'File recovery observation lock failed.',1;
+            """, connection, transaction))
+        {
+            stateLock.Parameters.AddWithValue("@key", "Files." + fileId);
+            await stateLock.ExecuteNonQueryAsync(token);
+        }
+        await using var command = new SqlCommand("SELECT f.EID fileId,l.EID uploadId,f.State fileState,l.State leaseState,f.StorageKey storageKey " +
+            "FROM dbo.FileRecord f JOIN dbo.FileUploadLease l ON l.FileId=f.EID WHERE f.FileName=@id AND f.EID=@fileId FOR JSON PATH;", connection, transaction);
+        command.Parameters.AddWithValue("@id", fileName);
+        command.Parameters.AddWithValue("@fileId", fileId);
+        var json = new StringBuilder();
+        await using (var reader = await command.ExecuteReaderAsync(token))
+            while (await reader.ReadAsync(token)) json.Append(reader.GetString(0));
+        using var document = JsonDocument.Parse(json.Length == 0 ? "[]" : json.ToString());
+        var rows = document.RootElement.EnumerateArray().ToArray();
+        if (rows.Length > 1) throw new InvalidOperationException("文件恢复样本名称没有唯一命中自身事实。");
+        var result = rows.Length == 0 ? null : new RecoveryFile(rows[0].GetProperty("fileId").GetString()!, rows[0].GetProperty("uploadId").GetString()!,
+            rows[0].GetProperty("fileState").GetString()!, rows[0].GetProperty("leaseState").GetString()!, rows[0].GetProperty("storageKey").GetString()!);
+        await transaction.CommitAsync(token);
+        return result;
+    }
+
+    // 各场景复用同一30秒观察期限；取消与任何SQL错误原样传播，不重放失败读取。
+    private Task<RecoveryFile> WaitForRecoveryFileAsync(string fileName, Func<RecoveryFile, bool> ready, CancellationToken token, string? fileId = null)
+        => WaitForRecoveryFileAsync(inner => ReadRecoveryFileAsync(fileName, inner, fileId), ready, token);
+
+    // 定向真实SQL回归沿同一循环验证期限；正常轮询只处理未到达目标的状态。
+    internal static async Task<RecoveryFile> WaitForRecoveryFileAsync(Func<CancellationToken, Task<RecoveryFile?>> read,
+        Func<RecoveryFile, bool> ready, CancellationToken token)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
         while (true)
         {
-            var file = await ReadRecoveryFileAsync(fileName, timeout.Token);
+            var file = await read(timeout.Token);
             if (file is not null && ready(file)) return file;
             await Task.Delay(100, timeout.Token);
         }

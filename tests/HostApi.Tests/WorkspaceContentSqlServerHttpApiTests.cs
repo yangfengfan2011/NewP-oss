@@ -229,6 +229,11 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         Assert.Equal(1, scopedList.GetProperty("total").GetInt32());
         var allowedRow = Assert.Single(scopedList.GetProperty("items").EnumerateArray());
         Assert.Equal(allowed.GetProperty("id").GetString(), allowedRow.GetProperty("associatedObject").GetProperty("id").GetString());
+        // 同模型 anchor/target 共用一次非空准备；关键词只命中子文件夹，不能因此拒绝根。
+        constraint.PrepareScope = true;
+        var filtered = await ListAsync(ordinary, entry, root, root.RootFolderId, "&pageSize=1&keyword=" + Uri.EscapeDataString("允许的文件夹"));
+        Assert.Equal(1, filtered.GetProperty("total").GetInt32());
+        Assert.Equal(allowed.GetProperty("id").GetString(), Assert.Single(filtered.GetProperty("items").EnumerateArray()).GetProperty("associatedObject").GetProperty("id").GetString());
         var add = Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "workspace.folder.add");
         constraint.AllowExcluded = true;
         using var attached = await FeatureHttpTestRequests.SendAsync(admin, add, HttpMethod.Post, "/api/workspace/content/references",
@@ -405,6 +410,7 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         public bool CannotTranslate { get; set; }
         public bool ExcludeRoot { get; set; }
         public bool AllowExcluded { get; set; }
+        public bool PrepareScope { get; set; }
         public string[]? ScopeIds { get; set; }
         public Task<Expression<Func<Dictionary<string, object?>, bool>>> ReadPredicateAsync(LinkQueryEndpoint endpoint, CancellationToken token)
         {
@@ -417,7 +423,13 @@ public sealed class WorkspaceContentSqlServerHttpApiTests(ITestOutputHelper outp
         {
             if (ScopeIds is null) return Task.FromResult<LinkQuerySqlScope?>(null);
             var parameters = ScopeIds.Select((id, index) => new SqlParameter("@" + scopeName + "Test" + index, id)).ToArray();
-            return Task.FromResult<LinkQuerySqlScope?>(new("", string.Join(" UNION ", parameters.Select(parameter => "SELECT " + parameter.ParameterName)), parameters));
+            var ids = string.Join(" UNION ", parameters.Select(parameter => "SELECT " + parameter.ParameterName));
+            if (!PrepareScope) return Task.FromResult<LinkQuerySqlScope?>(new("", ids, parameters));
+            // 固定模型标记让换 scopeName 重复准备也被 SQL 拒绝，不仅检测同名表变量冲突。
+            var table = "@" + scopeName + "TestIds";
+            var preparation = "DECLARE @TestPrepared" + endpoint.Model.LogicalKey + " bit; DECLARE " + table
+                + " TABLE (Id nvarchar(256)); INSERT INTO " + table + " " + ids + ";";
+            return Task.FromResult<LinkQuerySqlScope?>(new(preparation, "SELECT Id FROM " + table, parameters));
         }
         private static bool OnlyInMemory(string name) => name.Length > 0;
     }

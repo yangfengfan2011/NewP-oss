@@ -20,7 +20,7 @@ namespace ICP.Platform.Crud.LinkQueries;
 
 /// <summary>统一 Link 规划：真实读取范围与公共条件先下推，各类型 UNION ALL 后统一计数、排序、分页。</summary>
 public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog catalog,
-    IEnumerable<ILinkQuerySourcePolicy> policies, IEnumerable<ILinkQueryEndpointConstraint> constraints,
+    IEnumerable<ILinkQuerySourcePolicy> policies,
     DisplayValueProjection displays, ILogger<LinkQueryReader> logger, LinkEndpointReadScopes endpointScopes, LinkSourceReadScopes sourceScopes, IRuntimeTextCatalog? texts = null, IRequestPresentationContextAccessor? presentation = null)
 {
     /// <summary>公开查询只返回一页关系；关系身份与端点身份始终独立。</summary>
@@ -68,22 +68,14 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
         if (definition.Metadata.PolicyKey is { } policyKey)
             await GetPolicy(policyKey).ValidateAsync(definition, request, token);
         var parameters = new List<DbParameter>();
-        var sqlScopes = new Dictionary<string, LinkQuerySqlScope?>(StringComparer.Ordinal);
+        var preparedEndpoints = new Dictionary<string, LinkEndpointReadScopes.PreparedEndpoint>(StringComparer.Ordinal);
         foreach (var endpoint in definition.Endpoints.Values)
         {
-            if (endpoint.ConstraintKey is not { } key) continue;
-            var constraint = constraints.SingleOrDefault(c => c.Key == key) ?? throw new InvalidOperationException("LINK_QUERY_ENDPOINT_CONSTRAINT_MISSING");
-            var scope = await constraint.ReadSqlScopeAsync(endpoint, "linkEndpoint" + sqlScopes.Count, token);
-            sqlScopes.Add(endpoint.Model.LogicalKey, scope);
-            if (scope is not null) parameters.AddRange(scope.Parameters);
+            preparedEndpoints.Add(endpoint.Model.LogicalKey,
+                await endpointScopes.PrepareAsync(endpoint, "linkEndpoint" + preparedEndpoints.Count, parameters, token));
         }
-        var anchorRows = await EndpointRowsAsync(anchor, token);
-        var anchorSql = SqlFor(anchorRows.Where(row => EF.Property<string>(row, anchor.IdField) == request.Anchor.Id)
-            .Select(row => EF.Property<string>(row, anchor.IdField)), parameters);
         var anchorValue = Parameter(request.Anchor.Id, parameters);
-        var anchorAvailableSql = "SELECT 1 WHERE " + anchorValue + " IN (" + anchorSql + ")";
-        if (sqlScopes.GetValueOrDefault(anchor.Model.LogicalKey) is { } anchorScope)
-            anchorAvailableSql += " AND " + anchorValue + " IN (" + anchorScope.IdsQuery + ")";
+        var anchorAvailableSql = await preparedEndpoints[anchor.Model.LogicalKey].ReadAnchorAsync(request.Anchor.Id, anchorValue, parameters, token);
         var columns = definition.Metadata.Columns;
         var queryDescriptor = new PlatformQueryDescriptor
         {
@@ -121,9 +113,9 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
         {
             var endpoint = definition.Endpoints[type];
             var entity = Entity(type);
-            var rows = await EndpointRowsAsync(endpoint, token);
             // 共用单模型查询的操作符、分组和参数翻译，仅把公共字段解析为已验证端点字段或显式常量。
-            rows = EfPlatformQueryExecutor.ApplyConditions(rows, queryDescriptor, entity, conditions, (row, condition) =>
+            var endpointSql = await preparedEndpoints[type].ReadIdsAsync(parameters, token,
+                rows => EfPlatformQueryExecutor.ApplyConditions(rows, queryDescriptor, entity, conditions, (row, condition) =>
             {
                 var mapping = columns.Single(c => c.Field == condition.Field).Mappings[type];
                 if (mapping is null) return Expression.Constant(condition.Operator == "isNull");
@@ -133,11 +125,7 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
                     _ => throw new LinkQueryException(400, "LinkQuery.InvalidOperator", condition.Field)
                 });
                 return EfPlatformQueryExecutor.BuildConditionExpression(queryDescriptor, entity, row, condition with { Field = mapping });
-            });
-            var endpointSql = SqlFor(rows.Select(row => EF.Property<string>(row, endpoint.IdField)), parameters);
-            if (sqlScopes.GetValueOrDefault(type) is { } endpointScope)
-                // scope 自身可含 UNION；派生表闭合其运算边界，不能让来源 OR 分支逃出查询条件交集。
-                endpointSql += " INTERSECT SELECT ScopeId FROM (" + endpointScope.IdsQuery + ") scopeKeys(ScopeId)";
+            }));
             var associatedEnd = forward ? child : parent;
             var projections = fieldPlan.DbSelectFields.Where(f => f != "LID").Select(field =>
             {
@@ -166,7 +154,7 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
         var associatedEndForDiagnostics = forward ? child : parent;
         var eligibleSourceCount = "SELECT COUNT(*) FROM " + linkTable + " l WHERE " + anchorCondition + " AND " + sourceCondition
             + " AND " + EndType(associatedEndForDiagnostics, "l", linkEntity) + " IN (" + string.Join(",", allowedTypes.Select(Literal)) + ");";
-        var sql = string.Join("\n", sqlScopes.Values.Where(scope => scope is not null).Select(scope => scope!.Preparation))
+        var sql = string.Join("\n", preparedEndpoints.Values.Select(endpoint => endpoint.Preparation))
             + "\n" + anchorAvailableSql + "; SELECT TOP(1) 1 FROM " + linkTable + " l WHERE " + diagnosticAnchorCondition + " AND " + sourceCondition + " AND NOT(" + validPairs + "); "
             + union + "SELECT COUNT(*) FROM Relations; " + union + "SELECT * FROM Relations ORDER BY " + Quote(sortField!) + " " + sortDirection
             + ",AssociatedModelKey,AssociatedId,LID" + (completeLayer ? ";" : " OFFSET " + Parameter((page - 1) * pageSize, parameters) + " ROWS FETCH NEXT " + Parameter(pageSize, parameters) + " ROWS ONLY;") + eligibleSourceCount;
@@ -208,9 +196,6 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
         logger.LogDebug("LINK_QUERY_READ: Resource={Resource} CompleteLayer={CompleteLayer} Total={Total} Materialized={Materialized} DirectReaderCommands=1; excludes source policy, authorization and display", resourceKey, completeLayer, result.Total, result.Items.Count);
         return result with { Items = displayed };
     }
-
-    // 端点授权与显式业务条件共同进入数据库，不继承独立列表的临时查询。
-    private Task<IQueryable<Dictionary<string, object?>>> EndpointRowsAsync(LinkQueryEndpoint endpoint, CancellationToken token) => endpointScopes.RowsAsync(endpoint, token);
 
     // 公共筛选值沿标准条件结构；未声明列、操作或值类型拒绝而不是忽略。
     private static IReadOnlyList<PlatformQueryCondition> BuildConditions(LinkQueryDefinition definition, StandardCrudListQuery query)

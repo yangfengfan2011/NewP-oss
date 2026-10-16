@@ -29,11 +29,11 @@
 ```text
 在 <仓库路径> 完整交付父 Issue #<编号>。
 
-遵循 AGENTS.md、docs/agents/issue-tracker.md 和 docs/verification/quick-verification.md。先核对父子 Issue、评论、原生依赖及现有实现；首次记录 HEAD 为审查 baseline，续作沿用原 baseline，并保留已有改动与有效证据。
+遵循 AGENTS.md、docs/agents/issue-tracker.md 和 docs/verification/quick-verification.md。先核对父子 Issue、评论、原生依赖及现有实现；首次将 HEAD 作为审查 baseline 写入父 Issue 评论，续作沿用该 baseline，并保留已有改动与有效证据。
 
-本次授权按 issue-tracker 的“技能操作映射”选择实施入口：依赖图中存在可独立并行的 child 时，使用 $implement-spec 作为唯一父级编排入口；小任务或紧密相关的串行增量使用 $implement，由同一 owner 持续完成。按本页依赖与资源规则调度，子代理使用 GPT-6.1 SOL（gpt-6.1-sol），实际创建时按难度设置 medium 及以上 reasoning_effort。按 quick-verification 前置关键反例，各 Issue 分别验证和提交，集成并核对完成证据后及时回写、关闭及同步父 Map。
+本次授权按 issue-tracker 的“技能操作映射”选择实施入口：依赖图中存在可独立并行的 child 时，使用 $implement-spec 作为唯一父级编排入口；小任务或紧密相关的串行增量使用 $implement，由同一 owner 持续完成。按本页依赖与资源规则调度，子代理在创建时显式指定 GPT-6.1 SOL（gpt-6.1-sol），该指定优先于具名代理配置中的模型，并按难度设置 medium 及以上 reasoning_effort。按 quick-verification 前置关键反例，各 Issue 分别验证和提交，集成并核对完成证据后及时回写、关闭及同步父 Map。
 
-全部 child 完成并集成后，以原 baseline 为 fixed point、父子 Issue 及已确认评论为 Spec，由独立代理并行执行一次 $code-review 的 Standards 与 Spec；implement-spec 的收尾审查计入这一次。自主修复本次引入且有稳定证据的 P0/P1，以及范围内有规格依据和缺口证据的显式验收遗漏；其他 finding 只记录。按 quick-verification 的父级收尾规则完成原 owner 返修、原轴聚焦复核、最终冻结候选的完整 verify 及全部适用 Gate，再关闭父 Issue。
+全部 child 完成并集成后，以原 baseline 为 fixed point、父子 Issue 及已确认评论为 Spec，由独立代理并行执行一次 $code-review 的 Standards 与 Spec；implement-spec 的收尾审查计入这一次。自主修复本次引入且有稳定证据的 P0/P1（数据损坏或丢失、权限或安全边界扩大、事务一致性破坏、主路径不可用），以及范围内有规格依据和缺口证据的显式验收遗漏；其他 finding 只记录。按 quick-verification 的父级收尾规则完成原 owner 返修、原轴聚焦复核、最终冻结候选的完整 verify 及全部适用 Gate，再关闭父 Issue。
 
 授权本任务范围内的本地提交及父子 Issue 生命周期写入；不推送、不创建 PR、新 Issue 或 tickets.md，不修改无关内容。仅在权限或凭据缺失、任务归属不明、重大决策未定或需要未授权操作时暂停，其余自主推进。
 ```

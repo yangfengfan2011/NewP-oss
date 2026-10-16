@@ -46,6 +46,11 @@ public sealed partial class WorkspaceContents
             // 同一真实父的剪切只确认资格，不走新落入规则或关系重建，包括历史根下业务对象。
             if (mode == "cut" && source.FolderId == target.FolderId) return new(true, true);
             foreach (var item in targets) RequireContainer(targetPosition, target, item.ModelKey);
+            // cut重建LID但不是再次分享；在同一图锁内一次读取至多100条原边语义，连历史NULL也原样保留。
+            var sourceScopes = mode == "cut" ? await Links.AsNoTracking().Where(row => linkIds.Contains(EF.Property<string>(row, "LID"))
+                    && EF.Property<string>(row, "PEID") == source.FolderId)
+                .Select(row => new { Id = EF.Property<string>(row, "LID"), Neutral = EF.Property<bool?>(row, "IsScopeNeutral") })
+                .ToDictionaryAsync(row => row.Id, row => row.Neutral, cancellation) : null;
             // 名称按真实数据库collation比较，覆盖整批内部冲突，不能用客户端或CLR名称比较代替。
             var folders = targets.Where(item => item.ModelKey == WorkspacePositions.FolderModel).Select(item => item.Id).ToArray();
             if (folders.Length > 1 && await Folders.Where(row => folders.Contains(EF.Property<string>(row, "EID")))
@@ -54,7 +59,7 @@ public sealed partial class WorkspaceContents
             // 至多一页100项，保持选择次序；同事务未保存关系由正式NextOrdinalAsync参与末尾计算。
             for (var index = 0; index < targets.Length; index++)
             {
-                var linkId = await AddTargetReferenceAsync(target.FolderId, targets[index], cancellation);
+                var linkId = await AddTargetReferenceAsync(target.FolderId, targets[index], cancellation, sourceScopes is null ? false : sourceScopes[linkIds[index]]);
                 if (mode == "copy") await referenceAudit.CopiedAsync(linkIds[index], source.FolderId, linkId, target.FolderId, targets[index], cancellation);
                 else await referenceAudit.MovedAsync(linkIds[index], source.FolderId, linkId, target.FolderId, targets[index], cancellation);
             }
@@ -107,8 +112,8 @@ public sealed partial class WorkspaceContents
         ValidateSelection(linkIds);
     }
 
-    // 单条add与批量paste共享真实端点及完整存储图不变量，返回新LID供业务记录消费；调用方已持有图锁。
-    private async Task<string> AddTargetReferenceAsync(string parentId, LinkObjectReference target, CancellationToken cancellation)
+    // 单条add与批量paste共享完整图校验；显式分享为普通边，cut调用方传入原边语义，均已持图锁。
+    private async Task<string> AddTargetReferenceAsync(string parentId, LinkObjectReference target, CancellationToken cancellation, bool? isScopeNeutral = false)
     {
         var definition = catalog.Get("workspace.content");
         if (string.IsNullOrWhiteSpace(target.Id) || !definition.Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == target.ModelKey))
@@ -128,6 +133,6 @@ public sealed partial class WorkspaceContents
                 throw new LinkQueryException(409, "Workspace.SiblingNameConflict", "ENAME");
             if (await WouldCycleAsync(parentId, target.Id, cancellation)) throw new LinkQueryException(409, "Workspace.CycleForbidden");
         }
-        return await RegisterCreatedReferenceAsync(parentId, target.ModelKey, target.Id, cancellation);
+        return await RegisterCreatedReferenceAsync(parentId, target.ModelKey, target.Id, cancellation, isScopeNeutral);
     }
 }

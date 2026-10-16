@@ -11,6 +11,7 @@ public sealed class WorkspaceFolderContentDto
     public DateTime LCreatedAt { get; init; }
     public string? LUpdatedBy { get; init; }
     public DateTime? LUpdatedAt { get; init; }
+    public bool? IsScopeNeutral { get; init; }
     public long? TreeOrdinal { get; init; }
     public string ChildModelKey { get; init; }
 }

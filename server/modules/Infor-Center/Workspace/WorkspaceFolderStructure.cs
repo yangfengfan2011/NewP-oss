@@ -70,7 +70,7 @@ public sealed partial class WorkspaceContents
                 foreach (var edge in group.OrderBy(edge => edge.Ordinal))
                 {
                     var parent = (string)candidates[edge.Parent]["EID"]!; var child = (string)candidates[edge.Child]["EID"]!;
-                    var lid = RegisterCopiedReference(parent, new(edge.LinkId, WorkspacePositions.FolderModel, child, edge.Ordinal), ++ordinal);
+                    var lid = RegisterCopiedReference(parent, new(edge.LinkId, WorkspacePositions.FolderModel, child, edge.Ordinal), ++ordinal, isScopeNeutral: false);
                     await referenceAudit.CopiedAsync(edge.LinkId, edge.Parent, lid, parent, new(WorkspacePositions.FolderModel, child), cancellation);
                 }
             }

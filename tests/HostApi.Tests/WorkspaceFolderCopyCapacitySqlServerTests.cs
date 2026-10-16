@@ -37,6 +37,9 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var fileModels = new[] { "Document", "DocumentVersion", "DocumentIteration", "DocumentFileLink", "FileUsage", "FileUploadLease", "FileRecord" };
         var fileFacts = new Dictionary<string, string>(); foreach (var model in fileModels) fileFacts[model] = Snapshot(await Rows(fixture, model));
         var files = Directory.GetFiles(fixture.StorageRoot).ToDictionary(path => path, File.ReadAllBytes);
+        var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "ShallowOrdinaryCost", "浅副本容量账号", "shallow-ordinary-cost", "浅副本容量账号",
+            Point(fixture, "workspace.spaces.access"), Point(fixture, "workspace.folder.pasteFolderCopy"));
+        using var ordinary = actor.Client;
         var sourceId = FolderId(source, await Rows(fixture, "WorkspaceFolderContent")); var previous = 3;
         foreach (var size in new[] { 3, 30, 100, 300 })
         {
@@ -54,8 +57,8 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             }
             previous = size;
             var result = await MeasureFolderCopyAsync(statistics, lockClock, async () => {
-                await Command(fixture, admin, "workspace.folder.pasteFolderCopy", "/api/workspace/content/folders/copy", new { mode = "copy", sourcePosition = root, linkIds = new[] { source.LinkIds[^1] }, targetPosition = root, name = "容量副本" + size }); });
-            output.WriteLine("SHALLOW_CAPACITY " + JsonSerializer.Serialize(new { environment = new { runtime = Environment.Version.ToString(), processors = Environment.ProcessorCount, os = Environment.OSVersion.ToString(), sql = "local repository configured SQL Server; test catalog; Release" }, directNodes = size + 1, directEdges = size, depth = 1, folder = 1, document = 1, part = size - 2, result, acceptance = "Measured evidence only; no SLA or capacity acceptance and no business hard limit." }));
+                await Command(fixture, ordinary, "workspace.folder.pasteFolderCopy", "/api/workspace/content/folders/copy", new { mode = "copy", sourcePosition = root, linkIds = new[] { source.LinkIds[^1] }, targetPosition = root, name = "容量副本" + size }); });
+            output.WriteLine("SHALLOW_CAPACITY " + JsonSerializer.Serialize(new { environment = new { runtime = Environment.Version.ToString(), processors = Environment.ProcessorCount, os = Environment.OSVersion.ToString(), sql = "local repository configured SQL Server; test catalog; Release" }, actorKind = "ordinary-limited-features", rules = "formal default object rules; no synthetic complex ACL", directNodes = size + 1, directEdges = size, depth = 1, folder = 1, document = 1, part = size - 2, result, acceptance = "Measured evidence only; no SLA or capacity acceptance and no business hard limit." }));
             var rows = await Rows(fixture, "WorkspaceFolder"); var copyId = (string)Assert.Single(rows, row => Equals(row["ENAME"], "容量副本" + size))["EID"]!;
             Assert.Equal(size, (await Rows(fixture, "WorkspaceFolderContent")).Count(row => Equals(row["PEID"], copyId)));
         }

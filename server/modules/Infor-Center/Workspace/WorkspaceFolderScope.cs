@@ -28,7 +28,7 @@ public sealed class WorkspaceFolderScope(EfPlatformDbContext db, IDataScopeReadP
     public async Task<LinkQuerySqlScope?> ReadSqlScopeAsync(LinkQueryEndpoint endpoint, string scopeName, CancellationToken token) =>
         await BuildAsync(context.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new LinkQueryException(403, "Workspace.SubjectRequired"), scopeName, token);
 
-    /// <summary>每层交集对象读取计划，visited/frontier 集合使汇聚路径只处理一次节点，不枚举根路径。</summary>
+    /// <summary>仅普通边扩张空间范围；中性边复用既有对象资格，visited/frontier 不枚举共享路径。</summary>
     public async Task<LinkQuerySqlScope> BuildAsync(string actorId, string name, CancellationToken token)
     {
         if (name.Length == 0 || name.Any(character => !char.IsAsciiLetterOrDigit(character))) throw new ArgumentException("Invalid trusted scope name.", nameof(name));
@@ -59,6 +59,7 @@ public sealed class WorkspaceFolderScope(EfPlatformDbContext db, IDataScopeReadP
                     JOIN {frontier} f ON f.EID=l.{Column(link, "PEID")}
                     JOIN {readable} r ON r.EID=l.{Column(link, "CEID")}
                     WHERE l.{Column(link, "ChildModelKey")}=N'WorkspaceFolder'
+                    AND (l.{Column(link, "IsScopeNeutral")} IS NULL OR l.{Column(link, "IsScopeNeutral")}=0)
                     AND NOT EXISTS(SELECT 1 FROM {reached} v WHERE v.EID=r.EID);
                 DELETE FROM {frontier};
                 INSERT INTO {frontier} SELECT EID FROM {next};

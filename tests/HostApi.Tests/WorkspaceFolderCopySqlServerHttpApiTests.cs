@@ -12,6 +12,115 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "cut重建LID原样保留历史NULL、普通false和中性true；结构复制仍遍历中性边并生成普通新边")]
+    public async Task ScopeNeutral_CutPreservesAllStatesAndStructureTraversesNeutralEdges()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
+        using var admin = await fixture.LoginAdministratorAsync(); var root = await Root(fixture, admin);
+        var source = await Folder(fixture, admin, root, "迁移来源"); var target = await Folder(fixture, admin, root, "迁移目标");
+        foreach (var neutral in new bool?[] { null, false, true })
+        {
+            var child = await Folder(fixture, admin, source, "移动-" + (neutral?.ToString() ?? "历史NULL"));
+            var sourceLid = child.LinkIds[^1];
+            using (var scope = fixture.Services.CreateScope())
+                await scope.ServiceProvider.GetRequiredService<ICP.Platform.Persistence.EfCore.EfPlatformDbContext>().Set<Dictionary<string, object?>>("WorkspaceFolderContent")
+                    .Where(row => EF.Property<string>(row, "LID") == sourceLid).ExecuteUpdateAsync(set => set.SetProperty(row => EF.Property<bool?>(row, "IsScopeNeutral"), neutral));
+            await Command(fixture, admin, "workspace.folder.paste", "/api/workspace/content/paste", new { mode = "cut", sourcePosition = source, linkIds = new[] { child.LinkIds[^1] }, targetPosition = target });
+            var links = await Rows(fixture, "WorkspaceFolderContent");
+            var moved = Assert.Single(links, row => Equals(row["PEID"], FolderId(target, links)) && Equals(row["IsScopeNeutral"], neutral));
+            Assert.DoesNotContain(links, row => Equals(row["LID"], child.LinkIds[^1])); Assert.NotEqual(child.LinkIds[^1], moved["LID"]);
+        }
+        await Command(fixture, admin, "workspace.folder.pasteFolderCopy", "/api/workspace/content/folders/copy", new { mode = "copy", sourcePosition = root, linkIds = new[] { target.LinkIds[^1] }, targetPosition = root, name = "中性来源" });
+        var facts = await Rows(fixture, "WorkspaceFolderContent"); var folders = await Rows(fixture, "WorkspaceFolder");
+        var neutralId = (string)Assert.Single(folders, row => Equals(row["ENAME"], "中性来源"))["EID"]!;
+        var neutralRootLink = Assert.Single(facts, row => Equals(row["CEID"], neutralId));
+        Assert.Equal(3, facts.Count(row => Equals(row["PEID"], neutralId) && Equals(row["IsScopeNeutral"], true)));
+        var beforeIds = folders.Select(row => row["EID"]).ToHashSet();
+        await Command(fixture, admin, "workspace.folder.pasteFolderStructure", "/api/workspace/content/folders/copy-structure", new { mode = "copy", sourcePosition = root, linkIds = new[] { neutralRootLink["LID"] }, targetPosition = root, name = "新结构" });
+        var created = (await Rows(fixture, "WorkspaceFolder")).Where(row => !beforeIds.Contains(row["EID"])).Select(row => row["EID"]).ToHashSet(); Assert.Equal(4, created.Count);
+        Assert.All((await Rows(fixture, "WorkspaceFolderContent")).Where(row => created.Contains(row["CEID"])), row => Assert.Equal(false, row["IsScopeNeutral"]));
+        var childId = facts.First(row => Equals(row["PEID"], neutralId))["CEID"];
+        var childPosition = root with { LinkIds = [target.LinkIds[^1], (string)facts.Single(row => Equals(row["PEID"], FolderId(target, facts)) && Equals(row["CEID"], childId))["LID"]!] };
+        using var cycle = await Send(fixture, admin, "workspace.folder.pasteFolderCopy", "folders/copy", new { mode = "copy", sourcePosition = root, linkIds = new[] { neutralRootLink["LID"] }, targetPosition = childPosition, name = "不忽略中性边判环" });
+        Assert.InRange((int)cycle.StatusCode, 400, 499);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "FC12浅副本不能使公共主体首次读取私人来源子对象，原私人路径仍不可借用")]
+    public async Task ShallowCopy_DoesNotExpandAnotherActorsPrivateChildReadScope()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
+        using var admin = await fixture.LoginAdministratorAsync(); var publicRoot = await Root(fixture, admin);
+        var target = await Folder(fixture, admin, publicRoot, "公共目标");
+        var alice = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "Fc12AliceRole", "私人拥有者", "fc12-alice", "Alice",
+            Point(fixture, "workspace.spaces.access"), Point(fixture, "workspace.folder.create"), Point(fixture, "workspace.folder.copy"), Point(fixture, "workspace.folder.pasteFolderCopy"),
+            Point(fixture, "workspace.folder.paste"), Point(fixture, "workspace.folder.cut"));
+        using var aliceClient = alice.Client;
+        var bob = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "Fc12BobRole", "公共读取者", "fc12-bob", "Bob", Point(fixture, "workspace.spaces.access"));
+        using var bobClient = bob.Client;
+        var personal = await Command(fixture, aliceClient, "workspace.spaces.access", "/api/workspace/spaces/personal/ensure");
+        var personalRoot = new ICP.Platform.Modules.Workspace.WorkspacePosition(personal.GetProperty("spaceId").GetString()!, personal.GetProperty("rootFolderId").GetString()!, []);
+        var source = await Folder(fixture, aliceClient, personalRoot, "私人S");
+        var child = await Folder(fixture, aliceClient, source, "私人C");
+        var childId = FolderId(child, await Rows(fixture, "WorkspaceFolderContent"));
+        await Rule(fixture, admin, "Fc12ChildRead", "workspace.folder", childId, "read", "allow");
+        var privatePath = "/api/workspace/content/path?spaceId=" + personalRoot.SpaceId + "&rootFolderId=" + personalRoot.RootFolderId
+            + "&linkIds=" + Uri.EscapeDataString(JsonSerializer.Serialize(child.LinkIds));
+        using var before = await FeatureHttpTestRequests.SendAsync(bobClient, Point(fixture, "workspace.spaces.access"), HttpMethod.Get, "/api/workspace/folders/" + childId);
+        using var privateBefore = await FeatureHttpTestRequests.SendAsync(bobClient, Point(fixture, "workspace.spaces.access"), HttpMethod.Get, privatePath);
+        Assert.Equal(HttpStatusCode.NotFound, before.StatusCode); Assert.Equal(HttpStatusCode.NotFound, privateBefore.StatusCode);
+        var copied = await Command(fixture, aliceClient, "workspace.folder.pasteFolderCopy", "/api/workspace/content/folders/copy", new {
+            mode = "copy", sourcePosition = personalRoot, linkIds = new[] { source.LinkIds[^1] }, targetPosition = target, name = "公共浅副本N" });
+        Assert.True(copied.GetProperty("succeeded").GetBoolean());
+        using var after = await FeatureHttpTestRequests.SendAsync(bobClient, Point(fixture, "workspace.spaces.access"), HttpMethod.Get, "/api/workspace/folders/" + childId);
+        using var privateAfter = await FeatureHttpTestRequests.SendAsync(bobClient, Point(fixture, "workspace.spaces.access"), HttpMethod.Get, privatePath);
+        output.WriteLine(JsonSerializer.Serialize(new { scenario = "FC12-private-child-shallow-copy", before = (int)before.StatusCode,
+            after = (int)after.StatusCode, privatePathBefore = (int)privateBefore.StatusCode, privatePathAfter = (int)privateAfter.StatusCode,
+            copySucceeded = true, childOriginUnchanged = Equals(Assert.Single(await Rows(fixture, "WorkspaceFolder"), row => Equals(row["EID"], childId))["OriginSpaceId"], personalRoot.SpaceId) }));
+        Assert.Equal(HttpStatusCode.NotFound, privateAfter.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, after.StatusCode);
+        using (var ownerRead = await FeatureHttpTestRequests.SendAsync(aliceClient, Point(fixture, "workspace.spaces.access"), HttpMethod.Get, "/api/workspace/folders/" + childId))
+            Assert.Equal(HttpStatusCode.OK, ownerRead.StatusCode);
+        var links = await Rows(fixture, "WorkspaceFolderContent");
+        var newRootId = (string)Assert.Single(await Rows(fixture, "WorkspaceFolder"), row => Equals(row["ENAME"], "公共浅副本N"))["EID"]!;
+        var newRootLink = Assert.Single(links, row => Equals(row["CEID"], newRootId)); Assert.Equal(false, newRootLink["IsScopeNeutral"]);
+        var neutral = Assert.Single(links, row => Equals(row["PEID"], newRootId)); Assert.Equal(true, neutral["IsScopeNeutral"]);
+        var newPosition = target with { LinkIds = [.. target.LinkIds, (string)newRootLink["LID"]!] };
+        var query = "&queryScope=" + Uri.EscapeDataString(JsonSerializer.Serialize(new { spaceId = newPosition.SpaceId, rootFolderId = newPosition.RootFolderId, linkIds = JsonSerializer.Serialize(newPosition.LinkIds) }));
+        var visible = await FeatureHttpTestRequests.ReadAsync(bobClient, Point(fixture, "workspace.spaces.access"), "/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId=" + newRootId + query);
+        Assert.Empty(visible.GetProperty("items").EnumerateArray());
+        var children = await FeatureHttpTestRequests.ReadAsync(bobClient, Point(fixture, "workspace.spaces.access"), "/api/workspace/content/children?spaceId=" + newPosition.SpaceId + "&rootFolderId=" + newPosition.RootFolderId + "&linkIds=" + Uri.EscapeDataString(JsonSerializer.Serialize(newPosition.LinkIds)));
+        Assert.Empty(children.GetProperty("items").EnumerateArray());
+        var candidates = await FeatureHttpTestRequests.ReadAsync(bobClient, Point(fixture, "workspace.spaces.access"), "/api/workspace/folders/candidates?keyword=" + Uri.EscapeDataString("私人C"));
+        Assert.Empty(candidates.GetProperty("items").EnumerateArray());
+        // 移动不是再次分享，原true必须随新LID保留；同父no-op连审计也不写。
+        var noOpLinks = Snapshot(links); var noOpAudit = Snapshot(await Rows(fixture, "BusinessChange"));
+        var noOp = await Command(fixture, aliceClient, "workspace.folder.paste", "/api/workspace/content/paste", new { mode = "cut", sourcePosition = newPosition, linkIds = new[] { neutral["LID"] }, targetPosition = newPosition });
+        Assert.True(noOp.GetProperty("noChange").GetBoolean()); Assert.Equal(noOpLinks, Snapshot(await Rows(fixture, "WorkspaceFolderContent"))); Assert.Equal(noOpAudit, Snapshot(await Rows(fixture, "BusinessChange")));
+        var movedTo = await Folder(fixture, admin, publicRoot, "中性移动目标");
+        await Command(fixture, aliceClient, "workspace.folder.paste", "/api/workspace/content/paste", new { mode = "cut", sourcePosition = newPosition, linkIds = new[] { neutral["LID"] }, targetPosition = movedTo });
+        links = await Rows(fixture, "WorkspaceFolderContent");
+        var moved = Assert.Single(links, row => Equals(row["PEID"], FolderId(movedTo, links)) && Equals(row["CEID"], childId));
+        Assert.Equal(true, moved["IsScopeNeutral"]); Assert.NotEqual(neutral["LID"], moved["LID"]);
+        using (var movedRead = await FeatureHttpTestRequests.SendAsync(bobClient, Point(fixture, "workspace.spaces.access"), HttpMethod.Get, "/api/workspace/folders/" + childId)) Assert.Equal(HttpStatusCode.NotFound, movedRead.StatusCode);
+        // 显式引用复制仍是分享；随后撤销read或移除最后普通共享边，不得靠中性边维持范围。
+        var sharedAt = await Folder(fixture, admin, publicRoot, "显式共享目标");
+        await Command(fixture, aliceClient, "workspace.folder.paste", "/api/workspace/content/paste", new { mode = "copy", sourcePosition = movedTo, linkIds = new[] { moved["LID"] }, targetPosition = sharedAt });
+        links = await Rows(fixture, "WorkspaceFolderContent"); var shared = Assert.Single(links, row => Equals(row["PEID"], FolderId(sharedAt, links)) && Equals(row["CEID"], childId)); Assert.Equal(false, shared["IsScopeNeutral"]);
+        using (var sharedRead = await FeatureHttpTestRequests.SendAsync(bobClient, Point(fixture, "workspace.spaces.access"), HttpMethod.Get, "/api/workspace/folders/" + childId)) Assert.Equal(HttpStatusCode.OK, sharedRead.StatusCode);
+        // 历史NULL仍是普通共享边；对象本来可读时，再建浅副本也不遮断原资格。
+        var sharedLid = (string)shared["LID"]!;
+        using (var scope = fixture.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<ICP.Platform.Persistence.EfCore.EfPlatformDbContext>().Set<Dictionary<string, object?>>("WorkspaceFolderContent")
+                .Where(row => EF.Property<string>(row, "LID") == sharedLid).ExecuteUpdateAsync(set => set.SetProperty(row => EF.Property<bool?>(row, "IsScopeNeutral"), (bool?)null));
+        await Command(fixture, aliceClient, "workspace.folder.pasteFolderCopy", "/api/workspace/content/folders/copy", new { mode = "copy", sourcePosition = personalRoot, linkIds = new[] { source.LinkIds[^1] }, targetPosition = target, name = "原已共享的浅副本" });
+        using (var legacySharedRead = await FeatureHttpTestRequests.SendAsync(bobClient, Point(fixture, "workspace.spaces.access"), HttpMethod.Get, "/api/workspace/folders/" + childId)) Assert.Equal(HttpStatusCode.OK, legacySharedRead.StatusCode);
+        await Rule(fixture, admin, "Fc12ChildRead", "workspace.folder", childId, "read", "deny");
+        using (var revoked = await FeatureHttpTestRequests.SendAsync(bobClient, Point(fixture, "workspace.spaces.access"), HttpMethod.Get, "/api/workspace/folders/" + childId)) Assert.Equal(HttpStatusCode.NotFound, revoked.StatusCode);
+        await Rule(fixture, admin, "Fc12ChildRead", "workspace.folder", childId, "read", "allow");
+        using (var removed = await FeatureHttpTestRequests.SendAsync(admin, RowPoint(fixture, "remove"), HttpMethod.Delete, "/api/workspace/content/references/" + shared["LID"], new { position = sharedAt })) Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
+        using (var unshared = await FeatureHttpTestRequests.SendAsync(bobClient, Point(fixture, "workspace.spaces.access"), HttpMethod.Get, "/api/workspace/folders/" + childId)) Assert.Equal(HttpStatusCode.NotFound, unshared.StatusCode);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "浅副本经正式动作一次创建新根和完整直接引用，源与业务对象保持原身份")]
     public async Task ShallowCopy_CreatesNamedFolderAndSharesEveryDirectObject()
     {
@@ -70,6 +179,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             new { mode = "copy", sourcePosition = root, linkIds = Array.Empty<string>(), targetPosition = target, name = "无效" },
             new { mode = "copy", sourcePosition = root, linkIds = new[] { sourceLid, target.LinkIds[^1] }, targetPosition = target, name = "无效" },
             new { mode = "copy", sourcePosition = root, linkIds = new[] { sourceLid }, targetPosition = target, name = "无效", actor = "forged" },
+            new { mode = "copy", sourcePosition = root, linkIds = new[] { sourceLid }, targetPosition = target, name = "无效", isScopeNeutral = false },
             new { mode = "copy", sourcePosition = target, linkIds = new[] { (string)part["LID"]! }, targetPosition = target, name = "无效" },
             new { mode = "copy", sourcePosition = target, linkIds = new[] { sourceLid }, targetPosition = target, name = "无效" },
             new { mode = "copy", sourcePosition = root, linkIds = new[] { sourceLid }, targetPosition = target, name = " " },

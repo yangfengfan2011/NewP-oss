@@ -96,6 +96,10 @@ namespace ICP.Platform.Modules.Workspace.Migrations.SqlServer.Migrations
                         .HasColumnName("ChildModelKey")
                         .UseCollation("Latin1_General_100_BIN2");
 
+                    b.Property<bool?>("IsScopeNeutral")
+                        .HasColumnType("bit")
+                        .HasColumnName("IsScopeNeutral");
+
                     b.Property<DateTime>("LCreatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("LCreatedAt");

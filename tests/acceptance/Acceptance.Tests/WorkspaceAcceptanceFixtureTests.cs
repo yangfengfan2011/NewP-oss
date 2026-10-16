@@ -14,6 +14,8 @@ public sealed class WorkspaceAcceptanceFixtureTests
     {
         var (before, after) = TreeOrderUpgrade();
         PublishedComponentAcceptanceFixture.VerifyPreservedPredecessor(before, after, "Workspace");
+        var explicitNull = after with { Links = after.Links.Replace("\"TreeOrdinal\":1", "\"TreeOrdinal\":1,\"IsScopeNeutral\":null", StringComparison.Ordinal) };
+        PublishedComponentAcceptanceFixture.VerifyPreservedPredecessor(before, explicitNull, "Workspace");
         Assert.Throws<InvalidOperationException>(() => PublishedComponentAcceptanceFixture.VerifyPreservedPredecessor(before, after, "Files"));
     }
 
@@ -25,6 +27,8 @@ public sealed class WorkspaceAcceptanceFixtureTests
     [InlineData("history-prefix")]
     [InlineData("unexpected-tail")]
     [InlineData("other-data")]
+    [InlineData("scope-true")]
+    [InlineData("scope-false")]
     public void PublishedUpgrade_StillRejectsChangesOutsideTheConfirmedBackfill(string corruption)
     {
         var (before, after) = TreeOrderUpgrade();
@@ -37,6 +41,8 @@ public sealed class WorkspaceAcceptanceFixtureTests
             "history-prefix" => after with { History = after.History.Replace("old-prefix", "changed-prefix", StringComparison.Ordinal) },
             "unexpected-tail" => after with { History = after.History.Replace("20261014142313_Workspace_000005_TreeOrderBackfill", "unexpected-migration", StringComparison.Ordinal) },
             "other-data" => after with { PartRow = "changed-object" },
+            "scope-true" => after with { Links = after.Links.Replace("\"TreeOrdinal\":1", "\"TreeOrdinal\":1,\"IsScopeNeutral\":true", StringComparison.Ordinal) },
+            "scope-false" => after with { Links = after.Links.Replace("\"TreeOrdinal\":1", "\"TreeOrdinal\":1,\"IsScopeNeutral\":false", StringComparison.Ordinal) },
             _ => throw new ArgumentOutOfRangeException(nameof(corruption))
         };
         Assert.Throws<InvalidOperationException>(() => PublishedComponentAcceptanceFixture.VerifyPreservedPredecessor(before, after, "Workspace"));
@@ -57,7 +63,8 @@ public sealed class WorkspaceAcceptanceFixtureTests
             History = """
                 [{"OwnerModuleId":"Workspace","MigrationId":"old-prefix"},
                  {"OwnerModuleId":"Workspace","MigrationId":"20261014142253_Workspace_000004_TreeOrder"},
-                 {"OwnerModuleId":"Workspace","MigrationId":"20261014142313_Workspace_000005_TreeOrderBackfill"}]
+                 {"OwnerModuleId":"Workspace","MigrationId":"20261014142313_Workspace_000005_TreeOrderBackfill"},
+                 {"OwnerModuleId":"Workspace","MigrationId":"20261016054922_Workspace_000006_ScopeNeutral"}]
                 """
         };
         return (before, after);

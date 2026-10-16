@@ -2,7 +2,7 @@
   "schemaVersion": "1.0", "type": "model",
   "WorkspaceFolderContent": {
     "kind": "Link",
-    "fields": [{ "name": "TreeOrdinal", "contract": { "valueType": "Integer" }, "storage": { "type": "long", "nullable": true }, "form": { "create": { "mode": "hidden" }, "edit": { "mode": "hidden" } } }, { "name": "ChildModelKey", "contract": { "valueType": "Text" }, "storage": { "type": "string", "ordinalKey": true }, "uiType": "text", "form": { "create": { "mode": "hidden" }, "edit": { "mode": "hidden" } } }],
+    "fields": [{ "name": "IsScopeNeutral", "contract": { "valueType": "Bool" }, "storage": { "type": "bool", "nullable": true }, "form": { "create": { "mode": "hidden" }, "edit": { "mode": "hidden" } } }, { "name": "TreeOrdinal", "contract": { "valueType": "Integer" }, "storage": { "type": "long", "nullable": true }, "form": { "create": { "mode": "hidden" }, "edit": { "mode": "hidden" } } }, { "name": "ChildModelKey", "contract": { "valueType": "Text" }, "storage": { "type": "string", "ordinalKey": true }, "uiType": "text", "form": { "create": { "mode": "hidden" }, "edit": { "mode": "hidden" } } }],
     "linkedTypes": [{ "parent": "WorkspaceFolder", "child": "WorkspaceFolder" }, { "parent": "WorkspaceFolder", "child": "Part" }, { "parent": "WorkspaceFolder", "child": "Document" }],
     "indexes": [
       { "name": "UX_WorkspaceFolderContent_TreeOrdinal", "fields": ["PEID", "TreeOrdinal"], "unique": true },

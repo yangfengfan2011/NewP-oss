@@ -150,9 +150,11 @@ public sealed class SqlServerPersistenceSmokeTests
         Assert.Equal(5, await ExecuteScalarAsync(connection, "SELECT COUNT(*) FROM dbo.WorkspaceFolder WHERE Description=N'preserved' AND UpdatedAt='2026-01-01' AND UpdatedBy=N'legacy'"));
         Assert.Equal(6, await ExecuteScalarAsync(connection, "SELECT COUNT(*) FROM dbo.WorkspaceFolderContent WHERE LUpdatedAt='2026-01-01' AND LUpdatedBy=N'legacy'"));
         Assert.Equal(0, await ExecuteScalarAsync(connection, "SELECT COUNT(*) FROM sys.default_constraints WHERE parent_object_id=OBJECT_ID(N'dbo.WorkspaceFolderContent')"));
+        Assert.Equal(6, await ExecuteScalarAsync(connection, "SELECT COUNT(*) FROM dbo.WorkspaceFolderContent WHERE IsScopeNeutral IS NULL"));
+        Assert.Equal(1, await ExecuteScalarAsync(connection, "SELECT CAST(is_nullable AS int) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.WorkspaceFolderContent') AND name=N'IsScopeNeutral' AND TYPE_NAME(system_type_id)=N'bit'"));
         var currentHistory = await ReadAppliedMigrationsAsync(connection);
         Assert.Equal(oldHistory, currentHistory.Take(oldHistory.Length));
-        Assert.Equal(oldHistory.Length + 2, currentHistory.Length);
+        Assert.Equal(oldHistory.Length + 3, currentHistory.Length);
         await using (var restarted = BuildHostApplication(configuration, "Development", currentPlan))
         {
             await restarted.ApplyPlatformPersistenceAsync();

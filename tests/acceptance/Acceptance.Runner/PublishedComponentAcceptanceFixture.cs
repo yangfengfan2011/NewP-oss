@@ -532,7 +532,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     internal sealed record Continuity(string PhysicalMapping, string PartRow, string History, string DocumentRow = "",
         string WorkspaceFolders = "", string WorkspaceSpaces = "", string Links = "", string IdentityAccounts = "");
 
-    // 只允许明确 owner 的新尾；Workspace 仅新增关系次序，所有旧列与历史前缀仍逐行保持。
+    // 只允许明确 owner 的新尾；次序回填和可空安全标记不改变其他旧列或历史前缀。
     internal static void VerifyPreservedPredecessor(Continuity before, Continuity after, params string[] allowedNewOwners)
     {
         if (allowedNewOwners.Contains("Workspace", StringComparer.Ordinal))
@@ -552,11 +552,11 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         var workspaceTail = current.Skip(previous.Length).Where(row => row.GetProperty("OwnerModuleId").GetString() == "Workspace")
             .Select(row => row.GetProperty("MigrationId").GetString()).ToArray();
         if (allowedNewOwners.Contains("Workspace", StringComparer.Ordinal) && !workspaceTail.SequenceEqual(
-                ["20261014142253_Workspace_000004_TreeOrder", "20261014142313_Workspace_000005_TreeOrderBackfill"]))
+                ["20261014142253_Workspace_000004_TreeOrder", "20261014142313_Workspace_000005_TreeOrderBackfill", "20261016054922_Workspace_000006_ScopeNeutral"]))
             throw new InvalidOperationException("Workspace 未按已确认的扩展与回填尾迁移升级。");
     }
 
-    // 精确允许旧文件夹关系获得非空唯一次序；不忽略关系身份、审计列或其他数据变化。
+    // 旧边只允许新增NULL中性标记与有效次序，不忽略关系身份、审计或其他字段。
     private static void VerifyTreeOrderBackfillPreservesLinks(string before, string after)
     {
         using var previous = JsonDocument.Parse(before);
@@ -565,6 +565,8 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         var preserved = new List<Dictionary<string, JsonElement>>();
         foreach (var row in current.RootElement.EnumerateArray())
         {
+            if (row.TryGetProperty("IsScopeNeutral", out var neutral) && neutral.ValueKind != JsonValueKind.Null)
+                throw new InvalidOperationException("Workspace 旧关系的空间可达性标记不应被迁移改写。");
             var hasOrdinal = row.TryGetProperty("TreeOrdinal", out var ordinal);
             if (row.GetProperty("ChildModelKey").GetString() == "WorkspaceFolder")
             {
@@ -574,7 +576,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             }
             else if (hasOrdinal && ordinal.ValueKind != JsonValueKind.Null)
                 throw new InvalidOperationException("Workspace 业务对象关系不应参与树次序。");
-            preserved.Add(row.EnumerateObject().Where(property => property.Name != "TreeOrdinal")
+            preserved.Add(row.EnumerateObject().Where(property => property.Name is not ("TreeOrdinal" or "IsScopeNeutral"))
                 .ToDictionary(property => property.Name, property => property.Value));
         }
         if (!JsonElement.DeepEquals(previous.RootElement, JsonSerializer.SerializeToElement(preserved)))

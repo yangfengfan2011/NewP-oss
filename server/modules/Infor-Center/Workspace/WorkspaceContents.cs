@@ -292,8 +292,8 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
         audit.ForUpdate((string)folder["CreatedBy"]!, (DateTime)folder["CreatedAt"]!).ApplyTo(folder);
     }
 
-    /// <summary>登记真实实体的引用并返回服务端新 LID；关系盖章复用当前对象操作的时间和主体。</summary>
-    private async Task<string> RegisterCreatedReferenceAsync(string parentId, string modelKey, string objectId, CancellationToken token)
+    /// <summary>普通新引用可贡献空间范围；移动时保留原边语义，盖章复用当前操作的时间和主体。</summary>
+    private async Task<string> RegisterCreatedReferenceAsync(string parentId, string modelKey, string objectId, CancellationToken token, bool? isScopeNeutral = false)
     {
         if (!transactions.IsActive) throw new InvalidOperationException("Workspace creation requires an active transaction.");
         var stamp = audit.Current();
@@ -302,6 +302,7 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
         {
             ["LID"] = linkId, ["PEID"] = parentId, ["CEID"] = objectId, ["ChildModelKey"] = modelKey,
             ["TreeOrdinal"] = modelKey == WorkspacePositions.FolderModel ? await treeOrder.NextOrdinalAsync(parentId, token) : (long?)null,
+            ["IsScopeNeutral"] = isScopeNeutral,
             ["LCreatedBy"] = stamp.ActorId, ["LCreatedAt"] = stamp.OccurredAtUtc, ["LUpdatedBy"] = stamp.ActorId, ["LUpdatedAt"] = stamp.OccurredAtUtc
         });
         return linkId;

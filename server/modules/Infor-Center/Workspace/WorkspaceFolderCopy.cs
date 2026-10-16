@@ -72,7 +72,7 @@ public sealed partial class WorkspaceContents
             long ordinal = 0;
             foreach (var child in children.OrderBy(child => child.Ordinal).ThenBy(child => child.LinkId, StringComparer.Ordinal))
             {
-                var createdLink = RegisterCopiedReference(createdId, child, child.Model == WorkspacePositions.FolderModel ? ++ordinal : null);
+                var createdLink = RegisterCopiedReference(createdId, child, child.Model == WorkspacePositions.FolderModel ? ++ordinal : null, isScopeNeutral: true);
                 await referenceAudit.CopiedAsync(child.LinkId, source.Id, createdLink, createdId, new(child.Model, child.Id), cancellation);
             }
             await referenceAudit.FolderCopiedAsync(linkIds[0], source.Id, createdId, target.FolderId, rootLinkId, cancellation);
@@ -82,12 +82,12 @@ public sealed partial class WorkspaceContents
 
     private sealed record FolderCopyChild(string LinkId, string Model, string Id, long? Ordinal);
 
-    // 新父尚无其他关系，计划已核证相对次序；直接赋新连续序号，避免逐边查询空分支或扫描整个tracker。
-    private string RegisterCopiedReference(string parentId, FolderCopyChild child, long? ordinal)
+    // 浅副本边不贡献旧对象空间范围，结构新对象边正常；调用方明确选择，不沿用源边授权语义。
+    private string RegisterCopiedReference(string parentId, FolderCopyChild child, long? ordinal, bool isScopeNeutral)
     {
         var stamp = audit.Current(); var linkId = ids.NewId(WorkspacePositions.ContentModel);
         Links.Add(new() { ["LID"] = linkId, ["PEID"] = parentId, ["CEID"] = child.Id, ["ChildModelKey"] = child.Model,
-            ["TreeOrdinal"] = ordinal, ["LCreatedBy"] = stamp.ActorId, ["LCreatedAt"] = stamp.OccurredAtUtc,
+            ["TreeOrdinal"] = ordinal, ["IsScopeNeutral"] = isScopeNeutral, ["LCreatedBy"] = stamp.ActorId, ["LCreatedAt"] = stamp.OccurredAtUtc,
             ["LUpdatedBy"] = stamp.ActorId, ["LUpdatedAt"] = stamp.OccurredAtUtc });
         return linkId;
     }

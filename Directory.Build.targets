@@ -15,8 +15,8 @@
     <None Remove="@(NewpNestedProject->'%(RelativeDir)**/*')" />
     <Content Remove="@(NewpNestedProject->'%(RelativeDir)**/*')" />
   </ItemGroup>
-  <!-- solution 未逐个登记的原位工程仍继承调用方配置，不能回落到 Debug 消费另一份产物。 -->
-  <PropertyGroup Condition="'$(NewpIsModuleProject)' == 'true' or '$(NewpIsHostProject)' == 'true'">
+  <!-- solution 未逐个登记的原位工程与 SDK 注入的传递引用仍继承调用方配置，不能回落到 Debug 并行写另一份产物。 -->
+  <PropertyGroup>
     <ShouldUnsetParentConfigurationAndPlatform>false</ShouldUnsetParentConfigurationAndPlatform>
   </PropertyGroup>
   <ItemGroup Condition="'$(NewpIsModuleProject)' == 'true' or '$(NewpIsHostProject)' == 'true'">

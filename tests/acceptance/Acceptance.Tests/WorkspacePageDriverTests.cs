@@ -94,7 +94,7 @@ public sealed class WorkspacePageDriverTests
         Assert.Equal("selected", await page.EvaluateAsync<string>("window.contextTarget"));
     }
 
-    [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "批量删除 driver 复用共享确认按钮的 AntD 空格兼容定位，无服务器或端口")]
+    [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "批量删除 driver 兼容正式工具栏与确认按钮的 AntD 双汉字空格，无服务器或端口")]
     public async Task BatchDelete_UsesSharedSpacedConfirmationButton()
     {
         using var playwright = await Playwright.CreateAsync();
@@ -104,32 +104,80 @@ public sealed class WorkspacePageDriverTests
             ExecutablePath = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_CHROMIUM_EXECUTABLE")
                 ?? @"C:\Program Files\Google\Chrome\Application\chrome.exe"
         });
-        var page = await browser.NewPageAsync();
-        await page.RouteAsync("http://workspace.test/**", async route =>
+        foreach (var actionLabel in new[] { "删除", "删 除" })
         {
-            if (route.Request.Method == "POST")
-                await route.FulfillAsync(new() { Status = 200, ContentType = "application/json", Body = "{}" });
-            else await route.FulfillAsync(new() { ContentType = "text/html", Body = """
-                <meta charset="utf-8"><section aria-label="节点内容">
-                <button id="batch">删除</button><table><tbody class="ant-table-tbody">
-                <tr class="ant-table-row"><td><input type="checkbox"></td><td>甲对象</td></tr>
-                <tr class="ant-table-row"><td><input type="checkbox"></td><td>乙对象</td></tr>
-                </tbody></table></section>
-                <div role="dialog" aria-label="删除" hidden><button id="confirm">确 认</button></div>
-                <script>
-                document.querySelector('#batch').onclick=()=>{
-                  if(document.querySelectorAll('input:checked').length===2) document.querySelector('[role=dialog]').hidden=false;
-                };
-                document.querySelector('#confirm').onclick=async()=>{
-                  await fetch('/api/workspace/content/delete',{method:'POST'});
-                  document.querySelectorAll('tr,[role=dialog]').forEach(element=>element.remove());
-                };
-                </script>
-                """ });
+            var page = await browser.NewPageAsync();
+            page.SetDefaultTimeout(1_000);
+            await page.RouteAsync("http://workspace.test/**", async route =>
+            {
+                if (route.Request.Method == "POST")
+                    await route.FulfillAsync(new() { Status = 200, ContentType = "application/json", Body = "{}" });
+                else await route.FulfillAsync(new() { ContentType = "text/html", Body = """
+                    <meta charset="utf-8"><section aria-label="节点内容">
+                    <button id="batch">ACTION_LABEL</button><table><tbody class="ant-table-tbody">
+                    <tr class="ant-table-row"><td><input type="checkbox"></td><td>甲对象</td></tr>
+                    <tr class="ant-table-row"><td><input type="checkbox"></td><td>乙对象</td></tr>
+                    </tbody></table></section>
+                    <div role="dialog" aria-label="删除" hidden><button id="confirm">确 认</button></div>
+                    <script>
+                    document.querySelector('#batch').onclick=()=>{
+                      if(document.querySelectorAll('input:checked').length===2) document.querySelector('[role=dialog]').hidden=false;
+                    };
+                    document.querySelector('#confirm').onclick=async()=>{
+                      await fetch('/api/workspace/content/delete',{method:'POST'});
+                      document.querySelectorAll('tr,[role=dialog]').forEach(element=>element.remove());
+                    };
+                    </script>
+                    """.Replace("ACTION_LABEL", actionLabel) });
+            });
+            await page.GotoAsync("http://workspace.test/");
+            await new WorkspacePageDriver(page).DeleteSelectedAsync("甲对象", "乙对象");
+            await Assertions.Expect(page.GetByRole(AriaRole.Dialog)).ToHaveCountAsync(0);
+            await page.CloseAsync();
+        }
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "批量移除 driver 兼容正式工具栏的 AntD 双汉字空格并保留确认与写入等待，无服务器或端口")]
+    public async Task BatchRemove_UsesSpacedToolbarButton()
+    {
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new()
+        {
+            Headless = true,
+            ExecutablePath = Environment.GetEnvironmentVariable("NEWP_ACCEPTANCE_CHROMIUM_EXECUTABLE")
+                ?? @"C:\Program Files\Google\Chrome\Application\chrome.exe"
         });
-        await page.GotoAsync("http://workspace.test/");
-        await new WorkspacePageDriver(page).DeleteSelectedAsync("甲对象", "乙对象");
-        await Assertions.Expect(page.GetByRole(AriaRole.Dialog)).ToHaveCountAsync(0);
+        foreach (var actionLabel in new[] { "移除", "移 除" })
+        {
+            var page = await browser.NewPageAsync();
+            page.SetDefaultTimeout(1_000);
+            await page.RouteAsync("http://workspace.test/**", async route =>
+            {
+                if (route.Request.Method == "POST")
+                    await route.FulfillAsync(new() { Status = 200, ContentType = "application/json", Body = "{}" });
+                else await route.FulfillAsync(new() { ContentType = "text/html", Body = """
+                    <meta charset="utf-8"><section aria-label="节点内容">
+                    <button id="batch">ACTION_LABEL</button><table><tbody class="ant-table-tbody">
+                    <tr class="ant-table-row"><td><input type="checkbox"></td><td>甲对象</td></tr>
+                    <tr class="ant-table-row"><td><input type="checkbox"></td><td>乙对象</td></tr>
+                    </tbody></table></section>
+                    <div role="dialog" hidden>仅从当前文件夹移除所选引用，保留对象及文件，确定继续？<button id="confirm">确 认</button></div>
+                    <script>
+                    document.querySelector('#batch').onclick=()=>{
+                      if(document.querySelectorAll('input:checked').length===2) document.querySelector('[role=dialog]').hidden=false;
+                    };
+                    document.querySelector('#confirm').onclick=async()=>{
+                      await fetch('/api/workspace/content/references/remove',{method:'POST'});
+                      document.querySelectorAll('tr,[role=dialog]').forEach(element=>element.remove());
+                    };
+                    </script>
+                    """.Replace("ACTION_LABEL", actionLabel) });
+            });
+            await page.GotoAsync("http://workspace.test/");
+            await new WorkspacePageDriver(page).RemoveSelectedReferencesAsync(["甲对象", "乙对象"]);
+            await Assertions.Expect(page.GetByRole(AriaRole.Dialog)).ToHaveCountAsync(0);
+            await page.CloseAsync();
+        }
     }
 
     [EnvironmentGatedFact("NEWP_RUN_ACCEPTANCE", "Chromium中反向Modal及双Drawer按对象限定关闭，无服务器或端口")]

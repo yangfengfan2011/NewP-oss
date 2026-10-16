@@ -317,7 +317,8 @@ internal sealed class WorkspacePageDriver(IPage page)
     {
         var crud = new StandardCrudPageDriver(page);
         foreach (var name in names) await (await crud.WaitForRowAsync(name)).GetByRole(AriaRole.Checkbox).CheckAsync();
-        await crud.ClickPageActionAsync("移除");
+        await page.GetByRole(AriaRole.Region, new() { Name = "节点内容", Exact = true })
+            .GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^移\s*除$") }).ClickAsync();
         var dialog = crud.ConfirmDialogWithText("仅从当前文件夹移除所选引用，保留对象及文件，确定继续？");
         await dialog.WaitForAsync(new() { State = WaitForSelectorState.Visible });
         if (capture is not null)
@@ -363,7 +364,8 @@ internal sealed class WorkspacePageDriver(IPage page)
             var row = await crud.WaitForRowAsync(name);
             await row.GetByRole(AriaRole.Checkbox).CheckAsync();
         }
-        await crud.ClickPageActionAsync("删除");
+        await page.GetByRole(AriaRole.Region, new() { Name = "节点内容", Exact = true })
+            .GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^删\s*除$") }).ClickAsync();
         var dialog = page.GetByRole(AriaRole.Dialog, new() { Name = "删除", Exact = true });
         await crud.ConfirmAsync(dialog, new("POST", "/api/workspace/content/delete", 200, "批量删除对象"));
         foreach (var name in names)

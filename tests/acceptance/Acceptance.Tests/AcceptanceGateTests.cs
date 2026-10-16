@@ -308,7 +308,7 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
-    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通账号通过正式树和工具栏剪切移动并确认批量移除引用")]
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通账号通过正式树和工具栏剪切移动、确认批量移除引用并删除对象")]
     public async Task NativeWorkspaceCutAndRemove_UsesFormalDriver()
     {
         var (root, runId) = PrepareRun("native-workspace-cut-remove");
@@ -345,6 +345,9 @@ public sealed class AcceptanceGateTests
                     await dialog.EvaluateAsync("async element => { await new Promise(requestAnimationFrame); await Promise.all(element.getAnimations({subtree:true}).map(animation => animation.finished.catch(() => {}))); }");
                     await CaptureAsync("remove-references-confirm.png");
                 });
+                var deletedFolder = "工具栏删除验证 " + runId[..8];
+                await driver.CreateFolderAsync(deletedFolder);
+                await driver.DeleteSelectedAsync(deletedFolder);
                 var localizedRead = page.WaitForResponseAsync(response => response.Request.Method == "GET"
                     && new Uri(response.Url).AbsolutePath == "/api/links/workspace.content");
                 await driver.SelectLanguageAsync("English");

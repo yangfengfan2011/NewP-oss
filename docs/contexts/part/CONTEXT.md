@@ -16,4 +16,6 @@ Part 拥有独立零组件元数据，不包含版本、BOM、文件内容或专
 
 所属对象独立声明 `partCopy` 数据动作（`data.part.copy`），要求 read，只供引用复制资格裁决，不克隆实体或执行 update/delete。显示词条由本 owner 的 DataScope 词典提供，Workspace 通过正式对象资格接口消费，目录关系与剪贴板仍归 Workspace。
 
+`partObjectCopy`（`data.part.objectCopy`）独立控制真副本来源资格，要求 read，不从旧引用动作推导授权。`part.part.copy/copy` 由 Part owner 核对当前编码、名称和说明与确认来源一致，并调用正常 `part.part/create`；新编码与确认属性使用原字段规则、候选 create、唯一索引和可信审计。EID、对象审计重新生成，不复制旧审计或入向关系。复制字段分类与当前正式持久模型核对，新增实际字段未分类时失败关闭。Workspace 只编排完整出现位置、目标关系和结果，不克隆 Part 私表。
+
 回退优先撤销 Part 导航与资源接入，保留独立实体及迁移历史。代码回退不自动执行 Down 或清表，旧 Host 不得越过已应用的 schema frontier。

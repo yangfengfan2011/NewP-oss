@@ -16,7 +16,7 @@ public sealed class WorkspaceModelMetadataProvider : IModelDefinitionProvider
             directory = directory.Parent;
         var root = directory?.FullName ?? throw new InvalidOperationException("无法定位 Workspace authoring。");
         var storage = new JsonStorageTypeMapLoader().LoadFromFile(Path.Combine(root, "server/platform-modeling/metadata/storage-types.json"));
-        return new[] { "WorkspaceFolder", "WorkspaceSpace", "WorkspaceFolderContent" }.Select(name =>
+        return new[] { "WorkspaceFolder", "WorkspaceSpace", "WorkspaceFolderContent", "WorkspaceObjectCopy" }.Select(name =>
         {
             var document = new JsonModelMetadataDocumentLoader().LoadFromFile(Path.Combine(ModuleAuthoringPaths.ResolveModuleRoot(root, "Workspace"), "metadata/models", name + ".model.json"));
             new ModelMetadataValidator().Validate(document, storage);

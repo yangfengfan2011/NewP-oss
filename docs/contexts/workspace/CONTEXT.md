@@ -20,6 +20,12 @@ Workspace 拥有公共空间、当前账号个人空间及其根文件夹。入�
 
 ## 直接文件夹内容
 
+单 Part 真副本通过正式“复制”来源与“粘贴对象副本”进入共享 Drawer；新编码留空必填，名称及说明从可信源预填。来源必须是精确父出现位置和一个实际 Part LID；多 Part、混合、cut 和空间根目标拒绝。剪贴板预检可以接受引用复制或所属真副本资格，真正粘贴引用仍独立执行旧引用资格；新功能不放宽旧粘贴。目标完整位置、父 read/edit 和新 Part 候选 create 在提交时重验，源只需 read/真副本，不要求 edit/delete。
+
+`WorkspaceObjectCopy` 是 Workspace 私有的最小持久恢复事实，保存可信主体、确认的精确来源/目标和相关源值，状态为 ready、committed 或 cancelled。准备是短事务，不是后续写入凭据。提交由 `workspace.content.copy` 唯一对象操作根协调 Part owner；新 Part、普通目标 Link、`workspace.object.copied` 审计和 committed 状态同事务。来源当前字段变化时拒绝并要求重新确认，重新装载只更新未编辑的预填值。提交后不可读仍返回无对象标识的安全成功；刷新失败只重读。
+
+取消与结果核对按主体读取并等待相同图事务，已提交状态不能被取消覆盖。丢失回执后 UI 封闭重写，用正式“核对副本结果”动作读取状态；核对不重放创建或删除未知结果。状态接口不返回源字段、路径或新对象身份，他人的操作与不存在统一拒绝。账号、来源快照或目标变化使旧草稿失效；成功保留 copy 来源以便明确输入另一新编码。操作记录与已创建对象在前向迁移后保留，回退先撤销真副本动作，不执行 Down 或清除未知结果。
+
 WorkspaceFolderContent 是正式 Link，父端由 authoring 固定为 WorkspaceFolder，子端由必填 ChildModelKey 判别；允许组合只来自 linkedTypes。正式目录登记 WorkspaceFolder、Part、Document 三个真实端点；读取/显示契约来自其所属模块，Workspace 显式依赖 Part 与 Document。LID、PEID、CEID 与关系审计由服务端填写；关系不保存 SpaceId、父位置、名称或对象审计影子值。
 
 零组件和图文档不提供独立侧栏菜单；用户选择文件夹后，从“新建”父按钮选择新建文件夹、零组件或图文档，统一使用共享右侧 Drawer 和“保存并关闭”，页面不再提供“添加已有对象”。内容列表的名称作为属性入口，操作菜单提供复制引用、编辑、删除及移除引用；所属模块的 routeOnly 路由及功能位置继续服务于详情准入与属性打开。

@@ -149,6 +149,49 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "正式三成员包的单Part真副本、查看、独立编辑删除与双语输入沿唯一Workspace driver贯通")]
+    public async Task NativeWorkspaceObjectCopy_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-workspace-object-copy");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseCompositionLifecycle: false);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
+            browserJourney: async (page, token) =>
+            {
+                var driver = new WorkspacePageDriver(page);
+                var name = "真实副本来源 " + runId[..8]; var copied = "真实独立副本 " + runId[..8]; var target = "对象副本目标 " + runId[..8];
+                Task Capture(string file) => page.ScreenshotAsync(new() { Path = Path.Combine(root, file), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                await driver.OpenAsync(); await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
+                var sourceAddress = page.Url;
+                await driver.CreateObjectAsync("零组件", "ACC-COPY-SOURCE-" + runId[..8], name, _ => Capture("part-create-reference.png"));
+                await driver.CopyReferenceFromContextMenuAsync(name);
+                await driver.SelectRootAsync("公共空间"); await driver.CreateFolderAsync(target);
+                var targetAddress = await driver.SelectTreePathAsync("公共空间", target);
+                await driver.PastePartCopyAsync("ACC-COPY-TARGET-" + runId[..8], copied, async _ =>
+                {
+                    await Capture("object-copy-input-zhs.png");
+                    await page.SetViewportSizeAsync(900, 1000); await Capture("object-copy-input-zhs-narrow.png");
+                    await page.SetViewportSizeAsync(1440, 1000);
+                });
+                await Capture("object-copy-created.png");
+                // 复用copy来源的双语确认应在当前页面实例完成；进入独立详情和Goto恢复会按合同清空剪贴板。
+                await driver.SelectLanguageAsync("English");
+                var english = await driver.OpenObjectCopyAsync(english: true);
+                await Capture("object-copy-input-en.png"); await page.SetViewportSizeAsync(900, 1000);
+                await Capture("object-copy-input-en-narrow.png"); await page.SetViewportSizeAsync(1440, 1000);
+                await new StandardCrudPageDriver(page).CloseDrawerAsync(english);
+                await driver.SelectLanguageAsync("简体中文");
+                await driver.OpenOwnedPropertiesAsync(copied, "/parts"); await Capture("object-copy-properties.png");
+                await driver.RestorePositionAsync(targetAddress, "公共空间", target);
+                await driver.EditObjectAsync(copied, copied + " 已编辑"); await driver.DeleteSelectedAsync(copied + " 已编辑");
+                await driver.RestorePositionAsync(sourceAddress, "公共空间", fixture.ExistingFolderName);
+                await driver.OpenOwnedPropertiesAsync(name, "/parts");
+                await driver.RestorePositionAsync(sourceAddress, "公共空间", fixture.ExistingFolderName);
+                await driver.DeleteSelectedAsync(name);
+                await driver.SelectRootAsync("公共空间"); await driver.DeleteSelectedAsync(target);
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"), new { url = page.Url, journey = "part-object-copy", actor = "ordinary" }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "两种文件夹副本使用同一固定发行物旅程和正式driver完成选源到结果的最短路径")]
     public async Task NativeWorkspaceFolderCopy_UsesFormalDriver()
     {

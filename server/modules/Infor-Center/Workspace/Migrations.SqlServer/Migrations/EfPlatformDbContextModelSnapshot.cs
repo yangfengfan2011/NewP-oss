@@ -162,6 +162,59 @@ namespace ICP.Platform.Modules.Workspace.Migrations.SqlServer.Migrations
                     b.ToTable("WorkspaceFolderContent", "dbo");
                 });
 
+            modelBuilder.Entity("WorkspaceObjectCopy", b =>
+                {
+                    b.Property<string>("EID")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("EID");
+
+                    b.Property<string>("ActorId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("ActorId");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("CreatedAt");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("CreatedBy");
+
+                    b.Property<string>("Input")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("Input");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("State");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("UpdatedAt");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("UpdatedBy");
+
+                    b.HasKey("EID");
+
+                    b.HasIndex("EID")
+                        .IsUnique()
+                        .HasDatabaseName("UX_WorkspaceObjectCopy_EID");
+
+                    b.ToTable("WorkspaceObjectCopy", "dbo");
+                });
+
             modelBuilder.Entity("WorkspaceSpace", b =>
                 {
                     b.Property<string>("EID")

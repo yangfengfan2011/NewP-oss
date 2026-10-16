@@ -223,9 +223,9 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             await WorkspaceAcceptanceFixture.LoginAsync(pageAdministrator, _administrator!, token);
             var pageFeatures = await AcceptanceFeatureCatalog.LoadAsync(pageAdministrator, token);
             var pageWorkspace = pageFeatures.Behavior("Workspace", "workspace.spaces.access");
-            foreach (var key in new[] { "edit", "remove", "moveUp", "moveDown", "copy", "cut", "paste", "pasteFolderCopy", "pasteFolderStructure", "clearClipboard" })
+            foreach (var key in new[] { "edit", "remove", "moveUp", "moveDown", "copy", "cut", "paste", "pasteObjectCopy", "pasteFolderCopy", "pasteFolderStructure", "clearClipboard" })
                 granted.Add(pageFeatures.Action(pageWorkspace, key, "contextMenu", "folder"));
-            foreach (var key in new[] { "copySelected", "cutSelected", "removeSelected", "paste", "pasteFolderCopy", "pasteFolderStructure", "clearClipboard" })
+            foreach (var key in new[] { "copySelected", "cutSelected", "removeSelected", "paste", "pasteObjectCopy", "resolveObjectCopy", "pasteFolderCopy", "pasteFolderStructure", "clearClipboard" })
                 granted.Add(pageFeatures.Action(pageWorkspace, key, "list.pageActions", "folder"));
             granted.Add(pageFeatures.Action(pageWorkspace, "copy", "list.rowActions", "folder"));
             granted.Add(pageFeatures.Action(pageWorkspace, "cut", "list.rowActions", "folder"));
@@ -552,7 +552,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         var workspaceTail = current.Skip(previous.Length).Where(row => row.GetProperty("OwnerModuleId").GetString() == "Workspace")
             .Select(row => row.GetProperty("MigrationId").GetString()).ToArray();
         if (allowedNewOwners.Contains("Workspace", StringComparer.Ordinal) && !workspaceTail.SequenceEqual(
-                ["20261014142253_Workspace_000004_TreeOrder", "20261014142313_Workspace_000005_TreeOrderBackfill", "20261016054922_Workspace_000006_ScopeNeutral"]))
+                ["20261014142253_Workspace_000004_TreeOrder", "20261014142313_Workspace_000005_TreeOrderBackfill", "20261016054922_Workspace_000006_ScopeNeutral", "20261016132111_Workspace_000007_ObjectCopy"]))
             throw new InvalidOperationException("Workspace 未按已确认的扩展与回填尾迁移升级。");
     }
 
@@ -583,7 +583,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             throw new InvalidOperationException("Workspace 次序回填改变了既有关系或审计数据。");
     }
 
-    // Files 与 Document 新模型分别归自身；Part 与 Workspace 的旧装配不能随之演进。
+    // 新模型只允许落入已确认 owner；Workspace 只新增副本恢复事实，原模型归属保持。
     private static void VerifyDocumentModelEvolution(string before, string after)
     {
         using var oldOwners = JsonDocument.Parse(before); using var newOwners = JsonDocument.Parse(after);
@@ -595,6 +595,12 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             {
                 if (!current.GetProperty("models").EnumerateArray().Select(row => row.GetString()).SequenceEqual(["Document", "DocumentFileLink", "DocumentIteration", "DocumentVersion"]))
                     throw new InvalidOperationException("Document 初版模型装配不完整。");
+            }
+            else if (owner == "Workspace")
+            {
+                var expected = oldOwner.GetProperty("models").EnumerateArray().Select(row => row.GetString()).Append("WorkspaceObjectCopy").Order(StringComparer.Ordinal);
+                if (!current.GetProperty("models").EnumerateArray().Select(row => row.GetString()).SequenceEqual(expected))
+                    throw new InvalidOperationException("Workspace 副本操作模型装配不完整或原模型 owner 漂移。");
             }
             else if (owner == "Files") continue;
             else if (!JsonElement.DeepEquals(oldOwner, current)) throw new InvalidOperationException("非 Document 模型 owner 发生漂移。");

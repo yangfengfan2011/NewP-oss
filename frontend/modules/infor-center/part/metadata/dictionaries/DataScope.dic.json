@@ -1,6 +1,7 @@
 {
   "schemaVersion": "1.0", "type": "dic",
   "DataScope": {
+    "Action_partObjectCopy": { "zhs": "创建零组件真副本", "en": "Create independent part copy" },
     "Action_partCopy": { "zhs": "复制零组件引用", "en": "Copy part references" }
   }
 }

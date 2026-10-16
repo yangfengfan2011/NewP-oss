@@ -21,7 +21,7 @@ public sealed partial class WorkspaceContents
             if (openedHere) await db.Database.OpenConnectionAsync(token);
             var source = mode == "cut" ? await WritablePositionAsync(actor, sourcePosition, token)
                 : await positions.ResolveAsync(actor, sourcePosition, token);
-            var targets = await ResolveClipboardTargetsAsync(source.FolderId, linkIds, mode, token);
+            var targets = await ResolveClipboardTargetsAsync(source.FolderId, linkIds, mode == "copy" ? "select-copy" : mode, token);
             return new(mode, sourcePosition, linkIds.Select((id, index) => new WorkspaceClipboardItem(id, targets[index].ModelKey)).ToArray());
         }
         finally
@@ -83,7 +83,8 @@ public sealed partial class WorkspaceContents
         {
             var resource = Resource(target.ModelKey);
             if (!await reader.IsEndpointReadableAsync("workspace.content", target, token)) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
-            if (mode != "remove" && !await decisions.IsAllowedAsync(resource, target.Id, mode == "cut" ? "edit" : CopyAction(target.ModelKey), token))
+            if (mode != "remove" && !await decisions.IsAllowedAsync(resource, target.Id, mode == "cut" ? "edit" : CopyAction(target.ModelKey), token)
+                && !(mode == "select-copy" && target.ModelKey == "Part" && await decisions.IsAllowedAsync(resource, target.Id, "partObjectCopy", token)))
                 throw new LinkQueryException(403, mode == "cut" ? "Workspace.ObjectWriteDenied" : "Workspace.ObjectCopyDenied");
             if (target.ModelKey == WorkspacePositions.FolderModel && await db.Set<Dictionary<string, object?>>("WorkspaceSpace")
                 .AnyAsync(row => EF.Property<string>(row, "RootFolderId") == target.Id, token)) throw new LinkQueryException(409, "Workspace.RootReferenceForbidden");

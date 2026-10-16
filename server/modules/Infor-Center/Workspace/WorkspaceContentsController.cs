@@ -15,7 +15,7 @@ namespace ICP.Platform.Modules.Workspace;
 
 /// <summary>正式创建仅接受当前出现位置与可写字段；所有业务规则仍在应用服务。</summary>
 [ApiController, Route("api/workspace"), EndpointModule("Workspace"), PlatformRequestValidation]
-public sealed class WorkspaceContentsController(WorkspaceContents contents, WorkspaceSpaces spaces, WorkspacePositions positions,
+public sealed partial class WorkspaceContentsController(WorkspaceContents contents, WorkspaceSpaces spaces, WorkspacePositions positions,
     ILogger<WorkspaceContentsController> logger, WorkspaceFolderScope folderScope, IObjectOperationExecutor operations, ICP.Platform.Crud.Runtime.LinkTreeReader trees) : ControllerBase
 {
     public sealed record CreateFolderInput(WorkspacePosition Position, Dictionary<string, JsonElement> Values);

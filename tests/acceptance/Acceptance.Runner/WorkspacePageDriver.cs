@@ -446,6 +446,25 @@ internal sealed class WorkspacePageDriver(IPage page)
         await modal.WaitForAsync(new() { State = WaitForSelectorState.Hidden });
     }
 
+    /// <summary>通过正式副本确认填写新编码并等待目标列表消费成功结果。</summary>
+    internal async Task PastePartCopyAsync(string code, string name, Func<ILocator, Task>? capture = null)
+    {
+        var crud = new StandardCrudPageDriver(page);
+        var drawer = await OpenObjectCopyAsync();
+        await FillObjectCreationAsync(drawer, code, name);
+        if (capture is not null) await capture(drawer);
+        await crud.SaveAndCloseAsync(drawer, new("POST", "/api/workspace/content/objects/copy", 200, "粘贴零组件真副本"));
+        await crud.WaitForRowAsync(name);
+    }
+
+    /// <summary>副本输入等待真实异步来源准备；语言仅改变正式可访问名称。</summary>
+    internal async Task<ILocator> OpenObjectCopyAsync(bool english = false)
+    {
+        var drawer = await new StandardCrudPageDriver(page).OpenCreateDrawerAsync(english ? "Paste independent object copy" : "粘贴对象副本");
+        await Assertions.Expect(drawer.GetByLabel(english ? "Code" : "编码", new() { Exact = true })).ToBeEnabledAsync();
+        return drawer;
+    }
+
     /// <summary>通过当前文件夹的正式创建动作一次提交实体和关系。</summary>
     internal async Task CreateObjectAsync(string type, string code, string name, Func<ILocator, Task>? capture = null)
     {

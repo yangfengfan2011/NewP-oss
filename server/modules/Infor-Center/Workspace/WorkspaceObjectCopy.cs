@@ -1,0 +1,113 @@
+using System.Text.Json;
+using ICP.Platform.Crud.LinkQueries;
+using ICP.Platform.Crud.Models;
+using ICP.Platform.Crud.ObjectOperations;
+using Microsoft.EntityFrameworkCore;
+
+namespace ICP.Platform.Modules.Workspace;
+
+public sealed record WorkspaceObjectCopyPreparation(string OperationId, IReadOnlyDictionary<string, object?> Values,
+    IReadOnlyList<string> SourcePath, IReadOnlyList<string> TargetPath);
+public sealed record WorkspaceObjectCopyReceipt(bool Succeeded, string State);
+internal sealed record WorkspaceObjectCopyInput(WorkspacePosition SourcePosition, string[] LinkIds, WorkspacePosition TargetPosition,
+    string SourceId, string SourceCode, string SourceName, string? SourceDescription);
+
+public sealed partial class WorkspaceContents
+{
+    /// <summary>短事务保存本主体的确认输入及精确位置；该记录只用于恢复，不替代随后提交授权。</summary>
+    public ValueTask<WorkspaceObjectCopyPreparation> PrepareObjectCopyAsync(string actor, string mode, WorkspacePosition sourcePosition,
+        string[] linkIds, WorkspacePosition targetPosition, CancellationToken token)
+    {
+        if (mode != "copy" || linkIds.Length != 1 || string.IsNullOrWhiteSpace(linkIds[0]))
+            throw new LinkQueryException(400, "Workspace.ObjectCopySourceRequired");
+        return transactions.ExecuteAsync<WorkspaceObjectCopyPreparation>(async cancellation =>
+        {
+            using var operation = audit.BeginOperation();
+            await LockGraphAsync(cancellation);
+            var parent = await positions.ResolveAsync(actor, sourcePosition, cancellation);
+            var endpoint = await ResolveObjectCopySourceAsync(parent.FolderId, linkIds, cancellation);
+            if (endpoint.ModelKey != "Part") throw new LinkQueryException(400, "Workspace.ObjectCopySourceRequired");
+            var target = await WritablePositionAsync(actor, targetPosition, cancellation);
+            RequireContainer(targetPosition, target, endpoint.ModelKey);
+            var detail = await crud.GetDetailAsync(resources.FindByResourceKey("part.part")!, endpoint.Id, cancellation)
+                ?? throw new LinkQueryException(404, "Workspace.TargetUnavailable");
+            var fields = detail.Fields;
+            var input = new WorkspaceObjectCopyInput(sourcePosition, linkIds, targetPosition, endpoint.Id,
+                (string)fields["ECODE"]!, (string)fields["ENAME"]!, fields.GetValueOrDefault("Description") as string);
+            var id = ids.NewId("WorkspaceObjectCopy");
+            var row = new Dictionary<string, object?> { ["EID"] = id, ["ActorId"] = actor, ["State"] = "ready", ["Input"] = JsonSerializer.Serialize(input) };
+            audit.ForCreate().ApplyTo(row);
+            ObjectCopies.Add(row);
+            return new(id, new Dictionary<string, object?> { ["ECODE"] = "", ["ENAME"] = input.SourceName, ["Description"] = input.SourceDescription },
+                [.. parent.Names, input.SourceName], target.Names);
+        }, token);
+    }
+
+    /// <summary>最终重验来源、目标及所属资格；Part、引用、复制审计与结果状态只在同一事务提交。</summary>
+    internal async ValueTask<StandardCrudMutationResult> CopyObjectAsync(string actor, string operationId,
+        IReadOnlyDictionary<string, JsonElement> input, IObjectOperationExecutor operations, CancellationToken cancellation)
+    {
+        if (!transactions.IsActive) throw new InvalidOperationException("Workspace.CopyTransactionRequired");
+        using var operation = audit.BeginOperation();
+        await LockGraphAsync(cancellation);
+        var row = await ReadObjectCopyAsync(actor, operationId, cancellation);
+        if (Equals(row["State"], "committed")) return StandardCrudMutationResult.Success();
+        if (!Equals(row["State"], "ready")) throw new LinkQueryException(409, "Workspace.CopyCancelled");
+        var prepared = JsonSerializer.Deserialize<WorkspaceObjectCopyInput>((string)row["Input"]!)!;
+        var parent = await positions.ResolveAsync(actor, prepared.SourcePosition, cancellation);
+        var endpoint = await ResolveObjectCopySourceAsync(parent.FolderId, prepared.LinkIds, cancellation);
+        if (endpoint.ModelKey != "Part" || endpoint.Id != prepared.SourceId) throw new LinkQueryException(404, "Workspace.ReferenceUnavailable");
+        var target = await WritablePositionAsync(actor, prepared.TargetPosition, cancellation);
+        RequireContainer(prepared.TargetPosition, target, endpoint.ModelKey);
+        if (!catalog.Get("workspace.content").Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == endpoint.ModelKey))
+            throw new LinkQueryException(400, "Workspace.InvalidEndpoint");
+        var result = await operations.ExecuteAsync("part.part.copy", new("copy"), null, new Dictionary<string, object?> {
+            ["SourceId"] = endpoint.Id, ["ExpectedCode"] = prepared.SourceCode, ["ExpectedName"] = prepared.SourceName,
+            ["ExpectedDescription"] = prepared.SourceDescription, ["Values"] = ReadValues(input, "Part") }, cancellation);
+        if (!result.Succeeded) return result;
+        var id = (string)result.Detail!.Fields["EID"]!;
+        var linkId = await RegisterCreatedReferenceAsync(target.FolderId, "Part", id, cancellation);
+        await referenceAudit.ObjectCopiedAsync(prepared.LinkIds[0], parent.FolderId, endpoint, linkId, target.FolderId, id, cancellation);
+        // 授权规则写入不取得目录图锁；在业务图和审计登记之后再次裁决，不能把前次允许沿用到提交。
+        var finalParent = await positions.ResolveAsync(actor, prepared.SourcePosition, cancellation);
+        var finalSource = await ResolveObjectCopySourceAsync(finalParent.FolderId, prepared.LinkIds, cancellation);
+        if (finalSource != endpoint) throw new LinkQueryException(404, "Workspace.ReferenceUnavailable");
+        await WritablePositionAsync(actor, prepared.TargetPosition, cancellation);
+        if (!await decisions.IsCandidateAllowedAsync("part.part", result.Detail.Fields, "create", cancellation))
+            throw new LinkQueryException(403, "Workspace.ObjectCreateDenied");
+        row["State"] = "committed";
+        audit.ForUpdate((string)row["CreatedBy"]!, (DateTime)row["CreatedAt"]!).ApplyTo(row);
+        return StandardCrudMutationResult.Success();
+    }
+
+    /// <summary>核对与取消均等待同一短图事务；已提交事实不会被取消覆盖，返回值不泄露对象或来源。</summary>
+    public ValueTask<WorkspaceObjectCopyReceipt> ObjectCopyResultAsync(string actor, string operationId, bool cancel, CancellationToken token) =>
+        transactions.ExecuteAsync<WorkspaceObjectCopyReceipt>(async cancellation =>
+        {
+            using var operation = audit.BeginOperation();
+            await LockGraphAsync(cancellation);
+            var row = await ReadObjectCopyAsync(actor, operationId, cancellation);
+            if (cancel && Equals(row["State"], "ready"))
+            {
+                row["State"] = "cancelled";
+                audit.ForUpdate((string)row["CreatedBy"]!, (DateTime)row["CreatedAt"]!).ApplyTo(row);
+            }
+            var state = (string)row["State"]!;
+            return new(state == "committed", state);
+        }, token);
+
+    private DbSet<Dictionary<string, object?>> ObjectCopies => db.Set<Dictionary<string, object?>>("WorkspaceObjectCopy");
+
+    // 来源资格使用真副本专属拒绝，不能以“写入”提示误导用户额外申请源edit。
+    private async Task<ICP.Platform.Crud.LinkQueries.LinkObjectReference> ResolveObjectCopySourceAsync(string parentId, string[] linkIds, CancellationToken token)
+    {
+        try { return (await ResolveTargetsAsync(parentId, linkIds, "partObjectCopy", token)).Single(); }
+        catch (LinkQueryException exception) when (exception.Code == "Workspace.ObjectWriteDenied")
+        { throw new LinkQueryException(403, "Workspace.ObjectCopyDenied"); }
+    }
+
+    // actor 来自认证主体；不存在与属于他人使用同一拒绝，不暴露状态、名称和目标。
+    private async Task<Dictionary<string, object?>> ReadObjectCopyAsync(string actor, string operationId, CancellationToken token) =>
+        await ObjectCopies.SingleOrDefaultAsync(row => EF.Property<string>(row, "EID") == operationId && EF.Property<string>(row, "ActorId") == actor, token)
+        ?? throw new LinkQueryException(404, "Workspace.CopyOperationUnavailable");
+}

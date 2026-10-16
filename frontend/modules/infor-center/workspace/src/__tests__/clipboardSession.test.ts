@@ -6,6 +6,23 @@ import { platformFetch } from '@icp-platform/core';
 vi.mock('@icp-platform/core', () => ({ platformFetch: vi.fn() }));
 const source = { spaceId: 'public', rootFolderId: 'root', linkIds: ['source-parent'] };
 const target = { spaceId: 'public', rootFolderId: 'root', linkIds: ['target-parent'] };
+it('recovers a lost object-copy receipt by reading its operation and never repeats the write', async () => {
+  const session = new WorkspaceClipboardSession(vi.fn());
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ linkId: 'part', modelKey: 'Part' }] })));
+  await session.copy(source, ['part'], 'copy');
+  const draft = session.prepareObjectCopy(target, 'object-copy');
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ operationId: 'operation', values: { ECODE: '', ENAME: 'Source', Description: 'Original' }, sourcePath: ['Public', 'Source'], targetPath: ['Public', 'Target'] })));
+  await session.readObjectCopyInput(draft, new AbortController().signal);
+  vi.mocked(platformFetch).mockRejectedValueOnce(new TypeError('lost receipt'));
+  await expect(session.pasteObjectCopy(draft, { ECODE: 'NEW', ENAME: 'My edit' }, target, 'object-copy')).rejects.toThrow();
+  await expect(session.pasteObjectCopy(draft, { ECODE: 'REPLAY', ENAME: 'Must not write' }, target, 'object-copy')).rejects.toThrow();
+  expect(platformFetch).toHaveBeenCalledTimes(3);
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ state: 'committed', succeeded: true })));
+  expect(await session.resolveObjectCopy()).toEqual({ state: 'committed', succeeded: true });
+  expect(platformFetch).toHaveBeenLastCalledWith('/api/workspace/content/objects/copy/result', expect.objectContaining({ body: JSON.stringify({ operationId: 'operation' }) }));
+  expect(session.getSnapshot().phase).toBe('idle');
+  expect(session.getSnapshot().clipboard?.linkIds).toEqual(['part']);
+});
 it.each(['copy', 'copy-structure'] as const)('freezes %s a named copy against changed target, source snapshot, ended instance and unknown outcomes', async kind => {
   const session = new WorkspaceClipboardSession(vi.fn());
   expect(() => session.prepareFolderCopy(target, 'copy-folder', kind)).toThrow();

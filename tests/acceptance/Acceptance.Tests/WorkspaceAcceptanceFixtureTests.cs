@@ -64,7 +64,8 @@ public sealed class WorkspaceAcceptanceFixtureTests
                 [{"OwnerModuleId":"Workspace","MigrationId":"old-prefix"},
                  {"OwnerModuleId":"Workspace","MigrationId":"20261014142253_Workspace_000004_TreeOrder"},
                  {"OwnerModuleId":"Workspace","MigrationId":"20261014142313_Workspace_000005_TreeOrderBackfill"},
-                 {"OwnerModuleId":"Workspace","MigrationId":"20261016054922_Workspace_000006_ScopeNeutral"}]
+                 {"OwnerModuleId":"Workspace","MigrationId":"20261016054922_Workspace_000006_ScopeNeutral"},
+                 {"OwnerModuleId":"Workspace","MigrationId":"20261016132111_Workspace_000007_ObjectCopy"}]
                 """
         };
         return (before, after);

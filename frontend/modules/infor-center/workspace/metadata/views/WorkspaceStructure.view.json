@@ -9,6 +9,7 @@
         { "key": "copy", "labelKey": "Copy", "actionKey": "copy", "viewKey": "workspace.folder.list", "inputResolverKey": "workspace.folder.reference" },
         { "key": "cut", "labelKey": "Cut", "actionKey": "cut", "viewKey": "workspace.folder.list", "inputResolverKey": "workspace.folder.reference" },
         { "key": "paste", "labelKey": "PasteReferences", "actionKey": "paste", "viewKey": "workspace.folder.list", "inputResolverKey": "workspace.folder.content" },
+        { "key": "pasteObjectCopy", "labelKey": "PasteObjectCopy", "actionKey": "pasteObjectCopy", "viewKey": "workspace.folder.list", "inputResolverKey": "workspace.folder.content" },
         { "key": "pasteFolderCopy", "labelKey": "PasteFolderCopy", "actionKey": "pasteFolderCopy", "viewKey": "workspace.folder.list", "inputResolverKey": "workspace.folder.content" },
         { "key": "pasteFolderStructure", "labelKey": "PasteFolderStructure", "actionKey": "pasteFolderStructure", "viewKey": "workspace.folder.list", "inputResolverKey": "workspace.folder.content" },
         { "key": "clearClipboard", "labelKey": "ClearClipboard", "actionKey": "clearClipboard", "viewKey": "workspace.folder.list", "inputResolverKey": "workspace.folder.content" },

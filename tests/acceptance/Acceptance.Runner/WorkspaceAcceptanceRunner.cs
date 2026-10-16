@@ -92,6 +92,8 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
                 features.Action(entry, "copySelected", "list.pageActions", "folder"), features.Action(entry, "paste", "list.pageActions", "folder"),
                 features.Action(entry, "pasteFolderCopy", "list.pageActions", "folder"), features.Action(entry, "pasteFolderCopy", "contextMenu", "folder"),
                 features.Action(entry, "pasteFolderStructure", "list.pageActions", "folder"), features.Action(entry, "pasteFolderStructure", "contextMenu", "folder"),
+                features.Action(entry, "pasteObjectCopy", "list.pageActions", "folder"), features.Action(entry, "pasteObjectCopy", "contextMenu", "folder"),
+                features.Action(entry, "resolveObjectCopy", "list.pageActions", "folder"),
                 features.Action(entry, "clearClipboard", "list.pageActions", "folder"),
                 features.Action(entry, "cut", "contextMenu", "folder"), features.Action(entry, "cut", "list.rowActions", "folder"),
                 features.Action(entry, "cutSelected", "list.pageActions", "folder"), features.Action(entry, "removeSelected", "list.pageActions", "folder"),
@@ -191,6 +193,13 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             await driver.CreateObjectAsync("零组件", PartCode, PartName);
             var attachments = WorkspacePageDriver.SmallAttachmentFiles();
             await driver.CreateDocumentWithFilesAsync(DocumentCode, DocumentName, WorkspacePageDriver.SmallMainFile(), attachments: attachments);
+            await driver.CopyReferenceFromContextMenuAsync(PartName);
+            var objectCopyAddress = await driver.SelectTreePathAsync("公共空间", siblingName);
+            await driver.PastePartCopyAsync(PartCode + "-COPY", PartName + " 副本", _ => CapturePresentationAsync(page, "part-copy-input.png"));
+            await driver.OpenOwnedPropertiesAsync(PartName + " 副本", "/parts");
+            await driver.RestorePositionAsync(objectCopyAddress, "公共空间", siblingName);
+            await driver.EditObjectAsync(PartName + " 副本", PartName + " 副本已编辑");
+            await driver.DeleteSelectedAsync(PartName + " 副本已编辑");
             await driver.SelectRootAsync("个人空间");
             await driver.RestorePositionAsync(folderAddress, "公共空间", folderName);
             await driver.OpenOwnedPropertiesAsync(PartName, "/parts");

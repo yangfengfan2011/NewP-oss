@@ -15,7 +15,7 @@
     "bindings": ["workspace.spaces", "workspace.tree.current", "workspace.folder.content", "workspace.folder.reference", "workspace.folder.list", "workspace.references.list", "workspace.references.object"]
   },
   "persistence": {
-    "models": ["metadata/models/WorkspaceSpace.model.json", "metadata/models/WorkspaceFolder.model.json", "metadata/models/WorkspaceFolderContent.model.json"],
+    "models": ["metadata/models/WorkspaceSpace.model.json", "metadata/models/WorkspaceFolder.model.json", "metadata/models/WorkspaceFolderContent.model.json", "metadata/models/WorkspaceObjectCopy.model.json"],
     "migrations": { "sqlServer": { "assembly": "migrations/Workspace.SqlServerMigrations.dll", "manifest": "migrations/Workspace.SqlServerMigrations.json" } }
   }
 }

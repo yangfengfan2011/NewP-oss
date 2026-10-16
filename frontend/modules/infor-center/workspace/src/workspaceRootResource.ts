@@ -4,7 +4,7 @@ import { readStandardCrudRequestError, StandardCrudRequestError, type StandardCr
 import type { WorkspaceDocumentDraft } from './workspaceDocumentUpload';
 import { WorkspaceDocumentSession } from './workspaceDocumentSession';
 import { workspacePosition } from './workspacePosition';
-import { workspaceClipboard as clipboard, type FolderCopyDraft } from './workspaceClipboard';
+import { workspaceClipboard as clipboard, type FolderCopyDraft, type ObjectCopyDraft } from './workspaceClipboard';
 
 interface LinkRow { linkId: string; associatedObject: { modelKey: string; id: string }; fields: Record<string, unknown> }
 const headers = (featurePosition?: string): Record<string, string> => featurePosition ? { 'X-NewP-Feature': featurePosition } : {};
@@ -12,6 +12,7 @@ const WorkspaceObjectCreateInput = lazy(() => import('./WorkspaceObjectCreateInp
 const WorkspaceObjectEditInput = lazy(() => import('./WorkspaceObjectEditInput'));
 const WorkspaceDocumentCreateInput = lazy(() => import('./WorkspaceDocumentCreateInput'));
 const WorkspaceFolderCopyInput = lazy(() => import('./WorkspaceFolderCopyInput'));
+const WorkspaceObjectCopyInput = lazy(() => import('./WorkspaceObjectCopyInput'));
 async function referenceCommand(method: string, path: string, body: unknown, featurePosition?: string) {
   const response = await platformFetch(path, { method, headers: { ...headers(featurePosition), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!response.ok) throw await readStandardCrudRequestError(response);
@@ -28,6 +29,7 @@ const resource: StandardCrudResourceRegistration = {
   listFieldRenderers: { ObjectType: ({ row, value }) => createElement('span', null,
     createElement('span', { 'aria-hidden': true }, row.ObjectModelKey === 'WorkspaceFolder' ? '📁 ' : row.ObjectModelKey === 'Part' ? '▦ ' : '▤ '), String(value ?? '')) },
   actionInputRenderers: {
+    copyObject: Object.assign((context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceObjectCopyInput, context)), { presentation: 'drawer' as const }),
     copyFolder: (context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceFolderCopyInput, context)),
     editObject: Object.assign((context: StandardCrudActionInputRenderContext) =>
       createElement(Suspense, { fallback: null }, createElement(WorkspaceObjectEditInput, context)), { presentation: 'drawer' as const }),
@@ -37,6 +39,18 @@ const resource: StandardCrudResourceRegistration = {
       createElement(Suspense, { fallback: null }, createElement(context.action.key === 'createDocument' ? WorkspaceDocumentCreateInput : WorkspaceObjectCreateInput, context)), { presentation: 'drawer' as const }),
   },
   actionHandlers: {
+    pasteObjectCopy: Object.assign(async ({ instance, input, queryScope, featurePosition }: import('@icp-platform/sdk').StandardCrudActionContext) => {
+      const value = input as { draft?: ObjectCopyDraft; values?: Record<string, unknown> } | undefined;
+      if (!value?.draft || !value.values) throw new StandardCrudRequestError('Workspace.CopyInputExpired', 409, {}, { code: 'Workspace.CopyInputExpired' });
+      const receipt = await clipboard(instance).pasteObjectCopy(value.draft, value.values, workspacePosition(queryScope), featurePosition);
+      return { operation: 'action' as const, payload: receipt, change: { operation: 'create' as const, id: '' }, notice: { reasonKey: 'Workspace.ObjectCopied' } };
+    }, { isCorrectableInputError: (failure: unknown) => failure instanceof StandardCrudRequestError
+      && ['Part.CodeDuplicated', 'StandardCrud.PersistenceConflict', 'Workspace.CopySourceChanged', 'Workspace.CopyOutcomeUnknown'].includes(failure.code ?? '') }),
+    resolveObjectCopy: async ({ instance, featurePosition }) => {
+      const receipt = await clipboard(instance).resolveObjectCopy(false, featurePosition);
+      return { operation: 'action', payload: receipt, ...(receipt.succeeded ? { change: { operation: 'create' as const, id: '' } } : { noChange: true as const }),
+        notice: { reasonKey: receipt.succeeded ? 'Workspace.ObjectCopied' : receipt.state === 'cancelled' ? 'Workspace.CopyCancelled' : 'Workspace.CopyNotCommitted' } };
+    },
     pasteFolderCopy: Object.assign(async ({ instance, input, queryScope, featurePosition }: import('@icp-platform/sdk').StandardCrudActionContext) => {
       const value = input as { draft?: FolderCopyDraft; name?: string } | undefined;
       if (!value?.draft || typeof value.name !== 'string') throw new StandardCrudRequestError('Workspace.FolderCopyInputExpired', 409, {}, { code: 'Workspace.FolderCopyInputExpired' });
@@ -113,11 +127,13 @@ const resource: StandardCrudResourceRegistration = {
   },
   actionStateResolver: ({ action, instance, queryScope }) => {
     const root = queryScope?.linkIds === '[]';
-    if (root && ['createPart', 'createDocument'].includes(action.key)) return { visible: false, available: false, reasonKey: 'Workspace.RootOnlyFolders' };
+    if (root && ['createPart', 'createDocument', 'pasteObjectCopy'].includes(action.key)) return { visible: false, available: false, reasonKey: 'Workspace.RootOnlyFolders' };
     const state = instance?.active ? clipboard(instance).getSnapshot() : undefined;
     const label = state?.clipboard?.mode === 'cut' && ['cut', 'cutSelected', 'paste'].includes(action.key)
       ? { labelKey: action.key === 'paste' ? 'Workspace.PastePending' : 'Workspace.CutPending' } : {};
     if (state?.phase === 'pasting' || state?.phase === 'validating') return { visible: true, available: false, reasonKey: 'Workspace.ClipboardBusy', ...label };
+    if (action.key === 'pasteObjectCopy') return { visible: true, available: !!instance?.active && clipboard(instance).canCopyObject(), reasonKey: 'Workspace.ObjectCopySourceRequired' };
+    if (action.key === 'resolveObjectCopy') return { visible: !!instance?.active && clipboard(instance).canResolveObjectCopy(), available: true };
     if (['pasteFolderCopy', 'pasteFolderStructure'].includes(action.key)) return { visible: true, available: !!instance?.active && clipboard(instance).canCopyFolder(), reasonKey: state?.phase === 'unknown' ? 'Workspace.ClipboardOutcomeUnknown' : 'Workspace.FolderCopySourceRequired' };
     if (!['copy', 'copySelected', 'cut', 'cutSelected', 'paste', 'clearClipboard'].includes(action.key)) return { visible: true, available: true };
     if (!state) return { visible: true, available: false, reasonKey: 'Workspace.ClipboardUnavailable' };

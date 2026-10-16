@@ -8,6 +8,9 @@ export interface ClipboardState { readonly phase: 'idle' | 'validating' | 'pasti
 export type FolderCopyKind = 'copy' | 'copy-structure';
 export interface FolderCopyDraft { readonly kind: FolderCopyKind; readonly source: WorkspaceClipboard; readonly targetKey: string; readonly featurePosition?: string; closed: boolean }
 export interface FolderCopyPreparation { readonly sourceName: string; readonly sourcePath: readonly string[]; readonly targetPath: readonly string[] }
+export interface ObjectCopyDraft { readonly source: WorkspaceClipboard; readonly targetKey: string; readonly featurePosition?: string; operationId?: string; closed: boolean }
+export interface ObjectCopyPreparation { operationId: string; values: Record<string, unknown>; sourcePath: readonly string[]; targetPath: readonly string[] }
+export interface ObjectCopyReceipt { succeeded: boolean; state: 'ready' | 'committed' | 'cancelled' }
 const clipboardOwner = Symbol('workspace.clipboard');
 export function workspaceClipboard(instance: StandardCrudActionInstance | undefined): WorkspaceClipboardSession {
   if (!instance?.active) throw new StandardCrudRequestError('Workspace.ClipboardUnavailable', 409, {}, { code: 'Workspace.ClipboardUnavailable' });
@@ -29,6 +32,9 @@ export class WorkspaceClipboardSession {
   private validation?: AbortController;
   private validationBase?: ClipboardState;
   private folderSource?: WorkspaceClipboard;
+  private objectSource?: WorkspaceClipboard;
+  private objectOperation?: { id: string; featurePosition?: string };
+  private readonly objectDrafts = new WeakSet<ObjectCopyDraft>();
   private readonly folderDrafts = new WeakSet<FolderCopyDraft>();
   private readonly listeners = new Set<() => void>();
   constructor(private readonly changed: () => void) {}
@@ -57,6 +63,7 @@ export class WorkspaceClipboardSession {
       if (!Array.isArray(receipt.items) || receipt.items.length !== linkIds.length || receipt.items.some((item, index) => item.linkId !== linkIds[index]))
         throw this.failure('Workspace.InvalidClipboardInput');
       this.folderSource = mode === 'copy' && receipt.items.length === 1 && receipt.items[0].modelKey === 'WorkspaceFolder' ? clipboard : undefined;
+      this.objectSource = mode === 'copy' && receipt.items.length === 1 && receipt.items[0].modelKey === 'Part' ? clipboard : undefined;
       this.publish({ phase: 'idle', clipboard }); return true;
     } catch (failure) {
       if (this.closed || generation !== this.generation) return false;
@@ -65,6 +72,55 @@ export class WorkspaceClipboardSession {
   }
 
   canCopyFolder(): boolean { return !this.closed && this.state.phase === 'idle' && !!this.folderSource && this.folderSource === this.state.clipboard; }
+  canCopyObject(): boolean { return !this.closed && this.state.phase === 'idle' && !!this.objectSource && this.objectSource === this.state.clipboard; }
+  canResolveObjectCopy(): boolean { return !this.closed && !!this.objectOperation && this.state.phase === 'unknown'; }
+  prepareObjectCopy(target: ClipboardPosition, featurePosition?: string): ObjectCopyDraft {
+    if (!this.canCopyObject() || target.linkIds.length === 0) throw this.failure('Workspace.ObjectCopySourceRequired');
+    const draft = { source: this.state.clipboard!, targetKey: JSON.stringify(target), featurePosition, closed: false };
+    this.objectDrafts.add(draft); return draft;
+  }
+  async readObjectCopyInput(draft: ObjectCopyDraft, signal: AbortSignal): Promise<ObjectCopyPreparation> {
+    this.requireObjectDraft(draft);
+    const preparation = await command('objects/copy/prepare', { ...draft.source, targetPosition: JSON.parse(draft.targetKey) as ClipboardPosition }, draft.featurePosition, signal) as ObjectCopyPreparation;
+    this.requireObjectDraft(draft);
+    if (!preparation || typeof preparation.operationId !== 'string' || !preparation.values || typeof preparation.values.ENAME !== 'string'
+      || preparation.values.ECODE !== '' || !Array.isArray(preparation.sourcePath) || !Array.isArray(preparation.targetPath)) throw this.failure('Workspace.InvalidClipboardInput');
+    draft.operationId = preparation.operationId; return preparation;
+  }
+  async pasteObjectCopy(draft: ObjectCopyDraft, values: Record<string, unknown>, target: ClipboardPosition, featurePosition?: string): Promise<ObjectCopyReceipt> {
+    this.requireObjectDraft(draft);
+    if (!this.canCopyObject() || !draft.operationId || draft.targetKey !== JSON.stringify(target) || draft.featurePosition !== featurePosition)
+      throw this.failure('Workspace.CopyInputExpired');
+    this.objectOperation = { id: draft.operationId, featurePosition };
+    const clipboard = this.state.clipboard!;
+    this.publish({ phase: 'pasting', clipboard });
+    try {
+      const result = await command('objects/copy', { operationId: draft.operationId, values: { ...values } }, featurePosition) as ObjectCopyReceipt;
+      if (result.state !== 'committed' || result.succeeded !== true) throw this.failure('Workspace.CopyOutcomeUnknown');
+      draft.closed = true; this.objectOperation = undefined;
+      this.publish({ phase: 'idle', clipboard }); return result;
+    } catch (failure) {
+      const known = failure instanceof StandardCrudRequestError && failure.status >= 400 && failure.status < 500
+        && !['Persistence.CommitOutcomeUnknown', 'Platform.MutationOutcomeUnknown', 'Workspace.CopyOutcomeUnknown'].includes(failure.code ?? '');
+      this.publish({ phase: known ? 'idle' : 'unknown', clipboard });
+      throw known ? failure : Object.assign(this.failure('Workspace.CopyOutcomeUnknown'), { cause: failure });
+    }
+  }
+  async resolveObjectCopy(cancel = false, featurePosition?: string): Promise<ObjectCopyReceipt> {
+    if (this.closed || !this.objectOperation) throw this.failure('Workspace.CopyOperationUnavailable');
+    const operation = this.objectOperation;
+    const result = await command(`objects/copy/${cancel ? 'cancel' : 'result'}`, { operationId: operation.id }, featurePosition ?? operation.featurePosition) as ObjectCopyReceipt;
+    if (!result || !['ready', 'committed', 'cancelled'].includes(result.state) || result.succeeded !== (result.state === 'committed'))
+      throw this.failure('Workspace.CopyOutcomeUnknown');
+    if (this.objectOperation === operation && this.state.phase !== 'pasting') {
+      this.objectOperation = undefined;
+      this.publish({ ...this.state, phase: 'idle' });
+    }
+    return result;
+  }
+  private requireObjectDraft(draft: ObjectCopyDraft): void {
+    if (this.closed || draft.closed || !this.objectDrafts.has(draft) || this.state.clipboard !== draft.source) throw this.failure('Workspace.CopyInputExpired');
+  }
   prepareFolderCopy(target: ClipboardPosition, featurePosition?: string, kind: FolderCopyKind = 'copy'): FolderCopyDraft {
     if (!this.canCopyFolder()) throw this.failure('Workspace.FolderCopySourceRequired');
     const draft = { kind, source: this.state.clipboard!, targetKey: JSON.stringify(target), featurePosition, closed: false };

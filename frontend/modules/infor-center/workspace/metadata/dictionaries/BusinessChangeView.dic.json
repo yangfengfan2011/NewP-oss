@@ -3,6 +3,7 @@
   "BusinessChangeView": {
     "ChangeField_RootLID": { "zhs": "新根引用", "en": "New root reference" },
     "ChangeField_SourceLID": { "zhs": "来源引用", "en": "Source reference" },
+    "ChangeField_SourceObject": { "zhs": "来源对象", "en": "Source object" },
     "ChangeField_SourcePEID": { "zhs": "来源文件夹", "en": "Source folder" },
     "ChangeField_PEID": { "zhs": "父文件夹", "en": "Parent folder" },
     "ChangeField_ChildModelKey": { "zhs": "引用对象类型", "en": "Referenced object type" },

@@ -17,7 +17,7 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
 {
-    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "20/50文档真实文件流与SQL往返/逐事务锁区间，双请求与整批取消实际回收成本，无业务硬阈值")]
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_CAPACITY", "20/50文档真实文件流与SQL往返/逐事务锁区间，双请求与整批取消实际回收成本，无业务硬阈值")]
     public async Task ObjectCopy_DocumentBatchMeasuresTwentyFiftyConcurrencyAndReclamation()
     {
         var costs = new BatchSqlCosts(); var clock = new BatchLockClock(); var transactions = new BatchTransactionClock(clock); var io = new CopyIo();

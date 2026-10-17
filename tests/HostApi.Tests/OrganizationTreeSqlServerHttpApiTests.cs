@@ -40,7 +40,7 @@ public sealed class OrganizationTreeSqlServerHttpApiTests
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "Organization 范围列表与树端点在正式权限流水线和真实 SQL Server 上贯通")]
     public async Task ScopedDepartmentApi_IntersectsBeforeCountAndPagingAndTreeReadsUsePermissions()
     {
-        var databaseLease = await ReusableSqlServerDatabase.AcquireAsync();
+        var databaseLease = await ReusableSqlServerDatabase.AcquireAsync(allowParallel: true);
         var treeArtifacts = Directory.CreateTempSubdirectory("NewPRelationTree_");
         try
         {

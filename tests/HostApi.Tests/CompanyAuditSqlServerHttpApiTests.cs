@@ -30,7 +30,7 @@ public sealed class CompanyAuditSqlServerHttpApiTests
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "Company 正式 CRUD HTTP 与真实 SQL Server 审计投影")]
     public async Task CompanyApi_PreservesSqlPrecisionAndProjectsExistingReadAndWriteResponses()
     {
-        var databaseLease = await ReusableSqlServerDatabase.AcquireAsync();
+        var databaseLease = await ReusableSqlServerDatabase.AcquireAsync(allowParallel: true);
         try
         {
             var model = OrganizationModelDefinitions.All.Single(model => model.Name == "Company") with { OwnerModuleId = "Organization" };

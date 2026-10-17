@@ -4,7 +4,7 @@
 
 ## 开发循环
 
-优先运行本次变更涉及的项目或过滤测试：
+优先运行本次变更涉及的项目或过滤测试。已确认资源独立的 SQL/API fixture 可显式启用双库租约，同库仍排他；连接、接入和清理规则见[本地 SQL Server](../docs/guides/local-environment.md#本地-sql-server)。Native / Acceptance 仍串行。
 
 ```powershell
 dotnet test .\tests\Organization.Tests\Organization.Tests.csproj --filter <测试名或类别>

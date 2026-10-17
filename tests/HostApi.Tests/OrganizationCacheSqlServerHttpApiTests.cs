@@ -39,7 +39,7 @@ public sealed class OrganizationCacheSqlServerHttpApiTests(Xunit.Abstractions.IT
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "组织公司正式提交与缓存发布一致性")]
     public async Task CompanyApi_UpdatesCacheForEveryWriteAndDistinguishesCommittedPublicationFailure()
     {
-        var databaseLease = await ReusableSqlServerDatabase.AcquireAsync();
+        var databaseLease = await ReusableSqlServerDatabase.AcquireAsync(allowParallel: true);
         try
         {
             var models = OrganizationModelDefinitions.All.Select(model => model with { OwnerModuleId = "Organization" }).ToArray();
@@ -210,7 +210,7 @@ public sealed class OrganizationCacheSqlServerHttpApiTests(Xunit.Abstractions.IT
 
     private async Task AssertCommitFailureAsync(bool afterCommit)
     {
-        var databaseLease = await ReusableSqlServerDatabase.AcquireAsync();
+        var databaseLease = await ReusableSqlServerDatabase.AcquireAsync(allowParallel: true);
         try
         {
             var database = databaseLease.ConnectionString;

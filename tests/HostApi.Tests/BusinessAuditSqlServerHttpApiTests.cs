@@ -1363,7 +1363,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
     internal static async Task<BusinessAuditHostFixture> CreateAsync(Action<IServiceCollection>? configureServices = null,
         IReadOnlyDictionary<string, bool>? actionStates = null, bool useRequestPresentation = false, bool includeWorkspace = false, bool includePart = false, bool includeDocument = false, bool includeFiles = false)
     {
-        var fixture = new BusinessAuditHostFixture(await ReusableSqlServerDatabase.AcquireAsync(), configureServices);
+        var fixture = new BusinessAuditHostFixture(await ReusableSqlServerDatabase.AcquireAsync(allowParallel: true), configureServices);
         fixture._useRequestPresentation = useRequestPresentation;
         fixture._includeWorkspace = includeWorkspace;
         fixture._includePart = includePart || includeWorkspace;

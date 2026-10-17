@@ -184,7 +184,7 @@ Gate 超时先由资产 owner 检查现有截图、DOM／可访问名称、失�
 
 开始实施时，按改动与验收条件选择需要真实数据库、进程或浏览器的测试，记录项目、过滤器、环境开关和环境前提；开关以对应测试属性为准。父级收尾继承并核对这些要求。Gate 内部执行的集成测试只覆盖它明确调用的项目和过滤器：例如 IdentityFoundation 的 SQL Server smoke 不替代 HostApi 或其他项目的环境测试。
 
-所有 SQL 集成测试共用 `NewP_Test` 的会话级排他锁；xunit 会让不同测试类并行启动，后到者在锁上排队，该等待计入测试耗时（单个故障注入测试串行实测约 20 秒，并行排队时曾显示数百秒）。测耗时或定向复跑时，一次只选一个类或精确方法，不要把耗时直接当作测试自身成本。
+已确认其他可变资源独立、显式启用并行租约的 SQL/API fixture 可复用两个测试库；同库仍排他，两个库都忙时等待，默认 fixture 与 Native / Acceptance 保持原串行边界。连接、清理和接入条件见[本地 SQL Server](../guides/local-environment.md#本地-sql-server)。比较串行与并行耗时时，使用相同测试集合和候选，单独记录总耗时；租约等待计入单个测试耗时，不能将其当作测试自身成本，也不为并行扩大验证范围。
 
 **文档批量复制容量测量**使用独立开关 `NEWP_RUN_WORKSPACE_SQLSERVER_CAPACITY`，不随 `NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION` 开启，因此按 `WorkspaceClipboardSqlServerHttpApiTests` 类过滤运行普通剪贴板 SQL 测试时不会带上它（单次约 9 分钟）。它只测量 20/50 文档的真实文件流、SQL 往返、锁区间与取消回收成本，没有业务硬阈值，结果写入证据 JSON。只有改动影响文档批量复制的文件流、事务与锁粒度、`FileCopyLease` 准备或回收，或任务明确要求容量数据时才运行：
 
@@ -198,7 +198,7 @@ finally {
 }
 ```
 
-可用 `NEWP_COPY_COST_ARTIFACT_ROOT` 指定证据输出目录。该测试与其他 SQL 集成测试共用 `NewP_Test`，同样必须串行。
+可用 `NEWP_COPY_COST_ARTIFACT_ROOT` 指定证据输出目录。容量测量单独运行，避免其他 SQL 测试的资源竞争影响数据；其租约与清理沿用上述专用测试库规则。
 
 完成报告按所选范围列出实际命令与结果，区分：
 

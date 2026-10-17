@@ -29,11 +29,11 @@ Files 要求显式绝对私有 `Files:StorageRoot`。`dev.ps1` 优先沿用进�
 
 Host 不会因为 Development 环境或 `PERSISTENCE_DATABASE_REBUILD_REQUIRED` 自动删库。需要重建时，先运行 `.\scripts\stop-dev.ps1`，再核对连接指向的精确 catalog、NewP ownership marker、repository/worktree identity、数据可丢弃性和保护状态；只有全部一致且未受保护时，才通过受信任的数据库管理入口显式删除并新建空 catalog，随后重新启动 Host 让正式 migration 链创建 schema。不得重建 Acceptance、验收证据、显式保护或来源不明的数据库。
 
-自动化测试默认使用独立的 `NewP_Test`，不使用开发 catalog，也不为普通回归每次创建临时库。共享实现位于 `tests/TestSupport/SqlServer/ReusableSqlServerDatabase.cs`，适用于 Identity、Authentication、Organization 的普通 SQL 集成测试、业务 HTTP fixture、Host 重启、插件路由与功能目录测试，以及 Personnel / Authorization 常规 Acceptance。
+自动化测试复用 `NewP_Test` 和 `NewP_Test_2` 两个专用库，不使用开发 catalog，也不为普通回归每次创建临时库。共享实现位于 `tests/TestSupport/SqlServer/ReusableSqlServerDatabase.cs`；`AcquireAsync` 默认仍只租用 `NewP_Test`，已确认 Host、文件和其他可变资源独立的 SQL/API fixture 才显式传入 `allowParallel: true`，租用任一空闲库。Native / Acceptance 的调用与串行约束保持不变。
 
-连接优先使用 `NEWP_TEST_SQLSERVER_CONNECTION_STRING`（必须明确选择 `NewP_Test`），其次取 `NEWP_DEV_SQLSERVER_CONNECTION_STRING`，最后取 `apps/host-api/appsettings.Development.json`。后两项只复用服务器与登录身份，数据库强制切换到 `NewP_Test`。不需要另存一份密码，也不读取 `.env`。
+连接优先使用 `NEWP_TEST_SQLSERVER_CONNECTION_STRING`（必须明确选择基础库 `NewP_Test`），其次取 `NEWP_DEV_SQLSERVER_CONNECTION_STRING`，最后取 `apps/host-api/appsettings.Development.json`。后两项只复用服务器与登录身份；共享支撑按租约切换到上述两个固定库之一，第二库无需另配连接，不接受任意测试库名。不需要另存一份密码，也不读取 `.env`。
 
-专用库首次不存在时创建并写入数据库级 `NewP.AutomatedTests=disposable-schema` 标记，以后保留同一个 catalog。已有同名但无标记的数据库会拒绝接管。测试使用 SQL Server 会话应用锁跨进程独占整个 fixture；等待超过 15 分钟失败，不另建临时库绕过。各 fixture 的模型子集不同，因此当前在租用与归还时重置测试表、外键及序列，由原 fixture / Host 重新建表或执行迁移；这是 catalog 复用，不是 schema 或测试数据保留。测试必须先关闭自己的 Host 和数据库连接，再归还租约；SSMS 等工具的空闲连接不阻止复用，清理不强制踢掉连接，活动事务冲突由 SQL Server 报错或超时。验收归属检查或停止失败时保留本次 schema，仅关闭持锁连接；失败现场和异常中断留下的测试表会在下一次成功租用时清理。
+各专用库首次不存在时创建并写入数据库级 `NewP.AutomatedTests=disposable-schema` 标记，以后保留 catalog；已有同名但无标记的数据库会拒绝接管。每个库仍由 SQL Server 会话应用锁跨进程独占整个 fixture，不同库可并行；两个库都忙时等待空闲租约，默认等待超过 15 分钟失败，不创建第三个库。只有持有对应库租约的 fixture 才能重置该库，等待取消或超时不清理他人的库。各 fixture 的模型子集不同，租用与归还时重置测试表、外键及序列，由原 fixture / Host 重新建表或执行迁移；这是 catalog 复用，不是 schema 或测试数据保留。测试必须先关闭自己的 Host 和数据库连接，再归还租约；SSMS 等工具的空闲连接不阻止复用，清理不强制踢掉连接，活动事务冲突由 SQL Server 报错或超时。验收归属检查或停止失败时保留本次 schema，仅关闭持锁连接；失败现场和异常中断留下的测试表会在下一次成功租用时清理。
 
 只有必须独立控制 catalog、迁移历史、数据库级状态或启动故障的测试继续使用一次性库：Persistence SQL smoke、migration-manifest 纵向重放、Organization 前向迁移、Host 初始缓存故障、IdentityFoundation / ExampleRequiredField Acceptance，以及 production cold-start。普通事务回滚与并发业务操作可以在专用库的独占租约内验证。新增临时库 fixture 必须注明专用库不能满足的具体前提；“自动化测试”或“正式验收”本身不构成新建理由。
 
@@ -62,9 +62,9 @@ Host 不会因为 Development 环境或 `PERSISTENCE_DATABASE_REBUILD_REQUIRED` 
 - 开发循环：运行当前票据涉及的项目或过滤测试。
 - 仓库测试：`.\scripts\verify.ps1 -Quick`。
 - 全量验证：`.\scripts\verify.ps1`。
-- 纵向验收：`.\scripts\accept.ps1 -Gate <Gate>`，等价于设置 `NEWP_RUN_ACCEPTANCE=1` 后 `dotnet test tests/acceptance/Acceptance.Tests`。闸门默认跳过，不会拖慢日常 `dotnet test`。
+- 纵向验收：`.\scripts\accept.ps1 -Scenario <AcceptanceGateTests精确方法名>`，只执行显式选择的有界场景；默认按各自环境开关跳过。
 
-专用测试库的最小回归（包括连续复用与并发租约拒绝）：
+专用测试库的最小回归（包括双库隔离、连续复用、单库排他及等待取消）：
 
 ```powershell
 $env:NEWP_RUN_TEST_DATABASE_INTEGRATION = '1'
@@ -72,7 +72,7 @@ dotnet test tests/HostApi.Tests/HostApi.Tests.csproj -c Release --filter FullyQu
 Remove-Item Env:NEWP_RUN_TEST_DATABASE_INTEGRATION
 ```
 
-回退本次测试连接策略时恢复相关 fixture 和共享测试支撑的代码即可；`NewP_Test` 可保留为空库，无需删除或修改开发库。不要把业务数据或手工保留数据放入专用测试库。
+回退双库并行时恢复相关 fixture 和共享测试支撑的代码即可；`NewP_Test` 与 `NewP_Test_2` 可保留为空库，无需删除或修改开发库。不要把业务数据或手工保留数据放入专用测试库。
 
 完整验证结果位于 `.codex-temp/verify/runs/<run>/result.json`，每个阶段有独立日志；不需要从截断的终端输出推断结果。
 

@@ -10,6 +10,19 @@ Workspace 拥有公共空间、当前账号个人空间及其根文件夹。入�
 
 **来源空间（Origin Space）**：文件夹不可变的创建来源 `OriginSpaceId`，由服务端赋值，不作为公开详情字段。根初始化预分配空间身份，先保存根再保存空间；两次保存属于同一平台事务。
 
+### 对象归属（已确认术语，待实现）
+
+**创建人（Creator）**：最初创建对象的人。转交不改变创建人。
+
+**所属人（Object Owner）**：对象当前归属的人，新建时默认为创建人，转交后变为接收人。
+_Avoid_: 负责人、创建人、模块拥有者
+
+**所属部门（Owning Department）**：对象明确归属的一个部门，新建时默认记录创建人当时所属部门，主动转交时改为接收人部门；人员调动本身不自动改变该归属。
+_Avoid_: 所属组、创建人当前部门、所属人当前部门、来源空间
+
+**转交（Transfer）**：将对象的所属人及所属部门改为接收人及其部门的业务操作，不改变创建人；它不同于人员调动引起的组织关系变化。
+_Avoid_: 移动目录引用、复制对象
+
 ## 边界
 
 - WorkspaceSpace、WorkspaceFolder 及 SQL Server migration stream 由模块 authoring 拥有。主体固定为账号，不保存 `SubjectModelKey`；唯一索引为 `(SpaceKind, SubjectId)`，公共空间的 `SubjectId` 为 NULL，个人空间为可信当前账号 ID，NULL 也参加唯一约束；RootFolderId 非空、唯一且使用 Restrict 外键。OriginSpaceId 仅索引，不形成循环物理外键。

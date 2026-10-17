@@ -2,8 +2,8 @@
   "schemaVersion": "1.0",
   "provider": "SqlServer",
   "moduleId": "platform.foundation",
-  "modelDigest": "56554470f57d6620d947482f760982f3f6c2473739c2c66696019fefc5aa21a1",
-  "bundleChecksum": "e9db011e074ae5391689de3dac988f0c06d1a64615117816ca51f76b58e95aee",
+  "modelDigest": "669ef99fbf52466ccb2cc0702d5739c71c56d91d6d14802df36dfe5a24264d9c",
+  "bundleChecksum": "6c03037218d7a5e92f0c7fb429f1687dfd4cbc53dd03d5fd1c38bece7b8e42a0",
   "migrations": [
     {
       "sequence": "000001",
@@ -48,6 +48,15 @@
       "contentDigest": "5bbcfbb6debae9d86c91d3e92279800e4562bb09fdb2a57561143841bc42c02c",
       "fromModelDigest": "d683e1d11b4142d323425f3414f2afdf9818f6b53e0fc2a6e451734e76eabea5",
       "toModelDigest": "56554470f57d6620d947482f760982f3f6c2473739c2c66696019fefc5aa21a1",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000006",
+      "migrationId": "20261017151541_AddDataScopeObjectExpiry",
+      "previousContentDigest": "5bbcfbb6debae9d86c91d3e92279800e4562bb09fdb2a57561143841bc42c02c",
+      "contentDigest": "30182e0f6f1ac379227acbf40c5757248d32da8b9997404db65bc1b1402c71a0",
+      "fromModelDigest": "56554470f57d6620d947482f760982f3f6c2473739c2c66696019fefc5aa21a1",
+      "toModelDigest": "669ef99fbf52466ccb2cc0702d5739c71c56d91d6d14802df36dfe5a24264d9c",
       "compatibility": "safe-expand"
     }
   ]

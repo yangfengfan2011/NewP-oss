@@ -7,6 +7,60 @@ namespace ICP.Platform.Kernel.Tests;
 
 public sealed class WorkspaceFeatureProjectionTests
 {
+    [Fact]
+    [Trait("Category", "ModuleMetadataConsumer")]
+    public void PermissionReadNavigation_UsesExistingBrowseIdentityWithoutNewGrants()
+    {
+        var repository = new DirectoryInfo(AppContext.BaseDirectory);
+        while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "AGENTS.md"))) repository = repository.Parent;
+        Assert.NotNull(repository);
+        var moduleRoot = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository.FullName, "Workspace");
+        using var capsule = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(moduleRoot, "newp.plugin.json")));
+        var documents = Directory.GetFiles(Path.Combine(moduleRoot, "metadata"), "*.json", SearchOption.AllDirectories)
+            .Select(path => JsonSerializer.Deserialize<JsonElement>(File.ReadAllBytes(path))).ToArray();
+        var catalog = FeatureCatalogCompiler.Compile(StandardFeatureMetadataCompiler.Read("Workspace", documents,
+            FeatureCatalogCompiler.Read(capsule.RootElement, "Workspace"), includeCustomFeatures: true));
+        using var fixture = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(repository.FullName,
+            "tests", "Kernel.Tests", "Fixtures", "WorkspacePermissionFeatures.contract.json")));
+        var read = Assert.Single(catalog, point => point.Kind == "navigation" && point.Key == "workspace");
+        var manage = Assert.Single(catalog, point => point.Key == "authorizeContent" && point.ActionScope == "list.rowActions");
+        Assert.Equal(fixture.RootElement.GetProperty("readPosition").GetString(), read.Position);
+        Assert.Equal(fixture.RootElement.GetProperty("managePosition").GetString(), manage.Position);
+        Assert.Contains("workspace.folder.read", read.ReadBehaviors);
+        Assert.Equal("workspace.folder.authorize", manage.BehaviorKey);
+        Assert.DoesNotContain(catalog, point => point.Key == "workspace.permissions" || point.Key == "viewAuthorization"
+            || point.Position.Contains("navigation:workspace.permissions", StringComparison.Ordinal));
+        FeatureCatalogCompiler.ValidateSelection(catalog, [read.Position]);
+    }
+
+    [Theory, Trait("Category", "ModuleMetadataConsumer")]
+    [InlineData("Part", "part.part", "part.parts")]
+    [InlineData("Document", "document.document", "document.documents")]
+    public void IndependentPermissionReadNavigation_UsesOnlyExistingReadAndActualManagePositions(string moduleId, string resourceKey, string entryKey)
+    {
+        var repository = new DirectoryInfo(AppContext.BaseDirectory);
+        while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "AGENTS.md"))) repository = repository.Parent;
+        Assert.NotNull(repository);
+        var moduleRoot = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository.FullName, moduleId);
+        using var capsule = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(moduleRoot, "newp.plugin.json")));
+        var documents = Directory.GetFiles(Path.Combine(moduleRoot, "metadata"), "*.json", SearchOption.AllDirectories)
+            .Select(path => JsonSerializer.Deserialize<JsonElement>(File.ReadAllBytes(path))).ToArray();
+        var catalog = FeatureCatalogCompiler.Compile(StandardFeatureMetadataCompiler.Read(moduleId, documents,
+            FeatureCatalogCompiler.Read(capsule.RootElement, moduleId), includeCustomFeatures: true));
+        using var fixture = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(repository.FullName,
+            "tests", "Kernel.Tests", "Fixtures", moduleId + "PermissionFeatures.contract.json")));
+        var read = Assert.Single(catalog, point => point.Kind == "navigation" && point.Key == entryKey);
+        var manage = Assert.Single(catalog, point => point.Key == "authorize" && point.ActionScope == "list.rowActions");
+        Assert.Equal(fixture.RootElement.GetProperty("readPosition").GetString(), read.Position);
+        Assert.Equal(fixture.RootElement.GetProperty("managePosition").GetString(), manage.Position);
+        Assert.Contains(resourceKey + ".read", read.ReadBehaviors);
+        Assert.Equal(resourceKey + ".authorize", manage.BehaviorKey);
+        Assert.Contains(resourceKey + ".read", manage.ReadBehaviors);
+        Assert.DoesNotContain(catalog, point => point.Key == resourceKey + ".permissions" || point.Key == "viewAuthorization"
+            || point.Position.Contains("navigation:" + resourceKey + ".permissions", StringComparison.Ordinal));
+        FeatureCatalogCompiler.ValidateSelection(catalog, [read.Position]);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -47,7 +101,7 @@ public sealed class WorkspaceFeatureProjectionTests
         var documents = Directory.GetFiles(Path.Combine(moduleRoot, "metadata"), "*.json", SearchOption.AllDirectories)
             .Select(path => JsonSerializer.Deserialize<JsonElement>(File.ReadAllBytes(path))).ToArray();
         var catalog = FeatureCatalogCompiler.Compile(StandardFeatureMetadataCompiler.Read("Workspace", documents, custom, includeCustomFeatures: true));
-        var entry = Assert.Single(catalog, point => point.Kind == "navigation");
+        var entry = Assert.Single(catalog, point => point.Kind == "navigation" && point.Key == "workspace");
         Assert.Equal("workspace.spaces.access", entry.BehaviorKey);
         Assert.DoesNotContain(catalog, point => point.Key == "new");
         Assert.Contains("tree:workspace.structure", entry.ReadBehaviors); Assert.Contains("workspace.folder.read", entry.ReadBehaviors);

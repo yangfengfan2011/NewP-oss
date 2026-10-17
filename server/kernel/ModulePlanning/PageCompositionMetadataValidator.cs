@@ -73,6 +73,13 @@ public static class PageCompositionMetadataValidator
         {
             var pageKey = Required(page, "pageKey");
             if (page.TryGetProperty("inputResolverKey", out _)) Bind(Required(page, "inputResolverKey"));
+            // 只读来源是显式受控行为引用；不增加canonical字段，也不能把它用于任意页面或URL。
+            if (page.TryGetProperty("parameters", out var sourceParameters) && sourceParameters.ValueKind == JsonValueKind.Object
+                && sourceParameters.TryGetProperty("detailReadSourceKey", out _))
+            {
+                if (pageKey != "platform.detail") throw new JsonException("Detail read source requires platform.detail.");
+                Bind(Required(sourceParameters, "detailReadSourceKey"));
+            }
             if (!StandardModes.TryGetValue(pageKey, out var expected)) { Bind(pageKey); return; }
             if (!page.TryGetProperty("parameters", out var parameters) || parameters.ValueKind != JsonValueKind.Object)
                 throw new JsonException("Standard page requires parameters.");

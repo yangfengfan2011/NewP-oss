@@ -10,6 +10,6 @@
     ],
     "pageActions": [{ "key": "initializeOwnershipPending", "labelKey": "OwnershipPendingObjects", "handlerKey": "initializeOwnership", "inputKey": "initializeOwnership" }, { "key": "create", "labelKey": "Create", "standardAction": "create", "variant": "primary" }],
     "featureActions": [{ "key": "initializeOwnership", "titleKey": "InitializeOwnership", "behaviorKey": "document.document.initializeOwnership" }, { "key": "authorize", "titleKey": "Authorize", "behaviorKey": "document.document.authorize" }],
-    "rowActions": [{ "key": "initializeOwnership", "labelKey": "InitializeOwnership", "handlerKey": "initializeOwnership", "inputKey": "initializeOwnership" }, { "key": "view", "labelKey": "OpenProperties", "standardAction": "view" }]
+    "rowActions": [{ "key": "viewAuthorization", "labelKey": "Permissions", "standardAction": "view", "navigationTargetKey": "document.document.permissions" }, { "key": "authorize", "labelKey": "Authorize", "handlerKey": "authorize", "inputKey": "objectAuthorization", "readBehaviors": ["document.document.read"] }, { "key": "initializeOwnership", "labelKey": "InitializeOwnership", "handlerKey": "initializeOwnership", "inputKey": "initializeOwnership" }, { "key": "view", "labelKey": "OpenProperties", "standardAction": "view" }]
   }
 }

@@ -1,9 +1,31 @@
-import type { FrontendBehaviorBindings } from '@icp-platform/sdk';
+import type { FrontendBehaviorBindings, PageProps } from '@icp-platform/sdk';
+import { createElement } from 'react';
 
 const loadDocument = async () => ({ default: (await import('./documentResource')).documentResource });
 
+const documentPermissionsPage: NonNullable<FrontendBehaviorBindings['pages']>[number] = {
+  pageKey: 'document.document.permissions', requiresRecordId: true,
+  load: async () => {
+    const { ObjectAuthorizationPage } = await import('@icp-platform/ui');
+    return { default: (props: PageProps) => createElement(ObjectAuthorizationPage, { ...props,
+      target: { resourceKey: 'document.document', id: props.input.recordId, title: '图文档', titleKey: 'Document.Title', name: props.input.context?.label,
+        basePath: `/api/document/documents/${encodeURIComponent(props.input.recordId!)}/permissions` } }) };
+  },
+};
+
 export const documentBindings: FrontendBehaviorBindings = {
   behaviorKey: 'document.frontend',
+  pages: [documentPermissionsPage],
+  pageInputResolvers: [{ key: 'document.document.record', pageKeys: ['platform.tabs', 'platform.detail', 'document.document.permissions'],
+    resolve: (parameters, context) => {
+      const recordId = parameters.recordId ?? context?.context?.id;
+      const sourceFeaturePosition = parameters.sourceFeaturePosition ?? context?.context?.sourceFeaturePosition;
+      if (typeof recordId !== 'string' || !recordId || typeof sourceFeaturePosition !== 'string' || !sourceFeaturePosition)
+        throw new Error('缺少对象及来源读取位置');
+      return { parameters: { ...parameters, sourceFeaturePosition }, recordId, queryScope: { sourceFeaturePosition },
+        context: { ...(context ?? { nodeKey: recordId, nodeType: 'record', label: String(parameters.name ?? ''), hasChildren: false }),
+          context: { id: recordId, sourceFeaturePosition } } };
+    } }],
   standardCrudCapabilities: [
     { kind: 'standard-list', targetKey: 'document.document.list', load: loadDocument },
     { kind: 'standard-crud-detail', targetKey: 'document.document.detail', load: loadDocument },

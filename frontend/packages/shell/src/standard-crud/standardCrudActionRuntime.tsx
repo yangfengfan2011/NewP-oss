@@ -12,6 +12,7 @@ import type {
   StandardCrudActionStateResolver,
   StandardCrudOperationResult,
 } from '@icp-platform/sdk';
+import { actionInstanceQueryIdentity } from '../composition/ActionInstanceScope';
 import { StandardCrudActionReviewDialog } from './StandardCrudActionReviewDialog';
 import { useStandardCrudActionExecution } from './useStandardCrudActionExecution';
 import { formatStandardCrudActionReason } from './standardCrudActionReason';
@@ -184,6 +185,7 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
           row={context.row}
           pending={actionExecution.pendingKey === currentInputAction.key}
           error={actionExecution.error?.key === currentInputAction.key ? formatRequestError(actionExecution.error.failure, t) : null}
+          submissionFailure={actionExecution.error?.key === currentInputAction.key ? actionExecution.error.failure : undefined}
           onChange={setInputValue}
           onCancel={() => {
             if (actionExecution.pendingKey === null) setInputAction(null);
@@ -210,10 +212,12 @@ function QualifiedAction<TDetail, TRow>({ action, context, featurePosition, reso
   children: (state: StandardCrudActionState) => ReactElement | null;
 }) {
   const { t } = useLocalization();
-  const query = usePlatformQuery({
-    key: ['standard-crud-action-eligibility', resourceKey ?? '', context.id ?? '', action.key, featurePosition, epoch],
+  const query = usePlatformQuery<StandardCrudActionState>({
+    key: ['standard-crud-action-eligibility', resourceKey ?? '', context.id ?? '', action.key, featurePosition, epoch,
+      actionInstanceQueryIdentity(context.instance), JSON.stringify([context.queryScope ?? null, context.row ?? null, context.detail ?? null])],
+    enabled: context.instance?.active !== false,
     load: ({ signal }) => resolver({ id: context.id, detail: context.detail, row: context.row,
-      action, featurePosition, signal }),
+      queryScope: context.queryScope, instance: context.instance, action, featurePosition, signal }),
   });
   if (query.status === 'error') return <span role="alert">{t('Platform.EligibilityUnavailable', '对象动作资格暂时无法判定。')}</span>;
   if (query.status !== 'success' || !query.data) return null;

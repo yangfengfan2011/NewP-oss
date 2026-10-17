@@ -2,6 +2,7 @@ import { useFeaturePlacement } from '../authorization/FeaturePlacementContext';
 import { resolvedFeaturePosition, type FeatureResolution } from '../authorization/featurePlacementResolver';
 import { Component, lazy, Suspense, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { EntryNavigationContext } from '../navigation/entryNavigation';
 import { formatRequestError, useLocalization, usePlatformQuery } from '@icp-platform/core';
 import { DownOutlined, DownloadOutlined } from '@ant-design/icons';
 import {
@@ -79,6 +80,7 @@ import { formatStandardCrudActionReason } from '../standard-crud/standardCrudAct
 import { useStandardCrudMutationExecution } from '../standard-crud/useStandardCrudMutationExecution';
 import { useStandardCrudHostEnvironment, type StandardCrudHostAddress } from '../standard-crud/standardCrudHostEnvironment';
 
+import { actionInstanceQueryIdentity } from '../composition/ActionInstanceScope';
 import { ActionInstanceContext, TreeNodeActivationContext } from '../composition/pageCompositionRuntime';
 const noInstanceSubscription = () => () => undefined;
 const noInstanceSnapshot = () => 0;
@@ -146,6 +148,7 @@ interface RowActionItem {
     resourceKey: string;
     objectId: string;
     featurePosition: string;
+    sourceKey: string;
     resolve: (signal: AbortSignal) => Promise<StandardCrudActionState>;
   };
 }
@@ -550,7 +553,7 @@ function RowActionButtonGroup({ actions, onConfirmRequested, requested = false, 
   const eligibility = usePlatformQuery<Record<string, StandardCrudActionState>>({
     key: ['standard-crud-row-action-eligibility',
       JSON.stringify(qualifiedActions.map((item) => [item.eligibility?.resourceKey,
-        item.eligibility?.objectId, item.key, item.eligibility?.featurePosition])), eligibilityEpoch],
+        item.eligibility?.objectId, item.key, item.eligibility?.featurePosition, item.eligibility?.sourceKey])), eligibilityEpoch],
     enabled: active && (menuOpen || Boolean(contextMenu) || requested) && qualifiedActions.length > 0,
     load: async ({ signal }) => {
       const states: Record<string, StandardCrudActionState> = {};
@@ -838,6 +841,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const host = useStandardCrudHostEnvironment(routeAddress);
   const runtimeMetadata = useRuntimeMetadata();
   const features = useFeaturePlacement();
+  const navigateEntry = useContext(EntryNavigationContext);
   const readResolution = features.read();
   const readPosition = features.placement ? resolvedFeaturePosition(readResolution) : undefined;
   // 不拥有地址时查询串恒为空：列表状态与 Drawer 参数都不进入外层 URL。
@@ -850,8 +854,21 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   }, [exportFailure, messageApi, t]);
   const currentSubjectId = useOptionalCurrentSubjectId();
   const sessionTimeZoneId = useOptionalSessionTimeZoneId();
+  // 只有明确无独立功能授权的呈现导航复用当前列表读取资格；普通导航仍按目标位置裁决。
+  const readNavigationTarget = (action: StandardCrudRuntimeActionSchema, surface = 'list.rowActions') => {
+    if (surface !== 'list.rowActions' || action.standardAction !== 'view' || !action.navigationTargetKey
+      || action.handlerKey || action.inputKey) return undefined;
+    const matches = runtimeMetadata?.navDocuments.flatMap(document => document.navigation.items)
+      .filter(item => item.key === action.navigationTargetKey) ?? [];
+    if (matches.length !== 1) return undefined;
+    const target = matches[0];
+    return target.routeOnly === true && target.featureAuthorization === false && target.page
+      && !target.featureKey && !target.featureOwner && !target.redirectTo ? target : undefined;
+  };
   const resolveActionFeature = (action: StandardCrudRuntimeActionSchema, surface = 'list.rowActions'): FeatureResolution => (
-    action.navigationTargetKey
+    readNavigationTarget(action, surface)
+      ? readResolution.kind === 'allowed' && readResolution.position.trim() ? readResolution : { kind: 'unresolved' }
+      : action.navigationTargetKey
       ? features.navigation(action.navigationTargetKey)
       : (action.standardAction === 'refresh' || action.standardAction === 'view')
         ? readResolution
@@ -1741,6 +1758,29 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           ?? (action.standardAction === 'refresh' ? () => refreshList() : undefined);
         const inputRenderer = action.inputKey ? registration.actionInputRenderers?.[action.inputKey] : undefined;
 
+        const readTarget = readNavigationTarget(action);
+        if (readTarget) {
+          return {
+            key: action.key,
+            label,
+            disabled: actionExecution.pendingKey !== null || disabledReason !== undefined,
+            disabledReason,
+            onClick: () => confirmDiscardIfNeeded(() => {
+              if (featureResolution.kind !== 'allowed') return;
+              try {
+                const parameters = dataAdapter.getReadNavigationParameters?.(row, { queryScope: host.input.queryScope })
+                  ?? { recordId: dataAdapter.getDetailId?.(row) ?? rowId };
+                if (Object.entries(parameters).some(([key, value]) => key === 'featurePosition' || key === 'sourceFeaturePosition'
+                  || typeof value !== 'string')) throw new Error('只读导航定位不能声明功能资格或非字符串参数。');
+                if (!navigateEntry) throw new Error('导航入口运行时不可用。');
+                // 纯定位投影没有提交生命周期；否则路由保护会把当前导航本身误判为在途写入。
+                navigateEntry({ entryKey: readTarget.key, parameters: { ...parameters, sourceFeaturePosition: featureResolution.position } });
+              } catch (failure) {
+                void messageApi.error({ key: 'standard-crud-read-navigation-error', content: formatRequestError(failure, t), duration: 5 });
+              }
+            }),
+          };
+        }
         if (action.standardAction === 'view') {
           return {
             key: action.key,
@@ -1845,7 +1885,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           ...item,
           eligibility: { resourceKey: registration.resourceKey, objectId: rowId,
             featurePosition: position,
-            resolve: (signal: AbortSignal) => resolver({ id: rowId, row, action, featurePosition: position, signal }) },
+            sourceKey: JSON.stringify([actionInstanceQueryIdentity(actionInstance), host.input.queryScope, row]),
+            resolve: (signal: AbortSignal) => resolver({ id: rowId, row, queryScope: host.input.queryScope,
+              instance: actionInstance, action, featurePosition: position, signal }) },
         } : item;
       });
   }
@@ -2435,6 +2477,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             row={rowInputAction.row}
             selectedRows={rowInputAction.selectedRows}
             error={actionExecution.error?.key === rowInputAction.pendingKey ? formatRequestError(actionExecution.error.failure, t) : null}
+            submissionFailure={actionExecution.error?.key === rowInputAction.pendingKey ? actionExecution.error.failure : undefined}
             pending={actionExecution.pendingKey === rowInputAction.pendingKey}
             onChange={setRowInputValue}
             onCancel={() => {

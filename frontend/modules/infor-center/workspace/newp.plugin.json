@@ -2,7 +2,7 @@
   "schemaVersion": "1.0",
   "moduleId": "Workspace",
   "displayName": "工作空间",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "公共空间与当前账号个人空间",
   "entryAssembly": "../../WorkspaceModule.dll",
   "dependencies": ["Part", "Document", "Audit"],
@@ -12,7 +12,7 @@
   "dataActions": [{ "key": "workspaceCopy", "title": "复制文件夹引用", "behaviorKey": "data.workspace.copy", "requiresRead": true }],
   "frontend": {
     "behaviorKey": "workspace.frontend", "entry": "workspace", "bindingMode": "behavior-bindings",
-    "bindings": ["workspace.spaces", "workspace.tree.current", "workspace.folder.content", "workspace.folder.reference", "workspace.folder.list", "workspace.references.list", "workspace.references.object"]
+    "bindings": ["workspace.spaces", "workspace.tree.current", "workspace.folder.content", "workspace.folder.reference", "workspace.folder.list", "workspace.references.list", "workspace.references.object", "workspace.content.permissions", "workspace.content.properties", "workspace.content.record", "workspace.content.propertiesInput"]
   },
   "persistence": {
     "models": ["metadata/models/WorkspaceSpace.model.json", "metadata/models/WorkspaceFolder.model.json", "metadata/models/WorkspaceFolderContent.model.json", "metadata/models/WorkspaceObjectCopy.model.json"],

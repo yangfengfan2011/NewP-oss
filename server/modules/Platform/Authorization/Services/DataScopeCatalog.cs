@@ -13,16 +13,26 @@ public sealed class DataScopeCatalog(IStandardCrudResourceRegistry resources, Ca
     EfPlatformDbContext db, DataScopeIdentities identities, ITemporalInputNormalizer? temporalInputNormalizer = null,
     IEnumerable<IDataScopeBusinessConditionProvider>? conditionProviders = null,
     IEnumerable<IDataScopeEnumFieldProvider>? enumProviders = null,
-    IEnumerable<DataScopeResource>? resourceContributions = null)
+    IEnumerable<DataScopeResource>? resourceContributions = null,
+    IDataScopeResourceCatalog? preparedResources = null)
 {
     private DataScopeConditions Conditions => new(this, db, identities, temporalInputNormalizer, conditionProviders ?? [], enumProviders ?? []);
     public IReadOnlyList<DataActionDeclaration> Actions => plan.DataActionCatalog;
+    internal DataScopeDirectSubjects DirectSubjects => new(this, db, identities);
+
+    /// <summary>对象操作只消费owner选用的全局动作；旧资源未声明时保持既有目录。</summary>
+    public IReadOnlyList<DataActionDeclaration> ActionsFor(string resourceKey)
+    {
+        Resolve(resourceKey);
+        var keys = preparedResources?.ActionKeysFor(resourceKey);
+        return keys is null ? Actions : Actions.Where(action => keys.Contains(action.Key, StringComparer.Ordinal)).ToArray();
+    }
     public IReadOnlyList<DataScopeBusinessConditionDefinition> BusinessConditions
     {
         get { Conditions.ValidateRegistration(); return Conditions.BusinessTypes; }
     }
     public IReadOnlyList<string>? EnumValues(string resourceKey, string field) => Conditions.EnumValues(resourceKey, field);
-    public IReadOnlyList<DataScopeResource> Resources => ReadResources();
+    public IReadOnlyList<DataScopeResource> Resources => preparedResources?.Resources ?? ReadResources();
 
     // 专用命令资源不必开放普通 CRUD；目录仍验证真实活动 owner、模型和唯一主键，不推断字段身份。
     private IReadOnlyList<DataScopeResource> ReadResources()

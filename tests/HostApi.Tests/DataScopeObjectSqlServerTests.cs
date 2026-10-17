@@ -167,9 +167,10 @@ public sealed class DataScopeObjectSqlServerTests
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, endpoint, allow))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        // 两个不同且都匹配的规范选择器竞争；不能用技术ID伪造重复all项。
         var samePriority = allow with { Subjects = [
             new("ObjectPriorityAllow", "all", null, 2, new Dictionary<string, string> { ["read"] = "allow" }),
-            new("ObjectPriorityDeny", "all", null, 2, new Dictionary<string, string> { ["read"] = "deny" })] };
+            new("ObjectPriorityDeny", "user", actor.AccountId, 2, new Dictionary<string, string> { ["read"] = "deny" })] };
         using (var response = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, endpoint, samePriority))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get, $"/api/organization/persons/{id}"))

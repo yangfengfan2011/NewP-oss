@@ -1516,6 +1516,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         _app.UseRouting();
         _app.UseRateLimiter();
         _app.UseAuthentication();
+        _app.UseMiddleware<ICP.Platform.Authorization.Http.DataScopeEvaluationMiddleware>();
         if (_useRequestPresentation) _app.UseMiddleware<ICP.Platform.HostApi.Presentation.RequestPresentationContextMiddleware>();
         _app.UseHostAntiforgery();
         _app.UseMiddleware<RestrictedAuthenticationSessionMiddleware>();
@@ -1524,7 +1525,8 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         _app.MapStandardCrudResources();
         _app.MapRelationTrees();
         ICP.Platform.HostApi.Authorization.FeatureEndpointBindings.Validate(((Microsoft.AspNetCore.Routing.IEndpointRouteBuilder)_app).DataSources,
-            modulePlan.FeatureCatalog, _app.Services.GetRequiredService<IStandardCrudResourceRegistry>());
+            modulePlan.FeatureCatalog, _app.Services.GetRequiredService<IStandardCrudResourceRegistry>(),
+            _app.Services.GetRequiredService<ICP.Platform.Authorization.Contracts.IDataScopeResourceCatalog>().Resources);
         if (_includeWorkspace || _includePart || _includeDocument) ICP.Platform.HostApi.Authorization.EndpointAccessPlanCompiler.Compile(((Microsoft.AspNetCore.Routing.IEndpointRouteBuilder)_app).DataSources);
         using (var scope = _app.Services.CreateScope())
         {
@@ -1537,6 +1539,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
     internal sealed class StoreFault : DbCommandInterceptor
     {
         internal string Mode { get; set; } = "";
+        internal Action? AfterCommit { get; set; }
         internal Func<BusinessAuditChange, CancellationToken, Task>? AfterRegister { get; set; }
         internal volatile bool RegistrationWaiting;
         internal TaskCompletionSource ConcurrentCommand { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -1585,6 +1588,12 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
     }
     private sealed class CommitFault(StoreFault fault) : DbTransactionInterceptor
     {
+        // 在真实 SQL 提交完成后推进测试时钟，不能把提交前观察误当作写后读取。
+        public override Task TransactionCommittedAsync(DbTransaction transaction, TransactionEndEventData eventData, CancellationToken cancellationToken = default)
+        {
+            fault.AfterCommit?.Invoke();
+            return Task.CompletedTask;
+        }
         public override ValueTask<InterceptionResult> TransactionCommittingAsync(DbTransaction transaction, TransactionEventData eventData, InterceptionResult result, CancellationToken cancellationToken = default)
         {
             if (fault.Mode == "commit") throw new InvalidOperationException("injected known-uncommitted failure");

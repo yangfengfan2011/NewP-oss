@@ -2,17 +2,19 @@ import { formatRequestError, useLocalization } from '@icp-platform/core';
 import { useEffect, useState } from 'react';
 import { Alert, Button, Form, InputNumber, Select, Space, Switch, Typography } from 'antd';
 import { searchDataScopeSubjects, type DataScopeSubjectDirectoryRead, type DataScopeSubjectSearchResult } from './dataScopeSubjectDirectory';
+import { StandardCrudField } from './patterns/StandardCrudField';
 
 export interface DataScopeSubject { id: string; type: string; subjectId: string | null; priority: number;
-  actions: Record<string, string>; matchOptions?: { includeDescendants: boolean } }
+  actions: Record<string, string>; matchOptions?: { includeDescendants: boolean }; expiresAt?: string | null }
 export interface SubjectType { key: string; title: string; requiresId: boolean; supportsDescendants?: boolean }
 export interface DataScopeAction { key: string; title: string; enabled: boolean }
 
 /** 主体候选独立于业务页面读取；切换类型取消旧请求，已选名称由同一最小目录解析。 */
-export default function DataScopeSubjectEditor({ subject, index, types, actions, read, onChange, onRemove, showPriority = true }: {
+export default function DataScopeSubjectEditor({ subject, index, types, actions, read, onChange, onRemove, showPriority = true, objectMode = false }: {
   subject: DataScopeSubject; index: number; types: SubjectType[];
   actions?: DataScopeAction[];
   showPriority?: boolean;
+  objectMode?: boolean;
   read: DataScopeSubjectDirectoryRead;
   onChange: (change: Partial<DataScopeSubject>) => void; onRemove?: () => void;
 }) {
@@ -51,6 +53,9 @@ export default function DataScopeSubjectEditor({ subject, index, types, actions,
       {type?.supportsDescendants && <Form.Item label={t('DataScope.IncludeDepartments', '包含下级部门')}><Switch aria-label={t('DataScope.IncludeDepartments', '包含下级部门')} checked={subject.matchOptions?.includeDescendants ?? false}
         onChange={includeDescendants => onChange({ matchOptions: { includeDescendants } })} /></Form.Item>}
       {showPriority && <Form.Item label={t('DataScope.Priority', '优先级')}><InputNumber aria-label={t('DataScope.Priority', '优先级')} precision={0} value={subject.priority} onChange={priority => onChange({ priority: priority ?? 0 })} /></Form.Item>}
+      {objectMode && <StandardCrudField mode="edit" field={{ key: 'expiresAt', modelField: 'expiresAt', kind: 'dateTime',
+        labelKey: t('DataScope.ObjectExpiresAt', '截止时间（UTC）'), timeZoneId: 'UTC', placeholder: t('DataScope.Permanent', '永久') }}
+        value={subject.expiresAt ?? null} onChange={(_key, value) => onChange({ expiresAt: typeof value === 'string' ? (value.endsWith('Z') ? value : value + 'Z') : null })} />}
       {(actions ?? [{ key: 'read', title: '读取', enabled: true }]).map(action =>
         <Form.Item key={action.key} label={t('DataScope.ActionOpinion', '{action}意见', { action: t(`DataScope.Action_${action.key}`, action.title) })}><Select aria-label={t('DataScope.ActionOpinion', '{action}意见', { action: t(`DataScope.Action_${action.key}`, action.title) })} style={{ width: 130 }}
           value={subject.actions[action.key] ?? 'unset'}

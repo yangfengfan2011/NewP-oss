@@ -14,6 +14,33 @@ namespace ICP.Platform.Acceptance.Tests;
 [Collection(AcceptanceGateCollection.Name)]
 public sealed class AcceptanceGateTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "仅既有Workspace浏览资格打开Part来源属性/权限，再由独立管理账号修改草稿并标准保存一次")]
+    public async Task NativeWorkspacePartPermissions_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-workspace-part-permissions");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease, preparePermissionActors: true);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, publishedFixture: fixture,
+            browserJourney: async (page, token) =>
+            {
+                token.ThrowIfCancellationRequested();
+                var reader = new WorkspacePageDriver(page);
+                await reader.OpenAsync();
+                await reader.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
+                var sourceAddress = await reader.OpenPermissionViewerAsync(fixture.ExistingName);
+                await reader.InspectPermissionTabAsync();
+                await reader.RestorePositionAsync(sourceAddress, "公共空间", fixture.ExistingFolderName);
+                await page.GetByRole(AriaRole.Button, new() { Name = ShellPageDriver.SignOutLabel, Exact = true }).ClickAsync();
+                await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/login");
+                var manager = fixture.PermissionManager;
+                await new ShellPageDriver(page, new Uri(page.Url).GetLeftPart(UriPartial.Authority)).LoginAsync(manager.ECode, manager.Password);
+                var writer = new WorkspacePageDriver(page);
+                await writer.OpenAsync();
+                await writer.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
+                await writer.AddReadPermissionAndSaveAsync(fixture.ExistingName);
+            }).RunAsync(CancellationToken.None);
+    }
+
     private const string RunEnvironmentVariable = "NEWP_RUN_ACCEPTANCE";
 
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "管理员显式组织初始化及三模型缺失归属的正式页面、批次和人工补齐最短路径")]

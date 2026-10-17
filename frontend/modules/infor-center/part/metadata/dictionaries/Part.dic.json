@@ -1,5 +1,7 @@
 {
   "Part": {
+    "Information": { "zhs": "属性", "en": "Properties" },
+    "Permissions": { "zhs": "权限", "en": "Permissions" },
     "InitializeOwnership": { "zhs": "补齐归属", "en": "Initialize ownership" },
     "OwnershipPendingObjects": { "zhs": "待补齐归属", "en": "Missing ownership" },
     "Field_OwnerId": { "zhs": "所属人", "en": "Owner" },

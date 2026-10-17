@@ -1,6 +1,6 @@
 import { useFeaturePlacement } from '../authorization/FeaturePlacementContext';
 import { resolvedFeaturePosition } from '../authorization/featurePlacementResolver';
-import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
+import { Component, lazy, Suspense, useContext, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { useLocalization } from '@icp-platform/core';
 import {
   ModuleRegistry,
@@ -27,6 +27,7 @@ import {
 import { StandardCrudSummaryBlocks } from '../standard-crud/standardCrudSummaryRuntime';
 
 import { useStandardCrudHostEnvironment } from '../standard-crud/standardCrudHostEnvironment';
+import { ActionInstanceContext } from '../composition/pageCompositionRuntime';
 import { useLocalizedStandardCrudRegistration } from '../standard-crud/useLocalizedStandardCrudRegistration';
 
 type MetadataRecord = Record<string, unknown>;
@@ -37,6 +38,7 @@ interface StandardCrudDetailPageHostProps {
   viewKey: string;
   id: string | null;
   registration?: StandardCrudResourceRegistration;
+  readSourceKey?: string;
 }
 
 class StandardCrudHostErrorBoundary extends Component<{ children: ReactNode; message: string }, { error: string | null }> {
@@ -102,6 +104,7 @@ export default function StandardCrudDetailPageHost({
   viewKey,
   id,
   registration: loadedRegistration,
+  readSourceKey,
 }: StandardCrudDetailPageHostProps): ReactElement {
   const { t } = useLocalization();
   const runtimeMetadata = useRuntimeMetadata();
@@ -127,6 +130,7 @@ export default function StandardCrudDetailPageHost({
       id={id}
       view={viewDocument.view as Record<string, unknown>}
       registration={registration}
+      readSourceKey={readSourceKey}
       viewDocuments={(runtimeMetadata?.viewDocuments ?? []) as unknown as MetadataRecord[]}
       modelDocuments={runtimeMetadata?.modelDocuments ?? []}
     /></CrudLocaleProvider>
@@ -138,10 +142,12 @@ function StandardCrudDetailPageContent<TDetail>({
   id,
   view,
   registration: sourceRegistration,
+  readSourceKey,
   viewDocuments,
   modelDocuments,
 }: {
   id: string;
+  readSourceKey?: string;
   view: Record<string, unknown>;
   registration: StandardCrudResourceRegistration<Record<string, string>, Record<string, unknown>, TDetail>;
   viewDocuments: MetadataRecord[];
@@ -151,6 +157,8 @@ function StandardCrudDetailPageContent<TDetail>({
   const { t } = useLocalization();
   // 详情宿主从不拥有地址；独立路由下也传 null。
   const host = useStandardCrudHostEnvironment(null);
+  const actionInstance = useContext(ActionInstanceContext);
+  const readOnly = readSourceKey !== undefined;
   const features = useFeaturePlacement();
   const readResolution = features.read();
   const readPosition = features.placement ? resolvedFeaturePosition(readResolution) : undefined;
@@ -183,6 +191,8 @@ function StandardCrudDetailPageContent<TDetail>({
     id,
     dataAdapter,
     featurePosition: readPosition,
+    queryScope: host.input.queryScope,
+    readSourceKey,
   });
 
   useEffect(() => {
@@ -215,7 +225,7 @@ function StandardCrudDetailPageContent<TDetail>({
     ? resolveStandardCrudDetailPresentation({ schema, fields: currentNormalizedDetail.fields, expectedId: id })
     : null, [currentNormalizedDetail, id, schema]);
   const readyPresentation = presentation?.kind === 'ready' ? presentation : null;
-  const interactionIdentity = JSON.stringify([registration.resourceKey, view.key, id, readPosition,
+  const interactionIdentity = JSON.stringify([registration.resourceKey, view.key, id, readPosition, host.input.queryScope, readSourceKey,
     auth?.user?.id, auth?.isAuthenticated, auth?.permissionEpoch,
     [...(auth?.user?.featurePositions ?? [])].sort(), detailFeatureActions]);
   const [interactionSnapshot, setInteractionSnapshot] = useState<{
@@ -251,6 +261,7 @@ function StandardCrudDetailPageContent<TDetail>({
   const detailSectionPages = readyPresentation ? (
     <StandardCrudResolvedDetailSections
       presentation={readyPresentation}
+      allowContributions={!readOnly}
       registration={registration}
       textFor={(key, fallback) => t(`${schema.dicKey}.${key}`, fallback)}
     />
@@ -273,7 +284,7 @@ function StandardCrudDetailPageContent<TDetail>({
   }), [currentNormalizedDetail, id, registration.actionHandlers]);
   const showLoading = detailQuery.loading;
   // 背景刷新保留 Action Execution 子树及其冲突反馈，同时禁用旧快照上的再次操作。
-  const detailHeaderActions = presentedInteraction
+  const detailHeaderActions = !readOnly && presentedInteraction
     ? presentedInteraction.presentation.pageActions.length > 0
       ? (
         <StandardCrudActions
@@ -305,7 +316,7 @@ function StandardCrudDetailPageContent<TDetail>({
             if (operationResultPresenterRegistry.resolve(result)) setPresentedOperationResult(result);
           }}
           refresh={refresh}
-          context={{ id, detail: presentedInteraction.detail.value as TDetail }}
+          context={{ id, detail: presentedInteraction.detail.value as TDetail, queryScope: host.input.queryScope, instance: actionInstance }}
         />
       )
       : undefined
@@ -323,7 +334,7 @@ function StandardCrudDetailPageContent<TDetail>({
       {!composed && detailHeaderActions && <div className="sh-page-actions">{detailHeaderActions}</div>}
 
       <div className="sh-page-stack">
-      {presentedSummaries && <StandardCrudSummaryBlocks
+      {!readOnly && presentedSummaries && <StandardCrudSummaryBlocks
         key={interactionIdentity}
         blocks={schema.summaryBlocks}
         summaries={presentedSummaries}
@@ -348,7 +359,7 @@ function StandardCrudDetailPageContent<TDetail>({
       ) : (
         <ErrorState message={t('Platform.DetailNotFound', '未找到详情。')} />
       )}
-          {editing && editorDetail?.id === id && editFields.length > 0 && (!features.placement || editResolution.kind === 'allowed') ? (
+          {!readOnly && editing && editorDetail?.id === id && editFields.length > 0 && (!features.placement || editResolution.kind === 'allowed') ? (
             <Suspense fallback={<div className="sh-loading-state" role="status">{t('Platform.LoadingEditor', '正在加载编辑表单…')}</div>}>
               <StandardCrudDetailEditor
                 key={id}

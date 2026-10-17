@@ -14,7 +14,7 @@ namespace ICP.Platform.Modules.Workspace;
 [EndpointModule("Workspace")]
 [PlatformRequestValidation]
 public sealed class WorkspaceSpacesController(WorkspaceSpaces spaces, ILogger<WorkspaceSpacesController> logger,
-    ILocalAdministratorRoleAssignment administrators, ICP.Platform.Crud.LinkQueries.LinkQueryReader links) : ControllerBase
+    ILocalAdministratorRoleAssignment administrators, ICP.Platform.Crud.LinkQueries.LinkQueryReader links, IDataScopeEvaluationScope? evaluation = null) : ControllerBase
 {
     /// <summary>显式接入命令初始化公共空间；入口资格不自动授予初始化权。</summary>
     [HttpPost("public/initialize")]
@@ -91,6 +91,7 @@ public sealed class WorkspaceSpacesController(WorkspaceSpaces spaces, ILogger<Wo
     {
         try
         {
+            using var observation = evaluation?.BeginReadAfterWrite();
             if (await spaces.ReadRootAsync(ActorId(), root.SpaceId, token) is not null) return Ok(root);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)

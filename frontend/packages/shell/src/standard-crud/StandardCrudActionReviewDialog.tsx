@@ -28,6 +28,7 @@ interface StandardCrudActionReviewDialogProps {
   selectedRows?: readonly unknown[];
   pending: boolean;
   error?: string | null;
+  submissionFailure?: unknown;
   onChange: (value: unknown) => void;
   onCancel: () => void;
   onConfirm: () => void;
@@ -49,6 +50,7 @@ export function StandardCrudActionReviewDialog({
   selectedRows,
   pending,
   error,
+  submissionFailure,
   onChange,
   onCancel,
   onConfirm,
@@ -84,7 +86,7 @@ export function StandardCrudActionReviewDialog({
         const resolution = features.navigation(key);
         return resolution.kind === 'allowed' ? resolution.position : undefined;
       },
-      queryScope, submitting: pending, value, onChange, detail, row, selectedRows, onDraftStateChange: setDraftState,
+      queryScope, submitting: pending, submissionFailure, value, onChange, detail, row, selectedRows, onDraftStateChange: setDraftState,
     })}
   </>;
   return (

@@ -52,6 +52,20 @@ public sealed class FeatureCatalogCompilerTests
         }.Select(value => System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(value));
         Assert.Throws<InvalidOperationException>(() => StandardFeatureMetadataCompiler.Read("Authorization", documents));
     }
+    [Theory]
+    [InlineData("refresh", "rowActions")]
+    [InlineData("view", "pageActions")]
+    [InlineData("open", "rowActions")]
+    public void PresentationNavigation_RejectsActionsOtherThanStandardRowView(string operation, string surface)
+    {
+        var documents = new[]
+        {
+            """{"navigation":{"items":[{"key":"records","featureAuthorization":true,"targetKey":"records"},{"key":"target","routeOnly":true,"featureAuthorization":false,"page":{"pageKey":"platform.detail","parameters":{"viewKey":"record"}}}]}}""",
+            "{\"view\":{\"key\":\"records\",\"mode\":\"list\",\"resourceKey\":\"record\",\"" + surface + "\":[{\"key\":\"open\",\"standardAction\":\"" + operation + "\",\"navigationTargetKey\":\"target\"}]}}"
+        }.Select(value => System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(value));
+        Assert.Throws<InvalidOperationException>(() => StandardFeatureMetadataCompiler.Read("Module", documents));
+    }
+
     [Fact]
     public void AuthorizationAuthoring_SeparatesManagementActionsAndKeepsShortcutAtTarget()
     {

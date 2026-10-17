@@ -19,6 +19,8 @@ it('projects the formal Workspace composed content list without inventing standa
   expect(new Set(capsule.frontend.bindings)).toEqual(new Set([
     ...(workspace.treeProviders ?? []).map(binding => binding.key),
     ...(workspace.pageInputResolvers ?? []).map(binding => binding.key),
+    ...(workspace.pages ?? []).map(binding => binding.pageKey),
+    ...(workspace.standardCrudDetailReadSources ?? []).map(binding => binding.key),
     ...(workspace.standardCrudCapabilities ?? []).map(binding => binding.targetKey),
   ]));
   expect(compileStandardCrudRouteProjection([module], [navigation], views, [])).toEqual({ detailEntries: [], drawerRedirects: [], fallbackRoutes: [] });

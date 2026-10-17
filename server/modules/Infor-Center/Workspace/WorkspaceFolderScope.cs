@@ -15,10 +15,23 @@ public sealed record WorkspaceFolderCandidate(string Id, string Name);
 public sealed record WorkspaceFolderCandidates(IReadOnlyList<WorkspaceFolderCandidate> Items, int Total, int Page, int PageSize);
 
 /// <summary>独立详情、候选和 Link 端点共用来源或可读根路径范围；集合始终留在数据库命令内。</summary>
-public sealed class WorkspaceFolderScope(EfPlatformDbContext db, IDataScopeReadPlanProvider reads, IHttpContextAccessor context) : ILinkQueryEndpointConstraint
+public sealed class WorkspaceFolderScope(EfPlatformDbContext db, IDataScopeReadPlanProvider reads, IHttpContextAccessor context)
+    : ILinkQueryEndpointConstraint, IDataScopeResourceReadConstraint
 {
     public string Key => "workspace.folder.scope";
     public string ModelKey => WorkspacePositions.FolderModel;
+    public string ResourceKey => "workspace.folder";
+    public string ModuleId => new WorkspaceModule().ModuleId;
+
+    /// <inheritdoc/>
+    public async Task<bool> IsReadableAsync(string objectId, CancellationToken token = default)
+    {
+        // 根参与空间遍历，但不因此成为普通对象授权/查询目标；不改变底层可达集合。
+        if (await db.Set<Dictionary<string, object?>>("WorkspaceSpace").AsNoTracking()
+            .AnyAsync(space => EF.Property<string>(space, "RootFolderId") == objectId, token)) return false;
+        return await ContainsAsync(context.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? throw new LinkQueryException(403, "Workspace.SubjectRequired"), objectId, token);
+    }
 
     /// <inheritdoc/>
     public Task<Expression<Func<Dictionary<string, object?>, bool>>> ReadPredicateAsync(LinkQueryEndpoint endpoint, CancellationToken token) =>

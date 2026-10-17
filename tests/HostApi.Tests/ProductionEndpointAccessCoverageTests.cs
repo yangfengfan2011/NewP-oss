@@ -36,6 +36,47 @@ namespace ICP.Platform.HostApi.Tests;
 public sealed class ProductionEndpointAccessCoverageTests
 {
     [Fact]
+    public void WorkspaceSourceProperties_RequiresTheWorkspaceReadFeatureOnItsExactReadOnlyRoute()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddControllers().AddApplicationPart(typeof(ICP.Platform.Modules.Workspace.WorkspaceContentsController).Assembly);
+        using var app = builder.Build();
+        app.MapControllers();
+        foreach (var path in new[] { "properties", "permissions/catalog", "permissions/subjects/user" })
+        {
+            var endpoint = Assert.Single(((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints).OfType<RouteEndpoint>(),
+                endpoint => endpoint.RoutePattern.RawText?.TrimStart('/') == "api/workspace/content/{linkId}/" + path);
+            Assert.Equal(["GET"], endpoint.Metadata.GetOrderedMetadata<HttpMethodMetadata>().Single().HttpMethods);
+            Assert.Equal("workspace.folder.read", Assert.Single(endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>()).BehaviorKey);
+        }
+        EndpointAccessPlanCompiler.Compile(((IEndpointRouteBuilder)app).DataSources);
+    }
+
+    [Theory]
+    [InlineData("Part", "part", "parts", "part.part")]
+    [InlineData("Document", "document", "documents", "document.document")]
+    public void IndependentPermissionOwners_SeparateBrowseAndManagementOnEveryActualRoute(string moduleId, string modulePath, string collection, string resourceKey)
+    {
+        var builder = WebApplication.CreateBuilder();
+        var assembly = moduleId == "Part" ? typeof(ICP.Platform.Modules.Part.PartModule).Assembly : typeof(ICP.Platform.Modules.Document.DocumentModule).Assembly;
+        builder.Services.AddControllers().AddApplicationPart(assembly);
+        using var app = builder.Build();
+        app.MapControllers();
+        var endpoints = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints).OfType<RouteEndpoint>().ToArray();
+        var prefix = "api/" + modulePath + "/" + collection + "/{objectId}/permissions";
+        foreach (var (suffix, method, action) in new[] { ("/catalog", "GET", "read"), ("/explanation", "GET", "read"),
+            ("/subjects/user", "GET", "read"), ("/subjects/{type}", "GET", "authorize"), ("/eligibility", "GET", "authorize"),
+            ("", "GET", "authorize"), ("", "PUT", "authorize") })
+        {
+            var endpoint = Assert.Single(endpoints, item => item.RoutePattern.RawText?.TrimStart('/') == prefix + suffix
+                && item.Metadata.GetOrderedMetadata<HttpMethodMetadata>().Single().HttpMethods.Contains(method));
+            Assert.Equal(resourceKey + "." + action, Assert.Single(endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>()).BehaviorKey);
+            Assert.Equal(moduleId, Assert.Single(endpoint.Metadata.GetOrderedMetadata<EndpointModuleAttribute>()).ModuleId);
+        }
+        EndpointAccessPlanCompiler.Compile(((IEndpointRouteBuilder)app).DataSources);
+    }
+
+    [Fact, Trait("Category", "ModuleMetadataConsumer")]
     public void Compile_AllCurrentProductionControllersPersonCrudAndPluginManifests_HaveTerminalRules()
     {
         var builder = WebApplication.CreateBuilder();
@@ -73,7 +114,19 @@ public sealed class ProductionEndpointAccessCoverageTests
             endpoint => Assert.NotNull(endpoint.Metadata.GetMetadata<DenyAllAttribute>()));
         var documentEndpoints = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints).OfType<RouteEndpoint>()
             .Where(endpoint => endpoint.RoutePattern.RawText?.TrimStart('/').StartsWith("api/document/documents", StringComparison.Ordinal) == true).ToArray();
-        Assert.Equal(new[] { "document.document.create", "document.document.download", "document.document.read" }, documentEndpoints.SelectMany(endpoint => endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>())
+        var repository = new DirectoryInfo(AppContext.BaseDirectory);
+        while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "AGENTS.md"))) repository = repository.Parent;
+        Assert.NotNull(repository);
+        var documentRoot = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository.FullName, "Document");
+        using var capsule = System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(Path.Combine(documentRoot, "newp.plugin.json")));
+        var documents = Directory.GetFiles(Path.Combine(documentRoot, "metadata"), "*.json", SearchOption.AllDirectories)
+            .Select(path => System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(File.ReadAllBytes(path))).ToArray();
+        var declared = ICP.Platform.Kernel.ModulePlanning.FeatureCatalogCompiler.Compile(
+            ICP.Platform.Kernel.ModulePlanning.StandardFeatureMetadataCompiler.Read("Document", documents,
+                ICP.Platform.Kernel.ModulePlanning.FeatureCatalogCompiler.Read(capsule.RootElement, "Document"), true));
+        var expectedFeatures = declared.Select(point => point.BehaviorKey).Concat(declared.SelectMany(point => point.ReadBehaviors))
+            .Where(key => key.StartsWith("document.document.", StringComparison.Ordinal)).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal);
+        Assert.Equal(expectedFeatures, documentEndpoints.SelectMany(endpoint => endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>())
             .Select(feature => feature.BehaviorKey).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal));
         var documentFileEndpoints = documentEndpoints.Where(endpoint => endpoint.RoutePattern.RawText!.Contains("/files", StringComparison.Ordinal)).ToArray();
         Assert.Equal(new[] { "api/document/documents/{documentId}/files", "api/document/documents/{documentId}/files/{fileLinkId}/content" },
@@ -88,7 +141,9 @@ public sealed class ProductionEndpointAccessCoverageTests
         });
         Assert.Contains(documentEndpoints, endpoint => endpoint.Metadata.GetOrderedMetadata<HttpMethodMetadata>().Single().HttpMethods.Contains("PUT"));
         Assert.Contains(documentEndpoints, endpoint => endpoint.Metadata.GetOrderedMetadata<HttpMethodMetadata>().Single().HttpMethods.Contains("DELETE"));
-        Assert.All(documentEndpoints.Where(endpoint => endpoint.Metadata.GetOrderedMetadata<HttpMethodMetadata>().Single().HttpMethods.Any(method => method is "PUT" or "DELETE")),
+        // 标准业务CRUD仍关闭；owner的受控归属/授权写入由各自明确功能规则覆盖。
+        Assert.All(documentEndpoints.Where(endpoint => endpoint.RoutePattern.RawText!.StartsWith("/", StringComparison.Ordinal)
+            && endpoint.Metadata.GetOrderedMetadata<HttpMethodMetadata>().Single().HttpMethods.Any(method => method is "PUT" or "DELETE")),
             endpoint => Assert.NotNull(endpoint.Metadata.GetMetadata<DenyAllAttribute>()));
         var manifestEndpoints = ((IEndpointRouteBuilder)app).DataSources
             .SelectMany(static source => source.Endpoints)

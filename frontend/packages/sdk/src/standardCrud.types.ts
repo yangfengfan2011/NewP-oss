@@ -267,7 +267,7 @@ export type StandardCrudActionStateResolver<TDetail = unknown, TRow = unknown> =
 
 /** 异步对象资格由资源 owner 按正式功能位置读取；明确拒绝可隐藏动作，依赖故障必须传播。 */
 export type StandardCrudActionEligibilityResolver<TDetail = unknown, TRow = unknown> = (
-  context: Pick<StandardCrudActionContext<TDetail, TRow>, 'id' | 'detail' | 'row'> &
+  context: Pick<StandardCrudActionContext<TDetail, TRow>, 'id' | 'detail' | 'row' | 'queryScope' | 'instance'> &
     { action: StandardCrudActionDefinition; featurePosition: string; signal: AbortSignal },
 ) => Promise<StandardCrudActionState>;
 
@@ -279,6 +279,8 @@ export interface StandardCrudActionInputRenderContext extends StandardCrudFeatur
   navigationFeaturePosition?: (targetKey: string) => string | undefined;
   queryScope?: Record<string, unknown>;
   submitting?: boolean;
+  /** 当前动作原始提交失败；输入owner据既有错误类型区分可修正拒绝和未知提交，不能据此重放。 */
+  submissionFailure?: unknown;
   action: StandardCrudActionDefinition;
   value: unknown;
   onChange: (value: unknown) => void;
@@ -422,6 +424,14 @@ export interface StandardCrudDetailReadContext extends StandardCrudFeatureReques
   signal?: AbortSignal;
 }
 
+/** 显式来源只替换只读详情读取；仍由目标资源的真实 schema 呈现，不能提供任意 URL 或写入能力。 */
+export interface StandardCrudDetailReadSource {
+  key: string;
+  resourceKeys: readonly string[];
+  /** resourceKey/id 是目标 registration 的规范身份；来源 owner 每次核对来源和服务端返回的目标。 */
+  get: (resourceKey: string, id: string, context?: StandardCrudDetailReadContext) => Promise<StandardCrudLoadedDetail>;
+}
+
 /** 标准 CRUD 客户端最小方法集，供 Shell Host 复用统一路径、错误和详情规范化行为。 */
 export interface StandardCrudClient {
   list: (query?: StandardCrudListQueryRequest, readContext?: StandardCrudListReadContext) => Promise<unknown>;
@@ -467,6 +477,8 @@ export interface StandardCrudDataAdapter<TRow = Record<string, unknown>, TDetail
   getRowActivationTarget?: (row: TRow, context: { queryScope?: Record<string, string | null> }) => { kind: 'tree-node'; nodeKey: string } | undefined;
   /** 只读属性打开可使用关联对象主键；行选择和关系动作仍使用 getRowId。 */
   getDetailId?: (row: TRow) => string;
+  /** 只读导航的纯定位投影；URL/入口及source读取位置由宿主决定，不能转储整行或伪装资格。 */
+  getReadNavigationParameters?: (row: TRow, context: { queryScope?: Record<string, string | null> }) => Record<string, string>;
   /** 异构行只返回已登记的详情 View 与真实主键；宿主解析正式路由并重新执行目标准入。 */
   getDetailTarget?: (row: TRow) => { detailViewKey: string; id: string } | undefined;
 }

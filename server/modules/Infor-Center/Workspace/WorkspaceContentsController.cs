@@ -16,7 +16,8 @@ namespace ICP.Platform.Modules.Workspace;
 /// <summary>正式创建仅接受当前出现位置与可写字段；所有业务规则仍在应用服务。</summary>
 [ApiController, Route("api/workspace"), EndpointModule("Workspace"), PlatformRequestValidation]
 public sealed partial class WorkspaceContentsController(WorkspaceContents contents, WorkspaceSpaces spaces, WorkspacePositions positions,
-    ILogger<WorkspaceContentsController> logger, WorkspaceFolderScope folderScope, IObjectOperationExecutor operations, ICP.Platform.Crud.Runtime.LinkTreeReader trees) : ControllerBase
+    ILogger<WorkspaceContentsController> logger, WorkspaceFolderScope folderScope, IObjectOperationExecutor operations, ICP.Platform.Crud.Runtime.LinkTreeReader trees,
+    ICP.Platform.Authorization.Contracts.IDataScopeEvaluationScope? evaluation = null) : ControllerBase
 {
     public sealed record CreateFolderInput(WorkspacePosition Position, Dictionary<string, JsonElement> Values);
     public sealed record AddReferenceInput(WorkspacePosition Position, LinkObjectReference Target);
@@ -304,6 +305,7 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
         try
         {
+            using var observation = evaluation?.BeginReadAfterWrite();
             var fields = await spaces.ReadFolderAsync(Actor(), id, token);
             return fields is null ? Results.Ok(new { succeeded = true }) : Results.Ok(new { id, fields });
         }

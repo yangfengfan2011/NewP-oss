@@ -9,7 +9,8 @@
       { "name": "SubjectType", "storage": { "type": "string" } },
       { "name": "SubjectId", "storage": { "type": "string", "nullable": true } },
       { "name": "IncludeDescendants", "storage": { "type": "bool" } },
-      { "name": "Priority", "storage": { "type": "int" } }
+      { "name": "Priority", "storage": { "type": "int" } },
+      { "name": "ExpiresAt", "storage": { "type": "datetime", "nullable": true } }
     ],
     "indexes": [
       { "name": "IX_DataScopeObjectSubject_0", "fields": ["ResourceKey", "ObjectId"], "unique": false },

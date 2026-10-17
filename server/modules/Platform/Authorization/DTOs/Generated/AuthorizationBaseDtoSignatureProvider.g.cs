@@ -9,7 +9,7 @@ public sealed class AuthorizationBaseDtoSignatureProvider
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["DataScopeObjectActionDto"] = "sha256:8eeec3164155474ffe3b099efc317113db22d0623054b68022febb5ba429c7a6",
-            ["DataScopeObjectSubjectDto"] = "sha256:fdbb68fd6b30cf98fb13bd008eaa5509a493b7ca75f03ca3a6a3e8974f4bc2b2",
+            ["DataScopeObjectSubjectDto"] = "sha256:cddc1784f083503c9e2cec625cf7e301e4e2a62c4bb7792f46a54295e608168f",
             ["DataScopeRuleNodeDto"] = "sha256:de6d9df4f41c41e68b86288e27fab101e62cae6e04033e5b9914c8bda392c1a4",
             ["DataScopeRuleSubjectDto"] = "sha256:73da6bdfc6a527637ece40b0ae8abd416c449738ab1a3d88c2c90a968e22ec99",
             ["FunctionPointDto"] = "sha256:1ac59a660947193da74217ef049ca8c5715fb6665f4469fd133f2ca0ee356296",

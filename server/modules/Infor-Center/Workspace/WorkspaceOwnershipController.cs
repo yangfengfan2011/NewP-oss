@@ -66,11 +66,18 @@ public sealed partial class WorkspaceContentsController
         ?? throw new LinkQueryException(400, "Workspace.InvalidPosition");
 
     // 只消费完整位置及分页参数，未知字段和缺失链不能降级为裸对象或任意根。
-    private WorkspacePosition ReadOwnershipPosition(string? queryScope, bool paging = false)
+    private WorkspacePosition ReadOwnershipPosition(string? queryScope, bool paging = false, string? additionalKey = null)
     {
         if (queryScope is null || Request.Query["queryScope"].Count != 1
-            || Request.Query.Any(pair => pair.Value.Count != 1 || pair.Key != "queryScope" && !(paging && pair.Key is "page" or "pageSize")))
+            || Request.Query.Any(pair => pair.Value.Count != 1 || pair.Key != "queryScope" && pair.Key != additionalKey
+                && !(paging && pair.Key is "page" or "pageSize")))
             throw new LinkQueryException(400, "Workspace.InvalidPosition");
+        return ParseOwnershipPosition(queryScope);
+    }
+
+    // 只有HTTP边界校验过查询参数的调用方可解析同一完整位置，不接受额外字段或缺失链。
+    private static WorkspacePosition ParseOwnershipPosition(string queryScope)
+    {
         var position = JsonSerializer.Deserialize<WorkspacePosition>(queryScope, new JsonSerializerOptions(JsonSerializerDefaults.Web)
             { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow });
         if (position is null || string.IsNullOrWhiteSpace(position.SpaceId) || string.IsNullOrWhiteSpace(position.RootFolderId)

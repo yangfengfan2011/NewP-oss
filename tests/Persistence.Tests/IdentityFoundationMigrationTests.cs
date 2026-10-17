@@ -54,9 +54,9 @@ public sealed class IdentityFoundationMigrationTests
             })
             .ToArray();
 
-        Assert.Equal(
-            "56554470f57d6620d947482f760982f3f6c2473739c2c66696019fefc5aa21a1",
-            PersistenceModelDigest.Compute(definitions));
+        using var manifest = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(FindRepositoryRoot(), "server",
+            "platform-persistence-efcore.migrations.sqlserver", "PlatformFoundation.SqlServerMigrations.json")));
+        Assert.Equal(manifest.RootElement.GetProperty("modelDigest").GetString(), PersistenceModelDigest.Compute(definitions));
         Assert.Equal("038748ee556ade48658e64abc43230578eec7d4b9a7aab3429034bc53d7cf666",
             PersistenceModelDigest.Compute(FrozenFoundation()));
     }
@@ -645,11 +645,15 @@ public sealed class IdentityFoundationMigrationTests
         using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
         var root = document.RootElement;
         var migrations = root.GetProperty("migrations").EnumerateArray().ToArray();
-        Assert.Equal(
-            ["20260812144154_PlatformFoundation", "20260914114935_AddFunctionalAuthorization",
-                "20260922094146_AddDataScopeRules", "20260922105706_AddDataScopeSubjectOptions",
-                "20260923033732_AddDataScopeObjectGrants"],
-            migrations.Select(static migration => migration.GetProperty("migrationId").GetString()));
+        // 已发布五节点仍是固定前缀；当前尾集合另与真实构建的迁移类型核对。
+        Assert.Equal(new[] { "20260812144154_PlatformFoundation", "20260914114935_AddFunctionalAuthorization",
+            "20260922094146_AddDataScopeRules", "20260922105706_AddDataScopeSubjectOptions",
+            "20260923033732_AddDataScopeObjectGrants" }, migrations.Take(5).Select(migration => migration.GetProperty("migrationId").GetString()));
+        var builtIds = typeof(ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations.PlatformFoundation).Assembly.GetTypes()
+            .Where(type => typeof(Microsoft.EntityFrameworkCore.Migrations.Migration).IsAssignableFrom(type))
+            .SelectMany(type => type.GetCustomAttributes(typeof(Microsoft.EntityFrameworkCore.Migrations.MigrationAttribute), false)
+                .Cast<Microsoft.EntityFrameworkCore.Migrations.MigrationAttribute>()).Select(attribute => attribute.Id).Order(StringComparer.Ordinal);
+        Assert.Equal(builtIds, migrations.Select(static migration => migration.GetProperty("migrationId").GetString()));
 
         Assert.Equal("platform.foundation", root.GetProperty("moduleId").GetString());
         Assert.Equal(new string('0', 64), migrations[0].GetProperty("fromModelDigest").GetString());

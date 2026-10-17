@@ -112,6 +112,25 @@ public sealed class PageCompositionMetadataTests
         if (kind == "valid") { Assert.Contains("workspace.references.object", ValidateWorkspace()); Assert.Contains("workspace.references.list", ValidateWorkspace()); }
         else Assert.Throws<JsonException>(() => ValidateWorkspace());
     }
+    [Theory]
+    [InlineData("valid")]
+    [InlineData("wrong-page")]
+    [InlineData("empty")]
+    [InlineData("unknown")]
+    public void WorkspacePermissionSource_CollectsOnlyExplicitDetailReadBinding(string kind)
+    {
+        var root = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(RepositoryRoot(), "Workspace");
+        var documents = Directory.GetFiles(Path.Combine(root, "metadata"), "*.json", SearchOption.AllDirectories).Select(path => JsonNode.Parse(File.ReadAllText(path))!).ToArray();
+        var bindings = JsonNode.Parse(File.ReadAllText(Path.Combine(root, "newp.plugin.json")))!["frontend"]!["bindings"]!.AsArray().Select(value => value!.GetValue<string>()).ToHashSet(StringComparer.Ordinal);
+        var page = documents.Single(document => document["view"]?["key"]?.GetValue<string>() == "workspace.folder.tabs")["view"]!["tabs"]![0]!["pageRef"]!;
+        if (kind == "wrong-page") page["pageKey"] = "platform.list";
+        if (kind == "empty") page["parameters"]!["detailReadSourceKey"] = "";
+        if (kind == "unknown") page["parameters"]!["detailReadSourceKey"] = "missing.source";
+        IReadOnlyList<string> Check() => PageCompositionMetadataValidator.Validate(documents.Select(document => JsonSerializer.SerializeToElement(document)), bindings);
+        if (kind == "valid") Assert.Contains("workspace.content.properties", Check());
+        else Assert.Throws<JsonException>(() => Check());
+    }
+
     [Fact]
     public void Document_RuntimeModelMatchesTheSharedCreateAndDetailConsumerFixture()
     {

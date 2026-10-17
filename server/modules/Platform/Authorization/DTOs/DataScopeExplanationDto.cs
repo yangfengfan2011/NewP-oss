@@ -1,3 +1,5 @@
+using ICP.Platform.Authorization.Contracts;
+
 namespace ICP.Platform.Modules.Authorization.DTOs;
 
 /// <summary>指定用户对既有对象的数据范围裁决；不代替功能入口资格或业务校验。</summary>
@@ -10,4 +12,4 @@ public sealed record DataScopeActionExplanationDto(string Key, string Title, boo
 
 /// <summary>规则路径及主体意见；被后代或对象覆盖的来源保留明确状态。</summary>
 public sealed record DataScopeDecisionSourceDto(string Kind, string Id, string Name, string Opinion, string Status,
-    IReadOnlyList<DataScopeSubjectDto> Subjects);
+    IReadOnlyList<DataScopeDirectSubjectDto> Subjects);

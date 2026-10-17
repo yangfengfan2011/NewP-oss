@@ -27,7 +27,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     bool workspaceDelivery = false, WorkspaceDeliveryInput? deliveryInput = null, bool exerciseCompositionLifecycle = false,
     bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false, bool exerciseFileRecoveryMechanisms = true,
     bool exerciseDocumentCopyRecovery = false, bool exerciseDocumentCopyInterruptions = true, bool exerciseDocumentBatchRecovery = false,
-    PublishedWorkspacePreparation preparation = PublishedWorkspacePreparation.HistoricalUpgrade)
+    PublishedWorkspacePreparation preparation = PublishedWorkspacePreparation.HistoricalUpgrade, bool preparePermissionActors = false)
 {
     private readonly Dictionary<string, string?> _environment = new();
     private ReusableSqlServerDatabase? _database;
@@ -51,12 +51,14 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     private WorkspaceFolderPosition? _documentPosition;
     private string? _baselineOwners;
     private WorkspaceAcceptanceActor? _administrator;
+    private WorkspaceAcceptanceActor? _permissionManager;
+    internal WorkspaceAcceptanceActor PermissionManager => _permissionManager ?? throw new InvalidOperationException("对象权限管理主体尚未准备。");
     internal string HostIdentity => $"published:{_host?.Process.Id}:{runId}";
 
     internal static PublishedComponentAcceptanceFixture FromWorkspaceDelivery(string repositoryRoot, string runDirectory, string runId,
         bool exerciseCompositionLifecycle = false, bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false, bool exerciseFileRecoveryMechanisms = true,
         bool exerciseDocumentCopyRecovery = false, bool exerciseDocumentCopyInterruptions = true, bool exerciseDocumentBatchRecovery = false,
-        PublishedWorkspacePreparation preparation = PublishedWorkspacePreparation.HistoricalUpgrade)
+        PublishedWorkspacePreparation preparation = PublishedWorkspacePreparation.HistoricalUpgrade, bool preparePermissionActors = false)
     {
         var path = RequiredPath("NEWP_ACCEPTANCE_WORKSPACE_DELIVERY_INPUT");
         var input = JsonSerializer.Deserialize<WorkspaceDeliveryInput>(File.ReadAllText(path), AcceptanceJson.Options)
@@ -66,7 +68,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             exerciseCompositionLifecycle: exerciseCompositionLifecycle, exerciseUninstallRecovery: exerciseUninstallRecovery,
             exerciseFileRecovery: exerciseFileRecovery, exerciseFileRecoveryMechanisms: exerciseFileRecoveryMechanisms,
             exerciseDocumentCopyRecovery: exerciseDocumentCopyRecovery, exerciseDocumentCopyInterruptions: exerciseDocumentCopyInterruptions,
-            exerciseDocumentBatchRecovery: exerciseDocumentBatchRecovery, preparation: preparation);
+            exerciseDocumentBatchRecovery: exerciseDocumentBatchRecovery, preparation: preparation, preparePermissionActors: preparePermissionActors);
     }
 
     // 只登记受控构建的输入与来源；不产出裁决，也不授予包信任。Gate 仍走正式安装/Host。
@@ -97,6 +99,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     {
         if (!Enum.IsDefined(preparation)) throw new ArgumentOutOfRangeException(nameof(preparation));
         var historicalUpgrade = preparation == PublishedWorkspacePreparation.HistoricalUpgrade;
+        if (preparePermissionActors && (!workspaceDelivery || historicalUpgrade)) throw new InvalidOperationException("对象权限页面只使用当前三成员发行物。");
         // 文件、副本、批次恢复自建数据，不读历史升级留下的行或 Link；卸载与组合生命周期依赖旧业务，必须走历史升级。
         if (!historicalUpgrade && (!workspaceDelivery || exerciseCompositionLifecycle || exerciseUninstallRecovery))
             throw new InvalidOperationException("当前发行物准备不启用卸载恢复或组合生命周期演练，它们依赖历史升级留下的旧业务；请选择历史升级准备。");
@@ -290,6 +293,31 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         if (exerciseFileRecovery) await VerifyFileProcessRecoveryAsync(actor, token);
         if (exerciseDocumentCopyRecovery) actor = await VerifyDocumentCopyProcessRecoveryAsync(actor, registerSecret, granted, token);
         if (exerciseDocumentBatchRecovery) await VerifyDocumentBatchProcessRecoveryAsync(actor, token);
+        if (preparePermissionActors)
+        {
+            using var permissionAdministrator = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
+            await WorkspaceAcceptanceFixture.LoginAsync(permissionAdministrator, _administrator!, token);
+            var permissionFeatures = await AcceptanceFeatureCatalog.LoadAsync(permissionAdministrator, token);
+            var browse = permissionFeatures.Behavior("Workspace", "workspace.spaces.access");
+            var manage = permissionFeatures.Action(browse, "authorizeContent", "list.rowActions", "folder");
+            // 准备业务内容的原actor不参与此路径；页面主体只取得正式目录声明的浏览依赖和独立管理动作。
+            actor = await WorkspaceAcceptanceFixture.PrepareAsync(permissionAdministrator, permissionFeatures, "br" + runId, registerSecret, [browse], token);
+            var manager = await WorkspaceAcceptanceFixture.PrepareAsync(permissionAdministrator, permissionFeatures, "mg" + runId, registerSecret, [browse, manage], token);
+            _permissionManager = manager;
+            foreach (var (subject, selected) in new[] { (actor, new[] { browse }), (manager, new[] { browse, manage }) })
+            {
+                using var account = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
+                await WorkspaceAcceptanceFixture.LoginAsync(account, subject, token);
+                var current = await WorkspaceAcceptanceFixture.SendAsync(account, HttpMethod.Get, "/api/auth/current-user", null, null, token);
+                var actual = current.GetProperty("featurePositions").EnumerateArray().Select(item => item.GetString()!).ToHashSet(StringComparer.Ordinal);
+                var expected = permissionFeatures.GrantSet(selected);
+                if (!actual.SetEquals(expected) || actual.Any(position => position.StartsWith("Part/", StringComparison.Ordinal)
+                    || position.StartsWith("Document/", StringComparison.Ordinal) || position.Contains("workspace.permissions", StringComparison.Ordinal)))
+                    throw new InvalidOperationException("对象权限页面主体没有保持本轮正式限定的功能集合。");
+            }
+            await WriteAsync("permission-actors.json", new { reader = actor.AccountId, manager = _permissionManager.AccountId,
+                browse = browse.Position, manage = manage.Position, entryDependencies = browse.EntryDependencies }, token);
+        }
         var targetAfter = ReadTargetIdentity();
         await WriteAsync("target-after.json", targetAfter, token);
         if (before != targetAfter) throw new InvalidOperationException("安装期间固定 Host/Shell 发行物发生变化。");

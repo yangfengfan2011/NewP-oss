@@ -6,6 +6,13 @@ namespace ICP.Platform.Authorization.Contracts;
 /// <summary>规范资源身份显式映射到所属模型和对象标识字段；专用命令模块可通过 DI 贡献，标准 CRUD 由描述符贡献。</summary>
 public sealed record DataScopeResource(string ResourceKey, string ModuleId, string ModelName, string IdField)
 {
+    /// <summary>显式附加完整对象读取约束；保留四参数构造及解构供既有签发组件使用。</summary>
+    public DataScopeResource(string resourceKey, string moduleId, string modelName, string idField, string? readConstraintKey)
+        : this(resourceKey, moduleId, modelName, idField) => ReadConstraintKey = readConstraintKey;
+
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? ReadConstraintKey { get; init; }
+
     /// <summary>技术名称是唯一模型身份，ModuleId 独立声明资源 owner。</summary>
     public string ModelKey => ModelName;
 }

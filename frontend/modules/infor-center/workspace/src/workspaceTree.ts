@@ -1,6 +1,23 @@
 import { platformFetch } from '@icp-platform/core';
 import { createTreeQueryTransport, readStandardCrudRequestError, StandardCrudRequestError, type PageInputResolverBinding, type TreeProviderBinding } from '@icp-platform/sdk';
 
+const objectViews: Record<string, { resourceKey: string; viewKey: string }> = {
+  WorkspaceFolder: { resourceKey: 'workspace.folder', viewKey: 'workspace.folder.detail' },
+  Part: { resourceKey: 'part.part', viewKey: 'part.part.detail' },
+  Document: { resourceKey: 'document.document', viewKey: 'document.document.detail' },
+};
+
+/** 对象身份与出现位置分别保留；LID 只作为读取来源，不作为授权目标。 */
+export function workspaceContentSource(value: Record<string, unknown> | undefined) {
+  const model = typeof value?.modelKey === 'string' ? objectViews[value.modelKey] : undefined;
+  const linkIds: unknown = typeof value?.linkIds === 'string' ? JSON.parse(value.linkIds) : value?.linkIds;
+  if (!model || typeof value?.objectId !== 'string' || !value.objectId || typeof value.sourceLinkId !== 'string' || !value.sourceLinkId
+    || typeof value.spaceId !== 'string' || !value.spaceId || typeof value.rootFolderId !== 'string' || !value.rootFolderId
+    || !Array.isArray(linkIds) || linkIds.some(id => typeof id !== 'string' || !id)) throw new Error('缺少对象及完整工作空间来源');
+  return { ...model, objectId: value.objectId, modelKey: String(value.modelKey), sourceLinkId: value.sourceLinkId,
+    spaceId: value.spaceId, rootFolderId: value.rootFolderId, linkIds: linkIds as string[] };
+}
+
 const api = '/api/workspace/spaces';
 function headers(scope: Record<string, unknown>) {
   if (scope.kind !== 'currentUser' || typeof scope.featurePosition !== 'string'
@@ -40,6 +57,24 @@ export function createWorkspaceTreeProvider(fetcher: typeof fetch = platformFetc
 }
 
 export const workspacePageInputs: PageInputResolverBinding[] = [
+  { key: 'workspace.content.record', pageKeys: ['platform.tabs', 'workspace.content.permissions'], resolve: (parameters, context) => {
+    const source = workspaceContentSource(context?.context ?? parameters);
+    const readPosition = parameters.sourceFeaturePosition ?? context?.context?.sourceFeaturePosition;
+    if (typeof readPosition !== 'string' || !readPosition) throw new Error('缺少来源读取位置');
+    const selected = { ...(context ?? { nodeKey: source.sourceLinkId, nodeType: 'content', label: String(parameters.name ?? ''), hasChildren: false }),
+      context: { ...source, sourceFeaturePosition: readPosition } };
+    return { parameters: { ...parameters, sourceFeaturePosition: readPosition }, context: selected, recordId: source.objectId,
+      queryScope: { spaceId: source.spaceId, rootFolderId: source.rootFolderId, linkIds: JSON.stringify(source.linkIds),
+        sourceLinkId: source.sourceLinkId, sourceObjectId: source.objectId, sourceModelKey: source.modelKey, sourceFeaturePosition: readPosition } };
+  } },
+  { key: 'workspace.content.propertiesInput', pageKeys: ['platform.detail'], resolve: (parameters, context) => {
+    const source = workspaceContentSource(context?.context);
+    const readPosition = context?.context?.sourceFeaturePosition;
+    if (typeof readPosition !== 'string' || !readPosition) throw new Error('缺少来源读取位置');
+    return { parameters: { ...parameters, viewKey: source.viewKey, detailReadSourceKey: 'workspace.content.properties' }, context,
+      recordId: source.objectId, queryScope: { spaceId: source.spaceId, rootFolderId: source.rootFolderId, linkIds: JSON.stringify(source.linkIds),
+        sourceLinkId: source.sourceLinkId, sourceObjectId: source.objectId, sourceModelKey: source.modelKey, sourceFeaturePosition: readPosition } };
+  } },
   { key: 'workspace.folder.reference', pageKeys: ['platform.list'], resolve: (parameters, context) => {
     const value = context?.context;
     if (context?.nodeType !== 'folder' || typeof value?.id !== 'string' || typeof value.spaceId !== 'string' || typeof value.rootFolderId !== 'string'

@@ -781,6 +781,42 @@
     "Action_edit": {
       "zhs": "编辑",
       "en": "Edit"
+    },
+    "ObjectExpiresAt": {
+      "zhs": "截止时间（UTC）",
+      "en": "Expires at (UTC)"
+    },
+    "Permanent": {
+      "zhs": "永久",
+      "en": "Permanent"
+    },
+    "ObjectOutcomeUnknown": {
+      "zhs": "保存结果未知，不能重复提交。请核对当前配置。",
+      "en": "The save outcome is unknown. Do not submit again. Check the current configuration."
+    },
+    "ReconcileObject": {
+      "zhs": "核对结果",
+      "en": "Check outcome"
+    },
+    "ObjectCurrentConfigurationRead": {
+      "zhs": "已读取当前配置；这不能确定原保存请求的提交结果。",
+      "en": "The current configuration was loaded. This does not establish the outcome of the original save request."
+    },
+    "SubjectUnavailable": {
+      "zhs": "不可见或已不存在",
+      "en": "Unavailable or no longer exists"
+    },
+    "SubjectType_creator": {
+      "zhs": "创建人",
+      "en": "Creator"
+    },
+    "SubjectType_owner": {
+      "zhs": "所属人",
+      "en": "Owner"
+    },
+    "SubjectType_ownerDepartment": {
+      "zhs": "所属部门",
+      "en": "Owner department"
     }
   }
 }

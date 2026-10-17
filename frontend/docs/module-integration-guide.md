@@ -66,7 +66,9 @@ Shell 会导入并校验整份目录，全部成功后通过 `ModuleRegistry.rep
 
 标准列表按 metadata 顺序呈现新建及声明 handlerKey 的页动作。页/行动作的 handler 和输入 renderer 可读取当前页面的可选 queryScope；它只是定位输入，服务端必须重新校验空间、路径和对象资格。输入 renderer 的 submitting 表示共享执行器正在提交，可交给标准表单禁用输入；弹层、草稿保护、防重复提交与关闭仍由共享宿主持有。写入完成后异步列表刷新失败保留“已保存”事实，重试只读取；该事实按主体、页面实例和查询身份隔离，并在成功读取后清除。
 
-快捷跳转动作声明 `navigationTargetKey`，并保留现有 handler 返回 `StandardCrudOperationResult.navigation`。宿主按目标导航资格显示，目标路由仍执行正常准入；它不新增可授予动作，也不借用 `standardAction: view` 来改变原查看动作的含义。
+既有快捷跳转动作声明 `navigationTargetKey`，handler 返回 `StandardCrudOperationResult.navigation`，按目标导航资格显示并执行目标准入。普通 `view` 没有目标时仍打开原属性查看器。
+
+另一个明确受限的组合是列表行 `standardAction: view` 与 `navigationTargetKey`：目标必须是已声明 `routeOnly: true`、`featureAuthorization: false` 的呈现页面，动作不能再有 handler/input，目标不能有 featureKey、featureOwner 或 redirect。它沿当前真实 read 位置显示并直接使用既有入口导航，不进入写执行器的 pending；真实未保存草稿的导航保护保持。模块可用纯同步 `dataAdapter.getReadNavigationParameters(row, { queryScope })` 投影明确的字符串定位字段，不能转储整行。目标仍由 metadata 决定，Shell 拒绝投影内的 `featurePosition` / `sourceFeaturePosition`，最后加入当前 read 位置作为 `sourceFeaturePosition`；没有投影的普通实体只传真实 recordId。缺失必要来源须拒绝，不回退裸对象ID。该位置是请求上下文，服务端仍每次判当前功能资格及完整对象访问；不产生新导航/Tab grant或全局权限继承。同一入口切Tab的search更新保留定位state，跨入口仍使用新参数。
 
 运行时动态列的 `StandardCrudColumnContext.featurePosition` 同样来自所属读取入口。column provider 与行 data adapter 各自沿请求传递该位置；例如 Example 动态工作量的列请求和行请求使用相同的入口位置，原有模块列上下文 token 仍负责列与行的业务一致性，不能用它替代授权位置。宿主的动态列缓存已经按读取位置隔离。
 
@@ -78,7 +80,11 @@ Shell 会导入并校验整份目录，全部成功后通过 `ModuleRegistry.rep
 
 已登记的数据范围资源可复用 `@icp-platform/ui` 的 `createObjectAuthorizationActions(resourceKey, getTarget)`。`getTarget` 从动作的当前 `row` 或 `detail` 返回 `{ id, name, title }`，不缓存跨对象目标。将返回的 `actionInputRenderers`、`actionEligibilityResolvers` 和 `actionHandlers` 合并进标准资源注册；Example 的 `exampleRecordStandardCrudResource` 是列表接入实例，Organization 同样消费这套通用界面。
 
-View 的两个动作分别配置 `key: authorize` / `viewAuthorization`，共同使用 `handlerKey: authorize`，输入键分别为 `objectAuthorization` / `objectAuthorizationDetails`。两者都要求对象授权管理资格，分别派生功能位置并绑定 `<resourceKey>.authorize`；查看界面的只读设置是呈现约束，不另行授予较低权限的审计身份。模块只声明按钮和目标，完整授权保存、最小主体目录、用户选择及权限来源解释均由通用组件和 Authorization 端点负责。
+旧通用 View 两个动作仍可配置 `key: authorize` / `viewAuthorization`，共同使用 `handlerKey: authorize`，输入键分别为 `objectAuthorization` / `objectAuthorizationDetails`。没有 owner basePath 的旧通用合同保持两者均需 `<resourceKey>.authorize`，不因新查询而放宽原API资格。
+
+采用可浏览查询的 owner 可给 target 增加 `basePath`（含完整来源参数），复用 `ObjectAuthorizationPage` 的只读权限页及上述标准 read 导航组合；管理继续现有标准动作。共享请求在URL pathname上追加 catalog/explanation/subjects/eligibility 后缀并保留原查询；完整配置读写使用basePath本身，不拼接到问号之后。owner只读目录/账号选择/解释由本资源read入口保护，完整配置/管理主体候选/保存仍独立authorize。Workspace basePath里的LID与完整位置只用于来源校验，ACL身份始终是资源键+Entity EID；独立owner入口不要求LID。解释只消费server为实际命中主体投影的安全名称，不为浏览账号额外开放角色/公司/部门候选。选择被分析账号不切当前登录主体，数据动作结论不代表完整执行资格。
+
+完整来源、目标及当前主体参与读取和资格身份；变化时取消并失效旧响应。新的owner保存必须有活动 action instance，未知提交结果在该实例内按完整来源冻结，跨关闭/重开不得重发；只能显式GET核对当前配置，失败、拒绝或不同当前值均不能推定原提交失败或解锁重放。SDK input context 的 `submissionFailure` 保留原结构化错误，submitting期间禁用主体/期限编辑。明确可修正错误保留草稿，204后自身失权仍保持已保存成功，不回读敏感配置。共享主体编辑器仅对象模式启用秒级UTC绝对期限，规则默认不接收期限或对象相对类型。
 
 不使用标准动作注册时，也可在已有宿主中渲染 `ObjectAuthorizationInput`，传入 SDK 动作输入上下文及 `target: { resourceKey, id, name, title }`；`action.inputKey` 决定编辑或查看模式。权限解释默认当前用户，可以选择用户，展示已保存配置的最终数据范围结果及规则路径，不替代功能位置判权或业务校验。
 
@@ -106,7 +112,9 @@ corepack pnpm --dir frontend --filter @icp-platform/shell test
 
 外仓 `standard-data.v1` 插件不携带任意前端运行时代码；它使用独立 build-only plugin SDK 生成声明式标准投影。代码型外部 profile 必须另行设计。
 
-异构只读列表可用 Adapter.getDetailTarget 返回已登记的 detailViewKey 与真实实体主键；共享行操作只解析正式所属详情路由并重新执行目标准入，行选择与关系命令仍使用 getRowId。动作输入需要跨资源候选时，可从 navigationFeaturePosition(targetKey) 取得当前允许的正式导航位置；缺失位置不得拼接身份或以原动作位置冒充目标读取。候选继续使用所属模块标准 GET 的分页与字段协议。
+异构只读列表原有 Adapter.getDetailTarget 路径保持：返回已登记的 detailViewKey 与真实实体主键，重新执行目标准入，行选择与关系命令仍使用 getRowId。
+
+需要保留来源的属性页可在 `platform.detail` PageRef.parameters 显式声明 `detailReadSourceKey`。源由 `standardCrudDetailReadSources` 贡献 `{ key, resourceKeys, get(resourceKey, id, context) }`，key与页面/resolver等实现键一起进入现有Capsule.bindings；重复、未知key或资源不匹配拒绝装配。平台仍选择目标真实registration和已编译schema，只替换只读get；源核对服务器实际resourceKey/EID与目标一致，不接受任意URL/布局。来源属性页关闭编辑、摘要交互及按裸EID外跳的detailContributions，默认无source的详情行为保持。模块resolver负责明确记录/来源并保留read上下文，缺来源直接拒绝；独立owner可在原adapter.get里保留原featurePosition优先，承接本模块queryScope.sourceFeaturePosition，不导入Shell内部context或复制schema。自定义PageProps收到当前解析placement的featurePosition；没有placement时平台去除同名外来参数，呈现页的sourceFeaturePosition仍须由标准read导航提供并经服务端重新验证。动作输入需要跨资源候选时，可从 navigationFeaturePosition(targetKey) 取得当前允许的正式导航位置；缺失位置不得拼接身份或以原动作位置冒充目标读取。候选继续使用所属模块标准 GET 的分页与字段协议。
 
 ## 从标准详情进入只读关联列表
 

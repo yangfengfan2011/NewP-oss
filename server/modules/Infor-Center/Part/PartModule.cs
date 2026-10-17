@@ -15,6 +15,8 @@ public sealed class PartModule : ModuleCapsuleBindingBase
     /// <inheritdoc/>
     public override void ConfigureServices(IServiceCollection services)
     {
+        services.AddSingleton(new ICP.Platform.Authorization.Contracts.DataScopeResourceActionBinding("part.part", ModuleId,
+            ["read", "create", "edit", "delete", "authorize", "partCopy", "partObjectCopy"]));
         services.AddStandardCrudKernel();
         services.AddStandardCrudResource(provider =>
         {

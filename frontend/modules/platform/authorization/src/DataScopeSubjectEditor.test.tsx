@@ -37,3 +37,17 @@ it('keeps selected values in paged options and discards requests from the previo
   } finally { await act(async () => root.unmount()); container.remove(); }
   expect(pending[2].signal?.aborted).toBe(true);
 });
+
+it('keeps the default rule editor without object expiry or object-specific subject choices', async () => {
+  const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+  try {
+    await act(async () => root.render(localizeDataScope(<DataScopeSubjectEditor
+      subject={{ id: 'rule', type: 'all', subjectId: null, priority: 0, actions: {} }} index={0}
+      types={[{ key: 'all', title: '所有用户', requiresId: false }, { key: 'department', title: '部门', requiresId: true }]}
+      actions={[]} read={vi.fn()} onChange={vi.fn()} />)));
+    expect(container.querySelector('input[id="expiresAt"]')).toBeNull();
+    await act(async () => container.querySelector('[aria-label="主体类型"]')!.closest('.ant-select')!
+      .querySelector('.ant-select-selector')!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })));
+    expect([...document.querySelectorAll('.ant-select-item-option-content')].map(item => item.textContent)).toEqual(['所有用户', '部门']);
+  } finally { await act(async () => root.unmount()); container.remove(); }
+});

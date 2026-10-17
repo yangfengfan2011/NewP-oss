@@ -287,7 +287,8 @@ if (app.Services.GetService<IStandardCrudResourceRegistry>() is not null)
 var registry = app.Services.GetRequiredService<ModuleRegistry>();
 var featureCatalog = activationSession.ModulePlan.FeatureCatalog;
 FeatureEndpointBindings.Validate(((IEndpointRouteBuilder)app).DataSources, featureCatalog,
-    app.Services.GetRequiredService<IStandardCrudResourceRegistry>());
+    app.Services.GetRequiredService<IStandardCrudResourceRegistry>(),
+    app.Services.GetService<ICP.Platform.Authorization.Contracts.IDataScopeResourceCatalog>()?.Resources);
 EndpointAccessPlanCompiler.Compile(
     ((IEndpointRouteBuilder)app).DataSources);
 
@@ -340,6 +341,7 @@ if (Directory.Exists(publicAssetsPath))
 app.UseForwardedHeaders();
 app.UseRateLimiter();
 app.UseAuthentication();
+app.UseMiddleware<ICP.Platform.Authorization.Http.DataScopeEvaluationMiddleware>();
 app.UseMiddleware<RequestPresentationContextMiddleware>();
 app.UseHostAntiforgery();
 app.UseMiddleware<RestrictedAuthenticationSessionMiddleware>();

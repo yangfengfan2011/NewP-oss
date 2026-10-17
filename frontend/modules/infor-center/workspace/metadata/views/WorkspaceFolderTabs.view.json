@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "1.0", "type": "view",
+  "view": { "key": "workspace.folder.tabs", "mode": "tab", "dicKey": "Workspace", "titleKey": "Object", "defaultTabKey": "information",
+    "tabs": [
+      { "key": "information", "titleKey": "Information", "pageRef": { "pageKey": "platform.detail", "parameters": { "viewKey": "workspace.folder.detail", "detailReadSourceKey": "workspace.content.properties" }, "inputResolverKey": "workspace.content.propertiesInput" } },
+      { "key": "permissions", "titleKey": "Permissions", "pageRef": { "pageKey": "workspace.content.permissions", "parameters": { "viewKey": "workspace.folder.detail" }, "inputResolverKey": "workspace.content.record" } }
+    ] }
+}

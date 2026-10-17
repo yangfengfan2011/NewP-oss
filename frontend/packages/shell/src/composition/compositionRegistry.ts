@@ -44,6 +44,12 @@ export function validateCompositionCandidate(modules: FrontendModule[], metadata
     const key = ref.parameters?.viewKey;
     const view = typeof key === 'string' ? views.get(key) : undefined;
     if (!view || view.mode !== modes[ref.pageKey]) throw new Error(`页面 View 参数不兼容：${String(key)}`);
+    const sourceKey = ref.parameters?.detailReadSourceKey;
+    if (sourceKey !== undefined) {
+      const matches = modules.flatMap(module => module.standardCrudDetailReadSources ?? []).filter(source => source.key === sourceKey);
+      if (ref.pageKey !== 'platform.detail' || matches.length !== 1 || !matches[0].resourceKeys.includes(String(view.resourceKey)))
+        throw new Error(`invalid detail read source reference: ${String(sourceKey)}`);
+    }
     if (chain.has(String(key))) throw new Error(`循环页面配置：${key}`);
     const next = new Set(chain).add(String(key));
     if (view.mode === 'tab') {

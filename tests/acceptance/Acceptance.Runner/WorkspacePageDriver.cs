@@ -6,6 +6,57 @@ namespace ICP.Platform.Acceptance;
 /// <summary>工作空间唯一正式旅程的页面控件知识；后续内容操作继续扩展此驱动。</summary>
 internal sealed class WorkspacePageDriver(IPage page)
 {
+    /// <summary>沿当前Part行的标准只读导航进入真实页签；保留原地址供后续回到同一来源。</summary>
+    internal async Task<string> OpenPermissionViewerAsync(string rowName)
+    {
+        var address = page.Url;
+        var row = await new StandardCrudPageDriver(page).WaitForRowAsync(rowName);
+        await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
+        var loaded = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath.StartsWith("/api/workspace/content/", StringComparison.Ordinal)
+            && new Uri(response.Url).AbsolutePath.EndsWith("/properties", StringComparison.Ordinal));
+        await page.GetByRole(AriaRole.Menuitem, new() { NameRegex = new Regex(@"^权\s*限$") }).ClickAsync();
+        var response = await loaded;
+        if (!response.Ok) throw new InvalidOperationException($"来源属性读取失败：{response.Status} {await response.TextAsync()}");
+        await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/workspace/permissions");
+        await page.GetByRole(AriaRole.Tab, new() { Name = "属性", Exact = true }).WaitForAsync();
+        await page.Locator(".np-crud-detail:visible").First.WaitForAsync();
+        return address;
+    }
+
+    /// <summary>只证明用户能够切到解释页；名称和裁决语义由正式API测试承担。</summary>
+    internal async Task InspectPermissionTabAsync()
+    {
+        var loaded = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath.EndsWith("/permissions/explanation", StringComparison.Ordinal));
+        await page.GetByRole(AriaRole.Tab, new() { Name = "权限", Exact = true }).ClickAsync();
+        var response = await loaded;
+        if (!response.Ok) throw new InvalidOperationException($"对象权限解释读取失败：{response.Status} {await response.TextAsync()}");
+        await page.GetByText("分析用户", new() { Exact = true }).First.WaitForAsync();
+    }
+
+    /// <summary>通过现管理动作编辑真实草稿，再经唯一根保存提交；不直接构造授权载荷。</summary>
+    internal async Task AddReadPermissionAndSaveAsync(string rowName)
+    {
+        var crud = new StandardCrudPageDriver(page);
+        var row = await crud.WaitForRowAsync(rowName);
+        await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
+        var configuration = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath.StartsWith("/api/workspace/content/", StringComparison.Ordinal)
+            && new Uri(response.Url).AbsolutePath.EndsWith("/permissions", StringComparison.Ordinal));
+        await page.GetByRole(AriaRole.Menuitem, new() { Name = "对象授权", Exact = true }).ClickAsync();
+        var loaded = await configuration;
+        if (!loaded.Ok) throw new InvalidOperationException($"对象授权装载失败：{loaded.Status} {await loaded.TextAsync()}");
+        var dialog = crud.VisibleModal();
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "添加主体项", Exact = true }).ClickAsync();
+        var editor = crud.VisibleDrawer();
+        await editor.GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^确\s*定$") }).ClickAsync();
+        await editor.WaitForAsync(new() { State = WaitForSelectorState.Hidden });
+        await dialog.GetByRole(AriaRole.Checkbox, new() { Name = "读取：不选", Exact = true }).ClickAsync();
+        await crud.ConfirmAsync(dialog, new("PUT", new Uri(loaded.Url).AbsolutePath, 204, "保存对象权限"));
+        await crud.WaitForRowAsync(rowName);
+    }
+
     /// <summary>通过 Shell 的真实语言控件选择语言；只供原 Native 详情呈现核对使用。</summary>
     internal async Task SelectLanguageAsync(string language)
     {

@@ -7,7 +7,8 @@ import { resolveDataScopeSubjects, searchDataScopeSubjects, type DataScopeSubjec
 
 interface Source { kind: string; id: string; name: string; opinion: string; status: string; subjects: DataScopeSubject[] }
 interface ActionResult { key: string; title: string; allowed: boolean; reason: string; sources: Source[] }
-interface Explanation { accountId: string; accountName: string; actions: ActionResult[] }
+interface Explanation { accountId: string; accountName: string; actions: ActionResult[];
+  subjectNames?: { type: string; id: string; name: string | null; status: 'resolved' | 'unavailable' }[] }
 const reasons: Record<string, string> = { administrator: '管理员豁免', disabled: '该动作的数据权限检查已停用',
   readRequired: '没有读取权限，因此不能执行此动作', object: '由对象授权决定', rule: '由命中规则决定；独立分支拒绝优先', default: '没有明确意见，默认允许' };
 const statuses: Record<string, string> = { effective: '参与最终裁决', descendantOverride: '被子规则覆盖', objectOverride: '被对象授权覆盖' };
@@ -29,7 +30,11 @@ export default function ObjectAuthorizationDetails({ read, catalog, unavailable 
     load: async ({ signal }) => {
       const result = await read(`/explanation${accountId ? `?accountId=${encodeURIComponent(accountId)}` : ''}`, signal) as Explanation;
       const entries = result.actions.flatMap(action => action.sources.flatMap(source => source.subjects));
-      const names = await resolveDataScopeSubjects(read, entries, signal);
+      const projectedNames = result.subjectNames;
+      const names = projectedNames === undefined ? await resolveDataScopeSubjects(read, entries, signal)
+        : new Map([...new Set(projectedNames.map(item => item.type))].map(type => [type,
+          new Map(projectedNames.filter(item => item.type === type).map(item => [item.id,
+            { id: item.id, name: item.status === 'resolved' && item.name !== null ? item.name : t('DataScope.SubjectUnavailable', '不可见或已不存在') }]))]));
       return { ...result, names };
     } });
   const identity = JSON.stringify([accountId, revision]);

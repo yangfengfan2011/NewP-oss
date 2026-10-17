@@ -103,6 +103,7 @@ function collectBehaviorBindingTargetKeys(bindings: FrontendBehaviorBindings): s
     ...(bindings.pages ?? []).map((binding) => binding.pageKey),
     ...(bindings.pageInputResolvers ?? []).map((binding) => binding.key),
     ...(bindings.treeProviders ?? []).map((binding) => binding.key),
+    ...(bindings.standardCrudDetailReadSources ?? []).map(binding => binding.key),
   ];
 }
 
@@ -119,6 +120,7 @@ function collectModuleCapabilityTargetKeys(module: FrontendModule): string[] {
     ...(module.pages ?? []).map((binding) => binding.pageKey),
     ...(module.pageInputResolvers ?? []).map((binding) => binding.key),
     ...(module.treeProviders ?? []).map((binding) => binding.key),
+    ...(module.standardCrudDetailReadSources ?? []).map(binding => binding.key),
     ...(module.routes ?? []).map((route) => route.path),
   ];
 }
@@ -154,12 +156,24 @@ function validateStandardCrudCapabilityDescriptors(
   }
 }
 
+/** 来源实现只声明规范资源白名单与读取函数，不能借普通页面参数注入任意读取器。 */
+function validateDetailReadSources(moduleId: string, sources: FrontendBehaviorBindings['standardCrudDetailReadSources']): void {
+  for (const source of sources ?? []) {
+    if (typeof source.key !== 'string' || !source.key.trim() || typeof source.get !== 'function'
+      || !Array.isArray(source.resourceKeys) || !source.resourceKeys.length
+      || source.resourceKeys.some(key => typeof key !== 'string' || !key.trim())
+      || new Set(source.resourceKeys).size !== source.resourceKeys.length)
+      throw new Error(`invalid detail read source for '${moduleId}'`);
+  }
+}
+
 function validateRouteCapabilityCandidate(modules: FrontendModule[]): void {
   const ownerByTargetKey = new Map<string, string>();
   for (const module of modules) {
     const moduleId = module.metadata.moduleId;
     validateRouteCapabilityDescriptors(moduleId, module.routeCapabilities);
     validateStandardCrudCapabilityDescriptors(moduleId, module.standardCrudCapabilities);
+    validateDetailReadSources(moduleId, module.standardCrudDetailReadSources);
     for (const targetKey of collectModuleCapabilityTargetKeys(module)) {
       const owner = ownerByTargetKey.get(targetKey);
       if (owner) {
@@ -179,6 +193,7 @@ function validateBehaviorBindingCoverage(
 ): void {
   validateRouteCapabilityDescriptors(entry.moduleId, bindings.routeCapabilities);
   validateStandardCrudCapabilityDescriptors(entry.moduleId, bindings.standardCrudCapabilities);
+  validateDetailReadSources(entry.moduleId, bindings.standardCrudDetailReadSources);
 
   const implementedTargetKeys = collectBehaviorBindingTargetKeys(bindings);
   const duplicateDeclared = frontend.bindings.find(
@@ -409,6 +424,7 @@ export async function loadActiveModuleRuntimeWith(
               routeCapabilities: bindings.routeCapabilities,
               standardCrudCapabilities: bindings.standardCrudCapabilities,
               standardCrudResources: bindings.standardCrudResources,
+              standardCrudDetailReadSources: bindings.standardCrudDetailReadSources,
               standardListViews: bindings.standardListViews,
               customPages: bindings.customPages,
               pages: bindings.pages,

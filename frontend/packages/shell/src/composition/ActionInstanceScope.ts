@@ -1,5 +1,12 @@
 import type { StandardCrudActionInstance } from '@icp-platform/sdk';
 
+const queryIdentityOwner = Symbol('standard-crud-action-query-identity');
+
+/** 只标识当前实例生命周期，不缓存资格；实例释放并重新激活后重新分配。 */
+export function actionInstanceQueryIdentity(instance?: StandardCrudActionInstance): string | null {
+  return instance?.active ? instance.getOrCreate(queryIdentityOwner, () => crypto.randomUUID(), () => {}) : null;
+}
+
 /** 只归一个树/页面实例的动作状态容器；模块拥有值及其释放逻辑，宿主只管理生命周期。 */
 export class ActionInstanceScope implements StandardCrudActionInstance {
   private values = new Map<symbol, { value: unknown; dispose: () => void }>();

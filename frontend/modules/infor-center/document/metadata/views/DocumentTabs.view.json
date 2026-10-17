@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "1.0", "type": "view",
+  "view": { "key": "document.document.tabs", "mode": "tab", "dicKey": "Document", "titleKey": "Title", "defaultTabKey": "information",
+    "tabs": [
+      { "key": "information", "titleKey": "Information", "pageRef": { "pageKey": "platform.detail", "parameters": { "viewKey": "document.document.detail" }, "inputResolverKey": "document.document.record" } },
+      { "key": "permissions", "titleKey": "Permissions", "pageRef": { "pageKey": "document.document.permissions", "inputResolverKey": "document.document.record" } }
+    ] }
+}

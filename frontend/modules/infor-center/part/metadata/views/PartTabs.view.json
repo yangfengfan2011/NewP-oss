@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "1.0", "type": "view",
+  "view": { "key": "part.part.tabs", "mode": "tab", "dicKey": "Part", "titleKey": "Title", "defaultTabKey": "information",
+    "tabs": [
+      { "key": "information", "titleKey": "Information", "pageRef": { "pageKey": "platform.detail", "parameters": { "viewKey": "part.part.detail" }, "inputResolverKey": "part.part.record" } },
+      { "key": "permissions", "titleKey": "Permissions", "pageRef": { "pageKey": "part.part.permissions", "inputResolverKey": "part.part.record" } }
+    ] }
+}

@@ -50,8 +50,9 @@ it('projects the real Workspace row menu as references to its existing actions',
   expect(schema.rowActionColumn).toBe('menu');
   expect(schema.rowContextMenu).toBeUndefined();
   for (const model of ['WorkspaceFolder', 'Part', 'Document']) {
-    const keys = schema.rowActions.filter(action => model === 'WorkspaceFolder' || action.key !== 'view').map(action => action.key);
-    expect(schema.rowActionSets?.[model]).toEqual({ column: keys, contextMenu: keys });
+    const menu = [...(model === 'WorkspaceFolder' ? ['view'] : []), 'copy', 'cut', 'edit', 'delete', 'remove', 'initializeOwnership', 'viewAuthorization', 'authorizeContent'];
+    expect(schema.rowActionSets?.[model]).toEqual({ column: menu, contextMenu: menu });
+    expect(menu.every(key => schema.rowActions.some(action => action.key === key))).toBe(true);
   }
 });
 

@@ -8,5 +8,6 @@
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\modules\Platform\Authorization\Contracts\Authorization.Contracts.csproj" />
   </ItemGroup>
 </Project>

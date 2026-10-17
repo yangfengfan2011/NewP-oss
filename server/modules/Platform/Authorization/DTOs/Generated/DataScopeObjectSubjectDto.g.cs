@@ -19,4 +19,5 @@ public sealed class DataScopeObjectSubjectDto
     public string? SubjectId { get; init; }
     public bool IncludeDescendants { get; init; }
     public int Priority { get; init; }
+    public DateTime? ExpiresAt { get; init; }
 }

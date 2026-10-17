@@ -1,5 +1,5 @@
 import { ComponentType, ReactNode } from 'react';
-import type { StandardCrudResourceRegistration } from './standardCrud.types';
+import type { StandardCrudResourceRegistration, StandardCrudDetailReadSource } from './standardCrud.types';
 
 export { createRecoverableCapabilityLoader } from './capabilityLoader';
 export type * from './pageComposition';
@@ -129,6 +129,7 @@ export type {
   StandardCrudActionEligibilityResolver,
   StandardCrudDetail,
   StandardCrudDetailReadContext,
+  StandardCrudDetailReadSource,
   StandardCrudFeatureRequestContext,
   StandardCrudDetailFieldRenderer,
   StandardCrudDetailFieldRendererContext,
@@ -219,6 +220,7 @@ export interface FrontendBehaviorBindings {
   routeCapabilities?: RouteCapabilityBinding[];
   standardCrudCapabilities?: StandardCrudCapabilityBinding[];
   standardCrudResources?: StandardCrudResourceRegistration[];
+  standardCrudDetailReadSources?: StandardCrudDetailReadSource[];
   standardListViews?: StandardListViewRegistration[];
   customPages?: CustomPageRegistration[];
   pages?: PageBinding[];
@@ -233,6 +235,7 @@ export interface FrontendModule {
   routeCapabilities?: RouteCapabilityBinding[];
   standardCrudCapabilities?: StandardCrudCapabilityBinding[];
   standardCrudResources?: StandardCrudResourceRegistration[];
+  standardCrudDetailReadSources?: StandardCrudDetailReadSource[];
   standardListViews?: StandardListViewRegistration[];
   customPages?: CustomPageRegistration[];
   pages?: PageBinding[];

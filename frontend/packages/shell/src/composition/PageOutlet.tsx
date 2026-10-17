@@ -25,7 +25,8 @@ export function PageEntry({ page }: { page: PageRef }) {
   const navigate = useNavigate();
   const { token } = theme.useToken();
   const { navigation, treeNavigation } = createAddressNavigation(location.search, (search, replace) => {
-    navigate({ pathname: location.pathname, search }, { replace });
+    // 同页 Tab/树地址更新保留入口定位；切换正式入口仍由导航宿主建立新 state。
+    navigate({ pathname: location.pathname, search }, { replace, state: location.state });
   });
   // 导航入口切换必须释放旧页面的 dirty/submitting 登记；同一路径的查询参数变化保留组合状态。
   return <PageComposition key={`${auth?.user?.id ?? ''}:${location.pathname}`}><div className="sh-page np-composed-page" style={{
@@ -51,7 +52,11 @@ export function PageOutlet({ page, context, close, navigation, treeNavigation, a
     catch (error) { return { error: error instanceof Error ? error.message : String(error) }; }
   }, [context, page]);
   if (!resolved.input) return <div role="alert">{t('Platform.PageContextInvalid', '页面配置或上下文无效。')}</div>;
-  const props: PageProps = { input: resolved.input, reportState, active: parentActive && active };
+  // 自定义页消费已选入口上下文；resolver 中的同名参数不能替代当前入口。
+  const parameters = { ...resolved.input.parameters };
+  delete parameters.featurePosition;
+  if (placement?.entryPosition) parameters.featurePosition = placement.entryPosition;
+  const props: PageProps = { input: { ...resolved.input, parameters }, reportState, active: parentActive && active };
   return <FeaturePlacementContext.Provider value={placement}><PageActivityContext.Provider value={props.active!}><TreeNavigationContext.Provider value={treeNavigation ?? null}><PageNavigationContext.Provider value={navigation ?? null}><Suspense fallback={<div role="status">{t('Platform.LoadingPage', '正在加载页面…')}</div>}>
     {page.pageKey === 'platform.tree' ? <TreePage {...props} />
       : page.pageKey === 'platform.tabs' ? <TabPage {...props} />
@@ -100,9 +105,20 @@ function StandardPage({ pageKey, input, reportState, close, active }: PageProps 
     const modules = ModuleRegistry.getAllModules();
     const load = loadStandardListRegistration(modules, listKey);
     if (!load) setError(new Error('未找到标准页面资源绑定'));
-    else void load.then(result => { if (active) setRegistration(result.default); }, failure => { if (active) setError(failure); });
+    else void load.then(result => {
+      if (!active) return;
+      const sourceKey = input.parameters.detailReadSourceKey;
+      if (sourceKey === undefined) { setRegistration(result.default); return; }
+      const sources = modules.flatMap(module => module.standardCrudDetailReadSources ?? []).filter(source => source.key === sourceKey);
+      if (pageKey !== 'platform.detail' || sources.length !== 1 || !sources[0].resourceKeys.includes(result.default.resourceKey)) {
+        setError(new Error(`invalid detail read source reference: ${String(sourceKey)}`)); return;
+      }
+      const registration = result.default;
+      setRegistration({ ...registration, dataAdapter: { ...registration.dataAdapter,
+        get: (id, readContext) => sources[0].get(registration.resourceKey, id, readContext) } });
+    }, failure => { if (active) setError(failure); });
     return () => { active = false; };
-  }, [metadata, pageKey, viewKey]);
+  }, [input.parameters.detailReadSourceKey, metadata, pageKey, viewKey]);
   useEffect(() => runtime.subscribe(instanceId, async change => {
     if (change.resourceKey !== registration?.resourceKey) return;
     if (!active || reportedLifecycle.current.dirty || reportedLifecycle.current.submitting) pendingRefresh.current = true;
@@ -126,6 +142,7 @@ function StandardPage({ pageKey, input, reportState, close, active }: PageProps 
   if (!registration) return <div role="status">{t('Platform.LoadingResource', '正在加载标准资源…')}</div>;
   return <StandardCrudHostEnvironmentContext.Provider value={environment}>
     {pageKey === 'platform.list' ? <ListPage viewKey={viewKey} registration={registration} />
-      : <DetailPage viewKey={viewKey} id={input.recordId ?? null} registration={registration} />}
+      : <DetailPage viewKey={viewKey} id={input.recordId ?? null} registration={registration}
+      readSourceKey={typeof input.parameters.detailReadSourceKey === 'string' ? input.parameters.detailReadSourceKey : undefined} />}
   </StandardCrudHostEnvironmentContext.Provider>;
 }

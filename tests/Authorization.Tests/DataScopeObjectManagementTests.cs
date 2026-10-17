@@ -5,6 +5,7 @@ using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Authorization.DTOs;
+using ICP.Platform.Modules.Authorization.Persistence.Descriptors;
 using ICP.Platform.Modules.Authorization.Services;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.AspNetCore.Http;
@@ -194,7 +195,7 @@ public sealed class DataScopeObjectManagementTests
         var result = await fixture.Management.CatalogAsync("authorization.role", "target", default);
 
         Assert.Equal(DataScopeObjectStatus.Succeeded, result.Status);
-        Assert.Equal("user", Assert.Single(result.Value!.SubjectTypes).Key);
+        Assert.Equal(new[] { "creator", "user" }, result.Value!.SubjectTypes.Select(type => type.Key).Order(StringComparer.Ordinal));
         Assert.Empty(fixture.Directory.Searches);
         Assert.Equal(4, fixture.Decisions.Calls.Count);
     }
@@ -211,9 +212,10 @@ public sealed class DataScopeObjectManagementTests
 
     private sealed class Fixture : IDisposable
     {
-        // 不登记授权存储模型：越过拒绝结果读取配置时，真实 EF 依赖立即失败。
+        // 仅登记实际目标模型；不登记直接项存储模型，越过拒绝结果读取配置时真实 EF 依赖仍立即失败。
         private readonly EfPlatformDbContext db = new(new DbContextOptionsBuilder<EfPlatformDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString("N")).Options, []);
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N")).Options,
+            [AuthorizationModelDefinitions.All.Single(model => model.Name == "Role")]);
         internal FeatureSource Features { get; } = new();
         internal ObjectDecisions Decisions { get; } = new();
         internal IdentityDirectory Directory { get; } = new();
@@ -234,7 +236,7 @@ public sealed class DataScopeObjectManagementTests
             var plan = new CanonicalModulePlan("test", "1.0", "", "", [], [module]);
             var catalog = new DataScopeCatalog(new StandardCrudResourceRegistry([RoleReadResource.Create()]), plan, db, identities);
             Http.Request.Headers["X-NewP-Feature"] = plan.FeatureCatalog[0].Position;
-            var grants = new DataScopeObjectGrants(db, null!, catalog, identities, null!, null!);
+            var grants = new DataScopeObjectGrants(db, null!, catalog, identities, null!, null!, null!);
             Management = new(catalog, plan, Features, Decisions, grants, identities, new HttpContextAccessor { HttpContext = Http });
         }
 

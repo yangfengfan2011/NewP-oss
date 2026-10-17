@@ -13,6 +13,8 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
     /// <inheritdoc/>
     public override void ConfigureServices(IServiceCollection services)
     {
+        services.AddSingleton(new ICP.Platform.Authorization.Contracts.DataScopeResourceActionBinding("workspace.folder", ModuleId,
+            ["read", "create", "edit", "delete", "authorize", "workspaceCopy"]));
         services.AddScoped<WorkspaceSpaces>();
         services.AddScoped<WorkspacePositions>();
         services.AddScoped<WorkspaceContents>();
@@ -34,10 +36,13 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
             (provider, _) => new(() => provider.GetRequiredService<WorkspaceContents>(),
                 provider.GetRequiredService<Func<ICP.Platform.Crud.ObjectOperations.IObjectOperationExecutor>>()));
         services.AddScoped<WorkspaceFolderScope>();
+        services.AddKeyedScoped<IDataScopeResourceReadConstraint>("workspace.folder.scope", (provider, _) =>
+            provider.GetRequiredService<WorkspaceFolderScope>());
+        services.AddSingleton(new DataScopeResourceReadConstraintBinding("workspace.folder.scope", "workspace.folder", ModuleId));
         services.AddScoped<ICP.Platform.Crud.LinkQueries.ILinkQueryEndpointConstraint>(provider => provider.GetRequiredService<WorkspaceFolderScope>());
         services.AddScoped<ICP.Platform.Crud.LinkQueries.ILinkQuerySourcePolicy, WorkspaceContentQueryPolicy>();
         services.AddScoped<ICP.Platform.Crud.LinkQueries.ILinkTreeSourceReadPolicy, WorkspaceContentReadPredicate>();
         services.AddSingleton<WorkspaceFolderReadDescriptor>();
-        services.AddSingleton(new DataScopeResource("workspace.folder", ModuleId, "WorkspaceFolder", "EID"));
+        services.AddSingleton(new DataScopeResource("workspace.folder", ModuleId, "WorkspaceFolder", "EID", "workspace.folder.scope"));
     }
 }

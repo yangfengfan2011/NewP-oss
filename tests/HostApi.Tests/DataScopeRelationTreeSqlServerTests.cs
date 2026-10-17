@@ -1,3 +1,4 @@
+using ICP.Platform.Authorization.Contracts;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
@@ -117,7 +118,7 @@ public sealed class DataScopeRelationTreeSqlServerTests(ITestOutputHelper output
         async Task SaveObjectAsync(string resource, string id, string? opinion)
         {
             var subjects = opinion is null ? [] : new[]
-            { new DataScopeSubjectDto("TreeObject236_" + id, "user", actor.AccountId, 0,
+            { new DataScopeDirectSubjectDto("TreeObject236_" + id, "user", actor.AccountId, 0,
                 new Dictionary<string, string> { ["read"] = opinion }) };
             using var response = await FeatureHttpTestRequests.SendAsync(admin,
                 fixture.FeatureCatalog.First(point => point.BehaviorKey == resource + ".authorize"), HttpMethod.Put,

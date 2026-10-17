@@ -10,6 +10,7 @@ type ReadyDetailPresentation = Extract<StandardCrudDetailPresentation, { kind: '
 
 interface StandardCrudResolvedDetailSectionsProps {
   presentation: ReadyDetailPresentation;
+  allowContributions?: boolean;
   registration: Pick<StandardCrudResourceRegistration, 'detailFieldRenderers' | 'enumOptions' | 'detailViewKey'>;
   textFor: (key: string, fallback: string) => string;
 }
@@ -41,6 +42,7 @@ function formatStandardValue(
 /** Renders the shared runtime availability plan used by both the Drawer and the full detail page. */
 export default function StandardCrudResolvedDetailSections({
   presentation,
+  allowContributions = true,
   registration,
   textFor,
 }: StandardCrudResolvedDetailSectionsProps) {
@@ -99,6 +101,6 @@ export default function StandardCrudResolvedDetailSections({
         }))}
       />
     );
-  })}<StandardCrudDetailContributions key={`${registration.detailViewKey}:${String(presentation.sourceFields.EID)}`}
-    viewKey={registration.detailViewKey} recordId={String(presentation.sourceFields.EID)} /></div>;
+  })}{allowContributions && <StandardCrudDetailContributions key={`${registration.detailViewKey}:${String(presentation.sourceFields.EID)}`}
+    viewKey={registration.detailViewKey} recordId={String(presentation.sourceFields.EID)} />}</div>;
 }

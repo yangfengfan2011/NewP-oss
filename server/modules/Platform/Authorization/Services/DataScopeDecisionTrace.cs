@@ -39,7 +39,8 @@ internal sealed class DataScopeDecisionTrace(string objectId)
     {
         if (opinion is null) return;
         sources.Add(new("rule", node.Id, paths[node.Id], opinion,
-            effective ? "effective" : "descendantOverride", subjects.GetValueOrDefault(node.Id) ?? []));
+            effective ? "effective" : "descendantOverride", (subjects.GetValueOrDefault(node.Id) ?? []).Select(subject => new DataScopeDirectSubjectDto(
+                subject.Id, subject.Type, subject.SubjectId, subject.Priority, subject.Actions, subject.MatchOptions)).ToArray()));
         reason = "rule";
     }
 
@@ -65,7 +66,7 @@ internal sealed class DataScopeDecisionTrace(string objectId)
     }
 
     // 对象明确意见覆盖整棵规则结果，仍保留已经观察到的规则来源及覆盖说明。
-    internal void ObserveObject(string opinion, IReadOnlyList<DataScopeSubjectDto> selected)
+    internal void ObserveObject(string opinion, IReadOnlyList<DataScopeDirectSubjectDto> selected)
     {
         for (var i = 0; i < sources.Count; i++) sources[i] = sources[i] with { Status = "objectOverride" };
         sources.Add(new("object", objectId, "对象授权", opinion, "effective", selected));

@@ -10,6 +10,7 @@ namespace ICP.Platform.Crud.Runtime;
 
 public sealed class StandardCrudService : IStandardCrudService
 {
+    private readonly ICP.Platform.Authorization.Contracts.IDataScopeEvaluationScope? _evaluation;
     private readonly IStandardCrudRepository _repository;
     private readonly IPlatformQueryExecutor _queryExecutor;
     private readonly IReadOnlyDictionary<string, IStandardCrudQueryCustomizer> _queryCustomizers;
@@ -46,6 +47,21 @@ public sealed class StandardCrudService : IStandardCrudService
         _objectScope = objectScope;
     }
 
+    /// <summary>保留旧构造 ABI；正式 DI 额外注入观察范围，写后读取与写前裁决分开。</summary>
+    public StandardCrudService(
+        ICP.Platform.Authorization.Contracts.IDataScopeEvaluationScope evaluation,
+        IStandardCrudRepository repository, IPlatformQueryExecutor queryExecutor,
+        StandardCrudDefaultWriter defaultWriter, IEnumerable<IStandardCrudQueryCustomizer> queryCustomizers,
+        DisplayValueProjection displayProjection, IEnumerable<IStandardCrudSummaryProvider> summaryProviders,
+        ILogger<StandardCrudService>? logger = null, IObjectOperationExecutor? objectOperations = null,
+        ICP.Platform.Authorization.Contracts.IDataScopeReadPlanProvider? dataScope = null,
+        ICP.Platform.Authorization.Contracts.IDataScopeObjectDecisionProvider? objectScope = null)
+        : this(repository, queryExecutor, defaultWriter, queryCustomizers, displayProjection, summaryProviders,
+            logger, objectOperations, dataScope, objectScope)
+    {
+        _evaluation = evaluation;
+    }
+
     /// <summary>
     /// 列表读取先校验 descriptor，再将模块查询扩展收敛为平台查询条件，最后补齐显示值。
     /// </summary>
@@ -54,6 +70,7 @@ public sealed class StandardCrudService : IStandardCrudService
         StandardCrudListQuery query,
         CancellationToken cancellationToken = default)
     {
+        using var operation = _evaluation?.BeginOperation();
         StandardCrudDescriptorValidator.Validate(descriptor);
         var conditions = BuildConditions(descriptor, query);
         var queryDescriptor = StandardCrudQueryDescriptorAdapter.ToQueryDescriptor(descriptor);
@@ -139,6 +156,7 @@ public sealed class StandardCrudService : IStandardCrudService
         string id,
         CancellationToken cancellationToken = default)
     {
+        using var operation = _evaluation?.BeginOperation();
         StandardCrudDescriptorValidator.Validate(descriptor);
         if (_dataScope is not null)
         {
@@ -204,6 +222,7 @@ public sealed class StandardCrudService : IStandardCrudService
         IReadOnlyDictionary<string, object?> values,
         CancellationToken cancellationToken = default)
     {
+        using var operationScope = _evaluation?.BeginOperation();
         if (_objectOperations?.CanExecute(descriptor.ResourceKey, ObjectOperationAction.Create) == true)
         {
             try
@@ -244,6 +263,7 @@ public sealed class StandardCrudService : IStandardCrudService
         IReadOnlyDictionary<string, object?> values,
         CancellationToken cancellationToken = default)
     {
+        using var operationScope = _evaluation?.BeginOperation();
         if (_objectOperations?.CanExecute(descriptor.ResourceKey, ObjectOperationAction.Update) == true)
         {
             try
@@ -317,6 +337,7 @@ public sealed class StandardCrudService : IStandardCrudService
         string id,
         CancellationToken cancellationToken = default)
     {
+        using var operationScope = _evaluation?.BeginOperation();
         if (_objectOperations?.CanExecute(descriptor.ResourceKey, ObjectOperationAction.Delete) == true)
         {
             return await _objectOperations.ExecuteAsync(
@@ -383,6 +404,7 @@ public sealed class StandardCrudService : IStandardCrudService
 
         var row = result.Detail?.Fields
             ?? throw new InvalidOperationException(missingRowMessage);
+        using var observation = _evaluation?.BeginReadAfterWrite();
         if (_objectScope is not null)
         {
             var id = Convert.ToString(row.GetValueOrDefault(descriptor.IdField))

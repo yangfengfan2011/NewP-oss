@@ -80,6 +80,34 @@ public sealed class DataScopeResourceIdentityTests
             new("business", "", "", JsonSerializer.SerializeToElement<object?>(null), Key: "test.condition"), [], [])));
     }
 
+    [Fact]
+    [Trait("Category", "ModuleMetadataConsumer")]
+    public async Task DirectSubjectCatalog_UsesActualEntityFieldsBeyondTheThreeInitialConsumers()
+    {
+        var models = new OrganizationModelMetadataProvider().GetDefinitions().Select(model => model with { OwnerModuleId = "Organization" }).ToArray();
+        using var db = new EfPlatformDbContext(new DbContextOptionsBuilder<EfPlatformDbContext>()
+            .UseSqlServer("Server=localhost;Database=never-connect;Integrated Security=true;TrustServerCertificate=true")
+            .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().Options, models);
+        var descriptor = CompanyCrudDescriptorFactory.Create();
+        var resources = new StandardCrudResourceRegistry([descriptor, descriptor with { ResourceKey = "organization.company.alternate", Route = "api/organization/company-alternate" }]);
+        var identities = new DataScopeIdentities([]);
+        var catalog = new DataScopeCatalog(resources, new CanonicalModulePlan("test", "1.0", "", "", [], []), db, identities);
+        var queries = new DataScopeObjectPermissionQueries(new ReadableAccess(), identities, null!, new Microsoft.AspNetCore.Http.HttpContextAccessor(), catalog, db);
+        foreach (var key in new[] { "organization.company", "organization.company.alternate" })
+        {
+            var result = await queries.CatalogAsync(key, "catalog-only-target");
+            Assert.NotNull(result);
+            Assert.Equal(new[] { "creator" }, result.SubjectTypes.Select(type => type.Key));
+            Assert.False(Assert.Single(result.SubjectTypes).RequiresId);
+        }
+        Assert.Empty(identities.SubjectTypes);
+    }
+
+    private sealed class ReadableAccess : IDataScopeObjectAccess
+    {
+        public Task<bool> IsReadableAsync(string resourceKey, string objectId, CancellationToken token = default) => Task.FromResult(true);
+    }
+
     private sealed class TestCondition(params string[] models) : IDataScopeBusinessConditionProvider
     {
         public IReadOnlyList<DataScopeBusinessConditionDefinition> Definitions { get; } = [new("test.condition", "测试", models, true)];

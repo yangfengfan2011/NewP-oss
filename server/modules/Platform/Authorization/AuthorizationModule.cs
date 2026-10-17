@@ -15,12 +15,16 @@ public class AuthorizationModule : ModuleCapsuleBindingBase
     {
         services.AddPlatformObjectIdGeneration();
         services.AddScoped<DataScopeIdentities>();
+        services.AddSingleton<IDataScopeResourceCatalog, DataScopeResourceCatalog>();
+        services.AddScoped<IDataScopeObjectAccess, DataScopeObjectAccess>();
+        services.AddScoped<IDataScopeObjectPermissionQueries, DataScopeObjectPermissionQueries>();
         services.AddScoped<IDataScopeIdentityProvider, AllAuthenticatedDataScopeIdentities>();
         services.AddScoped<IDataScopeIdentityProvider, AuthorizationDataScopeIdentities>();
         services.AddScoped<DataScopeCatalog>();
         services.AddScoped<DataScopeRules>();
         services.AddScoped<DataScopeObjectGrants>();
         services.AddScoped<DataScopeObjectManagement>();
+        services.AddScoped<IDataScopeObjectAuthorization>(provider => provider.GetRequiredService<DataScopeObjectManagement>());
         services.AddScoped<IDataScopeReadPlanProvider, DataScopeReadPlans>();
         services.AddScoped<IDataScopeReadableIds>(provider =>
             (DataScopeReadPlans)provider.GetRequiredService<IDataScopeReadPlanProvider>());

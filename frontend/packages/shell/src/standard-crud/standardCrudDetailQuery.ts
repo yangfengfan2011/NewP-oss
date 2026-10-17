@@ -35,6 +35,7 @@ interface UseStandardCrudDetailQueryInput<TRow extends Record<string, unknown>, 
   enabled?: boolean;
   featurePosition?: string;
   queryScope?: StandardCrudDetailReadContext['queryScope'];
+  readSourceKey?: string;
 }
 
 /**
@@ -47,16 +48,17 @@ export function useStandardCrudDetailQuery<TRow extends Record<string, unknown>,
   enabled = true,
   featurePosition,
   queryScope,
+  readSourceKey,
 }: UseStandardCrudDetailQueryInput<TRow, TDetail>): StandardCrudDetailQueryResult<TDetail> {
   const { t } = useLocalization();
   const selectedId = id ?? '';
   const active = enabled && selectedId.length > 0;
   const scopeKey = JSON.stringify(queryScope);
-  const identity = JSON.stringify([resourceKey, selectedId, featurePosition, scopeKey, active]);
+  const identity = JSON.stringify([resourceKey, selectedId, featurePosition, scopeKey, readSourceKey, active]);
   const pendingReload = useRef<PendingReload<TDetail> | null>(null);
   useEffect(() => () => pendingReload.current?.complete({ status: 'cancelled' }), [identity]);
   const query = usePlatformQuery({
-    key: [...createStandardCrudDetailQueryKey(resourceKey, selectedId), ...(featurePosition ? [featurePosition] : []), ...(scopeKey ? [scopeKey] : [])],
+    key: [...createStandardCrudDetailQueryKey(resourceKey, selectedId), ...(featurePosition ? [featurePosition] : []), ...(scopeKey ? [scopeKey] : []), ...(readSourceKey ? [readSourceKey] : [])],
     enabled: active,
     load: async ({ signal }) => {
       const pending = pendingReload.current;

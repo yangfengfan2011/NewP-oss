@@ -119,13 +119,22 @@ public static class StandardFeatureMetadataCompiler
             if (!view.TryGetProperty(property, out var actions)) return;
             foreach (var action in actions.EnumerateArray())
             {
-                // 快捷跳转复用目标导航资格，不形成另一份业务动作授权。
+                // 普通快捷跳转复用目标资格；标准行查看可沿当前读取资格进入无独立授权的呈现页。
                 if (Optional(action, "navigationTargetKey") is { } target)
                 {
-                    if (!navigation.TryGetValue(target, out var targetEntry)
-                        || !(Optional(targetEntry, "featureKey") is { } featureKey
-                            ? customFeatures?.Any(feature => feature.Key == featureKey && feature.Kind == "navigation") == true
-                            : targetEntry.TryGetProperty("featureAuthorization", out var targetEnabled) && targetEnabled.ValueKind == JsonValueKind.True))
+                    if (!navigation.TryGetValue(target, out var targetEntry))
+                        throw new InvalidOperationException("动作快捷跳转缺少有效功能导航目标。");
+                    var readPresentation = Text(view, "mode") == "list" && property == "rowActions"
+                        && Optional(action, "standardAction") == "view" && Optional(action, "handlerKey") is null
+                        && Optional(action, "inputKey") is null && Optional(targetEntry, "featureKey") is null
+                        && Optional(targetEntry, "featureOwner") is null && !targetEntry.TryGetProperty("redirectTo", out _)
+                        && targetEntry.TryGetProperty("routeOnly", out var routeOnly) && routeOnly.ValueKind == JsonValueKind.True
+                        && targetEntry.TryGetProperty("featureAuthorization", out var independent) && independent.ValueKind == JsonValueKind.False
+                        && targetEntry.TryGetProperty("page", out _);
+                    var authorizedNavigation = Optional(targetEntry, "featureKey") is { } featureKey
+                        ? customFeatures?.Any(feature => feature.Key == featureKey && feature.Kind == "navigation") == true
+                        : targetEntry.TryGetProperty("featureAuthorization", out var targetEnabled) && targetEnabled.ValueKind == JsonValueKind.True;
+                    if (!readPresentation && !authorizedNavigation)
                         throw new InvalidOperationException("动作快捷跳转缺少有效功能导航目标。");
                     continue;
                 }

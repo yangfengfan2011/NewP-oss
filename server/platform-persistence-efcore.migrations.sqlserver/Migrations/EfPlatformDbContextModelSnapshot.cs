@@ -183,6 +183,10 @@ namespace ICP.Platform.Persistence.EfCore.SqlServerMigrations.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("CreatedBy");
 
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("ExpiresAt");
+
                     b.Property<bool>("IncludeDescendants")
                         .HasColumnType("bit")
                         .HasColumnName("IncludeDescendants");

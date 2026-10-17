@@ -10,12 +10,15 @@ namespace ICP.Platform.Modules.Authorization.Services;
 /// <summary>按可信当前主体合并明确优先级意见，再把拒绝范围编译为数据库谓词。</summary>
 public sealed partial class DataScopeReadPlans(DataScopeRules rules, DataScopeCatalog catalog,
     IHttpContextAccessor context, ILocalAdministratorRoleAssignment administrators, DataScopeIdentities identities,
-    DataScopeObjectGrants objects, EfPlatformDbContext db) : IDataScopeReadPlanProvider, IDataScopeObjectDecisionProvider, IDataScopeReadableIds
+    DataScopeObjectGrants objects, EfPlatformDbContext db, IDataScopeEvaluationScope? evaluation = null) : IDataScopeReadPlanProvider, IDataScopeObjectDecisionProvider, IDataScopeReadableIds
 {
+    private readonly IDataScopeEvaluationScope observation = evaluation ?? new ICP.Platform.Authorization.DataScopeEvaluationScope(TimeProvider.System);
+
     /// <inheritdoc/>
     public async Task<IReadOnlySet<string>> GetReadableIdsAsync(string resourceKey, IReadOnlyCollection<string> objectIds,
         CancellationToken cancellationToken = default)
     {
+        using var operation = observation.BeginOperation();
         ArgumentNullException.ThrowIfNull(objectIds);
         var ids = objectIds.Where(static id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal).ToArray();
         if (ids.Length == 0) return new HashSet<string>(StringComparer.Ordinal);
@@ -57,6 +60,8 @@ public sealed partial class DataScopeReadPlans(DataScopeRules rules, DataScopeCa
     private async Task<DataScopeReadPlan> GetReadPlanForSubjectAsync(string resourceKey, string? accountId,
         CancellationToken cancellationToken, DataScopeDecisionTrace? trace = null)
     {
+        using var operation = observation.BeginOperation();
+        var observedAt = observation.ObservedAt.UtcDateTime;
         catalog.Resolve(resourceKey);
         var action = catalog.Actions.Single(action => action.Key == "read");
         if (!action.Enabled) { trace?.SetReason("disabled"); return new(null); }
@@ -68,10 +73,10 @@ public sealed partial class DataScopeReadPlans(DataScopeRules rules, DataScopeCa
         trace?.SetRules(applicable);
         var relevant = RelevantNodes(resourceKey, applicable, "read", true);
         var readable = applicable.SelectMany(ActiveNodes).Where(rule => relevant.Contains(rule.Id)).ToArray();
-        var objectTypes = await objects.SubjectTypesAsync(resourceKey, "read", null, cancellationToken);
+        var objectTypes = await objects.SubjectTypesAsync(resourceKey, "read", null, observedAt, cancellationToken);
         var types = readable.SelectMany(rule => rule.Subjects)
             .Where(subject => subject.Actions.TryGetValue("read", out var opinion) && opinion != "unset")
-            .Select(subject => subject.Type).Concat(objectTypes).Distinct(StringComparer.Ordinal).ToArray();
+            .Select(subject => subject.Type).Concat(catalog.DirectSubjects.IdentityTypes(resourceKey, objectTypes)).Distinct(StringComparer.Ordinal).ToArray();
         var facts = await identities.ResolveAsync(id, types,
             readable.SelectMany(rule => catalog.ContextKeys(rule.Condition)), cancellationToken);
         var row = Expression.Parameter(typeof(Dictionary<string, object?>), "row");
@@ -90,12 +95,12 @@ public sealed partial class DataScopeReadPlans(DataScopeRules rules, DataScopeCa
             trace?.SetSubjects(node.Id, opinions.Where(subject => subject.Priority == priority).ToArray());
             return opinions.Any(subject => subject.Priority == priority && subject.Actions["read"] == "deny") ? "deny" : "allow";
         }, trace is null ? null : trace.ObserveReadRule);
-        var (allow, deny) = objects.ReadOverrides(resourceKey, row, facts, objectTypes);
+        var (allow, deny) = objects.ReadOverrides(resourceKey, row, facts, objectTypes, observedAt);
         var permitted = Expression.OrElse(allow, Expression.AndAlso(Expression.Not(deny),
             denied is null ? Expression.Constant(true) : Expression.Not(denied)));
         if (trace is not null) await trace.ReadSourcesAsync(db, catalog.Resolve(resourceKey), row, cancellationToken);
         if (trace is not null && objectTypes.Length > 0)
-            await objects.OpinionAsync(resourceKey, trace.ObjectId, "read", facts, cancellationToken, trace.ObserveObject);
+            await objects.OpinionAsync(resourceKey, trace.ObjectId, "read", facts, observedAt, cancellationToken, trace.ObserveObject);
         return new(Expression.Lambda<Func<Dictionary<string, object?>, bool>>(permitted, row));
     }
 
@@ -103,6 +108,7 @@ public sealed partial class DataScopeReadPlans(DataScopeRules rules, DataScopeCa
     public async Task<bool> IsAllowedAsync(string resourceKey, string objectId, string actionKey,
         CancellationToken cancellationToken = default)
     {
+        using var operation = observation.BeginOperation();
         return await DecideActionAsync(resourceKey, objectId, actionKey, null, cancellationToken);
     }
 
@@ -110,6 +116,7 @@ public sealed partial class DataScopeReadPlans(DataScopeRules rules, DataScopeCa
     public async Task<bool> IsCandidateAllowedAsync(string resourceKey, IReadOnlyDictionary<string, object?> candidate,
         string actionKey, CancellationToken cancellationToken = default)
     {
+        using var operation = observation.BeginOperation();
         var resource = catalog.Resolve(resourceKey);
         var objectId = candidate.TryGetValue(resource.IdField, out var value) ? value as string : null;
         if (string.IsNullOrWhiteSpace(objectId)) throw new InvalidOperationException("DATA_SCOPE_CANDIDATE_ID_REQUIRED");
@@ -122,7 +129,7 @@ public sealed partial class DataScopeReadPlans(DataScopeRules rules, DataScopeCa
         string? accountId = null, DataScopeDecisionTrace? trace = null)
     {
         var resource = catalog.Resolve(resourceKey);
-        var action = catalog.Actions.Single(item => item.Key == actionKey);
+        var action = catalog.ActionsFor(resourceKey).Single(item => item.Key == actionKey);
         if (actionKey == "read")
         {
             if (candidate is not null) throw new InvalidOperationException("DATA_SCOPE_CANDIDATE_READ_UNSUPPORTED");
@@ -138,11 +145,11 @@ public sealed partial class DataScopeReadPlans(DataScopeRules rules, DataScopeCa
         foreach (var rule in applicable) catalog.Validate(rule);
         trace?.SetRules(applicable);
         // 对象明确意见覆盖规则；校验配置后先只解析当前对象的主体，避免无关规则事实阻断覆盖。
-        var objectTypes = await objects.SubjectTypesAsync(resourceKey, actionKey, objectId, cancellationToken);
+        var objectTypes = await objects.SubjectTypesAsync(resourceKey, actionKey, objectId, observation.ObservedAt.UtcDateTime, cancellationToken);
         if (objectTypes.Length > 0)
         {
-            var objectFacts = await identities.ResolveAsync(subject, objectTypes, [], cancellationToken);
-            var opinion = await objects.OpinionAsync(resourceKey, objectId, actionKey, objectFacts, cancellationToken,
+            var objectFacts = await identities.ResolveAsync(subject, catalog.DirectSubjects.IdentityTypes(resourceKey, objectTypes), [], cancellationToken);
+            var opinion = await objects.OpinionAsync(resourceKey, objectId, actionKey, objectFacts, observation.ObservedAt.UtcDateTime, cancellationToken,
                 trace is null ? null : trace.ObserveObject);
             if (opinion is not null) return opinion == "allow";
         }

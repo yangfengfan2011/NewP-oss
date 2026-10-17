@@ -1,7 +1,8 @@
 import { platformFetch } from '@icp-platform/core';
-import { createObjectOwnershipActions } from '@icp-platform/ui';
+import { createObjectOwnershipActions, createObjectAuthorizationActions } from '@icp-platform/ui';
 import { createElement, lazy, Suspense } from 'react';
-import { readStandardCrudRequestError, StandardCrudRequestError, type StandardCrudActionInputRenderContext, type StandardCrudDetail, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
+import { isStandardCrudRecord, readStandardCrudRequestError, StandardCrudRequestError, type StandardCrudActionContext, type StandardCrudActionInputRenderContext, type StandardCrudDetail, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
+import { workspaceContentSource } from './workspaceTree';
 import type { WorkspaceDocumentDraft } from './workspaceDocumentUpload';
 import { WorkspaceDocumentSession } from './workspaceDocumentSession';
 import { workspacePosition } from './workspacePosition';
@@ -23,6 +24,17 @@ const ownership = createObjectOwnershipActions(({ id, row, queryScope }) => ({ i
   batchPath: '/api/workspace/ownership/initialize', batchIdField: 'linkIds',
   body: { position: workspacePosition(queryScope) },
 }), '/api/workspace/ownership/eligibility');
+function authorizationSource(context: Pick<StandardCrudActionContext, 'id' | 'row' | 'detail' | 'queryScope'>) {
+  const detail = isStandardCrudRecord(context.detail) && isStandardCrudRecord(context.detail.fields) ? context.detail.fields : {};
+  const row = isStandardCrudRecord(context.row) ? context.row : detail;
+  return workspaceContentSource({ ...context.queryScope, sourceLinkId: context.queryScope?.sourceLinkId ?? context.id ?? row.LID,
+    modelKey: context.queryScope?.sourceModelKey ?? row.ObjectModelKey, objectId: context.queryScope?.sourceObjectId ?? row.ObjectId });
+}
+function authorization(context: Pick<StandardCrudActionContext, 'id' | 'row' | 'detail' | 'queryScope'>) {
+  const source = authorizationSource(context);
+  return createObjectAuthorizationActions(source.resourceKey, () => ({ id: source.objectId, title: '对象', titleKey: 'Workspace.Object',
+    basePath: `/api/workspace/content/${encodeURIComponent(source.sourceLinkId)}/permissions?queryScope=${encodeURIComponent(JSON.stringify({ spaceId: source.spaceId, rootFolderId: source.rootFolderId, linkIds: source.linkIds }))}` }));
+}
 async function referenceCommand(method: string, path: string, body: unknown, featurePosition?: string) {
   const response = await platformFetch(path, { method, headers: { ...headers(featurePosition), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!response.ok) throw await readStandardCrudRequestError(response);
@@ -48,6 +60,7 @@ const resource: StandardCrudResourceRegistration = {
   }],
   actionInputRenderers: {
     ...ownership.actionInputRenderers,
+    objectAuthorization: context => authorization(context).actionInputRenderers.objectAuthorization(context),
     recoverObjectCopy: Object.assign((context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceObjectCopyRecovery, context)), { presentation: 'drawer' as const }),
     copyObject: Object.assign((context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceObjectCopyInput, context)), { presentation: 'drawer' as const }),
     copyFolder: (context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceFolderCopyInput, context)),
@@ -60,6 +73,8 @@ const resource: StandardCrudResourceRegistration = {
   },
   actionHandlers: {
     ...ownership.actionHandlers,
+    authorizeContent: context => authorization(context).actionHandlers.authorize(context),
+    authorize: context => authorization(context).actionHandlers.authorize(context),
     pasteObjectCopy: Object.assign(async ({ instance, input, queryScope, featurePosition }: import('@icp-platform/sdk').StandardCrudActionContext) => {
       const value = input as { draft?: ObjectCopyDraft; values?: Record<string, unknown> } | undefined;
       if (!value?.draft || !value.values) throw new StandardCrudRequestError('Workspace.CopyInputExpired', 409, {}, { code: 'Workspace.CopyInputExpired' });
@@ -148,7 +163,8 @@ const resource: StandardCrudResourceRegistration = {
     removeSelected: async ({ selectedRows, queryScope, featurePosition }) => referenceCommand('POST', '/api/workspace/content/references/remove',
       { position: workspacePosition(queryScope), linkIds: (selectedRows ?? []).map(row => String(row.LID)) }, featurePosition),
   },
-  actionEligibilityResolvers: ownership.actionEligibilityResolvers,
+  actionEligibilityResolvers: { ...ownership.actionEligibilityResolvers,
+    authorizeContent: context => authorization(context).actionEligibilityResolvers.authorize(context) },
   actionStateResolver: ({ action, instance, queryScope }) => {
     const root = queryScope?.linkIds === '[]';
     if (root && ['createPart', 'createDocument', 'pasteObjectCopy'].includes(action.key)) return { visible: false, available: false, reasonKey: 'Workspace.RootOnlyFolders' };
@@ -166,6 +182,11 @@ const resource: StandardCrudResourceRegistration = {
     return { visible: true, available: true, ...label };
   },
   dataAdapter: {
+    getReadNavigationParameters: (row, context) => {
+      const source = authorizationSource({ row, id: typeof row.LID === 'string' ? row.LID : undefined, queryScope: context.queryScope });
+      return { objectId: source.objectId, modelKey: source.modelKey, sourceLinkId: source.sourceLinkId,
+        spaceId: source.spaceId, rootFolderId: source.rootFolderId, linkIds: JSON.stringify(source.linkIds), name: String(row.Name ?? '') };
+    },
     list: async (query = {}, context) => {
       const { anchorId, ...position } = context?.queryScope ?? {};
       if (typeof anchorId !== 'string' || !position.spaceId || !position.rootFolderId || !position.linkIds) throw new Error('缺少工作空间出现位置');

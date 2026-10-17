@@ -10,10 +10,11 @@ import { resolveDataScopeSubjects, type DataScopeSubjectDirectoryRead, type Data
 interface Action { key: string; title: string; enabled: boolean }
 
 /** 主体完整展示，名称按类型分批读取；抽屉确认前不改根规则草稿。 */
-export default function DataScopeSubjectTable({ subjects, types, actions, read, disabled, onChange, onEditingChange }: {
+export default function DataScopeSubjectTable({ subjects, types, actions, read, disabled, onChange, onEditingChange, objectMode = false }: {
   subjects: DataScopeSubject[]; types: SubjectType[]; actions: Action[]; disabled: boolean;
   read: DataScopeSubjectDirectoryRead;
   onChange: (subjects: DataScopeSubject[]) => void; onEditingChange: (editing: boolean) => void;
+  objectMode?: boolean;
 }) {
   const { t } = useLocalization();
   const [names, setNames] = useState<DataScopeSubjectNames>(new Map());
@@ -55,7 +56,7 @@ export default function DataScopeSubjectTable({ subjects, types, actions, read, 
   return <>
     <Flex justify="space-between" align="center" wrap gap={12} style={{ marginBottom: 16 }}>
       <Button type="primary" disabled={disabled} onClick={() => open({ id: `DataScopeSubject_${crypto.randomUUID()}`,
-        type: 'all', subjectId: null, priority: 0, actions: { read: 'unset' } })}>{t('DataScope.AddSubject', '添加主体项')}</Button>
+        type: 'all', subjectId: null, priority: 0, actions: { read: 'unset' }, ...(objectMode ? { expiresAt: null } : {}) })}>{t('DataScope.AddSubject', '添加主体项')}</Button>
       <Typography.Text type="secondary">{t('DataScope.OpinionHelp', '□ 不选  ✓ 同意  ✕ 拒绝 · 点击循环切换')}</Typography.Text>
     </Flex>
     <Typography.Paragraph type="secondary">{t('DataScope.PriorityHelp', '从上到下优先；每个动作分别匹配，“不选”时继续查看下一项。')}</Typography.Paragraph>
@@ -74,6 +75,8 @@ export default function DataScopeSubjectTable({ subjects, types, actions, read, 
         } },
         { title: t('DataScope.IncludeDescendants', '包含下级'), key: 'descendants', width: 95, render: (_, subject) => types.find(type => type.key === subject.type)?.supportsDescendants
           ? subject.matchOptions?.includeDescendants ? t('DataScope.Yes', '是') : t('DataScope.No', '否') : '—' },
+        ...(objectMode ? [{ title: t('DataScope.ObjectExpiresAt', '截止时间（UTC）'), key: 'expiresAt', width: 200,
+          render: (_: unknown, subject: DataScopeSubject) => subject.expiresAt?.replace('T', ' ').replace(/Z$/, ' UTC') ?? t('DataScope.Permanent', '永久') }] : []),
         ...actions.map(action => ({ title: <span>{t(`DataScope.Action_${action.key}`, action.title ?? action.key)}{!action.enabled && <Typography.Text type="secondary">{t('DataScope.CatalogDisabled', '（目录已停用）')}</Typography.Text>}</span>,
           key: action.key, width: action.enabled ? 80 : 140, align: 'center' as const,
           render: (_: unknown, subject: DataScopeSubject) => <OpinionCheckbox value={subject.actions[action.key] ?? 'unset'}
@@ -93,7 +96,7 @@ export default function DataScopeSubjectTable({ subjects, types, actions, read, 
       extra={<Space><Button onClick={close}>{t('DataScope.Cancel', '取消')}</Button><Button type="primary" disabled={disabled} onClick={confirm}>{t('DataScope.Confirm', '确定')}</Button></Space>}>
       {editing && <Form layout="vertical" disabled={disabled}>
         {editorError && <Alert type="error" message={t(editorError)} showIcon style={{ marginBottom: 16 }} />}
-        <DataScopeSubjectEditor subject={editing} index={0} types={types} actions={[]} read={read} showPriority={false}
+        <DataScopeSubjectEditor subject={editing} index={0} types={types} actions={[]} read={read} showPriority={false} objectMode={objectMode}
           onChange={change => { setEditorError(''); setEditing({ ...editing, ...change }); }} />
         <Space size={24} wrap>{actions.map(action => <Form.Item key={action.key} label={t(`DataScope.Action_${action.key}`, action.title ?? action.key)}>
           <OpinionCheckbox value={editing.actions[action.key] ?? 'unset'} label={t(`DataScope.Action_${action.key}`, action.title ?? action.key)} disabled={disabled}

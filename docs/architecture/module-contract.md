@@ -84,7 +84,7 @@ View 的 `resourceKey` 指定稳定资源；`lookupBindings` 在该 View 的资�
 
 完整位置由声明引用及其祖先、静态节点类型和动作所在位置编译产生，不能使用 URL、文案、数组序号或记录 ID。导航的 `featureOwner` 为重定向别名和独立详情指定已有入口引用；别名不创建重复授权点。`ReferenceKey`、`StaticScope`、`ActionScope`、`StaticScopeTitle` 和 `Container` 是标准适配器的派生事实，不能据此推断 Capsule 自定义声明已经支持这些输入字段。
 
-纯导航快捷动作以 `navigationTargetKey` 引用已有导航，沿用现有 handler 与 navigation-result 跳转；按目标导航的位置资格呈现，不生成独立业务动作点。目标必须是采用位置授权的真实导航，缺失或无效引用拒绝候选；不能借用当前资源的查看或保存资格。
+普通纯导航快捷动作以 `navigationTargetKey` 引用采用位置授权的真实导航，沿用现有 handler 与 navigation-result 跳转；按目标导航的位置资格呈现，不生成独立业务动作点，不能借用当前资源的查看或保存资格。另一个明确受限的组合只允许 `list.rowActions` 的标准 `view`（无 handler、input）指向已声明的只读呈现导航：目标必须 `routeOnly: true`、`featureAuthorization: false`、具有 PageRef，且无 feature owner、key 或 redirect。该组合沿当前资源 read 位置呈现，不新增查询、导航或 Tab 授权点；缺失或无效引用仍拒绝候选。运行时定位投影、来源位置及逐请求校验见[模块接入指南](../../frontend/docs/module-integration-guide.md#标准路径的位置授权)。
 
 Host 在开放请求前核对目录与真实端点的模块归属及执行绑定。`RequireFeature` 只允许当前位置声明的行为；附加读取必须绑定 GET/HEAD 端点，纯容器不获得后代读取。已有 Host policy 可作为同一端点的附加约束，与功能位置判权共同满足；它不能代替位置授权，也不与旧 Permission、匿名或拒绝规则组成另一条放行路径。缺失、冲突或无效绑定拒绝整份候选。运行时投影提供编译后的 position，前后端不得另外拼装授权身份。
 

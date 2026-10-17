@@ -642,6 +642,165 @@ public sealed class EntityOwnershipMigrationSqlServerTests(ITestOutputHelper out
 
     private sealed record PermissionModuleImage(string ModuleId, string Version, string Path, string Sha256);
 
+    [EnvironmentGatedFact("NEWP_RUN_OBJECT_HISTORY_IP_UPGRADE", "冻结Audit000001真实旧记录经正式当前Host升级000002，旧事实/双账本保持、IP为null且重启幂等")]
+    public async Task PublishedAuditPrefix_AddsNullableIpWithoutRewritingExistingBusinessFacts()
+    {
+        using var baseline = JsonDocument.Parse(await File.ReadAllTextAsync(RequiredPath("NEWP_HISTORY_IP_UPGRADE_BASELINE_INPUT", directory: false)));
+        using var current = JsonDocument.Parse(await File.ReadAllTextAsync(RequiredPath("NEWP_ACCEPTANCE_WORKSPACE_DELIVERY_INPUT", directory: false)));
+        var oldHost = ExistingPath(baseline.RootElement.GetProperty("hostRoot").GetString()!, directory: true);
+        var oldPackage = ExistingPath(baseline.RootElement.GetProperty("packagePath").GetString()!, directory: false);
+        var newHost = ExistingPath(current.RootElement.GetProperty("hostRoot").GetString()!, directory: true);
+        var currentPackage = ExistingPath(current.RootElement.GetProperty("packagePath").GetString()!, directory: false);
+        Assert.Equal(baseline.RootElement.GetProperty("packageSha256").GetString(), await ReadPermissionFileHashAsync(oldPackage));
+        Assert.Equal(current.RootElement.GetProperty("packageSha256").GetString(), await ReadPermissionFileHashAsync(currentPackage));
+        var versionDecisions = ReadUpgradeDecisions(oldPackage, currentPackage);
+        const string tail = "20261017201106_Audit_000002_BusinessChangeIp";
+        using var oldManifest = JsonDocument.Parse(await File.ReadAllBytesAsync(Path.Combine(oldHost, "modules", "Audit", "migrations", "Audit.SqlServerMigrations.json")));
+        using var newManifest = JsonDocument.Parse(await File.ReadAllBytesAsync(Path.Combine(newHost, "modules", "Audit", "migrations", "Audit.SqlServerMigrations.json")));
+        var oldNodes = oldManifest.RootElement.GetProperty("migrations").EnumerateArray().ToArray();
+        var newNodes = newManifest.RootElement.GetProperty("migrations").EnumerateArray().ToArray();
+        Assert.Single(oldNodes);
+        Assert.Equal("20260910123205_Audit_000001_BusinessChanges", oldNodes[0].GetProperty("migrationId").GetString());
+        Assert.Equal("91688d8e5c45b2e2546ca919d9b05af2f2ec9c1c7bce29ec6c15b804bb960ca5", oldNodes[0].GetProperty("contentDigest").GetString());
+        Assert.True(JsonElement.DeepEquals(oldNodes[0], newNodes[0]));
+        Assert.Equal(2, newNodes.Length);
+        Assert.Equal(tail, newNodes[1].GetProperty("migrationId").GetString());
+        await using var fixture = await FeatureCatalogHostFixture.CreateAsync([], async owned =>
+        {
+            await DeployAsync(owned, "install-native", oldPackage);
+            await DeployAsync(owned, "enable-bundle", oldPackage);
+            await MountBaselineMetadataAsync(owned, oldPackage);
+        }, sourceHostRoot: oldHost);
+        Assert.Null(await ReadIpColumnAsync(fixture));
+        // 在真实旧schema上由旧Organization writer生成既有事实，不把新表的null模拟成迁移证据。
+        var organization = await PostAsync(fixture, fixture.Administrator, "organization.company.initialize", "/api/organization/initialization");
+        await PostAsync(fixture, fixture.Administrator, "organization.person.create", "/api/organization/persons", new {
+            PersonNo = "HISTORY-IP-UPGRADE-296", ENAME = "升级前真实人员", CompanyId = organization.GetProperty("companyId").GetString(),
+            DepartmentId = organization.GetProperty("departmentId").GetString(), EmploymentStatus = "Active", IsEnabled = true });
+        var oldFacts = await ReadSnapshotAsync(fixture, "BusinessChange");
+        Assert.Contains(oldFacts.Rows, row => row.GetProperty("EventType").GetString() == "person.created");
+        var oldEf = await ReadSnapshotAsync(fixture, "__EFMigrationsHistory");
+        var oldUnified = await ReadSnapshotAsync(fixture, "__NewPMigrationHistory");
+        await fixture.StopAsync();
+        var retired = Path.Combine(fixture.EvidenceRoot, "history-ip-baseline-host");
+        var ownedRoot = Path.GetFullPath(fixture.EvidenceRoot) + Path.DirectorySeparatorChar;
+        Assert.StartsWith(ownedRoot, Path.GetFullPath(fixture.HostRoot), StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith(ownedRoot, Path.GetFullPath(retired), StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(retired));
+        Directory.Move(fixture.HostRoot, retired);
+        CopyTree(newHost, fixture.HostRoot);
+        var statePath = Path.Combine(fixture.PluginRoot, "lifecycle/v2/state.json");
+        using var beforeSelection = JsonDocument.Parse(await File.ReadAllBytesAsync(statePath));
+        await SelectHistoryBuiltinsAsync(fixture, newHost, beforeSelection.RootElement.GetProperty("desiredModules"));
+        using (var afterSelection = JsonDocument.Parse(await File.ReadAllBytesAsync(statePath)))
+        {
+            Assert.Equal(beforeSelection.RootElement.GetProperty("desiredModules").GetArrayLength(), afterSelection.RootElement.GetProperty("desiredModules").GetArrayLength());
+            foreach (var previous in beforeSelection.RootElement.GetProperty("desiredModules").EnumerateArray())
+            {
+                var id = previous.GetProperty("moduleId").GetString();
+                var actual = Assert.Single(afterSelection.RootElement.GetProperty("desiredModules").EnumerateArray(), choice => choice.GetProperty("moduleId").GetString() == id);
+                Assert.Equal(previous.GetProperty("enabled").GetBoolean(), actual.GetProperty("enabled").GetBoolean());
+                if (id is "Audit" or "Authorization")
+                {
+                    using var capsule = JsonDocument.Parse(await File.ReadAllBytesAsync(Path.Combine(newHost, "modules", id, "plugin.json")));
+                    Assert.Equal(capsule.RootElement.GetProperty("version").GetString(), actual.GetProperty("version").GetString());
+                }
+                else Assert.Equal(previous.GetProperty("version").GetString(), actual.GetProperty("version").GetString());
+            }
+            foreach (var pointer in new[] { "activeSnapshotId", "lastKnownGoodSnapshotId" })
+                Assert.Equal(beforeSelection.RootElement.GetProperty(pointer).GetRawText(), afterSelection.RootElement.GetProperty(pointer).GetRawText());
+        }
+        // 本票升级旧数据与完整当前发行组合；新Audit合同不承诺继续装载旧native IL。
+        // 只退役本fixture给旧provider挂载的metadata副本，原历史包、Host和旧库存均保留。
+        RetireBaselineAuthoring(fixture);
+        await DeployAsync(fixture, "install-native", currentPackage);
+        var decisionsPath = Path.Combine(fixture.EvidenceRoot, "history-upgrade-version-decisions.json");
+        await File.WriteAllBytesAsync(decisionsPath, JsonSerializer.SerializeToUtf8Bytes(versionDecisions, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        await DeployAsync(fixture, "enable-bundle", currentPackage, decisionsPath);
+        using (var selected = JsonDocument.Parse(await File.ReadAllBytesAsync(statePath)))
+        {
+            foreach (var previous in beforeSelection.RootElement.GetProperty("desiredModules").EnumerateArray())
+            {
+                var id = previous.GetProperty("moduleId").GetString();
+                var actual = Assert.Single(selected.RootElement.GetProperty("desiredModules").EnumerateArray(), choice => choice.GetProperty("moduleId").GetString() == id);
+                Assert.Equal(previous.GetProperty("enabled").GetBoolean(), actual.GetProperty("enabled").GetBoolean());
+                if (id is not ("Audit" or "Authorization"))
+                {
+                    var decision = versionDecisions.SingleOrDefault(choice => choice.ModuleId == id);
+                    Assert.Equal(decision?.Version ?? previous.GetProperty("version").GetString(), actual.GetProperty("version").GetString());
+                }
+            }
+            foreach (var pointer in new[] { "activeSnapshotId", "lastKnownGoodSnapshotId" })
+                Assert.Equal(beforeSelection.RootElement.GetProperty(pointer).GetRawText(), selected.RootElement.GetProperty(pointer).GetRawText());
+        }
+        await fixture.StartAsync();
+        Assert.Equal("nvarchar:512:1", await ReadIpColumnAsync(fixture));
+        Assert.Equal(oldFacts.Rows, (await ReadSnapshotAsync(fixture, oldFacts.Table, oldFacts.Columns)).Rows, JsonRowsComparer.Instance);
+        var facts = await ReadSnapshotAsync(fixture, "BusinessChange");
+        Assert.All(facts.Rows, row => Assert.Equal(JsonValueKind.Null, row.GetProperty("IpAddress").ValueKind));
+        var upgradedEf = await ReadSnapshotAsync(fixture, oldEf.Table, oldEf.Columns);
+        var upgradedUnified = await ReadSnapshotAsync(fixture, oldUnified.Table, oldUnified.Columns);
+        Assert.Equal(oldEf.Rows, upgradedEf.Rows.Where(row => row.GetProperty("MigrationId").GetString() != tail), JsonRowsComparer.Instance);
+        AssertPrefix(oldUnified, upgradedUnified);
+        Assert.Equal(oldEf.Rows.Length + 1, upgradedEf.Rows.Length);
+        Assert.Equal(oldUnified.Rows.Length + 1, upgradedUnified.Rows.Length);
+        Assert.Single(upgradedUnified.Rows, row => row.GetProperty("OwnerModuleId").GetString() == "Audit" && row.GetProperty("MigrationId").GetString() == tail);
+        await fixture.StopAsync();
+        await fixture.StartAsync();
+        Assert.Equal(facts.Rows, (await ReadSnapshotAsync(fixture, facts.Table, facts.Columns)).Rows, JsonRowsComparer.Instance);
+        Assert.Equal(upgradedEf.Rows, (await ReadSnapshotAsync(fixture, oldEf.Table, oldEf.Columns)).Rows, JsonRowsComparer.Instance);
+        Assert.Equal(upgradedUnified.Rows, (await ReadSnapshotAsync(fixture, oldUnified.Table, oldUnified.Columns)).Rows, JsonRowsComparer.Instance);
+    }
+
+    private static async Task<string?> ReadIpColumnAsync(FeatureCatalogHostFixture fixture)
+    {
+        await using var connection = new SqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT CONCAT(TYPE_NAME(user_type_id),N':',max_length,N':',is_nullable) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.BusinessChange') AND name=N'IpAddress';";
+        return await command.ExecuteScalarAsync() as string;
+    }
+
+    // 两个builtin同时换版必须由现成desired命令原子选择；每项enabled显式保持旧值，不改库存。
+    private static async Task SelectHistoryBuiltinsAsync(FeatureCatalogHostFixture fixture, string currentHost, JsonElement previousDesired)
+    {
+        var selections = new List<PluginDesiredModuleState>();
+        foreach (var module in new[] { "Audit", "Authorization" })
+        {
+            using var capsule = JsonDocument.Parse(await File.ReadAllBytesAsync(Path.Combine(currentHost, "modules", module, "plugin.json")));
+            var previous = Assert.Single(previousDesired.EnumerateArray(), choice => choice.GetProperty("moduleId").GetString() == module);
+            selections.Add(new(module, capsule.RootElement.GetProperty("version").GetString()!, previous.GetProperty("enabled").GetBoolean()));
+        }
+        var selectionsPath = Path.Combine(fixture.EvidenceRoot, "history-builtin-desired.json");
+        await File.WriteAllTextAsync(selectionsPath, JsonSerializer.Serialize(selections, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        var start = new ProcessStartInfo("dotnet") { WorkingDirectory = fixture.HostRoot, UseShellExecute = false, CreateNoWindow = true,
+            RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (var argument in new[] { Path.Combine(fixture.HostRoot, "HostApi.dll"), "plugin-deploy", "desired", "--file", selectionsPath }) start.ArgumentList.Add(argument);
+        start.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+        start.Environment["ConnectionStrings__SqlServer"] = fixture.ConnectionString;
+        start.Environment["Platform__PluginInstallRoot"] = fixture.PluginRoot;
+        start.Environment["Platform__ExternalPluginsEnabled"] = "false";
+        start.Environment["Files__StorageRoot"] = fixture.StorageRoot;
+        start.Environment["Authentication__Host__KeyRingPath"] = Path.Combine(Path.GetDirectoryName(fixture.HostRoot)!, "keys");
+        start.Environment["Identity__Credentials__UseSharedDevelopmentCredential"] = "false";
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("无法启动正式内建组件选版。");
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        try
+        {
+            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromMinutes(3));
+            Assert.Equal(0, process.ExitCode);
+        }
+        finally
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15));
+            string Sanitize(string text) => text.Replace(fixture.ConnectionString, "[connection]", StringComparison.Ordinal).Replace(fixture.AdministratorPassword, "[credential]", StringComparison.Ordinal);
+            await File.WriteAllTextAsync(Path.Combine(fixture.EvidenceRoot, "history-select-builtins.stdout.log"), Sanitize(await stdout));
+            await File.WriteAllTextAsync(Path.Combine(fixture.EvidenceRoot, "history-select-builtins.stderr.log"), Sanitize(await stderr));
+        }
+    }
+
     private static string RequiredPath(string variable, bool directory) => ExistingPath(Environment.GetEnvironmentVariable(variable)
         ?? throw new InvalidOperationException("启用正式升级验证后必须提供 " + variable), directory);
 

@@ -1,9 +1,11 @@
 import { useFeaturePlacement } from '../authorization/FeaturePlacementContext';
 import { resolvedFeaturePosition } from '../authorization/featurePlacementResolver';
 import { Component, lazy, Suspense, useContext, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
-import { useLocalization } from '@icp-platform/core';
+import { formatRequestError, useLocalization } from '@icp-platform/core';
 import {
   ModuleRegistry,
+  isStandardCrudRecord,
+  StandardCrudRequestError,
   createStandardCrudOperationResultPresenterRegistry,
   type StandardCrudFieldDefinition,
   type StandardCrudResourceRegistration,
@@ -27,6 +29,8 @@ import {
 import { StandardCrudSummaryBlocks } from '../standard-crud/standardCrudSummaryRuntime';
 
 import { useStandardCrudHostEnvironment } from '../standard-crud/standardCrudHostEnvironment';
+import { Alert, Button, Space } from 'antd';
+import { EntryNavigationContext } from '../navigation/entryNavigation';
 import { ActionInstanceContext } from '../composition/pageCompositionRuntime';
 import { useLocalizedStandardCrudRegistration } from '../standard-crud/useLocalizedStandardCrudRegistration';
 
@@ -154,11 +158,17 @@ function StandardCrudDetailPageContent<TDetail>({
   modelDocuments: MetadataRecord[];
 }): ReactElement {
   const registration = useLocalizedStandardCrudRegistration(sourceRegistration);
+  const runtimeMetadata = useRuntimeMetadata();
   const { t } = useLocalization();
   // 详情宿主从不拥有地址；独立路由下也传 null。
   const host = useStandardCrudHostEnvironment(null);
   const actionInstance = useContext(ActionInstanceContext);
   const readOnly = readSourceKey !== undefined;
+  const entryNavigation = useContext(EntryNavigationContext);
+  const sources = ModuleRegistry.getAllModules().flatMap(module => module.standardCrudDetailReadSources ?? [])
+    .filter(source => source.key === readSourceKey && source.resourceKeys.includes(registration.resourceKey));
+  const sourceNavigations = readOnly && sources.length === 1 ? sources[0].navigationContributions ?? [] : [];
+  const [sourceNavigationFailure, setSourceNavigationFailure] = useState<{ identity: string; error: unknown }>();
   const features = useFeaturePlacement();
   const readResolution = features.read();
   const readPosition = features.placement ? resolvedFeaturePosition(readResolution) : undefined;
@@ -284,6 +294,24 @@ function StandardCrudDetailPageContent<TDetail>({
   }), [currentNormalizedDetail, id, registration.actionHandlers]);
   const showLoading = detailQuery.loading;
   // 背景刷新保留 Action Execution 子树及其冲突反馈，同时禁用旧快照上的再次操作。
+  // 来源读取成功后只展示已登记导航；该入口不恢复普通 EID 贡献或任何写入、摘要交互。
+  const sourceNavigationActions = currentInteraction && !detailQuery.loading && !detailQuery.refreshing && entryNavigation
+    ? sourceNavigations.flatMap(contribution => {
+      const targets = runtimeMetadata?.navDocuments.flatMap(document => document.navigation.items)
+        .filter(item => item.key === contribution.navigationKey && item.routeOnly === true && item.path && item.page) ?? [];
+      const resolution = features.navigation(contribution.navigationKey);
+      if (targets.length !== 1 || resolution.kind !== 'allowed' || !resolution.position.trim()) return [];
+      return [<Button key={contribution.key} onClick={() => {
+        try {
+          const parameters = contribution.getParameters(registration.resourceKey, id, { queryScope: host.input.queryScope, featurePosition: readPosition });
+          if (!isStandardCrudRecord(parameters) || typeof parameters.then === 'function' || Object.keys(parameters).some(key => ['url', 'href', 'path', 'featurePosition', 'sourceFeaturePosition'].includes(key))
+            || Object.values(parameters).some(value => typeof value !== 'string'))
+            throw new StandardCrudRequestError('当前操作不可用。', 400, {}, { reasonKey: 'Platform.ActionUnavailable' });
+          // 同步交给现有入口导航及组合 guard，不进入 mutation pending，也不借来源 read 位置发履历请求。
+          entryNavigation({ entryKey: contribution.navigationKey, parameters: { ...parameters } });
+        } catch (error) { setSourceNavigationFailure({ identity: interactionIdentity, error }); }
+      }}>{t(contribution.labelKey, contribution.labelKey)}</Button>];
+    }) : [];
   const detailHeaderActions = !readOnly && presentedInteraction
     ? presentedInteraction.presentation.pageActions.length > 0
       ? (
@@ -331,6 +359,8 @@ function StandardCrudDetailPageContent<TDetail>({
           })
         : null}
       <div className={composed ? undefined : "sh-page"}>
+      {sourceNavigationActions.length > 0 && <Space wrap>{sourceNavigationActions}</Space>}
+      {sourceNavigationFailure?.identity === interactionIdentity && <Alert type="error" message={formatRequestError(sourceNavigationFailure.error, t)} />}
       {!composed && detailHeaderActions && <div className="sh-page-actions">{detailHeaderActions}</div>}
 
       <div className="sh-page-stack">

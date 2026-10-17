@@ -18,6 +18,14 @@ const workspaceBindings: FrontendBehaviorBindings = {
     } };
   } }],
   standardCrudDetailReadSources: [{ key: 'workspace.content.properties', resourceKeys: ['workspace.folder', 'part.part', 'document.document'],
+    navigationContributions: [{ key: 'history', labelKey: 'Workspace.History', navigationKey: 'workspace.history',
+      getParameters: (resourceKey, id, context) => {
+        const scope = context.queryScope;
+        const source = workspaceContentSource({ ...scope, modelKey: scope?.sourceModelKey, objectId: scope?.sourceObjectId });
+        if (source.resourceKey !== resourceKey || source.objectId !== id) throw new StandardCrudRequestError('工作空间目标已变化。', 409);
+        return { objectId: source.objectId, modelKey: source.modelKey, sourceLinkId: source.sourceLinkId,
+          spaceId: source.spaceId, rootFolderId: source.rootFolderId, linkIds: JSON.stringify(source.linkIds) };
+      } }],
     get: async (resourceKey, id, context) => {
       const scope = context?.queryScope;
       const source = workspaceContentSource({ ...scope, modelKey: scope?.sourceModelKey, objectId: scope?.sourceObjectId });
@@ -33,6 +41,16 @@ const workspaceBindings: FrontendBehaviorBindings = {
       return { normalized: detail, value: detail };
     } }],
   standardCrudCapabilities: [
+    { kind: 'standard-list', targetKey: 'workspace.history.list', load: async () => {
+      const { createObjectHistoryResource } = await import('@icp-platform/ui');
+      return { default: createObjectHistoryResource({ resourceKey: 'workspace.history', listViewKey: 'workspace.history.list',
+        resolveTarget: scope => {
+          const source = workspaceContentSource({ ...scope, modelKey: scope?.sourceModelKey, objectId: scope?.sourceObjectId });
+          const position = { spaceId: source.spaceId, rootFolderId: source.rootFolderId, linkIds: source.linkIds };
+          return { resourceKey: source.resourceKey, id: source.objectId,
+            basePath: `/api/workspace/content/${encodeURIComponent(source.sourceLinkId)}/history?queryScope=${encodeURIComponent(JSON.stringify(position))}` };
+        } }) };
+    } },
     { kind: 'standard-list', targetKey: 'workspace.folder.list', load: () => import('./workspaceRootResource') },
     { kind: 'standard-list', targetKey: 'workspace.references.list', load: () => import('./workspaceReferencesResource') },
   ],

@@ -19,6 +19,7 @@ public sealed class BusinessChangeDto
     public string ActorId { get; init; }
     public DateTime OccurredAt { get; init; }
     public string? OccurredAt_DisplayValue { get; init; }
+    public string? IpAddress { get; init; }
     public string TraceId { get; init; }
     public string FieldsJson { get; init; }
 }

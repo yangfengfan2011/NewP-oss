@@ -9,6 +9,8 @@ import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } fr
 import { ModuleRegistry } from '@icp-platform/sdk';
 const { default: part } = await loadComponentSource<{ default: FrontendBehaviorBindings }>('Part', 'index.ts');
 import model from '../../../../../tests/Kernel.Tests/Fixtures/PartRuntime.contract.json';
+import historyFeatures from '../../../../../tests/Kernel.Tests/Fixtures/PartHistoryFeatures.contract.json';
+const history = readComponentJson('Part', 'metadata/views/PartObjectHistoryList.view.json');
 const list = readComponentJson('Part', 'metadata/views/PartList.view.json');
 const detail = readComponentJson('Part', 'metadata/views/PartDetail.view.json');
 const dictionary = readComponentJson('Part', 'metadata/dictionaries/Part.dic.json');
@@ -48,8 +50,8 @@ it.each(['success', 'receipt'] as const)('uses the formal Part routes and standa
     throw new Error(`Unexpected request ${method} ${path}`);
   }));
   ModuleRegistry.replaceAll([{ metadata: { moduleId: 'Part', displayName: '零组件', version: '1' }, ...part }], 'part-test');
-  const nav = { ...navigation, navigation: { items: navigation.navigation.items.map(item => ({ ...item, featurePosition: 'part-entry' })) } };
-  const projection = compileStandardCrudRouteProjection(ModuleRegistry.getAllModules(), [nav], [list, detail], []);
+  const nav = { ...navigation, navigation: { items: navigation.navigation.items.map(item => ({ ...item, featurePosition: item.key === 'part.history' ? historyFeatures.historyPosition : 'part-entry' })) } };
+  const projection = compileStandardCrudRouteProjection(ModuleRegistry.getAllModules(), [nav], [list, detail, history], []);
   expect(projection.detailEntries).toEqual([{ path: '/parts/:id', viewKey: detail.view.key, featurePosition: 'part-entry' }]);
   const container = document.createElement('div'); document.body.append(container);
   const root = createRoot(container);
@@ -58,8 +60,10 @@ it.each(['success', 'receipt'] as const)('uses the formal Part routes and standa
     <AuthProvider initialUser={user}><AuthorizationProvider featurePositions={user.featurePositions}><PlatformQueryProvider scopeKey="part-test">
       <RuntimeMetadataProvider value={{ manifest: { modules: [{ moduleId: 'Part', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: [
         { key: 'part.parts', position: 'part-entry', kind: 'navigation' },
+        { key: 'part.parts', position: historyFeatures.readPosition, kind: 'navigation' },
+        { key: 'part.history', position: historyFeatures.historyPosition, kind: 'navigation', parentPosition: historyFeatures.readPosition },
         { key: 'create', position: 'part-create', kind: 'action', parentPosition: 'part-entry', actionScope: 'list.pageActions' },
-      ] }] }, navDocuments: [nav], modelDocuments: [model], viewDocuments: [list, detail] }}>
+      ] }] }, navDocuments: [nav], modelDocuments: [model], viewDocuments: [list, detail, history] }}>
         <PageEntry page={{ pageKey, parameters: { viewKey, featurePosition: 'part-entry' } }} />
       </RuntimeMetadataProvider>
     </PlatformQueryProvider></AuthorizationProvider></AuthProvider>

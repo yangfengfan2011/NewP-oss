@@ -7,6 +7,31 @@ namespace ICP.Platform.Modules.Workspace;
 /// <summary>Workspace 显式声明关系业务事实；Audit 取得可信主体、时间和 Trace，原平台事务统一保存提交。</summary>
 public sealed class WorkspaceReferenceAudit(IBusinessAuditRecorder recorder)
 {
+    /// <summary>普通文件夹创建记录当次真实名称；该模型没有编码，不伪造编码事实。</summary>
+    public ValueTask FolderCreatedAsync(IReadOnlyDictionary<string, object?> folder, CancellationToken token) =>
+        FolderEventAsync("workspace.folder.created", folder, token);
+
+    /// <summary>普通文件夹实际名称或说明变化后登记当次名称。</summary>
+    public ValueTask FolderUpdatedAsync(IReadOnlyDictionary<string, object?> folder, CancellationToken token) =>
+        FolderEventAsync("workspace.folder.updated", folder, token);
+
+    /// <summary>成功删除后使用图锁内保留的旧对象文本登记事实。</summary>
+    public ValueTask FolderDeletedAsync(IReadOnlyDictionary<string, object?> folder, CancellationToken token) =>
+        FolderEventAsync("workspace.folder.deleted", folder, token);
+
+    // 历史名称仅来自本次真实行；快照不包含路径、授权配置或任意旧值载荷。
+    private ValueTask FolderEventAsync(string eventType, IReadOnlyDictionary<string, object?> folder, CancellationToken token) =>
+        recorder.RegisterAsync(new(eventType, "workspace.folder", (string)folder["EID"]!,
+            [new("ObjectName", null, BusinessAuditValue.Text(folder.GetValueOrDefault("ENAME") as string)),
+             new("ObjectCode", null, BusinessAuditValue.Text(null))]), token);
+
+    /// <summary>普通添加及对象初始引用保存确切新LID与两端事实；复制移动由其独立事件表达。</summary>
+    public ValueTask AddedAsync(string linkId, string parentId, LinkObjectReference endpoint, CancellationToken token) =>
+        recorder.RegisterAsync(new("workspace.reference.added", "workspace.content", linkId,
+            [new("PEID", null, BusinessAuditValue.Reference("workspace.folder", parentId)),
+             new("ChildModelKey", null, BusinessAuditValue.Text(endpoint.ModelKey)),
+             new("CEID", null, BusinessAuditValue.Reference(endpoint.ModelKey, endpoint.Id))]), token);
+
     /// <summary>真副本区分原引用复制；同事务登记可信源和新对象，安全引用不携带来源名称或路径。</summary>
     public ValueTask ObjectCopiedAsync(string sourceLinkId, string sourceParentId, LinkObjectReference source, string targetLinkId,
         string targetParentId, string targetId, CancellationToken token) => recorder.RegisterAsync(new(

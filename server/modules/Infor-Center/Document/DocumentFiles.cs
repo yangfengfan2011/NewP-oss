@@ -6,6 +6,7 @@ using ICP.Platform.Crud.ObjectOperations;
 using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Modules.Document.Contracts;
+using ICP.Platform.Modules.Audit.Contracts;
 using ICP.Platform.Modules.Files.Contracts;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.Auditing;
@@ -20,7 +21,7 @@ public sealed partial class DocumentFiles(EfPlatformDbContext db, DocumentInitia
     DocumentFileCreationScope creation, IFileLifecycleService files, IFileCopyService copies, Func<IObjectOperationExecutor> operations,
     IStandardCrudResourceRegistry resources, StandardCrudDefaultWriter writer, IDataScopeObjectDecisionProvider decisions,
     IPlatformTransactionExecutor transactions, IPlatformObjectIdGenerator ids, IEntityAuditValueProvider audit,
-    DocumentFileOwnerPolicy policy, IOptions<DocumentOptions> options) : IDocumentFiles, IDocumentCopies
+    DocumentFileOwnerPolicy policy, IOptions<DocumentOptions> options, IBusinessAuditRecorder businessAudit) : IDocumentFiles, IDocumentCopies
 {
     /// <inheritdoc/>
     public async Task<StandardCrudError?> ValidateUploadAsync(IReadOnlyDictionary<string, object?> values, string fileName,
@@ -71,6 +72,7 @@ public sealed partial class DocumentFiles(EfPlatformDbContext db, DocumentInitia
             if (confirmed.FileId != item.File.FileId) throw new InvalidOperationException("Document.FileAssociationCorrupted");
             item.Link["FileUsageId"] = confirmed.UsageId;
         }
+        await RegisterFileEventAsync("document.files.created", current, links, cancellationToken);
         return result;
     }
 
@@ -118,7 +120,18 @@ public sealed partial class DocumentFiles(EfPlatformDbContext db, DocumentInitia
         foreach (var link in links.OrderBy(link => (string)link["CEID"]!, StringComparer.Ordinal))
             await files.ReleaseUsageAsync(Reference(link), cancellationToken);
         db.Set<Dictionary<string, object?>>("DocumentFileLink").RemoveRange(links);
+        if (links.Length > 0) await RegisterFileEventAsync("document.files.released", current, links, cancellationToken);
     }
+
+    // 事实只描述本次已确认/释放的真实关联数量与角色；不记录文件ID、路径或客户端载荷。
+    private ValueTask RegisterFileEventAsync(string eventType, DocumentCurrentIdentity current,
+        IReadOnlyList<Dictionary<string, object?>> links, CancellationToken token) =>
+        businessAudit.RegisterAsync(new(eventType, "document.document", (string)current.Master["EID"]!,
+            [new("ObjectName", null, BusinessAuditValue.Text(current.Master.GetValueOrDefault("ENAME") as string)),
+             new("ObjectCode", null, BusinessAuditValue.Text(current.Master.GetValueOrDefault("ECODE") as string)),
+             new("FileCount", null, BusinessAuditValue.Text(links.Count.ToString(System.Globalization.CultureInfo.InvariantCulture))),
+             new("MainFileCount", null, BusinessAuditValue.Text(links.Count(link => Equals(link["Role"], "main")).ToString(System.Globalization.CultureInfo.InvariantCulture))),
+             new("AttachmentFileCount", null, BusinessAuditValue.Text(links.Count(link => Equals(link["Role"], "attachment")).ToString(System.Globalization.CultureInfo.InvariantCulture)))]), token);
 
     // 先判 read，避免未授权目标借身份损坏或关联状态泄漏内部事实。
     private async Task RequireReadAsync(string documentId, CancellationToken token)

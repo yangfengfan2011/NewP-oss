@@ -855,15 +855,18 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const currentSubjectId = useOptionalCurrentSubjectId();
   const sessionTimeZoneId = useOptionalSessionTimeZoneId();
   // 只有明确无独立功能授权的呈现导航复用当前列表读取资格；普通导航仍按目标位置裁决。
-  const readNavigationTarget = (action: StandardCrudRuntimeActionSchema, surface = 'list.rowActions') => {
+  const viewNavigationTarget = (action: StandardCrudRuntimeActionSchema, surface = 'list.rowActions') => {
     if (surface !== 'list.rowActions' || action.standardAction !== 'view' || !action.navigationTargetKey
       || action.handlerKey || action.inputKey) return undefined;
     const matches = runtimeMetadata?.navDocuments.flatMap(document => document.navigation.items)
       .filter(item => item.key === action.navigationTargetKey) ?? [];
     if (matches.length !== 1) return undefined;
     const target = matches[0];
-    return target.routeOnly === true && target.featureAuthorization === false && target.page
-      && !target.featureKey && !target.featureOwner && !target.redirectTo ? target : undefined;
+    return target.routeOnly === true && target.page && !target.redirectTo ? target : undefined;
+  };
+  const readNavigationTarget = (action: StandardCrudRuntimeActionSchema, surface = 'list.rowActions') => {
+    const target = viewNavigationTarget(action, surface);
+    return target?.featureAuthorization === false && !target.featureKey && !target.featureOwner ? target : undefined;
   };
   const resolveActionFeature = (action: StandardCrudRuntimeActionSchema, surface = 'list.rowActions'): FeatureResolution => (
     readNavigationTarget(action, surface)
@@ -1036,6 +1039,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     actionScope: 'list.pageActions' | 'list.rowActions';
     row?: TRow;
     selectedRows?: readonly TRow[];
+    listQuery?: Readonly<StandardCrudListQueryRequest>;
     rowId: string;
     pendingKey: string;
     label: string;
@@ -1758,15 +1762,15 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           ?? (action.standardAction === 'refresh' ? () => refreshList() : undefined);
         const inputRenderer = action.inputKey ? registration.actionInputRenderers?.[action.inputKey] : undefined;
 
-        const readTarget = readNavigationTarget(action);
-        if (readTarget) {
+        const viewTarget = viewNavigationTarget(action);
+        if (viewTarget) {
           return {
             key: action.key,
             label,
             disabled: actionExecution.pendingKey !== null || disabledReason !== undefined,
             disabledReason,
             onClick: () => confirmDiscardIfNeeded(() => {
-              if (featureResolution.kind !== 'allowed') return;
+              if (featureResolution.kind !== 'allowed' || readResolution.kind !== 'allowed' || !readResolution.position.trim()) return;
               try {
                 const parameters = dataAdapter.getReadNavigationParameters?.(row, { queryScope: host.input.queryScope })
                   ?? { recordId: dataAdapter.getDetailId?.(row) ?? rowId };
@@ -1774,7 +1778,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                   || typeof value !== 'string')) throw new Error('只读导航定位不能声明功能资格或非字符串参数。');
                 if (!navigateEntry) throw new Error('导航入口运行时不可用。');
                 // 纯定位投影没有提交生命周期；否则路由保护会把当前导航本身误判为在途写入。
-                navigateEntry({ entryKey: readTarget.key, parameters: { ...parameters, sourceFeaturePosition: featureResolution.position } });
+                navigateEntry({ entryKey: viewTarget.key, parameters: { ...parameters, sourceFeaturePosition: readResolution.position } });
               } catch (failure) {
                 void messageApi.error({ key: 'standard-crud-read-navigation-error', content: formatRequestError(failure, t), duration: 5 });
               }
@@ -1782,6 +1786,15 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           };
         }
         if (action.standardAction === 'view') {
+          if (inputRenderer?.readOnly === true) {
+            return { key: action.key, label, disabled: actionExecution.pendingKey !== null || disabledReason !== undefined, disabledReason,
+              onClick: () => confirmDiscardIfNeeded(() => {
+                // 只读输入沿本次读取资格进入已有弹层，不执行 handler 或制造提交/刷新。
+                if (featureResolution.kind !== 'allowed') return;
+                actionExecution.clearError(); setRowInputValue(undefined);
+                setRowInputAction({ action, actionScope: 'list.rowActions', row, rowId, pendingKey, label });
+              }) };
+          }
           return {
             key: action.key,
             label,
@@ -2074,6 +2087,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     </Dropdown>
   ) : undefined;
   // 分组只改变入口呈现；每次执行仍以子动作的当前权限和原有生命周期为准。
+  const isReadonlyHeaderInput = (action: StandardCrudRuntimeActionSchema) => action.standardAction === 'view'
+    && !!action.inputKey && registration.actionInputRenderers?.[action.inputKey]?.readOnly === true;
   function runHeaderAction(action: StandardCrudRuntimeActionSchema): void {
     if (actionExecution.pendingKey !== null || mutationExecution.pending || (action.requiresSelection && (effectiveLoading || selectedRows.length === 0))) return;
     const state = registration.actionStateResolver?.({ action, instance: actionInstance, queryScope: host.input.queryScope });
@@ -2084,12 +2099,16 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     const handler = registration.actionHandlers?.[action.handlerKey ?? action.key];
     if (!handler) return;
     confirmDiscardIfNeeded(() => {
+      // 查询值均为标量；固定动作触发时实际行查询，后续筛选草稿或 Review 等待不能改变本次输出范围。
+      const listQuery = Object.freeze({ ...(schema.columnSource === 'runtime' ? runtimeListRequest : metadataListRequest) });
       if (action.inputKey) {
         actionExecution.clearError(); setRowInputValue(undefined);
-        setRowInputAction({ action, actionScope: 'list.pageActions', rowId: '', pendingKey: action.key, label: action.labelKey, selectedRows: action.requiresSelection ? [...selectedRows] : undefined });
+        setRowInputAction({ action, actionScope: 'list.pageActions', rowId: '', pendingKey: action.key, label: action.labelKey,
+          listQuery, selectedRows: action.requiresSelection || isReadonlyHeaderInput(action) ? [...selectedRows] : undefined });
       } else {
         void actionExecution.execute({ key: action.key, handler,
-          context: { instance: actionInstance, action, queryScope: host.input.queryScope, featurePosition: feature.position, selectedRows: action.requiresSelection ? [...selectedRows] : undefined } });
+          context: { instance: actionInstance, action, queryScope: host.input.queryScope, featurePosition: feature.position,
+            listQuery, selectedRows: action.requiresSelection ? [...selectedRows] : undefined } });
       }
     });
   }
@@ -2244,7 +2263,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           },
         }) : {} : undefined}
         headerTitle={headerActions}
-        selectableRows={visibleHeaderActions.some(action => action.requiresSelection)}
+        selectableRows={visibleHeaderActions.some(action => action.requiresSelection || isReadonlyHeaderInput(action))}
         selection={{ keys: effectiveLoading ? [] : selectedRows.map(dataAdapter.getRowId), disabled: effectiveLoading || headerPending || rowInputAction !== null,
           onChange: rows => setSelection({ scope: selectionScope, data: effectiveRows, rows }) }}
         rowKey={dataAdapter.getRowId}
@@ -2294,7 +2313,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
 
   // 来源与 key 共同标识已打开动作，本地化重建配置对象不能改变会话的判权位置。
   const rowInputFeatureResolution: FeatureResolution = rowInputAction
-    ? features.action(rowInputAction.action.key, rowInputAction.actionScope)
+    ? rowInputAction.action.standardAction === 'view'
+      && registration.actionInputRenderers?.[rowInputAction.action.inputKey ?? '']?.readOnly === true
+      ? resolveActionFeature(rowInputAction.action, rowInputAction.actionScope)
+      : features.action(rowInputAction.action.key, rowInputAction.actionScope)
     : { kind: 'unresolved' };
   const confirmationAction = rowConfirmation
     ? buildRowActions(rowConfirmation.row, [rowConfirmation.action], rowConfirmation.rowId)[0]
@@ -2476,6 +2498,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             value={rowInputValue}
             row={rowInputAction.row}
             selectedRows={rowInputAction.selectedRows}
+            listQuery={rowInputAction.listQuery}
             error={actionExecution.error?.key === rowInputAction.pendingKey ? formatRequestError(actionExecution.error.failure, t) : null}
             submissionFailure={actionExecution.error?.key === rowInputAction.pendingKey ? actionExecution.error.failure : undefined}
             pending={actionExecution.pendingKey === rowInputAction.pendingKey}
@@ -2492,7 +2515,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 const outcome = await actionExecution.execute({
                   key: pendingKey,
                   handler,
-                  context: { instance: actionInstance, action: rowInputAction.action, id: rowId, row, selectedRows: rowInputAction.selectedRows, input: rowInputValue, queryScope: host.input.queryScope, featurePosition: rowInputFeatureResolution.position },
+                  context: { instance: actionInstance, action: rowInputAction.action, id: rowId, row, selectedRows: rowInputAction.selectedRows,
+                    ...(rowInputAction.listQuery ? { listQuery: rowInputAction.listQuery } : {}),
+                    input: rowInputValue, queryScope: host.input.queryScope, featurePosition: rowInputFeatureResolution.position },
                 });
                 if (outcome.status === 'succeeded') {
                   setRowInputAction(null);

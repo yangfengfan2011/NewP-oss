@@ -1,6 +1,7 @@
 using ICP.Platform.Sdk;
 using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Crud.Extensions;
+using ICP.Platform.Modules.Audit.Contracts;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ICP.Platform.Modules.Workspace;
@@ -14,11 +15,13 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
     public override void ConfigureServices(IServiceCollection services)
     {
         services.AddSingleton(new ICP.Platform.Authorization.Contracts.DataScopeResourceActionBinding("workspace.folder", ModuleId,
-            ["read", "create", "edit", "delete", "authorize", "workspaceCopy"]));
+            ["read", "create", "edit", "delete", "authorize", "history", "workspaceCopy"]));
         services.AddScoped<WorkspaceSpaces>();
         services.AddScoped<WorkspacePositions>();
         services.AddScoped<WorkspaceContents>();
         services.AddScoped<WorkspaceReferenceAudit>();
+        services.AddScoped<ICP.Platform.Modules.Audit.Contracts.IBusinessAuditNameDirectory, WorkspaceFolderAuditNames>();
+        RegisterHistory(services);
         services.AddScoped<ICP.Platform.Crud.Abstractions.IStandardCrudDisplayValueResolver>(provider =>
             new ICP.Platform.Crud.Ownership.EntityOwnershipDisplayResolver("workspace.folder",
                 provider.GetRequiredService<ICP.Platform.Presentation.IUserDisplayNameDirectory>(),
@@ -44,5 +47,47 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
         services.AddScoped<ICP.Platform.Crud.LinkQueries.ILinkTreeSourceReadPolicy, WorkspaceContentReadPredicate>();
         services.AddSingleton<WorkspaceFolderReadDescriptor>();
         services.AddSingleton(new DataScopeResource("workspace.folder", ModuleId, "WorkspaceFolder", "EID", "workspace.folder.scope"));
+    }
+
+    // 只将本owner真实writer的固定schema映射到规范对象；LID始终是记录事实，不变成授权目标。
+    private void RegisterHistory(IServiceCollection services)
+    {
+        foreach (var (eventType, description) in new[] {
+            ("workspace.folder.created", "Workspace.HistoryFolderCreated"),
+            ("workspace.folder.updated", "Workspace.HistoryFolderUpdated"),
+            ("workspace.folder.deleted", "Workspace.HistoryFolderDeleted"),
+            ("entity.ownership.initialized", "Workspace.HistoryOwnershipInitialized"),
+            ("entity.ownership.backfilled", "Workspace.HistoryOwnershipBackfilled") })
+            services.AddSingleton(new ObjectHistoryEventPolicy(ModuleId, eventType, "workspace.folder", "workspace.folder",
+                ObjectHistoryTargetFormat.ObjectId, description)
+            { TextSnapshot = eventType.StartsWith("workspace.folder.", StringComparison.Ordinal) ? new("ObjectName", "ObjectCode") : null });
+
+        (string EventType, string Description, ObjectHistoryFieldSide Side, string[] Parents, string[] Children)[] relations =
+        [
+            ("workspace.reference.added", "Workspace.HistoryReferenceAdded", ObjectHistoryFieldSide.After, ["PEID"], ["CEID"]),
+            ("workspace.reference.removed", "Workspace.HistoryReferenceRemoved", ObjectHistoryFieldSide.Before, ["PEID"], ["CEID"]),
+            ("workspace.reference.copied", "Workspace.HistoryReferenceCopied", ObjectHistoryFieldSide.After, ["SourcePEID", "PEID"], ["CEID"]),
+            ("workspace.reference.moved", "Workspace.HistoryReferenceMoved", ObjectHistoryFieldSide.After, ["SourcePEID", "PEID"], ["CEID"]),
+            ("workspace.reference.reordered", "Workspace.HistoryReferenceReordered", ObjectHistoryFieldSide.After, ["PEID"], ["CEID"]),
+            ("workspace.object.copied", "Workspace.HistoryObjectCopied", ObjectHistoryFieldSide.After, ["SourcePEID", "PEID"], ["SourceObject", "CEID"])
+        ];
+        foreach (var relation in relations)
+        {
+            services.AddSingleton(new ObjectHistoryEventPolicy(ModuleId, relation.EventType, "workspace.content", null,
+                ObjectHistoryTargetFormat.DeclaredFields, relation.Description)
+            { FieldAssociations = relation.Children.Select(field => new ObjectHistoryFieldAssociation(field, relation.Side)).ToArray(),
+                ObjectTypeField = new("ChildModelKey", relation.Side), SubjectField = new("CEID", relation.Side) });
+            services.AddSingleton(new ObjectHistoryEventPolicy(ModuleId, relation.EventType, "workspace.content", "workspace.folder",
+                ObjectHistoryTargetFormat.DeclaredFields, relation.Description)
+            { FieldAssociations = relation.Parents.Select(field => new ObjectHistoryFieldAssociation(field, relation.Side, "workspace.folder")).ToArray(),
+                ObjectTypeField = new("ChildModelKey", relation.Side), SubjectField = new("CEID", relation.Side) });
+        }
+        foreach (var (eventType, description, fields) in new (string, string, string[])[] {
+            ("workspace.folder.shallowCopied", "Workspace.HistoryFolderShallowCopied", ["SourcePEID", "PEID", "CEID"]),
+            ("workspace.folder.structureCopied", "Workspace.HistoryFolderStructureCopied", ["SourcePEID", "CEID"]) })
+            services.AddSingleton(new ObjectHistoryEventPolicy(ModuleId, eventType, "workspace.folder", "workspace.folder",
+                ObjectHistoryTargetFormat.DeclaredFields, description)
+            { FieldAssociations = fields.Select(field => new ObjectHistoryFieldAssociation(field, ObjectHistoryFieldSide.After, "workspace.folder")).ToArray(),
+                SubjectField = new("CEID", ObjectHistoryFieldSide.After, "workspace.folder") });
     }
 }

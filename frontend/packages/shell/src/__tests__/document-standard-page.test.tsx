@@ -9,6 +9,8 @@ import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } fr
 import { ModuleRegistry } from '@icp-platform/sdk';
 const { default: documentBindings } = await loadComponentSource<{ default: FrontendBehaviorBindings }>('Document', 'index.ts');
 import model from '../../../../../tests/Kernel.Tests/Fixtures/DocumentRuntime.contract.json';
+import historyFeatures from '../../../../../tests/Kernel.Tests/Fixtures/DocumentHistoryFeatures.contract.json';
+const history = readComponentJson('Document', 'metadata/views/DocumentObjectHistoryList.view.json');
 const list = readComponentJson('Document', 'metadata/views/DocumentList.view.json');
 const detail = readComponentJson('Document', 'metadata/views/DocumentDetail.view.json');
 const dictionary = readComponentJson('Document', 'metadata/dictionaries/Document.dic.json');
@@ -48,8 +50,8 @@ it.each(['success', 'receipt'] as const)('uses the formal Document routes and st
     throw new Error(`Unexpected request ${method} ${path}`);
   }));
   ModuleRegistry.replaceAll([{ metadata: { moduleId: 'Document', displayName: '图文档', version: '1' }, ...documentBindings }], 'document-test');
-  const nav = { ...navigation, navigation: { items: navigation.navigation.items.map(item => ({ ...item, featurePosition: 'document-entry' })) } };
-  const projection = compileStandardCrudRouteProjection(ModuleRegistry.getAllModules(), [nav], [list, detail], []);
+  const nav = { ...navigation, navigation: { items: navigation.navigation.items.map(item => ({ ...item, featurePosition: item.key === 'document.history' ? historyFeatures.historyPosition : 'document-entry' })) } };
+  const projection = compileStandardCrudRouteProjection(ModuleRegistry.getAllModules(), [nav], [list, detail, history], []);
   expect(projection.detailEntries).toEqual([{ path: '/documents/:id', viewKey: detail.view.key, featurePosition: 'document-entry' }]);
   const container = document.createElement('div'); document.body.append(container);
   const root = createRoot(container);
@@ -58,8 +60,10 @@ it.each(['success', 'receipt'] as const)('uses the formal Document routes and st
     <AuthProvider initialUser={user}><AuthorizationProvider featurePositions={user.featurePositions}><PlatformQueryProvider scopeKey="document-test">
       <RuntimeMetadataProvider value={{ manifest: { modules: [{ moduleId: 'Document', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: [
         { key: 'document.documents', position: 'document-entry', kind: 'navigation' },
+        { key: 'document.documents', position: historyFeatures.readPosition, kind: 'navigation' },
+        { key: 'document.history', position: historyFeatures.historyPosition, kind: 'navigation', parentPosition: historyFeatures.readPosition },
         { key: 'create', position: 'document-create', kind: 'action', parentPosition: 'document-entry', actionScope: 'list.pageActions' },
-      ] }] }, navDocuments: [nav], modelDocuments: [model], viewDocuments: [list, detail] }}>
+      ] }] }, navDocuments: [nav], modelDocuments: [model], viewDocuments: [list, detail, history] }}>
         <PageEntry page={{ pageKey, parameters: { viewKey, featurePosition: 'document-entry' } }} />
       </RuntimeMetadataProvider>
     </PlatformQueryProvider></AuthorizationProvider></AuthProvider>

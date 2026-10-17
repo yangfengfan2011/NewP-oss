@@ -24,6 +24,50 @@ internal sealed class WorkspacePageDriver(IPage page)
         return address;
     }
 
+    /// <summary>沿来源查看器的独立履历入口走通详情及选中输出；值、四种范围与权限边界由低层承担。</summary>
+    internal async Task InspectObjectHistoryAndOutputAsync(string downloadPath)
+    {
+        var listLoaded = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath.StartsWith("/api/workspace/content/", StringComparison.Ordinal)
+            && new Uri(response.Url).AbsolutePath.EndsWith("/history", StringComparison.Ordinal));
+        await page.GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^履\s*历$") }).ClickAsync();
+        var list = await listLoaded;
+        if (!list.Ok) throw new InvalidOperationException($"操作履历读取失败：{list.Status}");
+        var historyPath = new Uri(list.Url).AbsolutePath;
+        await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/workspace/history");
+        var row = page.Locator(".ant-table-tbody tr[data-row-key]").First;
+        await row.WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
+        var detailLoaded = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath.StartsWith(historyPath + "/", StringComparison.Ordinal));
+        await page.GetByRole(AriaRole.Menuitem, new() { NameRegex = new Regex(@"^详\s*情$") }).ClickAsync();
+        var detail = await detailLoaded;
+        if (!detail.Ok) throw new InvalidOperationException($"操作履历详情读取失败：{detail.Status}");
+        var drawer = new StandardCrudPageDriver(page).VisibleDrawer();
+        await drawer.Locator(".ant-descriptions").WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        await drawer.Locator(".ant-drawer-close").ClickAsync();
+        await drawer.WaitForAsync(new() { State = WaitForSelectorState.Hidden });
+        await row.GetByRole(AriaRole.Checkbox).CheckAsync();
+        await page.GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^输\s*出$") }).ClickAsync();
+        var output = new StandardCrudPageDriver(page).VisibleModal();
+        await output.WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        var downloaded = page.WaitForDownloadAsync();
+        await output.GetByRole(AriaRole.Button, new() { Name = "导出选中", Exact = true }).ClickAsync();
+        var download = await downloaded;
+        if (await download.FailureAsync() is { } failure) throw new InvalidOperationException("履历下载失败：" + failure);
+        await download.SaveAsAsync(downloadPath);
+        var printLoaded = page.WaitForResponseAsync(response => response.Request.Method == "POST"
+            && new Uri(response.Url).AbsolutePath == historyPath + "/print");
+        await output.GetByRole(AriaRole.Button, new() { Name = "打印选中", Exact = true }).ClickAsync();
+        var print = await printLoaded;
+        if (!print.Ok) throw new InvalidOperationException($"操作履历打印数据读取失败：{print.Status}");
+        await output.Locator("table").WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        await output.GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^打\s*印$") }).ClickAsync();
+        await output.Locator(".ant-modal-footer").GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^关\s*闭$") }).ClickAsync();
+        await output.WaitForAsync(new() { State = WaitForSelectorState.Hidden });
+        await page.Locator("iframe[title=\"操作履历打印\"]").WaitForAsync(new() { State = WaitForSelectorState.Hidden });
+    }
+
     /// <summary>只证明用户能够切到解释页；名称和裁决语义由正式API测试承担。</summary>
     internal async Task InspectPermissionTabAsync()
     {

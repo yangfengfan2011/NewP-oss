@@ -245,6 +245,8 @@ export interface StandardCrudActionContext<TDetail = unknown, TRow = unknown> ex
   detail?: TDetail;
   row?: TRow;
   selectedRows?: readonly TRow[];
+  /** 列表页级动作触发时的已应用查询快照；不含尚未搜索的草稿或授权事实，服务端仍须重验。 */
+  readonly listQuery?: Readonly<StandardCrudListQueryRequest>;
   input?: unknown;
 }
 
@@ -287,6 +289,8 @@ export interface StandardCrudActionInputRenderContext extends StandardCrudFeatur
   detail?: unknown;
   row?: unknown;
   selectedRows?: readonly unknown[];
+  /** 标准列表只读预览打开时的已应用查询快照，不含筛选草稿。 */
+  readonly listQuery?: Readonly<StandardCrudListQueryRequest>;
   /** 共享弹窗据此保护未保存草稿并阻止尚未加载的输入提交。 */
   onDraftStateChange?: (state: { dirty: boolean; ready: boolean }) => void;
 }
@@ -430,6 +434,13 @@ export interface StandardCrudDetailReadSource {
   resourceKeys: readonly string[];
   /** resourceKey/id 是目标 registration 的规范身份；来源 owner 每次核对来源和服务端返回的目标。 */
   get: (resourceKey: string, id: string, context?: StandardCrudDetailReadContext) => Promise<StandardCrudLoadedDetail>;
+  /** 来源详情的显式导航；固定登记目标，参数仅同步投影完整定位，不提供 URL、功能位置或写入能力。 */
+  navigationContributions?: readonly {
+    key: string;
+    labelKey: string;
+    navigationKey: string;
+    getParameters: (resourceKey: string, id: string, context: StandardCrudDetailReadContext) => Readonly<Record<string, string>>;
+  }[];
 }
 
 /** 标准 CRUD 客户端最小方法集，供 Shell Host 复用统一路径、错误和详情规范化行为。 */

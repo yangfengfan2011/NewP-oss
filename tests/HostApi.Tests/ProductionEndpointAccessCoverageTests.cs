@@ -4,6 +4,7 @@ using ICP.Platform.HostApi.Authorization;
 using ICP.Platform.HostApi.Controllers;
 using ICP.Platform.HostApi.Endpoints;
 using ICP.Platform.Kernel.ModuleLoader;
+using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Audit;
 using ICP.Platform.Modules.Audit.Controllers;
 using ICP.Platform.Modules.Authorization;
@@ -49,6 +50,70 @@ public sealed class ProductionEndpointAccessCoverageTests
             Assert.Equal(["GET"], endpoint.Metadata.GetOrderedMetadata<HttpMethodMetadata>().Single().HttpMethods);
             Assert.Equal("workspace.folder.read", Assert.Single(endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>()).BehaviorKey);
         }
+        EndpointAccessPlanCompiler.Compile(((IEndpointRouteBuilder)app).DataSources);
+    }
+
+    [Fact, Trait("Category", "ModuleMetadataConsumer")]
+    public void WorkspaceHistoryTerminals_ConsumeTheOneCompiledHistoryPositionWithoutExtraGrants()
+    {
+        var repository = new DirectoryInfo(AppContext.BaseDirectory);
+        while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "AGENTS.md"))) repository = repository.Parent;
+        Assert.NotNull(repository);
+        var root = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository.FullName, "Workspace");
+        using var capsule = System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(Path.Combine(root, "newp.plugin.json")));
+        var documents = Directory.GetFiles(Path.Combine(root, "metadata"), "*.json", SearchOption.AllDirectories)
+            .Select(path => System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(File.ReadAllBytes(path))).ToArray();
+        var points = FeatureCatalogCompiler.Compile(StandardFeatureMetadataCompiler.Read("Workspace", documents,
+            FeatureCatalogCompiler.Read(capsule.RootElement, "Workspace"), includeCustomFeatures: true));
+        var history = Assert.Single(points, point => point.BehaviorKey == "workspace.folder.history");
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddControllers().AddApplicationPart(typeof(ICP.Platform.Modules.Workspace.WorkspaceContentsController).Assembly);
+        using var app = builder.Build();
+        app.MapControllers();
+        var endpoints = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints).OfType<RouteEndpoint>()
+            .Where(endpoint => endpoint.RoutePattern.RawText?.TrimStart('/').StartsWith("api/workspace/content/{linkId}/history", StringComparison.Ordinal) == true).ToArray();
+        var list = Assert.Single(endpoints, endpoint => endpoint.RoutePattern.RawText!.TrimStart('/') == "api/workspace/content/{linkId}/history");
+        var detail = Assert.Single(endpoints, endpoint => endpoint.RoutePattern.RawText!.TrimStart('/') == "api/workspace/content/{linkId}/history/{recordId}");
+        Assert.Equal("workspace.history.read", Assert.Single(list.Metadata.GetOrderedMetadata<RequireFeatureAttribute>()).BehaviorKey);
+        Assert.Equal("workspace.folder.history", Assert.Single(detail.Metadata.GetOrderedMetadata<RequireFeatureAttribute>()).BehaviorKey);
+        foreach (var suffix in new[] { "export", "print" })
+        {
+            var terminal = Assert.Single(endpoints, endpoint => endpoint.RoutePattern.RawText!.TrimStart('/') == "api/workspace/content/{linkId}/history/" + suffix
+                && endpoint.Metadata.GetOrderedMetadata<HttpMethodMetadata>().Single().HttpMethods.Contains("POST"));
+            Assert.Equal("workspace.folder.history", Assert.Single(terminal.Metadata.GetOrderedMetadata<RequireFeatureAttribute>()).BehaviorKey);
+        }
+        FeatureEndpointBindings.Validate([new DefaultEndpointDataSource(endpoints)], [history]);
+    }
+
+    [Theory, Trait("Category", "ModuleMetadataConsumer")]
+    [InlineData("Part", "part", "parts")]
+    [InlineData("Document", "document", "documents")]
+    public void IndependentHistoryTerminals_UseDeclaredOwnerHistoryAndOneReadAlias(string module, string slug, string collection)
+    {
+        var repository = new DirectoryInfo(AppContext.BaseDirectory);
+        while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "AGENTS.md"))) repository = repository.Parent;
+        Assert.NotNull(repository);
+        var root = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository.FullName, module);
+        using var capsule = System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(Path.Combine(root, "newp.plugin.json")));
+        var documents = Directory.GetFiles(Path.Combine(root, "metadata"), "*.json", SearchOption.AllDirectories)
+            .Select(path => System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(File.ReadAllBytes(path))).ToArray();
+        var history = Assert.Single(FeatureCatalogCompiler.Compile(StandardFeatureMetadataCompiler.Read(module, documents,
+            FeatureCatalogCompiler.Read(capsule.RootElement, module), includeCustomFeatures: true)), point => point.BehaviorKey == slug + "." + slug + ".history");
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddControllers().AddApplicationPart(module == "Part" ? typeof(ICP.Platform.Modules.Part.PartModule).Assembly : typeof(ICP.Platform.Modules.Document.DocumentModule).Assembly);
+        using var app = builder.Build();
+        app.MapControllers();
+        var prefix = "api/" + slug + "/" + collection + "/{objectId}/history";
+        var endpoints = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints).OfType<RouteEndpoint>()
+            .Where(endpoint => endpoint.RoutePattern.RawText?.TrimStart('/').StartsWith(prefix, StringComparison.Ordinal) == true).ToArray();
+        Assert.Equal(4, endpoints.Length);
+        foreach (var (suffix, method) in new[] { ("", "GET"), ("/{recordId}", "GET"), ("/export", "POST"), ("/print", "POST") })
+        {
+            var endpoint = Assert.Single(endpoints, item => item.RoutePattern.RawText?.TrimStart('/') == prefix + suffix
+                && item.Metadata.GetOrderedMetadata<HttpMethodMetadata>().Single().HttpMethods.Contains(method));
+            Assert.Equal(slug + (suffix == "" ? ".history.read" : "." + slug + ".history"), Assert.Single(endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>()).BehaviorKey);
+        }
+        FeatureEndpointBindings.Validate([new DefaultEndpointDataSource(endpoints)], [history]);
         EndpointAccessPlanCompiler.Compile(((IEndpointRouteBuilder)app).DataSources);
     }
 
@@ -125,7 +190,7 @@ public sealed class ProductionEndpointAccessCoverageTests
             ICP.Platform.Kernel.ModulePlanning.StandardFeatureMetadataCompiler.Read("Document", documents,
                 ICP.Platform.Kernel.ModulePlanning.FeatureCatalogCompiler.Read(capsule.RootElement, "Document"), true));
         var expectedFeatures = declared.Select(point => point.BehaviorKey).Concat(declared.SelectMany(point => point.ReadBehaviors))
-            .Where(key => key.StartsWith("document.document.", StringComparison.Ordinal)).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal);
+            .Where(key => key.StartsWith("document.", StringComparison.Ordinal)).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal);
         Assert.Equal(expectedFeatures, documentEndpoints.SelectMany(endpoint => endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>())
             .Select(feature => feature.BehaviorKey).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal));
         var documentFileEndpoints = documentEndpoints.Where(endpoint => endpoint.RoutePattern.RawText!.Contains("/files", StringComparison.Ordinal)).ToArray();

@@ -36,7 +36,11 @@ function metadata(): RuntimeMetadataState {
 
 it('compiles three real owning details through Workspace authoring and existing controlled page bindings', () => {
   const candidate = metadata();
-  expect(resolveDetailContributions(modules, candidate).map(entry => entry.targetViewKey)).toEqual(['workspace.folder.detail', 'part.part.detail', 'document.document.detail']);
+  const declared = candidate.viewDocuments.flatMap(document => (document.view.detailContributions ?? []) as Array<{ key: string; targetViewKey: string; navigationKey: string }>);
+  expect(resolveDetailContributions(modules, candidate).map(({ key, targetViewKey, navigationKey }) => ({ key, targetViewKey, navigationKey })))
+    .toEqual(declared.map(({ key, targetViewKey, navigationKey }) => ({ key, targetViewKey, navigationKey })));
+  expect(declared.filter(entry => entry.navigationKey === 'workspace').map(entry => entry.targetViewKey))
+    .toEqual(['workspace.folder.detail', 'part.part.detail', 'document.document.detail']);
   expect(() => validateCompositionCandidate(modules, candidate)).not.toThrow();
 });
 it.each(['target', 'model', 'navigation', 'page', 'resolver', 'duplicate-key', 'duplicate-target', 'record-id', 'source', 'owner'])(

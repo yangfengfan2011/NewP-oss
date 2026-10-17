@@ -42,6 +42,10 @@
         }
       },
       {
+        "name": "IpAddress",
+        "storage": { "type": "string", "nullable": true }
+      },
+      {
         "name": "TraceId",
         "storage": {
           "type": "string"

@@ -76,11 +76,15 @@ export function compileStandardCrudRouteProjection(
       .map((binding) => binding.targetKey),
   );
   const consumedLazyDetailTargets = new Set<string>();
-  const composedPages = viewDocuments.flatMap(document => [
-    ...(Array.isArray(document.view.tabs) ? document.view.tabs : []),
-    ...(Array.isArray(document.view.nodeTypes) ? document.view.nodeTypes : []),
-    ...(Array.isArray(document.view.detailContributions) ? document.view.detailContributions : []),
-  ]).map(item => item.pageRef);
+  // 显式导航与组合 View 都通过受控 PageRef 消费绑定，不因此生成另一套独立路由。
+  const composedPages = [
+    ...navDocuments.flatMap(document => document.navigation.items).map(item => item.page),
+    ...viewDocuments.flatMap(document => [
+      ...(Array.isArray(document.view.tabs) ? document.view.tabs : []),
+      ...(Array.isArray(document.view.nodeTypes) ? document.view.nodeTypes : []),
+      ...(Array.isArray(document.view.detailContributions) ? document.view.detailContributions : []),
+    ]).map(item => item.pageRef),
+  ];
 
   for (const module of modules) {
     for (const resource of module.standardCrudResources ?? []) {

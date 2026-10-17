@@ -41,6 +41,26 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
+    /// <summary>普通Workspace主体经真实Part来源读取履历、详情及选中输出，不借独立Part或管理员审计资格。</summary>
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通Workspace读者通过真实Part来源查看履历和详情、下载XLSX并调用真实打印")]
+    public async Task NativeWorkspacePartHistory_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-workspace-part-history");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease, prepareHistoryActor: true);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, publishedFixture: fixture,
+            browserJourney: async (page, token) =>
+            {
+                token.ThrowIfCancellationRequested();
+                var reader = new WorkspacePageDriver(page);
+                await reader.OpenAsync();
+                await reader.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
+                await reader.OpenPermissionViewerAsync(fixture.ExistingName);
+                await reader.InspectObjectHistoryAndOutputAsync(Path.Combine(root, "history-selected.xlsx"));
+                token.ThrowIfCancellationRequested();
+            }).RunAsync(CancellationToken.None);
+    }
+
     private const string RunEnvironmentVariable = "NEWP_RUN_ACCEPTANCE";
 
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "管理员显式组织初始化及三模型缺失归属的正式页面、批次和人工补齐最短路径")]

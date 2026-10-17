@@ -134,7 +134,20 @@
     "Uploading": {
       "zhs": "正在上传…",
       "en": "Uploading…"
-    }
+    },
+    "History": {
+      "zhs": "履历",
+      "en": "History"
+    },
+    "HistoryCreated": {"zhs": "创建对象", "en": "Object created"},
+    "HistoryUpdated": {"zhs": "修改对象", "en": "Object updated"},
+    "HistoryDeleted": {"zhs": "删除对象", "en": "Object deleted"},
+    "HistoryOwnershipInitialized": {"zhs": "初始化对象归属", "en": "Object ownership initialized"},
+    "HistoryOwnershipBackfilled": {"zhs": "补齐对象归属", "en": "Object ownership backfilled"},
+    "HistoryIterationInitialized": {"zhs": "初始化初版", "en": "Initial iteration initialized"},
+    "HistoryFilesCreated": {"zhs": "建立文件关联", "en": "File associations created"},
+    "HistoryFilesCopied": {"zhs": "复制文件关联", "en": "File associations copied"},
+    "HistoryFilesReleased": {"zhs": "释放文件关联", "en": "File associations released"}
   },
   "type": "dic",
   "schemaVersion": "1.0"

@@ -21,6 +21,11 @@ const documentNavigation = readComponentJson('Document', 'metadata/navigation/Do
 import partModel from '../../../../../tests/Kernel.Tests/Fixtures/PartRuntime.contract.json';
 import documentModel from '../../../../../tests/Kernel.Tests/Fixtures/DocumentRuntime.contract.json';
 import folder from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceFolderRuntime.contract.json';
+import workspaceHistoryFeatures from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceHistoryFeatures.contract.json';
+import partHistoryFeatures from '../../../../../tests/Kernel.Tests/Fixtures/PartHistoryFeatures.contract.json';
+import documentHistoryFeatures from '../../../../../tests/Kernel.Tests/Fixtures/DocumentHistoryFeatures.contract.json';
+const historyFeatures = { Workspace: workspaceHistoryFeatures, Part: partHistoryFeatures, Document: documentHistoryFeatures };
+const historyViews = ['Workspace', 'Part', 'Document'].map(owner => readComponentJson(owner, `metadata/views/${owner === 'Workspace' ? 'WorkspaceObjectHistoryList' : owner + 'ObjectHistoryList'}.view.json`));
 const content = readComponentJson('Workspace', 'metadata/models/WorkspaceFolderContent.model.json');
 const tree = readComponentJson('Workspace', 'metadata/views/WorkspaceStructure.view.json');
 const list = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderList.view.json');
@@ -131,8 +136,9 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
   ModuleRegistry.replaceAll([{ metadata: { moduleId: 'Workspace', displayName: '工作空间', version: '1' }, ...workspace },
     { metadata: { moduleId: 'Part', displayName: '零组件', version: '1' }, ...part },
     { metadata: { moduleId: 'Document', displayName: '图文档', version: '1' }, ...documentModule }], 'workspace-test');
-  const views = [tree, list, detail, incoming, partDetail, partList, documentDetail, documentList];
-  const navs = [{ ...navigation, navigation: { items: navigation.navigation.items.map(item => ({ ...item, featurePosition: 'workspace-entry' })) } }, partNavigation, documentNavigation];
+  const views = [tree, list, detail, incoming, partDetail, partList, documentDetail, documentList, ...historyViews];
+  const navs = [{ ...navigation, navigation: { items: navigation.navigation.items.map(item => ({ ...item, featurePosition: item.key === 'workspace.history' ? historyFeatures.Workspace.historyPosition : 'workspace-entry' })) } }, ...[partNavigation, documentNavigation].map((document, index) => ({ ...document, navigation: { items: document.navigation.items.map(item =>
+    item.key === (index ? 'document.history' : 'part.history') ? { ...item, featurePosition: historyFeatures[index ? 'Document' : 'Part'].historyPosition } : item) } }))];
   // 实际 AppRoutes 先编译所有模块路由，再装载组合；直接挂 PageEntry 不能替代这一步。
   const projection = compileStandardCrudRouteProjection(ModuleRegistry.getAllModules(), navs, views, []);
   expect(projection.detailEntries.map(entry => entry.path)).toEqual(['/parts/:id', '/documents/:id']);
@@ -151,10 +157,15 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
       <AuthProvider initialUser={user()}><AuthorizationProvider featurePositions={user().featurePositions}><PlatformQueryProvider scopeKey="workspace-test">
         <RuntimeMetadataProvider value={{ manifest: { modules: [{ moduleId: 'Workspace', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: [
           { key: 'workspace', position: 'workspace-entry', kind: 'navigation' },
+          { key: 'workspace', position: historyFeatures.Workspace.readPosition, kind: 'navigation' },
+          { key: 'workspace.history', position: historyFeatures.Workspace.historyPosition, kind: 'navigation', parentPosition: historyFeatures.Workspace.readPosition },
           { key: 'create', position: 'workspace-create', kind: 'action', parentPosition: 'workspace-entry', staticScope: 'folder', actionScope: 'list.pageActions' },
           { key: 'createDocument', position: 'workspace-createDocument', kind: 'action', parentPosition: 'workspace-entry', staticScope: 'folder', actionScope: 'list.pageActions' },
           { key: 'remove', position: 'workspace-remove', kind: 'action', parentPosition: 'workspace-entry', staticScope: 'folder', actionScope: 'list.rowActions' },
-        ] }] }, navDocuments: navs, modelDocuments: [folder, content, partModel, documentModel], viewDocuments: views }}>
+        ] }, ...(['Part', 'Document'] as const).map(moduleId => ({ moduleId, metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: [
+          { key: moduleId === 'Part' ? 'part.parts' : 'document.documents', position: historyFeatures[moduleId].readPosition, kind: 'navigation' },
+          { key: moduleId === 'Part' ? 'part.history' : 'document.history', position: historyFeatures[moduleId].historyPosition, kind: 'navigation', parentPosition: historyFeatures[moduleId].readPosition },
+        ] }))] }, navDocuments: navs, modelDocuments: [folder, content, partModel, documentModel], viewDocuments: views }}>
           <SessionSwitch /><PageEntry page={{ pageKey: 'platform.tree', parameters: { viewKey: tree.view.key, featurePosition: 'workspace-entry' }, inputResolverKey: 'workspace.tree.current' }} />
         </RuntimeMetadataProvider>
       </PlatformQueryProvider></AuthorizationProvider></AuthProvider>

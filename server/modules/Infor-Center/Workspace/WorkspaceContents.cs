@@ -51,8 +51,10 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
                 throw new LinkQueryException(400, "Workspace.InvalidEndpoint");
             folders.Add(candidate);
             await ownershipAudit.RegisterAsync("workspace.folder", id, candidate, false, cancellation);
+            await referenceAudit.FolderCreatedAsync(candidate, cancellation);
             await transactions.FlushAsync(cancellation);
-            await RegisterCreatedReferenceAsync(path.FolderId, WorkspacePositions.FolderModel, id, cancellation);
+            var linkId = await RegisterCreatedReferenceAsync(path.FolderId, WorkspacePositions.FolderModel, id, cancellation);
+            await referenceAudit.AddedAsync(linkId, path.FolderId, new(WorkspacePositions.FolderModel, id), cancellation);
             return id;
         }, token);
     }
@@ -78,7 +80,8 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
             await LockGraphAsync(cancellation);
             var path = await WritablePositionAsync(actorId, position, cancellation);
             RequireContainer(position, path, target.ModelKey);
-            await AddTargetReferenceAsync(path.FolderId, target, cancellation);
+            var linkId = await AddTargetReferenceAsync(path.FolderId, target, cancellation);
+            await referenceAudit.AddedAsync(linkId, path.FolderId, target, cancellation);
             return true;
         }, token);
 
@@ -147,7 +150,8 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
         if (!result.Succeeded) return result;
         var id = result.Detail?.Fields.GetValueOrDefault("EID") as string
             ?? throw new InvalidOperationException("Created object identity is missing.");
-        await RegisterCreatedReferenceAsync(path.FolderId, model, id, cancellationToken);
+        var linkId = await RegisterCreatedReferenceAsync(path.FolderId, model, id, cancellationToken);
+        await referenceAudit.AddedAsync(linkId, path.FolderId, new(model, id), cancellationToken);
         // 不执行展示读取；事务完成后由独立列表读取决定新对象的可见性。
         return StandardCrudMutationResult.Success();
     }
@@ -198,11 +202,22 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
             }
             else
             {
+                var deletedFolder = target.ModelKey == WorkspacePositions.FolderModel
+                    ? await Folders.AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == target.Id, cancellationToken) : null;
+                // 旧行仍在时流式登记全部入向事实；不把删除后的LID再查回来，也不引入关系数量上限。
+                await foreach (var link in Links.AsNoTracking()
+                    .Where(row => EF.Property<string>(row, "ChildModelKey") == target.ModelKey && EF.Property<string>(row, "CEID") == target.Id)
+                    .Select(row => new { Id = EF.Property<string>(row, "LID"), ParentId = EF.Property<string>(row, "PEID") })
+                    .AsAsyncEnumerable().WithCancellation(cancellationToken))
+                    await referenceAudit.RemovedAsync(link.Id, link.ParentId, new(target.ModelKey, target.Id), cancellationToken);
                 // 清理全部入向关系留在 SQL 内；后续对象失败时同一事务回滚，包括先前成功的批量项。
                 await Links.Where(row => EF.Property<string>(row, "ChildModelKey") == target.ModelKey && EF.Property<string>(row, "CEID") == target.Id)
                     .ExecuteDeleteAsync(cancellationToken);
                 if (target.ModelKey == WorkspacePositions.FolderModel)
+                {
                     await Folders.Where(row => EF.Property<string>(row, "EID") == target.Id).ExecuteDeleteAsync(cancellationToken);
+                    await referenceAudit.FolderDeletedAsync(deletedFolder!, cancellationToken);
+                }
                 else
                 {
                     var result = await operations.ExecuteAsync(Resource(target.ModelKey), ObjectOperationAction.Delete, target.Id, new Dictionary<string, object?>(), cancellationToken);
@@ -291,8 +306,10 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
                 throw new LinkQueryException(409, "Workspace.SiblingNameConflict", "ENAME");
         }
         if (values.GetValueOrDefault("Description") is string { Length: > 500 }) throw new LinkQueryException(400, "Workspace.DescriptionTooLong", "Description");
+        var changed = values.Any(pair => !Equals(folder.GetValueOrDefault(pair.Key), pair.Value));
         foreach (var (key, value) in values) folder[key] = value;
         audit.ForUpdate((string)folder["CreatedBy"]!, (DateTime)folder["CreatedAt"]!).ApplyTo(folder);
+        if (changed) await referenceAudit.FolderUpdatedAsync(folder, token);
     }
 
     /// <summary>普通新引用可贡献空间范围；移动时保留原边语义，盖章复用当前操作的时间和主体。</summary>

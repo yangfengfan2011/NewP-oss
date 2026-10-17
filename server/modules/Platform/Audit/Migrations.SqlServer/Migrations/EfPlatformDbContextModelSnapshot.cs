@@ -22,7 +22,7 @@ namespace ICP.Platform.Modules.Audit.Migrations.SqlServer.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
-            modelBuilder.Entity("Audit/BusinessChange", b =>
+            modelBuilder.Entity("BusinessChange", b =>
                 {
                     b.Property<string>("EID")
                         .HasMaxLength(128)
@@ -55,6 +55,11 @@ namespace ICP.Platform.Modules.Audit.Migrations.SqlServer.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("FieldsJson");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("IpAddress");
 
                     b.Property<DateTime>("OccurredAt")
                         .HasColumnType("datetime2")

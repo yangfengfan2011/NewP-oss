@@ -18,7 +18,41 @@ public sealed class DocumentModule : ModuleCapsuleBindingBase
     public override void ConfigureServices(IServiceCollection services)
     {
         services.AddSingleton(new ICP.Platform.Authorization.Contracts.DataScopeResourceActionBinding("document.document", ModuleId,
-            ["read", "create", "edit", "delete", "authorize", "documentCopy", "documentObjectCopy", "download"]));
+            ["read", "create", "edit", "delete", "authorize", "history", "documentCopy", "documentObjectCopy", "download"]));
+        services.AddSingleton(new ICP.Platform.Modules.Audit.Contracts.ObjectHistoryEventPolicy(ModuleId,
+            "entity.ownership.initialized", "document.document", "document.document",
+            ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.ObjectId, "Document.HistoryOwnershipInitialized"));
+        services.AddSingleton(new ICP.Platform.Modules.Audit.Contracts.ObjectHistoryEventPolicy(ModuleId,
+            "entity.ownership.backfilled", "document.document", "document.document",
+            ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.ObjectId, "Document.HistoryOwnershipBackfilled"));
+        services.AddSingleton(new ICP.Platform.Modules.Audit.Contracts.ObjectHistoryEventPolicy(ModuleId,
+            "document.created", "document.document", "document.document",
+            ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.ObjectId, "Document.HistoryCreated")
+        { TextSnapshot = new("ObjectName", "ObjectCode") });
+        services.AddSingleton(new ICP.Platform.Modules.Audit.Contracts.ObjectHistoryEventPolicy(ModuleId,
+            "document.updated", "document.document", "document.document",
+            ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.ObjectId, "Document.HistoryUpdated")
+        { TextSnapshot = new("ObjectName", "ObjectCode") });
+        services.AddSingleton(new ICP.Platform.Modules.Audit.Contracts.ObjectHistoryEventPolicy(ModuleId,
+            "document.deleted", "document.document", "document.document",
+            ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.ObjectId, "Document.HistoryDeleted")
+        { TextSnapshot = new("ObjectName", "ObjectCode") });
+        services.AddSingleton(new ICP.Platform.Modules.Audit.Contracts.ObjectHistoryEventPolicy(ModuleId,
+            "document.iteration.initialized", "document.document", "document.document",
+            ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.ObjectId, "Document.HistoryIterationInitialized")
+        { TextSnapshot = new("ObjectName", "ObjectCode") });
+        services.AddSingleton(new ICP.Platform.Modules.Audit.Contracts.ObjectHistoryEventPolicy(ModuleId,
+            "document.files.created", "document.document", "document.document",
+            ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.ObjectId, "Document.HistoryFilesCreated")
+        { TextSnapshot = new("ObjectName", "ObjectCode") });
+        services.AddSingleton(new ICP.Platform.Modules.Audit.Contracts.ObjectHistoryEventPolicy(ModuleId,
+            "document.files.copied", "document.document", "document.document",
+            ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.ObjectId, "Document.HistoryFilesCopied")
+        { TextSnapshot = new("ObjectName", "ObjectCode") });
+        services.AddSingleton(new ICP.Platform.Modules.Audit.Contracts.ObjectHistoryEventPolicy(ModuleId,
+            "document.files.released", "document.document", "document.document",
+            ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.ObjectId, "Document.HistoryFilesReleased")
+        { TextSnapshot = new("ObjectName", "ObjectCode") });
         services.AddStandardCrudKernel();
         services.AddStandardCrudResource(provider =>
         {

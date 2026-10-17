@@ -47,3 +47,42 @@ const asynchronousClassification: StandardCrudActionHandler = Object.assign(asyn
 });
 void correctableInputHandler;
 void asynchronousClassification;
+
+// 旧 handler 无须提供列表上下文；新输出消费者只能读取或复制已应用快照。
+const listOutputHandler: StandardCrudActionHandler = context => {
+  if (!context.listQuery) return;
+  const request = { ...context.listQuery };
+  // @ts-expect-error 动作不能改写宿主持有的当前页快照。
+  context.listQuery.pageIndex = 2;
+  // @ts-expect-error 动作不能追加或改写查询筛选。
+  context.listQuery.keyword = 'changed';
+  // @ts-expect-error 快照属性本身也不可重新赋值。
+  context.listQuery = request;
+};
+void listOutputHandler;
+
+const readonlyPreview: import('../src/standardCrud.types').StandardCrudActionInputRenderer = context => {
+  if (context.listQuery) {
+    // @ts-expect-error 预览不能修改已应用查询。
+    context.listQuery.pageIndex = 3;
+    // @ts-expect-error 预览不能替换查询快照。
+    context.listQuery = {};
+  }
+  return null;
+};
+void readonlyPreview;
+
+// 来源可只提供原 get；导航贡献只接受固定目标和同步字符串定位投影。
+const sourceHistory: import('../src/standardCrud.types').StandardCrudDetailReadSource = {
+  key: 'source.properties', resourceKeys: ['example.record'],
+  get: async () => ({ value: { fields: { EID: 'one' }, summaries: {} }, normalized: { fields: { EID: 'one' }, summaries: {} } }),
+  navigationContributions: [{ key: 'history', labelKey: 'Example.History', navigationKey: 'example.history',
+    getParameters: (_resourceKey, id) => ({ recordId: id }) }],
+};
+const asynchronousSourceNavigation: NonNullable<typeof sourceHistory.navigationContributions>[number] = {
+  key: 'history', labelKey: 'Example.History', navigationKey: 'example.history',
+  // @ts-expect-error 导航投影必须同步；不在来源导航阶段发起异步工作。
+  getParameters: async () => ({ recordId: 'one' }),
+};
+void sourceHistory;
+void asynchronousSourceNavigation;

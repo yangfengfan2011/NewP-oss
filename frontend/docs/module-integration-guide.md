@@ -70,6 +70,8 @@ Shell 会导入并校验整份目录，全部成功后通过 `ModuleRegistry.rep
 
 另一个明确受限的组合是列表行 `standardAction: view` 与 `navigationTargetKey`：目标必须是已声明 `routeOnly: true`、`featureAuthorization: false` 的呈现页面，动作不能再有 handler/input，目标不能有 featureKey、featureOwner 或 redirect。它沿当前真实 read 位置显示并直接使用既有入口导航，不进入写执行器的 pending；真实未保存草稿的导航保护保持。模块可用纯同步 `dataAdapter.getReadNavigationParameters(row, { queryScope })` 投影明确的字符串定位字段，不能转储整行。目标仍由 metadata 决定，Shell 拒绝投影内的 `featurePosition` / `sourceFeaturePosition`，最后加入当前 read 位置作为 `sourceFeaturePosition`；没有投影的普通实体只传真实 recordId。缺失必要来源须拒绝，不回退裸对象ID。该位置是请求上下文，服务端仍每次判当前功能资格及完整对象访问；不产生新导航/Tab grant或全局权限继承。同一入口切Tab的search更新保留定位state，跨入口仍使用新参数。
 
+标准 view 也可导航到已登记的独立功能入口；此时按目标导航的真实资格显示和分派，不继承来源读取资格。仍只同步投影完整定位参数并经既有入口导航执行，不调用异步业务 handler 或写执行器。目标页面使用该导航自己的功能位置，详情及输出可复用同一履历资格。
+
 运行时动态列的 `StandardCrudColumnContext.featurePosition` 同样来自所属读取入口。column provider 与行 data adapter 各自沿请求传递该位置；例如 Example 动态工作量的列请求和行请求使用相同的入口位置，原有模块列上下文 token 仍负责列与行的业务一致性，不能用它替代授权位置。宿主的动态列缓存已经按读取位置隔离。
 
 列表与详情读取、Lookup 的缓存按位置隔离。标准宿主只加载可用入口及动作所需读取，创建或编辑的准备步骤和提交使用同一动作位置；动作 Drawer 不加载底层列表查询的 Lookup。纯容器没有可用后代时隐藏，默认 Tab 不可用时进入首个可用 Tab，不预读未授权内容。
@@ -115,6 +117,8 @@ corepack pnpm --dir frontend --filter @icp-platform/shell test
 异构只读列表原有 Adapter.getDetailTarget 路径保持：返回已登记的 detailViewKey 与真实实体主键，重新执行目标准入，行选择与关系命令仍使用 getRowId。
 
 需要保留来源的属性页可在 `platform.detail` PageRef.parameters 显式声明 `detailReadSourceKey`。源由 `standardCrudDetailReadSources` 贡献 `{ key, resourceKeys, get(resourceKey, id, context) }`，key与页面/resolver等实现键一起进入现有Capsule.bindings；重复、未知key或资源不匹配拒绝装配。平台仍选择目标真实registration和已编译schema，只替换只读get；源核对服务器实际resourceKey/EID与目标一致，不接受任意URL/布局。来源属性页关闭编辑、摘要交互及按裸EID外跳的detailContributions，默认无source的详情行为保持。模块resolver负责明确记录/来源并保留read上下文，缺来源直接拒绝；独立owner可在原adapter.get里保留原featurePosition优先，承接本模块queryScope.sourceFeaturePosition，不导入Shell内部context或复制schema。自定义PageProps收到当前解析placement的featurePosition；没有placement时平台去除同名外来参数，呈现页的sourceFeaturePosition仍须由标准read导航提供并经服务端重新验证。动作输入需要跨资源候选时，可从 navigationFeaturePosition(targetKey) 取得当前允许的正式导航位置；缺失位置不得拼接身份或以原动作位置冒充目标读取。候选继续使用所属模块标准 GET 的分页与字段协议。
+
+来源读取可额外声明可选 `navigationContributions: [{ key, labelKey, navigationKey, getParameters(resourceKey, id, context) }]`。这是来源注册拥有的固定导航目标，不是恢复普通详情贡献：Shell 仅在该来源详情读取成功、规范对象身份仍一致且目标导航真实存在并获独立资格时显示入口。投影必须同步且只返回完整字符串定位参数，不得包含 URL 定位键（`url` / `href` / `path`）或 `featurePosition` / `sourceFeaturePosition`。点击直接经既有入口导航及组合草稿保护，不进入写执行器；目标 PageEntry 提供自身真实功能位置，不能借来源 read 位置。模块必须校验 resourceKey/id 与完整来源一致；来源缺失或变化直接拒绝，不回退裸 EID。来源页的编辑、摘要及原 detailContributions 仍然关闭。
 
 ## 从标准详情进入只读关联列表
 

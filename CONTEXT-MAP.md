@@ -2,7 +2,7 @@
 
 ## Contexts
 
-- [Audit](./docs/contexts/audit/CONTEXT.md) — 拥有事务性业务变更记录与 LocalAdmin 只读查阅
+- [Audit](./docs/contexts/audit/CONTEXT.md) — 拥有事务性业务变更记录、LocalAdmin 审计查阅与 owner 准入的普通安全履历
 
 - [Identity](./docs/contexts/identity/CONTEXT.md) — 管理用户账号、账号状态与可供认证机制使用的账号目录
 - [Authentication](./docs/contexts/authentication/CONTEXT.md) — 管理认证会话、服务端有效性与统一撤销

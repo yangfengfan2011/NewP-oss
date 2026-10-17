@@ -12,3 +12,6 @@ export { createObjectAuthorizationActions } from './objectAuthorizationActions';
 export { default as ObjectAuthorizationPage } from './ObjectAuthorizationPage';
 export { createObjectOwnershipActions } from './objectOwnershipActions';
 export type { ObjectOwnershipInitializationTarget } from './ObjectOwnershipInitializationInput';
+export { createObjectHistoryResource } from './objectHistoryResource';
+export type { ObjectHistoryResourceOptions } from './objectHistoryResource';
+export type { ObjectHistoryItem, ObjectHistoryTarget, ObjectHistoryFilter } from './objectHistoryRequest';

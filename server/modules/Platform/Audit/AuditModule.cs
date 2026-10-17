@@ -15,8 +15,11 @@ public sealed class AuditModule : ModuleCapsuleBindingBase
     public override void ConfigureServices(IServiceCollection services)
     {
         services.AddStandardCrudKernel();
+        services.AddHttpContextAccessor();
         services.AddScoped<IBusinessAuditRecorder, BusinessAuditRecorder>();
         services.AddScoped<BusinessAuditQuery>();
+        services.AddScoped<IObjectHistoryQuery, ObjectHistoryQuery>();
+        services.AddScoped<IObjectHistoryExport, ObjectHistoryExport>();
         services.AddScoped<IAuditService, AuditService>();
         services.AddSingleton<IOperationLogRepository, OperationLogRepository>();
         services.AddSingleton<IAccessLogRepository, AccessLogRepository>();

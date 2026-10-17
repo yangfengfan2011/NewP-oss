@@ -99,6 +99,7 @@ public sealed partial class DocumentFiles
             if (confirmed.FileId != item.Copy.FileId) throw new InvalidOperationException("Document.FileAssociationCorrupted");
             item.Link["FileUsageId"] = confirmed.UsageId;
         }
+        if (links.Length > 0) await RegisterFileEventAsync("document.files.copied", identity, links, token);
         return result;
     }
 

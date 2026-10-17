@@ -57,6 +57,13 @@ export function createWorkspaceTreeProvider(fetcher: typeof fetch = platformFetc
 }
 
 export const workspacePageInputs: PageInputResolverBinding[] = [
+  { key: 'workspace.content.historyInput', pageKeys: ['platform.list'], resolve: (parameters, context) => {
+    const source = workspaceContentSource({ ...context?.context, ...parameters });
+    // history 头由 PageOutlet 的实际声明位置提供；来源 read 位置不能充当履历资格。
+    return { parameters: { ...parameters, viewKey: 'workspace.history.list' }, context, recordId: source.objectId,
+      queryScope: { spaceId: source.spaceId, rootFolderId: source.rootFolderId, linkIds: JSON.stringify(source.linkIds),
+        sourceLinkId: source.sourceLinkId, sourceObjectId: source.objectId, sourceModelKey: source.modelKey } };
+  } },
   { key: 'workspace.content.record', pageKeys: ['platform.tabs', 'workspace.content.permissions'], resolve: (parameters, context) => {
     const source = workspaceContentSource(context?.context ?? parameters);
     const readPosition = parameters.sourceFeaturePosition ?? context?.context?.sourceFeaturePosition;

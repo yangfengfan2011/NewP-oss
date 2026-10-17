@@ -3,6 +3,8 @@
     { "key": "document.documents", "titleKey": "Document.Title", "icon": "module", "path": "/documents", "order": 50, "entryType": "standard-list", "targetKey": "document.document.list", "featureAuthorization": true, "routeOnly": true },
     { "key": "document.document.detail", "path": "/documents/:id", "routeOnly": true, "entryType": "standard-crud-detail", "targetKey": "document.document.detail", "featureOwner": "navigation:document.documents" },
     { "key": "document.document.permissions", "path": "/documents/permissions", "routeOnly": true, "featureAuthorization": false,
-      "page": { "pageKey": "platform.tabs", "parameters": { "viewKey": "document.document.tabs" }, "inputResolverKey": "document.document.record" } }
+      "page": { "pageKey": "platform.tabs", "parameters": { "viewKey": "document.document.tabs" }, "inputResolverKey": "document.document.record" } },
+    { "key": "document.history", "path": "/documents/history", "routeOnly": true, "parentKey": "document.documents", "featureKey": "document.history",
+      "page": { "pageKey": "platform.list", "parameters": { "viewKey": "document.history.list" }, "inputResolverKey": "document.document.historyInput" } }
   ] }
 }

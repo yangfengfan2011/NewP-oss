@@ -116,11 +116,22 @@ it.each([
   const positions = JSON.parse(readFileSync(resolve(__dirname, '../../../../../tests/Kernel.Tests/Fixtures/WorkspacePermissionFeatures.contract.json'), 'utf8')) as { readPosition: string; managePosition: string };
   const metadata = authoring();
   metadata.modelDocuments.push(JSON.parse(readFileSync(resolve(__dirname, '../../../../modules/infor-center/workspace/metadata/models/WorkspaceFolderContent.model.json'), 'utf8')));
-  metadata.manifest.modules = [{ moduleId: 'Workspace', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: [
-    { key: 'workspace', position: positions.readPosition, kind: 'navigation' },
-    { key: 'authorizeContent', position: positions.managePosition, kind: 'action', parentPosition: positions.readPosition, staticScope: 'folder', actionScope: 'list.rowActions' },
-  ] }];
-  metadata.navDocuments.flatMap(document => document.navigation.items).find(item => item.key === 'workspace')!.featurePosition = positions.readPosition;
+  const nav = metadata.navDocuments.flatMap(document => document.navigation.items);
+  metadata.manifest.modules = ['Workspace', 'Part', 'Document'].map(moduleId => {
+    const compiled = JSON.parse(readFileSync(resolve(__dirname, '../../../../../tests/Kernel.Tests/Fixtures', `${moduleId}PermissionFeatures.contract.json`), 'utf8')) as { readPosition: string; managePosition: string };
+    const history = JSON.parse(readFileSync(resolve(__dirname, '../../../../../tests/Kernel.Tests/Fixtures', `${moduleId}HistoryFeatures.contract.json`), 'utf8')) as { readPosition: string; historyPosition: string };
+    expect(history.readPosition).toBe(compiled.readPosition);
+    const navigationKey = { Workspace: 'workspace', Part: 'part.parts', Document: 'document.documents' }[moduleId]!;
+    const historyKey = { Workspace: 'workspace.history', Part: 'part.history', Document: 'document.history' }[moduleId]!;
+    nav.find(item => item.key === navigationKey)!.featurePosition = compiled.readPosition;
+    nav.find(item => item.key === historyKey)!.featurePosition = history.historyPosition;
+    return { moduleId, metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: [
+      { key: navigationKey, position: compiled.readPosition, kind: 'navigation' as const },
+      { key: historyKey, position: history.historyPosition, kind: 'navigation' as const, parentPosition: compiled.readPosition },
+      { key: moduleId === 'Workspace' ? 'authorizeContent' : 'authorize', position: compiled.managePosition, kind: 'action' as const,
+        parentPosition: compiled.readPosition, actionScope: 'list.rowActions', ...(moduleId === 'Workspace' ? { staticScope: 'folder' } : {}) },
+    ] };
+  });
   const targetNavigation = metadata.navDocuments.flatMap(document => document.navigation.items).find(item => item.key === 'workspace.permissions')!;
   expect(targetNavigation.featureAuthorization).toBe(false);
   expect(targetNavigation.featureKey).toBeUndefined(); expect(targetNavigation.featureOwner).toBeUndefined();
@@ -148,7 +159,9 @@ it.each([
     internalModules: { Workspace: async () => ({ default: workspace }), Part: async () => ({ default: partBindings }), Document: async () => ({ default: documentBindings }) },
   });
   expect(() => validateCompositionCandidate(loaded.modules, metadata)).not.toThrow();
-  expect(resolveDetailContributions(loaded.modules, metadata)).toHaveLength(3);
+  expect(resolveDetailContributions(loaded.modules, metadata).filter(entry => entry.navigationKey === 'workspace').map(entry => entry.key)).toEqual([
+    'workspace.folder.references', 'workspace.part.references', 'workspace.document.references',
+  ]);
   // 只替换外部定位投影这一接缝，真实模块的读取、View、资格与调度都继续消费正式实现。
   if (variant !== 'valid') loaded.modules = loaded.modules.map(module => module.metadata.moduleId !== 'Workspace' ? module : ({ ...module,
     standardCrudCapabilities: module.standardCrudCapabilities?.map(binding => binding.targetKey !== 'workspace.folder.list' ? binding : ({ ...binding,
@@ -233,9 +246,14 @@ it.each(['part', 'document'] as const)('opens the independent %s permissions tab
   metadata.manifest.modules = ['Workspace', 'Part', 'Document'].map(moduleId => {
     const compiled = JSON.parse(readFileSync(resolve(__dirname, '../../../../../tests/Kernel.Tests/Fixtures', `${moduleId}PermissionFeatures.contract.json`), 'utf8')) as { readPosition: string; managePosition: string };
     const navigationKey = { Workspace: 'workspace', Part: 'part.parts', Document: 'document.documents' }[moduleId]!;
+    const history = JSON.parse(readFileSync(resolve(__dirname, '../../../../../tests/Kernel.Tests/Fixtures', `${moduleId}HistoryFeatures.contract.json`), 'utf8')) as { readPosition: string; historyPosition: string };
+    expect(history.readPosition).toBe(compiled.readPosition);
     nav.find(item => item.key === navigationKey)!.featurePosition = compiled.readPosition;
+    const historyKey = { Workspace: 'workspace.history', Part: 'part.history', Document: 'document.history' }[moduleId]!;
+    nav.find(item => item.key === historyKey)!.featurePosition = history.historyPosition;
     return { moduleId, metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: [
       { key: navigationKey, position: compiled.readPosition, kind: 'navigation' as const },
+      { key: historyKey, position: history.historyPosition, kind: 'navigation' as const, parentPosition: compiled.readPosition },
       { key: moduleId === 'Workspace' ? 'authorizeContent' : 'authorize', position: compiled.managePosition, kind: 'action' as const,
         parentPosition: compiled.readPosition, actionScope: 'list.rowActions', ...(moduleId === 'Workspace' ? { staticScope: 'folder' } : {}) },
     ] };

@@ -14,6 +14,9 @@ public class AuthorizationModule : ModuleCapsuleBindingBase
     public override void ConfigureServices(IServiceCollection services)
     {
         services.AddPlatformObjectIdGeneration();
+        services.AddSingleton(new ICP.Platform.Modules.Audit.Contracts.ObjectHistoryEventPolicy(ModuleId,
+            "dataScope.object.changed", "authorization.dataScopeObject", null,
+            ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.QualifiedObjectId, "DataScope.HistoryAuthorizationChanged"));
         services.AddScoped<DataScopeIdentities>();
         services.AddSingleton<IDataScopeResourceCatalog, DataScopeResourceCatalog>();
         services.AddScoped<IDataScopeObjectAccess, DataScopeObjectAccess>();

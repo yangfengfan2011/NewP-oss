@@ -78,8 +78,9 @@ public sealed class DocumentObjectBehavior : ObjectBehaviorBase
     protected override async ValueTask<StandardCrudMutationResult> DeleteAsync(ObjectOperationContext context, CancellationToken cancellationToken)
     {
         if (_db.Database.CurrentTransaction is null) throw new InvalidOperationException("Document.TransactionRequired");
-        if (string.IsNullOrWhiteSpace(context.TargetId)
-            || await _repository.GetByIdAsync(_resources.FindByResourceKey(Definition.ObjectKey)!, context.TargetId, cancellationToken) is null)
+        if (string.IsNullOrWhiteSpace(context.TargetId)) return await base.DeleteAsync(context, cancellationToken);
+        var deleted = await _repository.GetByIdAsync(_resources.FindByResourceKey(Definition.ObjectKey)!, context.TargetId, cancellationToken);
+        if (deleted is null)
             return await base.DeleteAsync(context, cancellationToken);
         // Workspace 已先裁决位置/read/delete；拥有者在解除任何下级前验证完整当前身份链。
         await _identity.ReadCurrentAsync(context.TargetId, cancellationToken);
@@ -94,7 +95,9 @@ public sealed class DocumentObjectBehavior : ObjectBehaviorBase
         await versions.ExecuteDeleteAsync(cancellationToken);
         DetachDeletedChildren(context.TargetId);
         // 默认删除失败结果由外层对象执行器回滚；单删和后项失败的混合批删共用这一事务。
-        return await base.DeleteAsync(context, cancellationToken);
+        var result = await base.DeleteAsync(context, cancellationToken);
+        if (result.Succeeded) await _identity.RegisterDeletedAsync(deleted, cancellationToken);
+        return result;
     }
 
     // ExecuteDelete 不更新 tracker；只解除已在 SQL 删除的本对象下级，保留混合事务其他对象的跟踪变化。

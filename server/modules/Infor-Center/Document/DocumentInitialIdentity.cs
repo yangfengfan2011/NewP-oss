@@ -1,12 +1,13 @@
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.ObjectIds;
+using ICP.Platform.Modules.Audit.Contracts;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Modules.Document;
 
 /// <summary>在原对象事务内初始化首版与 regular 快照；身份及审计只来自服务器。</summary>
-public sealed class DocumentInitialIdentity(EfPlatformDbContext db, IPlatformObjectIdGenerator ids)
+public sealed class DocumentInitialIdentity(EfPlatformDbContext db, IPlatformObjectIdGenerator ids, IBusinessAuditRecorder audit)
     : IStandardCrudCreationRecorder, IStandardCrudUpdateRecorder
 {
     public string ResourceKey => "document.document";
@@ -14,7 +15,7 @@ public sealed class DocumentInitialIdentity(EfPlatformDbContext db, IPlatformObj
     private static readonly string[] SnapshotFields = ["ECODE", "ENAME", "Description"];
 
     /// <inheritdoc/>
-    public ValueTask RegisterAsync(IReadOnlyDictionary<string, object?> created, CancellationToken cancellationToken = default)
+    public async ValueTask RegisterAsync(IReadOnlyDictionary<string, object?> created, CancellationToken cancellationToken = default)
     {
         RequireTransaction();
         cancellationToken.ThrowIfCancellationRequested();
@@ -36,7 +37,11 @@ public sealed class DocumentInitialIdentity(EfPlatformDbContext db, IPlatformObj
         master["LatestVersionId"] = version["EID"];
         db.Set<Dictionary<string, object?>>("DocumentVersion").Add(version);
         db.Set<Dictionary<string, object?>>("DocumentIteration").Add(iteration);
-        return ValueTask.CompletedTask;
+        await RegisterEventAsync("document.created", created, cancellationToken);
+        await RegisterEventAsync("document.iteration.initialized", created, cancellationToken,
+            [new("VersionLabel", null, BusinessAuditValue.Text((string)version["VersionLabel"]!)),
+             new("IterationKind", null, BusinessAuditValue.Text((string)iteration["Kind"]!)),
+             new("IterationOrdinal", null, BusinessAuditValue.Text(((long)iteration["IterationOrdinal"]!).ToString(System.Globalization.CultureInfo.InvariantCulture)))]);
     }
 
     /// <inheritdoc/>
@@ -48,7 +53,20 @@ public sealed class DocumentInitialIdentity(EfPlatformDbContext db, IPlatformObj
         foreach (var field in SnapshotFields) current.Iteration[field] = after.GetValueOrDefault(field);
         current.Iteration["UpdatedBy"] = after["UpdatedBy"];
         current.Iteration["UpdatedAt"] = after["UpdatedAt"];
+        if (SnapshotFields.Any(field => !Equals(before.GetValueOrDefault(field), after.GetValueOrDefault(field))))
+            await RegisterEventAsync("document.updated", after, cancellationToken);
     }
+
+    /// <summary>登记删除成功前保留的真实文本；提交仍由所属对象事务决定。</summary>
+    public ValueTask RegisterDeletedAsync(IReadOnlyDictionary<string, object?> deleted, CancellationToken cancellationToken = default) =>
+        RegisterEventAsync("document.deleted", deleted, cancellationToken);
+
+    // 名称和编码是本次事实快照，不从当前目录反推旧名称，也不采集任意字段载荷。
+    private ValueTask RegisterEventAsync(string eventType, IReadOnlyDictionary<string, object?> row, CancellationToken cancellationToken,
+        IReadOnlyList<BusinessAuditField>? facts = null) =>
+        audit.RegisterAsync(new(eventType, ResourceKey, (string)row["EID"]!,
+            [new("ObjectName", null, BusinessAuditValue.Text(row.GetValueOrDefault("ENAME") as string)),
+             new("ObjectCode", null, BusinessAuditValue.Text(row.GetValueOrDefault("ECODE") as string)), .. facts ?? []]), cancellationToken);
 
     /// <summary>只沿服务端当前指针与真实回链读取；缺失或损坏不猜任意版次。</summary>
     public async Task<DocumentCurrentIdentity> ReadCurrentAsync(string documentId, CancellationToken cancellationToken = default, bool tracking = true)

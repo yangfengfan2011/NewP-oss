@@ -1,0 +1,190 @@
+{
+  "schemaVersion": "1.0",
+  "type": "dic",
+  "ObjectHistory": {
+    "Title": {
+      "zhs": "操作履历",
+      "en": "Operation history"
+    },
+    "Help": {
+      "zhs": "默认最近三个月，按时间倒序显示。时间筛选使用 UTC。",
+      "en": "The last three months, newest first. Enter filter times in UTC."
+    },
+    "From": {
+      "zhs": "开始时间（UTC）",
+      "en": "From (UTC)"
+    },
+    "From_Placeholder": {
+      "zhs": "例如 2026-07-18T00:00:00Z",
+      "en": "For example 2026-07-18T00:00:00Z"
+    },
+    "To": {
+      "zhs": "结束时间（UTC）",
+      "en": "To (UTC)"
+    },
+    "To_Placeholder": {
+      "zhs": "例如 2026-10-18T23:59:59Z",
+      "en": "For example 2026-10-18T23:59:59Z"
+    },
+    "ActorId": {
+      "zhs": "操作者账号标识",
+      "en": "Actor account ID"
+    },
+    "ActorId_Placeholder": {
+      "zhs": "输入操作者账号标识",
+      "en": "Enter actor account ID"
+    },
+    "OccurredAt": {
+      "zhs": "时间（UTC）",
+      "en": "Time (UTC)"
+    },
+    "EventType": {
+      "zhs": "操作",
+      "en": "Operation"
+    },
+    "EventType_Placeholder": {
+      "zhs": "输入事件类型",
+      "en": "Enter event type"
+    },
+    "ObjectType": {
+      "zhs": "对象类型",
+      "en": "Object type"
+    },
+    "ObjectType_Placeholder": {
+      "zhs": "输入规范对象类型",
+      "en": "Enter canonical object type"
+    },
+    "Actor": {
+      "zhs": "操作者",
+      "en": "Actor"
+    },
+    "Target": {
+      "zhs": "对象",
+      "en": "Object"
+    },
+    "Description": {
+      "zhs": "描述",
+      "en": "Description"
+    },
+    "IpAddress": {
+      "zhs": "IP 地址",
+      "en": "IP address"
+    },
+    "View": {
+      "zhs": "详情",
+      "en": "Details"
+    },
+    "Unrecorded": {
+      "zhs": "未记录",
+      "en": "Not recorded"
+    },
+    "ActorUnavailable": {
+      "zhs": "操作者不可用",
+      "en": "Actor unavailable"
+    },
+    "NameSource_historical": {
+      "zhs": "历史名称",
+      "en": "Historical name"
+    },
+    "NameSource_current": {
+      "zhs": "当前名称",
+      "en": "Current name"
+    },
+    "NameSource_unrecorded": {
+      "zhs": "名称未记录",
+      "en": "Name not recorded"
+    },
+    "DescriptionUnavailable": {
+      "zhs": "操作描述未记录",
+      "en": "Operation description not recorded"
+    },
+    "ObjectType_WorkspaceFolder": {
+      "zhs": "文件夹",
+      "en": "Folder"
+    },
+    "ObjectType_Part": {
+      "zhs": "零组件",
+      "en": "Part"
+    },
+    "ObjectType_Document": {
+      "zhs": "图文档",
+      "en": "Document"
+    },
+    "InvalidResponse": {
+      "zhs": "操作履历响应无效。",
+      "en": "The operation history response is invalid."
+    },
+    "TargetRequired": {
+      "zhs": "缺少操作履历对象或来源。",
+      "en": "The history object or source is missing."
+    },
+    "FeatureRequired": {
+      "zhs": "缺少操作履历功能位置。",
+      "en": "The history feature placement is missing."
+    },
+    "SourceChanged": {
+      "zhs": "操作履历来源已变化。",
+      "en": "The history source has changed."
+    },
+    "Output": {
+      "zhs": "输出",
+      "en": "Output"
+    },
+    "ExportSelected": {
+      "zhs": "导出选中",
+      "en": "Export selected"
+    },
+    "ExportAll": {
+      "zhs": "导出全部",
+      "en": "Export all"
+    },
+    "PrintSelected": {
+      "zhs": "打印选中",
+      "en": "Print selected"
+    },
+    "PrintAll": {
+      "zhs": "打印全部",
+      "en": "Print all"
+    },
+    "Print": {
+      "zhs": "打印",
+      "en": "Print"
+    },
+    "CancelOutput": {
+      "zhs": "取消输出",
+      "en": "Cancel output"
+    },
+    "SelectionRequired": {
+      "zhs": "请先在履历列表选择记录。",
+      "en": "Select history records first."
+    },
+    "QueryRequired": {
+      "zhs": "缺少已应用的履历查询。",
+      "en": "The applied history query is missing."
+    },
+    "OutputCancelled": {
+      "zhs": "输出已取消。",
+      "en": "Output cancelled."
+    },
+    "OutputHelp": {
+      "zhs": "输出使用打开预览时已应用的筛选和选择。",
+      "en": "Output uses the applied filters and selection captured when this preview opened."
+    },
+    "PrintTitle": {
+      "zhs": "操作履历打印",
+      "en": "Print operation history"
+    },
+    "IpAddress_Placeholder": {
+      "zhs": "输入完整 IP 地址",
+      "en": "Enter the complete IP address"
+    },
+    "Description_Placeholder": {
+      "zhs": "输入操作描述关键字",
+      "en": "Enter an operation description keyword"
+    },
+    "NameSource_unavailable": {
+      "zhs": "名称不可用",
+      "en": "Name unavailable"
+    }
+  }
+}

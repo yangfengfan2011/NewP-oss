@@ -16,7 +16,25 @@ public sealed class PartModule : ModuleCapsuleBindingBase
     public override void ConfigureServices(IServiceCollection services)
     {
         services.AddSingleton(new ICP.Platform.Authorization.Contracts.DataScopeResourceActionBinding("part.part", ModuleId,
-            ["read", "create", "edit", "delete", "authorize", "partCopy", "partObjectCopy"]));
+            ["read", "create", "edit", "delete", "authorize", "history", "partCopy", "partObjectCopy"]));
+        services.AddSingleton(new ICP.Platform.Modules.Audit.Contracts.ObjectHistoryEventPolicy(ModuleId,
+            "entity.ownership.initialized", "part.part", "part.part",
+            ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.ObjectId, "Part.HistoryOwnershipInitialized"));
+        services.AddSingleton(new ICP.Platform.Modules.Audit.Contracts.ObjectHistoryEventPolicy(ModuleId,
+            "entity.ownership.backfilled", "part.part", "part.part",
+            ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.ObjectId, "Part.HistoryOwnershipBackfilled"));
+        services.AddSingleton(new ICP.Platform.Modules.Audit.Contracts.ObjectHistoryEventPolicy(ModuleId,
+            "part.created", "part.part", "part.part",
+            ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.ObjectId, "Part.HistoryCreated")
+        { TextSnapshot = new("ObjectName", "ObjectCode") });
+        services.AddSingleton(new ICP.Platform.Modules.Audit.Contracts.ObjectHistoryEventPolicy(ModuleId,
+            "part.updated", "part.part", "part.part",
+            ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.ObjectId, "Part.HistoryUpdated")
+        { TextSnapshot = new("ObjectName", "ObjectCode") });
+        services.AddSingleton(new ICP.Platform.Modules.Audit.Contracts.ObjectHistoryEventPolicy(ModuleId,
+            "part.deleted", "part.part", "part.part",
+            ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.ObjectId, "Part.HistoryDeleted")
+        { TextSnapshot = new("ObjectName", "ObjectCode") });
         services.AddStandardCrudKernel();
         services.AddStandardCrudResource(provider =>
         {
@@ -30,8 +48,10 @@ public sealed class PartModule : ModuleCapsuleBindingBase
             provider.GetRequiredService<ICP.Platform.Presentation.IUserDisplayNameDirectory>(),
             provider.GetRequiredService<ICP.Platform.Persistence.Ownership.IAccountOwnershipDirectory>()));
         // 插入与仓储规范重读属于同一事务；提交后的展示才由标准服务降级为成功回执。
-        services.AddStandardCrudObjectBehavior(this, new("part.part", ModuleId, "Part",
-            [ObjectOperationAction.Create, ObjectOperationAction.Update, ObjectOperationAction.Delete], [], ["EID", "OwnerId", "OwnerDepartmentId", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"]));
+        services.AddScoped<PartBusinessRecorder>();
+        services.AddScoped<IStandardCrudCreationRecorder>(provider => provider.GetRequiredService<PartBusinessRecorder>());
+        services.AddScoped<IStandardCrudUpdateRecorder>(provider => provider.GetRequiredService<PartBusinessRecorder>());
+        services.AddObjectBehavior<PartObjectBehavior>(this, PartObjectBehavior.BehaviorDefinition);
         services.AddObjectBehavior<PartCopyBehavior>(this, PartCopyBehavior.BehaviorDefinition);
         services.AddScoped<IStandardCrudValidator, PartCrudValidator>();
         services.AddScoped<IStandardCrudQueryCustomizer, PartCrudQueryCustomizer>();

@@ -9,6 +9,7 @@ import type {
   StandardCrudActionDefinition,
   StandardCrudActionInstance,
   StandardCrudActionInputRenderer,
+  StandardCrudListQueryRequest,
 } from '@icp-platform/sdk';
 
 const ActionFormDrawer = lazy(() => import('@icp-platform/ui/crud-form').then(module => ({ default: module.CrudFormDrawer })));
@@ -26,6 +27,7 @@ interface StandardCrudActionReviewDialogProps {
   detail?: unknown;
   row?: unknown;
   selectedRows?: readonly unknown[];
+  listQuery?: Readonly<StandardCrudListQueryRequest>;
   pending: boolean;
   error?: string | null;
   submissionFailure?: unknown;
@@ -48,6 +50,7 @@ export function StandardCrudActionReviewDialog({
   detail,
   row,
   selectedRows,
+  listQuery,
   pending,
   error,
   submissionFailure,
@@ -86,7 +89,7 @@ export function StandardCrudActionReviewDialog({
         const resolution = features.navigation(key);
         return resolution.kind === 'allowed' ? resolution.position : undefined;
       },
-      queryScope, submitting: pending, submissionFailure, value, onChange, detail, row, selectedRows, onDraftStateChange: setDraftState,
+      queryScope, submitting: pending, submissionFailure, value, onChange, detail, row, selectedRows, listQuery, onDraftStateChange: setDraftState,
     })}
   </>;
   return (

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0", "type": "model",
   "Document": {
-    "kind": "Entity", "builtinFields": ["ECODE", "ENAME"],
+    "kind": "Entity", "builtinFields": ["ECODE", "ENAME", "OwnerId", "OwnerDepartmentId"],
     "sections": [{ "key": "basic", "titleKey": "Basic", "fields": ["ECODE", "ENAME", "Description"] }],
     "fields": [
       { "name": "ECODE", "uiType": "text", "form": { "create": { "mode": "editable", "required": true }, "edit": { "mode": "editable", "required": true } } },

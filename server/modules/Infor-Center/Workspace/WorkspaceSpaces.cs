@@ -12,7 +12,9 @@ public sealed record WorkspaceSpaceRoot(string SpaceId, string SpaceKind, string
 
 /// <summary>空间初始化与强制准入；普通内容权限不由初始化命令授予。</summary>
 public sealed class WorkspaceSpaces(EfPlatformDbContext db, IPlatformTransactionExecutor transactions, IDataScopeReadPlanProvider readPlans,
-    IStandardCrudService details, WorkspaceFolderReadDescriptor descriptor, WorkspaceFolderScope folderScope)
+    IStandardCrudService details, WorkspaceFolderReadDescriptor descriptor, WorkspaceFolderScope folderScope,
+    ICP.Platform.Crud.Ownership.EntityOwnershipValues ownership, ICP.Platform.Crud.Ownership.EntityOwnershipAudit ownershipAudit,
+    ICP.Platform.Persistence.Auditing.IEntityAuditValueProvider audit)
 {
     private const string SpaceModel = "WorkspaceSpace";
     private const string FolderModel = "WorkspaceFolder";
@@ -35,6 +37,7 @@ public sealed class WorkspaceSpaces(EfPlatformDbContext db, IPlatformTransaction
         var kind = personal ? "Personal" : "Public";
         return await transactions.ExecuteAsync<WorkspaceSpaceRoot>(async cancellation =>
         {
+            using var operation = audit.BeginOperation();
             // SQL Server 的事务锁跨 Host 生效；按账号分锁，不把多标签页竞争退化为先查后插。
             var resource = "Workspace.Space." + (personal ? actorId : "Public");
             await db.Database.ExecuteSqlRawAsync("DECLARE @result int; EXEC @result = sp_getapplock @Resource=@resource, @LockMode='Exclusive', @LockOwner='Transaction', @LockTimeout=15000; IF @result < 0 THROW 51000, 'Workspace initialization lock failed.', 1;",
@@ -46,10 +49,13 @@ public sealed class WorkspaceSpaces(EfPlatformDbContext db, IPlatformTransaction
             var spaceId = Guid.NewGuid().ToString("N");
             var rootId = Guid.NewGuid().ToString("N");
             var name = personal ? "个人空间" : "公共空间";
-            db.Set<Dictionary<string, object?>>(FolderModel).Add(new()
+            var root = new Dictionary<string, object?>
             {
                 ["EID"] = rootId, ["ENAME"] = name, ["OriginSpaceId"] = spaceId, ["Description"] = null
-            });
+            };
+            await ownership.ApplyCreateAsync(root, ["OwnerId", "OwnerDepartmentId"], cancellation);
+            db.Set<Dictionary<string, object?>>(FolderModel).Add(root);
+            await ownershipAudit.RegisterAsync("workspace.folder", rootId, root, false, cancellation);
             // RootFolderId 非空 FK；先保存预分配来源的根，再保存空间，两次保存仍属于同一平台事务。
             await transactions.FlushAsync(cancellation);
             db.Set<Dictionary<string, object?>>(SpaceModel).Add(new()

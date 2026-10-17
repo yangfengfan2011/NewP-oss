@@ -224,7 +224,7 @@ public sealed class PluginOfflineDeploymentTests : IDisposable
         var selected = manager.ReadRecordedDesired(InstalledPluginInventoryAdapter.Create(store));
         // enable-bundle 明确启根；成员自身停用选择仍保留，不能把根的命令语义当作安装语义。
         Assert.Equal(new PluginDesiredModuleState("InforCenter", chosenVersion, true), selected.Single(item => item.ModuleId == "InforCenter"));
-        Assert.Equal(new PluginDesiredModuleState("Part", "1.0.0", false), selected.Single(item => item.ModuleId == "Part"));
+        Assert.Equal(before.Single(item => item.ModuleId == "Part"), selected.Single(item => item.ModuleId == "Part"));
         Assert.Null(manager.Resolve(InstalledPluginInventoryAdapter.Create(store)).ActiveSnapshot);
     }
 

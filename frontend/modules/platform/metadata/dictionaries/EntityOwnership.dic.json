@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "1.0", "type": "dic",
+  "EntityOwnership": {
+    "AccountUnresolved": { "zhs": "无法解析账号或其当前部门。对象保留待补齐，请人工选择具有部门归属的账号。", "en": "The account or its current department cannot be resolved. Choose an account with a department to initialize this object." },
+    "AlreadyOwned": { "zhs": "已有所属人不能通过补齐改变，请保留当前所属人。", "en": "Initialization cannot change an existing owner. Keep the current owner." },
+    "TargetUnavailable": { "zhs": "对象不存在或当前不可读取，请重新选择。", "en": "The object is unavailable or unreadable. Select it again." },
+    "EditDenied": { "zhs": "当前没有此对象的编辑资格，未补齐归属。", "en": "You cannot edit this object. Ownership was not initialized." },
+    "InvalidSelection": { "zhs": "请选择非空且不重复的真实对象集合。", "en": "Select a nonempty set of distinct objects." },
+    "InvalidPage": { "zhs": "页码无效，请重新读取待补齐列表。", "en": "The page is invalid. Reload the pending list." }
+  }
+}

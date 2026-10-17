@@ -14,7 +14,7 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
     Func<AcceptanceFeatureCatalog, IReadOnlyList<FeaturePoint>>? selectFeatures = null,
     Func<HttpClient, AcceptanceFeatureCatalog, WorkspaceAcceptanceActor, CancellationToken, Task>? prepareJourney = null,
     PublishedComponentAcceptanceFixture? publishedFixture = null,
-    bool includeBrowser = true)
+    bool includeBrowser = true, bool browserAsAdministrator = false)
     : AcceptanceRunner(repositoryRoot, runDirectory, runId)
 {
     private ReusableSqlServerDatabase? _databaseLease;
@@ -49,6 +49,13 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
             _publishedShellOrigin = target.ShellOrigin;
             _hostPort = target.HostPort;
             _entryPosition = target.EntryPosition;
+            if (prepareJourney is not null)
+            {
+                using var publishedAdministrator = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
+                await WorkspaceAcceptanceFixture.LoginAsync(publishedAdministrator, publishedFixture.Administrator, token);
+                var publishedFeatures = await AcceptanceFeatureCatalog.LoadAsync(publishedAdministrator, token);
+                await prepareJourney(publishedAdministrator, publishedFeatures, target.Actor, token);
+            }
             return;
         }
         _databaseLease = await ReusableSqlServerDatabase.AcquireAsync(_repositoryRoot, token);
@@ -129,7 +136,9 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
     // 该前缀从首片接入，后续功能继续在同一 driver 上追加内容/引用操作；浏览器只证明路径。
     private async Task RunBrowserAsync(CancellationToken token)
     {
-        var actor = _actor ?? throw new InvalidOperationException("Workspace 普通主体尚未准备。");
+        var actor = browserAsAdministrator ? publishedFixture?.Administrator
+            ?? throw new InvalidOperationException("管理员浏览器路径需要本轮正式发行fixture。")
+            : _actor ?? throw new InvalidOperationException("Workspace 普通主体尚未准备。");
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync(new()
         {

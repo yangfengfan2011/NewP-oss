@@ -1354,6 +1354,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
     private bool _includePart;
     private bool _includeDocument;
     private bool _includeFiles;
+    private bool _defaultOrganizationInitialized;
     private BusinessAuditHostFixture(ReusableSqlServerDatabase database, Action<IServiceCollection>? configureServices)
     {
         _database = database;
@@ -1490,7 +1491,11 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
             .Concat(OrganizationModelDefinitions.All.Select(m => m with { OwnerModuleId = "Organization" }))
             .Concat(new AuditModelMetadataProvider().GetDefinitions().Select(m => m with { OwnerModuleId = "Audit" }))
             .Concat(_includeWorkspace ? new ICP.Platform.Modules.Workspace.WorkspaceModelMetadataProvider().GetDefinitions() : []).Concat(_includePart ? new ICP.Platform.Modules.Part.PartModelMetadataProvider().GetDefinitions() : []).Concat(_includeDocument ? new ICP.Platform.Modules.Document.DocumentModelMetadataProvider().GetDefinitions() : []).Concat(_includeFiles ? new ICP.Platform.Modules.Files.FilesModelMetadataProvider().GetDefinitions() : []).ToArray();
-        var plan = new CompiledPersistencePlan("business-audit-test", "snapshot", "hash", default, "digest", [], models, []);
+        // 本夹具显式构造当前模型计划；运行时模块不能再回退到仓库查找缺失的候选 authoring。
+        var modelAuthoring = new Dictionary<string, ICP.Platform.Modeling.Metadata.ModelMetadataDocument>(StringComparer.Ordinal);
+        if (_includePart) modelAuthoring.Add("Part", new ICP.Platform.Modules.Part.PartModelMetadataProvider().GetDocument());
+        if (_includeDocument) modelAuthoring.Add("Document", new ICP.Platform.Modules.Document.DocumentModelMetadataProvider().GetDocument());
+        var plan = new CompiledPersistencePlan("business-audit-test", "snapshot", "hash", default, "digest", [], models, []) { ModelAuthoring = modelAuthoring };
         builder.Services.AddSingleton(plan);
         builder.Services.AddDbContext<EfPlatformDbContext>((sp, options) => options.UseSqlServer(_connection)
             .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>().AddInterceptors(Fault, new SaveFault(Fault), new CommitFault(Fault)));
@@ -1503,6 +1508,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         // 每次 Host 重启都复用首次配置；故障注入和 Files 选项不能随动作开关悄悄消失。
         _configureServices?.Invoke(builder.Services);
         if (_includeWorkspace) builder.Services.AddControllers().AddApplicationPart(typeof(ICP.Platform.Modules.Workspace.WorkspaceModule).Assembly);
+        if (_includePart) builder.Services.AddControllers().AddApplicationPart(typeof(ICP.Platform.Modules.Part.PartModule).Assembly);
         if (_includeDocument) builder.Services.AddControllers().AddApplicationPart(typeof(ICP.Platform.Modules.Document.DocumentModule).Assembly);
         if (_includeFiles) builder.Services.AddControllers().AddApplicationPart(typeof(ICP.Platform.Modules.Files.FilesModule).Assembly);
         _app = builder.Build();
@@ -1656,7 +1662,19 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
             return true;
         });
     }
-    internal Task<HttpClient> LoginAdministratorAsync() => LoginAsync("admin", _temporaryCredential);
+    internal async Task<HttpClient> LoginAdministratorAsync()
+    {
+        var client = await LoginAsync("admin", _temporaryCredential);
+        if (!_defaultOrganizationInitialized && (_includeWorkspace || _includePart || _includeDocument))
+        {
+            // 真实选用归属的消费者显式准备默认组织；生产GET和DI仍然没有初始化副作用。
+            var point = FeatureCatalog.First(point => point.BehaviorKey == "organization.company.initialize");
+            using var response = await FeatureHttpTestRequests.SendAsync(client, point, HttpMethod.Post, "/api/organization/initialization");
+            Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
+            _defaultOrganizationInitialized = true;
+        }
+        return client;
+    }
     internal HttpClient CreateClient() => new(new Cookies(_app.GetTestServer().CreateHandler())) { BaseAddress = new Uri("http://localhost") };
     internal async Task<HttpClient> LoginAsync(string code, string password)
     {

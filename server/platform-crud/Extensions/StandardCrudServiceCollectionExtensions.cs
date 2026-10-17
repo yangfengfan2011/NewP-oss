@@ -46,6 +46,10 @@ public static class StandardCrudServiceCollectionExtensions
         services.AddScoped<IStandardCrudRepository>(static provider =>
             provider.GetRequiredService<EfStandardCrudRepository>());
         services.AddScoped<StandardCrudDefaultWriter>();
+        services.AddScoped<ICP.Platform.Crud.Ownership.EntityOwnershipValues>();
+        services.AddScoped<ICP.Platform.Crud.Ownership.EntityOwnershipAudit>();
+        services.AddScoped(provider => ActivatorUtilities.CreateInstance<ICP.Platform.Crud.Ownership.EntityOwnershipBackfill>(provider));
+        services.AddScoped(provider => ActivatorUtilities.CreateInstance<ICP.Platform.Crud.Ownership.EntityOwnershipMaintenance>(provider));
         services.AddOptions<ObjectOperationAssemblyOptions>();
         services.TryAddSingleton<ObjectOperationAssemblyPlan>();
         services.TryAddScoped<ObjectOperationContributionSet>();
@@ -179,6 +183,21 @@ public static class StandardCrudServiceCollectionExtensions
         StandardCrudDescriptorValidator.Validate(descriptor);
         services.TryAddSingleton<IStandardCrudResourceRegistry, StandardCrudResourceRegistry>();
         services.AddSingleton(descriptor);
+        return services;
+    }
+
+    /// <summary>在已编译候选可解析后构造资源；仍执行同一 descriptor 校验及 registry 唯一性约束。</summary>
+    public static IServiceCollection AddStandardCrudResource(this IServiceCollection services,
+        Func<IServiceProvider, StandardCrudDescriptor> factory)
+    {
+        ArgumentNullException.ThrowIfNull(factory);
+        services.TryAddSingleton<IStandardCrudResourceRegistry, StandardCrudResourceRegistry>();
+        services.AddSingleton(provider =>
+        {
+            var descriptor = factory(provider);
+            StandardCrudDescriptorValidator.Validate(descriptor);
+            return descriptor;
+        });
         return services;
     }
 

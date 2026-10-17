@@ -102,8 +102,9 @@ public sealed class OfflineComponentDeploymentSqlServerTests
         Assert.Contains(fixture.Catalog, point => point.ModuleId == "Part");
         await AssertPart(fixture, partId);
         await fixture.StopAsync();
-        Assert.Equal(0, (await Offline(fixture, "select", "-ModuleId", "Part", "-Version", "1.0.0", "-Enabled", "false")).ExitCode);
-        Assert.Equal(0, (await Offline(fixture, "select", "-ModuleId", "Part", "-Version", "1.0.0")).ExitCode);
+        var partVersion = JsonNode.Parse(File.ReadAllText(Path.Combine(fixture.HostRoot, "modules", "Part", "plugin.json")))!["version"]!.GetValue<string>();
+        Assert.Equal(0, (await Offline(fixture, "select", "-ModuleId", "Part", "-Version", partVersion, "-Enabled", "false")).ExitCode);
+        Assert.Equal(0, (await Offline(fixture, "select", "-ModuleId", "Part", "-Version", partVersion)).ExitCode);
         await fixture.StartAsync();
         Assert.DoesNotContain(fixture.Catalog, point => point.ModuleId == "Part");
         Assert.Equal(history, await History(fixture));
@@ -254,6 +255,9 @@ public sealed class OfflineComponentDeploymentSqlServerTests
 
     private static async Task<string> CreatePart(FeatureCatalogHostFixture fixture)
     {
+        var initialize = fixture.Catalog.First(point => point.BehaviorKey == "organization.company.initialize");
+        using var initialized = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, initialize, HttpMethod.Post, "/api/organization/initialization");
+        Assert.True(initialized.IsSuccessStatusCode, await initialized.Content.ReadAsStringAsync());
         var point = Assert.Single(fixture.Catalog, point => point.BehaviorKey == "part.part.create");
         using var response = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, point, HttpMethod.Post, "/api/part/parts", new { ECODE = "OFFLINE264", ENAME = "离线保留264" });
         Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());

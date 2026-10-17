@@ -12,6 +12,39 @@ internal sealed class WorkspacePageDriver(IPage page)
         await page.Locator(".np-shell-language-select .ant-select-selector").ClickAsync();
         await page.Locator(".ant-select-dropdown:visible").GetByText(language, new() { Exact = true }).ClickAsync();
     }
+
+    /// <summary>归属维护复用实际列表工具栏或行菜单；只等待真实输入面板，不在浏览器裁决归属值。</summary>
+    internal async Task<ILocator> OpenOwnershipInitializationAsync(string? rowName = null, bool english = false)
+    {
+        var crud = new StandardCrudPageDriver(page);
+        if (rowName is null) await crud.ClickPageActionAsync(english ? "Missing ownership" : "待补齐归属");
+        else
+        {
+            var row = await crud.WaitForRowAsync(rowName);
+            await row.GetByRole(AriaRole.Button, new() { Name = english ? "More" : "更多", Exact = true }).ClickAsync();
+            await page.GetByRole(AriaRole.Menuitem, new() { Name = english ? "Initialize ownership" : "补齐归属", Exact = true }).ClickAsync();
+        }
+        var dialog = crud.VisibleModal();
+        await dialog.WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        return dialog;
+    }
+
+    /// <summary>人工补齐通过正式可搜索候选选中账号，不向页面注入ID或替代写入。</summary>
+    internal async Task ChooseOwnershipAccountAsync(ILocator dialog, string query)
+    {
+        await dialog.GetByRole(AriaRole.Radio, new() { Name = "人工指定账号", Exact = true }).CheckAsync();
+        var input = dialog.GetByRole(AriaRole.Combobox);
+        var loaded = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath == "/api/workspace/ownership/accounts"
+            && StandardCrudPageDriver.HasQueryValue(new Uri(response.Url), "query", query));
+        await input.FillAsync(query);
+        var response = await loaded;
+        if (!response.Ok) throw new InvalidOperationException($"归属账号候选请求失败：{response.Status} {await response.TextAsync()}");
+        var candidate = page.Locator(".ant-select-dropdown:visible .ant-select-item-option:not(.ant-select-item-option-disabled)")
+            .Filter(new() { HasTextString = query }).First;
+        await candidate.WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        await candidate.ClickAsync();
+    }
     internal async Task OpenAsync()
     {
         await page.Locator(".np-sidebar-menu").GetByRole(AriaRole.Link, new() { Name = "工作空间", Exact = true }).ClickAsync();

@@ -71,7 +71,8 @@ internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
     }
 
     internal static async Task<FeatureCatalogHostFixture> CreateAsync(JsonArray declarations,
-        Func<FeatureCatalogHostFixture, Task>? beforeFirstStartup = null, bool expectInitialStartupFailure = false)
+        Func<FeatureCatalogHostFixture, Task>? beforeFirstStartup = null, bool expectInitialStartupFailure = false,
+        string? sourceHostRoot = null)
     {
         var lease = await ReusableSqlServerDatabase.AcquireAsync();
         FeatureCatalogHostFixture fixture;
@@ -80,15 +81,19 @@ internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
         try
         {
             var output = new DirectoryInfo(AppContext.BaseDirectory);
-            var source = Path.Combine(fixture.RepositoryRoot, "apps", "host-api", "bin", output.Parent!.Name, output.Name);
+            var source = sourceHostRoot ?? Path.Combine(fixture.RepositoryRoot, "apps", "host-api", "bin", output.Parent!.Name, output.Name);
             foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
             {
                 var target = Path.Combine(fixture.HostRoot, Path.GetRelativePath(source, file));
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                 File.Copy(file, target);
             }
-            File.Copy(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(fixture.RepositoryRoot, "Example"), "newp.plugin.json"), fixture.CapsulePath, overwrite: true);
-            fixture.SetDeclarations(declarations);
+            // 固定历史发行物保留其完整声明；默认夹具仍按当前 Example authoring 构造功能反例。
+            if (sourceHostRoot is null)
+            {
+                File.Copy(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(fixture.RepositoryRoot, "Example"), "newp.plugin.json"), fixture.CapsulePath, overwrite: true);
+                fixture.SetDeclarations(declarations);
+            }
             if (beforeFirstStartup is not null) await beforeFirstStartup(fixture);
             await fixture.StartAsync(expectFailure: expectInitialStartupFailure);
             if (expectInitialStartupFailure) return fixture;

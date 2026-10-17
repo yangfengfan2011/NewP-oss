@@ -1,5 +1,9 @@
 {
   "Part": {
+    "InitializeOwnership": { "zhs": "补齐归属", "en": "Initialize ownership" },
+    "OwnershipPendingObjects": { "zhs": "待补齐归属", "en": "Missing ownership" },
+    "Field_OwnerId": { "zhs": "所属人", "en": "Owner" },
+    "Field_OwnerDepartmentId": { "zhs": "所属部门", "en": "Owning department" },
     "Title": {
       "en": "Parts",
       "zhs": "零组件"

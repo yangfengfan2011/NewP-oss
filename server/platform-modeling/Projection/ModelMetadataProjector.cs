@@ -1,5 +1,6 @@
 using ICP.Platform.Modeling.Definitions;
 using ICP.Platform.Modeling.Metadata;
+using ICP.Platform.Modeling.Ownership;
 
 namespace ICP.Platform.Modeling.Projection;
 
@@ -171,7 +172,7 @@ public sealed class ModelMetadataProjector
     private static bool IsProjectedByKernel(string modelKind, string fieldName)
     {
         return string.Equals(modelKind, "Entity", StringComparison.OrdinalIgnoreCase)
-            ? EntityFixedFields.Contains(fieldName)
+            ? EntityFixedFields.Contains(fieldName) || EntityOwnershipFields.Contains(fieldName)
             : LinkFixedFields.Contains(fieldName);
     }
 
@@ -193,6 +194,7 @@ public sealed class ModelMetadataProjector
         {
             fields.Add(new FieldDefinition("ECODE", "ECODE", FieldKind.Scalar, FieldValueType.Text, "string", true, false, false));
         }
+        fields.AddRange(EntityOwnershipFields.Project(builtinFields));
     }
 
     // Link 固定字段不仅包含两端引用，也包含关系对象自身的审计字段。

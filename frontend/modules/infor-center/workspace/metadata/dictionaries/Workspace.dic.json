@@ -1,6 +1,10 @@
 {
   "schemaVersion": "1.0", "type": "dic",
   "Workspace": {
+    "OwnershipPendingObjects": { "zhs": "待补齐归属", "en": "Missing ownership" },
+    "InitializeOwnership": { "zhs": "补齐归属", "en": "Initialize ownership" },
+    "Field_OwnerId": { "zhs": "所属人", "en": "Owner" },
+    "Field_OwnerDepartmentId": { "zhs": "所属部门", "en": "Owning department" },
     "PasteObjectCopy": { "zhs": "粘贴对象副本", "en": "Paste independent object copy" },
     "ObjectCopyDescription": { "zhs": "每个副本使用新编码；多个图文档整批成功或失败。提交时核对全部来源，源变化后需重新确认。", "en": "Use a new code for every copy. Documents commit as one batch. All sources are checked on submit; changes require confirmation again." },
     "ObjectCopySourceRequired": { "zhs": "请先复制单个零组件或当前页同模型图文档集合，并选择普通文件夹。不接受剪切、多零组件或混合类型。", "en": "Copy one part or the current page selection of documents, then select an ordinary folder. Cut, multiple parts and mixed types are not supported." },

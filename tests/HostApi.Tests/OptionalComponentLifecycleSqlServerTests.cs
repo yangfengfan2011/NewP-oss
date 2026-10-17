@@ -153,8 +153,20 @@ public sealed class OptionalComponentLifecycleSqlServerTests
     public async Task InforCenterDisableAndRestore_PreservesDataAndReferencesAndRemovesCapabilities()
     {
         await using var fixture = await FeatureCatalogHostFixture.CreateAsync([]);
+        var initialize = fixture.Catalog.First(point => point.BehaviorKey == "organization.company.initialize");
+        using var initialized = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, initialize, HttpMethod.Post, "/api/organization/initialization");
+        Assert.True(initialized.IsSuccessStatusCode, await initialized.Content.ReadAsStringAsync());
         var root = await Post(fixture, "workspace.spaces.access", "/api/workspace/spaces/public/initialize", null);
         var position = new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = root.GetProperty("rootFolderId").GetString(), linkIds = Array.Empty<string>() };
+        var container = await Post(fixture, "workspace.folder.create", "/api/workspace/content/folders", new { position, values = new { ENAME = "保留引用容器" } });
+        var containerId = container.GetProperty("id").GetString()!;
+        var rootScope = JsonSerializer.Serialize(new { position.spaceId, position.rootFolderId, linkIds = "[]" });
+        var rootContents = await FeatureHttpTestRequests.ReadAsync(fixture.Administrator, Point(fixture, "workspace.spaces.access"),
+            "/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId=" + Uri.EscapeDataString(position.rootFolderId!) + "&queryScope=" + Uri.EscapeDataString(rootScope));
+        var containerLinkId = Assert.Single(rootContents.GetProperty("items").EnumerateArray(), item =>
+            item.GetProperty("associatedObject").GetProperty("modelKey").GetString() == "WorkspaceFolder"
+            && item.GetProperty("associatedObject").GetProperty("id").GetString() == containerId).GetProperty("linkId").GetString()!;
+        position = position with { linkIds = new[] { containerLinkId } };
         var targets = new List<(string Model, string Id)>();
         foreach (var (model, route, behavior) in new[] { ("Part", "/api/part/parts", "part.part.create"), ("Document", "/api/document/documents", "document.document.create") })
         {
@@ -163,6 +175,14 @@ public sealed class OptionalComponentLifecycleSqlServerTests
             targets.Add((model, id));
             await Post(fixture, "workspace.folder.add", "/api/workspace/content/references", new { position, target = new { modelKey = model, id } });
         }
+        var scope = JsonSerializer.Serialize(new { position.spaceId, position.rootFolderId, linkIds = JsonSerializer.Serialize(position.linkIds) });
+        var contentPath = "/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId=" + Uri.EscapeDataString(containerId)
+            + "&queryScope=" + Uri.EscapeDataString(scope);
+        var beforeContents = await FeatureHttpTestRequests.ReadAsync(fixture.Administrator, Point(fixture, "workspace.spaces.access"), contentPath);
+        var beforeLinks = beforeContents.GetProperty("items").EnumerateArray().Select(item =>
+            (item.GetProperty("linkId").GetString(), item.GetProperty("associatedObject").GetProperty("modelKey").GetString(),
+                item.GetProperty("associatedObject").GetProperty("id").GetString())).OrderBy(item => item.Item1).ToArray();
+        Assert.Equal(2, beforeLinks.Length);
         await fixture.StopAsync();
         SetEnabled(fixture, "InforCenter", false);
         await fixture.StartAsync();
@@ -187,9 +207,10 @@ public sealed class OptionalComponentLifecycleSqlServerTests
                 "/api/" + target.Model.ToLowerInvariant() + "/" + target.Model.ToLowerInvariant() + "s/" + target.Id);
             Assert.Equal(target.Model + "保留", read.GetProperty("fields").GetProperty("ENAME").GetString());
         }
-        var scope = JsonSerializer.Serialize(new { position.spaceId, position.rootFolderId, linkIds = "[]" });
-        var contents = await FeatureHttpTestRequests.ReadAsync(fixture.Administrator, Point(fixture, "workspace.spaces.access"),
-            "/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId=" + position.rootFolderId + "&queryScope=" + Uri.EscapeDataString(scope));
+        var contents = await FeatureHttpTestRequests.ReadAsync(fixture.Administrator, Point(fixture, "workspace.spaces.access"), contentPath);
+        Assert.Equal(beforeLinks, contents.GetProperty("items").EnumerateArray().Select(item =>
+            (item.GetProperty("linkId").GetString(), item.GetProperty("associatedObject").GetProperty("modelKey").GetString(),
+                item.GetProperty("associatedObject").GetProperty("id").GetString())).OrderBy(item => item.Item1).ToArray());
         Assert.Equal(targets.OrderBy(target => target.Model).Select(target => (target.Model, target.Id)),
             contents.GetProperty("items").EnumerateArray().Select(item => (item.GetProperty("associatedObject").GetProperty("modelKey").GetString()!, item.GetProperty("associatedObject").GetProperty("id").GetString()!)).OrderBy(target => target.Item1));
     }

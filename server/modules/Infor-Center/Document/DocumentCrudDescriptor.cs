@@ -1,5 +1,7 @@
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Planning;
+using ICP.Platform.Modeling.Definitions;
+using ICP.Platform.Modeling.Metadata;
 
 namespace ICP.Platform.Modules.Document;
 
@@ -9,9 +11,15 @@ public static class DocumentCrudDescriptor
     /// <summary>从正式 Model 投影字段规则，编码唯一不依赖页面校验。</summary>
     public static StandardCrudDescriptor Create()
     {
-        string[] fields = ["EID", "ECODE", "ENAME", "Description", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"];
-        var fieldSet = new StandardCrudFieldSet(fields, fields, ["ECODE", "ENAME", "Description"], ["ECODE", "ENAME", "Description"]);
         var metadata = new DocumentModelMetadataProvider();
+        return Create(metadata.GetDocument(), metadata.GetDefinitions().Single(model => model.LogicalKey == "Document"));
+    }
+
+    /// <summary>运行时消费本候选已经验证的 authoring 与模型，不读取工作树或发行目录。</summary>
+    public static StandardCrudDescriptor Create(ModelMetadataDocument document, ModelDefinition model)
+    {
+        string[] fields = ["EID", "ECODE", "ENAME", "Description", "OwnerId", "OwnerDepartmentId", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"];
+        var fieldSet = new StandardCrudFieldSet(fields, fields, ["ECODE", "ENAME", "Description"], ["ECODE", "ENAME", "Description"]);
         return new()
         {
             ResourceKey = "document.document", ModuleId = "Document", ModelName = "Document", Route = "api/document/documents",
@@ -20,7 +28,7 @@ public static class DocumentCrudDescriptor
             IdField = "EID", DisplayField = "ENAME", FieldSet = fieldSet, DeletePolicy = StandardCrudDeletePolicy.Hard,
             Authorization = StandardCrudAuthorization.ByFeature("document.document", StandardCrudOperation.List, StandardCrudOperation.Detail, StandardCrudOperation.Create),
             OptionLabelFields = ["ECODE", "ENAME"], SortableFields = ["ECODE", "ENAME", "UpdatedAt"], DefaultSortField = "ECODE",
-            FieldPolicies = new ModelStandardCrudFieldPolicyProjector().Project(metadata.GetDocument(), metadata.GetDefinitions().Single(model => model.LogicalKey == "Document"), fieldSet),
+            FieldPolicies = new ModelStandardCrudFieldPolicyProjector().Project(document, model, fieldSet),
             RequiredFields = [new() { Field = "ECODE", Scope = StandardCrudRequiredFieldScope.CreateAndUpdate, ErrorCode = "Document.CodeRequired", Message = "编码不能为空。", ReasonKey = "Document.CodeRequired" },
                 new() { Field = "ENAME", Scope = StandardCrudRequiredFieldScope.CreateAndUpdate, ErrorCode = "Document.NameRequired", Message = "名称不能为空。", ReasonKey = "Document.NameRequired" }],
         };

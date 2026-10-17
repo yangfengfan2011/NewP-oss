@@ -41,6 +41,12 @@ public class ModelDtoSyncRunnerTests
             Assert.Contains(authenticationSessionDtoPath, writtenFiles);
             Assert.Contains(userDtoPath, writtenFiles);
             Assert.Contains(securityEventDtoPath, writtenFiles);
+            foreach (var (module, model) in new[] { ("Workspace", "WorkspaceFolder"), ("Part", "Part"), ("Document", "Document") })
+            {
+                var generated = File.ReadAllText(Path.Combine(repositoryRoot, "server", "modules", "Infor-Center", module, "DTOs", "Generated", model + "Dto.g.cs"));
+                Assert.Contains("public string? OwnerId { get; init; }", generated, StringComparison.Ordinal);
+                Assert.Contains("public string? OwnerDepartmentId_DisplayValue { get; init; }", generated, StringComparison.Ordinal);
+            }
             Assert.True(File.Exists(roleDtoPath));
             Assert.True(File.Exists(personDtoPath));
             Assert.True(File.Exists(positionDtoPath));

@@ -59,7 +59,11 @@ public sealed partial class WorkspaceContents
             var candidates = new Dictionary<string, Dictionary<string, object?>>(StringComparer.OrdinalIgnoreCase);
             foreach (var folder in plan.Folders) candidates.Add(folder.Id, await PrepareFolderCandidateAsync(StringComparer.OrdinalIgnoreCase.Equals(folder.Id, source.Id) ? name : folder.Name, folder.Description, targetPosition.SpaceId, cancellation));
             // 全部候选及最终图先成立，之后才产生任何持久写入；新图只指向全新EID，目标为源后代也不会成环。
-            foreach (var candidate in candidates.Values) Folders.Add(candidate);
+            foreach (var candidate in candidates.Values)
+            {
+                Folders.Add(candidate);
+                await ownershipAudit.RegisterAsync("workspace.folder", (string)candidate["EID"]!, candidate, false, cancellation);
+            }
             await transactions.FlushAsync(cancellation);
             var createdRoot = (string)candidates[source.Id]["EID"]!;
             var rootLink = await RegisterCreatedReferenceAsync(target.FolderId, WorkspacePositions.FolderModel, createdRoot, cancellation);

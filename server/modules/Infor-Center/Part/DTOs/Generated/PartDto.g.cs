@@ -16,5 +16,9 @@ public sealed class PartDto
     public string DisplayName { get; init; }
     public string Name { get => DisplayName; init => DisplayName = value; }
     public string Code { get; init; }
+    public string? OwnerId { get; init; }
+    public string? OwnerId_DisplayValue { get; init; }
+    public string? OwnerDepartmentId { get; init; }
+    public string? OwnerDepartmentId_DisplayValue { get; init; }
     public string? Description { get; init; }
 }

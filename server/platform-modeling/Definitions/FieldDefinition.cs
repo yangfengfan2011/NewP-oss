@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ICP.Platform.Modeling.Definitions;
 
 // Model artifact 的规范字段定义；DisplayRule 只携带 metadata 展示语义，不改变存储或持久化投影。
@@ -14,4 +16,8 @@ public sealed record FieldDefinition(
 {
     /// <summary>完整文本身份使用 Ordinal 比较，物理索引由 provider 派生。</summary>
     public bool OrdinalKey { get; init; }
+
+    /// <summary>已选用的 ENTITY 公共归属字段由服务端维护，独立于创建和更新审计。</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool IsOwnershipField { get; init; }
 }

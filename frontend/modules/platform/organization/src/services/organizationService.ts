@@ -467,3 +467,17 @@ export async function bindPersonUser(
     '绑定账号失败',
   );
 }
+
+/** 初始化只由用户显式发起；身份、名称和保留部门标识均由服务端决定。 */
+export async function initializeOrganization(featurePosition?: string): Promise<void> {
+  await requestJson<unknown>('/api/organization/initialization', {
+    method: 'POST', headers: { Accept: 'application/json', ...(featurePosition ? { 'X-NewP-Feature': featurePosition } : {}) },
+  }, '初始化组织失败');
+}
+
+/** 本地管理员维护资格与可分配的普通功能资格分别核验。 */
+export async function getOrganizationInitializationEligibility(featurePosition: string, signal: AbortSignal): Promise<boolean> {
+  const result = await fetchJson<{ allowed: boolean }>('/api/organization/initialization/eligibility',
+    '读取初始化资格失败', signal, featurePosition);
+  return result.allowed;
+}

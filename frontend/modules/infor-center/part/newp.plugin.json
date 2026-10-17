@@ -1,7 +1,7 @@
 {
-  "schemaVersion": "1.0", "moduleId": "Part", "displayName": "零组件", "version": "1.0.0",
+  "schemaVersion": "1.0", "moduleId": "Part", "displayName": "零组件", "version": "1.1.0",
   "description": "独立零组件元数据", "entryAssembly": "../../PartModule.dll",
-  "dependencies": ["Identity", "Authentication", "Authorization"],
+  "dependencies": ["Identity", "Authentication", "Authorization", "Organization", "Audit"],
   "hostVersion": { "min": "1.1.0", "max": "2.0.0" },
   "backend": { "behaviorKey": "part.backend" },
   "dataActions": [{ "key": "partCopy", "title": "复制零组件引用", "behaviorKey": "data.part.copy", "requiresRead": true }, { "key": "partObjectCopy", "title": "创建零组件真副本", "behaviorKey": "data.part.objectCopy", "requiresRead": true }],

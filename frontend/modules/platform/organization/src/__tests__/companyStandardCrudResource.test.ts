@@ -1,10 +1,34 @@
 import { describe, expect, it, vi } from 'vitest';
+import { invalidatePlatformAntiforgeryToken } from '@icp-platform/core';
 import {
   companyStandardCrudResource,
   mapCompanyListItem,
 } from '../standard-crud/companyStandardCrudResource';
 
 describe('company standard CRUD resource', () => {
+  it('hides initialization when the trusted maintenance eligibility is denied', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ allowed: false }), { status: 200 }));
+    const resolve = companyStandardCrudResource.actionEligibilityResolvers!.initialize!;
+    await expect(resolve({ action: { key: 'initialize', labelKey: 'Action_Initialize' },
+      featurePosition: 'organization.company.initialize', signal: new AbortController().signal,
+    })).resolves.toEqual({ visible: false, available: false });
+  });
+
+  it('initializes the default organization only through one explicit command', async () => {
+    invalidatePlatformAntiforgeryToken();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ requestToken: 'csrf-token' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+      companyId: 'company', departmentId: 'department', companyCreated: true, departmentCreated: true,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    expect(companyStandardCrudResource.actionHandlers?.initialize).toBeTypeOf('function');
+    await companyStandardCrudResource.actionHandlers!.initialize({ featurePosition: 'organization.company.initialize' });
+    const writes = fetchSpy.mock.calls.map(call => call[0]).filter((request): request is Request => request instanceof Request && request.method === 'POST');
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.url).toContain('/api/organization/initialization');
+    expect(writes[0]?.headers.get('X-NewP-Feature')).toBe('organization.company.initialize');
+  });
+
   it('binds the company list to the standard mutation lifecycle without handlers or revision', () => {
     expect(companyStandardCrudResource.resourceKey).toBe('organization.company');
     expect(companyStandardCrudResource.listViewKey).toBe('organization.company.list');

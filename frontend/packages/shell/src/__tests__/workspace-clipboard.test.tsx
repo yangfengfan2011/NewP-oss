@@ -64,6 +64,7 @@ async function mount(options: { actionSets?: Record<string, { column: string[]; 
     const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost');
     if (url.pathname.includes('antiforgery-token')) return json({ requestToken: 'token' });
     if (url.pathname.endsWith('/current-user')) return json(user());
+    if (url.pathname === '/api/workspace/ownership/eligibility') return json({ code: 'FORBIDDEN' }, 403);
     if (url.pathname.endsWith('/personal/ensure')) return json({ succeeded: true });
     if (url.pathname === '/api/trees/workspace.structure/roots') return json(workspaceTreeRoots([
       { spaceId: 'public', spaceKind: 'Public', rootFolderId: 'root', name: '公共空间', hasChildren: true },

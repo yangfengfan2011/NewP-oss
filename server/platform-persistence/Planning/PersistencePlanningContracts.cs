@@ -1,4 +1,5 @@
 using ICP.Platform.Modeling.Definitions;
+using ICP.Platform.Modeling.Metadata;
 using System.Text.Json.Serialization;
 
 namespace ICP.Platform.Persistence.Planning;
@@ -79,6 +80,21 @@ public sealed record CompiledPersistencePlan(
     IReadOnlyList<ModelDefinition> Models,
     IReadOnlyList<ModuleMigrationStream> Streams)
 {
+    /// <summary>本候选编译时已验证的模型 authoring；只供运行时字段策略消费，不进入存储计划或部署历史。</summary>
+    [JsonIgnore]
+    public IReadOnlyDictionary<string, ModelMetadataDocument> ModelAuthoring { get; init; } =
+        new Dictionary<string, ModelMetadataDocument>(StringComparer.Ordinal);
+
+    /// <summary>按已编译 owner 和全局模型身份读取 authoring，缺失时拒绝而不重新打开目录。</summary>
+    public ModelMetadataDocument GetModelAuthoring(string moduleId, string modelName)
+    {
+        if (!Models.Any(model => model.OwnerModuleId == moduleId && model.LogicalKey == modelName)
+            || !ModelAuthoring.TryGetValue(modelName, out var document)
+            || document.ModuleId != moduleId || document.Model.Name != modelName)
+            throw new InvalidOperationException($"MODEL_AUTHORING_NOT_FOUND: {moduleId}/{modelName}");
+        return document;
+    }
+
     /// <summary>
     /// 统一 history reconciliation 契约版本；未知版本必须阻断。
     /// </summary>

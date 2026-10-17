@@ -46,6 +46,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     private string ExistingDocumentCode => "ACC-OLD-D-" + runId[..8];
     internal string ExistingDocumentName => "归组旧图文档 " + runId[..8];
     private string? _oldDocumentId;
+    private string? _oldPartId;
     private string? _oldFolderId;
     private WorkspaceFolderPosition? _documentPosition;
     private string? _baselineOwners;
@@ -150,6 +151,12 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             administratorPassword, token);
         _administrator = new("local-admin", "admin", administratorPassword);
         var features = await AcceptanceFeatureCatalog.LoadAsync(administrator, token);
+        if (!historicalUpgrade && workspaceDelivery)
+        {
+            var company = features.OrganizationTab("companies");
+            await WorkspaceAcceptanceFixture.SendAsync(administrator, HttpMethod.Post, "/api/organization/initialization", null,
+                features.Action(company, "initialize", "list.pageActions").Position, token);
+        }
         var part = features.Behavior("Part", "part.part.read");
         var granted = new List<FeaturePoint> { part, features.Action(part, "create", "list.pageActions") };
         FeaturePoint? workspace = null;
@@ -195,6 +202,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         }
         else oldId = await WorkspaceAcceptanceFixture.CreateMetadataObjectAsync(ordinary, features,
             "Part", "part.part.read", "/api/part/parts", ExistingCode, ExistingName, token);
+        _oldPartId = oldId;
         Continuity? baseline = null;
         if (historicalUpgrade)
         {
@@ -206,8 +214,8 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             if (workspaceDelivery) await RunOfflineAsync("enable-bundle", ["--package", packagePath], token);
             else
             {
-                await RunOfflineAsync("enable", ["--module-id", "InforCenter", "--version", "1.0.0"], token);
-                await RunOfflineAsync("enable", ["--module-id", "Part", "--version", "1.0.0"], token);
+                await RunOfflineAsync("enable", ["--module-id", "InforCenter", "--version", ReadComponentVersion(packagePath, "InforCenter")], token);
+                await RunOfflineAsync("enable", ["--module-id", "Part", "--version", ReadComponentVersion(packagePath, "Part")], token);
             }
             if (workspaceDelivery)
             {
@@ -533,13 +541,13 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         await RequirePartReadAsync(actor, oldId, partPosition, false, token);
         if (await ReadContinuityAsync(oldId, token) != baseline) throw new InvalidOperationException("父屏蔽改变旧数据或历史。");
         await StopHostAsync(token);
-        await RunOfflineAsync("enable", ["--module-id", "InforCenter", "--version", "1.0.0"], token);
+        await RunOfflineAsync("enable", ["--module-id", "InforCenter", "--version", ReadComponentVersion(packagePath, "InforCenter")], token);
         if (ReadMemberChoices() != ownChoices) throw new InvalidOperationException("父恢复覆盖了停用成员。");
         await StartHostAsync(hostRoot, "parent-restored", token);
         await RequirePartReadAsync(actor, oldId, partPosition, true, token);
         await StopHostAsync(token);
-        await RunOfflineAsync("enable", ["--module-id", "Document", "--version", "1.0.0"], token);
-        await RunOfflineAsync("enable", ["--module-id", "Workspace", "--version", "1.0.0"], token);
+        await RunOfflineAsync("enable", ["--module-id", "Document", "--version", ReadComponentVersion(packagePath, "Document")], token);
+        await RunOfflineAsync("enable", ["--module-id", "Workspace", "--version", ReadComponentVersion(packagePath, "Workspace")], token);
         await StartHostAsync(hostRoot, "members-restored", token);
         if (ReadMemberChoices() != allEnabled || await ReadContinuityAsync(oldId, token) != baseline)
             throw new InvalidOperationException("明确恢复成员后，选择或旧数据/历史未保持。");
@@ -768,6 +776,18 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     {
         using var stream = File.OpenRead(path);
         return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+    }
+
+    // 选择正式包的组件版本；历史准备不能把当前组件硬编码回旧版库存。
+    internal static string ReadComponentVersion(string package, string moduleId)
+    {
+        using var archive = File.Exists(package) ? System.IO.Compression.ZipFile.OpenRead(package) : null;
+        using var stream = archive is null ? File.OpenRead(Path.Combine(package, "component-bundle.json"))
+            : (archive.GetEntry("component-bundle.json") ?? throw new InvalidDataException("Component bundle index missing.")).Open();
+        using var document = JsonDocument.Parse(stream);
+        return document.RootElement.GetProperty("components").EnumerateArray()
+            .Single(component => component.GetProperty("moduleId").GetString() == moduleId).GetProperty("version").GetString()
+            ?? throw new InvalidDataException("Component version missing: " + moduleId);
     }
 
     private async Task StartHostAsync(string root, string logName, CancellationToken token)

@@ -1,4 +1,5 @@
 import { platformFetch } from '@icp-platform/core';
+import { createObjectOwnershipActions } from '@icp-platform/ui';
 import { createElement, lazy, Suspense } from 'react';
 import { readStandardCrudRequestError, StandardCrudRequestError, type StandardCrudActionInputRenderContext, type StandardCrudDetail, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import type { WorkspaceDocumentDraft } from './workspaceDocumentUpload';
@@ -15,6 +16,13 @@ const WorkspaceFolderCopyInput = lazy(() => import('./WorkspaceFolderCopyInput')
 const WorkspaceObjectCopyInput = lazy(() => import('./WorkspaceObjectCopyInput'));
 const WorkspaceObjectCopyRecovery = lazy(() => import('./WorkspaceObjectCopyRecovery'));
 const WorkspaceObjectCopyResult = lazy(() => import('./WorkspaceObjectCopyResult'));
+const ownership = createObjectOwnershipActions(({ id, row, queryScope }) => ({ initialId: id ?? (row as { LID?: string } | undefined)?.LID,
+  pendingPath: '/api/workspace/ownership/pending?queryScope=' + encodeURIComponent(JSON.stringify(workspacePosition(queryScope))),
+  statusPath: '/api/workspace/content/{id}/ownership/status?queryScope=' + encodeURIComponent(JSON.stringify(workspacePosition(queryScope))), savePath: '/api/workspace/content/{id}/ownership',
+  accountsPath: '/api/workspace/ownership/accounts', eligibilityPath: '/api/workspace/ownership/eligibility',
+  batchPath: '/api/workspace/ownership/initialize', batchIdField: 'linkIds',
+  body: { position: workspacePosition(queryScope) },
+}), '/api/workspace/ownership/eligibility');
 async function referenceCommand(method: string, path: string, body: unknown, featurePosition?: string) {
   const response = await platformFetch(path, { method, headers: { ...headers(featurePosition), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!response.ok) throw await readStandardCrudRequestError(response);
@@ -39,6 +47,7 @@ const resource: StandardCrudResourceRegistration = {
     render: context => createElement(Suspense, { fallback: null }, createElement(WorkspaceObjectCopyResult, context)),
   }],
   actionInputRenderers: {
+    ...ownership.actionInputRenderers,
     recoverObjectCopy: Object.assign((context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceObjectCopyRecovery, context)), { presentation: 'drawer' as const }),
     copyObject: Object.assign((context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceObjectCopyInput, context)), { presentation: 'drawer' as const }),
     copyFolder: (context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceFolderCopyInput, context)),
@@ -50,6 +59,7 @@ const resource: StandardCrudResourceRegistration = {
       createElement(Suspense, { fallback: null }, createElement(context.action.key === 'createDocument' ? WorkspaceDocumentCreateInput : WorkspaceObjectCreateInput, context)), { presentation: 'drawer' as const }),
   },
   actionHandlers: {
+    ...ownership.actionHandlers,
     pasteObjectCopy: Object.assign(async ({ instance, input, queryScope, featurePosition }: import('@icp-platform/sdk').StandardCrudActionContext) => {
       const value = input as { draft?: ObjectCopyDraft; values?: Record<string, unknown> } | undefined;
       if (!value?.draft || !value.values) throw new StandardCrudRequestError('Workspace.CopyInputExpired', 409, {}, { code: 'Workspace.CopyInputExpired' });
@@ -138,6 +148,7 @@ const resource: StandardCrudResourceRegistration = {
     removeSelected: async ({ selectedRows, queryScope, featurePosition }) => referenceCommand('POST', '/api/workspace/content/references/remove',
       { position: workspacePosition(queryScope), linkIds: (selectedRows ?? []).map(row => String(row.LID)) }, featurePosition),
   },
+  actionEligibilityResolvers: ownership.actionEligibilityResolvers,
   actionStateResolver: ({ action, instance, queryScope }) => {
     const root = queryScope?.linkIds === '[]';
     if (root && ['createPart', 'createDocument', 'pasteObjectCopy'].includes(action.key)) return { visible: false, available: false, reasonKey: 'Workspace.RootOnlyFolders' };

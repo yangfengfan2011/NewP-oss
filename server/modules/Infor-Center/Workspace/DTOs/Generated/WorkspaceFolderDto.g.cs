@@ -15,6 +15,10 @@ public sealed class WorkspaceFolderDto
     public string? UpdatedAt_DisplayValue { get; init; }
     public string DisplayName { get; init; }
     public string Name { get => DisplayName; init => DisplayName = value; }
+    public string? OwnerId { get; init; }
+    public string? OwnerId_DisplayValue { get; init; }
+    public string? OwnerDepartmentId { get; init; }
+    public string? OwnerDepartmentId_DisplayValue { get; init; }
     public string? Description { get; init; }
     public string OriginSpaceId { get; init; }
 }

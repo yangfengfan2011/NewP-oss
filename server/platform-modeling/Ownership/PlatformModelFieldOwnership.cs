@@ -43,7 +43,7 @@ public static class PlatformModelFieldOwnership
         var isGeneratedPrimaryKey = !hasExplicitAuthoring
             && (isEntity && string.Equals(fieldName, "EID", StringComparison.OrdinalIgnoreCase)
                 || isLink && string.Equals(fieldName, "LID", StringComparison.OrdinalIgnoreCase));
-        return isAuditField || isGeneratedPrimaryKey;
+        return isAuditField || isGeneratedPrimaryKey || isEntity && EntityOwnershipFields.Contains(fieldName);
     }
 
     /// <summary>
@@ -55,6 +55,6 @@ public static class PlatformModelFieldOwnership
     public static bool IsServerOwned(FieldDefinition field, bool hasExplicitAuthoring)
     {
         ArgumentNullException.ThrowIfNull(field);
-        return field.IsAuditField || field.IsPrimaryKey && !hasExplicitAuthoring;
+        return field.IsAuditField || field.IsPrimaryKey && !hasExplicitAuthoring || field.IsOwnershipField;
     }
 }

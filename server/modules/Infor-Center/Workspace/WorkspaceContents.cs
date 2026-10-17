@@ -19,7 +19,9 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
     IDataScopeObjectDecisionProvider decisions, IPlatformObjectIdGenerator ids, IEntityAuditValueProvider audit, LinkQueryCatalog catalog,
     WorkspaceFolderScope folderScope, LinkQueryReader reader, IStandardCrudService crud, IStandardCrudResourceRegistry resources,
     IDocumentFiles documentFiles, IDocumentCopies documentCopies, WorkspaceTreeOrder treeOrder, WorkspaceReferenceAudit referenceAudit,
-    Microsoft.Extensions.Logging.ILogger<WorkspaceContents> logger)
+    Microsoft.Extensions.Logging.ILogger<WorkspaceContents> logger,
+    ICP.Platform.Crud.Ownership.EntityOwnershipValues ownership,
+    ICP.Platform.Crud.Ownership.EntityOwnershipAudit ownershipAudit, WorkspaceFolderReadDescriptor folderDescriptor)
 {
     /// <summary>在有效位置内创建实体与 Link，同父名称比较及并发串行化由 SQL Server 事务锁保护。</summary>
     public ValueTask<string> CreateFolderAsync(string actorId, WorkspacePosition position, IReadOnlyDictionary<string, JsonElement> values, CancellationToken token)
@@ -48,6 +50,7 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
                 || !await folders.AnyAsync(folder => EF.Property<string>(folder, "EID") == path.FolderId, cancellation))
                 throw new LinkQueryException(400, "Workspace.InvalidEndpoint");
             folders.Add(candidate);
+            await ownershipAudit.RegisterAsync("workspace.folder", id, candidate, false, cancellation);
             await transactions.FlushAsync(cancellation);
             await RegisterCreatedReferenceAsync(path.FolderId, WorkspacePositions.FolderModel, id, cancellation);
             return id;
@@ -62,6 +65,7 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
         var candidate = new Dictionary<string, object?> { ["EID"] = ids.NewId(WorkspacePositions.FolderModel), ["ENAME"] = name,
             ["Description"] = description, ["OriginSpaceId"] = spaceId };
         audit.ForCreate().ApplyTo(candidate);
+        await ownership.ApplyCreateAsync(candidate, ["OwnerId", "OwnerDepartmentId"], token);
         if (!await decisions.IsCandidateAllowedAsync("workspace.folder", candidate, "create", token)) throw new LinkQueryException(403, "Workspace.FolderCreateDenied");
         return candidate;
     }
@@ -215,13 +219,11 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
         ValidateSelection([linkId]);
         var path = await WritablePositionAsync(actor, position, token);
         var target = (await ResolveTargetsAsync(path.FolderId, [linkId], "edit", token)).Single();
-        IReadOnlyDictionary<string, object?> fields;
-        if (target.ModelKey == WorkspacePositions.FolderModel)
-            fields = await Folders.AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == target.Id, token);
-        else
-            fields = (await crud.GetDetailAsync(resources.FindByResourceKey(Resource(target.ModelKey))!, target.Id, token))?.Fields
+        var fields = (await crud.GetDetailAsync(target.ModelKey == WorkspacePositions.FolderModel ? folderDescriptor.Value
+                : resources.FindByResourceKey(Resource(target.ModelKey))!, target.Id, token))?.Fields
                 ?? throw new LinkQueryException(404, "Workspace.TargetUnavailable");
-        string[] names = target.ModelKey == WorkspacePositions.FolderModel ? ["ENAME", "Description"] : ["ECODE", "ENAME", "Description"];
+        string[] writable = target.ModelKey == WorkspacePositions.FolderModel ? ["ENAME", "Description"] : ["ECODE", "ENAME", "Description"];
+        string[] names = [.. writable, "OwnerId", "OwnerDepartmentId", "OwnerId_DisplayValue", "OwnerDepartmentId_DisplayValue"];
         return names.ToDictionary(name => name, name => fields.GetValueOrDefault(name));
     }
 

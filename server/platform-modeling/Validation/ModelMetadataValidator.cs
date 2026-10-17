@@ -20,7 +20,9 @@ public sealed class ModelMetadataValidator
     private static readonly HashSet<string> EntityBuiltinFields = new(StringComparer.OrdinalIgnoreCase)
     {
         "ENAME",
-        "ECODE"
+        "ECODE",
+        EntityOwnershipFields.OwnerId,
+        EntityOwnershipFields.OwnerDepartmentId
     };
 
     private static readonly HashSet<string> LinkBuiltinFields = new(StringComparer.OrdinalIgnoreCase)
@@ -96,6 +98,10 @@ public sealed class ModelMetadataValidator
         // storage.type 必须先在平台类型映射里可解析，后续投影才能继续。
         foreach (var field in document.Model.Fields)
         {
+            if (string.Equals(document.Model.Kind, "Entity", StringComparison.OrdinalIgnoreCase)
+                && EntityOwnershipFields.Contains(field.Name)
+                && !document.Model.BuiltinFields.Contains(field.Name, StringComparer.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"ENTITY ownership field '{field.Name}' must be selected in builtinFields.");
             var storage = field.Storage;
             if (storage is null)
             {

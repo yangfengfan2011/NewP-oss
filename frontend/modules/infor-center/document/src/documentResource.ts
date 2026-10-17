@@ -1,4 +1,5 @@
 import { platformFetch } from '@icp-platform/core';
+import { createObjectOwnershipActions } from '@icp-platform/ui';
 import { createElement, lazy, Suspense } from 'react';
 import {
   createStandardCrudRestDataAdapter,
@@ -14,6 +15,9 @@ export const documentResource: StandardCrudResourceRegistration = {
   resourceKey: 'document.document',
   listViewKey: 'document.document.list',
   detailViewKey: 'document.document.detail',
+  ...createObjectOwnershipActions(({ id, row }) => ({ initialId: id ?? (row as { EID?: string } | undefined)?.EID, pendingPath: '/api/document/documents/ownership/pending',
+    statusPath: '/api/document/documents/ownership/{id}/status', savePath: '/api/document/documents/ownership/{id}',
+    accountsPath: '/api/document/documents/ownership/accounts', eligibilityPath: '/api/document/documents/ownership/eligibility', batchPath: '/api/document/documents/ownership/initialize' }), '/api/document/documents/ownership/eligibility'),
   summaryRenderers: { files: context => createElement(Suspense, { fallback: null }, createElement(DocumentFilesSummary, context)) },
   dataAdapter: createStandardCrudRestDataAdapter({
     apiRoute: '/api/document/documents',

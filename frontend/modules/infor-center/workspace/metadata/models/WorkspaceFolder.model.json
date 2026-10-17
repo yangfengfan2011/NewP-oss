@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0", "type": "model",
   "WorkspaceFolder": {
-    "kind": "Entity", "builtinFields": ["ENAME"],
+    "kind": "Entity", "builtinFields": ["ENAME", "OwnerId", "OwnerDepartmentId"],
     "sections": [{ "key": "basic", "titleKey": "Basic", "fields": ["ENAME", "Description"] }],
     "fields": [
       { "name": "ENAME", "uiType": "text", "form": { "create": { "mode": "editable", "required": true }, "edit": { "mode": "editable", "required": true } } },

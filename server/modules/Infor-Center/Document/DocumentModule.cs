@@ -4,6 +4,7 @@ using ICP.Platform.Crud.ObjectOperations;
 using ICP.Platform.Sdk;
 using ICP.Platform.Modules.Document.Contracts;
 using ICP.Platform.Modules.Files.Contracts;
+using ICP.Platform.Persistence.Planning;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ICP.Platform.Modules.Document;
@@ -16,9 +17,18 @@ public sealed class DocumentModule : ModuleCapsuleBindingBase
     /// <inheritdoc/>
     public override void ConfigureServices(IServiceCollection services)
     {
-        DocumentCopyFields.RequireAuthoring(new DocumentModelMetadataProvider().GetDefinitions());
         services.AddStandardCrudKernel();
-        services.AddStandardCrudResource(DocumentCrudDescriptor.Create());
+        services.AddStandardCrudResource(provider =>
+        {
+            var plan = provider.GetRequiredService<CompiledPersistencePlan>();
+            var document = plan.GetModelAuthoring(ModuleId, "Document");
+            var models = plan.Models.Where(model => model.OwnerModuleId == ModuleId).ToArray();
+            DocumentCopyFields.RequireAuthoring(models);
+            return DocumentCrudDescriptor.Create(document, models.Single(model => model.LogicalKey == "Document"));
+        });
+        services.AddScoped<IStandardCrudDisplayValueResolver>(provider => new ICP.Platform.Crud.Ownership.EntityOwnershipDisplayResolver("document.document",
+            provider.GetRequiredService<ICP.Platform.Presentation.IUserDisplayNameDirectory>(),
+            provider.GetRequiredService<ICP.Platform.Persistence.Ownership.IAccountOwnershipDirectory>()));
         services.AddObjectBehavior<DocumentObjectBehavior>(this, DocumentObjectBehavior.BehaviorDefinition);
         services.AddObjectBehavior<DocumentCopyBehavior>(this, DocumentCopyBehavior.BehaviorDefinition);
         services.AddScoped<DocumentInitialIdentity>();

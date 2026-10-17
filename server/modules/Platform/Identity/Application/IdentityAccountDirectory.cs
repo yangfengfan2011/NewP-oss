@@ -58,25 +58,14 @@ public sealed class IdentityAccountDirectory : IIdentityAccountDirectory
         return snapshots;
     }
 
+    /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<IdentityAccountSnapshot>> SearchAsync(
         IdentityAccountSearch search,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(search);
-        var limit = Math.Clamp(search.Limit, 1, 100);
-        var query = search.Query?.Trim();
-        var accounts = await _repository.SearchAccountsAsync(cancellationToken);
-
+        var accounts = await _repository.SearchAccountsAsync(search, cancellationToken);
         return accounts
-            .Where(account => search.Status is null
-                ? account.Status != IdentityAccountStatus.Deleted
-                : account.Status == search.Status)
-            .Where(account => search.IsPersonnelBound is null || account.IsPersonnelBound == search.IsPersonnelBound)
-            .Where(account => string.IsNullOrWhiteSpace(query)
-                || account.ECODE.Contains(query, StringComparison.OrdinalIgnoreCase)
-                || account.ENAME.Contains(query, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(account => account.ECODE, StringComparer.OrdinalIgnoreCase)
-            .Take(limit)
             .Select(IdentityAccountApplicationService.ToSnapshot)
             .ToArray();
     }

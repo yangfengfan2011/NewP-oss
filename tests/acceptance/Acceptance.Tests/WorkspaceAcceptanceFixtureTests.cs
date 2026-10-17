@@ -10,6 +10,35 @@ namespace ICP.Platform.Acceptance.Tests;
 public sealed class WorkspaceAcceptanceFixtureTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ComponentVersion_ComesFromTheSelectedFormalBundleRatherThanHistoricalConstants(bool zip)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "newp-bundle-version-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "component-bundle.json"), """
+                {"components":[{"moduleId":"InforCenter","version":"1.0.0"},{"moduleId":"Part","version":"1.1.0"}]}
+                """);
+            var package = root;
+            if (zip)
+            {
+                package = root + ".zip";
+                System.IO.Compression.ZipFile.CreateFromDirectory(root, package);
+            }
+            try
+            {
+                Assert.Equal("1.1.0", PublishedComponentAcceptanceFixture.ReadComponentVersion(package, "Part"));
+                Assert.Equal("1.0.0", PublishedComponentAcceptanceFixture.ReadComponentVersion(package, "InforCenter"));
+                Assert.Throws<InvalidOperationException>(() => PublishedComponentAcceptanceFixture.ReadComponentVersion(package, "Missing"));
+            }
+            finally { if (zip) File.Delete(package); }
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Theory]
     [InlineData("composition")]
     [InlineData("uninstall")]
     [InlineData("non-workspace")]

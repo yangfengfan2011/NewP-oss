@@ -1,5 +1,9 @@
 {
   "Document": {
+    "InitializeOwnership": { "zhs": "补齐归属", "en": "Initialize ownership" },
+    "OwnershipPendingObjects": { "zhs": "待补齐归属", "en": "Missing ownership" },
+    "Field_OwnerId": { "zhs": "所属人", "en": "Owner" },
+    "Field_OwnerDepartmentId": { "zhs": "所属部门", "en": "Owning department" },
     "Files": { "zhs": "文件", "en": "Files" },
     "Block_Files": { "zhs": "文件", "en": "Files" },
     "Download": { "zhs": "下载", "en": "Download" },

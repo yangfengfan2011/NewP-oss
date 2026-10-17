@@ -3,7 +3,7 @@
   "view": {
     "key": "workspace.folder.detail", "mode": "detail", "model": "WorkspaceFolder", "resourceKey": "workspace.folder",
     "dicKey": "Workspace", "titleKey": "DetailTitle", "descriptionKey": "RootDescription",
-    "sections": [{ "key": "basic", "titleKey": "Basic", "fields": ["ENAME", "Description"] },
+    "sections": [{ "key": "basic", "titleKey": "Basic", "fields": ["ENAME", "Description", "OwnerId", "OwnerDepartmentId"] },
       { "key": "audit", "titleKey": "Audit", "fields": ["CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"] }]
   }
 }

@@ -85,6 +85,12 @@
     ],
     "pageActions": [
       {
+        "key": "initialize",
+        "labelKey": "Action_Initialize",
+        "handlerKey": "initialize",
+        "confirmMessageKey": "Action_Initialize_Confirm"
+      },
+      {
         "key": "create",
         "labelKey": "Action_Create",
         "standardAction": "create",
@@ -92,6 +98,7 @@
       }
     ],
     "featureActions": [
+      { "key": "initialize", "titleKey": "Action_Initialize", "behaviorKey": "organization.company.initialize" },
       { "key": "authorize", "titleKey": "Action_Authorize", "behaviorKey": "organization.company.authorize" }
     ],
     "rowActions": [

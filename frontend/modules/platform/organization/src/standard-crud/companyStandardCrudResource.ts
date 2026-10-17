@@ -7,6 +7,7 @@ import {
   type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
 import { createOrganizationObjectAuthorizationActions } from './organizationObjectAuthorizationActions';
+import { getOrganizationInitializationEligibility, initializeOrganization } from '../services/organizationService';
 
 export interface CompanyListRow {
   id: string;
@@ -40,11 +41,24 @@ const companyStandardCrudDataAdapter = createStandardCrudRestDataAdapter({
   getRowId: (row: CompanyListRow) => row.id,
 });
 
-// 公司页面只使用标准 REST 生命周期；启停属于普通 IsEnabled 编辑，不注册模块命令或版本字段。
+const authorizationActions = createOrganizationObjectAuthorizationActions('organization.company', '公司', 'Organization.Company.ObjectTitle');
+
+// 普通公司维护复用标准 REST；显式初始化只增加独立命令，保留现有授权输入与动作生命周期。
 export const companyStandardCrudResource: StandardCrudResourceRegistration<Record<string, unknown>, CompanyListRow> = {
   resourceKey: 'organization.company',
   dataAdapter: companyStandardCrudDataAdapter,
   listViewKey: 'organization.company.list',
   detailViewKey: 'organization.company.detail',
-  ...createOrganizationObjectAuthorizationActions('organization.company', '公司', 'Organization.Company.ObjectTitle'),
+  ...authorizationActions,
+  actionHandlers: {
+    ...authorizationActions.actionHandlers,
+    initialize: ({ featurePosition }) => initializeOrganization(featurePosition),
+  },
+  actionEligibilityResolvers: {
+    ...authorizationActions.actionEligibilityResolvers,
+    initialize: async ({ featurePosition, signal }) => {
+      const allowed = await getOrganizationInitializationEligibility(featurePosition, signal);
+      return { visible: allowed, available: allowed };
+    },
+  },
 };

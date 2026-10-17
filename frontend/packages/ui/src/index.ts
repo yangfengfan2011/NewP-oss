@@ -9,3 +9,5 @@ export { orderDataScopeSubjects, rankDataScopeSubjects } from './dataScopeSubjec
 export { default as ObjectAuthorizationInput } from './ObjectAuthorizationInput';
 export type { ObjectAuthorizationTarget } from './ObjectAuthorizationInput';
 export { createObjectAuthorizationActions } from './objectAuthorizationActions';
+export { createObjectOwnershipActions } from './objectOwnershipActions';
+export type { ObjectOwnershipInitializationTarget } from './ObjectOwnershipInitializationInput';

@@ -121,6 +121,12 @@ public sealed class StandardDataCompositionSqlServerTests
     public async Task PublicVersions_ComposeRestoreAndUninstallWithoutChangingDataOrHistory()
     {
         await using var fixture = await FeatureCatalogHostFixture.CreateAsync([]);
+        var initialize = fixture.Catalog.First(point => point.BehaviorKey == "organization.company.initialize");
+        using var initialized = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, initialize, HttpMethod.Post, "/api/organization/initialization");
+        Assert.True(initialized.IsSuccessStatusCode, await initialized.Content.ReadAsStringAsync());
+        string CurrentVersion(string module) => JsonNode.Parse(File.ReadAllText(Path.Combine(fixture.HostRoot, "modules", module, "plugin.json")))!["version"]!.GetValue<string>();
+        var partVersion = CurrentVersion("Part");
+        var workspaceVersion = CurrentVersion("Workspace");
         var partPoint = Assert.Single(fixture.Catalog, point => point.BehaviorKey == "part.part.create");
         using var partResponse = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, partPoint, HttpMethod.Post, "/api/part/parts", new { ECODE = "EXTERNAL266PART", ENAME = "外仓组合真实Part266" });
         Assert.True(partResponse.IsSuccessStatusCode, await partResponse.Content.ReadAsStringAsync());
@@ -149,7 +155,7 @@ public sealed class StandardDataCompositionSqlServerTests
         await AssertAsset(fixture, assetId);
         await fixture.StopAsync();
         // Workspace的真实业务依赖要求与Part一同暂停；父级屏蔽不覆盖Part自身选择。
-        await Desired(fixture, (ModuleId, "1.1.0", false), ("Workspace", "1.0.0", false));
+        await Desired(fixture, (ModuleId, "1.1.0", false), ("Workspace", workspaceVersion, false));
         await fixture.StartAsync();
         Assert.DoesNotContain(fixture.Catalog, point => point.ModuleId is ModuleId or "Part");
         part = await Node(fixture, "Part");
@@ -158,14 +164,14 @@ public sealed class StandardDataCompositionSqlServerTests
         Assert.True(unavailable.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.NotFound);
         Assert.Equal(history, await History(fixture));
         await fixture.StopAsync();
-        await Select(fixture, "Part", "1.0.0", false);
+        await Select(fixture, "Part", partVersion, false);
         await Select(fixture, ModuleId, "1.1.0", true);
         await fixture.StartAsync();
         Assert.Contains(fixture.Catalog, point => point.ModuleId == ModuleId);
         Assert.DoesNotContain(fixture.Catalog, point => point.ModuleId == "Part");
         await AssertAsset(fixture, assetId);
         await fixture.StopAsync();
-        await Select(fixture, "Part", "1.0.0", true);
+        await Select(fixture, "Part", partVersion, true);
         await Select(fixture, ModuleId, "1.1.0", false);
         await Install(fixture, "1.2.0");
         await fixture.StartAsync();

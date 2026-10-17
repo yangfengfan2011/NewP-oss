@@ -14,6 +14,7 @@
       { "key": "updatedAt", "labelKey": "Field_UpdatedAt", "source": "projection", "field": "UpdatedAt", "sortable": true }
     ],
     "pageActions": [
+      { "key": "initializeOwnershipPending", "labelKey": "OwnershipPendingObjects", "handlerKey": "initializeOwnership", "inputKey": "initializeOwnership" },
       {"key": "create", "labelKey": "CreateFolder", "standardAction": "create", "variant": "primary"},
       {"key": "createPart", "labelKey": "CreatePart", "handlerKey": "createPart", "inputKey": "createObject"},
       {"key": "createDocument", "labelKey": "CreateDocument", "handlerKey": "createDocument", "inputKey": "createObject"},
@@ -29,16 +30,17 @@
       {"key": "deleteObjects", "labelKey": "BatchDelete", "handlerKey": "deleteObjects", "requiresSelection": true, "inputKey": "confirmDelete", "variant": "danger", "confirmMessageKey": "ConfirmDeleteObjects"}],
     "pageActionGroups": [{ "key": "new", "labelKey": "New", "variant": "primary", "actionKeys": ["create", "createPart", "createDocument"] }],
     "featureActions": [
+      { "key": "initializeOwnership", "titleKey": "InitializeOwnership", "behaviorKey": "workspace.folder.initializeOwnership", "readBehaviors": ["workspace.folder.read"] },
       { "key": "moveUp", "titleKey": "MoveUp", "labelKey": "MoveUp", "behaviorKey": "workspace.folder.reorder", "handlerKey": "reorder", "readBehaviors": ["workspace.folder.read"] },
       { "key": "moveDown", "titleKey": "MoveDown", "labelKey": "MoveDown", "behaviorKey": "workspace.folder.reorder", "handlerKey": "reorder", "readBehaviors": ["workspace.folder.read"] },{ "key": "add", "titleKey": "AddFolder", "behaviorKey": "workspace.folder.add", "readBehaviors": ["workspace.folder.read"] }],
     "rowActionColumn": "menu",
     "rowActionSets": {
-      "WorkspaceFolder": { "column": ["view", "copy", "cut", "edit", "delete", "remove"], "contextMenu": ["view", "copy", "cut", "edit", "delete", "remove"] },
-      "Part": { "column": ["copy", "cut", "edit", "delete", "remove"], "contextMenu": ["copy", "cut", "edit", "delete", "remove"] },
-      "Document": { "column": ["copy", "cut", "edit", "delete", "remove"], "contextMenu": ["copy", "cut", "edit", "delete", "remove"] }
+      "WorkspaceFolder": { "column": ["view", "copy", "cut", "edit", "delete", "remove", "initializeOwnership"], "contextMenu": ["view", "copy", "cut", "edit", "delete", "remove", "initializeOwnership"] },
+      "Part": { "column": ["copy", "cut", "edit", "delete", "remove", "initializeOwnership"], "contextMenu": ["copy", "cut", "edit", "delete", "remove", "initializeOwnership"] },
+      "Document": { "column": ["copy", "cut", "edit", "delete", "remove", "initializeOwnership"], "contextMenu": ["copy", "cut", "edit", "delete", "remove", "initializeOwnership"] }
     },
     "rowActions": [{ "key": "view", "labelKey": "OpenProperties", "standardAction": "view" }, { "key": "copy", "labelKey": "Copy", "handlerKey": "copy" }, { "key": "cut", "labelKey": "Cut", "handlerKey": "cut" }, { "key": "edit", "labelKey": "Edit", "handlerKey": "editObject", "inputKey": "editObject" },
       { "key": "delete", "labelKey": "Delete", "handlerKey": "deleteObject", "variant": "danger", "confirmMessageKey": "ConfirmDeleteObjects" },
-      { "key": "remove", "labelKey": "RemoveReference", "handlerKey": "remove", "variant": "danger", "confirmMessageKey": "ConfirmRemoveReference" }], "export": { "enabled": false }
+      { "key": "remove", "labelKey": "RemoveReference", "handlerKey": "remove", "variant": "danger", "confirmMessageKey": "ConfirmRemoveReference" }, { "key": "initializeOwnership", "labelKey": "InitializeOwnership", "handlerKey": "initializeOwnership", "inputKey": "initializeOwnership" }], "export": { "enabled": false }
   }
 }

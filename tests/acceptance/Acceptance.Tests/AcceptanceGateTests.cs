@@ -16,6 +16,72 @@ public sealed class AcceptanceGateTests
 {
     private const string RunEnvironmentVariable = "NEWP_RUN_ACCEPTANCE";
 
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "管理员显式组织初始化及三模型缺失归属的正式页面、批次和人工补齐最短路径")]
+    public async Task NativeWorkspaceOwnership_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-workspace-ownership");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, publishedFixture: fixture, browserAsAdministrator: true,
+            prepareJourney: (_, _, _, token) => fixture.PrepareOwnershipLegacyRowsAsync(token),
+            browserJourney: async (page, token) =>
+            {
+                var crud = new StandardCrudPageDriver(page);
+                var driver = new WorkspacePageDriver(page);
+                Task Capture(string name) => AcceptancePresentation.CaptureAsync(page, Path.Combine(root, name));
+                await crud.OpenOrganizationTabAsync("公司", "companies");
+                await Capture("organization-initialization-zhs.png");
+                var initialization = page.WaitForResponseAsync(response => response.Request.Method == "POST"
+                    && new Uri(response.Url).AbsolutePath == "/api/organization/initialization");
+                await crud.ClickPageActionAsync("初始化默认组织");
+                Assert.Equal(200, (await initialization).Status);
+                await crud.WaitForTableReadyAsync();
+                if (AcceptancePresentation.Enabled)
+                {
+                    await driver.SelectLanguageAsync("English");
+                    await page.GetByRole(AriaRole.Button, new() { Name = "Initialize Default Organization", Exact = true })
+                        .WaitForAsync(new() { State = WaitForSelectorState.Visible });
+                    await Capture("organization-initialization-en.png");
+                    await driver.SelectLanguageAsync("简体中文");
+                }
+                await driver.OpenAsync();
+                await driver.SelectRootAsync("公共空间");
+                var properties = await driver.OpenFolderPropertiesAsync(fixture.ExistingFolderName);
+                await Capture("ownership-folder-properties.png");
+                await driver.ClosePropertiesAsync(properties);
+                var dialog = await driver.OpenOwnershipInitializationAsync(fixture.ExistingFolderName);
+                await Capture("ownership-folder-initialize.png");
+                await crud.ConfirmAsync(dialog, new("POST", "/api/workspace/content/", 200, "文件夹归属补齐", PathIsPrefix: true));
+                var address = await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
+                dialog = await driver.OpenOwnershipInitializationAsync();
+                await dialog.GetByRole(AriaRole.Button, new() { Name = "选择当前许可页", Exact = true }).ClickAsync();
+                await Capture("ownership-selected-batch.png");
+                await crud.ConfirmAsync(dialog, new("POST", "/api/workspace/ownership/initialize", 200, "所选旧对象归属补齐"));
+                if (AcceptancePresentation.Enabled)
+                {
+                    await driver.SelectLanguageAsync("English");
+                    dialog = await driver.OpenOwnershipInitializationAsync(fixture.ExistingDocumentName, english: true);
+                    await Capture("ownership-input-en.png");
+                    await dialog.GetByRole(AriaRole.Button, new() { Name = "Cancel", Exact = true }).ClickAsync();
+                    await driver.SelectLanguageAsync("简体中文");
+                }
+                dialog = await driver.OpenOwnershipInitializationAsync(fixture.ExistingDocumentName);
+                await driver.ChooseOwnershipAccountAsync(dialog, "admin");
+                await Capture("ownership-manual-account.png");
+                await crud.ConfirmAsync(dialog, new("POST", "/api/workspace/content/", 200, "未知创建账号的人工归属补齐", PathIsPrefix: true));
+                await driver.OpenOwnedPropertiesAsync(fixture.ExistingName, "/parts");
+                await Capture("ownership-part-properties.png");
+                await driver.RestorePositionAsync(address, "公共空间", fixture.ExistingFolderName);
+                await driver.OpenOwnedPropertiesAsync(fixture.ExistingDocumentName, "/documents");
+                await Capture("ownership-document-properties.png");
+                await driver.RestorePositionAsync(address, "公共空间", fixture.ExistingFolderName);
+                await driver.EditObjectAsync(fixture.ExistingDocumentName, fixture.ExistingDocumentName + " 已保存");
+                await crud.WaitForRowAsync(fixture.ExistingDocumentName + " 已保存");
+                await Capture("ownership-ordinary-save.png");
+                token.ThrowIfCancellationRequested();
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact(RunEnvironmentVariable, "一次性 SQL Server catalog、dev supervisor 与真实浏览器")]
     public async Task ExampleRequiredField_CompletesEveryScenario()
     {

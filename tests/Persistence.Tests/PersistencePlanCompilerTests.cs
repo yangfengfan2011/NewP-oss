@@ -800,6 +800,11 @@ public sealed class PersistencePlanCompilerTests
 
         Assert.True(result.IsSuccess, string.Join(Environment.NewLine, result.Diagnostics.Select(static item => item.Message)));
         Assert.NotNull(result.Plan);
+        var authoring = result.Plan.GetModelAuthoring("Identity", "IdentityAccount");
+        Assert.Equal("Identity", authoring.ModuleId);
+        Assert.Equal("IdentityAccount", authoring.Model.Name);
+        Assert.Throws<InvalidOperationException>(() => result.Plan.GetModelAuthoring("OtherOwner", "IdentityAccount"));
+        Assert.False(JsonSerializer.SerializeToElement(result.Plan).TryGetProperty("ModelAuthoring", out _));
         Assert.True(File.Exists(sentinelPath));
     }
 

@@ -17,6 +17,35 @@ namespace ICP.Platform.Identity.Tests;
 public sealed class EfIdentityRepositoryTests
 {
     [Fact]
+    public async Task AccountDirectorySearch_FiltersOrdersAndLimitsCandidatesInSql()
+    {
+        var sql = new List<string>();
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<EfPlatformDbContext>().UseSqlite(connection)
+            .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>()
+            .LogTo(sql.Add, LogLevel.Information).Options;
+        await using var context = new EfPlatformDbContext(options, IdentityModelDefinitions.All);
+        await context.Database.EnsureCreatedAsync();
+        var repository = new EfIdentityRepository(context);
+        repository.AddAccount(Account("a", "alpha", IdentityAccountStatus.Enabled, true));
+        repository.AddAccount(Account("b", "ALPHABET", IdentityAccountStatus.Disabled, true));
+        repository.AddAccount(Account("c", "alphabetical", IdentityAccountStatus.Deleted, true));
+        repository.AddAccount(Account("d", "ALPINE", IdentityAccountStatus.Enabled, false));
+        await context.SaveChangesAsync();
+        sql.Clear();
+        var directory = new IdentityAccountDirectory(repository);
+        var results = await directory.SearchAsync(new IdentityAccountSearch { Query = "  ALP  ", IsPersonnelBound = true, Limit = 1 });
+        Assert.Equal("a", Assert.Single(results).AccountEid);
+        var command = Assert.Single(sql, entry => entry.Contains("Executed DbCommand", StringComparison.Ordinal));
+        Assert.Contains("WHERE", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ORDER BY", command, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LIMIT", command, StringComparison.OrdinalIgnoreCase);
+        var deleted = await directory.SearchAsync(new IdentityAccountSearch { Status = IdentityAccountStatus.Deleted });
+        Assert.Equal("c", Assert.Single(deleted).AccountEid);
+    }
+
+    [Fact]
     public async Task ManagementSearch_ExecutesFilterCountStableSortAndPagingInSql()
     {
         var sql = new List<string>();

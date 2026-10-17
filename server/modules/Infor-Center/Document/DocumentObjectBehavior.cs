@@ -20,7 +20,7 @@ public sealed class DocumentObjectBehavior : ObjectBehaviorBase
     private readonly DocumentFiles _files;
     public static ObjectBehaviorDefinition BehaviorDefinition { get; } = new("document.document", "Document", "Document",
         [ObjectOperationAction.Create, ObjectOperationAction.Update, ObjectOperationAction.Delete], [],
-        ["EID", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt", "LatestVersionId"]);
+        ["EID", "OwnerId", "OwnerDepartmentId", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt", "LatestVersionId"]);
 
     /// <summary>复用标准 writer 的字段、授权和错误裁决，清理保持 Document 所有权。</summary>
     public DocumentObjectBehavior(IStandardCrudResourceRegistry resources, StandardCrudDefaultWriter writer, EfPlatformDbContext db,

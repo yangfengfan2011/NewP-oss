@@ -62,7 +62,7 @@ public sealed class LinkQueryAuthoringTests
                     Mappings = new Dictionary<string, string?>
                     {
                         [types[0]] = column.Mappings[types[0]],
-                        [types[1]] = column.Mappings["Part"]
+                        [types[1]] = column.Field is "OwnerId" or "OwnerDepartmentId" ? null : column.Mappings["Part"]
                     }
                 }).ToArray()
             }
@@ -178,7 +178,8 @@ public sealed class LinkQueryAuthoringTests
         DataScopeResource? platformEndpoint = null, bool omitBusinessDependency = false)
     {
         models = models.Concat(new ICP.Platform.Modules.Part.PartModelMetadataProvider().GetDefinitions())
-            .Concat(new ICP.Platform.Modules.Document.DocumentModelMetadataProvider().GetDefinitions()).ToArray();
+            .Concat(new ICP.Platform.Modules.Document.DocumentModelMetadataProvider().GetDefinitions())
+            .Concat(new ICP.Platform.Modules.Organization.Persistence.Descriptors.OrganizationModelMetadataProvider().GetDefinitions()).ToArray();
         var plan = new CompiledPersistencePlan("query-test", "snapshot", "hash", default, "digest", [], models, []);
         var source = TrustedBuiltInModuleSource.CreateForHostDistribution(AppContext.BaseDirectory, Path.Combine(AppContext.BaseDirectory, "modules"));
         var candidates = new ModuleCapsuleCandidateReader().ReadBuiltIn(source.ModulesRoot).Select(candidate =>

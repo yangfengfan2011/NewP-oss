@@ -46,6 +46,7 @@ public sealed class NativeComponentInstallRecoveryProcessTests
         File.WriteAllText(input.Capsule, capsule.ToJsonString());
         input.IncludePart();
         new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, input.Artifacts);
+        var partVersion = new ComponentBundleInspector().Inspect(input.Output).Manifest.Components.Single(member => member.ModuleId == "Part").Version;
         var protectedFiles = SeedProtectedFiles(root);
         var evidence = Path.Combine(input.SourceRepository, ".codex-temp", "issue-267", "272", "process-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(evidence);
@@ -90,7 +91,7 @@ public sealed class NativeComponentInstallRecoveryProcessTests
             Assert.Contains(consumer == "host" ? "UnavailableAfterFileRecovery@1.0.0" : "PLUGIN_SELECTION_INVALID", result.Output);
             Assert.False(File.Exists(Path.Combine(root, "native-install.pending")));
             Assert.False(Directory.Exists(Path.Combine(root, "packages", "InforCenter", "1.0.0")));
-            Assert.False(Directory.Exists(Path.Combine(root, "packages", "Part", "1.0.0")));
+            Assert.False(Directory.Exists(Path.Combine(root, "packages", "Part", partVersion)));
             Assert.Equal("0.9.0", Assert.Single(store.LoadAll()).Version);
             foreach (var item in protectedFiles) Assert.Equal(item.Value, File.ReadAllBytes(Path.Combine(root, item.Key)));
             WriteInventoryEvidence(evidence, "recovered-old-inventory", root, store);

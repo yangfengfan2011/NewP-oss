@@ -22,7 +22,7 @@ namespace ICP.Platform.Modules.Part.Migrations.SqlServer.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
-            modelBuilder.Entity("Part/Part", b =>
+            modelBuilder.Entity("Part", b =>
                 {
                     b.Property<string>("EID")
                         .HasMaxLength(128)
@@ -54,6 +54,16 @@ namespace ICP.Platform.Modules.Part.Migrations.SqlServer.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)")
                         .HasColumnName("ENAME");
+
+                    b.Property<string>("OwnerDepartmentId")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("OwnerDepartmentId");
+
+                    b.Property<string>("OwnerId")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("OwnerId");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2")

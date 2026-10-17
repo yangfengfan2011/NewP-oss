@@ -220,6 +220,7 @@ public sealed class OrganizationLifecycleHostAuthenticationTests
                     : new Dictionary<string, IdentityAccount>(StringComparer.Ordinal));
         public ValueTask<IdentityAccount?> FindAccountByNormalizedCodeAsync(string normalizedCode, CancellationToken cancellationToken = default) => ValueTask.FromResult<IdentityAccount?>(Current.NormalizedECODE == normalizedCode ? Clone(Current) : null);
         public ValueTask<IReadOnlyList<IdentityAccount>> SearchAccountsAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult<IReadOnlyList<IdentityAccount>>([Clone(Current)]);
+        public ValueTask<IReadOnlyList<IdentityAccount>> SearchAccountsAsync(ICP.Platform.Identity.Contracts.IdentityAccountSearch search, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<LocalCredential?> FindCredentialAsync(string accountEid, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<IReadOnlyList<IdentitySecurityEvent>> SearchSecurityEventsAsync(string targetAccountEid, CancellationToken cancellationToken = default) => ValueTask.FromResult<IReadOnlyList<IdentitySecurityEvent>>(Events.ToArray());
         public void AddAccount(IdentityAccount user) => throw new NotSupportedException();

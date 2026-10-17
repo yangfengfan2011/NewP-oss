@@ -27,6 +27,12 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
     public Task<LinkQueryResult> QueryAsync(string resourceKey, LinkQueryRequest request, CancellationToken token = default) =>
         ReadAsync(resourceKey, request, false, false, token);
 
+    /// <summary>可信模块可组合已声明字段的分组条件；所有条件仍在正式读取范围、Count和分页前执行。</summary>
+    /// <remarks>HTTP查询保持原有字典协议，不接受此额外条件形状；字段和操作必须属于正式Link目录。</remarks>
+    public Task<LinkQueryResult> QueryWithConditionsAsync(string resourceKey, LinkQueryRequest request,
+        IReadOnlyList<PlatformQueryCondition> conditions, CancellationToken token = default) =>
+        ReadAsync(resourceKey, request, false, false, token, conditions);
+
     /// <summary>引用写入复用正式端点目录和读取范围；没有任何 Link 的独立对象也能重新准入。</summary>
     public async Task<bool> IsEndpointReadableAsync(string resourceKey, LinkObjectReference target, CancellationToken token = default)
     {
@@ -36,6 +42,31 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
         var id = Parameter(target.Id, parameters);
         return await ExecuteAsync(scope.Preparation + "\nSELECT 1 WHERE " + id + " IN (" + scope.IdsQuery + ")",
             parameters, async reader => await reader.ReadAsync(token), token);
+    }
+
+    /// <summary>可信显式集合按模型只编译一次正式端点范围，保留SQL约束和当前事务，不逐对象重读同一范围。</summary>
+    public async Task<IReadOnlySet<string>> GetReadableEndpointIdsAsync(string resourceKey, string modelKey,
+        IReadOnlyCollection<string> objectIds, CancellationToken token = default)
+    {
+        var ids = objectIds.Distinct(StringComparer.Ordinal).ToArray();
+        var result = new HashSet<string>(StringComparer.Ordinal);
+        if (ids.Length == 0) return result;
+        var scope = await ReadEndpointScopeAsync(resourceKey, modelKey, "linkTargets", token);
+        var endpoint = catalog.Get(resourceKey).Endpoints[modelKey];
+        var entity = Entity(modelKey);
+        foreach (var batch in ids.Chunk(500))
+        {
+            var parameters = scope.Parameters.Select(parameter => (DbParameter)((ICloneable)parameter).Clone()).ToList();
+            var selected = string.Join(",", batch.Select(id => Parameter(id, parameters)));
+            var column = Column(entity, "e", endpoint.IdField);
+            await ExecuteAsync(scope.Preparation + "\nSELECT " + column + " FROM " + Table(entity) + " e WHERE " + column
+                + " IN (" + selected + ") AND " + column + " IN (" + scope.IdsQuery + ")", parameters, async reader =>
+                {
+                    while (await reader.ReadAsync(token)) result.Add(reader.GetString(0));
+                    return true;
+                }, token);
+        }
+        return result;
     }
 
     /// <summary>可信模块复用正式端点读取交集；范围名由代码分配，不接受请求 SQL 或排序表达式。</summary>
@@ -52,7 +83,7 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
 
     // 同一计划用于标准列表和受信任直属层；权限故障、不可翻译条件及损坏存储类型均失败关闭。
     private async Task<LinkQueryResult> ReadAsync(string resourceKey, LinkQueryRequest request,
-        bool completeLayer, bool includeChildren, CancellationToken token)
+        bool completeLayer, bool includeChildren, CancellationToken token, IReadOnlyList<PlatformQueryCondition>? extraConditions = null)
     {
         var definition = catalog.Get(resourceKey);
         if (request.Direction is not ("forward" or "reverse")) throw new LinkQueryException(400, "LinkQuery.InvalidDirection", "direction");
@@ -86,7 +117,13 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
             DefaultSortField = definition.Metadata.DefaultSortField, DefaultSortDirection = definition.Metadata.DefaultSortDirection,
             DisplayValueFields = definition.DisplayValueFields
         };
-        var conditions = BuildConditions(definition, request.Query);
+        foreach (var condition in extraConditions ?? [])
+        {
+            var column = definition.Metadata.Columns.SingleOrDefault(column => column.Field == condition.Field);
+            if (column is null || !column.Operators.Contains(condition.Operator, StringComparer.Ordinal))
+                throw new LinkQueryException(400, "LinkQuery.InvalidCondition", condition.Field);
+        }
+        var conditions = BuildConditions(definition, request.Query).Concat(extraConditions ?? []).ToArray();
         var requested = request.Query.Fields;
         // canonical raw/display 必须成对，沿用标准列表边界；非请求依赖只参与 SQL，不进入响应。
         if (requested is { Count: > 0 }) requested = requested.SelectMany(field => queryDescriptor.DisplayValueFields

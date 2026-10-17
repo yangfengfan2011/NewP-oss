@@ -54,11 +54,12 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
 
         var diagnostics = new List<PersistencePlanDiagnostic>();
         var models = new List<ModelDefinition>();
+        var authoring = new List<ModelMetadataDocument>();
         var streams = new List<ModuleMigrationStream>();
 
         foreach (var module in modules.Modules.OrderBy(static item => item.ModuleId, StringComparer.Ordinal))
         {
-            CompileModule(module, provider, models, streams, diagnostics);
+            CompileModule(module, provider, models, authoring, streams, diagnostics);
         }
 
         AddPlatformStream(modules, provider, models, streams, diagnostics);
@@ -134,7 +135,12 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 planDigest,
                 canonicalBytes,
                 orderedModels,
-                orderedStreams) { RetainedModuleIds = retainedOwners },
+                orderedStreams)
+            {
+                RetainedModuleIds = retainedOwners,
+                ModelAuthoring = new System.Collections.ObjectModel.ReadOnlyDictionary<string, ModelMetadataDocument>(
+                    authoring.ToDictionary(document => document.Model.Name, StringComparer.Ordinal))
+            },
             Array.Empty<PersistencePlanDiagnostic>());
     }
 
@@ -178,6 +184,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
         CanonicalModulePlanModule module,
         PersistenceProvider provider,
         List<ModelDefinition> models,
+        List<ModelMetadataDocument> authoring,
         List<ModuleMigrationStream> streams,
         List<PersistencePlanDiagnostic> diagnostics)
     {
@@ -240,6 +247,7 @@ public sealed partial class PersistencePlanCompiler : IPersistencePlanCompiler
                 };
                 _validator.Validate(projected);
                 moduleModels.Add(projected);
+                authoring.Add(document);
             }
             catch (Exception exception)
             {

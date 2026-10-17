@@ -13,6 +13,7 @@ Audit 拥有不可变的业务变更记录与当前 LocalAdmin 的只读查阅�
 - Organization 通过 Audit.Contracts 登记 person.created 的十个显式字段。Audit 只向共享平台上下文登记自身记录；Standard CRUD 的创建参与者与平台事务执行器拥有一次 SaveChanges 和 Commit。缺少必需 recorder、登记、写入、保存或可确认未提交的 Commit 失败均阻止业务成功，不存在补写或静默跳过路径。
 - person.updated 仅登记 ENAME、BirthDate、CompanyId、DepartmentId、PositionId、EmploymentStatus、EmploymentStartedAt、EmploymentEndedAt 的规范前后差异。事务内保护读取的旧值是本次实际替换值；无变化和仅四字段变化不新增业务记录。姓名保留历史文本，关联名称按当前目录批量展示并可降级 ID；PersonNo、启停和账号绑定不属于普通编辑事件。
 - Workspace 通过 Audit.Contracts 显式登记复制引用的来源关系与新目标关系事实；目标是新 LID，记录与关系在原事务中共同提交或回滚。对象真副本使用独立的 `workspace.object.copied`，关联可信来源对象/关系和新对象/目标关系，不复制历史审计；Part、Link、结果状态和记录同事务。字段标签由 Workspace 自有词典贡献，Audit 不自动推断关系或读取业务私有表。
+- ENTITY 选用者显式登记 `entity.ownership.initialized` 与 `entity.ownership.backfilled`，目标为规范资源及真实对象 EID，字段保留所属账号/部门 ID 的实际前后事实；补齐不改写旧创建人、时间或既有事件。recorder 从共享 `IEntityAuditValueProvider` 消费同一业务操作的 actor/time stamp，不独立采样另一份时间；登记、保存及提交前取消失败与对象写入整体回滚，无变化不新增记录。
 - Audit 的 Model、migration stream、capsule、列表和详情 metadata 是模块自有 authoring。Host 按统一模块计划执行迁移；旧 OperationLog/AccessLog 不被转换为业务记录，其冻结写入口保持冻结。
 - Audit 查询先在数据库完成资源/目标、操作者、事件和时间筛选，再 Count 与 OccurredAt DESC、EID DESC 分页。Identity 和对象所属模块按批次解析当前名称；名称不可用时保留 ID。Audit 存储查询错误不能伪装成无记录。
 - Audit.BusinessChange.View 只是菜单及 endpoint 权限声明；服务端还要求当前主体是 LocalAdmin，普通主体即使获得该权限也不能查阅。没有业务变更写入、删除或导出 HTTP 入口。

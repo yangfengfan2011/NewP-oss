@@ -1,4 +1,5 @@
 using ICP.Platform.Modules.Identity.Models;
+using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Identity.Repositories;
 using ICP.Platform.Query.Descriptors;
 using ICP.Platform.Query.Models;
@@ -42,6 +43,18 @@ internal sealed class InMemoryIdentityRepository : IIdentityRepository
 
     public ValueTask<IReadOnlyList<IdentityAccount>> SearchAccountsAsync(CancellationToken cancellationToken = default) =>
         ValueTask.FromResult<IReadOnlyList<IdentityAccount>>(Accounts.Select(item => Clone(item)!).ToArray());
+
+    public ValueTask<IReadOnlyList<IdentityAccount>> SearchAccountsAsync(IdentityAccountSearch search, CancellationToken cancellationToken = default)
+    {
+        var query = search.Query?.Trim();
+        return ValueTask.FromResult<IReadOnlyList<IdentityAccount>>(Accounts
+            .Where(account => search.Status is null ? account.Status != IdentityAccountStatus.Deleted : account.Status == search.Status)
+            .Where(account => search.IsPersonnelBound is null || account.IsPersonnelBound == search.IsPersonnelBound)
+            .Where(account => string.IsNullOrWhiteSpace(query) || account.ECODE.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || account.ENAME.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(account => account.ECODE, StringComparer.OrdinalIgnoreCase).ThenBy(account => account.EID, StringComparer.Ordinal)
+            .Take(Math.Clamp(search.Limit, 1, 100)).Select(account => Clone(account)!).ToArray());
+    }
 
     public ValueTask<LocalCredential?> FindCredentialAsync(string accountEid, CancellationToken cancellationToken = default) =>
         ValueTask.FromResult(Clone(Credentials.SingleOrDefault(item => item.AccountEID == accountEid)));

@@ -12,6 +12,14 @@ List View 可用 `pageActionGroups: [{ key, labelKey, variant?, actionKeys }]` �
 
 通用 Link 查询的端点目录、条件与执行入口见[接入指南](../../developer/link-query-configuration.md)。公开请求始终分页；受信任树适配只能读取当前一层，不能通过 HTTP 关闭分页。读取失败不自动修复关系或扩大授权。
 
+ENTITY 的可选归属字段由公共 Model projector 提供：`OwnerId` 引用稳定账号，`OwnerDepartmentId` 引用一个 Department；只有 `builtinFields` 选用的模型才得到字段、存储与创建要求。字段由服务端拥有，create/edit form 隐藏普通输入，Detail 可按需只读显示 raw/display companion。创建候选在判权前从 `IAccountOwnershipDirectory` 与同一业务审计作用域取得可信账号和当前部门；普通更新不重算它们。Organization 实现目录，CRUD 不读取其私有持久化。选用者须显式声明相应模块依赖，DTO 同步仅在自身及依赖闭包中解析 display 目标。
+
+归属字段的规范标记只在选中时序列化；未选用字段保持既有 JSON 形状。旧部署资产继续按原内容摘要与 canonical 模型严格校验，不通过重写旧资产或放宽校验接纳升级。
+
+受控归属补齐在真实 owner 的入口重验来源及 read/edit，公共内核只对选中模型的缺失列更新，不更新四个旧审计字段、不更改完整归属。实际 diff 与对象变化在同一事务登记到 Audit；未解析、无变化、失败或提交前取消不生成成功记录。停用维护入口可以停止新补齐，但回退不得删除新增列、已提交归属或历史；已升级数据库仍需兼容该前沿的 Host。
+
+Part、Document 的运行时字段策略和复制字段分类消费同一 `CompiledPersistencePlan`：持久化编译器保留本候选已验证的 authoring 投影供字段策略使用，分类读取该计划的模型。authoring 投影只在内存中存在，不进入存储计划摘要、部署状态或迁移历史；缺失或 owner 不匹配时拒绝注册，不向工作树、Host 同名目录或安装路径回退读取。资源工厂在候选计划可解析后构造 descriptor，仍执行统一校验及资源/路由唯一性检查；无参 metadata provider 只用于显式设计时输入。
+
 ## Language
 
 **标准 CRUD 资源（Standard CRUD Resource）**：

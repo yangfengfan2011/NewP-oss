@@ -11,7 +11,7 @@ namespace ICP.Platform.Modules.Part;
 public sealed class PartCopyBehavior(EfPlatformDbContext db, IStandardCrudRepository repository, IStandardCrudResourceRegistry resources,
     IDataScopeObjectDecisionProvider decisions, Func<IObjectOperationExecutor> operations) : IObjectBehavior
 {
-    private static readonly string[] ClassifiedFields = ["EID", "ECODE", "ENAME", "Description", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"];
+    private static readonly string[] ClassifiedFields = ["EID", "ECODE", "ENAME", "Description", "OwnerId", "OwnerDepartmentId", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"];
     public static readonly ObjectOperationAction Copy = new("copy");
     public static ObjectBehaviorDefinition BehaviorDefinition { get; } = new("part.part.copy", "Part", "Part", [Copy], [],
         ["SourceId", "ExpectedCode", "ExpectedName", "ExpectedDescription"], [new(Copy, new("part.part", ObjectOperationAction.Create))]);

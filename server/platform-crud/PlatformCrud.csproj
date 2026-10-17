@@ -9,6 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="..\kernel\Kernel.csproj" />
     <ProjectReference Include="..\modules\Platform\Authorization\Contracts\Authorization.Contracts.csproj" />
+    <ProjectReference Include="..\modules\Platform\Audit\Contracts\Audit.Contracts.csproj" />
     <ProjectReference Include="..\platform-authorization\PlatformAuthorization.csproj" />
     <ProjectReference Include="..\platform-modeling\PlatformModeling.csproj" />
     <ProjectReference Include="..\platform-presentation\PlatformPresentation.csproj" />

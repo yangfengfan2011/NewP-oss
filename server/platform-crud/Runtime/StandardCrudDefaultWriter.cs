@@ -24,6 +24,8 @@ public sealed class StandardCrudDefaultWriter
     private readonly StandardCrudWriteRules _rules;
     private readonly IDataScopeObjectDecisionProvider? _dataScope;
     private readonly IPlatformObjectIdGenerator? _objectIds;
+    private readonly ICP.Platform.Crud.Ownership.EntityOwnershipValues? _ownership;
+    private readonly ICP.Platform.Crud.Ownership.EntityOwnershipAudit? _ownershipAudit;
 
     /// <summary>组合默认写入依赖；事务与审计仍复用平台已有 owner，不依赖查询或展示服务。</summary>
     public StandardCrudDefaultWriter(
@@ -37,7 +39,9 @@ public sealed class StandardCrudDefaultWriter
         IPlatformTransactionExecutor? transactionExecutor = null,
         IEnumerable<IStandardCrudUpdateRecorder>? updateRecorders = null,
         IDataScopeObjectDecisionProvider? dataScope = null,
-        IPlatformObjectIdGenerator? objectIds = null)
+        IPlatformObjectIdGenerator? objectIds = null,
+        ICP.Platform.Crud.Ownership.EntityOwnershipValues? ownership = null,
+        ICP.Platform.Crud.Ownership.EntityOwnershipAudit? ownershipAudit = null)
     {
         _repository = repository;
         _deleteGuards = deleteGuards.ToDictionary(item => item.ResourceKey, StringComparer.Ordinal);
@@ -49,6 +53,8 @@ public sealed class StandardCrudDefaultWriter
         _rules = new StandardCrudWriteRules(repository, validators, temporalInputNormalizer, auditValueProvider);
         _dataScope = dataScope;
         _objectIds = objectIds;
+        _ownership = ownership;
+        _ownershipAudit = ownershipAudit;
     }
 
     // 默认创建核心可由统一对象行为复用；已处于对象事务时只登记变化，不再取得第二次事务所有权。
@@ -103,6 +109,11 @@ public sealed class StandardCrudDefaultWriter
         {
             return StandardCrudMutationResult.Failure(PersistenceConflict(descriptor));
         }
+        if (allowed.ContainsKey("OwnerId") || allowed.ContainsKey("OwnerDepartmentId"))
+        {
+            if (_ownershipAudit is null) throw new InvalidOperationException("ENTITY_OWNERSHIP_AUDIT_REQUIRED");
+            await _ownershipAudit.RegisterAsync(descriptor.ResourceKey, (string)created[descriptor.IdField]!, allowed, false, cancellationToken);
+        }
         return StandardCrudMutationResult.Success(new StandardCrudDetail
         {
             Fields = created
@@ -116,7 +127,14 @@ public sealed class StandardCrudDefaultWriter
     {
         var preparation = await _rules.PrepareCreateAsync(descriptor, values, cancellationToken);
         if (!preparation.Succeeded) return StandardCrudMutationResult.Failure(preparation.Error!);
-        IReadOnlyDictionary<string, object?> candidate = preparation.Values!;
+        var ownedCandidate = new Dictionary<string, object?>(preparation.Values!, StringComparer.Ordinal);
+        var ownershipFields = descriptor.FieldPolicies.Where(policy => ICP.Platform.Modeling.Ownership.EntityOwnershipFields.Contains(policy.Field)).Select(policy => policy.Field).ToArray();
+        if (ownershipFields.Length > 0)
+        {
+            if (_ownership is null) throw new InvalidOperationException("ENTITY_OWNERSHIP_PROVIDER_REQUIRED");
+            await _ownership.ApplyCreateAsync(ownedCandidate, ownershipFields, cancellationToken);
+        }
+        IReadOnlyDictionary<string, object?> candidate = ownedCandidate;
         if (_dataScope is not null)
         {
             if (_objectIds is null) throw new InvalidOperationException("DATA_SCOPE_OBJECT_ID_GENERATOR_REQUIRED");

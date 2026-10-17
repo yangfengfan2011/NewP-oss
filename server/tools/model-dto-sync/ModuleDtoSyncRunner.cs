@@ -5,6 +5,7 @@ using ICP.Platform.Modeling.Metadata;
 using ICP.Platform.Modeling.Projection;
 using ICP.Platform.Modeling.Validation;
 using ICP.Platform.Kernel.ModulePlanning;
+using System.Text.Json;
 
 namespace ICP.Platform.Tools.ModelDtoSync;
 
@@ -65,7 +66,7 @@ public static class ModuleDtoSyncRunner
         }
     }
 
-    // 每个模块先形成完整 model catalog，再让 DTO 只消费统一 planner 的成功编译结果。
+    // 每个模块从自身及正式声明的依赖形成完整 model catalog，再消费统一 planner 的成功结果。
     // 按实际 authoring owner 读取模型，输出仍归属原位后端模块。
     private static IReadOnlyList<string> Generate(string outputRepositoryRoot, string metadataRepositoryRoot)
     {
@@ -86,8 +87,11 @@ public static class ModuleDtoSyncRunner
         var validator = new ModelMetadataValidator();
         var projector = new ModelMetadataProjector();
 
-        foreach (var moduleRoot in ModuleAuthoringPaths.EnumerateModuleRoots(metadataRepositoryRoot)
-                     .OrderBy(static path => path, StringComparer.Ordinal))
+        var moduleRoots = ModuleAuthoringPaths.EnumerateModuleRoots(metadataRepositoryRoot)
+            .OrderBy(static path => path, StringComparer.Ordinal).ToArray();
+        var modelsByModule = new Dictionary<string, ModelDefinition[]>(StringComparer.Ordinal);
+        var rootsByModule = moduleRoots.ToDictionary(ModuleAuthoringPaths.ReadModuleId, StringComparer.Ordinal);
+        foreach (var moduleRoot in moduleRoots)
         {
             var moduleId = ModuleAuthoringPaths.ReadModuleId(moduleRoot);
             var modelDirectory = Path.Combine(moduleRoot, "metadata", "models");
@@ -106,8 +110,26 @@ public static class ModuleDtoSyncRunner
                 modelCandidates.Add(definition);
             }
 
-            var modelCatalog = modelCandidates.ToArray();
-            foreach (var definition in modelCatalog)
+            modelsByModule.Add(moduleId, modelCandidates.ToArray());
+        }
+
+        foreach (var moduleRoot in moduleRoots)
+        {
+            var moduleId = ModuleAuthoringPaths.ReadModuleId(moduleRoot);
+            if (!modelsByModule.TryGetValue(moduleId, out var ownModels)) continue;
+            var dependencies = new HashSet<string>(StringComparer.Ordinal);
+            var pending = new Queue<string>(); pending.Enqueue(moduleId);
+            while (pending.TryDequeue(out var current))
+            {
+                if (!dependencies.Add(current) || !rootsByModule.TryGetValue(current, out var currentRoot)) continue;
+                var capsulePath = Path.Combine(currentRoot, "newp.plugin.json");
+                if (!File.Exists(capsulePath)) continue;
+                using var capsule = JsonDocument.Parse(File.ReadAllBytes(capsulePath));
+                if (capsule.RootElement.TryGetProperty("dependencies", out var declared))
+                    foreach (var dependency in declared.EnumerateArray()) pending.Enqueue(dependency.GetString()!);
+            }
+            var modelCatalog = dependencies.Where(modelsByModule.ContainsKey).SelectMany(id => modelsByModule[id]).ToArray();
+            foreach (var definition in ownModels)
             {
                 var displayCompilation = displayPlanner.Compile(definition, modelCatalog);
                 if (!displayCompilation.IsSuccess)

@@ -8,7 +8,7 @@ internal static class DocumentCopyFields
 {
     private static readonly string[] EntityFields = ["EID", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"];
     private static readonly IReadOnlyDictionary<string, string[]> Classified = new Dictionary<string, string[]>(StringComparer.Ordinal) {
-        ["Document"] = [.. EntityFields, "ECODE", "ENAME", "Description", "LatestVersionId"],
+        ["Document"] = [.. EntityFields, "ECODE", "ENAME", "Description", "LatestVersionId", "OwnerId", "OwnerDepartmentId"],
         ["DocumentVersion"] = [.. EntityFields, "DocumentId", "VersionOrdinal", "VersionLabel", "State", "CurrentIterationId"],
         ["DocumentIteration"] = [.. EntityFields, "VersionId", "IterationOrdinal", "Kind", "DatasetTypeKey", "ECODE", "ENAME", "Description"],
         ["DocumentFileLink"] = ["LID", "PEID", "CEID", "LCreatedBy", "LCreatedAt", "LUpdatedBy", "LUpdatedAt", "Role", "Ordinal", "FileUsageId"] };

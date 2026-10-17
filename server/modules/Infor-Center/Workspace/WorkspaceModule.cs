@@ -17,6 +17,10 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
         services.AddScoped<WorkspacePositions>();
         services.AddScoped<WorkspaceContents>();
         services.AddScoped<WorkspaceReferenceAudit>();
+        services.AddScoped<ICP.Platform.Crud.Abstractions.IStandardCrudDisplayValueResolver>(provider =>
+            new ICP.Platform.Crud.Ownership.EntityOwnershipDisplayResolver("workspace.folder",
+                provider.GetRequiredService<ICP.Platform.Presentation.IUserDisplayNameDirectory>(),
+                provider.GetRequiredService<ICP.Platform.Persistence.Ownership.IAccountOwnershipDirectory>()));
         services.AddScoped<WorkspaceTreeOrder>();
         services.AddObjectBehavior<WorkspaceObjectCopyBehavior>(this, WorkspaceObjectCopyBehavior.BehaviorDefinition,
             (provider, _) => new(() => provider.GetRequiredService<WorkspaceContents>(),

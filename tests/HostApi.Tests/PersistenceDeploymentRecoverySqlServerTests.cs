@@ -266,13 +266,28 @@ public sealed class PersistenceDeploymentRecoverySqlServerTests
             IF EVENTDATA().value('(/EVENT_INSTANCE/ObjectName)[1]', 'nvarchar(256)') = N'IX_Document_ENAME'
                 WAITFOR DELAY '00:00:20';
             """);
-        var startup = fixture.StartAsync(expectFailure: true);
+        Assert.Null(State(fixture)["pending"]);
         var observation = System.Diagnostics.Stopwatch.StartNew();
+        using var startupBudget = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+        var startup = fixture.StartAsync(expectFailure: true);
+        double? pendingObservedAtSeconds = null;
         try
         {
-            await Until(async () => await Scalar(fixture, $"SELECT COUNT(*) FROM dbo.__NewPMigrationHistory WHERE MigrationId=N'{PartTail}';") == 1);
+            // 候选归档是首DDL前的正式屏障；20秒检查点窗口不包含此前的编译和准备。
+            while (State(fixture)["pending"]?.GetValue<string>() is not { } pending || pending == successful)
+            {
+                if (startup.IsCompleted)
+                {
+                    await startup;
+                    throw new InvalidOperationException("Host stopped before publishing the recovery candidate: " + fixture.LastError);
+                }
+                await Task.Delay(50, startupBudget.Token);
+            }
+            pendingObservedAtSeconds = observation.Elapsed.TotalSeconds;
+            await Until(async () => await Scalar(fixture, $"SELECT COUNT(*) FROM dbo.__NewPMigrationHistory WHERE MigrationId=N'{PartTail}';") == 1)
+                .WaitAsync(startupBudget.Token);
         }
-        catch (TimeoutException checkpointFailure)
+        catch (Exception checkpointFailure)
         {
             try
             {
@@ -290,7 +305,7 @@ public sealed class PersistenceDeploymentRecoverySqlServerTests
                     await Task.Delay(100);
                 }
                 await File.WriteAllTextAsync(Path.Combine(fixture.EvidenceRoot, "recovery-kill-deadline-diagnostic.json"),
-                    JsonSerializer.Serialize(new { fixture.OwnedHostProcessId, originalWindowSeconds = 20,
+                    JsonSerializer.Serialize(new { fixture.OwnedHostProcessId, originalWindowSeconds = 20, startupWindowSeconds = 90, pendingObservedAtSeconds,
                         committedWithinOriginalWindow = false, committedLater, startup.Status,
                         samples, finalStage = stage, elapsedSeconds = observation.Elapsed.TotalSeconds }));
             }
@@ -313,13 +328,14 @@ public sealed class PersistenceDeploymentRecoverySqlServerTests
         {
             input.IncludePart();
             new ComponentBundleBuilder().Stage(input.Repository, "InforCenter", input.Output, input.Artifacts);
+            var partVersion = new ComponentBundleInspector().Inspect(input.Output).Manifest.Components.Single(member => member.ModuleId == "Part").Version;
             var protectedFiles = Directory.GetFiles(fixture.PluginRoot, "*.json", SearchOption.AllDirectories)
                 .ToDictionary(path => path, File.ReadAllBytes, StringComparer.OrdinalIgnoreCase);
             await NativeComponentInstallRecoveryProcessTests.RunAndKillWorkerAsync(input, fixture.PluginRoot,
                 Path.Combine(input.Root, "checkpoint"), fixture.EvidenceRoot, "install");
             Assert.True(File.Exists(Path.Combine(fixture.PluginRoot, "native-install.pending")));
             Assert.True(Directory.Exists(Path.Combine(fixture.PluginRoot, "packages", "InforCenter", "1.0.0")));
-            Assert.False(Directory.Exists(Path.Combine(fixture.PluginRoot, "packages", "Part", "1.0.0")));
+            Assert.False(Directory.Exists(Path.Combine(fixture.PluginRoot, "packages", "Part", partVersion)));
             var recoveredFiles = await OfflineComponentDeploymentSqlServerTests.Offline(fixture, "uninstall",
                 "-ModuleId", "UnavailableAfterFileRecovery");
             Assert.NotEqual(0, recoveredFiles.ExitCode);

@@ -97,6 +97,35 @@ public sealed class EfIdentityRepository : IIdentityRepository
     public async ValueTask<IReadOnlyList<IdentityAccount>> SearchAccountsAsync(CancellationToken cancellationToken = default) =>
         (await Accounts.AsNoTracking().ToListAsync(cancellationToken)).Select(MapAccount).ToArray();
 
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<IdentityAccount>> SearchAccountsAsync(
+        IdentityAccountSearch search, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(search);
+        var candidates = Accounts.AsNoTracking();
+        var status = search.Status?.ToString();
+        candidates = status is null
+            ? candidates.Where(row => EF.Property<string>(row, "Status") != "Deleted")
+            : candidates.Where(row => EF.Property<string>(row, "Status") == status);
+        if (search.IsPersonnelBound is { } bound)
+            candidates = candidates.Where(row => EF.Property<bool>(row, "IsPersonnelBound") == bound);
+        if (!string.IsNullOrWhiteSpace(search.Query))
+        {
+            var query = search.Query.Trim().ToUpperInvariant();
+            // 正式 SQL Server 使用二进制比较，避免数据库的语言排序规则把不同重音或符号当作相同候选。
+            candidates = _dbContext.Database.IsSqlServer()
+                ? candidates.Where(row => EF.Functions.Collate(EF.Property<string>(row, "NormalizedECODE"), "Latin1_General_100_BIN2").Contains(query)
+                    || EF.Functions.Collate(EF.Property<string>(row, "ENAME"), "Latin1_General_100_BIN2").ToUpper().Contains(query))
+                : candidates.Where(row => EF.Property<string>(row, "ECODE").ToUpper().Contains(query)
+                    || EF.Property<string>(row, "ENAME").ToUpper().Contains(query));
+        }
+        var ordered = _dbContext.Database.IsSqlServer()
+            ? candidates.OrderBy(row => EF.Functions.Collate(EF.Property<string>(row, "NormalizedECODE"), "Latin1_General_100_BIN2"))
+            : candidates.OrderBy(row => EF.Property<string>(row, "ECODE").ToUpper());
+        return (await ordered.ThenBy(row => EF.Property<string>(row, "EID"))
+            .Take(Math.Clamp(search.Limit, 1, 100)).ToListAsync(cancellationToken)).Select(MapAccount).ToArray();
+    }
+
     public async ValueTask<LocalCredential?> FindCredentialAsync(
         string accountEid,
         CancellationToken cancellationToken = default)

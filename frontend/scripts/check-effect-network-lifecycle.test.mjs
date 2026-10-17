@@ -12,6 +12,23 @@ import {
 } from './check-effect-network-lifecycle.mjs';
 import { effectNetworkLifecycleAllowlist } from './effect-network-lifecycle.allowlist.mjs';
 
+test('ownership reviews only three cancellable reads and still rejects a status write from the same effect', () => {
+  const file = 'packages/ui/src/ObjectOwnershipInitializationInput.tsx';
+  const source = readFileSync(new URL('../packages/ui/src/ObjectOwnershipInitializationInput.tsx', import.meta.url), 'utf8');
+  const findings = analyzeEffectNetworkLifecycleSource({ file, source });
+  assert.equal(findings.length, 3);
+  assert.ok(findings.every(finding => finding.classification === 'read-query'));
+  const reviewed = effectNetworkLifecycleAllowlist.filter(entry => entry.file === file);
+  assert.equal(reviewed.length, 3);
+  assert.equal(evaluateEffectNetworkLifecycle({ findings, allowlist: reviewed }).ok, true);
+  const statusStart = source.indexOf('platformFetch(target.statusPath');
+  assert.notEqual(statusStart, -1);
+  const changed = source.slice(0, statusStart) + source.slice(statusStart).replace("method: 'GET'", "method: 'POST'");
+  const write = analyzeEffectNetworkLifecycleSource({ file, source: changed });
+  assert.ok(evaluateEffectNetworkLifecycle({ findings: write, allowlist: reviewed }).diagnostics
+    .some(item => item.code === 'EFFECT_NETWORK_WRITE_COMMAND' && item.id.endsWith('platformFetch#2')));
+});
+
 test('the real Workspace edit-values POST is a reviewed read query at its exact effect callsite', () => {
   const findings = analyzeEffectNetworkLifecycleSource({
     file: 'modules/infor-center/workspace/src/WorkspaceObjectEditInput.tsx',
@@ -1095,7 +1112,8 @@ test('runs as a standalone current-tree gate', () => {
   });
 
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /6 reviewed effect findings, 8 platform query loads, 0 write commands/);
+  const queryLoads = analyzeEffectNetworkLifecycleTree({ frontendRoot }).filter(finding => finding.hook === 'usePlatformQuery.load').length;
+  assert.equal(result.stdout.trim(), `[effect-network-lifecycle] ${effectNetworkLifecycleAllowlist.length} reviewed effect findings, ${queryLoads} platform query loads, 0 write commands`);
 });
 
 test('keeps repeated sink call sites distinct without using line numbers in ids', () => {

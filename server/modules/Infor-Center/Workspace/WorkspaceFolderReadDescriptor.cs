@@ -12,7 +12,7 @@ public sealed class WorkspaceFolderReadDescriptor
     // 复用标准 descriptor 编译器闭合真实计划中的 Model/display；局部目录不参与 HTTP 资源映射。
     public WorkspaceFolderReadDescriptor(CompiledPersistencePlan plan)
     {
-        string[] fields = ["EID", "ENAME", "Description", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"];
+        string[] fields = ["EID", "ENAME", "Description", "OwnerId", "OwnerDepartmentId", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"];
         Value = new StandardCrudResourceRegistry([new StandardCrudDescriptor
         {
             ResourceKey = "workspace.folder", ModuleId = "Workspace", ModelName = "WorkspaceFolder",

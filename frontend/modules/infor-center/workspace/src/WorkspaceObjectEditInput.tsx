@@ -24,13 +24,17 @@ export default function WorkspaceObjectEditInput({ row, queryScope, featurePosit
         });
         if (!response.ok) throw await readStandardCrudRequestError(response);
         const payload = await response.json() as { fields: Record<string, unknown> };
-        if (!controller.signal.aborted) { setInitial(payload.fields); onChange(payload.fields); }
+        if (!controller.signal.aborted) {
+          setInitial(payload.fields);
+          onChange(Object.fromEntries(Object.entries(payload.fields).filter(([field]) => ['ECODE', 'ENAME', 'Description'].includes(field))));
+        }
       } catch (error) { if (!controller.signal.aborted) setFailure({ error }); }
     })();
     return () => controller.abort();
   }, [target.LID, position, featurePosition, onChange]);
   const values = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {};
-  const dirty = initial !== null && JSON.stringify(values) !== JSON.stringify(initial);
+  const baseline = initial && Object.fromEntries(Object.entries(initial).filter(([field]) => ['ECODE', 'ENAME', 'Description'].includes(field)));
+  const dirty = baseline !== null && JSON.stringify(values) !== JSON.stringify(baseline);
   const ready = initial !== null && (folder ? ['ENAME'] : ['ECODE', 'ENAME'])
     .every(key => typeof values[key] === 'string' && String(values[key]).trim().length > 0);
   useEffect(() => { onDraftStateChange?.({ dirty, ready: ready && !submitting }); }, [dirty, ready, submitting, onDraftStateChange]);
@@ -40,8 +44,11 @@ export default function WorkspaceObjectEditInput({ row, queryScope, featurePosit
     ...(!folder ? [{ key: 'ECODE', modelField: 'ECODE', labelKey: t(`${dictionary}.Code`, '编码'), kind: 'text' as const, required: true }] : []),
     { key: 'ENAME', modelField: 'ENAME', labelKey: t(`${dictionary}.Name`, '名称'), kind: 'text', required: true },
     { key: 'Description', modelField: 'Description', labelKey: t(`${dictionary}.Field_Description`, '说明'), kind: 'textarea', maxLength: 500 },
+    { key: 'OwnerId', modelField: 'OwnerId', labelKey: t(`${dictionary}.Field_OwnerId`, '所属人'), kind: 'text', readOnly: true },
+    { key: 'OwnerDepartmentId', modelField: 'OwnerDepartmentId', labelKey: t(`${dictionary}.Field_OwnerDepartmentId`, '所属部门'), kind: 'text', readOnly: true },
   ];
-  return <StandardCrudForm formId="workspace-edit-object" mode="edit" fields={fields} sections={[]} values={values}
+  return <StandardCrudForm formId="workspace-edit-object" mode="edit" fields={fields} sections={[]}
+    values={{ ...values, OwnerId: initial.OwnerId_DisplayValue ?? null, OwnerDepartmentId: initial.OwnerDepartmentId_DisplayValue ?? null }}
     onChange={(key, next) => onChange({ ...values, [key]: next })} onSubmit={() => undefined}
     saving={submitting ?? false} showSubmitAction={false} titleForSection={() => t('Workspace.Basic', '基本信息')} />;
 }

@@ -4,6 +4,7 @@ using Xunit;
 
 namespace ICP.Platform.Kernel.Tests;
 
+[Trait("Category", "ModuleMetadataConsumer")]
 public sealed class DataActionCatalogTests
 {
     [Fact]
@@ -25,8 +26,13 @@ public sealed class DataActionCatalogTests
         var compiler = new CanonicalModulePlanCompiler();
         var original = compiler.Compile("order", candidates);
         Assert.True(original.IsSuccess);
-        Assert.Equal(new[] { "read", "create", "edit", "delete", "authorize", "documentObjectCopy", "documentCopy", "download", "partCopy", "partObjectCopy", "workspaceCopy" },
-            original.Plan!.DataActionCatalog.Select(action => action.Key));
+        // 原断言以固定 11 个 key 锁定真实目录顺序；模块新增或调整动作会让它漂移。
+        // 现在从读取到的候选推导：目录按生效模块 ID 的序数序排列，各 owner 内部保持其声明顺序。
+        var activeIds = original.Plan!.Modules.Select(module => module.ModuleId).ToHashSet(StringComparer.Ordinal);
+        var ownerOrdered = candidates.Where(candidate => activeIds.Contains(candidate.ModuleId)).OrderBy(candidate => candidate.ModuleId, StringComparer.Ordinal).ToArray();
+        var expectedKeys = ownerOrdered.SelectMany(candidate => candidate.DataActions).Select(action => action.Key).ToArray();
+        Assert.NotEmpty(expectedKeys);
+        Assert.Equal(expectedKeys, original.Plan.DataActionCatalog.Select(action => action.Key));
         Assert.All(original.Plan.DataActionCatalog.Where(action => new[] { "read", "create", "edit", "delete", "authorize" }.Contains(action.Key)), action => Assert.Equal("Authorization", action.ModuleId));
         foreach (var owner in new[] { "Document", "Part", "Workspace" })
         {
@@ -46,8 +52,10 @@ public sealed class DataActionCatalogTests
             candidate with { DataActions = candidate.DataActions.Reverse().ToArray() }));
         Assert.True(reversed.IsSuccess);
         // 反转各 owner 的贡献，不能越过模块边界反转整个合并目录。
-        Assert.Equal(new[] { "authorize", "delete", "edit", "create", "read", "download", "documentCopy", "documentObjectCopy", "partObjectCopy", "partCopy", "workspaceCopy" },
-            reversed.Plan!.DataActionCatalog.Select(action => action.Key));
+        // 反转后的期望同样由候选推导：owner 顺序不变，只反转每个 owner 内部的贡献。
+        var reversedKeys = ownerOrdered.SelectMany(candidate => candidate.DataActions.Reverse()).Select(action => action.Key).ToArray();
+        Assert.False(expectedKeys.SequenceEqual(reversedKeys), "至少一个 owner 需贡献多个动作，否则无法证明顺序被跟踪。");
+        Assert.Equal(reversedKeys, reversed.Plan!.DataActionCatalog.Select(action => action.Key));
         Assert.Equal(original.Plan.DataActionCatalog.Select(action => action.ModuleId), reversed.Plan.DataActionCatalog.Select(action => action.ModuleId));
         Assert.Equal(download, Assert.Single(reversed.Plan.DataActionCatalog, action => action.ModuleId == "Document" && action.Key == "download"));
         Assert.NotEqual(original.Plan.PlanHash, reversed.Plan.PlanHash);

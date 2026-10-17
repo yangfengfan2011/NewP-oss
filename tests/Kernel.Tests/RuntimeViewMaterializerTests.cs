@@ -9,6 +9,7 @@ using Xunit;
 
 namespace ICP.Platform.Kernel.Tests;
 
+[Trait("Category", "ModuleMetadataConsumer")]
 public class RuntimeViewMaterializerTests : IDisposable
 {
     private readonly UnifiedPluginPackageTestData _testData;

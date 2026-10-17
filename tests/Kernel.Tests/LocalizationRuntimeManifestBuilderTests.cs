@@ -4,6 +4,7 @@ using Xunit;
 
 namespace ICP.Platform.Kernel.Tests;
 
+[Trait("Category", "ModuleMetadataConsumer")]
 public sealed class LocalizationRuntimeManifestBuilderTests : IDisposable
 {
     private readonly List<string> _tempRoots = new();
@@ -55,8 +56,17 @@ public sealed class LocalizationRuntimeManifestBuilderTests : IDisposable
             Assert.Equal(chinese, complete.RootElement.GetProperty("catalogs").GetProperty("zhs").GetProperty(key).GetString());
             Assert.Equal(english, complete.RootElement.GetProperty("catalogs").GetProperty("en").GetProperty(key).GetString());
         }
-        Assert.Equal(5, complete.RootElement.GetProperty("catalogs").GetProperty("zhs").EnumerateObject().Count());
-        Assert.Equal(5, complete.RootElement.GetProperty("catalogs").GetProperty("en").EnumerateObject().Count());
+        // 原断言写死 5 个键，用来证明三个 owner 的字典互补合并、没有平台侧补键或覆盖丢失。
+        // 现在以三个 owner 字典实际声明的键并集为期望，owner 新增动作标题不再需要同步改数量。
+        var declaredKeys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var owner in new[] { "Workspace", "Part", "Document" })
+        {
+            var root = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository.FullName, owner);
+            using var source = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "metadata", "dictionaries", "DataScope.dic.json")));
+            foreach (var entry in source.RootElement.GetProperty("DataScope").EnumerateObject()) Assert.True(declaredKeys.Add("DataScope." + entry.Name), "owner 字典不得重复声明同一键：" + entry.Name);
+        }
+        foreach (var language in new[] { "zhs", "en" })
+            Assert.Equal(declaredKeys.Order(StringComparer.Ordinal), complete.RootElement.GetProperty("catalogs").GetProperty(language).EnumerateObject().Select(property => property.Name).Order(StringComparer.Ordinal));
     }
 
     [Fact]

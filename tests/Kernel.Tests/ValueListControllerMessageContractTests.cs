@@ -12,6 +12,7 @@ using Xunit;
 
 namespace ICP.Platform.Kernel.Tests;
 
+[Trait("Category", "ModuleMetadataConsumer")]
 public class ValueListControllerMessageContractTests : IClassFixture<ValueListControllerMessageContractTests.TestWebApplicationFactory>
 {
     private readonly TestWebApplicationFactory _factory;

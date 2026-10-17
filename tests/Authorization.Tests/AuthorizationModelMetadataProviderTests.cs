@@ -5,6 +5,7 @@ using Xunit;
 
 namespace ICP.Platform.Modules.Authorization.Tests;
 
+[Trait("Category", "ModuleMetadataConsumer")]
 public class AuthorizationModelMetadataProviderTests
 {
     [Fact]

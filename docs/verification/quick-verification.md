@@ -31,6 +31,11 @@ dotnet test .\tests\<Module>.Tests\<Module>.Tests.csproj --filter <Filter>
 - 定向命令沿用正式验证入口的配置与严格参数，只缩小文件、项目或测试范围。前端使用所属包的脚本和配置；lint 的 unused-disable、warning 等限制与完整验证一致，实际参数以当前脚本为准。
 - 字段与规则变更验证值和边界；权限、查询与事务变更使用对应真实 API／SQL 集成测试；组件交互变更使用真实组件行为测试。低层无法证明的页面接线只做最短受影响路径的真实页面冒烟。冷启动、首次建库、迁移、恢复、管理员初始化及权限边界保留所需真实验收，分别按变化选择，不捆绑到 WorkspaceSmoke 或其他页面冒烟。
 - 共享组件、公共服务、SDK、元数据、公共注册或生命周期变化，先定位受影响的既有消费者及其 fixture、注册断言和静态门禁，选择对应的定向检查。跨模块引用或被某个 Gate 消费，本身不触发全包、其他验收场景或全仓验证；新增测试通过不能替代既有消费者回归。
+- **模块元数据远端消费者测试**：读取真实模块的 authoring 元数据、动作目录、注册或本地化贡献的测试散落在其他包，模块自己的定向测试覆盖不到，完整 verify 又首败即停，只能一次暴露一个。改动模块的动作（`dataActions`）、`metadata/` 下的 model／view／dic、`plugin.json`／`newp.plugin.json`、依赖或组合成员、迁移 manifest 声明，或前端的页面动作、行动作与本地化键后，各运行一次以下命令，再决定是否需要全仓 verify：
+  - 后端：`dotnet test .\ICP-Platform.sln --filter "Category=ModuleMetadataConsumer"`，约 25 秒（含增量构建），覆盖 Kernel、Persistence、HostApi、Authorization 中读取真实模块的测试类。新增这类测试类时标 `[Trait("Category", "ModuleMetadataConsumer")]`。
+  - 前端：`pnpm --dir frontend --filter @icp-platform/shell test:module-consumers`，约 30 秒。入口自动选取 `packages/shell/src` 下 import 了 `test-support/componentTestInputs` 的测试，新增消费者无需登记。
+  - 前端根脚本 `pnpm --dir frontend test` 还会运行 `test:effect-network-lifecycle` 与 `check:effect-network-lifecycle`，按包定向测试不执行这两项。改动涉及前端网络请求、effect 或订阅生命周期时，另行运行 `pnpm --dir frontend run test:effect-network-lifecycle` 与 `pnpm --dir frontend run check:effect-network-lifecycle`。
+  - 新增这类测试时，对模块贡献的集合（动作、键、数量）从真实计划或 authoring 文件推导期望，不写死精确列表；确需锁定的顺序或互补语义，用合成模块验证。
 - 扩大验证前，由执行者（父子任务由协调者）在现有任务记录中简述：本次改变的行为、已有证据为何不足、较小范围检查还不能证明什么，以及所选范围如何补足。选择依据是具体证据缺口或任务明确要求的交付节点，不以“保险起见”替代判断，也不新增审批或清单文件。
 - 新增或修改涉及真实组件懒加载、异步清理或共享状态的测试时，定向通过后运行一次所属包测试，核对全包负载下的可靠性。复用现有真实模块预加载和可靠清理方式；保留行为断言、默认超时与全局并行配置。
 

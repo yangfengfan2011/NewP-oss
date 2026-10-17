@@ -9,6 +9,7 @@ using Xunit;
 
 namespace ICP.Platform.Persistence.Tests;
 
+[Trait("Category", "ModuleMetadataConsumer")]
 public sealed class PersistenceDeploymentTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "newp-deployment-262-" + Guid.NewGuid().ToString("N"));

@@ -8,8 +8,9 @@ try
     if (values.TryGetValue("--workspace-delivery-input", out var deliveryOutput))
     {
         string Required(string name) => values.GetValueOrDefault(name) ?? throw new ArgumentException($"缺少 {name}。");
+        // baseline 只服务历史升级场景；只准备当前发行物时可省略，登记为空。
         await PublishedComponentAcceptanceFixture.RecordWorkspaceDeliveryAsync(Path.GetFullPath(Required("--repository-root")),
-            Required("--baseline-host-root"), Required("--host-root"), Required("--shell-root"), Required("--package"),
+            values.GetValueOrDefault("--baseline-host-root"), Required("--host-root"), Required("--shell-root"), Required("--package"),
             Path.GetFullPath(deliveryOutput), CancellationToken.None);
         Console.WriteLine($"WORKSPACE_DELIVERY_INPUT: {Path.GetFullPath(deliveryOutput)}");
         return 0;

@@ -15,7 +15,7 @@ namespace ICP.Platform.Acceptance;
 
 internal sealed record PublishedWorkspaceTarget(WorkspaceAcceptanceActor Actor, string ShellOrigin, int HostPort, string? EntryPosition);
 
-internal sealed record WorkspaceDeliveryInput(JsonElement Candidate, string BaselineHostRoot, string HostRoot,
+internal sealed record WorkspaceDeliveryInput(JsonElement Candidate, string? BaselineHostRoot, string HostRoot,
     string ShellRoot, string PackagePath, string HostIdentity, string ShellIdentity, string PackageSha256);
 
 internal enum PublishedWorkspacePreparation { HistoricalUpgrade, CurrentRelease }
@@ -23,7 +23,7 @@ internal enum PublishedWorkspacePreparation { HistoricalUpgrade, CurrentRelease 
 // 历史场景从旧部署升级；当前场景直接初始化发行物，两者共用隔离资源与归属校验。
 internal sealed partial class PublishedComponentAcceptanceFixture(
     string repositoryRoot, string runDirectory, string runId,
-    string baselineHostRoot, string hostRoot, string shellRoot, string packagePath,
+    string? baselineHostRoot, string hostRoot, string shellRoot, string packagePath,
     bool workspaceDelivery = false, WorkspaceDeliveryInput? deliveryInput = null, bool exerciseCompositionLifecycle = false,
     bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false, bool exerciseFileRecoveryMechanisms = true,
     bool exerciseDocumentCopyRecovery = false, bool exerciseDocumentCopyInterruptions = true, bool exerciseDocumentBatchRecovery = false,
@@ -69,16 +69,18 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     }
 
     // 只登记受控构建的输入与来源；不产出裁决，也不授予包信任。Gate 仍走正式安装/Host。
-    internal static async Task RecordWorkspaceDeliveryAsync(string repositoryRoot, string baselineHostRoot,
+    internal static async Task RecordWorkspaceDeliveryAsync(string repositoryRoot, string? baselineHostRoot,
         string hostRoot, string shellRoot, string packagePath, string output, CancellationToken token)
     {
         var fixture = new PublishedComponentAcceptanceFixture(repositoryRoot, Path.GetDirectoryName(output)!, "input",
-            Path.GetFullPath(baselineHostRoot), Path.GetFullPath(hostRoot), Path.GetFullPath(shellRoot), Path.GetFullPath(packagePath), true);
+            FullPathOrNull(baselineHostRoot), Path.GetFullPath(hostRoot), Path.GetFullPath(shellRoot), Path.GetFullPath(packagePath), true);
         var identity = fixture.ReadTargetIdentity();
         var candidate = await ReadCandidateAsync(repositoryRoot, token);
-        await AcceptanceInfrastructure.WriteJsonAsync(output, new WorkspaceDeliveryInput(candidate, Path.GetFullPath(baselineHostRoot),
+        await AcceptanceInfrastructure.WriteJsonAsync(output, new WorkspaceDeliveryInput(candidate, FullPathOrNull(baselineHostRoot),
             Path.GetFullPath(hostRoot), Path.GetFullPath(shellRoot), Path.GetFullPath(packagePath), identity.Host, identity.Shell, FileHash(packagePath)), token);
     }
+
+    private static string? FullPathOrNull(string? path) => string.IsNullOrWhiteSpace(path) ? null : Path.GetFullPath(path);
 
     internal static PublishedComponentAcceptanceFixture FromEnvironment(string repositoryRoot, string runDirectory, string runId) => new(
         repositoryRoot, runDirectory, runId,
@@ -94,9 +96,11 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     {
         if (!Enum.IsDefined(preparation)) throw new ArgumentOutOfRangeException(nameof(preparation));
         var historicalUpgrade = preparation == PublishedWorkspacePreparation.HistoricalUpgrade;
-        if (!historicalUpgrade && (!workspaceDelivery || exerciseCompositionLifecycle || exerciseUninstallRecovery
-            || exerciseFileRecovery || exerciseDocumentCopyRecovery || exerciseDocumentBatchRecovery))
-            throw new InvalidOperationException("当前发行物准备不启用历史升级后的组件或故障恢复演练；请选择相应独立场景。");
+        // 文件、副本、批次恢复自建数据，不读历史升级留下的行或 Link；卸载与组合生命周期依赖旧业务，必须走历史升级。
+        if (!historicalUpgrade && (!workspaceDelivery || exerciseCompositionLifecycle || exerciseUninstallRecovery))
+            throw new InvalidOperationException("当前发行物准备不启用卸载恢复或组合生命周期演练，它们依赖历史升级留下的旧业务；请选择历史升级准备。");
+        if (historicalUpgrade && string.IsNullOrWhiteSpace(baselineHostRoot))
+            throw new InvalidOperationException("历史升级准备需要已有完整正式部署 Host；请用 --baseline-host-root 重新登记，或改用当前发行物场景。");
         _sanitize = sanitize;
         var before = ReadTargetIdentity();
         if (deliveryInput is not null)
@@ -131,7 +135,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             await RunOfflineAsync("install-native", ["--package", packagePath], token);
             await RunOfflineAsync("enable-bundle", ["--package", packagePath], token);
         }
-        var initialHostRoot = historicalUpgrade ? baselineHostRoot : hostRoot;
+        var initialHostRoot = historicalUpgrade ? baselineHostRoot! : hostRoot;
         var bootstrap = await FormalIdentityBootstrap.RunPublishedAsync(repositoryRoot,
             Path.Combine(initialHostRoot, "HostApi.dll"), initialHostRoot,
             Path.Combine(Resources, "bootstrap"), _environment, token);

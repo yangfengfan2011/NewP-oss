@@ -154,37 +154,22 @@ Workspace 有界验收场景消费正式三成员包，不再用静态 dev 装�
 
 历史模式的旧数据由一份已有完整正式部署 Host 的真实 bootstrap/API 建立，随后同一个专用 `NewP_Test` catalog 切换到裁剪目标，正式 `install-native`、`enable-bundle` 后重启。baseline 必须包含三个成员的原实现；它与新目标用途不同。调用方必须提供该已有完整部署 Host 的绝对目录；缺少此历史输入的新环境不能用空库或新裁剪目标替代，也不能伪造已有数据连续性。SQL 管理连接沿用 Acceptance 的 `NEWP_ACCEPTANCE_SQLSERVER_ADMIN_CONNECTION`、`NEWP_DEV_SQLSERVER_CONNECTION_STRING` 和开发配置读取顺序，不把凭据写入交付输入或命令日志。
 
-在仓库根、无其他 build/test/browser 占用时，逐条等待成功后继续。以下是所选场景首次准备所需发行物的入口；后续按实际输入变化选择重建与登记，不因父级收尾重做全部命令。重建资产使用新的输出目录；Host publish 保留 restore 并 Rebuild，避免复用默认全模块的 obj/deps。目标固定后，安装、选版、重启期间不再重建：
+在仓库根、无其他 build/test/browser 占用时，用仓库脚本准备并登记。它按 bundle（build、pack、inspect）、Host 裁剪 publish、Shell、Acceptance 构建、登记的顺序执行，每段计时写入运行目录 `.codex-temp/workspace-delivery/<运行>/timings.json`；失败直接抛出原始命令错误，不产生失败码或裁决文件。Host publish 保留 restore 并 Rebuild，避免复用默认全模块的 obj/deps；目标固定后，安装、选版、重启期间不再重建。
 
 ```powershell
-$repo = (Get-Location).Path
-$deliveryRoot = Join-Path $repo ('.codex-temp/workspace-delivery/' + [guid]::NewGuid().ToString('N'))
-New-Item -ItemType Directory -Path $deliveryRoot | Out-Null
-$baselineHost = (Resolve-Path -LiteralPath '<已有完整正式部署Host的绝对目录>').Path
-$stage = Join-Path $deliveryRoot 'stage'
-$package = Join-Path $deliveryRoot 'components.zip'
-$hostRoot = Join-Path $deliveryRoot 'host'
-$shellRoot = Join-Path $deliveryRoot 'shell'
-$workspaceDeliveryInput = Join-Path $deliveryRoot 'input.json'
-
-dotnet run --project server/tools/component-bundle/ComponentBundle.csproj -c Release -- build $repo InforCenter $stage
-dotnet run --project server/tools/component-bundle/ComponentBundle.csproj -c Release --no-build --no-restore -- pack $stage $package
-dotnet run --project server/tools/component-bundle/ComponentBundle.csproj -c Release --no-build --no-restore -- inspect $package
-dotnet publish apps/host-api/HostApi.csproj -c Release -t:Rebuild -p:DebugType=none -p:DebugSymbols=false -p:IncludeSourceRevisionInInformationalVersion=false -p:NewpExcludedModuleIds=InforCenter%2cWorkspace%2cPart%2cDocument -o $hostRoot
-$env:NEWP_EXCLUDED_MODULE_IDS = 'InforCenter,Workspace,Part,Document'
-try { pnpm --dir frontend --filter @icp-platform/shell exec vite build --outDir $shellRoot }
-finally { Remove-Item Env:NEWP_EXCLUDED_MODULE_IDS -ErrorAction SilentlyContinue }
-dotnet build tests/acceptance/Acceptance.Tests/Acceptance.Tests.csproj -c Release
-dotnet run --project tests/acceptance/Acceptance.Runner/Acceptance.Runner.csproj -c Release --no-build --no-restore -- --workspace-delivery-input $workspaceDeliveryInput --repository-root $repo --baseline-host-root $baselineHost --host-root $hostRoot --shell-root $shellRoot --package $package
-$env:NEWP_ACCEPTANCE_WORKSPACE_DELIVERY_INPUT = $workspaceDeliveryInput
+.\scripts\prepare-workspace-delivery.ps1                        # 只跑 CurrentRelease 场景：不需要 baseline
+.\scripts\prepare-workspace-delivery.ps1 -BaselineHostRoot <已有完整正式部署Host的绝对目录>   # 要跑历史升级场景
+$env:NEWP_ACCEPTANCE_WORKSPACE_DELIVERY_INPUT = Get-Content .codex-temp/workspace-delivery/latest-input.txt
 .\scripts\accept.ps1 -Scenario WorkspaceSmoke_UsesFixedRelease
 ```
+
+脚本按输入摘要复用产物：bundle、Host、Shell 各自对受控路径下的 tracked 与未忽略 untracked 文件内容取摘要（bundle：`server`、`apps`、`frontend`、`tools` 与根构建文件；Host：去掉 `frontend`；Shell：`frontend`），摘要未变且上次产物仍在时直接复用并在 `timings.json` 记为 `reused`；`-Force` 忽略摘要全部重建。摘要只是复用依据，不证明产物来自哪份源码，与下文登记的边界一致。Acceptance 构建走 MSBuild 增量，登记每次都重做，所以只改了测试、文档或脚本时直接重跑本脚本即可：产物摘要未变会全部复用，只重新构建 Acceptance 并登记，不跳过摘要检查。`-BaselineHostRoot` 仅历史升级场景需要，且 baseline 必须位于当前工作树内（例如复制到本工作树的 `.codex-temp` 下）：数据库所有权身份按 Host 所在工作树派生，放在另一个工作树会得到 `PERSISTENCE_DATABASE_IDENTITY_MISMATCH`，脚本会在构建前直接拒绝；省略时登记中不含 baseline，历史模式场景会在创建任何资源前拒绝并提示重新登记。
 
 输入登记会核对裁剪 Host 无三成员程序集、声明目录及 deps 引用，Shell 无对应构建期实现。正式 fixture 使用同一安装根、`ExternalPluginsEnabled=false`、`/plugins/runtime/assets` 与现有 production-shell-server 代理；保留候选/目标前后摘要、原始命令、SQL/API 快照、页面诊断及清理/凭据扫描。证据按所选场景覆盖范围和候选归属汇总，不将页面冒烟结果宣称为历史升级或恢复已通过；普通验证不要求 clean。
 
 Document 初版身份升级采用已确认的开发数据清理前提：固定 baseline 真实建立旧 Document 后，候选 Host 必须在新 step 的 DDL/history 前因非空旧 Document 拒绝。fixture 只清理自身创建的旧 Document 及其 Workspace 入向引用，然后在原 catalog 重试正式 Host 升级；Part、Folder、Identity 与旧历史前缀保持，升级后重新创建 Document 验证完整首版链。该过程不证明旧 Document 数据连续，也不重置整库。
 
-开发时按影响选择最低层或最短页面场景，环境测试默认明确 skip。`WorkspaceSmoke_UsesFixedRelease` 使用 `CurrentRelease`：在本轮独占的空 schema 上正式安装、启用包，再由当前固定 Host bootstrap 并通过 API 准备普通账号和业务数据，沿原 driver 完成页面操作及清理，不重复历史 Host 建数、旧 Document 升级拒绝和历史连续性检查。仍使用同一交付输入、候选与 Host/Shell/包摘要校验、有限角色、隔离资源和归属安全清理；其结果只证明当前页面旅程。进程重启由 `NativeWorkspaceProcessRestart_UsesFixedRelease` 独立覆盖；Document 批次恢复由 `NativeWorkspaceDocumentBatchRecovery_UsesFormalProcesses` 独立覆盖。Native API 历史升级、卸载及文件恢复沿各自入口与准备模式按变化选择，不能绑定到页面冒烟。原 `Workspace_CompletesEveryScenario` 聚合入口退役。
+开发时按影响选择最低层或最短页面场景，环境测试默认明确 skip。`WorkspaceSmoke_UsesFixedRelease` 使用 `CurrentRelease`：在本轮独占的空 schema 上正式安装、启用包，再由当前固定 Host bootstrap 并通过 API 准备普通账号和业务数据，沿原 driver 完成页面操作及清理，不重复历史 Host 建数、旧 Document 升级拒绝和历史连续性检查。仍使用同一交付输入、候选与 Host/Shell/包摘要校验、有限角色、隔离资源和归属安全清理；其结果只证明当前页面旅程。进程重启由 `NativeWorkspaceProcessRestart_UsesFixedRelease` 独立覆盖；Document 批次恢复由 `NativeWorkspaceDocumentBatchRecovery_UsesFormalProcesses` 独立覆盖。文件、文件集合、Document 副本与批次恢复自建文件夹和 Document，不读取历史升级留下的旧行、Link 或文件，使用 `CurrentRelease`，无需 baseline；Native API 历史升级、卸载恢复和父组合生命周期依赖旧业务，沿历史升级入口并需要 `-BaselineHostRoot`。准备模式按变化选择，不能绑定到页面冒烟。原 `Workspace_CompletesEveryScenario` 聚合入口退役。
 
 Workspace 页面冒烟保留正式组件、列表／详情及普通账号一次真实写入和结果消费，适度保留文件上传／下载真实接线；复制、搜索、移动、排序、反向引用、编辑等使用既有独立场景按需验证。呈现采集按[快速验证](../verification/quick-verification.md#界面呈现核对)选择，可对选中场景加 `-Presentation`。下例只运行文件夹副本；按本次行为替换精确方法名，历史连续性或卸载恢复也只选择对应入口：
 

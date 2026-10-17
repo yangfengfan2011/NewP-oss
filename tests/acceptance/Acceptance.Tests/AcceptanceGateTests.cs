@@ -68,7 +68,7 @@ public sealed class AcceptanceGateTests
     {
         var (root, runId) = PrepareRun("native-workspace-document-batch-recovery");
         var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
-            exerciseCompositionLifecycle: false, exerciseDocumentBatchRecovery: true);
+            exerciseCompositionLifecycle: false, exerciseDocumentBatchRecovery: true, preparation: PublishedWorkspacePreparation.CurrentRelease);
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, publishedFixture: fixture,
             includeBrowser: false).RunAsync(CancellationToken.None);
     }
@@ -107,7 +107,7 @@ public sealed class AcceptanceGateTests
     {
         var (root, runId) = PrepareRun("native-workspace-files");
         var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
-            exerciseCompositionLifecycle: false, exerciseFileRecovery: true, exerciseFileRecoveryMechanisms: true);
+            exerciseCompositionLifecycle: false, exerciseFileRecovery: true, exerciseFileRecoveryMechanisms: true, preparation: PublishedWorkspacePreparation.CurrentRelease);
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false,
             publishedFixture: fixture, includeBrowser: false).RunAsync(CancellationToken.None);
     }
@@ -117,7 +117,7 @@ public sealed class AcceptanceGateTests
     {
         var (root, runId) = PrepareRun("native-workspace-file-collection");
         var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
-            exerciseCompositionLifecycle: false, exerciseFileRecovery: true, exerciseFileRecoveryMechanisms: false);
+            exerciseCompositionLifecycle: false, exerciseFileRecovery: true, exerciseFileRecoveryMechanisms: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false,
             publishedFixture: fixture, includeBrowser: false).RunAsync(CancellationToken.None);
     }
@@ -194,7 +194,7 @@ public sealed class AcceptanceGateTests
     {
         var (root, runId) = PrepareRun("native-workspace-document-copy-recovery");
         var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
-            exerciseCompositionLifecycle: false, exerciseDocumentCopyRecovery: true);
+            exerciseCompositionLifecycle: false, exerciseDocumentCopyRecovery: true, preparation: PublishedWorkspacePreparation.CurrentRelease);
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture, includeBrowser: false)
             .RunAsync(CancellationToken.None);
     }
@@ -204,7 +204,7 @@ public sealed class AcceptanceGateTests
     {
         var (root, runId) = PrepareRun("native-workspace-document-copy-committed-recovery");
         var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
-            exerciseCompositionLifecycle: false, exerciseDocumentCopyRecovery: true, exerciseDocumentCopyInterruptions: false);
+            exerciseCompositionLifecycle: false, exerciseDocumentCopyRecovery: true, exerciseDocumentCopyInterruptions: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture, includeBrowser: false)
             .RunAsync(CancellationToken.None);
     }

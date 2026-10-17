@@ -12,22 +12,36 @@ public sealed class WorkspaceAcceptanceFixtureTests
     [Theory]
     [InlineData("composition")]
     [InlineData("uninstall")]
-    [InlineData("files")]
-    [InlineData("copy")]
-    [InlineData("batch")]
     [InlineData("non-workspace")]
     public async Task CurrentPreparation_RejectsHistoricalCoverageRequestsBeforeReadingAssets(string coverage)
     {
         var fixture = new PublishedComponentAcceptanceFixture("missing", "missing", "unused",
             "missing", "missing", "missing", "missing", workspaceDelivery: coverage != "non-workspace",
             exerciseCompositionLifecycle: coverage == "composition", exerciseUninstallRecovery: coverage == "uninstall",
-            exerciseFileRecovery: coverage == "files", exerciseDocumentCopyRecovery: coverage == "copy",
-            exerciseDocumentBatchRecovery: coverage == "batch", preparation: PublishedWorkspacePreparation.CurrentRelease);
+            preparation: PublishedWorkspacePreparation.CurrentRelease);
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.PrepareAsync(
             _ => { }, (_, _) => { }, value => value ?? string.Empty, CancellationToken.None));
 
-        Assert.Contains("当前发行物准备不启用历史升级后的组件或故障恢复演练", error.Message);
+        Assert.Contains("当前发行物准备不启用卸载恢复或组合生命周期演练", error.Message);
+    }
+
+    [Theory]
+    [InlineData("files")]
+    [InlineData("copy")]
+    [InlineData("batch")]
+    public async Task CurrentPreparation_AllowsSelfContainedRecoveryCoverage(string coverage)
+    {
+        var fixture = new PublishedComponentAcceptanceFixture("missing", "missing", "unused",
+            null, "missing", "missing", "missing", workspaceDelivery: true,
+            exerciseFileRecovery: coverage == "files", exerciseDocumentCopyRecovery: coverage == "copy",
+            exerciseDocumentBatchRecovery: coverage == "batch", preparation: PublishedWorkspacePreparation.CurrentRelease);
+
+        // 通过守卫后才会读取不存在的资产；失败原因不应再是覆盖范围被拒。
+        var error = await Record.ExceptionAsync(() => fixture.PrepareAsync(
+            _ => { }, (_, _) => { }, value => value ?? string.Empty, CancellationToken.None));
+
+        Assert.DoesNotContain("当前发行物准备不启用", error?.Message ?? string.Empty);
     }
 
     [Theory]
@@ -68,6 +82,44 @@ public sealed class WorkspaceAcceptanceFixtureTests
 
             Assert.Contains("输入与当前候选或固定发行资产不一致", error.Message);
             Assert.True(File.Exists(Path.Combine(run, "delivery-input-mismatch.json")));
+            Assert.False(Directory.Exists(Path.Combine(run, "resources")));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public async Task DeliveryInput_OmitsBaselineForCurrentReleaseAndHistoricalPreparationRejectsItBeforeReadingAssets()
+    {
+        var repository = new DirectoryInfo(AppContext.BaseDirectory);
+        while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "ICP-Platform.sln"))) repository = repository.Parent;
+        Assert.NotNull(repository);
+        var root = Path.Combine(Path.GetTempPath(), "newp-preparation-" + Guid.NewGuid().ToString("N"));
+        var host = Path.Combine(root, "host");
+        var shell = Path.Combine(root, "shell");
+        Directory.CreateDirectory(host);
+        Directory.CreateDirectory(Path.Combine(shell, ".vite"));
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(host, "HostApi.dll"), "identity-test");
+            await File.WriteAllTextAsync(Path.Combine(host, "HostApi.deps.json"), "{}");
+            await File.WriteAllTextAsync(Path.Combine(shell, "index.html"), "identity-test");
+            await File.WriteAllTextAsync(Path.Combine(shell, ".vite", "manifest.json"), "{}");
+            var package = Path.Combine(root, "package.zip");
+            await File.WriteAllTextAsync(package, "identity-test");
+            var inputPath = Path.Combine(root, "input.json");
+            await PublishedComponentAcceptanceFixture.RecordWorkspaceDeliveryAsync(repository.FullName, null, host, shell,
+                package, inputPath, CancellationToken.None);
+            var input = JsonSerializer.Deserialize<WorkspaceDeliveryInput>(await File.ReadAllTextAsync(inputPath), AcceptanceJson.Options)!;
+            Assert.Null(input.BaselineHostRoot);
+            var run = Path.Combine(root, "run");
+            Directory.CreateDirectory(run);
+            var fixture = new PublishedComponentAcceptanceFixture(repository.FullName, run, "unused", input.BaselineHostRoot, host, shell,
+                package, workspaceDelivery: true, deliveryInput: input, preparation: PublishedWorkspacePreparation.HistoricalUpgrade);
+
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.PrepareAsync(
+                _ => { }, (_, _) => { }, value => value ?? string.Empty, CancellationToken.None));
+
+            Assert.Contains("历史升级准备需要已有完整正式部署 Host", error.Message);
             Assert.False(Directory.Exists(Path.Combine(run, "resources")));
         }
         finally { Directory.Delete(root, recursive: true); }

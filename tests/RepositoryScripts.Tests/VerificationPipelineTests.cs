@@ -25,7 +25,7 @@ public sealed class VerificationPipelineTests : IDisposable
 
         Assert.True(preflightIndex > verification.LastIndexOf("$currentStage = \"dotnet-build\"", StringComparison.Ordinal));
         Assert.True(preflightIndex < verification.IndexOf("$currentStage = \"dotnet-test\"", StringComparison.Ordinal));
-        Assert.True(preflightIndex < verification.IndexOf("foreach ($gate in $AcceptanceGate)", StringComparison.Ordinal));
+        Assert.True(preflightIndex < verification.IndexOf("foreach ($scenario in $AcceptanceScenario)", StringComparison.Ordinal));
         Assert.Equal(1, CountOccurrences(verification, preflightStage));
         Assert.Equal(2, CountOccurrences(preflightBlock, "\"--no-build\""));
         Assert.DoesNotContain("\"build\"", preflightBlock, StringComparison.Ordinal);
@@ -46,7 +46,7 @@ public sealed class VerificationPipelineTests : IDisposable
         var preflightIndex = FindSingle(commands, "migration-manifest/MigrationManifest.csproj");
         var dotnetTestIndex = FindSingle(commands, "dotnet test ICP-Platform.sln");
         var frontendTestIndex = FindSingle(commands, "corepack pnpm --dir frontend test");
-        var acceptanceIndex = FindSingle(commands, "acceptance -Gate Personnel -NoBuild");
+        var acceptanceIndex = FindSingle(commands, "acceptance -Scenario NativeWorkspaceFolderEdit_UsesFormalDriver -NoBuild");
 
         Assert.True(buildIndex < preflightIndex);
         Assert.True(preflightIndex < dotnetTestIndex);
@@ -69,7 +69,7 @@ public sealed class VerificationPipelineTests : IDisposable
         var lintIndex = FindSingle(commands, "corepack pnpm --dir frontend lint");
         Assert.True(lintIndex < FindSingle(commands, "corepack pnpm --dir frontend test"));
         Assert.True(lintIndex < FindSingle(commands, "corepack pnpm --dir frontend build"));
-        Assert.True(lintIndex < FindSingle(commands, "acceptance -Gate Personnel -NoBuild"));
+        Assert.True(lintIndex < FindSingle(commands, "acceptance -Scenario NativeWorkspaceFolderEdit_UsesFormalDriver -NoBuild"));
     }
 
     [Fact]
@@ -117,6 +117,70 @@ public sealed class VerificationPipelineTests : IDisposable
         Assert.Contains(Fixture.PreflightDiagnostic, File.ReadAllText(stageLogPath), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void VerificationPipeline_PassesOnlyExplicitScenariosAndHasNoAcceptanceDefault()
+    {
+        var fixture = InitializeFixture(preflightFails: false);
+        var result = RunVerification(fixture, scenarios: null);
+        Assert.Equal(0, result.ExitCode);
+        Assert.DoesNotContain(File.ReadAllLines(fixture.CommandLogPath), command => command.StartsWith("acceptance "));
+        File.WriteAllText(fixture.CommandLogPath, string.Empty);
+        result = RunVerification(fixture, scenarios: "NativeWorkspaceFolderEdit_UsesFormalDriver,NativeWorkspacePartEdit_UsesFormalDriver");
+        Assert.Equal(0, result.ExitCode);
+        var commands = File.ReadAllLines(fixture.CommandLogPath);
+        Assert.Contains("acceptance -Scenario NativeWorkspaceFolderEdit_UsesFormalDriver -NoBuild", commands);
+        Assert.Contains("acceptance -Scenario NativeWorkspacePartEdit_UsesFormalDriver -NoBuild", commands);
+        Assert.Equal(2, commands.Count(command => command.StartsWith("acceptance ")));
+    }
+
+    [Fact]
+    public void VerificationPipeline_RejectsRetiredAcceptanceGate()
+    {
+        var fixture = InitializeFixture(preflightFails: false);
+        var result = RunVerification(fixture, scenarios: "Workspace", legacyGate: true);
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.False(File.Exists(fixture.CommandLogPath));
+    }
+    [Fact]
+    public void VerificationPipeline_WhenSelectedScenarioFails_StopsBeforeNextScenario()
+    {
+        var fixture = InitializeFixture(preflightFails: false);
+        File.AppendAllText(Path.Combine(fixture.Root, "scripts", "accept.ps1"), "exit 37\r\n");
+        var result = RunVerification(fixture, scenarios: "NativeWorkspaceFolderEdit_UsesFormalDriver,NativeWorkspacePartEdit_UsesFormalDriver");
+        Assert.Equal(1, result.ExitCode);
+        var commands = File.ReadAllLines(fixture.CommandLogPath);
+        Assert.Single(commands, command => command.StartsWith("acceptance "));
+        using var document = JsonDocument.Parse(File.ReadAllText(fixture.CurrentResultPath));
+        Assert.Equal("acceptance-NativeWorkspaceFolderEdit_UsesFormalDriver", document.RootElement.GetProperty("failureStage").GetString());
+    }
+
+    [Theory]
+    [InlineData("All")]
+    [InlineData("Workspace")]
+    [InlineData("SomeMethod|FullyQualifiedName~Other")]
+    [InlineData("SomeMethod,")]
+    public void VerificationPipeline_RejectsInvalidScenariosBeforeStages(string scenarios)
+    {
+        var fixture = InitializeFixture(preflightFails: false);
+        var result = RunVerification(fixture, scenarios: scenarios);
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.False(File.Exists(fixture.CommandLogPath));
+    }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void VerificationPipeline_WithInheritedAcceptanceEnvironment_ExcludesScenarioClassFromSolutionTests(bool selectScenario)
+    {
+        var fixture = InitializeFixture(preflightFails: false);
+        var result = RunVerification(fixture, scenarios: selectScenario ? "NativeWorkspaceFolderEdit_UsesFormalDriver" : null, inheritedAcceptance: true);
+        Assert.Equal(0, result.ExitCode);
+        var commands = File.ReadAllLines(fixture.CommandLogPath);
+        var solutionTest = commands[FindSingle(commands, "dotnet test ICP-Platform.sln")];
+        Assert.Contains("--filter FullyQualifiedName!~ICP.Platform.Acceptance.Tests.AcceptanceGateTests.", solutionTest);
+        Assert.Contains(commands, command => command.TrimEnd() == "inherited-acceptance=1;workspace=1;component=1;presentation=1");
+        if (selectScenario) Assert.Contains("acceptance -Scenario NativeWorkspaceFolderEdit_UsesFormalDriver -NoBuild", commands);
+        else Assert.DoesNotContain(commands, command => command.StartsWith("acceptance "));
+    }
     public void Dispose()
     {
         if (!Directory.Exists(_fixtureRoot))
@@ -157,6 +221,7 @@ public sealed class VerificationPipelineTests : IDisposable
             Path.Combine(shimRoot, "dotnet.cmd"),
             "@echo off\r\n" +
             "echo dotnet %*>>\"%NEWP_FAKE_COMMAND_LOG%\"\r\n" +
+            "if \"%1\"==\"test\" echo inherited-acceptance=%NEWP_RUN_ACCEPTANCE%;workspace=%NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE%;component=%NEWP_RUN_NATIVE_COMPONENT_ACCEPTANCE%;presentation=%NEWP_ACCEPTANCE_PRESENTATION% >>\"%NEWP_FAKE_COMMAND_LOG%\"\r\n" +
             "echo %*| findstr /C:\"migration-manifest/MigrationManifest.csproj\" >nul\r\n" +
             "if errorlevel 1 exit /b 0\r\n" +
             "if not \"%NEWP_FAKE_PREFLIGHT_FAIL%\"==\"1\" exit /b 0\r\n" +
@@ -187,7 +252,7 @@ public sealed class VerificationPipelineTests : IDisposable
             lintFails);
     }
 
-    private ProcessResult RunVerification(Fixture fixture, bool quick = true)
+    private ProcessResult RunVerification(Fixture fixture, bool quick = true, string? scenarios = "NativeWorkspaceFolderEdit_UsesFormalDriver", bool legacyGate = false, bool inheritedAcceptance = false)
     {
         var environment = new Dictionary<string, string?>
         {
@@ -196,12 +261,16 @@ public sealed class VerificationPipelineTests : IDisposable
             ["NEWP_FAKE_PREFLIGHT_FAIL"] = fixture.PreflightFails ? "1" : "0",
             ["NEWP_FAKE_LINT_FAIL"] = fixture.LintFails ? "1" : "0"
         };
+        if (inheritedAcceptance)
+        {
+            foreach (var name in new[] { "NEWP_RUN_ACCEPTANCE", "NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "NEWP_RUN_NATIVE_COMPONENT_ACCEPTANCE", "NEWP_ACCEPTANCE_PRESENTATION" }) environment[name] = "1";
+        }
         List<string> arguments = ["-NoProfile", "-File", Path.Combine(fixture.Root, "scripts", "verify.ps1")];
         if (quick)
         {
             arguments.Add("-Quick");
         }
-        arguments.AddRange(["-AcceptanceGate", "Personnel"]);
+        if (scenarios is not null) arguments.AddRange([legacyGate ? "-AcceptanceGate" : "-AcceptanceScenario", scenarios]);
         return RunProcess(
             "pwsh",
             arguments,

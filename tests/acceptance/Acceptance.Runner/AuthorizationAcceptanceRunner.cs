@@ -100,7 +100,7 @@ internal sealed class AuthorizationAcceptanceRunner(string repositoryRoot, strin
             var workbench = new AuthorizationWorkbenchPageDriver(page);
             await page.Locator(".np-sidebar-menu").GetByRole(AriaRole.Link, new() { Name = "角色管理", Exact = true }).ClickAsync();
             var row = await new StandardCrudPageDriver(page).WaitForRowAsync(roleName);
-            await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "role-list-baseline.png"), FullPage = true });
+            await AcceptancePresentation.CaptureAsync(page, Path.Combine(_runDirectory, "role-list-baseline.png"));
             await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
             await page.GetByRole(AriaRole.Menuitem, new() { Name = "配置权限", Exact = true }).ClickAsync();
             var roleCode = "AUTH-" + _runId[..8];
@@ -108,21 +108,27 @@ internal sealed class AuthorizationAcceptanceRunner(string repositoryRoot, strin
             await workbench.ClickFirstVisibleFeatureCheckboxAsync();
             await workbench.SaveAsync(roleId);
             await workbench.WaitForRoleButtonEnabledAsync(roleName, roleCode);
-            await workbench.WaitForSavePresentationFinishedAsync();
-            await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "workbench.png"), FullPage = true });
-            await page.SetViewportSizeAsync(900, 1000);
-            await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "workbench-narrow.png"), FullPage = true });
-            await page.SetViewportSizeAsync(1440, 1000);
+            if (AcceptancePresentation.Enabled)
+            {
+                await workbench.WaitForSavePresentationFinishedAsync();
+                await AcceptancePresentation.CaptureAsync(page, Path.Combine(_runDirectory, "workbench.png"));
+                await page.SetViewportSizeAsync(900, 1000);
+                await AcceptancePresentation.CaptureAsync(page, Path.Combine(_runDirectory, "workbench-narrow.png"));
+                await page.SetViewportSizeAsync(1440, 1000);
+            }
             var rules = new DataScopeRulesPageDriver(page);
             await rules.CreatePersonRuleAsync("人员读取规则", roleName, department,
-                () => page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "department-subject-candidates.png"), FullPage = true }),
+                AcceptancePresentation.Enabled ? () => AcceptancePresentation.CaptureAsync(page, Path.Combine(_runDirectory, "department-subject-candidates.png")) : null,
                 includeCompositeCondition: true, includeRuleTree: true,
-                captureDraftGuard: () => page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "data-scope-tree-draft-guard.png"), FullPage = true }));
+                captureDraftGuard: AcceptancePresentation.Enabled ? () => AcceptancePresentation.CaptureAsync(page, Path.Combine(_runDirectory, "data-scope-tree-draft-guard.png")) : null);
             await rules.ReloadRuleAsync("人员读取规则", roleName, department,
                 expectCompositeCondition: true, expectRuleTree: true);
-            await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "data-scope-rules.png"), FullPage = true });
-            await page.SetViewportSizeAsync(900, 1000);
-            await page.ScreenshotAsync(new() { Path = Path.Combine(_runDirectory, "data-scope-rules-narrow.png"), FullPage = true });
+            await AcceptancePresentation.CaptureAsync(page, Path.Combine(_runDirectory, "data-scope-rules.png"));
+            if (AcceptancePresentation.Enabled)
+            {
+                await page.SetViewportSizeAsync(900, 1000);
+                await AcceptancePresentation.CaptureAsync(page, Path.Combine(_runDirectory, "data-scope-rules-narrow.png"));
+            }
         }
         catch (Exception failure)
         {

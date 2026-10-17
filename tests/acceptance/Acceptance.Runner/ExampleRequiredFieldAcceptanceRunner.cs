@@ -375,6 +375,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
         page.SetDefaultNavigationTimeout(120_000);
         async Task CapturePageAsync(string name)
         {
+            if (!AcceptancePresentation.Enabled) return;
             var path = Path.Combine(_runDirectory, "example-required-field", name);
             await page.ScreenshotAsync(new PageScreenshotOptions { Path = path, FullPage = true,
                 Animations = ScreenshotAnimations.Disabled, Mask = [page.Locator("input, textarea")] });
@@ -417,8 +418,11 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
             var detailDrawer = driver.VisibleDrawer();
             await detailDrawer.GetByText("查看记录", new LocatorGetByTextOptions { Exact = true }).WaitForAsync();
             await AssertLocatorContainsAsync(detailDrawer, _browserCode, "browser detail reached");
-            await page.ScreenshotAsync(new PageScreenshotOptions { Path = screenshotPath, FullPage = true, Animations = ScreenshotAnimations.Disabled });
-            AddArtifact(screenshotPath);
+            if (AcceptancePresentation.Enabled)
+            {
+                await AcceptancePresentation.CaptureAsync(page, screenshotPath);
+                AddArtifact(screenshotPath);
+            }
 
             await RecordScenarioSuccessAsync(
                 BrowserScenario,
@@ -436,7 +440,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
                         "create-write-appears-in-list",
                         "detail-reachable"
                     },
-                    screenshot = "example-required-field/browser.png"
+                    screenshot = AcceptancePresentation.Enabled ? "example-required-field/browser.png" : null
                 },
                 cancellationToken);
         }

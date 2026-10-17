@@ -9,7 +9,7 @@ using Microsoft.Playwright;
 namespace ICP.Platform.Acceptance;
 
 /// <summary>Workspace 的同一正式浏览器旅程及其专用测试库、Host 和凭据生命周期。</summary>
-internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string runDirectory, string runId, bool includeSpaceLifecycle = true,
+internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string runDirectory, string runId, bool includeSpaceLifecycle = false,
     Func<IPage, CancellationToken, Task>? browserJourney = null,
     Func<AcceptanceFeatureCatalog, IReadOnlyList<FeaturePoint>>? selectFeatures = null,
     Func<HttpClient, AcceptanceFeatureCatalog, WorkspaceAcceptanceActor, CancellationToken, Task>? prepareJourney = null,
@@ -174,79 +174,27 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
                 await CapturePresentationAsync(page, "personal-root.png");
                 await driver.SelectRootAsync("公共空间");
             }
+            // 页面冒烟只保留代表性接线；生命周期和其他业务动作由独立场景选择，不在这里累积。
             var folderName = $"工作空间旅程文件夹 {_runId[..8]}";
-            var siblingName = $"工作空间复制目录 {_runId[..8]}";
-            var moveTarget = $"工作空间移动目录 {_runId[..8]}";
-            var orderNeighbor = $"工作空间排序相邻文件夹 {_runId[..8]}";
-            await driver.CreateFolderAsync(siblingName);
-            await driver.CreateFolderAsync(moveTarget);
             await driver.CreateFolderAsync(folderName);
-            await CapturePresentationAsync(page, "folder-content.png");
             var properties = await driver.OpenFolderPropertiesAsync(folderName);
             await CapturePresentationAsync(page, "folder-properties.png");
-            var references = await driver.OpenDirectReferencesAsync(properties, "公共空间");
-            var referencingFolder = await driver.OpenReferencingFolderPropertiesAsync(references, "公共空间");
-            await driver.ClosePropertiesAsync(referencingFolder);
-            await driver.CloseDirectReferencesAsync(references);
             await driver.ClosePropertiesAsync(properties);
             var folderAddress = await driver.SelectTreePathAsync("公共空间", folderName);
             await driver.CreateObjectAsync("零组件", PartCode, PartName);
-            var attachments = WorkspacePageDriver.SmallAttachmentFiles();
-            await driver.CreateDocumentWithFilesAsync(DocumentCode, DocumentName, WorkspacePageDriver.SmallMainFile(), attachments: attachments);
-            await driver.CopyReferenceFromContextMenuAsync(PartName);
-            var objectCopyAddress = await driver.SelectTreePathAsync("公共空间", siblingName);
-            await driver.PastePartCopyAsync(PartCode + "-COPY", PartName + " 副本", _ => CapturePresentationAsync(page, "part-copy-input.png"));
-            await driver.OpenOwnedPropertiesAsync(PartName + " 副本", "/parts");
-            await driver.RestorePositionAsync(objectCopyAddress, "公共空间", siblingName);
-            await driver.EditObjectAsync(PartName + " 副本", PartName + " 副本已编辑");
-            await driver.DeleteSelectedAsync(PartName + " 副本已编辑");
-            await driver.DocumentBatchCopyJourneyAsync(folderAddress, folderName, siblingName, DocumentCode, DocumentName, Path.Combine(_runDirectory, "batch-copy-download.pdf"), name => CapturePresentationAsync(page, name));
-            await driver.SelectRootAsync("个人空间");
-            await driver.RestorePositionAsync(folderAddress, "公共空间", folderName);
             await driver.OpenOwnedPropertiesAsync(PartName, "/parts");
-            references = await driver.OpenDirectReferencesAsync(page.GetByRole(AriaRole.Main), folderName);
-            await driver.CloseDirectReferencesAsync(references);
+            await CapturePresentationAsync(page, "part-properties.png");
             await driver.RestorePositionAsync(folderAddress, "公共空间", folderName);
+            await driver.CreateDocumentWithFilesAsync(DocumentCode, DocumentName, WorkspacePageDriver.SmallMainFile());
             await driver.OpenOwnedPropertiesAsync(DocumentName, "/documents");
-            foreach (var file in new[] { WorkspacePageDriver.SmallMainFile() }.Concat(attachments))
-                await driver.DownloadFileAsync(file.Name, Path.Combine(_runDirectory, "download-" + file.Name));
+            await driver.DownloadFileAsync(WorkspacePageDriver.SmallMainFile().Name, Path.Combine(_runDirectory, "download-workspace-main.pdf"));
+            await CapturePresentationAsync(page, "document-properties.png");
             await driver.RestorePositionAsync(folderAddress, "公共空间", folderName);
-            await driver.SearchAndSelectFolderAsync(folderName, ["公共空间", folderName],
-                () => CapturePresentationAsync(page, "folder-search-source.png"));
-            await driver.CopyFolderFromTreeContextMenuAsync(folderName, selectedOnly: true);
-            await driver.SelectTreePathAsync("公共空间", siblingName);
-            await driver.PasteReferencesAsync(folderName);
-            await driver.PasteFolderCopyAsync("浅副本 " + _runId[..8], () => CapturePresentationAsync(page, "folder-copy-input.png"));
-            await driver.PasteFolderStructureAsync("结构副本 " + _runId[..8], () => CapturePresentationAsync(page, "folder-structure-input.png"));
-            await driver.SelectTreePathAsync("公共空间", moveTarget);
-            await driver.CreateFolderAsync(orderNeighbor);
-            var searchedAddress = await driver.SearchAndSelectFolderAsync(folderName, ["公共空间", siblingName, folderName],
-                () => CapturePresentationAsync(page, "folder-search-shared-paths.png"));
-            await driver.CutFolderFromTreeContextMenuAsync(folderName, selectedOnly: true);
-            await driver.SelectTreePathAsync("公共空间", moveTarget);
-            await driver.PasteCutReferencesAsync(folderName);
-            await driver.RestoreMissingPositionAsync(searchedAddress);
-            await driver.SearchAndSelectFolderAsync(folderName, ["公共空间", moveTarget, folderName]);
-            await driver.ReorderFolderAsync(folderName, "up", selectedOnly: true);
-            await driver.SelectTreePathAsync("公共空间", moveTarget);
-            await driver.RemoveSelectedReferencesAsync([folderName, orderNeighbor],
-                _ => CapturePresentationAsync(page, "remove-references-confirm.png"));
-            await driver.SearchAndSelectFolderAsync(folderName, ["公共空间", folderName]);
-            await driver.RemoveReferenceAsync(PartName);
-            await driver.CreateObjectAsync("零组件", PartCode + "-NEXT", PartName + " 新建");
-            await CapturePresentationAsync(page, "folder-content-before-edit.png");
-            await driver.EditObjectFromContextMenuAsync(DocumentName, DocumentName + " 已编辑");
-            await driver.EditObjectAsync(PartName + " 新建", PartName + " 已编辑");
-            await CapturePresentationAsync(page, "folder-content-edited.png");
-            await driver.DeleteSelectedAsync(DocumentName + " 已编辑", PartName + " 已编辑");
-            // 新副本保留自己的对象图；移除其入向引用后，原目标才恢复既有空目录删除前提。
-            await driver.SelectTreePathAsync("公共空间", siblingName);
-            await driver.RemoveSelectedReferencesAsync(["浅副本 " + _runId[..8], "结构副本 " + _runId[..8]]);
-            await driver.SelectRootAsync("公共空间");
-            await driver.EditObjectAsync(folderName, folderName + " 已编辑");
-            await driver.DeleteSelectedAsync(siblingName, moveTarget, folderName + " 已编辑");
+            await new StandardCrudPageDriver(page).WaitForRowAsync(PartName);
+            await new StandardCrudPageDriver(page).WaitForRowAsync(DocumentName);
+            // 样本留给本轮隔离资源清理；不为页面清场重复业务删除旅程。
             await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(_runDirectory, "browser.json"),
-                new { url = page.Url, actor = "ordinary", createdFolder = folderName, includeSpaceLifecycle }, token);
+                new { url = page.Url, actor = "ordinary", createdFolder = folderName, includeSpaceLifecycle, journey = "workspace-smoke" }, token);
         }
         catch (Exception failure)
         {
@@ -265,10 +213,8 @@ internal sealed class WorkspaceAcceptanceRunner(string repositoryRoot, string ru
         }
     }
 
-    private Task CapturePresentationAsync(IPage page, string name) => page.ScreenshotAsync(new()
-    {
-        Path = Path.Combine(_runDirectory, name), FullPage = true, Animations = ScreenshotAnimations.Disabled
-    });
+    private Task CapturePresentationAsync(IPage page, string name) =>
+        AcceptancePresentation.CaptureAsync(page, Path.Combine(_runDirectory, name));
 
     // 独立准备重启样本，再在同一 catalog 跨真实 Host 重启比较空间、根与混合关系；重启后只读，不补建内容。
     private async Task VerifyProcessRestartAsync(CancellationToken token)

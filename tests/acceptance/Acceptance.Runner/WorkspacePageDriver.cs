@@ -499,27 +499,30 @@ internal sealed class WorkspacePageDriver(IPage page)
         return drawer;
     }
 
-    /// <summary>父Gate和定向冒烟复用同一集合片段：准备第二源、逐行确认、详情下载、编辑删除及语言/窄容器。</summary>
+    /// <summary>父Gate和定向冒烟复用同一集合片段：准备第二源、逐行确认、详情下载与编辑删除；按需补语言/窄容器呈现。</summary>
     internal async Task DocumentBatchCopyJourneyAsync(string sourceAddress, string sourceFolderName, string targetFolderName,
         string firstCode, string firstName, string downloadPath, Func<string, Task> capture)
     {
         var secondName = firstName + " 第二份"; var firstCopy = firstName + " 独立副本"; var secondCopy = firstName + " 第二份副本";
         await RestorePositionAsync(sourceAddress, "公共空间", sourceFolderName);
-        await CreateDocumentWithFilesAsync(firstCode + "-B", secondName, SmallMainFile(), _ => capture("document-batch-create-reference.png"), SmallAttachmentFiles());
+        await CreateDocumentWithFilesAsync(firstCode + "-B", secondName, SmallMainFile(), AcceptancePresentation.Enabled ? _ => capture("document-batch-create-reference.png") : null, SmallAttachmentFiles());
         await CopySelectedAsync(firstName, secondName);
         var targetAddress = await SelectTreePathAsync("公共空间", targetFolderName);
         await PasteDocumentCopiesAsync([(firstName, firstCode + "-COPY-A", firstCopy), (secondName, firstCode + "-COPY-B", secondCopy)],
-            async drawer => {
+            AcceptancePresentation.Enabled ? async drawer => {
                 await capture("document-batch-input-zhs.png"); await page.SetViewportSizeAsync(900, 1000); await capture("document-batch-input-zhs-narrow.png");
                 await drawer.Locator(".ant-drawer-body").EvaluateAsync("node => node.scrollTop = node.scrollHeight"); await capture("document-batch-input-zhs-narrow-bottom.png");
                 await page.SetViewportSizeAsync(1440, 1000);
-            }, () => capture("document-batch-result.png"));
-        await SelectLanguageAsync("English"); var english = await OpenDocumentCopiesAsync(english: true);
-        await capture("document-batch-input-en.png"); await page.SetViewportSizeAsync(900, 1000); await capture("document-batch-input-en-narrow.png");
-        await english.Locator(".ant-drawer-body").EvaluateAsync("node => node.scrollTop = node.scrollHeight"); await capture("document-batch-input-en-narrow-bottom.png");
-        await page.SetViewportSizeAsync(1440, 1000); await new StandardCrudPageDriver(page).CloseDrawerAsync(english); await SelectLanguageAsync("简体中文");
+            } : null, AcceptancePresentation.Enabled ? () => capture("document-batch-result.png") : null);
+        if (AcceptancePresentation.Enabled)
+        {
+            await SelectLanguageAsync("English"); var english = await OpenDocumentCopiesAsync(english: true);
+            await capture("document-batch-input-en.png"); await page.SetViewportSizeAsync(900, 1000); await capture("document-batch-input-en-narrow.png");
+            await english.Locator(".ant-drawer-body").EvaluateAsync("node => node.scrollTop = node.scrollHeight"); await capture("document-batch-input-en-narrow-bottom.png");
+            await page.SetViewportSizeAsync(1440, 1000); await new StandardCrudPageDriver(page).CloseDrawerAsync(english); await SelectLanguageAsync("简体中文");
+        }
         await OpenOwnedPropertiesAsync(firstCopy, "/documents"); await DownloadFileAsync(SmallMainFile().Name, downloadPath);
-        await capture("document-batch-properties.png");
+        if (AcceptancePresentation.Enabled) await capture("document-batch-properties.png");
         await RestorePositionAsync(targetAddress, "公共空间", targetFolderName); await EditObjectAsync(firstCopy, firstCopy + " 已编辑");
         await DeleteSelectedAsync(firstCopy + " 已编辑", secondCopy);
         await RestorePositionAsync(sourceAddress, "公共空间", sourceFolderName); await DeleteSelectedAsync(secondName);

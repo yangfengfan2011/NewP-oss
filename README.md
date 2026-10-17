@@ -39,14 +39,14 @@ dotnet run --project .\apps\host-api\HostApi.csproj -- identity bootstrap-local-
 ## 验证
 
 ```powershell
-# 当前任务的定向测试优先；开发循环使用：
+# 当前任务先选所属项目/包的定向测试；确需全仓检查的快速变体时使用：
 .\scripts\verify.ps1 -Quick
 
-# 合并前的全量验证：
+# 交付约定或实际影响需要全仓检查时使用，不附带验收：
 .\scripts\verify.ps1
 
-# 需要终局验收时显式选择 Gate：
-.\scripts\verify.ps1 -AcceptanceGate IdentityFoundation,Personnel
+# 只补本次行为需要的精确场景，例如文件夹编辑：
+.\scripts\accept.ps1 -Scenario NativeWorkspaceFolderEdit_UsesFormalDriver
 ```
 
 验证证据写入 `.codex-temp/verify/`，无需从截断的终端输出推断结果。

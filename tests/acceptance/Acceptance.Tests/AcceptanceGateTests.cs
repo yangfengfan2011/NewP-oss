@@ -44,12 +44,33 @@ public sealed class AcceptanceGateTests
         await new AuthorizationAcceptanceRunner(RepositoryRoot, root, runId).RunAsync(CancellationToken.None);
     }
 
-    [EnvironmentGatedFact(RunEnvironmentVariable, "工作空间双根入口、普通账号与同库真实 Host 进程重启")]
-    public async Task Workspace_CompletesEveryScenario()
+    [EnvironmentGatedFact(RunEnvironmentVariable, "当前固定发行物的Folder/Part/Document代表性页面接线，不包含历史升级或恢复演练")]
+    public async Task WorkspaceSmoke_UsesFixedRelease()
     {
-        var (root, runId) = PrepareRun("workspace");
+        var (root, runId) = PrepareRun("workspace-smoke");
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId,
-            publishedFixture: PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseFileRecovery: true, exerciseFileRecoveryMechanisms: true, exerciseDocumentBatchRecovery: true)).RunAsync(CancellationToken.None);
+            publishedFixture: PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+                exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease)).RunAsync(CancellationToken.None);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "当前正式Host同库重启后保持空间、根和混合引用身份，不重放页面或历史升级")]
+    public async Task NativeWorkspaceProcessRestart_UsesFixedRelease()
+    {
+        var (root, runId) = PrepareRun("native-workspace-process-restart");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: true,
+            publishedFixture: fixture, includeBrowser: false).RunAsync(CancellationToken.None);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "仅验证正式Document批次复制的进程中断与恢复，不重放Part或页面旅程")]
+    public async Task NativeWorkspaceDocumentBatchRecovery_UsesFormalProcesses()
+    {
+        var (root, runId) = PrepareRun("native-workspace-document-batch-recovery");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, exerciseDocumentBatchRecovery: true);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, publishedFixture: fixture,
+            includeBrowser: false).RunAsync(CancellationToken.None);
     }
 
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "三成员固定发行物与旧 Workspace/Part/Document 行、Link、历史连续性")]
@@ -58,6 +79,16 @@ public sealed class AcceptanceGateTests
         var (root, runId) = PrepareRun("native-workspace-api");
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false,
             publishedFixture: PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId),
+            includeBrowser: false).RunAsync(CancellationToken.None);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "仅验证父组件屏蔽与恢复成员自身选择，不重放页面或文件故障恢复")]
+    public async Task NativeWorkspaceCompositionLifecycle_UsesFixedRelease()
+    {
+        var (root, runId) = PrepareRun("native-workspace-composition");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: true);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, publishedFixture: fixture,
             includeBrowser: false).RunAsync(CancellationToken.None);
     }
 
@@ -91,54 +122,63 @@ public sealed class AcceptanceGateTests
             publishedFixture: fixture, includeBrowser: false).RunAsync(CancellationToken.None);
     }
 
-    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "三成员包通过正式 Workspace driver 打开旧内容、属性并创建一次对象")]
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "三成员包直接初始化当前发行物，通过正式 Workspace driver 打开本轮内容、属性并创建一次对象")]
     public async Task NativeWorkspace_UsesFormalDriver()
     {
         var (root, runId) = PrepareRun("native-workspace");
-        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseCompositionLifecycle: false);
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
             browserJourney: async (page, token) =>
             {
                 var driver = new WorkspacePageDriver(page);
-                Task CaptureAsync(string name) => page.ScreenshotAsync(new()
-                { Path = Path.Combine(root, name), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                Task CaptureAsync(string name) => AcceptancePresentation.CaptureAsync(page, Path.Combine(root, name));
                 await driver.OpenAsync();
                 await driver.SelectRootAsync("公共空间");
                 await new StandardCrudPageDriver(page).WaitForRowAsync(fixture.ExistingFolderName);
                 await CaptureAsync("workspace-content.png");
                 var properties = await driver.OpenFolderPropertiesAsync(fixture.ExistingFolderName);
                 await CaptureAsync("workspace-properties.png");
-                await page.SetViewportSizeAsync(900, 1000);
-                await CaptureAsync("workspace-properties-narrow.png");
+                if (AcceptancePresentation.Enabled)
+                {
+                    await page.SetViewportSizeAsync(900, 1000);
+                    await CaptureAsync("workspace-properties-narrow.png");
+                }
                 await driver.ClosePropertiesAsync(properties);
-                await page.SetViewportSizeAsync(1440, 1000);
+                if (AcceptancePresentation.Enabled)
+                {
+                    await page.SetViewportSizeAsync(1440, 1000);
+                }
                 var folderAddress = await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
                 var attachments = WorkspacePageDriver.SmallAttachmentFiles();
-                await driver.CreateDocumentWithFilesAsync("ACC-WS-D-" + runId[..8], "归组图文档旅程 " + runId[..8], WorkspacePageDriver.SmallMainFile(), async _ =>
+                await driver.CreateDocumentWithFilesAsync("ACC-WS-D-" + runId[..8], "归组图文档旅程 " + runId[..8], WorkspacePageDriver.SmallMainFile(), AcceptancePresentation.Enabled ? async _ =>
                 {
                     await CaptureAsync("workspace-create.png");
                     await page.SetViewportSizeAsync(900, 1000);
                     await CaptureAsync("workspace-create-narrow.png");
                     await page.SetViewportSizeAsync(1440, 1000);
-                }, attachments: attachments);
+                } : null, attachments: attachments);
                 await CaptureAsync("workspace-created-content.png");
                 var documentName = "归组图文档旅程 " + runId[..8];
                 await driver.OpenOwnedPropertiesAsync(documentName, "/documents");
                 foreach (var file in new[] { WorkspacePageDriver.SmallMainFile() }.Concat(attachments))
                     await driver.DownloadFileAsync(file.Name, Path.Combine(root, "download-" + file.Name));
                 await CaptureAsync("workspace-document-properties.png");
-                // 完整详情无遮挡时使用既有 Shell 语言控件，轻量核对集合面板的两种语言布局。
-                await driver.SelectLanguageAsync("English");
-                await page.GetByRole(AriaRole.Region, new() { Name = "Files", Exact = true })
-                    .GetByRole(AriaRole.Button, new() { Name = "Download", Exact = true }).First
-                    .WaitForAsync(new() { State = WaitForSelectorState.Visible });
-                await CaptureAsync("workspace-document-properties-en.png");
-                await page.SetViewportSizeAsync(900, 1000);
-                await CaptureAsync("workspace-document-properties-en-narrow.png");
-                await page.SetViewportSizeAsync(1440, 1000);
-                await driver.SelectLanguageAsync("简体中文");
-                await page.GetByRole(AriaRole.Region, new() { Name = "文件", Exact = true })
-                    .WaitForAsync(new() { State = WaitForSelectorState.Visible });
+                if (AcceptancePresentation.Enabled)
+                {
+                    // 完整详情无遮挡时使用既有 Shell 语言控件，轻量核对集合面板的两种语言布局。
+                    await driver.SelectLanguageAsync("English");
+                    await page.GetByRole(AriaRole.Region, new() { Name = "Files", Exact = true })
+                        .GetByRole(AriaRole.Button, new() { Name = "Download", Exact = true }).First
+                        .WaitForAsync(new() { State = WaitForSelectorState.Visible });
+                    await CaptureAsync("workspace-document-properties-en.png");
+                    await page.SetViewportSizeAsync(900, 1000);
+                    await CaptureAsync("workspace-document-properties-en-narrow.png");
+                    await page.SetViewportSizeAsync(1440, 1000);
+                    await driver.SelectLanguageAsync("简体中文");
+                    await page.GetByRole(AriaRole.Region, new() { Name = "文件", Exact = true })
+                        .WaitForAsync(new() { State = WaitForSelectorState.Visible });
+                }
                 await driver.RestorePositionAsync(folderAddress, "公共空间", fixture.ExistingFolderName);
                 await driver.EditObjectAsync(documentName, documentName + " 已编辑");
                 await CaptureAsync("workspace-document-edited.png");
@@ -169,30 +209,40 @@ public sealed class AcceptanceGateTests
             .RunAsync(CancellationToken.None);
     }
 
-    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "正式Document完整文件副本通过Workspace driver确认、查看下载、编辑删除及双语输入，并清理本轮资源")]
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "正式Document完整文件副本通过Workspace driver确认、查看下载、编辑删除，按需补双语呈现并清理本轮资源")]
     public async Task NativeWorkspaceDocumentCopy_UsesFormalDriver()
     {
         var (root, runId) = PrepareRun("native-workspace-document-copy");
-        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseCompositionLifecycle: false);
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
             browserJourney: async (page, token) =>
             {
                 var driver = new WorkspacePageDriver(page); var suffix = runId[..8];
                 var name = "图文档副本来源 " + suffix; var copied = "完整图文档副本 " + suffix; var target = "图文档副本目标 " + suffix;
-                Task Capture(string file) => page.ScreenshotAsync(new() { Path = Path.Combine(root, file), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                Task Capture(string file) => AcceptancePresentation.CaptureAsync(page, Path.Combine(root, file));
                 await driver.OpenAsync(); await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName); var sourceAddress = page.Url;
                 await driver.CreateDocumentWithFilesAsync("ACC-DOC-SOURCE-" + suffix, name, WorkspacePageDriver.SmallMainFile(),
-                    _ => Capture("document-create-reference.png"), WorkspacePageDriver.SmallAttachmentFiles());
+                    AcceptancePresentation.Enabled ? _ => Capture("document-create-reference.png") : null, WorkspacePageDriver.SmallAttachmentFiles());
                 await driver.CopyReferenceFromContextMenuAsync(name);
                 await driver.SelectRootAsync("公共空间"); await driver.CreateFolderAsync(target);
                 var targetAddress = await driver.SelectTreePathAsync("公共空间", target);
-                await driver.PasteObjectCopyAsync("ACC-DOC-COPY-" + suffix, copied, async _ => {
-                    await Capture("document-copy-input-zhs.png"); await page.SetViewportSizeAsync(900, 1000); await Capture("document-copy-input-zhs-narrow.png"); await page.SetViewportSizeAsync(1440, 1000);
-                });
+                await driver.PasteObjectCopyAsync("ACC-DOC-COPY-" + suffix, copied, AcceptancePresentation.Enabled ? async _ => {
+                    await Capture("document-copy-input-zhs.png");
+                    await page.SetViewportSizeAsync(900, 1000);
+                    await Capture("document-copy-input-zhs-narrow.png");
+                    await page.SetViewportSizeAsync(1440, 1000);
+                } : null);
                 await Capture("document-copy-created.png");
-                await driver.SelectLanguageAsync("English"); var english = await driver.OpenObjectCopyAsync(english: true);
-                await Capture("document-copy-input-en.png"); await page.SetViewportSizeAsync(900, 1000); await Capture("document-copy-input-en-narrow.png"); await page.SetViewportSizeAsync(1440, 1000);
-                await new StandardCrudPageDriver(page).CloseDrawerAsync(english); await driver.SelectLanguageAsync("简体中文");
+                if (AcceptancePresentation.Enabled)
+                {
+                    await driver.SelectLanguageAsync("English"); var english = await driver.OpenObjectCopyAsync(english: true);
+                    await Capture("document-copy-input-en.png");
+                    await page.SetViewportSizeAsync(900, 1000);
+                    await Capture("document-copy-input-en-narrow.png");
+                    await page.SetViewportSizeAsync(1440, 1000);
+                    await new StandardCrudPageDriver(page).CloseDrawerAsync(english); await driver.SelectLanguageAsync("简体中文");
+                }
                 await driver.OpenOwnedPropertiesAsync(copied, "/documents"); await driver.DownloadFileAsync(WorkspacePageDriver.SmallMainFile().Name, Path.Combine(root, "copy-main.pdf")); await Capture("document-copy-properties.png");
                 await driver.RestorePositionAsync(targetAddress, "公共空间", target); await driver.EditObjectAsync(copied, copied + " 已编辑"); await driver.DeleteSelectedAsync(copied + " 已编辑");
                 await driver.RestorePositionAsync(sourceAddress, "公共空间", fixture.ExistingFolderName); await driver.OpenOwnedPropertiesAsync(name, "/documents");
@@ -203,11 +253,12 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
-    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "仅补结果呈现采样：实际多文档正式提交结果沿同一driver等待动画并清理，不重放OS或完整旅程")]
+    [EnvironmentGatedFact("NEWP_ACCEPTANCE_PRESENTATION", "仅补结果呈现采样：实际多文档正式提交结果沿同一driver等待动画并清理，不重放OS或完整旅程")]
     public async Task NativeWorkspaceDocumentBatchResult_PresentsFormalModal()
     {
         var (root, runId) = PrepareRun("native-workspace-document-batch-result");
-        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseCompositionLifecycle: false);
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
             browserJourney: async (page, token) => {
                 var driver = new WorkspacePageDriver(page); var suffix = runId[..8];
@@ -216,76 +267,72 @@ public sealed class AcceptanceGateTests
                 await driver.CreateDocumentWithFilesAsync("RESULT-SOURCE-" + suffix, source, WorkspacePageDriver.SmallMainFile());
                 await driver.CopySelectedAsync(fixture.ExistingDocumentName, source);
                 await driver.PasteDocumentCopiesAsync([(fixture.ExistingDocumentName, "RESULT-A-" + suffix, first), (source, "RESULT-B-" + suffix, second)],
-                    captureResult: () => page.ScreenshotAsync(new() { Path = Path.Combine(root, "document-batch-result-stable.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled }));
+                    captureResult: AcceptancePresentation.Enabled ? () => AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "document-batch-result-stable.png")) : null);
                 await driver.DeleteSelectedAsync(first, second, source);
                 await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"), new { actor = "ordinary", journey = "document-batch-result-presentation" }, token);
             }).RunAsync(CancellationToken.None);
     }
 
-    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "同一正式旅程分别执行单Part和多Document，集合实际进程中断/重启恢复与双语逐行输入、结果及后续清理")]
-    public Task NativeWorkspaceObjectCopyBatch_UsesFormalDriverAndRecovery() => RunObjectCopyBatchAsync(true);
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "仅验证正式多Document页面片段及后续清理；进程恢复使用独立入口")]
+    public Task NativeWorkspaceDocumentBatch_UsesFormalDriver() => RunDocumentBatchAsync();
 
-    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "复用已有效的OS和Part证据，仅恢复同一正式多Document页面片段及后续清理")]
-    public Task NativeWorkspaceDocumentBatch_UsesFormalDriver() => RunObjectCopyBatchAsync(false);
-
-    // 返修只运行依赖受影响的页面；默认完整Gate仍组合Part和批次恢复，不改变发行物合同。
-    private async Task RunObjectCopyBatchAsync(bool includeRecoveryAndPart)
+    // 两个定向入口复用批次片段，由调用者显式选择是否组合 Part 和进程恢复。
+    private async Task RunDocumentBatchAsync()
     {
-        var (root, runId) = PrepareRun(includeRecoveryAndPart ? "native-workspace-object-copy-batch" : "native-workspace-document-batch");
+        var (root, runId) = PrepareRun("native-workspace-document-batch");
         var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
-            exerciseCompositionLifecycle: false, exerciseDocumentBatchRecovery: includeRecoveryAndPart);
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
             browserJourney: async (page, token) => {
                 var driver = new WorkspacePageDriver(page); var suffix = runId[..8];
-                var part = "批次旅程零组件 " + suffix; var document = "批次旅程图文档 " + suffix; var target = "批次旅程目标 " + suffix;
-                Task Capture(string name) => page.ScreenshotAsync(new() { Path = Path.Combine(root, name), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                var document = "批次旅程图文档 " + suffix; var target = "批次旅程目标 " + suffix;
+                Task Capture(string name) => AcceptancePresentation.CaptureAsync(page, Path.Combine(root, name));
                 await driver.OpenAsync(); await driver.SelectRootAsync("公共空间"); await driver.CreateFolderAsync(target);
                 await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName); var sourceAddress = page.Url;
-                if (includeRecoveryAndPart) await driver.CreateObjectAsync("零组件", "BATCH-PART-" + suffix, part);
                 await driver.CreateDocumentWithFilesAsync("BATCH-DOC-" + suffix, document, WorkspacePageDriver.SmallMainFile(), attachments: WorkspacePageDriver.SmallAttachmentFiles());
-                if (includeRecoveryAndPart)
-                {
-                    await driver.CopyReferenceFromContextMenuAsync(part); var targetAddress = await driver.SelectTreePathAsync("公共空间", target);
-                    await driver.PastePartCopyAsync("BATCH-PART-COPY-" + suffix, part + " 副本", _ => Capture("batch-part-input.png"));
-                    await driver.OpenOwnedPropertiesAsync(part + " 副本", "/parts"); await driver.RestorePositionAsync(targetAddress, "公共空间", target);
-                    await driver.EditObjectAsync(part + " 副本", part + " 副本已编辑"); await driver.DeleteSelectedAsync(part + " 副本已编辑");
-                }
                 await driver.DocumentBatchCopyJourneyAsync(sourceAddress, fixture.ExistingFolderName, target, "BATCH-DOC-" + suffix, document, Path.Combine(root, "batch-copy-download.pdf"), Capture);
-                await driver.DeleteSelectedAsync(includeRecoveryAndPart ? [part, document] : [document]); await driver.SelectRootAsync("公共空间"); await driver.DeleteSelectedAsync(target);
-                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"), new { url = page.Url, actor = "ordinary", journey = includeRecoveryAndPart ? "part-and-document-batch-copy" : "document-batch-copy" }, token);
+                await driver.DeleteSelectedAsync(document); await driver.SelectRootAsync("公共空间"); await driver.DeleteSelectedAsync(target);
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"), new { url = page.Url, actor = "ordinary", journey = "document-batch-copy" }, token);
             }).RunAsync(CancellationToken.None);
     }
-    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "正式三成员包的单Part真副本、查看、独立编辑删除与双语输入沿唯一Workspace driver贯通")]
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "正式三成员包的单Part真副本、查看、独立编辑删除沿唯一Workspace driver贯通，按需补双语呈现")]
     public async Task NativeWorkspaceObjectCopy_UsesFormalDriver()
     {
         var (root, runId) = PrepareRun("native-workspace-object-copy");
-        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseCompositionLifecycle: false);
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
             browserJourney: async (page, token) =>
             {
                 var driver = new WorkspacePageDriver(page);
                 var name = "真实副本来源 " + runId[..8]; var copied = "真实独立副本 " + runId[..8]; var target = "对象副本目标 " + runId[..8];
-                Task Capture(string file) => page.ScreenshotAsync(new() { Path = Path.Combine(root, file), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                Task Capture(string file) => AcceptancePresentation.CaptureAsync(page, Path.Combine(root, file));
                 await driver.OpenAsync(); await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
                 var sourceAddress = page.Url;
-                await driver.CreateObjectAsync("零组件", "ACC-COPY-SOURCE-" + runId[..8], name, _ => Capture("part-create-reference.png"));
+                await driver.CreateObjectAsync("零组件", "ACC-COPY-SOURCE-" + runId[..8], name, AcceptancePresentation.Enabled ? _ => Capture("part-create-reference.png") : null);
                 await driver.CopyReferenceFromContextMenuAsync(name);
                 await driver.SelectRootAsync("公共空间"); await driver.CreateFolderAsync(target);
                 var targetAddress = await driver.SelectTreePathAsync("公共空间", target);
-                await driver.PastePartCopyAsync("ACC-COPY-TARGET-" + runId[..8], copied, async _ =>
+                await driver.PastePartCopyAsync("ACC-COPY-TARGET-" + runId[..8], copied, AcceptancePresentation.Enabled ? async _ =>
                 {
                     await Capture("object-copy-input-zhs.png");
-                    await page.SetViewportSizeAsync(900, 1000); await Capture("object-copy-input-zhs-narrow.png");
+                    await page.SetViewportSizeAsync(900, 1000);
+                    await Capture("object-copy-input-zhs-narrow.png");
                     await page.SetViewportSizeAsync(1440, 1000);
-                });
+                } : null);
                 await Capture("object-copy-created.png");
                 // 复用copy来源的双语确认应在当前页面实例完成；进入独立详情和Goto恢复会按合同清空剪贴板。
-                await driver.SelectLanguageAsync("English");
-                var english = await driver.OpenObjectCopyAsync(english: true);
-                await Capture("object-copy-input-en.png"); await page.SetViewportSizeAsync(900, 1000);
-                await Capture("object-copy-input-en-narrow.png"); await page.SetViewportSizeAsync(1440, 1000);
-                await new StandardCrudPageDriver(page).CloseDrawerAsync(english);
-                await driver.SelectLanguageAsync("简体中文");
+                if (AcceptancePresentation.Enabled)
+                {
+                    await driver.SelectLanguageAsync("English");
+                    var english = await driver.OpenObjectCopyAsync(english: true);
+                    await Capture("object-copy-input-en.png");
+                    await page.SetViewportSizeAsync(900, 1000);
+                    await Capture("object-copy-input-en-narrow.png");
+                    await page.SetViewportSizeAsync(1440, 1000);
+                    await new StandardCrudPageDriver(page).CloseDrawerAsync(english);
+                    await driver.SelectLanguageAsync("简体中文");
+                }
                 await driver.OpenOwnedPropertiesAsync(copied, "/parts"); await Capture("object-copy-properties.png");
                 await driver.RestorePositionAsync(targetAddress, "公共空间", target);
                 await driver.EditObjectAsync(copied, copied + " 已编辑"); await driver.DeleteSelectedAsync(copied + " 已编辑");
@@ -302,7 +349,8 @@ public sealed class AcceptanceGateTests
     public async Task NativeWorkspaceFolderCopy_UsesFormalDriver()
     {
         var (root, runId) = PrepareRun("native-workspace-folder-copy");
-        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseCompositionLifecycle: false);
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
             browserJourney: async (page, token) =>
             {
@@ -313,43 +361,85 @@ public sealed class AcceptanceGateTests
                 var copyTarget = "副本目标 " + runId[..8];
                 await driver.CreateFolderAsync(copyTarget);
                 await driver.SelectTreePathAsync("公共空间", copyTarget);
-                await driver.PasteFolderCopyAsync("浅副本 " + runId[..8], async () =>
+                await driver.PasteFolderCopyAsync("浅副本 " + runId[..8], AcceptancePresentation.Enabled ? async () =>
                 {
-                    await page.ScreenshotAsync(new() { Path = Path.Combine(root, "copy-input-zhs.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                    await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "copy-input-zhs.png"));
                     await page.SetViewportSizeAsync(900, 1000);
-                    await page.ScreenshotAsync(new() { Path = Path.Combine(root, "copy-input-zhs-narrow.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                    await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "copy-input-zhs-narrow.png"));
                     await page.SetViewportSizeAsync(1440, 1000);
-                });
-                await page.ScreenshotAsync(new() { Path = Path.Combine(root, "copy-result.png"), FullPage = true });
-                await driver.PasteFolderStructureAsync("结构副本 " + runId[..8], async () =>
+                } : null);
+                await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "copy-result.png"));
+                await driver.PasteFolderStructureAsync("结构副本 " + runId[..8], AcceptancePresentation.Enabled ? async () =>
                 {
-                    await page.ScreenshotAsync(new() { Path = Path.Combine(root, "structure-input-zhs.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                    await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "structure-input-zhs.png"));
                     await page.SetViewportSizeAsync(900, 1000);
-                    await page.ScreenshotAsync(new() { Path = Path.Combine(root, "structure-input-zhs-narrow.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                    await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "structure-input-zhs-narrow.png"));
                     await page.SetViewportSizeAsync(1440, 1000);
-                });
-                await page.ScreenshotAsync(new() { Path = Path.Combine(root, "structure-result.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
-                await driver.SelectLanguageAsync("English");
-                await new StandardCrudPageDriver(page).ClickPageActionAsync("Paste folder copy");
-                var dialog = page.GetByRole(AriaRole.Dialog, new() { Name = "Paste folder copy", Exact = true });
-                await Assertions.Expect(dialog.GetByRole(AriaRole.Textbox, new() { Name = "New folder name", Exact = true })).ToBeEnabledAsync();
-                await page.ScreenshotAsync(new() { Path = Path.Combine(root, "copy-input-en.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
-                await page.SetViewportSizeAsync(900, 1000);
-                await page.ScreenshotAsync(new() { Path = Path.Combine(root, "copy-input-en-narrow.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
-                await dialog.GetByRole(AriaRole.Button, new() { Name = "Cancel", Exact = true }).ClickAsync();
-                await page.SetViewportSizeAsync(1440, 1000);
-                await new StandardCrudPageDriver(page).ClickPageActionAsync("Paste folder structure");
-                dialog = page.GetByRole(AriaRole.Dialog, new() { Name = "Paste folder structure", Exact = true });
-                await Assertions.Expect(dialog.GetByRole(AriaRole.Textbox, new() { Name = "New folder name", Exact = true })).ToBeEnabledAsync();
-                await page.ScreenshotAsync(new() { Path = Path.Combine(root, "structure-input-en.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
-                await page.SetViewportSizeAsync(900, 1000);
-                await page.ScreenshotAsync(new() { Path = Path.Combine(root, "structure-input-en-narrow.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
-                await dialog.GetByRole(AriaRole.Button, new() { Name = "Cancel", Exact = true }).ClickAsync();
-                await driver.SelectLanguageAsync("简体中文");
+                } : null);
+                await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "structure-result.png"));
+                if (AcceptancePresentation.Enabled)
+                {
+                    await driver.SelectLanguageAsync("English");
+                    await new StandardCrudPageDriver(page).ClickPageActionAsync("Paste folder copy");
+                    var dialog = page.GetByRole(AriaRole.Dialog, new() { Name = "Paste folder copy", Exact = true });
+                    await Assertions.Expect(dialog.GetByRole(AriaRole.Textbox, new() { Name = "New folder name", Exact = true })).ToBeEnabledAsync();
+                    await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "copy-input-en.png"));
+                    await page.SetViewportSizeAsync(900, 1000);
+                    await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "copy-input-en-narrow.png"));
+                    await dialog.GetByRole(AriaRole.Button, new() { Name = "Cancel", Exact = true }).ClickAsync();
+                    await page.SetViewportSizeAsync(1440, 1000);
+                    await new StandardCrudPageDriver(page).ClickPageActionAsync("Paste folder structure");
+                    dialog = page.GetByRole(AriaRole.Dialog, new() { Name = "Paste folder structure", Exact = true });
+                    await Assertions.Expect(dialog.GetByRole(AriaRole.Textbox, new() { Name = "New folder name", Exact = true })).ToBeEnabledAsync();
+                    await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "structure-input-en.png"));
+                    await page.SetViewportSizeAsync(900, 1000);
+                    await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "structure-input-en-narrow.png"));
+                    await dialog.GetByRole(AriaRole.Button, new() { Name = "Cancel", Exact = true }).ClickAsync();
+                    await driver.SelectLanguageAsync("简体中文");
+                }
                 await driver.RemoveSelectedReferencesAsync(["浅副本 " + runId[..8], "结构副本 " + runId[..8]]);
                 await driver.SelectRootAsync("公共空间");
                 await driver.DeleteSelectedAsync(copyTarget);
-                await page.ScreenshotAsync(new() { Path = Path.Combine(root, "copy-target-deleted.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "copy-target-deleted.png"));
+            }).RunAsync(CancellationToken.None);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通账号定位已有零组件，编辑后通过正式地址重新读取")]
+    public Task NativeWorkspacePartEdit_UsesFormalDriver() => RunWorkspaceEditAsync("part");
+
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通账号定位已有图文档，编辑后通过正式地址重新读取")]
+    public Task NativeWorkspaceDocumentEdit_UsesFormalDriver() => RunWorkspaceEditAsync("document");
+
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通账号定位已有文件夹，编辑后通过正式地址重新读取")]
+    public Task NativeWorkspaceFolderEdit_UsesFormalDriver() => RunWorkspaceEditAsync("folder");
+
+    // 每种对象独立运行最短编辑路径，复用当前发行物种子与同一普通账号。
+    private async Task RunWorkspaceEditAsync(string kind)
+    {
+        var (root, runId) = PrepareRun("native-workspace-" + kind + "-edit");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
+            browserJourney: async (page, token) =>
+            {
+                var driver = new WorkspacePageDriver(page);
+                await driver.OpenAsync();
+                await driver.SelectRootAsync("公共空间");
+                var labels = kind == "folder" ? new[] { "公共空间" } : new[] { "公共空间", fixture.ExistingFolderName };
+                var address = kind == "folder" ? page.Url : await driver.SelectTreePathAsync(labels);
+                var name = kind switch
+                {
+                    "part" => fixture.ExistingName,
+                    "document" => fixture.ExistingDocumentName,
+                    "folder" => fixture.ExistingFolderName,
+                    _ => throw new ArgumentOutOfRangeException(nameof(kind))
+                };
+                var editedName = name + " 已编辑";
+                await driver.EditObjectAsync(name, editedName);
+                await driver.RestorePositionAsync(address, labels);
+                await new StandardCrudPageDriver(page).WaitForRowAsync(editedName);
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
+                    new { url = page.Url, actor = "ordinary", journey = kind + "-edit" }, token);
             }).RunAsync(CancellationToken.None);
     }
 
@@ -357,13 +447,13 @@ public sealed class AcceptanceGateTests
     public async Task NativeWorkspaceContextMenus_UseFormalDriver()
     {
         var (root, runId) = PrepareRun("native-workspace-context-menus");
-        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseCompositionLifecycle: false);
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
             browserJourney: async (page, token) =>
             {
                 var driver = new WorkspacePageDriver(page);
-                Task CaptureAsync(string name) => page.ScreenshotAsync(new()
-                { Path = Path.Combine(root, name), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                Task CaptureAsync(string name) => AcceptancePresentation.CaptureAsync(page, Path.Combine(root, name));
                 var folder = "菜单文件夹 " + runId[..8];
                 var document = "菜单图文档 " + runId[..8];
                 await driver.OpenAsync();
@@ -372,11 +462,14 @@ public sealed class AcceptanceGateTests
                 await driver.ExpandRootToFolderAsync("公共空间", folder);
                 await driver.SelectTreePathAsync("公共空间", folder);
                 await driver.CreateDocumentWithFilesAsync("MENU-D-" + runId[..8], document, WorkspacePageDriver.SmallMainFile());
-                await driver.EditObjectFromContextMenuAsync(document, document + " 已编辑", () => CaptureAsync("list-context-menu.png"));
-                await driver.EditFolderFromTreeContextMenuAsync(folder, folder + " 已编辑", () => CaptureAsync("tree-context-menu.png"));
+                await driver.EditObjectFromContextMenuAsync(document, document + " 已编辑", AcceptancePresentation.Enabled ? () => CaptureAsync("list-context-menu.png") : null);
+                await driver.EditFolderFromTreeContextMenuAsync(folder, folder + " 已编辑", AcceptancePresentation.Enabled ? () => CaptureAsync("tree-context-menu.png") : null);
                 await CaptureAsync("context-menu-saved.png");
-                await page.SetViewportSizeAsync(900, 1000);
-                await CaptureAsync("context-menu-saved-narrow.png");
+                if (AcceptancePresentation.Enabled)
+                {
+                    await page.SetViewportSizeAsync(900, 1000);
+                    await CaptureAsync("context-menu-saved-narrow.png");
+                }
                 await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
                     new { url = page.Url, actor = "ordinary", journey = "workspace-context-menus" }, token);
             }).RunAsync(CancellationToken.None);
@@ -386,13 +479,13 @@ public sealed class AcceptanceGateTests
     public async Task NativeWorkspaceTreeOrder_UsesFormalDriver()
     {
         var (root, runId) = PrepareRun("native-workspace-tree-order");
-        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseCompositionLifecycle: false);
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
             browserJourney: async (page, token) =>
             {
                 var driver = new WorkspacePageDriver(page);
-                Task CaptureAsync(string name) => page.ScreenshotAsync(new()
-                { Path = Path.Combine(root, name), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                Task CaptureAsync(string name) => AcceptancePresentation.CaptureAsync(page, Path.Combine(root, name));
                 var previous = "排序相邻文件夹 " + runId[..8];
                 var target = "排序目标文件夹 " + runId[..8];
                 await driver.OpenAsync();
@@ -400,11 +493,14 @@ public sealed class AcceptanceGateTests
                 await driver.CreateFolderAsync(previous);
                 await driver.CreateFolderAsync(target);
                 await driver.ExpandRootToFolderAsync("公共空间", target);
-                await driver.ReorderFolderAsync(target, "up", () => CaptureAsync("tree-order-menu.png"));
+                await driver.ReorderFolderAsync(target, "up", AcceptancePresentation.Enabled ? () => CaptureAsync("tree-order-menu.png") : null);
                 await driver.ReorderFolderAsync(target, "down");
                 await CaptureAsync("tree-order-saved.png");
-                await page.SetViewportSizeAsync(900, 1000);
-                await CaptureAsync("tree-order-saved-narrow.png");
+                if (AcceptancePresentation.Enabled)
+                {
+                    await page.SetViewportSizeAsync(900, 1000);
+                    await CaptureAsync("tree-order-saved-narrow.png");
+                }
                 await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
                     new { url = page.Url, actor = "ordinary", journey = "workspace-tree-order" }, token);
             }).RunAsync(CancellationToken.None);
@@ -414,13 +510,13 @@ public sealed class AcceptanceGateTests
     public async Task NativeWorkspaceCopyPaste_UsesFormalDriver()
     {
         var (root, runId) = PrepareRun("native-workspace-copy-paste");
-        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseCompositionLifecycle: false);
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
             browserJourney: async (page, token) =>
             {
                 var driver = new WorkspacePageDriver(page);
-                Task CaptureAsync(string name) => page.ScreenshotAsync(new()
-                { Path = Path.Combine(root, name), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                Task CaptureAsync(string name) => AcceptancePresentation.CaptureAsync(page, Path.Combine(root, name));
                 var source = "复制来源 A " + runId[..8];
                 var targetB = "粘贴目录 B " + runId[..8];
                 var targetC = "粘贴目录 C " + runId[..8];
@@ -431,14 +527,14 @@ public sealed class AcceptanceGateTests
                 await driver.SelectRootAsync("公共空间");
                 foreach (var name in new[] { source, targetB, targetC, copiedFolder }) await driver.CreateFolderAsync(name);
                 await driver.ExpandRootToFolderAsync("公共空间", copiedFolder);
-                await driver.CopyFolderFromTreeContextMenuAsync(copiedFolder, () => CaptureAsync("clipboard-tree-menu.png"));
+                await driver.CopyFolderFromTreeContextMenuAsync(copiedFolder, AcceptancePresentation.Enabled ? () => CaptureAsync("clipboard-tree-menu.png") : null);
                 await driver.SelectTreePathAsync("公共空间", targetB);
                 await driver.PasteReferencesAsync(copiedFolder);
                 await driver.SelectTreePathAsync("公共空间", source);
                 await driver.CreateDocumentWithFilesAsync("COPY-D-" + runId[..8], document, WorkspacePageDriver.SmallMainFile(),
                     attachments: WorkspacePageDriver.SmallAttachmentFiles());
                 await driver.CreateObjectAsync("零组件", "COPY-P-" + runId[..8], part);
-                await driver.CopyReferenceFromContextMenuAsync(document, () => CaptureAsync("clipboard-row-menu.png"));
+                await driver.CopyReferenceFromContextMenuAsync(document, AcceptancePresentation.Enabled ? () => CaptureAsync("clipboard-row-menu.png") : null);
                 await driver.SelectTreePathAsync("公共空间", targetB);
                 await driver.PasteReferencesAsync(document);
                 await driver.SelectTreePathAsync("公共空间", targetC);
@@ -448,18 +544,21 @@ public sealed class AcceptanceGateTests
                 await driver.SelectTreePathAsync("公共空间", targetC);
                 await driver.PasteReferencesAsync(part);
                 await CaptureAsync("clipboard-pasted.png");
-                var localizedRead = page.WaitForResponseAsync(response => response.Request.Method == "GET"
-                    && new Uri(response.Url).AbsolutePath == "/api/links/workspace.content");
-                await driver.SelectLanguageAsync("English");
-                var localizedResponse = await localizedRead;
-                if (!localizedResponse.Ok) throw new InvalidOperationException($"切换语言后的列表读取失败：{localizedResponse.Status}");
-                await localizedResponse.FinishedAsync();
-                await page.GetByRole(AriaRole.Button, new() { Name = "Paste references", Exact = true })
-                    .WaitForAsync(new() { State = WaitForSelectorState.Visible });
-                await new StandardCrudPageDriver(page).WaitForRowAsync(document);
-                await new StandardCrudPageDriver(page).WaitForRowAsync(part);
-                await Assertions.Expect(page.Locator(".np-tree-content .ant-spin-spinning")).ToHaveCountAsync(0);
-                await CaptureAsync("clipboard-pasted-en.png");
+                if (AcceptancePresentation.Enabled)
+                {
+                    var localizedRead = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+                        && new Uri(response.Url).AbsolutePath == "/api/links/workspace.content");
+                    await driver.SelectLanguageAsync("English");
+                    var localizedResponse = await localizedRead;
+                    if (!localizedResponse.Ok) throw new InvalidOperationException($"切换语言后的列表读取失败：{localizedResponse.Status}");
+                    await localizedResponse.FinishedAsync();
+                    await page.GetByRole(AriaRole.Button, new() { Name = "Paste references", Exact = true })
+                        .WaitForAsync(new() { State = WaitForSelectorState.Visible });
+                    await new StandardCrudPageDriver(page).WaitForRowAsync(document);
+                    await new StandardCrudPageDriver(page).WaitForRowAsync(part);
+                    await Assertions.Expect(page.Locator(".np-tree-content .ant-spin-spinning")).ToHaveCountAsync(0);
+                    await CaptureAsync("clipboard-pasted-en.png");
+                }
                 await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
                     new { url = page.Url, actor = "ordinary", journey = "workspace-copy-paste" }, token);
             }).RunAsync(CancellationToken.None);
@@ -469,13 +568,13 @@ public sealed class AcceptanceGateTests
     public async Task NativeWorkspaceCutAndRemove_UsesFormalDriver()
     {
         var (root, runId) = PrepareRun("native-workspace-cut-remove");
-        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseCompositionLifecycle: false);
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
             browserJourney: async (page, token) =>
             {
                 var driver = new WorkspacePageDriver(page);
-                Task CaptureAsync(string name) => page.ScreenshotAsync(new()
-                { Path = Path.Combine(root, name), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                Task CaptureAsync(string name) => AcceptancePresentation.CaptureAsync(page, Path.Combine(root, name));
                 var folder = "待移动文件夹 " + runId[..8];
                 var targetB = "移动目录 B " + runId[..8];
                 var targetC = "移动目录 C " + runId[..8];
@@ -488,7 +587,7 @@ public sealed class AcceptanceGateTests
                 await driver.CreateDocumentWithFilesAsync("CUT-D-" + runId[..8], document, WorkspacePageDriver.SmallMainFile(),
                     attachments: WorkspacePageDriver.SmallAttachmentFiles());
                 await driver.CreateObjectAsync("零组件", "CUT-P-" + runId[..8], part);
-                await driver.CutFolderFromTreeContextMenuAsync(folder, () => CaptureAsync("cut-tree-menu.png"));
+                await driver.CutFolderFromTreeContextMenuAsync(folder, AcceptancePresentation.Enabled ? () => CaptureAsync("cut-tree-menu.png") : null);
                 await driver.SelectTreePathAsync("公共空间", targetB);
                 await CaptureAsync("cut-pending.png");
                 await driver.PasteCutReferencesAsync(folder);
@@ -497,24 +596,27 @@ public sealed class AcceptanceGateTests
                 await driver.SelectTreePathAsync("公共空间", targetC);
                 await driver.PasteCutReferencesAsync(document, part);
                 await CaptureAsync("cut-pasted.png");
-                await driver.RemoveSelectedReferencesAsync([document, part], async dialog =>
+                await driver.RemoveSelectedReferencesAsync([document, part], AcceptancePresentation.Enabled ? async dialog =>
                 {
                     await dialog.EvaluateAsync("async element => { await new Promise(requestAnimationFrame); await Promise.all(element.getAnimations({subtree:true}).map(animation => animation.finished.catch(() => {}))); }");
                     await CaptureAsync("remove-references-confirm.png");
-                });
+                } : null);
                 var deletedFolder = "工具栏删除验证 " + runId[..8];
                 await driver.CreateFolderAsync(deletedFolder);
                 await driver.DeleteSelectedAsync(deletedFolder);
-                var localizedRead = page.WaitForResponseAsync(response => response.Request.Method == "GET"
-                    && new Uri(response.Url).AbsolutePath == "/api/links/workspace.content");
-                await driver.SelectLanguageAsync("English");
-                var localizedResponse = await localizedRead;
-                if (!localizedResponse.Ok) throw new InvalidOperationException($"切换语言后的列表读取失败：{localizedResponse.Status}");
-                await localizedResponse.FinishedAsync();
-                await page.GetByRole(AriaRole.Button, new() { Name = "Remove", Exact = true })
-                    .WaitForAsync(new() { State = WaitForSelectorState.Visible });
-                await Assertions.Expect(page.Locator(".np-tree-content .ant-spin-spinning")).ToHaveCountAsync(0);
-                await CaptureAsync("references-removed-en.png");
+                if (AcceptancePresentation.Enabled)
+                {
+                    var localizedRead = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+                        && new Uri(response.Url).AbsolutePath == "/api/links/workspace.content");
+                    await driver.SelectLanguageAsync("English");
+                    var localizedResponse = await localizedRead;
+                    if (!localizedResponse.Ok) throw new InvalidOperationException($"切换语言后的列表读取失败：{localizedResponse.Status}");
+                    await localizedResponse.FinishedAsync();
+                    await page.GetByRole(AriaRole.Button, new() { Name = "Remove", Exact = true })
+                        .WaitForAsync(new() { State = WaitForSelectorState.Visible });
+                    await Assertions.Expect(page.Locator(".np-tree-content .ant-spin-spinning")).ToHaveCountAsync(0);
+                    await CaptureAsync("references-removed-en.png");
+                }
                 await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
                     new { url = page.Url, actor = "ordinary", journey = "workspace-cut-remove" }, token);
             }).RunAsync(CancellationToken.None);
@@ -524,13 +626,13 @@ public sealed class AcceptanceGateTests
     public async Task NativeWorkspaceSearch_UsesFormalDriver()
     {
         var (root, runId) = PrepareRun("native-workspace-search");
-        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId, exerciseCompositionLifecycle: false);
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
         await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
             browserJourney: async (page, token) =>
             {
                 var driver = new WorkspacePageDriver(page);
-                Task CaptureAsync(string name) => page.ScreenshotAsync(new()
-                { Path = Path.Combine(root, name), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                Task CaptureAsync(string name) => AcceptancePresentation.CaptureAsync(page, Path.Combine(root, name));
                 var target = "搜索目标目录 " + runId[..8];
                 var folder = fixture.ExistingFolderName;
                 await driver.OpenAsync();
@@ -541,30 +643,33 @@ public sealed class AcceptanceGateTests
                 await driver.SelectTreePathAsync("公共空间", target);
                 await driver.PasteReferencesAsync(folder);
                 var address = await driver.SearchAndSelectFolderAsync(folder, ["公共空间", target, folder],
-                    () => CaptureAsync("search-distinct-paths.png"));
+                    AcceptancePresentation.Enabled ? () => CaptureAsync("search-distinct-paths.png") : null);
                 await new StandardCrudPageDriver(page).WaitForRowAsync(fixture.ExistingDocumentName);
                 await CaptureAsync("search-located-content.png");
                 // 两条同名出现位置已展开；正式动作明确使用搜索选中的那条。
                 await driver.CopyFolderFromTreeContextMenuAsync(folder, selectedOnly: true);
-                var localizedRead = page.WaitForResponseAsync(response => response.Request.Method == "GET"
-                    && new Uri(response.Url).AbsolutePath == "/api/links/workspace.content");
-                await driver.SelectLanguageAsync("English");
-                var localizedResponse = await localizedRead;
-                if (!localizedResponse.Ok) throw new InvalidOperationException($"切换语言后的列表读取失败：{localizedResponse.Status}");
-                await localizedResponse.FinishedAsync();
-                await new StandardCrudPageDriver(page).WaitForRowAsync(fixture.ExistingDocumentName);
-                var englishSearch = page.GetByRole(AriaRole.Textbox, new() { Name = "Search nodes", Exact = true });
-                await englishSearch.FillAsync("");
-                var searchRead = page.WaitForResponseAsync(response => response.Request.Method == "GET"
-                    && new Uri(response.Url).AbsolutePath == "/api/trees/workspace.structure/search");
-                await englishSearch.FillAsync(folder);
-                var searchResponse = await searchRead;
-                if (!searchResponse.Ok) throw new InvalidOperationException($"英文搜索读取失败：{searchResponse.Status}");
-                await searchResponse.FinishedAsync();
-                await page.Locator("[aria-label='Search results']")
-                    .GetByRole(AriaRole.Button, new() { Name = "Locate node " + folder, Exact = true }).First
-                    .WaitForAsync(new() { State = WaitForSelectorState.Visible });
-                await CaptureAsync("search-distinct-paths-en.png");
+                if (AcceptancePresentation.Enabled)
+                {
+                    var localizedRead = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+                        && new Uri(response.Url).AbsolutePath == "/api/links/workspace.content");
+                    await driver.SelectLanguageAsync("English");
+                    var localizedResponse = await localizedRead;
+                    if (!localizedResponse.Ok) throw new InvalidOperationException($"切换语言后的列表读取失败：{localizedResponse.Status}");
+                    await localizedResponse.FinishedAsync();
+                    await new StandardCrudPageDriver(page).WaitForRowAsync(fixture.ExistingDocumentName);
+                    var englishSearch = page.GetByRole(AriaRole.Textbox, new() { Name = "Search nodes", Exact = true });
+                    await englishSearch.FillAsync("");
+                    var searchRead = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+                        && new Uri(response.Url).AbsolutePath == "/api/trees/workspace.structure/search");
+                    await englishSearch.FillAsync(folder);
+                    var searchResponse = await searchRead;
+                    if (!searchResponse.Ok) throw new InvalidOperationException($"英文搜索读取失败：{searchResponse.Status}");
+                    await searchResponse.FinishedAsync();
+                    await page.Locator("[aria-label='Search results']")
+                        .GetByRole(AriaRole.Button, new() { Name = "Locate node " + folder, Exact = true }).First
+                        .WaitForAsync(new() { State = WaitForSelectorState.Visible });
+                    await CaptureAsync("search-distinct-paths-en.png");
+                }
                 await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
                     new { url = address, actor = "ordinary", journey = "workspace-search-path" }, token);
             }).RunAsync(CancellationToken.None);
@@ -604,11 +709,12 @@ public sealed class AcceptanceGateTests
                 var driver = new WorkspacePageDriver(page);
                 async Task CapturePairAsync(string stage, ILocator? surface = null)
                 {
+                    if (!AcceptancePresentation.Enabled) return;
                     // Modal 外容器先可见，等待其内容动画完成后才能留下可核对的截图。
                     if (surface is not null) await surface.EvaluateAsync("async element => { await new Promise(requestAnimationFrame); await Promise.all(element.getAnimations({subtree:true}).map(animation => animation.finished.catch(() => {}))); }");
-                    await page.ScreenshotAsync(new() { Path = Path.Combine(root, stage + ".png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                    await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, stage + ".png"));
                     await page.SetViewportSizeAsync(900, 1000);
-                    await page.ScreenshotAsync(new() { Path = Path.Combine(root, stage + "-narrow.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                    await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, stage + "-narrow.png"));
                     await page.SetViewportSizeAsync(1440, 1000);
                 }
                 await driver.OpenAsync();
@@ -616,7 +722,7 @@ public sealed class AcceptanceGateTests
                 await driver.CreateFolderAsync(name);
                 await driver.ExpandRootToFolderAsync("公共空间", name);
                 await CapturePairAsync("folder-reference-list");
-                await driver.RemoveReferenceAsync(name, dialog => CapturePairAsync("remove-reference", dialog));
+                await driver.RemoveReferenceAsync(name, AcceptancePresentation.Enabled ? dialog => CapturePairAsync("remove-reference", dialog) : null);
                 await driver.CreateFolderAsync(name);
                 await driver.ExpandRootToFolderAsync("公共空间", name);
                 var properties = await driver.OpenFolderPropertiesAsync(name);
@@ -669,19 +775,20 @@ public sealed class AcceptanceGateTests
                 var driver = new WorkspacePageDriver(page);
                 async Task CapturePairAsync(string stage, ILocator? surface = null)
                 {
+                    if (!AcceptancePresentation.Enabled) return;
                     if (surface is not null) await surface.EvaluateAsync("async element => { await new Promise(requestAnimationFrame); await Promise.all(element.getAnimations({subtree:true}).map(animation => animation.finished.catch(() => {}))); }");
-                    await page.ScreenshotAsync(new() { Path = Path.Combine(root, stage + ".png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                    await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, stage + ".png"));
                     await page.SetViewportSizeAsync(900, 1000);
-                    await page.ScreenshotAsync(new() { Path = Path.Combine(root, stage + "-narrow.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                    await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, stage + "-narrow.png"));
                     await page.SetViewportSizeAsync(1440, 1000);
                 }
                 await driver.OpenAsync();
                 await driver.SelectRootAsync("公共空间");
                 var folderAddress = await driver.SelectTreePathAsync("公共空间", folderName);
                 await driver.CreateFolderAsync(folderName + " 子文件夹");
-                await driver.CreateObjectAsync("零组件", partCode, partName, dialog => CapturePairAsync("part-create", dialog));
+                await driver.CreateObjectAsync("零组件", partCode, partName, AcceptancePresentation.Enabled ? dialog => CapturePairAsync("part-create", dialog) : null);
                 var attachments = WorkspacePageDriver.SmallAttachmentFiles();
-                await driver.CreateDocumentWithFilesAsync(documentCode, documentName, WorkspacePageDriver.SmallMainFile(), dialog => CapturePairAsync("document-create", dialog), attachments);
+                await driver.CreateDocumentWithFilesAsync(documentCode, documentName, WorkspacePageDriver.SmallMainFile(), AcceptancePresentation.Enabled ? dialog => CapturePairAsync("document-create", dialog) : null, attachments);
                 await new StandardCrudPageDriver(page).WaitForRowAsync(folderName + " 子文件夹");
                 await CapturePairAsync("mixed-content");
                 await driver.OpenOwnedPropertiesAsync(partName, "/parts");
@@ -692,7 +799,7 @@ public sealed class AcceptanceGateTests
                     await driver.DownloadFileAsync(file.Name, Path.Combine(root, "download-" + file.Name));
                 await CapturePairAsync("mixed-document-properties");
                 await driver.RestorePositionAsync(folderAddress, "公共空间", folderName);
-                await driver.RemoveReferenceAsync(partName, dialog => CapturePairAsync("mixed-remove-reference", dialog));
+                await driver.RemoveReferenceAsync(partName, AcceptancePresentation.Enabled ? dialog => CapturePairAsync("mixed-remove-reference", dialog) : null);
                 await driver.CreateObjectAsync("零组件", partCode + "-NEXT", partName + " 新建");
                 await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"), new { url = page.Url, actor = "ordinary", readdedObject = partName }, token);
             }).RunAsync(CancellationToken.None);
@@ -745,9 +852,10 @@ public sealed class AcceptanceGateTests
                 var tree = new StandardTreePageDriver(page);
                 async Task CapturePairAsync(string stage)
                 {
-                    await page.ScreenshotAsync(new() { Path = Path.Combine(root, stage + ".png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                    if (!AcceptancePresentation.Enabled) return;
+                    await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, stage + ".png"));
                     await page.SetViewportSizeAsync(900, 1000);
-                    await page.ScreenshotAsync(new() { Path = Path.Combine(root, stage + "-narrow.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                    await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, stage + "-narrow.png"));
                     await page.SetViewportSizeAsync(1440, 1000);
                 }
                 await driver.OpenAsync();
@@ -824,9 +932,10 @@ public sealed class AcceptanceGateTests
                 var driver = new WorkspacePageDriver(page);
                 async Task CapturePairAsync(string stage)
                 {
-                    await page.ScreenshotAsync(new() { Path = Path.Combine(root, stage + ".png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                    if (!AcceptancePresentation.Enabled) return;
+                    await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, stage + ".png"));
                     await page.SetViewportSizeAsync(900, 1000);
-                    await page.ScreenshotAsync(new() { Path = Path.Combine(root, stage + "-narrow.png"), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                    await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, stage + "-narrow.png"));
                     await page.SetViewportSizeAsync(1440, 1000);
                 }
                 await driver.OpenAsync();
@@ -887,26 +996,34 @@ public sealed class AcceptanceGateTests
             publishedFixture: fixture, browserJourney: async (page, token) =>
             {
                 var driver = new StandardMetadataPageDriver(page, "零组件", "/parts", "/api/part/parts", "新建零组件");
-                Task CaptureAsync(string name) => page.ScreenshotAsync(new()
-                { Path = Path.Combine(root, name), FullPage = true, Animations = ScreenshotAnimations.Disabled });
+                Task CaptureAsync(string name) => AcceptancePresentation.CaptureAsync(page, Path.Combine(root, name));
                 await driver.OpenAsync();
                 await CaptureAsync("part-existing-list.png");
                 var oldProperties = await driver.OpenPropertiesAsync(fixture.ExistingCode, fixture.ExistingName);
                 await CaptureAsync("part-existing-properties.png");
-                await page.SetViewportSizeAsync(900, 1000);
-                await CaptureAsync("part-existing-properties-narrow.png");
-                await page.SetViewportSizeAsync(1440, 1000);
+                if (AcceptancePresentation.Enabled)
+                {
+                    await page.SetViewportSizeAsync(900, 1000);
+                    await CaptureAsync("part-existing-properties-narrow.png");
+                    await page.SetViewportSizeAsync(1440, 1000);
+                }
                 await driver.OpenFullDetailAsync(oldProperties, fixture.ExistingName);
                 await CaptureAsync("part-existing-detail.png");
-                await page.SetViewportSizeAsync(900, 1000);
-                await CaptureAsync("part-existing-detail-narrow.png");
-                await page.SetViewportSizeAsync(1440, 1000);
+                if (AcceptancePresentation.Enabled)
+                {
+                    await page.SetViewportSizeAsync(900, 1000);
+                    await CaptureAsync("part-existing-detail-narrow.png");
+                    await page.SetViewportSizeAsync(1440, 1000);
+                }
                 await driver.OpenAsync();
                 var create = await driver.OpenCreateAsync();
                 await CaptureAsync("part-create.png");
-                await page.SetViewportSizeAsync(900, 1000);
-                await CaptureAsync("part-create-narrow.png");
-                await page.SetViewportSizeAsync(1440, 1000);
+                if (AcceptancePresentation.Enabled)
+                {
+                    await page.SetViewportSizeAsync(900, 1000);
+                    await CaptureAsync("part-create-narrow.png");
+                    await page.SetViewportSizeAsync(1440, 1000);
+                }
                 var code = "ACC-NATIVE-P-" + runId[..8];
                 var name = "独立安装页面零组件 " + runId[..8];
                 await driver.SaveCreateAsync(create, code, name);
@@ -937,30 +1054,39 @@ public sealed class AcceptanceGateTests
     {
         var code = $"ACC-{prefix.ToUpperInvariant()}-{runId[..8]}";
         var name = $"{namePrefix} {runId[..8]}";
-        Task CaptureAsync(string file) => page.ScreenshotAsync(new()
-        {
-            Path = Path.Combine(root, file), FullPage = true, Animations = ScreenshotAnimations.Disabled
-        });
+        Task CaptureAsync(string file) => AcceptancePresentation.CaptureAsync(page, Path.Combine(root, file));
         await driver.OpenAsync();
         var form = await driver.OpenCreateAsync();
         await CaptureAsync($"{prefix}-create.png");
-        await page.SetViewportSizeAsync(900, 1000);
-        await CaptureAsync($"{prefix}-create-narrow.png");
-        await page.SetViewportSizeAsync(1440, 1000);
+        if (AcceptancePresentation.Enabled)
+        {
+            await page.SetViewportSizeAsync(900, 1000);
+            await CaptureAsync($"{prefix}-create-narrow.png");
+            await page.SetViewportSizeAsync(1440, 1000);
+        }
         await driver.SaveCreateAsync(form, code, name);
         await CaptureAsync($"{prefix}-list.png");
-        await page.SetViewportSizeAsync(900, 1000);
-        await CaptureAsync($"{prefix}-list-narrow.png");
-        await page.SetViewportSizeAsync(1440, 1000);
+        if (AcceptancePresentation.Enabled)
+        {
+            await page.SetViewportSizeAsync(900, 1000);
+            await CaptureAsync($"{prefix}-list-narrow.png");
+            await page.SetViewportSizeAsync(1440, 1000);
+        }
         var properties = await driver.OpenPropertiesAsync(code, name);
         await CaptureAsync($"{prefix}-properties.png");
-        await page.SetViewportSizeAsync(900, 1000);
-        await CaptureAsync($"{prefix}-properties-narrow.png");
-        await page.SetViewportSizeAsync(1440, 1000);
+        if (AcceptancePresentation.Enabled)
+        {
+            await page.SetViewportSizeAsync(900, 1000);
+            await CaptureAsync($"{prefix}-properties-narrow.png");
+            await page.SetViewportSizeAsync(1440, 1000);
+        }
         await driver.OpenFullDetailAsync(properties, name);
         await CaptureAsync($"{prefix}-detail.png");
-        await page.SetViewportSizeAsync(900, 1000);
-        await CaptureAsync($"{prefix}-detail-narrow.png");
+        if (AcceptancePresentation.Enabled)
+        {
+            await page.SetViewportSizeAsync(900, 1000);
+            await CaptureAsync($"{prefix}-detail-narrow.png");
+        }
         await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
             new { url = page.Url, actor = "ordinary", createdObject = code }, token);
     }

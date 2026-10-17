@@ -14,7 +14,7 @@
 - 用户点名或任务触发某个 skill 时，读取该 `SKILL.md` 执行。通用 skill 的默认流程由本仓库的任务状态源、验证分工和授权边界约束；其余步骤沿用 skill。`implement-spec`、`retro` 的调用条件与仓库适配见 [issue-tracker.md](docs/agents/issue-tracker.md#技能操作映射)。用户本次明确指令优先。
 - 实施任务（包括调用 `$implement` 或 `$implement-spec`）前，读取 [quick-verification.md](docs/verification/quick-verification.md) 的“执行层级”，确定本次承担单任务、child 还是父级收尾。
 - 派发或关闭 child 前，按 [issue-tracker.md](docs/agents/issue-tracker.md#执行前沿与中断恢复) 安排持续 owner 和依赖／资源允许的并行，按验证指南的“Child 完成证据”核对实际覆盖；属于本 child 的证据缺口不能留给父级补成完成结论。
-- 诊断、审查（包括 `$code-review`）或验证失败时，读取该指南的“诊断与审查证据”；恢复完整验证按其中的失败收敛条件执行，父级再按“父级收尾”核对候选与最终验收。
+- 诊断、审查（包括 `$code-review`）或验证失败时，读取该指南的“诊断与审查证据”；恢复所选检查按其中的失败收敛条件执行，父级再按“父级收尾”核对覆盖与候选归属。
 - Skill 配置文件由 `/setup-matt-pocock-skills` 生成并被 skill 运行时读取，不要删除或改名：
   - `docs/agents/issue-tracker.md` — issue 跟踪器约定（GitHub + `gh` CLI）
   - `docs/agents/triage-labels.md` — 分流标签映射
@@ -62,18 +62,18 @@
 
 每条断言放在能给出最精确失败信号的最低层。判据只有一条：**失败时能不能直接定位到行**。
 
-开发与返修执行覆盖本次行为变化及实际消费者的最小充分验证，保留未受影响的有效证据。验证范围、child 关闭、失败收敛和父级最终验收统一遵循 [quick-verification.md](docs/verification/quick-verification.md)。
+所有功能的开发与返修均按本次行为变化及实际消费者选择最低层的最小充分验证，保留未受影响的有效证据。父级收尾汇总覆盖与候选归属，只补真实跨 child 集成缺口；全仓 lint/build/unit verify 按明确交付约定或实际影响选择，不附带整模块或全部验收。验证范围、child 关闭和失败收敛统一遵循 [quick-verification.md](docs/verification/quick-verification.md)。
 
 - **静态门禁与编译**：格式、契约同步、引用完整性。秒级反馈。
 - **单元测试**：值的正确性、边界、投影函数、状态机。新增或改变模块能力时必须补足。
 - **API 集成测试**：契约形状、权限判定、事务与生命周期。
 - **浏览器验收**：只回答「用户能不能走通这条路」，不回答「值对不对」。
 
-浏览器层**禁止**断言数据语义、格式或边界，这些一律下沉。每个模块一条冒烟旅程即可：进入 → 列表出数据 → 打开详情 → 提交一次写入 → 看到结果；其余场景在下层验证。
+浏览器层**禁止**断言数据语义、格式或边界，这些一律下沉。页面接线只验证最短受影响路径；模块冒烟旅程为进入 → 列表出数据 → 打开详情 → 提交一次写入 → 看到结果。新增功能复用已有 driver，按需增加可独立运行的最短片段，不自动追加到长 E2E 链；具体选择见验证指南。
 
-例外：冷启动、首次建库、迁移执行和管理员初始化保留完整验收，它们没有下层替代。
+冷启动、首次建库、迁移、恢复、管理员初始化和权限边界保留各自所需的真实验收，按本次变化独立选择，不绑定到模块冒烟。
 
-验收闸门是 `tests/acceptance/Acceptance.Tests` 里的普通 xUnit 测试，未设 `NEWP_RUN_ACCEPTANCE=1` 时跳过，因此日常 `dotnet test` 可以放心包含它们。启用后用 `.\scripts\accept.ps1 -Gate <Gate>`（`dotnet test --filter` 的薄封装）。**失败就是异常与栈**，不要再引入失败码、事件流或裁决文件那类中间层——没有消费者的举证只会把失败信号变模糊。场景里写的 JSON 快照是排错转储，不是通过依据。
+验收 Gate 表示具体有界场景，不是模块功能全集。入口是 `tests/acceptance/Acceptance.Tests/AcceptanceGateTests.cs` 的普通 xUnit 测试，默认按各自环境开关跳过。使用 `.\scripts\accept.ps1 -Scenario <精确方法名>`，可显式列出有限场景或加 `-Presentation`；旧 `-Gate`、`-AcceptanceGate` 及 `All` 聚合入口已退役并明确拒绝。**失败就是异常与栈**，不要再引入失败码、事件流或裁决文件那类中间层——没有消费者的举证只会把失败信号变模糊。场景里写的 JSON 快照是排错转储，不是通过依据。
 
 新增或修改验收 runner、fixture、资源清理或凭据处理时，读取 [quick-verification.md](docs/verification/quick-verification.md) 的“验收资产开发”规则。
 

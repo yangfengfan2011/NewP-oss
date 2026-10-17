@@ -18,14 +18,14 @@ corepack pnpm --dir frontend test -- <测试过滤条件>
 .\scripts\verify.ps1
 ```
 
-`verify.ps1` 是唯一的验证入口，没有 CI 兜底。`-Quick` 供开发循环使用，跳过只有冻结候选才需要的 diff-check、`dotnet restore` 和前端 build；其余门禁两种模式完全一致。每个阶段的结果与日志写入 `.codex-temp/verify/`。
+`verify.ps1` 提供仓库级检查，没有 CI 兜底；按实际影响或明确交付约定选择，局部改动优先定向验证。`-Quick` 的实际跳过范围以脚本为准。每个阶段的结果与日志写入 `.codex-temp/verify/`；未传 `-AcceptanceScenario` 不运行验收。
 
 ## Acceptance
 
 ```powershell
-.\scripts\verify.ps1 -AcceptanceGate IdentityFoundation,Personnel
+.\scripts\verify.ps1 -AcceptanceScenario WorkspaceSmoke_UsesFixedRelease
 # 或
-.\scripts\accept.ps1 -Gate IdentityFoundation
+.\scripts\accept.ps1 -Scenario WorkspaceSmoke_UsesFixedRelease
 ```
 
-Acceptance 使用唯一临时 SQL Server catalog，并从本地配置解析管理连接。闸门本身是 `Acceptance.Tests` 中的 xUnit 测试，默认跳过，设置 `NEWP_RUN_ACCEPTANCE=1` 后启用；`accept.ps1` 只是 `dotnet test --filter` 的薄封装。
+Acceptance Gate 是具体有界验收场景，不是模块功能全集。通过 `-Scenario` 指定 `AcceptanceGateTests` 中的精确方法名，也可显式列出有限场景；用 `-Presentation` 按需采集成功呈现。脚本启用对应测试的环境开关并核对所选测试实际通过。旧 `-Gate`、`-AcceptanceGate`、`All` 与通配入口已退役并明确拒绝。SQL Server、冷启动、建库、迁移、恢复和权限边界测试分别按变化选择，不附加到页面冒烟或父级收尾。

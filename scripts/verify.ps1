@@ -1,7 +1,7 @@
-# 仓库唯一的验证入口。没有 CI，本机就是唯一的验证位置。
+# 仓库完整验证入口。局部修改按 quick-verification.md 选择定向检查；没有 CI，本机是唯一的验证位置。
 #
-# -Quick 供开发循环使用：跳过 diff-check、dotnet restore、前端 lint/build。
-# 它不替代交付前的完整验证；其余阶段复用相同命令与判据。
+# -Quick 仍是全仓验证变体：跳过 diff-check、独立 dotnet restore、前端 lint/build。
+# 它不是定向入口；明确要求完整验证的交付节点使用完整模式，并按验收条件显式选择场景。
 #
 # 本脚本**不要求也不检查干净工作树**。本机是唯一的验证位置，脏树跑验证是常态，
 # 拦住它等于把 verify 变成只有提交前才能用的东西。但结果必须能事后归属，
@@ -10,14 +10,19 @@
 [CmdletBinding()]
 param(
     [switch]$Quick,
-    [ValidateSet("IdentityFoundation", "Personnel", "ExampleRequiredField", "Authorization", "Workspace")]
-    [string[]]$AcceptanceGate = @(),
+    [string[]]$AcceptanceScenario = @(),
     [ValidateSet("Baseline", "Candidate")]
     [string]$ProductionColdStartMode,
     [string]$ProductionColdStartBaselineResult
 )
 
 $ErrorActionPreference = "Stop"
+# 不设模块默认集；列表逐项传给 accept 的精确方法名入口。
+$AcceptanceScenario = @($AcceptanceScenario | ForEach-Object { $_.Split(',') } | Select-Object -Unique)
+if (@($AcceptanceScenario | Where-Object {
+    $_ -cnotmatch '\A[_\p{L}\p{Nl}][_\p{L}\p{Nl}\p{Nd}\p{Pc}\p{Mn}\p{Mc}\p{Cf}]*\z' -or
+    $_ -in @('All', 'Workspace', 'Personnel', 'IdentityFoundation', 'Authorization', 'ExampleRequiredField')
+}).Count -gt 0) { throw 'Specify exact AcceptanceGateTests method names with -AcceptanceScenario; module groups and All are retired.' }
 $PSNativeCommandUseErrorActionPreference = $false
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -369,9 +374,11 @@ try {
         "run", "--project", "server/tools/model-dto-sync/ModelDtoSync.csproj",
         "--configuration", "Release", "--no-build", "--no-restore", "--", "--check", $repoRoot)
 
+    # 普通仓库测试排除显式验收入口，避免继承的环境开关扩大运行范围。
     $currentStage = "dotnet-test"
     Invoke-VerificationStage -Name $currentStage -FilePath "dotnet" -Arguments @(
-        "test", "ICP-Platform.sln", "--configuration", "Release", "--no-build", "--no-restore")
+        "test", "ICP-Platform.sln", "--configuration", "Release", "--no-build", "--no-restore",
+        "--filter", "FullyQualifiedName!~ICP.Platform.Acceptance.Tests.AcceptanceGateTests.")
 
     if (-not $Quick)
     {
@@ -391,12 +398,12 @@ try {
             "pnpm", "--dir", "frontend", "build")
     }
 
-    foreach ($gate in $AcceptanceGate)
+    foreach ($scenario in $AcceptanceScenario)
     {
-        $currentStage = "acceptance-" + $gate.ToLowerInvariant()
+        $currentStage = "acceptance-" + $scenario
         Invoke-VerificationStage -Name $currentStage -FilePath $pwshPath -Arguments @(
             "-NoLogo", "-NoProfile", "-File", (Join-Path $PSScriptRoot "accept.ps1"),
-            "-Gate", $gate, "-NoBuild")
+            "-Scenario", $scenario, "-NoBuild")
     }
 
     if (-not [string]::IsNullOrWhiteSpace($ProductionColdStartMode))
@@ -416,7 +423,7 @@ try {
     Write-Host ""
     if ($Quick)
     {
-        Write-Host "已跳过 diff-check、dotnet restore 与前端 lint/build；合并前请跑一次完整 verify.ps1。" -ForegroundColor Yellow
+        Write-Host "Quick 仍覆盖全仓，已跳过 diff-check、独立 dotnet restore 与前端 lint/build；明确要求完整验证的交付节点请使用完整模式，并按验收条件选择场景。" -ForegroundColor Yellow
     }
     Write-Host "VERIFY_RESULT: $resultPath" -ForegroundColor Green
     exit 0

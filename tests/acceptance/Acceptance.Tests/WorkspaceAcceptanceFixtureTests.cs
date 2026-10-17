@@ -9,6 +9,70 @@ namespace ICP.Platform.Acceptance.Tests;
 
 public sealed class WorkspaceAcceptanceFixtureTests
 {
+    [Theory]
+    [InlineData("composition")]
+    [InlineData("uninstall")]
+    [InlineData("files")]
+    [InlineData("copy")]
+    [InlineData("batch")]
+    [InlineData("non-workspace")]
+    public async Task CurrentPreparation_RejectsHistoricalCoverageRequestsBeforeReadingAssets(string coverage)
+    {
+        var fixture = new PublishedComponentAcceptanceFixture("missing", "missing", "unused",
+            "missing", "missing", "missing", "missing", workspaceDelivery: coverage != "non-workspace",
+            exerciseCompositionLifecycle: coverage == "composition", exerciseUninstallRecovery: coverage == "uninstall",
+            exerciseFileRecovery: coverage == "files", exerciseDocumentCopyRecovery: coverage == "copy",
+            exerciseDocumentBatchRecovery: coverage == "batch", preparation: PublishedWorkspacePreparation.CurrentRelease);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.PrepareAsync(
+            _ => { }, (_, _) => { }, value => value ?? string.Empty, CancellationToken.None));
+
+        Assert.Contains("当前发行物准备不启用历史升级后的组件或故障恢复演练", error.Message);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PublishedPreparation_RejectsStaleCandidateBeforeCreatingResources(bool currentRelease)
+    {
+        var preparation = currentRelease ? PublishedWorkspacePreparation.CurrentRelease : PublishedWorkspacePreparation.HistoricalUpgrade;
+        var repository = new DirectoryInfo(AppContext.BaseDirectory);
+        while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "ICP-Platform.sln"))) repository = repository.Parent;
+        Assert.NotNull(repository);
+        var root = Path.Combine(Path.GetTempPath(), "newp-preparation-" + Guid.NewGuid().ToString("N"));
+        var host = Path.Combine(root, "host");
+        var shell = Path.Combine(root, "shell");
+        Directory.CreateDirectory(host);
+        Directory.CreateDirectory(Path.Combine(shell, ".vite"));
+        try
+        {
+            // 只测试登记摘要和资源获取顺序；这些文件不会作为可运行发行物使用。
+            await File.WriteAllTextAsync(Path.Combine(host, "HostApi.dll"), "identity-test");
+            await File.WriteAllTextAsync(Path.Combine(host, "HostApi.deps.json"), "{}");
+            await File.WriteAllTextAsync(Path.Combine(shell, "index.html"), "identity-test");
+            await File.WriteAllTextAsync(Path.Combine(shell, ".vite", "manifest.json"), "{}");
+            var package = Path.Combine(root, "package.zip");
+            await File.WriteAllTextAsync(package, "identity-test");
+            var inputPath = Path.Combine(root, "input.json");
+            await PublishedComponentAcceptanceFixture.RecordWorkspaceDeliveryAsync(repository.FullName, root, host, shell,
+                package, inputPath, CancellationToken.None);
+            var input = JsonSerializer.Deserialize<WorkspaceDeliveryInput>(await File.ReadAllTextAsync(inputPath), AcceptanceJson.Options)!;
+            input = input with { Candidate = JsonSerializer.SerializeToElement(new { stale = true }) };
+            var run = Path.Combine(root, "run");
+            Directory.CreateDirectory(run);
+            var fixture = new PublishedComponentAcceptanceFixture(repository.FullName, run, "unused", root, host, shell,
+                package, workspaceDelivery: true, deliveryInput: input, exerciseCompositionLifecycle: false, preparation: preparation);
+
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.PrepareAsync(
+                _ => { }, (_, _) => { }, value => value ?? string.Empty, CancellationToken.None));
+
+            Assert.Contains("输入与当前候选或固定发行资产不一致", error.Message);
+            Assert.True(File.Exists(Path.Combine(run, "delivery-input-mismatch.json")));
+            Assert.False(Directory.Exists(Path.Combine(run, "resources")));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [Fact]
     public void PublishedUpgrade_AllowsOnlyTreeOrdinalBackfillAndTheConfirmedWorkspaceTails()
     {

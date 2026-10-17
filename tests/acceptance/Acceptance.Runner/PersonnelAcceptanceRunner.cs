@@ -439,6 +439,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         foreach (var observedPage in new[] { page, maintainerPage, readerPage }) ObservePage(observedPage);
         async Task CapturePresentationAsync(string name)
         {
+            if (!AcceptancePresentation.Enabled) return;
             var path = Path.Combine(_runDirectory, "personnel", name + ".png");
             await page.ScreenshotAsync(new PageScreenshotOptions { Path = path, FullPage = true });
             _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, path));
@@ -486,7 +487,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 driver = readerDriver;
                 await OpenPersonnelFromShellAsync(driver);
                 await AssertPersonListAndDrawerAsync(driver, person, company.Name, department.Name, null);
-                await page.ScreenshotAsync(new PageScreenshotOptions { Path = Path.Combine(_runDirectory, "personnel", "reader-person.png"), FullPage = true });
+                await AcceptancePresentation.CaptureAsync(page, Path.Combine(_runDirectory, "personnel", "reader-person.png"));
                 page = maintainerPage;
                 driver = maintainerDriver;
                 person = await UpdatePersonFromBrowserAsync(driver, person, company, destination, position, cancellationToken, sameCompany: true);
@@ -578,10 +579,13 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 .GetByText("基础信息", new LocatorGetByTextOptions { Exact = true }).First
                 .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
             var treeScreenshot = Path.Combine(_runDirectory, "personnel", $"tree-person-{phase}.png");
-            await page.ScreenshotAsync(new PageScreenshotOptions { Path = treeScreenshot, FullPage = true });
-            _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, treeScreenshot));
+            if (AcceptancePresentation.Enabled)
+            {
+                await AcceptancePresentation.CaptureAsync(page, treeScreenshot);
+                _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, treeScreenshot));
+            }
             browserAssertions.Add("person-located-in-organization-tree-and-detail-opened");
-            if (phase == "initial")
+            if (phase == "initial" && AcceptancePresentation.Enabled)
             {
                 await page.SetViewportSizeAsync(900, 1000);
                 await CapturePresentationAsync("tree-person-narrow");
@@ -605,24 +609,30 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 ? "list-and-detail-show-updated-person"
                 : "restart-list-and-detail-show-persisted-person");
 
-            await page.ScreenshotAsync(new PageScreenshotOptions { Path = screenshotPath, FullPage = true });
-            _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath));
+            if (AcceptancePresentation.Enabled)
+            {
+                await AcceptancePresentation.CaptureAsync(page, screenshotPath);
+                _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath));
+            }
             if (phase == "initial")
             {
-                // 仅采样既有详情的直达/刷新呈现，不重复写入或新增字段语义断言。
                 var detailPage = page;
-                var address = detailPage.Url;
-                page = await maintainerContext.NewPageAsync();
-                ObservePage(page);
-                driver = new StandardCrudPageDriver(page);
-                await page.GotoAsync(address);
-                await page.GetByText("基础信息", new PageGetByTextOptions { Exact = true }).WaitForAsync();
-                await CapturePresentationAsync("person-detail-direct");
-                await page.ReloadAsync();
-                await page.GetByText("基础信息", new PageGetByTextOptions { Exact = true }).WaitForAsync();
-                await CapturePresentationAsync("person-detail-refresh");
-                // 失败时保留当前 page 供外层原始诊断；context 的现有释放路径兜底关闭。
-                await page.CloseAsync();
+                if (AcceptancePresentation.Enabled)
+                {
+                    // 仅采样既有详情的直达/刷新呈现；后面的实际授权操作始终执行。
+                    var address = detailPage.Url;
+                    page = await maintainerContext.NewPageAsync();
+                    ObservePage(page);
+                    driver = new StandardCrudPageDriver(page);
+                    await page.GotoAsync(address);
+                    await page.GetByText("基础信息", new PageGetByTextOptions { Exact = true }).WaitForAsync();
+                    await CapturePresentationAsync("person-detail-direct");
+                    await page.ReloadAsync();
+                    await page.GetByText("基础信息", new PageGetByTextOptions { Exact = true }).WaitForAsync();
+                    await CapturePresentationAsync("person-detail-refresh");
+                    // 失败时保留当前 page 供外层原始诊断；context 的现有释放路径兜底关闭。
+                    await page.CloseAsync();
+                }
 
                 page = administratorPage;
                 driver = administratorDriver;
@@ -652,7 +662,7 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
                 phase,
                 url = page.Url,
                 browserAssertions,
-                screenshot = AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath)
+                screenshot = AcceptancePresentation.Enabled ? AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath) : null
             }, cancellationToken);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
@@ -953,8 +963,11 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         var accountRoles = page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "账号角色", Exact = true });
         await accountRoles.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         var roleScreenshot = Path.Combine(_runDirectory, "personnel", $"role-detail-{suffix}.png");
-        await page.ScreenshotAsync(new PageScreenshotOptions { Path = roleScreenshot, FullPage = true });
-        _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, roleScreenshot));
+        if (AcceptancePresentation.Enabled)
+        {
+            await AcceptancePresentation.CaptureAsync(page, roleScreenshot);
+            _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, roleScreenshot));
+        }
         await accountRoles.ClickAsync();
         var modal = driver.VisibleModal();
         var account = modal.GetByRole(AriaRole.Combobox, new LocatorGetByRoleOptions { Name = "账号", Exact = true });
@@ -1003,8 +1016,11 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await page.GetByText("变化明细", new PageGetByTextOptions { Exact = true }).First
             .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         var auditScreenshot = Path.Combine(_runDirectory, "personnel", $"audit-detail-{eventType}-{phase}.png");
-        await page.ScreenshotAsync(new PageScreenshotOptions { Path = auditScreenshot, FullPage = true });
-        _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, auditScreenshot));
+        if (AcceptancePresentation.Enabled)
+        {
+            await AcceptancePresentation.CaptureAsync(page, auditScreenshot);
+            _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, auditScreenshot));
+        }
     }
 
     private Task LoginBrowserActorAsync(IPage page, OrdinaryActor actor) =>
@@ -1054,14 +1070,17 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await AddObjectAuthorizationSubjectAsync(page, dialog, "所有用户", null, ["读取", "授权"]);
         await AddObjectAuthorizationSubjectAsync(page, dialog, "角色", roleName, ["编辑"]);
         await dialog.GetByRole(AriaRole.Row, new LocatorGetByRoleOptions { Name = "主体授权项 2", Exact = true }).WaitForAsync();
-        var wide = Path.Combine(_runDirectory, "personnel", "person-object-authorization-wide.png");
-        await page.ScreenshotAsync(new PageScreenshotOptions { Path = wide, FullPage = true });
-        _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, wide));
-        await page.SetViewportSizeAsync(900, 1000);
-        var narrow = Path.Combine(_runDirectory, "personnel", "person-object-authorization-narrow.png");
-        await page.ScreenshotAsync(new PageScreenshotOptions { Path = narrow, FullPage = true });
-        _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, narrow));
-        await page.SetViewportSizeAsync(1440, 1000);
+        if (AcceptancePresentation.Enabled)
+        {
+            var wide = Path.Combine(_runDirectory, "personnel", "person-object-authorization-wide.png");
+            await page.ScreenshotAsync(new PageScreenshotOptions { Path = wide, FullPage = true });
+            _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, wide));
+            await page.SetViewportSizeAsync(900, 1000);
+            var narrow = Path.Combine(_runDirectory, "personnel", "person-object-authorization-narrow.png");
+            await page.ScreenshotAsync(new PageScreenshotOptions { Path = narrow, FullPage = true });
+            _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, narrow));
+            await page.SetViewportSizeAsync(1440, 1000);
+        }
 
         var response = await page.RunAndWaitForResponseAsync(
             () => dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "保存授权", Exact = true }).ClickAsync(),
@@ -1141,14 +1160,17 @@ internal sealed class PersonnelAcceptanceRunner : AcceptanceRunner
         await AddObjectAuthorizationSubjectAsync(page, dialog, "所有用户", null, ["读取"]);
         await dialog.GetByRole(AriaRole.Row, new LocatorGetByRoleOptions { Name = "主体授权项 1", Exact = true }).WaitForAsync();
         await page.WaitForFunctionAsync("() => [...document.querySelectorAll('.ant-select-dropdown')].every(item => item.getClientRects().length === 0)");
-        var wide = Path.Combine(_runDirectory, "personnel", "department-object-authorization-wide.png");
-        await page.ScreenshotAsync(new PageScreenshotOptions { Path = wide, FullPage = true });
-        _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, wide));
-        await page.SetViewportSizeAsync(900, 1000);
-        var narrow = Path.Combine(_runDirectory, "personnel", "department-object-authorization-narrow.png");
-        await page.ScreenshotAsync(new PageScreenshotOptions { Path = narrow, FullPage = true });
-        _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, narrow));
-        await page.SetViewportSizeAsync(1440, 1000);
+        if (AcceptancePresentation.Enabled)
+        {
+            var wide = Path.Combine(_runDirectory, "personnel", "department-object-authorization-wide.png");
+            await page.ScreenshotAsync(new PageScreenshotOptions { Path = wide, FullPage = true });
+            _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, wide));
+            await page.SetViewportSizeAsync(900, 1000);
+            var narrow = Path.Combine(_runDirectory, "personnel", "department-object-authorization-narrow.png");
+            await page.ScreenshotAsync(new PageScreenshotOptions { Path = narrow, FullPage = true });
+            _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, narrow));
+            await page.SetViewportSizeAsync(1440, 1000);
+        }
 
         var response = await page.RunAndWaitForResponseAsync(
             () => dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "保存授权", Exact = true }).ClickAsync(),

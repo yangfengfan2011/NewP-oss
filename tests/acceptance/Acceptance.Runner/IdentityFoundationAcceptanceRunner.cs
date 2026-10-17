@@ -457,6 +457,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
         page.SetDefaultNavigationTimeout(120_000);
         async Task CaptureIdentityAsync(string name)
         {
+            if (!AcceptancePresentation.Enabled) return;
             var path = Path.Combine(_runDirectory, "identity-foundation", name);
             await page.ScreenshotAsync(new PageScreenshotOptions { Path = path, FullPage = true, Animations = ScreenshotAnimations.Disabled,
                 Mask = [page.Locator("input, textarea"), page.GetByLabel("临时密码", new PageGetByLabelOptions { Exact = true })] });
@@ -547,8 +548,11 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
             await restrictedPage.Locator("#confirm-password").FillAsync(browserPassword);
             await restrictedPage.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "完成改密", Exact = true }).ClickAsync();
             await restrictedPage.WaitForURLAsync(url => !new Uri(url).AbsolutePath.Equals("/account/change-password", StringComparison.Ordinal));
-            await restrictedPage.ScreenshotAsync(new PageScreenshotOptions { Path = screenshotPath, FullPage = true });
-            _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath));
+            if (AcceptancePresentation.Enabled)
+            {
+                await AcceptancePresentation.CaptureAsync(restrictedPage, screenshotPath);
+                _artifactRefs.Add(AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath));
+            }
 
             await RecordScenarioSuccessAsync(BrowserScenario, "identity-foundation/browser.json", new
             {
@@ -561,7 +565,7 @@ internal sealed class IdentityFoundationAcceptanceRunner : AcceptanceRunner
                     "temporary-session-route-guard",
                     "browser-password-change-establishes-regular-session"
                 },
-                screenshot = AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath),
+                screenshot = AcceptancePresentation.Enabled ? AcceptanceInfrastructure.RelativeArtifact(_runDirectory, screenshotPath) : null,
                 finalPath = new Uri(restrictedPage.Url).AbsolutePath
             }, cancellationToken);
         }

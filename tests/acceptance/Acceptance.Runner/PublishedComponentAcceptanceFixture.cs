@@ -18,13 +18,16 @@ internal sealed record PublishedWorkspaceTarget(WorkspaceAcceptanceActor Actor, 
 internal sealed record WorkspaceDeliveryInput(JsonElement Candidate, string BaselineHostRoot, string HostRoot,
     string ShellRoot, string PackagePath, string HostIdentity, string ShellIdentity, string PackageSha256);
 
-// 正式 baseline 建立旧数据；裁剪的固定发行物通过原生包消费同一 catalog。
+internal enum PublishedWorkspacePreparation { HistoricalUpgrade, CurrentRelease }
+
+// 历史场景从旧部署升级；当前场景直接初始化发行物，两者共用隔离资源与归属校验。
 internal sealed partial class PublishedComponentAcceptanceFixture(
     string repositoryRoot, string runDirectory, string runId,
     string baselineHostRoot, string hostRoot, string shellRoot, string packagePath,
-    bool workspaceDelivery = false, WorkspaceDeliveryInput? deliveryInput = null, bool exerciseCompositionLifecycle = true,
+    bool workspaceDelivery = false, WorkspaceDeliveryInput? deliveryInput = null, bool exerciseCompositionLifecycle = false,
     bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false, bool exerciseFileRecoveryMechanisms = true,
-    bool exerciseDocumentCopyRecovery = false, bool exerciseDocumentCopyInterruptions = true, bool exerciseDocumentBatchRecovery = false)
+    bool exerciseDocumentCopyRecovery = false, bool exerciseDocumentCopyInterruptions = true, bool exerciseDocumentBatchRecovery = false,
+    PublishedWorkspacePreparation preparation = PublishedWorkspacePreparation.HistoricalUpgrade)
 {
     private readonly Dictionary<string, string?> _environment = new();
     private ReusableSqlServerDatabase? _database;
@@ -50,8 +53,9 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     internal string HostIdentity => $"published:{_host?.Process.Id}:{runId}";
 
     internal static PublishedComponentAcceptanceFixture FromWorkspaceDelivery(string repositoryRoot, string runDirectory, string runId,
-        bool exerciseCompositionLifecycle = true, bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false, bool exerciseFileRecoveryMechanisms = true,
-        bool exerciseDocumentCopyRecovery = false, bool exerciseDocumentCopyInterruptions = true, bool exerciseDocumentBatchRecovery = false)
+        bool exerciseCompositionLifecycle = false, bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false, bool exerciseFileRecoveryMechanisms = true,
+        bool exerciseDocumentCopyRecovery = false, bool exerciseDocumentCopyInterruptions = true, bool exerciseDocumentBatchRecovery = false,
+        PublishedWorkspacePreparation preparation = PublishedWorkspacePreparation.HistoricalUpgrade)
     {
         var path = RequiredPath("NEWP_ACCEPTANCE_WORKSPACE_DELIVERY_INPUT");
         var input = JsonSerializer.Deserialize<WorkspaceDeliveryInput>(File.ReadAllText(path), AcceptanceJson.Options)
@@ -61,7 +65,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             exerciseCompositionLifecycle: exerciseCompositionLifecycle, exerciseUninstallRecovery: exerciseUninstallRecovery,
             exerciseFileRecovery: exerciseFileRecovery, exerciseFileRecoveryMechanisms: exerciseFileRecoveryMechanisms,
             exerciseDocumentCopyRecovery: exerciseDocumentCopyRecovery, exerciseDocumentCopyInterruptions: exerciseDocumentCopyInterruptions,
-            exerciseDocumentBatchRecovery: exerciseDocumentBatchRecovery);
+            exerciseDocumentBatchRecovery: exerciseDocumentBatchRecovery, preparation: preparation);
     }
 
     // 只登记受控构建的输入与来源；不产出裁决，也不授予包信任。Gate 仍走正式安装/Host。
@@ -84,10 +88,15 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     private static string RequiredPath(string variable) => Path.GetFullPath(Environment.GetEnvironmentVariable(variable)
         ?? throw new InvalidOperationException($"固定发行物验收需要 {variable}。"));
 
-    // 真实 baseline 先建立业务；Document 按已确认开发清理前提升级，其余 owner 保持旧事实。
+    // 历史模式证明旧事实连续性；当前模式只准备正式输入，各独立场景负责自己的行为断言。
     internal async Task<PublishedWorkspaceTarget> PrepareAsync(Action<string> registerSecret,
         Action<string, string?> addConnectionSecrets, Func<string?, string> sanitize, CancellationToken token)
     {
+        if (!Enum.IsDefined(preparation)) throw new ArgumentOutOfRangeException(nameof(preparation));
+        var historicalUpgrade = preparation == PublishedWorkspacePreparation.HistoricalUpgrade;
+        if (!historicalUpgrade && (!workspaceDelivery || exerciseCompositionLifecycle || exerciseUninstallRecovery
+            || exerciseFileRecovery || exerciseDocumentCopyRecovery || exerciseDocumentBatchRecovery))
+            throw new InvalidOperationException("当前发行物准备不启用历史升级后的组件或故障恢复演练；请选择相应独立场景。");
         _sanitize = sanitize;
         var before = ReadTargetIdentity();
         if (deliveryInput is not null)
@@ -117,13 +126,19 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         _environment["Authentication__Host__AllowInsecureDevelopmentCookie"] = "true";
         _environment["Identity__LocalAdministrator__ECODE"] = "admin";
         _environment["ASPNETCORE_ENVIRONMENT"] = "Acceptance";
+        if (!historicalUpgrade)
+        {
+            await RunOfflineAsync("install-native", ["--package", packagePath], token);
+            await RunOfflineAsync("enable-bundle", ["--package", packagePath], token);
+        }
+        var initialHostRoot = historicalUpgrade ? baselineHostRoot : hostRoot;
         var bootstrap = await FormalIdentityBootstrap.RunPublishedAsync(repositoryRoot,
-            Path.Combine(baselineHostRoot, "HostApi.dll"), baselineHostRoot,
+            Path.Combine(initialHostRoot, "HostApi.dll"), initialHostRoot,
             Path.Combine(Resources, "bootstrap"), _environment, token);
         registerSecret(bootstrap.TemporaryCredential);
         _ownership = await ReadSqlJsonAsync("SELECT * FROM dbo.__NewPDatabaseOwnership FOR JSON PATH;", null, token);
         _hostPort = ReservePort();
-        await StartHostAsync(baselineHostRoot, "baseline-host", token);
+        await StartHostAsync(initialHostRoot, historicalUpgrade ? "baseline-host" : "installed-host", token);
         using var administrator = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
         var administratorPassword = "Aa1!" + Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
         registerSecret(administratorPassword);
@@ -147,6 +162,11 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             granted.Add(features.Action(document, "create", "list.pageActions"));
             await WorkspaceAcceptanceFixture.SendAsync(administrator, HttpMethod.Post, "/api/workspace/spaces/public/initialize", null, workspace.Position, token);
         }
+        if (!historicalUpgrade)
+        {
+            granted.Add(features.Behavior("Document", "document.document.download"));
+            AddWorkspacePageGrants(features, granted);
+        }
         var actor = await WorkspaceAcceptanceFixture.PrepareAsync(administrator, features, runId, registerSecret, granted, token);
         using var ordinary = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
         await WorkspaceAcceptanceFixture.LoginAsync(ordinary, actor, token);
@@ -157,56 +177,73 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             var roots = await WorkspaceAcceptanceFixture.SendAsync(ordinary, HttpMethod.Get, "/api/workspace/spaces", null, workspace.Position, token);
             var root = roots.EnumerateArray().Single(item => string.Equals(item.GetProperty("spaceKind").GetString(), "public", StringComparison.OrdinalIgnoreCase));
             var position = new WorkspaceFolderPosition(root.GetProperty("spaceId").GetString()!, root.GetProperty("rootFolderId").GetString()!, root.GetProperty("rootFolderId").GetString()!, []);
-            _oldFolderId = (await WorkspaceAcceptanceFixture.CreateFolderAtPositionAsync(ordinary, features, position, ExistingFolderName, token)).FolderId;
-            oldId = await CreateWorkspaceObjectAsync(ordinary, features, position, "Part", "parts", ExistingCode, ExistingName, token);
-            _oldDocumentId = await CreateWorkspaceObjectAsync(ordinary, features, position, "Document", "documents", ExistingDocumentCode, ExistingDocumentName, token);
-            _baselineOwners = await ReadModelOwnersAsync(ordinary, token);
+            var folder = await WorkspaceAcceptanceFixture.CreateFolderAtPositionAsync(ordinary, features, position, ExistingFolderName, token);
+            _oldFolderId = folder.FolderId;
+            if (!historicalUpgrade) _documentPosition = folder;
+            // 当前根只允许文件夹；历史根的旧 Part 留给升级模式证明兼容，不用新 API 伪造。
+            oldId = await CreateWorkspaceObjectAsync(ordinary, features, historicalUpgrade ? position : folder,
+                "Part", "parts", ExistingCode, ExistingName, token);
+            if (historicalUpgrade)
+            {
+                _oldDocumentId = await CreateWorkspaceObjectAsync(ordinary, features, position, "Document", "documents", ExistingDocumentCode, ExistingDocumentName, token);
+                _baselineOwners = await ReadModelOwnersAsync(ordinary, token);
+            }
         }
         else oldId = await WorkspaceAcceptanceFixture.CreateMetadataObjectAsync(ordinary, features,
             "Part", "part.part.read", "/api/part/parts", ExistingCode, ExistingName, token);
-        var baseline = await ReadContinuityAsync(oldId, token);
-        await WriteAsync("sql-before.json", baseline, token);
-        await StopHostAsync(token);
-
-        await RunOfflineAsync("install-native", ["--package", packagePath], token);
-        if (workspaceDelivery) await RunOfflineAsync("enable-bundle", ["--package", packagePath], token);
-        else
+        Continuity? baseline = null;
+        if (historicalUpgrade)
         {
-            await RunOfflineAsync("enable", ["--module-id", "InforCenter", "--version", "1.0.0"], token);
-            await RunOfflineAsync("enable", ["--module-id", "Part", "--version", "1.0.0"], token);
-        }
-        if (workspaceDelivery)
-        {
-            await VerifyDocumentUpgradeGuardAsync(oldId, baseline, token);
-            await ClearOwnedLegacyDocumentAsync(token);
             baseline = await ReadContinuityAsync(oldId, token);
-            await WriteAsync("sql-after-explicit-document-cleanup.json", baseline, token);
+            await WriteAsync("sql-before.json", baseline, token);
+            await StopHostAsync(token);
+
+            await RunOfflineAsync("install-native", ["--package", packagePath], token);
+            if (workspaceDelivery) await RunOfflineAsync("enable-bundle", ["--package", packagePath], token);
+            else
+            {
+                await RunOfflineAsync("enable", ["--module-id", "InforCenter", "--version", "1.0.0"], token);
+                await RunOfflineAsync("enable", ["--module-id", "Part", "--version", "1.0.0"], token);
+            }
+            if (workspaceDelivery)
+            {
+                await VerifyDocumentUpgradeGuardAsync(oldId, baseline, token);
+                await ClearOwnedLegacyDocumentAsync(token);
+                baseline = await ReadContinuityAsync(oldId, token);
+                await WriteAsync("sql-after-explicit-document-cleanup.json", baseline, token);
+            }
+            await StartHostAsync(hostRoot, "installed-host", token);
+            var after = await ReadContinuityAsync(oldId, token);
+            await WriteAsync("sql-after.json", after, token);
+            if (workspaceDelivery) VerifyPreservedPredecessor(baseline, after, "Document", "Files", "Workspace");
+            else VerifyPreservedPredecessor(baseline, after, "Document", "Files");
         }
-        await StartHostAsync(hostRoot, "installed-host", token);
-        var after = await ReadContinuityAsync(oldId, token);
-        await WriteAsync("sql-after.json", after, token);
-        if (workspaceDelivery) VerifyPreservedPredecessor(baseline, after, "Document", "Files", "Workspace");
-        else VerifyPreservedPredecessor(baseline, after, "Document", "Files");
         using var installed = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
         await WorkspaceAcceptanceFixture.LoginAsync(installed, actor, token);
-        var installedFeatures = await AcceptanceFeatureCatalog.LoadAsync(installed, token);
+        var installedFeatures = historicalUpgrade ? await AcceptanceFeatureCatalog.LoadAsync(installed, token) : features;
         if (workspaceDelivery)
         {
-            granted.Add(installedFeatures.Behavior("Document", "document.document.download"));
-            VerifyDocumentModelEvolution(_baselineOwners!, await ReadModelOwnersAsync(installed, token));
-            _baselineOwners = await ReadModelOwnersAsync(installed, token);
-            var roots = await WorkspaceAcceptanceFixture.SendAsync(installed, HttpMethod.Get, "/api/workspace/spaces", null,
-                installedFeatures.Behavior("Workspace", "workspace.spaces.access").Position, token);
-            var root = roots.EnumerateArray().Single(item => string.Equals(item.GetProperty("spaceKind").GetString(), "public", StringComparison.OrdinalIgnoreCase));
-            var position = new WorkspaceFolderPosition(root.GetProperty("spaceId").GetString()!, root.GetProperty("rootFolderId").GetString()!, root.GetProperty("rootFolderId").GetString()!, []);
-            var rootContents = await WorkspaceAcceptanceFixture.ReadContentsAtPositionAsync(installed, position, workspace!.Position, token);
-            var folderLink = rootContents.GetProperty("items").EnumerateArray().Single(item => item.GetProperty("associatedObject").GetProperty("id").GetString() == _oldFolderId);
-            _documentPosition = position with { FolderId = _oldFolderId!, LinkIds = [folderLink.GetProperty("linkId").GetString()!] };
-            _oldDocumentId = await CreateWorkspaceObjectAsync(installed, installedFeatures, _documentPosition, "Document", "documents", ExistingDocumentCode, ExistingDocumentName, token);
-            baseline = await ReadContinuityAsync(oldId, token);
-            await WriteAsync("sql-post-upgrade-document.json", baseline, token);
+            if (historicalUpgrade)
+            {
+                granted.Add(installedFeatures.Behavior("Document", "document.document.download"));
+                VerifyDocumentModelEvolution(_baselineOwners!, await ReadModelOwnersAsync(installed, token));
+                _baselineOwners = await ReadModelOwnersAsync(installed, token);
+                var roots = await WorkspaceAcceptanceFixture.SendAsync(installed, HttpMethod.Get, "/api/workspace/spaces", null,
+                    installedFeatures.Behavior("Workspace", "workspace.spaces.access").Position, token);
+                var root = roots.EnumerateArray().Single(item => string.Equals(item.GetProperty("spaceKind").GetString(), "public", StringComparison.OrdinalIgnoreCase));
+                var position = new WorkspaceFolderPosition(root.GetProperty("spaceId").GetString()!, root.GetProperty("rootFolderId").GetString()!, root.GetProperty("rootFolderId").GetString()!, []);
+                var rootContents = await WorkspaceAcceptanceFixture.ReadContentsAtPositionAsync(installed, position, workspace!.Position, token);
+                var folderLink = rootContents.GetProperty("items").EnumerateArray().Single(item => item.GetProperty("associatedObject").GetProperty("id").GetString() == _oldFolderId);
+                _documentPosition = position with { FolderId = _oldFolderId!, LinkIds = [folderLink.GetProperty("linkId").GetString()!] };
+            }
+            _oldDocumentId = await CreateWorkspaceObjectAsync(installed, installedFeatures, _documentPosition!, "Document", "documents", ExistingDocumentCode, ExistingDocumentName, token);
+            if (historicalUpgrade)
+            {
+                baseline = await ReadContinuityAsync(oldId, token);
+                await WriteAsync("sql-post-upgrade-document.json", baseline, token);
+            }
         }
-        var detail = await ReadOldPartAsync(installed, installedFeatures, oldId, token);
+        JsonElement? detail = historicalUpgrade ? await ReadOldPartAsync(installed, installedFeatures, oldId, token) : null;
         var runtime = await WorkspaceAcceptanceFixture.SendAsync(installed, HttpMethod.Get,
             "/plugins/active-module-runtime.json", null, null, token);
         var modules = runtime.GetProperty("modules").EnumerateArray().ToArray();
@@ -214,27 +251,27 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         var expectedMembers = workspaceDelivery ? new[] { "Document", "Part", "Workspace" } : ["Part"];
         if (!parent.GetProperty("compositionMembers").EnumerateArray().Select(member => member.GetString()).Order(StringComparer.Ordinal).SequenceEqual(expectedMembers))
             throw new InvalidOperationException("首片未使用只含 Part 的正式 InforCenter 包。");
-        if (workspaceDelivery)
+        if (workspaceDelivery && historicalUpgrade)
             await VerifyWorkspaceApiContinuityAsync(installed, installedFeatures, oldId, "workspace-api-continuity.json", token);
-        await WriteAsync("api-continuity.json", new { oldId, detail, runtime, externalPluginsEnabled = false }, token);
-        if (workspaceDelivery && exerciseUninstallRecovery) await ExerciseUninstallRecoveryAsync(oldId, baseline, token);
+        await WriteAsync(historicalUpgrade ? "api-continuity.json" : "api-current-content.json",
+            new { oldId, detail, runtime, externalPluginsEnabled = false }, token);
+        if (workspaceDelivery && exerciseUninstallRecovery) await ExerciseUninstallRecoveryAsync(oldId, baseline!, token);
         if (workspaceDelivery)
         {
             if (exerciseCompositionLifecycle)
-                await VerifyCompositionLifecycleAsync(actor, oldId, installedFeatures.Behavior("Part", "part.part.read").Position, baseline, token);
-            // 新 download 位置不来自旧角色授权；生命周期删除后也不重放旧授权，页面使用明确有限的新角色。
-            using var pageAdministrator = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
-            await WorkspaceAcceptanceFixture.LoginAsync(pageAdministrator, _administrator!, token);
-            var pageFeatures = await AcceptanceFeatureCatalog.LoadAsync(pageAdministrator, token);
-            var pageWorkspace = pageFeatures.Behavior("Workspace", "workspace.spaces.access");
-            foreach (var key in new[] { "edit", "remove", "moveUp", "moveDown", "copy", "cut", "paste", "pasteObjectCopy", "pasteFolderCopy", "pasteFolderStructure", "clearClipboard" })
-                granted.Add(pageFeatures.Action(pageWorkspace, key, "contextMenu", "folder"));
-            foreach (var key in new[] { "copySelected", "cutSelected", "removeSelected", "paste", "pasteObjectCopy", "resolveObjectCopy", "pasteFolderCopy", "pasteFolderStructure", "clearClipboard" })
-                granted.Add(pageFeatures.Action(pageWorkspace, key, "list.pageActions", "folder"));
-            granted.Add(pageFeatures.Action(pageWorkspace, "copy", "list.rowActions", "folder"));
-            granted.Add(pageFeatures.Action(pageWorkspace, "cut", "list.rowActions", "folder"));
-            var previousActorId = actor.AccountId;
-            actor = await WorkspaceAcceptanceFixture.PrepareAsync(pageAdministrator, pageFeatures, "page" + runId, registerSecret, granted, token);
+                await VerifyCompositionLifecycleAsync(actor, oldId, installedFeatures.Behavior("Part", "part.part.read").Position, baseline!, token);
+            string? previousActorId = null;
+            var pageFeatures = features;
+            if (historicalUpgrade)
+            {
+                // 新 download 位置不来自旧角色授权；生命周期删除后也不重放旧授权，页面使用明确有限的新角色。
+                using var pageAdministrator = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
+                await WorkspaceAcceptanceFixture.LoginAsync(pageAdministrator, _administrator!, token);
+                pageFeatures = await AcceptanceFeatureCatalog.LoadAsync(pageAdministrator, token);
+                AddWorkspacePageGrants(pageFeatures, granted);
+                previousActorId = actor.AccountId;
+                actor = await WorkspaceAcceptanceFixture.PrepareAsync(pageAdministrator, pageFeatures, "page" + runId, registerSecret, granted, token);
+            }
             await WriteAsync("page-actor-preparation.json", new { previousActorId, pageActorId = actor.AccountId,
                 oldGrantsRestored = false, preparation = "formal-limited-role", grantedPositions = pageFeatures.GrantSet(granted.ToArray()) }, token);
         }
@@ -261,8 +298,21 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         var shellOrigin = $"http://127.0.0.1:{ready.RootElement.GetProperty("port").GetInt32()}";
         await WriteAsync("initialization.json", new { early271 = !workspaceDelivery, catalog = ReusableSqlServerDatabase.Catalog,
             hostOrigin = HostOrigin, shellOrigin, actorId = actor.AccountId, packagePath,
-            packageSha256 = FileHash(packagePath), baselineHostRoot, hostRoot, shellRoot }, token);
+            packageSha256 = FileHash(packagePath), preparation = preparation.ToString(),
+            baselineHostRoot = historicalUpgrade ? baselineHostRoot : null, hostRoot, shellRoot }, token);
         return new(actor, shellOrigin, _hostPort, workspaceDelivery ? installedFeatures.Behavior("Workspace", "workspace.spaces.access").Position : null);
+    }
+
+    // 两种准备方式共用同一有限页面授权集合；当前模式不为历史角色升级再创建第二个账号。
+    private static void AddWorkspacePageGrants(AcceptanceFeatureCatalog features, List<FeaturePoint> granted)
+    {
+        var workspace = features.Behavior("Workspace", "workspace.spaces.access");
+        foreach (var key in new[] { "edit", "remove", "moveUp", "moveDown", "copy", "cut", "paste", "pasteObjectCopy", "pasteFolderCopy", "pasteFolderStructure", "clearClipboard" })
+            granted.Add(features.Action(workspace, key, "contextMenu", "folder"));
+        foreach (var key in new[] { "copySelected", "cutSelected", "removeSelected", "paste", "pasteObjectCopy", "resolveObjectCopy", "pasteFolderCopy", "pasteFolderStructure", "clearClipboard" })
+            granted.Add(features.Action(workspace, key, "list.pageActions", "folder"));
+        granted.Add(features.Action(workspace, "copy", "list.rowActions", "folder"));
+        granted.Add(features.Action(workspace, "cut", "list.rowActions", "folder"));
     }
 
     private async Task<string> CreateWorkspaceObjectAsync(HttpClient client, AcceptanceFeatureCatalog features,

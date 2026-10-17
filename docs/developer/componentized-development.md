@@ -136,7 +136,7 @@ pnpm --dir frontend --filter @icp-platform/shell exec vite build --outDir <新�
 Remove-Item Env:NEWP_EXCLUDED_MODULE_IDS
 ```
 
-MSBuild 命令中的 `%2c` 转义逗号，避免将组件列表拆成多个属性。三成员正式包已贯通未预装它们的固定 Host/Shell：真实 Workspace、Part、Document API、旧业务行/内容 Link/迁移历史与 Workspace 页面消费连续。安装先完成整批校验与暂存，再以 `native-install.pending` 持久记录原库存字节及每个目录/receipt的先前所有权。提交期间进程中断，下一次正式离线命令或Host启动在同一安装根独占租约内、读取库存前恢复完整旧集合；恢复自身中断可重入。journal只在全部提交或全部恢复完成后移除；损坏、旧版仅摘要标记或无法恢复时保留journal与材料并以 `COMPONENT_BUNDLE_INSTALL_INCOMPLETE` 失败关闭，不能手工删除标记绕过。重复安装幂等，原选择、无关库存与Persistence pending/成功记录及恢复归档保持；文件恢复不连接数据库，也不代替数据库前沿恢复。整包选版和独立升级已沿固定 Host 重启及真实 Part API 验证；三成员归组、消费及显式集合退出/重装恢复已完成；真实部分迁移提交后叠加原生文件安装中断与恢复，SQL pending、成功事实、可信资产和历史保持，最终按真实数据库前沿恢复。父 #267 的完整审查与最终验证仍集中执行。
+MSBuild 命令中的 `%2c` 转义逗号，避免将组件列表拆成多个属性。三成员正式包已贯通未预装它们的固定 Host/Shell：真实 Workspace、Part、Document API、旧业务行/内容 Link/迁移历史与 Workspace 页面消费连续。安装先完成整批校验与暂存，再以 `native-install.pending` 持久记录原库存字节及每个目录/receipt的先前所有权。提交期间进程中断，下一次正式离线命令或Host启动在同一安装根独占租约内、读取库存前恢复完整旧集合；恢复自身中断可重入。journal只在全部提交或全部恢复完成后移除；损坏、旧版仅摘要标记或无法恢复时保留journal与材料并以 `COMPONENT_BUNDLE_INSTALL_INCOMPLETE` 失败关闭，不能手工删除标记绕过。重复安装幂等，原选择、无关库存与Persistence pending/成功记录及恢复归档保持；文件恢复不连接数据库，也不代替数据库前沿恢复。整包选版和独立升级已沿固定 Host 重启及真实 Part API 验证；三成员归组、消费及显式集合退出/重装恢复已完成；真实部分迁移提交后叠加原生文件安装中断与恢复，SQL pending、成功事实、可信资产和历史保持，最终按真实数据库前沿恢复。父级交付按验证指南汇总已有证据，只补具体集成缺口。
 
 创建固定目标时，restore 和 publish 必须使用同一排除集合；上述命令完成 restore 并重建 Host，避免复用其他组合生成的 deps/MVC ApplicationPart 引用。目标固定后，安装、选版和重启只操作安装根；二进制身份比较以安装前后同一固定目标为准。
 
@@ -150,11 +150,11 @@ MSBuild 命令中的 `%2c` 转义逗号，避免将组件列表拆成多个属�
 
 ## Workspace 固定发行物验收输入
 
-Workspace Gate 消费正式三成员包，不再用静态 dev 装配替代独立交付。普通验收使用 `accept.ps1 -Gate Workspace` 或 `accept.ps1 -Gate All`；完整验证使用 `verify.ps1 -AcceptanceGate Workspace`，也可在 `-AcceptanceGate` 中显式列出其他命名 Gate，列表包含 Workspace 时同样需要本节输入。先准备与本轮候选对应的正式包和平台发行物，再登记输入；开发候选可以 dirty。登记只记录 HEAD/tree/index/status、tracked/untracked 内容摘要及发行资产摘要，不授信、不产出另一套裁决。候选或固定目标变化时，重新准备受影响资产并登记；child 与排错轮次中仅测试资产或交付记录变化时，核对相关产品源码、构建输入及产物身份未变后，可复用原产品产物，只重建受影响测试资产，并用正式登记入口生成当前候选的新输入。登记与 Gate 只核对输入、当前候选和产物摘要，不能证明产物构建自哪份源码，因此父级最终冻结后一律按首次准备流程重建全部资产并重新登记。不得复用旧输入或手改其候选字段冒充最终验证。
+Workspace 有界验收场景消费正式三成员包，不再用静态 dev 装配替代独立交付。使用 `accept.ps1 -Scenario <AcceptanceGateTests精确方法名>`；需要同时执行仓库检查时才使用 `verify.ps1 -AcceptanceScenario <精确方法名>`。旧 `-Gate`、`-AcceptanceGate`、`All` 聚合入口已退役并明确拒绝。先准备与所选场景及本轮候选对应的正式包和平台发行物，再登记输入；开发候选可以 dirty。登记只记录 HEAD/tree/index/status、tracked/untracked 内容摘要及发行资产摘要，不授信、不产出另一套裁决。候选或固定目标变化时，核对相关产品源码、构建输入及产物身份：未受影响的产品产物可复用，仅重建受影响资产，并用正式登记入口生成当前候选的新输入。登记只核对输入、候选和产物摘要，不能证明产物来自哪份源码；复用须记录构建候选与仍有效的依据，不手改输入字段。父级收尾不统一重建全部资产或追加验收全集。
 
-旧数据由一份已有完整正式部署 Host 的真实 bootstrap/API 建立，随后同一个专用 `NewP_Test` catalog 切换到裁剪目标，正式 `install-native`、`enable-bundle` 后重启。baseline 必须包含三个成员的原实现；它与新目标用途不同。调用方必须提供该已有完整部署 Host 的绝对目录；缺少此历史输入的新环境不能用空库或新裁剪目标替代，也不能伪造已有数据连续性。SQL 管理连接沿用 Acceptance 的 `NEWP_ACCEPTANCE_SQLSERVER_ADMIN_CONNECTION`、`NEWP_DEV_SQLSERVER_CONNECTION_STRING` 和开发配置读取顺序，不把凭据写入交付输入或命令日志。
+历史模式的旧数据由一份已有完整正式部署 Host 的真实 bootstrap/API 建立，随后同一个专用 `NewP_Test` catalog 切换到裁剪目标，正式 `install-native`、`enable-bundle` 后重启。baseline 必须包含三个成员的原实现；它与新目标用途不同。调用方必须提供该已有完整部署 Host 的绝对目录；缺少此历史输入的新环境不能用空库或新裁剪目标替代，也不能伪造已有数据连续性。SQL 管理连接沿用 Acceptance 的 `NEWP_ACCEPTANCE_SQLSERVER_ADMIN_CONNECTION`、`NEWP_DEV_SQLSERVER_CONNECTION_STRING` 和开发配置读取顺序，不把凭据写入交付输入或命令日志。
 
-在仓库根、无其他 build/test/browser 占用时，逐条等待成功后继续。首次准备和父级最终冻结后执行下列全部命令；child 与排错轮次按上述影响范围选择构建与登记。重建资产使用新的输出目录；Host publish 保留 restore 并 Rebuild，避免复用默认全模块的 obj/deps。目标固定后，安装、选版、重启期间不再重建：
+在仓库根、无其他 build/test/browser 占用时，逐条等待成功后继续。以下是所选场景首次准备所需发行物的入口；后续按实际输入变化选择重建与登记，不因父级收尾重做全部命令。重建资产使用新的输出目录；Host publish 保留 restore 并 Rebuild，避免复用默认全模块的 obj/deps。目标固定后，安装、选版、重启期间不再重建：
 
 ```powershell
 $repo = (Get-Location).Path
@@ -177,24 +177,22 @@ finally { Remove-Item Env:NEWP_EXCLUDED_MODULE_IDS -ErrorAction SilentlyContinue
 dotnet build tests/acceptance/Acceptance.Tests/Acceptance.Tests.csproj -c Release
 dotnet run --project tests/acceptance/Acceptance.Runner/Acceptance.Runner.csproj -c Release --no-build --no-restore -- --workspace-delivery-input $workspaceDeliveryInput --repository-root $repo --baseline-host-root $baselineHost --host-root $hostRoot --shell-root $shellRoot --package $package
 $env:NEWP_ACCEPTANCE_WORKSPACE_DELIVERY_INPUT = $workspaceDeliveryInput
-.\scripts\verify.ps1 -AcceptanceGate Workspace
+.\scripts\accept.ps1 -Scenario WorkspaceSmoke_UsesFixedRelease
 ```
 
-输入登记会核对裁剪 Host 无三成员程序集、声明目录及 deps 引用，Shell 无对应构建期实现。正式 fixture 使用同一安装根、`ExternalPluginsEnabled=false`、`/plugins/runtime/assets` 与现有 production-shell-server 代理；保留候选/目标前后摘要、原始命令、SQL/API 快照、页面诊断及清理/凭据扫描。父级完整验证在最终冻结后按首次准备流程重建全部资产并重新登记最终输入，不沿用 child 或排错轮次的旧输入与产物；普通完整验证不要求 clean。
+输入登记会核对裁剪 Host 无三成员程序集、声明目录及 deps 引用，Shell 无对应构建期实现。正式 fixture 使用同一安装根、`ExternalPluginsEnabled=false`、`/plugins/runtime/assets` 与现有 production-shell-server 代理；保留候选/目标前后摘要、原始命令、SQL/API 快照、页面诊断及清理/凭据扫描。证据按所选场景覆盖范围和候选归属汇总，不将页面冒烟结果宣称为历史升级或恢复已通过；普通验证不要求 clean。
 
 Document 初版身份升级采用已确认的开发数据清理前提：固定 baseline 真实建立旧 Document 后，候选 Host 必须在新 step 的 DDL/history 前因非空旧 Document 拒绝。fixture 只清理自身创建的旧 Document 及其 Workspace 入向引用，然后在原 catalog 重试正式 Host 升级；Part、Folder、Identity 与旧历史前缀保持，升级后重新创建 Document 验证完整首版链。该过程不证明旧 Document 数据连续，也不重置整库。
 
-开发时可只开最低层或最短页面入口，二者默认明确 skip；完整 Workspace Gate 仍由父级集中执行。页面入口沿正式 driver 走进入、旧列表/属性、图文档创建、属性、编辑、删除和结果，不重复已通过的父成员生命周期循环：
+开发时按影响选择最低层或最短页面场景，环境测试默认明确 skip。`WorkspaceSmoke_UsesFixedRelease` 使用 `CurrentRelease`：在本轮独占的空 schema 上正式安装、启用包，再由当前固定 Host bootstrap 并通过 API 准备普通账号和业务数据，沿原 driver 完成页面操作及清理，不重复历史 Host 建数、旧 Document 升级拒绝和历史连续性检查。仍使用同一交付输入、候选与 Host/Shell/包摘要校验、有限角色、隔离资源和归属安全清理；其结果只证明当前页面旅程。进程重启由 `NativeWorkspaceProcessRestart_UsesFixedRelease` 独立覆盖；Document 批次恢复由 `NativeWorkspaceDocumentBatchRecovery_UsesFormalProcesses` 独立覆盖。Native API 历史升级、卸载及文件恢复沿各自入口与准备模式按变化选择，不能绑定到页面冒烟。原 `Workspace_CompletesEveryScenario` 聚合入口退役。
+
+Workspace 页面冒烟保留正式组件、列表／详情及普通账号一次真实写入和结果消费，适度保留文件上传／下载真实接线；复制、搜索、移动、排序、反向引用、编辑等使用既有独立场景按需验证。呈现采集按[快速验证](../verification/quick-verification.md#界面呈现核对)选择，可对选中场景加 `-Presentation`。下例只运行文件夹副本；按本次行为替换精确方法名，历史连续性或卸载恢复也只选择对应入口：
 
 ```powershell
-$env:NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE = '1'
-dotnet test tests/acceptance/Acceptance.Tests/Acceptance.Tests.csproj -c Release --no-build --no-restore --filter 'FullyQualifiedName~NativeWorkspaceApi_UsesFixedRelease' --logger 'console;verbosity=detailed'
-dotnet test tests/acceptance/Acceptance.Tests/Acceptance.Tests.csproj -c Release --no-build --no-restore --filter 'FullyQualifiedName~NativeWorkspaceUninstall_RecoversExistingBusiness' --logger 'console;verbosity=detailed'
-dotnet test tests/acceptance/Acceptance.Tests/Acceptance.Tests.csproj -c Release --no-build --no-restore --filter 'FullyQualifiedName~NativeWorkspace_UsesFormalDriver' --logger 'console;verbosity=detailed'
-Remove-Item Env:NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE
+.\scripts\accept.ps1 -Scenario NativeWorkspaceFolderCopy_UsesFormalDriver
 ```
 
-父组合屏蔽/恢复保留成员自身选择，以同一个正常判权的 LocalAdmin 和活动目录验证可用性。按 ADR-0048，正式删除的活动功能不恢复普通角色旧授权；fixture 如实保留恢复后的旧普通账号 403，再通过原有限授权准备流程另建页面主体，不宣称原授权恢复。退出/恢复验证复用 `PublishedComponentAcceptanceFixture.FromWorkspaceDelivery`、`PrepareAsync`、`RestartAsync` 和同一正式 Workspace runner/driver，不另建平行部署或浏览器准备。
+父组合屏蔽/恢复由 `NativeWorkspaceCompositionLifecycle_UsesFixedRelease` 显式选择，默认准备不执行该演练。它保留成员自身选择，以同一个正常判权的 LocalAdmin 和活动目录验证可用性。按 ADR-0048，正式删除的活动功能不恢复普通角色旧授权；fixture 如实保留恢复后的旧普通账号 403，再通过原有限授权准备流程另建页面主体，不宣称原授权恢复。退出/恢复验证复用 `PublishedComponentAcceptanceFixture.FromWorkspaceDelivery`、`PrepareAsync`、`RestartAsync` 和同一正式 Workspace runner/driver，不另建平行部署或浏览器准备。
 
 ## 100 组件、5 层规模回归
 

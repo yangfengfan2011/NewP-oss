@@ -120,8 +120,7 @@ export class WorkspaceClipboardSession {
         throw this.failure('Workspace.CopyCancelled');
       }
       if (failure instanceof StandardCrudRequestError) draft.fieldErrors = failure.fieldErrors;
-      const known = failure instanceof StandardCrudRequestError && failure.status >= 400 && failure.status < 500
-        && !['Persistence.CommitOutcomeUnknown', 'Platform.MutationOutcomeUnknown', 'Workspace.CopyOutcomeUnknown'].includes(failure.code ?? '');
+      const known = this.isKnownFailure(failure, 'Workspace.CopyOutcomeUnknown');
       if (known && failure.code === 'Workspace.CopySourceChanged') draft.requiresReconfirmation = true;
       if (this.objectOperation === operation && this.state.clipboard === clipboard) this.publish({ phase: known ? 'idle' : 'unknown', clipboard });
       throw known ? failure : Object.assign(this.failure('Workspace.CopyOutcomeUnknown'), { cause: failure });
@@ -136,8 +135,7 @@ export class WorkspaceClipboardSession {
       if (!result || !['ready', 'preparing', 'committed', 'cancelled'].includes(result.state) || result.succeeded !== (result.state === 'committed'))
         throw this.failure('Workspace.CopyOutcomeUnknown');
     } catch (failure) {
-      const known = failure instanceof StandardCrudRequestError && failure.status >= 400 && failure.status < 500
-        && !['Persistence.CommitOutcomeUnknown', 'Platform.MutationOutcomeUnknown', 'Workspace.CopyOutcomeUnknown'].includes(failure.code ?? '');
+      const known = this.isKnownFailure(failure, 'Workspace.CopyOutcomeUnknown');
       if (cancel && !known && this.objectOperation === operation && this.state.clipboard === operation.draft.source)
         this.publish({ ...this.state, phase: 'unknown' });
       throw failure;
@@ -197,8 +195,7 @@ export class WorkspaceClipboardSession {
       return receipt as ClipboardPasteReceipt;
     } catch (failure) {
       // 丢失回执、服务器故障或正式未知提交结果均不能恢复可粘贴状态，更不能自动重发。
-      const known = failure instanceof StandardCrudRequestError && failure.status >= 400 && failure.status < 500
-        && !['Platform.MutationOutcomeUnknown', 'Persistence.CommitOutcomeUnknown', 'Workspace.ClipboardOutcomeUnknown'].includes(failure.code ?? '');
+      const known = this.isKnownFailure(failure, 'Workspace.ClipboardOutcomeUnknown');
       if (!this.closed) this.publish({ phase: known ? 'idle' : 'unknown', clipboard });
       throw known ? failure : Object.assign(this.failure('Workspace.ClipboardOutcomeUnknown'), { cause: failure });
     }
@@ -214,5 +211,9 @@ export class WorkspaceClipboardSession {
     for (const listener of this.listeners) listener();
   }
   private publish(state: ClipboardState): void { if (!this.closed) { this.state = state; this.changed(); for (const listener of this.listeners) listener(); } }
+  private isKnownFailure(failure: unknown, outcomeUnknownCode: string): failure is StandardCrudRequestError {
+    return failure instanceof StandardCrudRequestError && failure.status >= 400 && failure.status < 500
+      && !['Persistence.CommitOutcomeUnknown', 'Platform.MutationOutcomeUnknown', outcomeUnknownCode].includes(failure.code ?? '');
+  }
   private failure(code: string): StandardCrudRequestError { return new StandardCrudRequestError(code, 409, {}, { code }); }
 }

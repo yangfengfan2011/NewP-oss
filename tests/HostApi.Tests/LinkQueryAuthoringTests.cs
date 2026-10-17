@@ -16,6 +16,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace ICP.Platform.HostApi.Tests;
 
+[Trait("Category", "ModuleMetadataConsumer")]
 public sealed class LinkQueryAuthoringTests
 {
     [Fact]

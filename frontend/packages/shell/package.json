@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "test": "vitest --run"
+    "test": "vitest --run",
+    "test:module-consumers": "node test-support/runModuleConsumerTests.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^6.2.3",

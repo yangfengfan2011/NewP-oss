@@ -3,6 +3,7 @@ using Xunit;
 
 namespace ICP.Platform.Kernel.Tests;
 
+[Trait("Category", "ModuleMetadataConsumer")]
 public sealed class PlatformCompositionTests
 {
     [Theory]

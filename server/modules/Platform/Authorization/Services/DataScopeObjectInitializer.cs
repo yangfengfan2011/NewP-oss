@@ -39,6 +39,6 @@ public sealed class DataScopeObjectInitializer(DataScopeObjectGrants grants, Dat
             throw new InvalidOperationException("Direct authorization initialization cannot replace an existing configuration.");
         if (parent.Subjects.Count == 0) return new(false, parents[0]);
         var copied = parent.Subjects.Select(subject => subject with { Id = ids.NewId("DataScopeObjectSubject") }).ToArray();
-        return new(await grants.SaveInCurrentOperationAsync(new DataScopeObjectDto(resourceKey, newObjectId, copied), token), parents[0]);
+        return new(await grants.InitializeInCurrentOperationAsync(new DataScopeObjectDto(resourceKey, newObjectId, copied), token), parents[0]);
     }
 }

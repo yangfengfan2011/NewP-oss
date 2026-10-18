@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.HostApi.Persistence;
+using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.Auditing;
@@ -483,6 +484,127 @@ public sealed class FolderParentAuthorizationSqlServerTests
         public override DateTimeOffset GetUtcNow() => Now;
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "父直接项引用账号软删后，普通新建/浅副本/结构仍完整克隆；手工单/批新增无效主体继续拒绝")]
+    public async Task RetainedParentConfiguration_ClonesDeletedUserThroughAllFolderCreationPaths_AndManualReferencesRemainValidated()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
+        using var admin = await fixture.LoginAdministratorAsync();
+        var departmentId = await InitializeAsync(fixture, admin);
+        var position = await ContainerAsync(fixture, admin);
+        var parent = await FindFolderAsync(fixture, "归属维护目录");
+        var source = await CreateAsync(fixture, admin, position, "WorkspaceFolder", "folders", "create", "RetainedSource298");
+        var sourcePosition = position with { LinkIds = [.. position.LinkIds, source.LinkId] };
+        await CreateAsync(fixture, admin, sourcePosition, "WorkspaceFolder", "folders", "create", "RetainedSourceChild298");
+        var manual = await CreateAsync(fixture, admin, position, "WorkspaceFolder", "folders", "create", "RetainedManual298");
+        var http = new FeatureHttpTestRequests(fixture);
+        var createdAccount = await FeatureHttpTestRequests.CreateAsync(admin, http.Identity("create"), "/api/identity/accounts",
+            new { ECODE = "retained-parent-subject298", ENAME = "父已有授权随后删除账号" });
+        var account = createdAccount.GetProperty("account");
+        var accountId = account.GetProperty("eid").GetString()!;
+        DataScopeDirectSubjectDto[] original = [
+            new("RetainedUser298", "user", accountId, 11, new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "deny" }, ExpiresAt: "2099-01-01T00:00:00Z"),
+            new("RetainedDepartment298", "department", departmentId, 7, new Dictionary<string, string> { ["history"] = "allow" }, new(true), "2099-02-01T00:00:00Z"),
+            new("RetainedCreator298", "creator", null, 3, new Dictionary<string, string> { ["authorize"] = "deny" })
+        ];
+        var parentOccurrence = position with { LinkIds = [] };
+        await SaveAsync(fixture, admin, parentOccurrence, parent, original);
+        await SaveAsync(fixture, admin, position, source,
+            [new("RetainedSourceDifferent298", "all", null, 99, new Dictionary<string, string> { ["history"] = "deny" })]);
+        var parentBefore = (await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(parentOccurrence, parent.LinkId))).GetRawText();
+        var sourceBefore = (await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(position, source.LinkId))).GetRawText();
+        // 从未登录/绑定的真实账号允许正式软删；保留下来的ACL引用不是新手工选择器。
+        using (var deleted = await FeatureHttpTestRequests.SendAsync(admin, http.Identity("delete"), HttpMethod.Post,
+            "/api/identity/accounts/" + accountId + "/delete", new { ExpectedRevision = account.GetProperty("revision").GetInt64(), Reason = "核证父已有直接项完整克隆" }))
+            await ReadOkAsync(deleted);
+        using (var scope = fixture.Services.CreateScope())
+        {
+            Assert.Null(await scope.ServiceProvider.GetRequiredService<IIdentityAccountDirectory>().FindAsync(accountId));
+            var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+            Assert.True(await db.Set<Dictionary<string, object?>>("IdentityAccount").AsNoTracking()
+                .AnyAsync(row => EF.Property<string>(row, "EID") == accountId && EF.Property<string>(row, "Status") == "Deleted"));
+            Assert.True(await db.Set<Dictionary<string, object?>>("DataScopeObjectSubject").AsNoTracking()
+                .AnyAsync(row => EF.Property<string>(row, "ObjectId") == parent.Id && EF.Property<string>(row, "SubjectId") == accountId));
+        }
+        var beforeRejected = await SnapshotAsync(fixture);
+        var batch = fixture.FeatureCatalog.Single(point => point.Key == "batchAuthorize" && point.ActionScope == "list.pageActions");
+        foreach (var invalidId in new[] { accountId, "missing-retained-subject298" })
+        {
+            using (var rejected = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.authorize"), HttpMethod.Put,
+                PermissionsPath(position, manual.LinkId), new DataScopeObjectConfiguration("workspace.folder", manual.Id,
+                    [original[0] with { Id = "RetainedManualInvalid298", SubjectId = invalidId }])))
+            {
+                Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+                Assert.Contains("DATA_SCOPE_SUBJECT_NOT_FOUND", await rejected.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+            }
+            using var rejectedBatch = await FeatureHttpTestRequests.SendAsync(admin, batch, HttpMethod.Post, "/api/workspace/content/permissions/batch",
+                new { mode = "U", sources = new[] { new { position, linkIds = new[] { manual.LinkId } } }, resources = new[] {
+                    new DataScopeBatchResourceConfiguration("workspace.folder", [new("user", invalidId, 11, original[0].Actions, ExpiresAt: original[0].ExpiresAt)]) } });
+            Assert.Equal(HttpStatusCode.BadRequest, rejectedBatch.StatusCode);
+            Assert.Contains("DATA_SCOPE_SUBJECT_NOT_FOUND", await rejectedBatch.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        }
+        Assert.Equal(beforeRejected, await SnapshotAsync(fixture));
+        HashSet<string> subjectIds;
+        HashSet<string> actionIds;
+        using (var scope = fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+            subjectIds = (await db.Set<Dictionary<string, object?>>("DataScopeObjectSubject").AsNoTracking().Select(row => EF.Property<string>(row, "EID")).ToArrayAsync()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            actionIds = (await db.Set<Dictionary<string, object?>>("DataScopeObjectAction").AsNoTracking().Select(row => EF.Property<string>(row, "EID")).ToArrayAsync()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+        foreach (var kind in new[] { "create", "copy", "copy-structure" })
+        {
+            string[] beforeIds;
+            using (var scope = fixture.Services.CreateScope())
+                beforeIds = await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("WorkspaceFolder")
+                    .AsNoTracking().Select(row => EF.Property<string>(row, "EID")).ToArrayAsync();
+            var name = "RetainedResult298-" + kind;
+            var body = kind == "create" ? (object)new { position, values = new { ENAME = name }, copyParentAuthorization = true }
+                : new { mode = "copy", sourcePosition = position, linkIds = new[] { source.LinkId }, targetPosition = position, name, copyParentAuthorization = true };
+            var feature = kind == "create" ? "create" : kind == "copy" ? "pasteFolderCopy" : "pasteFolderStructure";
+            var path = "/api/workspace/content/folders" + (kind == "create" ? "" : "/" + kind);
+            using (var response = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder." + feature), HttpMethod.Post, path, body))
+                await ReadOkAsync(response);
+            using var readScope = fixture.Services.CreateScope();
+            var readDb = readScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+            var folders = await readDb.Set<Dictionary<string, object?>>("WorkspaceFolder").AsNoTracking()
+                .Where(row => !beforeIds.Contains(EF.Property<string>(row, "EID"))).ToArrayAsync();
+            Assert.Equal(kind == "copy-structure" ? 2 : 1, folders.Length);
+            var root = Assert.Single(folders, row => Equals(row["ENAME"], name));
+            var rootId = (string)root["EID"]!;
+            var links = await readDb.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AsNoTracking().ToArrayAsync();
+            var rootLink = Assert.Single(links, row => Equals(row["CEID"], rootId));
+            foreach (var folder in folders)
+            {
+                var id = (string)folder["EID"]!;
+                var link = Assert.Single(links, row => Equals(row["CEID"], id));
+                Assert.Equal(id == rootId ? parent.Id : rootId, link["PEID"]);
+                var occurrence = id == rootId ? position : position with { LinkIds = [.. position.LinkIds, (string)rootLink["LID"]!] };
+                var configuration = await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(occurrence, (string)link["LID"]!));
+                var subjects = configuration.GetProperty("subjects").EnumerateArray().ToArray();
+                Assert.Equal(original.Length, subjects.Length);
+                foreach (var expected in original)
+                {
+                    var actual = Assert.Single(subjects, item => item.GetProperty("type").GetString() == expected.Type);
+                    Assert.True(subjectIds.Add(actual.GetProperty("id").GetString()!), "克隆主体项必须使用全局新技术ID");
+                    Assert.Equal(expected.SubjectId, actual.GetProperty("subjectId").GetString());
+                    Assert.Equal(expected.Priority, actual.GetProperty("priority").GetInt64());
+                    Assert.Equal(expected.ExpiresAt, actual.TryGetProperty("expiresAt", out var expiry) ? expiry.GetString() : null);
+                    Assert.Equal(expected.MatchOptions?.IncludeDescendants == true,
+                        actual.TryGetProperty("matchOptions", out var options) && options.ValueKind == JsonValueKind.Object && options.GetProperty("includeDescendants").GetBoolean());
+                    var opinions = actual.GetProperty("actions");
+                    Assert.Equal(expected.Actions.Count, opinions.EnumerateObject().Count());
+                    foreach (var (action, opinion) in expected.Actions) Assert.Equal(opinion, opinions.GetProperty(action).GetString());
+                }
+                var entryIds = subjects.Select(item => item.GetProperty("id").GetString()!).ToArray();
+                var actions = await readDb.Set<Dictionary<string, object?>>("DataScopeObjectAction").AsNoTracking()
+                    .Where(row => entryIds.Contains(EF.Property<string>(row, "EntryId"))).ToArrayAsync();
+                Assert.Equal(original.Sum(item => item.Actions.Count), actions.Length);
+                Assert.All(actions, action => Assert.True(actionIds.Add((string)action["EID"]!), "克隆动作行必须使用全局新技术ID"));
+            }
+        }
+        Assert.Equal(parentBefore, (await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(parentOccurrence, parent.LinkId))).GetRawText());
+        Assert.Equal(sourceBefore, (await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(position, source.LinkId))).GetRawText());
+    }
     private static async Task<string> SnapshotAsync(BusinessAuditHostFixture fixture)
     {
         using var scope = fixture.Services.CreateScope();

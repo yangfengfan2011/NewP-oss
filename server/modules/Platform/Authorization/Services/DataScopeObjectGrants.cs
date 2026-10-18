@@ -42,17 +42,32 @@ public sealed class DataScopeObjectGrants(EfPlatformDbContext db, IPlatformTrans
         }, token);
     }
 
-    // 可信初始化与批量写入复用当前业务stamp；必须由真实owner持有外层事务，不能自行提交。
-    internal async Task<bool> SaveInCurrentOperationAsync(DataScopeObjectDto input, CancellationToken token)
+    // 仅克隆锁内核证的既有父配置；保留已存主体引用，复用结构校验及规范化但不把它当作新手工选主体。
+    internal async Task<bool> InitializeInCurrentOperationAsync(DataScopeObjectDto input, CancellationToken token)
     {
         RequireTransaction();
-        var normalized = await PrepareAsync(input, token);
+        ValidateConfiguration(input);
+        var normalized = input with { Subjects = input.Subjects.Select(Normalize).ToArray() };
         await LockAsync(normalized.ResourceKey, normalized.ObjectId, token);
         return await ApplyAsync(normalized, token);
     }
 
-    // 只规范化和验证完整配置，不取得对象资格或写入；批量可先验证全部资源再修改任何目标。
+    // 外部单对象和批量手工输入仍须逐类核证主体当前存在；不取得对象资格或写入。
     internal async Task<DataScopeObjectDto> PrepareAsync(DataScopeObjectDto input, CancellationToken token)
+    {
+        ValidateConfiguration(input);
+        foreach (var group in input.Subjects.Where(subject => subject.SubjectId is not null).GroupBy(subject => subject.Type))
+            foreach (var batch in group.Select(subject => subject.SubjectId!).Distinct(StringComparer.Ordinal).Chunk(100))
+            {
+                var names = await identities.SearchAsync(group.Key, null, 1, batch, token);
+                if (batch.Except(names.CurrentValues.Select(value => value.Id), StringComparer.Ordinal).Any())
+                    throw new RolePermissionValidationException("所选授权主体不存在。", "DATA_SCOPE_SUBJECT_NOT_FOUND", field: "subjects");
+            }
+        return input with { Subjects = input.Subjects.Select(Normalize).ToArray() };
+    }
+
+    // 新手工配置与可信父克隆共用结构校验；当前目录存在性只由外部PrepareAsync额外核证。
+    private void ValidateConfiguration(DataScopeObjectDto input)
     {
         var supportedActions = catalog.ActionsFor(input.ResourceKey);
         if (string.IsNullOrWhiteSpace(input.ObjectId) || input.ObjectId.Length > 128 || input.Subjects is null)
@@ -69,14 +84,6 @@ public sealed class DataScopeObjectGrants(EfPlatformDbContext db, IPlatformTrans
             if (!selectors.Add((subject.Type, subject.SubjectId, subject.MatchOptions?.IncludeDescendants == true)))
                 throw new RolePermissionValidationException("同一规范主体选择器不能重复。", "DATA_SCOPE_OBJECT_SUBJECT_DUPLICATE", field: "subjects");
         }
-        foreach (var group in input.Subjects.Where(subject => subject.SubjectId is not null).GroupBy(subject => subject.Type))
-            foreach (var batch in group.Select(subject => subject.SubjectId!).Distinct(StringComparer.Ordinal).Chunk(100))
-            {
-                var names = await identities.SearchAsync(group.Key, null, 1, batch, token);
-                if (batch.Except(names.CurrentValues.Select(value => value.Id), StringComparer.Ordinal).Any())
-                    throw new RolePermissionValidationException("所选授权主体不存在。", "DATA_SCOPE_SUBJECT_NOT_FOUND", field: "subjects");
-            }
-        return input with { Subjects = input.Subjects.Select(Normalize).ToArray() };
     }
 
     // 所有多目标调用先按规范resource/EID稳定排序取得锁；来源图锁由Workspace owner先持有。
@@ -89,7 +96,7 @@ public sealed class DataScopeObjectGrants(EfPlatformDbContext db, IPlatformTrans
             token);
     }
 
-    // 输入已通过同一Prepare且调用者已持有ACL锁；不重新建立stamp或事务，保持整个批次的提交边界。
+    // 输入已通过同一结构校验及规范化且调用者已持有ACL锁；不重新建立stamp或事务。
     internal async Task<bool> ApplyAsync(DataScopeObjectDto normalized, CancellationToken cancellationToken)
     {
         RequireTransaction();

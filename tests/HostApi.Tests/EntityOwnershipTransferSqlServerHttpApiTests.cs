@@ -111,6 +111,19 @@ public sealed class EntityOwnershipTransferSqlServerHttpApiTests
         var personal = await db.Set<Dictionary<string, object?>>("WorkspaceSpace").AsNoTracking()
             .SingleAsync(row => EF.Property<string>(row, "SpaceKind") == "Personal" && EF.Property<string>(row, "SubjectId") == recipient.AccountId);
         var personalRoot = (string)personal["RootFolderId"]!;
+        // 转交创建的接收空间与本人初始化共用存储名称、平台 ID 和根校验；接收人随后初始化必须复用而不是另建。
+        var rootFolder = await db.Set<Dictionary<string, object?>>("WorkspaceFolder").AsNoTracking()
+            .SingleAsync(row => EF.Property<string>(row, "EID") == personalRoot);
+        Assert.Equal("个人空间", personal["ENAME"]);
+        Assert.Equal("个人空间", rootFolder["ENAME"]);
+        Assert.StartsWith("WorkspaceSpace_", (string)personal["EID"]!, StringComparison.Ordinal);
+        Assert.Equal(recipient.AccountId, rootFolder["OwnerId"]);
+        using (var ensured = await FeatureHttpTestRequests.SendAsync(recipientClient, browse, HttpMethod.Post, "/api/workspace/spaces/personal/ensure"))
+        {
+            var ensuredRoot = await ReadOkAsync(ensured);
+            Assert.Equal(personal["EID"], ensuredRoot.GetProperty("spaceId").GetString());
+            Assert.Equal(personalRoot, ensuredRoot.GetProperty("rootFolderId").GetString());
+        }
         var receiveDirectory = await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AsNoTracking()
             .SingleAsync(row => EF.Property<string>(row, "PEID") == personalRoot);
         var directoryId = (string)receiveDirectory["CEID"]!;

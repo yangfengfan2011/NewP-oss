@@ -2,7 +2,6 @@ using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Crud.Abstractions;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Modules.Workspace;
@@ -13,7 +12,7 @@ public sealed record WorkspaceSpaceRoot(string SpaceId, string SpaceKind, string
 /// <summary>空间初始化与强制准入；普通内容权限不由初始化命令授予。</summary>
 public sealed class WorkspaceSpaces(EfPlatformDbContext db, IPlatformTransactionExecutor transactions, IDataScopeReadPlanProvider readPlans,
     IStandardCrudService details, WorkspaceFolderReadDescriptor descriptor, WorkspaceFolderScope folderScope,
-    ICP.Platform.Crud.Ownership.EntityOwnershipValues ownership, ICP.Platform.Crud.Ownership.EntityOwnershipAudit ownershipAudit,
+    ICP.Platform.Crud.Ownership.EntityOwnershipValues ownership, WorkspaceSpaceInitialization initialization,
     ICP.Platform.Persistence.Auditing.IEntityAuditValueProvider audit)
 {
     private const string SpaceModel = "WorkspaceSpace";
@@ -34,37 +33,12 @@ public sealed class WorkspaceSpaces(EfPlatformDbContext db, IPlatformTransaction
     public async Task<WorkspaceSpaceRoot> EnsureAsync(string actorId, bool personal, CancellationToken token = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(actorId);
-        var kind = personal ? "Personal" : "Public";
         return await transactions.ExecuteAsync<WorkspaceSpaceRoot>(async cancellation =>
         {
             using var operation = audit.BeginOperation();
-            // SQL Server 的事务锁跨 Host 生效；按账号分锁，不把多标签页竞争退化为先查后插。
-            var resource = "Workspace.Space." + (personal ? actorId : "Public");
-            await db.Database.ExecuteSqlRawAsync("DECLARE @result int; EXEC @result = sp_getapplock @Resource=@resource, @LockMode='Exclusive', @LockOwner='Transaction', @LockTimeout=15000; IF @result < 0 THROW 51000, 'Workspace initialization lock failed.', 1;",
-                [new SqlParameter("@resource", resource)], cancellation);
-            var existing = SpaceRows().Where(r => EF.Property<string>(r, "SpaceKind") == kind);
-            if (personal) existing = existing.Where(r => EF.Property<string?>(r, "SubjectId") == actorId);
-            var current = await existing.SingleOrDefaultAsync(cancellation);
-            if (current is not null) return await ValidateRootAsync(db, current, cancellation);
-            var spaceId = Guid.NewGuid().ToString("N");
-            var rootId = Guid.NewGuid().ToString("N");
-            var name = personal ? "个人空间" : "公共空间";
-            var root = new Dictionary<string, object?>
-            {
-                ["EID"] = rootId, ["ENAME"] = name, ["OriginSpaceId"] = spaceId, ["Description"] = null
-            };
-            await ownership.ApplyCreateAsync(root, ["OwnerId", "OwnerDepartmentId"], cancellation);
-            db.Set<Dictionary<string, object?>>(FolderModel).Add(root);
-            await ownershipAudit.RegisterAsync("workspace.folder", rootId, root, false, cancellation);
-            // RootFolderId 非空 FK；先保存预分配来源的根，再保存空间，两次保存仍属于同一平台事务。
-            await transactions.FlushAsync(cancellation);
-            db.Set<Dictionary<string, object?>>(SpaceModel).Add(new()
-            {
-                ["EID"] = spaceId, ["ENAME"] = name, ["SpaceKind"] = kind,
-                ["SubjectId"] = personal ? actorId : null,
-                ["RootFolderId"] = rootId
-            });
-            return new(spaceId, kind, rootId, name);
+            // 本人初始化的根归属由可信当前账号填写；接收转交使用同一创建流程但提供 recipient 归属。
+            return await initialization.EnsureAsync(personal ? actorId : null,
+                (root, stamping) => ownership.ApplyCreateAsync(root, ["OwnerId", "OwnerDepartmentId"], stamping), cancellation);
         }, token);
     }
 
@@ -98,9 +72,6 @@ public sealed class WorkspaceSpaces(EfPlatformDbContext db, IPlatformTransaction
     internal static IQueryable<Dictionary<string, object?>> Admitted(EfPlatformDbContext db, string actorId) => db.Set<Dictionary<string, object?>>(SpaceModel).AsNoTracking().Where(r =>
         EF.Property<string>(r, "SpaceKind") == "Public" && EF.Property<string?>(r, "SubjectId") == null
         || EF.Property<string>(r, "SpaceKind") == "Personal" && EF.Property<string?>(r, "SubjectId") == actorId);
-
-    // Workspace 只读自己拥有的动态模型，不绑定另一个模块的 EF 实现。
-    private IQueryable<Dictionary<string, object?>> SpaceRows() => db.Set<Dictionary<string, object?>>(SpaceModel).AsNoTracking();
 
     // 无根或来源损坏是不可用状态，不能重建空间或回退全局目录。
     internal static async Task<WorkspaceSpaceRoot> ValidateRootAsync(EfPlatformDbContext db, Dictionary<string, object?> space, CancellationToken token)

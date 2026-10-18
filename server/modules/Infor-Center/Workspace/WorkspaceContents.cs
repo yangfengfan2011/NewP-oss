@@ -22,7 +22,7 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
     Microsoft.Extensions.Logging.ILogger<WorkspaceContents> logger,
     ICP.Platform.Crud.Ownership.EntityOwnershipValues ownership,
     ICP.Platform.Crud.Ownership.EntityOwnershipAudit ownershipAudit, WorkspaceFolderReadDescriptor folderDescriptor,
-    IDataScopeObjectInitializer parentAuthorizations)
+    IDataScopeObjectInitializer parentAuthorizations, WorkspaceSpaceInitialization spaceInitialization)
 {
     /// <summary>保留旧调用不复制父授权的行为；新的初始化语义须由真实业务入口明确选择。</summary>
     public ValueTask<string> CreateFolderAsync(string actorId, WorkspacePosition position, IReadOnlyDictionary<string, JsonElement> values, CancellationToken token) =>

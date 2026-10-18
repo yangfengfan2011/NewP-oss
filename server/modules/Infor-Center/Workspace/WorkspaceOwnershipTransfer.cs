@@ -3,7 +3,6 @@ using ICP.Platform.Crud.LinkQueries;
 using ICP.Platform.Crud.Ownership;
 using ICP.Platform.Persistence.Ownership;
 using ICP.Platform.Presentation;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Modules.Workspace;
@@ -54,7 +53,12 @@ public sealed partial class WorkspaceContents
     {
         if (!transactions.IsActive) throw new InvalidOperationException("ENTITY_OWNERSHIP_TRANSACTION_REQUIRED");
         var stamp = audit.Current();
-        var root = await EnsureReceivingSpaceAsync(recipient, texts.GetText("Workspace.Personal", presentation.Current?.Locale), token);
+        // 接收人尚无个人空间时与本人初始化走同一创建流程；根归属是 recipient，而非执行转交的 sender。
+        var root = await spaceInitialization.EnsureAsync(recipient.AccountId, (row, _) =>
+        {
+            StampReceivingFolder(row, recipient);
+            return ValueTask.CompletedTask;
+        }, token);
         var senderNames = await names.FindManyAsync([stamp.ActorId], token);
         var sender = senderNames.GetValueOrDefault(stamp.ActorId) ?? texts.GetText("Workspace.TransferSenderUnavailable", presentation.Current?.Locale);
         var local = TimeZoneInfo.ConvertTimeFromUtc(stamp.OccurredAtUtc, TimeZoneInfo.FindSystemTimeZoneById(presentation.Current?.TimeZoneId ?? "UTC"));
@@ -98,26 +102,6 @@ public sealed partial class WorkspaceContents
         }
     }
 
-    // 同账号空间创建与正常 ensure 复用相同锁名和根不变量；归属由可信 recipient 事实明确填写。
-    private async Task<WorkspaceSpaceRoot> EnsureReceivingSpaceAsync(AccountOwnership recipient, string personalName, CancellationToken token)
-    {
-        await db.Database.ExecuteSqlRawAsync("DECLARE @result int; EXEC @result=sp_getapplock @Resource=@resource,@LockMode='Exclusive',@LockOwner='Transaction',@LockTimeout=15000; IF @result<0 THROW 51000,'Workspace initialization lock failed.',1;",
-            [new SqlParameter("@resource", "Workspace.Space." + recipient.AccountId)], token);
-        var spaces = db.Set<Dictionary<string, object?>>("WorkspaceSpace");
-        var existing = await spaces.SingleOrDefaultAsync(row => EF.Property<string>(row, "SpaceKind") == "Personal"
-            && EF.Property<string>(row, "SubjectId") == recipient.AccountId, token);
-        if (existing is not null) return await WorkspaceSpaces.ValidateRootAsync(db, existing, token);
-        var spaceId = ids.NewId("WorkspaceSpace"); var rootId = ids.NewId(WorkspacePositions.FolderModel);
-        var root = ReceivingFolder(rootId, spaceId, personalName, recipient);
-        Folders.Add(root);
-        await ownershipAudit.RegisterAsync("workspace.folder", rootId, root, false, token);
-        await transactions.FlushAsync(token);
-        spaces.Add(new() { ["EID"] = spaceId, ["ENAME"] = personalName, ["SpaceKind"] = "Personal",
-            ["SubjectId"] = recipient.AccountId, ["RootFolderId"] = rootId });
-        await transactions.FlushAsync(token);
-        return new(spaceId, "Personal", rootId, personalName);
-    }
-
     // 同分钟目录名称按数据库 collation 比较；只复用接收人本根下同名目录，不因别处已有对象引用而跳过。
     private async Task<string> EnsureReceivingDirectoryAsync(WorkspaceSpaceRoot root, AccountOwnership recipient, string name, CancellationToken token)
     {
@@ -127,7 +111,8 @@ public sealed partial class WorkspaceContents
             .Select(folder => EF.Property<string>(folder, "EID")).SingleOrDefaultAsync(token);
         if (existing is not null) return existing;
         var id = ids.NewId(WorkspacePositions.FolderModel);
-        var folder = ReceivingFolder(id, root.SpaceId, name, recipient);
+        var folder = new Dictionary<string, object?> { ["EID"] = id, ["ENAME"] = name, ["Description"] = null, ["OriginSpaceId"] = root.SpaceId };
+        StampReceivingFolder(folder, recipient);
         Folders.Add(folder);
         await ownershipAudit.RegisterAsync("workspace.folder", id, folder, false, token);
         await referenceAudit.FolderCreatedAsync(folder, token);
@@ -138,12 +123,11 @@ public sealed partial class WorkspaceContents
     }
 
     // CreatedBy 仍是执行系统接收登记的可信转交者；Owner 单独是接收者，空部门不被猜测为 sender 部门。
-    private Dictionary<string, object?> ReceivingFolder(string id, string spaceId, string name, AccountOwnership recipient)
+    private void StampReceivingFolder(Dictionary<string, object?> row, AccountOwnership recipient)
     {
-        var row = new Dictionary<string, object?> { ["EID"] = id, ["ENAME"] = name, ["Description"] = null,
-            ["OriginSpaceId"] = spaceId, ["OwnerId"] = recipient.AccountId, ["OwnerDepartmentId"] = recipient.DepartmentId };
+        row["OwnerId"] = recipient.AccountId;
+        row["OwnerDepartmentId"] = recipient.DepartmentId;
         audit.ForCreate().ApplyTo(row);
-        return row;
     }
 }
 

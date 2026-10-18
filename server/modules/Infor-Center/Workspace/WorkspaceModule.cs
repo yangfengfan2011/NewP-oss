@@ -16,6 +16,7 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
     {
         services.AddSingleton(new ICP.Platform.Authorization.Contracts.DataScopeResourceActionBinding("workspace.folder", ModuleId,
             ["read", "create", "edit", "delete", "authorize", "history", "workspaceCopy"]));
+        services.AddScoped<WorkspaceSpaceInitialization>();
         services.AddScoped<WorkspaceSpaces>();
         services.AddScoped<WorkspacePositions>();
         services.AddScoped<WorkspaceContents>();

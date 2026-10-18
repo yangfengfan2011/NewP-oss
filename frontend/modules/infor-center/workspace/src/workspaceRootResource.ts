@@ -80,10 +80,10 @@ const resource: StandardCrudResourceRegistration = {
   }],
   actionInputRenderers: {
     ...transfer.actionInputRenderers, ...ownership.actionInputRenderers,
-    batchAuthorization: Object.assign((context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceBatchAuthorizationInput, context)), { dialogWidth: 960 }),
+    batchAuthorization: Object.assign((context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceBatchAuthorizationInput, context)), { dialogWidth: 1360 }),
     createFolder: Object.assign((context: StandardCrudActionInputRenderContext) =>
       createElement(Suspense, { fallback: null }, createElement(WorkspaceFolderCreateInput, context)), { presentation: 'drawer' as const }),
-    objectAuthorization: context => authorization(context).actionInputRenderers.objectAuthorization(context),
+    objectAuthorization: Object.assign((context: StandardCrudActionInputRenderContext) => authorization(context).actionInputRenderers.objectAuthorization(context), { dialogWidth: 1360 }),
     recoverObjectCopy: Object.assign((context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceObjectCopyRecovery, context)), { presentation: 'drawer' as const }),
     copyObject: Object.assign((context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceObjectCopyInput, context)), { presentation: 'drawer' as const }),
     copyFolder: (context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceFolderCopyInput, context)),

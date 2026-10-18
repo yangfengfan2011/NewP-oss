@@ -173,7 +173,7 @@ it('edits a direct expiry using the existing UTC second picker and clears it to 
   await vi.waitFor(() => expect(document.querySelector('.ant-picker-dropdown:not(.ant-picker-dropdown-hidden)')).not.toBeNull());
   await act(async () => document.querySelector<HTMLElement>('.ant-picker-dropdown:not(.ant-picker-dropdown-hidden) td[title="2027-03-05"] .ant-picker-cell-inner')!.click());
   await act(async () => document.querySelector<HTMLButtonElement>('.ant-picker-dropdown:not(.ant-picker-dropdown-hidden) .ant-picker-ok button')!.click());
-  await act(async () => [...document.querySelectorAll<HTMLButtonElement>('.ant-drawer-open button')]
+  await act(async () => [...document.querySelectorAll<HTMLButtonElement>('[data-subject-editor] button')]
     .find(element => element.textContent?.replace(/\s/g, '') === '确定')!.click());
   await act(async () => button('保存授权')!.click());
   expect(saves).toHaveLength(1);
@@ -184,7 +184,7 @@ it('edits a direct expiry using the existing UTC second picker and clears it to 
   input = await edit();
   expect(input.value).toBe('2027-03-05 05:06:07');
   await act(async () => input.closest('.ant-picker')!.querySelector<HTMLElement>('.ant-picker-clear')!.click());
-  await act(async () => [...document.querySelectorAll<HTMLButtonElement>('.ant-drawer-open button')]
+  await act(async () => [...document.querySelectorAll<HTMLButtonElement>('[data-subject-editor] button')]
     .find(element => element.textContent?.replace(/\s/g, '') === '确定')!.click());
   await act(async () => button('保存授权')!.click());
   expect(saves).toHaveLength(2);

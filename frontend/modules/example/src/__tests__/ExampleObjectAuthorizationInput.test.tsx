@@ -48,12 +48,12 @@ it('loads saved subjects, keeps tri-state changes in the draft and reports neste
   const add = [...document.querySelectorAll('button')].find(button => button.textContent === '添加主体项');
   await act(async () => add!.click());
   expect(draft).toHaveBeenLastCalledWith({ ready: false, dirty: true });
-  const drawer = document.querySelector('.ant-drawer')!;
-  expect([...drawer.querySelectorAll('.ant-form-item-label')].map(label => label.textContent)).toContain('读取');
-  expect(drawer.textContent).not.toContain('意见');
-  expect(drawer.textContent).not.toContain('新建');
-  expect(drawer.textContent).not.toContain('保存根规则');
-  expect(drawer.textContent).toContain('保存后生效');
+  const editor = document.querySelector('[data-subject-editor]')!;
+  expect([...editor.querySelectorAll('.ant-form-item-label')].map(label => label.textContent)).toContain('读取');
+  expect(editor.textContent).not.toContain('意见');
+  expect(editor.textContent).not.toContain('新建');
+  expect(editor.textContent).not.toContain('保存根规则');
+  expect(editor.textContent).toContain('保存后生效');
   expect(fetcher.mock.calls.every(([, options]) => !options.method)).toBe(true);
 });
 

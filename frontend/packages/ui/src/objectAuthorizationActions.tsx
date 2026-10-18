@@ -26,7 +26,7 @@ export function createObjectAuthorizationActions(
     return { visible: true, available: true };
   };
   const render = Object.assign((context: StandardCrudActionInputRenderContext) =>
-    <Suspense fallback={null}><Input {...context} target={{ ...getTarget(context), resourceKey }} /></Suspense>, { dialogWidth: 960 });
+    <Suspense fallback={null}><Input {...context} target={{ ...getTarget(context), resourceKey }} /></Suspense>, { dialogWidth: 1360 });
   const details = Object.assign((context: StandardCrudActionInputRenderContext) => render(context), { dialogWidth: 960, readOnly: true });
   return {
     actionInputRenderers: { objectAuthorization: render, objectAuthorizationDetails: details },

@@ -94,7 +94,7 @@ function ObjectAuthorizationSession(context: StandardCrudActionInputRenderContex
     } catch (failure) { if (!controller.signal.aborted) setCheckFailure(failure); }
     finally { if (!controller.signal.aborted) setChecking(false); }
   };
-  return <div style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+  return <div style={{ minHeight: 'min(520px, calc(100dvh - 240px))', maxHeight: 'min(720px, calc(100dvh - 240px))', overflowY: 'auto' }}>
     <Typography.Paragraph strong>{t('DataScope.Target', '目标{title}：{name}', { title: target.titleKey ? t(target.titleKey, target.title) : target.title, name: target.name ?? '' })}</Typography.Paragraph>
     {!inspect && frozen && <>
       <Alert type="warning" showIcon message={t('DataScope.ObjectOutcomeUnknown', '保存结果未知，不能重复提交。请核对当前配置。')} />

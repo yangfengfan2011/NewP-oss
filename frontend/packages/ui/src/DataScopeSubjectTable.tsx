@@ -1,6 +1,6 @@
 import { formatRequestError, useLocalization } from '@icp-platform/core';
-import { useEffect, useState } from 'react';
-import { Alert, Button, Drawer, Flex, Form, Popconfirm, Space, Table, Tag, Typography } from 'antd';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, Button, Card, Drawer, Flex, Form, Popconfirm, Space, Table, Tag, Typography } from 'antd';
 import OpinionCheckbox from './OpinionCheckbox';
 import DataScopeSubjectEditor, { type DataScopeSubject, type SubjectType } from './DataScopeSubjectEditor';
 
@@ -9,7 +9,7 @@ import { resolveDataScopeSubjects, type DataScopeSubjectDirectoryRead, type Data
 
 interface Action { key: string; title: string; enabled: boolean }
 
-/** 主体完整展示，名称按类型分批读取；抽屉确认前不改根规则草稿。 */
+/** 主体完整展示，名称按类型分批读取；对象主体在当前容器内编辑，确认前不改授权草稿。 */
 export default function DataScopeSubjectTable({ subjects, types, actions, read, disabled, onChange, onEditingChange, objectMode = false }: {
   subjects: DataScopeSubject[]; types: SubjectType[]; actions: Action[]; disabled: boolean;
   read: DataScopeSubjectDirectoryRead;
@@ -22,6 +22,10 @@ export default function DataScopeSubjectTable({ subjects, types, actions, read, 
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState<DataScopeSubject>();
   const [editorError, setEditorError] = useState('');
+  const editorRegion = useRef<HTMLElement>(null);
+  const editingId = editing?.id;
+  const tableDisabled = disabled || !!editing;
+  useEffect(() => { if (objectMode && editingId) editorRegion.current?.focus(); }, [objectMode, editingId]);
   const ordered = orderDataScopeSubjects(subjects);
   const commit = (next: DataScopeSubject[]) => onChange(rankDataScopeSubjects(next));
   const nameRequest = JSON.stringify(ordered.filter(subject => types.find(type => type.key === subject.type)?.requiresId && subject.subjectId)
@@ -48,14 +52,27 @@ export default function DataScopeSubjectTable({ subjects, types, actions, read, 
   const move = (id: string, offset: -1 | 1) => {
     const index = ordered.findIndex(subject => subject.id === id);
     const target = index + offset;
-    if (disabled || index < 0 || target < 0 || target >= ordered.length) return;
+    if (tableDisabled || index < 0 || target < 0 || target >= ordered.length) return;
     const next = [...ordered];
     [next[index], next[target]] = [next[target], next[index]];
     commit(next);
   };
+  const editorTitle = editing && subjects.some(subject => subject.id === editing.id)
+    ? t('DataScope.EditSubject', '编辑授权主体') : t('DataScope.AddSubjectTitle', '添加授权主体');
+  const editorActions = <Space><Button onClick={close}>{t('DataScope.Cancel', '取消')}</Button><Button type="primary" disabled={disabled} onClick={confirm}>{t('DataScope.Confirm', '确定')}</Button></Space>;
+  const editorContent = editing && <Form layout="vertical" disabled={disabled}>
+    {editorError && <Alert type="error" message={t(editorError)} showIcon style={{ marginBottom: 16 }} />}
+    <DataScopeSubjectEditor subject={editing} index={0} types={types} actions={[]} read={read} showPriority={false} objectMode={objectMode}
+      onChange={change => { setEditorError(''); setEditing({ ...editing, ...change }); }} />
+    <Space size={24} wrap>{actions.map(action => <Form.Item key={action.key} label={t(`DataScope.Action_${action.key}`, action.title ?? action.key)}>
+      <OpinionCheckbox value={editing.actions[action.key] ?? 'unset'} label={t(`DataScope.Action_${action.key}`, action.title ?? action.key)} disabled={disabled}
+        onChange={value => setEditing({ ...editing, actions: { ...editing.actions, [action.key]: value } })} />
+    </Form.Item>)}</Space>
+    <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>{t('DataScope.SubjectHelp', '□ 不选  ✓ 同意  ✕ 拒绝。确定后加入草稿，保存后生效。')}</Typography.Paragraph>
+  </Form>;
   return <>
     <Flex justify="space-between" align="center" wrap gap={12} style={{ marginBottom: 16 }}>
-      <Button type="primary" disabled={disabled} onClick={() => open({ id: `DataScopeSubject_${crypto.randomUUID()}`,
+      <Button type="primary" disabled={tableDisabled} onClick={() => open({ id: `DataScopeSubject_${crypto.randomUUID()}`,
         type: 'all', subjectId: null, priority: 0, actions: { read: 'unset' }, ...(objectMode ? { expiresAt: null } : {}) })}>{t('DataScope.AddSubject', '添加主体项')}</Button>
       <Typography.Text type="secondary">{t('DataScope.OpinionHelp', '□ 不选  ✓ 同意  ✕ 拒绝 · 点击循环切换')}</Typography.Text>
     </Flex>
@@ -80,30 +97,21 @@ export default function DataScopeSubjectTable({ subjects, types, actions, read, 
         ...actions.map(action => ({ title: <span>{t(`DataScope.Action_${action.key}`, action.title ?? action.key)}{!action.enabled && <Typography.Text type="secondary">{t('DataScope.CatalogDisabled', '（目录已停用）')}</Typography.Text>}</span>,
           key: action.key, width: action.enabled ? 80 : 140, align: 'center' as const,
           render: (_: unknown, subject: DataScopeSubject) => <OpinionCheckbox value={subject.actions[action.key] ?? 'unset'}
-            label={t(`DataScope.Action_${action.key}`, action.title ?? action.key)} disabled={disabled} onChange={value => commit(ordered.map(item => item.id === subject.id
+            label={t(`DataScope.Action_${action.key}`, action.title ?? action.key)} disabled={tableDisabled} onChange={value => commit(ordered.map(item => item.id === subject.id
               ? { ...item, actions: { ...item.actions, [action.key]: value } } : item))} /> })),
         { title: t('DataScope.Operations', '操作'), key: 'operations', width: 180, fixed: 'right', render: (_, subject) => <Space size={0} wrap>
-          <Button type="link" size="small" disabled={disabled || ordered[0]?.id === subject.id} onClick={() => move(subject.id, -1)}>{t('DataScope.MoveUp', '上移')}</Button>
-          <Button type="link" size="small" disabled={disabled || ordered[ordered.length - 1]?.id === subject.id} onClick={() => move(subject.id, 1)}>{t('DataScope.MoveDown', '下移')}</Button>
-          <Button type="link" size="small" disabled={disabled} onClick={() => open(subject)}>{t('DataScope.Edit', '编辑')}</Button>
-          <Popconfirm title={t('DataScope.DeleteSubjectConfirm', '从草稿中删除此主体项？')} onConfirm={() => commit(ordered.filter(item => item.id !== subject.id))} okText={t('DataScope.Delete', '删除')} cancelText={t('DataScope.Cancel', '取消')} disabled={disabled}>
-            <Button type="link" size="small" danger disabled={disabled}>{t('DataScope.Delete', '删除')}</Button>
+          <Button type="link" size="small" disabled={tableDisabled || ordered[0]?.id === subject.id} onClick={() => move(subject.id, -1)}>{t('DataScope.MoveUp', '上移')}</Button>
+          <Button type="link" size="small" disabled={tableDisabled || ordered[ordered.length - 1]?.id === subject.id} onClick={() => move(subject.id, 1)}>{t('DataScope.MoveDown', '下移')}</Button>
+          <Button type="link" size="small" disabled={tableDisabled} onClick={() => open(subject)}>{t('DataScope.Edit', '编辑')}</Button>
+          <Popconfirm title={t('DataScope.DeleteSubjectConfirm', '从草稿中删除此主体项？')} onConfirm={() => commit(ordered.filter(item => item.id !== subject.id))} okText={t('DataScope.Delete', '删除')} cancelText={t('DataScope.Cancel', '取消')} disabled={tableDisabled}>
+            <Button type="link" size="small" danger disabled={tableDisabled}>{t('DataScope.Delete', '删除')}</Button>
           </Popconfirm>
         </Space> },
       ]} />
-    <Drawer title={editing && subjects.some(subject => subject.id === editing.id) ? t('DataScope.EditSubject', '编辑授权主体') : t('DataScope.AddSubjectTitle', '添加授权主体')}
+    {objectMode ? editing && <section ref={editorRegion} tabIndex={-1} aria-label={editorTitle} data-subject-editor style={{ marginTop: 16, marginBottom: 16 }}>
+      <Card size="small" title={editorTitle} extra={editorActions}>{editorContent}</Card>
+    </section> : <Drawer title={editorTitle}
       open={!!editing} width={560} maskClosable={false} onClose={close} destroyOnClose
-      extra={<Space><Button onClick={close}>{t('DataScope.Cancel', '取消')}</Button><Button type="primary" disabled={disabled} onClick={confirm}>{t('DataScope.Confirm', '确定')}</Button></Space>}>
-      {editing && <Form layout="vertical" disabled={disabled}>
-        {editorError && <Alert type="error" message={t(editorError)} showIcon style={{ marginBottom: 16 }} />}
-        <DataScopeSubjectEditor subject={editing} index={0} types={types} actions={[]} read={read} showPriority={false} objectMode={objectMode}
-          onChange={change => { setEditorError(''); setEditing({ ...editing, ...change }); }} />
-        <Space size={24} wrap>{actions.map(action => <Form.Item key={action.key} label={t(`DataScope.Action_${action.key}`, action.title ?? action.key)}>
-          <OpinionCheckbox value={editing.actions[action.key] ?? 'unset'} label={t(`DataScope.Action_${action.key}`, action.title ?? action.key)} disabled={disabled}
-            onChange={value => setEditing({ ...editing, actions: { ...editing.actions, [action.key]: value } })} />
-        </Form.Item>)}</Space>
-        <Typography.Paragraph type="secondary">{t('DataScope.SubjectHelp', '□ 不选  ✓ 同意  ✕ 拒绝。确定后加入草稿，保存后生效。')}</Typography.Paragraph>
-      </Form>}
-    </Drawer>
+      extra={editorActions}>{editorContent}</Drawer>}
   </>;
 }

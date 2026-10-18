@@ -192,8 +192,8 @@ it('edits an actual subject with a full U template and carries R clear confirmat
   const add = [...section.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === '添加主体项');
   expect(add).toBeDefined();
   await act(async () => add!.click());
-  await waitFor(() => expect(document.querySelector('.ant-drawer-open')).not.toBeNull());
-  const confirmSubject = [...document.querySelectorAll<HTMLButtonElement>('.ant-drawer-open button')].find(button => button.textContent?.replace(/\s/g, '') === '确定');
+  await waitFor(() => expect(document.querySelector('[data-subject-editor]')).not.toBeNull());
+  const confirmSubject = [...document.querySelectorAll<HTMLButtonElement>('[data-subject-editor] button')].find(button => button.textContent?.replace(/\s/g, '') === '确定');
   expect(confirmSubject?.disabled).toBe(false);
   await act(async () => confirmSubject!.click());
   await waitFor(() => expect(section.querySelector('button[role="checkbox"]')).not.toBeNull());

@@ -6,10 +6,12 @@ import { workspaceContentSource } from './workspaceTree';
 import type { WorkspaceDocumentDraft } from './workspaceDocumentUpload';
 import { WorkspaceDocumentSession } from './workspaceDocumentSession';
 import { workspacePosition } from './workspacePosition';
+import { batchOutcomeUnknown, saveBatch } from './workspaceBatchAuthorization';
 import { workspaceClipboard as clipboard, type FolderCopyDraft, type ObjectCopyDraft, type ObjectCopyReceipt, type ObjectCopyValuesRow } from './workspaceClipboard';
 
 interface LinkRow { linkId: string; associatedObject: { modelKey: string; id: string }; fields: Record<string, unknown> }
 const headers = (featurePosition?: string): Record<string, string> => featurePosition ? { 'X-NewP-Feature': featurePosition } : {};
+const WorkspaceBatchAuthorizationInput = lazy(() => import('./WorkspaceBatchAuthorizationInput'));
 const WorkspaceObjectCreateInput = lazy(() => import('./WorkspaceObjectCreateInput'));
 const WorkspaceObjectEditInput = lazy(() => import('./WorkspaceObjectEditInput'));
 const WorkspaceDocumentCreateInput = lazy(() => import('./WorkspaceDocumentCreateInput'));
@@ -60,6 +62,7 @@ const resource: StandardCrudResourceRegistration = {
   }],
   actionInputRenderers: {
     ...ownership.actionInputRenderers,
+    batchAuthorization: Object.assign((context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceBatchAuthorizationInput, context)), { dialogWidth: 960 }),
     objectAuthorization: context => authorization(context).actionInputRenderers.objectAuthorization(context),
     recoverObjectCopy: Object.assign((context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceObjectCopyRecovery, context)), { presentation: 'drawer' as const }),
     copyObject: Object.assign((context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceObjectCopyInput, context)), { presentation: 'drawer' as const }),
@@ -74,7 +77,8 @@ const resource: StandardCrudResourceRegistration = {
   actionHandlers: {
     ...ownership.actionHandlers,
     authorizeContent: context => authorization(context).actionHandlers.authorize(context),
-    authorize: context => authorization(context).actionHandlers.authorize(context),
+    authorize: Object.assign((context: StandardCrudActionContext) => context.action?.inputKey === 'batchAuthorization' ? saveBatch(context) : authorization(context).actionHandlers.authorize(context),
+      { isCorrectableInputError: batchOutcomeUnknown }),
     pasteObjectCopy: Object.assign(async ({ instance, input, queryScope, featurePosition }: import('@icp-platform/sdk').StandardCrudActionContext) => {
       const value = input as { draft?: ObjectCopyDraft; values?: Record<string, unknown> } | undefined;
       if (!value?.draft || !value.values) throw new StandardCrudRequestError('Workspace.CopyInputExpired', 409, {}, { code: 'Workspace.CopyInputExpired' });

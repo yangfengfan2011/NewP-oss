@@ -27,6 +27,7 @@ public class AuthorizationModule : ModuleCapsuleBindingBase
         services.AddScoped<DataScopeRules>();
         services.AddScoped<DataScopeObjectGrants>();
         services.AddScoped<DataScopeObjectManagement>();
+        services.AddScoped<IDataScopeBatchAuthorization, DataScopeBatchAuthorization>();
         services.AddScoped<IDataScopeObjectAuthorization>(provider => provider.GetRequiredService<DataScopeObjectManagement>());
         services.AddScoped<IDataScopeReadPlanProvider, DataScopeReadPlans>();
         services.AddScoped<IDataScopeReadableIds>(provider =>

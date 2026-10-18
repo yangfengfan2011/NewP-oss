@@ -6,6 +6,38 @@ namespace ICP.Platform.Acceptance;
 /// <summary>工作空间唯一正式旅程的页面控件知识；后续内容操作继续扩展此驱动。</summary>
 internal sealed class WorkspacePageDriver(IPage page)
 {
+    /// <summary>勾选真实混合资源，经批量输入配置完整主体项并只确认一次；载荷及事务语义由API测试承担。</summary>
+    internal async Task SaveBatchAuthorizationAsync(string partName, string documentName, string presentationPath)
+    {
+        var crud = new StandardCrudPageDriver(page);
+        foreach (var name in new[] { partName, documentName })
+        {
+            var row = await crud.WaitForRowAsync(name);
+            await row.GetByRole(AriaRole.Checkbox).CheckAsync();
+        }
+        var preparing = page.WaitForResponseAsync(response => response.Request.Method == "POST"
+            && new Uri(response.Url).AbsolutePath == "/api/workspace/content/permissions/batch/prepare");
+        await crud.ClickPageActionAsync("批量授权");
+        var prepared = await preparing;
+        if (!prepared.Ok) throw new InvalidOperationException($"批量授权准备失败：{prepared.Status} {await prepared.TextAsync()}");
+        var dialog = crud.VisibleModal();
+        await dialog.WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        var sections = dialog.Locator("section");
+        await sections.Nth(1).WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        for (var index = 0; index < 2; index++)
+        {
+            await sections.Nth(index).GetByRole(AriaRole.Button, new() { Name = "添加主体项", Exact = true }).ClickAsync();
+            var editor = crud.VisibleDrawer();
+            await editor.GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^确\s*定$") }).ClickAsync();
+            await editor.WaitForAsync(new() { State = WaitForSelectorState.Hidden });
+            await sections.Nth(index).GetByRole(AriaRole.Checkbox, new() { Name = "读取：不选", Exact = true }).ClickAsync();
+        }
+        await AcceptancePresentation.CaptureAsync(page, presentationPath);
+        await crud.ConfirmAsync(dialog, new("POST", "/api/workspace/content/permissions/batch", 200, "保存批量授权"));
+        await crud.WaitForRowAsync(partName);
+        await crud.WaitForRowAsync(documentName);
+    }
+
     /// <summary>沿当前Part行的标准只读导航进入真实页签；保留原地址供后续回到同一来源。</summary>
     internal async Task<string> OpenPermissionViewerAsync(string rowName)
     {

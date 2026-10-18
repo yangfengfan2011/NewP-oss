@@ -19,8 +19,9 @@
         { "field": "ObjectType", "valueType": "Text", "operators": ["="], "mappings": { "WorkspaceFolder": "$modelKey", "Part": "$modelKey", "Document": "$modelKey" } },
         { "field": "Code", "valueType": "Text", "nullable": true, "sortable": true, "operators": ["=", "contains", "isNull"], "mappings": { "WorkspaceFolder": null, "Part": "ECODE", "Document": "ECODE" } },
         { "field": "Name", "valueType": "Text", "sortable": true, "operators": ["=", "contains"], "mappings": { "WorkspaceFolder": "ENAME", "Part": "ENAME", "Document": "ENAME" } },
-        { "field": "OwnerId", "valueType": "User", "nullable": true, "operators": ["isNull"], "mappings": { "WorkspaceFolder": "OwnerId", "Part": "OwnerId", "Document": "OwnerId" } },
+        { "field": "OwnerId", "valueType": "User", "nullable": true, "operators": ["=", "isNull"], "mappings": { "WorkspaceFolder": "OwnerId", "Part": "OwnerId", "Document": "OwnerId" } },
         { "field": "OwnerDepartmentId", "valueType": "ObjectId", "nullable": true, "operators": ["isNull"], "mappings": { "WorkspaceFolder": "OwnerDepartmentId", "Part": "OwnerDepartmentId", "Document": "OwnerDepartmentId" } },
+        { "field": "CreatedBy", "valueType": "User", "operators": ["="], "mappings": { "WorkspaceFolder": "CreatedBy", "Part": "CreatedBy", "Document": "CreatedBy" } },
         { "field": "UpdatedBy", "valueType": "User", "mappings": { "WorkspaceFolder": "UpdatedBy", "Part": "UpdatedBy", "Document": "UpdatedBy" } },
         { "field": "UpdatedAt", "valueType": "Instant", "sortable": true, "mappings": { "WorkspaceFolder": "UpdatedAt", "Part": "UpdatedAt", "Document": "UpdatedAt" } }
       ]

@@ -136,6 +136,9 @@ _Avoid_: 部门资源的数据条件、公司全体人员、组织准入
 - 单对象完整替换使用既有 `IEntityAuditValueProvider.BeginOperation` 包住本次事务，实际新增/更新的配置行、动作行和业务记录共享可信stamp；下一次顶层操作取新值，无变化不记事件。保留该provider原有嵌套语义，不把它与授权观察时刻的内层复用混为一谈。
 - 资源owner可用 `DataScopeResourceActionBinding` 显式选用已登记全局数据动作，由同一准备期资源目录验证资源、owner、唯一性和动作身份；对象目录、解释、完整替换和实际动作裁决消费同一适用集合。未声明的旧资源保持原全局目录合同，原四参资源构造与解构保留；不按动作定义的模块或首批业务模型名推断适用性，也不静默改写旧配置。
 
+- 批量直接项通过 `IDataScopeBatchAuthorization` 一次提交全部规范资源/EID。默认U保留未指定选择器，并完整替换指定选择器的意见、优先级、匹配选项和绝对期限；R完整替换所有直接项，空资源组须显式确认。资源分组严格匹配实际目标及正式适用动作，不修改规则树或系统来源。owner先锁定并重解完整来源，批服务按资源/EID稳定顺序取得全部ACL锁后重验全部read/authorize；资格、配置、基础设施或取消任一失败均不产生部分成功，实际变化与各对象审计共享本次事务及可信stamp，无变化不记事件。Workspace的LID只校验真实位置与private来源，ACL仍是Folder/Part/Document真实对象身份。
+- 显式整组当前配置核对沿同一来源和锁序，全组当前read/authorize都成立才返回直接配置；它不写ACL/审计，也不证明原未知请求曾提交或未提交。客户端未知状态属于当前主体/页面实例，关闭弹层不会允许重放；核对后仍须用户显式开始新操作并清空原模板，不以当前相等或资格拒绝推断先前结果。
+
 ## 角色管理与事务性功能配置
 
 角色维护的确定性业务拒绝由 `RoleValidationException` 表达，HTTP 只将此类拒绝翻译为既有 400 Problem Details，保留原文案；持久化、审计来源等依赖故障及取消继续传播，不伪装成请求校验失败。角色删除的 HTTP 禁用规则保持不变。角色、成员和功能配置的可预期拒绝共同继承 `AuthorizationValidationException`，由 `AuthorizationProblem` 保留 HTTP 状态与原诊断并附加稳定 `code`、`reasonKey`、原值 `args` 及适用字段事实；词条由 Authorization authoring 拥有。前端 `authorizationRequest` 复用 SDK 错误提取，组件在呈现时按活动语言解析，同一错误及保存成功消息切换语言不重放操作。功能目录消费编译链保留的词典键，角色名称、功能位置和选择集合保持原值。

@@ -14,6 +14,25 @@ namespace ICP.Platform.Acceptance.Tests;
 [Collection(AcceptanceGateCollection.Name)]
 public sealed class AcceptanceGateTests
 {
+    /// <summary>真实普通管理主体从当前Workspace混合行选择进入标准批量Review并保存一次。</summary>
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通Workspace管理主体在混合Part/Document上打开批量授权、编辑主体并一次保存")]
+    public async Task NativeWorkspaceBatchAuthorization_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-workspace-batch-authorization");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease, prepareBatchActor: true);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, publishedFixture: fixture,
+            browserJourney: async (page, token) =>
+            {
+                token.ThrowIfCancellationRequested();
+                var driver = new WorkspacePageDriver(page);
+                await driver.OpenAsync();
+                await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
+                await driver.SaveBatchAuthorizationAsync(fixture.ExistingName, fixture.ExistingDocumentName, Path.Combine(root, "batch-authorization-input.png"));
+                token.ThrowIfCancellationRequested();
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "仅既有Workspace浏览资格打开Part来源属性/权限，再由独立管理账号修改草稿并标准保存一次")]
     public async Task NativeWorkspacePartPermissions_UsesFormalDriver()
     {

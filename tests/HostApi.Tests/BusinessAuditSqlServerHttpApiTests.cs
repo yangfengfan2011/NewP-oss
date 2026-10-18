@@ -1477,13 +1477,11 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         builder.Services.AddScoped<ITemporalDisplayFormatter, TemporalDisplayFormatter>();
         builder.Services.AddScoped<ITemporalDisplayProjectionExecutor, TemporalDisplayProjectionExecutor>();
         builder.Services.AddSingleton<IRequestPresentationContextAccessor, TestPresentation>();
-        if (_useRequestPresentation || _includeWorkspace || _includePart || _includeDocument)
-        {
-            var localization = new ICP.Platform.Kernel.PluginPackages.LocalizationRuntimeManifestBuilder().Build(hostRoot);
-            builder.Services.AddSingleton(ICP.Platform.HostApi.Presentation.ActiveLocalizationManifest.Parse(localization));
-            builder.Services.AddSingleton<IRuntimeTextCatalog>(RuntimeTextCatalog.Parse(localization));
-            if (_useRequestPresentation) builder.Services.Replace(ServiceDescriptor.Scoped<IRequestPresentationContextAccessor, ICP.Platform.HostApi.Presentation.HttpRequestPresentationContextAccessor>());
-        }
+        // 所有分支都装配Audit履历查询，真实文本目录不能随业务模块选择而缺失。
+        var localization = new ICP.Platform.Kernel.PluginPackages.LocalizationRuntimeManifestBuilder().Build(hostRoot);
+        builder.Services.AddSingleton(ICP.Platform.HostApi.Presentation.ActiveLocalizationManifest.Parse(localization));
+        builder.Services.AddSingleton<IRuntimeTextCatalog>(RuntimeTextCatalog.Parse(localization));
+        if (_useRequestPresentation) builder.Services.Replace(ServiceDescriptor.Scoped<IRequestPresentationContextAccessor, ICP.Platform.HostApi.Presentation.HttpRequestPresentationContextAccessor>());
         builder.Services.AddScoped<ITemporalInputNormalizer>(sp => new TemporalInputNormalizer(sp.GetRequiredService<IRequestPresentationContextAccessor>(), "Asia/Shanghai", TimeProvider.System));
         var models = IdentityModelDefinitions.All.Select(m => m with { OwnerModuleId = "Identity" })
             .Concat(AuthenticationModelDefinitions.All.Select(m => m with { OwnerModuleId = "Authentication" }))

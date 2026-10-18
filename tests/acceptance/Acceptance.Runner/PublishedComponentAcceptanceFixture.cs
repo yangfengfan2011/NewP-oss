@@ -27,7 +27,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     bool workspaceDelivery = false, WorkspaceDeliveryInput? deliveryInput = null, bool exerciseCompositionLifecycle = false,
     bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false, bool exerciseFileRecoveryMechanisms = true,
     bool exerciseDocumentCopyRecovery = false, bool exerciseDocumentCopyInterruptions = true, bool exerciseDocumentBatchRecovery = false,
-    PublishedWorkspacePreparation preparation = PublishedWorkspacePreparation.HistoricalUpgrade, bool preparePermissionActors = false, bool prepareHistoryActor = false)
+    PublishedWorkspacePreparation preparation = PublishedWorkspacePreparation.HistoricalUpgrade, bool preparePermissionActors = false, bool prepareHistoryActor = false, bool prepareBatchActor = false)
 {
     private readonly Dictionary<string, string?> _environment = new();
     private ReusableSqlServerDatabase? _database;
@@ -58,7 +58,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     internal static PublishedComponentAcceptanceFixture FromWorkspaceDelivery(string repositoryRoot, string runDirectory, string runId,
         bool exerciseCompositionLifecycle = false, bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false, bool exerciseFileRecoveryMechanisms = true,
         bool exerciseDocumentCopyRecovery = false, bool exerciseDocumentCopyInterruptions = true, bool exerciseDocumentBatchRecovery = false,
-        PublishedWorkspacePreparation preparation = PublishedWorkspacePreparation.HistoricalUpgrade, bool preparePermissionActors = false, bool prepareHistoryActor = false)
+        PublishedWorkspacePreparation preparation = PublishedWorkspacePreparation.HistoricalUpgrade, bool preparePermissionActors = false, bool prepareHistoryActor = false, bool prepareBatchActor = false)
     {
         var path = RequiredPath("NEWP_ACCEPTANCE_WORKSPACE_DELIVERY_INPUT");
         var input = JsonSerializer.Deserialize<WorkspaceDeliveryInput>(File.ReadAllText(path), AcceptanceJson.Options)
@@ -68,7 +68,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             exerciseCompositionLifecycle: exerciseCompositionLifecycle, exerciseUninstallRecovery: exerciseUninstallRecovery,
             exerciseFileRecovery: exerciseFileRecovery, exerciseFileRecoveryMechanisms: exerciseFileRecoveryMechanisms,
             exerciseDocumentCopyRecovery: exerciseDocumentCopyRecovery, exerciseDocumentCopyInterruptions: exerciseDocumentCopyInterruptions,
-            exerciseDocumentBatchRecovery: exerciseDocumentBatchRecovery, preparation: preparation, preparePermissionActors: preparePermissionActors, prepareHistoryActor: prepareHistoryActor);
+            exerciseDocumentBatchRecovery: exerciseDocumentBatchRecovery, preparation: preparation, preparePermissionActors: preparePermissionActors, prepareHistoryActor: prepareHistoryActor, prepareBatchActor: prepareBatchActor);
     }
 
     // 只登记受控构建的输入与来源；不产出裁决，也不授予包信任。Gate 仍走正式安装/Host。
@@ -100,6 +100,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         if (!Enum.IsDefined(preparation)) throw new ArgumentOutOfRangeException(nameof(preparation));
         var historicalUpgrade = preparation == PublishedWorkspacePreparation.HistoricalUpgrade;
         if (preparePermissionActors && (!workspaceDelivery || historicalUpgrade)) throw new InvalidOperationException("对象权限页面只使用当前三成员发行物。");
+        if (prepareBatchActor && (!workspaceDelivery || historicalUpgrade)) throw new InvalidOperationException("批量授权页面只使用当前发行物。");
         if (prepareHistoryActor && (!workspaceDelivery || historicalUpgrade)) throw new InvalidOperationException("普通履历页面只使用当前三成员发行物。");
         // 文件、副本、批次恢复自建数据，不读历史升级留下的行或 Link；卸载与组合生命周期依赖旧业务，必须走历史升级。
         if (!historicalUpgrade && (!workspaceDelivery || exerciseCompositionLifecycle || exerciseUninstallRecovery))
@@ -319,6 +320,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             await WriteAsync("permission-actors.json", new { reader = actor.AccountId, manager = _permissionManager.AccountId,
                 browse = browse.Position, manage = manage.Position, entryDependencies = browse.EntryDependencies }, token);
         }
+        if (prepareBatchActor) actor = await PrepareBatchActorAsync(registerSecret, token);
         if (prepareHistoryActor) actor = await PrepareHistoryActorAsync(registerSecret, token);
         var targetAfter = ReadTargetIdentity();
         await WriteAsync("target-after.json", targetAfter, token);
@@ -343,6 +345,39 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             packageSha256 = FileHash(packagePath), preparation = preparation.ToString(),
             baselineHostRoot = historicalUpgrade ? baselineHostRoot : null, hostRoot, shellRoot }, token);
         return new(actor, shellOrigin, _hostPort, workspaceDelivery ? installedFeatures.Behavior("Workspace", "workspace.spaces.access").Position : null);
+    }
+
+    /// <summary>普通批量管理主体仅获得真实Workspace入口及批量动作；业务前置仍由正式完整来源API验证。</summary>
+    private async Task<WorkspaceAcceptanceActor> PrepareBatchActorAsync(Action<string> registerSecret, CancellationToken token)
+    {
+        using var administrator = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
+        await WorkspaceAcceptanceFixture.LoginAsync(administrator, _administrator!, token);
+        var features = await AcceptanceFeatureCatalog.LoadAsync(administrator, token);
+        var browse = features.Behavior("Workspace", "workspace.spaces.access");
+        var batch = features.Action(browse, "batchAuthorize", "list.pageActions", "folder");
+        var manager = await WorkspaceAcceptanceFixture.PrepareAsync(administrator, features, "ba" + runId, registerSecret, [browse, batch], token);
+        using var client = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
+        await WorkspaceAcceptanceFixture.LoginAsync(client, manager, token);
+        var current = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get, "/api/auth/current-user", null, null, token);
+        var actual = current.GetProperty("featurePositions").EnumerateArray().Select(item => item.GetString()!).ToHashSet(StringComparer.Ordinal);
+        var expected = features.GrantSet(browse, batch);
+        if (!actual.SetEquals(expected) || actual.Any(position => position.StartsWith("Part/", StringComparison.Ordinal)
+            || position.StartsWith("Document/", StringComparison.Ordinal) || position.StartsWith("Audit/", StringComparison.Ordinal)))
+            throw new InvalidOperationException("批量管理主体没有保持正式限定的功能集合。");
+        var position = _documentPosition ?? throw new InvalidOperationException("批量授权缺少公共内容位置。");
+        var contents = await WorkspaceAcceptanceFixture.ReadContentsAtPositionAsync(client, position, browse.Position, token);
+        var selected = contents.GetProperty("items").EnumerateArray().Where(item =>
+            item.GetProperty("associatedObject").GetProperty("id").GetString() == _oldPartId
+            || item.GetProperty("associatedObject").GetProperty("id").GetString() == _oldDocumentId).ToArray();
+        if (selected.Length != 2) throw new InvalidOperationException("批量授权没有两个真实混合资源前置对象。");
+        var prepared = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Post, "/api/workspace/content/permissions/batch/prepare",
+            new { sources = new[] { new { position = position.CommandPosition, linkIds = selected.Select(item => item.GetProperty("linkId").GetString()!).ToArray() } },
+                includeDescendants = false }, batch.Position, token);
+        if (prepared.GetProperty("items").GetArrayLength() != 2 || prepared.GetProperty("items").EnumerateArray().Any(item => !item.GetProperty("manageable").GetBoolean()))
+            throw new InvalidOperationException("普通管理账号无法经正式批量来源准备对象。");
+        await WriteAsync("batch-actor-preparation.json", new { actorId = manager.AccountId, browse = browse.Position, batch = batch.Position,
+            grantedPositions = expected, batch.EntryDependencies, position = position.CommandPosition, mixedTargets = 2 }, token);
+        return manager;
     }
 
     /// <summary>通过正式目录准备独立履历读者；当前真实Part出现位置及至少一条安全事件是页面的业务前置。</summary>

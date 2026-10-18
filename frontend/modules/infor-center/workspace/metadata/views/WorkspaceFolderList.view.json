@@ -14,6 +14,7 @@
       { "key": "updatedAt", "labelKey": "Field_UpdatedAt", "source": "projection", "field": "UpdatedAt", "sortable": true }
     ],
     "pageActions": [
+      { "key": "batchAuthorize", "labelKey": "BatchAuthorize", "handlerKey": "authorize", "inputKey": "batchAuthorization", "requiresSelection": true, "readBehaviors": ["workspace.folder.read"] },
       { "key": "initializeOwnershipPending", "labelKey": "OwnershipPendingObjects", "handlerKey": "initializeOwnership", "inputKey": "initializeOwnership" },
       {"key": "create", "labelKey": "CreateFolder", "standardAction": "create", "variant": "primary"},
       {"key": "createPart", "labelKey": "CreatePart", "handlerKey": "createPart", "inputKey": "createObject"},

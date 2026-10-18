@@ -33,6 +33,14 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
         IReadOnlyList<PlatformQueryCondition> conditions, CancellationToken token = default) =>
         ReadAsync(resourceKey, request, false, false, token, conditions);
 
+    /// <summary>可信显式关系集合复用同一来源、端点、投影、筛选与分页；空集合保持空结果。</summary>
+    public Task<LinkQueryResult> QuerySelectedAsync(string resourceKey, LinkQueryRequest request,
+        IReadOnlyCollection<string> linkIds, IReadOnlyList<PlatformQueryCondition>? conditions = null, CancellationToken token = default)
+    {
+        ArgumentNullException.ThrowIfNull(linkIds);
+        return ReadAsync(resourceKey, request, false, false, token, conditions, linkIds);
+    }
+
     /// <summary>引用写入复用正式端点目录和读取范围；没有任何 Link 的独立对象也能重新准入。</summary>
     public async Task<bool> IsEndpointReadableAsync(string resourceKey, LinkObjectReference target, CancellationToken token = default)
     {
@@ -83,7 +91,8 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
 
     // 同一计划用于标准列表和受信任直属层；权限故障、不可翻译条件及损坏存储类型均失败关闭。
     private async Task<LinkQueryResult> ReadAsync(string resourceKey, LinkQueryRequest request,
-        bool completeLayer, bool includeChildren, CancellationToken token, IReadOnlyList<PlatformQueryCondition>? extraConditions = null)
+        bool completeLayer, bool includeChildren, CancellationToken token, IReadOnlyList<PlatformQueryCondition>? extraConditions = null,
+        IReadOnlyCollection<string>? selectedLinkIds = null)
     {
         var definition = catalog.Get(resourceKey);
         if (request.Direction is not ("forward" or "reverse")) throw new LinkQueryException(400, "LinkQuery.InvalidDirection", "direction");
@@ -133,6 +142,11 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
         var (sortField, sortDirection) = PlatformQueryFieldPlanner.ResolveSort(queryDescriptor, platformRequest);
         var sourcePredicate = definition.Metadata.PolicyKey is { } sourcePolicy ? await GetPolicy(sourcePolicy).ReadPredicateAsync(token) : null;
         var sourceRows = await sourceScopes.RowsAsync(definition, sourcePredicate, token);
+        if (selectedLinkIds is not null)
+        {
+            var selected = selectedLinkIds.ToArray();
+            sourceRows = sourceRows.Where(row => EF.Parameter(selected).Contains(EF.Property<string>(row, "LID")));
+        }
         var sourceSql = SqlFor(sourceRows.Select(row => EF.Property<string>(row, "LID")), parameters);
         var linkEntity = Entity(definition.Model.LogicalKey);
         var linkTable = Table(linkEntity);

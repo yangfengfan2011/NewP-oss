@@ -12,6 +12,8 @@ List View 可用 `pageActionGroups: [{ key, labelKey, variant?, actionKeys }]` �
 
 通用 Link 查询的端点目录、条件与执行入口见[接入指南](../../developer/link-query-configuration.md)。公开请求始终分页；受信任树适配只能读取当前一层，不能通过 HTTP 关闭分页。读取失败不自动修复关系或扩大授权。
 
+`LinkQueryReader.QuerySelectedAsync` 供真实owner按明确LID集合复用同一Link查询链；所选关系与真实source policy、anchor、端点read和固定投影相交后才Count/排序/分页。空集合保持空结果，旧无选择入口不变；它不新增HTTP筛选协议、全层读取开关或任意字段投影。批量授权的候选收集按该链逐层分页遍历当前可读Folder，按规范EID去重；选中来源与最终授权对象分开，隐藏路径不补造名称或数量。
+
 ENTITY 的可选归属字段由公共 Model projector 提供：`OwnerId` 引用稳定账号，`OwnerDepartmentId` 引用一个 Department；只有 `builtinFields` 选用的模型才得到字段、存储与创建要求。字段由服务端拥有，create/edit form 隐藏普通输入，Detail 可按需只读显示 raw/display companion。创建候选在判权前从 `IAccountOwnershipDirectory` 与同一业务审计作用域取得可信账号和当前部门；普通更新不重算它们。Organization 实现目录，CRUD 不读取其私有持久化。选用者须显式声明相应模块依赖，DTO 同步仅在自身及依赖闭包中解析 display 目标。
 
 归属字段的规范标记只在选中时序列化；未选用字段保持既有 JSON 形状。旧部署资产继续按原内容摘要与 canonical 模型严格校验，不通过重写旧资产或放宽校验接纳升级。

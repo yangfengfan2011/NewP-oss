@@ -33,6 +33,27 @@ public sealed class DataScopeObjectGrants(EfPlatformDbContext db, IPlatformTrans
     /// <summary>完整校验后按目标锁读取实际旧值；关系、意见和审计在一次事务中提交。</summary>
     public async Task SaveAsync(DataScopeObjectDto input, CancellationToken token)
     {
+        var normalized = await PrepareAsync(input, token);
+        using var operation = auditValues.BeginOperation();
+        await transactions.ExecuteAsync(async cancellation =>
+        {
+            await LockAsync(normalized.ResourceKey, normalized.ObjectId, cancellation);
+            return await ApplyAsync(normalized, cancellation);
+        }, token);
+    }
+
+    // 可信初始化与批量写入复用当前业务stamp；必须由真实owner持有外层事务，不能自行提交。
+    internal async Task<bool> SaveInCurrentOperationAsync(DataScopeObjectDto input, CancellationToken token)
+    {
+        RequireTransaction();
+        var normalized = await PrepareAsync(input, token);
+        await LockAsync(normalized.ResourceKey, normalized.ObjectId, token);
+        return await ApplyAsync(normalized, token);
+    }
+
+    // 只规范化和验证完整配置，不取得对象资格或写入；批量可先验证全部资源再修改任何目标。
+    internal async Task<DataScopeObjectDto> PrepareAsync(DataScopeObjectDto input, CancellationToken token)
+    {
         var supportedActions = catalog.ActionsFor(input.ResourceKey);
         if (string.IsNullOrWhiteSpace(input.ObjectId) || input.ObjectId.Length > 128 || input.Subjects is null)
             throw new RolePermissionValidationException("对象授权目标无效。", "DATA_SCOPE_OBJECT_TARGET_INVALID", field: "objectId");
@@ -55,61 +76,77 @@ public sealed class DataScopeObjectGrants(EfPlatformDbContext db, IPlatformTrans
                 if (batch.Except(names.CurrentValues.Select(value => value.Id), StringComparer.Ordinal).Any())
                     throw new RolePermissionValidationException("所选授权主体不存在。", "DATA_SCOPE_SUBJECT_NOT_FOUND", field: "subjects");
             }
-        var normalized = input with { Subjects = input.Subjects.Select(Normalize).ToArray() };
-        // 配置与动作行的实际写入和业务记录共享本次可信stamp，不在保存后伪造审计时间。
-        using var operation = auditValues.BeginOperation();
-        await transactions.ExecuteAsync(async cancellationToken =>
+        return input with { Subjects = input.Subjects.Select(Normalize).ToArray() };
+    }
+
+    // 所有多目标调用先按规范resource/EID稳定排序取得锁；来源图锁由Workspace owner先持有。
+    internal async Task LockAsync(string resourceKey, string objectId, CancellationToken token)
+    {
+        RequireTransaction();
+        var target = "Authorization.DataScopeObject:" + resourceKey + ":" + objectId;
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"DECLARE @result int; EXEC @result = sys.sp_getapplock @Resource={target}, @LockMode='Exclusive', @LockOwner='Transaction'; IF @result < 0 THROW 51000, 'Data scope object lock failed.', 1;",
+            token);
+    }
+
+    // 输入已通过同一Prepare且调用者已持有ACL锁；不重新建立stamp或事务，保持整个批次的提交边界。
+    internal async Task<bool> ApplyAsync(DataScopeObjectDto normalized, CancellationToken cancellationToken)
+    {
+        RequireTransaction();
+        var existing = await Subjects.Where(row => EF.Property<string>(row, "ResourceKey") == normalized.ResourceKey
+            && EF.Property<string>(row, "ObjectId") == normalized.ObjectId).ToListAsync(cancellationToken);
+        if (existing.Any(row => (string)row["ResourceKey"]! != normalized.ResourceKey || (string)row["ObjectId"]! != normalized.ObjectId))
+            throw new RolePermissionValidationException("对象授权目标必须使用规范身份。", "DATA_SCOPE_OBJECT_CANONICAL_REQUIRED", field: "objectId");
+        var old = await MaterializeAsync(normalized.ResourceKey, normalized.ObjectId, existing, cancellationToken);
+        var previous = Canonical(old);
+        var current = Canonical(normalized);
+        if (SemanticConfiguration(old) == SemanticConfiguration(normalized)) return false;
+        var requestedIds = normalized.Subjects.Select(subject => subject.Id).ToArray();
+        var occupied = await Subjects.AsNoTracking().Where(row => requestedIds.Contains(EF.Property<string>(row, "EID")))
+            .Select(row => new { Id = EF.Property<string>(row, "EID"), Resource = EF.Property<string>(row, "ResourceKey"),
+                Object = EF.Property<string>(row, "ObjectId") }).ToListAsync(cancellationToken);
+        if (occupied.Any(row => row.Resource != normalized.ResourceKey || row.Object != normalized.ObjectId
+            || !requestedIds.Contains(row.Id, StringComparer.Ordinal)))
+            throw new RolePermissionValidationException("对象主体授权项身份已被占用。", "DATA_SCOPE_OBJECT_SUBJECT_OCCUPIED", field: "subjects");
+        var oldIds = existing.Select(row => (string)row["EID"]!).ToArray();
+        var oldActions = await Actions.Where(row => oldIds.Contains(EF.Property<string>(row, "EntryId"))).ToListAsync(cancellationToken);
+        Actions.RemoveRange(oldActions.Where(row => !requestedIds.Contains((string)row["EntryId"]!, StringComparer.Ordinal)
+            || normalized.Subjects.Single(subject => subject.Id == (string)row["EntryId"]!).Actions
+                .GetValueOrDefault((string)row["ActionKey"]!) is not ("allow" or "deny")));
+        Subjects.RemoveRange(existing.Where(row => !requestedIds.Contains((string)row["EID"]!, StringComparer.Ordinal)));
+        foreach (var subject in normalized.Subjects)
         {
-            await LockAsync(normalized.ResourceKey, normalized.ObjectId, cancellationToken);
-            var existing = await Subjects.Where(row => EF.Property<string>(row, "ResourceKey") == normalized.ResourceKey
-                && EF.Property<string>(row, "ObjectId") == normalized.ObjectId).ToListAsync(cancellationToken);
-            if (existing.Any(row => (string)row["ResourceKey"]! != normalized.ResourceKey || (string)row["ObjectId"]! != normalized.ObjectId))
-                throw new RolePermissionValidationException("对象授权目标必须使用规范身份。", "DATA_SCOPE_OBJECT_CANONICAL_REQUIRED", field: "objectId");
-            var old = await MaterializeAsync(normalized.ResourceKey, normalized.ObjectId, existing, cancellationToken);
-            var previous = Canonical(old);
-            var current = Canonical(normalized);
-            if (SemanticConfiguration(old) == SemanticConfiguration(normalized)) return true;
-            var requestedIds = normalized.Subjects.Select(subject => subject.Id).ToArray();
-            var occupied = await Subjects.AsNoTracking().Where(row => requestedIds.Contains(EF.Property<string>(row, "EID")))
-                .Select(row => new { Id = EF.Property<string>(row, "EID"), Resource = EF.Property<string>(row, "ResourceKey"),
-                    Object = EF.Property<string>(row, "ObjectId") }).ToListAsync(cancellationToken);
-            if (occupied.Any(row => row.Resource != normalized.ResourceKey || row.Object != normalized.ObjectId
-                || !requestedIds.Contains(row.Id, StringComparer.Ordinal)))
-                throw new RolePermissionValidationException("对象主体授权项身份已被占用。", "DATA_SCOPE_OBJECT_SUBJECT_OCCUPIED", field: "subjects");
-            var oldIds = existing.Select(row => (string)row["EID"]!).ToArray();
-            var oldActions = await Actions.Where(row => oldIds.Contains(EF.Property<string>(row, "EntryId"))).ToListAsync(cancellationToken);
-            Actions.RemoveRange(oldActions.Where(row => !requestedIds.Contains((string)row["EntryId"]!, StringComparer.Ordinal)
-                || normalized.Subjects.Single(subject => subject.Id == (string)row["EntryId"]!).Actions
-                    .GetValueOrDefault((string)row["ActionKey"]!) is not ("allow" or "deny")));
-            Subjects.RemoveRange(existing.Where(row => !requestedIds.Contains((string)row["EID"]!, StringComparer.Ordinal)));
-            foreach (var subject in normalized.Subjects)
+            var row = existing.SingleOrDefault(value => (string)value["EID"]! == subject.Id);
+            if (row is null) { row = new() { ["EID"] = subject.Id }; Subjects.Add(row); }
+            row["ResourceKey"] = normalized.ResourceKey;
+            row["ObjectId"] = normalized.ObjectId;
+            row["SubjectType"] = subject.Type;
+            row["SubjectId"] = subject.SubjectId;
+            row["IncludeDescendants"] = subject.MatchOptions?.IncludeDescendants ?? false;
+            row["Priority"] = subject.Priority;
+            row["ExpiresAt"] = subject.ExpiresAt is null ? null : ReadExpiry(subject.ExpiresAt);
+            foreach (var action in subject.Actions.Where(action => action.Value is "allow" or "deny"))
             {
-                var row = existing.SingleOrDefault(value => (string)value["EID"]! == subject.Id);
-                if (row is null) { row = new() { ["EID"] = subject.Id }; Subjects.Add(row); }
-                row["ResourceKey"] = normalized.ResourceKey;
-                row["ObjectId"] = normalized.ObjectId;
-                row["SubjectType"] = subject.Type;
-                row["SubjectId"] = subject.SubjectId;
-                row["IncludeDescendants"] = subject.MatchOptions?.IncludeDescendants ?? false;
-                row["Priority"] = subject.Priority;
-                row["ExpiresAt"] = subject.ExpiresAt is null ? null : ReadExpiry(subject.ExpiresAt);
-                foreach (var action in subject.Actions.Where(action => action.Value is "allow" or "deny"))
+                var opinion = oldActions.SingleOrDefault(value => (string)value["EntryId"]! == subject.Id
+                    && (string)value["ActionKey"]! == action.Key);
+                if (opinion is null)
                 {
-                    var opinion = oldActions.SingleOrDefault(value => (string)value["EntryId"]! == subject.Id
-                        && (string)value["ActionKey"]! == action.Key);
-                    if (opinion is null)
-                    {
-                        opinion = new() { ["EID"] = ids.NewId("DataScopeObjectAction"), ["EntryId"] = subject.Id, ["ActionKey"] = action.Key };
-                        Actions.Add(opinion);
-                    }
-                    opinion["Opinion"] = action.Value;
+                    opinion = new() { ["EID"] = ids.NewId("DataScopeObjectAction"), ["EntryId"] = subject.Id, ["ActionKey"] = action.Key };
+                    Actions.Add(opinion);
                 }
+                opinion["Opinion"] = action.Value;
             }
-            await audit.RegisterAsync(new("dataScope.object.changed", "authorization.dataScopeObject",
-                normalized.ResourceKey + "/" + normalized.ObjectId,
-                [new("Configuration", BusinessAuditValue.Text(previous), BusinessAuditValue.Text(current))]), cancellationToken);
-            return true;
-        }, token);
+        }
+        await audit.RegisterAsync(new("dataScope.object.changed", "authorization.dataScopeObject",
+            normalized.ResourceKey + "/" + normalized.ObjectId,
+            [new("Configuration", BusinessAuditValue.Text(previous), BusinessAuditValue.Text(current))]), cancellationToken);
+        return true;
+    }
+
+    // 内部登记接缝不能退化为可独立提交的第二写入器。
+    private void RequireTransaction()
+    {
+        if (!transactions.IsActive) throw new InvalidOperationException("DATA_SCOPE_OBJECT_TRANSACTION_REQUIRED");
     }
 
     /// <summary>单对象完整动作裁决只读取该对象关系，匹配语义仍交已解析的主体事实 owner。</summary>
@@ -177,7 +214,7 @@ public sealed class DataScopeObjectGrants(EfPlatformDbContext db, IPlatformTrans
     }
 
     // 技术行身份不代表权限变化；匹配选项参与选择器身份，动作、优先级和期限是可替换内容。
-    private static string SemanticConfiguration(DataScopeObjectDto config) => JsonSerializer.Serialize(config.Subjects
+    internal static string SemanticConfiguration(DataScopeObjectDto config) => JsonSerializer.Serialize(config.Subjects
         .OrderBy(subject => subject.Type, StringComparer.Ordinal).ThenBy(subject => subject.SubjectId, StringComparer.Ordinal)
         .ThenBy(subject => subject.MatchOptions?.IncludeDescendants == true)
         .Select(subject => new { subject.Type, subject.SubjectId,
@@ -196,16 +233,6 @@ public sealed class DataScopeObjectGrants(EfPlatformDbContext db, IPlatformTrans
             MatchOptions = subject.MatchOptions?.IncludeDescendants == true ? subject.MatchOptions : null
         }).ToArray()
     });
-
-    // owner先持有同一ACL事务锁再检查对象资格；旧保存仍复用完全相同的锁身份和SQL。
-    internal async Task LockAsync(string resourceKey, string objectId, CancellationToken token)
-    {
-        if (!transactions.IsActive) throw new InvalidOperationException("DATA_SCOPE_OBJECT_TRANSACTION_REQUIRED");
-        var target = "Authorization.DataScopeObject:" + resourceKey + ":" + objectId;
-        await db.Database.ExecuteSqlInterpolatedAsync(
-            $"DECLARE @result int; EXEC @result = sys.sp_getapplock @Resource={target}, @LockMode='Exclusive', @LockOwner='Transaction'; IF @result < 0 THROW 51000, 'Data scope object lock failed.', 1;",
-            token);
-    }
 
     // 一次目标读取批量取其动作行，并在应用层还原完整可编辑配置。
     private async Task<DataScopeObjectDto> MaterializeAsync(string resourceKey, string objectId,

@@ -1,6 +1,6 @@
 import { useFeaturePlacement } from '../authorization/FeaturePlacementContext';
 import { resolvedFeaturePosition, type FeatureResolution } from '../authorization/featurePlacementResolver';
-import { Component, lazy, Suspense, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
+import { Component, lazy, Suspense, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { EntryNavigationContext } from '../navigation/entryNavigation';
 import { formatRequestError, useLocalization, usePlatformQuery } from '@icp-platform/core';
@@ -80,10 +80,8 @@ import { formatStandardCrudActionReason } from '../standard-crud/standardCrudAct
 import { useStandardCrudMutationExecution } from '../standard-crud/useStandardCrudMutationExecution';
 import { useStandardCrudHostEnvironment, type StandardCrudHostAddress } from '../standard-crud/standardCrudHostEnvironment';
 
-import { actionInstanceQueryIdentity } from '../composition/ActionInstanceScope';
+import { ActionInstanceScope, actionInstanceQueryIdentity } from '../composition/ActionInstanceScope';
 import { ActionInstanceContext, TreeNodeActivationContext } from '../composition/pageCompositionRuntime';
-const noInstanceSubscription = () => () => undefined;
-const noInstanceSnapshot = () => 0;
 type MetadataRecord = Record<string, unknown>;
 
 const loadStandardCrudListOverlayRuntime = () => import('./StandardCrudListOverlayRuntime');
@@ -826,8 +824,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   detailRoutePath?: string;
 }): ReactElement {
   const registration = useLocalizedStandardCrudRegistration(sourceRegistration);
-  const actionInstance = useContext(ActionInstanceContext);
-  useSyncExternalStore(actionInstance?.subscribe ?? noInstanceSubscription, actionInstance?.getSnapshot ?? noInstanceSnapshot);
+  const inheritedActionInstance = useContext(ActionInstanceContext);
   // Router hook 无条件调用；是否真正拥有地址由宿主环境决定。
   const routeLocation = useLocation();
   const navigate = useNavigate();
@@ -853,6 +850,13 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     if (exportFailure) void messageApi.error({ key: 'standard-crud-export-error', content: formatRequestError(exportFailure.failure, t), duration: 5, onClose: () => setExportFailure(null) });
   }, [exportFailure, messageApi, t]);
   const currentSubjectId = useOptionalCurrentSubjectId();
+  const actionScopeKey = JSON.stringify([currentSubjectId, sourceRegistration.resourceKey, view.key, host.input.instanceId, host.input.queryScope]);
+  // 独立列表拥有缺省实例；已有树实例仍由树持有。Review关闭不结束实例，身份或来源变化才释放旧状态。
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const ownedActionInstance = useMemo(() => inheritedActionInstance ? null : new ActionInstanceScope(), [inheritedActionInstance, actionScopeKey]);
+  useLayoutEffect(() => ownedActionInstance?.activate(), [ownedActionInstance]);
+  const actionInstance = inheritedActionInstance ?? ownedActionInstance!;
+  useSyncExternalStore(actionInstance.subscribe, actionInstance.getSnapshot, actionInstance.getSnapshot);
   const sessionTimeZoneId = useOptionalSessionTimeZoneId();
   // 只有明确无独立功能授权的呈现导航复用当前列表读取资格；普通导航仍按目标位置裁决。
   const viewNavigationTarget = (action: StandardCrudRuntimeActionSchema, surface = 'list.rowActions') => {

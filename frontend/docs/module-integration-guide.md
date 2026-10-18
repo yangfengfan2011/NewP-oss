@@ -50,7 +50,7 @@ Shell 会导入并校验整份目录，全部成功后通过 `ModuleRegistry.rep
 
 动作的静态定义仍由 metadata 拥有。需要根据当前列表行或详情快照决定可见性、可用性和原因时，模块在 `StandardCrudResourceRegistration.actionStateResolver` 注册一个仅返回通用 `visible` / `available` / `reason` 的 resolver。Shell 只解释这个通用结果；业务字段、组合规则和保护原因必须留在模块 binding，而且前端状态不能替代服务端 guard。
 
-树与其右侧列表、动作 Drawer 共享当前 `StandardCrudActionContext.instance`，独立页面可省略该实例。模块用静态稳定 `Symbol` owner token 调用 `getOrCreate<T>` 持有自己的类型化内存会话，并用 `changed()` 通知动作状态重新读取；`actionStateResolver` 同时收到当前 `instance` 与 `queryScope`。容器归树/页面实例，切换目录保留，切换主体或销毁时执行模块 dispose；React effect 重挂载重新建立状态，旧异步响应不能复活。它不按 resourceKey 建立全局仓库，不持久化状态或代模块重放写入。`queryScope`、会话及动作定义只提供定位与呈现输入，服务端必须独立重验权限与关系。 树菜单仅为当前打开菜单实际引用的标准 list 装载同一注册及 schema，经纯 input resolver 提供定位上下文，复用相同 actionStateResolver 的可见性、禁用和原因，并在点击时重验；预览不执行 handler、input prepare 或对象读取。没有 row/detail 快照时不声明已完成异步对象资格裁决，最终 Drawer 与服务端仍各自重验。装载失败或过期结果保持不可执行。
+树与其右侧列表、动作 Drawer 共享当前 `StandardCrudActionContext.instance`。独立标准列表缺少父实例时由列表宿主建立实例，按当前主体、资源/View及宿主实例/来源范围拥有；已有父实例始终继承，列表不替外层激活或释放。关闭或重开 Review 不结束该实例，独立列表切换主体或来源及卸载时释放旧状态。模块用静态稳定 `Symbol` owner token 调用 `getOrCreate<T>` 持有自己的类型化内存会话，并用 `changed()` 通知动作状态重新读取；`actionStateResolver` 同时收到当前 `instance` 与 `queryScope`。容器归树/页面实例，树内切换目录保留，切换主体或销毁时执行模块 dispose；React effect 重挂载重新建立状态，旧异步响应不能复活。它不按 resourceKey 建立全局仓库，不持久化状态或代模块重放写入。`queryScope`、会话及动作定义只提供定位与呈现输入，服务端必须独立重验权限与关系。 树菜单仅为当前打开菜单实际引用的标准 list 装载同一注册及 schema，经纯 input resolver 提供定位上下文，复用相同 actionStateResolver 的可见性、禁用和原因，并在点击时重验；预览不执行 handler、input prepare 或对象读取。没有 row/detail 快照时不声明已完成异步对象资格裁决，最终 Drawer 与服务端仍各自重验。装载失败或过期结果保持不可执行。
 
 `actionHandlers` 可以返回不透明的 `StandardCrudOperationResult`。Shell 只把该结果交给模块注册的 `operationResultPresenter`，不检查、持久或重放 payload。模块 presenter 拥有具体结果形状、展示、复制与关闭销毁时机。动作发生并发冲突时，Shell 刷新最新快照并结束旧确认流程，不自动重放写入。
 

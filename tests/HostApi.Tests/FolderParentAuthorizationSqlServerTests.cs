@@ -41,7 +41,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
         DataScopeDirectSubjectDto[] subjects = [
             new("Parent298Creator", "creator", null, 10, new Dictionary<string, string> { ["read"] = "deny" }, ExpiresAt: "2099-01-01T00:00:00Z"),
             new("Parent298Actor", "user", actor.AccountId, 1, new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "allow", ["authorize"] = "deny" }),
-            new("Parent298Department", "department", departmentId, 7, new Dictionary<string, string> { ["history"] = "allow" }, new(true), "2099-02-01T00:00:00Z")
+            new("Parent298Department", "department", departmentId, 7, new Dictionary<string, string> { ["delete"] = "allow" }, new(true), "2099-02-01T00:00:00Z")
         ];
         var parentOccurrence = position with { LinkIds = position.LinkIds[..^1] };
         using (var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.authorize"), HttpMethod.Put,
@@ -104,7 +104,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
         await InitializeAsync(fixture, admin);
         var position = await ContainerAsync(fixture, admin);
         var parent = await FindFolderAsync(fixture, "归属维护目录");
-        DataScopeDirectSubjectDto[] subjects = [new("CompatibilityParent298", "creator", null, 4, new Dictionary<string, string> { ["history"] = "allow" })];
+        DataScopeDirectSubjectDto[] subjects = [new("CompatibilityParent298", "creator", null, 4, new Dictionary<string, string> { ["delete"] = "allow" })];
         await SaveAsync(fixture, admin, position with { LinkIds = [] }, parent, subjects);
         await CreateWithOptionAsync("Omitted298", new { position, values = new { ENAME = "Omitted298" } });
         await CreateWithOptionAsync("False298", new { position, values = new { ENAME = "False298" }, copyParentAuthorization = false });
@@ -145,7 +145,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
         var targetPosition = position with { LinkIds = [.. position.LinkIds, destination.LinkId] };
         DataScopeDirectSubjectDto[] sourceSubjects = [new("ShallowSource298", "creator", null, 3, new Dictionary<string, string> { ["edit"] = "deny" })];
         DataScopeDirectSubjectDto[] sharedSubjects = [new("ShallowShared298", "owner", null, 9, new Dictionary<string, string> { ["read"] = "deny" })];
-        DataScopeDirectSubjectDto[] targetSubjects = [new("ShallowTarget298", "creator", null, 17, new Dictionary<string, string> { ["history"] = "allow" }, ExpiresAt: "2099-03-01T00:00:00Z")];
+        DataScopeDirectSubjectDto[] targetSubjects = [new("ShallowTarget298", "creator", null, 17, new Dictionary<string, string> { ["delete"] = "allow" }, ExpiresAt: "2099-03-01T00:00:00Z")];
         await SaveAsync(fixture, admin, position, source, sourceSubjects);
         await SaveAsync(fixture, admin, sourcePosition, shared, sharedSubjects);
         await SaveAsync(fixture, admin, position, destination, targetSubjects);
@@ -179,7 +179,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
                 Assert.Equal("creator", entry.GetProperty("type").GetString());
                 Assert.Equal(17, entry.GetProperty("priority").GetInt64());
                 Assert.Equal("2099-03-01T00:00:00Z", entry.GetProperty("expiresAt").GetString());
-                Assert.Equal("allow", entry.GetProperty("actions").GetProperty("history").GetString());
+                Assert.Equal("allow", entry.GetProperty("actions").GetProperty("delete").GetString());
                 Assert.False(entry.GetProperty("actions").TryGetProperty("edit", out _));
             }
             else Assert.Empty(entries);
@@ -204,7 +204,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
         var source = await CreateAsync(fixture, admin, position, "WorkspaceFolder", "folders", "create", "RollbackSource298");
         await CreateAsync(fixture, admin, position with { LinkIds = [.. position.LinkIds, source.LinkId] }, "WorkspaceFolder", "folders", "create", "RollbackShared298");
         await SaveAsync(fixture, admin, position with { LinkIds = [] }, parent,
-            [new("RollbackParent298", "creator", null, 4, new Dictionary<string, string> { ["history"] = "allow" })]);
+            [new("RollbackParent298", "creator", null, 4, new Dictionary<string, string> { ["delete"] = "allow" })]);
         foreach (var shallow in new[] { false, true })
         foreach (var cancel in new[] { false, true })
         {
@@ -265,7 +265,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
             Point(fixture, "workspace.spaces.access"), Point(fixture, "workspace.folder.history"));
         using var ordinary = actor.Client;
         await SaveAsync(fixture, admin, position with { LinkIds = [] }, parent,
-            [new("HistoryParent298", "creator", null, 4, new Dictionary<string, string> { ["history"] = "allow" })]);
+            [new("HistoryParent298", "creator", null, 4, new Dictionary<string, string> { ["delete"] = "allow" })]);
         using (var response = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.create"), HttpMethod.Post,
             "/api/workspace/content/folders", new { position, values = new { ENAME = "HistoryInitialized298" }, copyParentAuthorization = true }))
             await ReadOkAsync(response);
@@ -299,7 +299,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
         Assert.Equal("unavailable", hidden.GetProperty("target").GetProperty("nameSource").GetString());
         Assert.Null(hidden.GetProperty("target").GetProperty("name").GetString()); AssertSafe(hidden);
 
-        Task<JsonElement> HistoryAsync(Position occurrence, string linkId) => FeatureHttpTestRequests.ReadAsync(ordinary,
+        Task<JsonElement> HistoryAsync(Position occurrence, string linkId) => new ObjectHistoryHttpTestRequests(fixture).ReadAsync(ordinary,
             Point(fixture, "workspace.folder.history"), PermissionsPath(occurrence, linkId).Replace("/permissions?", "/history?", StringComparison.Ordinal)
                 + "&eventType=workspace.folder.parentAuthorizationInitialized&objectType=WorkspaceFolder&pageSize=1");
         void AssertSafe(JsonElement item)
@@ -406,7 +406,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
         using var ordinary = actor.Client;
         DataScopeDirectSubjectDto[] original = [
             new("IndependentUser298", "user", actor.AccountId, 11, new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "allow" }, ExpiresAt: childExpiryText),
-            new("IndependentDepartment298", "department", departmentId, 7, new Dictionary<string, string> { ["history"] = "deny" }, new(true), departmentExpiryText)
+            new("IndependentDepartment298", "department", departmentId, 7, new Dictionary<string, string> { ["delete"] = "deny" }, new(true), departmentExpiryText)
         ];
         var parentOccurrence = position with { LinkIds = [] };
         await SaveAsync(fixture, admin, parentOccurrence, parent, original);
@@ -503,13 +503,13 @@ public sealed class FolderParentAuthorizationSqlServerTests
         var accountId = account.GetProperty("eid").GetString()!;
         DataScopeDirectSubjectDto[] original = [
             new("RetainedUser298", "user", accountId, 11, new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "deny" }, ExpiresAt: "2099-01-01T00:00:00Z"),
-            new("RetainedDepartment298", "department", departmentId, 7, new Dictionary<string, string> { ["history"] = "allow" }, new(true), "2099-02-01T00:00:00Z"),
+            new("RetainedDepartment298", "department", departmentId, 7, new Dictionary<string, string> { ["delete"] = "allow" }, new(true), "2099-02-01T00:00:00Z"),
             new("RetainedCreator298", "creator", null, 3, new Dictionary<string, string> { ["authorize"] = "deny" })
         ];
         var parentOccurrence = position with { LinkIds = [] };
         await SaveAsync(fixture, admin, parentOccurrence, parent, original);
         await SaveAsync(fixture, admin, position, source,
-            [new("RetainedSourceDifferent298", "all", null, 99, new Dictionary<string, string> { ["history"] = "deny" })]);
+            [new("RetainedSourceDifferent298", "all", null, 99, new Dictionary<string, string> { ["delete"] = "deny" })]);
         var parentBefore = (await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(parentOccurrence, parent.LinkId))).GetRawText();
         var sourceBefore = (await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(position, source.LinkId))).GetRawText();
         // 从未登录/绑定的真实账号允许正式软删；保留下来的ACL引用不是新手工选择器。

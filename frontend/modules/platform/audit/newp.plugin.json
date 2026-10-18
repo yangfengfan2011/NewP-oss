@@ -13,7 +13,6 @@
     "min": "1.0.0",
     "max": "2.0.0"
   },
-  "dataActions": [{ "key": "history", "title": "履历", "behaviorKey": "data.history", "requiresRead": true }],
   "backend": {
     "behaviorKey": "audit.backend"
   },

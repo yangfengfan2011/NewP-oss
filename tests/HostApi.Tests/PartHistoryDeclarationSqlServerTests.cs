@@ -27,7 +27,7 @@ public sealed class PartHistoryDeclarationSqlServerTests
         using var ordinary = actor.Client;
         var id = await CreateAsync(fixture, admin, "PART-HISTORY-302");
         var otherId = await CreateAsync(fixture, admin, "PART-HISTORY-OTHER-302");
-        await ConfigureAsync(fixture, admin, id, "allow", "deny");
+        await ConfigureAsync(fixture, admin, id, "allow");
         var declarations = plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Part").ToArray();
         Assert.All(declarations, item => Assert.Equal(new[] { "read" }, item.Actions));
         var basePath = "/api/part/parts/" + id + "/history";
@@ -89,7 +89,7 @@ public sealed class PartHistoryDeclarationSqlServerTests
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "PartRecheck302", "零组件重判", "part-recheck302", "零组件重判账号", history);
         using var ordinary = actor.Client;
         var id = await CreateAsync(fixture, admin, "PART-RECHECK-302");
-        await ConfigureAsync(fixture, admin, id, "allow", "deny");
+        await ConfigureAsync(fixture, admin, id, "allow");
         var declarations = fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog.Where(item => item.ModuleId == "Part").ToArray();
         var basePath = "/api/part/parts/" + id + "/history";
         var list = Assert.Single(declarations, item => item.Execution == "part.history.list");
@@ -122,7 +122,7 @@ public sealed class PartHistoryDeclarationSqlServerTests
         }
         var enter = declarations.First(item => item.Execution == "part.history.enter");
         using (var check = await SendAsync(ordinary, history, enter.Id, HttpMethod.Get, basePath + "/check/enter")) Assert.Equal(HttpStatusCode.NoContent, check.StatusCode);
-        await ConfigureAsync(fixture, admin, id, "deny", "allow");
+        await ConfigureAsync(fixture, admin, id, "deny");
         foreach (var declaration in declarations)
         {
             var operation = declaration.Execution.Split('.')[^1];
@@ -139,11 +139,11 @@ public sealed class PartHistoryDeclarationSqlServerTests
         return created.GetProperty("fields").GetProperty("EID").GetString()!;
     }
 
-    private static async Task ConfigureAsync(BusinessAuditHostFixture fixture, HttpClient admin, string id, string read, string history)
+    private static async Task ConfigureAsync(BusinessAuditHostFixture fixture, HttpClient admin, string id, string read)
     {
         var manage = fixture.FeatureCatalog.Single(point => point.ModuleId == "Part" && point.Key == "authorize" && point.ActionScope == "list.rowActions");
         using var saved = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, "/api/part/parts/" + id + "/permissions",
-            new DataScopeObjectDto("part.part", id, [new("part302", "all", null, 1, new Dictionary<string, string> { ["read"] = read, ["history"] = history })]));
+            new DataScopeObjectDto("part.part", id, [new("part302", "all", null, 1, new Dictionary<string, string> { ["read"] = read })]));
         Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
     }
 

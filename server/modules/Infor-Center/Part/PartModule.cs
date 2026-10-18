@@ -17,7 +17,7 @@ public sealed class PartModule : ModuleCapsuleBindingBase
     public override void ConfigureServices(IServiceCollection services)
     {
         services.AddSingleton(new ICP.Platform.Authorization.Contracts.DataScopeResourceActionBinding("part.part", ModuleId,
-            ["read", "create", "edit", "delete", "authorize", "history", "partCopy", "partObjectCopy"]));
+            ["read", "create", "edit", "delete", "authorize", "partCopy", "partObjectCopy"]));
         services.AddSingleton(new ICP.Platform.Modules.Audit.Contracts.ObjectHistoryEventPolicy(ModuleId,
             "entity.ownership.transferred", "part.part", "part.part",
             ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.ObjectId, "Part.HistoryOwnershipTransferred"));

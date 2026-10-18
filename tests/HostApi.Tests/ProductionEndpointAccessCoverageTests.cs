@@ -106,14 +106,10 @@ public sealed class ProductionEndpointAccessCoverageTests
         var prefix = "api/" + slug + "/" + collection + "/{objectId}/history";
         var endpoints = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints).OfType<RouteEndpoint>()
             .Where(endpoint => endpoint.RoutePattern.RawText?.TrimStart('/').StartsWith(prefix, StringComparison.Ordinal) == true).ToArray();
-        var declared = declarations.Any(feature => feature.DataAccess.Count > 0);
-        Assert.Equal(declared ? 5 : 4, endpoints.Length);
-        if (declared)
-        {
-            var check = Assert.Single(endpoints, item => item.RoutePattern.RawText?.TrimStart('/') == prefix + "/check/{operation}"
-                && item.Metadata.GetOrderedMetadata<HttpMethodMetadata>().Single().HttpMethods.Contains("GET"));
-            Assert.Equal(slug + "." + slug + ".history", Assert.Single(check.Metadata.GetOrderedMetadata<RequireFeatureAttribute>()).BehaviorKey);
-        }
+        Assert.Equal(5, endpoints.Length);
+        var check = Assert.Single(endpoints, item => item.RoutePattern.RawText?.TrimStart('/') == prefix + "/check/{operation}"
+            && item.Metadata.GetOrderedMetadata<HttpMethodMetadata>().Single().HttpMethods.Contains("GET"));
+        Assert.Equal(slug + "." + slug + ".history", Assert.Single(check.Metadata.GetOrderedMetadata<RequireFeatureAttribute>()).BehaviorKey);
         foreach (var (suffix, method) in new[] { ("", "GET"), ("/{recordId}", "GET"), ("/export", "POST"), ("/print", "POST") })
         {
             var endpoint = Assert.Single(endpoints, item => item.RoutePattern.RawText?.TrimStart('/') == prefix + suffix

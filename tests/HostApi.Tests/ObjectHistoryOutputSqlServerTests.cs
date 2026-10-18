@@ -62,7 +62,7 @@ public sealed class ObjectHistoryOutputSqlServerTests
         using var ordinary = actor.Client;
         var manage = Point(fixture, "part.part.authorize");
         var configuration = new DataScopeObjectDto("part.part", part.Id,
-            [new("output-user", "user", actor.AccountId, 1, new Dictionary<string, string> { ["read"] = "allow", ["history"] = "allow" })]);
+            [new("output-user", "user", actor.AccountId, 1, new Dictionary<string, string> { ["read"] = "allow" })]);
         foreach (var priority in new[] { 1, 2, 3 })
         {
             using var saved = await historyRequests.SendAsync(admin, manage, HttpMethod.Put,
@@ -135,7 +135,7 @@ public sealed class ObjectHistoryOutputSqlServerTests
             finally { cancellation.Cancel = null; }
         }
         using (var denied = await historyRequests.SendAsync(admin, manage, HttpMethod.Put, "/api/part/parts/" + part.Id + "/permissions",
-            configuration with { Subjects = [configuration.Subjects[0] with { Actions = new Dictionary<string, string> { ["read"] = "deny", ["history"] = "allow" } }] }))
+            configuration with { Subjects = [configuration.Subjects[0] with { Actions = new Dictionary<string, string> { ["read"] = "deny" } }] }))
             Assert.Equal(HttpStatusCode.NoContent, denied.StatusCode);
         foreach (var output in new[] { "export", "print" })
         {

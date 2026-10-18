@@ -170,7 +170,7 @@ public sealed class DataScopeBatchAuthorizationSqlServerTests
         {
             var path = "/api/workspace/content/" + target.LinkId + "/history?queryScope="
                 + Uri.EscapeDataString(JsonSerializer.Serialize(position, new JsonSerializerOptions(JsonSerializerDefaults.Web))) + "&eventType=dataScope.object.changed";
-            var page = await FeatureHttpTestRequests.ReadAsync(ordinary, history, path);
+            var page = await new ObjectHistoryHttpTestRequests(fixture).ReadAsync(ordinary, history, path);
             Assert.Equal(1, page.GetProperty("total").GetInt32());
             var item = Assert.Single(page.GetProperty("items").EnumerateArray());
             Assert.Equal(recordIds[resourceKey + "/" + target.Id], item.GetProperty("id").GetString());

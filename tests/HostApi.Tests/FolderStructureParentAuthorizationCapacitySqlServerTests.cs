@@ -38,10 +38,10 @@ public sealed partial class FolderStructureParentAuthorizationSqlServerTests
             Point(fixture, "workspace.spaces.access"), Point(fixture, "workspace.folder.pasteFolderStructure"));
         using var ordinary = actor.Client;
         await SaveAsync(fixture, admin, position with { LinkIds = [] }, parent,
-            [new("CapacityCreator298", "creator", null, 0, new Dictionary<string, string> { ["history"] = "allow" }, ExpiresAt: "2099-05-01T00:00:00Z"),
+            [new("CapacityCreator298", "creator", null, 0, new Dictionary<string, string> { ["delete"] = "allow" }, ExpiresAt: "2099-05-01T00:00:00Z"),
              new("CapacityOwner298", "owner", null, 3, new Dictionary<string, string> { ["read"] = "allow" }),
              new("CapacityUser298", "user", actor.AccountId, 1, new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "allow", ["authorize"] = "deny" }),
-             new("CapacityDepartment298", "department", department, 7, new Dictionary<string, string> { ["history"] = "allow" }, new(true), "2099-06-01T00:00:00Z")]);
+             new("CapacityDepartment298", "department", department, 7, new Dictionary<string, string> { ["delete"] = "allow" }, new(true), "2099-06-01T00:00:00Z")]);
 
         foreach (var units in new[] { 1, 6 })
         {

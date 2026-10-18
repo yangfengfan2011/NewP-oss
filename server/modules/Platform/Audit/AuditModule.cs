@@ -20,14 +20,6 @@ public sealed class AuditModule : ModuleCapsuleBindingBase
         services.AddScoped<BusinessAuditQuery>();
         services.AddScoped<IObjectHistoryQuery, ObjectHistoryQuery>();
         services.AddScoped<IObjectHistoryExport, ObjectHistoryExport>();
-        services.AddScoped<IReadableObjectHistoryQuery>(provider =>
-        {
-            var query = ActivatorUtilities.CreateInstance<ObjectHistoryQuery>(provider);
-            query.RequiresLegacyHistory = false;
-            return new ReadableObjectHistoryQuery(query);
-        });
-        services.AddScoped<IReadableObjectHistoryExport>(provider => new ReadableObjectHistoryExport(
-            ActivatorUtilities.CreateInstance<ObjectHistoryExport>(provider, provider.GetRequiredService<IReadableObjectHistoryQuery>())));
         services.AddScoped<IAuditService, AuditService>();
         services.AddSingleton<IOperationLogRepository, OperationLogRepository>();
         services.AddSingleton<IAccessLogRepository, AccessLogRepository>();

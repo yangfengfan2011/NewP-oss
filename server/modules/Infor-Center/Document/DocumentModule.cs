@@ -19,7 +19,7 @@ public sealed class DocumentModule : ModuleCapsuleBindingBase
     public override void ConfigureServices(IServiceCollection services)
     {
         services.AddSingleton(new ICP.Platform.Authorization.Contracts.DataScopeResourceActionBinding("document.document", ModuleId,
-            ["read", "create", "edit", "delete", "authorize", "history", "documentCopy", "documentObjectCopy", "download"]));
+            ["read", "create", "edit", "delete", "authorize", "documentCopy", "documentObjectCopy", "download"]));
         services.AddSingleton(new ICP.Platform.Modules.Audit.Contracts.ObjectHistoryEventPolicy(ModuleId,
             "entity.ownership.transferred", "document.document", "document.document",
             ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.ObjectId, "Document.HistoryOwnershipTransferred"));

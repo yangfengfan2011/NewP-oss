@@ -42,7 +42,7 @@ public sealed record ObjectHistoryEventPolicy(string OwnerModuleId, string Event
     /// <summary>owner确有登记的名称/编码文本快照；无声明只能使用当前可读目录并明确来源。</summary>
     public ObjectHistoryTextSnapshot? TextSnapshot { get; init; }
 }
-/// <summary>普通履历共享安全查询；始终完整读取目标，未迁移owner保留原附加检查，失败继续传播。</summary>
+/// <summary>普通履历共享安全查询；始终完整读取目标，失败继续传播。</summary>
 public interface IObjectHistoryQuery
 {
     /// <summary>调用方先验证正式功能与真实来源；null表示当前对象不可查询，记录过滤与分页在存储侧执行。</summary>
@@ -56,9 +56,6 @@ public interface IObjectHistoryQuery
         CancellationToken cancellationToken = default);
 }
 
-/// <summary>已接入正式按钮声明的owner使用完整读取查询；不再追加旧history数据动作。</summary>
-public interface IReadableObjectHistoryQuery : IObjectHistoryQuery { }
-
 /// <summary>履历owner输出的有限文件结果；不让业务owner依赖Audit私有服务或CRUD导出实现。</summary>
 public sealed record ObjectHistoryFile(string FileName, string ContentType, byte[] Content);
 /// <summary>同一安全查询集合的文件编码；资格/完整来源仍由当前owner入口和query共同重验。</summary>
@@ -67,6 +64,3 @@ public interface IObjectHistoryExport
     Task<ObjectHistoryFile?> ExportAsync(string resourceKey, string objectId, ObjectHistoryOutputRequest request,
         CancellationToken cancellationToken = default);
 }
-
-/// <summary>使用完整读取安全集合编码文件；旧独立owner仍保留原出口直到迁移。</summary>
-public interface IReadableObjectHistoryExport : IObjectHistoryExport { }

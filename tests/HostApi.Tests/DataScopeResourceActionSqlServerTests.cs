@@ -18,6 +18,8 @@ public sealed class DataScopeResourceActionSqlServerTests
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
+        var catalog = await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "authorization.dataScope.read"), "/api/authorization/data-scope/catalog");
+        Assert.DoesNotContain("history", Keys(catalog));
         await InitializeAsync(fixture, admin);
         var position = await ContainerAsync(fixture, admin);
         var folder = await CreateAsync(fixture, admin, position, "WorkspaceFolder", "folders", "create", "Action295Folder");
@@ -56,6 +58,9 @@ public sealed class DataScopeResourceActionSqlServerTests
             [new("Action295Invalid", "all", null, 0, new Dictionary<string, string> { ["download"] = "deny" })]);
         using (var rejected = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Put, Path(folder) + Query(), invalid))
             Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        using (var retired = await FeatureHttpTestRequests.SendAsync(ordinary, manage, HttpMethod.Put, Path(folder) + Query(),
+            invalid with { Subjects = [invalid.Subjects[0] with { Actions = new Dictionary<string, string> { ["history"] = "allow" } }] }))
+            Assert.Equal(HttpStatusCode.BadRequest, retired.StatusCode);
         var unchanged = await FeatureHttpTestRequests.ReadAsync(ordinary, manage, Path(folder) + Query());
         Assert.Empty(unchanged.GetProperty("subjects").EnumerateArray());
         var valid = invalid with { ResourceKey = "document.document", ObjectId = document.Id,

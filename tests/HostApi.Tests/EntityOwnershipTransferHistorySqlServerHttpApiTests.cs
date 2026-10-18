@@ -38,7 +38,7 @@ public sealed class EntityOwnershipTransferHistorySqlServerHttpApiTests
                 : "/api/" + model.ToLowerInvariant() + "/" + kind + "/" + target.Id + "/permissions";
             using var configured = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, permissions,
                 new DataScopeObjectDto(resource, target.Id, [new("history-all-" + model, "all", null, 0,
-                    new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "allow", ["history"] = "allow" })]));
+                    new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "allow" })]));
             Assert.True(configured.StatusCode == HttpStatusCode.NoContent, await configured.Content.ReadAsStringAsync());
         }
         using (var transferred = await FeatureHttpTestRequests.SendAsync(ownerClient, transfer, HttpMethod.Post, "/api/workspace/ownership/transfer",
@@ -50,7 +50,7 @@ public sealed class EntityOwnershipTransferHistorySqlServerHttpApiTests
         foreach (var target in targets)
         {
             var path = Source(position, target.LinkId, "history") + "&eventType=entity.ownership.transferred";
-            var original = await FeatureHttpTestRequests.ReadAsync(ownerClient, history, path);
+            var original = await new ObjectHistoryHttpTestRequests(fixture).ReadAsync(ownerClient, history, path);
             Assert.Equal(1, original.GetProperty("total").GetInt32());
             var item = Assert.Single(original.GetProperty("items").EnumerateArray());
             Assert.Equal("entity.ownership.transferred", item.GetProperty("eventType").GetString());
@@ -62,7 +62,7 @@ public sealed class EntityOwnershipTransferHistorySqlServerHttpApiTests
             var location = Assert.Single(locations, value => value.GetProperty("objectId").GetString() == target.Id);
             var receivedPath = "/api/workspace/content/" + location.GetProperty("sourceLinkId").GetString() + "/history?queryScope="
                 + Uri.EscapeDataString(location.GetProperty("position").GetRawText()) + "&eventType=entity.ownership.transferred";
-            var received = await FeatureHttpTestRequests.ReadAsync(recipientClient, history, receivedPath);
+            var received = await new ObjectHistoryHttpTestRequests(fixture).ReadAsync(recipientClient, history, receivedPath);
             Assert.Equal(1, received.GetProperty("total").GetInt32());
             Assert.Equal(item.GetProperty("id").GetString(), Assert.Single(received.GetProperty("items").EnumerateArray()).GetProperty("id").GetString());
         }
@@ -71,7 +71,7 @@ public sealed class EntityOwnershipTransferHistorySqlServerHttpApiTests
         var directoryLink = Assert.Single(receivedPosition.GetProperty("linkIds").EnumerateArray()).GetString()!;
         var rootPosition = new Position(receivedPosition.GetProperty("spaceId").GetString()!, receivedPosition.GetProperty("rootFolderId").GetString()!, []);
         var directoryPath = Source(rootPosition, directoryLink, "history") + "&eventType=workspace.reference.added&objectType=Part";
-        var directoryHistory = await FeatureHttpTestRequests.ReadAsync(recipientClient, history, directoryPath);
+        var directoryHistory = await new ObjectHistoryHttpTestRequests(fixture).ReadAsync(recipientClient, history, directoryPath);
         var relation = Assert.Single(directoryHistory.GetProperty("items").EnumerateArray());
         var part = targets.Single(target => target.Model == "Part");
         Assert.Equal(part.Name, relation.GetProperty("target").GetProperty("name").GetString());
@@ -80,7 +80,7 @@ public sealed class EntityOwnershipTransferHistorySqlServerHttpApiTests
                    new DataScopeObjectDto("part.part", part.Id, [new("deny-receiver", "user", recipient.AccountId, 0,
                        new Dictionary<string, string> { ["read"] = "deny" })])))
             Assert.True(deny.StatusCode == HttpStatusCode.NoContent, await deny.Content.ReadAsStringAsync());
-        var hidden = await FeatureHttpTestRequests.ReadAsync(recipientClient, history, directoryPath);
+        var hidden = await new ObjectHistoryHttpTestRequests(fixture).ReadAsync(recipientClient, history, directoryPath);
         var hiddenRelation = Assert.Single(hidden.GetProperty("items").EnumerateArray());
         Assert.Equal(relation.GetProperty("id").GetString(), hiddenRelation.GetProperty("id").GetString());
         Assert.Equal("unavailable", hiddenRelation.GetProperty("target").GetProperty("nameSource").GetString());

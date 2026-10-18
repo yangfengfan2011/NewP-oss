@@ -8,7 +8,7 @@ namespace ICP.Platform.Modules.Part;
 
 /// <summary>独立对象履历按自身声明交集完整读取；EID无需Workspace来源，功能资格属于本owner。</summary>
 [ApiController, Route("api/part/parts/{objectId}/history"), EndpointModule("Part")]
-public sealed class PartHistoryController(IReadableObjectHistoryQuery history, IReadableObjectHistoryExport export, IActionDataAccess dataAccess) : ControllerBase
+public sealed class PartHistoryController(IObjectHistoryQuery history, IObjectHistoryExport export, IActionDataAccess dataAccess) : ControllerBase
 {
     private const string ResourceKey = "part.part";
 

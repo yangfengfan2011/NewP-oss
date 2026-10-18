@@ -32,6 +32,7 @@ public sealed class DataActionCatalogTests
         var ownerOrdered = candidates.Where(candidate => activeIds.Contains(candidate.ModuleId)).OrderBy(candidate => candidate.ModuleId, StringComparer.Ordinal).ToArray();
         var expectedKeys = ownerOrdered.SelectMany(candidate => candidate.DataActions).Select(action => action.Key).ToArray();
         Assert.NotEmpty(expectedKeys);
+        Assert.DoesNotContain(original.Plan.DataActionCatalog, action => action.Key == "history");
         Assert.Equal(expectedKeys, original.Plan.DataActionCatalog.Select(action => action.Key));
         Assert.All(original.Plan.DataActionCatalog.Where(action => new[] { "read", "create", "edit", "delete", "authorize" }.Contains(action.Key)), action => Assert.Equal("Authorization", action.ModuleId));
         foreach (var owner in new[] { "Document", "Part", "Workspace" })

@@ -1,7 +1,6 @@
 using System.Net;
 using System.Text.Json;
 using ICP.Platform.Modules.Audit.Contracts;
-using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Testing;
@@ -60,14 +59,12 @@ public sealed class ObjectHistoryOwnerBoundariesSqlServerTests
             using (var forgedScope = await historyRequests.SendAsync(ordinary, feature, HttpMethod.Get, path + "?queryScope=forged"))
                 Assert.Equal(HttpStatusCode.BadRequest, forgedScope.StatusCode);
             var configuration = new DataScopeObjectDto(owner + "." + owner, target.Id,
-                [new("owner-history-" + owner, "user", actor.AccountId, 1, new Dictionary<string, string> { ["read"] = owner == "part" ? "allow" : "deny", ["history"] = owner == "part" ? "deny" : "allow" })]);
+                [new("owner-history-" + owner, "user", actor.AccountId, 1, new Dictionary<string, string> { ["read"] = owner == "part" ? "allow" : "deny" })]);
             using (var denied = await historyRequests.SendAsync(admin, Point(fixture, owner + "." + owner + ".authorize"), HttpMethod.Put,
                 "/api/" + owner + "/" + owner + "s/" + target.Id + "/permissions", configuration))
                 Assert.True(denied.StatusCode == HttpStatusCode.NoContent, await denied.Content.ReadAsStringAsync());
             using var deniedQuery = await historyRequests.SendAsync(ordinary, feature, HttpMethod.Get, path);
-            var declaredRead = fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog.Any(item => item.ModuleId == feature.ModuleId)
-                && configuration.Subjects[0].Actions["read"] == "allow";
-            Assert.Equal(declaredRead ? HttpStatusCode.OK : HttpStatusCode.NotFound, deniedQuery.StatusCode);
+            Assert.Equal(configuration.Subjects[0].Actions["read"] == "allow" ? HttpStatusCode.OK : HttpStatusCode.NotFound, deniedQuery.StatusCode);
         }
 
         using var ensured = await historyRequests.SendAsync(admin, Point(fixture, "workspace.spaces.access"), HttpMethod.Post,

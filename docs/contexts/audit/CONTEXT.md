@@ -21,12 +21,12 @@ Audit 拥有不可变的业务变更记录、LocalAdmin 审计查阅，以及由
 
 ## 普通对象履历
 
-- `Audit.Contracts` 的 `IObjectHistoryQuery` 只接受规范 resourceKey/EID、筛选与记录选择，返回安全 `ObjectHistoryItem`。真实 owner 每次先验证自己的正式 history 功能及完整来源；query 再交集当前对象存在、数据 read/history 和登记的 owner 读取约束。独立 owner 使用 EID；Workspace 的 LID 和完整 position 只解析出现来源，不成为对象授权或审计关联主键。空间根不开放普通对象履历，已删除目标返回 404，管理员自有历史保留。
+- `Audit.Contracts` 的唯一 `IObjectHistoryQuery` 只接受规范 resourceKey/EID、筛选与记录选择，返回安全 `ObjectHistoryItem`。真实 owner 每次先验证原履历功能、当前接口允许的正式按钮声明及完整来源；各入口、详情及输出直接声明 `read`，query 再交集当前对象存在、数据 read 和登记的 owner 读取约束，不另判 history 数据动作。点击预检不产生凭据，正式请求始终重判。独立 owner 使用 EID；Workspace 的 LID 和完整 position 只解析出现来源，不成为对象授权或审计关联主键。空间根不开放普通对象履历，已删除目标返回 404，管理员自有历史保留。
 - 真实事件 owner 用 `ObjectHistoryEventPolicy` 声明确切 event/resource、直接 EID、授权复合 target 或固定 `BusinessAuditField` 的 Field/Kind/Before|After/Value 关联。旧 LID 不依赖当前 Link 存在；不改写旧 target，不接受任意 JSONPath 或 JSON 模糊搜索。关系类型及主体来自已记录的 ChildModelKey/CEID 等事实；源 Folder 对象与源父 Folder 以真实调用语义区分，不由字段名猜测。一个记录匹配多个关联仍只返回一次，不聚合整个后代事件中心。
 - 关联、时间、操作者、事件、对象类型、IP 和安全描述筛选在 SQL Count/稳定分页前执行，默认最近三个月，按 OccurredAt DESC、EID DESC 排序。描述只匹配当前语言中 owner 声明的安全摘要，不搜索 ACL、原始字段或私人路径。目录和存储故障继续传播，失败不能显示为空页。
 - 普通 DTO 不含原始 target/actor 关联标识、FieldsJson、字段前后差异或 TraceId。记录 ID 仅用于当前安全集合内的详情及选择。对象主体先通过当前 read/owner 准入，才允许名称投影：确有固定文本快照为 `historical`，当前目录补充为 `current`，缺少可证明文本为 `unrecorded`；主体不可读或已缺失为 `unavailable`，不得以历史文本或原 ID 兜底。父 Folder 中的 Part 关系事件仍显示该 Part 的类型与安全名称。操作者从当前可读账号目录批量解析，不可用仅显示占位。
 - `IBusinessAuditRecorder` 仅采集可信请求连接的 `RemoteIpAddress`，不直接读取转发头或改变 Host 代理信任；非请求和旧缺失行保持 null。IP 列、筛选、详情和输出共用同一 history 资格，不增加 IP 专属权限。
-- 选中与全部输出每次重验同一对象、来源、history 和已应用筛选；选中 ID 任一不属于安全集合则整体拒绝，全部输出不受当前页裁剪。XLSX 仅复用现有 writer 编码安全标量；打印返回同一安全 Item 集合，由受控只读视图触发真实打印。输出不复用管理员 payload，不另建通用报表或全局导出模式。取消与失败不返回部分成功文件。
+- 选中与全部输出每次重验同一对象、来源、正式声明、原功能资格、完整 read 和已应用筛选；选中 ID 任一不属于安全集合则整体拒绝，全部输出不受当前页裁剪。`IObjectHistoryExport` 复用同一查询，XLSX 仅复用现有 writer 编码安全标量；打印返回同一安全 Item 集合，由受控只读视图触发真实打印。输出不复用管理员 payload，不另建通用报表或全局导出模式。取消与失败不返回部分成功文件。
 
 ## 非目标与回退
 

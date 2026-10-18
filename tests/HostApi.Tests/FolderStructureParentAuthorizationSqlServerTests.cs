@@ -56,9 +56,9 @@ public sealed partial class FolderStructureParentAuthorizationSqlServerTests(ITe
             Point(fixture, "workspace.spaces.access"), Point(fixture, "workspace.folder.pasteFolderStructure"));
         using var ordinary = actor.Client;
         await SaveAsync(fixture, admin, sourcePosition, a,
-            [new("StructureSourceA298", "creator", null, 3, new Dictionary<string, string> { ["history"] = "deny" })]);
+            [new("StructureSourceA298", "creator", null, 3, new Dictionary<string, string> { ["delete"] = "deny" })]);
         await SaveAsync(fixture, admin, sourcePosition, b,
-            [new("StructureSourceB298", "creator", null, 8, new Dictionary<string, string> { ["history"] = "allow" })]);
+            [new("StructureSourceB298", "creator", null, 8, new Dictionary<string, string> { ["delete"] = "allow" })]);
         await SaveAsync(fixture, admin, position, destination,
             [new("StructureTemplateCreator298", "creator", null, 10, new Dictionary<string, string> { ["read"] = "deny" }, ExpiresAt: "2099-04-01T00:00:00Z"),
              new("StructureTemplateActor298", "user", actor.AccountId, 1, new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "allow", ["authorize"] = "deny" })]);

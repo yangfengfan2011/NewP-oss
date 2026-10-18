@@ -52,7 +52,7 @@ public sealed partial class DataScopePermissionCostSqlServerTests
             Point(fixture, "workspace.spaces.access"), history, independentHistory);
         using var ordinary = actor.Client;
         var config = new DataScopeObjectDto("part.part", anchor.Id,
-            [new("history-capacity-user", "user", actor.AccountId, 1, new Dictionary<string, string> { ["read"] = "allow", ["history"] = "allow" })]);
+            [new("history-capacity-user", "user", actor.AccountId, 1, new Dictionary<string, string> { ["read"] = "allow" })]);
         using (var saved = await historyRequests.SendAsync(admin, Point(fixture, "part.part.authorize"), HttpMethod.Put,
             "/api/part/parts/" + anchor.Id + "/permissions", config)) Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         var now = fixture.Services.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime;

@@ -8,7 +8,7 @@ namespace ICP.Platform.Modules.Document;
 
 /// <summary>独立履历以自身声明和完整读取验证EID；不借用Workspace来源或功能资格。</summary>
 [ApiController, Route("api/document/documents/{objectId}/history"), EndpointModule("Document")]
-public sealed class DocumentHistoryController(IReadableObjectHistoryQuery history, IReadableObjectHistoryExport export,
+public sealed class DocumentHistoryController(IObjectHistoryQuery history, IObjectHistoryExport export,
     IActionDataAccess access) : ControllerBase
 {
     private const string ResourceKey = "document.document";

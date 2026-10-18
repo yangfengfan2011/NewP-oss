@@ -31,10 +31,10 @@ internal sealed class ObjectHistoryHttpTestRequests(IReadOnlyList<ActionDataAcce
     {
         var url = new Uri(new Uri("http://history-test.local"), path);
         var segments = url.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        var moduleId = segments.Length > 4 && segments[0] == "api" && segments[4] == "history"
-            ? declarations.Select(item => item.ModuleId).Distinct(StringComparer.Ordinal).SingleOrDefault(owner => owner.Equals(segments[1], StringComparison.OrdinalIgnoreCase)) : null;
-        if (moduleId is null)
+        if (segments.Length <= 4 || segments[0] != "api" || segments[4] != "history")
             return await FeatureHttpTestRequests.SendAsync(client, point, method, path, body);
+        var moduleId = declarations.Select(item => item.ModuleId).Distinct(StringComparer.Ordinal)
+            .Single(owner => owner.Equals(segments[1], StringComparison.OrdinalIgnoreCase));
         var suffix = url.AbsolutePath[(url.AbsolutePath.IndexOf("/history", StringComparison.Ordinal) + "/history".Length)..];
         var operation = suffix == "" ? "list" : suffix is "/export" or "/print" ? suffix[1..]
             : suffix.StartsWith("/check/", StringComparison.Ordinal) ? suffix[7..] : "detail";

@@ -30,7 +30,7 @@ public sealed partial class WorkspaceContentsController
     /// <summary>普通履历每次重解完整来源与真实EID；原功能资格与按钮声明都不能替代owner完整读取。</summary>
     [HttpGet("content/{linkId}/history"), RequireFeature("workspace.history.read")]
     public async Task<IResult> History(string linkId, [FromQuery] string? queryScope,
-        [FromQuery] ObjectHistoryFilter filter, [FromServices] IReadableObjectHistoryQuery history, [FromServices] IActionDataAccess access, CancellationToken token)
+        [FromQuery] ObjectHistoryFilter filter, [FromServices] IObjectHistoryQuery history, [FromServices] IActionDataAccess access, CancellationToken token)
     {
         try
         {
@@ -47,7 +47,7 @@ public sealed partial class WorkspaceContentsController
     /// <summary>详情仍按当前来源与对象安全集合精确取记录；不能使用管理员按裸审计ID查询的出口。</summary>
     [HttpGet("content/{linkId}/history/{recordId}"), RequireFeature("workspace.folder.history")]
     public async Task<IResult> HistoryDetail(string linkId, string recordId, [FromQuery] string? queryScope,
-        [FromQuery] ObjectHistoryFilter filter, [FromServices] IReadableObjectHistoryQuery history, [FromServices] IActionDataAccess access, CancellationToken token)
+        [FromQuery] ObjectHistoryFilter filter, [FromServices] IObjectHistoryQuery history, [FromServices] IActionDataAccess access, CancellationToken token)
     {
         try
         {
@@ -64,7 +64,7 @@ public sealed partial class WorkspaceContentsController
     /// <summary>导出保留原功能资格，并按自身正式声明和完整来源读取安全集合。</summary>
     [HttpPost("content/{linkId}/history/export"), RequireFeature("workspace.folder.history")]
     public async Task<IResult> ExportHistory(string linkId, [FromQuery] string? queryScope, [FromBody] ObjectHistoryOutputRequest request,
-        [FromServices] IReadableObjectHistoryExport export, [FromServices] IActionDataAccess access, CancellationToken token)
+        [FromServices] IObjectHistoryExport export, [FromServices] IActionDataAccess access, CancellationToken token)
     {
         try
         {
@@ -81,7 +81,7 @@ public sealed partial class WorkspaceContentsController
     /// <summary>打印只返回与页面相同的安全集合；实际打印由受控前端视图触发，不返回任意HTML。</summary>
     [HttpPost("content/{linkId}/history/print"), RequireFeature("workspace.folder.history")]
     public async Task<IResult> PrintHistory(string linkId, [FromQuery] string? queryScope, [FromBody] ObjectHistoryOutputRequest request,
-        [FromServices] IReadableObjectHistoryQuery history, [FromServices] IActionDataAccess access, CancellationToken token)
+        [FromServices] IObjectHistoryQuery history, [FromServices] IActionDataAccess access, CancellationToken token)
     {
         try
         {

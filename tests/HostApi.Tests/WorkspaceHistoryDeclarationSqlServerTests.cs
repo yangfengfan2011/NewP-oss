@@ -31,7 +31,7 @@ public sealed class WorkspaceHistoryDeclarationSqlServerTests
         Assert.Equal(new[] { "read" }, declaration.Actions);
         ordinary.DefaultRequestHeaders.Add("X-NewP-Data-Declaration", declaration.Id);
         var configuration = new DataScopeObjectDto("part.part", part.Id,
-            [new("Declared301", "all", null, 1, new Dictionary<string, string> { ["read"] = "allow", ["history"] = "deny" })]);
+            [new("Declared301", "all", null, 1, new Dictionary<string, string> { ["read"] = "allow" })]);
         using (var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "part.part.authorize"), HttpMethod.Put,
             "/api/part/parts/" + part.Id + "/permissions", configuration))
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
@@ -57,7 +57,7 @@ public sealed class WorkspaceHistoryDeclarationSqlServerTests
         ordinary.DefaultRequestHeaders.Add("X-NewP-Data-Declaration", declaration.Id);
         using (var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "part.part.authorize"), HttpMethod.Put,
             "/api/part/parts/" + part.Id + "/permissions", configuration with { Subjects = [configuration.Subjects[0] with {
-                Actions = new Dictionary<string, string> { ["read"] = "deny", ["history"] = "allow" } }] }))
+                Actions = new Dictionary<string, string> { ["read"] = "deny" } }] }))
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         using var denied = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Get, path);
         Assert.Equal(HttpStatusCode.NotFound, denied.StatusCode);
@@ -83,7 +83,7 @@ public sealed class WorkspaceHistoryDeclarationSqlServerTests
             var basePath = "/api/workspace/content/" + target.LinkId + "/history";
             var query = "?queryScope=" + encoded;
             var config = new DataScopeObjectDto(resource, target.Id, [new("exits301-" + model, "all", null, 1,
-                new Dictionary<string, string> { ["read"] = "allow", ["history"] = "deny" })]);
+                new Dictionary<string, string> { ["read"] = "allow" })]);
             using (var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.authorize"), HttpMethod.Put,
                 "/api/workspace/content/" + target.LinkId + "/permissions" + query, config)) Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
             using (var check = await Send("workspace.history.enter", HttpMethod.Get, basePath + "/check/enter" + query)) Assert.Equal(HttpStatusCode.NoContent, check.StatusCode);
@@ -187,7 +187,7 @@ public sealed class WorkspaceHistoryDeclarationSqlServerTests
         using var ordinary = actor.Client;
         using (var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "part.part.authorize"), HttpMethod.Put,
             "/api/part/parts/" + target.Id + "/permissions", new DataScopeObjectDto("part.part", target.Id,
-                [new("different-buttons301", "all", null, 1, new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "deny", ["history"] = "deny" })])))
+                [new("different-buttons301", "all", null, 1, new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "deny" })])))
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
         var declarations = plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Workspace" && item.Execution == "workspace.history.enter").ToArray();

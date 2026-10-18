@@ -5,6 +5,7 @@
     "key": "document.history.list",
     "resourceKey": "document.history",
     "mode": "list",
+    "dataAccess": { "execution": "document.history.list", "resources": ["document.document"], "actions": ["read"] },
     "dicKey": "DocumentHistory",
     "titleKey": "Title",
     "descriptionKey": "Help",
@@ -99,13 +100,20 @@
         "field": "ipAddress"
       }
     ],
+    "outputActions": [
+      { "key": "exportSelected", "dataAccess": { "execution": "document.history.export", "resources": ["document.document"], "actions": ["read"] } },
+      { "key": "exportAll", "dataAccess": { "execution": "document.history.export", "resources": ["document.document"], "actions": ["read"] } },
+      { "key": "printSelected", "dataAccess": { "execution": "document.history.print", "resources": ["document.document"], "actions": ["read"] } },
+      { "key": "printAll", "dataAccess": { "execution": "document.history.print", "resources": ["document.document"], "actions": ["read"] } }
+    ],
     "pageActions": [
       {
         "key": "output",
         "labelKey": "Output",
         "standardAction": "view",
         "handlerKey": "view",
-        "inputKey": "objectHistoryOutput"
+        "inputKey": "objectHistoryOutput",
+        "dataAccess": { "execution": "document.history.preview", "resources": ["document.document"], "actions": ["read"] }
       }
     ],
     "rowActions": [
@@ -114,12 +122,14 @@
         "labelKey": "View",
         "standardAction": "view",
         "handlerKey": "view",
-        "inputKey": "objectHistoryDetails"
+        "inputKey": "objectHistoryDetails",
+        "dataAccess": { "execution": "document.history.detail", "resources": ["document.document"], "actions": ["read"] }
       }
     ],
     "detailContributions": [
       {
         "key": "document.object.history",
+        "dataAccess": { "execution": "document.history.enter", "resources": ["document.document"], "actions": ["read"] },
         "targetViewKey": "document.document.detail",
         "navigationKey": "document.history",
         "pageRef": {

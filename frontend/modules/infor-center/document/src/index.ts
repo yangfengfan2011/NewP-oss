@@ -1,5 +1,6 @@
 import { StandardCrudRequestError, type FrontendBehaviorBindings, type PageProps } from '@icp-platform/sdk';
 import { createElement } from 'react';
+import { documentHistoryCheck } from './documentHistoryCheck';
 
 const loadDocument = async () => ({ default: (await import('./documentResource')).documentResource });
 
@@ -34,12 +35,14 @@ export const documentBindings: FrontendBehaviorBindings = {
   standardCrudCapabilities: [
     { kind: 'standard-list', targetKey: 'document.history.list', load: async () => {
       const { createObjectHistoryResource } = await import('@icp-platform/ui');
-      return { default: createObjectHistoryResource({ resourceKey: 'document.history', listViewKey: 'document.history.list',
+      const resource = createObjectHistoryResource({ resourceKey: 'document.history', listViewKey: 'document.history.list',
+        precheck: documentHistoryCheck,
         resolveTarget: scope => {
           const id = scope?.historyObjectId;
           if (typeof id !== 'string' || !id) throw new StandardCrudRequestError('缺少操作履历对象。', 400, {}, { reasonKey: 'ObjectHistory.TargetRequired' });
           return { resourceKey: 'document.document', id, basePath: `/api/document/documents/${encodeURIComponent(id)}/history` };
-        } }) };
+        } });
+      return { default: { ...resource, actionPrechecks: { ...resource.actionPrechecks, 'document.object.history': documentHistoryCheck } } };
     } },
     { kind: 'standard-list', targetKey: 'document.document.list', load: loadDocument },
     { kind: 'standard-crud-detail', targetKey: 'document.document.detail', load: loadDocument },

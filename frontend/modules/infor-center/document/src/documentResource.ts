@@ -1,6 +1,7 @@
 import { platformFetch } from '@icp-platform/core';
 import { createObjectOwnershipActions, createObjectAuthorizationActions, createObjectOwnershipTransferActions } from '@icp-platform/ui';
 import { createElement, lazy, Suspense } from 'react';
+import { documentHistoryCheck } from './documentHistoryCheck';
 import {
   createStandardCrudRestDataAdapter,
   isStandardCrudRecord,
@@ -47,6 +48,7 @@ export const documentResource: StandardCrudResourceRegistration = {
   resourceKey: 'document.document',
   listViewKey: 'document.document.list',
   detailViewKey: 'document.document.detail',
+  actionPrechecks: { history: documentHistoryCheck },
   summaryRenderers: { files: context => createElement(Suspense, { fallback: null }, createElement(DocumentFilesSummary, context)) },
   actionHandlers: { ...transfer.actionHandlers, ...ownership.actionHandlers, ...authorization.actionHandlers },
   actionInputRenderers: { ...transfer.actionInputRenderers, ...ownership.actionInputRenderers, ...authorization.actionInputRenderers },

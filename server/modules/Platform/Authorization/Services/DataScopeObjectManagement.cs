@@ -3,6 +3,7 @@ using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Authorization.DTOs;
+using ICP.Platform.Persistence.Abstractions;
 using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
 
@@ -11,7 +12,7 @@ namespace ICP.Platform.Modules.Authorization.Services;
 /// <summary>完整对象管理操作拥有目标资格、输入校验与执行顺序，调用方无需预先取得资格。</summary>
 public sealed class DataScopeObjectManagement(DataScopeCatalog catalog, CanonicalModulePlan plan,
     IFeatureDecisionSource features, IDataScopeObjectDecisionProvider decisions, DataScopeObjectGrants grants,
-    DataScopeIdentities identities, IHttpContextAccessor context, IDataScopeObjectAccess? access = null,
+    DataScopeIdentities identities, IHttpContextAccessor context, IPlatformTransactionExecutor transactions, IDataScopeObjectAccess? access = null,
     IDataScopeEvaluationScope? evaluation = null) : IDataScopeObjectAuthorization
 {
     /// <summary>校验具体资源的授权功能位置，不能借另一资源的入口或请求头获得资格。</summary>
@@ -135,11 +136,15 @@ public sealed class DataScopeObjectManagement(DataScopeCatalog catalog, Canonica
     async Task<DataScopeAuthorizationResult> IDataScopeObjectAuthorization.ReplaceAsync(string resourceKey, string objectId, DataScopeObjectConfiguration input, CancellationToken token)
     {
         using var operation = evaluation?.BeginOperation();
-        var status = AuthorizationStatus(await CheckDataAsync(resourceKey, objectId, token));
-        if (status != DataScopeAuthorizationStatus.Succeeded) return new(status);
-        var result = await SaveConfigurationAsync(resourceKey, objectId, new(input.ResourceKey, input.ObjectId, input.Subjects), token);
-        return result.Status == DataScopeObjectStatus.Succeeded ? new(DataScopeAuthorizationStatus.Succeeded)
-            : new(DataScopeAuthorizationStatus.InvalidInput, Error(result.ValidationError!));
+        return await transactions.ExecuteAsync<DataScopeAuthorizationResult>(async cancellation =>
+        {
+            await grants.LockAsync(resourceKey, objectId, cancellation);
+            var status = AuthorizationStatus(await CheckDataAsync(resourceKey, objectId, cancellation));
+            if (status != DataScopeAuthorizationStatus.Succeeded) return new(status);
+            var result = await SaveConfigurationAsync(resourceKey, objectId, new(input.ResourceKey, input.ObjectId, input.Subjects), cancellation);
+            return result.Status == DataScopeObjectStatus.Succeeded ? new(DataScopeAuthorizationStatus.Succeeded)
+                : new(DataScopeAuthorizationStatus.InvalidInput, Error(result.ValidationError!));
+        }, token);
     }
 
     /// <inheritdoc/>

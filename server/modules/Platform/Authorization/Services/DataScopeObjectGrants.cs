@@ -60,10 +60,7 @@ public sealed class DataScopeObjectGrants(EfPlatformDbContext db, IPlatformTrans
         using var operation = auditValues.BeginOperation();
         await transactions.ExecuteAsync(async cancellationToken =>
         {
-            var target = "Authorization.DataScopeObject:" + normalized.ResourceKey + ":" + normalized.ObjectId;
-            await db.Database.ExecuteSqlInterpolatedAsync(
-                $"DECLARE @result int; EXEC @result = sys.sp_getapplock @Resource={target}, @LockMode='Exclusive', @LockOwner='Transaction'; IF @result < 0 THROW 51000, 'Data scope object lock failed.', 1;",
-                cancellationToken);
+            await LockAsync(normalized.ResourceKey, normalized.ObjectId, cancellationToken);
             var existing = await Subjects.Where(row => EF.Property<string>(row, "ResourceKey") == normalized.ResourceKey
                 && EF.Property<string>(row, "ObjectId") == normalized.ObjectId).ToListAsync(cancellationToken);
             if (existing.Any(row => (string)row["ResourceKey"]! != normalized.ResourceKey || (string)row["ObjectId"]! != normalized.ObjectId))
@@ -199,6 +196,16 @@ public sealed class DataScopeObjectGrants(EfPlatformDbContext db, IPlatformTrans
             MatchOptions = subject.MatchOptions?.IncludeDescendants == true ? subject.MatchOptions : null
         }).ToArray()
     });
+
+    // owner先持有同一ACL事务锁再检查对象资格；旧保存仍复用完全相同的锁身份和SQL。
+    internal async Task LockAsync(string resourceKey, string objectId, CancellationToken token)
+    {
+        if (!transactions.IsActive) throw new InvalidOperationException("DATA_SCOPE_OBJECT_TRANSACTION_REQUIRED");
+        var target = "Authorization.DataScopeObject:" + resourceKey + ":" + objectId;
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"DECLARE @result int; EXEC @result = sys.sp_getapplock @Resource={target}, @LockMode='Exclusive', @LockOwner='Transaction'; IF @result < 0 THROW 51000, 'Data scope object lock failed.', 1;",
+            token);
+    }
 
     // 一次目标读取批量取其动作行，并在应用层还原完整可编辑配置。
     private async Task<DataScopeObjectDto> MaterializeAsync(string resourceKey, string objectId,

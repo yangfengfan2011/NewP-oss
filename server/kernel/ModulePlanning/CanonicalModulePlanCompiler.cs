@@ -41,13 +41,14 @@ public sealed class CanonicalModulePlanCompiler
         var required = graphDiagnostics.Length == 0
             ? CompileRequiredModules(candidateId, candidateArray, platformCompositionModuleId)
             : (ModuleIds: (IReadOnlyList<string>)[], Diagnostics: (IReadOnlyList<ModulePlanDiagnostic>)[]);
+        var dependencyDiagnostics = ValidateDependencies(candidateId, activeCandidates);
         var diagnostics = graphDiagnostics
             .Concat(required.Diagnostics)
-            .Concat(ValidateDependencies(candidateId, activeCandidates))
+            .Concat(dependencyDiagnostics)
             .Concat(ValidateBindings(candidateId, activeCandidates))
             .Concat(ValidateRouteOwners(candidateId, activeCandidates))
             .Concat(ValidateModelOwners(candidateId, activeCandidates)).Concat(ValidateFeatures(candidateId, activeCandidates))
-            .Concat(ValidateDataActions(candidateId, activeCandidates))
+            .Concat(ValidateDataActions(candidateId, activeCandidates, dependencyDiagnostics.Count == 0))
             .OrderBy(static diagnostic => diagnostic.Stage, StringComparer.Ordinal)
             .ThenBy(static diagnostic => diagnostic.Code, StringComparer.Ordinal)
             .ThenBy(static diagnostic => diagnostic.ModuleId, StringComparer.Ordinal)
@@ -468,9 +469,15 @@ public sealed class CanonicalModulePlanCompiler
     }
 
     // 动作身份跨模块唯一，候选冲突必须作为编译诊断拒绝，不能延迟到发布后。
-    private static IReadOnlyList<ModulePlanDiagnostic> ValidateDataActions(string candidateId, IReadOnlyList<ModuleCapsuleCandidate> candidates)
+    private static IReadOnlyList<ModulePlanDiagnostic> ValidateDataActions(string candidateId, IReadOnlyList<ModuleCapsuleCandidate> candidates, bool dependenciesAvailable)
     {
-        try { DataActionCatalogCompiler.Compile(candidates.SelectMany(candidate => candidate.DataActions)); return []; }
+        try
+        {
+            var actions = DataActionCatalogCompiler.Compile(candidates.SelectMany(candidate => candidate.DataActions));
+            // 缺失依赖已拒绝候选；不把其资源消失再报告成按钮声明错误。
+            if (dependenciesAvailable) ActionDataAccessCompiler.Compile(candidates.SelectMany(candidate => candidate.Features).ToArray(), actions);
+            return [];
+        }
         catch (InvalidOperationException exception)
         { return [new(candidateId, "*", "", "dataActions", "", "/dataActions", "data-actions", "MODULE_DATA_ACTION_INVALID", exception.Message)]; }
     }

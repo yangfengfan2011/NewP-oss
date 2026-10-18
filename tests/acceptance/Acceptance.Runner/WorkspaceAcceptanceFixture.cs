@@ -304,11 +304,12 @@ internal static class WorkspaceAcceptanceFixture
 
     // 正式命令保留空请求体；所有写请求取得同会话防伪令牌，Secure Cookie 仅在 loopback client 显式回放。
     internal static async Task<JsonElement> SendAsync(HttpClient client, HttpMethod method, string path,
-        object? body, string? featurePosition, CancellationToken token)
+        object? body, string? featurePosition, CancellationToken token, string? dataDeclaration = null)
     {
         using var request = new HttpRequestMessage(method, path);
         if (body is not null) request.Content = JsonContent.Create(body, options: new JsonSerializerOptions());
         if (featurePosition is not null) request.Headers.Add("X-NewP-Feature", featurePosition);
+        if (dataDeclaration is not null) request.Headers.Add("X-NewP-Data-Declaration", dataDeclaration);
         if (method != HttpMethod.Get)
         {
             using var antiforgeryResponse = await client.GetAsync("/api/auth/antiforgery-token", token);

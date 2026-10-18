@@ -1,4 +1,5 @@
 import { useFeaturePlacement } from '../authorization/FeaturePlacementContext';
+import { useStandardCrudActionEntry } from '../standard-crud/useStandardCrudActionEntry';
 import { resolvedFeaturePosition, type FeatureResolution } from '../authorization/featurePlacementResolver';
 import { Component, lazy, Suspense, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -888,6 +889,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     modelDocuments,
   }), [view, registration, modelDocuments]);
   const dataAdapter = registration.dataAdapter;
+  const dataAccessDeclarations = view.dataAccess ? runtimeMetadata?.manifest.modules.flatMap(module => module.dataAccess ?? []).filter(item => item.viewKey === view.key) : undefined;
   const [runtimeColumnGeneration, setRuntimeColumnGeneration] = useState<StandardCrudRuntimeColumnGeneration | null>(null);
   const resolvedColumns = useMemo<ResolvedStandardCrudListColumn[]>(() => (
     schema.columnSource === 'runtime'
@@ -1152,7 +1154,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     key: [...metadataListQueryKey, ...(readPosition ? [readPosition] : [])],
     enabled: schema.columnSource !== 'runtime' && host.presentation.kind !== 'action-drawer',
     load: async ({ signal }) => {
-      const result = await dataAdapter.list(metadataListRequest, { signal, queryScope: host.input.queryScope, ...(readPosition ? { featurePosition: readPosition } : {}) });
+      const result = await dataAdapter.list(metadataListRequest, { signal, queryScope: host.input.queryScope,
+        dataAccess: view.dataAccess as import('@icp-platform/sdk').ActionDataAccessRequirement | undefined, dataAccessDeclarations,
+        ...(readPosition ? { featurePosition: readPosition } : {}) });
       return { items: result.items, total: result.total };
     },
   });
@@ -1271,6 +1275,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const selectionScope = JSON.stringify([currentSubjectId, readPosition, host.input.queryScope, tableQuery, appliedFilters]);
   const rowMenuScope = JSON.stringify([selectionScope, schema.viewKey, host.input.instanceId, host.lifecycle.active,
     features.placement, routePathname, host.address?.search]);
+  const entryCheck = useStandardCrudActionEntry([rowMenuScope, effectiveRows]);
   const [rowMenu, setRowMenu] = useState<{ row: TRow; scope: string; point: { x: number; y: number; focusTarget: HTMLElement; keyboard?: boolean } } | null>(null);
   useEffect(() => setRowMenu(null), [rowMenuScope, effectiveRows]);
   const [selection, setSelection] = useState<{ scope: string; data: TRow[]; rows: TRow[] } | null>(null);
@@ -1771,10 +1776,13 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           return {
             key: action.key,
             label,
-            disabled: actionExecution.pendingKey !== null || disabledReason !== undefined,
+            disabled: entryCheck.pendingKey !== null || actionExecution.pendingKey !== null || disabledReason !== undefined,
+            loading: entryCheck.pendingKey === pendingKey,
             disabledReason,
             onClick: () => confirmDiscardIfNeeded(() => {
               if (featureResolution.kind !== 'allowed' || readResolution.kind !== 'allowed' || !readResolution.position.trim()) return;
+              void entryCheck.enter(pendingKey, { instance: actionInstance, action, id: rowId, row, queryScope: host.input.queryScope,
+                featurePosition: featureResolution.position }, registration.actionPrechecks?.[action.key], () => {
               try {
                 const parameters = dataAdapter.getReadNavigationParameters?.(row, { queryScope: host.input.queryScope })
                   ?? { recordId: dataAdapter.getDetailId?.(row) ?? rowId };
@@ -1786,17 +1794,22 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
               } catch (failure) {
                 void messageApi.error({ key: 'standard-crud-read-navigation-error', content: formatRequestError(failure, t), duration: 5 });
               }
+              });
             }),
           };
         }
         if (action.standardAction === 'view') {
           if (inputRenderer?.readOnly === true) {
-            return { key: action.key, label, disabled: actionExecution.pendingKey !== null || disabledReason !== undefined, disabledReason,
+            return { key: action.key, label, disabled: entryCheck.pendingKey !== null || actionExecution.pendingKey !== null || disabledReason !== undefined, disabledReason,
+              loading: entryCheck.pendingKey === pendingKey,
               onClick: () => confirmDiscardIfNeeded(() => {
                 // 只读输入沿本次读取资格进入已有弹层，不执行 handler 或制造提交/刷新。
                 if (featureResolution.kind !== 'allowed') return;
+                void entryCheck.enter(pendingKey, { instance: actionInstance, action, id: rowId, row, queryScope: host.input.queryScope,
+                  featurePosition: featureResolution.position }, registration.actionPrechecks?.[action.key], () => {
                 actionExecution.clearError(); setRowInputValue(undefined);
                 setRowInputAction({ action, actionScope: 'list.rowActions', row, rowId, pendingKey, label });
+                });
               }) };
           }
           return {
@@ -2094,7 +2107,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const isReadonlyHeaderInput = (action: StandardCrudRuntimeActionSchema) => action.standardAction === 'view'
     && !!action.inputKey && registration.actionInputRenderers?.[action.inputKey]?.readOnly === true;
   function runHeaderAction(action: StandardCrudRuntimeActionSchema): void {
-    if (actionExecution.pendingKey !== null || mutationExecution.pending || (action.requiresSelection && (effectiveLoading || selectedRows.length === 0))) return;
+    if (entryCheck.pendingKey !== null || actionExecution.pendingKey !== null || mutationExecution.pending || (action.requiresSelection && (effectiveLoading || selectedRows.length === 0))) return;
     const state = registration.actionStateResolver?.({ action, instance: actionInstance, queryScope: host.input.queryScope });
     if (state?.visible === false || state?.available === false) return;
     const feature = resolveActionFeature(action, 'list.pageActions');
@@ -2106,9 +2119,12 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       // 查询值均为标量；固定动作触发时实际行查询，后续筛选草稿或 Review 等待不能改变本次输出范围。
       const listQuery = Object.freeze({ ...(schema.columnSource === 'runtime' ? runtimeListRequest : metadataListRequest) });
       if (action.inputKey) {
+        void entryCheck.enter(action.key, { instance: actionInstance, action, queryScope: host.input.queryScope,
+          featurePosition: feature.position, listQuery, selectedRows }, registration.actionPrechecks?.[action.key], () => {
         actionExecution.clearError(); setRowInputValue(undefined);
         setRowInputAction({ action, actionScope: 'list.pageActions', rowId: '', pendingKey: action.key, label: action.labelKey,
           listQuery, selectedRows: action.requiresSelection || isReadonlyHeaderInput(action) ? [...selectedRows] : undefined });
+        });
       } else {
         void actionExecution.execute({ key: action.key, handler,
           context: { instance: actionInstance, action, queryScope: host.input.queryScope, featurePosition: feature.position,
@@ -2127,7 +2143,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     headerEntries.push({ key: group.key, group,
       actions: group.actionKeys.flatMap(key => visibleHeaderActions.filter(child => child.key === key)) });
   }
-  const headerPending = actionExecution.pendingKey !== null || mutationExecution.pending;
+  const headerPending = entryCheck.pendingKey !== null || actionExecution.pendingKey !== null || mutationExecution.pending;
   const headerActionLabel = (action: StandardCrudRuntimeActionSchema): string => {
     const state = registration.actionStateResolver?.({ action, instance: actionInstance, queryScope: host.input.queryScope });
     return state?.labelKey ? t(state.labelKey, '') : t(`${schema.dicKey}.${action.labelKey}`, action.labelKey);
@@ -2329,6 +2345,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   return (
     <>
       {messageContextHolder}
+      {entryCheck.pendingKey && <div role="status">{t('Platform.Processing', '处理中...')}<AntdButton onClick={entryCheck.cancel}>{t('Platform.Cancel', '取消')}</AntdButton></div>}
+      {entryCheck.failure !== undefined && <div role="alert">{formatRequestError(entryCheck.failure, t)}</div>}
       {embeddedActionQuery.error && <div role="alert">{embeddedActionQuery.error}<AntdButton onClick={embeddedActionQuery.retry}>{t('Platform.RetryRead', '重试读取')}</AntdButton></div>}
       {embeddedActionError && <div role="alert">{t(embeddedActionError, t('Platform.ActionUnavailable', '当前操作不可用。'))}<AntdButton onClick={host.lifecycle.close}>{t('Platform.Close', '关闭')}</AntdButton></div>}
       {embeddedAction && <RowActionButtonGroup requested active={host.lifecycle.active} close={host.lifecycle.close}
@@ -2483,6 +2501,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       {rowInputAction?.action.inputKey && registration.actionInputRenderers?.[rowInputAction.action.inputKey] ? (
         <Suspense fallback={<div className="sh-loading-state" role="status">{t('Platform.LoadingActionConfirmation', '正在加载操作确认…')}</div>}>
           <StandardCrudActionReviewDialog
+            dataAccessDeclarations={dataAccessDeclarations}
             open={host.lifecycle.active}
             action={{ ...rowInputAction.action,
               confirmLabel: rowInputAction.action.confirmLabelKey

@@ -208,6 +208,8 @@ export type StandardCrudFormMode = 'create' | 'edit';
 
 /** 标准动作声明；这里只描述入口和权限，不描述执行顺序、回滚或弹窗流程。 */
 export interface StandardCrudActionDefinition {
+  /** 当前正式计划投影；前端仅传声明身份，服务端独立解析要求。 */
+  dataAccess?: ActionDataAccessRequirement;
   key: string;
   labelKey: string;
   variant?: 'default' | 'primary' | 'danger';
@@ -223,6 +225,21 @@ export interface StandardCrudActionDefinition {
   handlerKey?: string;
   inputKey?: string;
 }
+
+export interface ActionDataAccessRequirement {
+  id: string;
+  moduleId: string;
+  viewKey: string;
+  surface: string;
+  actionKey: string;
+  execution: string;
+  actions: readonly string[];
+  resources: readonly string[];
+  featurePositions: readonly string[];
+}
+
+/** 模块解析真实目标并发起只读检查；共享执行器拥有取消、防重复和过期响应。 */
+export type StandardCrudActionPrecheck = (context: StandardCrudActionContext & { signal: AbortSignal }) => Promise<void>;
 
 /** 实例动作状态的受控容器；模块拥有值，宿主只管理生命周期。 */
 export interface StandardCrudActionInstance {
@@ -390,6 +407,7 @@ export interface StandardCrudResourceRegistration<
   actionHandlers?: Record<string, StandardCrudActionHandler<TDetail, TRow>>;
   actionStateResolver?: StandardCrudActionStateResolver<TDetail, TRow>;
   actionEligibilityResolvers?: Partial<Record<string, StandardCrudActionEligibilityResolver<TDetail, TRow>>>;
+  actionPrechecks?: Partial<Record<string, StandardCrudActionPrecheck>>;
   actionInputRenderers?: Record<string, StandardCrudActionInputRenderer>;
   detailFieldRenderers?: Record<string, StandardCrudDetailFieldRenderer>;
   summaryRenderers?: Record<string, StandardCrudSummaryRenderer>;
@@ -414,7 +432,11 @@ export interface StandardCrudListQueryRequest {
 }
 
 /** 正式声明位置随单次请求传输，不进入业务载荷或用户筛选。 */
-export interface StandardCrudFeatureRequestContext { featurePosition?: string }
+export interface StandardCrudFeatureRequestContext {
+  featurePosition?: string;
+  dataAccess?: ActionDataAccessRequirement;
+  dataAccessDeclarations?: readonly ActionDataAccessRequirement[];
+}
 export interface StandardCrudListReadContext extends StandardCrudFeatureRequestContext {
   columnContextToken?: string;
   queryScope?: Record<string, string | null>;
@@ -439,6 +461,8 @@ export interface StandardCrudDetailReadSource {
     key: string;
     labelKey: string;
     navigationKey: string;
+      dataActionReference?: { viewKey: string; surface: string; actionKey: string };
+      precheck?: StandardCrudActionPrecheck;
     getParameters: (resourceKey: string, id: string, context: StandardCrudDetailReadContext) => Readonly<Record<string, string>>;
   }[];
 }

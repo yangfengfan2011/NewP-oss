@@ -51,6 +51,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     private WorkspaceFolderPosition? _documentPosition;
     private string? _baselineOwners;
     private WorkspaceAcceptanceActor? _administrator;
+    private WorkspaceAcceptanceActor? _historyActor;
     private WorkspaceAcceptanceActor? _permissionManager;
     internal WorkspaceAcceptanceActor PermissionManager => _permissionManager ?? throw new InvalidOperationException("对象权限管理主体尚未准备。");
     private WorkspaceAcceptanceActor? _transferRecipient;
@@ -430,6 +431,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         var browse = features.Behavior("Workspace", "workspace.spaces.access");
         var history = features.Behavior("Workspace", "workspace.folder.history");
         var reader = await WorkspaceAcceptanceFixture.PrepareAsync(administrator, features, "hr" + runId, registerSecret, [browse, history], token);
+        _historyActor = reader;
         using var client = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
         await WorkspaceAcceptanceFixture.LoginAsync(client, reader, token);
         var current = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get, "/api/auth/current-user", null, null, token);
@@ -445,14 +447,32 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             && item.GetProperty("associatedObject").GetProperty("id").GetString() == _oldPartId);
         var linkId = source.GetProperty("linkId").GetString()!;
         var scope = Uri.EscapeDataString(JsonSerializer.Serialize(position.CommandPosition));
+        var manifest = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get, "/plugins/metadata-runtime-manifest.json", null, null, token);
+        var declaration = manifest.GetProperty("modules").EnumerateArray().Single(module => module.GetProperty("moduleId").GetString() == "Workspace")
+            .GetProperty("dataAccess").EnumerateArray().Single(item => item.GetProperty("viewKey").GetString() == "workspace.history.list"
+                && item.GetProperty("surface").GetString() == "read").GetProperty("id").GetString();
         var page = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get,
-            "/api/workspace/content/" + Uri.EscapeDataString(linkId) + "/history?queryScope=" + scope, null, history.Position, token);
+            "/api/workspace/content/" + Uri.EscapeDataString(linkId) + "/history?queryScope=" + scope, null, history.Position, token, declaration);
         if (page.GetProperty("items").GetArrayLength() == 0)
             throw new InvalidOperationException("普通履历没有可供详情和输出的真实事件。");
         await WriteAsync("history-actor-preparation.json", new { reader = reader.AccountId, browse = browse.Position, history = history.Position,
             grantedPositions = expected, history.EntryDependencies, sourceObjectId = _oldPartId, sourceLinkId = linkId,
             position = position.CommandPosition, pageHasRecords = true }, token);
         return reader;
+    }
+
+    /// <summary>页面已显示合法来源后撤销该普通主体的read，供最短浏览器拒绝路径消费。</summary>
+    internal async Task DenyHistorySourceReadAsync(CancellationToken token)
+    {
+        var reader = _historyActor ?? throw new InvalidOperationException("普通履历主体尚未准备。");
+        using var administrator = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
+        await WorkspaceAcceptanceFixture.LoginAsync(administrator, _administrator!, token);
+        var features = await AcceptanceFeatureCatalog.LoadAsync(administrator, token);
+        var authorize = features.Action(features.Behavior("Part", "part.part.read"), "authorize", "list.rowActions");
+        var configuration = new ICP.Platform.Modules.Authorization.DTOs.DataScopeObjectDto("part.part", _oldPartId!,
+            [new("history-browser-denied", "user", reader.AccountId, 1, new Dictionary<string, string> { ["read"] = "deny" })]);
+        await WorkspaceAcceptanceFixture.SendAsync(administrator, HttpMethod.Put, "/api/part/parts/" + Uri.EscapeDataString(_oldPartId!) + "/permissions",
+            configuration, authorize.Position, token);
     }
 
     // 两种准备方式共用同一有限页面授权集合；当前模式不为历史角色升级再创建第二个账号。

@@ -25,6 +25,7 @@ public sealed class ObjectHistoryEntityEventsSqlServerTests
                 new HttpContextEntityAuditStampProvider(provider.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>(),
                     provider.GetRequiredService<TimeProvider>()), ticks))), includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
+        var historyRequests = new ObjectHistoryHttpTestRequests(fixture);
         await InitializeAsync(fixture, admin);
         var position = await ContainerAsync(fixture, admin);
         foreach (var (model, kind, action) in Kinds.Where(item => item.Model != "WorkspaceFolder"))
@@ -71,7 +72,7 @@ public sealed class ObjectHistoryEntityEventsSqlServerTests
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
             Assert.False(await db.Set<Dictionary<string, object?>>(model).AnyAsync(row => EF.Property<string>(row, "EID") == target.Id));
             Assert.False(await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AnyAsync(row => EF.Property<string>(row, "LID") == target.LinkId));
-            using var audit = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "audit.change.read"), HttpMethod.Get,
+            using var audit = await historyRequests.SendAsync(admin, Point(fixture, "audit.change.read"), HttpMethod.Get,
                 "/api/audit/business-changes/" + deletion["EID"]);
             Assert.Equal(HttpStatusCode.OK, audit.StatusCode);
         }
@@ -82,6 +83,7 @@ public sealed class ObjectHistoryEntityEventsSqlServerTests
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
+        var historyRequests = new ObjectHistoryHttpTestRequests(fixture);
         await InitializeAsync(fixture, admin);
         var position = await ContainerAsync(fixture, admin);
         foreach (var (model, kind, action) in Kinds.Where(item => item.Model != "WorkspaceFolder"))
@@ -93,7 +95,7 @@ public sealed class ObjectHistoryEntityEventsSqlServerTests
                 ? throw new InvalidOperationException("injected entity created audit failure") : Task.CompletedTask;
             try
             {
-                using var failedCreate = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder." + action), HttpMethod.Post,
+                using var failedCreate = await historyRequests.SendAsync(admin, Point(fixture, "workspace.folder." + action), HttpMethod.Post,
                     "/api/workspace/content/" + kind, new { position, values = new { ENAME = failedName, ECODE = failedName } });
                 Assert.Equal(HttpStatusCode.InternalServerError, failedCreate.StatusCode);
             }
@@ -143,6 +145,7 @@ public sealed class ObjectHistoryEntityEventsSqlServerTests
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
+        var historyRequests = new ObjectHistoryHttpTestRequests(fixture);
         await InitializeAsync(fixture, admin);
         var position = await ContainerAsync(fixture, admin);
         foreach (var (model, kind, action) in Kinds.Where(item => item.Model != "WorkspaceFolder"))

@@ -1,4 +1,5 @@
 export interface RuntimeMetadataModuleEntry {
+  dataAccess?: import('@icp-platform/sdk').ActionDataAccessRequirement[];
   moduleId: string;
   features?: { key: string; position: string; kind: string; referenceKey?: string; parentPosition?: string | null; staticScope?: string | null; actionScope?: string | null; container?: boolean }[];
   metadataBasePath: string;

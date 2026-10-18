@@ -10,6 +10,7 @@ import type {
   StandardCrudActionDefinition,
   StandardCrudActionHandler,
   StandardCrudActionInputRenderer,
+  StandardCrudActionPrecheck,
   StandardCrudActionStateResolver,
   StandardCrudOperationResult,
 } from '@icp-platform/sdk';
@@ -37,6 +38,7 @@ describe('standard CRUD action runtime', () => {
     handlers,
     actionInputs,
     actionStateResolver,
+    actionPrechecks,
     onResult,
     refresh = vi.fn(),
   }: {
@@ -45,6 +47,7 @@ describe('standard CRUD action runtime', () => {
     handlers?: Record<string, StandardCrudActionHandler>;
     actionInputs?: Record<string, StandardCrudActionInputRenderer>;
     actionStateResolver?: StandardCrudActionStateResolver;
+    actionPrechecks?: Record<string, StandardCrudActionPrecheck>;
     onResult?: (result: StandardCrudOperationResult) => void;
     refresh?: () => void;
   }) {
@@ -62,6 +65,7 @@ describe('standard CRUD action runtime', () => {
           handlers={handlers}
           actionInputs={actionInputs}
           actionStateResolver={actionStateResolver}
+          actionPrechecks={actionPrechecks}
           onResult={onResult}
           refresh={refresh}
           context={{ id: 'Person_1', detail: { revision: 4 } }}
@@ -109,6 +113,22 @@ describe('standard CRUD action runtime', () => {
 
     expect(container.textContent).toContain('编辑');
     expect(container.textContent).not.toContain('停用');
+  });
+
+  it.each([true, false])('checks a declared handler entry before executing it (allowed=%s)', async allowed => {
+    const handler = vi.fn();
+    const precheck = vi.fn(async () => { if (!allowed) throw new Error('Entry denied'); });
+    await renderActions({
+      actions: [{ key: 'inspect', labelKey: '检查', dataAccess: {
+        id: 'Test/view:items/rowActions/action:inspect', moduleId: 'Test', viewKey: 'items', surface: 'rowActions',
+        actionKey: 'inspect', execution: 'test.inspect', resources: ['test.item'], actions: ['read'], featurePositions: ['inspect'],
+      } }],
+      handlers: { inspect: handler }, actionPrechecks: { inspect: precheck },
+    });
+    await clickActionButton('检查');
+    expect(precheck).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledTimes(allowed ? 1 : 0);
+    if (!allowed) expect(container.querySelector('[role="alert"]')?.textContent).toContain('操作失败，请稍后重试。');
   });
 
   it('opens Popconfirm for danger action and only runs handler after confirm', async () => {

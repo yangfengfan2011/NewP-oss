@@ -16,6 +16,7 @@ public sealed class ObjectHistoryLegacyEventsSqlServerTests
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
+        var historyRequests = new ObjectHistoryHttpTestRequests(fixture);
         await InitializeAsync(fixture, admin);
         var position = await ContainerAsync(fixture, admin);
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "LegacyCopies296", "旧副本履历", "legacy-copies296", "普通副本履历账号",
@@ -106,6 +107,7 @@ public sealed class ObjectHistoryLegacyEventsSqlServerTests
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
+        var historyRequests = new ObjectHistoryHttpTestRequests(fixture);
         await InitializeAsync(fixture, admin);
         var position = await ContainerAsync(fixture, admin);
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "LegacyRelations296", "旧关系履历", "legacy-relations296", "普通关系履历账号",
@@ -181,7 +183,7 @@ public sealed class ObjectHistoryLegacyEventsSqlServerTests
     private static string HistoryPath(Occurrence occurrence) => "/api/workspace/content/" + occurrence.LinkId + "/history?queryScope="
         + Uri.EscapeDataString(JsonSerializer.Serialize(occurrence.Position, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
     private static Task<JsonElement> HistoryAsync(BusinessAuditHostFixture fixture, HttpClient client, Occurrence occurrence, string eventType, string suffix = "") =>
-        FeatureHttpTestRequests.ReadAsync(client, Point(fixture, "workspace.folder.history"), HistoryPath(occurrence) + "&eventType=" + Uri.EscapeDataString(eventType) + suffix);
+        new ObjectHistoryHttpTestRequests(fixture).ReadAsync(client, Point(fixture, "workspace.folder.history"), HistoryPath(occurrence) + "&eventType=" + Uri.EscapeDataString(eventType) + suffix);
     private static async Task<JsonElement> SingleEventAsync(BusinessAuditHostFixture fixture, HttpClient client, Occurrence occurrence, string eventType, string eventId, string model, string name,
         bool includeDetail = false)
     {

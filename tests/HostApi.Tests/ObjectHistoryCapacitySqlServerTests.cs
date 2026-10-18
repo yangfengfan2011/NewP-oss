@@ -37,13 +37,14 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
             services.AddDbContext<EfPlatformDbContext>((_, options) => options.AddInterceptors(commands, connections, transactions, cancellation)), includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
+        var historyRequests = new ObjectHistoryHttpTestRequests(fixture);
         await InitializeAsync(fixture, admin);
         var position = await ContainerAsync(fixture, admin);
         var anchor = await CreateAsync(fixture, admin, position, "Part", "parts", "createPart", "HistoryCapacity296");
         var unrelated = await CreateAsync(fixture, admin, position, "Part", "parts", "createPart", "HistoryUnrelatedCapacity296");
         var otherFolder = await CreateAsync(fixture, admin, position, "WorkspaceFolder", "folders", "create", "HistorySecondPath296");
         var secondary = position with { LinkIds = [.. position.LinkIds, otherFolder.LinkId] };
-        using (var added = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.add"), HttpMethod.Post,
+        using (var added = await historyRequests.SendAsync(admin, Point(fixture, "workspace.folder.add"), HttpMethod.Post,
             "/api/workspace/content/references", new { position = secondary, target = new { modelKey = "Part", id = anchor.Id } })) await ReadOkAsync(added);
         var history = Point(fixture, "workspace.folder.history");
         var independentHistory = Point(fixture, "part.part.history");
@@ -52,7 +53,7 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         using var ordinary = actor.Client;
         var config = new DataScopeObjectDto("part.part", anchor.Id,
             [new("history-capacity-user", "user", actor.AccountId, 1, new Dictionary<string, string> { ["read"] = "allow", ["history"] = "allow" })]);
-        using (var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "part.part.authorize"), HttpMethod.Put,
+        using (var saved = await historyRequests.SendAsync(admin, Point(fixture, "part.part.authorize"), HttpMethod.Put,
             "/api/part/parts/" + anchor.Id + "/permissions", config)) Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         var now = fixture.Services.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime;
         int totalRows;
@@ -97,7 +98,7 @@ public sealed partial class DataScopePermissionCostSqlServerTests
                 commands.Begin();
                 try
                 {
-                    using var response = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Post, source + "/print" + scopeQuery,
+                    using var response = await historyRequests.SendAsync(ordinary, history, HttpMethod.Post, source + "/print" + scopeQuery,
                         new ObjectHistoryOutputRequest(mode, filter, mode == "selected" ? matchedIds : null));
                     responses.Add((mode, response.StatusCode, await response.Content.ReadAsByteArrayAsync(), commands.Items.Max(item => item.Parameters)));
                 }
@@ -117,13 +118,13 @@ public sealed partial class DataScopePermissionCostSqlServerTests
                 Assert.Equal(matchedIds, items.Select(item => item.GetProperty("id").GetString()!));
                 Assert.True(response.MaxParameters < 2100);
             }
-            using var forged = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Post, source + "/print" + scopeQuery,
+            using var forged = await historyRequests.SendAsync(ordinary, history, HttpMethod.Post, source + "/print" + scopeQuery,
                 new ObjectHistoryOutputRequest("selected", filter, [.. matchedIds.Take(size - 1), unrelatedRecordId!]));
             Assert.Equal(HttpStatusCode.NotFound, forged.StatusCode);
             // 保留原LID入口，真实移除第二条引用；消费另一处SubjectField事实的单集合参数翻译。
-            using (var removed = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.remove"), HttpMethod.Delete,
+            using (var removed = await historyRequests.SendAsync(admin, Point(fixture, "workspace.folder.remove"), HttpMethod.Delete,
                 "/api/workspace/content/references/" + secondaryLinkId, new { position = secondary })) await ReadOkAsync(removed);
-            var related = await FeatureHttpTestRequests.ReadAsync(ordinary, history, source + scopeQuery + "&eventType=workspace.reference.removed");
+            var related = await historyRequests.ReadAsync(ordinary, history, source + scopeQuery + "&eventType=workspace.reference.removed");
             Assert.Equal(1, related.GetProperty("total").GetInt32());
             var relation = Assert.Single(related.GetProperty("items").EnumerateArray());
             Assert.Equal("Part", relation.GetProperty("objectType").GetString());
@@ -151,7 +152,7 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         Assert.Equal(first.Page.Value.GetRawText(), steady.Page!.Value.GetRawText());
         await MeasureAsync("independent-count-page", async () =>
         {
-            var page = await FeatureHttpTestRequests.ReadAsync(ordinary, independentHistory, "/api/part/parts/" + anchor.Id + "/history?eventType=part.updated");
+            var page = await historyRequests.ReadAsync(ordinary, independentHistory, "/api/part/parts/" + anchor.Id + "/history?eventType=part.updated");
             Assert.Equal(size, page.GetProperty("total").GetInt32());
             return new(System.Text.Encoding.UTF8.GetByteCount(page.GetRawText()), page);
         });
@@ -237,12 +238,12 @@ public sealed partial class DataScopePermissionCostSqlServerTests
 
         async Task<HistoryMeasurement> ReadAsync(string path)
         {
-            var page = await FeatureHttpTestRequests.ReadAsync(ordinary, history, path);
+            var page = await historyRequests.ReadAsync(ordinary, history, path);
             return new(System.Text.Encoding.UTF8.GetByteCount(page.GetRawText()), page);
         }
         async Task<HistoryMeasurement> OutputAsync(string kind, ObjectHistoryOutputRequest request)
         {
-            using var response = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Post, source + "/" + kind + scopeQuery, request);
+            using var response = await historyRequests.SendAsync(ordinary, history, HttpMethod.Post, source + "/" + kind + scopeQuery, request);
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             var bytes = await response.Content.ReadAsByteArrayAsync();
             if (kind == "print")

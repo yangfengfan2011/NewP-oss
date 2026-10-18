@@ -20,6 +20,7 @@ public class AuthorizationModule : ModuleCapsuleBindingBase
         services.AddScoped<DataScopeIdentities>();
         services.AddSingleton<IDataScopeResourceCatalog, DataScopeResourceCatalog>();
         services.AddScoped<IDataScopeObjectAccess, DataScopeObjectAccess>();
+        services.AddScoped<IActionDataAccess, ActionDataAccess>();
         services.AddScoped<IDataScopeObjectPermissionQueries, DataScopeObjectPermissionQueries>();
         services.AddScoped<IDataScopeIdentityProvider, AllAuthenticatedDataScopeIdentities>();
         services.AddScoped<IDataScopeIdentityProvider, AuthorizationDataScopeIdentities>();

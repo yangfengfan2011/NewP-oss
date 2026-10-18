@@ -6,6 +6,8 @@ namespace ICP.Platform.Kernel.ModulePlanning;
 public sealed record FeatureDeclaration(string ModuleId, string Key, string Kind, string Title,
     string? ParentKey, string BehaviorKey, int Order = 0)
 {
+    public IReadOnlyList<ActionDataAccessDeclaration> DataAccess { get; init; } = [];
+    public IReadOnlyList<string> DataResources { get; init; } = [];
     public string? ReferenceKey { get; init; }
     public string? StaticScope { get; init; }
     public string? StaticScopeTitle { get; init; }

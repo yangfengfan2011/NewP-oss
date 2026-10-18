@@ -5,6 +5,7 @@ import { ObjectHistoryValue, type ObjectHistoryDisplayField } from './ObjectHist
 import { exportObjectHistory, printObjectHistory, type ObjectHistoryItem, type ObjectHistoryOutputMode, type ObjectHistoryOutputQuery, type ObjectHistoryTarget } from './objectHistoryRequest';
 
 export interface ObjectHistoryOutputProps {
+  dataAccessDeclarations?: readonly import('@icp-platform/sdk').ActionDataAccessRequirement[];
   target: ObjectHistoryTarget;
   featurePosition?: string;
   filter: ObjectHistoryOutputQuery;
@@ -14,9 +15,9 @@ export interface ObjectHistoryOutputProps {
 
 /** 只读预览在显式点击时输出；来源换代或关闭会取消在途请求，迟到结果不触发下载。 */
 export default function ObjectHistoryOutput(props: ObjectHistoryOutputProps) {
-  return <HistoryOutputSession key={JSON.stringify([props.target, props.featurePosition, props.filter, props.selectedIds])} {...props} />;
+  return <HistoryOutputSession key={JSON.stringify([props.target, props.featurePosition, props.filter, props.selectedIds, props.dataAccessDeclarations])} {...props} />;
 }
-function HistoryOutputSession({ target, featurePosition, filter, selectedIds, fetcher = platformFetch as typeof fetch }: ObjectHistoryOutputProps) {
+function HistoryOutputSession({ target, featurePosition, filter, selectedIds, dataAccessDeclarations, fetcher = platformFetch as typeof fetch }: ObjectHistoryOutputProps) {
   const { t } = useLocalization();
   const active = useRef<AbortController>();
   const [cancelled, setCancelled] = useState(false);
@@ -31,12 +32,16 @@ function HistoryOutputSession({ target, featurePosition, filter, selectedIds, fe
     const controller = new AbortController(); active.current = controller;
     setPending(true); setCancelled(false); setFailure(undefined); setPrintItems(undefined); printFrame.current?.remove();
     try {
+      const actionKey = kind + (mode === 'all' ? 'All' : 'Selected');
+      const declarations = dataAccessDeclarations?.filter(item => item.surface === 'outputActions' && item.actionKey === actionKey);
+      if (declarations && declarations.length !== 1) throw new Error('动作数据声明缺失或冲突。');
+      const dataAccess = declarations?.[0];
       if (kind === 'print') {
-        const items = await printObjectHistory(target, mode, selectedIds, filter, { featurePosition, signal: controller.signal }, fetcher);
+        const items = await printObjectHistory(target, mode, selectedIds, filter, { featurePosition, dataAccess, signal: controller.signal }, fetcher);
         if (!controller.signal.aborted && active.current === controller) setPrintItems(items);
         return;
       }
-      const result = await exportObjectHistory(target, mode, selectedIds, filter, { featurePosition, signal: controller.signal }, fetcher);
+      const result = await exportObjectHistory(target, mode, selectedIds, filter, { featurePosition, dataAccess, signal: controller.signal }, fetcher);
       if (controller.signal.aborted || active.current !== controller) return;
       const url = URL.createObjectURL(result.blob);
       try {

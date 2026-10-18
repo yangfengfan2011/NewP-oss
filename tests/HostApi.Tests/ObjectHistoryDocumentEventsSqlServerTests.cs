@@ -19,6 +19,7 @@ public sealed class ObjectHistoryDocumentEventsSqlServerTests
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
+        var historyRequests = new ObjectHistoryHttpTestRequests(fixture);
         await InitializeAsync(fixture, admin);
         var position = await ContainerAsync(fixture, admin);
         var source = new WorkspacePosition(position.SpaceId, position.RootFolderId, position.LinkIds);
@@ -27,7 +28,7 @@ public sealed class ObjectHistoryDocumentEventsSqlServerTests
         var values = new { ECODE = "HISTORY-FILES-296", ENAME = "文件履历原对象", Description = "真实主附件" };
         var main = await DocumentFilesSqlServerHttpApiTests.StageAsync(fixture, admin, source, values, [1, 2, 3], "main.pdf");
         var attachment = await DocumentFilesSqlServerHttpApiTests.StageAsync(fixture, admin, source, values, [4, 5, 6], "attachment.pdf");
-        using (var created = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.createDocument"), HttpMethod.Post,
+        using (var created = await historyRequests.SendAsync(admin, Point(fixture, "workspace.folder.createDocument"), HttpMethod.Post,
             "/api/workspace/content/documents", new { position = source, values,
                 uploads = new { mainUploadId = main.GetProperty("uploadId").GetString(), attachmentUploadIds = new[] { attachment.GetProperty("uploadId").GetString() } } }))
             await ReadOkAsync(created);
@@ -44,10 +45,10 @@ public sealed class ObjectHistoryDocumentEventsSqlServerTests
         Assert.DoesNotContain(await EventsAsync(fixture, id), row => Equals(row["EventType"], "document.files.copied"));
 
         string operationId;
-        using (var prepared = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.pasteObjectCopy"), HttpMethod.Post,
+        using (var prepared = await historyRequests.SendAsync(admin, Point(fixture, "workspace.folder.pasteObjectCopy"), HttpMethod.Post,
             "/api/workspace/content/objects/copy/prepare", new { mode = "copy", sourcePosition = source, linkIds = new[] { (string)link["LID"]! }, targetPosition = target }))
             operationId = (await ReadOkAsync(prepared)).GetProperty("operationId").GetString()!;
-        using (var copied = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.pasteObjectCopy"), HttpMethod.Post,
+        using (var copied = await historyRequests.SendAsync(admin, Point(fixture, "workspace.folder.pasteObjectCopy"), HttpMethod.Post,
             "/api/workspace/content/objects/copy", new { operationId, values = new { ECODE = "HISTORY-FILES-COPY-296", ENAME = "文件履历真副本" } }))
             await ReadOkAsync(copied);
         var copy = Assert.Single(await RowsAsync(fixture, "Document"), row => !Equals(row["EID"], id));
@@ -58,7 +59,7 @@ public sealed class ObjectHistoryDocumentEventsSqlServerTests
         Assert.DoesNotContain(copyRecords, row => Equals(row["EventType"], "document.files.created"));
         await AssertFileEventAsync(fixture, copyId, "document.files.copied", 2);
         var copyLink = Assert.Single(await RowsAsync(fixture, "WorkspaceFolderContent"), row => Equals(row["CEID"], copyId));
-        using (var deleted = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.deleteObject"), HttpMethod.Delete,
+        using (var deleted = await historyRequests.SendAsync(admin, Point(fixture, "workspace.folder.deleteObject"), HttpMethod.Delete,
             "/api/workspace/content/" + copyLink["LID"], new { position = target })) await ReadOkAsync(deleted);
         var released = Assert.Single(await EventsAsync(fixture, copyId), row => Equals(row["EventType"], "document.files.released"));
         AssertField(released, "FileCount", "2");
@@ -75,6 +76,7 @@ public sealed class ObjectHistoryDocumentEventsSqlServerTests
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
+        var historyRequests = new ObjectHistoryHttpTestRequests(fixture);
         await InitializeAsync(fixture, admin);
         var position = await ContainerAsync(fixture, admin);
         var source = new WorkspacePosition(position.SpaceId, position.RootFolderId, position.LinkIds);
@@ -98,7 +100,7 @@ public sealed class ObjectHistoryDocumentEventsSqlServerTests
             }
             else if (eventType == "document.files.copied")
             {
-                using var preparation = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.pasteObjectCopy"), HttpMethod.Post,
+                using var preparation = await historyRequests.SendAsync(admin, Point(fixture, "workspace.folder.pasteObjectCopy"), HttpMethod.Post,
                     "/api/workspace/content/objects/copy/prepare", new { mode = "copy", sourcePosition = source,
                         linkIds = new[] { (string)originalLink["LID"]! }, targetPosition = source });
                 body = new { operationId = (await ReadOkAsync(preparation)).GetProperty("operationId").GetString(), values = new { ECODE = code, ENAME = code } };
@@ -155,7 +157,7 @@ public sealed class ObjectHistoryDocumentEventsSqlServerTests
         {
             var values = new { ECODE = code, ENAME = code };
             var staged = await DocumentFilesSqlServerHttpApiTests.StageAsync(fixture, admin, source, values, [1, 2, 3]);
-            using var created = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.createDocument"), HttpMethod.Post,
+            using var created = await historyRequests.SendAsync(admin, Point(fixture, "workspace.folder.createDocument"), HttpMethod.Post,
                 "/api/workspace/content/documents", new { position = source, values, uploads = new { mainUploadId = staged.GetProperty("uploadId").GetString() } });
             await ReadOkAsync(created);
             return (string)Assert.Single(await RowsAsync(fixture, "Document"))["EID"]!;

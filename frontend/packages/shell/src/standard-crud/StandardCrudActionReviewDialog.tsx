@@ -15,6 +15,7 @@ import type {
 const ActionFormDrawer = lazy(() => import('@icp-platform/ui/crud-form').then(module => ({ default: module.CrudFormDrawer })));
 
 interface StandardCrudActionReviewDialogProps {
+  dataAccessDeclarations?: readonly import('@icp-platform/sdk').ActionDataAccessRequirement[];
   instance?: StandardCrudActionInstance;
   open?: boolean;
   action: StandardCrudActionDefinition;
@@ -38,6 +39,7 @@ interface StandardCrudActionReviewDialogProps {
 
 /** 动作输入共用生命周期；表单可采用标准 Drawer，关闭前仍保护未保存修改。 */
 export function StandardCrudActionReviewDialog({
+  dataAccessDeclarations,
   open = true,
   action,
   title,
@@ -85,6 +87,7 @@ export function StandardCrudActionReviewDialog({
     {confirmMessage ? <p>{confirmMessage}</p> : null}
     {inputRenderer({
       action, featurePosition, instance,
+      dataAccess: action.dataAccess, dataAccessDeclarations,
       navigationFeaturePosition: key => {
         const resolution = features.navigation(key);
         return resolution.kind === 'allowed' ? resolution.position : undefined;

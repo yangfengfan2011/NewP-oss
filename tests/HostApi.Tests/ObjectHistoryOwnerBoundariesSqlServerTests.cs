@@ -18,6 +18,7 @@ public sealed class ObjectHistoryOwnerBoundariesSqlServerTests
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
+        var historyRequests = new ObjectHistoryHttpTestRequests(fixture);
         await InitializeAsync(fixture, admin);
         var position = await ContainerAsync(fixture, admin);
         var part = await CreateAsync(fixture, admin, position, "Part", "parts", "createPart", "IndependentPartHistory296");
@@ -33,40 +34,40 @@ public sealed class ObjectHistoryOwnerBoundariesSqlServerTests
             (part, "part", partHistory, documentHistory), (document, "document", documentHistory, partHistory) })
         {
             var path = "/api/" + owner + "/" + owner + "s/" + target.Id + "/history";
-            var page = await FeatureHttpTestRequests.ReadAsync(ordinary, feature, path + "?eventType=" + filter.EventType);
+            var page = await historyRequests.ReadAsync(ordinary, feature, path + "?eventType=" + filter.EventType);
             Assert.Equal(1, page.GetProperty("total").GetInt32());
             var item = Assert.Single(page.GetProperty("items").EnumerateArray());
             Assert.Equal(target.Name, item.GetProperty("target").GetProperty("name").GetString());
             Assert.Equal("current", item.GetProperty("target").GetProperty("nameSource").GetString());
             var recordId = item.GetProperty("id").GetString();
-            using (var detail = await FeatureHttpTestRequests.SendAsync(ordinary, feature, HttpMethod.Get, path + "/" + recordId + "?eventType=" + filter.EventType))
+            using (var detail = await historyRequests.SendAsync(ordinary, feature, HttpMethod.Get, path + "/" + recordId + "?eventType=" + filter.EventType))
                 Assert.Equal(HttpStatusCode.OK, detail.StatusCode);
-            using (var print = await FeatureHttpTestRequests.SendAsync(ordinary, feature, HttpMethod.Post, path + "/print", new ObjectHistoryOutputRequest("selected", filter, [recordId!])))
+            using (var print = await historyRequests.SendAsync(ordinary, feature, HttpMethod.Post, path + "/print", new ObjectHistoryOutputRequest("selected", filter, [recordId!])))
             {
                 var printed = await ReadOkAsync(print);
                 Assert.Equal(recordId, Assert.Single(printed.GetProperty("items").EnumerateArray()).GetProperty("id").GetString());
             }
-            using (var exported = await FeatureHttpTestRequests.SendAsync(ordinary, feature, HttpMethod.Post, path + "/export", new ObjectHistoryOutputRequest("all", filter)))
+            using (var exported = await historyRequests.SendAsync(ordinary, feature, HttpMethod.Post, path + "/export", new ObjectHistoryOutputRequest("all", filter)))
             {
                 Assert.Equal(HttpStatusCode.OK, exported.StatusCode);
                 Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", exported.Content.Headers.ContentType?.MediaType);
             }
-            using (var wrongOwner = await FeatureHttpTestRequests.SendAsync(ordinary, otherFeature, HttpMethod.Get, path))
+            using (var wrongOwner = await historyRequests.SendAsync(ordinary, otherFeature, HttpMethod.Get, path))
                 Assert.Equal(HttpStatusCode.Forbidden, wrongOwner.StatusCode);
-            using (var noIndependentFeature = await FeatureHttpTestRequests.SendAsync(ordinary, workspaceHistory, HttpMethod.Get, path))
+            using (var noIndependentFeature = await historyRequests.SendAsync(ordinary, workspaceHistory, HttpMethod.Get, path))
                 Assert.Equal(HttpStatusCode.Forbidden, noIndependentFeature.StatusCode);
-            using (var forgedScope = await FeatureHttpTestRequests.SendAsync(ordinary, feature, HttpMethod.Get, path + "?queryScope=forged"))
+            using (var forgedScope = await historyRequests.SendAsync(ordinary, feature, HttpMethod.Get, path + "?queryScope=forged"))
                 Assert.Equal(HttpStatusCode.BadRequest, forgedScope.StatusCode);
             var configuration = new DataScopeObjectDto(owner + "." + owner, target.Id,
                 [new("owner-history-" + owner, "user", actor.AccountId, 1, new Dictionary<string, string> { ["read"] = owner == "part" ? "allow" : "deny", ["history"] = owner == "part" ? "deny" : "allow" })]);
-            using (var denied = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, owner + "." + owner + ".authorize"), HttpMethod.Put,
+            using (var denied = await historyRequests.SendAsync(admin, Point(fixture, owner + "." + owner + ".authorize"), HttpMethod.Put,
                 "/api/" + owner + "/" + owner + "s/" + target.Id + "/permissions", configuration))
                 Assert.True(denied.StatusCode == HttpStatusCode.NoContent, await denied.Content.ReadAsStringAsync());
-            using var deniedQuery = await FeatureHttpTestRequests.SendAsync(ordinary, feature, HttpMethod.Get, path);
+            using var deniedQuery = await historyRequests.SendAsync(ordinary, feature, HttpMethod.Get, path);
             Assert.Equal(HttpStatusCode.NotFound, deniedQuery.StatusCode);
         }
 
-        using var ensured = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.spaces.access"), HttpMethod.Post,
+        using var ensured = await historyRequests.SendAsync(admin, Point(fixture, "workspace.spaces.access"), HttpMethod.Post,
             "/api/workspace/spaces/personal/ensure");
         var personalRoot = await ReadOkAsync(ensured);
         var privatePosition = new Position(personalRoot.GetProperty("spaceId").GetString()!, personalRoot.GetProperty("rootFolderId").GetString()!, []);
@@ -75,23 +76,23 @@ public sealed class ObjectHistoryOwnerBoundariesSqlServerTests
         var privatePart = await CreateAsync(fixture, admin, privateChildPosition, "Part", "parts", "createPart", "PrivateOccurrenceHistory296");
         // 独立Part使用同一个EID及其ACL；有对象资格仍不能借该EID进入他人私人LID来源。
         var ownPath = "/api/part/parts/" + privatePart.Id + "/history?eventType=" + filter.EventType;
-        var privatePartPage = await FeatureHttpTestRequests.ReadAsync(ordinary, partHistory, ownPath);
+        var privatePartPage = await historyRequests.ReadAsync(ordinary, partHistory, ownPath);
         var privateRecord = Assert.Single(privatePartPage.GetProperty("items").EnumerateArray()).GetProperty("id").GetString();
         var sourcePath = HistoryPath(privateChildPosition, privatePart.LinkId);
         foreach (var suffix in new[] { "", "/" + privateRecord, "/export", "/print" })
         {
             var path = sourcePath.Replace("/history?", "/history" + suffix + "?", StringComparison.Ordinal);
-            using var denied = await FeatureHttpTestRequests.SendAsync(ordinary, workspaceHistory,
+            using var denied = await historyRequests.SendAsync(ordinary, workspaceHistory,
                 suffix is "/export" or "/print" ? HttpMethod.Post : HttpMethod.Get, path,
                 suffix is "/export" or "/print" ? new ObjectHistoryOutputRequest("all", filter) : null);
             Assert.Equal(HttpStatusCode.NotFound, denied.StatusCode);
         }
         foreach (var root in new[] { position with { LinkIds = [] }, privatePosition })
         {
-            using var rootQuery = await FeatureHttpTestRequests.SendAsync(admin, workspaceHistory, HttpMethod.Get, HistoryPath(root, root.RootFolderId));
+            using var rootQuery = await historyRequests.SendAsync(admin, workspaceHistory, HttpMethod.Get, HistoryPath(root, root.RootFolderId));
             Assert.Equal(HttpStatusCode.NotFound, rootQuery.StatusCode);
         }
-        using var missingSource = await FeatureHttpTestRequests.SendAsync(ordinary, workspaceHistory, HttpMethod.Get,
+        using var missingSource = await historyRequests.SendAsync(ordinary, workspaceHistory, HttpMethod.Get,
             "/api/workspace/content/" + privatePart.Id + "/history?queryScope=" + Uri.EscapeDataString(JsonSerializer.Serialize(position, new JsonSerializerOptions(JsonSerializerDefaults.Web))));
         Assert.Equal(HttpStatusCode.NotFound, missingSource.StatusCode);
     }
@@ -101,6 +102,7 @@ public sealed class ObjectHistoryOwnerBoundariesSqlServerTests
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(useRequestPresentation: true, includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
+        var historyRequests = new ObjectHistoryHttpTestRequests(fixture);
         await InitializeAsync(fixture, admin);
         var position = await ContainerAsync(fixture, admin);
         var part = await CreateAsync(fixture, admin, position, "Part", "parts", "createPart", "HistoryFilters296");
@@ -124,7 +126,7 @@ public sealed class ObjectHistoryOwnerBoundariesSqlServerTests
         }
         var path = "/api/part/parts/" + part.Id + "/history?eventType=part.updated";
         fixture.Fault.Commands.Clear();
-        var first = await FeatureHttpTestRequests.ReadAsync(ordinary, history, path + "&pageSize=1");
+        var first = await historyRequests.ReadAsync(ordinary, history, path + "&pageSize=1");
         Assert.Equal(4, first.GetProperty("total").GetInt32());
         var firstItem = Assert.Single(first.GetProperty("items").EnumerateArray());
         Assert.Equal(ids[0], firstItem.GetProperty("id").GetString());
@@ -132,20 +134,20 @@ public sealed class ObjectHistoryOwnerBoundariesSqlServerTests
         Assert.False(string.IsNullOrWhiteSpace(firstItem.GetProperty("actor").GetProperty("name").GetString()));
         var count = Assert.Single(fixture.Fault.Commands, sql => sql.Contains("COUNT(*)", StringComparison.Ordinal));
         Assert.Contains("[OccurredAt]", count, StringComparison.Ordinal);
-        var second = await FeatureHttpTestRequests.ReadAsync(ordinary, history, path + "&pageSize=1&pageIndex=2");
+        var second = await historyRequests.ReadAsync(ordinary, history, path + "&pageSize=1&pageIndex=2");
         Assert.Equal(ids[1], Assert.Single(second.GetProperty("items").EnumerateArray()).GetProperty("id").GetString());
-        var missingActor = await FeatureHttpTestRequests.ReadAsync(ordinary, history, path + "&pageSize=1&pageIndex=3");
+        var missingActor = await historyRequests.ReadAsync(ordinary, history, path + "&pageSize=1&pageIndex=3");
         var unavailable = Assert.Single(missingActor.GetProperty("items").EnumerateArray()).GetProperty("actor");
         Assert.Equal("unavailable", unavailable.GetProperty("status").GetString());
         Assert.Equal(JsonValueKind.Null, unavailable.GetProperty("name").ValueKind);
-        var allHistory = await FeatureHttpTestRequests.ReadAsync(ordinary, history, path + "&from=" + Uri.EscapeDataString(now.AddMonths(-6).ToString("O")));
+        var allHistory = await historyRequests.ReadAsync(ordinary, history, path + "&from=" + Uri.EscapeDataString(now.AddMonths(-6).ToString("O")));
         Assert.Equal(5, allHistory.GetProperty("total").GetInt32());
-        var self = await FeatureHttpTestRequests.ReadAsync(ordinary, history, path + "&actorId=" + Uri.EscapeDataString(actor.AccountId));
+        var self = await historyRequests.ReadAsync(ordinary, history, path + "&actorId=" + Uri.EscapeDataString(actor.AccountId));
         Assert.Equal(ids[0], Assert.Single(self.GetProperty("items").EnumerateArray()).GetProperty("id").GetString());
-        var description = await FeatureHttpTestRequests.ReadAsync(ordinary, history, path + "&description=" + Uri.EscapeDataString("Object updated"));
+        var description = await historyRequests.ReadAsync(ordinary, history, path + "&description=" + Uri.EscapeDataString("Object updated"));
         Assert.Equal(4, description.GetProperty("total").GetInt32());
         foreach (var notVisible in new[] { "Part.HistoryUpdated", "修改对象", "Configuration" })
-            Assert.Equal(0, (await FeatureHttpTestRequests.ReadAsync(ordinary, history, path + "&description=" + Uri.EscapeDataString(notVisible))).GetProperty("total").GetInt32());
+            Assert.Equal(0, (await historyRequests.ReadAsync(ordinary, history, path + "&description=" + Uri.EscapeDataString(notVisible))).GetProperty("total").GetInt32());
     }
 
     private static string HistoryPath(Position position, string linkId) => "/api/workspace/content/" + linkId + "/history?queryScope="

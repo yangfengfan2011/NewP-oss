@@ -26,7 +26,8 @@ public sealed class MetadataRuntimeManifestBuilder
         string runtimeRoot,
         IReadOnlyList<string> moduleOrder,
         IReadOnlyCollection<string> frontendModuleIds,
-        IReadOnlyList<FeaturePoint>? features = null)
+        IReadOnlyList<FeaturePoint>? features = null,
+        IReadOnlyList<ActionDataAccessRequirement>? dataAccess = null)
     {
         var frontendModules = frontendModuleIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var modules = moduleOrder
@@ -38,7 +39,8 @@ public sealed class MetadataRuntimeManifestBuilder
                 EnumerateMetadataFiles(runtimeRoot, moduleId, "navigation"),
                 EnumerateMetadataFiles(runtimeRoot, moduleId, "views"),
                 EnumerateMetadataFiles(runtimeRoot, moduleId, "models"),
-                (features ?? []).Where(point => point.ModuleId == moduleId).ToArray()))
+                (features ?? []).Where(point => point.ModuleId == moduleId).ToArray(),
+                (dataAccess ?? []).Where(requirement => requirement.ModuleId == moduleId).ToArray()))
             .Where(module => module.NavFiles.Count > 0 || module.ViewFiles.Count > 0 || module.ModelFiles.Count > 0)
             .ToArray();
 
@@ -69,5 +71,6 @@ public sealed class MetadataRuntimeManifestBuilder
         IReadOnlyList<string> NavFiles,
         IReadOnlyList<string> ViewFiles,
         IReadOnlyList<string> ModelFiles,
-        IReadOnlyList<FeaturePoint> Features);
+        IReadOnlyList<FeaturePoint> Features,
+        IReadOnlyList<ActionDataAccessRequirement> DataAccess);
 }

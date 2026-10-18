@@ -16,6 +16,7 @@ public sealed class ObjectHistoryNamesSqlServerTests
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
+        var historyRequests = new ObjectHistoryHttpTestRequests(fixture);
         await InitializeAsync(fixture, admin);
         var position = await ContainerAsync(fixture, admin);
         var part = await CreateAsync(fixture, admin, position, "Part", "parts", "createPart", "HistoryName296");
@@ -24,21 +25,21 @@ public sealed class ObjectHistoryNamesSqlServerTests
             Point(fixture, "workspace.spaces.access"), history);
         using var ordinary = actor.Client;
         var partPath = Path(position, part.LinkId);
-        var initial = Assert.Single((await FeatureHttpTestRequests.ReadAsync(ordinary, history, partPath + "&eventType=entity.ownership.initialized")).GetProperty("items").EnumerateArray());
+        var initial = Assert.Single((await historyRequests.ReadAsync(ordinary, history, partPath + "&eventType=entity.ownership.initialized")).GetProperty("items").EnumerateArray());
         AssertTarget(initial, part.Name, null, "current"); // 归属事件没有历史名，不把当前名伪装为历史。
-        var created = Assert.Single((await FeatureHttpTestRequests.ReadAsync(ordinary, history, partPath + "&eventType=part.created")).GetProperty("items").EnumerateArray());
+        var created = Assert.Single((await historyRequests.ReadAsync(ordinary, history, partPath + "&eventType=part.created")).GetProperty("items").EnumerateArray());
         AssertTarget(created, part.Name, part.Name, "historical");
-        using (var edited = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.editObject"), HttpMethod.Put,
+        using (var edited = await historyRequests.SendAsync(admin, Point(fixture, "workspace.folder.editObject"), HttpMethod.Put,
             "/api/workspace/content/" + part.LinkId, new { position, values = new { ENAME = "改名后的对象", ECODE = "HistoryNameChanged296" } })) await ReadOkAsync(edited);
-        var historical = Assert.Single((await FeatureHttpTestRequests.ReadAsync(ordinary, history, partPath + "&eventType=part.created")).GetProperty("items").EnumerateArray());
+        var historical = Assert.Single((await historyRequests.ReadAsync(ordinary, history, partPath + "&eventType=part.created")).GetProperty("items").EnumerateArray());
         AssertTarget(historical, part.Name, part.Name, "historical");
-        var updated = Assert.Single((await FeatureHttpTestRequests.ReadAsync(ordinary, history, partPath + "&eventType=part.updated")).GetProperty("items").EnumerateArray());
+        var updated = Assert.Single((await historyRequests.ReadAsync(ordinary, history, partPath + "&eventType=part.updated")).GetProperty("items").EnumerateArray());
         AssertTarget(updated, "改名后的对象", "HistoryNameChanged296", "historical");
-        var current = Assert.Single((await FeatureHttpTestRequests.ReadAsync(ordinary, history, partPath + "&eventType=entity.ownership.initialized")).GetProperty("items").EnumerateArray());
+        var current = Assert.Single((await historyRequests.ReadAsync(ordinary, history, partPath + "&eventType=entity.ownership.initialized")).GetProperty("items").EnumerateArray());
         AssertTarget(current, "改名后的对象", null, "current");
         var second = await CreateAsync(fixture, admin, position with { LinkIds = [] }, "WorkspaceFolder", "folders", "create", "名称剩余入口296");
         var secondPosition = position with { LinkIds = [second.LinkId] };
-        using (var added = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.add"), HttpMethod.Post,
+        using (var added = await historyRequests.SendAsync(admin, Point(fixture, "workspace.folder.add"), HttpMethod.Post,
             "/api/workspace/content/references", new { position = secondPosition, target = new { modelKey = "Part", id = part.Id } })) await ReadOkAsync(added);
         string remaining;
         using (var scope = fixture.Services.CreateScope())
@@ -48,26 +49,26 @@ public sealed class ObjectHistoryNamesSqlServerTests
                 db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").Where(row => Microsoft.EntityFrameworkCore.EF.Property<string>(row, "PEID") == second.Id
                     && Microsoft.EntityFrameworkCore.EF.Property<string>(row, "CEID") == part.Id)))["LID"]!;
         }
-        using (var removed = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.remove"), HttpMethod.Delete,
+        using (var removed = await historyRequests.SendAsync(admin, Point(fixture, "workspace.folder.remove"), HttpMethod.Delete,
             "/api/workspace/content/references/" + part.LinkId, new { position })) await ReadOkAsync(removed);
         var parentPath = Path(position with { LinkIds = [] }, position.LinkIds[0]) + "&eventType=workspace.reference.removed";
-        var related = Assert.Single((await FeatureHttpTestRequests.ReadAsync(ordinary, history, parentPath)).GetProperty("items").EnumerateArray());
+        var related = Assert.Single((await historyRequests.ReadAsync(ordinary, history, parentPath)).GetProperty("items").EnumerateArray());
         Assert.Equal("Part", related.GetProperty("objectType").GetString());
         AssertTarget(related, "改名后的对象", null, "current"); // 不能拿查询Folder的名称填Part事件。
         var configuration = new DataScopeObjectDto("part.part", part.Id,
             [new("hidden-name", "user", actor.AccountId, 1, new Dictionary<string, string> { ["read"] = "deny" })]);
-        using (var denied = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "part.part.authorize"), HttpMethod.Put,
+        using (var denied = await historyRequests.SendAsync(admin, Point(fixture, "part.part.authorize"), HttpMethod.Put,
             "/api/part/parts/" + part.Id + "/permissions", configuration)) Assert.Equal(HttpStatusCode.NoContent, denied.StatusCode);
-        var hidden = Assert.Single((await FeatureHttpTestRequests.ReadAsync(ordinary, history, parentPath)).GetProperty("items").EnumerateArray());
+        var hidden = Assert.Single((await historyRequests.ReadAsync(ordinary, history, parentPath)).GetProperty("items").EnumerateArray());
         AssertTarget(hidden, null, null, "unavailable");
         Assert.DoesNotContain(part.Id, hidden.GetRawText(), StringComparison.Ordinal);
-        using (var deleted = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.deleteObject"), HttpMethod.Delete,
+        using (var deleted = await historyRequests.SendAsync(admin, Point(fixture, "workspace.folder.deleteObject"), HttpMethod.Delete,
             "/api/workspace/content/" + remaining, new { position = secondPosition })) await ReadOkAsync(deleted);
-        var missing = Assert.Single((await FeatureHttpTestRequests.ReadAsync(ordinary, history, parentPath)).GetProperty("items").EnumerateArray());
+        var missing = Assert.Single((await historyRequests.ReadAsync(ordinary, history, parentPath)).GetProperty("items").EnumerateArray());
         AssertTarget(missing, null, null, "unavailable");
-        using (var deletedTarget = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Get, Path(secondPosition, remaining)))
+        using (var deletedTarget = await historyRequests.SendAsync(ordinary, history, HttpMethod.Get, Path(secondPosition, remaining)))
             Assert.Equal(HttpStatusCode.NotFound, deletedTarget.StatusCode);
-        using var retained = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "audit.change.read"), HttpMethod.Get,
+        using var retained = await historyRequests.SendAsync(admin, Point(fixture, "audit.change.read"), HttpMethod.Get,
             "/api/audit/business-changes/" + created.GetProperty("id").GetString());
         Assert.Equal(HttpStatusCode.OK, retained.StatusCode);
     }
@@ -77,19 +78,20 @@ public sealed class ObjectHistoryNamesSqlServerTests
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
+        var historyRequests = new ObjectHistoryHttpTestRequests(fixture);
         await InitializeAsync(fixture, admin);
         var position = await ContainerAsync(fixture, admin);
         var folder = await CreateAsync(fixture, admin, position, "WorkspaceFolder", "folders", "create", "AdminFolderName296");
-        using (var renamed = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.editObject"), HttpMethod.Put,
+        using (var renamed = await historyRequests.SendAsync(admin, Point(fixture, "workspace.folder.editObject"), HttpMethod.Put,
             "/api/workspace/content/" + folder.LinkId, new { position, values = new { ENAME = "AdminFolderRenamed296" } })) await ReadOkAsync(renamed);
         var audit = Point(fixture, "audit.change.read");
         var path = "/api/audit/business-changes?Resource=workspace.folder&TargetId=" + folder.Id + "&EventType=workspace.folder.created";
-        var page = await FeatureHttpTestRequests.ReadAsync(admin, audit, path);
+        var page = await historyRequests.ReadAsync(admin, audit, path);
         Assert.Equal(1, page.GetProperty("total").GetInt32());
         var record = Assert.Single(page.GetProperty("items").EnumerateArray());
         Assert.Equal("AdminFolderRenamed296", record.GetProperty("TargetId_DisplayValue").GetString());
         var detailPath = "/api/audit/business-changes/" + record.GetProperty("EID").GetString();
-        var detail = await FeatureHttpTestRequests.ReadAsync(admin, audit, detailPath);
+        var detail = await historyRequests.ReadAsync(admin, audit, detailPath);
         Assert.Equal(folder.Id, detail.GetProperty("fields").GetProperty("TargetId").GetString());
         Assert.Equal("AdminFolderRenamed296", detail.GetProperty("fields").GetProperty("TargetId_DisplayValue").GetString());
         Assert.False(string.IsNullOrWhiteSpace(detail.GetProperty("fields").GetProperty("TraceId").GetString()));
@@ -99,12 +101,12 @@ public sealed class ObjectHistoryNamesSqlServerTests
         using var ordinary = actor.Client;
         foreach (var ordinaryPath in new[] { path, detailPath })
         {
-            using var denied = await FeatureHttpTestRequests.SendAsync(ordinary, audit, HttpMethod.Get, ordinaryPath);
+            using var denied = await historyRequests.SendAsync(ordinary, audit, HttpMethod.Get, ordinaryPath);
             Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
         }
-        using (var deleted = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.deleteObject"), HttpMethod.Delete,
+        using (var deleted = await historyRequests.SendAsync(admin, Point(fixture, "workspace.folder.deleteObject"), HttpMethod.Delete,
             "/api/workspace/content/" + folder.LinkId, new { position })) await ReadOkAsync(deleted);
-        var retained = await FeatureHttpTestRequests.ReadAsync(admin, audit, detailPath);
+        var retained = await historyRequests.ReadAsync(admin, audit, detailPath);
         Assert.Equal(folder.Id, retained.GetProperty("fields").GetProperty("TargetId").GetString());
         Assert.Equal(JsonValueKind.Null, retained.GetProperty("fields").GetProperty("TargetId_DisplayValue").ValueKind);
     }

@@ -64,6 +64,14 @@ public sealed class DataScopeResourceCatalog : IDataScopeResourceCatalog
         }
         actionKeys = actions.ToDictionary(item => item.ResourceKey,
             item => (IReadOnlyList<string>)Array.AsReadOnly(item.ActionKeys.ToArray()), StringComparer.Ordinal);
+        foreach (var requirement in modules.ActionDataAccessCatalog)
+            foreach (var key in requirement.Resources)
+            {
+                var resource = resources.SingleOrDefault(item => item.ResourceKey == key)
+                    ?? throw new InvalidOperationException("ACTION_DATA_ACCESS_RESOURCE_UNKNOWN");
+                if (requirement.Actions.Any(action => actionKeys.TryGetValue(resource.ResourceKey, out var applicable) && !applicable.Contains(action)))
+                    throw new InvalidOperationException("ACTION_DATA_ACCESS_RESOURCE_ACTION_INVALID");
+            }
         Resources = Array.AsReadOnly(resources);
     }
 

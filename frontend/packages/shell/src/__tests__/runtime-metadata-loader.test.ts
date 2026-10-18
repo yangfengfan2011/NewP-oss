@@ -1,7 +1,24 @@
 import { describe, expect, it, vi } from 'vitest';
 import { loadRuntimeMetadata } from '../metadata/runtimeMetadataLoader';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { readComponentJson } from '../../test-support/componentTestInputs';
 
 describe('runtime metadata loader', () => {
+  it.each(['valid', 'missing-projection', 'missing-authoring', 'identity-conflict'] as const)('binds the formal action projection and fails closed for %s', async mode => {
+    const declarations = JSON.parse(readFileSync(resolve(__dirname, '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceHistoryDataAccess.contract.json'), 'utf8'));
+    const definition = readComponentJson('Workspace', 'metadata/views/WorkspaceObjectHistoryList.view.json');
+    const read = declarations.find((item: { surface: string }) => item.surface === 'read');
+    if (mode === 'missing-authoring') delete definition.view.dataAccess;
+    const projection = mode === 'missing-projection' ? [] : mode === 'identity-conflict' ? [...declarations, read] : declarations;
+    const fetcher = vi.fn(async (url: RequestInfo | URL) => new Response(JSON.stringify(String(url).endsWith('metadata-runtime-manifest.json')
+      ? { modules: [{ moduleId: 'Workspace', metadataBasePath: '/workspace', navFiles: [], modelFiles: [], viewFiles: ['history.json'], dataAccess: projection }] }
+      : definition)));
+    if (mode === 'valid') {
+      const metadata = await loadRuntimeMetadata(fetcher);
+      expect(metadata.viewDocuments[0].view.dataAccess).toMatchObject({ id: 'Workspace/view:workspace.history.list/read', actions: ['read'] });
+    } else await expect(loadRuntimeMetadata(fetcher)).rejects.toThrow('数据声明');
+  });
   it('loads nav, view and model documents from the runtime manifest', async () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (url === '/plugins/metadata-runtime-manifest.json') {

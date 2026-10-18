@@ -91,6 +91,14 @@ public static class StandardFeatureMetadataCompiler
             {
                 var resource = Text(view, "resourceKey");
                 BindRead(owner, resource + ".read");
+                BindDataResource(owner, view, resource);
+                DataAccess(view, view, "read", "", owner);
+                if (view.TryGetProperty("outputActions", out var outputs))
+                {
+                    if (outputs.EnumerateArray().GroupBy(output => Text(output, "key"), StringComparer.Ordinal).Any(group => group.Count() > 1))
+                        throw new InvalidOperationException("输出按钮声明身份冲突。");
+                    foreach (var output in outputs.EnumerateArray()) DataAccess(view, output, "outputActions", Text(output, "key"), owner);
+                }
                 if (mode == "list") foreach (var read in LookupBehaviors(view, false)) BindRead(owner, read);
                 Actions(view, "pageActions", owner, scope, resource);
                 Actions(view, "rowActions", owner, scope, resource);
@@ -113,10 +121,23 @@ public static class StandardFeatureMetadataCompiler
                 ReadBehaviors = [.. node.ReadBehaviors, behavior] };
         }
 
+        // 资源引用只来自真实Entity的既有View绑定，履历等model-less读取行为不伪装成数据资源。
+        void BindDataResource(string owner, JsonElement view, string resource)
+        {
+            var modelKey = Optional(view, "model");
+            if (modelKey is null || !all.Any(document => document.TryGetProperty(modelKey, out var model) && Optional(model, "kind") == "Entity")) return;
+            var index = result.FindIndex(node => (node.ReferenceKey ?? node.Key) == owner);
+            var node = result[index];
+            result[index] = node with { DataResources = node.DataResources.Append(resource).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray() };
+        }
+
         // 查看、排序等纯交互随入口；真实业务动作仍使用稳定动作键。
         void Actions(JsonElement view, string property, string owner, string? scope, string resource)
         {
             if (!view.TryGetProperty(property, out var actions)) return;
+            if (actions.EnumerateArray().GroupBy(action => Text(action, "key"), StringComparer.Ordinal)
+                .Any(group => group.Count() > 1 && group.Any(action => action.TryGetProperty("dataAccess", out _))))
+                throw new InvalidOperationException("按钮声明身份冲突。");
             foreach (var action in actions.EnumerateArray())
             {
                 // 普通快捷跳转复用目标资格；标准行查看可沿当前读取资格进入无独立授权的呈现页。
@@ -136,15 +157,36 @@ public static class StandardFeatureMetadataCompiler
                         : targetEntry.TryGetProperty("featureAuthorization", out var targetEnabled) && targetEnabled.ValueKind == JsonValueKind.True;
                     if (!readPresentation && !authorizedNavigation)
                         throw new InvalidOperationException("动作快捷跳转缺少有效功能导航目标。");
+                    var targetOwner = Optional(targetEntry, "featureKey") ?? "navigation:" + target;
+                    DataAccess(view, action, property, Text(action, "key"), targetOwner);
                     continue;
                 }
                 var operation = Optional(action, "standardAction") ?? Optional(action, "handlerKey");
-                if (operation is null or "view" or "refresh") continue;
+                if (operation is null or "view" or "refresh")
+                {
+                    DataAccess(view, action, property, Text(action, "key"), owner);
+                    continue;
+                }
                 Action(owner, scope, Text(action, "key"), Title(Optional(action, "labelKey") ?? Text(action, "key"), Optional(view, "dicKey")),
                     resource + "." + (operation == "edit" ? "update" : operation), Text(view, "mode") + "." + property,
                     ActionReads(view, action, operation),
                     FullTitleKey(Optional(action, "labelKey") ?? Text(action, "key"), Optional(view, "dicKey")));
+                DataAccess(view, action, property, Text(action, "key"), result[^1].ReferenceKey!);
             }
+        }
+
+        // 直接要求附在已有功能位置；查看和输出不因此增加可授权动作。
+        void DataAccess(JsonElement view, JsonElement action, string surface, string key, string owner)
+        {
+            if (!action.TryGetProperty("dataAccess", out var declared)) return;
+            var index = result.FindIndex(feature => (feature.ReferenceKey ?? feature.Key) == owner);
+            if (index < 0) throw new InvalidOperationException("数据声明缺少合法功能归属。");
+            var node = result[index];
+            var declaration = new ActionDataAccessDeclaration(moduleId, Text(view, "key"), surface, key, Text(declared, "execution"),
+                declared.GetProperty("resources").EnumerateArray().Select(item => item.GetString()!).ToArray(),
+                declared.GetProperty("actions").EnumerateArray().Select(item => item.GetString()!).ToArray());
+            // 相同 View 可由多个树节点引用到同一功能；相同结构的展开不制造重复声明。
+            if (!node.DataAccess.Any(item => item.Id == declaration.Id)) result[index] = node with { DataAccess = [.. node.DataAccess, declaration] };
         }
 
         // 树引用原 View 动作的行为；节点类型范围只参与静态身份。

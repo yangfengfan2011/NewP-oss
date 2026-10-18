@@ -1,0 +1,154 @@
+[
+  {
+    "id": "Workspace/view:workspace.folder.list/rowActions/action:history",
+    "moduleId": "Workspace",
+    "viewKey": "workspace.folder.list",
+    "surface": "rowActions",
+    "actionKey": "history",
+    "execution": "workspace.history.enter",
+    "resources": [
+      "workspace.folder",
+      "part.part",
+      "document.document"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/navigation:workspace.history"
+    ]
+  },
+  {
+    "id": "Workspace/view:workspace.history.list/outputActions/action:exportAll",
+    "moduleId": "Workspace",
+    "viewKey": "workspace.history.list",
+    "surface": "outputActions",
+    "actionKey": "exportAll",
+    "execution": "workspace.history.export",
+    "resources": [
+      "workspace.folder",
+      "part.part",
+      "document.document"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/navigation:workspace.history"
+    ]
+  },
+  {
+    "id": "Workspace/view:workspace.history.list/outputActions/action:exportSelected",
+    "moduleId": "Workspace",
+    "viewKey": "workspace.history.list",
+    "surface": "outputActions",
+    "actionKey": "exportSelected",
+    "execution": "workspace.history.export",
+    "resources": [
+      "workspace.folder",
+      "part.part",
+      "document.document"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/navigation:workspace.history"
+    ]
+  },
+  {
+    "id": "Workspace/view:workspace.history.list/outputActions/action:printAll",
+    "moduleId": "Workspace",
+    "viewKey": "workspace.history.list",
+    "surface": "outputActions",
+    "actionKey": "printAll",
+    "execution": "workspace.history.print",
+    "resources": [
+      "workspace.folder",
+      "part.part",
+      "document.document"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/navigation:workspace.history"
+    ]
+  },
+  {
+    "id": "Workspace/view:workspace.history.list/outputActions/action:printSelected",
+    "moduleId": "Workspace",
+    "viewKey": "workspace.history.list",
+    "surface": "outputActions",
+    "actionKey": "printSelected",
+    "execution": "workspace.history.print",
+    "resources": [
+      "workspace.folder",
+      "part.part",
+      "document.document"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/navigation:workspace.history"
+    ]
+  },
+  {
+    "id": "Workspace/view:workspace.history.list/pageActions/action:output",
+    "moduleId": "Workspace",
+    "viewKey": "workspace.history.list",
+    "surface": "pageActions",
+    "actionKey": "output",
+    "execution": "workspace.history.preview",
+    "resources": [
+      "workspace.folder",
+      "part.part",
+      "document.document"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/navigation:workspace.history"
+    ]
+  },
+  {
+    "id": "Workspace/view:workspace.history.list/read",
+    "moduleId": "Workspace",
+    "viewKey": "workspace.history.list",
+    "surface": "read",
+    "actionKey": "",
+    "execution": "workspace.history.list",
+    "resources": [
+      "workspace.folder",
+      "part.part",
+      "document.document"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/navigation:workspace.history"
+    ]
+  },
+  {
+    "id": "Workspace/view:workspace.history.list/rowActions/action:view",
+    "moduleId": "Workspace",
+    "viewKey": "workspace.history.list",
+    "surface": "rowActions",
+    "actionKey": "view",
+    "execution": "workspace.history.detail",
+    "resources": [
+      "workspace.folder",
+      "part.part",
+      "document.document"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/navigation:workspace.history"
+    ]
+  }
+]

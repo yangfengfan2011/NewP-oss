@@ -121,6 +121,8 @@ export type {
   StandardCrudActionContext,
   StandardCrudActionInstance,
   StandardCrudActionDefinition,
+  ActionDataAccessRequirement,
+  StandardCrudActionPrecheck,
   StandardCrudActionHandler,
   StandardCrudActionInputRenderer,
   StandardCrudActionInputRenderContext,

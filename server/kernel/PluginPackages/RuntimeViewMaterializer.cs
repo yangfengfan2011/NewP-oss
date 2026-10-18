@@ -276,7 +276,7 @@ public class RuntimeViewMaterializer
             File.WriteAllText(
                 metadataRuntimeManifestPath,
                 BindProjection(
-                    _metadataRuntimeManifestBuilder.Build(stagedRuntimeRoot, enabledModuleOrder, frontendModuleIds, plan.FeatureCatalog),
+                    _metadataRuntimeManifestBuilder.Build(stagedRuntimeRoot, enabledModuleOrder, frontendModuleIds, plan.FeatureCatalog, plan.ActionDataAccessCatalog),
                     plan));
 
             File.WriteAllBytes(Path.Combine(stagedRuntimeRoot, "canonical-module-plan.json"), plan.CanonicalBytes);

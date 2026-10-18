@@ -52,6 +52,7 @@ public sealed class ObjectHistoryOutputSqlServerTests
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
             services.AddDbContext<EfPlatformDbContext>((_, options) => options.AddInterceptors(cancellation)), includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
+        var historyRequests = new ObjectHistoryHttpTestRequests(fixture);
         await InitializeAsync(fixture, admin);
         var position = await ContainerAsync(fixture, admin);
         var part = await CreateAsync(fixture, admin, position, "Part", "parts", "createPart", "HistoryOutput296");
@@ -64,7 +65,7 @@ public sealed class ObjectHistoryOutputSqlServerTests
             [new("output-user", "user", actor.AccountId, 1, new Dictionary<string, string> { ["read"] = "allow", ["history"] = "allow" })]);
         foreach (var priority in new[] { 1, 2, 3 })
         {
-            using var saved = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put,
+            using var saved = await historyRequests.SendAsync(admin, manage, HttpMethod.Put,
                 "/api/part/parts/" + part.Id + "/permissions", configuration with { Subjects = [configuration.Subjects[0] with { Priority = priority }] });
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         }
@@ -72,11 +73,11 @@ public sealed class ObjectHistoryOutputSqlServerTests
         var basePath = "/api/workspace/content/" + part.LinkId + "/history";
         var queryScope = "?queryScope=" + scopeJson;
         var eventFilter = "&eventType=dataScope.object.changed";
-        var page = await FeatureHttpTestRequests.ReadAsync(ordinary, history, basePath + queryScope + eventFilter + "&pageSize=1");
+        var page = await historyRequests.ReadAsync(ordinary, history, basePath + queryScope + eventFilter + "&pageSize=1");
         Assert.Equal(3, page.GetProperty("total").GetInt32());
         Assert.Single(page.GetProperty("items").EnumerateArray());
         var request = new ObjectHistoryOutputRequest("all", new(PageSize: 1, EventType: "dataScope.object.changed"));
-        using var printed = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Post, basePath + "/print" + queryScope, request);
+        using var printed = await historyRequests.SendAsync(ordinary, history, HttpMethod.Post, basePath + "/print" + queryScope, request);
         var all = (await ReadOkAsync(printed)).GetProperty("items").EnumerateArray().ToArray();
         Assert.Equal(3, all.Length);
         var ids = all.Select(item => item.GetProperty("id").GetString()!).ToArray();
@@ -84,11 +85,11 @@ public sealed class ObjectHistoryOutputSqlServerTests
         Assert.Equal(page.GetProperty("items")[0].GetProperty("id").GetString(), ids[0]);
         Assert.All(all, item => Assert.Equal("dataScope.object.changed", item.GetProperty("eventType").GetString()));
         var selected = request with { Mode = "selected", SelectedIds = [ids[0], ids[2]] };
-        using (var selectedPrint = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Post, basePath + "/print" + queryScope, selected))
+        using (var selectedPrint = await historyRequests.SendAsync(ordinary, history, HttpMethod.Post, basePath + "/print" + queryScope, selected))
             Assert.Equal(new[] { ids[0], ids[2] }, (await ReadOkAsync(selectedPrint)).GetProperty("items").EnumerateArray().Select(item => item.GetProperty("id").GetString()));
         foreach (var (selection, rows) in new[] { (request, 4), (selected, 3) })
         {
-            using var exported = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Post, basePath + "/export" + queryScope, selection);
+            using var exported = await historyRequests.SendAsync(ordinary, history, HttpMethod.Post, basePath + "/export" + queryScope, selection);
             Assert.Equal(HttpStatusCode.OK, exported.StatusCode);
             Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", exported.Content.Headers.ContentType?.MediaType);
             Assert.Contains("object-history.xlsx", exported.Content.Headers.ContentDisposition?.ToString());
@@ -102,21 +103,21 @@ public sealed class ObjectHistoryOutputSqlServerTests
                 Assert.DoesNotContain(hidden, text, StringComparison.Ordinal);
         }
         // 描述匹配用户实际看见的安全译文，不匹配内部key或原ACL JSON。
-        Assert.Equal(3, (await FeatureHttpTestRequests.ReadAsync(ordinary, history, basePath + queryScope + "&description=" + Uri.EscapeDataString("修改对象直接授权"))).GetProperty("total").GetInt32());
-        Assert.Equal(0, (await FeatureHttpTestRequests.ReadAsync(ordinary, history, basePath + queryScope + "&description=DataScope.HistoryAuthorizationChanged")).GetProperty("total").GetInt32());
-        Assert.Equal(0, (await FeatureHttpTestRequests.ReadAsync(ordinary, history, basePath + queryScope + "&description=Configuration")).GetProperty("total").GetInt32());
+        Assert.Equal(3, (await historyRequests.ReadAsync(ordinary, history, basePath + queryScope + "&description=" + Uri.EscapeDataString("修改对象直接授权"))).GetProperty("total").GetInt32());
+        Assert.Equal(0, (await historyRequests.ReadAsync(ordinary, history, basePath + queryScope + "&description=DataScope.HistoryAuthorizationChanged")).GetProperty("total").GetInt32());
+        Assert.Equal(0, (await historyRequests.ReadAsync(ordinary, history, basePath + queryScope + "&description=Configuration")).GetProperty("total").GetInt32());
         foreach (var invalid in new[] { selected with { SelectedIds = [ids[0], "forged-record"] },
             selected with { Filter = selected.Filter with { EventType = "entity.ownership.initialized" } } })
         {
-            using var forged = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Post, basePath + "/print" + queryScope, invalid);
+            using var forged = await historyRequests.SendAsync(ordinary, history, HttpMethod.Post, basePath + "/print" + queryScope, invalid);
             Assert.Equal(HttpStatusCode.NotFound, forged.StatusCode);
         }
-        using (var empty = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Post, basePath + "/export" + queryScope, selected with { SelectedIds = [] }))
+        using (var empty = await historyRequests.SendAsync(ordinary, history, HttpMethod.Post, basePath + "/export" + queryScope, selected with { SelectedIds = [] }))
             Assert.Equal(HttpStatusCode.BadRequest, empty.StatusCode);
         fixture.Fault.Mode = "query";
         try
         {
-            using var failure = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Post, basePath + "/print" + queryScope, request);
+            using var failure = await historyRequests.SendAsync(ordinary, history, HttpMethod.Post, basePath + "/print" + queryScope, request);
             Assert.Equal(HttpStatusCode.InternalServerError, failure.StatusCode);
         }
         finally { fixture.Fault.Mode = ""; }
@@ -127,17 +128,18 @@ public sealed class ObjectHistoryOutputSqlServerTests
             {
                 using var http = new HttpRequestMessage(HttpMethod.Post, basePath + "/export" + queryScope) { Content = JsonContent.Create(request) };
                 http.Headers.Add("X-NewP-Feature", history.Position);
+                http.Headers.Add("X-NewP-Data-Declaration", fixture.Services.GetRequiredService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>().ActionDataAccessCatalog.Single(item => item.ModuleId == "Workspace" && item.ActionKey == "exportAll").Id);
                 await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ordinary.SendAsync(http, canceled.Token));
                 Assert.True(cancellation.Fired);
             }
             finally { cancellation.Cancel = null; }
         }
-        using (var denied = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, "/api/part/parts/" + part.Id + "/permissions",
-            configuration with { Subjects = [configuration.Subjects[0] with { Actions = new Dictionary<string, string> { ["read"] = "allow", ["history"] = "deny" } }] }))
+        using (var denied = await historyRequests.SendAsync(admin, manage, HttpMethod.Put, "/api/part/parts/" + part.Id + "/permissions",
+            configuration with { Subjects = [configuration.Subjects[0] with { Actions = new Dictionary<string, string> { ["read"] = "deny", ["history"] = "allow" } }] }))
             Assert.Equal(HttpStatusCode.NoContent, denied.StatusCode);
         foreach (var output in new[] { "export", "print" })
         {
-            using var revoked = await FeatureHttpTestRequests.SendAsync(ordinary, history, HttpMethod.Post, basePath + "/" + output + queryScope, selected);
+            using var revoked = await historyRequests.SendAsync(ordinary, history, HttpMethod.Post, basePath + "/" + output + queryScope, selected);
             Assert.Equal(HttpStatusCode.NotFound, revoked.StatusCode);
         }
     }

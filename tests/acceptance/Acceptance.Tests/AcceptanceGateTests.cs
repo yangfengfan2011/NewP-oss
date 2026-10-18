@@ -99,6 +99,11 @@ public sealed class AcceptanceGateTests
                 await reader.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
                 await reader.OpenPermissionViewerAsync(fixture.ExistingName);
                 await reader.InspectObjectHistoryAndOutputAsync(Path.Combine(root, "history-selected.xlsx"));
+                await reader.OpenAsync();
+                await reader.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
+                await reader.OpenPermissionViewerAsync(fixture.ExistingName);
+                await fixture.DenyHistorySourceReadAsync(token);
+                await reader.RejectObjectHistoryEntryAsync();
                 token.ThrowIfCancellationRequested();
             }).RunAsync(CancellationToken.None);
     }

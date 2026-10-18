@@ -1,5 +1,6 @@
 import { normalizeStandardCrudDetail, readStandardCrudRequestError, StandardCrudRequestError, type FrontendBehaviorBindings, type PageProps, type StandardCrudDetailReadContext } from '@icp-platform/sdk';
 import { platformFetch } from '@icp-platform/core';
+import { workspaceHistoryCheck } from './workspaceHistoryCheck';
 import { createElement } from 'react';
 import { createWorkspaceTreeProvider, workspaceContentSource, workspacePageInputs } from './workspaceTree';
 
@@ -35,6 +36,7 @@ const workspaceBindings: FrontendBehaviorBindings = {
   } }],
   standardCrudDetailReadSources: [{ key: 'workspace.content.properties', resourceKeys: ['workspace.folder', 'part.part', 'document.document'],
     navigationContributions: [{ key: 'history', labelKey: 'Workspace.History', navigationKey: 'workspace.history',
+      dataActionReference: { viewKey: 'workspace.folder.list', surface: 'rowActions', actionKey: 'history' }, precheck: workspaceHistoryCheck,
       getParameters: (resourceKey, id, context) => {
         const scope = context.queryScope;
         const source = workspaceContentSource({ ...scope, modelKey: scope?.sourceModelKey, objectId: scope?.sourceObjectId });
@@ -50,6 +52,7 @@ const workspaceBindings: FrontendBehaviorBindings = {
     { kind: 'standard-list', targetKey: 'workspace.history.list', load: async () => {
       const { createObjectHistoryResource } = await import('@icp-platform/ui');
       return { default: createObjectHistoryResource({ resourceKey: 'workspace.history', listViewKey: 'workspace.history.list',
+        precheck: workspaceHistoryCheck,
         resolveTarget: scope => {
           const source = workspaceContentSource({ ...scope, modelKey: scope?.sourceModelKey, objectId: scope?.sourceObjectId });
           const position = { spaceId: source.spaceId, rootFolderId: source.rootFolderId, linkIds: source.linkIds };

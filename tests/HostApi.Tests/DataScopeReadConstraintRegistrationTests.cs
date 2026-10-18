@@ -72,6 +72,18 @@ public sealed class DataScopeReadConstraintRegistrationTests
         Assert.Equal(new[] { "read" }, prepared.ActionKeysFor("workspace.folder"));
     }
 
+    [Fact, Trait("Category", "ModuleMetadataConsumer")]
+    public void Preparation_ButtonRequirementsMustApplyToTheRealRegisteredResource()
+    {
+        using var services = Services("valid");
+        var requirement = new ActionDataAccessDeclaration("Workspace", "workspace.folder.list", "rowActions", "inspect",
+            "workspace.history.enter", ["workspace.folder"], ["edit"]);
+        var failure = Assert.Throws<InvalidOperationException>(() => Prepare(services, "valid",
+            [new("workspace.folder", "Workspace", ["read"])], requirement));
+        Assert.Equal("ACTION_DATA_ACCESS_RESOURCE_ACTION_INVALID", failure.Message);
+        Assert.NotNull(Prepare(services, "valid", [new("workspace.folder", "Workspace", ["read"])], requirement with { Actions = ["read"] }));
+    }
+
     private static ServiceProvider Services(string invalid)
     {
         var services = new ServiceCollection();
@@ -81,11 +93,14 @@ public sealed class DataScopeReadConstraintRegistrationTests
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
     }
 
-    private static DataScopeResourceCatalog Prepare(ServiceProvider services, string invalid, DataScopeResourceActionBinding[]? actions = null)
+    private static DataScopeResourceCatalog Prepare(ServiceProvider services, string invalid, DataScopeResourceActionBinding[]? actions = null,
+        ActionDataAccessDeclaration? requirement = null)
     {
         var module = new CanonicalModulePlanModule("Workspace", "1.1.0", "工作空间", null, "", null, null,
             null, null, "", [], [], [], [], [], new("test", "test", "/"))
-            { DataActions = [new("Workspace", "read", "读取", "data.read")] };
+            { DataActions = [new("Workspace", "read", "读取", "data.read"), new("Workspace", "edit", "编辑", "data.edit")],
+                Features = requirement is null ? [] : [new("Workspace", "read", "navigation", "读取", null, "workspace.folder.read")
+                    { DataResources = ["workspace.folder"], DataAccess = [requirement] }] };
         var modules = new CanonicalModulePlan("candidate", "1.1.0", "", "", [], [module]);
         var models = new WorkspaceModelMetadataProvider().GetDefinitions();
         var persistence = new CompiledPersistencePlan("candidate", "snapshot", "hash", PersistenceProvider.SqlServer,

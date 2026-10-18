@@ -217,6 +217,14 @@ public sealed class PersistenceDeploymentTests : IDisposable
         var capsule = JsonNode.Parse(File.ReadAllText(capsulePath))!;
         capsule["persistence"]!["models"] = new JsonArray("metadata/models/" + current + ".model.json");
         File.WriteAllText(capsulePath, capsule.ToJsonString());
+        // 候选仍须是可编译的完整 authoring；本例只让持久化身份变化触发部署保护。
+        foreach (var viewPath in Directory.GetFiles(Path.Combine(root, "modules", owner, "metadata", "views"), "*.view.json"))
+        {
+            var document = JsonNode.Parse(File.ReadAllText(viewPath))!;
+            if (document["view"]?["model"]?.GetValue<string>() != previous) continue;
+            document["view"]!["model"] = current;
+            File.WriteAllText(viewPath, document.ToJsonString());
+        }
     }
 
     private static string HostRoot()

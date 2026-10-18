@@ -374,6 +374,8 @@ public sealed record CanonicalModulePlan(
     public IReadOnlyList<string> RequiredModuleIds { get; init; } = [];
     /// <summary>由已验证声明一次派生的完整目录，所有运行时投影共享该结果。</summary>
     public IReadOnlyList<DataActionDeclaration> DataActionCatalog { get; } = DataActionCatalogCompiler.Compile(Modules.SelectMany(module => module.DataActions));
+    public IReadOnlyList<ActionDataAccessRequirement> ActionDataAccessCatalog { get; } = ActionDataAccessCompiler.Compile(
+        Modules.SelectMany(module => module.Features).ToArray(), Modules.SelectMany(module => module.DataActions).ToArray());
     public IReadOnlyList<FeaturePoint> FeatureCatalog { get; } = FeatureCatalogCompiler.Compile(Modules.SelectMany(module => module.Features));
 }
 

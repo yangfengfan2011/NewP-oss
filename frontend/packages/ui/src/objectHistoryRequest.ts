@@ -13,7 +13,12 @@ export interface ObjectHistoryItem {
   ipAddress: string | null;
 }
 export interface ObjectHistoryPage { items: ObjectHistoryItem[]; total: number; pageIndex: number; pageSize: number }
-export interface ObjectHistoryReadContext { featurePosition?: string; signal?: AbortSignal }
+export interface ObjectHistoryReadContext { featurePosition?: string; signal?: AbortSignal; dataAccess?: import('@icp-platform/sdk').ActionDataAccessRequirement }
+
+/** 每次请求只传正式声明身份；从不携带允许结果或客户端数据动作要求。 */
+function headers(context: ObjectHistoryReadContext) {
+  return { 'X-NewP-Feature': context.featurePosition!, ...(context.dataAccess ? { 'X-NewP-Data-Declaration': context.dataAccess.id } : {}) };
+}
 
 function invalidResponse(): never {
   throw new StandardCrudRequestError('操作履历响应无效。', 502, {}, { reasonKey: 'ObjectHistory.InvalidResponse' });
@@ -58,7 +63,7 @@ export async function readObjectHistoryDetail(target: ObjectHistoryTarget, recor
   if (!context.featurePosition?.trim())
     throw new StandardCrudRequestError('缺少操作履历功能位置。', 400, {}, { reasonKey: 'ObjectHistory.FeatureRequired' });
   const response = await fetcher(historyPath(target, filter, recordId), { method: 'GET', signal: context.signal,
-    headers: { 'X-NewP-Feature': context.featurePosition } });
+    headers: headers(context) });
   if (!response.ok) throw await readStandardCrudRequestError(response);
   const item = readObjectHistoryItem(await response.json());
   if (item.id !== recordId) return invalidResponse();
@@ -91,7 +96,7 @@ export async function readObjectHistoryPage(target: ObjectHistoryTarget, query: 
     url.searchParams.set(key, String(value));
   }
   const response = await fetcher(url.pathname + url.search, { method: 'GET', signal: context.signal,
-    headers: { 'X-NewP-Feature': context.featurePosition } });
+    headers: headers(context) });
   if (!response.ok) throw await readStandardCrudRequestError(response);
   const value: unknown = await response.json();
   if (!isStandardCrudRecord(value) || !Array.isArray(value.items)
@@ -122,7 +127,7 @@ async function historyOutputResponse(target: ObjectHistoryTarget, output: 'expor
   if (mode === 'selected' && (selectedIds.length === 0 || selectedIds.some(id => !id.trim())))
     throw new StandardCrudRequestError('请先在履历列表选择记录。', 400, {}, { reasonKey: 'ObjectHistory.SelectionRequired' });
   const response = await fetcher(historyPath(target, {}, output), { method: 'POST', signal: context.signal,
-    headers: { 'X-NewP-Feature': context.featurePosition, 'Content-Type': 'application/json' },
+    headers: { ...headers(context), 'Content-Type': 'application/json' },
     body: JSON.stringify({ mode, ...(mode === 'selected' ? { selectedIds: [...selectedIds] } : {}), filter }) });
   if (!response.ok) throw await readStandardCrudRequestError(response);
   return response;

@@ -17,6 +17,7 @@ import { StandardCrudActionReviewDialog } from './StandardCrudActionReviewDialog
 import { useStandardCrudActionExecution } from './useStandardCrudActionExecution';
 import { formatStandardCrudActionReason } from './standardCrudActionReason';
 import { resolvedFeaturePosition, type FeatureResolution } from '../authorization/featurePlacementResolver';
+import { useStandardCrudActionEntry } from './useStandardCrudActionEntry';
 
 export interface StandardCrudActionsProps<TDetail = unknown, TRow = unknown> {
   actions: StandardCrudPresentationActionDefinition[];
@@ -25,6 +26,7 @@ export interface StandardCrudActionsProps<TDetail = unknown, TRow = unknown> {
   actionInputs?: Record<string, StandardCrudActionInputRenderer>;
   actionStateResolver?: StandardCrudActionStateResolver<TDetail, TRow>;
   actionEligibilityResolvers?: Partial<Record<string, StandardCrudActionEligibilityResolver<TDetail, TRow>>>;
+  actionPrechecks?: Partial<Record<string, import('@icp-platform/sdk').StandardCrudActionPrecheck>>;
   onResult?: (result: StandardCrudOperationResult) => void;
   resourceKey?: string;
   onCommitted?: (change: import("@icp-platform/sdk").ResourceChange) => Promise<void>;
@@ -53,11 +55,13 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
   actionInputs = {},
   actionStateResolver,
   actionEligibilityResolvers = {},
+  actionPrechecks = {},
   onResult, resourceKey, onCommitted,
   refresh,
   context,
 }: StandardCrudActionsProps<TDetail, TRow>): ReactElement {
   const { t } = useLocalization();
+  const entryCheck = useStandardCrudActionEntry(context);
   const [inputAction, setInputAction] = useState<StandardCrudActionDefinition | null>(null);
   const [inputValue, setInputValue] = useState<unknown>(undefined);
   const [eligibilityEpoch, setEligibilityEpoch] = useState(0);
@@ -105,21 +109,21 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
   }
 
   function requestAction(action: typeof resolvedActions[number]) {
-    if (action.runtimeDisabled) {
-      return;
-    }
-    if (action.inputKey && actionInputs[action.inputKey]) {
-      setInputValue(undefined);
-      setInputAction(action);
-      return;
-    }
-    void runAction(action, action.featureResolution);
+    if (action.runtimeDisabled || action.featureResolution.kind !== 'allowed') return;
+    void entryCheck.enter(action.key, { ...context, action, featurePosition: action.featureResolution.position }, actionPrechecks[action.key], () => {
+      if (action.inputKey && actionInputs[action.inputKey]) {
+        setInputValue(undefined);
+        setInputAction(action);
+      } else {
+        void runAction(action, action.featureResolution);
+      }
+    });
   }
 
   function renderAction(action: typeof resolvedActions[number]) {
     const isDangerAction = action.variant === 'danger' || action.standardAction === 'delete';
     const hasActionInput = Boolean(action.inputKey && actionInputs[action.inputKey]);
-    const disabled = actionExecution.pendingKey !== null || !resolveActionHandler(action, handlers) || action.runtimeDisabled === true;
+    const disabled = entryCheck.pendingKey !== null || actionExecution.pendingKey !== null || !resolveActionHandler(action, handlers) || action.runtimeDisabled === true;
 
     if (isDangerAction && action.confirmMessage && !hasActionInput) {
       return (
@@ -153,6 +157,8 @@ export function StandardCrudActions<TDetail = unknown, TRow = unknown>({
 
   return (
     <div style={{ display: 'grid', gap: 6 }}>
+      {entryCheck.pendingKey && <div role="status">{t('Platform.Processing', '处理中...')}<Button onClick={entryCheck.cancel}>{t('Platform.Cancel', '取消')}</Button></div>}
+      {entryCheck.failure !== undefined && <span role="alert">{formatRequestError(entryCheck.failure, t)}</span>}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         {visibleActions.map((action) => {
           const resolver = actionEligibilityResolvers[action.key];

@@ -85,7 +85,7 @@ async function loadRuntimeMetadataOnce(fetcher: typeof fetch): Promise<RuntimeMe
       const url = `${entry.metadataBasePath}/${relativePath}`;
       tasks.push(async () => ({
         kind: 'view',
-        document: await loadJson<RuntimeViewDocument>(fetcher, url),
+        document: bindActionDataAccess(await loadJson<RuntimeViewDocument>(fetcher, url), entry.dataAccess ?? []),
       }));
     }
 
@@ -127,6 +127,23 @@ async function loadRuntimeMetadataOnce(fetcher: typeof fetch): Promise<RuntimeMe
     viewDocuments,
     modelDocuments,
   };
+}
+
+/** 正式编译结果替换 authoring 要求；已接入声明缺失时不能退回未检查入口。 */
+export function bindActionDataAccess(document: RuntimeViewDocument, requirements: NonNullable<RuntimeMetadataManifest['modules'][number]['dataAccess']>): RuntimeViewDocument {
+  const view = { ...document.view };
+  const bind = (value: Record<string, unknown>, surface: string, actionKey: string) => {
+    const matches = requirements.filter(requirement => requirement.viewKey === view.key && requirement.surface === surface && requirement.actionKey === actionKey);
+    if (value.dataAccess === undefined && matches.length === 0) return value;
+    if (value.dataAccess === undefined) throw new Error(`动作数据声明缺失：${String(view.key)}/${surface}/${actionKey}`);
+    if (matches.length !== 1) throw new Error(`动作数据声明缺失或冲突：${String(view.key)}/${surface}/${actionKey}`);
+    return { ...value, dataAccess: matches[0] };
+  };
+  for (const surface of ['pageActions', 'rowActions', 'outputActions']) {
+    const actions = view[surface];
+    if (Array.isArray(actions)) view[surface] = actions.map(action => bind(action as Record<string, unknown>, surface, String(action.key)));
+  }
+  return { ...document, view: bind(view, 'read', '') };
 }
 
 async function mapWithConcurrency<T, TResult>(

@@ -21,6 +21,7 @@ export function ObjectHistoryValue({ item, field }: { item: ObjectHistoryItem; f
 }
 
 export interface ObjectHistoryDetailsProps {
+  dataAccess?: import('@icp-platform/sdk').ActionDataAccessRequirement;
   target: ObjectHistoryTarget;
   recordId: string;
   filter?: ObjectHistoryFilter;
@@ -30,12 +31,12 @@ export interface ObjectHistoryDetailsProps {
 
 /** 使用现标准只读动作弹层；此处只持有当前来源下的一次详情读取，不复用列表快照。 */
 export default function ObjectHistoryDetails(props: ObjectHistoryDetailsProps) {
-  return <ObjectHistoryDetailSession key={JSON.stringify([props.target, props.recordId, props.filter, props.featurePosition])} {...props} />;
+  return <ObjectHistoryDetailSession key={JSON.stringify([props.target, props.recordId, props.filter, props.featurePosition, props.dataAccess?.id])} {...props} />;
 }
-function ObjectHistoryDetailSession({ target, recordId, filter = {}, featurePosition, fetcher = platformFetch as typeof fetch }: ObjectHistoryDetailsProps) {
+function ObjectHistoryDetailSession({ target, recordId, filter = {}, featurePosition, dataAccess, fetcher = platformFetch as typeof fetch }: ObjectHistoryDetailsProps) {
   const { t } = useLocalization();
-  const query = usePlatformQuery<ObjectHistoryItem>({ key: ['object-history.detail', target.resourceKey, target.id, target.basePath, recordId, { ...filter }, featurePosition ?? ''],
-    load: ({ signal }) => readObjectHistoryDetail(target, recordId, filter, { featurePosition, signal }, fetcher) });
+  const query = usePlatformQuery<ObjectHistoryItem>({ key: ['object-history.detail', target.resourceKey, target.id, target.basePath, recordId, { ...filter }, featurePosition ?? '', dataAccess?.id ?? ''],
+    load: ({ signal }) => readObjectHistoryDetail(target, recordId, filter, { featurePosition, dataAccess, signal }, fetcher) });
   const fields: Array<{ key: ObjectHistoryDisplayField; label: string }> = [
     { key: 'occurredAt', label: t('ObjectHistory.OccurredAt', '时间（UTC）') },
     { key: 'eventType', label: t('ObjectHistory.EventType', '操作') },

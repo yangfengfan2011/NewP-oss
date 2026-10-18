@@ -1,4 +1,5 @@
 import { useFeaturePlacement } from '../authorization/FeaturePlacementContext';
+import { useStandardCrudActionEntry } from '../standard-crud/useStandardCrudActionEntry';
 import { resolvedFeaturePosition } from '../authorization/featurePlacementResolver';
 import { Component, lazy, Suspense, useContext, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { formatRequestError, useLocalization } from '@icp-platform/core';
@@ -295,20 +296,27 @@ function StandardCrudDetailPageContent<TDetail>({
   const showLoading = detailQuery.loading;
   // 背景刷新保留 Action Execution 子树及其冲突反馈，同时禁用旧快照上的再次操作。
   // 来源读取成功后只展示已登记导航；该入口不恢复普通 EID 贡献或任何写入、摘要交互。
+  const entryCheck = useStandardCrudActionEntry(interactionIdentity);
   const sourceNavigationActions = currentInteraction && !detailQuery.loading && !detailQuery.refreshing && entryNavigation
     ? sourceNavigations.flatMap(contribution => {
       const targets = runtimeMetadata?.navDocuments.flatMap(document => document.navigation.items)
         .filter(item => item.key === contribution.navigationKey && item.routeOnly === true && item.path && item.page) ?? [];
       const resolution = features.navigation(contribution.navigationKey);
       if (targets.length !== 1 || resolution.kind !== 'allowed' || !resolution.position.trim()) return [];
-      return [<Button key={contribution.key} onClick={() => {
+      return [<Button key={contribution.key} loading={entryCheck.pendingKey === contribution.key} disabled={entryCheck.pendingKey !== null} onClick={() => {
         try {
           const parameters = contribution.getParameters(registration.resourceKey, id, { queryScope: host.input.queryScope, featurePosition: readPosition });
           if (!isStandardCrudRecord(parameters) || typeof parameters.then === 'function' || Object.keys(parameters).some(key => ['url', 'href', 'path', 'featurePosition', 'sourceFeaturePosition'].includes(key))
             || Object.values(parameters).some(value => typeof value !== 'string'))
             throw new StandardCrudRequestError('当前操作不可用。', 400, {}, { reasonKey: 'Platform.ActionUnavailable' });
-          // 同步交给现有入口导航及组合 guard，不进入 mutation pending，也不借来源 read 位置发履历请求。
-          entryNavigation({ entryKey: contribution.navigationKey, parameters: { ...parameters } });
+          // 通过只读进入检查后交给原导航guard；不注册mutation，也不借来源read位置发履历请求。
+          const reference = contribution.dataActionReference;
+          const definition = reference ? runtimeMetadata?.viewDocuments.find(document => document.view.key === reference.viewKey)?.view[reference.surface] : undefined;
+          const action = reference && Array.isArray(definition) ? definition.find(item => item.key === reference.actionKey) as import('@icp-platform/sdk').StandardCrudActionDefinition | undefined : undefined;
+          if (reference && !action?.dataAccess?.id) throw new StandardCrudRequestError('动作数据声明不可用。', 400);
+          void entryCheck.enter(contribution.key, { instance: actionInstance, id, action,
+            queryScope: host.input.queryScope, featurePosition: resolution.position }, contribution.precheck,
+          () => entryNavigation({ entryKey: contribution.navigationKey, parameters: { ...parameters } }));
         } catch (error) { setSourceNavigationFailure({ identity: interactionIdentity, error }); }
       }}>{t(contribution.labelKey, contribution.labelKey)}</Button>];
     }) : [];
@@ -340,6 +348,7 @@ function StandardCrudDetailPageContent<TDetail>({
           actionInputs={registration.actionInputRenderers}
           actionStateResolver={registration.actionStateResolver}
           actionEligibilityResolvers={registration.actionEligibilityResolvers}
+          actionPrechecks={registration.actionPrechecks}
           onResult={(result) => {
             if (operationResultPresenterRegistry.resolve(result)) setPresentedOperationResult(result);
           }}
@@ -360,6 +369,8 @@ function StandardCrudDetailPageContent<TDetail>({
         : null}
       <div className={composed ? undefined : "sh-page"}>
       {sourceNavigationActions.length > 0 && <Space wrap>{sourceNavigationActions}</Space>}
+      {entryCheck.pendingKey && <div role="status">{t('Platform.Processing', '处理中...')}<Button onClick={entryCheck.cancel}>{t('Platform.Cancel', '取消')}</Button></div>}
+      {entryCheck.failure !== undefined && <Alert type="error" message={formatRequestError(entryCheck.failure, t)} />}
       {sourceNavigationFailure?.identity === interactionIdentity && <Alert type="error" message={formatRequestError(sourceNavigationFailure.error, t)} />}
       {!composed && detailHeaderActions && <div className="sh-page-actions">{detailHeaderActions}</div>}
 

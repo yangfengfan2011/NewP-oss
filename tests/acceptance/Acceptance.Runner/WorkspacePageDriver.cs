@@ -138,7 +138,8 @@ internal sealed class WorkspacePageDriver(IPage page)
         await row.WaitForAsync(new() { State = WaitForSelectorState.Visible });
         await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
         var detailLoaded = page.WaitForResponseAsync(response => response.Request.Method == "GET"
-            && new Uri(response.Url).AbsolutePath.StartsWith(historyPath + "/", StringComparison.Ordinal));
+            && new Uri(response.Url).AbsolutePath.StartsWith(historyPath + "/", StringComparison.Ordinal)
+            && !new Uri(response.Url).AbsolutePath.Contains("/check/", StringComparison.Ordinal));
         await page.GetByRole(AriaRole.Menuitem, new() { NameRegex = new Regex(@"^详\s*情$") }).ClickAsync();
         var detail = await detailLoaded;
         if (!detail.Ok) throw new InvalidOperationException($"操作履历详情读取失败：{detail.Status}");
@@ -165,6 +166,19 @@ internal sealed class WorkspacePageDriver(IPage page)
         await output.Locator(".ant-modal-footer").GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^关\s*闭$") }).ClickAsync();
         await output.WaitForAsync(new() { State = WaitForSelectorState.Hidden });
         await page.Locator("iframe[title=\"操作履历打印\"]").WaitForAsync(new() { State = WaitForSelectorState.Hidden });
+    }
+
+    /// <summary>对象失权后点击仍可见履历，拒绝反馈在原来源页完成，不打开业务履历界面。</summary>
+    internal async Task RejectObjectHistoryEntryAsync()
+    {
+        var original = page.Url;
+        var check = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath.EndsWith("/history/check/enter", StringComparison.Ordinal));
+        await page.GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^履\s*历$") }).ClickAsync();
+        if ((await check).Ok) throw new InvalidOperationException("失权来源的履历检查意外允许。");
+        await page.GetByText("对象不存在或不可访问。", new() { Exact = true }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        if (page.Url != original) throw new InvalidOperationException("拒绝履历进入后页面已离开原来源。");
+        await page.GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^履\s*历$") }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
     }
 
     /// <summary>只证明用户能够切到解释页；名称和裁决语义由正式API测试承担。</summary>

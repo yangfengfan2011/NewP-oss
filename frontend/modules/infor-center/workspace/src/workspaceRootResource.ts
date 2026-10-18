@@ -1,3 +1,4 @@
+import { workspaceHistoryCheck } from './workspaceHistoryCheck';
 import { platformFetch } from '@icp-platform/core';
 import { createObjectOwnershipTransferActions, createObjectOwnershipActions, createObjectAuthorizationActions } from '@icp-platform/ui';
 import { createElement, lazy, Suspense } from 'react';
@@ -63,6 +64,7 @@ const transfer = createObjectOwnershipTransferActions(context => {
 
 /** 关系身份参与表格；异构属性使用所属模块正式 View 和真实 EID，未知类型不能猜测。 */
 const resource: StandardCrudResourceRegistration = {
+  actionPrechecks: { history: workspaceHistoryCheck },
   resourceKey: 'workspace.folder', listViewKey: 'workspace.folder.list', detailViewKey: 'workspace.folder.detail',
   enumOptions: { 'workspace.content.types': [
     { value: '', label: '全部', labelKey: 'Workspace.All' }, { value: 'WorkspaceFolder', label: '文件夹', labelKey: 'Workspace.Folder' },

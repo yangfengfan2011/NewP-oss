@@ -24,6 +24,7 @@ public sealed class ObjectHistoryWorkspaceEventsSqlServerTests
             ServiceDescriptor.Scoped<IEntityAuditStampProvider>(provider => new AdvancingStamp(new HttpContextEntityAuditStampProvider(
                 provider.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>(), provider.GetRequiredService<TimeProvider>()), ticks))), includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
+        var historyRequests = new ObjectHistoryHttpTestRequests(fixture);
         await InitializeAsync(fixture, admin);
         var position = await ContainerAsync(fixture, admin);
         var folder = await CreateAsync(fixture, admin, position, "WorkspaceFolder", "folders", "create", "HistoryFolder296");
@@ -107,6 +108,7 @@ public sealed class ObjectHistoryWorkspaceEventsSqlServerTests
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
+        var historyRequests = new ObjectHistoryHttpTestRequests(fixture);
         await InitializeAsync(fixture, admin);
         var position = await ContainerAsync(fixture, admin);
         var folder = await CreateAsync(fixture, admin, position, "WorkspaceFolder", "folders", "create", "RollbackFolder296");

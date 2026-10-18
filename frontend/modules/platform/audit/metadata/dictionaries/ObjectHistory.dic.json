@@ -2,6 +2,7 @@
   "schemaVersion": "1.0",
   "type": "dic",
   "ObjectHistory": {
+    "Unavailable": { "zhs": "对象不存在或不可访问。", "en": "The object does not exist or is not accessible." },
     "Title": {
       "zhs": "操作履历",
       "en": "Operation history"

@@ -39,6 +39,7 @@ export interface StandardCrudActionDataDependencySchema {
 }
 
 export interface StandardCrudRuntimeActionSchema {
+  dataAccess?: StandardCrudActionDefinition['dataAccess'];
   key: string;
   labelKey: string;
   standardAction?: StandardCrudActionDefinition['standardAction'];
@@ -217,6 +218,7 @@ function readAction(value: MetadataRecord): StandardCrudRuntimeActionSchema {
 
   return {
     key: readString(value.key),
+    ...(value.dataAccess ? { dataAccess: value.dataAccess as StandardCrudActionDefinition['dataAccess'] } : {}),
     labelKey: readString(value.labelKey),
     ...(value.requiresSelection === true ? { requiresSelection: true } : {}),
     ...(standardAction.length > 0 ? { standardAction: standardAction as StandardCrudRuntimeActionSchema['standardAction'] } : {}),

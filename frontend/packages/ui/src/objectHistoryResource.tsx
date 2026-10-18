@@ -8,6 +8,7 @@ import { objectHistoryFilter, objectHistoryOutputQuery, readObjectHistoryDetail,
   type ObjectHistoryTarget } from './objectHistoryRequest';
 
 export interface ObjectHistoryResourceOptions {
+  precheck?: import('@icp-platform/sdk').StandardCrudActionPrecheck;
   resourceKey: string;
   listViewKey: string;
   resolveTarget: (queryScope: Record<string, unknown> | undefined) => ObjectHistoryTarget;
@@ -25,7 +26,7 @@ function HistoryDetailInput({ options, context }: { options: ObjectHistoryResour
       throw new StandardCrudRequestError('操作履历来源已变化。', 409, {}, { reasonKey: 'ObjectHistory.SourceChanged' });
     const item = readObjectHistoryItem(row.historyItem);
     return <ObjectHistoryDetails target={target} recordId={item.id} filter={objectHistoryFilter(row.historyFilter)}
-      featurePosition={context.featurePosition} fetcher={options.fetcher} />;
+      featurePosition={context.featurePosition} dataAccess={context.action.dataAccess} fetcher={options.fetcher} />;
   } catch (error) { return <Alert type="error" message={formatRequestError(error, t)} />; }
 }
 
@@ -39,7 +40,7 @@ function HistoryOutputInput({ options, context }: { options: ObjectHistoryResour
       return readObjectHistoryItem(row.historyItem).id;
     });
     return <ObjectHistoryOutput target={target} featurePosition={context.featurePosition} filter={objectHistoryOutputQuery(context.listQuery)}
-      selectedIds={ids} fetcher={options.fetcher} />;
+      selectedIds={ids} dataAccessDeclarations={context.dataAccessDeclarations} fetcher={options.fetcher} />;
   } catch (error) { return <Alert type="error" message={formatRequestError(error, t)} />; }
 }
 
@@ -49,6 +50,7 @@ export function createObjectHistoryResource(options: ObjectHistoryResourceOption
   const detailInput: StandardCrudActionInputRenderer = Object.assign((context: StandardCrudActionInputRenderContext) =>
     <HistoryDetailInput options={options} context={context} />, { readOnly: true, presentation: 'drawer' as const });
   return { resourceKey: options.resourceKey, listViewKey: options.listViewKey,
+    ...(options.precheck ? { actionPrechecks: { view: options.precheck, output: options.precheck } } : {}),
     dataAdapter: {
       list: async (query = {}, context) => {
         const target = options.resolveTarget(context?.queryScope);

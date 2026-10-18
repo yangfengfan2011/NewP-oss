@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ICP.Platform.Modules.Audit.Services;
 
-/// <summary>普通查询独立于管理员查询；先交集完整访问和history，再按owner精确策略在SQL中过滤与分页。</summary>
+/// <summary>普通查询独立于管理员查询；始终完整读取，未迁移owner保留附加history，再按精确策略在SQL中过滤分页。</summary>
 public sealed partial class ObjectHistoryQuery(EfPlatformDbContext db, IDataScopeObjectAccess access,
     IDataScopeObjectDecisionProvider decisions, IDataScopeResourceCatalog resources,
     IEnumerable<ObjectHistoryEventPolicy> policies, IUserDisplayNameDirectory userNames,
@@ -16,6 +16,8 @@ public sealed partial class ObjectHistoryQuery(EfPlatformDbContext db, IDataScop
     IDataScopeReadableIds readableIds, ICP.Platform.Crud.Abstractions.IStandardCrudResourceRegistry crudResources,
     IEnumerable<IBusinessAuditNameDirectory> objectNames) : IObjectHistoryQuery
 {
+    /// <summary>已声明入口复用同一SQL查询；未接入消费者仍保留原来的附加history检查。</summary>
+    internal bool RequiresLegacyHistory { get; set; } = true;
     /// <inheritdoc/>
     public Task<ObjectHistoryPage?> ListAsync(string resourceKey, string objectId, ObjectHistoryFilter filter,
         CancellationToken cancellationToken = default) => ReadAsync(resourceKey, objectId, filter, null, cancellationToken);
@@ -55,7 +57,7 @@ public sealed partial class ObjectHistoryQuery(EfPlatformDbContext db, IDataScop
         {
             using var operation = evaluation.BeginOperation();
             if (!await access.IsReadableAsync(resourceKey, objectId, cancellationToken)
-                || !await decisions.IsAllowedAsync(resourceKey, objectId, "history", cancellationToken)) return null;
+                || RequiresLegacyHistory && !await decisions.IsAllowedAsync(resourceKey, objectId, "history", cancellationToken)) return null;
             if (filter.PageSize <= 0 || filter.PageIndex <= 0 || filter.PageIndex > int.MaxValue / filter.PageSize
                 || filter.From is { Kind: not DateTimeKind.Utc } || filter.To is { Kind: not DateTimeKind.Utc }
                 || filter.From > filter.To) throw new ArgumentException("普通履历时间或分页输入无效。", nameof(filter));

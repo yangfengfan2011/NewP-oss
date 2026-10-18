@@ -1,5 +1,6 @@
 import { StandardCrudRequestError, type FrontendBehaviorBindings, type PageProps } from '@icp-platform/sdk';
 import { createElement } from 'react';
+import { partHistoryCheck } from './partHistoryCheck';
 
 const loadPart = async () => ({ default: (await import('./partResource')).partResource });
 
@@ -34,12 +35,13 @@ export const partBindings: FrontendBehaviorBindings = {
   standardCrudCapabilities: [
     { kind: 'standard-list', targetKey: 'part.history.list', load: async () => {
       const { createObjectHistoryResource } = await import('@icp-platform/ui');
-      return { default: createObjectHistoryResource({ resourceKey: 'part.history', listViewKey: 'part.history.list',
+      const resource = createObjectHistoryResource({ resourceKey: 'part.history', listViewKey: 'part.history.list', precheck: partHistoryCheck,
         resolveTarget: scope => {
           const id = scope?.historyObjectId;
           if (typeof id !== 'string' || !id) throw new StandardCrudRequestError('缺少操作履历对象。', 400, {}, { reasonKey: 'ObjectHistory.TargetRequired' });
           return { resourceKey: 'part.part', id, basePath: `/api/part/parts/${encodeURIComponent(id)}/history` };
-        } }) };
+        } });
+      return { default: { ...resource, actionPrechecks: { ...resource.actionPrechecks, 'part.object.history': partHistoryCheck } } };
     } },
     { kind: 'standard-list', targetKey: 'part.part.list', load: loadPart },
     { kind: 'standard-crud-detail', targetKey: 'part.part.detail', load: loadPart },

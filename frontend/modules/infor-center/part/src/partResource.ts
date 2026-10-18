@@ -1,4 +1,5 @@
 import { platformFetch } from '@icp-platform/core';
+import { partHistoryCheck } from './partHistoryCheck';
 import { createObjectOwnershipActions, createObjectAuthorizationActions, createObjectOwnershipTransferActions } from '@icp-platform/ui';
 import {
   createStandardCrudRestDataAdapter,
@@ -44,6 +45,7 @@ export const partResource: StandardCrudResourceRegistration = {
   resourceKey: 'part.part',
   listViewKey: 'part.part.list',
   detailViewKey: 'part.part.detail',
+  actionPrechecks: { history: partHistoryCheck },
   actionHandlers: { ...transfer.actionHandlers, ...ownership.actionHandlers, ...authorization.actionHandlers },
   actionInputRenderers: { ...transfer.actionInputRenderers, ...ownership.actionInputRenderers, ...authorization.actionInputRenderers },
   actionEligibilityResolvers: { ...transfer.actionEligibilityResolvers, ...ownership.actionEligibilityResolvers, ...authorization.actionEligibilityResolvers },

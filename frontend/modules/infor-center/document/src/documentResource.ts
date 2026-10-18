@@ -1,10 +1,11 @@
 import { platformFetch } from '@icp-platform/core';
-import { createObjectOwnershipActions, createObjectAuthorizationActions } from '@icp-platform/ui';
+import { createObjectOwnershipActions, createObjectAuthorizationActions, createObjectOwnershipTransferActions } from '@icp-platform/ui';
 import { createElement, lazy, Suspense } from 'react';
 import {
   createStandardCrudRestDataAdapter,
   isStandardCrudRecord,
   readStandardCrudString,
+  StandardCrudRequestError,
   type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
 
@@ -32,15 +33,24 @@ const authorization = createObjectAuthorizationActions('document.document', cont
     basePath: `/api/document/documents/${encodeURIComponent(id)}/permissions` };
 });
 
+const transfer = createObjectOwnershipTransferActions(context => {
+  const fields = isStandardCrudRecord(context.row) ? context.row
+    : isStandardCrudRecord(context.detail) && isStandardCrudRecord(context.detail.fields) ? context.detail.fields : {};
+  const id = context.id ?? readStandardCrudString(fields, ['EID', 'id']);
+  if (!id) throw new StandardCrudRequestError('缺少转交对象。', 409);
+  const base = `/api/document/documents/${encodeURIComponent(id)}/transfer`;
+  return { savePath: base, eligibilityPath: `${base}/eligibility`, accountsPath: `${base}/accounts` };
+});
+
 // 保留 canonical raw/display 输出，字段与布局由正式 Model/View 投影拥有。
 export const documentResource: StandardCrudResourceRegistration = {
   resourceKey: 'document.document',
   listViewKey: 'document.document.list',
   detailViewKey: 'document.document.detail',
   summaryRenderers: { files: context => createElement(Suspense, { fallback: null }, createElement(DocumentFilesSummary, context)) },
-  actionHandlers: { ...ownership.actionHandlers, ...authorization.actionHandlers },
-  actionInputRenderers: { ...ownership.actionInputRenderers, ...authorization.actionInputRenderers },
-  actionEligibilityResolvers: { ...ownership.actionEligibilityResolvers, ...authorization.actionEligibilityResolvers },
+  actionHandlers: { ...transfer.actionHandlers, ...ownership.actionHandlers, ...authorization.actionHandlers },
+  actionInputRenderers: { ...transfer.actionInputRenderers, ...ownership.actionInputRenderers, ...authorization.actionInputRenderers },
+  actionEligibilityResolvers: { ...transfer.actionEligibilityResolvers, ...ownership.actionEligibilityResolvers, ...authorization.actionEligibilityResolvers },
   dataAdapter: {
     ...documentDataAdapter,
     get: (id, context) => {

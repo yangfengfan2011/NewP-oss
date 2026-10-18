@@ -24,6 +24,13 @@
     "BatchUnknown": {"zhs": "提交结果未知，不能重复保存。请核对当前配置。", "en": "The commit outcome is unknown. Do not submit again; check the current configuration."},
     "BatchAccessChanged": {"zhs": "当前目标或管理资格已改变，请重新打开。", "en": "Targets or management access changed. Reopen the editor."},
     "BatchSaved": {"zhs": "批量授权已保存", "en": "Batch authorization saved"},
+    "HistoryOwnershipTransferred": { "zhs": "转交对象归属", "en": "Object ownership transferred" },
+    "TransferNotifications": {"zhs": "接收通知", "en": "Received transfers"},
+    "TransferNotificationsHelp": {"zhs": "通知仅显示当前可读取的对象；打开时重新核对权限。", "en": "Only currently readable objects are shown. Access is checked again when opening."},
+    "TransferOccurredAt": {"zhs": "接收时间（UTC）", "en": "Received at (UTC)"},
+    "TransferSender": {"zhs": "转交人", "en": "Sender"},
+    "TransferTarget": {"zhs": "对象", "en": "Object"},
+    "TransferTargetUnavailable": {"zhs": "对象不可用", "en": "Object unavailable"},
     "History": { "zhs": "履历", "en": "History" },
     "HistoryParentAuthorizationInitialized": { "zhs": "从父文件夹初始化直接授权", "en": "Direct authorization initialized from parent folder" },
     "CopyParentAuthorization": { "zhs": "复制父文件夹直接授权", "en": "Copy parent folder direct authorization" },
@@ -181,6 +188,10 @@
     "HistoryFolderShallowCopied": {"zhs": "创建文件夹浅副本", "en": "Folder shallow copy created"},
     "HistoryFolderStructureCopied": {"zhs": "创建文件夹结构副本", "en": "Folder structure copy created"},
     "HistoryOwnershipInitialized": {"zhs": "初始化对象归属", "en": "Object ownership initialized"},
-    "HistoryOwnershipBackfilled": {"zhs": "补齐对象归属", "en": "Object ownership backfilled"}
+    "HistoryOwnershipBackfilled": {"zhs": "补齐对象归属", "en": "Object ownership backfilled"},
+    "Transfer": { "zhs": "转交", "en": "Transfer" },
+    "TransferFolderLabel": { "zhs": "转交", "en": "Transferred" },
+    "TransferSenderUnavailable": { "zhs": "原所属人不可用", "en": "Former owner unavailable" },
+    "TransferSelected": {"zhs": "转交选中对象", "en": "Transfer selected objects"}
   }
 }

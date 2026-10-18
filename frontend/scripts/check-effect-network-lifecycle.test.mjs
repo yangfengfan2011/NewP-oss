@@ -12,6 +12,23 @@ import {
 } from './check-effect-network-lifecycle.mjs';
 import { effectNetworkLifecycleAllowlist } from './effect-network-lifecycle.allowlist.mjs';
 
+test('transfer effects review exactly two GET reads and reject a write at either reviewed callsite', () => {
+  const file = 'packages/ui/src/ObjectOwnershipTransferInput.tsx';
+  const source = readFileSync(new URL('../packages/ui/src/ObjectOwnershipTransferInput.tsx', import.meta.url), 'utf8');
+  const reviewed = effectNetworkLifecycleAllowlist.filter(entry => entry.file === file);
+  const findings = analyzeEffectNetworkLifecycleSource({ file, source });
+  assert.equal(findings.length, 2);
+  assert.equal(reviewed.length, 2);
+  assert.ok(findings.every(finding => finding.classification === 'read-query'));
+  assert.equal(evaluateEffectNetworkLifecycle({ findings, allowlist: reviewed }).ok, true);
+  for (const [marker, suffix] of [['platformFetch(target.eligibilityPath', '#1'], ['platformFetch(url.pathname', '#2']]) {
+    const start = source.indexOf(marker); assert.notEqual(start, -1);
+    const changed = source.slice(0, start) + source.slice(start).replace("method: 'GET'", "method: 'POST'");
+    assert.ok(evaluateEffectNetworkLifecycle({ findings: analyzeEffectNetworkLifecycleSource({ file, source: changed }), allowlist: reviewed }).diagnostics
+      .some(item => item.code === 'EFFECT_NETWORK_WRITE_COMMAND' && item.id.endsWith(suffix)));
+  }
+});
+
 test('ownership reviews only three cancellable reads and still rejects a status write from the same effect', () => {
   const file = 'packages/ui/src/ObjectOwnershipInitializationInput.tsx';
   const source = readFileSync(new URL('../packages/ui/src/ObjectOwnershipInitializationInput.tsx', import.meta.url), 'utf8');

@@ -130,6 +130,12 @@
     "ValidationFailed": { "zhs": "请检查输入的字段。", "en": "Please check the entered fields." },
     "Forbidden": { "zhs": "当前操作已被拒绝，请核对当前权限。", "en": "This operation was denied. Check your permissions." },
     "Unauthorized": { "zhs": "登录状态已失效，请重新登录后重试。", "en": "Your session has expired. Sign in and try again." },
-    "MutationConflict": { "zhs": "记录已发生变化，未覆盖服务器上的最新数据。请重新加载后再编辑。", "en": "The record has changed. Your changes did not overwrite the latest data. Reload before editing." }
+    "MutationConflict": { "zhs": "记录已发生变化，未覆盖服务器上的最新数据。请重新加载后再编辑。", "en": "The record has changed. Your changes did not overwrite the latest data. Reload before editing." },
+    "TransferRecipient": {"zhs": "接收人", "en": "Recipient"},
+    "TransferExplanation": {"zhs": "转交会改变所属人及所属部门，创建人和手工授权保持不变；接收后是否可读仍按正常权限决定。", "en": "Transfer changes the owner and owning department. Creator and explicit permissions stay unchanged. Normal permissions still control access afterward."},
+    "TransferSourceChanged": {"zhs": "转交对象或来源已变化，请重新选择。", "en": "The transfer selection or source changed. Select it again."},
+    "TransferOutcomeUnknown": {"zhs": "转交结果未知，不能重复提交。请核对当前对象归属及通知。", "en": "The transfer outcome is unknown. Do not submit again. Check current ownership and notifications."},
+    "OwnershipTransferred": {"zhs": "对象转交成功。", "en": "Objects transferred successfully."},
+    "OwnershipTransferUnchanged": {"zhs": "归属未变化。", "en": "Ownership is unchanged."}
   }
 }

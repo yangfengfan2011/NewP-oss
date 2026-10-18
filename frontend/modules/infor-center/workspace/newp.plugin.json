@@ -2,20 +2,20 @@
   "schemaVersion": "1.0",
   "moduleId": "Workspace",
   "displayName": "工作空间",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "公共空间与当前账号个人空间",
   "entryAssembly": "../../WorkspaceModule.dll",
   "dependencies": ["Part", "Document", "Audit"],
   "hostVersion": { "min": "1.1.0", "max": "2.0.0" },
   "backend": { "behaviorKey": "workspace.backend" },
-  "features": [{ "key": "workspace", "kind": "navigation", "title": "工作空间", "titleKey": "Workspace.Title", "behaviorKey": "workspace.spaces.access" }, { "key": "workspace.history", "kind": "navigation", "parentKey": "workspace", "title": "对象履历", "titleKey": "Workspace.History", "behaviorKey": "workspace.folder.history" }],
+  "features": [{"key": "workspace", "kind": "navigation", "title": "工作空间", "titleKey": "Workspace.Title", "behaviorKey": "workspace.spaces.access"}, {"key": "workspace.history", "kind": "navigation", "parentKey": "workspace", "title": "对象履历", "titleKey": "Workspace.History", "behaviorKey": "workspace.folder.history"}, {"key": "workspace.transfers", "kind": "navigation", "parentKey": "workspace", "title": "接收通知", "titleKey": "Workspace.TransferNotifications", "behaviorKey": "workspace.transfers.read"}],
   "dataActions": [{ "key": "workspaceCopy", "title": "复制文件夹引用", "behaviorKey": "data.workspace.copy", "requiresRead": true }],
   "frontend": {
     "behaviorKey": "workspace.frontend", "entry": "workspace", "bindingMode": "behavior-bindings",
-    "bindings": ["workspace.spaces", "workspace.tree.current", "workspace.folder.content", "workspace.folder.reference", "workspace.folder.list", "workspace.references.list", "workspace.references.object", "workspace.content.permissions", "workspace.content.properties", "workspace.content.record", "workspace.content.propertiesInput", "workspace.history.list", "workspace.content.historyInput"]
+    "bindings": ["workspace.spaces", "workspace.tree.current", "workspace.folder.content", "workspace.folder.reference", "workspace.folder.list", "workspace.references.list", "workspace.references.object", "workspace.content.permissions", "workspace.content.properties", "workspace.content.record", "workspace.content.propertiesInput", "workspace.history.list", "workspace.content.historyInput", "workspace.transfers.list", "workspace.content.receivedProperties", "workspace.content.receivedObject"]
   },
   "persistence": {
-    "models": ["metadata/models/WorkspaceSpace.model.json", "metadata/models/WorkspaceFolder.model.json", "metadata/models/WorkspaceFolderContent.model.json", "metadata/models/WorkspaceObjectCopy.model.json"],
+    "models": ["metadata/models/WorkspaceSpace.model.json", "metadata/models/WorkspaceFolder.model.json", "metadata/models/WorkspaceFolderContent.model.json", "metadata/models/WorkspaceObjectCopy.model.json", "metadata/models/WorkspaceTransferNotification.model.json"],
     "migrations": { "sqlServer": { "assembly": "migrations/Workspace.SqlServerMigrations.dll", "manifest": "migrations/Workspace.SqlServerMigrations.json" } }
   }
 }

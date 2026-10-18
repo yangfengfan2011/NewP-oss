@@ -2,7 +2,7 @@
   "schemaVersion": "1.0",
   "moduleId": "Organization",
   "displayName": "组织结构",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "组织结构管理模块",
   "entryAssembly": "../../OrganizationModule.dll",
   "dependencies": [

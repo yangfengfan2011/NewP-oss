@@ -2,8 +2,8 @@
   "schemaVersion": "1.0",
   "provider": "SqlServer",
   "moduleId": "Workspace",
-  "modelDigest": "7eeca289e39cecb20231a90918eede01e781c0326639166b7a3fd59c028a2949",
-  "bundleChecksum": "db70ef1f47a0fadd55178248137cde97f8a16ea888c93c6283a27b8ed35dceb3",
+  "modelDigest": "2c3e3eda8c6c6c88b115e4803f9f742d0c4fe476567b257ef419763858cd5572",
+  "bundleChecksum": "71555f1389dca1e9b517eebb287aaffcb6466aa3129708bcf8ae10c2a7918a31",
   "migrations": [
     {
       "sequence": "000001",
@@ -75,6 +75,15 @@
       "contentDigest": "3ef77fbd234a046816f444a189b6f48c0a2b3b70ca1e304b71479600a19334e2",
       "fromModelDigest": "9c06fa32a7eb2256de4ff48444f6d77b37ac94ce50d3e1df965f827d09a1b960",
       "toModelDigest": "7eeca289e39cecb20231a90918eede01e781c0326639166b7a3fd59c028a2949",
+      "compatibility": "safe-expand"
+    },
+    {
+      "sequence": "000009",
+      "migrationId": "20261017231111_Workspace_000009_TransferNotifications",
+      "previousContentDigest": "3ef77fbd234a046816f444a189b6f48c0a2b3b70ca1e304b71479600a19334e2",
+      "contentDigest": "fbcc3df543fec6e37ba606f6763987618cef111f0c688c7cad58d61a63a3a2b7",
+      "fromModelDigest": "7eeca289e39cecb20231a90918eede01e781c0326639166b7a3fd59c028a2949",
+      "toModelDigest": "2c3e3eda8c6c6c88b115e4803f9f742d0c4fe476567b257ef419763858cd5572",
       "compatibility": "safe-expand"
     }
   ]

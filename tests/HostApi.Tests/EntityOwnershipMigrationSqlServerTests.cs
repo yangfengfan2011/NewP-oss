@@ -752,6 +752,198 @@ public sealed class EntityOwnershipMigrationSqlServerTests(ITestOutputHelper out
         Assert.Equal(upgradedUnified.Rows, (await ReadSnapshotAsync(fixture, oldUnified.Table, oldUnified.Columns)).Rows, JsonRowsComparer.Instance);
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_OWNERSHIP_TRANSFER_UPGRADE", "冻结296完整旧部署升级通知000009，旧对象/引用/审计保留、真实接收及重启")]
+    public async Task PublishedWorkspacePrefix_AddsTransferNotifications_PreservesFactsAndRestart()
+    {
+        using var baseline = JsonDocument.Parse(await File.ReadAllTextAsync(RequiredPath("NEWP_TRANSFER_UPGRADE_BASELINE_INPUT", false)));
+        using var current = JsonDocument.Parse(await File.ReadAllTextAsync(RequiredPath("NEWP_ACCEPTANCE_WORKSPACE_DELIVERY_INPUT", false)));
+        var oldHost = ExistingPath(baseline.RootElement.GetProperty("hostRoot").GetString()!, true);
+        var oldPackage = ExistingPath(baseline.RootElement.GetProperty("packagePath").GetString()!, false);
+        var newHost = ExistingPath(current.RootElement.GetProperty("hostRoot").GetString()!, true);
+        var newPackage = ExistingPath(current.RootElement.GetProperty("packagePath").GetString()!, false);
+        Assert.Equal(baseline.RootElement.GetProperty("packageSha256").GetString(), await ReadPermissionFileHashAsync(oldPackage));
+        Assert.Equal(current.RootElement.GetProperty("packageSha256").GetString(), await ReadPermissionFileHashAsync(newPackage));
+        var decisions = ReadUpgradeDecisions(oldPackage, newPackage);
+        const string tail = "20261017231111_Workspace_000009_TransferNotifications";
+        using (var archive = ZipFile.OpenRead(oldPackage))
+        {
+            var entry = Assert.Single(archive.Entries, item => item.FullName == "modules/Workspace/migrations/Workspace.SqlServerMigrations.json");
+            using var stream = entry.Open();
+            using var manifest = await JsonDocument.ParseAsync(stream);
+            Assert.Equal(8, manifest.RootElement.GetProperty("migrations").GetArrayLength());
+            Assert.DoesNotContain(manifest.RootElement.GetProperty("migrations").EnumerateArray(), node => node.GetProperty("migrationId").GetString() == tail);
+        }
+        await using var fixture = await FeatureCatalogHostFixture.CreateAsync([], async owned =>
+        {
+            await DeployAsync(owned, "install-native", oldPackage);
+            await DeployAsync(owned, "enable-bundle", oldPackage);
+            await MountBaselineMetadataAsync(owned, oldPackage);
+        }, sourceHostRoot: oldHost);
+        Assert.False(await TransferNotificationTableExistsAsync(fixture));
+        var organization = await PostAsync(fixture, fixture.Administrator, "organization.company.initialize", "/api/organization/initialization");
+        await PostAsync(fixture, fixture.Administrator, "organization.person.create", "/api/organization/persons", new {
+            PersonNo = "TRANSFER-UPGRADE-299", ENAME = "转交升级前人员", CompanyId = organization.GetProperty("companyId").GetString(),
+            DepartmentId = organization.GetProperty("departmentId").GetString(), EmploymentStatus = "Active", IsEnabled = true });
+        var recipient = await PostAsync(fixture, fixture.Administrator, "identity.account.create", "/api/identity/accounts",
+            new { ECODE = "transfer-upgrade-recipient", ENAME = "转交升级接收人" });
+        var recipientId = recipient.GetProperty("account").GetProperty("eid").GetString()!;
+        var root = await PostAsync(fixture, fixture.Administrator, "workspace.spaces.access", "/api/workspace/spaces/public/initialize");
+        var rootId = root.GetProperty("rootFolderId").GetString()!;
+        var rootPosition = new { spaceId = root.GetProperty("spaceId").GetString()!, rootFolderId = rootId, linkIds = Array.Empty<string>() };
+        await PostAsync(fixture, fixture.Administrator, "workspace.folder.create", "/api/workspace/content/folders",
+            new { position = rootPosition, values = new { ENAME = "升级前原对象容器" } });
+        var rootContents = await ReadContentsAsync(fixture, fixture.Administrator, rootPosition.spaceId, rootId, rootId, []);
+        var container = Assert.Single(rootContents.GetProperty("items").EnumerateArray(), row => row.GetProperty("fields").GetProperty("Name").GetString() == "升级前原对象容器");
+        var containerId = container.GetProperty("associatedObject").GetProperty("id").GetString()!;
+        var position = new { rootPosition.spaceId, rootFolderId = rootId, linkIds = new[] { container.GetProperty("linkId").GetString()! } };
+        var targets = new List<(string Model, string Resource, string Id, string LinkId)>();
+        foreach (var (model, resource, kind, behavior) in new[] {
+            ("WorkspaceFolder", "workspace.folder", "folders", "workspace.folder.create"),
+            ("Part", "part.part", "parts", "workspace.folder.createPart"),
+            ("Document", "document.document", "documents", "workspace.folder.createDocument") })
+        {
+            var name = "转交升级原对象-" + model;
+            object values = model == "WorkspaceFolder" ? new { ENAME = name } : new { ENAME = name, ECODE = "TRANSFER-UPGRADE-" + model };
+            await PostAsync(fixture, fixture.Administrator, behavior, "/api/workspace/content/" + kind, new { position, values });
+            var contents = await ReadContentsAsync(fixture, fixture.Administrator, rootPosition.spaceId, rootId, containerId, position.linkIds);
+            var row = Assert.Single(contents.GetProperty("items").EnumerateArray(), item => item.GetProperty("fields").GetProperty("Name").GetString() == name);
+            targets.Add((model, resource, row.GetProperty("associatedObject").GetProperty("id").GetString()!, row.GetProperty("linkId").GetString()!));
+        }
+        var oldFacts = new List<TableSnapshot>();
+        foreach (var table in new[] { "WorkspaceSpace", "WorkspaceFolder", "WorkspaceFolderContent", "Part", "Document", "BusinessChange" })
+        {
+            var snapshot = await ReadSnapshotAsync(fixture, table);
+            Assert.NotEmpty(snapshot.Rows);
+            oldFacts.Add(snapshot);
+        }
+        Assert.Contains(oldFacts.Single(item => item.Table == "BusinessChange").Rows, row => row.GetProperty("EventType").GetString() == "person.created");
+        var oldEf = await ReadSnapshotAsync(fixture, "__EFMigrationsHistory");
+        var oldUnified = await ReadSnapshotAsync(fixture, "__NewPMigrationHistory");
+        Assert.NotEmpty(oldEf.Rows); Assert.NotEmpty(oldUnified.Rows);
+        await fixture.StopAsync();
+        var retiredHost = Path.Combine(fixture.EvidenceRoot, "transfer-baseline-host");
+        var ownedRoot = Path.GetFullPath(fixture.EvidenceRoot) + Path.DirectorySeparatorChar;
+        Assert.StartsWith(ownedRoot, Path.GetFullPath(fixture.HostRoot), StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith(ownedRoot, Path.GetFullPath(retiredHost), StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(retiredHost));
+        Directory.Move(fixture.HostRoot, retiredHost);
+        CopyTree(newHost, fixture.HostRoot);
+        var statePath = Path.Combine(fixture.PluginRoot, "lifecycle/v2/state.json");
+        using var previousState = JsonDocument.Parse(await File.ReadAllBytesAsync(statePath));
+        await SelectTransferBuiltinsAsync(fixture, newHost, previousState.RootElement.GetProperty("desiredModules"));
+        RetireBaselineAuthoring(fixture);
+        // 新Host与完整当前native先配齐，不以旧共享DLL混装测试本次迁移。
+        await DeployAsync(fixture, "install-native", newPackage);
+        var decisionsPath = Path.Combine(fixture.EvidenceRoot, "transfer-version-decisions.json");
+        await File.WriteAllBytesAsync(decisionsPath, JsonSerializer.SerializeToUtf8Bytes(decisions, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        await DeployAsync(fixture, "enable-bundle", newPackage, decisionsPath);
+        await fixture.StartAsync();
+        Assert.True(await TransferNotificationTableExistsAsync(fixture));
+        var notifications = await ReadSnapshotAsync(fixture, "WorkspaceTransferNotification");
+        Assert.Empty(notifications.Rows);
+        Assert.Contains("RecipientId", notifications.Columns); Assert.Contains("ObjectId", notifications.Columns);
+        foreach (var snapshot in oldFacts)
+            AssertRetained(snapshot, await ReadSnapshotAsync(fixture, snapshot.Table, snapshot.Columns));
+        var upgradedEf = await ReadSnapshotAsync(fixture, oldEf.Table, oldEf.Columns);
+        var upgradedUnified = await ReadSnapshotAsync(fixture, oldUnified.Table, oldUnified.Columns);
+        AssertRetained(oldEf, upgradedEf); AssertPrefix(oldUnified, upgradedUnified);
+        Assert.Single(upgradedEf.Rows, row => row.GetProperty("MigrationId").GetString() == tail);
+        Assert.Single(upgradedUnified.Rows, row => row.GetProperty("OwnerModuleId").GetString() == "Workspace" && row.GetProperty("MigrationId").GetString() == tail);
+        var receipt = await PostAsync(fixture, fixture.Administrator, "workspace.folder.transfer", "/api/workspace/ownership/transfer",
+            new { position, linkIds = targets.Select(target => target.LinkId).ToArray(), recipientId });
+        Assert.Equal(3, receipt.GetProperty("changed").GetInt32());
+        notifications = await ReadSnapshotAsync(fixture, "WorkspaceTransferNotification");
+        Assert.Equal(3, notifications.Rows.Length);
+        Assert.All(notifications.Rows, row => Assert.Equal(recipientId, row.GetProperty("RecipientId").GetString()));
+        foreach (var target in targets)
+        {
+            var old = oldFacts.Single(snapshot => snapshot.Table == target.Model);
+            var before = Assert.Single(old.Rows, row => row.GetProperty("EID").GetString() == target.Id);
+            var after = await ReadSnapshotAsync(fixture, target.Model, old.Columns);
+            var row = Assert.Single(after.Rows, row => row.GetProperty("EID").GetString() == target.Id);
+            Assert.Equal(recipientId, row.GetProperty("OwnerId").GetString());
+            Assert.Equal(JsonValueKind.Null, row.GetProperty("OwnerDepartmentId").ValueKind);
+            foreach (var column in new[] { "CreatedBy", "CreatedAt" }) Assert.Equal(before.GetProperty(column).GetRawText(), row.GetProperty(column).GetRawText());
+            Assert.Single(notifications.Rows, item => item.GetProperty("ResourceKey").GetString() == target.Resource && item.GetProperty("ObjectId").GetString() == target.Id);
+        }
+        var links = await ReadSnapshotAsync(fixture, "WorkspaceFolderContent");
+        AssertRetained(oldFacts.Single(item => item.Table == links.Table), links);
+        foreach (var notification in notifications.Rows)
+        {
+            var link = Assert.Single(links.Rows, row => row.GetProperty("LID").GetString() == notification.GetProperty("LinkId").GetString());
+            Assert.Equal(notification.GetProperty("DirectoryId").GetString(), link.GetProperty("PEID").GetString());
+            Assert.Equal(notification.GetProperty("ObjectId").GetString(), link.GetProperty("CEID").GetString());
+        }
+        var audit = await ReadSnapshotAsync(fixture, "BusinessChange");
+        AssertRetained(oldFacts.Single(item => item.Table == audit.Table), audit);
+        foreach (var target in targets) Assert.Single(audit.Rows, row => row.GetProperty("EventType").GetString() == "entity.ownership.transferred"
+            && row.GetProperty("Resource").GetString() == target.Resource && row.GetProperty("TargetId").GetString() == target.Id);
+        var beforeRestart = new List<TableSnapshot>();
+        foreach (var table in oldFacts.Select(item => item.Table).Append("WorkspaceTransferNotification").Append(oldEf.Table).Append(oldUnified.Table))
+            beforeRestart.Add(await ReadSnapshotAsync(fixture, table));
+        await fixture.StopAsync(); await fixture.StartAsync();
+        foreach (var snapshot in beforeRestart)
+            Assert.Equal(snapshot.Rows, (await ReadSnapshotAsync(fixture, snapshot.Table, snapshot.Columns)).Rows, JsonRowsComparer.Instance);
+        output.WriteLine("Transfer upgrade: prefix8 -> 000009; old objects/links/audit retained; changed3/received3; restart retained all facts.");
+    }
+
+    private static async Task<bool> TransferNotificationTableExistsAsync(FeatureCatalogHostFixture fixture)
+    {
+        await using var connection = new SqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT CASE WHEN OBJECT_ID(N'dbo.WorkspaceTransferNotification',N'U') IS NULL THEN 0 ELSE 1 END;";
+        return Convert.ToInt32(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture) == 1;
+    }
+
+    private static async Task SelectTransferBuiltinsAsync(FeatureCatalogHostFixture fixture, string currentHost, JsonElement previousDesired)
+    {
+        var selections = new List<PluginDesiredModuleState>();
+        foreach (var directory in Directory.EnumerateDirectories(Path.Combine(currentHost, "modules")).Order(StringComparer.Ordinal))
+        {
+            var path = Path.Combine(directory, "plugin.json");
+            if (!File.Exists(path)) continue;
+            using var capsule = JsonDocument.Parse(await File.ReadAllBytesAsync(path));
+            var id = capsule.RootElement.GetProperty("moduleId").GetString()!;
+            var previous = previousDesired.EnumerateArray().SingleOrDefault(item => item.GetProperty("moduleId").GetString() == id);
+            if (previous.ValueKind == JsonValueKind.Undefined) continue;
+            var version = capsule.RootElement.GetProperty("version").GetString()!;
+            if (version != previous.GetProperty("version").GetString()) selections.Add(new(id, version, previous.GetProperty("enabled").GetBoolean()));
+        }
+        Assert.Contains(selections, choice => choice.ModuleId == "Organization");
+        Assert.Contains(selections, choice => choice.ModuleId == "Authorization");
+        var pathToSelection = Path.Combine(fixture.EvidenceRoot, "transfer-builtin-desired.json");
+        await File.WriteAllBytesAsync(pathToSelection, JsonSerializer.SerializeToUtf8Bytes(selections, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        var start = new ProcessStartInfo("dotnet") { WorkingDirectory = fixture.HostRoot, UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (var argument in new[] { Path.Combine(fixture.HostRoot, "HostApi.dll"), "plugin-deploy", "desired", "--file", pathToSelection }) start.ArgumentList.Add(argument);
+        start.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+        start.Environment["ConnectionStrings__SqlServer"] = fixture.ConnectionString;
+        start.Environment["Platform__PluginInstallRoot"] = fixture.PluginRoot;
+        start.Environment["Platform__ExternalPluginsEnabled"] = "false";
+        start.Environment["Files__StorageRoot"] = fixture.StorageRoot;
+        start.Environment["Authentication__Host__KeyRingPath"] = Path.Combine(Path.GetDirectoryName(fixture.HostRoot)!, "keys");
+        start.Environment["Identity__Credentials__UseSharedDevelopmentCredential"] = "false";
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("无法启动正式转交升级内建选版。");
+        var stdout = process.StandardOutput.ReadToEndAsync(); var stderr = process.StandardError.ReadToEndAsync();
+        try { await process.WaitForExitAsync().WaitAsync(TimeSpan.FromMinutes(3)); Assert.Equal(0, process.ExitCode); }
+        finally
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15));
+            string Sanitize(string text) => text.Replace(fixture.ConnectionString, "[connection]", StringComparison.Ordinal).Replace(fixture.AdministratorPassword, "[credential]", StringComparison.Ordinal);
+            await File.WriteAllTextAsync(Path.Combine(fixture.EvidenceRoot, "transfer-select-builtins.stdout.log"), Sanitize(await stdout));
+            await File.WriteAllTextAsync(Path.Combine(fixture.EvidenceRoot, "transfer-select-builtins.stderr.log"), Sanitize(await stderr));
+        }
+        using var selected = JsonDocument.Parse(await File.ReadAllBytesAsync(Path.Combine(fixture.PluginRoot, "lifecycle/v2/state.json")));
+        foreach (var previous in previousDesired.EnumerateArray())
+        {
+            var actual = Assert.Single(selected.RootElement.GetProperty("desiredModules").EnumerateArray(), item => item.GetProperty("moduleId").GetString() == previous.GetProperty("moduleId").GetString());
+            Assert.Equal(previous.GetProperty("enabled").GetBoolean(), actual.GetProperty("enabled").GetBoolean());
+            Assert.Equal(selections.SingleOrDefault(choice => choice.ModuleId == previous.GetProperty("moduleId").GetString())?.Version
+                ?? previous.GetProperty("version").GetString(), actual.GetProperty("version").GetString());
+        }
+    }
+
     private static async Task<string?> ReadIpColumnAsync(FeatureCatalogHostFixture fixture)
     {
         await using var connection = new SqlConnection(fixture.ConnectionString);

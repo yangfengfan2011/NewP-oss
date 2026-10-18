@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.0",
+  "type": "model",
+  "WorkspaceTransferNotification": {
+    "kind": "Entity",
+    "fields": [
+      { "name": "RecipientId", "storage": { "type": "guid" } },
+      { "name": "SenderId", "storage": { "type": "guid" } },
+      { "name": "ResourceKey", "storage": { "type": "string" } },
+      { "name": "ObjectId", "storage": { "type": "guid" } },
+      { "name": "SpaceId", "storage": { "type": "guid" } },
+      { "name": "DirectoryId", "storage": { "type": "guid" } },
+      { "name": "LinkId", "storage": { "type": "guid" } }
+    ],
+    "indexes": [{ "name": "IX_WorkspaceTransferNotification_Recipient", "fields": ["RecipientId", "CreatedAt", "EID"], "unique": false }]
+  }
+}

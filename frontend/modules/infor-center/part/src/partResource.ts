@@ -1,9 +1,10 @@
 import { platformFetch } from '@icp-platform/core';
-import { createObjectOwnershipActions, createObjectAuthorizationActions } from '@icp-platform/ui';
+import { createObjectOwnershipActions, createObjectAuthorizationActions, createObjectOwnershipTransferActions } from '@icp-platform/ui';
 import {
   createStandardCrudRestDataAdapter,
   isStandardCrudRecord,
   readStandardCrudString,
+  StandardCrudRequestError,
   type StandardCrudResourceRegistration,
 } from '@icp-platform/sdk';
 
@@ -29,14 +30,23 @@ const authorization = createObjectAuthorizationActions('part.part', context => {
     basePath: `/api/part/parts/${encodeURIComponent(id)}/permissions` };
 });
 
+const transfer = createObjectOwnershipTransferActions(context => {
+  const fields = isStandardCrudRecord(context.row) ? context.row
+    : isStandardCrudRecord(context.detail) && isStandardCrudRecord(context.detail.fields) ? context.detail.fields : {};
+  const id = context.id ?? readStandardCrudString(fields, ['EID', 'id']);
+  if (!id) throw new StandardCrudRequestError('缺少转交对象。', 409);
+  const base = `/api/part/parts/${encodeURIComponent(id)}/transfer`;
+  return { savePath: base, eligibilityPath: `${base}/eligibility`, accountsPath: `${base}/accounts` };
+});
+
 // 保留 canonical raw/display 输出，字段与布局由正式 Model/View 投影拥有。
 export const partResource: StandardCrudResourceRegistration = {
   resourceKey: 'part.part',
   listViewKey: 'part.part.list',
   detailViewKey: 'part.part.detail',
-  actionHandlers: { ...ownership.actionHandlers, ...authorization.actionHandlers },
-  actionInputRenderers: { ...ownership.actionInputRenderers, ...authorization.actionInputRenderers },
-  actionEligibilityResolvers: { ...ownership.actionEligibilityResolvers, ...authorization.actionEligibilityResolvers },
+  actionHandlers: { ...transfer.actionHandlers, ...ownership.actionHandlers, ...authorization.actionHandlers },
+  actionInputRenderers: { ...transfer.actionInputRenderers, ...ownership.actionInputRenderers, ...authorization.actionInputRenderers },
+  actionEligibilityResolvers: { ...transfer.actionEligibilityResolvers, ...ownership.actionEligibilityResolvers, ...authorization.actionEligibilityResolvers },
   dataAdapter: {
     ...partDataAdapter,
     get: (id, context) => {

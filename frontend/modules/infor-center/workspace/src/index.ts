@@ -1,7 +1,23 @@
-import { normalizeStandardCrudDetail, readStandardCrudRequestError, StandardCrudRequestError, type FrontendBehaviorBindings, type PageProps } from '@icp-platform/sdk';
+import { normalizeStandardCrudDetail, readStandardCrudRequestError, StandardCrudRequestError, type FrontendBehaviorBindings, type PageProps, type StandardCrudDetailReadContext } from '@icp-platform/sdk';
 import { platformFetch } from '@icp-platform/core';
 import { createElement } from 'react';
 import { createWorkspaceTreeProvider, workspaceContentSource, workspacePageInputs } from './workspaceTree';
+
+/** 来源校验共享，读取功能位置由各自受控入口决定，不能在两种入口之间回退。 */
+async function readProperties(resourceKey: string, id: string, context: StandardCrudDetailReadContext | undefined, featurePosition: unknown) {
+  const scope = context?.queryScope;
+  const source = workspaceContentSource({ ...scope, modelKey: scope?.sourceModelKey, objectId: scope?.sourceObjectId });
+  if (source.resourceKey !== resourceKey || source.objectId !== id) throw new StandardCrudRequestError('工作空间目标已变化。', 409);
+  if (typeof featurePosition !== 'string' || !featurePosition) throw new StandardCrudRequestError('缺少来源读取位置。', 400);
+  const position = { spaceId: source.spaceId, rootFolderId: source.rootFolderId, linkIds: source.linkIds };
+  const response = await platformFetch(`/api/workspace/content/${encodeURIComponent(source.sourceLinkId)}/properties?queryScope=${encodeURIComponent(JSON.stringify(position))}`,
+    { signal: context?.signal, headers: { 'X-NewP-Feature': featurePosition } });
+  if (!response.ok) throw await readStandardCrudRequestError(response);
+  const payload = await response.json() as { resourceKey: string; objectId: string; detail: unknown };
+  if (payload.resourceKey !== resourceKey || payload.objectId !== id) throw new StandardCrudRequestError('工作空间返回了不同目标。', 409);
+  const detail = normalizeStandardCrudDetail(payload.detail);
+  return { normalized: detail, value: detail };
+}
 
 const workspaceBindings: FrontendBehaviorBindings = {
   behaviorKey: 'workspace.frontend',
@@ -26,21 +42,11 @@ const workspaceBindings: FrontendBehaviorBindings = {
         return { objectId: source.objectId, modelKey: source.modelKey, sourceLinkId: source.sourceLinkId,
           spaceId: source.spaceId, rootFolderId: source.rootFolderId, linkIds: JSON.stringify(source.linkIds) };
       } }],
-    get: async (resourceKey, id, context) => {
-      const scope = context?.queryScope;
-      const source = workspaceContentSource({ ...scope, modelKey: scope?.sourceModelKey, objectId: scope?.sourceObjectId });
-      if (source.resourceKey !== resourceKey || source.objectId !== id) throw new StandardCrudRequestError('工作空间目标已变化。', 409);
-      if (typeof scope?.sourceFeaturePosition !== 'string' || !scope.sourceFeaturePosition) throw new StandardCrudRequestError('缺少来源读取位置。', 400);
-      const position = { spaceId: source.spaceId, rootFolderId: source.rootFolderId, linkIds: source.linkIds };
-      const response = await platformFetch(`/api/workspace/content/${encodeURIComponent(source.sourceLinkId)}/properties?queryScope=${encodeURIComponent(JSON.stringify(position))}`,
-        { signal: context?.signal, headers: { 'X-NewP-Feature': scope.sourceFeaturePosition } });
-      if (!response.ok) throw await readStandardCrudRequestError(response);
-      const payload = await response.json() as { resourceKey: string; objectId: string; detail: unknown };
-      if (payload.resourceKey !== resourceKey || payload.objectId !== id) throw new StandardCrudRequestError('工作空间返回了不同目标。', 409);
-      const detail = normalizeStandardCrudDetail(payload.detail);
-      return { normalized: detail, value: detail };
-    } }],
+    get: (resourceKey, id, context) => readProperties(resourceKey, id, context, context?.queryScope?.sourceFeaturePosition) },
+    { key: 'workspace.content.receivedProperties', resourceKeys: ['workspace.folder', 'part.part', 'document.document'],
+      get: (resourceKey, id, context) => readProperties(resourceKey, id, context, context?.featurePosition) }],
   standardCrudCapabilities: [
+    { kind: 'standard-list', targetKey: 'workspace.transfers.list', load: () => import('./workspaceTransferNotificationsResource') },
     { kind: 'standard-list', targetKey: 'workspace.history.list', load: async () => {
       const { createObjectHistoryResource } = await import('@icp-platform/ui');
       return { default: createObjectHistoryResource({ resourceKey: 'workspace.history', listViewKey: 'workspace.history.list',

@@ -9,18 +9,19 @@ const list = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderList.
 const detail = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderDetail.view.json');
 const references = readComponentJson('Workspace', 'metadata/views/WorkspaceReferencesList.view.json');
 const history = readComponentJson('Workspace', 'metadata/views/WorkspaceObjectHistoryList.view.json');
+const notifications = readComponentJson('Workspace', 'metadata/views/WorkspaceTransferNotificationsList.view.json');
 const capsule = readComponentJson('Workspace', 'newp.plugin.json');
 import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';
 
 const module: FrontendModule = { metadata: { moduleId: 'Workspace', displayName: '工作空间', version: '1' }, ...workspace };
-const views = [tree, list, detail, references, history];
+const views = [tree, list, detail, references, history, notifications];
 
 it('projects the formal Workspace composed content list without inventing standalone routes', () => {
-  expect(module.standardCrudCapabilities?.map(binding => ({ kind: binding.kind, targetKey: binding.targetKey }))).toEqual([
-    { kind: 'standard-list', targetKey: history.view.key },
-    { kind: 'standard-list', targetKey: list.view.key },
-    { kind: 'standard-list', targetKey: references.view.key },
-  ]);
+  const declaredLists = views.filter(document => document.view.mode === 'list')
+    .map(document => ({ kind: 'standard-list', targetKey: document.view.key }))
+    .sort((left, right) => left.targetKey.localeCompare(right.targetKey));
+  expect(module.standardCrudCapabilities?.map(binding => ({ kind: binding.kind, targetKey: binding.targetKey }))
+    .sort((left, right) => left.targetKey.localeCompare(right.targetKey))).toEqual(declaredLists);
   expect(new Set(capsule.frontend.bindings)).toEqual(new Set([
     ...(workspace.treeProviders ?? []).map(binding => binding.key),
     ...(workspace.pageInputResolvers ?? []).map(binding => binding.key),
@@ -32,12 +33,14 @@ it('projects the formal Workspace composed content list without inventing standa
 });
 
 it('still rejects an unconsumed list binding and an object list that hides every detail action', () => {
-  expect(() => compileStandardCrudRouteProjection([module], [navigation], [history, list, detail], [])).toThrow('STANDARD_CRUD_NAV_NOT_UNIQUE: workspace.folder.list');
+  const unconsumed = { ...navigation, navigation: { items: navigation.navigation.items.filter(item =>
+    item.page?.pageKey !== 'platform.detail' || item.page.parameters?.viewKey !== detail.view.key) } };
+  expect(() => compileStandardCrudRouteProjection([module], [unconsumed], [notifications, history, list, detail, references], [])).toThrow('STANDARD_CRUD_NAV_NOT_UNIQUE: workspace.folder.list');
   const composedList = { ...tree, view: { ...tree.view, nodeTypes: [{ ...tree.view.nodeTypes[0], pageRef: {
     pageKey: 'platform.list', parameters: { viewKey: list.view.key },
   } }] } };
   const hiddenDetailList = { ...list, view: { ...list.view, rowActions: [], columns: list.view.columns.map(column => ({ ...column, standardAction: undefined })) } };
-  expect(() => compileStandardCrudRouteProjection([module], [navigation], [history, composedList, hiddenDetailList, detail], [])).toThrow('STANDARD_CRUD_DETAIL_ACTION_MISSING: workspace.folder.list');
+  expect(() => compileStandardCrudRouteProjection([module], [navigation], [notifications, history, composedList, hiddenDetailList, detail, references], [])).toThrow('STANDARD_CRUD_DETAIL_ACTION_MISSING: workspace.folder.list');
 });
 
 it('still rejects two standard-list owners even when the same binding also has a controlled navigation PageRef', () => {

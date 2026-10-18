@@ -11,6 +11,8 @@ export type { ObjectAuthorizationTarget } from './ObjectAuthorizationInput';
 export { createObjectAuthorizationActions } from './objectAuthorizationActions';
 export { default as ObjectAuthorizationPage } from './ObjectAuthorizationPage';
 export { createObjectOwnershipActions } from './objectOwnershipActions';
+export { createObjectOwnershipTransferActions } from './objectOwnershipTransferActions';
+export type { ObjectOwnershipTransferTarget, OwnershipTransferDraft } from './ownershipTransferRequest';
 export type { ObjectOwnershipInitializationTarget } from './ObjectOwnershipInitializationInput';
 export { createObjectHistoryResource } from './objectHistoryResource';
 export type { ObjectHistoryResourceOptions } from './objectHistoryResource';

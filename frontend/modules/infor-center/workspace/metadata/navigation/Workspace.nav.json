@@ -5,5 +5,9 @@
     { "key": "workspace.permissions", "path": "/workspace/permissions", "routeOnly": true, "featureAuthorization": false,
       "page": { "pageKey": "platform.tabs", "parameters": { "viewKey": "workspace.folder.tabs" }, "inputResolverKey": "workspace.content.record" } },
     { "key": "workspace.history", "path": "/workspace/history", "routeOnly": true, "parentKey": "workspace", "featureKey": "workspace.history",
-      "page": { "pageKey": "platform.list", "parameters": { "viewKey": "workspace.history.list" }, "inputResolverKey": "workspace.content.historyInput" } }] }
+      "page": { "pageKey": "platform.list", "parameters": { "viewKey": "workspace.history.list" }, "inputResolverKey": "workspace.content.historyInput" } },
+    { "key": "workspace.transfers", "titleKey": "Workspace.TransferNotifications", "parentKey": "workspace", "path": "/workspace/transfers", "featureKey": "workspace.transfers", "order": 210,
+      "page": { "pageKey": "platform.list", "parameters": { "viewKey": "workspace.transfers.list" } } },
+    { "key": "workspace.transfers.object", "path": "/workspace/transfers/object", "routeOnly": true, "featureKey": "workspace",
+      "page": { "pageKey": "platform.detail", "parameters": { "viewKey": "workspace.folder.detail", "detailReadSourceKey": "workspace.content.receivedProperties" }, "inputResolverKey": "workspace.content.receivedObject" } }] }
 }

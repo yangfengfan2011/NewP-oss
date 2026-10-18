@@ -20,6 +20,8 @@ import documentModel from '../../../../../tests/Kernel.Tests/Fixtures/DocumentRu
 import workspaceHistoryFeatures from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceHistoryFeatures.contract.json';
 import partHistoryFeatures from '../../../../../tests/Kernel.Tests/Fixtures/PartHistoryFeatures.contract.json';
 import documentHistoryFeatures from '../../../../../tests/Kernel.Tests/Fixtures/DocumentHistoryFeatures.contract.json';
+import notificationFeatures from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceTransferNotificationFeatures.contract.json';
+const notifications = readComponentJson('Workspace', 'metadata/views/WorkspaceTransferNotificationsList.view.json');
 const historyFeatures = { Workspace: workspaceHistoryFeatures, Part: partHistoryFeatures, Document: documentHistoryFeatures };
 const historyViews = ['Workspace', 'Part', 'Document'].map(owner => readComponentJson(owner, `metadata/views/${owner === 'Workspace' ? 'WorkspaceObjectHistoryList' : owner + 'ObjectHistoryList'}.view.json`));
 const historyDictionaries = [['Audit', 'ObjectHistory'], ['Part', 'PartHistory'], ['Document', 'DocumentHistory']].map(([owner, name]) => [readComponentJson(owner, `metadata/dictionaries/${name}.dic.json`)[name], name] as const);
@@ -119,8 +121,8 @@ async function renderMixedProperties(type: 'part' | 'document') {
     { metadata: { moduleId: 'Part', displayName: '零组件', version: '1' }, ...part },
     { metadata: { moduleId: 'Document', displayName: '图文档', version: '1' }, ...documentModule }], 'workspace-mixed');
   const navs = [partNavigation, documentNavigation].map((navigation, index) => ({ ...navigation, navigation: { items: navigation.navigation.items.map(item => ({ ...item, featurePosition: item.key === (index ? 'document.history' : 'part.history') ? historyFeatures[index ? 'Document' : 'Part'].historyPosition : index ? 'document-entry' : 'part-entry' })) } }));
-  const views = [tree, list, detail, references, partList, partDetail, documentList, documentDetail, ...historyViews];
-  const workspaceNav = { ...workspaceNavigation, navigation: { items: workspaceNavigation.navigation.items.map(item => ({ ...item, featurePosition: item.key === 'workspace.history' ? historyFeatures.Workspace.historyPosition : 'workspace-entry' })) } };
+  const views = [tree, list, detail, references, partList, partDetail, documentList, documentDetail, ...historyViews, notifications];
+  const workspaceNav = { ...workspaceNavigation, navigation: { items: workspaceNavigation.navigation.items.map(item => ({ ...item, featurePosition: item.key === 'workspace.history' ? historyFeatures.Workspace.historyPosition : item.key === 'workspace.transfers' ? notificationFeatures.notificationsPosition : 'workspace-entry' })) } };
   expect(buildMenusFromNavDocuments([workspaceNav, ...navs], (title, fallback) => title ?? fallback ?? '').map(menu => menu.path)).toEqual(['/workspace']);
   expect(compileStandardCrudRouteProjection(ModuleRegistry.getAllModules(), [workspaceNavigation, ...navs], views, []).detailEntries).toHaveLength(2);
   const catalogs = { zhs: Object.fromEntries([[dictionary.Workspace, 'Workspace'], [partDictionary.Part, 'Part'], [documentDictionary.Document, 'Document'], ...historyDictionaries].flatMap(([dict, key]) =>
@@ -135,6 +137,7 @@ async function renderMixedProperties(type: 'part' | 'document') {
         // 新目录采用实际编译事实，原交互位置及actor grants不替换、不扩history资格。
         { key: 'workspace', position: historyFeatures.Workspace.readPosition, kind: 'navigation' },
         { key: 'workspace.history', position: historyFeatures.Workspace.historyPosition, kind: 'navigation', parentPosition: historyFeatures.Workspace.readPosition },
+        { key: 'workspace.transfers', position: notificationFeatures.notificationsPosition, kind: 'navigation', parentPosition: notificationFeatures.readPosition },
         { key: 'edit', position: 'workspace-edit', kind: 'action', parentPosition: 'workspace-entry', staticScope: 'folder', actionScope: 'list.rowActions' }, ...['createPart', 'createDocument'].map(key => ({ key, position: 'workspace-' + key, kind: 'action', parentPosition: 'workspace-entry', staticScope: 'folder', actionScope: 'list.pageActions' })),
       ] }, ...['Part', 'Document'].map(moduleId => ({ moduleId, metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: [{ key: moduleId === 'Part' ? 'part.parts' : 'document.documents', kind: 'navigation', position: moduleId.toLowerCase() + '-entry' },
         { key: moduleId === 'Part' ? 'part.parts' : 'document.documents', kind: 'navigation', position: historyFeatures[moduleId as 'Part' | 'Document'].readPosition },

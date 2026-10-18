@@ -1,5 +1,5 @@
 import { platformFetch } from '@icp-platform/core';
-import { createObjectOwnershipActions, createObjectAuthorizationActions } from '@icp-platform/ui';
+import { createObjectOwnershipTransferActions, createObjectOwnershipActions, createObjectAuthorizationActions } from '@icp-platform/ui';
 import { createElement, lazy, Suspense } from 'react';
 import { isStandardCrudRecord, readStandardCrudRequestError, StandardCrudRequestError, type StandardCrudActionContext, type StandardCrudActionInputRenderContext, type StandardCrudDetail, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { workspaceContentSource } from './workspaceTree';
@@ -44,6 +44,23 @@ async function referenceCommand(method: string, path: string, body: unknown, fea
   return { operation: 'action' as const, payload: await response.json() as unknown, change: { operation: 'update' as const, id: '' } };
 }
 
+// 转交请求只携带真实父位置与所选LID，服务端重解规范EID并重验归属。
+const transfer = createObjectOwnershipTransferActions(context => {
+  const position = workspacePosition(context.queryScope);
+  const fields = isStandardCrudRecord(context.row) ? context.row
+    : isStandardCrudRecord(context.detail) && isStandardCrudRecord(context.detail.fields) ? context.detail.fields : {};
+  const sourceLinkId = context.queryScope?.sourceLinkId ?? context.id ?? fields.LID;
+  const linkIds = typeof sourceLinkId === 'string' && sourceLinkId ? [sourceLinkId] : (context.selectedRows ?? []).map(row => {
+    if (!isStandardCrudRecord(row) || typeof row.LID !== 'string' || !row.LID) throw new StandardCrudRequestError('缺少转交来源。', 409);
+    return row.LID;
+  });
+  if (!linkIds.length) throw new StandardCrudRequestError('请选择转交对象。', 409);
+  const selected = [...new Set(linkIds)];
+  const base = '/api/workspace/ownership/transfer';
+  const query = new URLSearchParams({ queryScope: JSON.stringify(position), selectedIds: JSON.stringify(selected) });
+  return { savePath: base, eligibilityPath: `${base}/eligibility?${query}`, accountsPath: `${base}/accounts?${query}`, body: { position, linkIds: selected } };
+});
+
 /** 关系身份参与表格；异构属性使用所属模块正式 View 和真实 EID，未知类型不能猜测。 */
 const resource: StandardCrudResourceRegistration = {
   resourceKey: 'workspace.folder', listViewKey: 'workspace.folder.list', detailViewKey: 'workspace.folder.detail',
@@ -62,7 +79,7 @@ const resource: StandardCrudResourceRegistration = {
     render: context => createElement(Suspense, { fallback: null }, createElement(WorkspaceObjectCopyResult, context)),
   }],
   actionInputRenderers: {
-    ...ownership.actionInputRenderers,
+    ...transfer.actionInputRenderers, ...ownership.actionInputRenderers,
     batchAuthorization: Object.assign((context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceBatchAuthorizationInput, context)), { dialogWidth: 960 }),
     createFolder: Object.assign((context: StandardCrudActionInputRenderContext) =>
       createElement(Suspense, { fallback: null }, createElement(WorkspaceFolderCreateInput, context)), { presentation: 'drawer' as const }),
@@ -78,7 +95,7 @@ const resource: StandardCrudResourceRegistration = {
       createElement(Suspense, { fallback: null }, createElement(context.action.key === 'createDocument' ? WorkspaceDocumentCreateInput : WorkspaceObjectCreateInput, context)), { presentation: 'drawer' as const }),
   },
   actionHandlers: {
-    ...ownership.actionHandlers,
+    ...transfer.actionHandlers, ...ownership.actionHandlers,
     create: async ({ input, queryScope, featurePosition }) => {
       if (!isStandardCrudRecord(input)) throw new Error('缺少文件夹创建输入');
       const values = Object.fromEntries(['ENAME', 'Description'].filter(key => input[key] !== undefined).map(key => [key, input[key]]));
@@ -180,7 +197,7 @@ const resource: StandardCrudResourceRegistration = {
     removeSelected: async ({ selectedRows, queryScope, featurePosition }) => referenceCommand('POST', '/api/workspace/content/references/remove',
       { position: workspacePosition(queryScope), linkIds: (selectedRows ?? []).map(row => String(row.LID)) }, featurePosition),
   },
-  actionEligibilityResolvers: { ...ownership.actionEligibilityResolvers,
+  actionEligibilityResolvers: { ...transfer.actionEligibilityResolvers, ...ownership.actionEligibilityResolvers,
     authorizeContent: context => authorization(context).actionEligibilityResolvers.authorize(context) },
   actionStateResolver: ({ action, instance, queryScope }) => {
     const root = queryScope?.linkIds === '[]';

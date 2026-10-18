@@ -24,6 +24,8 @@ import folder from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceFolderRu
 import workspaceHistoryFeatures from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceHistoryFeatures.contract.json';
 import partHistoryFeatures from '../../../../../tests/Kernel.Tests/Fixtures/PartHistoryFeatures.contract.json';
 import documentHistoryFeatures from '../../../../../tests/Kernel.Tests/Fixtures/DocumentHistoryFeatures.contract.json';
+import notificationFeatures from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceTransferNotificationFeatures.contract.json';
+const notifications = readComponentJson('Workspace', 'metadata/views/WorkspaceTransferNotificationsList.view.json');
 const historyFeatures = { Workspace: workspaceHistoryFeatures, Part: partHistoryFeatures, Document: documentHistoryFeatures };
 const historyViews = ['Workspace', 'Part', 'Document'].map(owner => readComponentJson(owner, `metadata/views/${owner === 'Workspace' ? 'WorkspaceObjectHistoryList' : owner + 'ObjectHistoryList'}.view.json`));
 const content = readComponentJson('Workspace', 'metadata/models/WorkspaceFolderContent.model.json');
@@ -136,8 +138,8 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
   ModuleRegistry.replaceAll([{ metadata: { moduleId: 'Workspace', displayName: '工作空间', version: '1' }, ...workspace },
     { metadata: { moduleId: 'Part', displayName: '零组件', version: '1' }, ...part },
     { metadata: { moduleId: 'Document', displayName: '图文档', version: '1' }, ...documentModule }], 'workspace-test');
-  const views = [tree, list, detail, incoming, partDetail, partList, documentDetail, documentList, ...historyViews];
-  const navs = [{ ...navigation, navigation: { items: navigation.navigation.items.map(item => ({ ...item, featurePosition: item.key === 'workspace.history' ? historyFeatures.Workspace.historyPosition : 'workspace-entry' })) } }, ...[partNavigation, documentNavigation].map((document, index) => ({ ...document, navigation: { items: document.navigation.items.map(item =>
+  const views = [tree, list, detail, incoming, partDetail, partList, documentDetail, documentList, ...historyViews, notifications];
+  const navs = [{ ...navigation, navigation: { items: navigation.navigation.items.map(item => ({ ...item, featurePosition: item.key === 'workspace.history' ? historyFeatures.Workspace.historyPosition : item.key === 'workspace.transfers' ? notificationFeatures.notificationsPosition : 'workspace-entry' })) } }, ...[partNavigation, documentNavigation].map((document, index) => ({ ...document, navigation: { items: document.navigation.items.map(item =>
     item.key === (index ? 'document.history' : 'part.history') ? { ...item, featurePosition: historyFeatures[index ? 'Document' : 'Part'].historyPosition } : item) } }))];
   // 实际 AppRoutes 先编译所有模块路由，再装载组合；直接挂 PageEntry 不能替代这一步。
   const projection = compileStandardCrudRouteProjection(ModuleRegistry.getAllModules(), navs, views, []);
@@ -159,6 +161,7 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
           { key: 'workspace', position: 'workspace-entry', kind: 'navigation' },
           { key: 'workspace', position: historyFeatures.Workspace.readPosition, kind: 'navigation' },
           { key: 'workspace.history', position: historyFeatures.Workspace.historyPosition, kind: 'navigation', parentPosition: historyFeatures.Workspace.readPosition },
+        { key: 'workspace.transfers', position: notificationFeatures.notificationsPosition, kind: 'navigation', parentPosition: notificationFeatures.readPosition },
           { key: 'create', position: 'workspace-create', kind: 'action', parentPosition: 'workspace-entry', staticScope: 'folder', actionScope: 'list.pageActions' },
           { key: 'createDocument', position: 'workspace-createDocument', kind: 'action', parentPosition: 'workspace-entry', staticScope: 'folder', actionScope: 'list.pageActions' },
           { key: 'remove', position: 'workspace-remove', kind: 'action', parentPosition: 'workspace-entry', staticScope: 'folder', actionScope: 'list.rowActions' },

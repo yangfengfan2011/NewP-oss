@@ -19,6 +19,10 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
         services.AddScoped<WorkspaceSpaces>();
         services.AddScoped<WorkspacePositions>();
         services.AddScoped<WorkspaceContents>();
+        services.AddScoped<ICP.Platform.Crud.Ownership.EntityOwnershipTransfer>();
+        services.AddScoped<ICP.Platform.Crud.Ownership.EntityOwnershipTransferDisplay>();
+        services.AddScoped<ICP.Platform.Crud.Ownership.IEntityOwnershipTransferReceiver, WorkspaceOwnershipTransferReceiver>();
+        services.AddScoped<WorkspaceTransferNotifications>();
         services.AddScoped<WorkspaceReferenceAudit>();
         services.AddScoped<ICP.Platform.Modules.Audit.Contracts.IBusinessAuditNameDirectory, WorkspaceFolderAuditNames>();
         RegisterHistory(services);
@@ -61,7 +65,8 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
             ("workspace.folder.updated", "Workspace.HistoryFolderUpdated"),
             ("workspace.folder.deleted", "Workspace.HistoryFolderDeleted"),
             ("entity.ownership.initialized", "Workspace.HistoryOwnershipInitialized"),
-            ("entity.ownership.backfilled", "Workspace.HistoryOwnershipBackfilled") })
+            ("entity.ownership.backfilled", "Workspace.HistoryOwnershipBackfilled"),
+            ("entity.ownership.transferred", "Workspace.HistoryOwnershipTransferred") })
             services.AddSingleton(new ObjectHistoryEventPolicy(ModuleId, eventType, "workspace.folder", "workspace.folder",
                 ObjectHistoryTargetFormat.ObjectId, description)
             { TextSnapshot = eventType.StartsWith("workspace.folder.", StringComparison.Ordinal) ? new("ObjectName", "ObjectCode") : null });

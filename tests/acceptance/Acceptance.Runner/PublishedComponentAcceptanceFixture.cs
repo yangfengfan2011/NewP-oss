@@ -27,7 +27,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     bool workspaceDelivery = false, WorkspaceDeliveryInput? deliveryInput = null, bool exerciseCompositionLifecycle = false,
     bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false, bool exerciseFileRecoveryMechanisms = true,
     bool exerciseDocumentCopyRecovery = false, bool exerciseDocumentCopyInterruptions = true, bool exerciseDocumentBatchRecovery = false,
-    PublishedWorkspacePreparation preparation = PublishedWorkspacePreparation.HistoricalUpgrade, bool preparePermissionActors = false, bool prepareHistoryActor = false, bool prepareBatchActor = false)
+    PublishedWorkspacePreparation preparation = PublishedWorkspacePreparation.HistoricalUpgrade, bool preparePermissionActors = false, bool prepareHistoryActor = false, bool prepareBatchActor = false, bool prepareTransferActors = false)
 {
     private readonly Dictionary<string, string?> _environment = new();
     private ReusableSqlServerDatabase? _database;
@@ -53,12 +53,16 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     private WorkspaceAcceptanceActor? _administrator;
     private WorkspaceAcceptanceActor? _permissionManager;
     internal WorkspaceAcceptanceActor PermissionManager => _permissionManager ?? throw new InvalidOperationException("对象权限管理主体尚未准备。");
+    private WorkspaceAcceptanceActor? _transferRecipient;
+    internal WorkspaceAcceptanceActor TransferRecipient => _transferRecipient ?? throw new InvalidOperationException("转交接收主体尚未准备。");
+    internal string TransferFolderName => "转交来源文件夹 " + runId[..8];
+    internal string TransferTargetName => "转交原零组件 " + runId[..8];
     internal string HostIdentity => $"published:{_host?.Process.Id}:{runId}";
 
     internal static PublishedComponentAcceptanceFixture FromWorkspaceDelivery(string repositoryRoot, string runDirectory, string runId,
         bool exerciseCompositionLifecycle = false, bool exerciseUninstallRecovery = false, bool exerciseFileRecovery = false, bool exerciseFileRecoveryMechanisms = true,
         bool exerciseDocumentCopyRecovery = false, bool exerciseDocumentCopyInterruptions = true, bool exerciseDocumentBatchRecovery = false,
-        PublishedWorkspacePreparation preparation = PublishedWorkspacePreparation.HistoricalUpgrade, bool preparePermissionActors = false, bool prepareHistoryActor = false, bool prepareBatchActor = false)
+        PublishedWorkspacePreparation preparation = PublishedWorkspacePreparation.HistoricalUpgrade, bool preparePermissionActors = false, bool prepareHistoryActor = false, bool prepareBatchActor = false, bool prepareTransferActors = false)
     {
         var path = RequiredPath("NEWP_ACCEPTANCE_WORKSPACE_DELIVERY_INPUT");
         var input = JsonSerializer.Deserialize<WorkspaceDeliveryInput>(File.ReadAllText(path), AcceptanceJson.Options)
@@ -68,7 +72,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             exerciseCompositionLifecycle: exerciseCompositionLifecycle, exerciseUninstallRecovery: exerciseUninstallRecovery,
             exerciseFileRecovery: exerciseFileRecovery, exerciseFileRecoveryMechanisms: exerciseFileRecoveryMechanisms,
             exerciseDocumentCopyRecovery: exerciseDocumentCopyRecovery, exerciseDocumentCopyInterruptions: exerciseDocumentCopyInterruptions,
-            exerciseDocumentBatchRecovery: exerciseDocumentBatchRecovery, preparation: preparation, preparePermissionActors: preparePermissionActors, prepareHistoryActor: prepareHistoryActor, prepareBatchActor: prepareBatchActor);
+            exerciseDocumentBatchRecovery: exerciseDocumentBatchRecovery, preparation: preparation, preparePermissionActors: preparePermissionActors, prepareHistoryActor: prepareHistoryActor, prepareBatchActor: prepareBatchActor, prepareTransferActors: prepareTransferActors);
     }
 
     // 只登记受控构建的输入与来源；不产出裁决，也不授予包信任。Gate 仍走正式安装/Host。
@@ -322,6 +326,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         }
         if (prepareBatchActor) actor = await PrepareBatchActorAsync(registerSecret, token);
         if (prepareHistoryActor) actor = await PrepareHistoryActorAsync(registerSecret, token);
+        if (prepareTransferActors) actor = await PrepareTransferActorsAsync(registerSecret, token);
         var targetAfter = ReadTargetIdentity();
         await WriteAsync("target-after.json", targetAfter, token);
         if (before != targetAfter) throw new InvalidOperationException("安装期间固定 Host/Shell 发行物发生变化。");
@@ -381,6 +386,42 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     }
 
     /// <summary>通过正式目录准备独立履历读者；当前真实Part出现位置及至少一条安全事件是页面的业务前置。</summary>
+    private async Task<WorkspaceAcceptanceActor> PrepareTransferActorsAsync(Action<string> registerSecret, CancellationToken token)
+    {
+        using var administrator = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
+        await WorkspaceAcceptanceFixture.LoginAsync(administrator, _administrator!, token);
+        var features = await AcceptanceFeatureCatalog.LoadAsync(administrator, token);
+        var browse = features.Behavior("Workspace", "workspace.spaces.access");
+        var transfer = features.Action(browse, "transfer", "list.rowActions", "folder");
+        var notification = features.Behavior("Workspace", "workspace.transfers.read");
+        var ownerGrants = new[] { browse, transfer, features.Action(browse, "create", "list.pageActions", "folder"),
+            features.Action(browse, "createPart", "list.pageActions", "folder") };
+        var owner = await WorkspaceAcceptanceFixture.PrepareAsync(administrator, features, "to" + runId, registerSecret, ownerGrants, token);
+        var recipient = await WorkspaceAcceptanceFixture.PrepareAsync(administrator, features, "tr" + runId, registerSecret, [browse, notification], token);
+        _transferRecipient = recipient;
+        foreach (var (actor, selected) in new[] { (owner, ownerGrants), (recipient, new[] { browse, notification }) })
+        {
+            using var client = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
+            await WorkspaceAcceptanceFixture.LoginAsync(client, actor, token);
+            var current = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get, "/api/auth/current-user", null, null, token);
+            var positions = current.GetProperty("featurePositions").EnumerateArray().Select(item => item.GetString()!).ToHashSet(StringComparer.Ordinal);
+            if (!positions.SetEquals(features.GrantSet(selected)) || positions.Any(position => position.StartsWith("Part/", StringComparison.Ordinal)
+                || position.StartsWith("Document/", StringComparison.Ordinal) || position.StartsWith("Audit/", StringComparison.Ordinal)))
+                throw new InvalidOperationException("转交页面主体没有保持正式限定功能集合。");
+        }
+        using var sourceOwner = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
+        await WorkspaceAcceptanceFixture.LoginAsync(sourceOwner, owner, token);
+        var spaces = await WorkspaceAcceptanceFixture.SendAsync(sourceOwner, HttpMethod.Get, "/api/workspace/spaces", null, browse.Position, token);
+        var root = spaces.EnumerateArray().Single(item => string.Equals(item.GetProperty("spaceKind").GetString(), "Public", StringComparison.OrdinalIgnoreCase));
+        var position = new WorkspaceFolderPosition(root.GetProperty("spaceId").GetString()!, root.GetProperty("rootFolderId").GetString()!, root.GetProperty("rootFolderId").GetString()!, []);
+        var folder = await WorkspaceAcceptanceFixture.CreateFolderAtPositionAsync(sourceOwner, features, position, TransferFolderName, token);
+        var target = await CreateWorkspaceObjectAsync(sourceOwner, features, folder, "Part", "parts", "ACC-TRANSFER-" + runId[..8], TransferTargetName, token);
+        await WriteAsync("transfer-actors.json", new { owner = owner.AccountId, recipient = recipient.AccountId, target,
+            sourcePosition = folder.CommandPosition, transfer = transfer.Position, browse = browse.Position, notification = notification.Position,
+            ownerGrants = features.GrantSet(ownerGrants), recipientGrants = features.GrantSet(browse, notification) }, token);
+        return owner;
+    }
+
     private async Task<WorkspaceAcceptanceActor> PrepareHistoryActorAsync(Action<string> registerSecret, CancellationToken token)
     {
         using var administrator = WorkspaceAcceptanceFixture.CreateClient(_hostPort);

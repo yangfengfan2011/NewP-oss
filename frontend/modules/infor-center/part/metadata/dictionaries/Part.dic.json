@@ -1,5 +1,6 @@
 {
   "Part": {
+    "HistoryOwnershipTransferred": { "zhs": "转交对象归属", "en": "Object ownership transferred" },
     "HistoryOwnershipInitialized": { "zhs": "初始化对象归属", "en": "Object ownership initialized" },
     "HistoryOwnershipBackfilled": { "zhs": "补齐对象归属", "en": "Object ownership backfilled" },
     "Information": { "zhs": "属性", "en": "Properties" },
@@ -106,7 +107,8 @@
     },
     "HistoryCreated": {"zhs": "创建对象", "en": "Object created"},
     "HistoryUpdated": {"zhs": "修改对象", "en": "Object updated"},
-    "HistoryDeleted": {"zhs": "删除对象", "en": "Object deleted"}
+    "HistoryDeleted": {"zhs": "删除对象", "en": "Object deleted"},
+    "Transfer": { "zhs": "转交", "en": "Transfer" }
   },
   "type": "dic",
   "schemaVersion": "1.0"

@@ -6,6 +6,7 @@ using ICP.Platform.Modules.Document.Contracts;
 using ICP.Platform.Modules.Files.Contracts;
 using ICP.Platform.Persistence.Planning;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace ICP.Platform.Modules.Document;
 
@@ -19,6 +20,9 @@ public sealed class DocumentModule : ModuleCapsuleBindingBase
     {
         services.AddSingleton(new ICP.Platform.Authorization.Contracts.DataScopeResourceActionBinding("document.document", ModuleId,
             ["read", "create", "edit", "delete", "authorize", "history", "documentCopy", "documentObjectCopy", "download"]));
+        services.AddSingleton(new ICP.Platform.Modules.Audit.Contracts.ObjectHistoryEventPolicy(ModuleId,
+            "entity.ownership.transferred", "document.document", "document.document",
+            ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.ObjectId, "Document.HistoryOwnershipTransferred"));
         services.AddSingleton(new ICP.Platform.Modules.Audit.Contracts.ObjectHistoryEventPolicy(ModuleId,
             "entity.ownership.initialized", "document.document", "document.document",
             ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.ObjectId, "Document.HistoryOwnershipInitialized"));
@@ -54,6 +58,7 @@ public sealed class DocumentModule : ModuleCapsuleBindingBase
             ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.ObjectId, "Document.HistoryFilesReleased")
         { TextSnapshot = new("ObjectName", "ObjectCode") });
         services.AddStandardCrudKernel();
+        services.TryAddScoped<ICP.Platform.Crud.Ownership.EntityOwnershipTransfer>();
         services.AddStandardCrudResource(provider =>
         {
             var plan = provider.GetRequiredService<CompiledPersistencePlan>();

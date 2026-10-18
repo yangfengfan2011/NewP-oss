@@ -58,7 +58,7 @@ internal sealed class FeatureCatalogHostFixture : IAsyncDisposable
     private FeatureCatalogHostFixture(ReusableSqlServerDatabase databaseLease)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !Directory.Exists(Path.Combine(directory.FullName, ".git"))) directory = directory.Parent;
+        while (directory is not null && !Directory.Exists(Path.Combine(directory.FullName, ".git")) && !File.Exists(Path.Combine(directory.FullName, ".git"))) directory = directory.Parent;
         RepositoryRoot = directory?.FullName ?? throw new InvalidOperationException("Repository root missing.");
         EvidenceRoot = Path.Combine(RepositoryRoot, ".codex-temp", "issue205", _runId);
         Directory.CreateDirectory(EvidenceRoot);

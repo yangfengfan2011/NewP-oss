@@ -6,6 +6,73 @@ namespace ICP.Platform.Acceptance;
 /// <summary>工作空间唯一正式旅程的页面控件知识；后续内容操作继续扩展此驱动。</summary>
 internal sealed class WorkspacePageDriver(IPage page)
 {
+    /// <summary>标准转交输入选择真实账号并保存一次；身份、事务与不可读接收者边界由API证明。</summary>
+    internal async Task TransferOwnershipAsync(string targetName, string recipientCode)
+    {
+        var crud = new StandardCrudPageDriver(page);
+        var row = await crud.WaitForRowAsync(targetName);
+        await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
+        var eligible = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath == "/api/workspace/ownership/transfer/eligibility");
+        await page.GetByRole(AriaRole.Menuitem, new() { NameRegex = new Regex(@"^转\s*交$") }).ClickAsync();
+        var eligibility = await eligible;
+        if (!eligibility.Ok) throw new InvalidOperationException($"转交准备失败：{eligibility.Status} {await eligibility.TextAsync()}");
+        var dialog = crud.VisibleModal();
+        await dialog.WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        var account = dialog.GetByRole(AriaRole.Combobox);
+        await Assertions.Expect(account).ToBeEnabledAsync();
+        await account.ClickAsync();
+        var candidates = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath == "/api/workspace/ownership/transfer/accounts"
+            && StandardCrudPageDriver.HasQueryValue(new Uri(response.Url), "query", recipientCode));
+        await account.FillAsync(recipientCode);
+        var loaded = await candidates;
+        if (!loaded.Ok) throw new InvalidOperationException($"转交接收人候选失败：{loaded.Status} {await loaded.TextAsync()}");
+        await Assertions.Expect(account).ToBeEnabledAsync();
+        var candidate = page.Locator(".ant-select-dropdown:visible .ant-select-item-option:not(.ant-select-item-option-disabled)")
+            .Filter(new() { HasTextString = recipientCode });
+        await Assertions.Expect(candidate).ToHaveCountAsync(1);
+        await candidate.ClickAsync();
+        await crud.ConfirmAsync(dialog, new("POST", "/api/workspace/ownership/transfer", 200, "转交原对象"));
+        await crud.WaitForRowAsync(targetName);
+    }
+
+    /// <summary>切换后的接收人进入实际个人接收目录，再由私有通知打开原对象正式属性。</summary>
+    internal async Task OpenReceivedTransferAsync(string targetName)
+    {
+        await OpenAsync();
+        await SelectTreePathAsync("个人空间");
+        var directoryCell = page.GetByRole(AriaRole.Cell, new() { NameRegex = new Regex(@"\s转交\s\d{4}-\d{2}-\d{2}\s") });
+        await Assertions.Expect(directoryCell).ToHaveCountAsync(1);
+        var directoryName = (await directoryCell.InnerTextAsync()).Trim();
+        await SelectTreePathAsync("个人空间", directoryName);
+        var crud = new StandardCrudPageDriver(page);
+        await crud.WaitForRowAsync(targetName);
+        var notifications = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath == "/api/workspace/transfers/notifications");
+        var sidebar = page.Locator(".np-sidebar-menu");
+        var notificationLink = sidebar.GetByRole(AriaRole.Link, new() { Name = "接收通知", Exact = true });
+        if (!await notificationLink.IsVisibleAsync())
+        {
+            var submenu = sidebar.Locator(".ant-menu-submenu").Filter(new() { Has = page.GetByRole(AriaRole.Link, new() { Name = "工作空间", Exact = true }) });
+            await Assertions.Expect(submenu).ToHaveCountAsync(1);
+            if (!(await submenu.GetAttributeAsync("class") ?? "").Contains("ant-menu-submenu-open", StringComparison.Ordinal))
+                await submenu.Locator(".ant-menu-submenu-title").ClickAsync();
+        }
+        await notificationLink.ClickAsync();
+        var loaded = await notifications;
+        if (!loaded.Ok) throw new InvalidOperationException($"接收通知读取失败：{loaded.Status} {await loaded.TextAsync()}");
+        var row = await crud.WaitForRowAsync(targetName);
+        await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
+        var properties = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath.StartsWith("/api/workspace/content/", StringComparison.Ordinal)
+            && new Uri(response.Url).AbsolutePath.EndsWith("/properties", StringComparison.Ordinal));
+        await page.GetByRole(AriaRole.Menuitem, new() { Name = "打开属性", Exact = true }).ClickAsync();
+        var read = await properties;
+        if (!read.Ok) throw new InvalidOperationException($"接收原对象属性失败：{read.Status} {await read.TextAsync()}");
+        await page.Locator(".np-crud-detail:visible").First.WaitForAsync();
+    }
+
     /// <summary>勾选真实混合资源，经批量输入配置完整主体项并只确认一次；载荷及事务语义由API测试承担。</summary>
     internal async Task SaveBatchAuthorizationAsync(string partName, string documentName, string presentationPath)
     {

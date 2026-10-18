@@ -33,6 +33,29 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通所属人标准转交一次，接收人真实登录进入个人目录/通知并打开原对象")]
+    public async Task NativeWorkspaceOwnershipTransfer_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-workspace-ownership-transfer");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease, prepareTransferActors: true);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, publishedFixture: fixture,
+            browserJourney: async (page, token) =>
+            {
+                token.ThrowIfCancellationRequested();
+                var owner = new WorkspacePageDriver(page);
+                await owner.OpenAsync();
+                await owner.SelectTreePathAsync("公共空间", fixture.TransferFolderName);
+                await owner.TransferOwnershipAsync(fixture.TransferTargetName, fixture.TransferRecipient.ECode);
+                await page.GetByRole(AriaRole.Button, new() { Name = ShellPageDriver.SignOutLabel, Exact = true }).ClickAsync();
+                await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/login");
+                var recipient = fixture.TransferRecipient;
+                await new ShellPageDriver(page, new Uri(page.Url).GetLeftPart(UriPartial.Authority)).LoginAsync(recipient.ECode, recipient.Password);
+                await new WorkspacePageDriver(page).OpenReceivedTransferAsync(fixture.TransferTargetName);
+                token.ThrowIfCancellationRequested();
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "仅既有Workspace浏览资格打开Part来源属性/权限，再由独立管理账号修改草稿并标准保存一次")]
     public async Task NativeWorkspacePartPermissions_UsesFormalDriver()
     {

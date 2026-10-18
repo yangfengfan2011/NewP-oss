@@ -4,6 +4,7 @@ using ICP.Platform.Crud.ObjectOperations;
 using ICP.Platform.Sdk;
 using ICP.Platform.Persistence.Planning;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace ICP.Platform.Modules.Part;
 
@@ -17,6 +18,9 @@ public sealed class PartModule : ModuleCapsuleBindingBase
     {
         services.AddSingleton(new ICP.Platform.Authorization.Contracts.DataScopeResourceActionBinding("part.part", ModuleId,
             ["read", "create", "edit", "delete", "authorize", "history", "partCopy", "partObjectCopy"]));
+        services.AddSingleton(new ICP.Platform.Modules.Audit.Contracts.ObjectHistoryEventPolicy(ModuleId,
+            "entity.ownership.transferred", "part.part", "part.part",
+            ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.ObjectId, "Part.HistoryOwnershipTransferred"));
         services.AddSingleton(new ICP.Platform.Modules.Audit.Contracts.ObjectHistoryEventPolicy(ModuleId,
             "entity.ownership.initialized", "part.part", "part.part",
             ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.ObjectId, "Part.HistoryOwnershipInitialized"));
@@ -36,6 +40,7 @@ public sealed class PartModule : ModuleCapsuleBindingBase
             ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.ObjectId, "Part.HistoryDeleted")
         { TextSnapshot = new("ObjectName", "ObjectCode") });
         services.AddStandardCrudKernel();
+        services.TryAddScoped<ICP.Platform.Crud.Ownership.EntityOwnershipTransfer>();
         services.AddStandardCrudResource(provider =>
         {
             var plan = provider.GetRequiredService<CompiledPersistencePlan>();

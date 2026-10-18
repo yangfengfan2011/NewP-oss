@@ -1,5 +1,27 @@
 export const effectNetworkLifecycleAllowlist = [
   {
+    id: 'packages/ui/src/ObjectOwnershipTransferInput.tsx::TransferSession::useEffect::platformFetch#1',
+    file: 'packages/ui/src/ObjectOwnershipTransferInput.tsx',
+    enclosingFunction: 'TransferSession',
+    hook: 'useEffect',
+    triggerChain: 'platformFetch#1',
+    classification: 'read-query',
+    owner: 'UI Ownership Transfer',
+    reason: '只读当前完整选择的转交资格；来源/账号实例变化会Abort，旧响应不写入新会话，提交仍在显式handler中。',
+    exitCondition: '读取迁入Platform Query Runtime或移除此Effect时删除。',
+  },
+  {
+    id: 'packages/ui/src/ObjectOwnershipTransferInput.tsx::TransferSession::useEffect::platformFetch#2',
+    file: 'packages/ui/src/ObjectOwnershipTransferInput.tsx',
+    enclosingFunction: 'TransferSession',
+    hook: 'useEffect',
+    triggerChain: 'platformFetch#2',
+    classification: 'read-query',
+    owner: 'UI Ownership Transfer',
+    reason: '只读当前转交资格下的账号候选；搜索和来源变化会Abort且迟到响应失效，不按接收者对象read限制候选。',
+    exitCondition: '读取迁入Platform Query Runtime或移除此Effect时删除。',
+  },
+  {
     id: 'packages/ui/src/ObjectOwnershipInitializationInput.tsx::ObjectOwnershipInitializationInput::useEffect::platformFetch#1',
     file: 'packages/ui/src/ObjectOwnershipInitializationInput.tsx',
     enclosingFunction: 'ObjectOwnershipInitializationInput',

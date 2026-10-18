@@ -30,6 +30,7 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         services.AddScoped<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, OrganizationAvailabilityHandler>();
         services.AddSingleton<IOrganizationQuery, OrganizationQuery>();
         services.AddScoped<ICP.Platform.Persistence.Ownership.IAccountOwnershipDirectory, OrganizationAccountOwnershipDirectory>();
+        services.AddScoped<ICP.Platform.Persistence.Ownership.ITransactionalAccountOwnershipDirectory, TransactionalAccountOwnershipDirectory>();
         services.AddScoped<OrganizationInitializationService>();
         services.AddScoped<ICP.Platform.Identity.Contracts.IIdentityAdmissionPolicy, OrganizationAdmissionPolicy>();
         services.AddScoped<OrganizationAdmissionCommitParticipant>();

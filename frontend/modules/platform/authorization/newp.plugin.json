@@ -1,7 +1,7 @@
 {
   "moduleId": "Authorization",
   "displayName": "权限管理",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "开发期内建插件清单",
   "entryAssembly": "../../AuthorizationModule.dll",
   "dependencies": [],

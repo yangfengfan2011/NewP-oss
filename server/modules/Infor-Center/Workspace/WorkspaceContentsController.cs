@@ -19,7 +19,10 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
     ILogger<WorkspaceContentsController> logger, WorkspaceFolderScope folderScope, IObjectOperationExecutor operations, ICP.Platform.Crud.Runtime.LinkTreeReader trees,
     ICP.Platform.Authorization.Contracts.IDataScopeEvaluationScope? evaluation = null) : ControllerBase
 {
-    public sealed record CreateFolderInput(WorkspacePosition Position, Dictionary<string, JsonElement> Values);
+    public sealed record CreateFolderInput(WorkspacePosition Position, Dictionary<string, JsonElement> Values)
+    {
+        public bool? CopyParentAuthorization { get; init; }
+    }
     public sealed record AddReferenceInput(WorkspacePosition Position, LinkObjectReference Target);
     public sealed record RemoveReferenceInput(WorkspacePosition Position);
     public sealed record DeleteObjectsInput(WorkspacePosition Position, string[] LinkIds);
@@ -82,13 +85,14 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
         {
             if (input.ValueKind != JsonValueKind.Object) throw new LinkQueryException(400, "Workspace.InvalidClipboardInput");
             var members = input.EnumerateObject().ToArray();
-            if (members.Length != 5 || members.Select(member => member.Name).Distinct(StringComparer.Ordinal).Count() != 5
-                || members.Any(member => member.Name is not ("mode" or "sourcePosition" or "linkIds" or "targetPosition" or "name"))
+            if (members.Length is not (5 or 6) || members.Select(member => member.Name).Distinct(StringComparer.Ordinal).Count() != members.Length
+                || members.Any(member => member.Name is not ("mode" or "sourcePosition" or "linkIds" or "targetPosition" or "name" or "copyParentAuthorization"))
+                || input.TryGetProperty("copyParentAuthorization", out var copyParent) && copyParent.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
                 || !input.TryGetProperty("name", out var name) || name.ValueKind != JsonValueKind.String)
                 throw new LinkQueryException(400, "Workspace.InvalidClipboardInput");
-            var clipboard = JsonSerializer.SerializeToElement(members.Where(member => member.Name != "name").ToDictionary(member => member.Name, member => member.Value));
+            var clipboard = JsonSerializer.SerializeToElement(members.Where(member => member.Name is not ("name" or "copyParentAuthorization")).ToDictionary(member => member.Name, member => member.Value));
             var request = ReadClipboardInput(clipboard, true);
-            return Results.Ok(await contents.CopyFolderAsync(Actor(), request.Mode, request.SourcePosition, request.LinkIds, request.TargetPosition!, name.GetString()!, token));
+            return Results.Ok(await contents.CopyFolderAsync(Actor(), request.Mode, request.SourcePosition, request.LinkIds, request.TargetPosition!, name.GetString()!, copyParent.ValueKind == JsonValueKind.True, token));
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
     }
@@ -113,13 +117,14 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
         {
             if (input.ValueKind != JsonValueKind.Object) throw new LinkQueryException(400, "Workspace.InvalidClipboardInput");
             var members = input.EnumerateObject().ToArray();
-            if (members.Length != 5 || members.Select(member => member.Name).Distinct(StringComparer.Ordinal).Count() != 5
-                || members.Any(member => member.Name is not ("mode" or "sourcePosition" or "linkIds" or "targetPosition" or "name"))
+            if (members.Length is not (5 or 6) || members.Select(member => member.Name).Distinct(StringComparer.Ordinal).Count() != members.Length
+                || members.Any(member => member.Name is not ("mode" or "sourcePosition" or "linkIds" or "targetPosition" or "name" or "copyParentAuthorization"))
+                || input.TryGetProperty("copyParentAuthorization", out var copyParent) && copyParent.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
                 || !input.TryGetProperty("name", out var name) || name.ValueKind != JsonValueKind.String)
                 throw new LinkQueryException(400, "Workspace.InvalidClipboardInput");
-            var clipboard = JsonSerializer.SerializeToElement(members.Where(member => member.Name != "name").ToDictionary(member => member.Name, member => member.Value));
+            var clipboard = JsonSerializer.SerializeToElement(members.Where(member => member.Name is not ("name" or "copyParentAuthorization")).ToDictionary(member => member.Name, member => member.Value));
             var request = ReadClipboardInput(clipboard, true);
-            return Results.Ok(await contents.CopyFolderStructureAsync(Actor(), request.Mode, request.SourcePosition, request.LinkIds, request.TargetPosition!, name.GetString()!, token));
+            return Results.Ok(await contents.CopyFolderStructureAsync(Actor(), request.Mode, request.SourcePosition, request.LinkIds, request.TargetPosition!, name.GetString()!, copyParent.ValueKind == JsonValueKind.True, token));
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
     }
@@ -300,7 +305,7 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
         try
         {
             if (input.Position is null || input.Values is null) throw new LinkQueryException(400, "Workspace.InvalidCreateInput");
-            id = await contents.CreateFolderAsync(Actor(), input.Position, input.Values, token);
+            id = await contents.CreateFolderAsync(Actor(), input.Position, input.Values, input.CopyParentAuthorization == true, token);
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
         try

@@ -267,12 +267,13 @@ internal sealed class WorkspacePageDriver(IPage page)
         await page.WaitForURLAsync(url => url != address);
     }
 
-    internal async Task CreateFolderAsync(string name)
+    internal async Task CreateFolderAsync(string name, bool? copyParentAuthorization = null)
     {
         var crud = new StandardCrudPageDriver(page);
         var drawer = await crud.OpenCreateDrawerAsync("新建文件夹", "新建");
         await StandardCrudPageDriver.FillDrawerFieldAsync(drawer, "名称", name);
         await StandardCrudPageDriver.FillDrawerFieldAsync(drawer, "说明", "工作空间正式创建旅程");
+        await SelectParentAuthorizationAsync(drawer, copyParentAuthorization);
         await crud.SaveAndCloseAsync(drawer, new("POST", "/api/workspace/content/folders", null, "创建子文件夹"));
         await crud.WaitForRowAsync(name);
     }
@@ -394,20 +395,21 @@ internal sealed class WorkspacePageDriver(IPage page)
         => await PasteReferencesAsync("粘贴引用", names);
 
     /// <summary>从正式名称输入提交浅副本，只证明用户能确认并在目标看到结果。</summary>
-    internal Task PasteFolderCopyAsync(string name, Func<Task>? capture = null)
-        => PasteNamedFolderAsync("粘贴文件夹副本", "copy", name, capture);
+    internal Task PasteFolderCopyAsync(string name, Func<Task>? capture = null, bool? copyParentAuthorization = null)
+        => PasteNamedFolderAsync("粘贴文件夹副本", "copy", name, capture, copyParentAuthorization);
 
     /// <summary>结构副本使用自己的正式动作和端点，结果数据语义由 SQL 测试验证。</summary>
-    internal Task PasteFolderStructureAsync(string name, Func<Task>? capture = null)
-        => PasteNamedFolderAsync("粘贴文件夹结构", "copy-structure", name, capture);
+    internal Task PasteFolderStructureAsync(string name, Func<Task>? capture = null, bool? copyParentAuthorization = null)
+        => PasteNamedFolderAsync("粘贴文件夹结构", "copy-structure", name, capture, copyParentAuthorization);
 
     /// <summary>两种复制共用名称输入交接；异步准备完成后填写，提交后消费正式列表刷新。</summary>
-    private async Task PasteNamedFolderAsync(string actionLabel, string endpoint, string name, Func<Task>? capture)
+    private async Task PasteNamedFolderAsync(string actionLabel, string endpoint, string name, Func<Task>? capture, bool? copyParentAuthorization)
     {
         var crud = new StandardCrudPageDriver(page);
         await crud.ClickPageActionAsync(actionLabel);
         var dialog = page.GetByRole(AriaRole.Dialog, new() { Name = actionLabel, Exact = true });
         await dialog.GetByRole(AriaRole.Textbox, new() { Name = "新文件夹名称", Exact = true }).FillAsync(name);
+        await SelectParentAuthorizationAsync(dialog, copyParentAuthorization);
         if (capture is not null) await capture();
         var written = page.WaitForResponseAsync(response => response.Request.Method == "POST"
             && new Uri(response.Url).AbsolutePath == "/api/workspace/content/folders/" + endpoint);
@@ -416,6 +418,13 @@ internal sealed class WorkspacePageDriver(IPage page)
         if (!response.Ok) throw new InvalidOperationException($"{actionLabel}提交失败：{response.Status} {await response.TextAsync()}");
         await Assertions.Expect(dialog).ToHaveCountAsync(0);
         await crud.WaitForRowAsync(name);
+    }
+
+    // 只在本次旅程明确选择时操作真实控件，保留旧driver调用的交互顺序。
+    private static async Task SelectParentAuthorizationAsync(ILocator surface, bool? selected)
+    {
+        if (selected is not null)
+            await surface.GetByRole(AriaRole.Checkbox, new() { Name = "复制父文件夹直接授权", Exact = true }).SetCheckedAsync(selected.Value);
     }
 
     /// <summary>剪切使用同一粘贴动作的待移动文案，成功后仍沿正式读取交接。</summary>

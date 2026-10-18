@@ -256,11 +256,14 @@ it('protects a cross-space draft and submission, then refreshes all loaded share
   await click('继续编辑');
   expect(input.value).toBe('新共享内容');
   expect(new URLSearchParams(page.router.state.location.search).get('node')).toBe('mine:my-root:private-shared');
-  await act(async () => document.querySelector<HTMLFormElement>('.ant-drawer form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  const saveButton = [...document.querySelectorAll<HTMLButtonElement>('.ant-drawer .np-crud-form-drawer-footer button')].find(button => button.textContent?.replace(/\s/g, '') === '保存并关闭')!;
+  expect(saveButton).toBeDefined();
+  await waitFor(() => expect(saveButton.disabled).toBe(false));
+  await act(async () => saveButton.click());
   await waitFor(() => expect(page.writes).toHaveLength(1));
   await selectPublic();
   expect(new URLSearchParams(page.router.state.location.search).get('node')).toBe('mine:my-root:private-shared');
-  expect(page.writes[0]).toEqual({ position: { spaceId: 'mine', rootFolderId: 'my-root', linkIds: ['private-shared'] }, values: { ENAME: '新共享内容', Description: null } });
+  expect(page.writes[0]).toEqual({ position: { spaceId: 'mine', rootFolderId: 'my-root', linkIds: ['private-shared'] }, values: { ENAME: '新共享内容' }, copyParentAuthorization: true });
   const before = page.requests.length;
   await act(async () => complete(json({ succeeded: true })));
   await waitFor(() => expect(document.querySelector('.ant-drawer-open')).toBeNull());

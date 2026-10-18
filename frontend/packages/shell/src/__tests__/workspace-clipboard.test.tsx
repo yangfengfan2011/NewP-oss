@@ -429,7 +429,7 @@ it.each(['copy', 'copy-structure'] as const)('submits the real prepared folder c
   await waitFor(() => expect(page.container.textContent).toContain('已保存，刷新失败'));
   expect(page.writes.filter(item => item.path.endsWith(`/folders/${kind}`))).toHaveLength(1);
   expect(page.writes.find(item => item.path.endsWith(`/folders/${kind}`))!.body).toEqual({ mode: 'copy', sourcePosition: { spaceId: 'public', rootFolderId: 'root', linkIds: ['A-link'] },
-    linkIds: ['WorkspaceFolder-lid'], targetPosition: { spaceId: 'public', rootFolderId: 'root', linkIds: ['B-link'] }, name: 'WorkspaceFolder source' });
+    linkIds: ['WorkspaceFolder-lid'], targetPosition: { spaceId: 'public', rootFolderId: 'root', linkIds: ['B-link'] }, name: 'WorkspaceFolder source', copyParentAuthorization: true });
   await act(async () => page.button('刷新').click());
   await waitFor(() => expect(page.container.textContent).not.toContain('已保存，刷新失败'));
   expect(page.writes.filter(item => item.path.endsWith(`/folders/${kind}`))).toHaveLength(1);

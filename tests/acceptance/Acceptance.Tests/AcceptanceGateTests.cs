@@ -477,6 +477,33 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通Folder新建及两种复制在原输入中选择父授权初始化并看到结果，语义由真实API承担")]
+    public async Task NativeWorkspaceFolderParentAuthorization_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-workspace-folder-parent-authorization");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
+            browserJourney: async (page, token) =>
+            {
+                token.ThrowIfCancellationRequested();
+                var driver = new WorkspacePageDriver(page);
+                var source = "父授权源 " + runId[..8];
+                await driver.OpenAsync();
+                await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
+                await driver.CreateFolderAsync(source, copyParentAuthorization: false);
+                await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName, source);
+                await driver.CopyFolderFromTreeContextMenuAsync(source, selectedOnly: true);
+                await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
+                await driver.PasteFolderCopyAsync("父授权浅副本 " + runId[..8], copyParentAuthorization: true);
+                await driver.PasteFolderStructureAsync("父授权结构 " + runId[..8],
+                    capture: () => AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "parent-authorization-input.png")), copyParentAuthorization: true);
+                // 新行随本轮受保护schema由既有fixture清理，不增加删除UI旅程。
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
+                    new { url = page.Url, journey = "folder-parent-authorization", actor = "ordinary" }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "两种文件夹副本使用同一固定发行物旅程和正式driver完成选源到结果的最短路径")]
     public async Task NativeWorkspaceFolderCopy_UsesFormalDriver()
     {

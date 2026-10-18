@@ -21,10 +21,16 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
     IDocumentFiles documentFiles, IDocumentCopies documentCopies, WorkspaceTreeOrder treeOrder, WorkspaceReferenceAudit referenceAudit,
     Microsoft.Extensions.Logging.ILogger<WorkspaceContents> logger,
     ICP.Platform.Crud.Ownership.EntityOwnershipValues ownership,
-    ICP.Platform.Crud.Ownership.EntityOwnershipAudit ownershipAudit, WorkspaceFolderReadDescriptor folderDescriptor)
+    ICP.Platform.Crud.Ownership.EntityOwnershipAudit ownershipAudit, WorkspaceFolderReadDescriptor folderDescriptor,
+    IDataScopeObjectInitializer parentAuthorizations)
 {
+    /// <summary>保留旧调用不复制父授权的行为；新的初始化语义须由真实业务入口明确选择。</summary>
+    public ValueTask<string> CreateFolderAsync(string actorId, WorkspacePosition position, IReadOnlyDictionary<string, JsonElement> values, CancellationToken token) =>
+        CreateFolderAsync(actorId, position, values, false, token);
+
     /// <summary>在有效位置内创建实体与 Link，同父名称比较及并发串行化由 SQL Server 事务锁保护。</summary>
-    public ValueTask<string> CreateFolderAsync(string actorId, WorkspacePosition position, IReadOnlyDictionary<string, JsonElement> values, CancellationToken token)
+    public ValueTask<string> CreateFolderAsync(string actorId, WorkspacePosition position, IReadOnlyDictionary<string, JsonElement> values,
+        bool copyParentAuthorization, CancellationToken token)
     {
         if (values.Keys.Any(key => key is not ("ENAME" or "Description"))) throw new LinkQueryException(400, "Workspace.ServerFieldForbidden", values.Keys.First(key => key is not ("ENAME" or "Description")));
         if (!values.TryGetValue("ENAME", out var name) || name.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(name.GetString()) || name.GetString()!.Length > 256)
@@ -52,6 +58,14 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
             folders.Add(candidate);
             await ownershipAudit.RegisterAsync("workspace.folder", id, candidate, false, cancellation);
             await referenceAudit.FolderCreatedAsync(candidate, cancellation);
+            // 空间根不是普通父授权来源；选项不扩大到Part/Document，也不复制源文件夹ACL。
+            if (copyParentAuthorization && path.FolderId != position.RootFolderId)
+            {
+                var initialized = await parentAuthorizations.InitializeFromParentAsync("workspace.folder", path.FolderId, id, cancellation);
+                // 通用授权保存不取图锁；父ACL锁保持到提交，在此重验读取与edit，空配置也不能跳过。
+                await WritablePositionAsync(actorId, position, cancellation);
+                if (initialized) await referenceAudit.ParentAuthorizationInitializedAsync(path.FolderId, candidate, cancellation);
+            }
             await transactions.FlushAsync(cancellation);
             var linkId = await RegisterCreatedReferenceAsync(path.FolderId, WorkspacePositions.FolderModel, id, cancellation);
             await referenceAudit.AddedAsync(linkId, path.FolderId, new(WorkspacePositions.FolderModel, id), cancellation);

@@ -31,7 +31,12 @@ public sealed partial class WorkspaceContents
 
     /// <summary>浅副本在唯一图锁事务内核证全部直接内容，再创建独立根和共享引用；结果读取不属于提交。</summary>
     public ValueTask<WorkspacePasteResult> CopyFolderAsync(string actor, string mode, WorkspacePosition sourcePosition,
-        string[] linkIds, WorkspacePosition targetPosition, string name, CancellationToken token)
+        string[] linkIds, WorkspacePosition targetPosition, string name, CancellationToken token) =>
+        CopyFolderAsync(actor, mode, sourcePosition, linkIds, targetPosition, name, false, token);
+
+    /// <summary>显式父授权选项只作用于新根；直接子对象仍共享，不读取或复制来源授权。</summary>
+    public ValueTask<WorkspacePasteResult> CopyFolderAsync(string actor, string mode, WorkspacePosition sourcePosition,
+        string[] linkIds, WorkspacePosition targetPosition, string name, bool copyParentAuthorization, CancellationToken token)
     {
         if (mode != "copy" || linkIds.Length != 1 || string.IsNullOrWhiteSpace(linkIds[0]))
             throw new LinkQueryException(400, "Workspace.FolderCopySourceRequired");
@@ -65,7 +70,7 @@ public sealed partial class WorkspaceContents
             }
             // 普通创建拥有名称、Description、目标归属和候选create规则；嵌套执行共享当前事务及图锁。
             var createdId = await CreateFolderAsync(actor, targetPosition, new Dictionary<string, JsonElement> {
-                ["ENAME"] = JsonSerializer.SerializeToElement(name), ["Description"] = JsonSerializer.SerializeToElement(sourceFields.Description) }, cancellation);
+                ["ENAME"] = JsonSerializer.SerializeToElement(name), ["Description"] = JsonSerializer.SerializeToElement(sourceFields.Description) }, copyParentAuthorization, cancellation);
             var rootLinkId = (string)db.ChangeTracker.Entries<Dictionary<string, object?>>()
                 .Single(entry => entry.Metadata.Name == WorkspacePositions.ContentModel
                     && Equals(entry.Entity["PEID"], target.FolderId) && Equals(entry.Entity["CEID"], createdId)).Entity["LID"]!;

@@ -52,6 +52,10 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
     // 只将本owner真实writer的固定schema映射到规范对象；LID始终是记录事实，不变成授权目标。
     private void RegisterHistory(IServiceCollection services)
     {
+        services.AddSingleton(new ObjectHistoryEventPolicy(ModuleId, "workspace.folder.parentAuthorizationInitialized", "workspace.folder", "workspace.folder",
+            ObjectHistoryTargetFormat.DeclaredFields, "Workspace.HistoryParentAuthorizationInitialized")
+        { FieldAssociations = [new("PEID", ObjectHistoryFieldSide.After, "workspace.folder"), new("CEID", ObjectHistoryFieldSide.After, "workspace.folder")],
+            SubjectField = new("CEID", ObjectHistoryFieldSide.After, "workspace.folder"), TextSnapshot = new("ObjectName", "ObjectCode") });
         foreach (var (eventType, description) in new[] {
             ("workspace.folder.created", "Workspace.HistoryFolderCreated"),
             ("workspace.folder.updated", "Workspace.HistoryFolderUpdated"),

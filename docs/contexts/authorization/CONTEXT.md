@@ -134,6 +134,8 @@ _Avoid_: 部门资源的数据条件、公司全体人员、组织准入
 - 显式`ReadConstraintKey`与owner静态绑定在活动候选确认前验证，不构造scoped实现；请求在资源目录准备后解析同一scoped约束。该约束与data read相交，覆盖旧管理出口，不回调底层GetReadPlan，避免Folder范围递归；空间根参与遍历，但不是普通对象授权目标。
 - 动态直接项 `creator`、`owner`、`ownerDepartment` 不接收客户端主体ID，分别关联目标真实 `CreatedBy`、`OwnerId`、`OwnerDepartmentId`。可用性由正式 ENTITY 的平台审计/归属投影标记派生，不限于首批三个模型；未选归属字段的 ENTITY 只提供实际拥有的类型。规则主体目录不增加这些相对类型。匹配复用既有账号/部门事实，所属部门包含下级仍须显式选择；缺失或未知事实不匹配，事实源故障继续传播。SQL相关 EXISTS 与单对象意见使用相同目标关联，不物化对象全集或逐行查目录。
 - 单对象完整替换使用既有 `IEntityAuditValueProvider.BeginOperation` 包住本次事务，实际新增/更新的配置行、动作行和业务记录共享可信stamp；下一次顶层操作取新值，无变化不记事件。保留该provider原有嵌套语义，不把它与授权观察时刻的内层复用混为一谈。
+- 真实业务owner通过 `IDataScopeObjectInitializer.InitializeFromParentAsync` 为同资源的新对象初始化父直接项。调用方持有本次业务事务及可信stamp，核证父完整位置的edit和新对象create；初始化不额外要求父authorize或新对象read，不另建审计作用域或提交。初始化锁定父与新对象配置，要求两者不同且目标配置为空，沿同一规范化、验证和存储核心保存；主体项及动作行使用新的技术ID，保留绝对期限、动态选择器、匹配选项、优先级和动作意见。它只供受控owner调用，不向HTTP暴露跳过资格参数；父来源资格在持有配置锁时由owner最终重验。
+- 同一受控owner可用 `InitializeFromParentsAsync` 读取并比较全部新父的完整配置语义，排除技术项ID、对象身份和无意见项；全部相同才初始化一次并返回实际采用父对象，供owner登记真实关联事实。当前Workspace单根新图保证同源配置；不同配置按不变量失败关闭，此契约不提供HTTP来源选择能力。
 - 资源owner可用 `DataScopeResourceActionBinding` 显式选用已登记全局数据动作，由同一准备期资源目录验证资源、owner、唯一性和动作身份；对象目录、解释、完整替换和实际动作裁决消费同一适用集合。未声明的旧资源保持原全局目录合同，原四参资源构造与解构保留；不按动作定义的模块或首批业务模型名推断适用性，也不静默改写旧配置。
 
 - 批量直接项通过 `IDataScopeBatchAuthorization` 一次提交全部规范资源/EID。默认U保留未指定选择器，并完整替换指定选择器的意见、优先级、匹配选项和绝对期限；R完整替换所有直接项，空资源组须显式确认。资源分组严格匹配实际目标及正式适用动作，不修改规则树或系统来源。owner先锁定并重解完整来源，批服务按资源/EID稳定顺序取得全部ACL锁后重验全部read/authorize；资格、配置、基础设施或取消任一失败均不产生部分成功，实际变化与各对象审计共享本次事务及可信stamp，无变化不记事件。Workspace的LID只校验真实位置与private来源，ACL仍是Folder/Part/Document真实对象身份。

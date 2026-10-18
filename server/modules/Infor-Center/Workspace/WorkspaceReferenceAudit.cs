@@ -7,6 +7,14 @@ namespace ICP.Platform.Modules.Workspace;
 /// <summary>Workspace 显式声明关系业务事实；Audit 取得可信主体、时间和 Trace，原平台事务统一保存提交。</summary>
 public sealed class WorkspaceReferenceAudit(IBusinessAuditRecorder recorder)
 {
+    /// <summary>初始化成功只登记明确父与新对象及其当次文本，不公开复制的授权原文。</summary>
+    public ValueTask ParentAuthorizationInitializedAsync(string parentId, IReadOnlyDictionary<string, object?> folder, CancellationToken token) =>
+        recorder.RegisterAsync(new("workspace.folder.parentAuthorizationInitialized", "workspace.folder", (string)folder["EID"]!,
+            [new("PEID", null, BusinessAuditValue.Reference("workspace.folder", parentId)),
+             new("CEID", null, BusinessAuditValue.Reference("workspace.folder", (string)folder["EID"]!)),
+             new("ObjectName", null, BusinessAuditValue.Text(folder.GetValueOrDefault("ENAME") as string)),
+             new("ObjectCode", null, BusinessAuditValue.Text(null))]), token);
+
     /// <summary>普通文件夹创建记录当次真实名称；该模型没有编码，不伪造编码事实。</summary>
     public ValueTask FolderCreatedAsync(IReadOnlyDictionary<string, object?> folder, CancellationToken token) =>
         FolderEventAsync("workspace.folder.created", folder, token);

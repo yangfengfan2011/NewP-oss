@@ -13,6 +13,7 @@ interface LinkRow { linkId: string; associatedObject: { modelKey: string; id: st
 const headers = (featurePosition?: string): Record<string, string> => featurePosition ? { 'X-NewP-Feature': featurePosition } : {};
 const WorkspaceBatchAuthorizationInput = lazy(() => import('./WorkspaceBatchAuthorizationInput'));
 const WorkspaceObjectCreateInput = lazy(() => import('./WorkspaceObjectCreateInput'));
+const WorkspaceFolderCreateInput = lazy(() => import('./WorkspaceFolderCreateInput'));
 const WorkspaceObjectEditInput = lazy(() => import('./WorkspaceObjectEditInput'));
 const WorkspaceDocumentCreateInput = lazy(() => import('./WorkspaceDocumentCreateInput'));
 const WorkspaceFolderCopyInput = lazy(() => import('./WorkspaceFolderCopyInput'));
@@ -63,6 +64,8 @@ const resource: StandardCrudResourceRegistration = {
   actionInputRenderers: {
     ...ownership.actionInputRenderers,
     batchAuthorization: Object.assign((context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceBatchAuthorizationInput, context)), { dialogWidth: 960 }),
+    createFolder: Object.assign((context: StandardCrudActionInputRenderContext) =>
+      createElement(Suspense, { fallback: null }, createElement(WorkspaceFolderCreateInput, context)), { presentation: 'drawer' as const }),
     objectAuthorization: context => authorization(context).actionInputRenderers.objectAuthorization(context),
     recoverObjectCopy: Object.assign((context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceObjectCopyRecovery, context)), { presentation: 'drawer' as const }),
     copyObject: Object.assign((context: StandardCrudActionInputRenderContext) => createElement(Suspense, { fallback: null }, createElement(WorkspaceObjectCopyInput, context)), { presentation: 'drawer' as const }),
@@ -76,6 +79,16 @@ const resource: StandardCrudResourceRegistration = {
   },
   actionHandlers: {
     ...ownership.actionHandlers,
+    create: async ({ input, queryScope, featurePosition }) => {
+      if (!isStandardCrudRecord(input)) throw new Error('缺少文件夹创建输入');
+      const values = Object.fromEntries(['ENAME', 'Description'].filter(key => input[key] !== undefined).map(key => [key, input[key]]));
+      const position = workspacePosition(queryScope);
+      const response = await platformFetch('/api/workspace/content/folders', { method: 'POST', headers: { ...headers(featurePosition), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ position, values, copyParentAuthorization: position.linkIds.length > 0 && input.copyParentAuthorization === true }) });
+      if (!response.ok) throw await readStandardCrudRequestError(response);
+      const payload: unknown = await response.json();
+      return { operation: 'create', payload, change: { operation: 'create', id: '' } };
+    },
     authorizeContent: context => authorization(context).actionHandlers.authorize(context),
     authorize: Object.assign((context: StandardCrudActionContext) => context.action?.inputKey === 'batchAuthorization' ? saveBatch(context) : authorization(context).actionHandlers.authorize(context),
       { isCorrectableInputError: batchOutcomeUnknown }),
@@ -94,15 +107,15 @@ const resource: StandardCrudResourceRegistration = {
         notice: { reasonKey: receipt.succeeded ? 'Workspace.ObjectCopied' : receipt.state === 'cancelled' ? 'Workspace.CopyCancelled' : 'Workspace.CopyNotCommitted' } };
     },
     pasteFolderCopy: Object.assign(async ({ instance, input, queryScope, featurePosition }: import('@icp-platform/sdk').StandardCrudActionContext) => {
-      const value = input as { draft?: FolderCopyDraft; name?: string } | undefined;
+      const value = input as { draft?: FolderCopyDraft; name?: string; copyParentAuthorization?: boolean } | undefined;
       if (!value?.draft || typeof value.name !== 'string') throw new StandardCrudRequestError('Workspace.FolderCopyInputExpired', 409, {}, { code: 'Workspace.FolderCopyInputExpired' });
-      const receipt = await clipboard(instance).pasteFolderCopy(value.draft, value.name, workspacePosition(queryScope), featurePosition);
+      const receipt = await clipboard(instance).pasteFolderCopy(value.draft, value.name, workspacePosition(queryScope), featurePosition, 'copy', value.copyParentAuthorization);
       return { operation: 'action' as const, payload: receipt, change: { operation: 'update' as const, id: '' }, notice: { reasonKey: 'Workspace.FolderCopied' } };
     }, { isCorrectableInputError: (failure: unknown) => failure instanceof StandardCrudRequestError && failure.code === 'Workspace.SiblingNameConflict' }),
     pasteFolderStructure: Object.assign(async ({ instance, input, queryScope, featurePosition }: import('@icp-platform/sdk').StandardCrudActionContext) => {
-      const value = input as { draft?: FolderCopyDraft; name?: string } | undefined;
+      const value = input as { draft?: FolderCopyDraft; name?: string; copyParentAuthorization?: boolean } | undefined;
       if (!value?.draft || typeof value.name !== 'string') throw new StandardCrudRequestError('Workspace.FolderCopyInputExpired', 409, {}, { code: 'Workspace.FolderCopyInputExpired' });
-      const receipt = await clipboard(instance).pasteFolderCopy(value.draft, value.name, workspacePosition(queryScope), featurePosition, 'copy-structure');
+      const receipt = await clipboard(instance).pasteFolderCopy(value.draft, value.name, workspacePosition(queryScope), featurePosition, 'copy-structure', value.copyParentAuthorization);
       return { operation: 'action' as const, payload: receipt, change: { operation: 'update' as const, id: '' }, notice: { reasonKey: 'Workspace.FolderStructureCopied' } };
     }, { isCorrectableInputError: (failure: unknown) => failure instanceof StandardCrudRequestError && failure.code === 'Workspace.SiblingNameConflict' }),
     copy: async ({ action, instance, id, selectedRows, queryScope, featurePosition }) => {

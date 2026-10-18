@@ -7,7 +7,12 @@ public sealed partial class WorkspaceContents
 {
     /// <summary>在唯一图锁事务内确定不同Folder及全部内部边，完整核验后按旧新映射一次写入。</summary>
     public ValueTask<WorkspacePasteResult> CopyFolderStructureAsync(string actor, string mode, WorkspacePosition sourcePosition,
-        string[] linkIds, WorkspacePosition targetPosition, string name, CancellationToken token)
+        string[] linkIds, WorkspacePosition targetPosition, string name, CancellationToken token) =>
+        CopyFolderStructureAsync(actor, mode, sourcePosition, linkIds, targetPosition, name, false, token);
+
+    /// <summary>显式初始化按拓扑依赖采用目标父和全部新父的等价配置；共享Folder始终只有一个新对象。</summary>
+    public ValueTask<WorkspacePasteResult> CopyFolderStructureAsync(string actor, string mode, WorkspacePosition sourcePosition,
+        string[] linkIds, WorkspacePosition targetPosition, string name, bool copyParentAuthorization, CancellationToken token)
     {
         if (mode != "copy" || linkIds.Length != 1 || string.IsNullOrWhiteSpace(linkIds[0])) throw new LinkQueryException(400, "Workspace.FolderCopySourceRequired");
         if (string.IsNullOrWhiteSpace(name) || name.Length > 256) throw new LinkQueryException(400, "Workspace.InvalidName", "ENAME");
@@ -65,6 +70,25 @@ public sealed partial class WorkspaceContents
                 await ownershipAudit.RegisterAsync("workspace.folder", (string)candidate["EID"]!, candidate, false, cancellation);
             }
             await transactions.FlushAsync(cancellation);
+            if (copyParentAuthorization)
+            {
+                var incoming = plan.Edges.ToLookup(edge => edge.Child, StringComparer.OrdinalIgnoreCase);
+                foreach (var folder in plan.Folders)
+                {
+                    string[] parents = StringComparer.OrdinalIgnoreCase.Equals(folder.Id, source.Id)
+                        ? target.FolderId == targetPosition.RootFolderId ? [] : new[] { target.FolderId }
+                        : incoming[folder.Id].Select(edge => (string)candidates[edge.Parent]["EID"]!).ToArray();
+                    if (parents.Length == 0) continue;
+                    var candidate = candidates[folder.Id];
+                    var initialized = await parentAuthorizations.InitializeFromParentsAsync("workspace.folder", parents, (string)candidate["EID"]!, cancellation);
+                    if (!initialized.Initialized) continue;
+                    await referenceAudit.ParentAuthorizationInitializedAsync(initialized.ParentObjectId, candidate, cancellation);
+                    // 后继必须从真实已保存新父读取；Flush不提交，整个结构仍由外层事务统一回滚。
+                    await transactions.FlushAsync(cancellation);
+                }
+                // 外部目标父ACL锁仍在本事务内；新内部父不增加read/edit要求。
+                await WritablePositionAsync(actor, targetPosition, cancellation);
+            }
             var createdRoot = (string)candidates[source.Id]["EID"]!;
             var rootLink = await RegisterCreatedReferenceAsync(target.FolderId, WorkspacePositions.FolderModel, createdRoot, cancellation);
             await referenceAudit.CopiedAsync(linkIds[0], sourceParent.FolderId, rootLink, target.FolderId, new(WorkspacePositions.FolderModel, createdRoot), cancellation);

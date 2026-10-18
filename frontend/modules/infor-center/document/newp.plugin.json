@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0", "moduleId": "Document", "displayName": "图文档", "version": "1.4.0",
+  "schemaVersion": "1.0", "moduleId": "Document", "displayName": "图文档", "version": "1.5.0",
   "description": "独立图文档元数据", "entryAssembly": "../../DocumentModule.dll",
   "dependencies": ["Identity", "Authentication", "Authorization", "Organization", "Audit", "Files"],
   "hostVersion": { "min": "1.1.0", "max": "2.0.0" },

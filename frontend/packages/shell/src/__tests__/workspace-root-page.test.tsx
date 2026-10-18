@@ -208,9 +208,12 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(nameInput, scenario === 'success' ? '创建后可读' : '创建后不可读');
     nameInput.dispatchEvent(new Event('input', { bubbles: true }));
   });
-  await act(async () => document.querySelector<HTMLFormElement>('.ant-drawer form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  const saveButton = [...document.querySelectorAll<HTMLButtonElement>('.ant-drawer .np-crud-form-drawer-footer button')].find(button => button.textContent?.replace(/\s/g, '') === '保存并关闭')!;
+  expect(saveButton).toBeDefined();
+  await vi.waitFor(() => expect(saveButton.disabled).toBe(false));
+  await act(async () => saveButton.click());
   await vi.waitFor(() => expect(writes).toHaveLength(1));
-  expect(writes[0]).toEqual({ position: { spaceId: 'public', rootFolderId: 'public-root', linkIds: [] }, values: { ENAME: scenario === 'success' ? '创建后可读' : '创建后不可读', Description: null } });
+  expect(writes[0]).toEqual({ position: { spaceId: 'public', rootFolderId: 'public-root', linkIds: [] }, values: { ENAME: scenario === 'success' ? '创建后可读' : '创建后不可读' }, copyParentAuthorization: false });
   await vi.waitFor(() => expect(document.querySelector('.ant-drawer-open')).toBeNull());
   await vi.waitFor(() => expect(container.textContent).not.toContain('已保存，刷新失败'));
   expect(container.querySelector('.ant-table')?.textContent).not.toContain('创建后不可读');

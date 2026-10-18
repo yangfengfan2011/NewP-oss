@@ -169,11 +169,12 @@ export class WorkspaceClipboardSession {
       throw this.failure('Workspace.InvalidClipboardInput');
     return receipt;
   }
-  async pasteFolderCopy(draft: FolderCopyDraft, name: string, target: ClipboardPosition, featurePosition?: string, kind: FolderCopyKind = 'copy'): Promise<ClipboardPasteReceipt> {
+  async pasteFolderCopy(draft: FolderCopyDraft, name: string, target: ClipboardPosition, featurePosition?: string, kind: FolderCopyKind = 'copy', copyParentAuthorization?: boolean): Promise<ClipboardPasteReceipt> {
     if (!this.canCopyFolder() || draft.closed || !this.folderDrafts.has(draft) || draft.source !== this.state.clipboard
       || draft.kind !== kind || draft.targetKey !== JSON.stringify(target) || draft.featurePosition !== featurePosition)
       throw this.failure('Workspace.FolderCopyInputExpired');
-    return this.write(`folders/${draft.kind}`, { ...draft.source, targetPosition: JSON.parse(draft.targetKey) as ClipboardPosition, name }, featurePosition);
+    return this.write(`folders/${draft.kind}`, { ...draft.source, targetPosition: JSON.parse(draft.targetKey) as ClipboardPosition, name,
+      ...(copyParentAuthorization !== undefined ? { copyParentAuthorization } : {}) }, featurePosition);
   }
 
   async paste(targetPosition: ClipboardPosition, featurePosition?: string): Promise<ClipboardPasteReceipt> {

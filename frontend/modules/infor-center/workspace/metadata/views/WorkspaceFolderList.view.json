@@ -16,7 +16,7 @@
     "pageActions": [
       { "key": "batchAuthorize", "labelKey": "BatchAuthorize", "handlerKey": "authorize", "inputKey": "batchAuthorization", "requiresSelection": true, "readBehaviors": ["workspace.folder.read"] },
       { "key": "initializeOwnershipPending", "labelKey": "OwnershipPendingObjects", "handlerKey": "initializeOwnership", "inputKey": "initializeOwnership" },
-      {"key": "create", "labelKey": "CreateFolder", "standardAction": "create", "variant": "primary"},
+      {"key": "create", "labelKey": "CreateFolder", "handlerKey": "create", "inputKey": "createFolder", "variant": "primary"},
       {"key": "createPart", "labelKey": "CreatePart", "handlerKey": "createPart", "inputKey": "createObject"},
       {"key": "createDocument", "labelKey": "CreateDocument", "handlerKey": "createDocument", "inputKey": "createObject"},
       {"key": "copySelected", "labelKey": "Copy", "handlerKey": "copy", "requiresSelection": true},

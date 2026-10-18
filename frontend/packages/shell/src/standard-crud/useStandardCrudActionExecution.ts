@@ -93,8 +93,8 @@ export function useStandardCrudActionExecution<TDetail = unknown, TRow = unknown
         result, onCommitted, refresh,
         onResult: value => {
           if (value.notice && mounted.current && submittedNoticeScope === currentNoticeScope.current) {
-            if (composition?.notice) composition.notice(value.notice.reasonKey);
-            else void message.info(t(value.notice.reasonKey, value.notice.reasonKey));
+            if (composition?.notice) composition.notice(value.notice.reasonKey, value.notice.args);
+            else void message.info(t(value.notice.reasonKey, value.notice.reasonKey, value.notice.args));
           }
           onResult?.(value);
         },

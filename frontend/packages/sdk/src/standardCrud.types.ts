@@ -35,8 +35,8 @@ export type StandardCrudOperationKind = 'create' | 'update' | 'action';
 export interface StandardCrudOperationResult {
   /** 已确认成功且没有写入；不能与 change 同时出现，也不表示失败或未知结果。 */
   noChange?: true;
-  /** 正式词典中的成功提示；共享宿主负责翻译和通知生命周期。 */
-  notice?: { reasonKey: string };
+  /** 正式词典中的成功提示及模板参数；共享宿主负责翻译和通知生命周期。 */
+  notice?: { reasonKey: string; args?: Record<string, unknown> };
   /** 只引用已注册导航入口；Shell 解析路径并执行目标入口的正常准入。 */
   navigation?: { entryKey: string; parameters?: Record<string, string> };
   change?: Omit<import("./pageComposition").ResourceChange, "resourceKey">;

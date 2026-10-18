@@ -19,7 +19,7 @@ function CompositionOwner({ children }: { children: ReactNode }) {
   const [messageApi, messageHolder] = useMessage();
   const noticeText = useRef(t); noticeText.current = t;
   // 翻译变化不能重建组合 runtime，否则已选对象的草稿会随上下文身份变化丢失。
-  const notice = useCallback((reasonKey: string) => { void messageApi.info({ key: 'standard-crud-action-notice', content: noticeText.current(reasonKey, reasonKey), duration: 5 }); }, [messageApi]);
+  const notice = useCallback((reasonKey: string, args?: Record<string, unknown>) => { void messageApi.info({ key: 'standard-crud-action-notice', content: noticeText.current(reasonKey, reasonKey, args), duration: 5 }); }, [messageApi]);
   const states = useRef(new Map<string, PageLifecycleState & { discard?: () => void; save?: () => Promise<boolean> }>());
   const savingLeave = useRef(false);
   const [saving, setSaving] = useState(false);

@@ -80,6 +80,8 @@ Canonical Module Plan 在既有功能位置展开时编译声明，按模块、V
 
 模块在 `actionPrechecks` 注册真实目标解析与只读检查；共享进入生命周期先检查、后导航或打开业务弹层，持有等待、防重复及取消。主体、功能范围、目标、来源或页面实例变化会结束旧检查；迟到结果不能进入旧目标，也不缓存允许结果。预检数据拒绝不改变原按钮的功能可见性，按不存在或不可访问统一反馈；依赖故障继续明确失败。
 
+List View 的 `detailContributions[].dataAccess` 声明详情贡献按钮自身的数据要求，身份保留该结构位置和贡献 key。它沿原 `navigationKey` 的功能资格进入，不增加目标详情或来源读取资格；来源列表注册在 `actionPrechecks[贡献key]` 提供检查，检查通过后才创建原 Modal/PageOutlet。
+
 预检及每次正式请求分别携带原 `X-NewP-Feature` 和自身 `X-NewP-Data-Declaration`。服务端 `IActionDataAccess` 只从活动计划解析要求，并核对声明、当前 endpoint owner、允许的执行关系及原功能位置，再使用 owner 解析的真实资源/对象交集完整读取与声明动作。Workspace 必须保留完整位置及 LID，不能用客户端资源名或裸 EID 替代。直接请求不需要点击历史；预检允许也不是后续凭据。未接入入口保留原行为，已接入出口缺失声明必须失败，不能回退到默认 read。
 
 运行时动态列的 `StandardCrudColumnContext.featurePosition` 同样来自所属读取入口。column provider 与行 data adapter 各自沿请求传递该位置；例如 Example 动态工作量的列请求和行请求使用相同的入口位置，原有模块列上下文 token 仍负责列与行的业务一致性，不能用它替代授权位置。宿主的动态列缓存已经按读取位置隔离。

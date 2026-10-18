@@ -97,8 +97,8 @@ public sealed class ProductionEndpointAccessCoverageTests
         using var capsule = System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(Path.Combine(root, "newp.plugin.json")));
         var documents = Directory.GetFiles(Path.Combine(root, "metadata"), "*.json", SearchOption.AllDirectories)
             .Select(path => System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(File.ReadAllBytes(path))).ToArray();
-        var history = Assert.Single(FeatureCatalogCompiler.Compile(StandardFeatureMetadataCompiler.Read(module, documents,
-            FeatureCatalogCompiler.Read(capsule.RootElement, module), includeCustomFeatures: true)), point => point.BehaviorKey == slug + "." + slug + ".history");
+        var declarations = StandardFeatureMetadataCompiler.Read(module, documents, FeatureCatalogCompiler.Read(capsule.RootElement, module), includeCustomFeatures: true);
+        var history = Assert.Single(FeatureCatalogCompiler.Compile(declarations), point => point.BehaviorKey == slug + "." + slug + ".history");
         var builder = WebApplication.CreateBuilder();
         builder.Services.AddControllers().AddApplicationPart(module == "Part" ? typeof(ICP.Platform.Modules.Part.PartModule).Assembly : typeof(ICP.Platform.Modules.Document.DocumentModule).Assembly);
         using var app = builder.Build();
@@ -106,7 +106,14 @@ public sealed class ProductionEndpointAccessCoverageTests
         var prefix = "api/" + slug + "/" + collection + "/{objectId}/history";
         var endpoints = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints).OfType<RouteEndpoint>()
             .Where(endpoint => endpoint.RoutePattern.RawText?.TrimStart('/').StartsWith(prefix, StringComparison.Ordinal) == true).ToArray();
-        Assert.Equal(4, endpoints.Length);
+        var declared = declarations.Any(feature => feature.DataAccess.Count > 0);
+        Assert.Equal(declared ? 5 : 4, endpoints.Length);
+        if (declared)
+        {
+            var check = Assert.Single(endpoints, item => item.RoutePattern.RawText?.TrimStart('/') == prefix + "/check/{operation}"
+                && item.Metadata.GetOrderedMetadata<HttpMethodMetadata>().Single().HttpMethods.Contains("GET"));
+            Assert.Equal(slug + "." + slug + ".history", Assert.Single(check.Metadata.GetOrderedMetadata<RequireFeatureAttribute>()).BehaviorKey);
+        }
         foreach (var (suffix, method) in new[] { ("", "GET"), ("/{recordId}", "GET"), ("/export", "POST"), ("/print", "POST") })
         {
             var endpoint = Assert.Single(endpoints, item => item.RoutePattern.RawText?.TrimStart('/') == prefix + suffix

@@ -8,7 +8,8 @@ const repositoryRoot = resolve(__dirname, '../../../..');
 const output = execFileSync('dotnet', ['run', '--project', resolve(repositoryRoot, 'server/tools/component-source-build/ComponentSource.Build.csproj'),
   '-c', 'Release', '--no-build', '--no-restore', '--', 'frontend-entries', repositoryRoot],
 { encoding: 'utf8', timeout: 60000, windowsHide: true });
-const entries = JSON.parse(output.trim().split(/\r?\n/).at(-1)!) as Record<string, string>;
+const outputLines = output.trim().split(/\r?\n/);
+const entries = JSON.parse(outputLines[outputLines.length - 1]) as Record<string, string>;
 const roots = new Map(Object.values(entries).map(entry => dirname(dirname(entry)))
   .filter(root => existsSync(resolve(root, 'newp.plugin.json')))
   .map(root => [JSON.parse(readFileSync(resolve(root, 'newp.plugin.json'), 'utf8')).moduleId as string, root]));

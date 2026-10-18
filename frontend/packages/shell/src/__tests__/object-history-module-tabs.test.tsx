@@ -1,13 +1,11 @@
 // @vitest-environment jsdom
-import { readFileSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, platformFetch } from '@icp-platform/core';
 import { ModuleRegistry, type FrontendBehaviorBindings } from '@icp-platform/sdk';
-import { componentRoot, loadComponentSource, readComponentJson } from '../../test-support/componentTestInputs';
+import { loadComponentSource, readComponentJson } from '../../test-support/componentTestInputs';
 import { validateCompositionCandidate } from '../composition/compositionRegistry';
 import { loadActiveModuleRuntimeWith } from '../active-module-runtime-loader';
 import { buildPageEntriesFromNavDocuments } from '../navigation/pageEntryAdapter';
@@ -15,8 +13,7 @@ import { EntryNavigationProvider } from '../navigation/EntryNavigationContext';
 import { PageEntry, PageOutlet } from '../composition/PageOutlet';
 import { PageComposition } from '../composition/PageCompositionContext';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
-import { bindActionDataAccess } from '../metadata/runtimeMetadataLoader';
-import type { RuntimeMetadataState } from '../metadata/runtimeMetadataManifest';
+import { authoring, installHistoryFeatures, mountIndependentHistory } from './independentHistoryHarness';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { CurrentPermissionScope } from '../components/CurrentPermissionScope';
 
@@ -34,36 +31,6 @@ const item = { id: 'event-1', eventType: 'dataScope.object.changed', occurredAt:
   actor: { name: '列表操作者', status: 'available' }, target: { name: null, code: null, nameSource: 'unrecorded' },
   description: { key: 'ObjectHistory.DescriptionUnavailable', parameters: {} }, ipAddress: null };
 const json = (value: unknown) => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } });
-
-function authoring(): RuntimeMetadataState {
-  const documents = (moduleId: string, folder: string) => {
-    const root = resolve(componentRoot(moduleId), 'metadata', folder);
-    return readdirSync(root).filter(file => file.endsWith('.json')).map(file => JSON.parse(readFileSync(resolve(root, file), 'utf8')));
-  };
-  return { manifest: { modules: [] }, navDocuments: ['Workspace', 'Part', 'Document'].flatMap(owner => documents(owner, 'navigation')),
-    viewDocuments: ['Workspace', 'Part', 'Document'].flatMap(owner => documents(owner, 'views')),
-    modelDocuments: ['WorkspaceFolder', 'Part', 'Document'].map(model => JSON.parse(readFileSync(resolve(__dirname, '../../../../../tests/Kernel.Tests/Fixtures', model + 'Runtime.contract.json'), 'utf8')))
-      .concat(readComponentJson('Workspace', 'metadata/models/WorkspaceFolderContent.model.json')) };
-}
-
-function installHistoryFeatures(metadata: RuntimeMetadataState) {
-  const nav = metadata.navDocuments.flatMap(document => document.navigation.items);
-  const positions = Object.fromEntries(['Workspace', 'Part', 'Document'].map(owner => [owner,
-    JSON.parse(readFileSync(resolve(__dirname, '../../../../../tests/Kernel.Tests/Fixtures', `${owner}HistoryFeatures.contract.json`), 'utf8')) as { readPosition: string; historyPosition: string }]));
-  metadata.manifest.modules = ['Workspace', 'Part', 'Document'].map(owner => {
-    const keys = { Workspace: ['workspace', 'workspace.history'], Part: ['part.parts', 'part.history'], Document: ['document.documents', 'document.history'] }[owner]!;
-    const points = positions[owner];
-    nav.find(entry => entry.key === keys[0])!.featurePosition = points.readPosition;
-    nav.find(entry => entry.key === keys[1])!.featurePosition = points.historyPosition;
-    return { moduleId: owner, metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [],
-      dataAccess: owner === 'Workspace' ? JSON.parse(readFileSync(resolve(__dirname, '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceHistoryDataAccess.contract.json'), 'utf8')) : [], features: [
-      { key: keys[0], position: points.readPosition, kind: 'navigation' },
-      { key: keys[1], position: points.historyPosition, kind: 'navigation', parentPosition: points.readPosition },
-    ] };
-  });
-  metadata.viewDocuments = metadata.viewDocuments.map(document => bindActionDataAccess(document, metadata.manifest.modules.flatMap(module => module.dataAccess ?? [])));
-  return positions;
-}
 
 async function mount(hasHistory = true, direct = false, editableInput = false, viewer = false, reservedProjection?: string,
   checkHistory?: (request: Request) => Response | Promise<Response>, omitDataAccess = false) {
@@ -335,68 +302,6 @@ it.each(['featurePosition', 'sourceFeaturePosition', 'url'])('refuses a source n
   expect(requests.some(request => new URL(request.url).pathname.includes('/history'))).toBe(false);
 });
 
-async function mountIndependentHistory(owner: 'Part' | 'Document', fullDetail = false, historyAllowed = true) {
-  const prefix = owner.toLowerCase();
-  const resourceKey = `${prefix}.${prefix}`;
-  const api = owner === 'Part' ? '/api/part/parts' : '/api/document/documents';
-  const metadata = authoring();
-  const points = installHistoryFeatures(metadata)[owner];
-  const grants = [points.readPosition, ...(historyAllowed ? [points.historyPosition] : [])];
-  const user = { id: 'reader', ecode: 'reader', ename: 'Reader', revision: 1, mustChangePassword: false, featurePositions: grants, timeZoneId: 'UTC' };
-  const requests: Request[] = [];
-  const unexpectedRequests: string[] = [];
-  const record = { EID: 'entity', ECODE: 'E1', ENAME: 'Independent object', Description: '', OwnerId: null, OwnerDepartmentId: null,
-    CreatedBy: 'reader', CreatedAt: '2026-10-18T00:00:00Z', UpdatedBy: 'reader', UpdatedAt: '2026-10-18T00:00:00Z' };
-  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin), init);
-    requests.push(request); const url = new URL(request.url);
-    if (url.pathname.endsWith('/current-user')) return json(user);
-    if (url.pathname === `${api}/entity/permissions/catalog`) return json({ actions: [{ key: 'read', title: '读取', enabled: true }], subjectTypes: [] });
-    if (url.pathname === `${api}/ownership/eligibility`) return new Response('{}', { status: 403 });
-    if (url.pathname === api) return json({ items: [record], total: 1, page: 1, pageSize: 20 });
-    if (url.pathname === `${api}/entity`) return json({ fields: record, summaries: owner === 'Document'
-      ? { files: { status: 'ready', data: { documentId: 'entity', featurePosition: points.readPosition } } } : {} });
-    if (url.pathname === `${api}/entity/files`) return json({ documentId: 'entity', versionId: 'version', iterationId: 'iteration', files: [], downloadAllowed: false });
-    if (url.pathname === `${api}/entity/history`) return json({ items: [{ ...item, objectType: owner }], total: 1, pageIndex: 1, pageSize: 20 });
-    if (url.pathname === `${api}/entity/history/event-1`) return json({ ...item, objectType: owner, actor: { name: '独立详情最新操作者', status: 'available' } });
-    unexpectedRequests.push(`${request.method} ${url.pathname}`);
-    throw new Error(`Unexpected independent history request: ${request.method} ${url.pathname}`);
-  }));
-  const capsules = ['Workspace', 'Part', 'Document'].map(moduleId => readComponentJson(moduleId, 'newp.plugin.json'));
-  const loaded = await loadActiveModuleRuntimeWith({
-    fetchCatalog: async () => ({ ok: true, status: 200, json: async () => ({ schemaVersion: '1.0', snapshotId: 'independent-history', planHash: 'independent-history',
-      modules: capsules.map(capsule => ({ moduleId: capsule.moduleId, version: capsule.version, displayName: capsule.displayName, dependencies: capsule.dependencies,
-        frontend: { moduleId: capsule.moduleId, behaviorKey: capsule.frontend.behaviorKey, bindingMode: 'behavior-bindings', bindings: capsule.frontend.bindings } })) }) }),
-    internalModules: { Workspace: async () => ({ default: workspace }), Part: async () => ({ default: part }), Document: async () => ({ default: documentModule }) },
-  });
-  expect(() => validateCompositionCandidate(loaded.modules, metadata)).not.toThrow();
-  ModuleRegistry.replaceAll(loaded.modules, 'independent-history');
-  const words = Object.fromEntries([{ moduleId: 'Audit', dicKey: 'ObjectHistory' }, { moduleId: owner, dicKey: owner },
-    { moduleId: owner, dicKey: `${owner}History` }].flatMap(({ moduleId, dicKey }) => {
-    const dictionary = readComponentJson(moduleId, `metadata/dictionaries/${dicKey}.dic.json`)[dicKey];
-    return Object.entries(dictionary).map(([key, value]) => [`${dicKey}.${key}`, (value as { zhs: string }).zhs]);
-  }));
-  const nav = metadata.navDocuments.flatMap(document => document.navigation.items);
-  const target = nav.find(entry => entry.key === `${prefix}.history`)!;
-  const historyEntry = buildPageEntriesFromNavDocuments(metadata.navDocuments).find(entry => entry.path === target.path)!;
-  const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
-  const wrap = (content: React.ReactNode) => <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={{ zhs: words }}>
-    <AuthProvider initialUser={user}><AuthorizationProvider featurePositions={grants}><CurrentPermissionScope><RuntimeMetadataProvider value={metadata}>
-      <EntryNavigationProvider>{content}</EntryNavigationProvider>
-    </RuntimeMetadataProvider></CurrentPermissionScope></AuthorizationProvider></AuthProvider>
-  </LocalizationProvider>;
-  const path = owner === 'Part' ? '/parts' : '/documents';
-  const router = createMemoryRouter([
-    { path, element: wrap(<PageComposition><PageOutlet page={{ pageKey: 'platform.list', parameters: { viewKey: `${resourceKey}.list` } }} featurePlacement={{ entryPosition: points.readPosition }} /></PageComposition>) },
-    { path: `${path}/entity`, element: wrap(<PageComposition><PageOutlet page={{ pageKey: 'platform.detail', parameters: { viewKey: `${resourceKey}.detail`, recordId: 'entity', sourceFeaturePosition: points.readPosition }, inputResolverKey: `${resourceKey}.record` }}
-      featurePlacement={{ entryPosition: points.readPosition }} /></PageComposition>) },
-    { path: target.path!, element: wrap(<PageEntry page={historyEntry.page!} />) },
-  ], { initialEntries: [fullDetail ? `${path}/entity` : path] });
-  onTestFinished(async () => { await act(async () => root.unmount()); router.dispose(); container.remove(); ModuleRegistry.replaceAll([], 'independent-history-cleanup'); vi.unstubAllGlobals(); expect(unexpectedRequests).toEqual([]); });
-  await act(async () => root.render(<RouterProvider router={router} />));
-  return { container, router, requests, points, api };
-}
-
 it.each(['Part', 'Document'] as const)('opens independent %s history and fresh detail using its own compiled history grant and EID', async owner => {
   const { container, router, requests, points, api } = await mountIndependentHistory(owner);
   await vi.waitFor(() => expect(container.querySelector('tr[data-row-key="entity"]')).not.toBeNull());
@@ -409,17 +314,17 @@ it.each(['Part', 'Document'] as const)('opens independent %s history and fresh d
   const detail = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(entry => entry.textContent?.trim() === '详情');
   await vi.waitFor(() => expect(detail()).toBeDefined()); act(() => detail()!.click());
   await vi.waitFor(() => expect(document.body.textContent).toContain('独立详情最新操作者'));
-  const historyRequests = requests.filter(request => new URL(request.url).pathname.startsWith(`${api}/entity/history`));
+  const historyRequests = requests.filter(request => new URL(request.url).pathname.startsWith(`${api}/entity/history`) && !new URL(request.url).pathname.includes('/check/'));
   expect(historyRequests).toHaveLength(2);
   expect(historyRequests.every(request => request.headers.get('X-NewP-Feature') === points.historyPosition && !new URL(request.url).searchParams.has('queryScope'))).toBe(true);
   expect(requests.some(request => new URL(request.url).pathname.includes('/workspace/'))).toBe(false);
   expect(requests.every(request => request.method === 'GET')).toBe(true);
 });
 
-it.each(['Part', 'Document'] as const)('opens independent %s full-detail history through the existing qualified detail contribution', async owner => {
-  const { container, requests, points, api } = await mountIndependentHistory(owner, true);
-  await vi.waitFor(() => expect(container.textContent).toContain('Independent object'));
-  const history = () => [...container.querySelectorAll('button')].find(button => button.textContent?.replace(/\s/g, '') === '操作履历');
+it.each(['Part', 'Document'] as const)('opens independent %s history from the real list properties and qualified detail contribution', async owner => {
+  const { requests, points, api } = await mountIndependentHistory(owner, true);
+  await vi.waitFor(() => expect(document.querySelector('.ant-drawer')?.textContent).toContain('Independent object'));
+  const history = () => [...document.querySelectorAll('.ant-drawer button')].find(button => button.textContent?.replace(/\s/g, '') === '操作履历');
   await vi.waitFor(() => expect(history()).toBeDefined()); act(() => history()!.click());
   await vi.waitFor(() => expect(document.querySelector('.ant-modal-body')?.textContent).toContain('列表操作者'));
   const request = requests.find(request => new URL(request.url).pathname === `${api}/entity/history`)!;

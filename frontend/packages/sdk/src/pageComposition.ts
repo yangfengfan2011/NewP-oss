@@ -4,6 +4,8 @@ import type { ComponentType } from 'react';
 export interface PageRef { pageKey: string; parameters?: Record<string, unknown>; inputResolverKey?: string }
 /** 模块在自己的 List View 声明只读详情入口；宿主传入已验证的 recordId，查询授权属于来源导航。 */
 export interface StandardCrudDetailContribution {
+  /** 贡献按钮自身的正式数据声明，不改变来源导航的功能资格。 */
+  dataAccess?: import('./standardCrud.types').ActionDataAccessRequirement;
   key: string;
   targetViewKey: string;
   navigationKey: string;

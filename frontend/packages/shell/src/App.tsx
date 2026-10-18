@@ -69,7 +69,8 @@ function LocalAdministratorGuard({ children }: { children: React.ReactNode }) {
   return auth.user?.isLocalAdministrator ? <>{children}</> : <Navigate to="/" replace />;
 }
 
-function RouteAccess({
+/** 正式路由按活动入口的功能位置建立下游上下文，页面参数不授予资格。 */
+export function RouteAccess({
   children,
   localAdministratorOnly,
   featurePosition,

@@ -16,6 +16,9 @@ public sealed class ActionDataAccessCompilerTests(ITestOutputHelper output)
         var result = new CanonicalModulePlanCompiler().Compile("declarations", candidates);
         Assert.True(result.IsSuccess, JsonSerializer.Serialize(result.Diagnostics));
         var plan = result.Plan!;
+        foreach (var module in plan.ActionDataAccessCatalog.GroupBy(item => item.ModuleId))
+            output.WriteLine("ACTION_DATA_ACCESS:" + module.Key + "=" + JsonSerializer.Serialize(module.ToArray(),
+                new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
         var requirements = plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Workspace").ToArray();
         Assert.NotEmpty(requirements);
         Assert.All(requirements, item =>
@@ -82,6 +85,25 @@ public sealed class ActionDataAccessCompilerTests(ITestOutputHelper output)
         Assert.Equal("action", owner.Kind);
         Assert.Equal("change", owner.Key);
         Assert.Equal("test.item.change", owner.BehaviorKey);
+    }
+
+    [Fact]
+    public void DetailContribution_UsesItsOwnDeclarationAtTheOriginalNavigation()
+    {
+        using var navigation = JsonDocument.Parse("""
+            {"navigation":{"items":[{"key":"entry","featureAuthorization":true,"targetKey":"history"}]}}
+            """);
+        using var view = JsonDocument.Parse("""
+            {"view":{"key":"history","mode":"list","resourceKey":"test.history","detailContributions":[
+              {"key":"history.entry","navigationKey":"entry","dataAccess":{"execution":"test.history.enter","resources":["test.item"],"actions":["read"]}}
+            ]}}
+            """);
+        var feature = Assert.Single(StandardFeatureMetadataCompiler.Read("Test", [navigation.RootElement, view.RootElement]));
+        Assert.Equal("navigation", feature.Kind);
+        Assert.Equal("entry", feature.Key);
+        var declaration = Assert.Single(feature.DataAccess);
+        Assert.Equal("detailContributions", declaration.Surface);
+        Assert.Equal("Test/view:history/detailContributions/action:history.entry", declaration.Id);
     }
 
     [Fact]

@@ -30,14 +30,17 @@ internal sealed class ObjectHistoryHttpTestRequests(IReadOnlyList<ActionDataAcce
     internal async Task<HttpResponseMessage> SendAsync(HttpClient client, FeaturePoint point, HttpMethod method, string path, object? body = null)
     {
         var url = new Uri(new Uri("http://history-test.local"), path);
-        if (!url.AbsolutePath.StartsWith("/api/workspace/content/", StringComparison.Ordinal) || !url.AbsolutePath.Contains("/history", StringComparison.Ordinal))
+        var segments = url.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var moduleId = segments.Length > 4 && segments[0] == "api" && segments[4] == "history"
+            ? declarations.Select(item => item.ModuleId).Distinct(StringComparer.Ordinal).SingleOrDefault(owner => owner.Equals(segments[1], StringComparison.OrdinalIgnoreCase)) : null;
+        if (moduleId is null)
             return await FeatureHttpTestRequests.SendAsync(client, point, method, path, body);
         var suffix = url.AbsolutePath[(url.AbsolutePath.IndexOf("/history", StringComparison.Ordinal) + "/history".Length)..];
         var operation = suffix == "" ? "list" : suffix is "/export" or "/print" ? suffix[1..]
             : suffix.StartsWith("/check/", StringComparison.Ordinal) ? suffix[7..] : "detail";
         var actionKey = operation is "export" or "print" ? operation + (body is ObjectHistoryOutputRequest { Mode: "selected" } ? "Selected" : "All") : null;
-        var declaration = declarations.Single(item => item.ModuleId == "Workspace" && item.Execution == "workspace.history." + operation
-            && (actionKey is null || item.ActionKey == actionKey));
+        var declaration = declarations.Single(item => item.ModuleId == moduleId && item.Execution == moduleId.ToLowerInvariant() + ".history." + operation
+            && (operation != "enter" || item.Surface == "rowActions") && (actionKey is null || item.ActionKey == actionKey));
         using var request = new HttpRequestMessage(method, path);
         request.Headers.Add("X-NewP-Feature", point.Position);
         request.Headers.Add("X-NewP-Data-Declaration", declaration.Id);

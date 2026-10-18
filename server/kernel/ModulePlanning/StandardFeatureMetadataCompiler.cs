@@ -99,6 +99,21 @@ public static class StandardFeatureMetadataCompiler
                         throw new InvalidOperationException("输出按钮声明身份冲突。");
                     foreach (var output in outputs.EnumerateArray()) DataAccess(view, output, "outputActions", Text(output, "key"), owner);
                 }
+                if (view.TryGetProperty("detailContributions", out var contributions))
+                {
+                    if (contributions.EnumerateArray().GroupBy(contribution => Text(contribution, "key"), StringComparer.Ordinal)
+                        .Any(group => group.Count() > 1 && group.Any(contribution => contribution.TryGetProperty("dataAccess", out _))))
+                        throw new InvalidOperationException("详情贡献声明身份冲突。");
+                    foreach (var contribution in contributions.EnumerateArray())
+                    {
+                        if (!contribution.TryGetProperty("dataAccess", out _)) continue;
+                        var navigationKey = Text(contribution, "navigationKey");
+                        if (!navigation.TryGetValue(navigationKey, out var targetEntry))
+                            throw new InvalidOperationException("详情贡献的数据声明缺少原功能导航。");
+                        var targetOwner = Optional(targetEntry, "featureKey") ?? "navigation:" + navigationKey;
+                        DataAccess(view, contribution, "detailContributions", Text(contribution, "key"), targetOwner);
+                    }
+                }
                 if (mode == "list") foreach (var read in LookupBehaviors(view, false)) BindRead(owner, read);
                 Actions(view, "pageActions", owner, scope, resource);
                 Actions(view, "rowActions", owner, scope, resource);

@@ -144,7 +144,7 @@ public sealed class ObjectHistoryOutputSqlServerTests
         }
     }
 
-    private sealed class CancelHistoryQuery : DbCommandInterceptor
+    internal sealed class CancelHistoryQuery : DbCommandInterceptor
     {
         internal CancellationTokenSource? Cancel { get; set; }
         internal bool Fired { get; private set; }

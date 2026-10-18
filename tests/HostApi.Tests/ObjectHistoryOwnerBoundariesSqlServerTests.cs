@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using ICP.Platform.Modules.Audit.Contracts;
+using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Testing;
@@ -64,7 +65,9 @@ public sealed class ObjectHistoryOwnerBoundariesSqlServerTests
                 "/api/" + owner + "/" + owner + "s/" + target.Id + "/permissions", configuration))
                 Assert.True(denied.StatusCode == HttpStatusCode.NoContent, await denied.Content.ReadAsStringAsync());
             using var deniedQuery = await historyRequests.SendAsync(ordinary, feature, HttpMethod.Get, path);
-            Assert.Equal(HttpStatusCode.NotFound, deniedQuery.StatusCode);
+            var declaredRead = fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog.Any(item => item.ModuleId == feature.ModuleId)
+                && configuration.Subjects[0].Actions["read"] == "allow";
+            Assert.Equal(declaredRead ? HttpStatusCode.OK : HttpStatusCode.NotFound, deniedQuery.StatusCode);
         }
 
         using var ensured = await historyRequests.SendAsync(admin, Point(fixture, "workspace.spaces.access"), HttpMethod.Post,

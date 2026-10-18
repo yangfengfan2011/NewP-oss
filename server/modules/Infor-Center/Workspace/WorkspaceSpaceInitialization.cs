@@ -24,8 +24,10 @@ public sealed class WorkspaceSpaceInitialization(EfPlatformDbContext db, IPlatfo
         await db.Database.ExecuteSqlRawAsync("DECLARE @result int; EXEC @result = sp_getapplock @Resource=@resource, @LockMode='Exclusive', @LockOwner='Transaction', @LockTimeout=15000; IF @result < 0 THROW 51000, 'Workspace initialization lock failed.', 1;",
             [new SqlParameter("@resource", "Workspace.Space." + (subjectId ?? "Public"))], token);
         var spaces = db.Set<Dictionary<string, object?>>(SpaceModel);
-        var current = await spaces.AsNoTracking().SingleOrDefaultAsync(row => EF.Property<string>(row, "SpaceKind") == kind
-            && EF.Property<string?>(row, "SubjectId") == subjectId, token);
+        // 公共空间只按种类查找，主体配对损坏的既有行交给根校验拒绝；唯一索引允许它与新 NULL 主体行并存，不能视为未创建。
+        var existing = spaces.AsNoTracking().Where(row => EF.Property<string>(row, "SpaceKind") == kind);
+        if (personal) existing = existing.Where(row => EF.Property<string?>(row, "SubjectId") == subjectId);
+        var current = await existing.SingleOrDefaultAsync(token);
         if (current is not null) return await WorkspaceSpaces.ValidateRootAsync(db, current, token);
         var spaceId = ids.NewId(SpaceModel);
         var rootId = ids.NewId(WorkspacePositions.FolderModel);

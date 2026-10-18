@@ -112,6 +112,17 @@ public sealed class WorkspaceSqlServerHttpApiTests
         var publicSpace = await response.Content.ReadFromJsonAsync<JsonElement>();
         using var repeated = await FeatureHttpTestRequests.SendAsync(admin, entry, HttpMethod.Post, "/api/workspace/spaces/public/initialize");
         Assert.Equal(publicSpace.ToString(), (await repeated.Content.ReadFromJsonAsync<JsonElement>()).ToString());
+        // 唯一索引允许主体配对损坏的公共行与新 NULL 主体行并存；初始化必须拒绝损坏行，不能另建替代空间和根。
+        using (var scope = fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+            await db.Set<Dictionary<string, object?>>("WorkspaceSpace").ExecuteUpdateAsync(set => set.SetProperty(row => EF.Property<string?>(row, "SubjectId"), "corrupted-subject"));
+            using var corrupted = await FeatureHttpTestRequests.SendAsync(admin, entry, HttpMethod.Post, "/api/workspace/spaces/public/initialize");
+            Assert.Equal(HttpStatusCode.InternalServerError, corrupted.StatusCode);
+            Assert.Equal(1, await db.Set<Dictionary<string, object?>>("WorkspaceSpace").CountAsync());
+            Assert.Equal(1, await db.Set<Dictionary<string, object?>>("WorkspaceFolder").CountAsync());
+            await db.Set<Dictionary<string, object?>>("WorkspaceSpace").ExecuteUpdateAsync(set => set.SetProperty(row => EF.Property<string?>(row, "SubjectId"), (string?)null));
+        }
 
         var first = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "WorkspaceA", "工作空间A", "workspace-a", "账号A", entry);
         var second = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "WorkspaceB", "工作空间B", "workspace-b", "账号B", entry);

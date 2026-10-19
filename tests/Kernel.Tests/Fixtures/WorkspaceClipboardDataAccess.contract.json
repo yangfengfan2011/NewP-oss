@@ -14,7 +14,13 @@
         "read"
       ],
       "featurePositions": [
-        "Workspace/navigation:workspace"
+        "Workspace/navigation:workspace",
+        "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:copy",
+        "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:cut",
+        "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:edit",
+        "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:moveDown",
+        "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:moveUp",
+        "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:remove"
       ],
       "requirements": [
         {
@@ -1282,6 +1288,75 @@
       "container": false
     },
     {
+      "position": "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:edit",
+      "moduleId": "Workspace",
+      "key": "edit",
+      "kind": "action",
+      "title": "\u7F16\u8F91",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "workspace.folder.editObject",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "workspace/node-type:folder/surface:contextMenu/action:edit",
+      "staticScope": "folder",
+      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "titleKey": "Workspace.Edit",
+      "staticScopeTitleKey": "Workspace.Folder",
+      "actionScope": "contextMenu",
+      "readBehaviors": [
+        "workspace.folder.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:moveDown",
+      "moduleId": "Workspace",
+      "key": "moveDown",
+      "kind": "action",
+      "title": "\u4E0B\u79FB",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "workspace.folder.reorder",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "workspace/node-type:folder/surface:contextMenu/action:moveDown",
+      "staticScope": "folder",
+      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "titleKey": "Workspace.MoveDown",
+      "staticScopeTitleKey": "Workspace.Folder",
+      "actionScope": "contextMenu",
+      "readBehaviors": [
+        "workspace.folder.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:moveUp",
+      "moduleId": "Workspace",
+      "key": "moveUp",
+      "kind": "action",
+      "title": "\u4E0A\u79FB",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "workspace.folder.reorder",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "workspace/node-type:folder/surface:contextMenu/action:moveUp",
+      "staticScope": "folder",
+      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "titleKey": "Workspace.MoveUp",
+      "staticScopeTitleKey": "Workspace.Folder",
+      "actionScope": "contextMenu",
+      "readBehaviors": [
+        "workspace.folder.read"
+      ],
+      "container": false
+    },
+    {
       "position": "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:paste",
       "moduleId": "Workspace",
       "key": "paste",
@@ -1322,6 +1397,52 @@
       "titleKey": "Workspace.RemoveReference",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "contextMenu",
+      "readBehaviors": [
+        "workspace.folder.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/node-type:folder/surface:list.custom/action:moveDown",
+      "moduleId": "Workspace",
+      "key": "moveDown",
+      "kind": "action",
+      "title": "\u4E0B\u79FB",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "workspace.folder.reorder",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "workspace/node-type:folder/surface:list.custom/action:moveDown",
+      "staticScope": "folder",
+      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "titleKey": "Workspace.MoveDown",
+      "staticScopeTitleKey": "Workspace.Folder",
+      "actionScope": "list.custom",
+      "readBehaviors": [
+        "workspace.folder.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/node-type:folder/surface:list.custom/action:moveUp",
+      "moduleId": "Workspace",
+      "key": "moveUp",
+      "kind": "action",
+      "title": "\u4E0A\u79FB",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "workspace.folder.reorder",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "workspace/node-type:folder/surface:list.custom/action:moveUp",
+      "staticScope": "folder",
+      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "titleKey": "Workspace.MoveUp",
+      "staticScopeTitleKey": "Workspace.Folder",
+      "actionScope": "list.custom",
       "readBehaviors": [
         "workspace.folder.read"
       ],
@@ -1481,6 +1602,29 @@
       "staticScope": "folder",
       "staticScopeTitle": "\u6587\u4EF6\u5939",
       "titleKey": "Workspace.Cut",
+      "staticScopeTitleKey": "Workspace.Folder",
+      "actionScope": "list.rowActions",
+      "readBehaviors": [
+        "workspace.folder.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:edit",
+      "moduleId": "Workspace",
+      "key": "edit",
+      "kind": "action",
+      "title": "\u7F16\u8F91",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "workspace.folder.editObject",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "workspace/node-type:folder/surface:list.rowActions/action:edit",
+      "staticScope": "folder",
+      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "titleKey": "Workspace.Edit",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "list.rowActions",
       "readBehaviors": [

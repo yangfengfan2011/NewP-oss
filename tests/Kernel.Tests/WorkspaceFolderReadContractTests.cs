@@ -8,6 +8,31 @@ namespace ICP.Platform.Kernel.Tests;
 public sealed class WorkspaceFolderReadContractTests
 {
     [Fact]
+    public void ExistingTreeRowTargets_PrefetchThroughDetailReadAtTheirActualActionPosition()
+    {
+        var compiled = new CanonicalModulePlanCompiler().Compile("workspace-tree-prefetch-314",
+            new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")));
+        Assert.True(compiled.IsSuccess, JsonSerializer.Serialize(compiled.Diagnostics));
+        var plan = compiled.Plan!;
+        var read = Assert.Single(plan.ActionDataAccessCatalog, item => item.ModuleId == "Workspace"
+            && item.ViewKey == "workspace.folder.detail" && item.Surface == "read");
+        foreach (var key in new[] { "edit", "remove", "copy", "cut", "moveUp", "moveDown" })
+        {
+            var point = Assert.Single(plan.FeatureCatalog, point => point.ModuleId == "Workspace"
+                && point.ActionScope == "contextMenu" && point.Key == key);
+            Assert.Contains("workspace.folder.read", point.ReadBehaviors);
+            Assert.Contains(point.Position, read.FeaturePositions);
+        }
+        // page action没有目标详情预取，不为粘贴或新候选制造读取入口。
+        var paste = Assert.Single(plan.FeatureCatalog, point => point.ModuleId == "Workspace"
+            && point.ActionScope == "contextMenu" && point.Key == "paste");
+        Assert.DoesNotContain(paste.Position, read.FeaturePositions);
+        var create = Assert.Single(plan.FeatureCatalog, point => point.ModuleId == "Workspace"
+            && point.ActionScope == "list.pageActions" && point.Key == "create");
+        Assert.DoesNotContain(create.Position, read.FeaturePositions);
+    }
+
+    [Fact]
     public void ActualContentViews_FreezeOnlyTheirOwnLinkReadSource()
     {
         var source = TrustedBuiltInModuleSource.CreateForHost(AppContext.BaseDirectory, Path.Combine(AppContext.BaseDirectory, "modules"));

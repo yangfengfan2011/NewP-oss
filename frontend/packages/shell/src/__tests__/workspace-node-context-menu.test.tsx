@@ -8,6 +8,7 @@ import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } fr
 import { ModuleRegistry, type FrontendBehaviorBindings } from '@icp-platform/sdk';
 import { loadComponentSource, readComponentJson } from '../../test-support/componentTestInputs';
 import folder from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceFolderRuntime.contract.json';
+import compiledWorkspace from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceClipboardDataAccess.contract.json';
 import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import { formalDataAccessFor } from './formalRuntimeMetadataTestSupport';
 import { PageEntry } from '../composition/PageOutlet';
@@ -24,6 +25,11 @@ const dictionary = readComponentJson('Workspace', 'metadata/dictionaries/Workspa
 
 it.each([['edit', 'zhs'], ['remove', 'zhs'], ['moveUp', 'zhs'], ['moveDown', 'zhs'], ['moveUp', 'en'], ['moveDown', 'en']] as const)('executes the real Workspace tree %s action in %s against its incoming LID and parent occurrence', async (action, language) => {
   const rootName = language === 'en' ? 'Public space' : '公共空间';
+  const entry = compiledWorkspace.features.find(point => point.kind === 'navigation' && point.key === 'workspace')!;
+  const menuFeatures = compiledWorkspace.features.filter(point => point.actionScope === 'contextMenu'
+    && ['edit', 'remove', 'moveUp', 'moveDown'].includes(point.key));
+  const granted = [entry.position, ...menuFeatures.map(point => point.position)];
+  const detailReads: { declarationId: string | null; featurePosition: string | null; allowed: boolean }[] = [];
   let name = '原目录'; let present = true;
   const writes: { path: string; method: string; body: unknown }[] = [];
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -44,7 +50,16 @@ it.each([['edit', 'zhs'], ['remove', 'zhs'], ['moveUp', 'zhs'], ['moveDown', 'zh
       return json(workspaceTreePath(nodeKey, links.length ? ['root', 'folder-eid'] : ['root'], links.length ? ['公共空间', name] : ['公共空间']));
     }
     if (url.pathname === '/api/links/workspace.content') return json({ items: [], total: 0, page: 1, pageSize: 20 });
-    if (url.pathname === '/api/workspace/folders/folder-eid') return json({ fields: { ENAME: name, Description: '原说明' } });
+    if (url.pathname === '/api/workspace/folders/folder-eid') {
+      const headers = new Headers(input instanceof Request ? input.headers : init?.headers);
+      const declaration = formalDataAccessFor('workspace.folder.detail', 'read');
+      const featurePosition = headers.get('X-NewP-Feature');
+      const declarationId = headers.get('X-NewP-Data-Declaration');
+      const allowed = declarationId === declaration.id && !!featurePosition && declaration.featurePositions.includes(featurePosition);
+      detailReads.push({ declarationId, featurePosition, allowed });
+      return allowed ? json({ fields: { ENAME: name, Description: '原说明' } })
+        : json({ code: 'ActionDataAccess.FeatureMismatch' }, 403);
+    }
     if (url.pathname === '/api/workspace/content/incoming-link/edit-values' || method === 'PUT') {
       expect(new Headers(input instanceof Request ? input.headers : init?.headers).get('X-NewP-Data-Declaration'))
         .toBe(formalDataAccessFor('workspace.folder.list', 'rowActions', 'edit').id);
@@ -70,12 +85,10 @@ it.each([['edit', 'zhs'], ['remove', 'zhs'], ['moveUp', 'zhs'], ['moveDown', 'zh
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
   const router = createMemoryRouter([{ path: '/workspace', element:
     <LocalizationProvider defaultLanguage={language} supportedLanguages={[{ code: language, displayName: language }]} catalogs={{ [language]: catalog }}>
-      <AuthorizationProvider featurePositions={['entry', 'tree-edit', 'tree-remove', 'tree-moveUp', 'tree-moveDown']}><PlatformQueryProvider scopeKey="node-menu">
+      <AuthorizationProvider featurePositions={granted}><PlatformQueryProvider scopeKey="node-menu">
         <RuntimeMetadataProvider value={{ manifest: { modules: [{ moduleId: 'Workspace', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [],
-          features: [{ key: 'workspace', position: 'entry', kind: 'navigation' }, ...['edit', 'remove', 'moveUp', 'moveDown'].map(key => ({
-            key, position: `tree-${key}`, kind: 'action', parentPosition: 'entry', staticScope: 'folder', actionScope: 'contextMenu',
-          }))] }] }, navDocuments: [], modelDocuments: [folder, content], viewDocuments: [tree, list, detail] }}>
-          <PageEntry page={{ pageKey: 'platform.tree', parameters: { viewKey: tree.view.key, featurePosition: 'entry' }, inputResolverKey: 'workspace.tree.current' }} />
+          features: [entry, ...menuFeatures] }] }, navDocuments: [], modelDocuments: [folder, content], viewDocuments: [tree, list, detail] }}>
+          <PageEntry page={{ pageKey: 'platform.tree', parameters: { viewKey: tree.view.key, featurePosition: entry.position }, inputResolverKey: 'workspace.tree.current' }} />
         </RuntimeMetadataProvider>
       </PlatformQueryProvider></AuthorizationProvider>
     </LocalizationProvider> }], { initialEntries: ['/workspace'] });
@@ -94,6 +107,9 @@ it.each([['edit', 'zhs'], ['remove', 'zhs'], ['moveUp', 'zhs'], ['moveDown', 'zh
     await vi.waitFor(() => expect(document.querySelector('[role="menuitem"]')).not.toBeNull());
     const readsBeforeAction = request.mock.calls.filter(([input, init]) => (init?.method ?? 'GET') === 'GET' && !String(input).includes('antiforgery')).length;
     await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent === (language === 'en' ? { edit: 'Edit', remove: 'Remove reference', moveUp: 'Move up', moveDown: 'Move down' }[action] : { edit: '编辑', remove: '移除引用', moveUp: '上移', moveDown: '下移' }[action]))!.click());
+    await vi.waitFor(() => expect(detailReads).toHaveLength(1));
+    expect(detailReads[0]).toEqual({ declarationId: formalDataAccessFor('workspace.folder.detail', 'read').id,
+      featurePosition: menuFeatures.find(point => point.key === action)!.position, allowed: true });
     if (action === 'edit') {
       await vi.waitFor(() => expect(document.querySelector('.ant-drawer textarea')).not.toBeNull());
       expect(document.querySelector('.ant-drawer-title')?.textContent).toBe('编辑');

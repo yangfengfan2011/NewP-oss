@@ -276,7 +276,9 @@ public static class StandardFeatureMetadataCompiler
                     FullTitleKey(Text(action, "labelKey"), dictionary));
                 DataAccess(target, definition, referenced.Surface, Text(definition, "key"), result[^1].ReferenceKey!);
                 if (operation is "create" or "edit") BindLookupDataAccess(target, true, result[^1].ReferenceKey!);
-                if (operation == "edit") BindDetailRead(target, result[^1].ReferenceKey!);
+                // 节点行与 feature 动作沿原目标详情预取，绑定其既有树位置；page 动作不增加读取。
+                if (operation == "edit" || operation != "create" && referenced.Surface is ("rowActions" or "featureActions"))
+                    BindDetailRead(target, result[^1].ReferenceKey!);
             }
         }
 

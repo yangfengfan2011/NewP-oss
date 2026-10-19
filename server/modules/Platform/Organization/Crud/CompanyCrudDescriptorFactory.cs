@@ -18,6 +18,7 @@ public static class CompanyCrudDescriptorFactory
             UpdateFields: ["ENAME", "SortOrder", "IsEnabled"]);
         return new StandardCrudDescriptor
         {
+            LegacyDataExecutions = ["create", "update", "delete"],
             ResourceKey = "organization.company",
             ModuleId = "Organization",
             ModelName = "Company",

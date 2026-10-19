@@ -7,7 +7,7 @@ import { act, StrictMode, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
 import { AuthorizationProvider, LanguageSelect, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
-import { ModuleRegistry, StandardCrudRequestError, createStandardCrudRestDataAdapter, type AuthUser } from '@icp-platform/sdk';
+import { ModuleRegistry, StandardCrudRequestError, createStandardCrudRestDataAdapter, type AuthUser, type ActionDataAccessRequirement } from '@icp-platform/sdk';
 import { AuthProvider, useAuth, useOptionalAuth } from '../contexts/AuthContext';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
 import { StandardCrudHostEnvironmentContext, type StandardCrudHostEnvironment } from '../standard-crud/standardCrudHostEnvironment';
@@ -15,7 +15,9 @@ import { createEmbeddedHostEnvironment } from './standardCrudHostEnvironmentTest
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 import exampleRecordListViewDocument from '../../../../modules/example/metadata/views/ExampleRecordList.view.json';
 import exampleRecordDetailViewDocument from '../../../../modules/example/metadata/views/ExampleRecordDetail.view.json';
-import exampleRecordModelDocument from '../../../../modules/example/metadata/models/ExampleRecord.model.json';
+import exampleRecordModelDocument from '../../../../../tests/Kernel.Tests/Fixtures/ExampleRuntimeModel.contract.json';
+import exampleDataAccess from '../../../../../tests/Kernel.Tests/Fixtures/ExampleCrudDataAccess.contract.json';
+import { bindActionDataAccess } from '../metadata/runtimeMetadataLoader';
 import exampleRecordListDictionary from '../../../../modules/example/metadata/dictionaries/ExampleRecordListView.dic.json';
 import companyListViewDocument from '../../../../modules/platform/organization/metadata/views/CompanyList.view.json';
 import companyModelDocument from '../../../../modules/platform/organization/metadata/models/Company.model.json';
@@ -2128,6 +2130,7 @@ describe('StandardCrudListPageHost', () => {
   });
 
   it('projects the formal Example user column into the Shell export request as raw authoring', async () => {
+    const declarations = exampleDataAccess as ActionDataAccessRequirement[];
     const exampleListCatalog = Object.fromEntries(
       Object.entries(exampleRecordListDictionary.ExampleRecordListView)
         .map(([key, translations]) => [`ExampleRecordListView.${key}`, translations.zhs]),
@@ -2196,10 +2199,11 @@ describe('StandardCrudListPageHost', () => {
             <PlatformQueryProvider scopeKey="issue-137-user-export">
               <RuntimeMetadataProvider
                 value={{
-                  manifest: { modules: [] },
+                  manifest: { modules: [{ moduleId: 'Example', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], dataAccess: declarations }] },
                   navDocuments: [],
                   modelDocuments: [exampleRecordModelDocument],
-                  viewDocuments: [exampleRecordListViewDocument, exampleRecordDetailViewDocument],
+                  viewDocuments: [bindActionDataAccess({ ...exampleRecordListViewDocument, type: 'view' }, declarations),
+                    bindActionDataAccess({ ...exampleRecordDetailViewDocument, type: 'view' }, declarations)],
                 }}
               >
                 <StandardCrudListPageHost viewKey="example.record.list" />

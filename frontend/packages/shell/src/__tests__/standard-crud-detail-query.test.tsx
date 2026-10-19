@@ -5,7 +5,7 @@ import { act, StrictMode } from 'react';
 import type { Root } from 'react-dom/client';
 import { createLocalizedRoot as createRoot } from './localizedTestRoot';
 import { PlatformQueryProvider } from '@icp-platform/core';
-import type { StandardCrudLoadedDetail } from '@icp-platform/sdk';
+import type { ActionDataAccessRequirement, StandardCrudLoadedDetail } from '@icp-platform/sdk';
 import { useStandardCrudDetailQuery, type StandardCrudDetailQueryResult } from '../standard-crud/standardCrudDetailQuery';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -18,6 +18,32 @@ describe('Standard CRUD detail query', () => {
     if (root) await act(async () => root.unmount());
     container?.remove();
     vi.restoreAllMocks();
+  });
+
+  it('isolates declarations at the same resource, target and feature position and cancels a pending reload', async () => {
+    const original = { normalized: { fields: { EID: 'record-1', ENAME: 'read' }, summaries: {} }, value: {} };
+    const prepared = { normalized: { fields: { EID: 'record-1', ENAME: 'prepare' }, summaries: {} }, value: {} };
+    let finishOld!: (value: typeof original) => void;
+    const get = vi.fn().mockResolvedValueOnce(original).mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; })).mockResolvedValueOnce(prepared);
+    let current!: StandardCrudDetailQueryResult<unknown>;
+    function Subscriber({ declarationId }: { declarationId: string }) {
+      const dataAccess: ActionDataAccessRequirement = { id: declarationId, moduleId: 'Example', viewKey: 'records', surface: 'read', actionKey: '',
+        execution: 'example.record.read', resources: ['example.record'], actions: ['read'], featurePositions: ['entry'] };
+      current = useStandardCrudDetailQuery({ resourceKey: 'example.record', id: 'record-1', featurePosition: 'entry', dataAccess,
+        dataAdapter: { get, list: vi.fn(), getRowId: () => 'record-1' } });
+      return null;
+    }
+    container = document.createElement('div'); document.body.append(container); root = createRoot(container);
+    await act(async () => root.render(<PlatformQueryProvider scopeKey="actor"><Subscriber declarationId="read" /></PlatformQueryProvider>));
+    let reload!: ReturnType<typeof current.reload>;
+    await act(async () => { reload = current.reload(); });
+    const oldSignal = get.mock.calls[1][1].signal as AbortSignal;
+    await act(async () => root.render(<PlatformQueryProvider scopeKey="actor"><Subscriber declarationId="prepare" /></PlatformQueryProvider>));
+    expect(await reload).toEqual({ status: 'cancelled' });
+    await vi.waitFor(() => expect(oldSignal.aborted).toBe(true));
+    expect(get.mock.calls[2][1]).toMatchObject({ dataAccess: { id: 'prepare' }, featurePosition: 'entry' });
+    await act(async () => finishOld(original));
+    expect(current.detail).toBe(prepared);
   });
 
   it('isolates the same action record by scope, aborts the old request, and ignores its late result', async () => {

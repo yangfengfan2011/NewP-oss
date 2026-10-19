@@ -94,6 +94,7 @@ public sealed class StandardCrudCreatePreparationTests
     {
         ResourceKey = "organization.person", ModuleId = "Organization", ModelName = "Person", Route = "api/organization/persons", IdField = "EID", DisplayField = "ENAME",
         RequiresCreationRecord = true,
+        LegacyDataExecutions = ["create"],
         FieldSet = new(["EID", "PersonNo", "ENAME"], ["EID", "PersonNo", "ENAME", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"], ["PersonNo", "ENAME"], ["ENAME"]),
         FieldPolicies = [.. new[] { "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt" }.Select(field => new StandardCrudFieldPolicy
             { Field = field, StorageRequired = true, ValueOwner = StandardCrudFieldValueOwner.Server })],

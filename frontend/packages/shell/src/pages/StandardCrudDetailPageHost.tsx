@@ -11,6 +11,7 @@ import {
   type StandardCrudFieldDefinition,
   type StandardCrudResourceRegistration,
   type StandardCrudOperationResult,
+  type ActionDataAccessRequirement,
 } from '@icp-platform/sdk';
 import { ErrorState, LoadingState } from '@icp-platform/ui/core';
 import { CrudLocaleProvider } from '@icp-platform/ui/crud-detail';
@@ -195,13 +196,17 @@ function StandardCrudDetailPageContent<TDetail>({
     [formSchema.fields, dicKey, t],
   );
   const [editing, setEditing] = useState(false);
+  const readDataAccess = view.dataAccess as ActionDataAccessRequirement | undefined;
+  const editDataAccess = (Array.isArray(view.pageActions) ? view.pageActions : [])
+    .find((action: { standardAction?: string }) => action.standardAction === 'edit')?.dataAccess as ActionDataAccessRequirement | undefined;
   const [editorDetail, setEditorDetail] = useState<{ id: string; detail: { fields: Record<string, unknown> } } | null>(null);
   const [presentedOperationResult, setPresentedOperationResult] = useState<StandardCrudOperationResult | null>(null);
   const detailQuery = useStandardCrudDetailQuery({
     resourceKey: registration.resourceKey,
     id,
     dataAdapter,
-    featurePosition: readPosition,
+    featurePosition: editing && editDataAccess ? resolvedFeaturePosition(editResolution) : readPosition,
+    dataAccess: editing ? editDataAccess : readDataAccess,
     queryScope: host.input.queryScope,
     readSourceKey,
   });
@@ -400,13 +405,14 @@ function StandardCrudDetailPageContent<TDetail>({
       ) : (
         <ErrorState message={t('Platform.DetailNotFound', '未找到详情。')} />
       )}
-          {!readOnly && editing && editorDetail?.id === id && editFields.length > 0 && (!features.placement || editResolution.kind === 'allowed') ? (
+          {!readOnly && editing && !detailQuery.error && editorDetail?.id === id && editFields.length > 0 && (!features.placement || editResolution.kind === 'allowed') ? (
             <Suspense fallback={<div className="sh-loading-state" role="status">{t('Platform.LoadingEditor', '正在加载编辑表单…')}</div>}>
               <StandardCrudDetailEditor
                 key={id}
                 id={id}
                 resourceKey={schema.resourceKey}
                 featurePosition={resolvedFeaturePosition(editResolution)}
+                dataAccess={editDataAccess}
                 detail={editorDetail.detail}
                 reading={detailQuery.loading || detailQuery.refreshing}
                 fields={editFields}

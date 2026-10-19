@@ -34,7 +34,7 @@ public sealed class PersistenceDeploymentTests : IDisposable
         RenameModel(root, "Document", "Document", "Part");
         // 本场景只保留 Document 的存储贡献；Workspace 停用后不发布依赖其入口的功能。
         var current = ReadFormalCandidate(candidate => candidate.ModuleId is "Workspace" or "Part" ? candidate with { Enabled = false }
-            : candidate.ModuleId == "Document" ? candidate with { Features = [] } : candidate, root);
+            : candidate.ModuleId == "Document" ? candidate with { Features = [], DataExecutions = [] } : candidate, root);
         var result = Compiler().Compile(current, PersistenceProvider.SqlServer, deployed);
         Assert.Null(result.Plan);
         Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Code == "PERSISTENCE_DEPLOYED_IDENTITY_CONFLICT" && diagnostic.CanonicalKey == "Part");
@@ -148,7 +148,7 @@ public sealed class PersistenceDeploymentTests : IDisposable
         var selected = ReadFormalCandidate(candidate =>
             (maskParent ? candidate.ModuleId == "InforCenter" : candidate.ModuleId is "Workspace" or "Document")
                 ? candidate with { Enabled = false }
-                : !maskParent && candidate.ModuleId == "Part" ? candidate with { Features = [] } : candidate);
+                : !maskParent && candidate.ModuleId == "Part" ? candidate with { Features = [], DataExecutions = [] } : candidate);
         var retained = Compile(selected, recovered);
         Assert.DoesNotContain(selected.Modules, module => module.ModuleId is "Workspace" or "Document");
         Assert.Equal(!maskParent, selected.Modules.Any(module => module.ModuleId == "Part"));

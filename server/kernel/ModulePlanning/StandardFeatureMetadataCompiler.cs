@@ -201,9 +201,12 @@ public static class StandardFeatureMetadataCompiler
             var index = result.FindIndex(feature => (feature.ReferenceKey ?? feature.Key) == owner);
             if (index < 0) throw new InvalidOperationException("数据声明缺少合法功能归属。");
             var node = result[index];
+            if (declared.EnumerateObject().Any(property => property.Name is not ("execution" or "resources" or "actions" or "additionalActions")))
+                throw new InvalidOperationException("ACTION_DATA_ACCESS_DECLARATION_INVALID");
             var declaration = new ActionDataAccessDeclaration(moduleId, Text(view, "key"), surface, key, Text(declared, "execution"),
                 declared.GetProperty("resources").EnumerateArray().Select(item => item.GetString()!).ToArray(),
-                declared.GetProperty("actions").EnumerateArray().Select(item => item.GetString()!).ToArray());
+                declared.TryGetProperty("actions", out var declaredActions) ? declaredActions.EnumerateArray().Select(item => item.GetString()!).ToArray() : [])
+            { AdditionalActions = declared.TryGetProperty("additionalActions", out var additional) ? additional.EnumerateArray().Select(item => item.GetString()!).ToArray() : [] };
             // 相同 View 可由多个树节点引用到同一功能；相同结构的展开不制造重复声明。
             if (!node.DataAccess.Any(item => item.Id == declaration.Id)) result[index] = node with { DataAccess = [.. node.DataAccess, declaration] };
         }

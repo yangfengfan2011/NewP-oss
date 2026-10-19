@@ -456,6 +456,9 @@ public sealed class CanonicalModulePlanCompiler
                     throw new InvalidOperationException("功能声明不能跨模块冒领归属。");
                 if (candidate.DataActions.Any(action => action.ModuleId != candidate.ModuleId))
                     throw new InvalidOperationException("数据动作声明不能跨模块冒领归属。");
+                if (candidate.DataExecutions.Any(execution => execution.ModuleId != candidate.ModuleId
+                    || !execution.Provider.StartsWith("standardCrud.", StringComparison.Ordinal) && execution.Provider != candidate.BackendBehaviorKey))
+                    throw new InvalidOperationException("DATA_EXECUTION_PROVIDER_OWNER_INVALID");
                 DataActionCatalogCompiler.Compile(candidate.DataActions);
             }
             catch (InvalidOperationException exception)
@@ -482,7 +485,7 @@ public sealed class CanonicalModulePlanCompiler
         {
             var actions = DataActionCatalogCompiler.Compile(candidates.SelectMany(candidate => candidate.DataActions));
             // 缺失依赖已拒绝候选；不把其资源消失再报告成按钮声明错误。
-            if (dependenciesAvailable) ActionDataAccessCompiler.Compile(candidates.SelectMany(candidate => candidate.Features).ToArray(), actions);
+            if (dependenciesAvailable) ActionDataAccessCompiler.Compile(candidates.SelectMany(candidate => candidate.Features).ToArray(), actions, candidates.SelectMany(candidate => candidate.DataExecutions).ToArray());
             return [];
         }
         catch (InvalidOperationException exception)
@@ -543,6 +546,7 @@ public sealed class CanonicalModulePlanCompiler
         {
             Features = candidate.Features.OrderBy(node => node.Key, StringComparer.Ordinal).ToArray(),
             DataActions = candidate.DataActions.ToArray(),
+            DataExecutions = candidate.DataExecutions.ToArray(),
             CompositionMembers = Sort(candidate.CompositionMembers),
             Enabled = candidate.Enabled,
             FrontendDelivery = candidate.FrontendDelivery

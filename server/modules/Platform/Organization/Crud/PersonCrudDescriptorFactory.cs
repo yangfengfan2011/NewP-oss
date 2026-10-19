@@ -20,6 +20,7 @@ public static class PersonCrudDescriptorFactory
             UpdateFields: ["ENAME", "BirthDate", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "EmploymentStartedAt", "EmploymentEndedAt", "UpdatedAt"]);
         return new StandardCrudDescriptor
         {
+            LegacyDataExecutions = ["create", "update", "delete"],
             ResourceKey = "organization.person",
             RequiresCreationRecord = true,
             RequiresUpdateRecord = true,

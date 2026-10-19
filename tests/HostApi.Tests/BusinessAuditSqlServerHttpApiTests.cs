@@ -1354,6 +1354,8 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
     private bool _includePart;
     private bool _includeDocument;
     private bool _includeFiles;
+    private bool _includeExample;
+    private bool _legacyExampleExecutions;
     private bool _defaultOrganizationInitialized;
     private BusinessAuditHostFixture(ReusableSqlServerDatabase database, Action<IServiceCollection>? configureServices)
     {
@@ -1362,10 +1364,12 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         _configureServices = configureServices;
     }
     internal static async Task<BusinessAuditHostFixture> CreateAsync(Action<IServiceCollection>? configureServices = null,
-        IReadOnlyDictionary<string, bool>? actionStates = null, bool useRequestPresentation = false, bool includeWorkspace = false, bool includePart = false, bool includeDocument = false, bool includeFiles = false)
+        IReadOnlyDictionary<string, bool>? actionStates = null, bool useRequestPresentation = false, bool includeWorkspace = false, bool includePart = false, bool includeDocument = false, bool includeFiles = false, bool includeExample = false, bool legacyExampleExecutions = false)
     {
         var fixture = new BusinessAuditHostFixture(await ReusableSqlServerDatabase.AcquireAsync(allowParallel: true), configureServices);
         fixture._useRequestPresentation = useRequestPresentation;
+        fixture._includeExample = includeExample;
+        fixture._legacyExampleExecutions = legacyExampleExecutions;
         fixture._includeWorkspace = includeWorkspace || includePart || includeDocument;
         fixture._includePart = fixture._includeWorkspace;
         fixture._includeDocument = fixture._includeWorkspace;
@@ -1420,7 +1424,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
             typeof(AuditModule).Assembly,
             typeof(OrganizationModule).Assembly,
             typeof(ObjectOperationExtensionProbeModule).Assembly
-        }.Concat(_includeWorkspace ? [typeof(ICP.Platform.Modules.Workspace.WorkspaceModule).Assembly] : []).Concat(_includePart ? [typeof(ICP.Platform.Modules.Part.PartModule).Assembly] : []).Concat(_includeDocument ? [typeof(ICP.Platform.Modules.Document.DocumentModule).Assembly] : []).Concat(_includeFiles ? [typeof(ICP.Platform.Modules.Files.FilesModule).Assembly] : []).ToArray();
+        }.Concat(_includeExample ? [typeof(ICP.Platform.Modules.Example.ExampleModule).Assembly] : []).Concat(_includeWorkspace ? [typeof(ICP.Platform.Modules.Workspace.WorkspaceModule).Assembly] : []).Concat(_includePart ? [typeof(ICP.Platform.Modules.Part.PartModule).Assembly] : []).Concat(_includeDocument ? [typeof(ICP.Platform.Modules.Document.DocumentModule).Assembly] : []).Concat(_includeFiles ? [typeof(ICP.Platform.Modules.Files.FilesModule).Assembly] : []).ToArray();
         builder.Services.AddModuleSystem(options =>
         {
             foreach (var assembly in moduleAssemblies)
@@ -1429,11 +1433,15 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
             }
         });
         var productionModuleIds = new[] { "Identity", "Authentication", "Authorization", "Audit", "Organization" }
-            .Concat(_includeWorkspace ? ["InforCenter", "Workspace"] : []).Concat(_includePart ? ["Part"] : []).Concat(_includeDocument ? ["Document"] : []).Concat(_includeFiles ? ["Files"] : []).ToArray();
+            .Concat(_includeExample ? ["Example"] : []).Concat(_includeWorkspace ? ["InforCenter", "Workspace"] : []).Concat(_includePart ? ["Part"] : []).Concat(_includeDocument ? ["Document"] : []).Concat(_includeFiles ? ["Files"] : []).ToArray();
         var hostRoot = Path.GetDirectoryName(typeof(AuthController).Assembly.Location)!;
         var trust = TrustedBuiltInModuleSource.CreateForHost(hostRoot, Path.Combine(hostRoot, "modules"));
         var candidates = new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(trust)
             .Where(candidate => productionModuleIds.Contains(candidate.ModuleId, StringComparer.Ordinal)).ToArray();
+        // 成本诊断只在当前fixture内重放明确登记的迁移前路径，不修改生产authoring或连接池。
+        if (_legacyExampleExecutions)
+            candidates = candidates.Select(candidate => candidate.ModuleId == "Example" ? candidate with
+            { DataExecutions = [], Features = candidate.Features.Select(feature => feature with { DataAccess = [] }).ToArray() } : candidate).ToArray();
         // 注册的测试扩展也必须拥有同一候选中的正式 Capsule，不能只靠 IModule 注册旁路依赖校验。
         var probeModulesRoot = Path.Combine(_root, "probe-capsules");
         var probeRoot = Path.Combine(probeModulesRoot, "ObjectOperationExtensionProbe");
@@ -1488,9 +1496,10 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
             .Concat(AuthorizationModelDefinitions.All.Select(m => m with { OwnerModuleId = "Authorization" }))
             .Concat(OrganizationModelDefinitions.All.Select(m => m with { OwnerModuleId = "Organization" }))
             .Concat(new AuditModelMetadataProvider().GetDefinitions().Select(m => m with { OwnerModuleId = "Audit" }))
-            .Concat(_includeWorkspace ? new ICP.Platform.Modules.Workspace.WorkspaceModelMetadataProvider().GetDefinitions() : []).Concat(_includePart ? new ICP.Platform.Modules.Part.PartModelMetadataProvider().GetDefinitions() : []).Concat(_includeDocument ? new ICP.Platform.Modules.Document.DocumentModelMetadataProvider().GetDefinitions() : []).Concat(_includeFiles ? new ICP.Platform.Modules.Files.FilesModelMetadataProvider().GetDefinitions() : []).ToArray();
+            .Concat(_includeExample ? new ICP.Platform.Modules.Example.Persistence.Descriptors.ExampleModelMetadataProvider().GetDefinitions().Select(m => m with { OwnerModuleId = "Example" }) : []).Concat(_includeWorkspace ? new ICP.Platform.Modules.Workspace.WorkspaceModelMetadataProvider().GetDefinitions() : []).Concat(_includePart ? new ICP.Platform.Modules.Part.PartModelMetadataProvider().GetDefinitions() : []).Concat(_includeDocument ? new ICP.Platform.Modules.Document.DocumentModelMetadataProvider().GetDefinitions() : []).Concat(_includeFiles ? new ICP.Platform.Modules.Files.FilesModelMetadataProvider().GetDefinitions() : []).ToArray();
         // 本夹具显式构造当前模型计划；运行时模块不能再回退到仓库查找缺失的候选 authoring。
         var modelAuthoring = new Dictionary<string, ICP.Platform.Modeling.Metadata.ModelMetadataDocument>(StringComparer.Ordinal);
+        if (_includeExample) modelAuthoring.Add("Example", new ICP.Platform.Modeling.Metadata.JsonModelMetadataDocumentLoader().LoadFromFile(Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(hostRoot, "Example"), "metadata", "models", "ExampleRecord.model.json")));
         if (_includePart) modelAuthoring.Add("Part", new ICP.Platform.Modules.Part.PartModelMetadataProvider().GetDocument());
         if (_includeDocument) modelAuthoring.Add("Document", new ICP.Platform.Modules.Document.DocumentModelMetadataProvider().GetDocument());
         var plan = new CompiledPersistencePlan("business-audit-test", "snapshot", "hash", default, "digest", [], models, []) { ModelAuthoring = modelAuthoring };
@@ -1505,6 +1514,12 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
             new FaultedOrganizationQuery(sp.GetRequiredService<ICP.Platform.Modules.Organization.Caching.OrganizationCache>(), Fault));
         // 每次 Host 重启都复用首次配置；故障注入和 Files 选项不能随动作开关悄悄消失。
         _configureServices?.Invoke(builder.Services);
+        if (_legacyExampleExecutions)
+            builder.Services.AddSingleton<IStandardCrudResourceRegistry>(services => new ICP.Platform.Crud.Runtime.StandardCrudResourceRegistry(
+                services.GetServices<StandardCrudDescriptor>().Select(descriptor => descriptor.ModuleId == "Example" ? descriptor with
+                { DataExecutions = new Dictionary<string, string>(), LegacyDataExecutions = ["create", "update", "delete"] } : descriptor),
+                services.GetRequiredService<CompiledPersistencePlan>()));
+        if (_includeExample) builder.Services.AddControllers().AddApplicationPart(typeof(ICP.Platform.Modules.Example.ExampleModule).Assembly);
         if (_includeWorkspace) builder.Services.AddControllers().AddApplicationPart(typeof(ICP.Platform.Modules.Workspace.WorkspaceModule).Assembly);
         if (_includePart) builder.Services.AddControllers().AddApplicationPart(typeof(ICP.Platform.Modules.Part.PartModule).Assembly);
         if (_includeDocument) builder.Services.AddControllers().AddApplicationPart(typeof(ICP.Platform.Modules.Document.DocumentModule).Assembly);

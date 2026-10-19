@@ -1,0 +1,248 @@
+[
+  {
+    "id": "Example/view:example.record.detail/pageActions/action:edit",
+    "moduleId": "Example",
+    "viewKey": "example.record.detail",
+    "surface": "pageActions",
+    "actionKey": "edit",
+    "execution": "example.record.update",
+    "resources": [
+      "example.record"
+    ],
+    "actions": [
+      "read",
+      "edit"
+    ],
+    "featurePositions": [
+      "Example/navigation:example.group/navigation:example.records/surface:detail.pageActions/action:edit"
+    ],
+    "requirements": [
+      {
+        "role": "target",
+        "stage": "prepare",
+        "shape": "object",
+        "resources": [
+          "example.record"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      },
+      {
+        "role": "target",
+        "stage": "submit",
+        "shape": "object",
+        "resources": [
+          "example.record"
+        ],
+        "anyOf": [
+          [
+            "read",
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "standardCrud.update"
+  },
+  {
+    "id": "Example/view:example.record.detail/read",
+    "moduleId": "Example",
+    "viewKey": "example.record.detail",
+    "surface": "read",
+    "actionKey": "",
+    "execution": "example.record.read",
+    "resources": [
+      "example.record"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Example/navigation:example.group/navigation:example.records"
+    ],
+    "requirements": [
+      {
+        "role": "target",
+        "stage": "read",
+        "shape": "object",
+        "resources": [
+          "example.record"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "standardCrud.read"
+  },
+  {
+    "id": "Example/view:example.record.list/pageActions/action:create",
+    "moduleId": "Example",
+    "viewKey": "example.record.list",
+    "surface": "pageActions",
+    "actionKey": "create",
+    "execution": "example.record.create",
+    "resources": [
+      "example.record"
+    ],
+    "actions": [
+      "create"
+    ],
+    "featurePositions": [
+      "Example/navigation:example.group/navigation:example.records/surface:list.pageActions/action:create"
+    ],
+    "requirements": [
+      {
+        "role": "candidate",
+        "stage": "submit",
+        "shape": "candidate",
+        "resources": [
+          "example.record"
+        ],
+        "anyOf": [
+          [
+            "create"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "standardCrud.create"
+  },
+  {
+    "id": "Example/view:example.record.list/read",
+    "moduleId": "Example",
+    "viewKey": "example.record.list",
+    "surface": "read",
+    "actionKey": "",
+    "execution": "example.record.list",
+    "resources": [
+      "example.record"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Example/navigation:example.group/navigation:example.records"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "example.record"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      }
+    ],
+    "provider": "standardCrud.list"
+  },
+  {
+    "id": "Example/view:example.record.list/rowActions/action:delete",
+    "moduleId": "Example",
+    "viewKey": "example.record.list",
+    "surface": "rowActions",
+    "actionKey": "delete",
+    "execution": "example.record.delete",
+    "resources": [
+      "example.record"
+    ],
+    "actions": [
+      "read",
+      "delete"
+    ],
+    "featurePositions": [
+      "Example/navigation:example.group/navigation:example.records/surface:list.rowActions/action:delete"
+    ],
+    "requirements": [
+      {
+        "role": "target",
+        "stage": "submit",
+        "shape": "object",
+        "resources": [
+          "example.record"
+        ],
+        "anyOf": [
+          [
+            "read",
+            "delete"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "standardCrud.delete"
+  },
+  {
+    "id": "Example/view:example.record.list/rowActions/action:edit",
+    "moduleId": "Example",
+    "viewKey": "example.record.list",
+    "surface": "rowActions",
+    "actionKey": "edit",
+    "execution": "example.record.update",
+    "resources": [
+      "example.record"
+    ],
+    "actions": [
+      "read",
+      "edit"
+    ],
+    "featurePositions": [
+      "Example/navigation:example.group/navigation:example.records/surface:list.rowActions/action:edit"
+    ],
+    "requirements": [
+      {
+        "role": "target",
+        "stage": "prepare",
+        "shape": "object",
+        "resources": [
+          "example.record"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      },
+      {
+        "role": "target",
+        "stage": "submit",
+        "shape": "object",
+        "resources": [
+          "example.record"
+        ],
+        "anyOf": [
+          [
+            "read",
+            "edit"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "standardCrud.update"
+  }
+]

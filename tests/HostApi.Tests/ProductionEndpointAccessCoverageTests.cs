@@ -148,7 +148,11 @@ public sealed class ProductionEndpointAccessCoverageTests
     [Fact, Trait("Category", "ModuleMetadataConsumer")]
     public void Compile_AllCurrentProductionControllersPersonCrudAndPluginManifests_HaveTerminalRules()
     {
+        var compiled = new CanonicalModulePlanCompiler().Compile("production-endpoint-coverage",
+            new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")));
+        Assert.True(compiled.IsSuccess, System.Text.Json.JsonSerializer.Serialize(compiled.Diagnostics));
         var builder = WebApplication.CreateBuilder();
+        builder.Services.AddSingleton(compiled.Plan!);
         builder.Services.AddControllers()
             .AddApplicationPart(typeof(AuthController).Assembly)
             .AddApplicationPart(typeof(AccessLogsController).Assembly)

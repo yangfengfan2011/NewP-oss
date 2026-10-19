@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using ICP.Platform.HostApi.Acceptance;
+using ICP.Platform.Testing;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Playwright;
@@ -19,6 +20,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
     internal const string ContractPreconditionScenario = "example-required-field.contract-precondition";
     internal const string BrowserScenario = "example-required-field.browser";
     internal const string RestartScenario = "example-required-field.restart";
+    internal const string DeclarationCrudScenario = "example-data-execution.browser-crud";
 
     internal static IReadOnlyList<string> RequiredScenarios { get; } =
     [
@@ -58,19 +60,29 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
     private DatabaseOwnershipSnapshot? _ownershipSnapshot;
     private string? _adminPassword;
     private string? _browserCode;
+    private readonly bool _declarationCrudOnly;
+    private ReusableSqlServerDatabase? _databaseLease;
 
     public ExampleRequiredFieldAcceptanceRunner(
         string repositoryRoot,
         string runDirectory,
-        string runId)
+        string runId,
+        bool declarationCrudOnly = false)
         : base(repositoryRoot, runDirectory, runId)
     {
+        _declarationCrudOnly = declarationCrudOnly;
     }
 
     /// <inheritdoc/>
     protected override async Task RunScenariosAsync(CancellationToken cancellationToken)
     {
         await RunScenarioAsync(PreflightScenario, RunPreflightScenarioAsync, cancellationToken);
+        if (_declarationCrudOnly)
+        {
+            await RunScenarioAsync("example-data-execution.prepare", PrepareDeclarationCrudAsync, cancellationToken);
+            await RunScenarioAsync(DeclarationCrudScenario, RunBrowserScenarioAsync, cancellationToken);
+            return;
+        }
         await RunScenarioAsync(BackfillRecoveryScenario, RunBackfillRecoveryScenarioAsync, cancellationToken);
         await RunScenarioAsync(ContractPreconditionScenario, RunContractPreconditionScenarioAsync, cancellationToken);
         await RunScenarioAsync(MigrationScenario, RunMigrationScenarioAsync, cancellationToken);
@@ -100,20 +112,29 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
     // Preflight 固定唯一 catalog、数据前缀、Host/Shell 资源根和受支持的 managed dev 入口。
     private async Task RunPreflightAsync(CancellationToken cancellationToken)
     {
-        var adminConnection = AcceptanceSqlServerConnectionResolver.Resolve(_repositoryRoot);
-        var adminBuilder = new SqlConnectionStringBuilder(adminConnection.AdminConnectionString);
-        _adminConnectionString = adminConnection.AdminConnectionString;
-        _connectionSource = adminConnection.SourceName;
-        AddConnectionSecrets(adminConnection.ConfiguredConnectionString, adminConnection.Password);
-
-        _catalog = $"NewP_acceptance_example_{_runId}";
-        ValidateCatalogName(_catalog);
         _dataPrefix = $"ACC140-{_runId[..8]}";
-        _applicationConnectionString = new SqlConnectionStringBuilder(adminBuilder.ConnectionString)
+        if (_declarationCrudOnly)
         {
-            InitialCatalog = _catalog,
-            Pooling = false
-        }.ConnectionString;
+            _catalog = ReusableSqlServerDatabase.Catalog;
+            _applicationConnectionString = ReusableSqlServerDatabase.ResolveConnection(_repositoryRoot);
+            var testConnection = new SqlConnectionStringBuilder(_applicationConnectionString);
+            AddConnectionSecrets(_applicationConnectionString, testConnection.Password);
+            _connectionSource = "ReusableSqlServerDatabase";
+        }
+        else
+        {
+            var adminConnection = AcceptanceSqlServerConnectionResolver.Resolve(_repositoryRoot);
+            _adminConnectionString = adminConnection.AdminConnectionString;
+            _connectionSource = adminConnection.SourceName;
+            AddConnectionSecrets(adminConnection.ConfiguredConnectionString, adminConnection.Password);
+            _catalog = $"NewP_acceptance_example_{_runId}";
+            ValidateCatalogName(_catalog);
+            _applicationConnectionString = new SqlConnectionStringBuilder(_adminConnectionString)
+            {
+                InitialCatalog = _catalog,
+                Pooling = false
+            }.ConnectionString;
+        }
         _pluginRoot = Path.Combine(_runDirectory, "resources", "plugins");
         _keyRingRoot = Path.Combine(_runDirectory, "resources", "key-ring");
         Directory.CreateDirectory(_pluginRoot);
@@ -159,6 +180,21 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
             throw new InvalidOperationException($"HostApi release build failed: {Sanitize(build.StandardError)}");
         }
 
+    }
+
+    // 普通页面回归只租用固定测试库；当前 Host 完成正式准备，不重放历史迁移或故障场景。
+    private async Task PrepareDeclarationCrudAsync(CancellationToken cancellationToken)
+    {
+        _databaseLease = await ReusableSqlServerDatabase.AcquireAsync(_repositoryRoot, cancellationToken);
+        await RunDevExpectFailureAsync("example-data-execution/bootstrap-required.json", "IDENTITY_BOOTSTRAP_REQUIRED", cancellationToken);
+        _ownershipSnapshot = await ReadOwnershipSnapshotAsync(cancellationToken);
+        await RunDevScriptAsync("stop-dev.ps1", "example-data-execution/bootstrap-stop.json", cancellationToken, allowAlreadyStopped: true);
+        var bootstrap = await FormalIdentityBootstrap.RunAsync(_repositoryRoot, Path.Combine(_runDirectory, "resources"), _devEnvironment, cancellationToken);
+        RegisterSecret(bootstrap.TemporaryCredential);
+        _processIdentities.Add($"identity-bootstrap:{bootstrap.ProcessId}:{_runId}");
+        await StartDevAsync("example-data-execution/ready-dev.json", cancellationToken);
+        await AssertReadyAsync(cancellationToken);
+        await PrepareAdministratorPasswordAsync(bootstrap.TemporaryCredential, cancellationToken);
     }
 
     // Backfill 故障由 runner-owned trigger 注入；移除故障后必须从未记录的 backfill 继续并到达 Ready。
@@ -384,6 +420,16 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
         var responses = new System.Collections.Concurrent.ConcurrentQueue<string>();
         var errors = new System.Collections.Concurrent.ConcurrentQueue<string>();
         var failedResponses = new System.Collections.Concurrent.ConcurrentQueue<IResponse>();
+        var declarationRequests = new System.Collections.Concurrent.ConcurrentQueue<object>();
+        page.Request += (_, request) =>
+        {
+            var path = new Uri(request.Url).AbsolutePath;
+            if (!_declarationCrudOnly || !path.StartsWith("/api/example/records", StringComparison.Ordinal)) return;
+            request.Headers.TryGetValue("x-newp-data-declaration", out var declaration);
+            request.Headers.TryGetValue("x-newp-feature", out var feature);
+            declarationRequests.Enqueue(new { request.Method, path, declaration, feature });
+            while (declarationRequests.Count > 10) declarationRequests.TryDequeue(out _);
+        };
         page.PageError += (_, error) => errors.Enqueue(error);
         page.RequestFailed += (_, request) => errors.Enqueue($"{request.Method} {new Uri(request.Url).AbsolutePath}: {request.Failure}");
         page.Response += (sender, response) =>
@@ -400,7 +446,10 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
             await page.GotoAsync(
                 $"http://127.0.0.1:{_shellPort}/examples/standard-crud/persistent-records",
                 new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
-            await page.GetByText(LegacyCode, new PageGetByTextOptions { Exact = true }).WaitForAsync();
+            if (_declarationCrudOnly)
+                await page.GetByRole(AriaRole.Button, new() { Name = "新建记录", Exact = true }).WaitForAsync();
+            else
+                await page.GetByText(LegacyCode, new PageGetByTextOptions { Exact = true }).WaitForAsync();
             await CapturePageAsync("list.png");
 
             // 标准 Drawer 的定位、填写与提交由页面驱动持有；本旅程不观察写入响应，只以列表行出现为准。
@@ -413,6 +462,31 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
 
             var browserRow = page.Locator("tr").Filter(new LocatorFilterOptions { HasText = _browserCode });
             await browserRow.WaitForAsync();
+
+            if (_declarationCrudOnly)
+            {
+                await browserRow.GetByRole(AriaRole.Button, new() { Name = "编辑", Exact = true }).ClickAsync();
+                var editDrawer = await driver.WaitForVisibleDrawerAsync("Example edit");
+                await StandardCrudPageDriver.FillDrawerFieldAsync(editDrawer, "示例名称", browserName + " edited");
+                await CapturePageAsync("declaration-edit.png");
+                await driver.SaveChangesAsync(editDrawer, new("PUT", "/api/example/records/", 200, "Example edit", PathIsPrefix: true));
+                browserRow = await driver.WaitForRowAsync(_browserCode, browserName + " edited");
+                await browserRow.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
+                await page.GetByRole(AriaRole.Menuitem, new() { Name = "删除", Exact = true }).ClickAsync();
+                var confirmation = driver.ConfirmDialogWithText("确认删除当前示例记录？");
+                await CapturePageAsync("declaration-delete.png");
+                await driver.ConfirmAsync(confirmation, new("DELETE", "/api/example/records/", null, "Example delete", PathIsPrefix: true));
+                await browserRow.WaitForAsync(new() { State = WaitForSelectorState.Hidden });
+                await RecordScenarioSuccessAsync(DeclarationCrudScenario, "example-data-execution/browser-crud.json", new
+                {
+                    status = "passed",
+                    route = "/examples/standard-crud/persistent-records",
+                    assertions = new[] { "list-entry-reachable", "created-row-visible", "edited-row-visible", "deleted-row-removed" },
+                    declarationRequests = declarationRequests.ToArray(),
+                    responses = responses.Where(value => value.Contains("/api/example/records", StringComparison.Ordinal)).ToArray()
+                }, cancellationToken);
+                return;
+            }
 
             await browserRow.GetByText(_browserCode, new LocatorGetByTextOptions { Exact = true }).ClickAsync();
             var detailDrawer = driver.VisibleDrawer();
@@ -1166,9 +1240,24 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
     // Teardown 先重验数据库 ownership，再 stop owned supervisor，最后清理 catalog 与资源根。
     protected override async Task<AcceptanceCleanupResult> TeardownAsync(CancellationToken cancellationToken)
     {
+        try { return await TeardownResourcesAsync(cancellationToken); }
+        finally
+        {
+            // 无法确认归属或停止 Host 时保留 schema，只归还租约会话锁。
+            if (_databaseLease is not null)
+            {
+                await _databaseLease.ReleaseAsync();
+                _databaseLease = null;
+            }
+        }
+    }
+
+    // 归属核对和停止成功后才清理资源；外层负责失败时保留 schema 并归还会话锁。
+    private async Task<AcceptanceCleanupResult> TeardownResourcesAsync(CancellationToken cancellationToken)
+    {
         try
         {
-            if (_catalogCreated)
+            if (_catalogCreated || _databaseLease is not null)
             {
                 await VerifyCatalogOwnershipAsync(cancellationToken);
             }
@@ -1192,6 +1281,11 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
             if (_catalogCreated)
             {
                 await DropCatalogAsync(cancellationToken);
+            }
+            if (_databaseLease is not null)
+            {
+                await _databaseLease.DisposeAsync();
+                _databaseLease = null;
             }
             foreach (var root in new[] { _pluginRoot, _keyRingRoot })
             {

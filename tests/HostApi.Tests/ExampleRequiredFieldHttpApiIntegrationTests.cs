@@ -34,14 +34,15 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class ExampleRequiredFieldHttpApiIntegrationTests
 {
-    private static readonly IReadOnlyList<FeaturePoint> Points = LoadFeatures();
+    private static readonly CanonicalModulePlan Plan = LoadPlan();
+    private static readonly IReadOnlyList<FeaturePoint> Points = Plan.FeatureCatalog;
     private static readonly FeatureHttpTestRequests Http = new(Points);
 
-    private static IReadOnlyList<FeaturePoint> LoadFeatures()
+    private static CanonicalModulePlan LoadPlan()
     {
         var root = Path.GetDirectoryName(typeof(AuthController).Assembly.Location)!;
         var candidates = new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(TrustedBuiltInModuleSource.CreateForHost(root, Path.Combine(root, "modules")));
-        return new CanonicalModulePlanCompiler().Compile("example-api-tests", candidates).Plan?.FeatureCatalog
+        return new CanonicalModulePlanCompiler().Compile("example-api-tests", candidates).Plan
             ?? throw new InvalidOperationException("Formal module plan did not compile.");
     }
 
@@ -56,7 +57,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         await app.StartAsync();
         var client = app.GetTestClient();
 
-        var missingResponse = await FeatureHttpTestRequests.SendAsync(client, Http.Example("create"), HttpMethod.Post,
+        var missingResponse = await SendAsync(client, Http.Example("create"), HttpMethod.Post,
             "/api/example/records",
             new Dictionary<string, object?>
             {
@@ -69,7 +70,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         Assert.Equal("Example.Record.SourceRequired", problem.GetProperty("code").GetString());
         Assert.Empty(repository.Rows);
 
-        var createdResponse = await FeatureHttpTestRequests.SendAsync(client, Http.Example("create"), HttpMethod.Post,
+        var createdResponse = await SendAsync(client, Http.Example("create"), HttpMethod.Post,
             "/api/example/records",
             new Dictionary<string, object?>
             {
@@ -95,7 +96,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         await using var app = BuildApplication(repository);
         await app.StartAsync();
         var client = app.GetTestClient();
-        var createdResponse = await FeatureHttpTestRequests.SendAsync(client, Http.Example("create"), HttpMethod.Post,
+        var createdResponse = await SendAsync(client, Http.Example("create"), HttpMethod.Post,
             "/api/example/records",
             new Dictionary<string, object?>
             {
@@ -107,7 +108,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         var row = Assert.Single(repository.Rows);
         var id = Assert.IsType<string>(row["EID"]);
 
-        var omittedResponse = await FeatureHttpTestRequests.SendAsync(client, Http.Example("edit"), HttpMethod.Put,
+        var omittedResponse = await SendAsync(client, Http.Example("edit"), HttpMethod.Put,
             $"/api/example/records/{id}",
             new Dictionary<string, object?> { ["ENAME"] = "省略来源更新" });
 
@@ -115,7 +116,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         Assert.Equal("省略来源更新", row["ENAME"]);
         Assert.Equal("Legacy", row["RecordSource"]);
 
-        var explicitNullResponse = await FeatureHttpTestRequests.SendAsync(client, Http.Example("edit"), HttpMethod.Put,
+        var explicitNullResponse = await SendAsync(client, Http.Example("edit"), HttpMethod.Put,
             $"/api/example/records/{id}",
             new Dictionary<string, object?> { ["RecordSource"] = null });
 
@@ -125,7 +126,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         Assert.Equal("Legacy", row["RecordSource"]);
 
         row["RecordSource"] = "";
-        var inheritedInvalidResponse = await FeatureHttpTestRequests.SendAsync(client, Http.Example("edit"), HttpMethod.Put,
+        var inheritedInvalidResponse = await SendAsync(client, Http.Example("edit"), HttpMethod.Put,
             $"/api/example/records/{id}",
             new Dictionary<string, object?> { ["ENAME"] = "不应写入" });
 
@@ -144,7 +145,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         await app.StartAsync();
         var client = app.GetTestClient();
 
-        var forgedCreateResponse = await FeatureHttpTestRequests.SendAsync(client, Http.Example("create"), HttpMethod.Post,
+        var forgedCreateResponse = await SendAsync(client, Http.Example("create"), HttpMethod.Post,
             "/api/example/records",
             new Dictionary<string, object?>
             {
@@ -159,7 +160,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         Assert.Equal("StandardCrud.ServerOwnedFieldReadOnly", forgedCreateError.GetProperty("code").GetString());
         Assert.Empty(repository.Rows);
 
-        var createdResponse = await FeatureHttpTestRequests.SendAsync(client, Http.Example("create"), HttpMethod.Post,
+        var createdResponse = await SendAsync(client, Http.Example("create"), HttpMethod.Post,
             "/api/example/records",
             new Dictionary<string, object?>
             {
@@ -171,7 +172,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         var row = Assert.Single(repository.Rows);
         var id = Assert.IsType<string>(row["EID"]);
 
-        var forgedUpdateResponse = await FeatureHttpTestRequests.SendAsync(client, Http.Example("edit"), HttpMethod.Put,
+        var forgedUpdateResponse = await SendAsync(client, Http.Example("edit"), HttpMethod.Put,
             $"/api/example/records/{id}",
             new Dictionary<string, object?>
             {
@@ -195,7 +196,7 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         await app.StartAsync();
         var client = app.GetTestClient();
 
-        var response = await FeatureHttpTestRequests.SendAsync(client, Http.Example("create"), HttpMethod.Post,
+        var response = await SendAsync(client, Http.Example("create"), HttpMethod.Post,
             "/api/example/records",
             new Dictionary<string, object?>
             {
@@ -219,14 +220,14 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         using var client = app.GetTestClient();
         var body = new { ECODE = "FEATURE", ENAME = "功能位置", RecordSource = "Manual" };
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/example/records", body)).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await FeatureHttpTestRequests.SendAsync(client, Http.Example(), HttpMethod.Post, "/api/example/records", body)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(client, Http.Example(), HttpMethod.Post, "/api/example/records", body)).StatusCode);
         Assert.Empty(repository.Rows);
-        using var created = await FeatureHttpTestRequests.SendAsync(client, Http.Example("create"), HttpMethod.Post, "/api/example/records", body);
+        using var created = await SendAsync(client, Http.Example("create"), HttpMethod.Post, "/api/example/records", body);
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var id = Assert.Single(repository.Rows)["EID"];
-        Assert.Equal(HttpStatusCode.Forbidden, (await FeatureHttpTestRequests.SendAsync(client, Http.Example("create"), HttpMethod.Put, $"/api/example/records/{id}", new { ENAME = "越权" })).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await FeatureHttpTestRequests.SendAsync(client, Http.Example(), HttpMethod.Get, $"/api/example/records/{id}")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await FeatureHttpTestRequests.SendAsync(client, Http.Example(), HttpMethod.Get, "/api/example/records/options")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(client, Http.Example("create"), HttpMethod.Put, $"/api/example/records/{id}", new { ENAME = "越权" })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await SendAsync(client, Http.Example(), HttpMethod.Get, $"/api/example/records/{id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(client, Http.Example(), HttpMethod.Get, "/api/example/records/options")).StatusCode);
         Assert.Equal(0, repository.UpdateCallCount);
     }
 
@@ -240,12 +241,24 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         Assert.Equal("example", entry.Key);
         Assert.Equal("example.record.export", Http.Example("export").BehaviorKey);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/example/runtime-workload/columns")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await FeatureHttpTestRequests.SendAsync(client, Http.Example(), HttpMethod.Get, "/api/example/runtime-workload/columns")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await SendAsync(client, Http.Example(), HttpMethod.Get, "/api/example/runtime-workload/columns")).StatusCode);
         var columns = await FeatureHttpTestRequests.ReadAsync(client, entry, "/api/example/runtime-workload/columns");
         using var rows = new HttpRequestMessage(HttpMethod.Get, "/api/example/runtime-workload/rows");
         rows.Headers.Add("X-NewP-Feature", entry.Position);
         rows.Headers.Add("X-Example-Column-Context", columns.GetProperty("contextToken").GetString());
         Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(rows)).StatusCode);
+    }
+
+    private static Task<HttpResponseMessage> SendAsync(HttpClient client, FeaturePoint point, HttpMethod method, string path, object? body = null) =>
+        FeatureHttpTestRequests.SendAsync(client, point, method, path, body,
+            Plan.ActionDataAccessCatalog.SingleOrDefault(item => item.Execution == point.BehaviorKey && item.FeaturePositions.Contains(point.Position)));
+
+    // 此既有内存fixture只验证字段和功能流水线；数据权限的正式消费由Example SQL测试证明。
+    private sealed class UnusedDataScope : ICP.Platform.Authorization.Contracts.IDataScopeObjectAccess, ICP.Platform.Authorization.Contracts.IDataScopeObjectDecisionProvider
+    {
+        public Task<bool> IsReadableAsync(string resourceKey, string objectId, CancellationToken token = default) => throw new NotSupportedException();
+        public Task<bool> IsAllowedAsync(string resourceKey, string objectId, string actionKey, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<bool> IsCandidateAllowedAsync(string resourceKey, IReadOnlyDictionary<string, object?> candidate, string actionKey, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private static WebApplication BuildApplication(
@@ -257,6 +270,14 @@ public sealed class ExampleRequiredFieldHttpApiIntegrationTests
         builder.Services.AddAuthentication("ExampleApiTests").AddCookie("ExampleApiTests", options =>
             options.Events.OnRedirectToAccessDenied = context => { context.Response.StatusCode = 403; return Task.CompletedTask; });
         builder.Services.AddPlatformAuthorization();
+        builder.Services.AddSingleton(Plan);
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.AddScoped<ICP.Platform.Authorization.Contracts.IDataExecutionAccess>(services =>
+        {
+            var unused = new UnusedDataScope();
+            return new ICP.Platform.Modules.Authorization.Services.DataExecutionAccess(Plan,
+                services.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>(), unused, unused);
+        });
         builder.Services.AddAuthorization(options => options.AddPolicy(DenyAllAttribute.PolicyName, policy => policy.RequireAssertion(_ => false)));
         builder.Services.AddSingleton<IFeatureDecisionSource, DeclaredFeatureDecisionSource>();
         builder.Services.AddControllers()

@@ -22,6 +22,7 @@ import type {
   StandardCrudResourceRegistration,
   StandardCrudRuntimeColumn,
   StandardCrudActionState,
+  ActionDataAccessRequirement,
 } from '@icp-platform/sdk';
 import AntdButton from 'antd/es/button';
 import Dropdown from 'antd/es/dropdown';
@@ -890,6 +891,8 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     modelDocuments,
   }), [view, registration, modelDocuments]);
   const dataAdapter = registration.dataAdapter;
+  const listDataAccess = view.dataAccess as ActionDataAccessRequirement | undefined;
+  const detailDataAccess = runtimeMetadata?.viewDocuments.find(document => document.view.key === registration.detailViewKey)?.view.dataAccess as ActionDataAccessRequirement | undefined;
   const dataAccessDeclarations = view.dataAccess ? runtimeMetadata?.manifest.modules.flatMap(module => module.dataAccess ?? []).filter(item => item.viewKey === view.key) : undefined;
   const [runtimeColumnGeneration, setRuntimeColumnGeneration] = useState<StandardCrudRuntimeColumnGeneration | null>(null);
   const resolvedColumns = useMemo<ResolvedStandardCrudListColumn[]>(() => (
@@ -1001,6 +1004,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     drawerState.mode === 'create' ? 'create' : 'edit',
     drawerState.mode === 'create' ? 'list.pageActions' : 'list.rowActions',
   );
+  const drawerDataAccess = (drawerState.mode === 'create'
+    ? schema.pageActions.find(action => action.standardAction === 'create')
+    : schema.rowActions.find(action => action.standardAction === 'edit'))?.dataAccess;
   const drawerDetailQuery = useStandardCrudDetailQuery({
     resourceKey: registration.resourceKey,
     id: drawerState.mode === 'view' || drawerState.mode === 'edit' ? drawerState.id : null,
@@ -1008,6 +1014,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     featurePosition: drawerState.mode === 'edit'
       ? resolvedFeaturePosition(drawerActionResolution)
       : readPosition,
+    dataAccess: drawerState.mode === 'edit' ? drawerDataAccess : detailDataAccess,
   });
   const detailFields = useMemo(
     () => drawerDetailQuery.detail?.normalized.fields ?? {},
@@ -1020,6 +1027,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     dataAdapter,
     featurePosition: readPosition,
     queryScope: host.input.queryScope,
+    dataAccess: detailDataAccess,
   });
   const embeddedAction = embeddedActionRequest && (!embeddedActionRequest.id || embeddedActionQuery.detail)
     ? { ...embeddedActionRequest, row: (embeddedActionQuery.detail?.normalized.fields ?? {}) as TRow }
@@ -1152,11 +1160,11 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     [host.input.instanceId, host.input.queryScope, metadataListRequest, registration.resourceKey],
   );
   const metadataListQuery = usePlatformQuery<{ items: TRow[]; total: number }>({
-    key: [...metadataListQueryKey, ...(readPosition ? [readPosition] : [])],
+    key: [...metadataListQueryKey, ...(readPosition ? [readPosition] : []), ...(listDataAccess ? [listDataAccess.id] : [])],
     enabled: schema.columnSource !== 'runtime' && host.presentation.kind !== 'action-drawer',
     load: async ({ signal }) => {
       const result = await dataAdapter.list(metadataListRequest, { signal, queryScope: host.input.queryScope,
-        dataAccess: view.dataAccess as import('@icp-platform/sdk').ActionDataAccessRequirement | undefined, dataAccessDeclarations,
+        dataAccess: listDataAccess, dataAccessDeclarations,
         ...(readPosition ? { featurePosition: readPosition } : {}) });
       return { items: result.items, total: result.total };
     },
@@ -1246,7 +1254,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     && runtimeColumnGeneration !== null
     && runtimeColumnGeneration.id === runtimeColumnsQuery.data?.id;
   const runtimeRowsQuery = usePlatformQuery<{ items: TRow[]; total: number }>({
-    key: [...runtimeRowsQueryKey, ...(readPosition ? [readPosition] : [])],
+    key: [...runtimeRowsQueryKey, ...(readPosition ? [readPosition] : []), ...(listDataAccess ? [listDataAccess.id] : [])],
     enabled: runtimeRowsEnabled,
     load: async ({ signal }) => {
       if (!runtimeColumnGeneration) throw new Error('runtime rows require a successful column generation');
@@ -1255,6 +1263,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           ? { columnContextToken: runtimeColumnGeneration.contextToken }
           : {}),
         signal,
+        ...(listDataAccess ? { dataAccess: listDataAccess, dataAccessDeclarations } : {}),
         ...(readPosition ? { featurePosition: readPosition } : {}),
       });
       return { items: result.items, total: result.total };
@@ -1652,6 +1661,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     const succeeded = await mutationExecution.execute({
       mode: drawerState.mode === 'create' ? 'create' : 'edit',
       featurePosition: resolvedFeaturePosition(drawerActionResolution),
+      dataAccess: drawerDataAccess,
       id: drawerState.id,
       fields: drawerState.mode === 'create' ? createFields : editFields,
       ...(drawerState.mode === 'edit' ? editSession.draft! : { values: formValues, detailFields }),
@@ -1859,6 +1869,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
                 }
                 return dataAdapter.remove(rowId, isStandardCrudRecord(row) ? row : undefined, {
                   featurePosition: featureResolution.position,
+                  ...(action.dataAccess ? { dataAccess: action.dataAccess } : {}),
                 });
               });
               const outcome = await actionExecution.execute({

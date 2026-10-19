@@ -236,6 +236,16 @@ export interface ActionDataAccessRequirement {
   actions: readonly string[];
   resources: readonly string[];
   featurePositions: readonly string[];
+  provider?: string;
+  requirements?: readonly {
+    role: string;
+    stage: 'read' | 'prepare' | 'submit';
+    shape: 'object' | 'objects' | 'query' | 'candidate';
+    resources: readonly string[];
+    anyOf: readonly (readonly string[])[];
+    minimumCount: number;
+    maximumCount: number | null;
+  }[];
 }
 
 /** 模块解析真实目标并发起只读检查；共享执行器拥有取消、防重复和过期响应。 */

@@ -15,6 +15,49 @@
   "backend": {
     "behaviorKey": "example.backend"
   },
+  "dataExecutions": [
+    { "key": "example.record.list", "moduleId": "Example", "provider": "standardCrud.list", "boundary": "entry", "featureBehaviors": ["example.record.read"], "resourceKey": "example.record" },
+    {
+      "key": "example.record.read",
+      "moduleId": "Example",
+      "provider": "standardCrud.read",
+      "boundary": "entry",
+      "featureBehaviors": [
+        "example.record.read"
+      ],
+      "resourceKey": "example.record"
+    },
+    {
+      "key": "example.record.create",
+      "moduleId": "Example",
+      "provider": "standardCrud.create",
+      "boundary": "entry",
+      "featureBehaviors": [
+        "example.record.create"
+      ],
+      "resourceKey": "example.record"
+    },
+    {
+      "key": "example.record.update",
+      "moduleId": "Example",
+      "provider": "standardCrud.update",
+      "boundary": "entry",
+      "featureBehaviors": [
+        "example.record.update"
+      ],
+      "resourceKey": "example.record"
+    },
+    {
+      "key": "example.record.delete",
+      "moduleId": "Example",
+      "provider": "standardCrud.delete",
+      "boundary": "entry",
+      "featureBehaviors": [
+        "example.record.delete"
+      ],
+      "resourceKey": "example.record"
+    }
+  ],
   "frontend": {
     "behaviorKey": "example.frontend",
     "entry": "example",

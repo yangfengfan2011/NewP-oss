@@ -183,6 +183,13 @@ public sealed class AcceptanceGateTests
         await new ExampleRequiredFieldAcceptanceRunner(RepositoryRoot, root, runId).RunAsync(CancellationToken.None);
     }
 
+    [EnvironmentGatedFact(RunEnvironmentVariable, "共享专用 SQL Server 租约与正式 Example 页面创建、编辑和删除声明接线")]
+    public async Task ExampleDataExecutionCrud_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("example-data-execution");
+        await new ExampleRequiredFieldAcceptanceRunner(RepositoryRoot, root, runId, declarationCrudOnly: true).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact(RunEnvironmentVariable, "一次性 SQL Server catalog、dev supervisor 与真实浏览器")]
     public async Task IdentityFoundation_CompletesEveryScenario()
     {

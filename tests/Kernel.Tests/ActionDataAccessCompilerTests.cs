@@ -115,7 +115,7 @@ public sealed class ActionDataAccessCompilerTests(ITestOutputHelper output)
         var index = Array.FindIndex(features, feature => feature.DataAccess.Count > 0);
         var first = features[index].DataAccess[0] with { Surface = "rowActions", ActionKey = "same", Actions = ["read"] };
         var second = first with { Surface = "pageActions", Actions = ["edit"] };
-        features[index] = features[index] with { DataAccess = [first, second] };
+        features[index] = features[index] with { DataAccess = [.. features[index].DataAccess.Skip(1), first, second] };
         candidates[owner] = candidates[owner] with { Features = features };
         var result = new CanonicalModulePlanCompiler().Compile("independent", candidates);
         Assert.True(result.IsSuccess, JsonSerializer.Serialize(result.Diagnostics));

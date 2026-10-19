@@ -24,8 +24,8 @@ export function useStandardCrudActionEntry(identity: unknown) {
     const controller = new AbortController(); active.current = controller;
     setFailure(undefined);
     try {
-      if (context.action?.dataAccess || precheck) {
-        if (!precheck || !context.action?.dataAccess?.id) throw new StandardCrudRequestError('动作数据声明不可用。', 400);
+      if (precheck) {
+        if (!context.action?.dataAccess?.id) throw new StandardCrudRequestError('动作数据声明不可用。', 400);
         setPendingKey(key);
         await precheck({ ...context, signal: controller.signal });
       }

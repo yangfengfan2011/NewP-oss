@@ -52,10 +52,11 @@ internal sealed class FeatureHttpTestRequests(IReadOnlyList<FeaturePoint> points
 
     internal FeaturePoint Workbench(string behavior) => points.Single(point => point.ModuleId == "Authorization" && point.BehaviorKey == behavior);
 
-    internal static Task<HttpResponseMessage> SendAsync(HttpClient client, FeaturePoint point, HttpMethod method, string path, object? body = null)
+    internal static Task<HttpResponseMessage> SendAsync(HttpClient client, FeaturePoint point, HttpMethod method, string path, object? body = null, ActionDataAccessRequirement? dataAccess = null)
     {
         var request = new HttpRequestMessage(method, path);
         request.Headers.Add("X-NewP-Feature", point.Position);
+        if (dataAccess is not null) request.Headers.Add("X-NewP-Data-Declaration", dataAccess.Id);
         if (body is not null) request.Content = JsonContent.Create(body, options: new JsonSerializerOptions());
         return SendAndDisposeAsync(client, request);
     }

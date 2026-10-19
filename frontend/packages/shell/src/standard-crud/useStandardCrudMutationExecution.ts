@@ -7,6 +7,7 @@ import {
   type StandardCrudFieldDefinition,
   type StandardCrudOperationResult,
   type StandardCrudFieldErrorFact,
+  type ActionDataAccessRequirement,
 } from '@icp-platform/sdk';
 import { handoffStandardCrudSuccess } from './standardCrudSuccessHandoff';
 
@@ -15,6 +16,7 @@ const STANDARD_CRUD_MUTATION_CONFLICT_MESSAGE = '记录已发生变化，未覆�
 export interface StandardCrudMutationExecutionRequest {
   mode: 'create' | 'edit';
   featurePosition?: string;
+  dataAccess?: ActionDataAccessRequirement;
   id?: string;
   fields: StandardCrudFieldDefinition[];
   values: Record<string, unknown>;
@@ -88,6 +90,7 @@ export function useStandardCrudMutationExecution({
   const execute = useCallback(async ({
     mode,
     featurePosition,
+    dataAccess,
     id,
     fields,
     values,
@@ -121,13 +124,16 @@ export function useStandardCrudMutationExecution({
           }
         : normalizedValues;
 
+      const context = featurePosition || dataAccess
+        ? { ...(featurePosition ? { featurePosition } : {}), ...(dataAccess ? { dataAccess } : {}) }
+        : undefined;
       let result: StandardCrudOperationResult | undefined;
       if (mode === 'create') {
         if (!registration.dataAdapter.create) {
           throw new Error(`标准资源 "${registration.resourceKey}" 未提供创建能力。`);
         }
 
-        result = await registration.dataAdapter.create({ ...mutationValues, ...fixedCreateValues }, detailFields, ...(featurePosition ? [{ featurePosition }] : []));
+        result = await registration.dataAdapter.create({ ...mutationValues, ...fixedCreateValues }, detailFields, ...(context ? [context] : []));
       } else {
         if (!id) {
           throw new Error('缺少资源标识，无法保存修改。');
@@ -136,7 +142,7 @@ export function useStandardCrudMutationExecution({
           throw new Error(`标准资源 "${registration.resourceKey}" 未提供更新能力。`);
         }
 
-        result = await registration.dataAdapter.update(id, mutationValues, detailFields, ...(featurePosition ? [{ featurePosition }] : []));
+        result = await registration.dataAdapter.update(id, mutationValues, detailFields, ...(context ? [context] : []));
       }
 
       // 写入已经提交；后置呈现或读取失败不能进入写入错误分支，也不能重放写入。

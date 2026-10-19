@@ -4,6 +4,7 @@ import {
   type StandardCrudFormSection,
   type StandardCrudLookupProvider,
   type StandardCrudOperationResult,
+  type ActionDataAccessRequirement,
 } from '@icp-platform/sdk';
 import AntdButton from 'antd/es/button';
 import { FormPage, StandardCrudForm } from '@icp-platform/ui/crud-form';
@@ -20,6 +21,7 @@ interface StandardCrudDetailEditorProps {
   id: string;
   resourceKey: string;
   featurePosition?: string;
+  dataAccess?: ActionDataAccessRequirement;
   detail: { fields: Record<string, unknown> };
   reading?: boolean;
   fields: StandardCrudFieldDefinition[];
@@ -38,6 +40,7 @@ export default function StandardCrudDetailEditor({
   id,
   resourceKey,
   featurePosition,
+  dataAccess,
   detail,
   reading = false,
   fields,
@@ -51,7 +54,7 @@ export default function StandardCrudDetailEditor({
 }: StandardCrudDetailEditorProps) {
   const { t } = useLocalization();
   const editSession = useStandardCrudEditSession({
-    identity: JSON.stringify([resourceKey, id]), snapshot: detail.fields, fields,
+    identity: JSON.stringify([resourceKey, id, dataAccess?.id]), snapshot: detail.fields, fields,
     buildValues: buildStandardCrudDetailFormValues, reload: onReload,
   });
   const formValues = editSession.draft?.values ?? {};
@@ -74,6 +77,7 @@ export default function StandardCrudDetailEditor({
     const succeeded = await mutationExecution.execute({
       mode: 'edit',
       featurePosition,
+      dataAccess,
       id,
       fields,
       ...editSession.draft,

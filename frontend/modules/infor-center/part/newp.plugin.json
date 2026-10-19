@@ -6,6 +6,14 @@
   "backend": { "behaviorKey": "part.backend" },
   "features": [{ "key": "part.history", "kind": "navigation", "parentKey": "navigation:part.parts", "title": "对象履历", "titleKey": "Part.History", "behaviorKey": "part.part.history" }],
   "dataActions": [{ "key": "partCopy", "title": "复制零组件引用", "behaviorKey": "data.part.copy", "requiresRead": true }, { "key": "partObjectCopy", "title": "创建零组件真副本", "behaviorKey": "data.part.objectCopy", "requiresRead": true }],
+  "dataExecutions": [
+    {"key": "part.history.enter", "moduleId": "Part", "provider": "part.backend", "boundary": "entry", "featureBehaviors": [], "requirements": [{"role": "target", "stage": "read", "shape": "object", "resources": ["part.part"], "anyOf": [["read"]]}], "legacyActions": true},
+    {"key": "part.history.list", "moduleId": "Part", "provider": "part.backend", "boundary": "entry", "featureBehaviors": [], "requirements": [{"role": "target", "stage": "read", "shape": "object", "resources": ["part.part"], "anyOf": [["read"]]}], "legacyActions": true},
+    {"key": "part.history.preview", "moduleId": "Part", "provider": "part.backend", "boundary": "entry", "featureBehaviors": [], "requirements": [{"role": "target", "stage": "read", "shape": "object", "resources": ["part.part"], "anyOf": [["read"]]}], "legacyActions": true},
+    {"key": "part.history.detail", "moduleId": "Part", "provider": "part.backend", "boundary": "entry", "featureBehaviors": [], "requirements": [{"role": "target", "stage": "read", "shape": "object", "resources": ["part.part"], "anyOf": [["read"]]}], "legacyActions": true},
+    {"key": "part.history.export", "moduleId": "Part", "provider": "part.backend", "boundary": "entry", "featureBehaviors": [], "requirements": [{"role": "target", "stage": "read", "shape": "object", "resources": ["part.part"], "anyOf": [["read"]]}], "legacyActions": true},
+    {"key": "part.history.print", "moduleId": "Part", "provider": "part.backend", "boundary": "entry", "featureBehaviors": [], "requirements": [{"role": "target", "stage": "read", "shape": "object", "resources": ["part.part"], "anyOf": [["read"]]}], "legacyActions": true}
+  ],
   "frontend": { "behaviorKey": "part.frontend", "entry": "part", "bindingMode": "behavior-bindings", "bindings": ["part.part.list", "part.part.detail", "part.part.permissions", "part.part.record", "part.history.list", "part.part.historyInput"] },
   "persistence": { "models": ["metadata/models/Part.model.json"], "migrations": { "sqlServer": { "assembly": "migrations/Part.SqlServerMigrations.dll", "manifest": "migrations/Part.SqlServerMigrations.json" } } }
 }

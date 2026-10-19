@@ -34,9 +34,21 @@
       {
         "key": "edit",
         "labelKey": "Action_Edit",
-        "standardAction": "edit"
+        "standardAction": "edit",
+        "dataAccess": {
+          "execution": "example.record.update",
+          "resources": [
+            "example.record"
+          ]
+        }
       }
     ],
-    "resourceKey": "example.record"
+    "resourceKey": "example.record",
+    "dataAccess": {
+      "execution": "example.record.read",
+      "resources": [
+        "example.record"
+      ]
+    }
   }
 }

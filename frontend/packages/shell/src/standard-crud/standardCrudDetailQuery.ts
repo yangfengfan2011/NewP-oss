@@ -34,6 +34,7 @@ interface UseStandardCrudDetailQueryInput<TRow extends Record<string, unknown>, 
   dataAdapter: StandardCrudDataAdapter<TRow, TDetail>;
   enabled?: boolean;
   featurePosition?: string;
+  dataAccess?: StandardCrudDetailReadContext['dataAccess'];
   queryScope?: StandardCrudDetailReadContext['queryScope'];
   readSourceKey?: string;
 }
@@ -47,6 +48,7 @@ export function useStandardCrudDetailQuery<TRow extends Record<string, unknown>,
   dataAdapter,
   enabled = true,
   featurePosition,
+  dataAccess,
   queryScope,
   readSourceKey,
 }: UseStandardCrudDetailQueryInput<TRow, TDetail>): StandardCrudDetailQueryResult<TDetail> {
@@ -54,11 +56,11 @@ export function useStandardCrudDetailQuery<TRow extends Record<string, unknown>,
   const selectedId = id ?? '';
   const active = enabled && selectedId.length > 0;
   const scopeKey = JSON.stringify(queryScope);
-  const identity = JSON.stringify([resourceKey, selectedId, featurePosition, scopeKey, readSourceKey, active]);
+  const identity = JSON.stringify([resourceKey, selectedId, featurePosition, dataAccess?.id, scopeKey, readSourceKey, active]);
   const pendingReload = useRef<PendingReload<TDetail> | null>(null);
   useEffect(() => () => pendingReload.current?.complete({ status: 'cancelled' }), [identity]);
   const query = usePlatformQuery({
-    key: [...createStandardCrudDetailQueryKey(resourceKey, selectedId), ...(featurePosition ? [featurePosition] : []), ...(scopeKey ? [scopeKey] : []), ...(readSourceKey ? [readSourceKey] : [])],
+    key: [...createStandardCrudDetailQueryKey(resourceKey, selectedId), ...(featurePosition ? [featurePosition] : []), ...(dataAccess ? [dataAccess.id] : []), ...(scopeKey ? [scopeKey] : []), ...(readSourceKey ? [readSourceKey] : [])],
     enabled: active,
     load: async ({ signal }) => {
       const pending = pendingReload.current;
@@ -69,7 +71,8 @@ export function useStandardCrudDetailQuery<TRow extends Record<string, unknown>,
       signal.addEventListener('abort', cancel, { once: true });
       try {
         signal.throwIfAborted();
-        const detail = await dataAdapter.get(selectedId, { signal, ...(featurePosition ? { featurePosition } : {}), ...(queryScope ? { queryScope } : {}) });
+        const detail = await dataAdapter.get(selectedId, { signal, ...(featurePosition ? { featurePosition } : {}),
+          ...(dataAccess ? { dataAccess } : {}), ...(queryScope ? { queryScope } : {}) });
         if (signal.aborted) cancel();
         else requested?.complete({ status: 'success', detail });
         return detail;

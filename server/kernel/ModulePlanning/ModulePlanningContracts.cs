@@ -31,6 +31,7 @@ public sealed record ModuleCapsuleCandidate(
     public ModuleFrontendDelivery FrontendDelivery { get; init; }
     public IReadOnlyList<FeatureDeclaration> Features { get; init; } = [];
     public IReadOnlyList<DataActionDeclaration> DataActions { get; init; } = [];
+    public IReadOnlyList<DataExecutionContract> DataExecutions { get; init; } = [];
     public IReadOnlyList<string> CompositionMembers { get; init; } = [];
     public bool Enabled { get; init; } = true;
 }
@@ -201,7 +202,7 @@ public sealed class ModulePlanProvenance
             candidate.FrontendBindings,
             candidate.FrontendBindingReferences,
             candidate.ModelKeys,
-            candidate.Persistence, candidate.Features, candidate.DataActions, candidate.CompositionMembers, candidate.Enabled, candidate.FrontendDelivery);
+            candidate.Persistence, candidate.Features, candidate.DataActions, candidate.DataExecutions, candidate.CompositionMembers, candidate.Enabled, candidate.FrontendDelivery);
 
     // 信任指纹覆盖动作、组合声明与自身启用选择，避免保留旧身份却替换已验证事实。
     private static string ComputeCanonicalFingerprint(CanonicalModulePlanModule module) =>
@@ -221,7 +222,7 @@ public sealed class ModulePlanProvenance
             module.FrontendBindings,
             module.FrontendBindingReferences,
             module.ModelKeys,
-            module.Persistence, module.Features, module.DataActions, module.CompositionMembers, module.Enabled, module.FrontendDelivery);
+            module.Persistence, module.Features, module.DataActions, module.DataExecutions, module.CompositionMembers, module.Enabled, module.FrontendDelivery);
 
     // 信任指纹覆盖动作、组合声明与自身启用选择，避免保留旧身份却替换已验证事实。
     private static string ComputeCanonicalFingerprint(
@@ -240,7 +241,7 @@ public sealed class ModulePlanProvenance
         IReadOnlyList<string> frontendBindings,
         IReadOnlyList<string> frontendBindingReferences,
         IReadOnlyList<string> modelKeys,
-        ModulePersistenceContribution? persistence, IReadOnlyList<FeatureDeclaration> features, IReadOnlyList<DataActionDeclaration> dataActions,
+        ModulePersistenceContribution? persistence, IReadOnlyList<FeatureDeclaration> features, IReadOnlyList<DataActionDeclaration> dataActions, IReadOnlyList<DataExecutionContract> dataExecutions,
         IReadOnlyList<string> compositionMembers, bool enabled, ModuleFrontendDelivery frontendDelivery)
     {
         var bytes = JsonSerializer.SerializeToUtf8Bytes(new
@@ -264,6 +265,7 @@ public sealed class ModulePlanProvenance
             compositionMembers = Sort(compositionMembers),
             enabled,
             dataActions = dataActions.ToArray(),
+            dataExecutions = dataExecutions.ToArray(),
             features = features.OrderBy(node => node.Key, StringComparer.Ordinal).ToArray(),
             persistence = persistence is null
                 ? null
@@ -342,6 +344,7 @@ public sealed record CanonicalModulePlanModule(
     public ModuleFrontendDelivery FrontendDelivery { get; init; }
     public IReadOnlyList<FeatureDeclaration> Features { get; init; } = [];
     public IReadOnlyList<DataActionDeclaration> DataActions { get; init; } = [];
+    public IReadOnlyList<DataExecutionContract> DataExecutions { get; init; } = [];
     public IReadOnlyList<string> CompositionMembers { get; init; } = [];
     public bool Enabled { get; init; } = true;
 }
@@ -375,7 +378,8 @@ public sealed record CanonicalModulePlan(
     /// <summary>由已验证声明一次派生的完整目录，所有运行时投影共享该结果。</summary>
     public IReadOnlyList<DataActionDeclaration> DataActionCatalog { get; } = DataActionCatalogCompiler.Compile(Modules.SelectMany(module => module.DataActions));
     public IReadOnlyList<ActionDataAccessRequirement> ActionDataAccessCatalog { get; } = ActionDataAccessCompiler.Compile(
-        Modules.SelectMany(module => module.Features).ToArray(), Modules.SelectMany(module => module.DataActions).ToArray());
+        Modules.SelectMany(module => module.Features).ToArray(), Modules.SelectMany(module => module.DataActions).ToArray(),
+        Modules.SelectMany(module => module.DataExecutions).ToArray());
     public IReadOnlyList<FeaturePoint> FeatureCatalog { get; } = FeatureCatalogCompiler.Compile(Modules.SelectMany(module => module.Features));
 }
 

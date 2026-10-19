@@ -27,6 +27,7 @@ public static class DepartmentCrudDescriptorFactory
             UpdateFields: ["ParentDepartmentId", "ENAME", "SortOrder", "IsEnabled"]);
         return new StandardCrudDescriptor
         {
+            LegacyDataExecutions = ["create", "update", "delete"],
             ResourceKey = "organization.department",
             ModuleId = "Organization",
             ModelName = "Department",

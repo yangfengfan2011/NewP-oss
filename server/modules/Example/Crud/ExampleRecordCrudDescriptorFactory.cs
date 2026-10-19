@@ -21,6 +21,11 @@ public static class ExampleRecordCrudDescriptorFactory
         return new StandardCrudDescriptor
         {
             ResourceKey = "example.record",
+            DataExecutions = new Dictionary<string, string>
+            {
+                ["create"] = "example.record.create", ["update"] = "example.record.update",
+                ["delete"] = "example.record.delete", ["read"] = "example.record.read", ["list"] = "example.record.list"
+            },
             ModuleId = "Example",
             ModelName = "ExampleRecord",
             Route = "api/example/records",

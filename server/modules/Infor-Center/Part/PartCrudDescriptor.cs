@@ -22,6 +22,7 @@ public static class PartCrudDescriptor
         var fieldSet = new StandardCrudFieldSet(fields, fields, ["ECODE", "ENAME", "Description"], ["ECODE", "ENAME", "Description"]);
         return new()
         {
+            LegacyDataExecutions = ["create", "update", "delete"],
             RequiresCreationRecord = true, RequiresUpdateRecord = true,
             ResourceKey = "part.part", ModuleId = "Part", ModelName = "Part", Route = "api/part/parts",
             IdField = "EID", DisplayField = "ENAME", FieldSet = fieldSet, DeletePolicy = StandardCrudDeletePolicy.Hard,

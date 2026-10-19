@@ -65,11 +65,21 @@
         "key": "create",
         "labelKey": "Action_Create",
         "standardAction": "create",
-        "variant": "primary"
+        "variant": "primary",
+        "dataAccess": {
+          "execution": "example.record.create",
+          "resources": [
+            "example.record"
+          ]
+        }
       }
     ],
     "featureActions": [
-      { "key": "authorize", "titleKey": "对象授权", "behaviorKey": "example.record.authorize" }
+      {
+        "key": "authorize",
+        "titleKey": "对象授权",
+        "behaviorKey": "example.record.authorize"
+      }
     ],
     "rowActions": [
       {
@@ -89,14 +99,26 @@
       {
         "key": "edit",
         "labelKey": "Action_Edit",
-        "standardAction": "edit"
+        "standardAction": "edit",
+        "dataAccess": {
+          "execution": "example.record.update",
+          "resources": [
+            "example.record"
+          ]
+        }
       },
       {
         "key": "delete",
         "labelKey": "Action_Delete",
         "standardAction": "delete",
         "variant": "danger",
-        "confirmMessageKey": "Action_Delete_Confirm"
+        "confirmMessageKey": "Action_Delete_Confirm",
+        "dataAccess": {
+          "execution": "example.record.delete",
+          "resources": [
+            "example.record"
+          ]
+        }
       }
     ],
     "export": {
@@ -105,6 +127,12 @@
         "all"
       ]
     },
-    "resourceKey": "example.record"
+    "resourceKey": "example.record",
+    "dataAccess": {
+      "execution": "example.record.list",
+      "resources": [
+        "example.record"
+      ]
+    }
   }
 }

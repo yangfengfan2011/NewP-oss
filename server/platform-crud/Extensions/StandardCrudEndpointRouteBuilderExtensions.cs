@@ -47,6 +47,8 @@ public static class StandardCrudEndpointRouteBuilderExtensions
         }
 
         endpoints.MapLinkQueries();
+        if (endpoints.ServiceProvider.GetService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>() is { } plan)
+            StandardCrudDataExecutions.ValidateCoverage(endpoints.DataSources, plan);
 
         return endpoints;
     }
@@ -77,7 +79,8 @@ public static class StandardCrudEndpointRouteBuilderExtensions
                 });
             }
         }).WithMetadata(new EndpointModuleAttribute(descriptor.ModuleId))
-            .RequireCrudOperation(authorization, StandardCrudOperation.List);
+            .RequireCrudOperation(authorization, StandardCrudOperation.List)
+            .WithDataExecution(endpoints.ServiceProvider, descriptor, "list");
 
         endpoints.MapGet(route + "/options", async (
             HttpContext context,
@@ -148,7 +151,8 @@ public static class StandardCrudEndpointRouteBuilderExtensions
             var detail = await endpoint.GetDetailAsync(descriptor, id, cancellationToken);
             return detail is null ? Results.NotFound() : Results.Ok(detail);
         }).WithMetadata(new EndpointModuleAttribute(descriptor.ModuleId))
-            .RequireCrudOperation(authorization, StandardCrudOperation.Detail);
+            .RequireCrudOperation(authorization, StandardCrudOperation.Detail)
+            .WithDataExecution(endpoints.ServiceProvider, descriptor, "read");
 
         endpoints.MapPost(route, async (
             HttpContext context,
@@ -160,7 +164,8 @@ public static class StandardCrudEndpointRouteBuilderExtensions
             return ToMutationResult(result, detail => Results.Created(BuildCreatedLocation(route, descriptor, detail), detail),
                 () => Results.Json(new StandardCrudMutationReceipt(true), statusCode: StatusCodes.Status201Created));
         }).WithMetadata(new EndpointModuleAttribute(descriptor.ModuleId))
-            .RequireCrudOperation(authorization, StandardCrudOperation.Create);
+            .RequireCrudOperation(authorization, StandardCrudOperation.Create)
+            .WithDataExecution(endpoints.ServiceProvider, descriptor, "create");
 
         endpoints.MapPut(route + "/{id}", async (
             string id,
@@ -172,7 +177,8 @@ public static class StandardCrudEndpointRouteBuilderExtensions
             var result = await endpoint.UpdateAsync(descriptor, id, values, cancellationToken);
             return ToMutationResult(result, Results.Ok);
         }).WithMetadata(new EndpointModuleAttribute(descriptor.ModuleId))
-            .RequireCrudOperation(authorization, StandardCrudOperation.Update);
+            .RequireCrudOperation(authorization, StandardCrudOperation.Update)
+            .WithDataExecution(endpoints.ServiceProvider, descriptor, "update");
 
         endpoints.MapPost(route + "/{id}/enable", async (
             string id,
@@ -204,7 +210,8 @@ public static class StandardCrudEndpointRouteBuilderExtensions
                 ? Results.NoContent()
                 : ToErrorResult(result.Error!);
         }).WithMetadata(new EndpointModuleAttribute(descriptor.ModuleId))
-            .RequireCrudOperation(authorization, StandardCrudOperation.Delete);
+            .RequireCrudOperation(authorization, StandardCrudOperation.Delete)
+            .WithDataExecution(endpoints.ServiceProvider, descriptor, "delete");
     }
 
     // 显式采用位置绑定的资源不再消费旧 Permission；未开放操作仍映射为拒绝以封闭遗留地址。

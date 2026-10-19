@@ -41,12 +41,13 @@ public sealed class WorkspaceMixedSqlServerHttpApiTests(ITestOutputHelper output
         var targets = new List<(string Model, string Route, FeaturePoint Read, string Id)>();
         foreach (var (model, route, create, read) in new[] { ("Part", "/api/part/parts", "part.part.create", partRead), ("Document", "/api/document/documents", "document.document.create", documentRead) })
         {
-            var created = await Post(admin, Point(fixture, create), route, new { ECODE = "INDEPENDENT", ENAME = "可读取元数据" });
+            var created = await Post(admin, Point(fixture, create), route, new { ECODE = "INDEPENDENT", ENAME = "可读取元数据" },
+                OwnedResourceReadHttpRequests.Declaration(fixture, Point(fixture, create), model == "Part" ? "part.part" : "document.document", "create"));
             var id = created.GetProperty("fields").GetProperty("EID").GetString()!; targets.Add((model, route, read, id));
             await Post(admin, add, "/api/workspace/content/references", new { position, target = new { modelKey = model, id } });
         }
         await Post(admin, Point(fixture, "workspace.folder.create"), "/api/workspace/content/folders", new { position, values = new { ENAME = "可读文件夹" } });
-        var excluded = await Post(admin, Point(fixture, "part.part.create"), "/api/part/parts", new { ECODE = "EXCLUDED", ENAME = "强制业务排除" });
+        var excluded = await Post(admin, Point(fixture, "part.part.create"), "/api/part/parts", new { ECODE = "EXCLUDED", ENAME = "强制业务排除" }, OwnedResourceReadHttpRequests.Declaration(fixture, Point(fixture, "part.part.create"), "part.part", "create"));
         var excludedId = excluded.GetProperty("fields").GetProperty("EID").GetString();
         await Post(admin, add, "/api/workspace/content/references", new { position, target = new { modelKey = "Part", id = excludedId } });
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "MixedWriter", "混合写入", "mixed-writer", "混合写入账号", entry, add, remove, partRead, documentRead);
@@ -139,7 +140,7 @@ public sealed class WorkspaceMixedSqlServerHttpApiTests(ITestOutputHelper output
         var root = await Post(admin, entry, "/api/workspace/spaces/public/initialize", null); var position = Position(root);
         await Post(admin, Point(fixture, "workspace.folder.create"), "/api/workspace/content/folders", new { position, values = new { ENAME = "seed" } });
         foreach (var (route, behavior) in new[] { ("/api/part/parts", "part.part.create"), ("/api/document/documents", "document.document.create") })
-            await Post(admin, Point(fixture, behavior), route, new { ECODE = "seed", ENAME = "seed" });
+            await Post(admin, Point(fixture, behavior), route, new { ECODE = "seed", ENAME = "seed" }, OwnedResourceReadHttpRequests.Declaration(fixture, Point(fixture, behavior), behavior == "part.part.create" ? "part.part" : "document.document", "create"));
         var types = new[] { "Document", "Part", "WorkspaceFolder" };
         // 关系 LID 是夹具的独立身份，不随模型技术名切换重新命名。
         var relationPrefixes = new Dictionary<string, string>
@@ -289,9 +290,9 @@ public sealed class WorkspaceMixedSqlServerHttpApiTests(ITestOutputHelper output
         point => point.BehaviorKey == behavior && (behavior is not ("workspace.folder.remove" or "workspace.folder.editObject")
             || point.ModuleId == "Workspace" && point.StaticScope == "folder" && point.ActionScope == "list.rowActions"
                 && point.Key == (behavior == "workspace.folder.remove" ? "remove" : "edit")));
-    private static async Task<JsonElement> Post(HttpClient client, FeaturePoint point, string path, object? body)
+    private static async Task<JsonElement> Post(HttpClient client, FeaturePoint point, string path, object? body, ActionDataAccessRequirement? declaration = null)
     {
-        using var response = await FeatureHttpTestRequests.SendAsync(client, point, HttpMethod.Post, path, body);
+        using var response = await FeatureHttpTestRequests.SendAsync(client, point, HttpMethod.Post, path, body, declaration);
         Assert.True(response.StatusCode is HttpStatusCode.OK or HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
         return await response.Content.ReadFromJsonAsync<JsonElement>();
     }

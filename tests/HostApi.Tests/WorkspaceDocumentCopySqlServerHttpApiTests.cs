@@ -40,14 +40,14 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         }
         foreach (var documentId in new[] { (string)original["EID"]!, (string)copy["EID"]! })
         {
-            var list = await FeatureHttpTestRequests.ReadAsync(admin, DocFiles.Point(fixture, "document.document.read"), $"/api/document/documents/{documentId}/files");
+            var list = await DocumentFileHttpTestRequests.ReadAsync(fixture, admin, DocFiles.Point(fixture, "document.document.read"), $"/api/document/documents/{documentId}/files");
             var files = list.GetProperty("files").EnumerateArray().ToArray(); Assert.Equal(3, files.Length);
             for (var index = 0; index < files.Length; index++)
             {
                 Assert.Equal($"copy-{index}.pdf", files[index].GetProperty("fileName").GetString());
                 Assert.Equal(index == 0 ? "main" : "attachment", files[index].GetProperty("role").GetString());
                 Assert.Equal(index, files[index].GetProperty("ordinal").GetInt32());
-                using var download = await FeatureHttpTestRequests.SendAsync(admin, DocFiles.Point(fixture, "document.document.download"), HttpMethod.Get,
+                using var download = await DocumentFileHttpTestRequests.SendAsync(fixture, admin, DocFiles.Point(fixture, "document.document.download"), HttpMethod.Get,
                     $"/api/document/documents/{documentId}/files/{files[index].GetProperty("fileLinkId").GetString()}/content");
                 Assert.Equal(HttpStatusCode.OK, download.StatusCode); Assert.Equal(bytes[index], await download.Content.ReadAsByteArrayAsync());
             }

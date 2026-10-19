@@ -12,6 +12,8 @@ Files 的正式身份、模型和迁移来自 `frontend/modules/platform/files/n
 
 `ConfirmUsageAsync` 和 `ReleaseUsageAsync` 要求已有平台事务，只登记共享 tracker 的变更，不能自行 Flush、Save 或提交。业务 owner 在确认返回后填齐关联的 UsageId，再由外层统一保存和提交。相同已 confirmed 的活跃目标只返回原使用，不能换目标或复活 released 使用。
 
+业务上下文通过 `FileOwnerOperationContext` 显式交接，不进入上传或业务 Values。首次及幂等 Confirm 使用 `FileOwnerCreationContext`，来源绑定实际候选执行与新对象身份；业务 owner 保留真实创建事务、Added 关联与凭据检查，不给未存在对象增加 read。Release 使用 `FileOwnerReleaseContext` 固定真实资源与对象；owner 在原锁内读取和回链后独立消费自己的有效要求，不能使用创建证明或先前阶段的允许结果。Stage 和 Cancel 仍按原功能入口及 actor/lease 守卫，不增加对象预检。
+
 ## 独立文件副本
 
 `IFileCopyService` 只接受已登记 owner 的真实活跃 `FileUsageReference`，通过 `CopySource` 核证来源，不借用 download。每份副本物理克隆不可变字节，生成独立文件和使用身份，保留安全名称、ContentType，并重新测量 Length/Sha256。新上传格式、大小及附件配置不能作为既有内容的默认复制拒绝；业务复制准入仍由 owner 明确裁决。
@@ -27,6 +29,8 @@ Files 的正式身份、模型和迁移来自 `frontend/modules/platform/files/n
 `ReadOwnedStagedAsync` 接收完整暂存集合，由 Files 按 `MaxReadBatchSize` 内部分批查询并按输入次序返回。空白、重复及非法 token 在查询前拒绝；空集合仍核验 actor 和登记用途。集合内他人或错用途 token 的不可见结果优先于本人过期、取消或已消费冲突，取消及持久故障继续传播。此预读不预留或消费暂存，最终 Confirm 仍在原业务事务内锁定并重验。
 
 Files 不另设暂存集合总量上限；业务 owner 约束整个输入（当前 Document 最多 101 项），完整结果及身份校验占用 O(N) 空间。`MaxReadBatchSize` 限制内部每次数据库读取，不能据此声称整个调用具有固定内存或总工作量上界。
+
+读取和开流接收实际入口的 `FileOwnerExecutionContext`，包含正式绑定、资源与真实对象 EID；FileId、UsageId、LinkId 不能代替授权对象。Document provider 对下载唯一定义 read + download，下层 policy 从自身完整回链与当前读取事实执行同一要求；元数据反馈与正式下载独立判权。`FileOwnerLegacyCopyReadContext` 仅保留 #317 前明确的真实复制方法：CopySource 限定 `FileLifecycleService.PrepareCopyAsync/ConfirmCopyAsync` 两处来源读取，ConfirmCopy 操作只接受 `ConfirmCopyAsync`。Document 内部 ReadCopySource 的 read 来源单独登记；缺正式上下文不进入旧分支。
 
 安全元数据 `ReadUsageMetadataAsync` 仍限制单次输入不超过 `MaxReadBatchSize`，超界拒绝，由调用方分批，同用途 policy 批量验证。开流另行判定 read/download；可信目标的持久关联损坏、物理内容缺失或长度不匹配是明确故障。返回流由调用方释放，请求取消也关闭真实文件句柄。
 

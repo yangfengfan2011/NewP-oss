@@ -106,7 +106,7 @@ public sealed partial class FileLifecycleService(FileStateStore state, IPlatform
     }
 
     /// <inheritdoc/>
-    public async Task<ConfirmedFileUsage> ConfirmUsageAsync(string uploadId, FileOwnerReference owner, CancellationToken token = default)
+    public async Task<ConfirmedFileUsage> ConfirmUsageAsync(string uploadId, FileOwnerReference owner, FileOwnerCreationContext context, CancellationToken token = default)
     {
         state.RequireTransaction();
         ValidateUploadId(uploadId);
@@ -125,12 +125,12 @@ public sealed partial class FileLifecycleService(FileStateStore state, IPlatform
             if (Text(usage, "OwnerObjectId") != owner.Id || Text(usage, "State") == "released") throw AlreadyConfirmed();
             if (Text(usage, "State") != "active") throw Corrupted();
             RequireReady(pair.File);
-            await policy.VerifyAsync(owner, fileId, usageId, FileOwnerOperation.Confirm, token);
+            await policy.VerifyAsync(owner, fileId, usageId, FileOwnerOperation.Confirm, context, token);
             return new(usageId, fileId);
         }
         state.RequireStagedLease(pair.Lease);
         RequireReady(pair.File);
-        await policy.VerifyAsync(owner, fileId, null, FileOwnerOperation.Confirm, token);
+        await policy.VerifyAsync(owner, fileId, null, FileOwnerOperation.Confirm, context, token);
         if (await state.Usages.AnyAsync(row => EF.Property<string>(row, "OwnerKey") == owner.Key
             && EF.Property<string>(row, "OwnerObjectId") == owner.Id, token)
             || state.LocalRows(UsageModel).Any(row => Text(row, "OwnerKey") == owner.Key && Text(row, "OwnerObjectId") == owner.Id)) throw Unavailable();
@@ -142,10 +142,10 @@ public sealed partial class FileLifecycleService(FileStateStore state, IPlatform
     }
 
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<FileUsageMetadata>> ReadUsageMetadataAsync(IReadOnlyList<FileUsageReference> usageReferences, CancellationToken token = default)
+    public async Task<IReadOnlyList<FileUsageMetadata>> ReadUsageMetadataAsync(IReadOnlyList<FileUsageReference> usageReferences, FileOwnerOperationContext context, CancellationToken token = default)
     {
         ValidateBatch(usageReferences.Select(reference => reference.UsageId).ToArray());
-        var facts = await ReadUsageFactsAsync(usageReferences, FileOwnerOperation.Read, token);
+        var facts = await ReadUsageFactsAsync(usageReferences, FileOwnerOperation.Read, context, token);
         return usageReferences.Select(reference =>
         {
             var file = facts[reference.UsageId];
@@ -154,9 +154,9 @@ public sealed partial class FileLifecycleService(FileStateStore state, IPlatform
     }
 
     /// <inheritdoc/>
-    public async Task<FileUsageContent> OpenUsageAsync(FileUsageReference usageReference, CancellationToken token = default)
+    public async Task<FileUsageContent> OpenUsageAsync(FileUsageReference usageReference, FileOwnerExecutionContext context, CancellationToken token = default)
     {
-        var facts = await ReadUsageFactsAsync([usageReference], FileOwnerOperation.Download, token);
+        var facts = await ReadUsageFactsAsync([usageReference], FileOwnerOperation.Download, context, token);
         var file = facts[usageReference.UsageId];
         Stream stream;
         try { stream = await storage.OpenAsync(Text(file, "StorageKey"), token); }
@@ -182,11 +182,11 @@ public sealed partial class FileLifecycleService(FileStateStore state, IPlatform
     }
 
     /// <inheritdoc/>
-    public async Task ReleaseUsageAsync(FileUsageReference usageReference, CancellationToken token = default)
+    public async Task ReleaseUsageAsync(FileUsageReference usageReference, FileOwnerReleaseContext context, CancellationToken token = default)
     {
         state.RequireTransaction();
         await state.LockAsync(usageReference.FileId, token);
-        await Policy(usageReference.Owner.Key).VerifyAsync(usageReference.Owner, usageReference.FileId, usageReference.UsageId, FileOwnerOperation.Release, token);
+        await Policy(usageReference.Owner.Key).VerifyAsync(usageReference.Owner, usageReference.FileId, usageReference.UsageId, FileOwnerOperation.Release, context, token);
         var usage = state.LocalRows(UsageModel).SingleOrDefault(row => Text(row, "EID") == usageReference.UsageId)
             ?? await state.Usages.SingleOrDefaultAsync(row => EF.Property<string>(row, "EID") == usageReference.UsageId, token) ?? throw Corrupted();
         CheckUsage(usage, usageReference);
@@ -203,13 +203,13 @@ public sealed partial class FileLifecycleService(FileStateStore state, IPlatform
 
     // 跨用途先批量业务资格，再一次批读各 Files 表；缺失/互换是可信关联的损坏。
     private async Task<IReadOnlyDictionary<string, Dictionary<string, object?>>> ReadUsageFactsAsync(IReadOnlyList<FileUsageReference> references,
-        FileOwnerOperation operation, CancellationToken token)
+        FileOwnerOperation operation, FileOwnerOperationContext context, CancellationToken token)
     {
         ValidateBatch(references.Select(reference => reference.UsageId).ToArray());
         return await state.ReadUnitAsync<IReadOnlyDictionary<string, Dictionary<string, object?>>>(async () =>
         {
             foreach (var group in references.GroupBy(reference => reference.Owner.Key, StringComparer.Ordinal))
-                await Policy(group.Key).VerifyBatchAsync(group.ToArray(), operation, token);
+                await Policy(group.Key).VerifyBatchAsync(group.ToArray(), operation, context, token);
             var usageIds = references.Select(reference => reference.UsageId).ToArray();
             var fileIds = references.Select(reference => reference.FileId).Distinct(StringComparer.Ordinal).ToArray();
             var usages = await state.Usages.AsNoTracking().Where(row => usageIds.Contains(EF.Property<string>(row, "EID"))).ToDictionaryAsync(row => Text(row, "EID"), token);

@@ -15,6 +15,19 @@ internal static class OwnedResourceReadHttpRequests
             item.Execution == resource + "." + operation && item.Provider == "standardCrud." + operation
             && item.Resources.SequenceEqual([resource]) && item.FeaturePositions.Contains(point.Position, StringComparer.Ordinal));
 
+    /// <summary>真实进程准备从当前manifest选择已知操作；不缓存旧发行声明或按URL推断绑定。</summary>
+    internal static async Task<ActionDataAccessRequirement> DeclarationAsync(HttpClient client, FeaturePoint point, string resource, string operation)
+    {
+        using var manifest = await client.GetFromJsonAsync<JsonDocument>("/plugins/metadata-runtime-manifest.json")
+            ?? throw new InvalidOperationException("Runtime metadata manifest was empty.");
+        var declarations = manifest.RootElement.GetProperty("modules").EnumerateArray()
+            .SelectMany(module => module.GetProperty("dataAccess").EnumerateArray())
+            .Select(item => item.Deserialize<ActionDataAccessRequirement>(new JsonSerializerOptions(JsonSerializerDefaults.Web))!).ToArray();
+        return Assert.Single(declarations, item => item.ModuleId == point.ModuleId
+            && item.Execution == resource + "." + operation && item.Provider == "standardCrud." + operation
+            && item.Resources.SequenceEqual([resource]) && item.FeaturePositions.Contains(point.Position, StringComparer.Ordinal));
+    }
+
     internal static async Task<JsonElement> ReadAsync(BusinessAuditHostFixture fixture, HttpClient client, FeaturePoint point,
         string resource, string operation, string path)
     {

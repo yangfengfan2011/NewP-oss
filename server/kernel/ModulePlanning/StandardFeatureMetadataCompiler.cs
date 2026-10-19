@@ -129,8 +129,11 @@ public static class StandardFeatureMetadataCompiler
                 Actions(view, "rowActions", owner, scope, resource);
                 if (view.TryGetProperty("featureActions", out var customActions))
                     foreach (var action in customActions.EnumerateArray())
+                    {
                         Action(owner, scope, Text(action, "key"), Title(Text(action, "titleKey"), Optional(view, "dicKey")), Text(action, "behaviorKey"), mode + ".custom",
                             action.TryGetProperty("readBehaviors", out var reads) ? reads.EnumerateArray().Select(read => read.GetString()!).ToArray() : [], FullTitleKey(Text(action, "titleKey"), Optional(view, "dicKey")));
+                        DataAccess(view, action, "featureActions", Text(action, "key"), result[^1].ReferenceKey!);
+                    }
                 if (mode == "list" && view.TryGetProperty("export", out var export) && (!export.TryGetProperty("enabled", out var enabled) || enabled.ValueKind != JsonValueKind.False))
                 {
                     Action(owner, scope, "export", "导出", resource + ".export", "list", titleKey: "Platform.Export");

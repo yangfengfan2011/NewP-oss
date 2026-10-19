@@ -137,7 +137,11 @@ public sealed class DocumentHistoryDeclarationSqlServerTests
 
     private static async Task<string> CreateAsync(BusinessAuditHostFixture fixture, HttpClient admin, string code)
     {
-        var created = await FeatureHttpTestRequests.CreateAsync(admin, Point(fixture, "document.document.create"), "/api/document/documents", new { ECODE = code, ENAME = "图文档履历" });
+        var feature = Point(fixture, "document.document.create");
+        using var response = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Post, "/api/document/documents",
+            new { ECODE = code, ENAME = "图文档履历" }, OwnedResourceReadHttpRequests.Declaration(fixture, feature, "document.document", "create"));
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var created = await response.Content.ReadFromJsonAsync<JsonElement>();
         return created.GetProperty("fields").GetProperty("EID").GetString()!;
     }
 

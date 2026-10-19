@@ -8,10 +8,12 @@ import partWrite from '../../../../../tests/Kernel.Tests/Fixtures/PartWriteDataA
 import partHistory from '../../../../../tests/Kernel.Tests/Fixtures/PartHistoryDataAccess.contract.json';
 import documentHistory from '../../../../../tests/Kernel.Tests/Fixtures/DocumentHistoryDataAccess.contract.json';
 import workspaceHistory from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceHistoryDataAccess.contract.json';
+import documentFiles from '../../../../../tests/Kernel.Tests/Fixtures/DocumentFileDataAccess.contract.json';
 import clipboard from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceClipboardDataAccess.contract.json';
 
 const declarations = uniqueDeclarations([...(standardRead as ActionDataAccessRequirement[]), ...(organization as ActionDataAccessRequirement[]), ...(example as ActionDataAccessRequirement[]),
   ...(partWrite as ActionDataAccessRequirement[]), ...(partHistory as ActionDataAccessRequirement[]), ...(documentHistory as ActionDataAccessRequirement[]),
+  ...(documentFiles.dataAccess as ActionDataAccessRequirement[]),
   ...(workspaceHistory as ActionDataAccessRequirement[]), ...(clipboard.declarations as ActionDataAccessRequirement[])]);
 
 function uniqueDeclarations(items: readonly ActionDataAccessRequirement[]) {

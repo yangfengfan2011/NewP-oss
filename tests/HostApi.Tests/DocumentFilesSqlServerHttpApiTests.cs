@@ -25,7 +25,7 @@ using Xunit;
 namespace ICP.Platform.HostApi.Tests;
 
 /// <summary>真实 Document 首个使用者贯通正规上传、原子保存、所属安全元数据与授权开流。</summary>
-public sealed class DocumentFilesSqlServerHttpApiTests
+public sealed partial class DocumentFilesSqlServerHttpApiTests
 {
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "单main真实Stage到Document使用、目录关系、Metadata和Open贯通")]
     public async Task MainFile_StagesCreatesReadsDownloadsAndOwnDeleteReleases()
@@ -74,12 +74,12 @@ public sealed class DocumentFilesSqlServerHttpApiTests
             Assert.Equal(documentId, ws["CEID"]);
             contentLinkId = (string)ws["LID"]!;
         }
-        var list = await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "document.document.read"), $"/api/document/documents/{documentId}/files");
+        var list = await DocumentFileHttpTestRequests.ReadAsync(fixture, admin, Point(fixture, "document.document.read"), $"/api/document/documents/{documentId}/files");
         var item = Assert.Single(list.GetProperty("files").EnumerateArray());
         Assert.True(list.GetProperty("downloadAllowed").GetBoolean());
         Assert.Equal("main.pdf", item.GetProperty("fileName").GetString());
         foreach (var forbidden in new[] { "fileId", "usageId", "storageKey", "storagePath" }) Assert.False(item.TryGetProperty(forbidden, out _));
-        using var download = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "document.document.download"), HttpMethod.Get,
+        using var download = await DocumentFileHttpTestRequests.SendAsync(fixture, admin, Point(fixture, "document.document.download"), HttpMethod.Get,
             $"/api/document/documents/{documentId}/files/{item.GetProperty("fileLinkId").GetString()}/content");
         Assert.True(download.StatusCode == HttpStatusCode.OK, await download.Content.ReadAsStringAsync());
         Assert.Equal(bytes, await download.Content.ReadAsByteArrayAsync());
@@ -159,7 +159,7 @@ public sealed class DocumentFilesSqlServerHttpApiTests
             using var accepted = await CreateDocumentAsync(fixture, admin, new { position, values = acceptedValues, uploads = acceptedUploads });
             Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
             var acceptedFacts = await ReadCreatedAsync(fixture, acceptedValues.ECODE);
-            var acceptedFiles = await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "document.document.read"), $"/api/document/documents/{acceptedFacts.DocumentId}/files");
+            var acceptedFiles = await DocumentFileHttpTestRequests.ReadAsync(fixture, admin, Point(fixture, "document.document.read"), $"/api/document/documents/{acceptedFacts.DocumentId}/files");
             var main = Assert.Single(acceptedFiles.GetProperty("files").EnumerateArray());
             Assert.Equal("main", main.GetProperty("role").GetString());
             Assert.Equal(0L, main.GetProperty("ordinal").GetInt64());
@@ -167,7 +167,7 @@ public sealed class DocumentFilesSqlServerHttpApiTests
         using var legacy = await CreateDocumentAsync(fixture, admin, new { position, values = new { ECODE = "LEGACY-01", ENAME = "无文件创建" }, uploads = (object?)null });
         Assert.Equal(HttpStatusCode.OK, legacy.StatusCode);
         var facts = await ReadCreatedAsync(fixture, "LEGACY-01");
-        var files = await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "document.document.read"), $"/api/document/documents/{facts.DocumentId}/files");
+        var files = await DocumentFileHttpTestRequests.ReadAsync(fixture, admin, Point(fixture, "document.document.read"), $"/api/document/documents/{facts.DocumentId}/files");
         Assert.Empty(files.GetProperty("files").EnumerateArray());
     }
 
@@ -541,7 +541,7 @@ public sealed class DocumentFilesSqlServerHttpApiTests
         Assert.DoesNotContain(fixture.FeatureCatalog, point => point.ParentPosition is null && point.ModuleId is "Part" or "Document");
         var actor = await ActorAsync(fixture, admin, "FileReader");
         using var ordinary = actor.Client;
-        using (var allowed = await FeatureHttpTestRequests.SendAsync(ordinary, documentDownload, HttpMethod.Get, ContentUrl(first)))
+        using (var allowed = await DocumentFileHttpTestRequests.SendAsync(fixture, ordinary, documentDownload, HttpMethod.Get, ContentUrl(first)))
         {
             Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
             Assert.Equal(new byte[] { 1, 2, 3 }, await allowed.Content.ReadAsByteArrayAsync());
@@ -558,28 +558,28 @@ public sealed class DocumentFilesSqlServerHttpApiTests
             Point(fixture, "document.document.read"));
         using (var reader = readOnly.Client)
         {
-            var detail = await FeatureHttpTestRequests.ReadAsync(reader, documentRead, "/api/document/documents/" + first.DocumentId);
+            var detail = await DocumentFileHttpTestRequests.ReadAsync(fixture, reader, documentRead, "/api/document/documents/" + first.DocumentId);
             Assert.Equal(first.DocumentId, detail.GetProperty("fields").GetProperty("EID").GetString());
-            var visible = await FeatureHttpTestRequests.ReadAsync(reader, Point(fixture, "document.document.read"), FilesUrl(first));
+            var visible = await DocumentFileHttpTestRequests.ReadAsync(fixture, reader, Point(fixture, "document.document.read"), FilesUrl(first));
             Assert.Single(visible.GetProperty("files").EnumerateArray());
-            using var noFeature = await FeatureHttpTestRequests.SendAsync(reader, Point(fixture, "document.document.download"), HttpMethod.Get, ContentUrl(first));
+            using var noFeature = await DocumentFileHttpTestRequests.SendAsync(fixture, reader, Point(fixture, "document.document.download"), HttpMethod.Get, ContentUrl(first));
             Assert.Equal(HttpStatusCode.Forbidden, noFeature.StatusCode);
         }
         await SaveRuleAsync(fixture, admin, "NoDownload", "document.document", "EID", first.DocumentId, "download");
-        var list = await FeatureHttpTestRequests.ReadAsync(ordinary, Point(fixture, "document.document.read"), FilesUrl(first));
+        var list = await DocumentFileHttpTestRequests.ReadAsync(fixture, ordinary, Point(fixture, "document.document.read"), FilesUrl(first));
         Assert.False(list.GetProperty("downloadAllowed").GetBoolean());
         var file = Assert.Single(list.GetProperty("files").EnumerateArray());
         Assert.Equal("main.pdf", file.GetProperty("fileName").GetString());
         foreach (var hidden in new[] { "fileId", "usageId", "storageKey", "storagePath", "actorId", "ownerKey" }) Assert.False(file.TryGetProperty(hidden, out _));
-        using (var denied = await FeatureHttpTestRequests.SendAsync(ordinary, Point(fixture, "document.document.download"), HttpMethod.Get, ContentUrl(first)))
+        using (var denied = await DocumentFileHttpTestRequests.SendAsync(fixture, ordinary, Point(fixture, "document.document.download"), HttpMethod.Get, ContentUrl(first)))
             await ProblemAsync(denied, HttpStatusCode.Forbidden, "Document.DownloadDenied");
-        using (var wrongTarget = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "document.document.download"), HttpMethod.Get,
+        using (var wrongTarget = await DocumentFileHttpTestRequests.SendAsync(fixture, admin, Point(fixture, "document.document.download"), HttpMethod.Get,
             $"/api/document/documents/{first.DocumentId}/files/{second.LinkId}/content"))
             await ProblemAsync(wrongTarget, HttpStatusCode.NotFound, "Files.UsageUnavailable");
         await SaveRuleAsync(fixture, admin, "HiddenDocument", "document.document", "EID", first.DocumentId, "read");
         foreach (var (url, behavior) in new[] { (FilesUrl(first), "document.document.read"), (ContentUrl(first), "document.document.download") })
         {
-            using var hidden = await FeatureHttpTestRequests.SendAsync(ordinary, Point(fixture, behavior), HttpMethod.Get, url);
+            using var hidden = await DocumentFileHttpTestRequests.SendAsync(fixture, ordinary, Point(fixture, behavior), HttpMethod.Get, url);
             Assert.Equal(HttpStatusCode.NotFound, hidden.StatusCode);
         }
         await SaveRuleAsync(fixture, admin, "HiddenCreated", "document.document", "ECODE", "UNREADABLE-CREATED", "read");
@@ -591,7 +591,7 @@ public sealed class DocumentFilesSqlServerHttpApiTests
         Assert.True(receipt.GetProperty("succeeded").GetBoolean());
         Assert.Single(receipt.EnumerateObject());
         var created = await ReadCreatedAsync(fixture, values.ECODE);
-        using var unreadable = await FeatureHttpTestRequests.SendAsync(ordinary, Point(fixture, "document.document.read"), HttpMethod.Get,
+        using var unreadable = await DocumentFileHttpTestRequests.SendAsync(fixture, ordinary, Point(fixture, "document.document.read"), HttpMethod.Get,
             $"/api/document/documents/{created.DocumentId}/files");
         Assert.Equal(HttpStatusCode.NotFound, unreadable.StatusCode);
         Assert.Equal(3, (await ObserveBusinessAsync(fixture)).Usages.Length);
@@ -614,8 +614,8 @@ public sealed class DocumentFilesSqlServerHttpApiTests
         })
         {
             await ChangeRowAsync(fixture, model, keyField, key, field, invalid);
-            await IntegrityFailureAsync(() => FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "document.document.read"), HttpMethod.Get, FilesUrl(first)), error);
-            await IntegrityFailureAsync(() => FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "document.document.download"), HttpMethod.Get, ContentUrl(first)), error);
+            await IntegrityFailureAsync(() => DocumentFileHttpTestRequests.SendAsync(fixture, admin, Point(fixture, "document.document.read"), HttpMethod.Get, FilesUrl(first)), error);
+            await IntegrityFailureAsync(() => DocumentFileHttpTestRequests.SendAsync(fixture, admin, Point(fixture, "document.document.download"), HttpMethod.Get, ContentUrl(first)), error);
             await ChangeRowAsync(fixture, model, keyField, key, field, original);
         }
         foreach (var (method, path) in new[]
@@ -627,12 +627,12 @@ public sealed class DocumentFilesSqlServerHttpApiTests
             using var raw = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "document.document.download"), method, path);
             Assert.Equal(HttpStatusCode.Forbidden, raw.StatusCode);
         }
-        using (var arbitrary = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "document.document.read"), HttpMethod.Get, FilesUrl(first) + "?usageId=" + second.UsageId))
+        using (var arbitrary = await DocumentFileHttpTestRequests.SendAsync(fixture, admin, Point(fixture, "document.document.read"), HttpMethod.Get, FilesUrl(first) + "?usageId=" + second.UsageId))
             await ProblemAsync(arbitrary, HttpStatusCode.BadRequest, "REQUEST_VALIDATION_FAILED");
         var facts = await ObserveBusinessAsync(fixture);
         var content = ContentPath(fixture, Assert.Single(facts.Files, row => Equals(row["EID"], first.FileId)));
         File.Delete(content);
-        await IntegrityFailureAsync(() => FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "document.document.download"), HttpMethod.Get, ContentUrl(first)), "Files.ContentMissing");
+        await IntegrityFailureAsync(() => DocumentFileHttpTestRequests.SendAsync(fixture, admin, Point(fixture, "document.document.download"), HttpMethod.Get, ContentUrl(first)), "Files.ContentMissing");
         Assert.Equal("active", Assert.Single((await ObserveBusinessAsync(fixture)).Usages, row => Equals(row["EID"], first.UsageId))["State"]);
     }
 

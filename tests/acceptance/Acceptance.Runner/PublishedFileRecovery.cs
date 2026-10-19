@@ -22,8 +22,6 @@ internal sealed partial class PublishedComponentAcceptanceFixture
         var features = await AcceptanceFeatureCatalog.LoadAsync(client, token);
         var entry = features.Behavior("Workspace", "workspace.spaces.access").Position;
         var create = features.Behavior("Workspace", "workspace.folder.createDocument").Position;
-        var read = features.Behavior("Document", "document.document.read").Position;
-        var download = features.Behavior("Document", "document.document.download").Position;
         var roots = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get, "/api/workspace/spaces", null, entry, token);
         var root = roots.EnumerateArray().Single(row => row.GetProperty("spaceKind").GetString()!.Equals("public", StringComparison.OrdinalIgnoreCase));
         var rootId = root.GetProperty("rootFolderId").GetString()!;
@@ -54,13 +52,13 @@ internal sealed partial class PublishedComponentAcceptanceFixture
         using (var facts = JsonDocument.Parse(before))
             if (facts.RootElement.GetArrayLength() != files.Length)
                 throw new InvalidOperationException("正式保存没有为全部文件形成完整关联、使用及已确认租约。");
-        await VerifyRecoveryDownloadsAsync(client, documentId, read, download, files, token);
+        await VerifyRecoveryDownloadsAsync(client, documentId, features, files, token);
         var previous = HostIdentity;
         await RestartAsync(token);
         if (HostIdentity == previous) throw new InvalidOperationException("文件恢复未启动新的正式 Host 进程。");
         using var restarted = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
         await WorkspaceAcceptanceFixture.LoginAsync(restarted, actor, token);
-        await VerifyRecoveryDownloadsAsync(restarted, documentId, read, download, files, token);
+        await VerifyRecoveryDownloadsAsync(restarted, documentId, features, files, token);
         var after = await ReadSavedFileFactsAsync(documentId, token);
         if (before != after) throw new InvalidOperationException("同库同 root 重启改变了已保存的 Document/文件关联或使用。");
         await WriteAsync("files-saved-process-restart.json", new { previous, restarted = HostIdentity, catalog = ReusableSqlServerDatabase.Catalog,
@@ -75,7 +73,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture
         await VerifyStagedAndPendingRecoveryAsync(finalClient, actor, create, position, token);
         using var savedClient = WorkspaceAcceptanceFixture.CreateClient(_hostPort);
         await WorkspaceAcceptanceFixture.LoginAsync(savedClient, actor, token);
-        await VerifyRecoveryDownloadsAsync(savedClient, documentId, read, download, files, token);
+        await VerifyRecoveryDownloadsAsync(savedClient, documentId, features, files, token);
         if (before != await ReadSavedFileFactsAsync(documentId, token)) throw new InvalidOperationException("恢复未确认文件时改变了 active 文件使用。");
     }
 
@@ -141,17 +139,21 @@ internal sealed partial class PublishedComponentAcceptanceFixture
         return request;
     }
 
-    private async Task VerifyRecoveryDownloadsAsync(HttpClient client, string documentId, string read, string download,
+    private async Task VerifyRecoveryDownloadsAsync(HttpClient client, string documentId, AcceptanceFeatureCatalog features,
         IReadOnlyList<SavedRecoveryFile> files, CancellationToken token)
     {
-        var metadata = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get, $"/api/document/documents/{documentId}/files", null, read, token);
+        var read = features.Behavior("Document", "document.document.read");
+        var download = features.Behavior("Document", "document.document.download");
+        var metadata = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get, $"/api/document/documents/{documentId}/files", null, read.Position, token,
+            features.Declaration(read, "document.document.read", "standardCrud.read", "document.document"));
         var items = metadata.GetProperty("files").EnumerateArray().ToArray();
         if (items.Length != files.Count) throw new InvalidOperationException("正式重启改变了已保存文件集合。");
         foreach (var file in files)
         {
             var item = items.Single(item => item.GetProperty("fileName").GetString() == file.FileName);
             using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/document/documents/{documentId}/files/{item.GetProperty("fileLinkId").GetString()}/content");
-            request.Headers.Add("X-NewP-Feature", download);
+            request.Headers.Add("X-NewP-Feature", download.Position);
+            request.Headers.Add("X-NewP-Data-Declaration", features.Declaration(download, "document.files.download", "document.files.download", "document.document"));
             using var response = await client.SendAsync(request, token);
             response.EnsureSuccessStatusCode();
             var received = await response.Content.ReadAsByteArrayAsync(token);

@@ -1,3 +1,4 @@
+using ICP.Platform.Authorization.Contracts;
 using System.Collections.Concurrent;
 using System.Data.Common;
 using System.Net;
@@ -310,10 +311,11 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
         Assert.Equal(fixture.ActorId, actorId);
         var expected = new ConfirmedFileUsage((string)originalUsage["EID"]!, (string)originalUsage["FileId"]!);
         FileOwnerReference originalOwner;
-        string contentLinkId;
+        string contentLinkId, documentId;
         using (var scope = fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+            documentId = (string)(await db.Set<Dictionary<string, object?>>("Document").AsNoTracking().SingleAsync())["EID"]!;
             var actualLink = await db.Set<Dictionary<string, object?>>("DocumentFileLink").AsNoTracking().SingleAsync();
             Assert.Equal(expected.UsageId, actualLink["FileUsageId"]);
             Assert.Equal(expected.FileId, actualLink["CEID"]);
@@ -322,8 +324,8 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
         }
         // confirmed 的 ExpiresAt 只是历史；真实关联仍 active 时不得把重复确认当到期 token。
         await ExpireAsync(fixture, uploadId);
-        Assert.Equal(expected, await ConfirmAsActualActorAsync(fixture, actorId, uploadId, originalOwner));
-        Assert.Equal(expected, await ConfirmAsActualActorAsync(fixture, actorId, uploadId, originalOwner));
+        Assert.Equal(expected, await ConfirmAsActualActorAsync(fixture, actorId, uploadId, originalOwner, documentId));
+        Assert.Equal(expected, await ConfirmAsActualActorAsync(fixture, actorId, uploadId, originalOwner, documentId));
 
         var otherStage = await StageAsync(fixture, admin, position, Values("CONFIRM-OTHER"), Bytes);
         using (var otherCreated = await CreateDocumentAsync(fixture, admin, position, "CONFIRM-OTHER", otherStage.GetProperty("uploadId").GetString()!))
@@ -336,12 +338,12 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
                 .SingleAsync(row => EF.Property<string>(row, "LID") != originalOwner.Id);
             otherOwner = new(DocumentFileOwnerPolicy.Key, (string)otherLink["LID"]!);
         }
-        var retarget = await Assert.ThrowsAsync<FileLifecycleException>(() => ConfirmAsActualActorAsync(fixture, actorId, uploadId, otherOwner));
+        var retarget = await Assert.ThrowsAsync<FileLifecycleException>(() => ConfirmAsActualActorAsync(fixture, actorId, uploadId, otherOwner, documentId));
         Assert.Equal(409, retarget.StatusCode);
         Assert.Equal("Files.UploadAlreadyConfirmed", retarget.Code);
         using (var deleted = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.deleteObject"), HttpMethod.Delete,
                    "/api/workspace/content/" + contentLinkId, new { position })) Assert.Equal(HttpStatusCode.OK, deleted.StatusCode);
-        var released = await Assert.ThrowsAsync<FileLifecycleException>(() => ConfirmAsActualActorAsync(fixture, actorId, uploadId, originalOwner));
+        var released = await Assert.ThrowsAsync<FileLifecycleException>(() => ConfirmAsActualActorAsync(fixture, actorId, uploadId, originalOwner, documentId));
         Assert.Equal(409, released.StatusCode);
         Assert.Equal("Files.UploadAlreadyConfirmed", released.Code);
         var final = await ObserveAsync(fixture);
@@ -351,7 +353,7 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
     }
 
     private static async Task<ConfirmedFileUsage> ConfirmAsActualActorAsync(BusinessAuditHostFixture fixture, string actorId,
-        string uploadId, FileOwnerReference owner)
+        string uploadId, FileOwnerReference owner, string documentId)
     {
         using var scope = fixture.Services.CreateScope();
         var accessor = fixture.Services.GetRequiredService<IHttpContextAccessor>();
@@ -368,7 +370,9 @@ public sealed class DocumentFileLifecycleFaultSqlServerHttpApiTests
             Assert.Empty(db.ChangeTracker.Entries());
             var service = scope.ServiceProvider.GetRequiredService<IFileLifecycleService>();
             var transaction = scope.ServiceProvider.GetRequiredService<IPlatformTransactionExecutor>();
-            var result = await transaction.ExecuteAsync(token => new ValueTask<ConfirmedFileUsage>(service.ConfirmUsageAsync(uploadId, owner, token)));
+            var result = await transaction.ExecuteAsync(token => new ValueTask<ConfirmedFileUsage>(service.ConfirmUsageAsync(uploadId, owner,
+                new(new(new("document.document.internal.create", "standardCrud.create", "submit"), "document.document", null)
+                { Internal = new("document.document.internal.create", "standardCrud.create", typeof(DocumentFiles), nameof(DocumentFiles.CreateWithFilesAsync)) }, documentId), token)));
             Assert.DoesNotContain(db.ChangeTracker.Entries(), entry => entry.Metadata.Name == "DocumentFileLink" && entry.State == EntityState.Added);
             return result;
         }

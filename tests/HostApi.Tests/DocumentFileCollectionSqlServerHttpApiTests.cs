@@ -63,7 +63,7 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
         Assert.Equal(3, links.Length); Assert.Equal(3, usages.Length); Assert.Equal(3, leases.Length); Assert.Equal(3, files.Length);
         Assert.Equal(master["EID"], (await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AsNoTracking().SingleAsync(row => EF.Property<string>(row, "ChildModelKey") == "Document"))["CEID"]);
         var documentId = (string)master["EID"]!;
-        var list = await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "document.document.read"), $"/api/document/documents/{documentId}/files");
+        var list = await DocumentFileHttpTestRequests.ReadAsync(fixture, admin, Point(fixture, "document.document.read"), $"/api/document/documents/{documentId}/files");
         var publicFiles = list.GetProperty("files").EnumerateArray().ToArray();
         Assert.Equal(3, publicFiles.Length);
         for (var index = 0; index < links.Length; index++)
@@ -83,7 +83,7 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
             Assert.Equal(index, publicFiles[index].GetProperty("ordinal").GetInt32());
             Assert.Equal($"file-{index}.pdf", publicFiles[index].GetProperty("fileName").GetString());
             foreach (var hidden in new[] { "fileId", "usageId", "storageKey", "actorId" }) Assert.False(publicFiles[index].TryGetProperty(hidden, out _));
-            using var downloaded = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "document.document.download"), HttpMethod.Get,
+            using var downloaded = await DocumentFileHttpTestRequests.SendAsync(fixture, admin, Point(fixture, "document.document.download"), HttpMethod.Get,
                 $"/api/document/documents/{documentId}/files/{link["LID"]}/content");
             Assert.Equal(HttpStatusCode.OK, downloaded.StatusCode);
             Assert.Equal(contents[index], await downloaded.Content.ReadAsByteArrayAsync());
@@ -282,7 +282,7 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
         fixture.Services.GetRequiredService<IOptions<DocumentOptions>>().Value.MaxAttachmentsPerDocument = 0;
         var document = Assert.Single(await RowsAsync(fixture, "Document"));
         probe.ObserveMetadataReads = true;
-        var response = await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "document.document.read"), $"/api/document/documents/{document["EID"]}/files");
+        var response = await DocumentFileHttpTestRequests.ReadAsync(fixture, admin, Point(fixture, "document.document.read"), $"/api/document/documents/{document["EID"]}/files");
         probe.ObserveMetadataReads = false;
         var list = response.GetProperty("files").EnumerateArray().ToArray();
         Assert.Equal(101, list.Length); Assert.Equal(Enumerable.Range(0, 101), list.Select(item => item.GetProperty("ordinal").GetInt32()));
@@ -291,7 +291,7 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
         Assert.Equal(7, probe.UsageReadBatchSizes.Max()); Assert.All(probe.UsageReadBatchSizes, size => Assert.InRange(size, 1, 7));
         Assert.Equal(15, probe.RecordReads); Assert.Equal(15, probe.ConfirmedLeaseReads);
         output.WriteLine($"Collection metadata SQL: returned={list.Length}; Files.MaxReadBatchSize=7; totalCommands={probe.MetadataCommands}; usageQueries={probe.UsageReadBatchSizes.Count}; recordQueries={probe.RecordReads}; confirmedLeaseQueries={probe.ConfirmedLeaseReads}; largestUsageIdBatch={probe.UsageReadBatchSizes.Max()}; sumUsageIds={probe.UsageReadBatchSizes.Sum()}; Document.Take=102; absoluteReturnLimit=101.");
-        using var last = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "document.document.download"), HttpMethod.Get,
+        using var last = await DocumentFileHttpTestRequests.SendAsync(fixture, admin, Point(fixture, "document.document.download"), HttpMethod.Get,
             $"/api/document/documents/{document["EID"]}/files/{list[^1].GetProperty("fileLinkId").GetString()}/content");
         Assert.Equal(HttpStatusCode.OK, last.StatusCode); Assert.Equal(new byte[] { 100, 101, 102 }, await last.Content.ReadAsByteArrayAsync());
         var ws = Assert.Single(await RowsAsync(fixture, "WorkspaceFolderContent"));
@@ -412,7 +412,7 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
     private static async Task<JsonElement> ReadListAsync(BusinessAuditHostFixture fixture, HttpClient client, string code)
     {
         var document = Assert.Single(await RowsAsync(fixture, "Document"), row => Equals(row["ECODE"], code));
-        return await FeatureHttpTestRequests.ReadAsync(client, Point(fixture, "document.document.read"), $"/api/document/documents/{document["EID"]}/files");
+        return await DocumentFileHttpTestRequests.ReadAsync(fixture, client, Point(fixture, "document.document.read"), $"/api/document/documents/{document["EID"]}/files");
     }
     private static async Task<Dictionary<string, object?>[]> RowsAsync(BusinessAuditHostFixture fixture, string model)
     {
@@ -459,7 +459,7 @@ public sealed class DocumentFileCollectionSqlServerHttpApiTests(ITestOutputHelpe
     {
         foreach (var (behavior, url) in new[] { ("document.document.read", $"/api/document/documents/{documentId}/files"), ("document.document.download", $"/api/document/documents/{documentId}/files/{linkId}/content") })
         {
-            try { using var response = await FeatureHttpTestRequests.SendAsync(client, Point(fixture, behavior), HttpMethod.Get, url); Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode); }
+            try { using var response = await DocumentFileHttpTestRequests.SendAsync(fixture, client, Point(fixture, behavior), HttpMethod.Get, url); Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode); }
             catch (Exception exception) when (exception is not Xunit.Sdk.XunitException) { Assert.Contains("Corrupted", exception.ToString(), StringComparison.Ordinal); }
         }
     }

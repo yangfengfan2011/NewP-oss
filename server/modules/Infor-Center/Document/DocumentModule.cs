@@ -81,6 +81,8 @@ public sealed class DocumentModule : ModuleCapsuleBindingBase
             .ValidateOnStart();
         services.AddScoped<DocumentFileCreationScope>();
         services.AddScoped<DocumentFileOwnerPolicy>();
+        services.AddScoped<DocumentFileReadScope>();
+        services.AddScoped<ICP.Platform.Authorization.Contracts.IDataExecutionTargetResolver, DocumentFileReadResolver>();
         services.AddScoped<IFileOwnerPolicy>(provider => provider.GetRequiredService<DocumentFileOwnerPolicy>());
         services.AddSingleton(new FileOwnerPolicyRequirement(DocumentFileOwnerPolicy.Key));
         services.AddScoped<DocumentFiles>();

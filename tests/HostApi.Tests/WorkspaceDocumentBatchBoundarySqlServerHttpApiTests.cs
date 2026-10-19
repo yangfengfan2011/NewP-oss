@@ -109,7 +109,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         {
             await io.Reached.Task.WaitAsync(TimeSpan.FromSeconds(30));
             var point = Assert.Single(fixture.FeatureCatalog, item => item.ModuleId == "Document" && item.BehaviorKey == "document.document.create" && item.ActionScope == "list.pageActions");
-            using var winner = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Post, "/api/document/documents", new { ECODE = "CONCURRENT-1", ENAME = "普通创建赢家" });
+            using var winner = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Post, "/api/document/documents", new { ECODE = "CONCURRENT-1", ENAME = "普通创建赢家" }, OwnedResourceReadHttpRequests.Declaration(fixture, point, "document.document", "create"));
             Assert.Equal(HttpStatusCode.Created, winner.StatusCode); io.Release.TrySetResult();
             using var response = await pending; Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
             var error = await response.Content.ReadFromJsonAsync<JsonElement>();

@@ -1,4 +1,5 @@
 using ICP.Platform.Authorization.Http;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Modules.Document.Contracts;
 using ICP.Platform.Modules.Files.Contracts;
 using ICP.Platform.Sdk.Http;
@@ -18,6 +19,8 @@ public sealed class DocumentFilesController(IDocumentFiles files) : ControllerBa
         if (Request.Query.Count > 0) return InvalidQuery();
         try { return Results.Ok(await files.ReadAsync(documentId, token)); }
         catch (FileLifecycleException exception) { return Problem(exception); }
+        catch (ActionDataAccessException exception) { return Results.Problem(statusCode: exception.Status, title: exception.Code,
+            extensions: new Dictionary<string, object?> { ["code"] = exception.Code }); }
     }
 
     /// <summary>独立重新裁决 download；框架在完成或取消时释放文件流。</summary>
@@ -31,6 +34,8 @@ public sealed class DocumentFilesController(IDocumentFiles files) : ControllerBa
             return Results.Stream(content.FileStream, content.ContentType, fileDownloadName: content.FileName);
         }
         catch (FileLifecycleException exception) { return Problem(exception); }
+        catch (ActionDataAccessException exception) { return Results.Problem(statusCode: exception.Status, title: exception.Code,
+            extensions: new Dictionary<string, object?> { ["code"] = exception.Code }); }
     }
 
     // 只接受固定当前版次目标，未知 query 不能伪装成任意版本或私有 owner 查询。

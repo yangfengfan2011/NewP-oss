@@ -238,7 +238,7 @@ function StandardCrudDetailPageContent<TDetail>({
       const resolution = features.action(key, 'detail.custom');
       return resolution.kind === 'unresolved'
         ? []
-        : [[key, { position: resolution.position, allowed: resolution.kind === 'allowed' }]];
+        : [[key, { position: resolution.position, allowed: resolution.kind === 'allowed', dataAccess: (action as Record<string, unknown>).dataAccess as ActionDataAccessRequirement | undefined }]];
     }));
   }, [features, view.featureActions]);
   const presentation = useMemo(() => currentNormalizedDetail
@@ -247,7 +247,7 @@ function StandardCrudDetailPageContent<TDetail>({
   const readyPresentation = presentation?.kind === 'ready' ? presentation : null;
   const interactionIdentity = JSON.stringify([registration.resourceKey, view.key, id, readPosition, host.input.queryScope, readSourceKey,
     auth?.user?.id, auth?.isAuthenticated, auth?.permissionEpoch,
-    [...(auth?.user?.featurePositions ?? [])].sort(), detailFeatureActions]);
+    [...(auth?.user?.featurePositions ?? [])].sort(), readDataAccess?.id, detailFeatureActions]);
   const [interactionSnapshot, setInteractionSnapshot] = useState<{
     identity: string;
     detail: NonNullable<typeof detailQuery.detail>;
@@ -390,6 +390,7 @@ function StandardCrudDetailPageContent<TDetail>({
         summaries={presentedSummaries}
         renderers={registration.summaryRenderers}
         featureActions={detailFeatureActions}
+        dataAccess={readDataAccess}
         titleForBlock={(key) => t(`${schema.dicKey}.${toDictionaryBlockKey(key)}`, key)}
       />}
       {showLoading ? (

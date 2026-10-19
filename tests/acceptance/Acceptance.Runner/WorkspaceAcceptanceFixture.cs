@@ -227,8 +227,11 @@ internal static class WorkspaceAcceptanceFixture
         string module, string behavior, string path, string code, string name, CancellationToken token)
     {
         var entry = features.Behavior(module, behavior);
+        var create = features.Action(entry, "create", "list.pageActions");
+        var resource = module switch { "Part" => "part.part", "Document" => "document.document",
+            _ => throw new InvalidOperationException("元数据准备只接受已登记的Part/Document来源。") };
         var result = await SendAsync(ordinary, HttpMethod.Post, path, new { ECODE = code, ENAME = name },
-            features.Action(entry, "create", "list.pageActions").Position, token);
+            create.Position, token, features.Declaration(create, resource + ".create", "standardCrud.create", resource));
         // 受控成功回执不含可引用身份，不能伪造 ID 继续准备。
         return result.GetProperty("fields").GetProperty("EID").GetString()
             ?? throw new InvalidOperationException("正式元数据创建未返回可引用的 EID。");

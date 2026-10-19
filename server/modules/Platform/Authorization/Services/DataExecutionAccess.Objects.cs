@@ -14,20 +14,29 @@ public sealed partial class DataExecutionAccess
         var declared = ids?.Count == 1 ? plan.ActionDataAccessCatalog.SingleOrDefault(item => item.Id == ids.Value[0]) : null;
         var resource = targets.FirstOrDefault()?.ResourceKey ?? declared?.Requirements?.FirstOrDefault(item => item.Role == role)?.Resources.FirstOrDefault() ?? "";
         var effective = Resolve([binding], resource);
-        var matches = effective.Requirements!.Where(item => item.Stage == binding.Stage && item.Role == role
+        await foreach (var decision in EvaluateResolvedObjectsAsync(effective.ModuleId, effective.Resources, effective.Requirements!, binding, role, targets, cancellationToken))
+            yield return decision;
+    }
+
+    // 入口与固定内部调用共用完整对象角色执行，不复制OR、读取解析器或拒绝顺序。
+    private async IAsyncEnumerable<DataExecutionTargetDecision> EvaluateResolvedObjectsAsync(string moduleId,
+        IReadOnlyList<string> resources, IReadOnlyList<DataExecutionRequirement> requirements, DataExecutionBindingReference binding,
+        string role, IReadOnlyList<DataExecutionTargetInput> targets, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var matches = requirements.Where(item => item.Stage == binding.Stage && item.Role == role
             && (item.Branch is null || item.Branch == binding.Branch)).ToArray();
         if (matches.Length != 1 || matches[0].Shape is not ("object" or "objects"))
             throw new ActionDataAccessException(400, "ActionDataAccess.ShapeInvalid");
         var requirement = matches[0];
         if (targets.Count < requirement.MinimumCount || requirement.MaximumCount is { } maximum && targets.Count > maximum
             || targets.Any(target => !requirement.Resources.Contains(target.ResourceKey, StringComparer.Ordinal)
-                || !effective.Resources.Contains(target.ResourceKey, StringComparer.Ordinal)
+                || !resources.Contains(target.ResourceKey, StringComparer.Ordinal)
                 || string.IsNullOrWhiteSpace(target.ObjectId) && requirement.ReadResolverKey is null))
             throw new ActionDataAccessException(400, "ActionDataAccess.ShapeInvalid");
         IDataExecutionTargetResolver? resolver = null;
         if (requirement.ReadResolverKey is { } key)
         {
-            var registered = _resolvers.Where(item => item.Key == key && item.ModuleId == effective.ModuleId).ToArray();
+            var registered = _resolvers.Where(item => item.Key == key && item.ModuleId == moduleId).ToArray();
             if (registered.Length != 1) throw new InvalidOperationException("DATA_EXECUTION_TARGET_RESOLVER_INVALID");
             resolver = registered[0];
         }

@@ -196,12 +196,14 @@ internal sealed partial class PublishedComponentAcceptanceFixture
     // 下载按独立已知的A字节生成样本逐缓冲核对，不将元数据hash当成内容正确的唯一依据。
     private async Task VerifyGeneratedCopyDownloadsAsync(HttpClient client, string id, long[] lengths, AcceptanceFeatureCatalog features, CancellationToken token)
     {
-        var read = features.Behavior("Document", "document.document.read").Position; var download = features.Behavior("Document", "document.document.download").Position;
-        var files = (await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get, $"/api/document/documents/{id}/files", null, read, token)).GetProperty("files").EnumerateArray().ToArray();
+        var read = features.Behavior("Document", "document.document.read"); var download = features.Behavior("Document", "document.document.download");
+        var files = (await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get, $"/api/document/documents/{id}/files", null, read.Position, token,
+            features.Declaration(read, "document.document.read", "standardCrud.read", "document.document"))).GetProperty("files").EnumerateArray().ToArray();
         if (files.Length != lengths.Length) throw new InvalidOperationException("真实进程恢复丢失主附件。");
         for (var index = 0; index < files.Length; index++)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/document/documents/{id}/files/{files[index].GetProperty("fileLinkId").GetString()}/content"); request.Headers.Add("X-NewP-Feature", download);
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/document/documents/{id}/files/{files[index].GetProperty("fileLinkId").GetString()}/content"); request.Headers.Add("X-NewP-Feature", download.Position);
+            request.Headers.Add("X-NewP-Data-Declaration", features.Declaration(download, "document.files.download", "document.files.download", "document.document"));
             using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token); response.EnsureSuccessStatusCode();
             await using var content = await response.Content.ReadAsStreamAsync(token); var buffer = new byte[65536]; long received = 0; int count;
             while ((count = await content.ReadAsync(buffer, token)) != 0) { if (buffer.AsSpan(0, count).ContainsAnyExcept((byte)0x41)) throw new InvalidOperationException("重启后的副本内容不同。"); received += count; }

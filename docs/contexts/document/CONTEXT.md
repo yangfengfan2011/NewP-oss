@@ -6,6 +6,8 @@ Document 拥有稳定主身份、初始 DocumentVersion/DocumentIteration 及当
 
 稳定资源 `document.document` 提供 `/api/document/documents` 标准创建和读取，页面 `/documents` 使用共享标准列表与创建 Drawer，`document.document.detail` 提供只读属性 Drawer 和正式 `/documents/:id` 详情。创建提交后不可读或展示失败继续返回不含对象标识的成功回执，客户端只重试读取。
 
+标准创建入口绑定 `document.document.create`，固定 `candidate/submit` 要求由 Standard CRUD 提供者生成；页面仅引用执行与本资源，服务端在原补齐候选、所属与审计字段后判 create。上传预检与带文件创建在各自原候选位置使用 Document owner 登记的固定内部来源，不借用公开 POST 的声明，也不增加新对象 read。原独立 PUT/DELETE 保持关闭；组合编辑/删除的 `WorkspaceContents.MutateObjectsAsync` 仅保留逐调用者、动作和目标的显式旧来源，由 #315 迁移。真副本的 `DocumentFiles.ValidateCopyCandidateAsync/CopyAsync` 同样独立登记旧 create 来源，由 #317 迁移；缺来源不能回退到它们。
+
 侧栏不提供独立图文档入口；用户从 Workspace 选中文件夹后新建，由 Workspace 在同一对象操作事务内调用 `document.document` 创建行为并建立内容关系。原页面路由保持 routeOnly；功能入口通过 `parentModuleId: Workspace`、`parentKey: workspace` 显式归入工作空间，详情和全部子操作共享这条授权祖先链，不再发布独立顶层授权入口。数据资源、对象行为和接口执行归属仍由 Document 拥有。
 
 ## 完整真副本
@@ -27,6 +29,10 @@ Document 的 LatestVersionId 与 DocumentVersion 的 CurrentIterationId 是服�
 **文件关联（DocumentFileLink）**属于 Document，父端是实际 DocumentIteration，子端是 Files 的 FileRecord；它具有独立 LID，必须保存 FileUsageId。显式 uploads 包含一个 main 和零至一百个 attachment；main 的 Ordinal=0，附件按请求次序为 1..N，所有关联身份由服务端填写。附件列表可空或省略，空 main、非 canonical token、主附件全局重复及超过当前新建配置上限的集合均拒绝；省略 uploads 保留 metadata-only 创建。主附件全部先登记为真实 Added Link，再按服务器 FileId、UploadId 排序确认，显示次序不参与 Files 事务锁序。
 
 Document.Contracts 的文件创建复用原所属 Create，在同一业务事务内建立主对象、首版、regular 版次、实际 Added FileLink 和 Files 使用；创建证明绑定本次实际版次及事务。Files.Contracts 的 Confirm 只登记共享 tracker，全部关联填齐 FileUsageId 后才允许首次 Flush；Release 同样不独立提交。Document 将已按业务规则限量的完整暂存集合一次交给 Files，由 Files 按自有 MaxReadBatchSize 内部分批并统一裁决，整集合身份或用途不可见优先于本人暂存失效；安全元数据仍由 Document 按该上限分批读取。Files 不另设集合总量上限，预读不预留使用，资格检查完成前不登记业务写入，最终 Confirm 仍重验。上传预检复用标准字段、审计及完整候选 create 裁决，只返回验证结果，不能公开候选身份或代替保存时重验。业务提交结果未知时保留持久使用与内容，不自动重放保存或盲目取消暂存。
+
+文件列表使用当前详情的正式 root read 绑定；`featureActions.download` 单独绑定 `document.files.download`，固定 read + download 下限由 Document provider 唯一定义，仍使用原下载功能位置。`downloadAllowed` 从同一有效要求派生，但只消费本次列表已经完成的 read 与真实回链事实；它不附加 download 功能资格，也不授权后续请求。正式 Open 与 Files owner policy 各自在原判权时点重建独立事实，核 HTTP、主体、真实 Document EID、阶段及同一 typed Source 引用，不缓存允许结果或增加重复读取。
+
+首次 Confirm 同时接收实际内部候选来源和本次新对象身份，并核对同一事务中真实 Added FileLink、版次和创建证明；重复确认保留原 actor/lease 与持久回链保护，不新增 read。Release 在原文件锁、独立 batch read 与实际 Link→Iteration→Version→Document 回链后，消费固定内部 `document.files.release` 的 read + delete 要求；与 Open、metadata 的读取事实互不替代。两者仍只登记原业务事务的 tracker 变更，不 Flush、不独立提交。Files 的旧 CopySource 仅接受真实 `FileLifecycleService.PrepareCopyAsync/ConfirmCopyAsync` 两处来源读取，ConfirmCopy 操作本身只接受 `ConfirmCopyAsync`；不能因缺上下文自动进入旧分支。
 
 属性文件列表沿当前身份和真实关联批量读取安全元数据，最多 101 项，按 Ordinal/LID 稳定读取。只公开 FileLink 身份、角色、次序及文件显示信息，不公开 File/Usage 身份或存储键。新建附件配置调低不改变既有合法集合的读取、下载或释放。read 允许而 download 拒绝时仍可看列表；下载分别重验正式功能与数据 download 资格，并核对 Document/版次/FileLink/Usage/File 回链。不可读或错目标安全拒绝；已授权的关联损坏、空或重复使用身份及内容缺失保持明确故障。存储配置、接收意图、取消、TTL 与回收状态的唯一事实见 [Files README](../../../server/modules/Platform/Files/README.md)。
 

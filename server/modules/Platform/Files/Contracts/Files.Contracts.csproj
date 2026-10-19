@@ -6,4 +6,7 @@
     <AssemblyName>Files.Contracts</AssemblyName>
     <RootNamespace>ICP.Platform.Modules.Files.Contracts</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Authorization\Contracts\Authorization.Contracts.csproj" />
+  </ItemGroup>
 </Project>

@@ -48,5 +48,5 @@ it.each([['zhs', '文件'], ['en', 'Files']] as const)('localizes the actual Doc
   expect(element.querySelector('section[aria-label="files"]')).toBeNull();
   expect(fetch).toHaveBeenCalledTimes(1);
   expect(fetch.mock.calls[0][0]).toBe('/api/document/documents/doc-1/files');
-  expect(fetch.mock.calls[0][1].headers).toEqual({ 'X-NewP-Feature': 'document-read' });
+  expect(fetch.mock.calls[0][1].headers).toEqual({ 'X-NewP-Feature': 'document-read', 'X-NewP-Data-Declaration': 'Document/view:document.document.detail/read' });
 });

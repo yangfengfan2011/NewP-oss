@@ -158,11 +158,18 @@ public sealed partial class DataExecutionAccess(CanonicalModulePlan plan, IHttpC
         {
             var resource = resources?.Resources.SingleOrDefault(resource => resource.ResourceKey == resourceKey) ?? throw new InvalidOperationException("DATA_EXECUTION_RESOURCE_CATALOG_REQUIRED");
             var feature = context.GetEndpoint()?.Metadata.GetOrderedMetadata<ResourceFeatureBindingAttribute>();
-            if (resource.ModuleId != requirement.ModuleId || feature?.Count != 1
+            var endpointBehaviors = context.GetEndpoint()?.Metadata.GetOrderedMetadata<RequireFeatureAttribute>()
+                .Select(binding => binding.BehaviorKey).Distinct(StringComparer.Ordinal).ToArray() ?? [];
+            var generic = feature?.Count == 1 && plan.FeatureCatalog.Any(point => point.Position == position[0]
+                && point.ModuleId == resource.ModuleId && point.BehaviorKey == resourceKey + "." + feature[0].ActionKey);
+            var ownEndpoint = feature?.Count == 0 && requirement.ProviderModuleId == requirement.ModuleId
+                && owners[0].ModuleId == requirement.ModuleId && endpointBehaviors.Length == 1
+                && contract.FeatureBehaviors.Contains(endpointBehaviors[0], StringComparer.Ordinal)
+                && plan.FeatureCatalog.Any(point => point.Position == position[0] && point.ModuleId == resource.ModuleId
+                    && (point.BehaviorKey == endpointBehaviors[0] || point.ReadBehaviors.Contains(endpointBehaviors[0], StringComparer.Ordinal)));
+            if (resource.ModuleId != requirement.ModuleId || !generic && !ownEndpoint
                 || !plan.Modules.SelectMany(module => module.DataExecutionProviders).Any(provider => provider.Key == requirement.Provider
-                    && provider.ModuleId == requirement.ProviderModuleId && provider.ConsumerBinding == "resource-owner")
-                || !plan.FeatureCatalog.Any(point => point.Position == position[0] && point.ModuleId == resource.ModuleId
-                    && point.BehaviorKey == resourceKey + "." + feature[0].ActionKey))
+                    && provider.ModuleId == requirement.ProviderModuleId && provider.ConsumerBinding == "resource-owner"))
                 throw new ActionDataAccessException(400, "ActionDataAccess.DeclarationInvalid");
         }
         return requirement;

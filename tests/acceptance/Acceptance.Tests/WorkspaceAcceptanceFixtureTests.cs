@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using ICP.Platform.Kernel.ModulePlanning;
+using ICP.Platform.Kernel.PluginPackages;
 using ICP.Platform.Acceptance;
 using Xunit;
 
@@ -384,15 +385,23 @@ public sealed class WorkspaceAcceptanceFixtureTests
     [InlineData("Document", "document.document.read", "/api/document/documents")]
     public async Task MetadataPreparation_UsesGrantedCreatePointAndThe201FieldsEid(string module, string behavior, string path)
     {
-        var entry = new FeaturePoint("entry", module, "entry", "navigation", "entry", null, behavior, [], 0);
-        var create = new FeaturePoint("create", module, "create", "action", "create", "entry", "create", [], 0) { ActionScope = "list.pageActions" };
+        var compiled = new CanonicalModulePlanCompiler().Compile("metadata-preparation",
+            new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")).ToArray());
+        Assert.True(compiled.IsSuccess, JsonSerializer.Serialize(compiled.Diagnostics));
+        var features = new AcceptanceFeatureCatalog(compiled.Plan!.FeatureCatalog, compiled.Plan.ActionDataAccessCatalog);
+        var entry = features.Behavior(module, behavior);
+        var create = features.Action(entry, "create", "list.pageActions");
+        var resource = module == "Part" ? "part.part" : "document.document";
+        var declaration = features.Declaration(create, resource + ".create", "standardCrud.create", resource);
         var created = false;
         using var client = new HttpClient(new AsyncHandler(async (request, token) =>
         {
             if (request.RequestUri!.AbsolutePath == "/api/auth/antiforgery-token") return Json(HttpStatusCode.OK, "{\"requestToken\":\"fixture-token\"}");
             Assert.Equal(HttpMethod.Post, request.Method);
             Assert.Equal(path, request.RequestUri.AbsolutePath);
-            Assert.Equal("create", Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
+            Assert.Equal(create.Position, Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
+            Assert.Equal(declaration, Assert.Single(request.Headers.GetValues("X-NewP-Data-Declaration")));
+            Assert.Equal("fixture-token", Assert.Single(request.Headers.GetValues("X-CSRF-TOKEN")));
             using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(token));
             Assert.Equal(["ECODE", "ENAME"], body.RootElement.EnumerateObject().Select(property => property.Name).ToArray());
             Assert.Equal("CODE", body.RootElement.GetProperty("ECODE").GetString());
@@ -401,7 +410,7 @@ public sealed class WorkspaceAcceptanceFixtureTests
             return Json(HttpStatusCode.Created, "{\"id\":\"wrong-top-level-id\",\"fields\":{\"EID\":\"real-EID\"},\"summaries\":{}}");
         })) { BaseAddress = new Uri("http://127.0.0.1:5000") };
 
-        var id = await WorkspaceAcceptanceFixture.CreateMetadataObjectAsync(client, new([entry, create]), module, behavior, path, "CODE", "名称", CancellationToken.None);
+        var id = await WorkspaceAcceptanceFixture.CreateMetadataObjectAsync(client, features, module, behavior, path, "CODE", "名称", CancellationToken.None);
 
         Assert.True(created);
         Assert.Equal("real-EID", id);

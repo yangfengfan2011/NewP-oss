@@ -21,13 +21,23 @@ public sealed partial class DocumentFiles(EfPlatformDbContext db, DocumentInitia
     DocumentFileCreationScope creation, IFileLifecycleService files, IFileCopyService copies, Func<IObjectOperationExecutor> operations,
     IStandardCrudResourceRegistry resources, StandardCrudDefaultWriter writer, IDataScopeObjectDecisionProvider decisions,
     IPlatformTransactionExecutor transactions, IPlatformObjectIdGenerator ids, IEntityAuditValueProvider audit,
-    DocumentFileOwnerPolicy policy, IOptions<DocumentOptions> options, IBusinessAuditRecorder businessAudit) : IDocumentFiles, IDocumentCopies
+    DocumentFileOwnerPolicy policy, IOptions<DocumentOptions> options, IBusinessAuditRecorder businessAudit,
+    IDataExecutionAccess access, DocumentFileReadScope readScope) : IDocumentFiles, IDocumentCopies
 {
+    internal static readonly DataExecutionBindingReference FileReadBinding = new("document.document.read", "standardCrud.read", "read");
+    internal static readonly DataExecutionBindingReference FileDownloadBinding = new("document.files.download", "document.files.download", "read");
+    private static readonly DataExecutionInternalBinding DownloadFeedback = new("document.files.download.feedback", "document.files.download", typeof(DocumentFiles), nameof(ReadAsync));
+
+    // 固定内部来源只替换原owner候选裁决；不替代Workspace的功能/父位置或公开POST的入口声明。
+    private static ObjectOperationWriteSource.Declared InternalCreateSource(string member) => new(new(
+        new("document.document.internal.create", "standardCrud.create", "submit"), "document.document", null)
+        { Internal = new("document.document.internal.create", "standardCrud.create", typeof(DocumentFiles), member) });
+
     /// <inheritdoc/>
     public async Task<StandardCrudError?> ValidateUploadAsync(IReadOnlyDictionary<string, object?> values, string fileName,
         string contentType, CancellationToken cancellationToken = default)
     {
-        var result = await writer.PrepareCreateCandidateAsync(resources.FindByResourceKey("document.document")!, values, cancellationToken);
+        var result = await writer.PrepareCreateCandidateAsync(resources.FindByResourceKey("document.document")!, values, InternalCreateSource(nameof(ValidateUploadAsync)), cancellationToken);
         if (!result.Succeeded) return result.Error;
         policy.ValidateUpload(fileName, contentType);
         return null;
@@ -50,10 +60,12 @@ public sealed partial class DocumentFiles(EfPlatformDbContext db, DocumentInitia
             staged = await files.ReadOwnedStagedAsync(uploadIds, DocumentFileOwnerPolicy.Key, cancellationToken);
             if (staged.Select(item => item.FileId).Distinct(StringComparer.Ordinal).Count() != staged.Count) return InvalidUploadSet();
         }
-        var result = await operations().ExecuteAsync("document.document", ObjectOperationAction.Create, null, values, cancellationToken);
+        var source = InternalCreateSource(nameof(CreateWithFilesAsync));
+        var result = await operations().ExecuteAsync("document.document", ObjectOperationAction.Create, null, values, source, cancellationToken);
         if (!result.Succeeded || staged.Count == 0) return result;
         var current = await identities.ReadCurrentAsync((string)result.Detail!.Fields["EID"]!, cancellationToken);
-        using var proof = creation.Begin(current);
+        var fileSource = new FileOwnerCreationContext(source.Context, (string)current.Master["EID"]!);
+        using var proof = creation.Begin(current, source: fileSource);
         var stamp = audit.Current();
         var links = staged.Select((item, ordinal) => new Dictionary<string, object?>
         {
@@ -68,7 +80,7 @@ public sealed partial class DocumentFiles(EfPlatformDbContext db, DocumentInitia
             .OrderBy(item => item.File.FileId, StringComparer.Ordinal).ThenBy(item => item.File.UploadId, StringComparer.Ordinal))
         {
             var confirmed = await files.ConfirmUsageAsync(item.File.UploadId,
-                new(DocumentFileOwnerPolicy.Key, (string)item.Link["LID"]!), cancellationToken);
+                new(DocumentFileOwnerPolicy.Key, (string)item.Link["LID"]!), fileSource, cancellationToken);
             if (confirmed.FileId != item.File.FileId) throw new InvalidOperationException("Document.FileAssociationCorrupted");
             item.Link["FileUsageId"] = confirmed.UsageId;
         }
@@ -79,12 +91,14 @@ public sealed partial class DocumentFiles(EfPlatformDbContext db, DocumentInitia
     /// <inheritdoc/>
     public async Task<DocumentFileList> ReadAsync(string documentId, CancellationToken cancellationToken = default)
     {
+        access.Validate([FileReadBinding], "document.document");
         await RequireReadAsync(documentId, cancellationToken);
         var current = await identities.ReadCurrentAsync(documentId, cancellationToken);
+        var context = new FileOwnerExecutionContext(FileReadBinding, "document.document", documentId);
         var links = await ReadLinksAsync((string)current.Iteration["EID"]!, false, cancellationToken);
         var metadata = new Dictionary<string, FileUsageMetadata>(StringComparer.Ordinal);
         foreach (var batch in links.Select(Reference).Chunk(files.MaxReadBatchSize))
-            foreach (var item in await files.ReadUsageMetadataAsync(batch, cancellationToken))
+            foreach (var item in await files.ReadUsageMetadataAsync(batch, context, cancellationToken))
                 if (!metadata.TryAdd(item.UsageId, item)) throw new InvalidOperationException("Document.FileAssociationCorrupted");
         var result = links.Select(link =>
         {
@@ -94,21 +108,31 @@ public sealed partial class DocumentFiles(EfPlatformDbContext db, DocumentInitia
             return new DocumentFileItem((string)link["LID"]!, (string)link["Role"]!, (long)link["Ordinal"]!,
                 item.FileName, item.Length, item.ContentType);
         }).ToArray();
+        using var read = readScope.Begin(documentId, DocumentFileReadPhase.Metadata, current);
         return new(documentId, (string)current.Version["EID"]!, (string)current.Iteration["EID"]!,
-            await decisions.IsAllowedAsync("document.document", documentId, "download", cancellationToken), result);
+            (await access.EvaluateInternalObjectAsync(DownloadFeedback, "target", readScope.Target(documentId), cancellationToken)).Decision == DataExecutionDecision.Allowed, result);
     }
 
     /// <inheritdoc/>
     public async Task<FileUsageContent> OpenAsync(string documentId, string fileLinkId, CancellationToken cancellationToken = default)
     {
+        access.Validate([FileDownloadBinding], "document.document");
         await RequireReadAsync(documentId, cancellationToken);
-        if (!await decisions.IsAllowedAsync("document.document", documentId, "download", cancellationToken))
-            throw new FileLifecycleException(403, "Document.DownloadDenied");
+        using var read = readScope.Begin(documentId, DocumentFileReadPhase.Open);
+        await foreach (var decision in access.EvaluateObjectsAsync(FileDownloadBinding, "target", [readScope.Target(documentId)], cancellationToken))
+            RequireDownloadDecision(decision.Decision);
         var current = await identities.ReadCurrentAsync(documentId, cancellationToken);
         var link = await db.Set<Dictionary<string, object?>>("DocumentFileLink").AsNoTracking().SingleOrDefaultAsync(row =>
             EF.Property<string>(row, "LID") == fileLinkId && EF.Property<string>(row, "PEID") == (string)current.Iteration["EID"]!, cancellationToken);
         if (link is null) throw new FileLifecycleException(404, "Files.UsageUnavailable");
-        return await files.OpenUsageAsync(Reference(link), cancellationToken);
+        return await files.OpenUsageAsync(Reference(link), new FileOwnerExecutionContext(FileDownloadBinding, "document.document", documentId), cancellationToken);
+    }
+
+    // 不可读保持404，读后下载拒绝保持403，不把声明错误翻译成业务拒绝。
+    internal static void RequireDownloadDecision(DataExecutionDecision decision)
+    {
+        if (decision == DataExecutionDecision.NotFound) throw new FileLifecycleException(404, "Files.UsageUnavailable");
+        if (decision != DataExecutionDecision.Allowed) throw new FileLifecycleException(403, "Document.DownloadDenied");
     }
 
     /// <summary>原 delete 事务内先登记所有使用释放与关联删除，不在此保存或删除物理内容。</summary>
@@ -118,7 +142,7 @@ public sealed partial class DocumentFiles(EfPlatformDbContext db, DocumentInitia
         var current = await identities.ReadCurrentAsync(documentId, cancellationToken);
         var links = await ReadLinksAsync((string)current.Iteration["EID"]!, true, cancellationToken);
         foreach (var link in links.OrderBy(link => (string)link["CEID"]!, StringComparer.Ordinal))
-            await files.ReleaseUsageAsync(Reference(link), cancellationToken);
+            await files.ReleaseUsageAsync(Reference(link), new("document.document", documentId), cancellationToken);
         db.Set<Dictionary<string, object?>>("DocumentFileLink").RemoveRange(links);
         if (links.Length > 0) await RegisterFileEventAsync("document.files.released", current, links, cancellationToken);
     }

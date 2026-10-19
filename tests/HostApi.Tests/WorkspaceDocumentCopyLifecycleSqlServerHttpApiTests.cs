@@ -59,9 +59,9 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             DocFiles.Point(fixture, "document.document.read"), DocFiles.Point(fixture, "document.document.download"));
         using var ordinary = actor.Client;
         foreach (var action in new[] { "download", "documentCopy", "edit", "delete" }) await Rule(fixture, admin, "DenyDoc" + action, "document.document", row.Id, action, "deny");
-        var list = await FeatureHttpTestRequests.ReadAsync(ordinary, DocFiles.Point(fixture, "document.document.read"), $"/api/document/documents/{row.Id}/files");
+        var list = await DocumentFileHttpTestRequests.ReadAsync(fixture, ordinary, DocFiles.Point(fixture, "document.document.read"), $"/api/document/documents/{row.Id}/files");
         var fileLink = list.GetProperty("files")[0].GetProperty("fileLinkId").GetString();
-        using (var denied = await FeatureHttpTestRequests.SendAsync(ordinary, DocFiles.Point(fixture, "document.document.download"), HttpMethod.Get, $"/api/document/documents/{row.Id}/files/{fileLink}/content"))
+        using (var denied = await DocumentFileHttpTestRequests.SendAsync(fixture, ordinary, DocFiles.Point(fixture, "document.document.download"), HttpMethod.Get, $"/api/document/documents/{row.Id}/files/{fileLink}/content"))
             Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
         await Command(fixture, ordinary, "workspace.folder.copy", "/api/workspace/content/clipboard/validate", new { mode = "copy", sourcePosition = source, linkIds = new[] { row.LinkId } });
         using (var deniedReference = await Send(fixture, ordinary, "workspace.folder.paste", "paste", new { mode = "copy", sourcePosition = source, linkIds = new[] { row.LinkId }, targetPosition = target }))

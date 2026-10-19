@@ -43,7 +43,7 @@ public interface IDataExecutionTargetResolver
 public enum DataExecutionDecision { Allowed, NotFound, Denied }
 
 /// <summary>消费正式装配的有效要求；真实身份和候选由执行 owner 解析后传入。</summary>
-public interface IDataExecutionAccess
+public partial interface IDataExecutionAccess
 {
     /// <summary>核验入口绑定与具体执行端；查询权限过滤继续由原SQL读取计划负责。</summary>
     void Validate(IReadOnlyList<DataExecutionBindingReference> bindings, string resourceKey);

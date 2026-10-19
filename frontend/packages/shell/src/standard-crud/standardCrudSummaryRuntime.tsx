@@ -12,6 +12,7 @@ interface StandardCrudSummaryBlocksProps {
   renderers?: Record<string, StandardCrudSummaryRenderer>;
   titleForBlock: (key: string) => string;
   featureActions?: import('@icp-platform/sdk').StandardCrudSummaryRendererContext['featureActions'];
+  dataAccess?: import('@icp-platform/sdk').ActionDataAccessRequirement;
 }
 
 /**
@@ -24,6 +25,7 @@ export function StandardCrudSummaryBlocks({
   renderers,
   titleForBlock,
   featureActions,
+  dataAccess,
 }: StandardCrudSummaryBlocksProps): ReactElement | null {
   const { t } = useLocalization();
   if (blocks.length === 0) {
@@ -38,7 +40,7 @@ export function StandardCrudSummaryBlocks({
         const renderer = renderers?.[blockKey];
 
         if (block.status === 'ready' && renderer) {
-          return <div key={blockKey}>{renderer({ blockKey, block, title, ...(featureActions ? { featureActions } : {}) })}</div>;
+          return <div key={blockKey}>{renderer({ blockKey, block, title, ...(featureActions ? { featureActions } : {}), ...(dataAccess ? { dataAccess } : {}) })}</div>;
         }
 
         return (

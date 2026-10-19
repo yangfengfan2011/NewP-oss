@@ -19,4 +19,7 @@
     <Compile Remove="Migrations.SqlServer/**/*.cs" />
     <Compile Remove="Contracts/**/*.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="HostApi.Tests" />
+  </ItemGroup>
 </Project>

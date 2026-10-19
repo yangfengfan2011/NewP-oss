@@ -214,7 +214,7 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
                 else
                 {
                     var result = await operations.ExecuteAsync(Resource(target.ModelKey), ObjectOperationAction.Update, target.Id, values,
-                        target.ModelKey == "Part" ? new ObjectOperationWriteSource.Legacy(typeof(WorkspaceContents), nameof(MutateObjectsAsync), "part.part", "update", target.Id) : null, cancellationToken);
+                        target.ModelKey is "Part" or "Document" ? new ObjectOperationWriteSource.Legacy(typeof(WorkspaceContents), nameof(MutateObjectsAsync), Resource(target.ModelKey), "update", target.Id) : null, cancellationToken);
                     if (!result.Succeeded) return result;
                 }
             }
@@ -239,7 +239,7 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
                 else
                 {
                     var result = await operations.ExecuteAsync(Resource(target.ModelKey), ObjectOperationAction.Delete, target.Id, new Dictionary<string, object?>(),
-                        target.ModelKey == "Part" ? new ObjectOperationWriteSource.Legacy(typeof(WorkspaceContents), nameof(MutateObjectsAsync), "part.part", "delete", target.Id) : null, cancellationToken);
+                        target.ModelKey is "Part" or "Document" ? new ObjectOperationWriteSource.Legacy(typeof(WorkspaceContents), nameof(MutateObjectsAsync), Resource(target.ModelKey), "delete", target.Id) : null, cancellationToken);
                     if (!result.Succeeded) return result;
                 }
             }

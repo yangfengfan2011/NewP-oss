@@ -139,7 +139,7 @@ export function bindActionDataAccess(document: RuntimeViewDocument, requirements
     if (matches.length !== 1) throw new Error(`动作数据声明缺失或冲突：${String(view.key)}/${surface}/${actionKey}`);
     return { ...value, dataAccess: matches[0] };
   };
-  for (const surface of ['pageActions', 'rowActions', 'outputActions', 'detailContributions']) {
+  for (const surface of ['pageActions', 'rowActions', 'outputActions', 'detailContributions', 'featureActions']) {
     const actions = view[surface];
     if (Array.isArray(actions)) view[surface] = actions.map(action => bind(action as Record<string, unknown>, surface, String(action.key)));
   }

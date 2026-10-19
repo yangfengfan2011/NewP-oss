@@ -45,11 +45,12 @@ public static class DataExecutionContracts
         {
             if (item.TryGetProperty("resourceKey", out var resource) && !item.GetProperty("provider").GetString()!.StartsWith("standardCrud.", StringComparison.Ordinal))
             {
-                if (item.EnumerateObject().Any(property => property.Name is not ("key" or "moduleId" or "provider" or "boundary" or "featureBehaviors" or "resourceKey"))
+                if (item.EnumerateObject().Any(property => property.Name is not ("key" or "moduleId" or "provider" or "boundary" or "featureBehaviors" or "resourceKey" or "fixedBindings"))
                     || item.GetProperty("moduleId").GetString() != moduleId)
                     throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
                 return new DataExecutionContract(item.GetProperty("key").GetString()!, moduleId, item.GetProperty("provider").GetString()!,
-                    item.GetProperty("boundary").GetString()!, item.GetProperty("featureBehaviors").Deserialize<string[]>()!, []) { TargetResource = resource.GetString() };
+                    item.GetProperty("boundary").GetString()!, item.GetProperty("featureBehaviors").Deserialize<string[]>()!, []) { TargetResource = resource.GetString(), FixedBindings = item.TryGetProperty("fixedBindings", out var bindings)
+                        ? bindings.Deserialize<DataExecutionFixedBinding[]>(options)! : [] };
             }
             if (item.GetProperty("provider").GetString() is { } provider && provider.StartsWith("standardCrud.", StringComparison.Ordinal))
             {

@@ -24,6 +24,28 @@ namespace ICP.Platform.Tests.Files;
 public sealed class FilePersistentLifecycleTests
 {
     [Fact]
+    public async Task Copy_PropagatesEachActualLegacyCallerForSourceAndConfirmation()
+    {
+        var calls = new List<(FileOwnerOperation Operation, FileOwnerOperationContext? Context)>();
+        await using var fixture = await LifecycleFixture.CreateAsync(observeOwnerContext: (operation, context) => calls.Add((operation, context)));
+        var staged = await fixture.StageAsync([1, 2, 3]);
+        var owner = new FileOwnerReference(OwnerPolicy.Key, "source-link");
+        var usage = await fixture.ConfirmAsync(staged.UploadId, owner);
+        calls.Clear();
+        using var scope = fixture.Services.CreateScope();
+        var copy = scope.ServiceProvider.GetRequiredService<IFileCopyService>();
+        await copy.PrepareCopyAsync("caller-proof", new(usage.UsageId, staged.FileId, owner), OwnerPolicy.Key);
+        await scope.ServiceProvider.GetRequiredService<IPlatformTransactionExecutor>().ExecuteAsync(token =>
+            new ValueTask<ConfirmedFileUsage>(copy.ConfirmCopyAsync("caller-proof", new(OwnerPolicy.Key, "target-link"), token)));
+        var sources = calls.Where(item => item.Operation == FileOwnerOperation.CopySource).Select(item => Assert.IsType<FileOwnerLegacyCopyReadContext>(item.Context)).ToArray();
+        Assert.Equal(new[] { nameof(FileLifecycleService.PrepareCopyAsync), nameof(FileLifecycleService.ConfirmCopyAsync) }, sources.Select(item => item.Member));
+        Assert.All(sources, source => Assert.Equal(typeof(FileLifecycleService), source.Caller));
+        var confirmation = Assert.IsType<FileOwnerLegacyCopyReadContext>(Assert.Single(calls, item => item.Operation == FileOwnerOperation.ConfirmCopy).Context);
+        Assert.Equal(typeof(FileLifecycleService), confirmation.Caller);
+        Assert.Equal(nameof(FileLifecycleService.ConfirmCopyAsync), confirmation.Member);
+    }
+
+    [Fact]
     public async Task StagedSetReadsBeyondBatchSizeInInputOrderWithBoundedQueriesAndNoWrites()
     {
         var probe = new StagedReadProbe();
@@ -58,7 +80,7 @@ public sealed class FilePersistentLifecycleTests
             await AssertUploadFailureAsync(() => service.ReadOwnedStagedAsync([first.UploadId, invalid], OwnerPolicy.Key), 404, "Files.UploadUnavailable");
         await AssertUploadFailureAsync(() => service.ReadUsageMetadataAsync([
             new("FileUsage_" + new string('1', 32), first.FileId, new(OwnerPolicy.Key, "one")),
-            new("FileUsage_" + new string('2', 32), second.FileId, new(OwnerPolicy.Key, "two"))]), 400, "Files.InvalidReadBatch");
+            new("FileUsage_" + new string('2', 32), second.FileId, new(OwnerPolicy.Key, "two"))], TestReadContext), 400, "Files.InvalidReadBatch");
         Assert.Equal(0, probe.Commands);
         Assert.Empty(await service.ReadOwnedStagedAsync([], OwnerPolicy.Key));
         Assert.Equal("Files.OwnerPolicyMissing", (await Assert.ThrowsAsync<InvalidOperationException>(() => service.ReadOwnedStagedAsync([], "unknown-owner"))).Message);
@@ -108,7 +130,7 @@ public sealed class FilePersistentLifecycleTests
         probe.Arm();
         using var scope = fixture.Services.CreateScope();
         var service = scope.ServiceProvider.GetRequiredService<IFileLifecycleService>();
-        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ReadUsageMetadataAsync([new(usage.UsageId, usage.FileId, owner)]));
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ReadUsageMetadataAsync([new(usage.UsageId, usage.FileId, owner)], TestReadContext));
         Assert.Equal("Files.PersistentAssociationCorrupted", failure.Message);
         // 一项真实输入最多物化一项关联加一项损坏哨兵，不能先加载全部再报错。
         Assert.Equal(2, probe.LeaseRows);
@@ -211,8 +233,8 @@ public sealed class FilePersistentLifecycleTests
                 ["Role"] = "main", ["Ordinal"] = 0L, ["FileUsageId"] = null, ["LCreatedBy"] = "actor", ["LCreatedAt"] = fixture.Clock.GetUtcNow().UtcDateTime,
                 ["LUpdatedBy"] = "actor", ["LUpdatedAt"] = fixture.Clock.GetUtcNow().UtcDateTime
             });
-            var usage = await service.ConfirmUsageAsync(staged.UploadId, owner, token);
-            var repeated = await service.ConfirmUsageAsync(staged.UploadId, owner, token);
+            var usage = await service.ConfirmUsageAsync(staged.UploadId, owner, TestCreationContext, token);
+            var repeated = await service.ConfirmUsageAsync(staged.UploadId, owner, TestCreationContext, token);
             Assert.Equal(usage, repeated);
             Assert.Equal(savedBefore, fixture.Faults.Saves);
             Assert.Single(db.ChangeTracker.Entries(), entry => entry.Metadata.Name == "FileUsage");
@@ -267,7 +289,7 @@ public sealed class FilePersistentLifecycleTests
             var savesBefore = fixture.Faults.Saves;
             await Assert.ThrowsAsync<InjectedFailure>(() => transaction.ExecuteAsync<bool>(async token =>
             {
-                var usage = await files.ConfirmUsageAsync(staged.UploadId, owner, token);
+                var usage = await files.ConfirmUsageAsync(staged.UploadId, owner, TestCreationContext, token);
                 Assert.Equal(savesBefore, fixture.Faults.Saves);
                 Assert.Equal(EntityState.Added, db.ChangeTracker.Entries().Single(entry => entry.Metadata.Name == "FileUsage").State);
                 Assert.NotEmpty(usage.UsageId);
@@ -288,7 +310,7 @@ public sealed class FilePersistentLifecycleTests
         var service = other.ServiceProvider.GetRequiredService<IFileLifecycleService>();
         var changedOwner = owner with { Id = "OwnerLink_00000000000000000000000000000002" };
         await AssertUploadFailureAsync(() => tx.ExecuteAsync(token =>
-            new ValueTask<ConfirmedFileUsage>(service.ConfirmUsageAsync(staged.UploadId, changedOwner, token))).AsTask(), 409, "Files.UploadAlreadyConfirmed");
+            new ValueTask<ConfirmedFileUsage>(service.ConfirmUsageAsync(staged.UploadId, changedOwner, TestCreationContext, token))).AsTask(), 409, "Files.UploadAlreadyConfirmed");
     }
 
     [Fact]
@@ -306,7 +328,7 @@ public sealed class FilePersistentLifecycleTests
             var tx = scope.ServiceProvider.GetRequiredService<IPlatformTransactionExecutor>();
             var files = scope.ServiceProvider.GetRequiredService<IFileLifecycleService>();
             await Assert.ThrowsAsync<InjectedFailure>(() => tx.ExecuteAsync<bool>(async token =>
-            { await files.ReleaseUsageAsync(reference, token); throw new InjectedFailure(); }).AsTask());
+            { await files.ReleaseUsageAsync(reference, TestReleaseContext, token); throw new InjectedFailure(); }).AsTask());
         }
         await fixture.CleanupAsync();
         Assert.True(File.Exists(await fixture.ContentPathAsync(staged.FileId)));
@@ -314,7 +336,7 @@ public sealed class FilePersistentLifecycleTests
         {
             var tx = scope.ServiceProvider.GetRequiredService<IPlatformTransactionExecutor>();
             var files = scope.ServiceProvider.GetRequiredService<IFileLifecycleService>();
-            await tx.ExecuteAsync(async token => { await files.ReleaseUsageAsync(reference, token); return true; });
+            await tx.ExecuteAsync(async token => { await files.ReleaseUsageAsync(reference, TestReleaseContext, token); return true; });
         }
         using (var observed = fixture.Services.CreateScope())
         {
@@ -338,18 +360,18 @@ public sealed class FilePersistentLifecycleTests
         var reference = new FileUsageReference(usage.UsageId, usage.FileId, owner);
         using var scope = fixture.Services.CreateScope();
         var service = scope.ServiceProvider.GetRequiredService<IFileLifecycleService>();
-        var metadata = Assert.Single(await service.ReadUsageMetadataAsync([reference]));
+        var metadata = Assert.Single(await service.ReadUsageMetadataAsync([reference], TestReadContext));
         Assert.Equal(3L, metadata.Length);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ReadUsageMetadataAsync([reference with { FileId = "FileRecord_wrong" }]));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ReadUsageMetadataAsync([reference with { FileId = "FileRecord_wrong" }], TestReadContext));
         using var cancellation = new CancellationTokenSource();
-        var opened = await service.OpenUsageAsync(reference, cancellation.Token);
+        var opened = await service.OpenUsageAsync(reference, TestReadContext, cancellation.Token);
         try
         {
             cancellation.Cancel();
             Assert.False(opened.FileStream.CanRead);
             // 删除必须先于显式 Dispose，证明取消已经释放真实 Local 句柄。
             File.Delete(await fixture.ContentPathAsync(staged.FileId));
-            var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => service.OpenUsageAsync(reference));
+            var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => service.OpenUsageAsync(reference, TestReadContext));
             Assert.Equal("Files.ContentMissing", failure.Message);
         }
         finally { await opened.FileStream.DisposeAsync(); }
@@ -478,7 +500,8 @@ public sealed class FilePersistentLifecycleTests
         public string StorageRoot => Path.Combine(_root, "private");
 
         public static async Task<LifecycleFixture> CreateAsync(bool includeDocumentModels = false, LeaseMaterializationProbe? readProbe = null,
-            int batchSize = 128, StagedReadProbe? stagedReadProbe = null)
+            int batchSize = 128, StagedReadProbe? stagedReadProbe = null,
+            Action<FileOwnerOperation, FileOwnerOperationContext?>? observeOwnerContext = null)
         {
             var fixture = new LifecycleFixture();
             Directory.CreateDirectory(fixture._root);
@@ -498,7 +521,7 @@ public sealed class FilePersistentLifecycleTests
                 .ReplaceService<IModelCacheKeyFactory, EfPlatformModelCacheKeyFactory>()
                 .AddInterceptors(fixture.Faults).AddInterceptors(readObservers).Options, definitions, provider.GetRequiredService<IEntityAuditValueProvider>()));
             services.AddScoped<IPlatformTransactionExecutor, EfPlatformTransactionExecutor>();
-            services.AddScoped<IFileOwnerPolicy, OwnerPolicy>();
+            services.AddScoped<IFileOwnerPolicy>(_ => new OwnerPolicy { Observe = observeOwnerContext });
             new FilesModule().ConfigureServices(services);
             services.AddSingleton<IFileContentStore>(provider => fixture.ContentFaults = new(provider.GetRequiredService<LocalStorageProvider>()));
             fixture.Services = services.BuildServiceProvider();
@@ -537,7 +560,7 @@ public sealed class FilePersistentLifecycleTests
             using var scope = Services.CreateScope();
             var files = scope.ServiceProvider.GetRequiredService<IFileLifecycleService>();
             return await scope.ServiceProvider.GetRequiredService<IPlatformTransactionExecutor>()
-                .ExecuteAsync(token => new ValueTask<ConfirmedFileUsage>(files.ConfirmUsageAsync(uploadId, owner, token)));
+                .ExecuteAsync(token => new ValueTask<ConfirmedFileUsage>(files.ConfirmUsageAsync(uploadId, owner, TestCreationContext, token)));
         }
         public async Task CleanupAsync()
         {
@@ -623,13 +646,20 @@ public sealed class FilePersistentLifecycleTests
         public bool Unavailable { get; set; }
         public EntityAuditStamp GetCurrent() => Unavailable ? throw new EntityAuditStampUnavailableException() : new("actor", clock.GetUtcNow().UtcDateTime);
     }
+    private static FileOwnerCreationContext TestCreationContext => new(new(new("fixture.create", "standardCrud.create", "submit"), "fixture.owner", null), "fixture-target");
+    private static FileOwnerReleaseContext TestReleaseContext => new("fixture.owner", "fixture-target");
+    private static FileOwnerExecutionContext TestReadContext => new(new("fixture.read", "fixture.backend", "read"), "fixture.owner", "fixture-target");
+
     private sealed class OwnerPolicy : IFileOwnerPolicy
     {
         public const string Key = "tests.fileState";
+        internal Action<FileOwnerOperation, FileOwnerOperationContext?>? Observe;
         public string OwnerKey => Key;
         public void ValidateUpload(string safeFileName, string contentType) { }
-        public Task VerifyAsync(FileOwnerReference owner, string fileId, string? usageId, FileOwnerOperation operation, CancellationToken token) => Task.CompletedTask;
-        public Task VerifyBatchAsync(IReadOnlyList<FileUsageReference> references, FileOwnerOperation operation, CancellationToken token) => Task.CompletedTask;
+        public Task VerifyAsync(FileOwnerReference owner, string fileId, string? usageId, FileOwnerOperation operation, FileOwnerOperationContext? context, CancellationToken token)
+        { Observe?.Invoke(operation, context); return Task.CompletedTask; }
+        public Task VerifyBatchAsync(IReadOnlyList<FileUsageReference> references, FileOwnerOperation operation, FileOwnerOperationContext? context, CancellationToken token)
+        { Observe?.Invoke(operation, context); return Task.CompletedTask; }
     }
     private sealed class InjectedFailure : Exception { }
     private sealed class ContentFaultStore(LocalStorageProvider inner) : IFileContentStore

@@ -1328,18 +1328,29 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
-    [EnvironmentGatedFact(RunEnvironmentVariable, "正式 Document 迁移、普通账号标准创建及 Drawer/独立只读属性 driver")]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "当前固定Document发行物、普通账号独立创建及主文件保存/属性下载的正式driver")]
     public async Task DocumentCreation_UsesFormalDriver()
     {
         var (root, runId) = PrepareRun("document");
-        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false,
-            selectFeatures: features =>
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
+            browserJourney: async (page, token) =>
             {
-                var entry = features.Behavior("Document", "document.document.read");
-                return [entry, features.Action(entry, "create", "list.pageActions")];
-            },
-            browserJourney: (page, token) => RunMetadataPageJourneyAsync(page, token, root, runId,
-                "document", "图文档旅程", new(page, "图文档", "/documents", "/api/document/documents", "新建图文档")))
+                await RunMetadataPageJourneyAsync(page, token, root, runId,
+                    "document", "图文档旅程", new(page, "图文档", "/documents", "/api/document/documents", "新建图文档"));
+                if (AcceptancePresentation.Enabled) await page.SetViewportSizeAsync(1440, 1000);
+                var driver = new WorkspacePageDriver(page);
+                await driver.OpenAsync();
+                await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
+                var name = "文件图文档旅程 " + runId[..8];
+                var file = WorkspacePageDriver.SmallMainFile();
+                await driver.CreateDocumentWithFilesAsync("ACC-DOC-FILE-" + runId[..8], name, file);
+                await driver.OpenOwnedPropertiesAsync(name, "/documents");
+                await driver.DownloadFileAsync(file.Name, Path.Combine(root, "download-" + file.Name));
+                await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "document-file-properties.png"));
+                token.ThrowIfCancellationRequested();
+            })
             .RunAsync(CancellationToken.None);
     }
 

@@ -263,7 +263,10 @@ public sealed class OptionalComponentLifecycleSqlServerTests
     private static FeaturePoint Point(FeatureCatalogHostFixture fixture, string behavior) => Assert.Single(fixture.Catalog, point => point.BehaviorKey == behavior);
     private static async Task<JsonElement> Post(FeatureCatalogHostFixture fixture, string behavior, string path, object? body)
     {
-        using var response = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, Point(fixture, behavior), HttpMethod.Post, path, body);
+        var point = Point(fixture, behavior);
+        var resource = behavior switch { "part.part.create" => "part.part", "document.document.create" => "document.document", _ => null };
+        var declaration = resource is null ? null : await OwnedResourceReadHttpRequests.DeclarationAsync(fixture.Administrator, point, resource, "create");
+        using var response = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, point, HttpMethod.Post, path, body, declaration);
         Assert.True(response.StatusCode is HttpStatusCode.OK or HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
         return await response.Content.ReadFromJsonAsync<JsonElement>();
     }

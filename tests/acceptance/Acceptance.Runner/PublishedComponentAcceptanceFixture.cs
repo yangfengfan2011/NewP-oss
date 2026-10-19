@@ -524,7 +524,8 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
     {
         if (_baselineOwners != await ReadModelOwnersAsync(client, token)) throw new InvalidOperationException("三成员的模型 owner 发生漂移。");
         var oldDocument = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get, "/api/document/documents/" + _oldDocumentId,
-            null, features.Behavior("Document", "document.document.read").Position, token);
+            null, features.Behavior("Document", "document.document.read").Position, token,
+            features.Declaration(features.Behavior("Document", "document.document.read"), "document.document.read", "standardCrud.read", "document.document"));
         if (oldDocument.GetProperty("fields").GetProperty("ECODE").GetString() != ExistingDocumentCode)
             throw new InvalidOperationException("正式 Document API 未读取旧对象。");
         var roots = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get, "/api/workspace/spaces", null,

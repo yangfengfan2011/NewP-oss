@@ -28,9 +28,9 @@ public sealed class WorkspaceReverseSqlServerHttpApiTests(ITestOutputHelper outp
         var parentLink = await parentScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("WorkspaceFolderContent")
             .AsNoTracking().SingleAsync(row => EF.Property<string>(row, "LID") == parentPosition.LinkIds[0]);
         var parentId = (string)parentLink["CEID"]!;
-        var part = await Post(admin, Point(fixture, "part.part.create"), "/api/part/parts", new { ECODE = "CORRUPT-REVERSE", ENAME = "真实零组件" });
+        var part = await Post(admin, Point(fixture, "part.part.create"), "/api/part/parts", new { ECODE = "CORRUPT-REVERSE", ENAME = "真实零组件" }, OwnedResourceReadHttpRequests.Declaration(fixture, Point(fixture, "part.part.create"), "part.part", "create"));
         var partId = part.GetProperty("fields").GetProperty("EID").GetString()!;
-        var document = await Post(admin, Point(fixture, "document.document.create"), "/api/document/documents", new { ECODE = "CORRUPT-REVERSE", ENAME = "同ID真实图文档" });
+        var document = await Post(admin, Point(fixture, "document.document.create"), "/api/document/documents", new { ECODE = "CORRUPT-REVERSE", ENAME = "同ID真实图文档" }, OwnedResourceReadHttpRequests.Declaration(fixture, Point(fixture, "document.document.create"), "document.document", "create"));
         var id = document.GetProperty("fields").GetProperty("EID").GetString()!;
         using (var scope = fixture.Services.CreateScope())
             await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("Part")
@@ -183,7 +183,7 @@ public sealed class WorkspaceReverseSqlServerHttpApiTests(ITestOutputHelper outp
         var sharedLink = Assert.Single(privateContents.GetProperty("items").EnumerateArray()).GetProperty("linkId").GetString()!;
         var sharedPrivatePosition = Position(personal, privateLink, sharedLink);
         await Post(admin, add, "/api/workspace/content/references", new { position = Position(root), target = new { modelKey = "WorkspaceFolder", id = sharedId } });
-        var target = await Post(admin, Point(fixture, "part.part.create"), "/api/part/parts", new { ECODE = "PRIVATE-REVERSE", ENAME = "独立零组件" });
+        var target = await Post(admin, Point(fixture, "part.part.create"), "/api/part/parts", new { ECODE = "PRIVATE-REVERSE", ENAME = "独立零组件" }, OwnedResourceReadHttpRequests.Declaration(fixture, Point(fixture, "part.part.create"), "part.part", "create"));
         var id = target.GetProperty("fields").GetProperty("EID").GetString()!;
         foreach (var position in new[] { privatePosition, sharedPrivatePosition }) await Post(admin, add, "/api/workspace/content/references", new { position, target = new { modelKey = "Part", id } });
         var descendant = await Post(admin, create, "/api/workspace/content/folders", new { position = sharedPrivatePosition, values = new { ENAME = "共享后代" } });
@@ -223,7 +223,7 @@ public sealed class WorkspaceReverseSqlServerHttpApiTests(ITestOutputHelper outp
         using var admin = await fixture.LoginAdministratorAsync(); var entry = Point(fixture, "workspace.spaces.access");
         var root = await Post(admin, entry, "/api/workspace/spaces/public/initialize");
         await Post(admin, Point(fixture, "workspace.folder.create"), "/api/workspace/content/folders", new { position = Position(root), values = new { ENAME = "真实父种子" } });
-        var target = await Post(admin, Point(fixture, "part.part.create"), "/api/part/parts", new { ECODE = "REVERSE-PAGING", ENAME = "子对象不能参与父名称筛选" });
+        var target = await Post(admin, Point(fixture, "part.part.create"), "/api/part/parts", new { ECODE = "REVERSE-PAGING", ENAME = "子对象不能参与父名称筛选" }, OwnedResourceReadHttpRequests.Declaration(fixture, Point(fixture, "part.part.create"), "part.part", "create"));
         var id = target.GetProperty("fields").GetProperty("EID").GetString()!;
         string database;
         using (var scope = fixture.Services.CreateScope())
@@ -315,9 +315,9 @@ public sealed class WorkspaceReverseSqlServerHttpApiTests(ITestOutputHelper outp
         return "/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId=" + Uri.EscapeDataString(id) + "&queryScope=" + Uri.EscapeDataString(JsonSerializer.Serialize(new { spaceId = value.GetProperty("spaceId").GetString(), rootFolderId = value.GetProperty("rootFolderId").GetString(), linkIds = value.GetProperty("linkIds").GetRawText() }));
     }
     private static string Reverse(string model, string id) => "/api/links/workspace.content?direction=reverse&anchorModelKey=" + Uri.EscapeDataString(model) + "&anchorId=" + Uri.EscapeDataString(id);
-    private static async Task<JsonElement> Post(HttpClient client, FeaturePoint point, string url, object? body = null)
+    private static async Task<JsonElement> Post(HttpClient client, FeaturePoint point, string url, object? body = null, ActionDataAccessRequirement? declaration = null)
     {
-        using var response = await FeatureHttpTestRequests.SendAsync(client, point, HttpMethod.Post, url, body);
+        using var response = await FeatureHttpTestRequests.SendAsync(client, point, HttpMethod.Post, url, body, declaration);
         Assert.True(response.StatusCode is HttpStatusCode.OK or HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
         return await response.Content.ReadFromJsonAsync<JsonElement>();
     }

@@ -1,4 +1,17 @@
+using ICP.Platform.Authorization.Contracts;
+
 namespace ICP.Platform.Modules.Files.Contracts;
+
+/// <summary>业务拥有者选定的正式执行来源；文件引用不能充当授权目标。</summary>
+public abstract record FileOwnerOperationContext;
+/// <summary>候选创建后的实际新对象；首次确认还必须匹配owner同事务的真实Added关联证明。</summary>
+public sealed record FileOwnerCreationContext(DataExecutionWriteContext Source, string ObjectId) : FileOwnerOperationContext;
+/// <summary>原删除流程选定的真实对象；policy在自己的锁内读取阶段独立执行固定Release要求。</summary>
+public sealed record FileOwnerReleaseContext(string ResourceKey, string ObjectId) : FileOwnerOperationContext;
+/// <summary>由业务owner选定的正式读取/下载执行、资源与真实对象；Files不接受客户端关联替代目标。</summary>
+public sealed record FileOwnerExecutionContext(DataExecutionBindingReference Binding, string ResourceKey, string ObjectId) : FileOwnerOperationContext;
+/// <summary>第317片迁移前的明确旧复制调用；缺少正式上下文不自动进入此分支。</summary>
+public sealed record FileOwnerLegacyCopyReadContext(Type Caller, string Member) : FileOwnerOperationContext;
 
 /// <summary>业务拥有者从实际关联生成的身份；HTTP 客户端不能提供它。</summary>
 public sealed record FileOwnerReference(string Key, string Id);
@@ -26,15 +39,15 @@ public interface IFileLifecycleService
     /// </summary>
     Task<IReadOnlyList<StagedFileInfo>> ReadOwnedStagedAsync(IReadOnlyList<string> uploadIds, string ownerKey, CancellationToken token = default);
     /// <summary>在已有平台事务内登记使用；不会保存、Flush 或独立提交。</summary>
-    Task<ConfirmedFileUsage> ConfirmUsageAsync(string uploadId, FileOwnerReference owner, CancellationToken token = default);
+    Task<ConfirmedFileUsage> ConfirmUsageAsync(string uploadId, FileOwnerReference owner, FileOwnerCreationContext context, CancellationToken token = default);
     /// <summary>有界批量验证 owner read 与完整持久回链，按输入次序返回安全元数据。</summary>
-    Task<IReadOnlyList<FileUsageMetadata>> ReadUsageMetadataAsync(IReadOnlyList<FileUsageReference> usageReferences, CancellationToken token = default);
+    Task<IReadOnlyList<FileUsageMetadata>> ReadUsageMetadataAsync(IReadOnlyList<FileUsageReference> usageReferences, FileOwnerOperationContext context, CancellationToken token = default);
     /// <summary>独立核验 read/download 和使用回链后开流；缺少物理内容是完整性故障。</summary>
-    Task<FileUsageContent> OpenUsageAsync(FileUsageReference usageReference, CancellationToken token = default);
+    Task<FileUsageContent> OpenUsageAsync(FileUsageReference usageReference, FileOwnerExecutionContext context, CancellationToken token = default);
     /// <summary>只取消当前 actor 的未确认暂存；已确认使用不能通过此操作删除。</summary>
     Task CancelStageAsync(string uploadId, CancellationToken token = default);
     /// <summary>在已有业务事务内标记释放和回收候选，不保存或删除字节。</summary>
-    Task ReleaseUsageAsync(FileUsageReference usageReference, CancellationToken token = default);
+    Task ReleaseUsageAsync(FileUsageReference usageReference, FileOwnerReleaseContext context, CancellationToken token = default);
 }
 
 public enum FileOwnerOperation { Confirm, Read, Download, Release, CopySource, ConfirmCopy }
@@ -46,9 +59,9 @@ public interface IFileOwnerPolicy
     /// <summary>只验证所属用途的格式规则；安全名和上传上限由 Files 执行。</summary>
     void ValidateUpload(string safeFileName, string contentType);
     /// <summary>首次 Confirm 的 usageId 为空，必须证明本次创建与真实 Added 关联；其余操作核原使用。</summary>
-    Task VerifyAsync(FileOwnerReference owner, string fileId, string? usageId, FileOwnerOperation operation, CancellationToken token);
+    Task VerifyAsync(FileOwnerReference owner, string fileId, string? usageId, FileOwnerOperation operation, FileOwnerOperationContext? context, CancellationToken token);
     /// <summary>同用途批量核验实际业务回链及资格，避免逐使用重复查询。</summary>
-    Task VerifyBatchAsync(IReadOnlyList<FileUsageReference> references, FileOwnerOperation operation, CancellationToken token);
+    Task VerifyBatchAsync(IReadOnlyList<FileUsageReference> references, FileOwnerOperation operation, FileOwnerOperationContext? context, CancellationToken token);
 }
 
 /// <summary>活跃用途显式声明必需 policy；启动时缺失或重复登记失败关闭。</summary>

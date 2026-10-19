@@ -143,7 +143,9 @@ public sealed class AcceptanceGateTests
                 await driver.SelectSearchOptionAsync(account, accountCode!, $"工作空间验收账号 {runId[..8]} ({accountCode})");
                 var option = dialog.GetByRole(AriaRole.Checkbox, new() { Name = $"{name} ({code})", Exact = true });
                 await option.WaitForAsync(new() { State = WaitForSelectorState.Visible });
-                await option.CheckAsync();
+                // 受控 Checkbox 的父草稿稍后提交；只点击一次，再等待真实勾选状态。
+                await option.ClickAsync();
+                await Assertions.Expect(option).ToBeCheckedAsync();
                 await driver.ConfirmAsync(dialog, new("PUT", "/api/authorization/users/", 204, "角色配置", PathIsPrefix: true));
                 row = await driver.WaitForRowAsync(code);
                 await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();

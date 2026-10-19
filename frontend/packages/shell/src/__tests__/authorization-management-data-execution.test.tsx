@@ -8,7 +8,7 @@ import { ModuleRegistry, type ActionDataAccessRequirement } from '@icp-platform/
 import bindings from '../../../../modules/platform/authorization/src';
 import navigation from '../../../../modules/platform/authorization/metadata/navigation/Authorization.nav.json';
 import moduleRuntime from '../../../../../tests/Kernel.Tests/Fixtures/AuthorizationManagementRuntime.contract.json';
-import { bindNavigationDataAccess } from '../metadata/runtimeMetadataLoader';
+import { bindNavigationDataAccess, loadRuntimeMetadata } from '../metadata/runtimeMetadataLoader';
 import type { RuntimeNavItemDocument } from '../metadata/runtimeMetadataManifest';
 import { PageEntry } from '../composition/PageOutlet';
 import list from '../../../../modules/platform/authorization/metadata/views/RoleList.view.json';
@@ -19,7 +19,12 @@ import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 
 vi.unmock('@icp-platform/core');
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-beforeAll(async () => { await Promise.all([import('../../../../modules/platform/authorization/src/FeatureWorkbench'), import('@ant-design/pro-table'), import('@ant-design/pro-descriptions'), import('../pages/StandardCrudListDrawerRuntime')]); });
+beforeAll(async () => {
+  await Promise.all([import('../../../../modules/platform/authorization/src/FeatureWorkbench'), import('@ant-design/pro-table'),
+    import('@ant-design/pro-descriptions'), import('../pages/StandardCrudListDrawerRuntime'), import('../pages/StandardCrudListPageHost')]);
+  const capabilities = bindings.standardCrudCapabilities.filter(item => item.targetKey === list.view.key);
+  expect(capabilities).toHaveLength(1); await capabilities[0].load();
+});
 const declarations = moduleRuntime.dataAccess as ActionDataAccessRequirement[];
 const sources = declarations.filter(item => item.execution === 'authorization.workbench.read');
 expect(sources).toHaveLength(1);
@@ -67,13 +72,11 @@ it('uses the real Workbench PageEntry read source for catalog and selected role 
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
   const router = createMemoryRouter([{ path: '/', element: <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={{ zhs: {} }}>
     <AuthorizationProvider featurePositions={points.map(point => point.position)}>
-      <PageEntry page={{ ...entries[0].page!, parameters: { featurePosition: readPosition } }} />
+      <PageEntry page={{ ...entries[0].page!, parameters: { featurePosition: readPosition, roleId: 'role-one' } }} />
     </AuthorizationProvider></LocalizationProvider> }]);
   onTestFinished(async () => { await act(async () => root.unmount()); router.dispose(); container.remove(); ModuleRegistry.replaceAll([], 'authorization-management-cleanup'); vi.unstubAllGlobals(); });
   await act(async () => root.render(<RouterProvider router={router} />));
   await vi.waitFor(() => expect(container.textContent).toContain('工作台目标'));
-  const role = [...container.querySelectorAll('button')].find(button => button.textContent?.includes('R311'));
-  expect(role).toBeDefined(); await act(async () => role!.click());
   await vi.waitFor(() => expect(container.querySelector('.ant-tree-checkbox')).not.toBeNull());
   await act(async () => (container.querySelector('.ant-tree-checkbox') as HTMLElement).click());
   const save = [...container.querySelectorAll('button')].find(button => button.textContent === '保存授权');
@@ -85,14 +88,21 @@ it('uses the real Workbench PageEntry read source for catalog and selected role 
 it('opens the actual list account-role input and submits through its existing controls', async () => {
   const entry = points.filter(point => point.behaviorKey === 'authorization.role.read'); expect(entry).toHaveLength(1);
   const member = declarations.filter(item => item.viewKey === list.view.key && item.surface === 'rowActions' && item.actionKey === 'userRoles'); expect(member).toHaveLength(1);
+  const documents: Record<string, unknown> = {
+    '/plugins/metadata-runtime-manifest.json': { modules: [{ moduleId: 'Authorization', metadataBasePath: '/authorization',
+      navFiles: ['navigation'], viewFiles: ['list', 'detail'], modelFiles: ['role'], features: points, dataAccess: declarations }] },
+    '/authorization/navigation': navigation, '/authorization/list': list, '/authorization/detail': detail, '/authorization/role': roleModel,
+  };
+  const metadata = await loadRuntimeMetadata(async input => json(documents[String(input)]));
   const writes: Request[] = [];
+  let currentRoleReads = 0;
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin), init);
     const path = new URL(request.url).pathname;
     if (path.endsWith('/antiforgery-token')) return json({ requestToken: 'token' });
     if (request.method === 'PUT') { writes.push(request); expect(request.headers.get('X-NewP-Data-Declaration')).toBeNull(); return new Response(null, { status: 204 }); }
     if (path.endsWith('/users/candidates')) return json([{ id: 'actor311', name: '普通账号', code: 'actor311', status: 'Enabled' }]);
-    if (path.endsWith('/users/actor311/roles')) return json({ roleCodes: [] });
+    if (path.endsWith('/users/actor311/roles')) { currentRoleReads++; return json({ roleCodes: [] }); }
     if (path.endsWith('/roles/query')) {
       const isOptions = request.headers.get('X-NewP-Feature') === member[0].featurePositions[0];
       const expected = isOptions ? member[0] : declarations.find(item => item.viewKey === list.view.key && item.surface === 'read')!;
@@ -106,7 +116,7 @@ it('opens the actual list account-role input and submits through its existing co
   const catalogs = Object.fromEntries(Object.entries(dictionary.RoleView).map(([key, value]) => [`RoleView.${key}`, value.zhs]));
   const router = createMemoryRouter([{ path: '/', element: <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={{ zhs: catalogs }}>
     <AuthorizationProvider featurePositions={points.map(point => point.position)}>
-      <RuntimeMetadataProvider value={{ manifest: { modules: [{ moduleId: 'Authorization', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: points }] }, navDocuments: [navigation], viewDocuments: [list, detail], modelDocuments: [roleModel] }}>
+      <RuntimeMetadataProvider value={metadata}>
         <PlatformQueryProvider scopeKey="role-native-controls"><PageEntry page={{ pageKey: 'platform.list', parameters: { viewKey: list.view.key, featurePosition: entry[0].position } }} /></PlatformQueryProvider>
       </RuntimeMetadataProvider>
     </AuthorizationProvider></LocalizationProvider> }]);
@@ -129,7 +139,13 @@ it('opens the actual list account-role input and submits through its existing co
   const checkbox = document.querySelector('.ant-modal input[type="checkbox"]') as HTMLInputElement;
   expect(checkbox.closest('label')?.textContent).toBe('实际角色 (AUTH311)');
   await act(async () => checkbox.click());
+  await vi.waitFor(() => expect(checkbox.checked).toBe(true));
+  expect(currentRoleReads).toBe(1);
   const confirm = [...document.querySelectorAll('.ant-modal button')].find(button => button.textContent?.replace(/\s/g, '') === '确认');
   expect(confirm).toBeDefined(); await act(async () => (confirm as HTMLElement).click());
   await vi.waitFor(() => expect(writes).toHaveLength(1));
+  await vi.waitFor(() => expect(document.querySelector('.ant-modal')).toBeNull());
+  const permissionsMore = [...container.querySelectorAll('button')].find(button => button.textContent === '更多');
+  expect(permissionsMore).toBeDefined(); await act(async () => permissionsMore!.click());
+  expect([...document.querySelectorAll('[role="menuitem"]')].some(item => item.textContent === '配置权限')).toBe(true);
 });

@@ -53,7 +53,7 @@ public sealed class DataScopeWorkspacePermissionConcurrencySqlServerTests
             }
             graph.Watch = true;
             removing = FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.remove"), HttpMethod.Delete,
-                "/api/workspace/content/references/" + target.LinkId, new { position });
+                "/api/workspace/content/references/" + target.LinkId, new { position }, WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, Point(fixture, "workspace.folder.remove")));
             await graph.Reached.Task.WaitAsync(TimeSpan.FromSeconds(20));
             Assert.False(removing.IsCompleted);
             release.TrySetResult();

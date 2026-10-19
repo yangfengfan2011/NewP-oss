@@ -39,6 +39,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             using var cancellation = new CancellationTokenSource();
             using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/" + path) { Content = JsonContent.Create(body) };
             request.Headers.Add("X-NewP-Feature", Point(fixture, behavior).Position);
+            request.Headers.Add("X-NewP-Data-Declaration", ClipboardDeclaration(fixture, Point(fixture, behavior))!.Id);
             var pending = admin.SendAsync(request, cancellation.Token);
             try
             {
@@ -309,7 +310,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             Assert.Equal(reference["LID"], detail.GetProperty("fields").GetProperty("TargetId").GetString());
             Assert.Equal(3, detail.GetProperty("summaries").GetProperty("changes").GetProperty("data").GetArrayLength());
         }
-        using (var single = await FeatureHttpTestRequests.SendAsync(admin, RowPoint(fixture, "remove"), HttpMethod.Delete, "/api/workspace/content/references/" + sharedA.LinkIds[^1], new { position = b })) Assert.Equal(HttpStatusCode.OK, single.StatusCode);
+        using (var single = await FeatureHttpTestRequests.SendAsync(admin, RowPoint(fixture, "remove"), HttpMethod.Delete, "/api/workspace/content/references/" + sharedA.LinkIds[^1], new { position = b }, ClipboardDeclaration(fixture, RowPoint(fixture, "remove")))) Assert.Equal(HttpStatusCode.OK, single.StatusCode);
         Assert.Single(await Rows(fixture, "BusinessChange"), row => Equals(row["EventType"], "workspace.reference.removed") && Equals(row["TargetId"], sharedA.LinkIds[^1]));
         Assert.Equal(folders, Snapshot(await Rows(fixture, "WorkspaceFolder"))); Assert.Equal(parts, Snapshot(await Rows(fixture, "Part")));
     }

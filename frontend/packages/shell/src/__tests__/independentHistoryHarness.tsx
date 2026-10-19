@@ -18,6 +18,7 @@ import { bindActionDataAccess } from '../metadata/runtimeMetadataLoader';
 import type { RuntimeMetadataState } from '../metadata/runtimeMetadataManifest';
 import { AuthProvider } from '../contexts/AuthContext';
 import { CurrentPermissionScope } from '../components/CurrentPermissionScope';
+import clipboardContract from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceClipboardDataAccess.contract.json';
 
 await import('../pages/StandardCrudListPageHost');
 await import('../pages/StandardCrudListOverlayRuntime');
@@ -58,7 +59,8 @@ export function installHistoryFeatures(metadata: RuntimeMetadataState) {
       .some(({ view }) => view.dataAccess !== undefined || ['pageActions', 'rowActions', 'outputActions', 'detailContributions']
         .some(surface => Array.isArray(view[surface]) && (view[surface] as Array<Record<string, unknown>>).some(action => action.dataAccess !== undefined)));
     return { moduleId: owner, metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [],
-      dataAccess: declared ? JSON.parse(readFileSync(resolve(__dirname, '../../../../../tests/Kernel.Tests/Fixtures', `${owner}HistoryDataAccess.contract.json`), 'utf8')) : [], features: [
+      dataAccess: declared ? [...JSON.parse(readFileSync(resolve(__dirname, '../../../../../tests/Kernel.Tests/Fixtures', `${owner}HistoryDataAccess.contract.json`), 'utf8')),
+        ...(owner === 'Workspace' ? clipboardContract.declarations.filter(item => item.execution.startsWith('workspace.clipboard.')) : [])] : [], features: [
       { key: keys[0], position: points.readPosition, kind: 'navigation' },
       { key: keys[1], position: points.historyPosition, kind: 'navigation', parentPosition: points.readPosition },
     ] };

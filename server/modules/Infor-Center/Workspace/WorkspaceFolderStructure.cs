@@ -21,7 +21,7 @@ public sealed partial class WorkspaceContents
             using var operation = audit.BeginOperation();
             await LockGraphAsync(cancellation);
             var sourceParent = await positions.ResolveAsync(actor, sourcePosition, cancellation);
-            var source = (await ResolveClipboardTargetsAsync(sourceParent.FolderId, linkIds, "copy", cancellation))[0];
+            var source = (await ResolveDeferredClipboardTargetsAsync(sourceParent.FolderId, linkIds, DeferredClipboardExecution.FolderStructure, cancellation))[0];
             if (source.ModelKey != WorkspacePositions.FolderModel) throw new LinkQueryException(400, "Workspace.FolderCopySourceRequired");
             var target = await WritablePositionAsync(actor, targetPosition, cancellation);
             if (!catalog.Get("workspace.content").Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == WorkspacePositions.FolderModel))

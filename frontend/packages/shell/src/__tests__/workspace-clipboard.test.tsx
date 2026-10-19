@@ -6,7 +6,9 @@ import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
-import { ModuleRegistry, type FrontendBehaviorBindings, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
+import { ModuleRegistry, type ActionDataAccessRequirement, type FrontendBehaviorBindings, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
+import clipboardContract from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceClipboardDataAccess.contract.json';
+import { bindActionDataAccess } from '../metadata/runtimeMetadataLoader';
 import { loadComponentSource, readComponentJson } from '../../test-support/componentTestInputs';
 import folder from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceFolderRuntime.contract.json';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
@@ -48,7 +50,7 @@ async function waitForActive(check: () => void | Promise<void>, signal: AbortSig
 const waitFor = (check: () => void | Promise<void>) => waitForActive(check, testLifetime.signal);
 
 async function mount(options: { actionSets?: Record<string, { column: string[]; contextMenu: string[] }>; columnMode?: 'default' | 'menu'; folderRow?: boolean; validate?: (body: Record<string, unknown>) => Promise<Response>; paste?: (body: Record<string, unknown>) => Promise<Response>; failRefresh?: boolean;
-  folderCopy?: (body: Record<string, unknown>) => Promise<Response>; grants?: readonly string[]; remove?: (body: Record<string, unknown>) => Promise<Response>;
+  folderCopy?: (body: Record<string, unknown>) => Promise<Response>; grants?: readonly string[]; remove?: (body: Record<string, unknown>) => Promise<Response>; formalDeclarations?: boolean;
   menuLoad?: (load: () => Promise<{ default: StandardCrudResourceRegistration }>, call: number) => Promise<{ default: StandardCrudResourceRegistration }> } = {}) {
   const lifetime = new AbortController();
   const waitFor = (check: () => void | Promise<void>) => waitForActive(check, lifetime.signal);
@@ -58,9 +60,11 @@ async function mount(options: { actionSets?: Record<string, { column: string[]; 
     operation().then(value => { pendingResponses.delete(finish); resolve(value); }, failure => { pendingResponses.delete(finish); reject(failure); });
   });
   const writes: Array<{ path: string; body: Record<string, unknown> }> = [];
+  const declarations = clipboardContract.declarations as ActionDataAccessRequirement[];
+  const entryPosition = options.formalDeclarations ? clipboardContract.features.find(point => point.kind === 'navigation' && point.key === 'workspace')!.position : 'entry';
   let actor = 'actor'; let failedRead = false;
   const user = () => ({ id: actor, ecode: actor, ename: actor, revision: 1, mustChangePassword: false, isLocalAdministrator: false,
-    timeZoneId: 'Asia/Taipei', featurePositions: ['entry', ...actions.map(action => action.position).filter(position => !options.grants || options.grants.includes(position))] });
+    timeZoneId: 'Asia/Taipei', featurePositions: [entryPosition, ...actions.map(action => action.position).filter(position => !options.grants || options.grants.includes(position))] });
   const request = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost');
     if (url.pathname.includes('antiforgery-token')) return json({ requestToken: 'token' });
@@ -117,7 +121,7 @@ async function mount(options: { actionSets?: Record<string, { column: string[]; 
     ? { ...binding, load: () => { ++registrationLoads; return registrationLoads > 1 && options.menuLoad ? options.menuLoad(binding.load, registrationLoads) : binding.load(); } } : binding) };
   ModuleRegistry.replaceAll([{ metadata: { moduleId: 'Workspace', displayName: 'Workspace', version: '1' }, ...bindings }], 'clipboard-test');
   const catalog = Object.fromEntries(Object.entries(dictionary.Workspace).map(([key, value]) => [`Workspace.${key}`, value.zhs]));
-  const actions = [...list.view.pageActions.map((action: { key: string }) => ({ key: action.key, position: `page-${action.key}`, kind: 'action', parentPosition: 'entry', staticScope: 'folder', actionScope: 'list.pageActions' })),
+  const actions = options.formalDeclarations ? clipboardContract.features.filter(point => point.kind === 'action') : [...list.view.pageActions.map((action: { key: string }) => ({ key: action.key, position: `page-${action.key}`, kind: 'action', parentPosition: 'entry', staticScope: 'folder', actionScope: 'list.pageActions' })),
     ...list.view.rowActions.map((action: { key: string }) => ({ key: action.key, position: `row-${action.key}`, kind: 'action', parentPosition: 'entry', staticScope: 'folder', actionScope: 'list.rowActions' })),
     ...tree.view.nodeTypes[0].contextMenu.map((action: { key: string }) => ({ key: action.key, position: `tree-${action.key}`, kind: 'action', parentPosition: 'entry', staticScope: 'folder', actionScope: 'contextMenu' }))];
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
@@ -126,8 +130,11 @@ async function mount(options: { actionSets?: Record<string, { column: string[]; 
     <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={{ zhs: catalog }}>
       <AuthProvider initialUser={user()}><AuthorizationProvider featurePositions={user().featurePositions}><PlatformQueryProvider scopeKey="clipboard-test">
         <RuntimeMetadataProvider value={{ manifest: { modules: [{ moduleId: 'Workspace', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [],
-          features: [{ key: 'workspace', position: 'entry', kind: 'navigation' }, ...actions] }] }, navDocuments: [], modelDocuments: [folder, content], viewDocuments: [tree, { ...list, view: { ...list.view, rowActionSets: options.actionSets ?? list.view.rowActionSets, rowActionColumn: options.columnMode ?? list.view.rowActionColumn } }, detail] }}>
-          <SwitchActor /><PageEntry page={{ pageKey: 'platform.tree', parameters: { viewKey: tree.view.key, featurePosition: 'entry' }, inputResolverKey: 'workspace.tree.current' }} />
+          features: options.formalDeclarations ? clipboardContract.features : [{ key: 'workspace', position: 'entry', kind: 'navigation' }, ...actions],
+          ...(options.formalDeclarations ? { dataAccess: declarations } : {}) }] }, navDocuments: [], modelDocuments: [folder, content], viewDocuments: [tree,
+          options.formalDeclarations ? bindActionDataAccess({ ...list, type: 'view' }, declarations)
+            : { ...list, view: { ...list.view, rowActionSets: options.actionSets ?? list.view.rowActionSets, rowActionColumn: options.columnMode ?? list.view.rowActionColumn } }, detail] }}>
+          <SwitchActor /><PageEntry page={{ pageKey: 'platform.tree', parameters: { viewKey: tree.view.key, featurePosition: entryPosition }, inputResolverKey: 'workspace.tree.current' }} />
         </RuntimeMetadataProvider>
       </PlatformQueryProvider></AuthorizationProvider></AuthProvider>
     </LocalizationProvider> }], { initialEntries: ['/workspace'] });
@@ -169,6 +176,55 @@ async function mount(options: { actionSets?: Record<string, { column: string[]; 
   };
   return { router, container, writes, request, select, button, disabled, click, hasAction, copyRows, cleanup, openTreeMenu, waitFor };
 }
+
+it.each(['copy', 'cut'] as const)('uses the compiled %s declaration through the actual tree Provider and current paste occurrence', async mode => {
+  const page = await mount({ formalDeclarations: true });
+  const menu = (label: string) => [...document.querySelectorAll<HTMLElement>('.ant-dropdown:not(.ant-dropdown-hidden):not(.np-crud-header-menu) [role=menuitem]')]
+    .find(item => !item.closest('.np-crud-header-menu') && item.textContent === label)!;
+  await page.openTreeMenu('A');
+  await page.waitFor(() => expect(menu(mode === 'copy' ? '复制' : '剪切')?.classList.contains('ant-dropdown-menu-item-disabled')).toBe(false));
+  await act(async () => menu(mode === 'copy' ? '复制' : '剪切').click());
+  await page.waitFor(() => expect(page.writes).toHaveLength(1));
+  await page.openTreeMenu('B');
+  const pasteLabel = mode === 'cut' ? '粘贴引用（待移动）' : '粘贴引用';
+  await page.waitFor(() => expect(menu(pasteLabel)?.classList.contains('ant-dropdown-menu-item-disabled')).toBe(false));
+  await act(async () => menu(pasteLabel).click());
+  await page.waitFor(() => expect(page.writes).toHaveLength(2));
+  for (const [path, surface, key] of [
+    [mode === 'copy' ? '/clipboard/validate' : '/clipboard/cut/validate', 'rowActions', mode], ['/paste', 'pageActions', 'paste'],
+  ]) {
+    const call = page.request.mock.calls.find(([input]) => String(input instanceof Request ? input.url : input).endsWith(path))!;
+    const headers = new Headers(call[0] instanceof Request ? call[0].headers : call[1]?.headers);
+    const declaration = clipboardContract.declarations.find(item => item.surface === surface && item.actionKey === key)!;
+    expect(headers.get('X-NewP-Data-Declaration')).toBe(declaration.id);
+    expect(declaration.featurePositions).toContain(headers.get('X-NewP-Feature'));
+    expect(headers.get('X-NewP-Feature')).toContain('/surface:contextMenu/');
+  }
+  if (mode === 'copy') {
+    await page.openTreeMenu('B');
+    await page.waitFor(() => expect(menu('清空剪贴板')?.classList.contains('ant-dropdown-menu-item-disabled')).toBe(false));
+    await act(async () => menu('清空剪贴板').click());
+    expect(page.writes).toHaveLength(2);
+  }
+});
+
+it('uses compiled batch declarations through selection and the real removal review Provider', async () => {
+  const page = await mount({ formalDeclarations: true });
+  await page.copyRows(['Document', 'Part']);
+  await page.waitFor(() => expect(page.writes).toHaveLength(1));
+  await page.click('移除');
+  await page.waitFor(() => expect(document.querySelector('[role=dialog]')?.textContent).toContain('保留对象及文件'));
+  await act(async () => [...document.querySelectorAll<HTMLButtonElement>('[role=dialog] button')]
+    .find(item => item.textContent?.replace(/\s/g, '') === '确认')!.click());
+  await page.waitFor(() => expect(page.writes).toHaveLength(2));
+  for (const [path, key] of [['/clipboard/validate', 'copySelected'], ['/references/remove', 'removeSelected']]) {
+    const call = page.request.mock.calls.find(([input]) => String(input instanceof Request ? input.url : input).endsWith(path))!;
+    const headers = new Headers(call[0] instanceof Request ? call[0].headers : call[1]?.headers);
+    const declaration = clipboardContract.declarations.find(item => item.surface === 'pageActions' && item.actionKey === key)!;
+    expect(headers.get('X-NewP-Data-Declaration')).toBe(declaration.id);
+    expect(declaration.featurePositions).toContain(headers.get('X-NewP-Feature'));
+  }
+});
 
 it('ends an outstanding fixture wait when its mounted page is disposed', async () => {
   const diagnostic = vi.spyOn(console, 'error'); onTestFinished(() => diagnostic.mockRestore());

@@ -220,10 +220,11 @@ public static class StandardFeatureMetadataCompiler
                 var target = views[Text(action, "viewKey")];
                 var standard = Optional(action, "standardAction");
                 var key = standard ?? Text(action, "actionKey");
-                var definition = new[] { "pageActions", "rowActions", "featureActions" }.SelectMany(name => target.TryGetProperty(name, out var entries)
-                    ? entries.EnumerateArray().ToArray() : [])
-                    .Single(item => Optional(item, standard is null ? "key" : "standardAction") == key
-                        && (Optional(item, "handlerKey") is not null || Optional(item, "standardAction") is not null));
+                var referenced = new[] { "pageActions", "rowActions", "featureActions" }.SelectMany(name => target.TryGetProperty(name, out var entries)
+                    ? entries.EnumerateArray().Select(item => (Surface: name, Definition: item)).ToArray() : [])
+                    .Single(item => Optional(item.Definition, standard is null ? "key" : "standardAction") == key
+                        && (Optional(item.Definition, "handlerKey") is not null || Optional(item.Definition, "standardAction") is not null));
+                var definition = referenced.Definition;
                 var operation = Optional(definition, "standardAction") ?? Optional(definition, "handlerKey")
                     ?? throw new InvalidOperationException("树动作引用缺少资源执行行为。");
                 var behavior = Text(target, "resourceKey") + "." + (operation is "view" or "refresh" ? "read" : operation == "edit" ? "update" : operation);
@@ -233,6 +234,7 @@ public static class StandardFeatureMetadataCompiler
                     Text(target, "resourceKey") + "." + (operation is "view" or "refresh" ? "read" : operation == "edit" ? "update" : operation), property,
                     ActionReads(target, definition, operation),
                     FullTitleKey(Text(action, "labelKey"), dictionary));
+                DataAccess(target, definition, referenced.Surface, Text(definition, "key"), result[^1].ReferenceKey!);
             }
         }
 

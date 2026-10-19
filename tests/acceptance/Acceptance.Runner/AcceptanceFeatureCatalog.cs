@@ -6,13 +6,15 @@ using ICP.Platform.Testing.Authorization;
 namespace ICP.Platform.Acceptance;
 
 /// <summary>验收仅从正式运行目录选择位置，不从旧权限代码推导授权或拼接位置字符串。</summary>
-internal sealed class AcceptanceFeatureCatalog(IReadOnlyList<FeaturePoint> points)
+internal sealed class AcceptanceFeatureCatalog(IReadOnlyList<FeaturePoint> points, IReadOnlyList<ActionDataAccessRequirement>? declarations = null)
 {
     internal static async Task<AcceptanceFeatureCatalog> LoadAsync(HttpClient client, CancellationToken token)
     {
         using var manifest = await client.GetFromJsonAsync<JsonDocument>("/plugins/metadata-runtime-manifest.json", token)
             ?? throw new InvalidOperationException("Runtime metadata manifest was empty.");
-        return new(RuntimeFeatureCatalogTestSupport.Parse(manifest.RootElement));
+        return new(RuntimeFeatureCatalogTestSupport.Parse(manifest.RootElement),
+            manifest.RootElement.GetProperty("modules").EnumerateArray().SelectMany(module => module.GetProperty("dataAccess").EnumerateArray())
+                .Select(item => item.Deserialize<ActionDataAccessRequirement>(new JsonSerializerOptions(JsonSerializerDefaults.Web))!).ToArray());
     }
 
     internal FeaturePoint Behavior(string module, string behavior) => Require(point =>
@@ -37,6 +39,9 @@ internal sealed class AcceptanceFeatureCatalog(IReadOnlyList<FeaturePoint> point
 
     internal string[] GrantSet(params FeaturePoint[] selected) =>
         RuntimeFeatureCatalogTestSupport.ExpandGrantSet(selected);
+
+    internal string Declaration(FeaturePoint point) => (declarations ?? []).Single(declaration =>
+        declaration.ModuleId == point.ModuleId && declaration.FeaturePositions.Contains(point.Position)).Id;
 
     private FeaturePoint Require(Func<FeaturePoint, bool> predicate, string description)
     {

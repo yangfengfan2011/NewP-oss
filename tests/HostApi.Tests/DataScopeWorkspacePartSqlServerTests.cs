@@ -73,7 +73,7 @@ public sealed class DataScopeWorkspacePartSqlServerTests
         using (var noLongerReadable = await FeatureHttpTestRequests.SendAsync(ordinary, manage!, HttpMethod.Get, path))
             Assert.Equal(HttpStatusCode.NotFound, noLongerReadable.StatusCode);
         using (var removed = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.remove"), HttpMethod.Delete,
-            "/api/workspace/content/references/" + part.LinkId, new { position }))
+            "/api/workspace/content/references/" + part.LinkId, new { position }, WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, Point(fixture, "workspace.folder.remove"))))
             Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
         using (var staleRead = await FeatureHttpTestRequests.SendAsync(admin, manage!, HttpMethod.Get, path))
             Assert.Equal(HttpStatusCode.NotFound, staleRead.StatusCode);
@@ -107,7 +107,7 @@ public sealed class DataScopeWorkspacePartSqlServerTests
             "/api/workspace/content/" + part.Id + "/properties?queryScope=" + scope))
             Assert.Equal(HttpStatusCode.NotFound, bare.StatusCode);
         using (var removed = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.remove"), HttpMethod.Delete,
-            "/api/workspace/content/references/" + part.LinkId, new { position }))
+            "/api/workspace/content/references/" + part.LinkId, new { position }, WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, Point(fixture, "workspace.folder.remove"))))
             Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
         using (var stale = await FeatureHttpTestRequests.SendAsync(admin, read, HttpMethod.Get, path))
             Assert.Equal(HttpStatusCode.NotFound, stale.StatusCode);

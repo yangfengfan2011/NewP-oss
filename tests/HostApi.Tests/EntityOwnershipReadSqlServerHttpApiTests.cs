@@ -58,7 +58,7 @@ public sealed class EntityOwnershipReadSqlServerHttpApiTests
         using var privateState = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Get, StatusUrl(targets[0].LinkId, privatePosition));
         Assert.Equal(HttpStatusCode.NotFound, privateState.StatusCode);
         using var removed = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.removeSelected"), HttpMethod.Post,
-            "/api/workspace/content/references/remove", new { position = position with { LinkIds = [] }, linkIds = position.LinkIds });
+            "/api/workspace/content/references/remove", new { position = position with { LinkIds = [] }, linkIds = position.LinkIds }, WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, Point(fixture, "workspace.folder.removeSelected")));
         await ReadOkAsync(removed);
         using var stale = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Get, PendingUrl(position));
         Assert.Equal(HttpStatusCode.NotFound, stale.StatusCode);

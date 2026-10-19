@@ -222,7 +222,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         await Command(fixture, ordinary, "workspace.folder.copy", "/api/workspace/content/clipboard/validate", new { mode = "copy", sourcePosition = root, input.linkIds });
         var sourceId = FolderId(source, await Rows(fixture, "WorkspaceFolderContent"));
         await Command(fixture, admin, "workspace.folder.add", "/api/workspace/content/references", new { position = target, target = new { modelKey = "WorkspaceFolder", id = sourceId } });
-        using (var removed = await FeatureHttpTestRequests.SendAsync(admin, RowPoint(fixture, "remove"), HttpMethod.Delete, "/api/workspace/content/references/" + source.LinkIds[^1], new { position = root })) Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
+        using (var removed = await FeatureHttpTestRequests.SendAsync(admin, RowPoint(fixture, "remove"), HttpMethod.Delete, "/api/workspace/content/references/" + source.LinkIds[^1], new { position = root }, ClipboardDeclaration(fixture, RowPoint(fixture, "remove")))) Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
         using var stale = await Send(fixture, ordinary, "workspace.folder.pasteFolderStructure", "folders/copy-structure", new { input.mode, input.sourcePosition, input.linkIds, targetPosition = target, name = "失效" }); await Problem(stale, HttpStatusCode.NotFound, "Workspace.ReferenceUnavailable");
     }
 

@@ -80,6 +80,24 @@ it('reads the real folder EID for a tree action but preserves its LID row and pa
   expect(regular.normalized.fields).toEqual({ ENAME: 'Folder', Description: null });
 });
 
+it.each(['remove', 'removeSelected'] as const)('passes the current %s declaration with the original LID and position', async handler => {
+  const request = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify(
+    String(_input).endsWith('antiforgery-token') ? { requestToken: 'token' } : { succeeded: true })));
+  vi.stubGlobal('fetch', request);
+  const dataAccess = { id: 'current-remove', moduleId: 'Workspace', viewKey: 'workspace.folder.list', surface: 'rowActions',
+    actionKey: handler, execution: 'workspace.clipboard.remove', resources: ['workspace.folder', 'part.part', 'document.document'],
+    actions: ['read', 'edit'], featurePositions: ['current-feature'] };
+  await resource.actionHandlers![handler]({ id: 'reference', selectedRows: [{ LID: 'reference', ObjectId: 'different-entity' }],
+    queryScope: { spaceId: 'public', rootFolderId: 'root', linkIds: '["parent-link"]' }, featurePosition: 'current-feature', action: { key: handler, labelKey: handler, dataAccess } });
+  const write = request.mock.calls.find(([input]) => String(input instanceof Request ? input.url : input).includes('/content/references'))!;
+  const headers = new Headers(write[0] instanceof Request ? write[0].headers : write[1]?.headers);
+  expect(headers.get('X-NewP-Feature')).toBe('current-feature');
+  expect(headers.get('X-NewP-Data-Declaration')).toBe('current-remove');
+  const body = write[0] instanceof Request ? await write[0].clone().json() : JSON.parse(String(write[1]?.body));
+  expect(body).toEqual({ position: { spaceId: 'public', rootFolderId: 'root', linkIds: ['parent-link'] },
+    ...(handler === 'removeSelected' ? { linkIds: ['reference'] } : {}) });
+});
+
 it('activates folders by their exact incoming link path while other types retain details', () => {
   const target = resource.dataAdapter.getRowActivationTarget!;
   expect(target).toBeTypeOf('function');

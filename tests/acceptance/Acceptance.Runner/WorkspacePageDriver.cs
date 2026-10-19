@@ -6,6 +6,9 @@ namespace ICP.Platform.Acceptance;
 /// <summary>工作空间唯一正式旅程的页面控件知识；后续内容操作继续扩展此驱动。</summary>
 internal sealed class WorkspacePageDriver(IPage page)
 {
+    private ILocator CurrentContentLabel => page.GetByRole(AriaRole.Region, new() { Name = "节点内容", Exact = true })
+        .GetByRole(AriaRole.Navigation, new() { Name = "面包屑", Exact = true }).Locator("[aria-current=\"page\"]");
+
     /// <summary>标准转交输入选择真实账号并保存一次；身份、事务与不可读接收者边界由API证明。</summary>
     internal async Task TransferOwnershipAsync(string targetName, string recipientCode)
     {
@@ -265,9 +268,8 @@ internal sealed class WorkspacePageDriver(IPage page)
     internal async Task SelectRootAsync(string label)
     {
         var tree = page.GetByRole(AriaRole.Complementary, new() { Name = "结构树", Exact = true });
-        var content = page.GetByRole(AriaRole.Region, new() { Name = "节点内容", Exact = true });
         // 共享树首次会自动选择公共根，不能等待一次并不存在的重复选中请求。
-        if (!await content.GetByRole(AriaRole.Heading, new() { Name = label, Exact = true }).IsVisibleAsync())
+        if (!await CurrentContentLabel.IsVisibleAsync() || await CurrentContentLabel.InnerTextAsync() != label)
         {
             var responseTask = page.WaitForResponseAsync(response => response.Request.Method == "GET"
                 && new Uri(response.Url).AbsolutePath == "/api/links/workspace.content");
@@ -281,7 +283,7 @@ internal sealed class WorkspacePageDriver(IPage page)
     private async Task WaitForContentAsync(string label)
     {
         var content = page.GetByRole(AriaRole.Region, new() { Name = "节点内容", Exact = true });
-        await content.GetByRole(AriaRole.Heading, new() { Name = label, Exact = true }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        await Assertions.Expect(CurrentContentLabel).ToHaveTextAsync(label);
         await content.Locator(".ant-table").WaitForAsync(new() { State = WaitForSelectorState.Visible });
         // 共享列表有独立容器/表格加载者，全部可见指示器退出后才交给后续交互。
         await Assertions.Expect(content.Locator(".ant-spin-spinning:visible")).ToHaveCountAsync(0, new() { Timeout = 30_000 });

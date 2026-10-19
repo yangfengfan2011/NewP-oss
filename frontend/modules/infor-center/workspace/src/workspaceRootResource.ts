@@ -39,8 +39,9 @@ function authorization(context: Pick<StandardCrudActionContext, 'id' | 'row' | '
   return createObjectAuthorizationActions(source.resourceKey, () => ({ id: source.objectId, title: '对象', titleKey: 'Workspace.Object',
     basePath: `/api/workspace/content/${encodeURIComponent(source.sourceLinkId)}/permissions?queryScope=${encodeURIComponent(JSON.stringify({ spaceId: source.spaceId, rootFolderId: source.rootFolderId, linkIds: source.linkIds }))}` }));
 }
-async function referenceCommand(method: string, path: string, body: unknown, featurePosition?: string) {
-  const response = await platformFetch(path, { method, headers: { ...headers(featurePosition), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+async function referenceCommand(method: string, path: string, body: unknown, featurePosition?: string, declarationId?: string) {
+  const response = await platformFetch(path, { method, headers: { ...headers(featurePosition), 'Content-Type': 'application/json',
+    ...(declarationId ? { 'X-NewP-Data-Declaration': declarationId } : {}) }, body: JSON.stringify(body) });
   if (!response.ok) throw await readStandardCrudRequestError(response);
   return { operation: 'action' as const, payload: await response.json() as unknown, change: { operation: 'update' as const, id: '' } };
 }
@@ -143,17 +144,17 @@ const resource: StandardCrudResourceRegistration = {
         if (!session.clear()) throw new StandardCrudRequestError('Workspace.ClipboardBusy', 409, {}, { code: 'Workspace.ClipboardBusy' });
         return { operation: 'action', payload: null, noChange: true, notice: { reasonKey: 'Workspace.ClipboardCleared' } };
       }
-      const copied = await session.copy(workspacePosition(queryScope), id ? [id] : (selectedRows ?? []).map(row => String(row.LID)), featurePosition);
+      const copied = await session.copy(workspacePosition(queryScope), id ? [id] : (selectedRows ?? []).map(row => String(row.LID)), featurePosition, action?.dataAccess?.id);
       return { operation: 'action', payload: null, noChange: true, ...(copied ? { notice: { reasonKey: 'Workspace.Copied' } } : {}) };
     },
-    cut: async ({ instance, id, selectedRows, queryScope, featurePosition }) => {
+    cut: async ({ action, instance, id, selectedRows, queryScope, featurePosition }) => {
       const session = clipboard(instance);
-      const selected = await session.cut(workspacePosition(queryScope), id ? [id] : (selectedRows ?? []).map(row => String(row.LID)), featurePosition);
+      const selected = await session.cut(workspacePosition(queryScope), id ? [id] : (selectedRows ?? []).map(row => String(row.LID)), featurePosition, action?.dataAccess?.id);
       return { operation: 'action', payload: null, noChange: true, ...(selected ? { notice: { reasonKey: 'Workspace.CutReady' } } : {}) };
     },
-    paste: async ({ instance, queryScope, featurePosition }) => {
+    paste: async ({ action, instance, queryScope, featurePosition }) => {
       const session = clipboard(instance); const mode = session.getSnapshot().clipboard?.mode;
-      const receipt = await session.paste(workspacePosition(queryScope), featurePosition);
+      const receipt = await session.paste(workspacePosition(queryScope), featurePosition, action?.dataAccess?.id);
       return { operation: 'action', payload: receipt, ...(receipt.noChange ? { noChange: true as const } : { change: { operation: 'update' as const, id: '' } }),
         notice: { reasonKey: receipt.noChange ? 'Workspace.PositionUnchanged' : mode === 'cut' ? 'Workspace.Moved' : 'Workspace.Pasted' } };
     },
@@ -192,12 +193,12 @@ const resource: StandardCrudResourceRegistration = {
         && failure.code === 'Document.CodeDuplicated'
         && failure.fieldErrorDetails.some(error => error.field === 'ECODE' && error.code === 'Document.CodeDuplicated'),
     }),
-    remove: async ({ id, queryScope, featurePosition }) => {
+    remove: async ({ action, id, queryScope, featurePosition }) => {
       if (!id) throw new Error('缺少引用标识');
-      return referenceCommand('DELETE', `/api/workspace/content/references/${encodeURIComponent(id)}`, { position: workspacePosition(queryScope) }, featurePosition);
+      return referenceCommand('DELETE', `/api/workspace/content/references/${encodeURIComponent(id)}`, { position: workspacePosition(queryScope) }, featurePosition, action?.dataAccess?.id);
     },
-    removeSelected: async ({ selectedRows, queryScope, featurePosition }) => referenceCommand('POST', '/api/workspace/content/references/remove',
-      { position: workspacePosition(queryScope), linkIds: (selectedRows ?? []).map(row => String(row.LID)) }, featurePosition),
+    removeSelected: async ({ action, selectedRows, queryScope, featurePosition }) => referenceCommand('POST', '/api/workspace/content/references/remove',
+      { position: workspacePosition(queryScope), linkIds: (selectedRows ?? []).map(row => String(row.LID)) }, featurePosition, action?.dataAccess?.id),
   },
   actionEligibilityResolvers: { ...transfer.actionEligibilityResolvers, ...ownership.actionEligibilityResolvers,
     authorizeContent: context => authorization(context).actionEligibilityResolvers.authorize(context) },

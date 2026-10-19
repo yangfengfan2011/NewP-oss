@@ -107,7 +107,7 @@ public sealed class WorkspaceHistoryDeclarationSqlServerTests
                 Assert.Equal(HttpStatusCode.NotFound, bareId.StatusCode);
             // 允许预检后移除真实来源，不能将允许结果当后续列表或输出凭据。
             using (var removed = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.removeSelected"), HttpMethod.Post,
-                "/api/workspace/content/references/remove", new { position, linkIds = new[] { target.LinkId } }))
+                "/api/workspace/content/references/remove", new { position, linkIds = new[] { target.LinkId } }, WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, Point(fixture, "workspace.folder.removeSelected"))))
                 Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
             using var stale = await Send("workspace.history.list", HttpMethod.Get, basePath + query);
             Assert.Equal(HttpStatusCode.NotFound, stale.StatusCode);

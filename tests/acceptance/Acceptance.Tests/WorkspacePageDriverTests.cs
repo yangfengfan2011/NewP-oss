@@ -78,7 +78,8 @@ public sealed class WorkspacePageDriverTests
                   <div role="treeitem" aria-label="共享目录" id="first"><span>共享目录</span></div>
                   <div role="treeitem" aria-label="共享目录" id="selected" class="ant-tree-treenode-selected"><span>共享目录</span></div>
                 </div></aside>
-                <section aria-label="节点内容"><h2>共享目录</h2><table class="ant-table"><tr><td>内容</td></tr></table></section>
+                <section aria-label="节点内容"><nav aria-label="面包屑"><span aria-current="page">共享目录</span></nav>
+                  <table class="ant-table"><tr><td>内容</td></tr></table></section>
                 <div role="menu" hidden><button role="menuitem">复制</button></div>
                 <script>
                   document.querySelectorAll('[role=treeitem] span').forEach(title=>title.oncontextmenu=event=>{
@@ -464,10 +465,12 @@ public sealed class WorkspacePageDriverTests
                 ?? @"C:\Program Files\Google\Chrome\Application\chrome.exe"
         });
         var page = await browser.NewPageAsync();
-        // 保留失败现场的双层 loading 结构，两个组件可以分别完成；driver 不能只等第一项。
+        page.SetDefaultTimeout(1_000);
+        // 已选根只有当前面包屑，不会再发选中请求；双层 loading 仍须分别完成。
         await page.SetContentAsync("""
             <aside aria-label="结构树">公共空间</aside>
-            <section aria-label="节点内容"><h2>公共空间</h2><table class="ant-table"><tr><td>列表</td></tr></table>
+            <section aria-label="节点内容"><nav aria-label="面包屑"><span aria-current="page">公共空间</span></nav>
+              <table class="ant-table"><tr><td>列表</td></tr></table>
               <div id="outer" class="ant-spin-spinning">列表容器加载</div>
               <div id="inner" class="ant-spin-spinning">正在加载列表</div>
             </section>

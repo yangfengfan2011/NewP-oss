@@ -23,7 +23,6 @@ public sealed class ActionDataAccessCompilerTests(ITestOutputHelper output)
         Assert.NotEmpty(requirements);
         Assert.All(requirements, item =>
         {
-            Assert.Equal(new[] { "read" }, item.Actions);
             Assert.Equal(new[] { "workspace.folder", "part.part", "document.document" }, item.Resources);
             Assert.All(item.FeaturePositions, position => Assert.Contains(plan.FeatureCatalog, point => point.Position == position && point.ModuleId == item.ModuleId));
         });
@@ -41,7 +40,10 @@ public sealed class ActionDataAccessCompilerTests(ITestOutputHelper output)
         var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
         var fixture = JsonSerializer.Deserialize<ActionDataAccessRequirement[]>(File.ReadAllText(Path.Combine(repository.FullName,
             "tests/Kernel.Tests/Fixtures/WorkspaceHistoryDataAccess.contract.json")), options);
-        Assert.Equal(json, JsonSerializer.Serialize(fixture, options));
+        var historyIds = fixture!.Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
+        var history = requirements.Where(item => historyIds.Contains(item.Id)).ToArray();
+        Assert.All(history, item => Assert.Equal(new[] { "read" }, item.Actions));
+        Assert.Equal(JsonSerializer.Serialize(history, options), JsonSerializer.Serialize(fixture, options));
     }
 
     [Theory]

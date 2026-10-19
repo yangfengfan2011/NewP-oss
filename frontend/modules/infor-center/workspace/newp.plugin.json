@@ -16,7 +16,26 @@
     {"key": "workspace.history.export", "moduleId": "Workspace", "provider": "workspace.backend", "boundary": "entry", "featureBehaviors": [], "requirements": [{"role": "target", "stage": "read", "shape": "object", "resources": ["workspace.folder", "part.part", "document.document"], "anyOf": [["read"]]}], "legacyActions": true},
     {"key": "workspace.history.print", "moduleId": "Workspace", "provider": "workspace.backend", "boundary": "entry", "featureBehaviors": [], "requirements": [{"role": "target", "stage": "read", "shape": "object", "resources": ["workspace.folder", "part.part", "document.document"], "anyOf": [["read"]]}], "legacyActions": true},
     {"key": "workspace.history.preview", "moduleId": "Workspace", "provider": "workspace.backend", "boundary": "entry", "featureBehaviors": [], "requirements": [{"role": "target", "stage": "read", "shape": "object", "resources": ["workspace.folder", "part.part", "document.document"], "anyOf": [["read"]]}], "legacyActions": true},
-    {"key": "workspace.history.detail", "moduleId": "Workspace", "provider": "workspace.backend", "boundary": "entry", "featureBehaviors": [], "requirements": [{"role": "target", "stage": "read", "shape": "object", "resources": ["workspace.folder", "part.part", "document.document"], "anyOf": [["read"]]}], "legacyActions": true}
+    {"key": "workspace.history.detail", "moduleId": "Workspace", "provider": "workspace.backend", "boundary": "entry", "featureBehaviors": [], "requirements": [{"role": "target", "stage": "read", "shape": "object", "resources": ["workspace.folder", "part.part", "document.document"], "anyOf": [["read"]]}], "legacyActions": true},
+    {"key": "workspace.clipboard.copy", "moduleId": "Workspace", "provider": "workspace.backend", "boundary": "entry", "featureBehaviors": ["workspace.folder.copy"], "requirements": [
+      {"role": "sourceParent", "stage": "prepare", "shape": "object", "resources": ["workspace.folder"], "anyOf": [["read"]], "readResolverKey": "workspace.position"},
+      {"role": "sourceTargets", "stage": "prepare", "shape": "objects", "minimumCount": 1, "maximumCount": 100, "resources": ["workspace.folder", "part.part", "document.document"], "anyOf": [["read"]], "resourceAnyOf": {"workspace.folder": [["workspaceCopy"]], "part.part": [["partCopy"], ["partObjectCopy"]], "document.document": [["documentCopy"], ["documentObjectCopy"]]}, "readResolverKey": "workspace.clipboard.endpoint"}
+    ]},
+    {"key": "workspace.clipboard.cut", "moduleId": "Workspace", "provider": "workspace.backend", "boundary": "entry", "featureBehaviors": ["workspace.folder.cut"], "requirements": [
+      {"role": "sourceParent", "stage": "prepare", "shape": "object", "resources": ["workspace.folder"], "anyOf": [["read", "edit"]], "readResolverKey": "workspace.position"},
+      {"role": "sourceTargets", "stage": "prepare", "shape": "objects", "minimumCount": 1, "maximumCount": 100, "resources": ["workspace.folder", "part.part", "document.document"], "anyOf": [["read", "edit"]], "readResolverKey": "workspace.clipboard.endpoint"}
+    ]},
+    {"key": "workspace.clipboard.paste", "moduleId": "Workspace", "provider": "workspace.backend", "boundary": "entry", "featureBehaviors": ["workspace.folder.paste"], "branches": ["copy", "cut"], "requirements": [
+      {"role": "sourceParent", "stage": "submit", "branch": "copy", "shape": "object", "resources": ["workspace.folder"], "anyOf": [["read"]], "readResolverKey": "workspace.position"},
+      {"role": "sourceTargets", "stage": "submit", "branch": "copy", "shape": "objects", "minimumCount": 1, "maximumCount": 100, "resources": ["workspace.folder", "part.part", "document.document"], "anyOf": [["read"]], "resourceAnyOf": {"workspace.folder": [["workspaceCopy"]], "part.part": [["partCopy"]], "document.document": [["documentCopy"]]}, "readResolverKey": "workspace.clipboard.endpoint"},
+      {"role": "sourceParent", "stage": "submit", "branch": "cut", "shape": "object", "resources": ["workspace.folder"], "anyOf": [["read", "edit"]], "readResolverKey": "workspace.position"},
+      {"role": "sourceTargets", "stage": "submit", "branch": "cut", "shape": "objects", "minimumCount": 1, "maximumCount": 100, "resources": ["workspace.folder", "part.part", "document.document"], "anyOf": [["read", "edit"]], "readResolverKey": "workspace.clipboard.endpoint"},
+      {"role": "targetParent", "stage": "submit", "shape": "object", "resources": ["workspace.folder"], "anyOf": [["read", "edit"]], "readResolverKey": "workspace.position"}
+    ]},
+    {"key": "workspace.clipboard.remove", "moduleId": "Workspace", "provider": "workspace.backend", "boundary": "entry", "featureBehaviors": ["workspace.folder.remove", "workspace.folder.removeSelected"], "requirements": [
+      {"role": "sourceParent", "stage": "submit", "shape": "object", "resources": ["workspace.folder"], "anyOf": [["read", "edit"]], "readResolverKey": "workspace.position"},
+      {"role": "sourceTargets", "stage": "submit", "shape": "objects", "minimumCount": 1, "maximumCount": 100, "resources": ["workspace.folder", "part.part", "document.document"], "anyOf": [["read"]], "readResolverKey": "workspace.clipboard.endpoint"}
+    ]}
   ],
   "frontend": {
     "behaviorKey": "workspace.frontend", "entry": "workspace", "bindingMode": "behavior-bindings",

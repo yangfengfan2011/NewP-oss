@@ -20,7 +20,7 @@ public sealed partial class WorkspaceContents
         using var operation = audit.BeginOperation();
         await LockGraphAsync(cancellation);
         var parent = await positions.ResolveAsync(actor, sourcePosition, cancellation);
-        var endpoints = await ResolveClipboardTargetsAsync(parent.FolderId, linkIds, "remove", cancellation);
+        var endpoints = await ResolveDeferredClipboardTargetsAsync(parent.FolderId, linkIds, DeferredClipboardExecution.DocumentPreparation, cancellation);
         if (endpoints.Any(endpoint => endpoint.ModelKey != "Document")) throw new LinkQueryException(400, "Workspace.ObjectCopySourceRequired");
         var target = await WritablePositionAsync(actor, targetPosition, cancellation);
         RequireContainer(targetPosition, target, "Document");
@@ -87,7 +87,7 @@ public sealed partial class WorkspaceContents
     {
         var parent = await positions.ResolveAsync(actor, input.SourcePosition, token);
         var sources = CopySources(input);
-        var endpoints = await ResolveClipboardTargetsAsync(parent.FolderId, input.LinkIds, "remove", token);
+        var endpoints = await ResolveDeferredClipboardTargetsAsync(parent.FolderId, input.LinkIds, DeferredClipboardExecution.DocumentSources, token);
         if (endpoints.Length != sources.Length) throw new LinkQueryException(404, "Workspace.ReferenceUnavailable");
         for (var index = 0; index < sources.Length; index++)
         {

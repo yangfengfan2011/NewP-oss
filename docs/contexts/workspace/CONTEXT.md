@@ -79,9 +79,13 @@ WorkspaceFolderContent 是正式 Link，父端由 authoring 固定为 WorkspaceF
 
 ## 复制、剪切引用与根接收
 
+复制、剪切、粘贴及单/批量移除共同消费 Workspace Capsule 的 `workspace.clipboard.*` 正式执行合同；树引用与列表按钮共享原声明和各自功能位置，当前按钮声明经请求头传入，不新增功能点。服务端从完整位置和当前父的 LID 解析异构资源/EID；`sourceParent`、`sourceTargets`、`targetParent` 是独立角色，粘贴 copy/cut 分支由已校验的请求模式选择。父角色的 read 在可信 `workspace.position` 解析器内沿原完整链读取一次并交回真实路径事实，端点 read 仍走原 Link 范围；逐对象 read→动作/有限 OR→根约束，再处理目标父，保留首个拒绝顺序。正式提交继续在原图锁内重验当前事实，预检结果不形成授权凭证。
+
+已迁移入口缺失、借用声明或阶段不符直接拒绝。浅副本、结构副本及对象副本的后续提交仅通过显式旧执行边界复用真实关系解析，仍重验自己的正式资格，不按缺声明降级；清空剪贴板只改变当前页面会话。此次合同接入不改变持久化；回退须同时恢复执行端、模块声明与前端消费者，保留关系及审计事实。
+
 新进入空间根的所有内容只能是文件夹：文件夹内创建 Part/Document、添加引用及批量粘贴都在服务端统一拒绝根目标；Document 上传预检在任何文件 IO 前拒绝根位置。普通文件夹仍接收 Folder、Part、Document。已有根 Part/Document 不自动删除或迁移，继续沿原读取、编辑、下载、移除及复制到普通文件夹路径；没有 Workspace 位置的所属对象直接创建不受此准入规则影响。
 
-树复制绑定当前普通文件夹出现位置的单个末端 LID；行菜单绑定实际点击行；页工具栏 `copySelected` 只采样当前页 1–100 个不同 LID，必须同父。`POST /api/workspace/content/clipboard/validate` 只接受 copy 模式、完整 sourcePosition 及 linkIds；重验完整祖先 read、源关系端点及对象所属 copy 数据资格，不要求源父 edit。三个 owner 分别声明 `workspaceCopy`、`partCopy`、`documentCopy`，均 requiresRead；行为分别是 `data.workspace.copy`、`data.part.copy`、`data.document.copy`，词条由各 owner 互补贡献到既有 DataScope 词典。只读预检在本请求复用已有 scoped 连接，结束或取消归还自己打开的连接，不建立事务或缓存授权结果。
+树复制绑定当前普通文件夹出现位置的单个末端 LID；行菜单绑定实际点击行；页工具栏 `copySelected` 只采样当前页 1–100 个不同 LID，必须同父。`POST /api/workspace/content/clipboard/validate` 只接受 copy 模式、完整 sourcePosition 及 linkIds；重验完整祖先 read、源关系端点及对象所属复制资格：Folder 要求 workspaceCopy，Part/Document 的引用复制或真副本动作满足其一即可，不要求源父 edit。三个 owner 分别声明 `workspaceCopy`、`partCopy`、`documentCopy`，均 requiresRead；行为分别是 `data.workspace.copy`、`data.part.copy`、`data.document.copy`，词条由各 owner 互补贡献到既有 DataScope 词典。只读预检在本请求复用已有 scoped 连接，结束或取消归还自己打开的连接，不建立事务或缓存授权结果。
 
 剪切使用独立的 `POST /api/workspace/content/clipboard/cut/validate` 和正式 `workspace.folder.cut` 功能位置，只接受 cut 模式。预检不写数据，重验完整源位置、源父 edit、端点 read 和对象既有 edit，不要求 copy 或 delete。copy 的功能位置不能授权 cut 预检，前次预检不是粘贴凭证。
 

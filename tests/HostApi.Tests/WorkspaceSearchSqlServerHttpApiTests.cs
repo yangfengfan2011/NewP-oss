@@ -111,7 +111,7 @@ public sealed partial class WorkspaceSearchSqlServerHttpApiTests(Xunit.Abstracti
         var path = await Path(client, entry, alternateLeaf);
         Assert.Equal(new[] { "公共空间", "命中A", "命中共享", "命中后代" }, path.GetProperty("names").EnumerateArray().Select(name => name.GetString()));
         using var removed = await FeatureHttpTestRequests.SendAsync(client, Point(fixture, "workspace.folder.remove"), HttpMethod.Delete,
-            "/api/workspace/content/references/" + secondShared, new { position = second });
+            "/api/workspace/content/references/" + secondShared, new { position = second }, WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, Point(fixture, "workspace.folder.remove")));
         Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
         using var stale = await FeatureHttpTestRequests.SendAsync(client, entry, HttpMethod.Get, PathUrl(alternateLeaf));
         Assert.Equal(HttpStatusCode.NotFound, stale.StatusCode);

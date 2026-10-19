@@ -266,7 +266,9 @@ public sealed class WorkspaceAcceptanceFixtureTests
             { ActionScope = "list.pageActions", StaticScope = "folder" };
         var remove = new FeaturePoint("remove", "Workspace", "remove", "action", "remove", "entry", "workspace.folder.remove", [], 0)
             { ActionScope = "list.rowActions", StaticScope = "folder" };
-        var catalog = new AcceptanceFeatureCatalog([entry, create, remove]);
+        var catalog = new AcceptanceFeatureCatalog([entry, create, remove],
+            [new("remove-declaration", "Workspace", "workspace.folder.list", "rowActions", "remove", "workspace.clipboard.remove",
+                ["workspace.folder", "part.part", "document.document"], ["read", "edit"], [remove.Position])]);
         var deleted = false;
         using var client = new HttpClient(new AsyncHandler(async (request, token) =>
         {
@@ -298,6 +300,7 @@ public sealed class WorkspaceAcceptanceFixtureTests
             Assert.Equal(HttpMethod.Delete, request.Method);
             Assert.Equal("/api/workspace/content/references/relation-LID", path);
             Assert.Equal("remove", Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
+            Assert.Equal("remove-declaration", Assert.Single(request.Headers.GetValues("X-NewP-Data-Declaration")));
             using var removal = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(token));
             Assert.Equal("personal-space", removal.RootElement.GetProperty("position").GetProperty("spaceId").GetString());
             deleted = true;

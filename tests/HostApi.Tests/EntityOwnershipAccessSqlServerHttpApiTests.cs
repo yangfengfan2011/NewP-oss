@@ -132,7 +132,7 @@ public sealed class EntityOwnershipAccessSqlServerHttpApiTests
         var visible = await CreateAsync(fixture, admin, publicPosition, "WorkspaceFolder", "folders", "create", "已移除来源");
         await EntityOwnershipFailureSqlServerHttpApiTests.ClearOwnershipAsync(fixture, visible);
         using var removed = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.removeSelected"), HttpMethod.Post,
-            "/api/workspace/content/references/remove", new { position = publicPosition, linkIds = new[] { visible.LinkId } });
+            "/api/workspace/content/references/remove", new { position = publicPosition, linkIds = new[] { visible.LinkId } }, WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, Point(fixture, "workspace.folder.removeSelected")));
         await ReadOkAsync(removed);
         using var stale = await FeatureHttpTestRequests.SendAsync(admin, maintenance, HttpMethod.Post,
             $"/api/workspace/content/{visible.LinkId}/ownership", new { position = publicPosition });

@@ -207,7 +207,7 @@ public sealed class WorkspaceReverseSqlServerHttpApiTests(ITestOutputHelper outp
         await Rule(fixture, admin, "ReverseAnchorDenied", "part.part", "unused");
         var publicList = await FeatureHttpTestRequests.ReadAsync(admin, entry, Forward(root.GetProperty("rootFolderId").GetString()!, Position(root)));
         var publicLink = Assert.Single(publicList.GetProperty("items").EnumerateArray()).GetProperty("linkId").GetString()!;
-        using (var removed = await FeatureHttpTestRequests.SendAsync(admin, remove, HttpMethod.Delete, "/api/workspace/content/references/" + publicLink, new { position = Position(root) })) Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
+        using (var removed = await FeatureHttpTestRequests.SendAsync(admin, remove, HttpMethod.Delete, "/api/workspace/content/references/" + publicLink, new { position = Position(root) }, WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, remove))) Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
         Assert.Equal(0, (await FeatureHttpTestRequests.ReadAsync(ordinary, entry, Reverse("Part", id))).GetProperty("total").GetInt32());
         using (var noPublicAnchor = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, Reverse("WorkspaceFolder", sharedId))) Assert.Equal(HttpStatusCode.NotFound, noPublicAnchor.StatusCode);
         Assert.Equal(2, (await FeatureHttpTestRequests.ReadAsync(admin, entry, Reverse("Part", id))).GetProperty("total").GetInt32());

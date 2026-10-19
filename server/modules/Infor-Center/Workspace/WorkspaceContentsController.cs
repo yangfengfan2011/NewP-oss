@@ -29,6 +29,7 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
 
     /// <summary>只读复制预检使用正式copy功能，快照仅用于本次页面交互，不生成持久凭证。</summary>
     [HttpPost("content/clipboard/validate"), RequireFeature("workspace.folder.copy")]
+    [WorkspaceClipboardExecution(WorkspaceClipboardExecutions.Copy, "prepare")]
     public async Task<IResult> ValidateClipboard(JsonElement input, CancellationToken token)
     {
         try
@@ -42,6 +43,7 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
 
     /// <summary>剪切预检绑定自己的正式功能，客户端mode或复制功能位置不能替代cut资格。</summary>
     [HttpPost("content/clipboard/cut/validate"), RequireFeature("workspace.folder.cut")]
+    [WorkspaceClipboardExecution(WorkspaceClipboardExecutions.Cut, "prepare")]
     public async Task<IResult> ValidateCutClipboard(JsonElement input, CancellationToken token)
     {
         try
@@ -55,6 +57,7 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
 
     /// <summary>粘贴仅接受来源与目标完整位置和LID，提交后的展示读取不参与写入回执。</summary>
     [HttpPost("content/paste"), RequireFeature("workspace.folder.paste")]
+    [WorkspaceClipboardExecution(WorkspaceClipboardExecutions.Paste, "submit")]
     public async Task<IResult> Paste(JsonElement input, CancellationToken token)
     {
         try
@@ -260,6 +263,7 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
 
     /// <summary>移除所选关系始终带当前完整位置，裸父或对象 EID 不能替代 LID。</summary>
     [HttpDelete("content/references/{linkId}"), RequireFeature("workspace.folder.remove")]
+    [WorkspaceClipboardExecution(WorkspaceClipboardExecutions.Remove, "submit")]
     public async Task<IResult> RemoveReference(string linkId, RemoveReferenceInput input, CancellationToken token)
     {
         try
@@ -273,6 +277,7 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
 
     /// <summary>整批只移除当前父中的引用，业务对象、其他入向关系及文件保留。</summary>
     [HttpPost("content/references/remove"), RequireFeature("workspace.folder.removeSelected")]
+    [WorkspaceClipboardExecution(WorkspaceClipboardExecutions.Remove, "submit")]
     public async Task<IResult> RemoveReferences(DeleteObjectsInput input, CancellationToken token)
     {
         try

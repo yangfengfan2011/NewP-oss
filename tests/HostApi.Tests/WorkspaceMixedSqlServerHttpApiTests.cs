@@ -72,7 +72,7 @@ public sealed class WorkspaceMixedSqlServerHttpApiTests(ITestOutputHelper output
             var all = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, Url(root));
             var row = Assert.Single(all.GetProperty("items").EnumerateArray(), item => item.GetProperty("associatedObject").GetProperty("modelKey").GetString() == target.Model);
             var before = await FeatureHttpTestRequests.ReadAsync(ordinary, target.Read, target.Route + "/" + target.Id);
-            using var removed = await FeatureHttpTestRequests.SendAsync(ordinary, remove, HttpMethod.Delete, "/api/workspace/content/references/" + row.GetProperty("linkId").GetString(), new { position });
+            using var removed = await FeatureHttpTestRequests.SendAsync(ordinary, remove, HttpMethod.Delete, "/api/workspace/content/references/" + row.GetProperty("linkId").GetString(), new { position }, WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, remove));
             Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
             Assert.Equal(1, (await FeatureHttpTestRequests.ReadAsync(ordinary, target.Read, target.Route + "?keyword=INDEPENDENT")).GetProperty("total").GetInt32());
             await Rule(fixture, admin, "Deny" + target.Model.Replace('/', '_'), target.Model == "Part" ? "part.part" : "document.document", target.Id);

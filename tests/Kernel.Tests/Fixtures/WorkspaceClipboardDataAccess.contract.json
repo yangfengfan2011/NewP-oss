@@ -1,0 +1,1019 @@
+{
+  "declarations": [
+    {
+      "id": "Workspace/view:workspace.folder.list/pageActions/action:copySelected",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.folder.list",
+      "surface": "pageActions",
+      "actionKey": "copySelected",
+      "execution": "workspace.clipboard.copy",
+      "resources": [
+        "workspace.folder",
+        "part.part",
+        "document.document"
+      ],
+      "actions": [
+        "read",
+        "workspaceCopy",
+        "partCopy",
+        "partObjectCopy",
+        "documentCopy",
+        "documentObjectCopy"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:copySelected"
+      ],
+      "requirements": [
+        {
+          "role": "sourceParent",
+          "stage": "prepare",
+          "shape": "object",
+          "resources": [
+            "workspace.folder"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1,
+          "readResolverKey": "workspace.position"
+        },
+        {
+          "role": "sourceTargets",
+          "stage": "prepare",
+          "shape": "objects",
+          "resources": [
+            "workspace.folder",
+            "part.part",
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 100,
+          "readResolverKey": "workspace.clipboard.endpoint",
+          "resourceAnyOf": {
+            "workspace.folder": [
+              [
+                "workspaceCopy"
+              ]
+            ],
+            "part.part": [
+              [
+                "partCopy"
+              ],
+              [
+                "partObjectCopy"
+              ]
+            ],
+            "document.document": [
+              [
+                "documentCopy"
+              ],
+              [
+                "documentObjectCopy"
+              ]
+            ]
+          }
+        }
+      ],
+      "provider": "workspace.backend"
+    },
+    {
+      "id": "Workspace/view:workspace.folder.list/pageActions/action:cutSelected",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.folder.list",
+      "surface": "pageActions",
+      "actionKey": "cutSelected",
+      "execution": "workspace.clipboard.cut",
+      "resources": [
+        "workspace.folder",
+        "part.part",
+        "document.document"
+      ],
+      "actions": [
+        "read",
+        "edit"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:cutSelected"
+      ],
+      "requirements": [
+        {
+          "role": "sourceParent",
+          "stage": "prepare",
+          "shape": "object",
+          "resources": [
+            "workspace.folder"
+          ],
+          "anyOf": [
+            [
+              "read",
+              "edit"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1,
+          "readResolverKey": "workspace.position"
+        },
+        {
+          "role": "sourceTargets",
+          "stage": "prepare",
+          "shape": "objects",
+          "resources": [
+            "workspace.folder",
+            "part.part",
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read",
+              "edit"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 100,
+          "readResolverKey": "workspace.clipboard.endpoint"
+        }
+      ],
+      "provider": "workspace.backend"
+    },
+    {
+      "id": "Workspace/view:workspace.folder.list/pageActions/action:paste",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.folder.list",
+      "surface": "pageActions",
+      "actionKey": "paste",
+      "execution": "workspace.clipboard.paste",
+      "resources": [
+        "workspace.folder",
+        "part.part",
+        "document.document"
+      ],
+      "actions": [
+        "read",
+        "workspaceCopy",
+        "partCopy",
+        "documentCopy",
+        "edit"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:paste",
+        "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:paste"
+      ],
+      "requirements": [
+        {
+          "role": "sourceParent",
+          "stage": "submit",
+          "shape": "object",
+          "resources": [
+            "workspace.folder"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1,
+          "branch": "copy",
+          "readResolverKey": "workspace.position"
+        },
+        {
+          "role": "sourceTargets",
+          "stage": "submit",
+          "shape": "objects",
+          "resources": [
+            "workspace.folder",
+            "part.part",
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 100,
+          "branch": "copy",
+          "readResolverKey": "workspace.clipboard.endpoint",
+          "resourceAnyOf": {
+            "workspace.folder": [
+              [
+                "workspaceCopy"
+              ]
+            ],
+            "part.part": [
+              [
+                "partCopy"
+              ]
+            ],
+            "document.document": [
+              [
+                "documentCopy"
+              ]
+            ]
+          }
+        },
+        {
+          "role": "sourceParent",
+          "stage": "submit",
+          "shape": "object",
+          "resources": [
+            "workspace.folder"
+          ],
+          "anyOf": [
+            [
+              "read",
+              "edit"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1,
+          "branch": "cut",
+          "readResolverKey": "workspace.position"
+        },
+        {
+          "role": "sourceTargets",
+          "stage": "submit",
+          "shape": "objects",
+          "resources": [
+            "workspace.folder",
+            "part.part",
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read",
+              "edit"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 100,
+          "branch": "cut",
+          "readResolverKey": "workspace.clipboard.endpoint"
+        },
+        {
+          "role": "targetParent",
+          "stage": "submit",
+          "shape": "object",
+          "resources": [
+            "workspace.folder"
+          ],
+          "anyOf": [
+            [
+              "read",
+              "edit"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1,
+          "readResolverKey": "workspace.position"
+        }
+      ],
+      "provider": "workspace.backend"
+    },
+    {
+      "id": "Workspace/view:workspace.folder.list/pageActions/action:removeSelected",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.folder.list",
+      "surface": "pageActions",
+      "actionKey": "removeSelected",
+      "execution": "workspace.clipboard.remove",
+      "resources": [
+        "workspace.folder",
+        "part.part",
+        "document.document"
+      ],
+      "actions": [
+        "read",
+        "edit"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:removeSelected"
+      ],
+      "requirements": [
+        {
+          "role": "sourceParent",
+          "stage": "submit",
+          "shape": "object",
+          "resources": [
+            "workspace.folder"
+          ],
+          "anyOf": [
+            [
+              "read",
+              "edit"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1,
+          "readResolverKey": "workspace.position"
+        },
+        {
+          "role": "sourceTargets",
+          "stage": "submit",
+          "shape": "objects",
+          "resources": [
+            "workspace.folder",
+            "part.part",
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 100,
+          "readResolverKey": "workspace.clipboard.endpoint"
+        }
+      ],
+      "provider": "workspace.backend"
+    },
+    {
+      "id": "Workspace/view:workspace.folder.list/rowActions/action:copy",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.folder.list",
+      "surface": "rowActions",
+      "actionKey": "copy",
+      "execution": "workspace.clipboard.copy",
+      "resources": [
+        "workspace.folder",
+        "part.part",
+        "document.document"
+      ],
+      "actions": [
+        "read",
+        "workspaceCopy",
+        "partCopy",
+        "partObjectCopy",
+        "documentCopy",
+        "documentObjectCopy"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:copy",
+        "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:copy"
+      ],
+      "requirements": [
+        {
+          "role": "sourceParent",
+          "stage": "prepare",
+          "shape": "object",
+          "resources": [
+            "workspace.folder"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1,
+          "readResolverKey": "workspace.position"
+        },
+        {
+          "role": "sourceTargets",
+          "stage": "prepare",
+          "shape": "objects",
+          "resources": [
+            "workspace.folder",
+            "part.part",
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 100,
+          "readResolverKey": "workspace.clipboard.endpoint",
+          "resourceAnyOf": {
+            "workspace.folder": [
+              [
+                "workspaceCopy"
+              ]
+            ],
+            "part.part": [
+              [
+                "partCopy"
+              ],
+              [
+                "partObjectCopy"
+              ]
+            ],
+            "document.document": [
+              [
+                "documentCopy"
+              ],
+              [
+                "documentObjectCopy"
+              ]
+            ]
+          }
+        }
+      ],
+      "provider": "workspace.backend"
+    },
+    {
+      "id": "Workspace/view:workspace.folder.list/rowActions/action:cut",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.folder.list",
+      "surface": "rowActions",
+      "actionKey": "cut",
+      "execution": "workspace.clipboard.cut",
+      "resources": [
+        "workspace.folder",
+        "part.part",
+        "document.document"
+      ],
+      "actions": [
+        "read",
+        "edit"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:cut",
+        "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:cut"
+      ],
+      "requirements": [
+        {
+          "role": "sourceParent",
+          "stage": "prepare",
+          "shape": "object",
+          "resources": [
+            "workspace.folder"
+          ],
+          "anyOf": [
+            [
+              "read",
+              "edit"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1,
+          "readResolverKey": "workspace.position"
+        },
+        {
+          "role": "sourceTargets",
+          "stage": "prepare",
+          "shape": "objects",
+          "resources": [
+            "workspace.folder",
+            "part.part",
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read",
+              "edit"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 100,
+          "readResolverKey": "workspace.clipboard.endpoint"
+        }
+      ],
+      "provider": "workspace.backend"
+    },
+    {
+      "id": "Workspace/view:workspace.folder.list/rowActions/action:history",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.folder.list",
+      "surface": "rowActions",
+      "actionKey": "history",
+      "execution": "workspace.history.enter",
+      "resources": [
+        "workspace.folder",
+        "part.part",
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/navigation:workspace.history"
+      ]
+    },
+    {
+      "id": "Workspace/view:workspace.folder.list/rowActions/action:remove",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.folder.list",
+      "surface": "rowActions",
+      "actionKey": "remove",
+      "execution": "workspace.clipboard.remove",
+      "resources": [
+        "workspace.folder",
+        "part.part",
+        "document.document"
+      ],
+      "actions": [
+        "read",
+        "edit"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:remove",
+        "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:remove"
+      ],
+      "requirements": [
+        {
+          "role": "sourceParent",
+          "stage": "submit",
+          "shape": "object",
+          "resources": [
+            "workspace.folder"
+          ],
+          "anyOf": [
+            [
+              "read",
+              "edit"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1,
+          "readResolverKey": "workspace.position"
+        },
+        {
+          "role": "sourceTargets",
+          "stage": "submit",
+          "shape": "objects",
+          "resources": [
+            "workspace.folder",
+            "part.part",
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 100,
+          "readResolverKey": "workspace.clipboard.endpoint"
+        }
+      ],
+      "provider": "workspace.backend"
+    },
+    {
+      "id": "Workspace/view:workspace.history.list/outputActions/action:exportAll",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.history.list",
+      "surface": "outputActions",
+      "actionKey": "exportAll",
+      "execution": "workspace.history.export",
+      "resources": [
+        "workspace.folder",
+        "part.part",
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/navigation:workspace.history"
+      ]
+    },
+    {
+      "id": "Workspace/view:workspace.history.list/outputActions/action:exportSelected",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.history.list",
+      "surface": "outputActions",
+      "actionKey": "exportSelected",
+      "execution": "workspace.history.export",
+      "resources": [
+        "workspace.folder",
+        "part.part",
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/navigation:workspace.history"
+      ]
+    },
+    {
+      "id": "Workspace/view:workspace.history.list/outputActions/action:printAll",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.history.list",
+      "surface": "outputActions",
+      "actionKey": "printAll",
+      "execution": "workspace.history.print",
+      "resources": [
+        "workspace.folder",
+        "part.part",
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/navigation:workspace.history"
+      ]
+    },
+    {
+      "id": "Workspace/view:workspace.history.list/outputActions/action:printSelected",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.history.list",
+      "surface": "outputActions",
+      "actionKey": "printSelected",
+      "execution": "workspace.history.print",
+      "resources": [
+        "workspace.folder",
+        "part.part",
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/navigation:workspace.history"
+      ]
+    },
+    {
+      "id": "Workspace/view:workspace.history.list/pageActions/action:output",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.history.list",
+      "surface": "pageActions",
+      "actionKey": "output",
+      "execution": "workspace.history.preview",
+      "resources": [
+        "workspace.folder",
+        "part.part",
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/navigation:workspace.history"
+      ]
+    },
+    {
+      "id": "Workspace/view:workspace.history.list/read",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.history.list",
+      "surface": "read",
+      "actionKey": "",
+      "execution": "workspace.history.list",
+      "resources": [
+        "workspace.folder",
+        "part.part",
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/navigation:workspace.history"
+      ]
+    },
+    {
+      "id": "Workspace/view:workspace.history.list/rowActions/action:view",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.history.list",
+      "surface": "rowActions",
+      "actionKey": "view",
+      "execution": "workspace.history.detail",
+      "resources": [
+        "workspace.folder",
+        "part.part",
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/navigation:workspace.history"
+      ]
+    }
+  ],
+  "features": [
+    {
+      "position": "Workspace/navigation:workspace",
+      "moduleId": "Workspace",
+      "key": "workspace",
+      "kind": "navigation",
+      "title": "\u5DE5\u4F5C\u7A7A\u95F4",
+      "parentPosition": null,
+      "behaviorKey": "workspace.spaces.access",
+      "entryDependencies": [],
+      "order": 0,
+      "referenceKey": "workspace",
+      "staticScope": null,
+      "staticScopeTitle": null,
+      "titleKey": "Workspace.Title",
+      "staticScopeTitleKey": null,
+      "actionScope": null,
+      "readBehaviors": [
+        "tree:workspace.structure",
+        "workspace.folder.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:clearClipboard",
+      "moduleId": "Workspace",
+      "key": "clearClipboard",
+      "kind": "action",
+      "title": "\u6E05\u7A7A\u526A\u8D34\u677F",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "workspace.folder.copy",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "workspace/node-type:folder/surface:contextMenu/action:clearClipboard",
+      "staticScope": "folder",
+      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "titleKey": "Workspace.ClearClipboard",
+      "staticScopeTitleKey": "Workspace.Folder",
+      "actionScope": "contextMenu",
+      "readBehaviors": [
+        "workspace.folder.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:copy",
+      "moduleId": "Workspace",
+      "key": "copy",
+      "kind": "action",
+      "title": "\u590D\u5236",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "workspace.folder.copy",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "workspace/node-type:folder/surface:contextMenu/action:copy",
+      "staticScope": "folder",
+      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "titleKey": "Workspace.Copy",
+      "staticScopeTitleKey": "Workspace.Folder",
+      "actionScope": "contextMenu",
+      "readBehaviors": [
+        "workspace.folder.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:cut",
+      "moduleId": "Workspace",
+      "key": "cut",
+      "kind": "action",
+      "title": "\u526A\u5207",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "workspace.folder.cut",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "workspace/node-type:folder/surface:contextMenu/action:cut",
+      "staticScope": "folder",
+      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "titleKey": "Workspace.Cut",
+      "staticScopeTitleKey": "Workspace.Folder",
+      "actionScope": "contextMenu",
+      "readBehaviors": [
+        "workspace.folder.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:paste",
+      "moduleId": "Workspace",
+      "key": "paste",
+      "kind": "action",
+      "title": "\u7C98\u8D34\u5F15\u7528",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "workspace.folder.paste",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "workspace/node-type:folder/surface:contextMenu/action:paste",
+      "staticScope": "folder",
+      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "titleKey": "Workspace.PasteReferences",
+      "staticScopeTitleKey": "Workspace.Folder",
+      "actionScope": "contextMenu",
+      "readBehaviors": [
+        "workspace.folder.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:remove",
+      "moduleId": "Workspace",
+      "key": "remove",
+      "kind": "action",
+      "title": "\u79FB\u9664\u5F15\u7528",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "workspace.folder.remove",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "workspace/node-type:folder/surface:contextMenu/action:remove",
+      "staticScope": "folder",
+      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "titleKey": "Workspace.RemoveReference",
+      "staticScopeTitleKey": "Workspace.Folder",
+      "actionScope": "contextMenu",
+      "readBehaviors": [
+        "workspace.folder.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:clearClipboard",
+      "moduleId": "Workspace",
+      "key": "clearClipboard",
+      "kind": "action",
+      "title": "\u6E05\u7A7A\u526A\u8D34\u677F",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "workspace.folder.copy",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "workspace/node-type:folder/surface:list.pageActions/action:clearClipboard",
+      "staticScope": "folder",
+      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "titleKey": "Workspace.ClearClipboard",
+      "staticScopeTitleKey": "Workspace.Folder",
+      "actionScope": "list.pageActions",
+      "readBehaviors": [
+        "workspace.folder.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:copySelected",
+      "moduleId": "Workspace",
+      "key": "copySelected",
+      "kind": "action",
+      "title": "\u590D\u5236",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "workspace.folder.copy",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "workspace/node-type:folder/surface:list.pageActions/action:copySelected",
+      "staticScope": "folder",
+      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "titleKey": "Workspace.Copy",
+      "staticScopeTitleKey": "Workspace.Folder",
+      "actionScope": "list.pageActions",
+      "readBehaviors": [
+        "workspace.folder.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:cutSelected",
+      "moduleId": "Workspace",
+      "key": "cutSelected",
+      "kind": "action",
+      "title": "\u526A\u5207",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "workspace.folder.cut",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "workspace/node-type:folder/surface:list.pageActions/action:cutSelected",
+      "staticScope": "folder",
+      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "titleKey": "Workspace.Cut",
+      "staticScopeTitleKey": "Workspace.Folder",
+      "actionScope": "list.pageActions",
+      "readBehaviors": [
+        "workspace.folder.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:paste",
+      "moduleId": "Workspace",
+      "key": "paste",
+      "kind": "action",
+      "title": "\u7C98\u8D34\u5F15\u7528",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "workspace.folder.paste",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "workspace/node-type:folder/surface:list.pageActions/action:paste",
+      "staticScope": "folder",
+      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "titleKey": "Workspace.PasteReferences",
+      "staticScopeTitleKey": "Workspace.Folder",
+      "actionScope": "list.pageActions",
+      "readBehaviors": [
+        "workspace.folder.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:removeSelected",
+      "moduleId": "Workspace",
+      "key": "removeSelected",
+      "kind": "action",
+      "title": "\u79FB\u9664",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "workspace.folder.removeSelected",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "workspace/node-type:folder/surface:list.pageActions/action:removeSelected",
+      "staticScope": "folder",
+      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "titleKey": "Workspace.RemoveSelected",
+      "staticScopeTitleKey": "Workspace.Folder",
+      "actionScope": "list.pageActions",
+      "readBehaviors": [
+        "workspace.folder.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:copy",
+      "moduleId": "Workspace",
+      "key": "copy",
+      "kind": "action",
+      "title": "\u590D\u5236",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "workspace.folder.copy",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "workspace/node-type:folder/surface:list.rowActions/action:copy",
+      "staticScope": "folder",
+      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "titleKey": "Workspace.Copy",
+      "staticScopeTitleKey": "Workspace.Folder",
+      "actionScope": "list.rowActions",
+      "readBehaviors": [
+        "workspace.folder.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:cut",
+      "moduleId": "Workspace",
+      "key": "cut",
+      "kind": "action",
+      "title": "\u526A\u5207",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "workspace.folder.cut",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "workspace/node-type:folder/surface:list.rowActions/action:cut",
+      "staticScope": "folder",
+      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "titleKey": "Workspace.Cut",
+      "staticScopeTitleKey": "Workspace.Folder",
+      "actionScope": "list.rowActions",
+      "readBehaviors": [
+        "workspace.folder.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/node-type:folder/surface:list.rowActions/action:remove",
+      "moduleId": "Workspace",
+      "key": "remove",
+      "kind": "action",
+      "title": "\u79FB\u9664\u5F15\u7528",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "workspace.folder.remove",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "workspace/node-type:folder/surface:list.rowActions/action:remove",
+      "staticScope": "folder",
+      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "titleKey": "Workspace.RemoveReference",
+      "staticScopeTitleKey": "Workspace.Folder",
+      "actionScope": "list.rowActions",
+      "readBehaviors": [
+        "workspace.folder.read"
+      ],
+      "container": false
+    }
+  ]
+}

@@ -176,19 +176,19 @@ public sealed class WorkspaceReferenceSqlServerHttpApiTests(ITestOutputHelper ou
         var visible = await FeatureHttpTestRequests.ReadAsync(reader, add, "/api/workspace/folders/candidates");
         Assert.Equal(child, Assert.Single(visible.GetProperty("items").EnumerateArray()).GetProperty("id").GetString());
         publicList = await FeatureHttpTestRequests.ReadAsync(reader, entry, ListUrl(root)); var alternateLink = LinkTo(publicList, child);
-        using var removed = await FeatureHttpTestRequests.SendAsync(reader, remove, HttpMethod.Delete, "/api/workspace/content/references/" + alternateLink, new { position = Position(root) });
+        using var removed = await FeatureHttpTestRequests.SendAsync(reader, remove, HttpMethod.Delete, "/api/workspace/content/references/" + alternateLink, new { position = Position(root) }, WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, remove));
         Assert.Equal(HttpStatusCode.OK, removed.StatusCode); await Missing(reader, entry, child);
         await Rule(admin, fixture, "UnreadableSharedAncestor", parent, "read", "allow");
         var retained = await FeatureHttpTestRequests.ReadAsync(reader, entry, ListUrl(root, parent, [publicLink]));
         Assert.Equal(childLink, LinkTo(retained, child));
-        using var wrongParent = await FeatureHttpTestRequests.SendAsync(owner, remove, HttpMethod.Delete, "/api/workspace/content/references/" + childLink, new { position = Position(root) });
+        using var wrongParent = await FeatureHttpTestRequests.SendAsync(owner, remove, HttpMethod.Delete, "/api/workspace/content/references/" + childLink, new { position = Position(root) }, WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, remove));
         Assert.Equal(HttpStatusCode.NotFound, wrongParent.StatusCode);
         await Rule(admin, fixture, "RemoveTargetRead", child, "read", "deny");
-        using var deniedTarget = await FeatureHttpTestRequests.SendAsync(reader, remove, HttpMethod.Delete, "/api/workspace/content/references/" + childLink, new { position = publicParentPosition });
+        using var deniedTarget = await FeatureHttpTestRequests.SendAsync(reader, remove, HttpMethod.Delete, "/api/workspace/content/references/" + childLink, new { position = publicParentPosition }, WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, remove));
         Assert.Equal(HttpStatusCode.NotFound, deniedTarget.StatusCode);
         await Rule(admin, fixture, "RemoveTargetRead", child, "read", "allow");
         await Rule(admin, fixture, "RemoveParentEdit", parent, "edit", "deny");
-        using var deniedParent = await FeatureHttpTestRequests.SendAsync(reader, remove, HttpMethod.Delete, "/api/workspace/content/references/" + childLink, new { position = publicParentPosition });
+        using var deniedParent = await FeatureHttpTestRequests.SendAsync(reader, remove, HttpMethod.Delete, "/api/workspace/content/references/" + childLink, new { position = publicParentPosition }, WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, remove));
         Assert.Equal(HttpStatusCode.Forbidden, deniedParent.StatusCode);
     }
 
@@ -241,14 +241,14 @@ public sealed class WorkspaceReferenceSqlServerHttpApiTests(ITestOutputHelper ou
         Assert.Equal(descendant, (await FeatureHttpTestRequests.ReadAsync(reader, entry, "/api/workspace/folders/" + descendant)).GetProperty("id").GetString());
         var list = await FeatureHttpTestRequests.ReadAsync(reader, entry, ListUrl(root));
         var linkId = Assert.Single(list.GetProperty("items").EnumerateArray()).GetProperty("linkId").GetString();
-        using var removed = await FeatureHttpTestRequests.SendAsync(owner, remove, HttpMethod.Delete, "/api/workspace/content/references/" + linkId, new { position = publicPosition });
+        using var removed = await FeatureHttpTestRequests.SendAsync(owner, remove, HttpMethod.Delete, "/api/workspace/content/references/" + linkId, new { position = publicPosition }, WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, remove));
         Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
         await Missing(reader, entry, id);
         await Missing(reader, entry, descendant);
         Assert.Equal(0, (await FeatureHttpTestRequests.ReadAsync(reader, add, "/api/workspace/folders/candidates")).GetProperty("total").GetInt32());
         var ownList = await FeatureHttpTestRequests.ReadAsync(owner, entry, ListUrl(personal));
         var ownLink = Assert.Single(ownList.GetProperty("items").EnumerateArray()).GetProperty("linkId").GetString();
-        using var orphaned = await FeatureHttpTestRequests.SendAsync(owner, remove, HttpMethod.Delete, "/api/workspace/content/references/" + ownLink, new { position = privatePosition });
+        using var orphaned = await FeatureHttpTestRequests.SendAsync(owner, remove, HttpMethod.Delete, "/api/workspace/content/references/" + ownLink, new { position = privatePosition }, WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, remove));
         Assert.Equal(HttpStatusCode.OK, orphaned.StatusCode);
         var originCandidates = await FeatureHttpTestRequests.ReadAsync(owner, add, "/api/workspace/folders/candidates");
         Assert.Equal(2, originCandidates.GetProperty("total").GetInt32());

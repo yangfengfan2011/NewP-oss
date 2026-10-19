@@ -48,6 +48,8 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
             provider.GetRequiredService<WorkspaceFolderScope>());
         services.AddSingleton(new DataScopeResourceReadConstraintBinding("workspace.folder.scope", "workspace.folder", ModuleId));
         services.AddScoped<ICP.Platform.Crud.LinkQueries.ILinkQueryEndpointConstraint>(provider => provider.GetRequiredService<WorkspaceFolderScope>());
+        services.AddScoped<ICP.Platform.Authorization.Contracts.IDataExecutionTargetResolver, WorkspacePositionDataExecutionResolver>();
+        services.AddScoped<ICP.Platform.Authorization.Contracts.IDataExecutionTargetResolver, WorkspaceClipboardEndpointDataExecutionResolver>();
         services.AddScoped<ICP.Platform.Crud.LinkQueries.ILinkQuerySourcePolicy, WorkspaceContentQueryPolicy>();
         services.AddScoped<ICP.Platform.Crud.LinkQueries.ILinkTreeSourceReadPolicy, WorkspaceContentReadPredicate>();
         services.AddSingleton<WorkspaceFolderReadDescriptor>();

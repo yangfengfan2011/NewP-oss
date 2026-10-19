@@ -19,9 +19,10 @@ export function workspaceClipboard(instance: StandardCrudActionInstance | undefi
   return instance.getOrCreate(clipboardOwner, () => new WorkspaceClipboardSession(() => instance.changed()), session => session.close());
 }
 
-async function command(path: string, body: unknown, featurePosition: string | undefined, signal?: AbortSignal): Promise<unknown> {
+async function command(path: string, body: unknown, featurePosition: string | undefined, signal?: AbortSignal, declarationId?: string): Promise<unknown> {
   const response = await platformFetch(`/api/workspace/content/${path}`, { method: 'POST', signal,
-    headers: { 'Content-Type': 'application/json', ...(featurePosition ? { 'X-NewP-Feature': featurePosition } : {}) }, body: JSON.stringify(body) });
+    headers: { 'Content-Type': 'application/json', ...(featurePosition ? { 'X-NewP-Feature': featurePosition } : {}),
+      ...(declarationId ? { 'X-NewP-Data-Declaration': declarationId } : {}) }, body: JSON.stringify(body) });
   if (!response.ok) throw await readStandardCrudRequestError(response);
   return await response.json() as unknown;
 }
@@ -43,13 +44,13 @@ export class WorkspaceClipboardSession {
   readonly getSnapshot = (): ClipboardState => this.state;
   readonly subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
 
-  copy(sourcePosition: ClipboardPosition, linkIds: readonly string[], featurePosition?: string): Promise<boolean> {
-    return this.select('copy', sourcePosition, linkIds, featurePosition);
+  copy(sourcePosition: ClipboardPosition, linkIds: readonly string[], featurePosition?: string, declarationId?: string): Promise<boolean> {
+    return this.select('copy', sourcePosition, linkIds, featurePosition, declarationId);
   }
-  cut(sourcePosition: ClipboardPosition, linkIds: readonly string[], featurePosition?: string): Promise<boolean> {
-    return this.select('cut', sourcePosition, linkIds, featurePosition);
+  cut(sourcePosition: ClipboardPosition, linkIds: readonly string[], featurePosition?: string, declarationId?: string): Promise<boolean> {
+    return this.select('cut', sourcePosition, linkIds, featurePosition, declarationId);
   }
-  private async select(mode: 'copy' | 'cut', sourcePosition: ClipboardPosition, linkIds: readonly string[], featurePosition?: string): Promise<boolean> {
+  private async select(mode: 'copy' | 'cut', sourcePosition: ClipboardPosition, linkIds: readonly string[], featurePosition?: string, declarationId?: string): Promise<boolean> {
     if (this.closed || this.state.phase === 'pasting') throw this.failure('Workspace.ClipboardBusy');
     if (linkIds.length < 1 || linkIds.length > 100 || linkIds.some(id => !id) || new Set(linkIds.map(id => id.toLowerCase())).size !== linkIds.length)
       throw this.failure('Workspace.InvalidSelection');
@@ -60,7 +61,7 @@ export class WorkspaceClipboardSession {
     this.validation?.abort(); const validation = new AbortController(); this.validation = validation;
     this.publish({ ...this.state, phase: 'validating' });
     try {
-      const receipt = await command(mode === 'cut' ? 'clipboard/cut/validate' : 'clipboard/validate', clipboard, featurePosition, validation.signal) as { items?: Array<{ linkId: string; modelKey?: string }> };
+      const receipt = await command(mode === 'cut' ? 'clipboard/cut/validate' : 'clipboard/validate', clipboard, featurePosition, validation.signal, declarationId) as { items?: Array<{ linkId: string; modelKey?: string }> };
       if (this.closed || generation !== this.generation) return false;
       if (!Array.isArray(receipt.items) || receipt.items.length !== linkIds.length || receipt.items.some((item, index) => item.linkId !== linkIds[index]))
         throw this.failure('Workspace.InvalidClipboardInput');
@@ -177,18 +178,18 @@ export class WorkspaceClipboardSession {
       ...(copyParentAuthorization !== undefined ? { copyParentAuthorization } : {}) }, featurePosition);
   }
 
-  async paste(targetPosition: ClipboardPosition, featurePosition?: string): Promise<ClipboardPasteReceipt> {
+  async paste(targetPosition: ClipboardPosition, featurePosition?: string, declarationId?: string): Promise<ClipboardPasteReceipt> {
     if (this.closed || this.state.phase !== 'idle' || !this.state.clipboard)
       throw this.failure(this.state.phase === 'unknown' ? 'Workspace.ClipboardOutcomeUnknown' : 'Workspace.ClipboardUnavailable');
     const clipboard = this.state.clipboard;
-    return this.write('paste', { ...clipboard, targetPosition: { ...targetPosition, linkIds: [...targetPosition.linkIds] } }, featurePosition);
+    return this.write('paste', { ...clipboard, targetPosition: { ...targetPosition, linkIds: [...targetPosition.linkIds] } }, featurePosition, declarationId);
   }
 
-  private async write(path: string, body: unknown, featurePosition?: string): Promise<ClipboardPasteReceipt> {
+  private async write(path: string, body: unknown, featurePosition?: string, declarationId?: string): Promise<ClipboardPasteReceipt> {
     const clipboard = this.state.clipboard!;
     this.publish({ phase: 'pasting', clipboard });
     try {
-      const receipt = await command(path, body, featurePosition);
+      const receipt = await command(path, body, featurePosition, undefined, declarationId);
       if (typeof receipt !== 'object' || receipt === null || !('succeeded' in receipt) || receipt.succeeded !== true
         || 'noChange' in receipt && typeof receipt.noChange !== 'boolean')
         throw this.failure('Workspace.ClipboardOutcomeUnknown');

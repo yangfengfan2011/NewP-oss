@@ -707,6 +707,60 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通账号通过正式声明接通树复制、异构选择、剪切粘贴和直接移除")]
+    public async Task WorkspaceClipboardExecution_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("workspace-clipboard-execution");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, publishedFixture: fixture,
+            browserJourney: async (page, token) =>
+            {
+                var requests = new System.Collections.Concurrent.ConcurrentQueue<object>();
+                page.Request += (_, request) =>
+                {
+                    var path = new Uri(request.Url).AbsolutePath;
+                    if (request.Method is not ("POST" or "DELETE") || !path.StartsWith("/api/workspace/content/", StringComparison.Ordinal)) return;
+                    request.Headers.TryGetValue("x-newp-data-declaration", out var declaration);
+                    request.Headers.TryGetValue("x-newp-feature", out var feature);
+                    requests.Enqueue(new { request.Method, path, declaration, feature });
+                };
+                var driver = new WorkspacePageDriver(page);
+                var source = "声明来源 " + runId[..8];
+                var target = "声明复制目标 " + runId[..8];
+                var moved = "声明移动目标 " + runId[..8];
+                var folder = "声明树文件夹 " + runId[..8];
+                var part = "声明零组件 " + runId[..8];
+                await driver.OpenAsync();
+                await driver.SelectRootAsync("公共空间");
+                foreach (var name in new[] { source, target, moved }) await driver.CreateFolderAsync(name);
+                await driver.SelectTreePathAsync("公共空间", source);
+                await driver.CreateFolderAsync(folder);
+                await driver.CreateObjectAsync("零组件", "DECL-P-" + runId[..8], part);
+                await driver.SelectTreePathAsync("公共空间", source, folder);
+                await driver.CopyFolderFromTreeContextMenuAsync(folder, selectedOnly: true);
+                await driver.SelectTreePathAsync("公共空间", target);
+                await driver.PasteReferencesAsync(folder);
+                await driver.RemoveReferenceAsync(folder);
+                await driver.SelectTreePathAsync("公共空间", source);
+                await driver.CopySelectedAsync(folder, part);
+                await driver.SelectTreePathAsync("公共空间", target);
+                await driver.PasteReferencesAsync(folder, part);
+                await driver.CutSelectedAsync(folder, part);
+                await driver.SelectTreePathAsync("公共空间", moved);
+                await driver.PasteCutReferencesAsync(folder, part);
+                await driver.RemoveSelectedReferencesAsync([folder, part]);
+                await driver.SelectTreePathAsync("公共空间", source, folder);
+                await driver.CutFolderFromTreeContextMenuAsync(folder, selectedOnly: true);
+                await driver.SelectTreePathAsync("公共空间", target);
+                await driver.PasteCutReferencesAsync(folder);
+                await driver.RemoveReferenceAsync(folder);
+                await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "clipboard-execution.png"));
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
+                    new { url = page.Url, actor = "ordinary", journey = "workspace-clipboard-execution", declarationRequests = requests.ToArray() }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通账号通过正式树/行菜单和当前页工具栏复制并连续粘贴引用")]
     public async Task NativeWorkspaceCopyPaste_UsesFormalDriver()
     {

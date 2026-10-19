@@ -446,7 +446,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
 
         // 复用正式cut输入；更换出现位置只换Link，不从新父的deny配置重新初始化对象。
         using (var moved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.paste"), HttpMethod.Post,
-            "/api/workspace/content/paste", new { mode = "cut", sourcePosition = position, linkIds = new[] { child.LinkId }, targetPosition = destinationPosition }))
+            "/api/workspace/content/paste", new { mode = "cut", sourcePosition = position, linkIds = new[] { child.LinkId }, targetPosition = destinationPosition }, WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, Point(fixture, "workspace.folder.paste"))))
             Assert.False((await ReadOkAsync(moved)).GetProperty("noChange").GetBoolean());
         var relocated = await FindFolderAsync(fixture, child.Name);
         Assert.Equal(child.Id, relocated.Id); Assert.NotEqual(child.LinkId, relocated.LinkId);

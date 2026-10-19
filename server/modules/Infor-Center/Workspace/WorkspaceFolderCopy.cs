@@ -19,7 +19,7 @@ public sealed partial class WorkspaceContents
         {
             if (openedHere) await db.Database.OpenConnectionAsync(token);
             var parent = await positions.ResolveAsync(actor, sourcePosition, token);
-            var source = (await ResolveClipboardTargetsAsync(parent.FolderId, linkIds, "copy", token))[0];
+            var source = (await ResolveDeferredClipboardTargetsAsync(parent.FolderId, linkIds, DeferredClipboardExecution.FolderPreparation, token))[0];
             if (source.ModelKey != WorkspacePositions.FolderModel) throw new LinkQueryException(400, "Workspace.FolderCopySourceRequired");
             var target = await WritablePositionAsync(actor, targetPosition, token);
             var name = await Folders.AsNoTracking().Where(row => EF.Property<string>(row, "EID") == source.Id)
@@ -46,7 +46,7 @@ public sealed partial class WorkspaceContents
             using var operation = audit.BeginOperation();
             await LockGraphAsync(cancellation);
             var sourceParent = await positions.ResolveAsync(actor, sourcePosition, cancellation);
-            var source = (await ResolveClipboardTargetsAsync(sourceParent.FolderId, linkIds, "copy", cancellation))[0];
+            var source = (await ResolveDeferredClipboardTargetsAsync(sourceParent.FolderId, linkIds, DeferredClipboardExecution.FolderCopy, cancellation))[0];
             if (source.ModelKey != WorkspacePositions.FolderModel) throw new LinkQueryException(400, "Workspace.FolderCopySourceRequired");
             var target = await WritablePositionAsync(actor, targetPosition, cancellation);
             var sourceFields = await Folders.AsNoTracking().Where(row => EF.Property<string>(row, "EID") == source.Id)

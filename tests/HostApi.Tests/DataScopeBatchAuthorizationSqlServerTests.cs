@@ -428,7 +428,7 @@ public sealed class DataScopeBatchAuthorizationSqlServerTests
             Assert.Equal(before, await SnapshotAsync(fixture, part.Id, document.Id));
         }
         using (var removed = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.remove"), HttpMethod.Delete,
-            "/api/workspace/content/references/" + document.LinkId, new { position })) await ReadOkAsync(removed);
+            "/api/workspace/content/references/" + document.LinkId, new { position }, WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, Point(fixture, "workspace.folder.remove")))) await ReadOkAsync(removed);
         using var stale = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Post,
             "/api/workspace/content/permissions/batch", input);
         Assert.Equal(HttpStatusCode.NotFound, stale.StatusCode);

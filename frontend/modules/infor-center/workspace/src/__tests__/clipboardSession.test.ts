@@ -156,6 +156,23 @@ it.each([false, true])('cut uses its own qualification and clears only a confirm
   expect(session.getSnapshot()).toEqual({ phase: 'idle' });
 });
 
+it.each(['copy', 'cut'] as const)('uses each current %s and paste declaration without reusing source qualification as authority', async mode => {
+  const session = new WorkspaceClipboardSession(vi.fn());
+  vi.mocked(platformFetch).mockResolvedValueOnce(validated(['lid']));
+  await session[mode](source, ['lid'], 'source-feature', 'source-declaration');
+  expect(platformFetch).toHaveBeenLastCalledWith(mode === 'copy' ? '/api/workspace/content/clipboard/validate' : '/api/workspace/content/clipboard/cut/validate', expect.objectContaining({
+    headers: expect.objectContaining({ 'X-NewP-Feature': 'source-feature', 'X-NewP-Data-Declaration': 'source-declaration' }),
+  }));
+  vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ succeeded: true })));
+  await session.paste(target, 'target-feature', 'paste-declaration');
+  expect(platformFetch).toHaveBeenLastCalledWith('/api/workspace/content/paste', expect.objectContaining({
+    headers: expect.objectContaining({ 'X-NewP-Feature': 'target-feature', 'X-NewP-Data-Declaration': 'paste-declaration' }),
+  }));
+  const requests = vi.mocked(platformFetch).mock.calls.length;
+  expect(session.clear()).toBe(true);
+  expect(platformFetch).toHaveBeenCalledTimes(requests);
+});
+
 it('replaces only after a successful qualification and preserves both source and validated selection order', async () => {
   const session = new WorkspaceClipboardSession(vi.fn());
   vi.mocked(platformFetch).mockResolvedValueOnce(validated(['b', 'a']));

@@ -408,7 +408,7 @@ public sealed class WorkspaceObjectMutationSqlServerHttpApiTests
             && (action is not ("edit" or "remove") || point.ModuleId == "Workspace" && point.StaticScope == "folder"
                 && point.ActionScope == "list.rowActions" && point.Key == action));
     private static Task<HttpResponseMessage> SendAsync(BusinessAuditHostFixture fixture, HttpClient client, string action, HttpMethod method, string path, object body) =>
-        FeatureHttpTestRequests.SendAsync(client, Point(fixture, action), method, path, body);
+        FeatureHttpTestRequests.SendAsync(client, Point(fixture, action), method, path, body, WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, Point(fixture, action)));
     private static async Task<Position> RootAsync(BusinessAuditHostFixture fixture, HttpClient admin)
     {
         using var response = await FeatureHttpTestRequests.SendAsync(admin, Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "workspace.spaces.access"), HttpMethod.Post, "/api/workspace/spaces/public/initialize");

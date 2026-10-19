@@ -22,7 +22,7 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
     Microsoft.Extensions.Logging.ILogger<WorkspaceContents> logger,
     ICP.Platform.Crud.Ownership.EntityOwnershipValues ownership,
     ICP.Platform.Crud.Ownership.EntityOwnershipAudit ownershipAudit, WorkspaceFolderReadDescriptor folderDescriptor,
-    IDataScopeObjectInitializer parentAuthorizations, WorkspaceSpaceInitialization spaceInitialization)
+    IDataScopeObjectInitializer parentAuthorizations, WorkspaceSpaceInitialization spaceInitialization, IDataExecutionAccess executionAccess)
 {
     /// <summary>保留旧调用不复制父授权的行为；新的初始化语义须由真实业务入口明确选择。</summary>
     public ValueTask<string> CreateFolderAsync(string actorId, WorkspacePosition position, IReadOnlyDictionary<string, JsonElement> values, CancellationToken token) =>
@@ -120,12 +120,14 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
     public ValueTask<bool> RemoveReferencesAsync(string actorId, WorkspacePosition position, string[] linkIds, CancellationToken token)
     {
         ValidateSelection(linkIds);
+        var binding = WorkspaceClipboardExecutions.Binding(WorkspaceClipboardExecutions.Remove, "submit");
+        executionAccess.Validate([binding], "workspace.folder");
         return transactions.ExecuteAsync<bool>(async cancellation =>
         {
             using var operation = audit.BeginOperation();
             await LockGraphAsync(cancellation);
-            var path = await WritablePositionAsync(actorId, position, cancellation);
-            var targets = await ResolveClipboardTargetsAsync(path.FolderId, linkIds, "remove", cancellation);
+            var path = await ResolveClipboardPositionAsync(binding, "sourceParent", position, cancellation);
+            var targets = await ResolveDeclaredClipboardTargetsAsync(path.FolderId, linkIds, binding, cancellation);
             await Links.Where(row => linkIds.Contains(EF.Property<string>(row, "LID"))
                 && EF.Property<string>(row, "PEID") == path.FolderId).ExecuteDeleteAsync(cancellation);
             for (var index = 0; index < targets.Length; index++)

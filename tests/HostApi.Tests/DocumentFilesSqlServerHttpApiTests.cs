@@ -516,7 +516,7 @@ public sealed class DocumentFilesSqlServerHttpApiTests
             await SaveRuleAsync(fixture, admin, ruleId, resource, field, "none", action);
         }
         using (var removed = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.remove"), HttpMethod.Delete,
-            "/api/workspace/content/references/" + folder.Position.LinkIds[0], new { position = root })) Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
+            "/api/workspace/content/references/" + folder.Position.LinkIds[0], new { position = root }, WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, Point(fixture, "workspace.folder.remove")))) Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
         using (var vanished = await SaveMainAsync(fixture, ordinary, folder.Position, values, uploadId)) Assert.Equal(HttpStatusCode.NotFound, vanished.StatusCode);
         Assert.Equal("staged", Assert.Single((await ObserveBusinessAsync(fixture)).Leases)["State"]);
         var correctedFolder = await CreateFolderPositionAsync(fixture, admin, root, "修正保存目录");

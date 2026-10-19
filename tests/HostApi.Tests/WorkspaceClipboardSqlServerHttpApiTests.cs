@@ -36,6 +36,11 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
         var contents = scope.ServiceProvider.GetRequiredService<WorkspaceContents>();
         var accessor = scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>(); var previous = accessor.HttpContext;
         accessor.HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, fixture.ActorId)], "qualification-test")) };
+        var qualificationFeature = Point(fixture, "workspace.folder.copy");
+        accessor.HttpContext.SetEndpoint(new Endpoint(_ => Task.CompletedTask,
+            new EndpointMetadataCollection(new ICP.Platform.Authorization.Http.EndpointModuleAttribute("Workspace")), "clipboard-connection-owner"));
+        accessor.HttpContext.Request.Headers["X-NewP-Feature"] = qualificationFeature.Position;
+        accessor.HttpContext.Request.Headers["X-NewP-Data-Declaration"] = ClipboardDeclaration(fixture, qualificationFeature)!.Id;
         try
         {
             var connection = db.Database.GetDbConnection();
@@ -225,7 +230,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
         var oldIds = new[] { x.LinkIds[^1], y.LinkIds[^1] };
         await Command(fixture, admin, "workspace.folder.copy", "/api/workspace/content/clipboard/validate", new { mode = "copy", sourcePosition = a, linkIds = oldIds });
         using (var removed = await FeatureHttpTestRequests.SendAsync(admin, RowPoint(fixture, "remove"), HttpMethod.Delete,
-            "/api/workspace/content/references/" + y.LinkIds[^1], new { position = a })) Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
+            "/api/workspace/content/references/" + y.LinkIds[^1], new { position = a }, ClipboardDeclaration(fixture, RowPoint(fixture, "remove")))) Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
         var all = await Rows(fixture, "WorkspaceFolderContent"); var yId = (await Rows(fixture, "WorkspaceFolder")).Single(row => Equals(row["ENAME"], "Y"))["EID"];
         await Command(fixture, admin, "workspace.folder.add", "/api/workspace/content/references", new { position = a, target = new { modelKey = "WorkspaceFolder", id = yId } });
         var before = Snapshot(await Rows(fixture, "WorkspaceFolderContent"));
@@ -263,6 +268,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
         using var cancellation = new CancellationTokenSource();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/paste") { Content = JsonContent.Create(body) };
         request.Headers.Add("X-NewP-Feature", Point(fixture, "workspace.folder.paste").Position);
+        request.Headers.Add("X-NewP-Data-Declaration", ClipboardDeclaration(fixture, Point(fixture, "workspace.folder.paste"))!.Id);
         var pending = admin.SendAsync(request, cancellation.Token);
         try
         {
@@ -334,7 +340,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
         {
             using var edited = await FeatureHttpTestRequests.SendAsync(admin, RowPoint(fixture, "edit"), HttpMethod.Put, "/api/workspace/content/" + row["LID"], new { position = root, values = new { ENAME = "历史根仍可编辑" } });
             Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
-            using var removed = await FeatureHttpTestRequests.SendAsync(admin, RowPoint(fixture, "remove"), HttpMethod.Delete, "/api/workspace/content/references/" + row["LID"], new { position = root });
+            using var removed = await FeatureHttpTestRequests.SendAsync(admin, RowPoint(fixture, "remove"), HttpMethod.Delete, "/api/workspace/content/references/" + row["LID"], new { position = root }, ClipboardDeclaration(fixture, RowPoint(fixture, "remove")));
             Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
         }
         Assert.Single(await Rows(fixture, "Document")); Assert.Single(await Rows(fixture, "DocumentVersion")); Assert.Single(await Rows(fixture, "DocumentIteration")); Assert.Single(await Rows(fixture, "Part"));
@@ -731,7 +737,8 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
         point => point.ModuleId == "Workspace" && point.StaticScope == "folder" && point.ActionScope == "list.rowActions" && point.Key == key);
     private static async Task<JsonElement> Command(BusinessAuditHostFixture fixture, HttpClient client, string behavior, string path, object? body = null)
     {
-        using var response = await FeatureHttpTestRequests.SendAsync(client, Point(fixture, behavior), HttpMethod.Post, path, body);
+        var feature = Point(fixture, behavior);
+        using var response = await FeatureHttpTestRequests.SendAsync(client, feature, HttpMethod.Post, path, body, ClipboardDeclaration(fixture, feature));
         Assert.True(response.StatusCode == HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         return await response.Content.ReadFromJsonAsync<JsonElement>();
     }
@@ -740,8 +747,14 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
         var root = await Command(fixture, admin, "workspace.spaces.access", "/api/workspace/spaces/public/initialize");
         return new(root.GetProperty("spaceId").GetString()!, root.GetProperty("rootFolderId").GetString()!, []);
     }
-    private static Task<HttpResponseMessage> Send(BusinessAuditHostFixture fixture, HttpClient client, string behavior, string path, object body) =>
-        FeatureHttpTestRequests.SendAsync(client, Point(fixture, behavior), HttpMethod.Post, "/api/workspace/content/" + path, body);
+    private static Task<HttpResponseMessage> Send(BusinessAuditHostFixture fixture, HttpClient client, string behavior, string path, object body)
+    {
+        var feature = Point(fixture, behavior);
+        return FeatureHttpTestRequests.SendAsync(client, feature, HttpMethod.Post, "/api/workspace/content/" + path, body, ClipboardDeclaration(fixture, feature));
+    }
+    internal static ActionDataAccessRequirement? ClipboardDeclaration(BusinessAuditHostFixture fixture, FeaturePoint feature) =>
+        fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog.SingleOrDefault(item =>
+            item.Execution.StartsWith("workspace.clipboard.", StringComparison.Ordinal) && item.FeaturePositions.Contains(feature.Position));
     private static async Task Rule(BusinessAuditHostFixture fixture, HttpClient admin, string key, string resource, string id, string action, string opinion)
     {
         var rule = new DataScopeRuleDto(key, key, null, key, true, resource, new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(id)),

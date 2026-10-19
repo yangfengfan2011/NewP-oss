@@ -156,7 +156,8 @@ internal static class WorkspaceAcceptanceFixture
             item.GetProperty("associatedObject").GetProperty("id").GetString() == folderId);
         var linkId = link.GetProperty("linkId").GetString()!;
         await SendAsync(ordinary, HttpMethod.Delete, $"/api/workspace/content/references/{Uri.EscapeDataString(linkId)}",
-            new { position }, features.Action(entry, "remove", "list.rowActions", "folder").Position, token);
+            new { position }, features.Action(entry, "remove", "list.rowActions", "folder").Position, token,
+            features.Declaration(features.Action(entry, "remove", "list.rowActions", "folder")));
         return folderId;
     }
 
@@ -206,7 +207,8 @@ internal static class WorkspaceAcceptanceFixture
     {
         var entry = features.Behavior("Workspace", "workspace.spaces.access");
         return SendAsync(ordinary, HttpMethod.Delete, $"/api/workspace/content/references/{Uri.EscapeDataString(fixture.ALinkId)}",
-            new { position = fixture.PublicRoot.CommandPosition }, features.Action(entry, "remove", "list.rowActions", "folder").Position, token);
+            new { position = fixture.PublicRoot.CommandPosition }, features.Action(entry, "remove", "list.rowActions", "folder").Position, token,
+            features.Declaration(features.Action(entry, "remove", "list.rowActions", "folder")));
     }
 
     internal static Task<JsonElement> ReadDirectReferencesAsync(HttpClient ordinary, AcceptanceFeatureCatalog features,

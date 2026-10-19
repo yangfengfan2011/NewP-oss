@@ -1,3 +1,4 @@
+using ICP.Platform.Testing.Authorization;
 using System.Text.Json;
 using ICP.Platform.Kernel.ModulePlanning;
 using Xunit;
@@ -17,7 +18,7 @@ public sealed class EntityOwnershipTransferFeatureProjectionTests(ITestOutputHel
         using var capsule = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(root, "newp.plugin.json")));
         var documents = Directory.GetFiles(Path.Combine(root, "metadata"), "*.json", SearchOption.AllDirectories)
             .Select(path => JsonSerializer.Deserialize<JsonElement>(File.ReadAllBytes(path))).ToArray();
-        var points = FeatureCatalogCompiler.Compile(StandardFeatureMetadataCompiler.Read("Workspace", documents,
+        var points = RuntimeFeatureCatalogTestSupport.CompileWithParents(StandardFeatureMetadataCompiler.Read("Workspace", documents,
             FeatureCatalogCompiler.Read(capsule.RootElement, "Workspace"), true));
         var notifications = Assert.Single(points, point => point.Key == "workspace.transfers" && point.Kind == "navigation");
         var read = Assert.Single(points, point => point.Key == "workspace" && point.Kind == "navigation");
@@ -47,14 +48,14 @@ public sealed class EntityOwnershipTransferFeatureProjectionTests(ITestOutputHel
         using var capsule = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(root, "newp.plugin.json")));
         var documents = Directory.GetFiles(Path.Combine(root, "metadata"), "*.json", SearchOption.AllDirectories)
             .Select(path => JsonSerializer.Deserialize<JsonElement>(File.ReadAllBytes(path))).ToArray();
-        var points = FeatureCatalogCompiler.Compile(StandardFeatureMetadataCompiler.Read(module, documents,
+        var points = RuntimeFeatureCatalogTestSupport.CompileWithParents(StandardFeatureMetadataCompiler.Read(module, documents,
             FeatureCatalogCompiler.Read(capsule.RootElement, module), includeCustomFeatures: true));
         var read = Assert.Single(points, point => point.Kind == "navigation" && point.Key == entryKey);
         var row = Assert.Single(points, point => point.Key == "transfer" && point.ActionScope == "list.rowActions");
         Assert.Equal(resource + ".transfer", row.BehaviorKey);
         Assert.Contains(resource + ".read", row.ReadBehaviors);
-        Assert.Equal(read.Position, Assert.Single(row.EntryDependencies));
-        FeatureCatalogCompiler.ValidateSelection(points, [read.Position, row.Position]);
+        Assert.Equal(read.EntryDependencies.Append(read.Position), row.EntryDependencies);
+        FeatureCatalogCompiler.ValidateSelection(points, RuntimeFeatureCatalogTestSupport.ExpandGrantSet([read, row]));
         var batch = points.SingleOrDefault(point => point.Key == "transferSelected" && point.ActionScope == "list.pageActions");
         if (module == "Workspace")
         {

@@ -4,6 +4,69 @@ namespace ICP.Platform.Kernel.Tests;
 [Trait("Category", "ModuleMetadataConsumer")]
 public sealed class FeatureCatalogCompilerTests
 {
+    [Fact]
+    public void CrossModuleNavigation_KeepsExecutionOwnerAndRequiresTheWorkspaceEntry()
+    {
+        var documents = new[]
+        {
+            """{"navigation":{"items":[{"key":"documents","titleKey":"Documents","featureAuthorization":true,"parentModuleId":"Workspace","parentKey":"workspace","targetKey":"documents"}]}}""",
+            """{"view":{"key":"documents","mode":"detail","resourceKey":"document.document","featureActions":[{"key":"download","titleKey":"Download","behaviorKey":"document.document.download"}]}}"""
+        }.Select(value => System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(value));
+        var declarations = StandardFeatureMetadataCompiler.Read("Document", documents);
+        var catalog = FeatureCatalogCompiler.Compile(declarations.Prepend(new("Workspace", "workspace", "navigation", "工作空间", null, "workspace.spaces.access")));
+        var workspace = catalog.Single(point => point.ModuleId == "Workspace");
+        var document = catalog.Single(point => point.Key == "documents");
+        var download = catalog.Single(point => point.Key == "download");
+        Assert.Equal(workspace.Position, document.ParentPosition);
+        Assert.Equal("Document", document.ModuleId);
+        Assert.StartsWith(workspace.Position + "/module:Document/", document.Position);
+        Assert.Equal(new[] { workspace.Position, document.Position }, download.EntryDependencies);
+        Assert.Equal("Document", download.ModuleId);
+        Assert.Throws<FeatureSelectionException>(() => FeatureCatalogCompiler.ValidateSelection(catalog, [document.Position, download.Position]));
+        FeatureCatalogCompiler.ValidateSelection(catalog, catalog.Select(point => point.Position).ToArray());
+    }
+
+    [Fact]
+    public void WorkspaceObjects_ExposeNoIndependentRootAndMoveDetailAndDownloadWithTheirEntry()
+    {
+        var repository = new DirectoryInfo(AppContext.BaseDirectory);
+        while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "ICP-Platform.sln"))) repository = repository.Parent;
+        Assert.NotNull(repository);
+        var declarations = new[] { "Workspace", "Part", "Document" }.SelectMany(module =>
+        {
+            var root = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository.FullName, module);
+            var capsule = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(File.ReadAllBytes(Path.Combine(root, "newp.plugin.json")));
+            var documents = Directory.GetFiles(Path.Combine(root, "metadata"), "*.json", SearchOption.AllDirectories)
+                .Select(path => System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(File.ReadAllBytes(path)));
+            return StandardFeatureMetadataCompiler.Read(module, documents, FeatureCatalogCompiler.Read(capsule, module), true);
+        }).ToArray();
+        var points = FeatureCatalogCompiler.Compile(declarations);
+        var workspace = points.Single(point => point.ModuleId == "Workspace" && point.Key == "workspace");
+        foreach (var module in new[] { "Part", "Document" })
+        {
+            var entry = points.Single(point => point.ModuleId == module && point.ReferenceKey == "navigation:" + (module == "Part" ? "part.parts" : "document.documents"));
+            Assert.Equal(workspace.Position, entry.ParentPosition);
+            Assert.All(points.Where(point => point.ModuleId == module), point => Assert.Contains(workspace.Position, point.EntryDependencies));
+        }
+        var download = points.Single(point => point.BehaviorKey == "document.document.download");
+        Assert.Contains(workspace.Position, download.EntryDependencies);
+        Assert.DoesNotContain(points, point => point.ParentPosition is null && point.ModuleId is "Part" or "Document");
+        Assert.Throws<InvalidOperationException>(() => FeatureCatalogCompiler.Compile(declarations.Where(point => point.ModuleId != "Workspace")));
+    }
+
+    [Fact]
+    public void CrossModuleParents_RejectMissingEntriesCyclesAndActionParents()
+    {
+        FeatureDeclaration Child(string module, string parentModule) => new(module, "root", "navigation", module, "root", module + ".read") { ParentModuleId = parentModule };
+        Assert.Throws<InvalidOperationException>(() => FeatureCatalogCompiler.Compile([Child("A", "B")]));
+        Assert.Throws<InvalidOperationException>(() => FeatureCatalogCompiler.Compile([Child("A", "B"), Child("B", "A")]));
+        Assert.Throws<InvalidOperationException>(() => FeatureCatalogCompiler.Compile([
+            new("B", "entry", "navigation", "入口", null, "read"), new("B", "root", "action", "操作", "entry", "save"), Child("A", "B")]));
+        using var json = System.Text.Json.JsonDocument.Parse("""{"features":[{"key":"root","kind":"navigation","title":"子入口","parentKey":"root","parentModuleId":"B","behaviorKey":"a.read"}]}""");
+        var declared = Assert.Single(FeatureCatalogCompiler.Read(json.RootElement, "A"));
+        Assert.Equal("B", declared.ParentModuleId);
+    }
+
     [Theory]
     [InlineData("missing")]
     [InlineData("")]

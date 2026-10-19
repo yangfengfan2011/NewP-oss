@@ -6,6 +6,18 @@ const point = (position: string, parentPosition: string | null, title = position
 });
 const catalog = [point("a", null), point("a/x", "a", "保存"), point("a/y", "a", "删除"), point("b", null), point("b/x", "b", "保存")];
 describe("功能工作台树", () => {
+  it("跨模块对象归入工作空间且分支选择覆盖详情和下载", () => {
+    const workspace = { ...point("workspace", null, "工作空间"), moduleId: "Workspace" };
+    const part = { ...point("workspace/part", "workspace", "零组件"), moduleId: "Part" };
+    const document = { ...point("workspace/document", "workspace", "图文档"), moduleId: "Document" };
+    const download = { ...point("workspace/document/download", document.position, "下载"), moduleId: "Document", entryDependencies: [workspace.position, document.position] };
+    const points = [workspace, part, document, download];
+    const tree = buildFeatureTree(points, "", new Set(), false);
+    expect(tree.map(node => node.title)).toEqual(["工作空间"]);
+    expect(tree[0].children?.map(node => node.title)).toEqual(["图文档", "零组件"]);
+    expect(changeBranch(points, new Set(), workspace.position, true)).toEqual(new Set(points.map(item => item.position)));
+    expect(changeBranch(points, new Set(points.map(item => item.position)), document.position, false)).toEqual(new Set([workspace.position, part.position]));
+  });
   it("静态树类型展示分组不进入授权集合且相同操作保持独立", () => {
     const points = [point("tree", null),
       { ...point("tree/company/edit", "tree", "编辑"), staticScope: "company", staticScopeTitle: "公司" },

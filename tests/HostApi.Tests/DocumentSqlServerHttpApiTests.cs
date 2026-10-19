@@ -24,7 +24,7 @@ public sealed class DocumentSqlServerHttpApiTests
         {
             Content = JsonContent.Create(new { ECODE = "DOC-001", ENAME = "首个图文档", Description = new string('字', 500) }, options: new JsonSerializerOptions())
         };
-        request.Headers.Add("X-NewP-Feature", "Document/navigation:document.documents/surface:list.pageActions/action:create");
+        request.Headers.Add("X-NewP-Feature", fixture.FeatureCatalog.Single(point => point.BehaviorKey == "document.document.create").Position);
         using var response = await admin.SendAsync(request);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -218,7 +218,7 @@ public sealed class DocumentSqlServerHttpApiTests
         Assert.Equal(HttpStatusCode.NotFound, documentAsPart.StatusCode);
     }
 
-    private static FeaturePoint Entry(BusinessAuditHostFixture fixture) => Assert.Single(fixture.FeatureCatalog, p => p.ModuleId == "Document" && p.Kind == "navigation");
+    private static FeaturePoint Entry(BusinessAuditHostFixture fixture) => Assert.Single(fixture.FeatureCatalog, p => p.ModuleId == "Document" && p.Kind == "navigation" && p.Key == "document.documents");
     private static FeaturePoint Create(BusinessAuditHostFixture fixture) => Assert.Single(fixture.FeatureCatalog, p => p.BehaviorKey == "document.document.create");
     private static async Task RuleAsync(BusinessAuditHostFixture fixture, HttpClient admin, string key, string field, string value, string action)
     {

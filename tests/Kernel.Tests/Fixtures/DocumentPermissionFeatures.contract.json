@@ -1,4 +1,4 @@
 {
-  "readPosition": "Document/navigation:document.documents",
-  "managePosition": "Document/navigation:document.documents/surface:list.rowActions/action:authorize"
+  "readPosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents",
+  "managePosition": "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:authorize"
 }

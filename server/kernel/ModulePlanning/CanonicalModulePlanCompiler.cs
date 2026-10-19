@@ -454,7 +454,6 @@ public sealed class CanonicalModulePlanCompiler
             {
                 if (candidate.Features.Any(node => node.ModuleId != candidate.ModuleId))
                     throw new InvalidOperationException("功能声明不能跨模块冒领归属。");
-                FeatureCatalogCompiler.Compile(candidate.Features);
                 if (candidate.DataActions.Any(action => action.ModuleId != candidate.ModuleId))
                     throw new InvalidOperationException("数据动作声明不能跨模块冒领归属。");
                 DataActionCatalogCompiler.Compile(candidate.DataActions);
@@ -463,6 +462,14 @@ public sealed class CanonicalModulePlanCompiler
             {
                 diagnostics.Add(new(candidateId, candidate.ModuleId, candidate.Version, "features",
                     candidate.Provenance.SourcePath, "/features", "features", "MODULE_FEATURE_INVALID", exception.Message));
+            }
+        }
+        if (diagnostics.Count == 0)
+        {
+            try { FeatureCatalogCompiler.Compile(candidates.SelectMany(candidate => candidate.Features)); }
+            catch (InvalidOperationException exception)
+            {
+                diagnostics.Add(new(candidateId, "*", "", "features", "", "/features", "features", "MODULE_FEATURE_INVALID", exception.Message));
             }
         }
         return diagnostics;

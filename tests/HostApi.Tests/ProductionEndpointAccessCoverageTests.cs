@@ -1,3 +1,4 @@
+using ICP.Platform.Testing.Authorization;
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.HostApi.Authorization;
@@ -63,7 +64,7 @@ public sealed class ProductionEndpointAccessCoverageTests
         using var capsule = System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(Path.Combine(root, "newp.plugin.json")));
         var documents = Directory.GetFiles(Path.Combine(root, "metadata"), "*.json", SearchOption.AllDirectories)
             .Select(path => System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(File.ReadAllBytes(path))).ToArray();
-        var points = FeatureCatalogCompiler.Compile(StandardFeatureMetadataCompiler.Read("Workspace", documents,
+        var points = RuntimeFeatureCatalogTestSupport.CompileWithParents(StandardFeatureMetadataCompiler.Read("Workspace", documents,
             FeatureCatalogCompiler.Read(capsule.RootElement, "Workspace"), includeCustomFeatures: true));
         var history = Assert.Single(points, point => point.BehaviorKey == "workspace.folder.history");
         var builder = WebApplication.CreateBuilder();
@@ -98,7 +99,7 @@ public sealed class ProductionEndpointAccessCoverageTests
         var documents = Directory.GetFiles(Path.Combine(root, "metadata"), "*.json", SearchOption.AllDirectories)
             .Select(path => System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(File.ReadAllBytes(path))).ToArray();
         var declarations = StandardFeatureMetadataCompiler.Read(module, documents, FeatureCatalogCompiler.Read(capsule.RootElement, module), includeCustomFeatures: true);
-        var history = Assert.Single(FeatureCatalogCompiler.Compile(declarations), point => point.BehaviorKey == slug + "." + slug + ".history");
+        var history = Assert.Single(RuntimeFeatureCatalogTestSupport.CompileWithParents(declarations), point => point.BehaviorKey == slug + "." + slug + ".history");
         var builder = WebApplication.CreateBuilder();
         builder.Services.AddControllers().AddApplicationPart(module == "Part" ? typeof(ICP.Platform.Modules.Part.PartModule).Assembly : typeof(ICP.Platform.Modules.Document.DocumentModule).Assembly);
         using var app = builder.Build();
@@ -189,7 +190,7 @@ public sealed class ProductionEndpointAccessCoverageTests
         using var capsule = System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(Path.Combine(documentRoot, "newp.plugin.json")));
         var documents = Directory.GetFiles(Path.Combine(documentRoot, "metadata"), "*.json", SearchOption.AllDirectories)
             .Select(path => System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(File.ReadAllBytes(path))).ToArray();
-        var declared = ICP.Platform.Kernel.ModulePlanning.FeatureCatalogCompiler.Compile(
+        var declared = RuntimeFeatureCatalogTestSupport.CompileWithParents(
             ICP.Platform.Kernel.ModulePlanning.StandardFeatureMetadataCompiler.Read("Document", documents,
                 ICP.Platform.Kernel.ModulePlanning.FeatureCatalogCompiler.Read(capsule.RootElement, "Document"), true));
         var expectedFeatures = declared.Select(point => point.BehaviorKey).Concat(declared.SelectMany(point => point.ReadBehaviors))

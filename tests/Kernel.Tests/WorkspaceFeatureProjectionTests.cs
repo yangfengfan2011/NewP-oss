@@ -1,3 +1,4 @@
+using ICP.Platform.Testing.Authorization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using ICP.Platform.Kernel.ModulePlanning;
@@ -18,7 +19,7 @@ public sealed class WorkspaceFeatureProjectionTests
         using var capsule = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(moduleRoot, "newp.plugin.json")));
         var documents = Directory.GetFiles(Path.Combine(moduleRoot, "metadata"), "*.json", SearchOption.AllDirectories)
             .Select(path => JsonSerializer.Deserialize<JsonElement>(File.ReadAllBytes(path))).ToArray();
-        var catalog = FeatureCatalogCompiler.Compile(StandardFeatureMetadataCompiler.Read("Workspace", documents,
+        var catalog = RuntimeFeatureCatalogTestSupport.CompileWithParents(StandardFeatureMetadataCompiler.Read("Workspace", documents,
             FeatureCatalogCompiler.Read(capsule.RootElement, "Workspace"), includeCustomFeatures: true));
         using var fixture = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(repository.FullName,
             "tests", "Kernel.Tests", "Fixtures", "WorkspacePermissionFeatures.contract.json")));
@@ -30,7 +31,7 @@ public sealed class WorkspaceFeatureProjectionTests
         Assert.Equal("workspace.folder.authorize", manage.BehaviorKey);
         Assert.DoesNotContain(catalog, point => point.Key == "workspace.permissions" || point.Key == "viewAuthorization"
             || point.Position.Contains("navigation:workspace.permissions", StringComparison.Ordinal));
-        FeatureCatalogCompiler.ValidateSelection(catalog, [read.Position]);
+        FeatureCatalogCompiler.ValidateSelection(catalog, RuntimeFeatureCatalogTestSupport.ExpandGrantSet([read]));
     }
 
     [Theory, Trait("Category", "ModuleMetadataConsumer")]
@@ -45,7 +46,7 @@ public sealed class WorkspaceFeatureProjectionTests
         using var capsule = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(moduleRoot, "newp.plugin.json")));
         var documents = Directory.GetFiles(Path.Combine(moduleRoot, "metadata"), "*.json", SearchOption.AllDirectories)
             .Select(path => JsonSerializer.Deserialize<JsonElement>(File.ReadAllBytes(path))).ToArray();
-        var catalog = FeatureCatalogCompiler.Compile(StandardFeatureMetadataCompiler.Read(moduleId, documents,
+        var catalog = RuntimeFeatureCatalogTestSupport.CompileWithParents(StandardFeatureMetadataCompiler.Read(moduleId, documents,
             FeatureCatalogCompiler.Read(capsule.RootElement, moduleId), includeCustomFeatures: true));
         using var fixture = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(repository.FullName,
             "tests", "Kernel.Tests", "Fixtures", moduleId + "PermissionFeatures.contract.json")));
@@ -58,7 +59,7 @@ public sealed class WorkspaceFeatureProjectionTests
         Assert.Contains(resourceKey + ".read", manage.ReadBehaviors);
         Assert.DoesNotContain(catalog, point => point.Key == resourceKey + ".permissions" || point.Key == "viewAuthorization"
             || point.Position.Contains("navigation:" + resourceKey + ".permissions", StringComparison.Ordinal));
-        FeatureCatalogCompiler.ValidateSelection(catalog, [read.Position]);
+        FeatureCatalogCompiler.ValidateSelection(catalog, RuntimeFeatureCatalogTestSupport.ExpandGrantSet([read]));
     }
 
     [Theory]
@@ -80,7 +81,7 @@ public sealed class WorkspaceFeatureProjectionTests
         var reference = tree["nodeTypes"]![0]!["contextMenu"]!.AsArray().Single(item => item!["key"]!.GetValue<string>() == "edit")!.AsObject();
         if (standard) { reference.Remove("actionKey"); reference["standardAction"] = "edit"; }
         var capsule = JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(Path.Combine(root, "newp.plugin.json")));
-        var points = FeatureCatalogCompiler.Compile(StandardFeatureMetadataCompiler.Read("Workspace",
+        var points = RuntimeFeatureCatalogTestSupport.CompileWithParents(StandardFeatureMetadataCompiler.Read("Workspace",
             documents.Select(document => JsonSerializer.SerializeToElement(document)), FeatureCatalogCompiler.Read(capsule, "Workspace"), true));
         var row = Assert.Single(points, point => point.Key == "edit" && point.ActionScope == "list.rowActions");
         var node = Assert.Single(points, point => point.Key == "edit" && point.ActionScope == "contextMenu");
@@ -100,7 +101,7 @@ public sealed class WorkspaceFeatureProjectionTests
         var custom = FeatureCatalogCompiler.Read(capsule.RootElement, "Workspace");
         var documents = Directory.GetFiles(Path.Combine(moduleRoot, "metadata"), "*.json", SearchOption.AllDirectories)
             .Select(path => JsonSerializer.Deserialize<JsonElement>(File.ReadAllBytes(path))).ToArray();
-        var catalog = FeatureCatalogCompiler.Compile(StandardFeatureMetadataCompiler.Read("Workspace", documents, custom, includeCustomFeatures: true));
+        var catalog = RuntimeFeatureCatalogTestSupport.CompileWithParents(StandardFeatureMetadataCompiler.Read("Workspace", documents, custom, includeCustomFeatures: true));
         var entry = Assert.Single(catalog, point => point.Kind == "navigation" && point.Key == "workspace");
         Assert.Equal("workspace.spaces.access", entry.BehaviorKey);
         Assert.DoesNotContain(catalog, point => point.Key == "new");

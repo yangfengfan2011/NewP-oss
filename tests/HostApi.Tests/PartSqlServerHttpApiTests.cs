@@ -24,7 +24,7 @@ public sealed class PartSqlServerHttpApiTests
         {
             Content = JsonContent.Create(new { ECODE = "PART-001", ENAME = "首个零组件", Description = new string('字', 500) }, options: new JsonSerializerOptions())
         };
-        request.Headers.Add("X-NewP-Feature", "Part/navigation:part.parts/surface:list.pageActions/action:create");
+        request.Headers.Add("X-NewP-Feature", fixture.FeatureCatalog.Single(point => point.BehaviorKey == "part.part.create").Position);
         using var response = await admin.SendAsync(request);
         Assert.True(response.StatusCode == HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
         var result = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -52,7 +52,9 @@ public sealed class PartSqlServerHttpApiTests
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(relogged);
         var restored = await FeatureHttpTestRequests.ReadAsync(relogged, Entry(fixture), "/api/part/parts/" + id);
-        Assert.Equal(fields.GetRawText(), restored.GetProperty("fields").GetRawText());
+        // 重启核对全部字段值，JSON 对象的成员顺序不参与详情契约。
+        Assert.Equal(fields.EnumerateObject().OrderBy(property => property.Name).Select(property => (property.Name, property.Value.GetRawText())),
+            restored.GetProperty("fields").EnumerateObject().OrderBy(property => property.Name).Select(property => (property.Name, property.Value.GetRawText())));
     }
 
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "零组件字段边界与并发唯一编码使用真实SQL和标准写入")]
@@ -177,7 +179,7 @@ public sealed class PartSqlServerHttpApiTests
         Assert.True(fault.FailedInsideTransaction);
     }
 
-    private static FeaturePoint Entry(BusinessAuditHostFixture fixture) => Assert.Single(fixture.FeatureCatalog, p => p.ModuleId == "Part" && p.Kind == "navigation");
+    private static FeaturePoint Entry(BusinessAuditHostFixture fixture) => Assert.Single(fixture.FeatureCatalog, p => p.ModuleId == "Part" && p.Kind == "navigation" && p.Key == "part.parts");
     private static FeaturePoint Create(BusinessAuditHostFixture fixture) => Assert.Single(fixture.FeatureCatalog, p => p.BehaviorKey == "part.part.create");
     private static async Task RuleAsync(BusinessAuditHostFixture fixture, HttpClient admin, string key, string field, string value, string action)
     {

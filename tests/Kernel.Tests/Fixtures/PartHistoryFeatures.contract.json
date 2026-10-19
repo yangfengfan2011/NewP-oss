@@ -1,4 +1,4 @@
 {
-  "readPosition": "Part/navigation:part.parts",
-  "historyPosition": "Part/navigation:part.parts/navigation:part.history"
+  "readPosition": "Workspace/navigation:workspace/module:Part/navigation:part.parts",
+  "historyPosition": "Workspace/navigation:workspace/module:Part/navigation:part.parts/navigation:part.history"
 }

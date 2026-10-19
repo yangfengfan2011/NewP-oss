@@ -9,6 +9,8 @@ public sealed record FeatureDeclaration(string ModuleId, string Key, string Kind
     public IReadOnlyList<ActionDataAccessDeclaration> DataAccess { get; init; } = [];
     public IReadOnlyList<string> DataResources { get; init; } = [];
     public string? ReferenceKey { get; init; }
+    /// <summary>显式父入口的模块；缺省时沿用当前模块，不改变本功能的执行归属。</summary>
+    public string? ParentModuleId { get; init; }
     public string? StaticScope { get; init; }
     public string? StaticScopeTitle { get; init; }
     public string? TitleKey { get; init; }
@@ -46,7 +48,8 @@ public static class FeatureCatalogCompiler
             node.TryGetProperty("parentKey", out var parent) ? parent.GetString() : null,
             node.GetProperty("behaviorKey").GetString()!,
             node.TryGetProperty("order", out var order) ? order.GetInt32() : 0)
-            { TitleKey = node.TryGetProperty("titleKey", out var titleKey) ? titleKey.GetString() : null }).ToArray();
+            { TitleKey = node.TryGetProperty("titleKey", out var titleKey) ? titleKey.GetString() : null,
+                ParentModuleId = node.TryGetProperty("parentModuleId", out var parentModule) ? parentModule.GetString() : null }).ToArray();
     }
 
     /// <summary>拒绝重复、循环、缺少入口及必需行为声明；按位置输出确定快照。</summary>
@@ -58,6 +61,7 @@ public static class FeatureCatalogCompiler
             if (string.IsNullOrWhiteSpace(node.ModuleId) || string.IsNullOrWhiteSpace(node.Key)
                 || string.IsNullOrWhiteSpace(node.Title) || (!node.Container && string.IsNullOrWhiteSpace(node.BehaviorKey))
                 || node.Kind is not ("navigation" or "tab" or "action")
+                || node.ParentModuleId is not null && (string.IsNullOrWhiteSpace(node.ParentModuleId) || node.ParentKey is null || node.Kind != "navigation")
                 || !nodes.TryAdd((node.ModuleId, node.ReferenceKey ?? node.Key), node))
                 throw new InvalidOperationException("功能声明存在重复身份、非法种类或缺少必需绑定。");
         }
@@ -70,12 +74,13 @@ public static class FeatureCatalogCompiler
             if (compiled.TryGetValue(identity, out var result)) return result;
             if (!nodes.TryGetValue(identity, out var node) || !visiting.Add(identity))
                 throw new InvalidOperationException("功能声明存在缺失引用或循环入口。");
-            var parent = node.ParentKey is null ? null : Visit((node.ModuleId, node.ParentKey));
+            var parent = node.ParentKey is null ? null : Visit((node.ParentModuleId ?? node.ModuleId, node.ParentKey));
             if (parent?.Kind == "action" || (parent is null && node.Kind != "navigation"))
                 throw new InvalidOperationException("Tab 和动作必须声明所属入口，动作不能承载子入口。");
+            var moduleScope = parent is not null && parent.ModuleId != node.ModuleId ? $"/module:{Uri.EscapeDataString(node.ModuleId)}" : "";
             var scope = node.StaticScope is null ? "" : $"/node-type:{Uri.EscapeDataString(node.StaticScope)}";
             var actionScope = node.ActionScope is null ? "" : $"/surface:{Uri.EscapeDataString(node.ActionScope)}";
-            var position = $"{parent?.Position ?? Uri.EscapeDataString(node.ModuleId)}{scope}{actionScope}/{node.Kind}:{Uri.EscapeDataString(node.Key)}";
+            var position = $"{parent?.Position ?? Uri.EscapeDataString(node.ModuleId)}{moduleScope}{scope}{actionScope}/{node.Kind}:{Uri.EscapeDataString(node.Key)}";
             if (!positions.Add(position))
                 throw new InvalidOperationException("功能声明在同一静态位置重复。");
             result = new(position, node.ModuleId, node.Key, node.Kind, node.Title, parent?.Position,

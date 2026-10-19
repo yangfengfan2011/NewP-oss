@@ -37,7 +37,11 @@ public static class StandardFeatureMetadataCompiler
             var key = Text(item, "key");
             if (!entered.Add(key)) return;
             var parent = Optional(item, "parentKey");
-            if (parent is not null)
+            var parentModule = Optional(item, "parentModuleId");
+            var externalParent = parentModule is not null && parentModule != moduleId;
+            if (parentModule is not null && (string.IsNullOrWhiteSpace(parentModule) || parent is null))
+                throw new InvalidOperationException("跨模块导航必须声明有效父模块与父入口。");
+            if (parent is not null && !externalParent)
             {
                 if (!navigation.TryGetValue(parent, out var parentItem)) throw new InvalidOperationException("导航入口祖先不存在。");
                 Navigation(parentItem);
@@ -45,7 +49,7 @@ public static class StandardFeatureMetadataCompiler
             if (item.TryGetProperty("redirectTo", out _)) throw new InvalidOperationException("重定向别名不能创建授权点。");
             var reference = "navigation:" + key;
             var node = new FeatureDeclaration(moduleId, key, "navigation", Title(Optional(item, "titleKey") ?? key),
-                parent is null ? null : "navigation:" + parent, "") { ReferenceKey = reference, TitleKey = FullTitleKey(Optional(item, "titleKey")), Container = true };
+                parent is null ? null : externalParent ? parent : "navigation:" + parent, "") { ParentModuleId = externalParent ? parentModule : null, ReferenceKey = reference, TitleKey = FullTitleKey(Optional(item, "titleKey")), Container = true };
             result.Add(node);
             if (item.TryGetProperty("page", out var page)) Page(page, reference, null, []);
             else if (item.TryGetProperty("targetKey", out var target)) View(target.GetString()!, reference, null, []);

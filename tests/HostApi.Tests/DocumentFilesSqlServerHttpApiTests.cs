@@ -533,12 +533,33 @@ public sealed class DocumentFilesSqlServerHttpApiTests
         var position = await ContentAsync(fixture, admin);
         var first = await CreateMainAsync(fixture, admin, position, "PERMISSION-01", [1, 2, 3]);
         var second = await CreateMainAsync(fixture, admin, position, "PERMISSION-02", [4, 5, 6]);
+        var workspaceEntry = fixture.FeatureCatalog.Single(point => point.ModuleId == "Workspace" && point.Key == "workspace");
+        var documentRead = Point(fixture, "document.document.read");
+        var documentDownload = Point(fixture, "document.document.download");
+        Assert.Contains(workspaceEntry.Position, documentRead.EntryDependencies);
+        Assert.Contains(workspaceEntry.Position, documentDownload.EntryDependencies);
+        Assert.DoesNotContain(fixture.FeatureCatalog, point => point.ParentPosition is null && point.ModuleId is "Part" or "Document");
         var actor = await ActorAsync(fixture, admin, "FileReader");
         using var ordinary = actor.Client;
+        using (var allowed = await FeatureHttpTestRequests.SendAsync(ordinary, documentDownload, HttpMethod.Get, ContentUrl(first)))
+        {
+            Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
+            Assert.Equal(new byte[] { 1, 2, 3 }, await allowed.Content.ReadAsByteArrayAsync());
+        }
+        using (var wrongOwner = await FeatureHttpTestRequests.SendAsync(ordinary, workspaceEntry, HttpMethod.Get, FilesUrl(first)))
+            Assert.Equal(HttpStatusCode.Forbidden, wrongOwner.StatusCode);
+        using (var retired = new HttpRequestMessage(HttpMethod.Get, FilesUrl(first)))
+        {
+            retired.Headers.Add("X-NewP-Feature", "Document/navigation:document.documents");
+            using var denied = await ordinary.SendAsync(retired);
+            Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        }
         var readOnly = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "ReadOnlyFiles", "只读文件", "readonly-files", "只读文件账号",
             Point(fixture, "document.document.read"));
         using (var reader = readOnly.Client)
         {
+            var detail = await FeatureHttpTestRequests.ReadAsync(reader, documentRead, "/api/document/documents/" + first.DocumentId);
+            Assert.Equal(first.DocumentId, detail.GetProperty("fields").GetProperty("EID").GetString());
             var visible = await FeatureHttpTestRequests.ReadAsync(reader, Point(fixture, "document.document.read"), FilesUrl(first));
             Assert.Single(visible.GetProperty("files").EnumerateArray());
             using var noFeature = await FeatureHttpTestRequests.SendAsync(reader, Point(fixture, "document.document.download"), HttpMethod.Get, ContentUrl(first));

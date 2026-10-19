@@ -6,7 +6,7 @@ Document 拥有稳定主身份、初始 DocumentVersion/DocumentIteration 及当
 
 稳定资源 `document.document` 提供 `/api/document/documents` 标准创建和读取，页面 `/documents` 使用共享标准列表与创建 Drawer，`document.document.detail` 提供只读属性 Drawer 和正式 `/documents/:id` 详情。创建提交后不可读或展示失败继续返回不含对象标识的成功回执，客户端只重试读取。
 
-侧栏不提供独立图文档入口；用户从 Workspace 选中文件夹后新建，由 Workspace 在同一对象操作事务内调用 `document.document` 创建行为并建立内容关系。原页面路由保持 routeOnly，详情与权限身份继续由 Document 拥有。
+侧栏不提供独立图文档入口；用户从 Workspace 选中文件夹后新建，由 Workspace 在同一对象操作事务内调用 `document.document` 创建行为并建立内容关系。原页面路由保持 routeOnly；功能入口通过 `parentModuleId: Workspace`、`parentKey: workspace` 显式归入工作空间，详情和全部子操作共享这条授权祖先链，不再发布独立顶层授权入口。数据资源、对象行为和接口执行归属仍由 Document 拥有。
 
 ## 完整真副本
 

@@ -1,4 +1,6 @@
 using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -50,5 +52,42 @@ public sealed partial class WorkspaceObjectMutationSqlServerHttpApiTests
         var after = afterScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
         Assert.False(await after.Set<Dictionary<string, object?>>("Part").AnyAsync());
         Assert.False(await after.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AnyAsync(row => EF.Property<string>(row, "CEID") == keep.Id));
+    }
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "普通主体Part编辑按真实旧事实判权，写后不可读仍交成功回执且不泄露字段")]
+    public async Task PartWriteSource_EditBecomingUnreadableCommitsAndReturnsOnlyReceipt()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
+        using var admin = await fixture.LoginAdministratorAsync();
+        var root = await RootAsync(fixture, admin);
+        var part = await CreateAsync(fixture, admin, root, "parts", "createPart", "Part编辑前可读");
+        var partRead = Assert.Single(fixture.FeatureCatalog, point => point.ModuleId == "Part" && point.Kind == "navigation" && point.Key == "part.parts");
+        var access = Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "workspace.spaces.access");
+        var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "PartEditReceipt", "Part编辑回执",
+            "part-edit-receipt", "Part编辑普通主体", access, Point(fixture, "edit"), partRead);
+        using var ordinary = actor.Client;
+        const string afterName = "Part编辑后不可读";
+        const string key = "PartEditReadDeny";
+        var rule = new ICP.Platform.Modules.Authorization.DTOs.DataScopeRuleDto(key, key, null, key, true, "part.part",
+            new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement(afterName)),
+            [new(key + "Subject", "all", null, 0, new Dictionary<string, string> { ["read"] = "deny" })], []);
+        var save = Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "authorization.dataScope.save");
+        using (var saved = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/" + key, rule))
+            Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
+        var before = await OwnedResourceReadHttpRequests.ReadAsync(fixture, ordinary, partRead, "part.part", "read", "/api/part/parts/" + part.Id);
+        Assert.Equal("Part编辑前可读", before.GetProperty("fields").GetProperty("ENAME").GetString());
+        using var edited = await SendAsync(fixture, ordinary, "edit", HttpMethod.Put, "/api/workspace/content/" + part.Link,
+            new { position = root, values = new { ENAME = afterName } });
+        Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
+        var receipt = await edited.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Single(receipt.EnumerateObject());
+        Assert.True(receipt.GetProperty("succeeded").GetBoolean());
+        using var hidden = await FeatureHttpTestRequests.SendAsync(ordinary, partRead, HttpMethod.Get, "/api/part/parts/" + part.Id,
+            dataAccess: OwnedResourceReadHttpRequests.Declaration(fixture, partRead, "part.part", "read"));
+        Assert.Equal(HttpStatusCode.NotFound, hidden.StatusCode);
+        using var scope = fixture.Services.CreateScope();
+        var row = await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("Part")
+            .AsNoTracking().SingleAsync(item => EF.Property<string>(item, "EID") == part.Id);
+        Assert.Equal(afterName, row["ENAME"]);
+        Assert.Equal(actor.AccountId, row["UpdatedBy"]);
     }
 }

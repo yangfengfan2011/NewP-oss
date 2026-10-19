@@ -123,4 +123,63 @@ public sealed class PartWriteExecutionSqlServerTests
         }
         finally { accessor.HttpContext = previous; }
     }
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "真实Part内部写在原旧事实保护位置执行read和edit/delete，拒绝不修改对象")]
+    public async Task InternalWrites_ReadAndActionDenialsPreserveProtectedFacts()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(includePart: true);
+        using var admin = await fixture.LoginAdministratorAsync();
+        var read = Assert.Single(fixture.FeatureCatalog, point => point.ModuleId == "Part" && point.Kind == "navigation" && point.Key == "part.parts");
+        var create = Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "part.part.create");
+        var declaration = OwnedResourceReadHttpRequests.Declaration(fixture, create, "part.part", "create");
+        var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "PartWriteDenials", "内部写拒绝",
+            "part-write-denials", "内部写普通账号", read, create);
+        using var ordinary = actor.Client;
+        var ids = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var action in new[] { "read", "edit", "delete" })
+        {
+            using var response = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post, "/api/part/parts",
+                new { ECODE = "DENY-" + action, ENAME = "拒绝前的名称" }, declaration);
+            Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+            ids[action] = BusinessAuditSqlServerHttpApiTests.Id(await response.Content.ReadFromJsonAsync<JsonElement>());
+            var key = "PartInternalDeny" + action;
+            var rule = new ICP.Platform.Modules.Authorization.DTOs.DataScopeRuleDto(key, key, null, key, true, "part.part",
+                new("attribute", "ECODE", "equal", JsonSerializer.SerializeToElement("DENY-" + action)),
+                [new(key + "Subject", "all", null, 0, new Dictionary<string, string> { [action] = "deny" })], []);
+            var save = Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "authorization.dataScope.save");
+            using var saved = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put, "/api/authorization/data-scope/rules/" + key, rule);
+            Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
+        }
+        using var scope = fixture.Services.CreateScope();
+        var accessor = scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>();
+        var previous = accessor.HttpContext;
+        accessor.HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, actor.AccountId)], "part-internal-write-denials")) };
+        using var trace = new Activity(nameof(InternalWrites_ReadAndActionDenialsPreserveProtectedFacts)).Start();
+        try
+        {
+            var executor = scope.ServiceProvider.GetRequiredService<IObjectOperationExecutor>();
+            foreach (var (denied, operation, status, code) in new[]
+            {
+                ("read", "update", 404, "StandardCrud.NotFound"),
+                ("read", "delete", 404, "StandardCrud.NotFound"),
+                ("edit", "update", 403, "DataScope.ActionDenied"),
+                ("delete", "delete", 403, "DataScope.ActionDenied")
+            })
+            {
+                var key = "part.part." + operation;
+                var source = new ObjectOperationWriteSource.Declared(new(new(key, "standardCrud." + operation, "submit"), "part.part", ids[denied])
+                { Internal = new(key, "standardCrud." + operation, typeof(WorkspaceContents), "MutateObjectsAsync") });
+                var action = operation == "update" ? ObjectOperationAction.Update : ObjectOperationAction.Delete;
+                var result = await executor.ExecuteAsync("part.part", action, ids[denied],
+                    new Dictionary<string, object?> { ["ENAME"] = "不得生效" }, source);
+                Assert.False(result.Succeeded);
+                Assert.Equal(status, result.Error!.StatusCode);
+                Assert.Equal(code, result.Error.Code);
+            }
+            var rows = await scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("Part").AsNoTracking().ToListAsync();
+            Assert.Equal(3, rows.Count);
+            Assert.All(rows, row => Assert.Equal("拒绝前的名称", row["ENAME"]));
+        }
+        finally { accessor.HttpContext = previous; }
+    }
 }

@@ -215,6 +215,50 @@ it('edits an actual subject with a full U template and carries R clear confirmat
   expect(payload.resources[1].subjects).toEqual([]);
 });
 
+it.each(['确定', '取消'] as const)('keeps the batch blocked while another resource is editing after %s closes the first editor', async firstAction => {
+  const { requests } = await mount();
+  const confirm = () => document.querySelector<HTMLButtonElement>('[role="dialog"] .ant-modal-footer button.ant-btn-primary');
+  const saves = () => requests.filter(request => new URL(request.url).pathname.endsWith('/permissions/batch'));
+  const sections = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')]
+    .filter(button => button.textContent === '添加主体项').map(button => button.closest('section')!);
+  expect(sections).toHaveLength(2);
+  for (const section of sections) {
+    await act(async () => [...section.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === '添加主体项')!.click());
+    await waitFor(() => expect(section.querySelector('[data-subject-editor]')).not.toBeNull());
+    await act(async () => section.querySelector<HTMLButtonElement>('[data-subject-editor] button[role="checkbox"]')!.click());
+  }
+  expect(document.querySelectorAll('[data-subject-editor]')).toHaveLength(2);
+  await waitFor(() => expect(confirm()?.disabled).toBe(true));
+  const closeEditor = (section: Element, action: string) => [...section.querySelectorAll<HTMLButtonElement>('[data-subject-editor] button')]
+    .find(button => button.textContent?.replace(/\s/g, '') === action)!;
+  await act(async () => closeEditor(sections[0], firstAction).click());
+  await waitFor(() => expect(sections[0].querySelector('[data-subject-editor]')).toBeNull());
+  expect(sections[1].querySelector('[data-subject-editor]')).not.toBeNull();
+  await waitFor(() => expect(confirm()?.disabled).toBe(true));
+  await act(async () => confirm()!.click());
+  expect(saves()).toHaveLength(0);
+  await act(async () => document.querySelector<HTMLButtonElement>('[role="dialog"] .ant-modal-footer button:not(.ant-btn-primary)')!.click());
+  await waitFor(() => expect(document.body.textContent).toContain('放弃未保存的草稿'));
+  const keepEditing = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')]
+    .find(button => button.textContent?.replace(/\s/g, '') === '继续编辑');
+  await act(async () => keepEditing!.click());
+  await waitFor(() => expect(getComputedStyle(keepEditing!.closest<HTMLElement>('.ant-modal-wrap')!).display).toBe('none'));
+  expect(sections[1].querySelector('[data-subject-editor]')).not.toBeNull();
+  expect(confirm()?.disabled).toBe(true);
+
+  await act(async () => closeEditor(sections[1], '确定').click());
+  await waitFor(() => expect(confirm()?.disabled).toBe(false));
+  await act(async () => confirm()!.click());
+  await waitFor(() => expect(saves()).toHaveLength(1));
+  const payload = await saves()[0].clone().json();
+  const subject = { type: 'all', subjectId: null, priority: 0, actions: { read: 'allow' }, expiresAt: null };
+  expect(payload).toMatchObject({ mode: 'U', confirmClear: false });
+  expect(payload.resources).toEqual([
+    { resourceKey: 'part.part', subjects: firstAction === '确定' ? [subject] : [] },
+    { resourceKey: 'document.document', subjects: [subject] },
+  ]);
+});
+
 it('requires explicit whole-set current reconciliation after an unknown save and never replays the old template', async () => {
   const { requests } = await mount(undefined, () => json({ code: 'Persistence.CommitOutcomeUnknown' }, 409));
   const confirm = () => document.querySelector<HTMLButtonElement>('[role="dialog"] .ant-modal-footer button.ant-btn-primary');

@@ -17,7 +17,17 @@ export default function WorkspaceBatchAuthorizationInput(context: StandardCrudAc
   const { onChange, onDraftStateChange } = context;
   const submission = batchSubmission(context.instance);
   const frozen = useSyncExternalStore(submission?.subscribe ?? noSubscribe, submission?.getSnapshot ?? notFrozen);
-  const [editing, setEditing] = useState(false);
+  // 每个资源拥有独立主体草稿；一个编辑器结束不能清除其他资源仍在编辑的事实。
+  const [editingResources, setEditingResources] = useState<ReadonlySet<string>>(() => new Set());
+  const editing = editingResources.size > 0;
+  const setResourceEditing = useCallback((resourceKey: string, active: boolean) => {
+    setEditingResources(current => {
+      if (current.has(resourceKey) === active) return current;
+      const next = new Set(current);
+      if (active) next.add(resourceKey); else next.delete(resourceKey);
+      return next;
+    });
+  }, []);
   const [collecting, setCollecting] = useState(false);
   const [collectionFailure, setCollectionFailure] = useState<unknown>();
   const [filterDraft, setFilterDraft] = useState<BatchFilters>({});
@@ -125,7 +135,7 @@ export default function WorkspaceBatchAuthorizationInput(context: StandardCrudAc
     {draft.catalogs.filter(catalog => draft.items.some(item => item.resourceKey === catalog.resourceKey)).map(catalog => <ResourceSubjects key={catalog.resourceKey} catalog={catalog}
       item={draft.items.find(item => item.resourceKey === catalog.resourceKey)!} featurePosition={context.featurePosition!}
       subjects={draft.resources.find(resource => resource.resourceKey === catalog.resourceKey)?.subjects ?? []}
-      disabled={Boolean(context.submitting || frozen || collecting || collectionFailure || draft.items.some(item => !item.manageable))} onEditingChange={setEditing}
+      disabled={Boolean(context.submitting || frozen || collecting || collectionFailure || draft.items.some(item => !item.manageable))} onEditingChange={active => setResourceEditing(catalog.resourceKey, active)}
       onChange={subjects => onChange({ ...draft, resources: draft.resources.map(resource => resource.resourceKey === catalog.resourceKey
         ? { ...resource, subjects } : resource) })} />)}
   </Space></div>;

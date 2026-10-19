@@ -5,6 +5,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
 import { invalidatePlatformAntiforgeryToken, LocalizationProvider } from '@icp-platform/core';
 import { createObjectAuthorizationActions } from '../../../ui/src/objectAuthorizationActions';
+import { objectAuthorizationSubmission } from '../../../ui/src/objectAuthorizationRequest';
+import compiledRequirements from '../../../../../tests/Kernel.Tests/Fixtures/ExampleCrudDataAccess.contract.json';
+import type { ActionDataAccessRequirement } from '@icp-platform/sdk';
 import type { SubjectType } from '../../../ui/src/DataScopeSubjectEditor';
 import { CurrentPermissionScope } from '../components/CurrentPermissionScope';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
@@ -39,6 +42,24 @@ afterEach(async () => {
   for (const dispose of disposeInstances.splice(0)) dispose();
   container?.remove(); container = undefined;
   localStorage.clear(); vi.unstubAllGlobals(); invalidatePlatformAntiforgeryToken();
+});
+
+it('keeps an unknown save frozen under its original declaration while a separate inspection stays isolated', async () => {
+  const requirements = compiledRequirements as ActionDataAccessRequirement[];
+  const manage = requirements.find(item => item.actionKey === 'authorize')!;
+  const inspect = requirements.find(item => item.actionKey === 'viewAuthorization')!;
+  const instance = new ActionInstanceScope(); disposeInstances.push(instance.activate());
+  const target = { resourceKey: 'example.record', id: 'same-target', title: '记录' };
+  const fetcher = vi.fn().mockRejectedValue(new TypeError('response unavailable'));
+  const registration = createObjectAuthorizationActions(target.resourceKey, () => target, fetcher);
+  const context = { instance, id: target.id, featurePosition: 'same-position',
+    action: { key: 'authorize', labelKey: '授权', dataAccess: manage },
+    input: { resourceKey: target.resourceKey, objectId: target.id, subjects: [] } };
+  await expect(registration.actionHandlers.authorize(context)).rejects.toMatchObject({ reasonKey: 'AuthorizationMessages.OperationUnknown' });
+  await expect(registration.actionHandlers.authorize(context)).rejects.toMatchObject({ reasonKey: 'AuthorizationMessages.OperationUnknown' });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(objectAuthorizationSubmission(instance, target, context.featurePosition, manage)?.getSnapshot()).toBe(true);
+  expect(objectAuthorizationSubmission(instance, target, context.featurePosition, inspect)?.getSnapshot()).toBe(false);
 });
 
 async function mountEditor(save?: () => Promise<Response>, settings: { readCurrent?: () => Response; denyAfterSave?: boolean; failRefresh?: boolean; subjectTypes?: SubjectType[] } = {}) {

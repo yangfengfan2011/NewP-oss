@@ -84,6 +84,35 @@ public sealed class DataScopeReadConstraintRegistrationTests
         Assert.NotNull(Prepare(services, "valid", [new("workspace.folder", "Workspace", ["read"])], requirement with { Actions = ["read"] }));
     }
 
+    // 异构角色的摘要不能被当作每个资源都要求的动作；非法资源动作仍在正式catalog拒绝。
+    [Theory, Trait("Category", "ModuleMetadataConsumer")]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Preparation_StructuredRolesValidateOnlyTheCurrentResourceAlternatives(bool invalid)
+    {
+        using var services = new ServiceCollection().BuildServiceProvider();
+        string[] resources = ["workspace.folder", "workspace.other"];
+        var contract = new DataExecutionContract("workspace.heterogeneous", "Workspace", "workspace.backend", "entry", ["workspace.folder.read"],
+            [new("targets", "submit", "objects", resources, [["read"]], 1, 5)
+            { ResourceAnyOf = new Dictionary<string, IReadOnlyList<IReadOnlyList<string>>>
+                { [resources[0]] = [["edit"]], [resources[1]] = [[invalid ? "edit" : "delete"]] } }]);
+        var module = new CanonicalModulePlanModule("Workspace", "1.1.0", "工作空间", null, "", null, null,
+            null, null, "", [], [], [], [], [], new("test", "test", "/"))
+        {
+            DataActions = [new("Workspace", "read", "读取", "data.read"), new("Workspace", "edit", "编辑", "data.edit"), new("Workspace", "delete", "删除", "data.delete")],
+            DataExecutions = [contract], Features = [new("Workspace", "read", "navigation", "读取", null, "workspace.folder.read")
+            { DataResources = resources, DataAccess = [new("Workspace", "mixed", "rowActions", "read", contract.Key, resources, [])] }]
+        };
+        var plan = new CanonicalModulePlan("candidate", "1.1.0", "", "", [], [module]);
+        var persistence = new CompiledPersistencePlan("candidate", "snapshot", "hash", PersistenceProvider.SqlServer,
+            "digest", [], new WorkspaceModelMetadataProvider().GetDefinitions(), []);
+        DataScopeResourceCatalog PrepareStructured() => new(new StandardCrudResourceRegistry([]), plan, persistence,
+            resources.Select(key => new DataScopeResource(key, "Workspace", "WorkspaceFolder", "EID")), [], services.GetRequiredService<IServiceProviderIsKeyedService>(),
+            [new(resources[0], "Workspace", ["read", "edit"]), new(resources[1], "Workspace", ["read", "delete"])]);
+        if (invalid) Assert.Equal("ACTION_DATA_ACCESS_RESOURCE_ACTION_INVALID", Assert.Throws<InvalidOperationException>(PrepareStructured).Message);
+        else Assert.Equal(2, PrepareStructured().Resources.Count);
+    }
+
     private static ServiceProvider Services(string invalid)
     {
         var services = new ServiceCollection();

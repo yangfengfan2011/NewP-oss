@@ -1,4 +1,4 @@
-import { fetchObjectAuthorization, objectAuthorizationError, objectAuthorizationPath, objectAuthorizationOutcomeUnknown, objectAuthorizationSubmission, type ObjectAuthorizationAddress } from './objectAuthorizationRequest';
+import { fetchObjectAuthorization, objectAuthorizationError, objectAuthorizationPath, objectAuthorizationOutcomeUnknown, objectAuthorizationSubmission, objectAuthorizationHeaders, type ObjectAuthorizationAddress } from './objectAuthorizationRequest';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Alert, Button, Spin, Typography } from 'antd';
 import { formatRequestError, platformFetch, useLocalization, usePlatformQuery } from '@icp-platform/core';
@@ -16,17 +16,18 @@ const noUnknownOutcome = () => false;
 /** 标准动作宿主持有草稿；固定当前行目标，关闭后重新读取已保存配置。 */
 export default function ObjectAuthorizationInput(context: StandardCrudActionInputRenderContext & { target: ObjectAuthorizationTarget }) {
   const { target, featurePosition, action } = context;
+  const dataAccess = action.dataAccess ?? context.dataAccess;
   // 宿主在主体或权限边界变化时卸载整个输入；目标和模式变化在此终止本地交互。
-  return <ObjectAuthorizationSession key={JSON.stringify([target.resourceKey, target.id, target.basePath, featurePosition, action.inputKey])} {...context} />;
+  return <ObjectAuthorizationSession key={JSON.stringify([target.resourceKey, target.id, target.basePath, featurePosition, action.inputKey, dataAccess?.id])} {...context} dataAccess={dataAccess} />;
 }
 
 function ObjectAuthorizationSession(context: StandardCrudActionInputRenderContext & { target: ObjectAuthorizationTarget }) {
-  const { action, value, onChange, onDraftStateChange, featurePosition, submitting = false } = context;
+  const { action, value, onChange, onDraftStateChange, featurePosition, dataAccess, submitting = false } = context;
   const { t } = useLocalization();
   const { target } = context;
   const { resourceKey, id, basePath } = target;
   const inspect = action.inputKey === 'objectAuthorizationDetails';
-  const submission = objectAuthorizationSubmission(context.instance, target, featurePosition);
+  const submission = objectAuthorizationSubmission(context.instance, target, featurePosition, dataAccess);
   const frozen = useSyncExternalStore(submission?.subscribe ?? noSubscription, submission?.getSnapshot ?? noUnknownOutcome)
     || objectAuthorizationOutcomeUnknown(context.submissionFailure);
   const instance = useRef(crypto.randomUUID());
@@ -39,11 +40,11 @@ function ObjectAuthorizationSession(context: StandardCrudActionInputRenderContex
   const config = value as Configuration | undefined;
   const read = useCallback(async (path: string, signal?: AbortSignal) => {
     const response = await fetchObjectAuthorization(platformFetch as typeof fetch, objectAuthorizationPath({ resourceKey, id, basePath }, path),
-      { signal, headers: { 'X-NewP-Feature': featurePosition ?? '' } });
+      { signal, headers: objectAuthorizationHeaders(featurePosition, dataAccess) });
     if (!response.ok) throw await objectAuthorizationError(response);
     return response.json() as Promise<unknown>;
-  }, [resourceKey, id, basePath, featurePosition]);
-  const query = usePlatformQuery({ key: ['object-authorization', target.resourceKey, target.id ?? '', target.basePath ?? '', featurePosition ?? '', inspect, instance.current],
+  }, [resourceKey, id, basePath, featurePosition, dataAccess]);
+  const query = usePlatformQuery({ key: ['object-authorization', target.resourceKey, target.id ?? '', target.basePath ?? '', featurePosition ?? '', dataAccess?.id ?? '', inspect, instance.current],
     enabled: Boolean(target.id && featurePosition),
     load: async ({ signal }) => {
       const catalog = await read('/catalog', signal) as ObjectCatalog;

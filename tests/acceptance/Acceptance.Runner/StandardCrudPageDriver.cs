@@ -164,10 +164,11 @@ internal sealed class StandardCrudPageDriver
         Page.GetByRole(AriaRole.Dialog).Filter(new LocatorFilterOptions { HasTextString = text });
 
     // 在弹窗内点击确认，等待期望响应并校验，再等待弹窗关闭。
-    internal async Task<IResponse> ConfirmAsync(ILocator dialog, ApiExpectation expectation)
+    internal async Task<IResponse> ConfirmAsync(ILocator dialog, ApiExpectation expectation, string? buttonLabel = null)
     {
         var responseTask = Page.WaitForResponseAsync(expectation.Matches);
-        await dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { NameRegex = ConfirmButtonName }).ClickAsync();
+        await (buttonLabel is null ? dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { NameRegex = ConfirmButtonName })
+            : dialog.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = buttonLabel, Exact = true })).ClickAsync();
         var response = await responseTask;
         await EnsureExpectedStatusAsync(response, expectation);
         await WaitForDrawerAsync(dialog, WaitForSelectorState.Hidden, $"dialog after confirm ({expectation.Operation})");

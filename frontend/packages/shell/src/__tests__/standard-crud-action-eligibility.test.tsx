@@ -8,6 +8,8 @@ import { LanguageSelect, LocalizationProvider, PlatformQueryProvider } from '@ic
 import { companyStandardCrudResource } from '../../../../modules/platform/organization/src/standard-crud/companyStandardCrudResource';
 import { platformTestCatalogs } from './localizationTestCatalogs';
 import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime';
+import compiledRequirements from '../../../../../tests/Kernel.Tests/Fixtures/ExampleCrudDataAccess.contract.json';
+import type { ActionDataAccessRequirement } from '@icp-platform/sdk';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let root: Root | undefined;
@@ -16,6 +18,29 @@ afterEach(async () => {
   document.body.innerHTML = '';
   root = undefined;
   vi.unstubAllGlobals();
+});
+
+it('rechecks a changed declaration at the same target and feature and rejects an old late eligibility', async () => {
+  const requirements = compiledRequirements as ActionDataAccessRequirement[];
+  const first = requirements.find(item => item.actionKey === 'authorize')!;
+  const next = requirements.find(item => item.actionKey === 'viewAuthorization')!;
+  let finishOld!: (value: { visible: boolean; available: boolean }) => void;
+  const resolver = vi.fn().mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; }))
+    .mockResolvedValue({ visible: false, available: false });
+  const container = document.createElement('div'); document.body.append(container); root = createRoot(container);
+  const render = (dataAccess: ActionDataAccessRequirement) => <PlatformQueryProvider scopeKey="declaration-eligibility"><StandardCrudActions
+    resourceKey="example.record" actions={[{ key: 'authorize', labelKey: '授权', dataAccess }]}
+    featureResolutionForAction={() => ({ kind: 'allowed', position: 'same-position' })}
+    actionEligibilityResolvers={{ authorize: resolver }} handlers={{ authorize: vi.fn() }} refresh={vi.fn()} context={{ id: 'same-target' }}
+  /></PlatformQueryProvider>;
+  await act(async () => root!.render(render(first)));
+  const oldSignal = resolver.mock.calls[0][0].signal as AbortSignal;
+  await act(async () => root!.render(render(next)));
+  await vi.waitFor(() => expect(oldSignal.aborted).toBe(true));
+  expect(resolver).toHaveBeenCalledTimes(2);
+  expect(resolver.mock.calls[1][0]).toMatchObject({ dataAccess: next, featurePosition: 'same-position', id: 'same-target' });
+  await act(async () => finishOld({ visible: true, available: true }));
+  expect(container.querySelector('button')).toBeNull();
 });
 
 it.each(['http', 'network'])('localizes real object action eligibility %s failures without granting or replaying actions', async failure => {

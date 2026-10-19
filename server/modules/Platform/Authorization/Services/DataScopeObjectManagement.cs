@@ -16,14 +16,15 @@ public sealed partial class DataScopeObjectManagement(DataScopeCatalog catalog, 
     IFeatureDecisionSource features, IDataScopeObjectDecisionProvider decisions, DataScopeObjectGrants grants,
     DataScopeIdentities identities, IHttpContextAccessor context, IPlatformTransactionExecutor transactions, IEntityAuditValueProvider audit, IPlatformObjectIdGenerator ids,
     IDataScopeObjectAccess? access = null,
-    IDataScopeEvaluationScope? evaluation = null) : IDataScopeObjectAuthorization, IDataScopeBatchAuthorization
+    IDataScopeEvaluationScope? evaluation = null, IDataExecutionAccess? executions = null) : IDataScopeObjectAuthorization, IDataScopeBatchAuthorization
 {
     /// <summary>只读操作组合功能位置与当前数据资格；手工写入只前置功能资格，数据资格由锁内流程拥有。</summary>
     public async Task<DataScopeObjectEligibility> CheckAsync(string resourceKey, string objectId, CancellationToken token)
     {
         using var operation = evaluation?.BeginOperation();
         var feature = await CheckFeatureAsync(resourceKey, token);
-        return feature == DataScopeObjectEligibility.Allowed ? await CheckDataAsync(resourceKey, objectId, token) : feature;
+        return feature == DataScopeObjectEligibility.Allowed
+            ? await CheckDataAsync(resourceKey, objectId, token, executions?.BindResourceEndpoint(resourceKey)) : feature;
     }
 
     /// <summary>校验具体资源的授权功能位置，不能借另一资源的入口或请求头获得资格。</summary>
@@ -48,10 +49,18 @@ public sealed partial class DataScopeObjectManagement(DataScopeCatalog catalog, 
     }
 
     // 统一数据资格供旧generic功能门禁和已验证来源的owner入口复用，不接收skip或功能头替代值。
-    private async Task<DataScopeObjectEligibility> CheckDataAsync(string resourceKey, string objectId, CancellationToken token)
+    private async Task<DataScopeObjectEligibility> CheckDataAsync(string resourceKey, string objectId, CancellationToken token,
+        DataExecutionBindingReference? execution = null)
     {
         using var operation = evaluation?.BeginOperation();
         var resource = catalog.Resolve(resourceKey);
+        if (execution is not null)
+            return await executions!.EvaluateObjectAsync(execution, resourceKey, "target", objectId, token) switch
+            {
+                DataExecutionDecision.Allowed => DataScopeObjectEligibility.Allowed,
+                DataExecutionDecision.NotFound => DataScopeObjectEligibility.NotFound,
+                _ => DataScopeObjectEligibility.Forbidden
+            };
         // 手工构造的旧无约束消费者保留原构造方式；显式声明约束绝不能退回纯数据read。
         if (access is null && resource.ReadConstraintKey is not null)
             throw new InvalidOperationException("DATA_SCOPE_OBJECT_ACCESS_MISSING");
@@ -77,7 +86,7 @@ public sealed partial class DataScopeObjectManagement(DataScopeCatalog catalog, 
         using var operation = evaluation?.BeginOperation();
         var eligibility = await CheckFeatureAsync(resourceKey, token);
         if (eligibility != DataScopeObjectEligibility.Allowed) return new(DeniedStatus(eligibility));
-        return await SaveConfigurationAsync(resourceKey, objectId, input, token);
+        return await SaveConfigurationAsync(resourceKey, objectId, input, token, executions?.BindResourceEndpoint(resourceKey));
     }
 
     /// <summary>被分析账号必须存在；复用正式裁决实现，不改变操作者的管理资格或请求身份。</summary>

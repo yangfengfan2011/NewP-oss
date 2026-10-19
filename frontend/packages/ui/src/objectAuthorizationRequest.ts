@@ -1,4 +1,4 @@
-import { readStandardCrudRequestError, StandardCrudRequestError, type StandardCrudActionInstance } from '@icp-platform/sdk';
+import { readStandardCrudRequestError, StandardCrudRequestError, type StandardCrudActionInstance, type ActionDataAccessRequirement } from '@icp-platform/sdk';
 
 export interface ObjectAuthorizationAddress { resourceKey: string; id?: string; basePath?: string }
 
@@ -13,16 +13,24 @@ class ObjectAuthorizationSubmission {
 const submissionOwner = Symbol('object-authorization-submission');
 
 /** 未知结果属于页面/主体实例和完整来源；关弹窗不能把它变成可重复提交的新操作。 */
-export function objectAuthorizationSubmission(instance: StandardCrudActionInstance | undefined, target: ObjectAuthorizationAddress, featurePosition?: string) {
+export function objectAuthorizationSubmission(instance: StandardCrudActionInstance | undefined, target: ObjectAuthorizationAddress, featurePosition?: string, dataAccess?: ActionDataAccessRequirement) {
   if (!instance?.active) return undefined;
   const entries = instance.getOrCreate(submissionOwner, () => new Map<string, ObjectAuthorizationSubmission>(), values => {
     for (const value of values.values()) value.dispose();
     values.clear();
   });
-  const key = JSON.stringify([target.resourceKey, target.id, objectAuthorizationPath(target), featurePosition]);
+  const key = JSON.stringify([target.resourceKey, target.id, objectAuthorizationPath(target), featurePosition, dataAccess?.id]);
   let state = entries.get(key);
   if (!state) { state = new ObjectAuthorizationSubmission(); entries.set(key, state); }
   return state;
+}
+
+/** 所有对象授权请求携带当前正式绑定，声明仅作引用，业务载荷不包含权限要求。 */
+export function objectAuthorizationHeaders(featurePosition?: string, dataAccess?: ActionDataAccessRequirement): Record<string, string> {
+  return {
+    ...(featurePosition ? { 'X-NewP-Feature': featurePosition } : {}),
+    ...(dataAccess?.id ? { 'X-NewP-Data-Declaration': dataAccess.id } : {}),
+  };
 }
 
 export function objectAuthorizationOutcomeUnknown(failure: unknown): boolean {

@@ -1356,6 +1356,7 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
     private bool _includeFiles;
     private bool _includeExample;
     private bool _legacyExampleExecutions;
+    private bool _legacyExampleAuthorization;
     private bool _defaultOrganizationInitialized;
     private BusinessAuditHostFixture(ReusableSqlServerDatabase database, Action<IServiceCollection>? configureServices)
     {
@@ -1364,12 +1365,13 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         _configureServices = configureServices;
     }
     internal static async Task<BusinessAuditHostFixture> CreateAsync(Action<IServiceCollection>? configureServices = null,
-        IReadOnlyDictionary<string, bool>? actionStates = null, bool useRequestPresentation = false, bool includeWorkspace = false, bool includePart = false, bool includeDocument = false, bool includeFiles = false, bool includeExample = false, bool legacyExampleExecutions = false)
+        IReadOnlyDictionary<string, bool>? actionStates = null, bool useRequestPresentation = false, bool includeWorkspace = false, bool includePart = false, bool includeDocument = false, bool includeFiles = false, bool includeExample = false, bool legacyExampleExecutions = false, bool legacyExampleAuthorization = false)
     {
         var fixture = new BusinessAuditHostFixture(await ReusableSqlServerDatabase.AcquireAsync(allowParallel: true), configureServices);
         fixture._useRequestPresentation = useRequestPresentation;
         fixture._includeExample = includeExample;
         fixture._legacyExampleExecutions = legacyExampleExecutions;
+        fixture._legacyExampleAuthorization = legacyExampleAuthorization;
         fixture._includeWorkspace = includeWorkspace || includePart || includeDocument;
         fixture._includePart = fixture._includeWorkspace;
         fixture._includeDocument = fixture._includeWorkspace;
@@ -1442,6 +1444,16 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         if (_legacyExampleExecutions)
             candidates = candidates.Select(candidate => candidate.ModuleId == "Example" ? candidate with
             { DataExecutions = [], Features = candidate.Features.Select(feature => feature with { DataAccess = [] }).ToArray() } : candidate).ToArray();
+        // 307诊断仅将Example对象授权登记为旧消费者，保留306 CRUD及相同显示计划与池设置。
+        if (_legacyExampleAuthorization)
+            candidates = candidates.Select(candidate => candidate.ModuleId == "Example" ? candidate with
+            {
+                DataExecutions = candidate.DataExecutions.Where(execution => !execution.Provider.StartsWith("authorization.object.", StringComparison.Ordinal)).ToArray(),
+                Features = candidate.Features.Select(feature => feature with
+                    { DataAccess = feature.DataAccess.Where(binding => !binding.Execution.StartsWith("example.record.authorization.", StringComparison.Ordinal)).ToArray() }).ToArray()
+            } : candidate.ModuleId == "Authorization" ? candidate with
+            { DataExecutionProviders = candidate.DataExecutionProviders.Select(provider => provider.Key == "authorization.object.manage"
+                ? provider with { LegacyConsumers = [.. provider.LegacyConsumers, new("Example", "example.record")] } : provider).ToArray() } : candidate).ToArray();
         // 注册的测试扩展也必须拥有同一候选中的正式 Capsule，不能只靠 IModule 注册旁路依赖校验。
         var probeModulesRoot = Path.Combine(_root, "probe-capsules");
         var probeRoot = Path.Combine(probeModulesRoot, "ObjectOperationExtensionProbe");

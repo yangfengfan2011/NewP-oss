@@ -166,6 +166,7 @@ public sealed class ModuleCapsuleCandidateReader
             Features = ReadFeatures(root, moduleId, Path.Combine(moduleRoot, "metadata"), snapshot),
             DataActions = DataActionCatalogCompiler.Read(root, moduleId),
             DataExecutions = DataExecutionContracts.Read(root, moduleId),
+            DataExecutionProviders = DataExecutionProviders.Read(root, moduleId),
             CompositionMembers = ReadCompositionMembers(root, manifestPath)
         };
     }
@@ -218,6 +219,7 @@ public sealed class ModuleCapsuleCandidateReader
             Features = ReadFeatures(root, moduleId, Path.Combine(packageRoot, "modules", moduleId, "metadata"), null),
             DataActions = DataActionCatalogCompiler.Read(root, moduleId),
             DataExecutions = DataExecutionContracts.Read(root, moduleId),
+            DataExecutionProviders = DataExecutionProviders.Read(root, moduleId),
             CompositionMembers = ReadCompositionMembers(root, manifestPath)
         };
     }

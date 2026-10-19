@@ -457,7 +457,11 @@ public sealed class CanonicalModulePlanCompiler
                 if (candidate.DataActions.Any(action => action.ModuleId != candidate.ModuleId))
                     throw new InvalidOperationException("数据动作声明不能跨模块冒领归属。");
                 if (candidate.DataExecutions.Any(execution => execution.ModuleId != candidate.ModuleId
-                    || !execution.Provider.StartsWith("standardCrud.", StringComparison.Ordinal) && execution.Provider != candidate.BackendBehaviorKey))
+                    || !execution.Provider.StartsWith("standardCrud.", StringComparison.Ordinal) && execution.Provider != candidate.BackendBehaviorKey && !candidates.SelectMany(owner => owner.DataExecutionProviders).Any(provider => provider.Key == execution.Provider)))
+                    throw new InvalidOperationException("DATA_EXECUTION_PROVIDER_OWNER_INVALID");
+                if (candidate.DataExecutionProviders.Any(provider => provider.ModuleId != candidate.ModuleId || provider.BackendBehaviorKey != candidate.BackendBehaviorKey
+                    || provider.ConsumerBinding != "resource-owner" || string.IsNullOrWhiteSpace(provider.Key) || provider.Key.StartsWith("standardCrud.", StringComparison.Ordinal)
+                    || provider.Requirements is not { Count: > 0 }))
                     throw new InvalidOperationException("DATA_EXECUTION_PROVIDER_OWNER_INVALID");
                 DataActionCatalogCompiler.Compile(candidate.DataActions);
             }
@@ -485,7 +489,7 @@ public sealed class CanonicalModulePlanCompiler
         {
             var actions = DataActionCatalogCompiler.Compile(candidates.SelectMany(candidate => candidate.DataActions));
             // 缺失依赖已拒绝候选；不把其资源消失再报告成按钮声明错误。
-            if (dependenciesAvailable) ActionDataAccessCompiler.Compile(candidates.SelectMany(candidate => candidate.Features).ToArray(), actions, candidates.SelectMany(candidate => candidate.DataExecutions).ToArray());
+            if (dependenciesAvailable) ActionDataAccessCompiler.Compile(candidates.SelectMany(candidate => candidate.Features).ToArray(), actions, candidates.SelectMany(candidate => candidate.DataExecutions).ToArray(), candidates.SelectMany(candidate => candidate.DataExecutionProviders).ToArray());
             return [];
         }
         catch (InvalidOperationException exception)
@@ -547,6 +551,7 @@ public sealed class CanonicalModulePlanCompiler
             Features = candidate.Features.OrderBy(node => node.Key, StringComparer.Ordinal).ToArray(),
             DataActions = candidate.DataActions.ToArray(),
             DataExecutions = candidate.DataExecutions.ToArray(),
+            DataExecutionProviders = candidate.DataExecutionProviders.ToArray(),
             CompositionMembers = Sort(candidate.CompositionMembers),
             Enabled = candidate.Enabled,
             FrontendDelivery = candidate.FrontendDelivery

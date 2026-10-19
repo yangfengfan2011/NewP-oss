@@ -6,7 +6,8 @@
   "description": "功能示例 模块",
   "entryAssembly": "../../ExampleModule.dll",
   "dependencies": [
-    "Identity"
+    "Identity",
+    "Authorization"
   ],
   "hostVersion": {
     "min": "1.0.0",
@@ -16,6 +17,8 @@
     "behaviorKey": "example.backend"
   },
   "dataExecutions": [
+    { "key": "example.record.authorization.manage", "moduleId": "Example", "provider": "authorization.object.manage", "boundary": "entry", "featureBehaviors": ["example.record.authorize"], "resourceKey": "example.record" },
+    { "key": "example.record.authorization.inspect", "moduleId": "Example", "provider": "authorization.object.inspect", "boundary": "entry", "featureBehaviors": ["example.record.authorize"], "resourceKey": "example.record" },
     { "key": "example.record.list", "moduleId": "Example", "provider": "standardCrud.list", "boundary": "entry", "featureBehaviors": ["example.record.read"], "resourceKey": "example.record" },
     {
       "key": "example.record.read",

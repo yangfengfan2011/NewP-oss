@@ -1,4 +1,4 @@
-import { fetchObjectAuthorization, objectAuthorizationError, objectAuthorizationPath, objectAuthorizationOutcomeUnknown, objectAuthorizationSubmission } from './objectAuthorizationRequest';
+import { fetchObjectAuthorization, objectAuthorizationError, objectAuthorizationPath, objectAuthorizationOutcomeUnknown, objectAuthorizationSubmission, objectAuthorizationHeaders } from './objectAuthorizationRequest';
 import { lazy, Suspense } from 'react';
 import { platformFetch } from '@icp-platform/core';
 import type { ObjectAuthorizationTarget } from './ObjectAuthorizationInput';
@@ -16,11 +16,12 @@ export function createObjectAuthorizationActions(
 ) {
   const eligibility = (inspect: boolean): StandardCrudActionEligibilityResolver => async context => {
     const { id, featurePosition, signal } = context;
+    const dataAccess = context.action.dataAccess ?? context.dataAccess;
     if (!id) return { visible: false, available: false };
     const selected = getTarget(context);
     const target = { ...selected, resourceKey, id: selected.id ?? id };
     const response = await fetchObjectAuthorization(fetcher, objectAuthorizationPath(target, inspect && target.basePath ? '/catalog' : '/eligibility'),
-      { headers: { 'X-NewP-Feature': featurePosition }, signal });
+      { headers: objectAuthorizationHeaders(featurePosition, dataAccess), signal });
     if (response.status === 403 || response.status === 404) return { visible: false, available: false };
     if (!response.ok) throw await objectAuthorizationError(response);
     return { visible: true, available: true };
@@ -34,20 +35,21 @@ export function createObjectAuthorizationActions(
     actionHandlers: {
       authorize: async (context: StandardCrudActionContext) => {
         const { id, input, featurePosition } = context;
+        const dataAccess = context.action?.dataAccess ?? context.dataAccess;
         if (!id || !featurePosition || !input || typeof input !== 'object') throw new StandardCrudRequestError('对象授权尚未加载。', 0, {}, { reasonKey: 'DataScope.ObjectNotLoaded' });
         const config = input as { resourceKey: string; objectId: string; subjects: unknown[] };
         const selected = getTarget(context);
         const target = { ...selected, resourceKey, id: selected.id ?? id };
         if (config.resourceKey !== resourceKey || config.objectId !== target.id || !Array.isArray(config.subjects))
           throw new StandardCrudRequestError('对象授权目标已变化，请重新打开。', 0, {}, { reasonKey: 'DataScope.ObjectChanged' });
-        const submission = objectAuthorizationSubmission(context.instance, target, featurePosition);
+        const submission = objectAuthorizationSubmission(context.instance, target, featurePosition, dataAccess);
         if (target.basePath && !submission)
           throw new StandardCrudRequestError('对象授权上下文已结束，请重新打开。', 400, {}, { reasonKey: 'DataScope.ObjectNotLoaded' });
         if (submission?.getSnapshot())
           throw new StandardCrudRequestError('原保存结果未知，不能重复提交。', 0, {}, { reasonKey: 'AuthorizationMessages.OperationUnknown' });
         try {
           const response = await fetchObjectAuthorization(fetcher, objectAuthorizationPath(target), {
-            method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-NewP-Feature': featurePosition },
+            method: 'PUT', headers: { 'Content-Type': 'application/json', ...objectAuthorizationHeaders(featurePosition, dataAccess) },
             body: JSON.stringify(config),
           });
           if (!response.ok) throw await objectAuthorizationError(response);

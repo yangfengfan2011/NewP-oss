@@ -87,6 +87,7 @@
         "labelKey": "Action_Authorize",
         "handlerKey": "authorize",
         "inputKey": "objectAuthorization",
+          "dataAccess": { "execution": "example.record.authorization.manage", "resources": ["example.record"] },
         "confirmLabelKey": "Action_SaveAuthorization"
       },
       {
@@ -94,6 +95,7 @@
         "labelKey": "Action_ViewAuthorization",
         "handlerKey": "authorize",
         "inputKey": "objectAuthorizationDetails",
+          "dataAccess": { "execution": "example.record.authorization.inspect", "resources": ["example.record"] },
         "confirmLabelKey": "Action_Close"
       },
       {

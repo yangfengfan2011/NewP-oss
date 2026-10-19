@@ -1927,9 +1927,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           ...item,
           eligibility: { resourceKey: registration.resourceKey, objectId: rowId,
             featurePosition: position,
-            sourceKey: JSON.stringify([actionInstanceQueryIdentity(actionInstance), host.input.queryScope, row]),
+            sourceKey: JSON.stringify([actionInstanceQueryIdentity(actionInstance), action.dataAccess?.id, host.input.queryScope, row]),
             resolve: (signal: AbortSignal) => resolver({ id: rowId, row, queryScope: host.input.queryScope,
-              instance: actionInstance, action, featurePosition: position, signal }) },
+              instance: actionInstance, action, dataAccess: action.dataAccess, featurePosition: position, signal }) },
         } : item;
       });
   }

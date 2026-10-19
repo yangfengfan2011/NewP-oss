@@ -5,7 +5,18 @@ namespace ICP.Platform.Kernel.ModulePlanning;
 /// <summary>一个有序角色要求；各要求取交集，AnyOf 中的分支可替代，分支内部动作取交集。</summary>
 public sealed record DataExecutionRequirement(string Role, string Stage, string Shape,
     IReadOnlyList<string> Resources, IReadOnlyList<IReadOnlyList<string>> AnyOf,
-    int MinimumCount = 1, int? MaximumCount = 1);
+    int MinimumCount = 1, int? MaximumCount = 1)
+{
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? Branch { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? ReadResolverKey { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyList<string>>>? ResourceAnyOf { get; init; }
+}
+
+/// <summary>无界面执行的正式固定绑定；API不能伪装为内部调用或成为界面缺声明的回退。</summary>
+public sealed record DataExecutionFixedBinding(string Kind, string Identity, string? HttpMethod = null, string? Route = null, string? Caller = null);
 
 /// <summary>执行 owner 的固定合同；入口只能引用，不能替换必要要求。</summary>
 public sealed record DataExecutionContract(string Key, string ModuleId, string Provider, string Boundary,
@@ -13,6 +24,12 @@ public sealed record DataExecutionContract(string Key, string ModuleId, string P
 {
     public bool LegacyActions { get; init; }
     public IReadOnlyList<string> AllowedAdditionalActions { get; init; } = [];
+    public IReadOnlyList<string> Branches { get; init; } = [];
+    public IReadOnlyList<DataExecutionFixedBinding> FixedBindings { get; init; } = [];
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? TargetResource { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? ProviderModuleId { get; init; }
 }
 
 /// <summary>从同一可信 Capsule 读取执行合同，装配时核对 owner、形状和动作目录。</summary>
@@ -26,6 +43,14 @@ public static class DataExecutionContracts
         { UnmappedMemberHandling = System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow };
         return executions.EnumerateArray().Select(item =>
         {
+            if (item.TryGetProperty("resourceKey", out var resource) && !item.GetProperty("provider").GetString()!.StartsWith("standardCrud.", StringComparison.Ordinal))
+            {
+                if (item.EnumerateObject().Any(property => property.Name is not ("key" or "moduleId" or "provider" or "boundary" or "featureBehaviors" or "resourceKey"))
+                    || item.GetProperty("moduleId").GetString() != moduleId)
+                    throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
+                return new DataExecutionContract(item.GetProperty("key").GetString()!, moduleId, item.GetProperty("provider").GetString()!,
+                    item.GetProperty("boundary").GetString()!, item.GetProperty("featureBehaviors").Deserialize<string[]>()!, []) { TargetResource = resource.GetString() };
+            }
             if (item.GetProperty("provider").GetString() is { } provider && provider.StartsWith("standardCrud.", StringComparison.Ordinal))
             {
                 if (item.EnumerateObject().Any(property => property.Name is not ("key" or "moduleId" or "provider" or "boundary" or "featureBehaviors" or "resourceKey"))
@@ -54,16 +79,35 @@ public static class DataExecutionContracts
             if (string.IsNullOrWhiteSpace(contract.Key) || string.IsNullOrWhiteSpace(contract.ModuleId)
                 || string.IsNullOrWhiteSpace(contract.Provider) || contract.Boundary is not ("entry" or "api" or "internal")
                 || contract.FeatureBehaviors is null || contract.Requirements is not { Count: > 0 }
+                || contract.Branches.Distinct(StringComparer.Ordinal).Count() != contract.Branches.Count
+                || contract.Branches.Any(string.IsNullOrWhiteSpace)
+                || contract.Branches.Any(branch => !contract.Requirements.Any(requirement => requirement.Branch == branch))
                 || contract.Requirements.Any(requirement => string.IsNullOrWhiteSpace(requirement.Role)
                     || requirement.Stage is not ("read" or "prepare" or "submit")
                     || requirement.Shape is not ("object" or "objects" or "query" or "candidate")
                     || requirement.Resources is not { Count: > 0 } || requirement.AnyOf is not { Count: > 0 }
                     || requirement.MinimumCount < 0 || requirement.MaximumCount < requirement.MinimumCount
+                    || requirement.Branch is not null && !contract.Branches.Contains(requirement.Branch, StringComparer.Ordinal)
+                    || requirement.ReadResolverKey is not null && (string.IsNullOrWhiteSpace(requirement.ReadResolverKey)
+                        || requirement.AnyOf.Any(branch => !branch.Contains("read", StringComparer.Ordinal)))
+                    || requirement.ResourceAnyOf is not null && (requirement.ResourceAnyOf.Count != requirement.Resources.Count
+                        || requirement.AnyOf.Any(branch => !branch.Contains("read", StringComparer.Ordinal))
+                        || requirement.Resources.Any(resource => !requirement.ResourceAnyOf.ContainsKey(resource))
+                        || requirement.ResourceAnyOf.Values.Any(branches => branches.Count == 0 || branches.Any(branch => branch.Count == 0
+                            || branch.Distinct(StringComparer.Ordinal).Count() != branch.Count
+                            || branch.Any(key => key == "read" || !actions.Any(action => action.Key == key)))))
                     || requirement.Shape is "candidate" or "object" && (requirement.MinimumCount != 1 || requirement.MaximumCount != 1)
                     || requirement.AnyOf.Any(branch => branch.Count == 0 || branch.Distinct(StringComparer.Ordinal).Count() != branch.Count
                         || branch.Any(key => !actions.Any(action => action.Key == key))))
                 || contract.AllowedAdditionalActions.Any(key => !actions.Any(action => action.Key == key)))
                 throw new InvalidOperationException("DATA_EXECUTION_CONTRACT_INVALID");
+            if (contract.Boundary == "entry" && contract.FixedBindings.Count != 0
+                || contract.Boundary != "entry" && (contract.FeatureBehaviors.Count != 0 || contract.FixedBindings.Count == 0)
+                || contract.FixedBindings.Any(binding => binding.Kind != contract.Boundary || string.IsNullOrWhiteSpace(binding.Identity)
+                    || binding.Kind == "api" && (binding.HttpMethod is not ("GET" or "POST" or "PUT" or "PATCH" or "DELETE")
+                        || binding.Route?.StartsWith("/", StringComparison.Ordinal) != true || binding.Caller is not null)
+                    || binding.Kind == "internal" && (string.IsNullOrWhiteSpace(binding.Caller) || binding.HttpMethod is not null || binding.Route is not null)))
+                throw new InvalidOperationException("DATA_EXECUTION_FIXED_BINDING_INVALID");
             if (contract.Provider.StartsWith("standardCrud.", StringComparison.Ordinal)
                 && (contract.LegacyActions || contract.Requirements[0].Resources.Count != 1
                     || JsonSerializer.Serialize(contract.Requirements) != JsonSerializer.Serialize(StandardCrudRequirements(contract.Provider, contract.Requirements[0].Resources[0]))))

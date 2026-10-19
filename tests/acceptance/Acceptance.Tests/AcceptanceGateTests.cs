@@ -190,6 +190,13 @@ public sealed class AcceptanceGateTests
         await new ExampleRequiredFieldAcceptanceRunner(RepositoryRoot, root, runId, declarationCrudOnly: true).RunAsync(CancellationToken.None);
     }
 
+    [EnvironmentGatedFact(RunEnvironmentVariable, "共享SQL租约与真实Example到通用对象授权的查看、草稿和保存接线")]
+    public async Task ExampleObjectAuthorization_UsesFormalCrossModuleBinding()
+    {
+        var (root, runId) = PrepareRun("example-authorization-execution");
+        await new ExampleRequiredFieldAcceptanceRunner(RepositoryRoot, root, runId, declarationAuthorizationOnly: true).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact(RunEnvironmentVariable, "一次性 SQL Server catalog、dev supervisor 与真实浏览器")]
     public async Task IdentityFoundation_CompletesEveryScenario()
     {

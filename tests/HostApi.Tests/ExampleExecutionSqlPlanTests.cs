@@ -14,7 +14,7 @@ using Xunit;
 namespace ICP.Platform.HostApi.Tests;
 
 /// <summary>当前候选内隔离重放显式旧路径与正式绑定；补充原提交基线未采集的权限SQL逻辑读及计划。</summary>
-public sealed class ExampleExecutionSqlPlanTests
+public sealed partial class ExampleExecutionSqlPlanTests
 {
     [EnvironmentGatedFact("NEWP_RUN_ENTITY_PERMISSION_CAPACITY", "先验证SQL统计观察器能捕获真实IO与实际计划")]
     public async Task PermissionCostObservation_CapturesLogicalReadsAndActualPlan()
@@ -141,7 +141,7 @@ public sealed class ExampleExecutionSqlPlanTests
     }
     // 权限配置不被CRUD写入改变；按捕获的同SQL/参数定向重放只读查询，取得真实IO、返回规模与实际计划。
     // 请求本身的命令/连接成本保留原测量；诊断重放的往返不混入运行时成本。
-    private static async Task<Measurement> ExplainAsync(string connectionString, Sample sample)
+    private static async Task<Measurement> ExplainAsync(string connectionString, Sample sample, bool requireIo = true)
     {
         await using var connection = new SqlConnection(connectionString);
         var statistics = new List<string>();
@@ -160,7 +160,7 @@ public sealed class ExampleExecutionSqlPlanTests
                 if (plan) plans.Add(reader.GetString(0)); else rows++;
         } while (await reader.NextResultAsync());
         Assert.NotEmpty(plans);
-        Assert.NotEmpty(statistics);
+        if (requireIo) Assert.NotEmpty(statistics);
         return new(sample.Sql, statistics.ToArray(), plans.ToArray(), rows);
     }
     private static string Root()

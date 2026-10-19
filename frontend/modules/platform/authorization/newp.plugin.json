@@ -38,6 +38,32 @@
   "backend": {
     "behaviorKey": "authorization.backend"
   },
+  "dataExecutionProviders": [
+    {
+      "key": "authorization.object.manage", "moduleId": "Authorization", "backendBehaviorKey": "authorization.backend", "consumerBinding": "resource-owner",
+      "requirements": [
+        { "role": "target", "stage": "prepare", "shape": "object", "resources": ["$resource"], "anyOf": [["read", "authorize"]] },
+        { "role": "target", "stage": "submit", "shape": "object", "resources": ["$resource"], "anyOf": [["read", "authorize"]] }
+      ],
+      "legacyConsumers": [
+        { "moduleId": "Identity", "resourceKey": "identity.account" },
+        { "moduleId": "Authorization", "resourceKey": "authorization.role" },
+        { "moduleId": "Organization", "resourceKey": "organization.company" },
+        { "moduleId": "Organization", "resourceKey": "organization.department" },
+        { "moduleId": "Organization", "resourceKey": "organization.person" },
+        { "moduleId": "Organization", "resourceKey": "organization.position" },
+        { "moduleId": "Part", "resourceKey": "part.part" },
+        { "moduleId": "Document", "resourceKey": "document.document" },
+        { "moduleId": "Workspace", "resourceKey": "workspace.folder" }
+      ]
+    },
+    {
+      "key": "authorization.object.inspect", "moduleId": "Authorization", "backendBehaviorKey": "authorization.backend", "consumerBinding": "resource-owner",
+      "requirements": [
+        { "role": "target", "stage": "prepare", "shape": "object", "resources": ["$resource"], "anyOf": [["read", "authorize"]] }
+      ]
+    }
+  ],
   "features": [
     {
       "key": "authorization.workbench",

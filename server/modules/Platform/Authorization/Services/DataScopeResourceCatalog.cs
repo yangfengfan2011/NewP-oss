@@ -69,7 +69,11 @@ public sealed class DataScopeResourceCatalog : IDataScopeResourceCatalog
             {
                 var resource = resources.SingleOrDefault(item => item.ResourceKey == key)
                     ?? throw new InvalidOperationException("ACTION_DATA_ACCESS_RESOURCE_UNKNOWN");
-                if (requirement.Actions.Any(action => actionKeys.TryGetValue(resource.ResourceKey, out var applicable) && !applicable.Contains(action)))
+                var effectiveActions = requirement.Requirements is null ? requirement.Actions : requirement.Requirements
+                    .Where(role => role.Resources.Contains(key, StringComparer.Ordinal))
+                    .SelectMany(role => role.AnyOf.Concat(role.ResourceAnyOf?.GetValueOrDefault(key) ?? []))
+                    .SelectMany(branch => branch).Distinct(StringComparer.Ordinal);
+                if (effectiveActions.Any(action => actionKeys.TryGetValue(resource.ResourceKey, out var applicable) && !applicable.Contains(action)))
                     throw new InvalidOperationException("ACTION_DATA_ACCESS_RESOURCE_ACTION_INVALID");
             }
         Resources = Array.AsReadOnly(resources);

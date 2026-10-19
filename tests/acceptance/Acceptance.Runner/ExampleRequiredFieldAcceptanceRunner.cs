@@ -21,6 +21,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
     internal const string BrowserScenario = "example-required-field.browser";
     internal const string RestartScenario = "example-required-field.restart";
     internal const string DeclarationCrudScenario = "example-data-execution.browser-crud";
+    internal const string DeclarationAuthorizationScenario = "example-authorization.browser";
 
     internal static IReadOnlyList<string> RequiredScenarios { get; } =
     [
@@ -61,16 +62,18 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
     private string? _adminPassword;
     private string? _browserCode;
     private readonly bool _declarationCrudOnly;
+    private readonly bool _declarationAuthorizationOnly;
     private ReusableSqlServerDatabase? _databaseLease;
 
     public ExampleRequiredFieldAcceptanceRunner(
         string repositoryRoot,
         string runDirectory,
         string runId,
-        bool declarationCrudOnly = false)
+        bool declarationCrudOnly = false, bool declarationAuthorizationOnly = false)
         : base(repositoryRoot, runDirectory, runId)
     {
-        _declarationCrudOnly = declarationCrudOnly;
+        _declarationCrudOnly = declarationCrudOnly || declarationAuthorizationOnly;
+        _declarationAuthorizationOnly = declarationAuthorizationOnly;
     }
 
     /// <inheritdoc/>
@@ -80,7 +83,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
         if (_declarationCrudOnly)
         {
             await RunScenarioAsync("example-data-execution.prepare", PrepareDeclarationCrudAsync, cancellationToken);
-            await RunScenarioAsync(DeclarationCrudScenario, RunBrowserScenarioAsync, cancellationToken);
+            await RunScenarioAsync(_declarationAuthorizationOnly ? DeclarationAuthorizationScenario : DeclarationCrudScenario, RunBrowserScenarioAsync, cancellationToken);
             return;
         }
         await RunScenarioAsync(BackfillRecoveryScenario, RunBackfillRecoveryScenarioAsync, cancellationToken);
@@ -424,11 +427,12 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
         page.Request += (_, request) =>
         {
             var path = new Uri(request.Url).AbsolutePath;
-            if (!_declarationCrudOnly || !path.StartsWith("/api/example/records", StringComparison.Ordinal)) return;
+            if (!_declarationCrudOnly || !(path.StartsWith("/api/example/records", StringComparison.Ordinal)
+                || _declarationAuthorizationOnly && path.StartsWith("/api/authorization/data-scope/objects/example.record/", StringComparison.Ordinal))) return;
             request.Headers.TryGetValue("x-newp-data-declaration", out var declaration);
             request.Headers.TryGetValue("x-newp-feature", out var feature);
             declarationRequests.Enqueue(new { request.Method, path, declaration, feature });
-            while (declarationRequests.Count > 10) declarationRequests.TryDequeue(out _);
+            while (declarationRequests.Count > (_declarationAuthorizationOnly ? 20 : 10)) declarationRequests.TryDequeue(out _);
         };
         page.PageError += (_, error) => errors.Enqueue(error);
         page.RequestFailed += (_, request) => errors.Enqueue($"{request.Method} {new Uri(request.Url).AbsolutePath}: {request.Failure}");
@@ -463,6 +467,17 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
             var browserRow = page.Locator("tr").Filter(new LocatorFilterOptions { HasText = _browserCode });
             await browserRow.WaitForAsync();
 
+            if (_declarationAuthorizationOnly)
+            {
+                await ExerciseAuthorizationAsync(page, driver, browserRow, cancellationToken);
+                await RecordScenarioSuccessAsync(DeclarationAuthorizationScenario, "example-authorization/browser.json", new
+                {
+                    status = "passed", route = "/examples/standard-crud/persistent-records",
+                    assertions = new[] { "created-row-visible", "inspection-opened", "configuration-edited", "configuration-saved", "row-still-visible" },
+                    declarationRequests = declarationRequests.ToArray(), responses = responses.ToArray()
+                }, cancellationToken);
+                return;
+            }
             if (_declarationCrudOnly)
             {
                 await browserRow.GetByRole(AriaRole.Button, new() { Name = "编辑", Exact = true }).ClickAsync();
@@ -556,6 +571,39 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
             throw;
         }
 
+    }
+
+    // 只验证真实菜单、配置草稿与根保存可达；资格、动作值和失权语义在API/SQL层核对。
+    private static async Task ExerciseAuthorizationAsync(IPage page, StandardCrudPageDriver driver, ILocator row, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        var prefix = "/api/authorization/data-scope/objects/example.record/";
+        await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
+        var explanation = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath.StartsWith(prefix, StringComparison.Ordinal)
+            && new Uri(response.Url).AbsolutePath.EndsWith("/explanation", StringComparison.Ordinal));
+        await page.GetByRole(AriaRole.Menuitem, new() { Name = "查看授权", Exact = true }).ClickAsync();
+        var inspected = await explanation;
+        if (!inspected.Ok) throw new InvalidOperationException($"Example授权查看装载失败：{inspected.Status}");
+        var inspection = driver.VisibleModal();
+        await inspection.GetByRole(AriaRole.Button, new() { Name = "关闭", Exact = true }).ClickAsync();
+        await inspection.WaitForAsync(new() { State = WaitForSelectorState.Hidden });
+        await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
+        var configuration = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath.StartsWith(prefix, StringComparison.Ordinal)
+            && !new Uri(response.Url).AbsolutePath[prefix.Length..].Contains('/'));
+        await page.GetByRole(AriaRole.Menuitem, new() { Name = "授权", Exact = true }).ClickAsync();
+        var loaded = await configuration;
+        if (!loaded.Ok) throw new InvalidOperationException($"Example授权配置装载失败：{loaded.Status}");
+        var dialog = driver.VisibleModal();
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "添加主体项", Exact = true }).ClickAsync();
+        // 对象模式的当前正式控件是inline editor；不复用旧Drawer假设或直接写React状态。
+        var editor = dialog.Locator("[data-subject-editor]");
+        await editor.GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^确\s*定$") }).ClickAsync();
+        await editor.WaitForAsync(new() { State = WaitForSelectorState.Hidden });
+        await dialog.GetByRole(AriaRole.Checkbox, new() { Name = "读取：不选", Exact = true }).ClickAsync();
+        await driver.ConfirmAsync(dialog, new("PUT", new Uri(loaded.Url).AbsolutePath, 204, "保存Example对象授权"), "保存授权");
+        await row.WaitForAsync(new() { State = WaitForSelectorState.Visible });
     }
 
     // Restart 使用新的 Host/Shell 与 API session，证明已完成 history 不重放且正式数据仍可读。

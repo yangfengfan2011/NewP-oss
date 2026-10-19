@@ -157,6 +157,60 @@
     "provider": "standardCrud.list"
   },
   {
+    "id": "Example/view:example.record.list/rowActions/action:authorize",
+    "moduleId": "Example",
+    "viewKey": "example.record.list",
+    "surface": "rowActions",
+    "actionKey": "authorize",
+    "execution": "example.record.authorization.manage",
+    "resources": [
+      "example.record"
+    ],
+    "actions": [
+      "read",
+      "authorize"
+    ],
+    "featurePositions": [
+      "Example/navigation:example.group/navigation:example.records/surface:list.rowActions/action:authorize"
+    ],
+    "requirements": [
+      {
+        "role": "target",
+        "stage": "prepare",
+        "shape": "object",
+        "resources": [
+          "example.record"
+        ],
+        "anyOf": [
+          [
+            "read",
+            "authorize"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      },
+      {
+        "role": "target",
+        "stage": "submit",
+        "shape": "object",
+        "resources": [
+          "example.record"
+        ],
+        "anyOf": [
+          [
+            "read",
+            "authorize"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "authorization.object.manage",
+    "providerModuleId": "Authorization"
+  },
+  {
     "id": "Example/view:example.record.list/rowActions/action:delete",
     "moduleId": "Example",
     "viewKey": "example.record.list",
@@ -244,5 +298,43 @@
       }
     ],
     "provider": "standardCrud.update"
+  },
+  {
+    "id": "Example/view:example.record.list/rowActions/action:viewAuthorization",
+    "moduleId": "Example",
+    "viewKey": "example.record.list",
+    "surface": "rowActions",
+    "actionKey": "viewAuthorization",
+    "execution": "example.record.authorization.inspect",
+    "resources": [
+      "example.record"
+    ],
+    "actions": [
+      "read",
+      "authorize"
+    ],
+    "featurePositions": [
+      "Example/navigation:example.group/navigation:example.records/surface:list.rowActions/action:viewAuthorization"
+    ],
+    "requirements": [
+      {
+        "role": "target",
+        "stage": "prepare",
+        "shape": "object",
+        "resources": [
+          "example.record"
+        ],
+        "anyOf": [
+          [
+            "read",
+            "authorize"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "authorization.object.inspect",
+    "providerModuleId": "Authorization"
   }
 ]

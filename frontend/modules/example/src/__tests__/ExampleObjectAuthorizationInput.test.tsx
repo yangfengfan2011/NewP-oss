@@ -5,6 +5,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ObjectAuthorizationInput } from '@icp-platform/ui';
+import type { ActionDataAccessRequirement } from '@icp-platform/sdk';
+import compiledRequirements from '../../../../../tests/Kernel.Tests/Fixtures/ExampleCrudDataAccess.contract.json';
 import dictionaryText from '../../../../modules/platform/authorization/metadata/dictionaries/DataScope.dic.json?raw';
 
 const fetcher = vi.hoisted(() => vi.fn());
@@ -18,6 +20,9 @@ afterEach(async () => { await act(async () => root?.unmount()); document.body.in
 const catalog = { actions: [{ key: 'read', title: '读取', enabled: true }, { key: 'create', title: '新建', enabled: true }],
   subjectTypes: [{ key: 'all', title: '所有用户', requiresId: false }] };
 const row = { id: 'Record_1', ENAME: '测试记录' };
+const requirements = compiledRequirements as ActionDataAccessRequirement[];
+const requirementFor = (inspect: boolean) => requirements.find(item => item.viewKey === 'example.record.list' && item.surface === 'rowActions'
+  && item.actionKey === (inspect ? 'viewAuthorization' : 'authorize'))!;
 const draft = vi.fn();
 const dictionary = JSON.parse(dictionaryText)
   .DataScope as Record<string, { zhs: string; en: string }>;
@@ -28,7 +33,7 @@ async function mount(inspect: boolean) {
     const [value, onChange] = useState<unknown>();
     return <PlatformQueryProvider scopeKey="example-permissions"><ObjectAuthorizationInput row={row}
       target={{ resourceKey: 'example.record', title: '记录', id: row.id, name: row.ENAME }}
-      action={{ key: inspect ? 'viewAuthorization' : 'authorize', labelKey: '授权', inputKey: inspect ? 'objectAuthorizationDetails' : 'objectAuthorization' }}
+      action={{ key: inspect ? 'viewAuthorization' : 'authorize', labelKey: '授权', inputKey: inspect ? 'objectAuthorizationDetails' : 'objectAuthorization', dataAccess: requirementFor(inspect) }}
       featurePosition="record-authorize" value={value} onChange={onChange} onDraftStateChange={draft} /></PlatformQueryProvider>;
   }
   await act(async () => root.render(<LocalizationProvider initialLanguage="zhs" defaultLanguage="zhs" catalogs={catalogs}
@@ -55,6 +60,7 @@ it('loads saved subjects, keeps tri-state changes in the draft and reports neste
   expect(editor.textContent).not.toContain('保存根规则');
   expect(editor.textContent).toContain('保存后生效');
   expect(fetcher.mock.calls.every(([, options]) => !options.method)).toBe(true);
+  expect(fetcher.mock.calls.every(([, options]) => options.headers['X-NewP-Data-Declaration'] === requirementFor(false).id)).toBe(true);
 });
 
 it('defaults to the current user, explains rule provenance and allows selecting another user without writes', async () => {
@@ -78,6 +84,39 @@ it('defaults to the current user, explains rule provenance and allows selecting 
   expect(document.querySelector('[role="checkbox"]')).toBeNull();
   expect(draft).toHaveBeenLastCalledWith({ ready: true, dirty: false });
   expect(fetcher.mock.calls.every(([, options]) => !options.method)).toBe(true);
+  expect(fetcher.mock.calls.every(([, options]) => options.headers['X-NewP-Data-Declaration'] === requirementFor(true).id)).toBe(true);
+});
+
+it('aborts and discards the old input when only its compiled declaration identity changes', async () => {
+  let finishOld!: (value: Response) => void;
+  let configReads = 0;
+  fetcher.mockImplementation(async (path: string) => {
+    if (path.endsWith('/catalog')) return new Response(JSON.stringify(catalog));
+    if (++configReads === 1) return new Promise<Response>(resolve => { finishOld = resolve; });
+    return new Response(JSON.stringify({ resourceKey: 'example.record', objectId: row.id,
+      subjects: [{ id: 'fresh', type: 'all', subjectId: null, priority: 0, actions: { read: 'allow' } }] }));
+  });
+  let draftValue: unknown;
+  function Harness({ dataAccess }: { dataAccess: ActionDataAccessRequirement }) {
+    const [value, onChange] = useState<unknown>(); draftValue = value;
+    return <PlatformQueryProvider scopeKey="declaration-boundary"><ObjectAuthorizationInput row={row}
+      target={{ resourceKey: 'example.record', title: '记录', id: row.id }}
+      action={{ key: 'authorize', labelKey: '授权', inputKey: 'objectAuthorization', dataAccess }}
+      featurePosition="same-position" value={value} onChange={onChange} /></PlatformQueryProvider>;
+  }
+  const container = document.createElement('div'); document.body.append(container); root = createRoot(container);
+  const render = (dataAccess: ActionDataAccessRequirement) => <LocalizationProvider initialLanguage="zhs" defaultLanguage="zhs" catalogs={catalogs}
+    supportedLanguages={[{ code: 'zhs', displayName: '简体中文', locale: 'zh-CN' }]}><Harness dataAccess={dataAccess} /></LocalizationProvider>;
+  await act(async () => root.render(render(requirementFor(false))));
+  const oldSignal = fetcher.mock.calls.find(([path]) => !path.endsWith('/catalog'))![1].signal as AbortSignal;
+  // 固定模式、功能位置和目标，仅改变真实装配引用；绑定合法性由 API 反例独立覆盖。
+  await act(async () => root.render(render(requirementFor(true))));
+  await vi.waitFor(() => expect(oldSignal.aborted).toBe(true));
+  expect(draftValue).toMatchObject({ subjects: [{ id: 'fresh' }] });
+  await act(async () => finishOld(new Response(JSON.stringify({ resourceKey: 'example.record', objectId: row.id,
+    subjects: [{ id: 'old', type: 'all', subjectId: null, priority: 0, actions: { read: 'deny' } }] }))));
+  expect(draftValue).toMatchObject({ subjects: [{ id: 'fresh' }] });
+  expect(fetcher.mock.calls.at(-1)![1].headers['X-NewP-Data-Declaration']).toBe(requirementFor(true).id);
 });
 
 it('shows an analysis failure instead of a permission result', async () => {

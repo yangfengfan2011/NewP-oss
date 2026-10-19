@@ -17,6 +17,8 @@ public sealed record ActionDataAccessRequirement(string Id, string ModuleId, str
     public IReadOnlyList<DataExecutionRequirement>? Requirements { get; init; }
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public string? Provider { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? ProviderModuleId { get; init; }
 }
 
 /// <summary>从既有功能展开中的直接按钮声明编译数据要求，不增加功能授权点。</summary>
@@ -24,9 +26,10 @@ public static class ActionDataAccessCompiler
 {
     /// <summary>拒绝动作、身份、归属及资源引用错误，并合并同一 View 的合法功能出现位置。</summary>
     public static IReadOnlyList<ActionDataAccessRequirement> Compile(IReadOnlyList<FeatureDeclaration> features,
-        IReadOnlyList<DataActionDeclaration> actions, IReadOnlyList<DataExecutionContract>? executions = null)
+        IReadOnlyList<DataActionDeclaration> actions, IReadOnlyList<DataExecutionContract>? executions = null,
+        IReadOnlyList<DataExecutionProviderContract>? providers = null)
     {
-        var contracts = DataExecutionContracts.Compile(executions ?? [], actions);
+        var contracts = DataExecutionContracts.Compile(DataExecutionProviders.Resolve(executions ?? [], providers ?? []), actions);
         var positions = FeatureCatalogCompiler.Compile(features).ToDictionary(point => (point.ModuleId, point.ReferenceKey));
         var resources = features.SelectMany(feature => feature.DataResources).ToHashSet(StringComparer.Ordinal);
         var entries = features.SelectMany(feature => feature.DataAccess.Select(declaration => (feature, declaration))).ToArray();
@@ -66,14 +69,17 @@ public static class ActionDataAccessCompiler
                 || !entry.declaration.AdditionalActions.SequenceEqual(first.AdditionalActions)))
                 throw new InvalidOperationException("ACTION_DATA_ACCESS_IDENTITY_CONFLICT");
             return new ActionDataAccessRequirement(first.Id, first.ModuleId, first.ViewKey, first.Surface, first.ActionKey,
-                first.Execution, first.Resources, contract.LegacyActions ? first.Actions : contract.Requirements.SelectMany(requirement => requirement.AnyOf)
+                first.Execution, first.Resources, contract.LegacyActions ? first.Actions : contract.Requirements.SelectMany(requirement =>
+                    requirement.AnyOf.Concat(requirement.ResourceAnyOf?.Values.SelectMany(branches => branches) ?? []))
                     .SelectMany(branch => branch).Concat(first.AdditionalActions).Distinct(StringComparer.Ordinal).ToArray(),
                 group.Select(entry => positions[(entry.feature.ModuleId,
                     entry.feature.ReferenceKey ?? entry.feature.Key)].Position).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray())
             {
                 Provider = contract.LegacyActions ? null : contract.Provider,
+                ProviderModuleId = contract.ProviderModuleId,
                 Requirements = contract.LegacyActions ? null : contract.Requirements.Select(requirement => requirement with
                 { Resources = requirement.Resources.Where(first.Resources.Contains).ToArray(),
+                    ResourceAnyOf = requirement.ResourceAnyOf?.Where(item => first.Resources.Contains(item.Key)).ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal),
                     AnyOf = requirement.AnyOf.Select(branch => (IReadOnlyList<string>)branch.Concat(first.AdditionalActions).Distinct(StringComparer.Ordinal).ToArray()).ToArray() }).ToArray()
             };
         }).OrderBy(requirement => requirement.Id, StringComparer.Ordinal).ToArray();

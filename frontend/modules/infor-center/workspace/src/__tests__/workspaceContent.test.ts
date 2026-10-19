@@ -51,7 +51,8 @@ it('edits and batch deletes through the current occurrence using LIDs', async ()
   expect(resource.actionHandlers?.deleteObjects).toBeTypeOf('function');
   const dataAccess = (compiledWorkspace.declarations as ActionDataAccessRequirement[]).find(item => item.execution === 'workspace.content.edit' && item.surface === 'rowActions')!;
   await resource.actionHandlers!.editObject({ ...context, id: 'relation', input: { ENAME: 'changed', Description: 'note' }, action: { key: 'edit', labelKey: 'Edit', dataAccess } });
-  await resource.actionHandlers!.deleteObjects({ ...context, selectedRows: [{ LID: 'a', ObjectId: 'entity-a' }, { LID: 'b', ObjectId: 'entity-b' }] });
+  const deleteAccess = (compiledWorkspace.declarations as ActionDataAccessRequirement[]).find(item => item.execution === 'workspace.content.delete' && item.surface === 'pageActions')!;
+  await resource.actionHandlers!.deleteObjects({ ...context, action: { key: 'deleteObjects', labelKey: 'Delete', dataAccess: deleteAccess }, selectedRows: [{ LID: 'a', ObjectId: 'entity-a' }, { LID: 'b', ObjectId: 'entity-b' }] });
   const writes = await Promise.all(request.mock.calls.filter(([input]) => String(input instanceof Request ? input.url : input).includes('/api/workspace/content/')).map(async ([input, init]) => input instanceof Request ? input.clone().json() : JSON.parse(String(init?.body))));
   expect(writes).toEqual([
     { position: { spaceId: 'public', rootFolderId: 'root', linkIds: [] }, values: { ENAME: 'changed', Description: 'note' } },

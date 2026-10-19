@@ -407,8 +407,18 @@ public sealed partial class WorkspaceObjectMutationSqlServerHttpApiTests
         point => point.BehaviorKey == "workspace.folder." + (action == "edit" ? "editObject" : action == "delete" ? "deleteObject" : action)
             && (action is not ("edit" or "remove") || point.ModuleId == "Workspace" && point.StaticScope == "folder"
                 && point.ActionScope == "list.rowActions" && point.Key == action));
-    private static Task<HttpResponseMessage> SendAsync(BusinessAuditHostFixture fixture, HttpClient client, string action, HttpMethod method, string path, object body) =>
-        FeatureHttpTestRequests.SendAsync(client, Point(fixture, action), method, path, body, WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, Point(fixture, action)));
+    // 正常业务消费按实际动作与正式功能点选择声明；裸请求反例仍直接构造HTTP。
+    private static Task<HttpResponseMessage> SendAsync(BusinessAuditHostFixture fixture, HttpClient client, string action, HttpMethod method, string path, object body)
+    {
+        var feature = Point(fixture, action);
+        var execution = action switch { "create" => "workspace.folder.create", "createPart" => "workspace.content.createPart",
+            "createDocument" => "workspace.content.createDocument", "edit" => "workspace.content.edit",
+            "delete" or "deleteObjects" => "workspace.content.delete", _ => null };
+        var declaration = execution is null ? WorkspaceClipboardSqlServerHttpApiTests.ClipboardDeclaration(fixture, feature)
+            : Assert.Single(fixture.Services.GetRequiredService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>().ActionDataAccessCatalog,
+                item => item.Execution == execution && item.FeaturePositions.Contains(feature.Position));
+        return FeatureHttpTestRequests.SendAsync(client, feature, method, path, body, declaration);
+    }
     private static async Task<Position> RootAsync(BusinessAuditHostFixture fixture, HttpClient admin)
     {
         using var response = await FeatureHttpTestRequests.SendAsync(admin, Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "workspace.spaces.access"), HttpMethod.Post, "/api/workspace/spaces/public/initialize");

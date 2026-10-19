@@ -89,18 +89,21 @@ public sealed class WorkspaceObjectCreationSqlServerHttpApiTests
         foreach (var (kind, model, action) in Targets)
         {
             var create = Point(fixture, "workspace.folder." + action);
+            var declaration = Assert.Single(fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog,
+                item => item.Execution == (model == "Part" ? "workspace.content.createPart" : "workspace.content.createDocument")
+                    && item.FeaturePositions.Contains(create.Position));
             var url = "/api/workspace/content/" + kind;
             var body = new { position, values = new { ECODE = "ATOMIC", ENAME = "不能留下孤立对象" } };
             decisions.AllowParent = false;
-            using var parentDenied = await FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post, url, body);
+            using var parentDenied = await FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post, url, body, declaration);
             Assert.Equal(HttpStatusCode.Forbidden, parentDenied.StatusCode);
             decisions.AllowParent = true;
             decisions.AllowCreate = false;
-            using var createDenied = await FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post, url, body);
+            using var createDenied = await FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post, url, body, declaration);
             Assert.Equal(HttpStatusCode.Forbidden, createDenied.StatusCode);
             decisions.AllowCreate = true;
             fault.Enabled = true;
-            using var failed = await FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post, url, body);
+            using var failed = await FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post, url, body, declaration);
             Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
             fault.Enabled = false;
             using var scope = fixture.Services.CreateScope();

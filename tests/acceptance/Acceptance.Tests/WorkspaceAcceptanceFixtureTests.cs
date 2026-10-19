@@ -353,6 +353,46 @@ public sealed class WorkspaceAcceptanceFixtureTests
         await WorkspaceAcceptanceFixture.ReadDirectReferencesAsync(client, features, model, "same/id:with?reserved", CancellationToken.None);
     }
 
+    [Theory]
+    [InlineData("Part", "parts", true)]
+    [InlineData("Document", "documents", true)]
+    [InlineData("Part", "parts", false)]
+    [InlineData("Document", "documents", false)]
+    public async Task ObjectPreparation_UsesTheActualCreationDeclarationOnlyForCurrentRelease(string model, string route, bool current)
+    {
+        var features = CurrentWorkspaceFeatures();
+        var entry = features.Behavior("Workspace", "workspace.spaces.access");
+        var action = features.Action(entry, "create" + model, "list.pageActions", "folder");
+        var declaration = features.DeclarationAtView(action, "workspace.folder.list", "pageActions", "create" + model);
+        var read = features.ReadDeclaration("Workspace", "workspace.folder.list", entry.Position);
+        var writes = 0;
+        using var client = new HttpClient(new AsyncHandler(async (request, token) =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (path == "/api/auth/antiforgery-token") return Json(HttpStatusCode.OK, "{\"requestToken\":\"token\"}");
+            if (path == "/api/workspace/content/" + route)
+            {
+                writes++;
+                Assert.Equal(HttpMethod.Post, request.Method);
+                Assert.Equal(action.Position, Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
+                if (current) Assert.Equal(declaration, Assert.Single(request.Headers.GetValues("X-NewP-Data-Declaration")));
+                else Assert.False(request.Headers.Contains("X-NewP-Data-Declaration"));
+                using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(token));
+                Assert.Equal("parent-LID", Assert.Single(body.RootElement.GetProperty("position").GetProperty("linkIds").EnumerateArray()).GetString());
+                Assert.Equal("Code", body.RootElement.GetProperty("values").GetProperty("ECODE").GetString());
+                return Json(HttpStatusCode.OK, "{\"succeeded\":true}");
+            }
+            Assert.Equal("/api/links/workspace.content", path);
+            Assert.Equal(read, Assert.Single(request.Headers.GetValues("X-NewP-Data-Declaration")));
+            return Json(HttpStatusCode.OK, "{\"items\":[{\"fields\":{\"Name\":\"Name\"},\"associatedObject\":{\"id\":\"created-EID\"}}]}");
+        })) { BaseAddress = new Uri("http://127.0.0.1:5000") };
+        var id = await PublishedComponentAcceptanceFixture.CreateWorkspaceObjectAsync(client, features,
+            new("space", "root-EID", "parent-EID", ["parent-LID"]), model, route, "Code", "Name", CancellationToken.None,
+            current ? PublishedWorkspacePreparation.CurrentRelease : PublishedWorkspacePreparation.HistoricalUpgrade);
+        Assert.Equal("created-EID", id);
+        Assert.Equal(1, writes);
+    }
+
     [Fact]
     public async Task PositionCreation_PreservesFullChainAndUsesReturnedMatchingLinkForTheNewOccurrence()
     {

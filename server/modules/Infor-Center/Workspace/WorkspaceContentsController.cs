@@ -222,6 +222,11 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
         catch (FileLifecycleException exception) { return WorkspaceDocumentUploadsController.FileProblem(exception); }
+        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)
+        {
+            return Results.Problem(statusCode: exception.Status, title: exception.Code,
+                extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+        }
     }
 
     // 唯一执行器提交后只返回成功回执；业务校验保留所属模块的标准字段错误。
@@ -235,6 +240,11 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
             return result.Succeeded ? Results.Ok(new { succeeded = true }) : Results.Json(result.Error, statusCode: result.Error!.StatusCode);
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)
+        {
+            return Results.Problem(statusCode: exception.Status, title: exception.Code,
+                extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+        }
     }
 
     /// <summary>添加只提交引用；回执不绑定提交后的读取资格，不会因刷新故障重放命令。</summary>

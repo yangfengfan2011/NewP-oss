@@ -199,15 +199,17 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
                 throw new LinkQueryException(400, "Workspace.InvalidCreateInput", field);
             values[field] = value.ValueKind == JsonValueKind.Null ? null : value.GetString();
         }
+        var binding = model == "Part" ? WorkspaceObjectExecutions.CreatePartBinding() : WorkspaceObjectExecutions.CreateDocumentBinding("submit");
+        executionAccess.Validate([binding], "workspace.folder");
         await LockGraphAsync(cancellationToken);
-        var path = await WritablePositionAsync(actor, position, cancellationToken);
+        var path = await ResolveClipboardPositionAsync(binding, "parent", position, cancellationToken);
         RequireContainer(position, path, model);
         if (!catalog.Get("workspace.content").Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == model))
             throw new LinkQueryException(400, "Workspace.InvalidEndpoint");
         var result = model == "Document"
             ? await documentFiles.CreateWithFilesAsync(values, context.Values.GetValueOrDefault("Uploads") as DocumentUploadSet, cancellationToken)
             : await operations.ExecuteAsync(resource, ObjectOperationAction.Create, null, values,
-                model == "Part" ? new ObjectOperationWriteSource.Legacy(typeof(WorkspaceContents), nameof(CreateObjectAsync), resource, "create", null) : null, cancellationToken);
+                WorkspaceObjectExecutions.PartCreateSource(), cancellationToken);
         if (!result.Succeeded) return result;
         var id = result.Detail?.Fields.GetValueOrDefault("EID") as string
             ?? throw new InvalidOperationException("Created object identity is missing.");
@@ -221,7 +223,9 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
     public async Task<StandardCrudError?> ValidateDocumentUploadAsync(string actorId, WorkspacePosition position,
         IReadOnlyDictionary<string, JsonElement> input, string fileName, string contentType, CancellationToken token)
     {
-        var path = await WritablePositionAsync(actorId, position, token);
+        var binding = WorkspaceObjectExecutions.CreateDocumentBinding("prepare");
+        executionAccess.Validate([binding], "workspace.folder");
+        var path = await ResolveClipboardPositionAsync(binding, "parent", position, token);
         RequireContainer(position, path, "Document");
         if (!catalog.Get("workspace.content").Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == "Document"))
             throw new LinkQueryException(400, "Workspace.InvalidEndpoint");
@@ -239,14 +243,13 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
         ValidateSelection(linkIds);
         if (editing && linkIds.Length != 1) throw new LinkQueryException(400, "Workspace.InvalidSelection");
         // 与创建、引用变更取得同一图锁；等待之后重新验证整个位置和对象资格。
-        if (editing) executionAccess.Validate([WorkspaceFolderExecutions.EditBinding("submit")], "workspace.folder");
+        var binding = editing ? WorkspaceFolderExecutions.EditBinding("submit") : WorkspaceObjectExecutions.DeleteBinding();
+        executionAccess.Validate([binding], "workspace.folder");
         await LockGraphAsync(cancellationToken);
-        var path = editing
-            ? await ResolveClipboardPositionAsync(WorkspaceFolderExecutions.EditBinding("submit"), "parent", position, cancellationToken)
-            : await WritablePositionAsync(actor, position, cancellationToken);
+        var path = await ResolveClipboardPositionAsync(binding, "parent", position, cancellationToken);
         var targets = editing
             ? await ResolveFolderEditTargetsAsync(path.FolderId, linkIds, false, cancellationToken)
-            : await ResolveTargetsAsync(path.FolderId, linkIds, "delete", cancellationToken);
+            : await ResolveDeclaredMutationTargetsAsync(path.FolderId, linkIds, WorkspaceObjectExecutions.DeleteTargetCaller(), "target", cancellationToken);
         if (!editing)
         {
             var folders = targets.Where(target => target.ModelKey == WorkspacePositions.FolderModel).Select(target => target.Id).ToArray();
@@ -263,7 +266,7 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
                 else
                 {
                     var result = await operations.ExecuteAsync(Resource(target.ModelKey), ObjectOperationAction.Update, target.Id, values,
-                        target.ModelKey is "Part" or "Document" ? new ObjectOperationWriteSource.Legacy(typeof(WorkspaceContents), nameof(MutateObjectsAsync), Resource(target.ModelKey), "update", target.Id) : null, cancellationToken);
+                        WorkspaceObjectExecutions.MutationSource(target.ModelKey, target.Id, ObjectOperationAction.Update), cancellationToken);
                     if (!result.Succeeded) return result;
                 }
             }
@@ -288,7 +291,7 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
                 else
                 {
                     var result = await operations.ExecuteAsync(Resource(target.ModelKey), ObjectOperationAction.Delete, target.Id, new Dictionary<string, object?>(),
-                        target.ModelKey is "Part" or "Document" ? new ObjectOperationWriteSource.Legacy(typeof(WorkspaceContents), nameof(MutateObjectsAsync), Resource(target.ModelKey), "delete", target.Id) : null, cancellationToken);
+                        WorkspaceObjectExecutions.MutationSource(target.ModelKey, target.Id, ObjectOperationAction.Delete), cancellationToken);
                     if (!result.Succeeded) return result;
                 }
             }
@@ -339,26 +342,24 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
         return rows.Select(row => new LinkObjectReference(row.Model, row.Id)).Distinct().ToArray();
     }
 
-    // 实际Folder消费自身内部目标合同；Part/Document明确保留315旧目标规则，不悬挂未消费的Folder角色。
-    private async Task<LinkObjectReference[]> ResolveFolderEditTargetsAsync(string parentId, string[] linkIds, bool preparing, CancellationToken token)
+    // 文件夹内容的实际目标复用原阶段与读取解析器；对象所属写入仍在原before-facts点复核。
+    private Task<LinkObjectReference[]> ResolveFolderEditTargetsAsync(string parentId, string[] linkIds, bool preparing, CancellationToken token) =>
+        ResolveDeclaredMutationTargetsAsync(parentId, linkIds, WorkspaceFolderExecutions.EditTargetCaller(preparing),
+            WorkspaceFolderExecutions.EditTargetRole(preparing), token);
+
+    // 父裁决之后只执行原一次LID查询，并按原目标顺序消费固定内部read/action及根约束。
+    private async Task<LinkObjectReference[]> ResolveDeclaredMutationTargetsAsync(string parentId, string[] linkIds,
+        DataExecutionInternalBinding source, string role, CancellationToken token)
     {
         var targets = await ReadMutationTargetsAsync(parentId, linkIds, token);
         foreach (var target in targets)
         {
-            if (target.ModelKey == WorkspacePositions.FolderModel)
-            {
-                var result = await executionAccess.EvaluateInternalObjectAsync(WorkspaceFolderExecutions.EditTargetCaller(preparing),
-                    WorkspaceFolderExecutions.EditTargetRole(preparing), new("workspace.folder", target.Id, target), token);
-                if (result.Decision == DataExecutionDecision.NotFound) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
-                if (result.Decision == DataExecutionDecision.Denied) throw new LinkQueryException(403, "Workspace.ObjectWriteDenied");
-                if (result.Target?.ResourceKey != "workspace.folder" || result.Target.ObjectId != target.Id)
-                    throw new ActionDataAccessException(400, "ActionDataAccess.ShapeInvalid");
-            }
-            else
-            {
-                if (!await reader.IsEndpointReadableAsync("workspace.content", target, token)) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
-                if (!await decisions.IsAllowedAsync(Resource(target.ModelKey), target.Id, "edit", token)) throw new LinkQueryException(403, "Workspace.ObjectWriteDenied");
-            }
+            var resource = Resource(target.ModelKey);
+            var result = await executionAccess.EvaluateInternalObjectAsync(source, role, new(resource, target.Id, target), token);
+            if (result.Decision == DataExecutionDecision.NotFound) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
+            if (result.Decision == DataExecutionDecision.Denied) throw new LinkQueryException(403, "Workspace.ObjectWriteDenied");
+            if (result.Target?.ResourceKey != resource || result.Target.ObjectId != target.Id)
+                throw new ActionDataAccessException(400, "ActionDataAccess.ShapeInvalid");
             await RequireNonRootMutationTargetAsync(target, token);
         }
         return targets;

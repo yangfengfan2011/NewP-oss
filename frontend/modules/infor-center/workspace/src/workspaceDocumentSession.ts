@@ -23,7 +23,7 @@ export class WorkspaceDocumentSession {
   private active?: { id: number; controller: AbortController };
 
   constructor(scope: Record<string, unknown> | undefined, private readonly featurePosition: string | undefined,
-    private readonly currentValues: () => unknown) {
+    private readonly currentValues: () => unknown, private readonly declarationId?: string) {
     this.scopeKey = JSON.stringify(scope);
     this.scope = this.scopeKey === undefined ? undefined : JSON.parse(this.scopeKey) as Record<string, unknown>;
   }
@@ -68,8 +68,8 @@ export class WorkspaceDocumentSession {
   }
 
   /** 保存使用当前字段快照和会话自有 token；结果与清理资格在同一 owner 内完成裁决。 */
-  async submit(values: unknown, scope: Record<string, unknown> | undefined, featurePosition: string | undefined): Promise<unknown> {
-    if (this.snapshot.closed || JSON.stringify(scope) !== this.scopeKey || featurePosition !== this.featurePosition)
+  async submit(values: unknown, scope: Record<string, unknown> | undefined, featurePosition: string | undefined, declarationId = this.declarationId): Promise<unknown> {
+    if (this.snapshot.closed || JSON.stringify(scope) !== this.scopeKey || featurePosition !== this.featurePosition || declarationId !== this.declarationId)
       throw new Error('上传会话已结束或位置已变化，请重新打开。');
     if (this.snapshot.phase !== 'idle') throw new Error('本次保存已经开始，请先核对结果。');
     if (!this.canSubmit()) throw new Error('请先完成主文件和附件上传。');
@@ -78,7 +78,7 @@ export class WorkspaceDocumentSession {
     const attachmentUploadIds = this.snapshot.choices.filter(choice => choice.role === 'attachment').map(choice => choice.staged!.uploadId);
     this.publish({ phase: 'submitting' });
     try {
-      const payload = await saveDocument(fields, { mainUploadId, attachmentUploadIds }, this.scope, this.featurePosition);
+      const payload = await saveDocument(fields, { mainUploadId, attachmentUploadIds }, this.scope, this.featurePosition, this.declarationId);
       this.publish({ phase: 'committed' });
       return payload;
     } catch (error) {
@@ -124,7 +124,7 @@ export class WorkspaceDocumentSession {
       const result = await stageDocumentFile(choice.file, this.currentValues(), this.scope, this.featurePosition, running.controller.signal, (loaded, total) => {
         if (!this.snapshot.closed && !running.controller.signal.aborted)
           this.updateChoice(choice.id, { percent: total ? Math.min(100, Math.round(loaded / total * 100)) : undefined });
-      });
+      }, this.declarationId);
       if (this.snapshot.closed || running.controller.signal.aborted || !this.snapshot.choices.some(item => item.id === choice.id)) {
         void this.cancelAbandoned(result.uploadId);
         return;

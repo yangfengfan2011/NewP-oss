@@ -147,8 +147,10 @@ public sealed class EntityOwnershipBackfillSqlServerHttpApiTests
         var values = new Dictionary<string, object?> { ["ENAME"] = name };
         if (model != "WorkspaceFolder") values["ECODE"] = name;
         var feature = Point(fixture, "workspace.folder." + action);
-        var declaration = model == "WorkspaceFolder" ? Assert.Single(fixture.Services.GetRequiredService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>()
-            .ActionDataAccessCatalog, binding => binding.Execution == "workspace.folder.create" && binding.FeaturePositions.Contains(feature.Position)) : null;
+        var execution = model switch { "WorkspaceFolder" => "workspace.folder.create", "Part" => "workspace.content.createPart",
+            "Document" => "workspace.content.createDocument", _ => throw new ArgumentOutOfRangeException(nameof(model)) };
+        var declaration = Assert.Single(fixture.Services.GetRequiredService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>()
+            .ActionDataAccessCatalog, binding => binding.Execution == execution && binding.FeaturePositions.Contains(feature.Position));
         using var response = await FeatureHttpTestRequests.SendAsync(client, feature, HttpMethod.Post,
             "/api/workspace/content/" + kind, new { position, values }, declaration);
         await ReadOkAsync(response);

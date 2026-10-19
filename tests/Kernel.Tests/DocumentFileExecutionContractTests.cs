@@ -73,7 +73,9 @@ public sealed class DocumentFileExecutionContractTests
         Assert.DoesNotContain(plan.ActionDataAccessCatalog, item => item.Execution is "document.document.internal.create" or "document.document.update" or "document.document.delete" or "document.files.release");
         var descriptor = ICP.Platform.Modules.Document.DocumentCrudDescriptor.Create();
         Assert.Empty(descriptor.LegacyDataExecutions);
-        Assert.Equal(4, descriptor.LegacyObjectOperationBindings.Count);
+        Assert.Equal(new[] { ("ICP.Platform.Modules.Document.DocumentFiles.ValidateCopyCandidateAsync", "create"),
+            ("ICP.Platform.Modules.Document.DocumentFiles.CopyAsync", "create") },
+            descriptor.LegacyObjectOperationBindings.Select(binding => (binding.Caller, binding.Operation)));
     }
 
     [Theory]

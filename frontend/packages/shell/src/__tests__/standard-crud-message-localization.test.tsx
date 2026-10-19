@@ -11,6 +11,7 @@ import { useStandardCrudLookupRuntime } from '../standard-crud/standardCrudLooku
 import type { StandardCrudFieldDefinition } from '@icp-platform/sdk';
 import { StandardCrudRequestError } from '@icp-platform/sdk';
 import { StandardCrudActions } from '../standard-crud/standardCrudActionRuntime';
+import { formalDataAccessFor } from './formalRuntimeMetadataTestSupport';
 import dictionary from '../../../../modules/platform/metadata/dictionaries/Platform.dic.json';
 const workspaceDictionary = readComponentJson('Workspace', 'metadata/dictionaries/Workspace.dic.json');
 const partDictionary = readComponentJson('Part', 'metadata/dictionaries/Part.dic.json');
@@ -31,6 +32,8 @@ it.each(['createPart', 'createDocument'] as const)('retranslates the real Worksp
     uploadId, fileId: 'FileRecord_internal', fileName: 'main.pdf', length: 4, contentType: 'application/pdf', expiresAt: '2026-10-14T00:00:00Z'
   }))) : undefined;
   onTestFinished(() => upload?.mockRestore());
+  const dataAccess = formalDataAccessFor('workspace.folder.list', 'pageActions', scenario);
+  const featurePosition = dataAccess.featurePositions.find(position => position.includes('surface:list.pageActions'))!;
   const path = '/api/workspace/content/' + (scenario === 'createPart' ? 'parts' : 'documents');
   const requests: { path: string; method: string; body?: unknown }[] = [];
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -48,9 +51,9 @@ it.each(['createPart', 'createDocument'] as const)('retranslates the real Worksp
   const refresh = vi.fn();
   function Consumer() {
     const { t } = useLocalization();
-    return <><LanguageSelect /><StandardCrudActions actions={[{ key: scenario, labelKey: t(scenario === 'createPart' ? 'Workspace.CreatePart' : 'Workspace.CreateDocument'), inputKey: 'createObject' }]}
+    return <><LanguageSelect /><StandardCrudActions actions={[{ key: scenario, labelKey: t(scenario === 'createPart' ? 'Workspace.CreatePart' : 'Workspace.CreateDocument'), inputKey: 'createObject', dataAccess }]}
       handlers={workspaceResource.actionHandlers} actionInputs={workspaceResource.actionInputRenderers}
-      featureResolutionForAction={() => ({ kind: 'allowed', position: 'workspace-' + scenario })} refresh={refresh}
+      featureResolutionForAction={() => ({ kind: 'allowed', position: featurePosition })} refresh={refresh}
       context={{ id: 'root', queryScope: { spaceId: 'public', rootFolderId: 'root', linkIds: '[]' } }} /></>;
   }
   const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);

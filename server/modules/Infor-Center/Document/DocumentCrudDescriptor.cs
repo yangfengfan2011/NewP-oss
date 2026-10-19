@@ -24,8 +24,6 @@ public static class DocumentCrudDescriptor
         {
             DataExecutions = new Dictionary<string, string> { ["list"] = "document.document.list", ["read"] = "document.document.read", ["create"] = "document.document.create", ["update"] = "document.document.update", ["delete"] = "document.document.delete" },
             LegacyObjectOperationBindings = [
-                new("ICP.Platform.Modules.Workspace.WorkspaceContents.MutateObjectsAsync", "update"),
-                new("ICP.Platform.Modules.Workspace.WorkspaceContents.MutateObjectsAsync", "delete"),
                 new("ICP.Platform.Modules.Document.DocumentFiles.ValidateCopyCandidateAsync", "create"),
                 new("ICP.Platform.Modules.Document.DocumentFiles.CopyAsync", "create")],
             ResourceKey = "document.document", ModuleId = "Document", ModelName = "Document", Route = "api/document/documents",

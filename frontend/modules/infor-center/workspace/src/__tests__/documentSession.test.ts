@@ -12,7 +12,7 @@ const scope = { spaceId: 'public', rootFolderId: 'root', linkIds: '["content-fol
 const fields = { ECODE: 'DOC', ENAME: '图文档' };
 const staged = (name: string): DocumentStage => ({ uploadId: `upload-${name}`, fileId: `file-${name}`, fileName: name,
   length: 1, contentType: 'application/pdf', expiresAt: '2026-10-15T00:00:00Z' });
-function session() { return new WorkspaceDocumentSession(scope, 'create-position', () => fields); }
+function session() { return new WorkspaceDocumentSession(scope, 'create-position', () => fields, 'create-declaration'); }
 async function ready(target: WorkspaceDocumentSession) {
   vi.mocked(stageDocumentFile).mockResolvedValueOnce(staged('main.pdf'));
   target.choose([new File(['1'], 'main.pdf')], 'main');
@@ -26,6 +26,7 @@ it('rejects missing readiness, changed position or feature, and a closed session
   await ready(target);
   await expect(target.submit(fields, { ...scope, rootFolderId: 'elsewhere' }, 'create-position')).rejects.toThrow('上传会话');
   await expect(target.submit(fields, scope, 'other-feature')).rejects.toThrow('上传会话');
+  await expect(target.submit(fields, scope, 'create-position', 'other-declaration')).rejects.toThrow('上传会话');
   target.close(); target.close();
   await expect(target.submit(fields, scope, 'create-position')).rejects.toThrow('上传会话');
   expect(saveDocument).not.toHaveBeenCalled();
@@ -38,7 +39,7 @@ it('owns tokens and submits a business-field snapshot without serializing the se
   const values = { ...fields, session: target, mainUploadId: 'forged' };
   await expect(target.submit(values, scope, 'create-position')).resolves.toEqual({ succeeded: true });
   expect(saveDocument).toHaveBeenCalledTimes(1);
-  expect(saveDocument).toHaveBeenCalledWith(fields, { mainUploadId: 'upload-main.pdf', attachmentUploadIds: [] }, scope, 'create-position');
+  expect(saveDocument).toHaveBeenCalledWith(fields, { mainUploadId: 'upload-main.pdf', attachmentUploadIds: [] }, scope, 'create-position', 'create-declaration');
   expect(target.getSnapshot().phase).toBe('committed');
   target.close(); expect(cancelDocumentStage).not.toHaveBeenCalled();
 });
@@ -51,7 +52,7 @@ it('keeps staged uploads reusable after a known failure and captures corrected f
   expect(target.canSubmit()).toBe(true);
   await target.submit({ ...fields, ECODE: 'CORRECTED' }, scope, 'create-position');
   expect(saveDocument).toHaveBeenLastCalledWith({ ...fields, ECODE: 'CORRECTED' },
-    { mainUploadId: 'upload-main.pdf', attachmentUploadIds: [] }, scope, 'create-position');
+    { mainUploadId: 'upload-main.pdf', attachmentUploadIds: [] }, scope, 'create-position', 'create-declaration');
   expect(stageDocumentFile).toHaveBeenCalledTimes(1);
   expect(cancelDocumentStage).not.toHaveBeenCalled();
 });

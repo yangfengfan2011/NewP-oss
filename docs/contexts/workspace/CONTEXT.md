@@ -63,6 +63,8 @@ WorkspaceFolderContent 是正式 Link，父端由 authoring 固定为 WorkspaceF
 
 文件夹内创建由 Workspace 的 createPart/createDocument 功能动作准入，并交集当前完整位置、父文件夹 edit 与所属对象 create 数据范围。Workspace 对象行为静态声明调用 part.part/document.document 的 create，统一执行器在一个事务与审计作用域内保存所属实体和内容 Link；字段规范化、校验、唯一约束及对象审计仍由所属模块标准行为负责。创建回执不包含对象标识，后续列表读取独立裁决；刷新失败不能重放创建。已有引用 API 保留为独立功能授权能力，不再贡献页面按钮。回退这两个创建入口不删除已创建实体或关系。
 
+上述组合创建使用 `workspace.content.createPart` / `workspace.content.createDocument` 的当前正式入口声明；服务端从完整位置取得真实父事实。Part 在原所属创建点传递固定 caller 的 Declared write source，Document 沿原 `CreateWithFilesAsync` 消费所属候选及真实上传凭据，不把父读取结果缓存为对象允许结论。新对象不必可读，创建成功不追加读取或返回标识。
+
 图文档的每个主文件和附件使用同一个专属手工 multipart 上传入口：先读取严格 Position 和 values JSON，再把单个 file 流交给 Files.Contracts。接收前验证完整出现位置、祖先 read、当前父 edit 与 Document.Contracts 的候选 create；最终保存取得原文件夹图锁后再次验证，暂存成功不是权限或位置凭证。最终 JSON 使用专属 DTO，仅传业务字段、mainUploadId 和可空的 attachmentUploadIds，不接受 actor、owner、File/Usage 身份、角色或次序。附件数量、角色及集合去重由 Document 拥有，旧 raw Files 入口保持冻结。
 
 上传和取消属于独立 Files 生命周期操作；一次保存经 Document.Contracts 把 Document 图、全部文件使用确认及初始目录 Link 纳入原对象事务。Workspace 不读取 Document 或 Files 私有表，也不自行 Flush 文件使用。主文件单选、附件多选，使用现有 Ant Design 控件逐项呈现真实进度、失败、重试和移除；上传并发固定为一，全部已暂存且主文件存在才允许保存。上传成功只代表暂存；关闭或切换位置/主体中断旧上传并收敛本次未提交集合，迟到响应不能恢复旧选择。已开始保存、已成功或结果未知的集合禁止自动重发保存或取消可能已确认的使用。
@@ -138,6 +140,8 @@ WorkspaceFolderContent 是正式 Link，父端由 authoring 固定为 WorkspaceF
 普通文件夹树节点贡献已有编辑与移除引用动作，右侧内容 List View 通过 `rowContextMenu` 引用已有编辑、删除与移除。根仍使用 `folder` nodeType 和既有功能位置；Provider 以 `rootContextMenuKeys` 声明的引用粘贴、两种文件夹复制和清空动作 收窄根菜单，根不能复制或排序。`workspace.folder.reference` 从完整节点位置取末端 LID 作为动作 recordId，其源父位置为链去掉末端 LID；空链根及非法链拒绝。`referenceObjectId` 只供共享动作读取真实 Folder EID，并保留动作 row 的 LID/ObjectModelKey；它不进入写入 DTO，也不替代 edit-values、PUT 或移除命令对真实关系端点和完整源父位置的重验。普通实体详情继续按 EID 读取。
 
 内容行编辑通过当前完整位置与 LID 重新读取可编辑字段，在共享 Drawer 修改。文件夹编辑名称及说明；零组件、图文档编辑编码、名称及说明。服务端从真实关系推导 EID 和模型，不接受客户端替换类型；完整位置、父文件夹 edit、端点 read 与目标 edit/delete 数据权限每次重验。空间根继续禁止编辑和删除。
+
+编辑和删除入口分别消费当前 `workspace.content.edit` / `workspace.content.delete` 的共同父要求；父成功后才按原顺序一次解析 LID。实际 Folder、Part、Document 的目标在原点消费固定内部 read+edit / read+delete 要求，Part/Document writer 随后仍按原 before-facts 时点重验所属当前对象，来源事实不是允许缓存。缺声明、借用移除引用声明或阶段串用在任何写入前拒绝，后续目标拒绝保持整批原子性。
 
 Part/Document 通过所属标准 update/delete 行为执行字段规则、编码唯一性和可信审计；其普通 HTTP 更新/删除仍不开放。Workspace 文件夹改名在同一图锁下检查所有真实直接父文件夹的同名冲突，不返回不可见路径。实体编辑不改变 Link 审计。
 

@@ -506,7 +506,11 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
             var ruleId = "ChangedAdmission-" + action;
             await SaveRuleAsync(fixture, admin, ruleId, resource, field, value, action);
             using (var request = UploadRequest(fixture, folder.Position, values, new ByteArrayContent([9]), "main.pdf"))
-            using (var deniedStage = await ordinary.SendAsync(request)) Assert.Equal(status, deniedStage.StatusCode);
+            {
+                request.Headers.Add("X-NewP-Data-Declaration", WorkspaceObjectDeclaration(fixture, "workspace.content.createDocument", "workspace.folder.createDocument").Id);
+                using var deniedStage = await ordinary.SendAsync(request);
+                Assert.Equal(status, deniedStage.StatusCode);
+            }
             using (var deniedSave = await SaveMainAsync(fixture, ordinary, folder.Position, values, uploadId)) Assert.Equal(status, deniedSave.StatusCode);
             var unchanged = await ObserveBusinessAsync(fixture);
             Assert.Single(unchanged.Files);
@@ -698,6 +702,7 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/documents")
         { Content = new StringContent(JsonSerializer.Serialize(new { position, values, uploads = new { mainUploadId = uploadId } }), Encoding.UTF8, "application/json") };
         request.Headers.Add("X-NewP-Feature", Point(fixture, "workspace.folder.createDocument").Position);
+        request.Headers.Add("X-NewP-Data-Declaration", WorkspaceObjectDeclaration(fixture, "workspace.content.createDocument", "workspace.folder.createDocument").Id);
         fault.Armed = true;
         var saving = admin.SendAsync(request, cancellation.Token);
         Exception? primary = null;
@@ -767,19 +772,19 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
         var second = await CreateMainAsync(fixture, admin, position, "DELETE-02", [4, 5, 6]);
         fault.ArmDelete(1);
         await InjectedFailureAsync(() => FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.deleteObject"), HttpMethod.Delete,
-            "/api/workspace/content/" + first.WorkspaceLinkId, new { position }));
+            "/api/workspace/content/" + first.WorkspaceLinkId, new { position }, WorkspaceObjectDeclaration(fixture, "workspace.content.delete", "workspace.folder.deleteObject")));
         Assert.Equal(1, fault.Injected);
         Assert.True(fault.ObservedReleasedUsage);
         await AssertTwoActiveDocumentsAsync(fixture);
         fault.ArmDelete(2);
         await InjectedFailureAsync(() => FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.deleteObjects"), HttpMethod.Post,
-            "/api/workspace/content/delete", new { position, linkIds = new[] { first.WorkspaceLinkId, second.WorkspaceLinkId } }));
+            "/api/workspace/content/delete", new { position, linkIds = new[] { first.WorkspaceLinkId, second.WorkspaceLinkId } }, WorkspaceObjectDeclaration(fixture, "workspace.content.delete", "workspace.folder.deleteObjects")));
         Assert.Equal(2, fault.Injected);
         Assert.Equal(2, fault.DocumentDeleteCommands);
         Assert.True(fault.ObservedReleasedUsage);
         await AssertTwoActiveDocumentsAsync(fixture);
         using var deleted = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.deleteObjects"), HttpMethod.Post,
-            "/api/workspace/content/delete", new { position, linkIds = new[] { first.WorkspaceLinkId, second.WorkspaceLinkId } });
+            "/api/workspace/content/delete", new { position, linkIds = new[] { first.WorkspaceLinkId, second.WorkspaceLinkId } }, WorkspaceObjectDeclaration(fixture, "workspace.content.delete", "workspace.folder.deleteObjects"));
         Assert.Equal(HttpStatusCode.OK, deleted.StatusCode);
         var final = await ObserveBusinessAsync(fixture);
         Assert.Empty(final.Documents); Assert.Empty(final.Versions); Assert.Empty(final.Iterations); Assert.Empty(final.Links); Assert.Empty(final.References);
@@ -813,7 +818,8 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
     private static async Task<(WorkspacePosition Position, string FolderId)> CreateFolderPositionAsync(BusinessAuditHostFixture fixture, HttpClient admin, WorkspacePosition root, string name)
     {
         using var response = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.create"), HttpMethod.Post,
-            "/api/workspace/content/folders", new { position = root, values = new { ENAME = name } });
+            "/api/workspace/content/folders", new { position = root, values = new { ENAME = name } },
+            WorkspaceObjectDeclaration(fixture, "workspace.folder.create", "workspace.folder.create"));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         var id = body.GetProperty("id").GetString()!;
@@ -994,8 +1000,15 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
         }
     }
 
+    // 正常创建取实际Workspace入口声明；不改变手工构造的缺声明/伪造凭据反例。
     private static Task<HttpResponseMessage> CreateDocumentAsync(BusinessAuditHostFixture fixture, HttpClient client, object input) =>
-        FeatureHttpTestRequests.SendAsync(client, Point(fixture, "workspace.folder.createDocument"), HttpMethod.Post, "/api/workspace/content/documents", input);
+        FeatureHttpTestRequests.SendAsync(client, Point(fixture, "workspace.folder.createDocument"), HttpMethod.Post, "/api/workspace/content/documents", input,
+            WorkspaceObjectDeclaration(fixture, "workspace.content.createDocument", "workspace.folder.createDocument"));
+
+    private static ICP.Platform.Kernel.ModulePlanning.ActionDataAccessRequirement WorkspaceObjectDeclaration(
+        BusinessAuditHostFixture fixture, string execution, string behavior) =>
+        Assert.Single(fixture.Services.GetRequiredService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>().ActionDataAccessCatalog,
+            item => item.Execution == execution && item.FeaturePositions.Contains(Point(fixture, behavior).Position));
 
     private static async Task<JsonElement> ProblemAsync(HttpResponseMessage response, HttpStatusCode status, string code)
     {
@@ -1067,6 +1080,7 @@ public sealed partial class DocumentFilesSqlServerHttpApiTests
         object values, byte[] bytes, string name = "main.pdf")
     {
         using var request = UploadRequest(fixture, position, values, new ByteArrayContent(bytes), name);
+        request.Headers.Add("X-NewP-Data-Declaration", WorkspaceObjectDeclaration(fixture, "workspace.content.createDocument", "workspace.folder.createDocument").Id);
         using var response = await client.SendAsync(request);
         Assert.True(response.StatusCode == HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         return await response.Content.ReadFromJsonAsync<JsonElement>();

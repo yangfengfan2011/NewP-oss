@@ -181,18 +181,26 @@ const resource: StandardCrudResourceRegistration = {
       if (!action?.dataAccess?.id) throw new StandardCrudRequestError('缺少当前编辑声明。', 400);
       return referenceCommand('PUT', `/api/workspace/content/${encodeURIComponent(id)}`, { position: workspacePosition(queryScope), values: input }, featurePosition, action.dataAccess.id);
     },
-    deleteObject: async ({ id, queryScope, featurePosition }) => {
+    deleteObject: async ({ id, queryScope, featurePosition, action }) => {
       if (!id) throw new Error('缺少引用标识');
-      return referenceCommand('DELETE', `/api/workspace/content/${encodeURIComponent(id)}`, { position: workspacePosition(queryScope) }, featurePosition);
+      if (!action?.dataAccess?.id) throw new StandardCrudRequestError('缺少当前删除对象声明。', 400);
+      return referenceCommand('DELETE', `/api/workspace/content/${encodeURIComponent(id)}`, { position: workspacePosition(queryScope) }, featurePosition, action.dataAccess.id);
     },
-    deleteObjects: async ({ selectedRows, queryScope, featurePosition }) => referenceCommand('POST', '/api/workspace/content/delete',
-      { position: workspacePosition(queryScope), linkIds: (selectedRows ?? []).map(row => String(row.LID)) }, featurePosition),
-    createPart: async ({ input, queryScope, featurePosition }) => referenceCommand('POST', '/api/workspace/content/parts',
-      { position: workspacePosition(queryScope), values: input }, featurePosition),
-    createDocument: Object.assign(async ({ input, queryScope, featurePosition }: import('@icp-platform/sdk').StandardCrudActionContext) => {
+    deleteObjects: async ({ selectedRows, queryScope, featurePosition, action }) => {
+      if (!action?.dataAccess?.id) throw new StandardCrudRequestError('缺少当前选择删除声明。', 400);
+      return referenceCommand('POST', '/api/workspace/content/delete',
+        { position: workspacePosition(queryScope), linkIds: (selectedRows ?? []).map(row => String(row.LID)) }, featurePosition, action.dataAccess.id);
+    },
+    createPart: async ({ input, queryScope, featurePosition, action }) => {
+      if (!action?.dataAccess?.id) throw new StandardCrudRequestError('缺少当前Part创建声明。', 400);
+      return referenceCommand('POST', '/api/workspace/content/parts',
+        { position: workspacePosition(queryScope), values: input }, featurePosition, action.dataAccess.id);
+    },
+    createDocument: Object.assign(async ({ input, queryScope, featurePosition, action }: import('@icp-platform/sdk').StandardCrudActionContext) => {
       const draft = typeof input === 'object' && input !== null ? input as WorkspaceDocumentDraft : undefined;
       if (!(draft?.session instanceof WorkspaceDocumentSession)) throw new Error('缺少有效的上传会话，请重新打开。');
-      const payload = await draft.session.submit(draft, queryScope, featurePosition);
+      if (!action?.dataAccess?.id) throw new StandardCrudRequestError('缺少当前图文档创建声明。', 400);
+      const payload = await draft.session.submit(draft, queryScope, featurePosition, action.dataAccess.id);
       return { operation: 'action' as const, payload, change: { operation: 'update' as const, id: '' } };
     }, {
       // 重复代码已确定未消费暂存；修正字段后可由用户再次保存，其他409沿共享冲突生命周期。

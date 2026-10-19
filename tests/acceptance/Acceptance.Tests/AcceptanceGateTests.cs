@@ -804,6 +804,31 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通账号在原Workspace入口创建零组件与带文件图文档，编辑后选中并删除两种对象")]
+    public async Task NativeWorkspaceObjects_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-workspace-objects");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
+            browserJourney: async (page, token) =>
+            {
+                var driver = new WorkspacePageDriver(page);
+                var suffix = runId[..8];
+                var part = "零组件创建旅程 " + suffix;
+                var document = "图文档上传旅程 " + suffix;
+                await driver.OpenAsync();
+                await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
+                await driver.CreateObjectAsync("零组件", "ACC-WS-P-" + suffix, part);
+                await driver.CreateDocumentWithFilesAsync("ACC-WS-D-" + suffix, document, WorkspacePageDriver.SmallMainFile());
+                await driver.EditObjectAsync(part, part + " 已编辑");
+                await driver.DeleteSelectedAsync(part + " 已编辑", document);
+                await AcceptancePresentation.CaptureAsync(page, Path.Combine(root, "workspace-objects-saved.png"));
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
+                    new { url = page.Url, actor = "ordinary", journey = "workspace-objects-create-upload-edit-delete" }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通账号通过正式声明接通树复制、异构选择、剪切粘贴和直接移除")]
     public async Task WorkspaceClipboardExecution_UsesFormalDriver()
     {

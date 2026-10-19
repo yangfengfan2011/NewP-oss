@@ -38,7 +38,7 @@ public sealed class WorkspaceClipboardDataExecutionContractTests
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "AGENTS.md"))) root = root.Parent;
         var allDeclarations = compiled.Plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Workspace").ToArray();
         // 同一正式fixture也覆盖已存在树动作的目标读取来源，位置仍取实际编译目录。
-        var clipboardKeys = new[] { "copy", "copySelected", "cut", "cutSelected", "paste", "remove", "removeSelected", "clearClipboard", "edit", "moveUp", "moveDown" };
+        var clipboardKeys = new[] { "copy", "copySelected", "cut", "cutSelected", "paste", "remove", "removeSelected", "clearClipboard", "edit", "moveUp", "moveDown", "createPart", "createDocument", "delete", "deleteObjects" };
         var features = compiled.Plan.FeatureCatalog.Where(point => point.ModuleId == "Workspace"
             && (point.Kind == "navigation" && point.Key == "workspace" || point.Kind == "action" && clipboardKeys.Contains(point.Key))).ToArray();
         var json = JsonSerializer.Serialize(new { declarations = allDeclarations, features }, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });

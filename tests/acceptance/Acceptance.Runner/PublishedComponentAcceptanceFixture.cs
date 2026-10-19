@@ -203,10 +203,10 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             if (!historicalUpgrade) _documentPosition = folder;
             // 当前根只允许文件夹；历史根的旧 Part 留给升级模式证明兼容，不用新 API 伪造。
             oldId = await CreateWorkspaceObjectAsync(ordinary, features, historicalUpgrade ? position : folder,
-                "Part", "parts", ExistingCode, ExistingName, token);
+                "Part", "parts", ExistingCode, ExistingName, token, preparation);
             if (historicalUpgrade)
             {
-                _oldDocumentId = await CreateWorkspaceObjectAsync(ordinary, features, position, "Document", "documents", ExistingDocumentCode, ExistingDocumentName, token);
+                _oldDocumentId = await CreateWorkspaceObjectAsync(ordinary, features, position, "Document", "documents", ExistingDocumentCode, ExistingDocumentName, token, preparation);
                 _baselineOwners = await ReadModelOwnersAsync(ordinary, token);
             }
         }
@@ -487,13 +487,18 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         granted.Add(features.Action(workspace, "cut", "list.rowActions", "folder"));
     }
 
-    private async Task<string> CreateWorkspaceObjectAsync(HttpClient client, AcceptanceFeatureCatalog features,
-        WorkspaceFolderPosition position, string model, string route, string code, string name, CancellationToken token)
+    // 历史宿主准备保留原ABI；当前发行物准备消费该真实动作的正式声明。
+    internal static async Task<string> CreateWorkspaceObjectAsync(HttpClient client, AcceptanceFeatureCatalog features,
+        WorkspaceFolderPosition position, string model, string route, string code, string name, CancellationToken token,
+        PublishedWorkspacePreparation sourcePreparation = PublishedWorkspacePreparation.CurrentRelease)
     {
         var entry = features.Behavior("Workspace", "workspace.spaces.access");
+        var action = features.Action(entry, "create" + model, "list.pageActions", "folder");
+        var declaration = sourcePreparation == PublishedWorkspacePreparation.CurrentRelease
+            ? features.DeclarationAtView(action, "workspace.folder.list", "pageActions", "create" + model) : null;
         await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Post, "/api/workspace/content/" + route,
             new { position = position.CommandPosition, values = new { ECODE = code, ENAME = name } },
-            features.Action(entry, "create" + model, "list.pageActions", "folder").Position, token);
+            action.Position, token, declaration);
         var contents = await WorkspaceAcceptanceFixture.ReadContentsAtPositionAsync(client, position, entry.Position, token, features);
         return contents.GetProperty("items").EnumerateArray().Single(item => item.GetProperty("fields").GetProperty("Name").GetString() == name)
             .GetProperty("associatedObject").GetProperty("id").GetString()!;

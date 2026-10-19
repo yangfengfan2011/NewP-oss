@@ -7,6 +7,7 @@ import { createLocalizedRoot as createRoot } from './localizedTestRoot';
 import { loadComponentSource } from '../../test-support/componentTestInputs';
 import { StandardCrudActionReviewDialog } from '../standard-crud/StandardCrudActionReviewDialog';
 import { useStandardCrudActionExecution } from '../standard-crud/useStandardCrudActionExecution';
+import { formalDataAccessFor } from './formalRuntimeMetadataTestSupport';
 
 vi.unmock('@icp-platform/core');
 const { default: resource } = await loadComponentSource<{ default: StandardCrudResourceRegistration }>('Workspace', 'workspaceRootResource.ts');
@@ -14,6 +15,8 @@ await loadComponentSource('Workspace', 'WorkspaceDocumentCreateInput.tsx');
 await import('@icp-platform/ui/crud-form');
 
 it.each(['committed', 'unknown'] as const)('unmounts the real input on authority change while its pending save settles as %s', async outcome => {
+  const dataAccess = formalDataAccessFor('workspace.folder.list', 'pageActions', 'createDocument');
+  const featurePosition = dataAccess.featurePositions.find(position => position.includes('surface:list.pageActions'))!;
   const scope = { spaceId: 'public', rootFolderId: 'root', linkIds: '["content-folder-link"]' };
   const uploads = vi.spyOn(core, 'platformUpload').mockResolvedValue(new Response(JSON.stringify({
     uploadId: 'FileUploadLease_11111111111111111111111111111111', fileName: 'main.pdf', fileId: 'private', length: 1,
@@ -31,15 +34,15 @@ it.each(['committed', 'unknown'] as const)('unmounts the real input on authority
   function Harness({ feature }: { feature: string }) {
     const [value, setValue] = useState<unknown>({ ECODE: 'DOC', ENAME: '图文档' }); draft = value;
     const execution = useStandardCrudActionExecution({ refresh });
-    return <StandardCrudActionReviewDialog action={{ key: 'createDocument', labelKey: '新建图文档', inputKey: 'createObject' }}
+    return <StandardCrudActionReviewDialog action={{ key: 'createDocument', labelKey: '新建图文档', inputKey: 'createObject', dataAccess }}
       title="新建图文档" featurePosition={feature} queryScope={scope} value={value} onChange={setValue}
       inputRenderer={resource.actionInputRenderers!.createObject} pending={execution.pendingKey !== null} onCancel={cancel}
       onConfirm={() => { saving = execution.execute({ key: 'createDocument', handler: resource.actionHandlers!.createDocument,
-        context: { input: value, queryScope: scope, featurePosition: feature } }); }} />;
+        context: { input: value, queryScope: scope, featurePosition: feature, action: { key: 'createDocument', labelKey: '新建图文档', dataAccess } } }); }} />;
   }
   const element = document.createElement('div'); document.body.append(element); const root = createRoot(element);
   try {
-    await act(async () => root.render(<Harness feature="create-position" />));
+    await act(async () => root.render(<Harness feature={featurePosition} />));
     const input = document.querySelector<HTMLInputElement>('.ant-drawer input[type=file]:not([multiple])')!;
     expect(input).not.toBeNull();
     Object.defineProperty(input, 'files', { configurable: true, value: [new File(['1'], 'main.pdf')] });
@@ -52,7 +55,7 @@ it.each(['committed', 'unknown'] as const)('unmounts the real input on authority
     await act(async () => root.render(<Harness feature="changed-position" />));
     expect(document.querySelector('.ant-drawer input[type=file]')).toBeNull();
     expect(cancel).not.toHaveBeenCalled();
-    await expect(resource.actionHandlers!.createDocument({ input: oldDraft, queryScope: scope, featurePosition: 'create-position' })).rejects.toThrow('上传会话');
+    await expect(resource.actionHandlers!.createDocument({ input: oldDraft, queryScope: scope, featurePosition, action: { key: 'createDocument', labelKey: '新建图文档', dataAccess } })).rejects.toThrow('上传会话');
     await act(async () => { finish(new Response(outcome === 'committed' ? '{"succeeded":true}' : '{"succeeded":', { status: 200 })); await saving; });
     expect(cancel).toHaveBeenCalledTimes(1);
     expect(refresh).toHaveBeenCalledTimes(outcome === 'committed' ? 1 : 0);

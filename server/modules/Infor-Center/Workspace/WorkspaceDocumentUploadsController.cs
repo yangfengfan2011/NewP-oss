@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using ICP.Platform.Authorization.Http;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Crud.LinkQueries;
 using ICP.Platform.Modules.Files.Contracts;
@@ -55,7 +56,7 @@ public sealed partial class WorkspaceDocumentUploadsController(WorkspaceContents
                 throw new FileLifecycleException(413, "Files.UploadTooLarge");
             return Results.Ok(staged);
         }
-        catch (Exception exception) when (exception is JsonException or InvalidDataException or FileLifecycleException or LinkQueryException or OperationCanceledException)
+        catch (Exception exception) when (exception is JsonException or InvalidDataException or FileLifecycleException or LinkQueryException or ActionDataAccessException or OperationCanceledException)
         {
             if (staged is not null) await CancelRejectedAsync(staged.UploadId);
             if (exception is OperationCanceledException) throw;
@@ -63,6 +64,8 @@ public sealed partial class WorkspaceDocumentUploadsController(WorkspaceContents
             {
                 FileLifecycleException file => FileProblem(file),
                 LinkQueryException link => LinkQueryEndpointExtensions.Problem(link),
+                ActionDataAccessException access => Results.Problem(statusCode: access.Status, title: access.Code,
+                    extensions: new Dictionary<string, object?> { ["code"] = access.Code }),
                 _ => ValidationProblem(exception is JsonException ? "Invalid multipart metadata or shape." : "Invalid multipart framing.")
             };
         }

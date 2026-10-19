@@ -46,6 +46,18 @@ internal sealed class StandardCrudPageDriver
 
     internal IPage Page { get; }
 
+    // AntD 虚拟列表的 role=option 是隐藏辅助节点；用户点击实际可见候选。
+    internal async Task SelectSearchOptionAsync(ILocator control, string query, string label)
+    {
+        await control.WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        await control.ClickAsync();
+        await control.FillAsync(query);
+        var candidate = Page.Locator(".ant-select-dropdown:visible .ant-select-item-option:not(.ant-select-item-option-disabled)")
+            .Filter(new() { HasTextRegex = new Regex("^" + Regex.Escape(label) + "$") });
+        await Assertions.Expect(candidate).ToHaveCountAsync(1);
+        await candidate.ClickAsync();
+    }
+
     // ---- 标准列表入口 ----
 
     // 单一正式菜单与外层标签共同拥有入口，内嵌列表保留自己的筛选和 Drawer 状态。

@@ -139,10 +139,8 @@ public sealed class AcceptanceGateTests
                 await page.GetByRole(AriaRole.Menuitem, new() { Name = "账号角色", Exact = true }).ClickAsync();
                 var dialog = driver.VisibleModal();
                 var account = dialog.GetByRole(AriaRole.Combobox, new() { Name = "账号", Exact = true });
-                await account.WaitForAsync(new() { State = WaitForSelectorState.Visible });
-                await account.ClickAsync();
-                await account.FillAsync(accountCode!);
-                await page.GetByRole(AriaRole.Option, new() { NameRegex = new System.Text.RegularExpressions.Regex(System.Text.RegularExpressions.Regex.Escape(accountCode!)) }).ClickAsync();
+                // 同 fixture 的 PrepareActorAsync 固定创建该账号名称；完整标签避免误选相似代码。
+                await driver.SelectSearchOptionAsync(account, accountCode!, $"工作空间验收账号 {runId[..8]} ({accountCode})");
                 var option = dialog.GetByRole(AriaRole.Checkbox, new() { Name = $"{name} ({code})", Exact = true });
                 await option.WaitForAsync(new() { State = WaitForSelectorState.Visible });
                 await option.CheckAsync();

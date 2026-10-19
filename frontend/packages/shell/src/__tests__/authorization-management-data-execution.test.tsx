@@ -120,7 +120,11 @@ it('opens the actual list account-role input and submits through its existing co
   await vi.waitFor(() => expect(document.querySelector('input[aria-label="账号"]')).not.toBeNull());
   await act(async () => document.querySelector('input[aria-label="账号"]')!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })));
   await vi.waitFor(() => expect(document.body.textContent).toContain('普通账号 (actor311)'));
-  await act(async () => (document.querySelector('.ant-select-item-option') as HTMLElement).click());
+  const candidates = document.querySelectorAll<HTMLElement>('.ant-select-dropdown .ant-select-item-option:not(.ant-select-item-option-disabled)');
+  expect(candidates).toHaveLength(1);
+  expect(candidates[0].getAttribute('title')).toBe('普通账号 (actor311)');
+  expect(candidates[0]).not.toBe(document.querySelector('[role="option"]'));
+  await act(async () => candidates[0].click());
   await vi.waitFor(() => expect(document.querySelector('.ant-modal input[type="checkbox"]')).not.toBeNull());
   const checkbox = document.querySelector('.ant-modal input[type="checkbox"]') as HTMLInputElement;
   expect(checkbox.closest('label')?.textContent).toBe('实际角色 (AUTH311)');

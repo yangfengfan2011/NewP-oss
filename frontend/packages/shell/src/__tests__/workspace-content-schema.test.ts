@@ -20,14 +20,14 @@ it('validates Link projection fields against the formal query directory and requ
   expect(() => buildStandardCrudListSchema({ ...list.view, querySource: { kind: 'table', model: 'WorkspaceFolderContent', resourceKey: 'workspace.content' } }, resource, context)).toThrow('unsupported query source');
 });
 
-it('groups existing creation actions without replacing their identities and exposes the Name activation entry', () => {
+it('groups declared page actions without replacing their identities and exposes the Name activation entry', () => {
   const schema = buildStandardCrudListSchema(list.view, resource, { modelDocuments: [folder, content] });
   // 原断言写死 13 个 key 来保护“分组不丢动作、不改身份和次序”；Workspace 每新增动作都会漂移。
   // 现在以 view 声明的 pageActions 为期望，同样要求分组后的动作集合与声明顺序逐项一致。
   const declaredPageActionKeys = list.view.pageActions.map((action: { key: string }) => action.key);
   expect(declaredPageActionKeys.length).toBeGreaterThan(0);
   expect(schema.pageActions.map(action => action.key)).toEqual(declaredPageActionKeys);
-  expect(schema.pageActionGroups).toEqual([{ key: 'new', labelKey: 'New', variant: 'primary', actionKeys: ['create', 'createPart', 'createDocument'] }]);
+  expect(schema.pageActionGroups).toEqual(list.view.pageActionGroups);
   expect(schema.columns.find(column => column.field === 'Name')?.standardAction).toBe('view');
   expect(schema.rowActions.map(action => action.key)).toEqual(list.view.rowActions.map((action: { key: string }) => action.key));
   expect(schema.pageActions.find(action => action.key === 'deleteObjects')?.requiresSelection).toBe(true);

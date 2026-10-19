@@ -878,7 +878,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     expect(container.textContent).not.toContain('删除');
     expect(container.textContent).toContain('启用');
 
-    const moreButton = findAntdButtonByText(container, '更多');
+    const moreButton = findRowActionButton(container, '张三', '更多');
     expect(moreButton).toBeDefined();
     await act(async () => {
       moreButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));

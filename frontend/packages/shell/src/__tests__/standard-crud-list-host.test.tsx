@@ -955,7 +955,7 @@ describe('StandardCrudListPageHost', () => {
     expect(disableAction).not.toHaveBeenCalled();
     expect(enableAction).not.toHaveBeenCalled();
 
-    const moreButton = Array.from(container.querySelectorAll('button')).find((button) =>
+    const moreButton = Array.from(container.querySelectorAll('tr[data-row-key="Person_1"] button')).find((button) =>
       button.textContent?.replace(/\s+/g, '') === '更多');
     expect(moreButton).toBeDefined();
     await act(async () => moreButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
@@ -2438,7 +2438,7 @@ describe('StandardCrudListPageHost', () => {
     expect(container.textContent).not.toContain('启用');
     expect(container.querySelectorAll('.np-row-action-button')).toHaveLength(1);
     await act(async () => {
-      const moreButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      const moreButton = Array.from(container.querySelectorAll('tr[data-row-key="Person_1"] button')).find((button) =>
         button.textContent?.replace(/\s+/g, '') === '更多');
       moreButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });

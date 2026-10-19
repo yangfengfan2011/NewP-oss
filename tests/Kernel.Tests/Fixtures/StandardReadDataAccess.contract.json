@@ -406,6 +406,7 @@
     "featurePositions": [
       "Organization/navigation:organization/navigation:organization.structure/tab:companies",
       "Organization/navigation:organization/navigation:organization.structure/tab:companies/surface:list.rowActions/action:edit",
+      "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/surface:contextMenu/action:delete",
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/surface:contextMenu/action:edit",
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:information"
     ],
@@ -481,6 +482,7 @@
       "Organization/navigation:organization/navigation:organization.structure/tab:departments/surface:list.rowActions/action:edit",
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct",
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct/surface:list.rowActions/action:edit",
+      "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/surface:contextMenu/action:delete",
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/surface:contextMenu/action:edit",
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct",
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct/surface:list.rowActions/action:edit",
@@ -611,6 +613,7 @@
       "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:detail.pageActions/action:edit",
       "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:list.rowActions/action:edit",
       "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+      "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:person/surface:contextMenu/action:delete",
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:person/surface:contextMenu/action:edit",
       "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:person/surface:detail.pageActions/action:edit"
     ],

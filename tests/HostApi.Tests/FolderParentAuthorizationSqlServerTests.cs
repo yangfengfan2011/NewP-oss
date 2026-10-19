@@ -228,7 +228,15 @@ public sealed class FolderParentAuthorizationSqlServerTests
                     : new { position, values = new { ENAME = "RollbackInherited298" }, copyParentAuthorization = true };
                 using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/folders" + (shallow ? "/copy" : ""))
                 { Content = JsonContent.Create(body, options: new JsonSerializerOptions()) };
-                request.Headers.Add("X-NewP-Feature", Point(fixture, "workspace.folder." + (shallow ? "pasteFolderCopy" : "create")).Position);
+                var feature = Point(fixture, "workspace.folder." + (shallow ? "pasteFolderCopy" : "create"));
+                request.Headers.Add("X-NewP-Feature", feature.Position);
+                // 正式新建使用同一真实声明；尚未迁移的浅副本仍沿其原显式边界。
+                if (!shallow)
+                {
+                    var declaration = Assert.Single(fixture.Services.GetRequiredService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>().ActionDataAccessCatalog,
+                        binding => binding.Execution == "workspace.folder.create" && binding.FeaturePositions.Contains(feature.Position));
+                    request.Headers.Add("X-NewP-Data-Declaration", declaration.Id);
+                }
                 if (cancel)
                     await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
                     {

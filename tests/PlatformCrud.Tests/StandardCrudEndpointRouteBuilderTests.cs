@@ -467,6 +467,7 @@ public sealed class StandardCrudEndpointRouteBuilderTests
         string resourceKey = "organization.person",
         string route = "api/organization/persons") => new()
         {
+            LegacyDataExecutions = ["create", "update", "delete"],
             ResourceKey = resourceKey,
             ModuleId = "Organization",
             ModelName = "Person",

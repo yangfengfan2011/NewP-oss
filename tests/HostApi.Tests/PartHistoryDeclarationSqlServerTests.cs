@@ -15,20 +15,22 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class PartHistoryDeclarationSqlServerTests
 {
-    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "独立Part四出口只消费自身read声明与EID，无Workspace资格，拒绝声明换绑和跨对象记录")]
-    public async Task IndependentPart_AllDeclarationsUseReadWithoutWorkspace_AndRejectForgery()
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "Part履历保留Workspace功能祖先，四出口只消费自身read声明与EID，无需来源LID，拒绝换绑和跨对象记录")]
+    public async Task OwnedPart_AllDeclarationsUseReadFromEid_AndRejectForgery()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includePart: true);
         using var admin = await fixture.LoginAdministratorAsync();
         var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
-        Assert.DoesNotContain(plan.Modules, module => module.ModuleId is "Workspace" or "Document");
+        Assert.Contains(plan.Modules, module => module.ModuleId == "Workspace");
         var history = Point(fixture, "part.part.history");
+        var workspaceEntry = Assert.Single(plan.FeatureCatalog, feature => feature.ModuleId == "Workspace" && feature.Key == "workspace");
+        Assert.Contains(workspaceEntry.Position, history.EntryDependencies);
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "PartHistory302", "独立零组件履历", "part-history302", "零组件履历账号", history);
         using var ordinary = actor.Client;
         var id = await CreateAsync(fixture, admin, "PART-HISTORY-302");
         var otherId = await CreateAsync(fixture, admin, "PART-HISTORY-OTHER-302");
         await ConfigureAsync(fixture, admin, id, "allow");
-        var declarations = plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Part").ToArray();
+        var declarations = plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Part" && item.Execution.StartsWith("part.history.", StringComparison.Ordinal)).ToArray();
         Assert.All(declarations, item => Assert.Equal(new[] { "read" }, item.Actions));
         var basePath = "/api/part/parts/" + id + "/history";
         var list = Assert.Single(declarations, item => item.Execution == "part.history.list");
@@ -90,7 +92,7 @@ public sealed class PartHistoryDeclarationSqlServerTests
         using var ordinary = actor.Client;
         var id = await CreateAsync(fixture, admin, "PART-RECHECK-302");
         await ConfigureAsync(fixture, admin, id, "allow");
-        var declarations = fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog.Where(item => item.ModuleId == "Part").ToArray();
+        var declarations = fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog.Where(item => item.ModuleId == "Part" && item.Execution.StartsWith("part.history.", StringComparison.Ordinal)).ToArray();
         var basePath = "/api/part/parts/" + id + "/history";
         var list = Assert.Single(declarations, item => item.Execution == "part.history.list");
         using var listed = await SendAsync(ordinary, history, list.Id, HttpMethod.Get, basePath);

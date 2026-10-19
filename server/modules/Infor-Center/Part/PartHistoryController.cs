@@ -6,9 +6,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ICP.Platform.Modules.Part;
 
-/// <summary>独立对象履历按自身声明交集完整读取；EID无需Workspace来源，功能资格属于本owner。</summary>
+/// <summary>对象履历按自身声明交集完整读取；使用自身履历功能位置与EID，不借用Workspace出现位置或LID。</summary>
 [ApiController, Route("api/part/parts/{objectId}/history"), EndpointModule("Part")]
-public sealed class PartHistoryController(IObjectHistoryQuery history, IObjectHistoryExport export, IActionDataAccess dataAccess) : ControllerBase
+public sealed class PartHistoryController(IObjectHistoryQuery history, IObjectHistoryExport export, IDataExecutionAccess dataAccess) : ControllerBase
 {
     private const string ResourceKey = "part.part";
 
@@ -20,8 +20,8 @@ public sealed class PartHistoryController(IObjectHistoryQuery history, IObjectHi
         try
         {
             ValidateQuery();
-            return await dataAccess.IsAllowedAsync("part.history." + operation, ResourceKey, objectId, token)
-                ? Results.NoContent() : Unavailable();
+            return await dataAccess.EvaluateObjectAsync(new("part.history." + operation, "part.backend", "read"),
+                ResourceKey, "target", objectId, token) == DataExecutionDecision.Allowed ? Results.NoContent() : Unavailable();
         }
         catch (ActionDataAccessException error) { return DeclarationFailure(error); }
         catch (ArgumentException) { return InvalidInput(); }
@@ -44,7 +44,8 @@ public sealed class PartHistoryController(IObjectHistoryQuery history, IObjectHi
         try
         {
             ValidateQuery();
-            if (!await dataAccess.IsAllowedAsync("part.history.export", ResourceKey, objectId, token)) return Unavailable();
+            if (await dataAccess.EvaluateObjectAsync(new("part.history.export", "part.backend", "read"),
+                ResourceKey, "target", objectId, token) != DataExecutionDecision.Allowed) return Unavailable();
             var file = await export.ExportAsync(ResourceKey, objectId, request, token);
             return file is null ? Results.NotFound() : Results.File(file.Content, file.ContentType, file.FileName);
         }
@@ -63,7 +64,8 @@ public sealed class PartHistoryController(IObjectHistoryQuery history, IObjectHi
         try
         {
             ValidateQuery();
-            if (!await dataAccess.IsAllowedAsync(execution, ResourceKey, objectId, token)) return Unavailable();
+            if (await dataAccess.EvaluateObjectAsync(new(execution, "part.backend", "read"),
+                ResourceKey, "target", objectId, token) != DataExecutionDecision.Allowed) return Unavailable();
             var value = await read();
             return value is null ? Results.NotFound() : Results.Ok(value);
         }

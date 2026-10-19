@@ -22,6 +22,7 @@ public static class DocumentCrudDescriptor
         var fieldSet = new StandardCrudFieldSet(fields, fields, ["ECODE", "ENAME", "Description"], ["ECODE", "ENAME", "Description"]);
         return new()
         {
+            DataExecutions = new Dictionary<string, string> { ["list"] = "document.document.list", ["read"] = "document.document.read" },
             LegacyDataExecutions = ["create", "update", "delete"],
             ResourceKey = "document.document", ModuleId = "Document", ModelName = "Document", Route = "api/document/documents",
             RequiresCreationRecord = true, RequiresUpdateRecord = true,

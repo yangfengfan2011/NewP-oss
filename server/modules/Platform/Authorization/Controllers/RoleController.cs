@@ -1,4 +1,5 @@
 using ICP.Platform.Authorization.Http;
+using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Modules.Authorization.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -23,6 +24,7 @@ public class RoleController : ControllerBase
     /// <summary>标准列表在存储侧按代码筛选及分页，旧列表 API 保持原协议。</summary>
     [HttpGet("query")]
     [RequireFeature("authorization.role.read")]
+    [StandardCrudDataExecution("authorization.role", "authorization.role.list", "list")]
     public async Task<IActionResult> Query([FromQuery] string? query, [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 20, CancellationToken cancellationToken = default) =>
         Ok(await _query.ListAsync(query, pageIndex, pageSize, cancellationToken));
 
@@ -38,6 +40,7 @@ public class RoleController : ControllerBase
     /// <summary>按入口或发起动作读取角色详情。</summary>
     [HttpGet("{roleId}")]
     [RequireFeature("authorization.role.read")]
+    [StandardCrudDataExecution("authorization.role", "authorization.role.read", "read")]
     public async Task<ActionResult<RoleDto>> GetRoleById(string roleId, CancellationToken cancellationToken)
     {
         var role = await _query.GetAsync(roleId, cancellationToken);

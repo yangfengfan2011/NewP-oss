@@ -14,7 +14,10 @@ public sealed partial class WorkspaceContents
         var target = await ResolvePermissionTargetAsync(actor, position, linkId, token);
         var descriptor = target.ResourceKey == folderDescriptor.Value.ResourceKey ? folderDescriptor.Value
             : resources.FindByResourceKey(target.ResourceKey) ?? throw new InvalidOperationException("Workspace object descriptor unavailable.");
-        var detail = await crud.GetDetailAsync(descriptor, target.ObjectId, token);
+        var detail = target.ResourceKey == folderDescriptor.Value.ResourceKey
+            ? await crud.GetDetailAsync(descriptor, target.ObjectId, token)
+            : await crud.GetDetailFromSourceAsync(descriptor, target.ObjectId,
+                new("workspace.properties.detail", "workspace.backend", typeof(WorkspaceContents), nameof(ReadPropertiesAsync)), token);
         return detail is null ? null : new(target.ResourceKey, target.ObjectId, detail);
     }
 

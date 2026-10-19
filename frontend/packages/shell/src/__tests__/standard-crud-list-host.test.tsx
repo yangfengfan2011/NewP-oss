@@ -9,7 +9,7 @@ import { MemoryRouter, useLocation, useNavigate, type NavigateFunction } from 'r
 import { AuthorizationProvider, LanguageSelect, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry, StandardCrudRequestError, createStandardCrudRestDataAdapter, type AuthUser, type ActionDataAccessRequirement } from '@icp-platform/sdk';
 import { AuthProvider, useAuth, useOptionalAuth } from '../contexts/AuthContext';
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import { StandardCrudHostEnvironmentContext, type StandardCrudHostEnvironment } from '../standard-crud/standardCrudHostEnvironment';
 import { createEmbeddedHostEnvironment } from './standardCrudHostEnvironmentTestSupport';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';

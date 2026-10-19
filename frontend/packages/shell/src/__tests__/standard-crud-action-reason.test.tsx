@@ -7,7 +7,7 @@ import { expect, it, vi } from 'vitest';
 import { LanguageSelect, LocalizationProvider, PlatformQueryProvider, useLocalization } from '@icp-platform/core';
 import type { StandardCrudActionState } from '@icp-platform/sdk';
 import { formatStandardCrudActionReason } from '../standard-crud/standardCrudActionReason';
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 import { personStandardCrudResource } from '../../../../modules/platform/organization/src/standard-crud/personStandardCrudResource';

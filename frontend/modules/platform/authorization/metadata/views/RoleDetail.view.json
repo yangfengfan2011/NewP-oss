@@ -2,6 +2,7 @@
   "schemaVersion": "1.0",
   "type": "view",
   "view": {
+    "dataAccess": { "execution": "authorization.role.read", "resources": ["authorization.role"] },
     "dicKey": "RoleView",
     "model": "Role",
     "resourceKey": "authorization.role",

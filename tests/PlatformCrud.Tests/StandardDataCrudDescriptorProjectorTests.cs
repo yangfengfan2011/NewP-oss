@@ -27,6 +27,9 @@ public sealed class StandardDataCrudDescriptorProjectorTests : IDisposable
             [CreateModule()]);
 
         var descriptor = Assert.Single(new StandardDataCrudDescriptorProjector().Project(plan));
+        Assert.Equal("Partner.AssetCatalog.Asset.list", descriptor.DataExecutions["list"]);
+        Assert.Equal("Partner.AssetCatalog.Asset.read", descriptor.DataExecutions["read"]);
+        Assert.Equal(new[] { "create", "update" }, descriptor.LegacyDataExecutions);
 
         Assert.Equal("Partner.AssetCatalog.Asset", descriptor.ResourceKey);
         Assert.Equal("Partner.AssetCatalog", descriptor.ModuleId);

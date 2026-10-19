@@ -8,7 +8,7 @@
   "ICP.Platform.Crud.Runtime.StandardCrudDefaultWriter.CheckExistingScopeAsync[1] -> IsAllowedAsync": "明确LegacyDataExecutions隔离的尚未迁移执行；参数来自writer固定阶段，Example已走统一执行器；#321删除。 动作来源为调用者固定edit/delete，先核具体legacy操作。",
   "ICP.Platform.Crud.Runtime.StandardCrudDefaultWriter.PrepareCreateCandidateAsync[0] -> IsCandidateAllowedAsync": "明确LegacyDataExecutions隔离的尚未迁移执行；参数来自writer固定阶段，Example已走统一执行器；#321删除。",
   "ICP.Platform.Crud.Runtime.StandardCrudService.BuildMutationDetailAsync[0] -> IsAllowedAsync": "写后独立读取观察；只决定详情或成功回执，不重复写前授权。",
-  "ICP.Platform.Modules.Authorization.Services.ActionDataAccess.IsAllowedAsync[0] -> IsAllowedAsync": "既有履历声明消费者，#309迁移后删除直接动作接线，#321核清；不用于Example新路径。",
+  "ICP.Platform.Modules.Authorization.Services.ActionDataAccess.IsAllowedAsync[0] -> IsAllowedAsync": "履历已在#309迁移到固定read合同；旧公开适配器现无正式履历调用，仅待#321随过渡机制核清退役。",
   "ICP.Platform.Modules.Authorization.Services.DataExecutionAccess.EvaluateCandidateAsync[0] -> IsCandidateAllowedAsync": "统一有效要求执行器；动作仅来自正式装配合同，角色及候选由执行owner解析。 动作来源为当前role/stage的正式AnyOf分支。",
   "ICP.Platform.Modules.Authorization.Services.DataExecutionAccess.EvaluateObjectAsync[0] -> IsAllowedAsync": "统一有效要求执行器；动作仅来自正式装配合同，角色及候选由执行owner解析。 动作来源为当前role/stage的正式AnyOf分支。",
   "ICP.Platform.Modules.Authorization.Services.DataScopeObjectAccess.IsReadableAsync[0] -> IsAllowedAsync": "底层完整对象读取裁决；保留read和资源owner读取约束。",

@@ -12,7 +12,8 @@ import PersonDetailPage from '../../../../modules/platform/organization/src/page
 import personDetailDictionary from '../../../../modules/platform/organization/metadata/dictionaries/PersonDetailView.dic.json';
 import organizationRuntimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
 import personDetailViewDocument from '../../../../modules/platform/organization/metadata/views/PersonDetail.view.json';
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { formalDataAccessFor } from './formalRuntimeMetadataTestSupport';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -237,6 +238,7 @@ describe('organization person center detail layout', () => {
     });
 
     expect(fetch).toHaveBeenCalledWith('/api/organization/persons/person-1', {
+      headers: { 'X-NewP-Data-Declaration': formalDataAccessFor('organization.person.detail', 'read').id },
       method: 'GET',
       signal: expect.any(AbortSignal),
     });

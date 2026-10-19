@@ -18,7 +18,8 @@ import identityRuntimeModels from '../../../../../tests/Kernel.Tests/Fixtures/Id
 import identityNavigationDocument from '../../../../modules/platform/identity/metadata/navigation/Identity.nav.json';
 import accountListViewDocument from '../../../../modules/platform/identity/metadata/views/AccountList.view.json';
 import accountDetailViewDocument from '../../../../modules/platform/identity/metadata/views/AccountDetail.view.json';
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { formalDataAccessFor } from './formalRuntimeMetadataTestSupport';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import { resolveStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';
 import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
@@ -198,7 +199,7 @@ describe('Identity account Standard CRUD production route', () => {
 
     expect(fetch).toHaveBeenCalledWith(
       '/api/identity/accounts?status=Deleted&fields=EID%2CECODE%2CENAME%2CStatus%2CIsPersonnelBound%2CIsLocalAdministrator%2CPersonnelDisableHold&pageIndex=2&pageSize=20&sortBy=ECODE&sortDirection=asc',
-      { method: 'GET', signal: expect.any(AbortSignal) },
+      { method: 'GET', headers: { 'X-NewP-Data-Declaration': formalDataAccessFor('identity.account.list', 'read').id }, signal: expect.any(AbortSignal) },
     );
     expect(container.querySelector('.ant-pro-table')).not.toBeNull();
     expect(container.querySelector('.np-crud-workspace-header')).toBeNull();

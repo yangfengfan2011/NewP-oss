@@ -8,7 +8,7 @@ import list from '../../../../modules/platform/authorization/metadata/views/Role
 import detail from '../../../../modules/platform/authorization/metadata/views/RoleDetail.view.json';
 import dictionary from '../../../../modules/platform/authorization/metadata/dictionaries/RoleView.dic.json';
 import { createRoleResource } from '../../../../modules/platform/authorization/src/roleResource';
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 import { FeaturePlacementContext } from '../authorization/FeaturePlacementContext';

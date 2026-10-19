@@ -16,7 +16,27 @@
     ],
     "featurePositions": [
       "Workspace/navigation:workspace/navigation:workspace.history"
-    ]
+    ],
+    "requirements": [
+      {
+        "role": "target",
+        "stage": "read",
+        "shape": "object",
+        "resources": [
+          "workspace.folder",
+          "part.part",
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "workspace.backend"
   },
   {
     "id": "Workspace/view:workspace.history.list/outputActions/action:exportAll",
@@ -35,7 +55,27 @@
     ],
     "featurePositions": [
       "Workspace/navigation:workspace/navigation:workspace.history"
-    ]
+    ],
+    "requirements": [
+      {
+        "role": "target",
+        "stage": "read",
+        "shape": "object",
+        "resources": [
+          "workspace.folder",
+          "part.part",
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "workspace.backend"
   },
   {
     "id": "Workspace/view:workspace.history.list/outputActions/action:exportSelected",
@@ -54,7 +94,27 @@
     ],
     "featurePositions": [
       "Workspace/navigation:workspace/navigation:workspace.history"
-    ]
+    ],
+    "requirements": [
+      {
+        "role": "target",
+        "stage": "read",
+        "shape": "object",
+        "resources": [
+          "workspace.folder",
+          "part.part",
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "workspace.backend"
   },
   {
     "id": "Workspace/view:workspace.history.list/outputActions/action:printAll",
@@ -73,7 +133,27 @@
     ],
     "featurePositions": [
       "Workspace/navigation:workspace/navigation:workspace.history"
-    ]
+    ],
+    "requirements": [
+      {
+        "role": "target",
+        "stage": "read",
+        "shape": "object",
+        "resources": [
+          "workspace.folder",
+          "part.part",
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "workspace.backend"
   },
   {
     "id": "Workspace/view:workspace.history.list/outputActions/action:printSelected",
@@ -92,7 +172,27 @@
     ],
     "featurePositions": [
       "Workspace/navigation:workspace/navigation:workspace.history"
-    ]
+    ],
+    "requirements": [
+      {
+        "role": "target",
+        "stage": "read",
+        "shape": "object",
+        "resources": [
+          "workspace.folder",
+          "part.part",
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "workspace.backend"
   },
   {
     "id": "Workspace/view:workspace.history.list/pageActions/action:output",
@@ -111,7 +211,27 @@
     ],
     "featurePositions": [
       "Workspace/navigation:workspace/navigation:workspace.history"
-    ]
+    ],
+    "requirements": [
+      {
+        "role": "target",
+        "stage": "read",
+        "shape": "object",
+        "resources": [
+          "workspace.folder",
+          "part.part",
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "workspace.backend"
   },
   {
     "id": "Workspace/view:workspace.history.list/read",
@@ -130,7 +250,27 @@
     ],
     "featurePositions": [
       "Workspace/navigation:workspace/navigation:workspace.history"
-    ]
+    ],
+    "requirements": [
+      {
+        "role": "target",
+        "stage": "read",
+        "shape": "object",
+        "resources": [
+          "workspace.folder",
+          "part.part",
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "workspace.backend"
   },
   {
     "id": "Workspace/view:workspace.history.list/rowActions/action:view",
@@ -149,6 +289,26 @@
     ],
     "featurePositions": [
       "Workspace/navigation:workspace/navigation:workspace.history"
-    ]
+    ],
+    "requirements": [
+      {
+        "role": "target",
+        "stage": "read",
+        "shape": "object",
+        "resources": [
+          "workspace.folder",
+          "part.part",
+          "document.document"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "workspace.backend"
   }
 ]

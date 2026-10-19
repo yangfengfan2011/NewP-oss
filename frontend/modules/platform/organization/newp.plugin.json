@@ -17,6 +17,21 @@
   "backend": {
     "behaviorKey": "organization.backend"
   },
+  "dataExecutions": [
+    {"key":"organization.person.accountSummary","moduleId":"Organization","provider":"organization.backend","boundary":"internal","featureBehaviors":[],"requirements":[{"role":"targets","stage":"read","shape":"objects","resources":["identity.account"],"anyOf":[["read"]],"minimumCount":0,"maximumCount":null}],"fixedBindings":[{"kind":"internal","identity":"organization.person.accountSummary","caller":"ICP.Platform.Modules.Organization.Crud.PersonUserBindingSummaryProvider"}]},
+    {"key":"organization.department.display","moduleId":"Organization","provider":"organization.backend","boundary":"internal","featureBehaviors":[],"requirements":[{"role":"targets","stage":"read","shape":"objects","resources":["organization.company","organization.department"],"anyOf":[["read"]],"minimumCount":0,"maximumCount":null}],"fixedBindings":[{"kind":"internal","identity":"organization.department.display","caller":"ICP.Platform.Modules.Organization.Crud.DepartmentCrudDisplayValueResolver"}]},
+    {"key":"organization.person.display","moduleId":"Organization","provider":"organization.backend","boundary":"internal","featureBehaviors":[],"requirements":[{"role":"targets","stage":"read","shape":"objects","resources":["organization.company","organization.department","organization.position"],"anyOf":[["read"]],"minimumCount":0,"maximumCount":null}],"fixedBindings":[{"kind":"internal","identity":"organization.person.display","caller":"ICP.Platform.Modules.Organization.Crud.PersonCrudDisplayValueResolver"}]},
+    {"key":"organization.person.list","moduleId":"Organization","provider":"standardCrud.list","boundary":"entry","featureBehaviors":["organization.person.read"],"resourceKey":"organization.person"},
+    {"key":"organization.person.read","moduleId":"Organization","provider":"standardCrud.read","boundary":"entry","featureBehaviors":["organization.person.read"],"resourceKey":"organization.person"},
+    {"key":"organization.person.export","moduleId":"Organization","provider":"standardCrud.export","boundary":"entry","featureBehaviors":["organization.person.export"],"resourceKey":"organization.person"},
+    {"key":"organization.company.list","moduleId":"Organization","provider":"standardCrud.list","boundary":"entry","featureBehaviors":["organization.company.read"],"resourceKey":"organization.company"},
+    {"key":"organization.company.read","moduleId":"Organization","provider":"standardCrud.read","boundary":"entry","featureBehaviors":["organization.company.read"],"resourceKey":"organization.company"},
+    {"key":"organization.department.list","moduleId":"Organization","provider":"standardCrud.list","boundary":"entry","featureBehaviors":["organization.department.read"],"resourceKey":"organization.department"},
+    {"key":"organization.department.read","moduleId":"Organization","provider":"standardCrud.read","boundary":"entry","featureBehaviors":["organization.department.read"],"resourceKey":"organization.department"},
+    {"key":"organization.position.list","moduleId":"Organization","provider":"standardCrud.list","boundary":"entry","featureBehaviors":["organization.position.read"],"resourceKey":"organization.position"},
+    {"key":"organization.position.read","moduleId":"Organization","provider":"standardCrud.read","boundary":"entry","featureBehaviors":["organization.position.read"],"resourceKey":"organization.position"},
+    {"key":"organization.position.options","moduleId":"Organization","provider":"standardCrud.options","boundary":"entry","featureBehaviors":["organization.position.lookup"],"resourceKey":"organization.position"}
+  ],
   "frontend": {
     "behaviorKey": "organization.frontend",
     "entry": "organization",

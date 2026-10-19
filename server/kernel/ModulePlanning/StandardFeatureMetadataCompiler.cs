@@ -97,6 +97,7 @@ public static class StandardFeatureMetadataCompiler
                 BindRead(owner, resource + ".read");
                 BindDataResource(owner, view, resource);
                 DataAccess(view, view, "read", "", owner);
+                if (mode == "list") BindDetailRead(view, owner);
                 if (view.TryGetProperty("outputActions", out var outputs))
                 {
                     if (outputs.EnumerateArray().GroupBy(output => Text(output, "key"), StringComparer.Ordinal).Any(group => group.Count() > 1))
@@ -118,7 +119,11 @@ public static class StandardFeatureMetadataCompiler
                         DataAccess(view, contribution, "detailContributions", Text(contribution, "key"), targetOwner);
                     }
                 }
-                if (mode == "list") foreach (var read in LookupBehaviors(view, false)) BindRead(owner, read);
+                if (mode == "list")
+                {
+                    foreach (var read in LookupBehaviors(view, false)) BindRead(owner, read);
+                    BindLookupDataAccess(view, false, owner);
+                }
                 Actions(view, "pageActions", owner, scope, resource);
                 Actions(view, "rowActions", owner, scope, resource);
                 if (view.TryGetProperty("featureActions", out var customActions))
@@ -126,7 +131,10 @@ public static class StandardFeatureMetadataCompiler
                         Action(owner, scope, Text(action, "key"), Title(Text(action, "titleKey"), Optional(view, "dicKey")), Text(action, "behaviorKey"), mode + ".custom",
                             action.TryGetProperty("readBehaviors", out var reads) ? reads.EnumerateArray().Select(read => read.GetString()!).ToArray() : [], FullTitleKey(Text(action, "titleKey"), Optional(view, "dicKey")));
                 if (mode == "list" && view.TryGetProperty("export", out var export) && (!export.TryGetProperty("enabled", out var enabled) || enabled.ValueKind != JsonValueKind.False))
+                {
                     Action(owner, scope, "export", "导出", resource + ".export", "list", titleKey: "Platform.Export");
+                    DataAccess(view, export, "export", "export", result[^1].ReferenceKey!);
+                }
             }
             else throw new InvalidOperationException("不支持的标准授权 View 类型。");
         }
@@ -191,7 +199,17 @@ public static class StandardFeatureMetadataCompiler
                     ActionReads(view, action, operation),
                     FullTitleKey(Optional(action, "labelKey") ?? Text(action, "key"), Optional(view, "dicKey")));
                 DataAccess(view, action, property, Text(action, "key"), result[^1].ReferenceKey!);
+                if (operation is "create" or "edit") BindLookupDataAccess(view, true, result[^1].ReferenceKey!);
+                if (operation == "edit") BindDetailRead(view, result[^1].ReferenceKey!);
             }
+        }
+
+        // 编辑预取使用真实详情读取声明；位置仍是原编辑资格，不借列表导航或新造入口。
+        void BindDetailRead(JsonElement view, string owner)
+        {
+            if (Optional(view, "mode") == "detail") DataAccess(view, view, "read", "", owner);
+            else if (Optional(view, "detailViewKey") is { } key && views.TryGetValue(key, out var detail))
+                DataAccess(detail, detail, "read", "", owner);
         }
 
         // 直接要求附在已有功能位置；查看和输出不因此增加可授权动作。
@@ -235,6 +253,8 @@ public static class StandardFeatureMetadataCompiler
                     ActionReads(target, definition, operation),
                     FullTitleKey(Text(action, "labelKey"), dictionary));
                 DataAccess(target, definition, referenced.Surface, Text(definition, "key"), result[^1].ReferenceKey!);
+                if (operation is "create" or "edit") BindLookupDataAccess(target, true, result[^1].ReferenceKey!);
+                if (operation == "edit") BindDetailRead(target, result[^1].ReferenceKey!);
             }
         }
 
@@ -244,7 +264,18 @@ public static class StandardFeatureMetadataCompiler
                 .Concat(action.TryGetProperty("readBehaviors", out var reads) ? reads.EnumerateArray().Select(read => read.GetString()!) : []).ToArray();
 
         // Lookup 绑定属于资源 View；同名 provider 在不同资源中不能合并为同一执行行为。
-        IReadOnlyList<string> LookupBehaviors(JsonElement view, bool form)
+        IReadOnlyList<string> LookupBehaviors(JsonElement view, bool form) =>
+            LookupSources(view, form).Select(source => source.Behavior).Distinct(StringComparer.Ordinal).ToArray();
+
+        // 声明附在同一既有读取/表单位置；provider key只选择真实视图已使用的来源。
+        void BindLookupDataAccess(JsonElement view, bool form, string owner)
+        {
+            foreach (var source in LookupSources(view, form))
+                if (source.Definition.ValueKind == JsonValueKind.Object) DataAccess(view, source.Definition, "lookupBindings", source.Key, owner);
+        }
+
+        // 旧字符串保留所属专用接口；采用者在相同来源位置增加正式执行引用。
+        IReadOnlyList<(string Key, string Behavior, JsonElement Definition)> LookupSources(JsonElement view, bool form)
         {
             if (!view.TryGetProperty("lookupBindings", out var bindings)) return [];
             var modelName = Optional(view, "model");
@@ -261,8 +292,14 @@ public static class StandardFeatureMetadataCompiler
                 if (view.TryGetProperty("query", out var query)) Query(query);
                 if (view.TryGetProperty("advancedFilter", out var advanced)) Query(advanced);
             }
-            return providers.Select(provider => Optional(bindings, provider)
-                ?? throw new InvalidOperationException($"Lookup {provider} 缺少执行绑定。")).Distinct(StringComparer.Ordinal).ToArray();
+            return providers.Select(provider =>
+            {
+                if (!bindings.TryGetProperty(provider, out var definition)) throw new InvalidOperationException($"Lookup {provider} 缺少执行绑定。");
+                if (definition.ValueKind == JsonValueKind.Object && definition.EnumerateObject().Any(property => property.Name is not ("behavior" or "dataAccess")))
+                    throw new InvalidOperationException("LOOKUP_DATA_ACCESS_BINDING_INVALID");
+                var behavior = definition.ValueKind == JsonValueKind.String ? definition.GetString()! : Text(definition, "behavior");
+                return (provider, behavior, definition);
+            }).ToArray();
 
             // 只读取元数据已经选择的字段或 provider override，不给予整模块读取集合。
             void Query(JsonElement value)

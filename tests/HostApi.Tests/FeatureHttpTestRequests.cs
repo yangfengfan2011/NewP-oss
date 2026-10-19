@@ -76,7 +76,12 @@ internal sealed class FeatureHttpTestRequests(IReadOnlyList<FeaturePoint> points
     internal static async Task<string> ReadTextAsync(HttpClient client, FeaturePoint point, string path)
     {
         using var response = await SendAsync(client, point, HttpMethod.Get, path);
-        Assert.True(response.StatusCode == HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+        if (response.StatusCode != HttpStatusCode.OK)
+        {
+            var failure = await response.Content.ReadAsStringAsync();
+            var headers = failure.IndexOf("\nHEADERS", StringComparison.Ordinal);
+            Assert.Fail(headers < 0 ? failure : failure[..headers]);
+        }
         return await response.Content.ReadAsStringAsync();
     }
 

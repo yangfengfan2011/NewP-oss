@@ -28,6 +28,7 @@ public static class DepartmentCrudDescriptorFactory
         return new StandardCrudDescriptor
         {
             LegacyDataExecutions = ["create", "update", "delete"],
+            DataExecutions = new Dictionary<string, string> { ["list"] = "organization.department.list", ["read"] = "organization.department.read" },
             ResourceKey = "organization.department",
             ModuleId = "Organization",
             ModelName = "Department",

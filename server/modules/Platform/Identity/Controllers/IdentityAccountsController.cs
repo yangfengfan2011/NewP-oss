@@ -2,6 +2,7 @@ using ICP.Platform.Persistence.Transactions;
 using System.Security.Claims;
 using System.ComponentModel.DataAnnotations;
 using ICP.Platform.Authorization.Http;
+using ICP.Platform.Crud.Extensions;
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Identity.Application;
 using ICP.Platform.Modules.Identity.Models;
@@ -64,6 +65,7 @@ public sealed class IdentityAccountsController : ControllerBase
     [HttpGet("{accountEid}")]
     [Authorize(Policy = "AdminOnly")]
     [RequireFeature("identity.account.read")]
+    [StandardCrudDataExecution("identity.account", "identity.account.read", "read")]
     public async Task<ActionResult<IdentityAccountDetailResponse>> Get(
         string accountEid,
         [FromQuery] int? eventPage,
@@ -87,6 +89,7 @@ public sealed class IdentityAccountsController : ControllerBase
     [HttpGet("{accountEid}/snapshot")]
     [Authorize(Policy = "AdminOnly")]
     [RequireFeature("identity.account.read")]
+    [StandardCrudDataExecution("identity.account", "identity.account.read", "read")]
     public async Task<ActionResult<IdentityAccountViewResponse>> GetSnapshot(
         string accountEid,
         CancellationToken cancellationToken)
@@ -272,6 +275,7 @@ public sealed class IdentityAccountsController : ControllerBase
     [HttpGet]
     [Authorize(Policy = "AdminOnly")]
     [RequireFeature("identity.account.read")]
+    [StandardCrudDataExecution("identity.account", "identity.account.list", "list")]
     public async Task<ActionResult<IdentityAccountPageResponse>> List(
         [FromQuery] string? query,
         [FromQuery] IdentityAccountStatus? status,

@@ -42,7 +42,7 @@ const partDictionary = readComponentJson('Part', 'metadata/dictionaries/Part.dic
 const documentDictionary = readComponentJson('Document', 'metadata/dictionaries/Document.dic.json');
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 import { PageEntry } from '../composition/PageOutlet';
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import { AuthProvider } from '../contexts/AuthContext';
 import { FeaturePlacementContext } from '../authorization/FeaturePlacementContext';
 import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';

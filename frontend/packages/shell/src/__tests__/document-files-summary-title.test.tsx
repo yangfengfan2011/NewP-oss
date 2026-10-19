@@ -7,7 +7,7 @@ import { LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core'
 import type { StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import model from '../../../../../tests/Kernel.Tests/Fixtures/DocumentRuntime.contract.json';
 import { loadComponentSource, readComponentJson } from '../../test-support/componentTestInputs';
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 // 本例核对真实标题接线；详情控件的冷装载留在收集阶段。
 import '@ant-design/pro-descriptions';

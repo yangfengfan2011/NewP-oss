@@ -1,6 +1,7 @@
 {
   "schemaVersion": "1.0", "type": "view", "view": {
     "key": "document.document.list", "dicKey": "Document", "titleKey": "Title", "mode": "list", "model": "Document", "resourceKey": "document.document", "editorMode": "drawer", "detailViewKey": "document.document.detail",
+    "dataAccess": { "execution": "document.document.list", "resources": ["document.document"] },
     "query": { "fields": [{ "key": "keyword", "labelKey": "Keyword", "source": "preset", "preset": "keyword", "operator": "like" }], "defaultSort": { "field": "ECODE", "direction": "asc" }, "defaultPageSize": 20 },
     "columns": [
       { "key": "code", "labelKey": "Code", "source": "model", "field": "ECODE", "sortable": true, "hideable": false, "responsivePriority": "high" },
@@ -10,6 +11,6 @@
     ],
     "pageActions": [{ "key": "initializeOwnershipPending", "labelKey": "OwnershipPendingObjects", "handlerKey": "initializeOwnership", "inputKey": "initializeOwnership" }, { "key": "create", "labelKey": "Create", "standardAction": "create", "variant": "primary" }],
     "featureActions": [{ "key": "initializeOwnership", "titleKey": "InitializeOwnership", "behaviorKey": "document.document.initializeOwnership" }, { "key": "authorize", "titleKey": "Authorize", "behaviorKey": "document.document.authorize" }],
-    "rowActions": [{ "key": "transfer", "labelKey": "Transfer", "handlerKey": "transfer", "inputKey": "transferOwnership", "readBehaviors": ["document.document.read"] }, { "key": "viewAuthorization", "labelKey": "Permissions", "standardAction": "view", "navigationTargetKey": "document.document.permissions" }, { "key": "authorize", "labelKey": "Authorize", "handlerKey": "authorize", "inputKey": "objectAuthorization", "readBehaviors": ["document.document.read"] }, { "key": "initializeOwnership", "labelKey": "InitializeOwnership", "handlerKey": "initializeOwnership", "inputKey": "initializeOwnership" }, { "key": "history", "labelKey": "History", "standardAction": "view", "navigationTargetKey": "document.history", "dataAccess": { "execution": "document.history.enter", "resources": ["document.document"], "actions": ["read"] } }, { "key": "view", "labelKey": "OpenProperties", "standardAction": "view" }]
+    "rowActions": [{ "key": "transfer", "labelKey": "Transfer", "handlerKey": "transfer", "inputKey": "transferOwnership", "readBehaviors": ["document.document.read"] }, { "key": "viewAuthorization", "labelKey": "Permissions", "standardAction": "view", "navigationTargetKey": "document.document.permissions" }, { "key": "authorize", "labelKey": "Authorize", "handlerKey": "authorize", "inputKey": "objectAuthorization", "readBehaviors": ["document.document.read"] }, { "key": "initializeOwnership", "labelKey": "InitializeOwnership", "handlerKey": "initializeOwnership", "inputKey": "initializeOwnership" }, { "key": "history", "labelKey": "History", "standardAction": "view", "navigationTargetKey": "document.history", "dataAccess": { "execution": "document.history.enter", "resources": ["document.document"] } }, { "key": "view", "labelKey": "OpenProperties", "standardAction": "view" }]
   }
 }

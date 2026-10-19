@@ -38,7 +38,7 @@ public static class ActionDataAccessCompiler
         foreach (var (feature, declaration) in entries)
         {
             if (declaration.ModuleId != feature.ModuleId || string.IsNullOrWhiteSpace(declaration.ViewKey)
-                || string.IsNullOrWhiteSpace(declaration.Execution) || declaration.Surface is not ("read" or "pageActions" or "rowActions" or "outputActions" or "detailContributions")
+                || string.IsNullOrWhiteSpace(declaration.Execution) || declaration.Surface is not ("read" or "export" or "lookupBindings" or "pageActions" or "rowActions" or "outputActions" or "detailContributions")
                 || declaration.Surface != "read" && string.IsNullOrWhiteSpace(declaration.ActionKey)
                 || declaration.Actions.Distinct(StringComparer.Ordinal).Count() != declaration.Actions.Count
                 || declaration.Actions.Any(key => !actions.Any(action => action.Key == key))

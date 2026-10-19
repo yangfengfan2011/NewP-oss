@@ -1,6 +1,7 @@
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Kernel.PluginPackages;
 using ICP.Platform.Modeling.Projection;
+using ICP.Platform.Testing;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Xunit;
@@ -144,7 +145,8 @@ public sealed class RuntimeViewStagingTests : IDisposable
 
         using var catalog = JsonDocument.Parse(File.ReadAllText(
             Path.Combine(_installRoot, "runtime", "active-module-runtime.json")));
-        var frontend = catalog.RootElement.GetProperty("modules")[0].GetProperty("frontend");
+        var frontend = catalog.RootElement.GetProperty("modules").EnumerateArray()
+            .Single(module => module.GetProperty("moduleId").GetString() == "Partner.AssetCatalog").GetProperty("frontend");
         Assert.Equal("standard-data", frontend.GetProperty("bindingMode").GetString());
         Assert.Equal(
             "/plugins/runtime/modules/Partner.AssetCatalog/projections/standard-data.json",
@@ -297,35 +299,19 @@ public sealed class RuntimeViewStagingTests : IDisposable
         throw new DirectoryNotFoundException("Repository root not found.");
     }
 
-    private static CanonicalModulePlan CreateStandardDataPlan(string packageRoot) =>
-        new(
-            "candidate",
-            "1.0",
-            new string('b', 64),
-            "standard-snapshot",
-            [4, 5, 6],
-            [
-                new CanonicalModulePlanModule(
-                    "Partner.AssetCatalog",
-                    "1.0.0",
-                    "Asset Catalog",
-                    null,
-                    packageRoot,
-                    null,
-                    null,
-                    "projections/standard-data.json",
-                    "standard-data.v1",
-                    "standard-data",
-                    [],
-                    ["/api/standard/partner-asset-catalog/assets", "/assets"],
-                    ["Partner.AssetCatalog.Asset"],
-                    ["Partner.AssetCatalog.Asset"],
-                    ["Asset"],
-                    new ModulePlanProvenance(
-                        "installed-package",
-                        Path.Combine(packageRoot, "plugin.json"),
-                        "/")) { Features = ReadStandardDataFeatures(packageRoot) }
-            ]);
+    private static CanonicalModulePlan CreateStandardDataPlan(string packageRoot)
+    {
+        var blueprint = JsonNode.Parse(File.ReadAllText(Path.Combine(packageRoot, "authoring/newp.plugin.json")))!.AsObject();
+        var candidate = new ModuleCapsuleCandidate("Partner.AssetCatalog", "1.0.0", "Asset Catalog", null,
+            packageRoot, null, null, "projections/standard-data.json", "standard-data.v1", "standard-data",
+            [], ["/api/standard/partner-asset-catalog/assets", "/assets"], ["Partner.AssetCatalog.Asset"],
+            ["Partner.AssetCatalog.Asset"], ["Asset"], new("installed-package", Path.Combine(packageRoot, "plugin.json"), "/"))
+        {
+            Features = ReadStandardDataFeatures(packageRoot),
+            DataExecutions = StandardDataMetadataProjection.ReadExecutions("Partner.AssetCatalog", blueprint)
+        };
+        return StandardDataReadFixtureCatalog.Compile(candidate, Path.Combine(packageRoot, "test-catalog"));
+    }
 
     private static IReadOnlyList<FeatureDeclaration> ReadStandardDataFeatures(string packageRoot)
     {
@@ -340,6 +326,10 @@ public sealed class RuntimeViewStagingTests : IDisposable
     {
         Directory.CreateDirectory(Path.Combine(packageRoot, "authoring"));
         Directory.CreateDirectory(Path.Combine(packageRoot, "projections"));
+        var modelsRoot = Path.Combine(packageRoot, "metadata", "models");
+        Directory.CreateDirectory(modelsRoot);
+        File.WriteAllText(Path.Combine(modelsRoot, "Asset.model.json"),
+            new JsonObject { ["Asset"] = new JsonObject { ["kind"] = "Entity", ["fields"] = new JsonArray() } }.ToJsonString());
         File.WriteAllText(
             Path.Combine(packageRoot, "plugin.json"),
             """

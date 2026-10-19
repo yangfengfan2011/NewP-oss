@@ -7,6 +7,7 @@ using ICP.Platform.PluginPlatform.Activation;
 using ICP.Platform.PluginPlatform.Lifecycle;
 using ICP.Platform.PluginPlatform.StandardData;
 using ICP.Platform.Kernel.PluginPackages;
+using ICP.Platform.Testing;
 using Xunit;
 
 namespace ICP.Platform.PluginPlatform.Tests;
@@ -114,12 +115,12 @@ public sealed class StandardDataPackageTests : IDisposable
             null,
             null,
             UsesLegacyFallback: false);
-        var compiler = new StandardDataCandidatePlanCompiler(
+        var compiler = new StandardDataCandidatePlanCompiler(StandardDataReadFixtureCatalog.Source(),
             new StandardDataPackageInspector(CreateHostCatalog()));
 
         var plan = compiler.Compile(inventory, state);
 
-        var module = Assert.Single(plan.Modules);
+        var module = Assert.Single(plan.Modules, module => module.ModuleId == "Partner.AssetCatalog");
         Assert.Equal("1.1.0", module.Version);
         Assert.Null(module.BackendEntry);
         Assert.Equal("projections/standard-data.json", module.FrontendEntry);
@@ -127,7 +128,7 @@ public sealed class StandardDataPackageTests : IDisposable
         Assert.Contains("/api/standard/partner-asset-catalog/assets", module.Routes);
         Assert.Contains("/assets", module.Routes);
         Assert.Equal(["", "Partner.AssetCatalog.Asset.authorize", "Partner.AssetCatalog.Asset.create", "Partner.AssetCatalog.Asset.read", "Partner.AssetCatalog.Asset.update"],
-            plan.FeatureCatalog.Select(point => point.BehaviorKey).Order(StringComparer.Ordinal));
+            plan.FeatureCatalog.Where(point => point.ModuleId == "Partner.AssetCatalog").Select(point => point.BehaviorKey).Order(StringComparer.Ordinal));
         Assert.DoesNotContain(plan.FeatureCatalog, point => point.Key == "refresh");
         Assert.Equal("Asset", Assert.Single(module.ModelKeys));
         Assert.Equal("installed-package", module.Provenance.SourceKind);
@@ -144,9 +145,9 @@ public sealed class StandardDataPackageTests : IDisposable
             : new JsonArray("Partner.Missing"));
         var inventory = new[] { new InstalledPluginInventoryItem("Partner.AssetCatalog", ["1.0.0", "1.1.0"], "1.0.0",
             new Dictionary<string, string> { ["1.0.0"] = original, ["1.1.0"] = changed }) };
-        var compiler = new StandardDataCandidatePlanCompiler(new StandardDataPackageInspector(CreateHostCatalog()));
+        var compiler = new StandardDataCandidatePlanCompiler(StandardDataReadFixtureCatalog.Source(), new StandardDataPackageInspector(CreateHostCatalog()));
         Assert.Equal("1.0.0", Assert.Single(compiler.Compile(inventory,
-            new([new("Partner.AssetCatalog", "1.0.0", true)], null, null, false)).Modules).Version);
+            new([new("Partner.AssetCatalog", "1.0.0", true)], null, null, false)).Modules, module => module.ModuleId == "Partner.AssetCatalog").Version);
         var exception = Assert.Throws<PluginActivationException>(() => compiler.Compile(inventory,
             new([new("Partner.AssetCatalog", "1.1.0", true)], null, null, false)));
         Assert.Equal(expectedCode, exception.FailureCode);
@@ -156,11 +157,22 @@ public sealed class StandardDataPackageTests : IDisposable
     public void Compile_DisabledSelectedComposition_StillRejectsMissingMember()
     {
         var package = WritePackage("1.0.0", blueprint => blueprint["composition"] = new JsonObject { ["members"] = new JsonArray("Partner.Missing") });
-        var compiler = new StandardDataCandidatePlanCompiler(new StandardDataPackageInspector(CreateHostCatalog()));
+        var compiler = new StandardDataCandidatePlanCompiler(StandardDataReadFixtureCatalog.Source(), new StandardDataPackageInspector(CreateHostCatalog()));
         var exception = Assert.Throws<PluginActivationException>(() => compiler.Compile(
             [new("Partner.AssetCatalog", ["1.0.0"], "1.0.0", new Dictionary<string, string> { ["1.0.0"] = package })],
             new([new("Partner.AssetCatalog", "1.0.0", false)], null, null, false)));
         Assert.Equal("MODULE_COMPOSITION_MEMBER_MISSING", exception.FailureCode);
+    }
+
+    [Fact]
+    public void Compile_WithoutTrustedBase_RejectsReadContractsInsteadOfDefiningGlobalRead()
+    {
+        var package = WritePackage("1.0.0");
+        var compiler = new StandardDataCandidatePlanCompiler(new StandardDataPackageInspector(CreateHostCatalog()));
+        var failure = Assert.Throws<PluginActivationException>(() => compiler.Compile(
+            [new("Partner.AssetCatalog", ["1.0.0"], "1.0.0", new Dictionary<string, string> { ["1.0.0"] = package })],
+            new([new("Partner.AssetCatalog", "1.0.0", true)], null, null, false)));
+        Assert.Equal("MODULE_DATA_ACTION_INVALID", failure.FailureCode);
     }
 
     [Fact]

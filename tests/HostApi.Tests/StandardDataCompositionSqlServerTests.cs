@@ -38,22 +38,17 @@ public sealed class StandardDataCompositionSqlServerTests
             var packageRoot = Path.Combine(root, "packages", "Partner.AssetCatalog", "1.0.0");
             ZipFile.ExtractToDirectory(package!, packageRoot);
             var catalog = new PlatformApiHostCatalog("1.0.0", ["standard-data.v1"], [new("1.0.0", PlatformApiReleaseIdentity.ReleaseDigest)]);
-            var modules = new StandardDataCandidatePlanCompiler(new StandardDataPackageInspector(catalog)).Compile(
-                [new("Partner.AssetCatalog", ["1.0.0"], "1.0.0", new Dictionary<string, string> { ["1.0.0"] = packageRoot })],
-                new([new("Partner.AssetCatalog", "1.0.0", true)], null, null, false));
             var repository = new DirectoryInfo(AppContext.BaseDirectory);
             while (repository is not null && !Directory.Exists(Path.Combine(repository.FullName, ".git"))) repository = repository.Parent;
             var releaseRoot = Path.Combine(repository!.FullName, "apps", "host-api", "bin", "Release", "net10.0");
             var builtIns = TrustedBuiltInModuleSource.CreateForHostDistribution(releaseRoot, Path.Combine(releaseRoot, "modules"));
-            var external = Assert.Single(modules.Modules);
-            var candidate = new ModuleCapsuleCandidate(external.ModuleId, external.Version, external.DisplayName, external.Description,
-                external.PackageRoot, external.BackendEntry, external.BackendBehaviorKey, external.FrontendEntry, external.FrontendBehaviorKey,
-                external.FrontendBindingMode, external.Dependencies, external.Routes, external.FrontendBindings, external.FrontendBindingReferences,
-                external.ModelKeys, external.Provenance, external.Persistence);
-            var canonical = new CanonicalModulePlanCompiler().Compile("external266-real-distribution",
-                new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(builtIns).Append(candidate), builtIns.PlatformCompositionModuleId);
-            Assert.True(canonical.IsSuccess, string.Join(Environment.NewLine, canonical.Diagnostics));
-            modules = canonical.Plan!;
+            // 与正式Host同源编译，保留模板投影的功能、资源和读取合同，不手造丢字段的第二候选。
+            var modules = new StandardDataCandidatePlanCompiler(builtIns, new StandardDataPackageInspector(catalog)).Compile(
+                [new("Partner.AssetCatalog", ["1.0.0"], "1.0.0", new Dictionary<string, string> { ["1.0.0"] = packageRoot })],
+                new([new("Partner.AssetCatalog", "1.0.0", true)], null, null, false));
+            var external = Assert.Single(modules.Modules, module => module.ModuleId == ModuleId);
+            Assert.NotEmpty(external.DataExecutions);
+            Assert.Contains(modules.ActionDataAccessCatalog, requirement => requirement.ModuleId == ModuleId && requirement.Provider == "standardCrud.read");
             var result = new PersistencePlanCompiler(Path.Combine(repository!.FullName, "server", "platform-modeling", "metadata", "storage-types.json")).Compile(modules, PersistenceProvider.SqlServer);
             Assert.True(result.IsSuccess, string.Join(Environment.NewLine, result.Diagnostics));
             var model = Assert.Single(result.Plan!.Models, model => model.OwnerModuleId == "Partner.AssetCatalog");
@@ -81,7 +76,12 @@ public sealed class StandardDataCompositionSqlServerTests
     {
         var package = Environment.GetEnvironmentVariable("NEWP_EXTERNAL_PLUGIN_PACKAGE");
         Assert.True(File.Exists(package), "Set NEWP_EXTERNAL_PLUGIN_PACKAGE to the public release smoke .npp output.");
-        await using var fixture = await FeatureCatalogHostFixture.CreateAsync([]);
+        var output = new DirectoryInfo(AppContext.BaseDirectory);
+        var repository = output;
+        while (repository is not null && !Directory.Exists(Path.Combine(repository.FullName, ".git"))) repository = repository.Parent;
+        var sourceHost = Path.Combine(repository!.FullName, "apps", "host-api", "bin", output.Parent!.Name, output.Name);
+        // 此消费者不改Example功能反例，直接保留本轮正式Host发行物的完整装配输入。
+        await using var fixture = await FeatureCatalogHostFixture.CreateAsync([], sourceHostRoot: sourceHost);
         await fixture.StopAsync();
         fixture.ExternalPluginsEnabled = true;
         var packageRoot = Path.Combine(fixture.EvidenceRoot, "external-package");
@@ -106,7 +106,15 @@ public sealed class StandardDataCompositionSqlServerTests
         var created = await response.Content.ReadFromJsonAsync<JsonElement>();
         var id = created.GetProperty("fields").GetProperty("EID").GetString()!;
         var read = Assert.Single(fixture.Catalog, point => point.BehaviorKey == "Partner.AssetCatalog.Asset.read");
-        var detail = await FeatureHttpTestRequests.ReadAsync(fixture.Administrator, read, "/api/plugins/partner-asset-catalog/assets/" + id);
+        using var manifest = await fixture.Administrator.GetFromJsonAsync<JsonDocument>("/plugins/metadata-runtime-manifest.json");
+        var owner = Assert.Single(manifest!.RootElement.GetProperty("modules").EnumerateArray(), module => module.GetProperty("moduleId").GetString() == ModuleId);
+        var declarations = owner.GetProperty("dataAccess").Deserialize<ActionDataAccessRequirement[]>(new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+        var declaration = Assert.Single(declarations, item => item.Provider == "standardCrud.read" && item.FeaturePositions.Contains(read.Position, StringComparer.Ordinal));
+        using (var missing = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, read, HttpMethod.Get, ApiRoute + "/" + id))
+            Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        using var detailResponse = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, read, HttpMethod.Get, ApiRoute + "/" + id, dataAccess: declaration);
+        Assert.True(detailResponse.StatusCode == HttpStatusCode.OK, await detailResponse.Content.ReadAsStringAsync());
+        var detail = await detailResponse.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("真实外仓266", detail.GetProperty("fields").GetProperty("Name").GetString());
         await using var connection = new SqlConnection(fixture.ConnectionString);
         await connection.OpenAsync();

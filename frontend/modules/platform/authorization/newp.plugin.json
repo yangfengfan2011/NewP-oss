@@ -1,5 +1,9 @@
 {
   "moduleId": "Authorization",
+  "dataExecutions": [
+    {"key":"authorization.role.list","moduleId":"Authorization","provider":"standardCrud.list","boundary":"entry","featureBehaviors":["authorization.role.read"],"resourceKey":"authorization.role"},
+    {"key":"authorization.role.read","moduleId":"Authorization","provider":"standardCrud.read","boundary":"entry","featureBehaviors":["authorization.role.read"],"resourceKey":"authorization.role"}
+  ],
   "displayName": "权限管理",
   "version": "1.4.0",
   "description": "开发期内建插件清单",

@@ -2,6 +2,7 @@
   "schemaVersion": "1.0",
   "type": "view",
   "view": {
+    "dataAccess": { "execution": "identity.account.read", "resources": ["identity.account"] },
     "key": "identity.account.detail",
     "dicKey": "AccountDetailView",
     "titleKey": "Title",

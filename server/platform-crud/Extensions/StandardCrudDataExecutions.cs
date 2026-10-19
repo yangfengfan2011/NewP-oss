@@ -20,11 +20,24 @@ public static class StandardCrudDataExecutions
     {
         var bound = sources.SelectMany(source => source.Endpoints)
             .Select(endpoint => endpoint.Metadata.GetMetadata<StandardCrudDataExecutionEndpoint>())
-            .Where(endpoint => endpoint is not null).SelectMany(endpoint => endpoint!.Bindings).ToArray();
+            .Where(endpoint => endpoint is not null).SelectMany(endpoint => endpoint!.Bindings)
+            .Concat(sources.SelectMany(source => source.Endpoints)
+                .SelectMany(endpoint => endpoint.Metadata.GetOrderedMetadata<StandardCrudDataExecutionAttribute>())
+                .SelectMany(endpoint => endpoint.Bindings)).ToArray();
         foreach (var execution in plan.Modules.SelectMany(module => module.DataExecutions)
             .Where(contract => contract.Provider.StartsWith("standardCrud.", StringComparison.Ordinal)))
             if (!bound.Any(binding => binding.Execution == execution.Key && binding.Provider == execution.Provider))
                 throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_ENDPOINT_MISSING");
+    }
+
+    /// <summary>详情允许自身完整读取或已登记更新的准备阶段；调用方不能通过声明缺失切换旧路径。</summary>
+    public static IReadOnlyList<DataExecutionBindingReference> DetailReadBindings(StandardCrudDescriptor descriptor)
+    {
+        if (!descriptor.DataExecutions.TryGetValue("read", out var read)) return [];
+        var bindings = new List<DataExecutionBindingReference> { new(read, "standardCrud.read", "read") };
+        if (descriptor.DataExecutions.TryGetValue("update", out var update))
+            bindings.Add(new(update, "standardCrud.update", "prepare"));
+        return bindings;
     }
 
     /// <summary>将绑定固定到真实端点，并在业务执行前验证声明身份；正式写入仍在原有事务内复核要求。</summary>
@@ -34,7 +47,8 @@ public static class StandardCrudDataExecutions
         if (!descriptor.DataExecutions.TryGetValue(operation, out var execution))
         {
             var published = operation switch { "create" => StandardCrudOperation.Create, "update" => StandardCrudOperation.Update,
-                "delete" => StandardCrudOperation.Delete, _ => (StandardCrudOperation?)null };
+                "delete" => StandardCrudOperation.Delete, "list" => StandardCrudOperation.List, "read" => StandardCrudOperation.Detail,
+                "options" => StandardCrudOperation.Options, "export" => StandardCrudOperation.Export, _ => (StandardCrudOperation?)null };
             if (published is not null && descriptor.Authorization!.FeatureOperations.Contains(published.Value)
                 && !descriptor.LegacyDataExecutions.Contains(operation))
                 throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_UNREGISTERED");
@@ -47,9 +61,8 @@ public static class StandardCrudDataExecutions
             || !contract.Requirements.All(requirement => requirement.Resources.SequenceEqual([descriptor.ResourceKey]))
             || !plan.ActionDataAccessCatalog.Any(requirement => requirement.Execution == execution))
             throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_BINDING_INVALID");
-        var bindings = new List<DataExecutionBindingReference> { new(execution, provider, operation is "read" or "list" ? "read" : "submit") };
-        if (operation == "read" && descriptor.DataExecutions.TryGetValue("update", out var update))
-            bindings.Add(new(update, "standardCrud.update", "prepare"));
+        var bindings = new List<DataExecutionBindingReference> { new(execution, provider, operation is "read" or "list" or "export" or "options" ? "read" : "submit") };
+        if (operation == "read") bindings = DetailReadBindings(descriptor).ToList();
         endpoint.WithMetadata(new StandardCrudDataExecutionEndpoint(descriptor.ResourceKey, operation, bindings));
         endpoint.AddEndpointFilter(async (context, next) =>
         {

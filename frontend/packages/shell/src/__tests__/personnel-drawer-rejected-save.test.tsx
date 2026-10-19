@@ -6,7 +6,7 @@ import { AuthorizationProvider, LocalizationProvider, useLocalization, invalidat
 import { AuthProvider } from '../contexts/AuthContext';
 import { CurrentPermissionScope } from '../components/CurrentPermissionScope';
 import { FeaturePlacementContext } from '../authorization/FeaturePlacementContext';
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import { PlatformRequestLocaleBridge } from '../localization/PlatformRequestLocaleBridge';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 import { personStandardCrudResource } from '../../../../modules/platform/organization/src/standard-crud/personStandardCrudResource';

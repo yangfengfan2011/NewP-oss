@@ -170,6 +170,9 @@ public sealed class ProductionEndpointAccessCoverageTests
         builder.Services.AddStandardCrudResource(PersonCrudDescriptorFactory.Create());
         builder.Services.AddStandardCrudResource(CompanyCrudDescriptorFactory.Create());
         builder.Services.AddStandardCrudResource(DepartmentCrudDescriptorFactory.Create());
+        builder.Services.AddStandardCrudResource(PositionCrudDescriptorFactory.Create());
+        builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Identity.Application.IdentityAccountCrudResource.Create());
+        builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Authorization.Services.RoleReadResource.Create());
         builder.Services.AddStandardCrudResource(ExampleRecordCrudDescriptorFactory.Create());
         builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Part.PartCrudDescriptor.Create());
         builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Document.DocumentCrudDescriptor.Create());

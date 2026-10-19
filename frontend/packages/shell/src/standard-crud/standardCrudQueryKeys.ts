@@ -1,5 +1,6 @@
 import type { PlatformQueryKey, PlatformQueryKeyValue } from '@icp-platform/core';
 import type {
+  ActionDataAccessRequirement,
   StandardCrudFieldDefinition,
   StandardCrudListQueryRequest,
   StandardCrudLookupProvider,
@@ -8,6 +9,7 @@ import type {
 export interface StandardCrudLookupQueryKeyInput {
   resourceKey: string;
   featurePosition?: string;
+  dataAccessByProvider?: Readonly<Record<string, ActionDataAccessRequirement>>;
   fields: StandardCrudFieldDefinition[];
   providers: StandardCrudLookupProvider[];
   values: Record<string, unknown>;
@@ -97,6 +99,7 @@ export function createStandardCrudLookupQueryKey(
         fieldKey: field.key,
         providerAvailable: input.providers.some((provider) => provider.key === providerKey),
         providerKey,
+        dataAccessId: input.dataAccessByProvider?.[providerKey]?.id ?? null,
         request: input.requests?.[field.key] ?? { keyword: '', page: 1, pageSize: 20 },
       };
     });

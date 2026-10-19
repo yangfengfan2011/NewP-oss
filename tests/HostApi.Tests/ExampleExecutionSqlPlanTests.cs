@@ -88,11 +88,11 @@ public sealed partial class ExampleExecutionSqlPlanTests
         }
     }
 
-    private sealed record Measurement(string Sql, string[] Statistics, string[] Plans, int ReturnedRows)
+    internal sealed record Measurement(string Sql, string[] Statistics, string[] Plans, int ReturnedRows)
     {
         public string Timing { get; init; } = "after-request-unchanged-permission-configuration";
     }
-    private sealed record Sample(string Sql, SqlParameter[] Parameters);
+    internal sealed record Sample(string Sql, SqlParameter[] Parameters);
     // 与现有Workspace成本资产同样观察SqlClient，覆盖EF和直接ADO命令，不记录参数或凭据。
     private sealed class Capture : IObserver<DiagnosticListener>, IObserver<KeyValuePair<string, object?>>, IDisposable
     {
@@ -141,7 +141,7 @@ public sealed partial class ExampleExecutionSqlPlanTests
     }
     // 权限配置不被CRUD写入改变；按捕获的同SQL/参数定向重放只读查询，取得真实IO、返回规模与实际计划。
     // 请求本身的命令/连接成本保留原测量；诊断重放的往返不混入运行时成本。
-    private static async Task<Measurement> ExplainAsync(string connectionString, Sample sample, bool requireIo = true)
+    internal static async Task<Measurement> ExplainAsync(string connectionString, Sample sample, bool requireIo = true)
     {
         await using var connection = new SqlConnection(connectionString);
         var statistics = new List<string>();

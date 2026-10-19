@@ -43,4 +43,7 @@
     <ProjectReference Include="../Acceptance.HistoricalMigrations/Platform.Foundation.SqlServerMigrations/Platform.Foundation.SqlServerMigrations.csproj" />
     <Content Include="../Acceptance.HistoricalMigrations/Authoring/**/*.json" Link="AcceptanceHistory/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../TestSupport/StandardData/StandardDataReadFixtureCatalog.cs" Link="TestSupport/StandardData/StandardDataReadFixtureCatalog.cs" />
+  </ItemGroup>
 </Project>

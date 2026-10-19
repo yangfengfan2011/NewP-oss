@@ -16,6 +16,7 @@ public sealed class IdentityAccountCrudResource : IStandardCrudQueryCustomizer
             "PersonnelDisableHold", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"];
         return new StandardCrudDescriptor
         {
+            DataExecutions = new Dictionary<string, string> { ["list"] = "identity.account.list", ["read"] = "identity.account.read" },
             ResourceKey = "identity.account", ModuleId = "Identity", ModelName = "IdentityAccount",
             Route = "api/identity/accounts", MapStandardEndpoints = false, IdField = "EID", DisplayField = "ENAME",
             FieldSet = new StandardCrudFieldSet(fields, fields, [], []),

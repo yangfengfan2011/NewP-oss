@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { expect, it, vi } from 'vitest';
-import { mountIndependentHistory } from './independentHistoryHarness';
+import { expectFixedReadHistoryRequests, mountIndependentHistory } from './independentHistoryHarness';
 
 vi.unmock('@icp-platform/core');
 
@@ -18,7 +18,7 @@ async function historyAction(container: HTMLElement) {
 
 it('checks the Document button declaration before independent navigation and uses the separate list and detail declarations', async () => {
   let finish!: (response: Response) => void;
-  const { container, router, requests, points } = await mountIndependentHistory('Document', {
+  const { container, router, requests, points, metadata } = await mountIndependentHistory('Document', {
     checkHistory: request => new URL(request.url).pathname.endsWith('/enter') ? new Promise<Response>(resolve => { finish = resolve; }) : new Response(null, { status: 204 }),
   });
   await historyAction(container);
@@ -39,6 +39,7 @@ it('checks the Document button declaration before independent navigation and use
   const detail = requests.find(request => new URL(request.url).pathname.endsWith('/history/event-1'))!;
   expect(detail.headers.get('X-NewP-Data-Declaration')).toContain('Document/view:document.history.list/rowActions/action:view');
   expect(requests.some(request => new URL(request.url).pathname.startsWith('/api/workspace/'))).toBe(false);
+  expectFixedReadHistoryRequests(metadata, requests);
 });
 
 it('keeps the functionally allowed Document button visible and stays on its list after a read denial', async () => {

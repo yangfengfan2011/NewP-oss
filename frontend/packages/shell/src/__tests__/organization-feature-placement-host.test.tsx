@@ -20,7 +20,7 @@ import runtimeModels from '../../../../../tests/Kernel.Tests/Fixtures/Organizati
 import featureManifest from './fixtures/organization-feature-manifest.json';
 import { FeaturePlacementContext } from '../authorization/FeaturePlacementContext';
 import { PageEntry } from '../composition/PageOutlet';
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import type { RuntimeMetadataManifest, RuntimeMetadataState } from '../metadata/runtimeMetadataManifest';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 

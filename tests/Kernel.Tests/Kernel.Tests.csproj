@@ -37,4 +37,7 @@
     <None Include="..\TestData\localization-template-cases.json" Link="TestData\localization-template-cases.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="../TestSupport/StandardData/StandardDataReadFixtureCatalog.cs" Link="TestSupport/StandardData/StandardDataReadFixtureCatalog.cs" />
+  </ItemGroup>
 </Project>

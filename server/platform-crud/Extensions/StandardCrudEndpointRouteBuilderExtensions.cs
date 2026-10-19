@@ -90,7 +90,8 @@ public static class StandardCrudEndpointRouteBuilderExtensions
             var result = await endpoint.OptionsAsync(descriptor, BuildLookupRequest(context.Request.Query), cancellationToken);
             return Results.Ok(result);
         }).WithMetadata(new EndpointModuleAttribute(descriptor.ModuleId))
-            .RequireCrudOperation(authorization, StandardCrudOperation.Options);
+            .RequireCrudOperation(authorization, StandardCrudOperation.Options)
+            .WithDataExecution(endpoints.ServiceProvider, descriptor, "options");
 
         endpoints.MapPost(route + "/export", async (
             HttpContext context,
@@ -141,7 +142,8 @@ public static class StandardCrudEndpointRouteBuilderExtensions
                 });
             }
         }).WithMetadata(new EndpointModuleAttribute(descriptor.ModuleId))
-            .RequireCrudOperation(authorization, StandardCrudOperation.Export);
+            .RequireCrudOperation(authorization, StandardCrudOperation.Export)
+            .WithDataExecution(endpoints.ServiceProvider, descriptor, "export");
 
         endpoints.MapGet(route + "/{id}", async (
             string id,

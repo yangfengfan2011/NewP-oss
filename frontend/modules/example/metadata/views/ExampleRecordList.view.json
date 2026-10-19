@@ -124,6 +124,7 @@
       }
     ],
     "export": {
+      "dataAccess": {"execution":"example.record.export","resources":["example.record"]},
       "modes": [
         "current",
         "all"

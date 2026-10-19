@@ -60,6 +60,8 @@ public sealed class StandardDataCrudDescriptorProjector
 
             yield return new StandardCrudDescriptor
             {
+                DataExecutions = new Dictionary<string, string> { ["list"] = resourceKey + ".list", ["read"] = resourceKey + ".read" },
+                LegacyDataExecutions = ["create", "update"],
                 ResourceKey = resourceKey,
                 ModuleId = module.ModuleId,
                 ModelName = resource.Key,

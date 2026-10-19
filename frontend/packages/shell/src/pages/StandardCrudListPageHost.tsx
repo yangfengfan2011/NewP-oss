@@ -893,6 +893,10 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const dataAdapter = registration.dataAdapter;
   const listDataAccess = view.dataAccess as ActionDataAccessRequirement | undefined;
   const detailDataAccess = runtimeMetadata?.viewDocuments.find(document => document.view.key === registration.detailViewKey)?.view.dataAccess as ActionDataAccessRequirement | undefined;
+  const lookupDataAccess = useMemo(() => Object.fromEntries(Object.entries(readMetadataRecord(view.lookupBindings)).flatMap(([key, value]) => {
+    const dataAccess = readMetadataRecord(value).dataAccess as ActionDataAccessRequirement | undefined;
+    return dataAccess ? [[key, dataAccess]] : [];
+  })), [view.lookupBindings]);
   const dataAccessDeclarations = view.dataAccess ? runtimeMetadata?.manifest.modules.flatMap(module => module.dataAccess ?? []).filter(item => item.viewKey === view.key) : undefined;
   const [runtimeColumnGeneration, setRuntimeColumnGeneration] = useState<StandardCrudRuntimeColumnGeneration | null>(null);
   const resolvedColumns = useMemo<ResolvedStandardCrudListColumn[]>(() => (
@@ -988,6 +992,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   ), [registration.lookupProviders, schema.advancedFilter.sections, schema.query.fields]);
   const queryLookupRuntime = useStandardCrudLookupRuntime({
     featurePosition: readPosition,
+    dataAccessByProvider: lookupDataAccess,
     resourceKey: registration.resourceKey,
     fields: host.presentation.kind === 'action-drawer' ? [] : queryLookupFields,
     providers: registration.lookupProviders ?? [],
@@ -1014,7 +1019,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     featurePosition: drawerState.mode === 'edit'
       ? resolvedFeaturePosition(drawerActionResolution)
       : readPosition,
-    dataAccess: drawerState.mode === 'edit' ? drawerDataAccess : detailDataAccess,
+    dataAccess: drawerState.mode === 'edit' ? drawerDataAccess ?? detailDataAccess : detailDataAccess,
   });
   const detailFields = useMemo(
     () => drawerDetailQuery.detail?.normalized.fields ?? {},
@@ -1408,6 +1413,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       : [];
   const formLookupRuntime = useStandardCrudLookupRuntime({
     featurePosition: resolvedFeaturePosition(drawerActionResolution),
+    dataAccessByProvider: lookupDataAccess,
     resourceKey: registration.resourceKey,
     fields: activeFormFields,
     providers: registration.lookupProviders ?? [],
@@ -2053,6 +2059,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     .filter(({ action }) => action.standardAction === 'create' || Boolean(action.handlerKey))
     .map(({ action }) => action);
   const exportResolution = features.action('export', 'list');
+  const exportDataAccess = readMetadataRecord(view.export).dataAccess as ActionDataAccessRequirement | undefined;
   const handleExport = async (mode: StandardCrudExportMode) => {
     if (exportResolution.kind !== 'allowed') return;
     if (exportRequestPendingRef.current) {
@@ -2080,7 +2087,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
           sortDirection: tableQuery.sortDirection,
           filters: filtersQuery,
         },
-      }, { featurePosition: exportResolution.position });
+      }, { featurePosition: exportResolution.position, ...(exportDataAccess ? { dataAccess: exportDataAccess } : {}) });
       const fallbackModeLabel = mode === 'current' ? '当前页' : '全部';
       downloadStandardCrudBlob(
         response.blob,

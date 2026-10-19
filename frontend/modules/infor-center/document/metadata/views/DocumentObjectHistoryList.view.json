@@ -5,7 +5,7 @@
     "key": "document.history.list",
     "resourceKey": "document.history",
     "mode": "list",
-    "dataAccess": { "execution": "document.history.list", "resources": ["document.document"], "actions": ["read"] },
+    "dataAccess": { "execution": "document.history.list", "resources": ["document.document"] },
     "dicKey": "DocumentHistory",
     "titleKey": "Title",
     "descriptionKey": "Help",
@@ -101,10 +101,10 @@
       }
     ],
     "outputActions": [
-      { "key": "exportSelected", "dataAccess": { "execution": "document.history.export", "resources": ["document.document"], "actions": ["read"] } },
-      { "key": "exportAll", "dataAccess": { "execution": "document.history.export", "resources": ["document.document"], "actions": ["read"] } },
-      { "key": "printSelected", "dataAccess": { "execution": "document.history.print", "resources": ["document.document"], "actions": ["read"] } },
-      { "key": "printAll", "dataAccess": { "execution": "document.history.print", "resources": ["document.document"], "actions": ["read"] } }
+      { "key": "exportSelected", "dataAccess": { "execution": "document.history.export", "resources": ["document.document"] } },
+      { "key": "exportAll", "dataAccess": { "execution": "document.history.export", "resources": ["document.document"] } },
+      { "key": "printSelected", "dataAccess": { "execution": "document.history.print", "resources": ["document.document"] } },
+      { "key": "printAll", "dataAccess": { "execution": "document.history.print", "resources": ["document.document"] } }
     ],
     "pageActions": [
       {
@@ -113,7 +113,7 @@
         "standardAction": "view",
         "handlerKey": "view",
         "inputKey": "objectHistoryOutput",
-        "dataAccess": { "execution": "document.history.preview", "resources": ["document.document"], "actions": ["read"] }
+        "dataAccess": { "execution": "document.history.preview", "resources": ["document.document"] }
       }
     ],
     "rowActions": [
@@ -123,13 +123,13 @@
         "standardAction": "view",
         "handlerKey": "view",
         "inputKey": "objectHistoryDetails",
-        "dataAccess": { "execution": "document.history.detail", "resources": ["document.document"], "actions": ["read"] }
+        "dataAccess": { "execution": "document.history.detail", "resources": ["document.document"] }
       }
     ],
     "detailContributions": [
       {
         "key": "document.object.history",
-        "dataAccess": { "execution": "document.history.enter", "resources": ["document.document"], "actions": ["read"] },
+        "dataAccess": { "execution": "document.history.enter", "resources": ["document.document"] },
         "targetViewKey": "document.document.detail",
         "navigationKey": "document.history",
         "pageRef": {

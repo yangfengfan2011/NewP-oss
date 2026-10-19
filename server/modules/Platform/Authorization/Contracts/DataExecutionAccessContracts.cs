@@ -6,6 +6,22 @@ public sealed record DataExecutionBindingReference(string Execution, string Prov
     public string? Branch { get; init; }
 }
 
+/// <summary>服务端选定的查询来源；仅传执行绑定和角色，不代表允许结果或对象ID集合。</summary>
+public sealed record DataExecutionQueryContext(DataExecutionBindingReference Binding, string Role)
+{
+    /// <summary>与查询定义分开的真实显式ID集合，由服务端按既有请求规则归一化。</summary>
+    public IReadOnlyList<DataExecutionReadTargetSet> TargetSets { get; init; } = [];
+}
+
+/// <summary>查询伴随的当前值等集合角色；ID只定位目标，不是允许证明。</summary>
+public sealed record DataExecutionReadTargetSet(string Role, IReadOnlyList<string> Ids);
+
+/// <summary>内部调用者的类型来自真实服务装配，不接受HTTP头、JSON或允许结果。</summary>
+public sealed record DataExecutionInternalReadBinding(string Execution, string Provider, Type Caller, string? Member = null)
+{
+    public string CallerIdentity => Caller.FullName + (Member is null ? "" : "." + Member);
+}
+
 /// <summary>执行owner的真实解析输入；Source仅供已登记服务端解析器，不能作为授权结果。</summary>
 public sealed record DataExecutionTargetInput(string ResourceKey, string? ObjectId, object? Source = null);
 
@@ -31,6 +47,18 @@ public interface IDataExecutionAccess
 {
     /// <summary>核验入口绑定与具体执行端；查询权限过滤继续由原SQL读取计划负责。</summary>
     void Validate(IReadOnlyList<DataExecutionBindingReference> bindings, string resourceKey);
+    /// <summary>按正式查询来源取得原数据库读取计划；调用方继续在Count/排序/分页之前组合它。</summary>
+    Task<DataScopeReadPlan> GetQueryReadPlanAsync(DataExecutionQueryContext context, string resourceKey,
+        CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    /// <summary>单对象读取在原SQL位置核对真实入口允许的执行；保留编辑准备与直接查看的不同来源。</summary>
+    Task<DataScopeReadPlan> GetObjectReadPlanAsync(IReadOnlyList<DataExecutionBindingReference> bindings,
+        string resourceKey, string role, string objectId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    /// <summary>固定内部来源在原批量读取位置核对角色、资源和调用者；不借用HTTP位置或逐对象预检。</summary>
+    Task<IReadOnlySet<string>> GetInternalReadableIdsAsync(DataExecutionInternalReadBinding binding,
+        string resourceKey, IReadOnlyCollection<string> objectIds, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    /// <summary>内部调用者在原单对象SQL读取位置组合完整read计划；ID只核角色基数，不逐项预检。</summary>
+    Task<DataScopeReadPlan> GetInternalReadPlanAsync(DataExecutionInternalReadBinding binding,
+        string resourceKey, IReadOnlyCollection<string> objectIds, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     /// <summary>通用端点由真实metadata及资源owner选择受控绑定；仅明确登记的旧消费者返回null。</summary>
     DataExecutionBindingReference? BindResourceEndpoint(string resourceKey) => throw new NotSupportedException();
     /// <summary>完整角色先核基数，再按输入顺序裁决；每次枚举均使用当前阶段事实。</summary>

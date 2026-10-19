@@ -175,8 +175,9 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
     {
         var manifest = inspection.Manifest!;
         var projection = inspection.Projection!;
+        var blueprint = JsonNode.Parse(File.ReadAllText(Path.Combine(packageRoot, manifest.Artifacts.Blueprint)))!.AsObject();
         var documents = StandardDataMetadataProjection.Project(manifest.ModuleId,
-            JsonNode.Parse(File.ReadAllText(Path.Combine(packageRoot, manifest.Artifacts.Blueprint)))!.AsObject(),
+            blueprint,
             JsonNode.Parse(File.ReadAllText(Path.Combine(packageRoot, manifest.Artifacts.StandardProjection)))!.AsObject(),
             StandardDataMetadataProjection.ReadDocuments(Path.Combine(packageRoot, "metadata")));
         var features = StandardFeatureMetadataCompiler.Read(manifest.ModuleId,
@@ -227,6 +228,7 @@ public sealed class StandardDataCandidatePlanCompiler : IPluginCandidatePlanComp
                 migrationBundles))
         {
             Features = features,
+            DataExecutions = StandardDataMetadataProjection.ReadExecutions(manifest.ModuleId, blueprint),
             CompositionMembers = inspection.Blueprint!.Composition?.Members ?? []
         };
     }

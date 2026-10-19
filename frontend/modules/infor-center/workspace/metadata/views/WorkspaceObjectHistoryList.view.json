@@ -5,7 +5,7 @@
     "key": "workspace.history.list",
     "resourceKey": "workspace.history",
     "mode": "list",
-    "dataAccess": { "execution": "workspace.history.list", "resources": ["workspace.folder", "part.part", "document.document"], "actions": ["read"] },
+    "dataAccess": { "execution": "workspace.history.list", "resources": ["workspace.folder", "part.part", "document.document"] },
     "dicKey": "ObjectHistory",
     "titleKey": "Title",
     "descriptionKey": "Help",
@@ -101,10 +101,10 @@
       }
     ],
     "outputActions": [
-      { "key": "exportSelected", "dataAccess": { "execution": "workspace.history.export", "resources": ["workspace.folder", "part.part", "document.document"], "actions": ["read"] } },
-      { "key": "exportAll", "dataAccess": { "execution": "workspace.history.export", "resources": ["workspace.folder", "part.part", "document.document"], "actions": ["read"] } },
-      { "key": "printSelected", "dataAccess": { "execution": "workspace.history.print", "resources": ["workspace.folder", "part.part", "document.document"], "actions": ["read"] } },
-      { "key": "printAll", "dataAccess": { "execution": "workspace.history.print", "resources": ["workspace.folder", "part.part", "document.document"], "actions": ["read"] } }
+      { "key": "exportSelected", "dataAccess": { "execution": "workspace.history.export", "resources": ["workspace.folder", "part.part", "document.document"] } },
+      { "key": "exportAll", "dataAccess": { "execution": "workspace.history.export", "resources": ["workspace.folder", "part.part", "document.document"] } },
+      { "key": "printSelected", "dataAccess": { "execution": "workspace.history.print", "resources": ["workspace.folder", "part.part", "document.document"] } },
+      { "key": "printAll", "dataAccess": { "execution": "workspace.history.print", "resources": ["workspace.folder", "part.part", "document.document"] } }
     ],
     "pageActions": [
       {
@@ -113,7 +113,7 @@
         "standardAction": "view",
         "handlerKey": "view",
         "inputKey": "objectHistoryOutput",
-        "dataAccess": { "execution": "workspace.history.preview", "resources": ["workspace.folder", "part.part", "document.document"], "actions": ["read"] }
+        "dataAccess": { "execution": "workspace.history.preview", "resources": ["workspace.folder", "part.part", "document.document"] }
       }
     ],
     "rowActions": [
@@ -123,7 +123,7 @@
         "standardAction": "view",
         "handlerKey": "view",
         "inputKey": "objectHistoryDetails",
-        "dataAccess": { "execution": "workspace.history.detail", "resources": ["workspace.folder", "part.part", "document.document"], "actions": ["read"] }
+        "dataAccess": { "execution": "workspace.history.detail", "resources": ["workspace.folder", "part.part", "document.document"] }
       }
     ]
   }

@@ -116,6 +116,14 @@ public static class DataExecutionContracts
         return contracts.ToDictionary(contract => contract.Key, StringComparer.Ordinal);
     }
 
+    /// <summary>模板与内建读取注册复用同一固定下限，调用方仅提供真实owner、资源和既有list/read操作。</summary>
+    public static DataExecutionContract StandardRead(string moduleId, string resource, string operation)
+    {
+        if (operation is not ("list" or "read")) throw new ArgumentException("Only existing standard read operations are supported.", nameof(operation));
+        var provider = "standardCrud." + operation;
+        return new(resource + "." + operation, moduleId, provider, "entry", [resource + ".read"], StandardCrudRequirements(provider, resource));
+    }
+
     // 标准CRUD执行提供者只在此定义必要权限；绑定声明没有覆盖它的字段。
     private static IReadOnlyList<DataExecutionRequirement> StandardCrudRequirements(string provider, string resource) => provider switch
     {
@@ -124,6 +132,8 @@ public static class DataExecutionContracts
         "standardCrud.delete" => [new("target", "submit", "object", [resource], [["read", "delete"]])],
         "standardCrud.read" => [new("target", "read", "object", [resource], [["read"]])],
         "standardCrud.list" => [new("query", "read", "query", [resource], [["read"]], 0, null)],
+        "standardCrud.export" => [new("query", "read", "query", [resource], [["read"]], 0, null)],
+        "standardCrud.options" => [new("query", "read", "query", [resource], [["read"]], 0, null), new("current", "read", "objects", [resource], [["read"]], 0, null)],
         _ => throw new InvalidOperationException("DATA_EXECUTION_PROVIDER_UNKNOWN")
     };
 }

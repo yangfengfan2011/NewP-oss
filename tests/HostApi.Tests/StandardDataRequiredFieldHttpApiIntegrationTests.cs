@@ -28,15 +28,43 @@ using Xunit;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using ICP.Platform.Modules.Authorization.Controllers;
+using ICP.Platform.Authorization.Contracts;
+using ICP.Platform.Modules.Authorization.Services;
+using ICP.Platform.Testing;
 
 namespace ICP.Platform.HostApi.Tests;
 
 public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposable
 {
     private IReadOnlyList<FeaturePoint> _points = [];
+    private CanonicalModulePlan _plan = null!;
     private FeaturePoint Point(string? action = null) => _points.Single(point => action is null
         ? point.BehaviorKey == "Partner.AssetCatalog.Asset.read"
         : point.Key == action && point.Kind == "action");
+
+    [Fact]
+    [Trait("Category", "ModuleMetadataConsumer")]
+    public void StandardDataReadBindings_UseDeclaredEntityAndExistingEditPosition()
+    {
+        var descriptor = BuildDescriptor();
+        Assert.Equal("Partner.AssetCatalog.Asset.read", descriptor.DataExecutions["read"]);
+        var read = Assert.Single(_plan.ActionDataAccessCatalog, item => item.Execution == descriptor.DataExecutions["read"]);
+        Assert.Equal(new[] { Point("edit").Position }, read.FeaturePositions);
+        Assert.Equal("rowActions", read.Surface);
+        Assert.Equal("edit", read.ActionKey);
+        Assert.Equal("standardCrud.read", read.Provider);
+        var required = Assert.Single(read.Requirements!);
+        Assert.Equal(("target", "read", "object"), (required.Role, required.Stage, required.Shape));
+        Assert.Equal(new[] { "read" }, Assert.Single(required.AnyOf));
+        var action = Assert.Single(_plan.DataActionCatalog, action => action.Key == "read");
+        Assert.NotEqual("Partner.AssetCatalog", action.ModuleId);
+        Assert.All(_plan.Modules.Where(module => module.ModuleId != "Partner.AssetCatalog"), module =>
+        {
+            Assert.Equal("test-catalog", module.Provenance.SourceKind);
+            Assert.Null(module.BackendEntry);
+            Assert.Null(module.FrontendEntry);
+        });
+    }
 
     [Fact]
     public async Task StandardDataDetail_AutomaticallyProjectsAuditTimeAndRejectsUnselectedCompanionWrites()
@@ -47,7 +75,14 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         await using var app = BuildApplication(repository, auditProjection: true);
         await app.StartAsync();
         using var client = app.GetTestClient();
-        var result = await FeatureHttpTestRequests.ReadAsync(client, Point(), "/api/standard/partner-asset-catalog/assets/Asset_1");
+        // 未声明Detail View时，详情仍由已有edit预取声明消费，不产生新入口。
+        var read = Assert.Single(_plan.ActionDataAccessCatalog, item => item.Execution == "Partner.AssetCatalog.Asset.read"
+            && item.FeaturePositions.Contains(Point("edit").Position));
+        using (var missing = await FeatureHttpTestRequests.SendAsync(client, Point("edit"), HttpMethod.Get, "/api/standard/partner-asset-catalog/assets/Asset_1"))
+            Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        using var response = await FeatureHttpTestRequests.SendAsync(client, Point("edit"), HttpMethod.Get, "/api/standard/partner-asset-catalog/assets/Asset_1", dataAccess: read);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>();
         var fields = result.GetProperty("fields");
         Assert.Equal(instant, fields.GetProperty("CreatedAt").GetDateTime());
         Assert.Equal("2026/9/4 15:24:26", fields.GetProperty("CreatedAt_DisplayValue").GetString());
@@ -168,6 +203,12 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
         builder.Services.AddAuthentication("StandardDataApiTests").AddCookie("StandardDataApiTests", options =>
             options.Events.OnRedirectToAccessDenied = context => { context.Response.StatusCode = 403; return Task.CompletedTask; });
         builder.Services.AddPlatformAuthorization();
+        builder.Services.AddSingleton(_plan);
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.AddSingleton<IDataScopeReadPlanProvider, FixtureReadPlan>();
+        builder.Services.AddScoped<IDataExecutionAccess>(services => ActivatorUtilities.CreateInstance<DataExecutionAccess>(services,
+            _plan, services.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>(),
+            new UnexpectedObjectDecisions(), new UnexpectedObjectDecisions()));
         builder.Services.AddAuthorization(options => options.AddPolicy(DenyAllAttribute.PolicyName, policy => policy.RequireAssertion(_ => false)));
         builder.Services.AddSingleton<IFeatureDecisionSource>(new DeclaredFeatures(_points));
         builder.Services.AddStandardCrudKernel();
@@ -215,23 +256,22 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
     private StandardCrudDescriptor BuildDescriptor()
     {
         WritePackageContracts();
-        var documents = StandardDataMetadataProjection.Project("Partner.AssetCatalog",
-            JsonNode.Parse(File.ReadAllText(Path.Combine(_packageRoot, "authoring/newp.plugin.json")))!.AsObject(),
-            JsonNode.Parse(File.ReadAllText(Path.Combine(_packageRoot, "projections/standard-data.json")))!.AsObject(),
-            new Dictionary<string, JsonObject>());
-        _points = FeatureCatalogCompiler.Compile(StandardFeatureMetadataCompiler.Read("Partner.AssetCatalog",
-            documents.Values.Select(document => JsonSerializer.SerializeToElement(document))));
-        var plan = new CanonicalModulePlan(
-            "candidate",
-            "1.0",
-            "plan-hash",
-            "snapshot",
-            [],
-            [CreateModule()]);
-        return Assert.Single(new StandardDataCrudDescriptorProjector().Project(plan));
+        var blueprint = JsonNode.Parse(File.ReadAllText(Path.Combine(_packageRoot, "authoring/newp.plugin.json")))!.AsObject();
+        var sourceDocuments = StandardDataMetadataProjection.ReadDocuments(Path.Combine(_packageRoot, "metadata"));
+        Assert.Contains(sourceDocuments.Values, document => document["Asset"]?["kind"]?.GetValue<string>() == "Entity");
+        var documents = StandardDataMetadataProjection.Project("Partner.AssetCatalog", blueprint,
+            JsonNode.Parse(File.ReadAllText(Path.Combine(_packageRoot, "projections/standard-data.json")))!.AsObject(), sourceDocuments);
+        var candidate = CreateModule() with
+        {
+            Features = StandardFeatureMetadataCompiler.Read("Partner.AssetCatalog", documents.Values.Select(document => JsonSerializer.SerializeToElement(document))),
+            DataExecutions = StandardDataMetadataProjection.ReadExecutions("Partner.AssetCatalog", blueprint)
+        };
+        _plan = StandardDataReadFixtureCatalog.Compile(candidate, Path.Combine(_packageRoot, "test-catalog"));
+        _points = _plan.FeatureCatalog.Where(point => point.ModuleId == "Partner.AssetCatalog").ToArray();
+        return Assert.Single(new StandardDataCrudDescriptorProjector().Project(_plan));
     }
 
-    private CanonicalModulePlanModule CreateModule() => new CanonicalModulePlanModule(
+    private ModuleCapsuleCandidate CreateModule() => new ModuleCapsuleCandidate(
         "Partner.AssetCatalog",
         "1.0.0",
         "Asset Catalog",
@@ -312,6 +352,13 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
             new StandardPluginPackageChecksums("checksums/sha256sums.json"));
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web) { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
 
+        // 声明的Entity文档必须真实进入投影，不能由测试直接补DataResources或绕过目录核验。
+        Directory.CreateDirectory(Path.Combine(_packageRoot, "metadata", "models"));
+        File.WriteAllText(Path.Combine(_packageRoot, "metadata", "models", "Asset.model.json"), new JsonObject
+        {
+            ["schemaVersion"] = "1.0", ["type"] = "model",
+            ["Asset"] = new JsonObject { ["kind"] = "Entity", ["fields"] = new JsonArray() }
+        }.ToJsonString(options));
         File.WriteAllText(Path.Combine(_packageRoot, "plugin.json"), JsonSerializer.Serialize(manifest, options));
         File.WriteAllText(
             Path.Combine(_packageRoot, "authoring", "newp.plugin.json"),
@@ -332,8 +379,27 @@ public sealed class StandardDataRequiredFieldHttpApiIntegrationTests : IDisposab
     private sealed class DeclaredFeatures(IReadOnlyList<FeaturePoint> points) : IFeatureDecisionSource
     {
         public ValueTask<PermissionDecision> EvaluateAsync(string subjectId, string position, string moduleId, string behaviorKey, CancellationToken cancellationToken) =>
-            ValueTask.FromResult(points.Any(point => point.Position == position && point.BehaviorKey == behaviorKey)
+            ValueTask.FromResult(points.Any(point => point.Position == position && point.ModuleId == moduleId
+                && (point.BehaviorKey == behaviorKey || point.ReadBehaviors.Contains(behaviorKey, StringComparer.Ordinal)))
                 ? PermissionDecision.Granted : PermissionDecision.Denied);
+    }
+
+    // 既有内存fixture只验证字段及绑定形状；真实权限由完整Host/SQL消费者证明。
+    private sealed class FixtureReadPlan : IDataScopeReadPlanProvider
+    {
+        public Task<DataScopeReadPlan> GetReadPlanAsync(string resourceKey, CancellationToken token = default)
+        {
+            Assert.Equal("Partner.AssetCatalog.Asset", resourceKey);
+            token.ThrowIfCancellationRequested();
+            return Task.FromResult(new DataScopeReadPlan(null));
+        }
+    }
+
+    private sealed class UnexpectedObjectDecisions : IDataScopeObjectAccess, IDataScopeObjectDecisionProvider
+    {
+        public Task<bool> IsReadableAsync(string resourceKey, string objectId, CancellationToken token = default) => throw new NotSupportedException();
+        public Task<bool> IsAllowedAsync(string resourceKey, string objectId, string action, CancellationToken token = default) => throw new NotSupportedException();
+        public Task<bool> IsCandidateAllowedAsync(string resourceKey, IReadOnlyDictionary<string, object?> candidate, string action, CancellationToken token = default) => throw new NotSupportedException();
     }
 
     private sealed class UnusedQueryExecutor : IPlatformQueryExecutor

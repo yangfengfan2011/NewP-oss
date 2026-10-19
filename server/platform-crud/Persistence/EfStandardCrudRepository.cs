@@ -17,6 +17,7 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository, IStandar
     private readonly IPlatformTransactionExecutor? _transactions;
     private readonly IPlatformObjectIdGenerator _objectIdGenerator;
     private readonly IDataScopeReadPlanProvider? _readPlans;
+    private readonly IDataExecutionAccess? _executions;
 
     // 自保存仓储也进入统一提交，调用方不需要额外维护缓存。
     public EfStandardCrudRepository(
@@ -29,6 +30,14 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository, IStandar
         _transactions = transactions;
         _objectIdGenerator = objectIdGenerator;
         _readPlans = readPlans;
+    }
+
+    /// <summary>正式DI取得读取执行器，保留原仓储构造签名供既有消费者。</summary>
+    public EfStandardCrudRepository(IDataExecutionAccess executions, EfPlatformDbContext dbContext,
+        IPlatformObjectIdGenerator objectIdGenerator, IPlatformTransactionExecutor? transactions = null, IDataScopeReadPlanProvider? readPlans = null)
+        : this(dbContext, objectIdGenerator, transactions, readPlans)
+    {
+        _executions = executions;
     }
 
     /// <summary>
@@ -58,7 +67,7 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository, IStandar
         query.Filters?.TryGetValue("keyword", out keyword);
         var result = await LookupAsync(
             descriptor,
-            new StandardCrudLookupRequest(keyword, query.Page, query.PageSize),
+            new StandardCrudLookupRequest(keyword, query.Page, query.PageSize) { ReadContext = query.ReadContext },
             cancellationToken);
         return result.Items;
     }
@@ -73,12 +82,18 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository, IStandar
     {
         var pageSize = Math.Clamp(request.PageSize, 1, 100);
         var page = Math.Clamp(request.Page, 1, int.MaxValue / pageSize);
+        var currentValueIds = (request.CurrentValueIds ?? []).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal).ToList();
         var rows = _dbContext.Set<Dictionary<string, object?>>(_dbContext.ResolveModelKey(descriptor.ModelName))
             .AsNoTracking()
             .AsQueryable();
-        var readPredicate = _readPlans is null
-            ? null
-            : (await _readPlans.GetReadPlanAsync(descriptor.ResourceKey, cancellationToken)).Predicate;
+        if (request.ReadContext is null && descriptor.DataExecutions.ContainsKey("options"))
+            throw new InvalidOperationException("DATA_EXECUTION_QUERY_CONTEXT_REQUIRED");
+        if (request.ReadContext is { } bound && bound.TargetSets.SingleOrDefault(set => set.Role == "current")?.Ids.SequenceEqual(currentValueIds) != true)
+            throw new InvalidOperationException("DATA_EXECUTION_QUERY_TARGETS_MISMATCH");
+        var readPredicate = request.ReadContext is { } context
+            ? (await (_executions ?? throw new InvalidOperationException("DATA_EXECUTION_ACCESS_REQUIRED"))
+                .GetQueryReadPlanAsync(context, descriptor.ResourceKey, cancellationToken)).Predicate
+            : _readPlans is null ? null : (await _readPlans.GetReadPlanAsync(descriptor.ResourceKey, cancellationToken)).Predicate;
         if (readPredicate is not null) rows = rows.Where(readPredicate);
         if (!string.IsNullOrWhiteSpace(descriptor.EnabledField))
         {
@@ -98,10 +113,6 @@ public sealed class EfStandardCrudRepository : IStandardCrudRepository, IStandar
         var hasMore = pageRows.Count > pageSize;
         var items = pageRows.Take(pageSize).Select(row => ToOption(descriptor, row)).ToList();
 
-        var currentValueIds = (request.CurrentValueIds ?? [])
-            .Where(static id => !string.IsNullOrWhiteSpace(id))
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
         var currentItems = new List<StandardCrudOptionItem>();
         foreach (var batch in currentValueIds.Chunk(100))
         {

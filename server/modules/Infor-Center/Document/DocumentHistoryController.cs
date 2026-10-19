@@ -6,10 +6,10 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ICP.Platform.Modules.Document;
 
-/// <summary>独立履历以自身声明和完整读取验证EID；不借用Workspace来源或功能资格。</summary>
+/// <summary>对象履历按自身声明交集完整读取；使用自身履历功能位置与EID，不借用Workspace出现位置或LID。</summary>
 [ApiController, Route("api/document/documents/{objectId}/history"), EndpointModule("Document")]
 public sealed class DocumentHistoryController(IObjectHistoryQuery history, IObjectHistoryExport export,
-    IActionDataAccess access) : ControllerBase
+    IDataExecutionAccess access) : ControllerBase
 {
     private const string ResourceKey = "document.document";
 
@@ -37,7 +37,8 @@ public sealed class DocumentHistoryController(IObjectHistoryQuery history, IObje
         try
         {
             ValidateQuery();
-            if (!await access.IsAllowedAsync("document.history.export", ResourceKey, objectId, token)) return Results.NotFound();
+            if (await access.EvaluateObjectAsync(new("document.history.export", "document.backend", "read"),
+                ResourceKey, "target", objectId, token) != DataExecutionDecision.Allowed) return Results.NotFound();
             var file = await export.ExportAsync(ResourceKey, objectId, request, token);
             return file is null ? Results.NotFound() : Results.File(file.Content, file.ContentType, file.FileName);
         }
@@ -56,7 +57,8 @@ public sealed class DocumentHistoryController(IObjectHistoryQuery history, IObje
         try
         {
             ValidateQuery();
-            if (!await access.IsAllowedAsync(execution, ResourceKey, objectId, token)) return Results.NotFound();
+            if (await access.EvaluateObjectAsync(new(execution, "document.backend", "read"),
+                ResourceKey, "target", objectId, token) != DataExecutionDecision.Allowed) return Results.NotFound();
             var value = await read();
             return value is null ? Results.NotFound() : noContent ? Results.NoContent() : Results.Ok(value);
         }

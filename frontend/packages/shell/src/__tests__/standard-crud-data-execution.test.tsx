@@ -33,6 +33,10 @@ const requirementFor = (viewKey: string, surface: string, actionKey = '') => dec
 const idFor = (viewKey: string, surface: string, actionKey = '') => requirementFor(viewKey, surface, actionKey).id;
 const entryPosition = requirementFor(list.view.key, 'read').featurePositions[0];
 const editPosition = (entry: 'list' | 'detail') => requirementFor(entry === 'list' ? list.view.key : detail.view.key, entry === 'list' ? 'rowActions' : 'pageActions', 'edit').featurePositions[0];
+const compiledFeatures = [{ key: 'records', kind: 'navigation', position: entryPosition },
+  ...declarations.filter(item => item.surface !== 'read').map(item => ({ key: item.actionKey,
+    actionScope: item.surface === 'export' ? 'list' : `${item.viewKey === list.view.key ? 'list' : 'detail'}.${item.surface}`,
+    position: item.featurePositions[0], kind: 'action', parentPosition: entryPosition }))];
 
 it.each(['list', 'detail'] as const)('selects formal read and mutation declarations through the real %s entry without a precheck', async entry => {
   const fields = { EID: 'ExampleRecord_one', ECODE: 'DECL-01', ENAME: '声明记录', ReviewerUserEID: null, RecordSource: 'Manual',
@@ -72,15 +76,9 @@ it.each(['list', 'detail'] as const)('selects formal read and mutation declarati
   const dictionaries: Array<[string, Record<string, { zhs: string }>]> = [['ExampleRecordListView', listDictionary.ExampleRecordListView], ['ExampleRecordDetailView', detailDictionary.ExampleRecordDetailView], ['Platform', platformDictionary.Platform]];
   const catalog = Object.fromEntries(dictionaries
     .flatMap(([prefix, dictionary]) => Object.entries(dictionary).map(([key, value]) => [`${prefix}.${key}`, (value as { zhs: string }).zhs])));
-  const features = [
-    { key: 'records', kind: 'navigation', position: entryPosition },
-    ...declarations.filter(item => item.surface !== 'read').map(item => ({ key: item.actionKey,
-      actionScope: `${item.viewKey === list.view.key ? 'list' : 'detail'}.${item.surface}`,
-      position: item.featurePositions[0], kind: 'action', parentPosition: entryPosition })),
-  ];
   const page = <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={{ zhs: catalog }}>
     <AuthProvider initialUser={user}><AuthorizationProvider featurePositions={user.featurePositions}><PlatformQueryProvider scopeKey="data-execution-test">
-      <RuntimeMetadataProvider value={{ manifest: { modules: [{ moduleId: 'Example', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features, dataAccess: declarations }] },
+      <RuntimeMetadataProvider value={{ manifest: { modules: [{ moduleId: 'Example', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: compiledFeatures, dataAccess: declarations }] },
         navDocuments: [], modelDocuments: [{ ...model, type: 'model' }], viewDocuments: [bindActionDataAccess({ ...list, type: 'view' }, declarations), bindActionDataAccess({ ...detail, type: 'view' }, declarations)] }}>
         {entry === 'list'
           ? <PageEntry page={{ pageKey: 'platform.list', parameters: { viewKey: list.view.key, featurePosition: entryPosition } }} />
@@ -175,14 +173,11 @@ it('keeps one compiled authorization binding through the real PageEntry eligibil
   const dictionaries: Array<[string, Record<string, { zhs: string }>]> = [['ExampleRecordListView', listDictionary.ExampleRecordListView],
     ['Platform', platformDictionary.Platform], ['DataScope', dataScopeDictionary.DataScope]];
   const catalog = Object.fromEntries(dictionaries.flatMap(([prefix, dictionary]) => Object.entries(dictionary).map(([key, value]) => [`${prefix}.${key}`, value.zhs])));
-  const features = [{ key: 'records', kind: 'navigation', position: entryPosition },
-    ...declarations.filter(item => item.surface !== 'read').map(item => ({ key: item.actionKey,
-      actionScope: `${item.viewKey === list.view.key ? 'list' : 'detail'}.${item.surface}`, position: item.featurePositions[0], kind: 'action', parentPosition: entryPosition }))];
   const container = document.createElement('div'); document.body.append(container);
   const root = createRoot(container);
   const page = <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={{ zhs: catalog }}>
     <AuthProvider initialUser={user}><AuthorizationProvider featurePositions={user.featurePositions}><PlatformQueryProvider scopeKey="authorization-execution-test">
-      <RuntimeMetadataProvider value={{ manifest: { modules: [{ moduleId: 'Example', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features, dataAccess: declarations }] },
+      <RuntimeMetadataProvider value={{ manifest: { modules: [{ moduleId: 'Example', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: compiledFeatures, dataAccess: declarations }] },
         navDocuments: [], modelDocuments: [{ ...model, type: 'model' }], viewDocuments: [bindActionDataAccess({ ...list, type: 'view' }, declarations), bindActionDataAccess({ ...detail, type: 'view' }, declarations)] }}>
         <PageEntry page={{ pageKey: 'platform.list', parameters: { viewKey: list.view.key, featurePosition: entryPosition } }} />
       </RuntimeMetadataProvider>
@@ -224,4 +219,77 @@ it('keeps one compiled authorization binding through the real PageEntry eligibil
   expect(authorized.some(request => request.path.endsWith('/explanation') && request.declaration === inspect.id)).toBe(true);
   expect(authorized.filter(request => request.method === 'PUT').every(request => request.declaration === manage.id)).toBe(true);
   expect(authorized.every(request => request.declaration === manage.id || request.declaration === inspect.id)).toBe(true);
+});
+
+it.each(['current', 'all'] as const)('exports %s through the real PageEntry with its own compiled binding and fixed export position', async mode => {
+  const exportRequirement = requirementFor(list.view.key, 'export', 'export');
+  const exportPosition = exportRequirement.featurePositions[0];
+  const user = { id: 'export-reader', ecode: 'export-reader', ename: '导出读者', revision: 1, mustChangePassword: false,
+    isLocalAdministrator: false, featurePositions: [entryPosition, exportPosition], timeZoneId: 'UTC' };
+  const requests: Array<{ path: string; declaration: string | null; position: string | null; body?: unknown }> = [];
+  const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
+  const createUrl = vi.fn(() => 'blob:compiled-export');
+  const revokeUrl = vi.fn();
+  Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createUrl });
+  Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeUrl });
+  const download = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+  let denied = false;
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = input instanceof Request ? new URL(input.url).pathname + new URL(input.url).search : String(input);
+    if (path.endsWith('antiforgery-token')) return json({ requestToken: 'token' });
+    if (path.endsWith('current-user')) return json(user);
+    const headers = new Headers(input instanceof Request ? input.headers : init?.headers);
+    const declaration = headers.get('X-NewP-Data-Declaration');
+    const position = headers.get('X-NewP-Feature');
+    const body = path.endsWith('/export') ? input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body)) : undefined;
+    requests.push({ path, declaration, position, body });
+    if (path.startsWith('/api/example/records?')) return json({ items: [], total: 0, page: 1, pageSize: 20 });
+    if (path !== '/api/example/records/export' || declaration !== exportRequirement.id || position !== exportPosition)
+      return json({ code: 'DECLARATION_MISMATCH' }, 400);
+    if (denied) return json({ code: 'DATA_ACTION_DENIED' }, 403);
+    return new Response(new Uint8Array([80, 75]), { headers: { 'Content-Disposition': 'attachment; filename="compiled-example.xlsx"' } });
+  }));
+  ModuleRegistry.replaceAll([{ metadata: { moduleId: 'Example', displayName: '示例', version: '1' }, ...exampleBindings }], `export-${mode}`);
+  const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
+  const dictionaries: Array<[string, Record<string, { zhs: string }>]> = [['ExampleRecordListView', listDictionary.ExampleRecordListView], ['Platform', platformDictionary.Platform]];
+  const catalog = Object.fromEntries(dictionaries.flatMap(([prefix, dictionary]) => Object.entries(dictionary).map(([key, value]) => [`${prefix}.${key}`, value.zhs])));
+  const router = createMemoryRouter([{ path: '/', element:
+    <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={{ zhs: catalog }}>
+      <AuthProvider initialUser={user}><AuthorizationProvider featurePositions={user.featurePositions}><PlatformQueryProvider scopeKey={`export-${mode}`}>
+        <RuntimeMetadataProvider value={{ manifest: { modules: [{ moduleId: 'Example', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: compiledFeatures, dataAccess: declarations }] },
+          navDocuments: [], modelDocuments: [{ ...model, type: 'model' }], viewDocuments: [bindActionDataAccess({ ...list, type: 'view' }, declarations), bindActionDataAccess({ ...detail, type: 'view' }, declarations)] }}>
+          <PageEntry page={{ pageKey: 'platform.list', parameters: { viewKey: list.view.key, featurePosition: entryPosition } }} />
+        </RuntimeMetadataProvider>
+      </PlatformQueryProvider></AuthorizationProvider></AuthProvider>
+    </LocalizationProvider> }]);
+  onTestFinished(async () => { await act(async () => root.unmount()); router.dispose(); container.remove(); download.mockRestore(); vi.unstubAllGlobals(); ModuleRegistry.replaceAll([], 'export-cleanup'); });
+  await act(async () => root.render(<RouterProvider router={router} />));
+  await vi.waitFor(() => expect(container.textContent).toContain('当前数据集为空'));
+  const requestExport = async () => {
+    const button = [...container.querySelectorAll<HTMLButtonElement>('button')].find(node => node.textContent?.replace(/\s/g, '') === '导出');
+    expect(button).toBeDefined(); await act(async () => button!.click());
+    const label = mode === 'current' ? '导出当前' : '导出全部';
+    await vi.waitFor(() => expect([...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].some(node => node.textContent === label)).toBe(true));
+    await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(node => node.textContent === label)!.click());
+  };
+  await requestExport();
+  await vi.waitFor(() => expect(download).toHaveBeenCalledTimes(1));
+  expect(requests.find(request => request.path.endsWith('/export'))).toMatchObject({ declaration: exportRequirement.id,
+    position: exportPosition, body: { mode, query: { pageIndex: 1, pageSize: 20 } } });
+  expect(exportPosition).not.toBe(entryPosition);
+  expect(createUrl).toHaveBeenCalledTimes(1); expect(revokeUrl).toHaveBeenCalledWith('blob:compiled-export');
+  denied = true;
+  await requestExport();
+  await vi.waitFor(() => expect(document.body.textContent).toContain('当前操作已被拒绝'));
+  expect(download).toHaveBeenCalledTimes(1);
+});
+
+it('binds the nested export requirement and rejects a missing or ambiguous compiled export declaration', () => {
+  const requirement = requirementFor(list.view.key, 'export', 'export');
+  const document = { ...list, type: 'view' as const };
+  const bound = bindActionDataAccess(document, declarations);
+  expect((bound.view.export as { dataAccess: ActionDataAccessRequirement }).dataAccess).toEqual(requirement);
+  expect(() => bindActionDataAccess(document, declarations.filter(item => item.id !== requirement.id))).toThrow('声明缺失或冲突');
+  expect(() => bindActionDataAccess(document, [...declarations, requirement])).toThrow('声明缺失或冲突');
+  expect(() => bindActionDataAccess({ ...document, view: { ...document.view, export: { modes: ['current', 'all'] } } }, declarations)).toThrow('声明缺失');
 });

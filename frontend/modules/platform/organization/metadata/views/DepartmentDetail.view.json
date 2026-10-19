@@ -2,6 +2,7 @@
   "schemaVersion": "1.0",
   "type": "view",
   "view": {
+    "dataAccess": { "execution": "organization.department.read", "resources": ["organization.department"] },
     "key": "organization.department.detail",
     "dicKey": "DepartmentDetailView",
     "titleKey": "Title",

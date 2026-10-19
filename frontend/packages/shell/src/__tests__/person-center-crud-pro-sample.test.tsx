@@ -13,7 +13,8 @@ import personListDictionary from '../../../../modules/platform/organization/meta
 import organizationRuntimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
 import personDetailViewDocument from '../../../../modules/platform/organization/metadata/views/PersonDetail.view.json';
 import personListViewDocument from '../../../../modules/platform/organization/metadata/views/PersonList.view.json';
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { formalDataAccessFor } from './formalRuntimeMetadataTestSupport';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -373,7 +374,7 @@ describe('人员中心 CRUD Pro 样板', () => {
     expect(container.textContent).not.toContain('true');
     expect(globalThis.fetch).toHaveBeenCalledWith(
       expect.stringContaining('fields='),
-      { method: 'GET', signal: expect.any(AbortSignal) },
+      { method: 'GET', headers: { 'X-NewP-Data-Declaration': formalDataAccessFor('organization.person.list', 'read').id }, signal: expect.any(AbortSignal) },
     );
     expect(decodeURIComponent(String((globalThis.fetch as Mock).mock.calls[0][0]))).toContain(
       'fields=EID,PersonNo,ENAME,BirthDate,CompanyId,DepartmentName,PositionName,EmploymentStatus,EmploymentStartedAt,EmploymentEndedAt,IsEnabled,AccountEID',

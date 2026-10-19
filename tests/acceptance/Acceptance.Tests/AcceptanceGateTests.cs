@@ -197,6 +197,13 @@ public sealed class AcceptanceGateTests
         await new ExampleRequiredFieldAcceptanceRunner(RepositoryRoot, root, runId, declarationAuthorizationOnly: true).RunAsync(CancellationToken.None);
     }
 
+    [EnvironmentGatedFact(RunEnvironmentVariable, "共享SQL租约与同一正式宿主的Example、Person页面current/all下载接线")]
+    public async Task StandardCrudExport_UsesFormalExampleAndPersonBindings()
+    {
+        var (root, runId) = PrepareRun("standard-crud-export");
+        await new ExampleRequiredFieldAcceptanceRunner(RepositoryRoot, root, runId, declarationExportOnly: true).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact(RunEnvironmentVariable, "一次性 SQL Server catalog、dev supervisor 与真实浏览器")]
     public async Task IdentityFoundation_CompletesEveryScenario()
     {

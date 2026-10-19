@@ -14,7 +14,7 @@ import { EntryNavigationProvider } from '../navigation/EntryNavigationContext';
 import { RouteAccess } from '../App';
 import { renderPageEntry } from '../navigation/pageRouteRenderer';
 import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
-import { bindActionDataAccess } from '../metadata/runtimeMetadataLoader';
+import { bindFormalRuntimeMetadata } from './formalRuntimeMetadataTestSupport';
 import type { RuntimeMetadataState } from '../metadata/runtimeMetadataManifest';
 import { AuthProvider } from '../contexts/AuthContext';
 import { CurrentPermissionScope } from '../components/CurrentPermissionScope';
@@ -65,8 +65,25 @@ export function installHistoryFeatures(metadata: RuntimeMetadataState) {
       { key: keys[1], position: points.historyPosition, kind: 'navigation', parentPosition: points.readPosition },
     ] };
   });
-  metadata.viewDocuments = metadata.viewDocuments.map(document => bindActionDataAccess(document, metadata.manifest.modules.flatMap(module => module.dataAccess ?? [])));
+  const bound = bindFormalRuntimeMetadata(metadata);
+  metadata.manifest = bound.manifest;
+  metadata.viewDocuments = bound.viewDocuments;
   return positions;
+}
+
+export function expectFixedReadHistoryRequests(metadata: RuntimeMetadataState, requests: Request[]) {
+  const declarations = metadata.manifest.modules.flatMap(module => module.dataAccess ?? []);
+  const historyRequests = requests.filter(request => new URL(request.url).pathname.includes('/history'));
+  expect(historyRequests.length).toBeGreaterThan(0);
+  for (const request of historyRequests) {
+    const matches = declarations.filter(declaration => declaration.id === request.headers.get('X-NewP-Data-Declaration'));
+    expect(matches).toHaveLength(1);
+    const declaration = matches[0];
+    expect(declaration.provider).toBe(`${declaration.moduleId.toLowerCase()}.backend`);
+    expect(declaration.featurePositions).toContain(request.headers.get('X-NewP-Feature'));
+    expect(declaration.requirements).toEqual([{ role: 'target', stage: 'read', shape: 'object', resources: declaration.resources,
+      anyOf: [['read']], minimumCount: 1, maximumCount: 1 }]);
+  }
 }
 
 export async function mountIndependentHistory(owner: 'Part' | 'Document', options: IndependentHistoryOptions | boolean = false, grantHistory = true) {
@@ -149,5 +166,5 @@ export async function mountIndependentHistory(owner: 'Part' | 'Document', option
     const detailRead = requests.find(request => new URL(request.url).pathname === `${api}/entity`);
     expect(detailRead?.headers.get('X-NewP-Feature')).toBe(points.readPosition);
   }
-  return { container, router, requests, points, api, root };
+  return { container, router, requests, points, api, root, metadata };
 }

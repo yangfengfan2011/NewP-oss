@@ -186,20 +186,15 @@ public sealed class PageCompositionMetadataTests
         var temporary = Directory.CreateTempSubdirectory("NewPTreeActions_");
         try
         {
-            var modulesRoot = Directory.CreateDirectory(Path.Combine(temporary.FullName, "modules")).FullName;
-            var moduleRoot = Directory.CreateDirectory(Path.Combine(modulesRoot, "Organization")).FullName;
-            var sourceRoot = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(repository, "Organization");
-            foreach (var file in Directory.GetFiles(Path.Combine(sourceRoot, "metadata"), "*", SearchOption.AllDirectories))
+            // 当前Organization读取引用真实基础动作和跨模块资源；使用完整发行副本，不剥离它的依赖。
+            var host = Path.Combine(repository, "apps", "host-api", "bin", "Release", "net10.0");
+            foreach (var file in Directory.EnumerateFiles(host, "*", SearchOption.AllDirectories))
             {
-                var target = Path.Combine(moduleRoot, Path.GetRelativePath(sourceRoot, file));
+                var target = Path.Combine(temporary.FullName, Path.GetRelativePath(host, file));
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!); File.Copy(file, target);
             }
-            var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(sourceRoot, "newp.plugin.json")))!;
-            manifest["dependencies"] = new JsonArray();
-            File.WriteAllText(Path.Combine(moduleRoot, "plugin.json"), manifest.ToJsonString());
-            // 可信候选签发会读取 PE 引用；使用当前真实模块，不以文本冒充程序集。
-            File.Copy(typeof(ICP.Platform.Modules.Organization.OrganizationModule).Assembly.Location,
-                Path.Combine(temporary.FullName, "OrganizationModule.dll"));
+            var modulesRoot = Path.Combine(temporary.FullName, "modules");
+            var moduleRoot = ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(temporary.FullName, "Organization");
             var treePath = Path.Combine(moduleRoot, "metadata/views/OrganizationStructure.view.json");
             var tree = JsonNode.Parse(File.ReadAllText(treePath))!;
             tree["view"]!["treeActions"]!.AsArray().Add(JsonNode.Parse("""{"key":"secondCreate","labelKey":"Department","viewKey":"organization.department.list","actionKey":"create"}"""));
@@ -209,11 +204,15 @@ public sealed class PageCompositionMetadataTests
                 action.Remove("standardAction"); action["actionKey"] = "delete";
             }
             File.WriteAllText(treePath, tree.ToJsonString());
-            var source = TrustedBuiltInModuleSource.CreateForHost(temporary.FullName, modulesRoot);
-            var candidate = Assert.Single(new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(source));
+            var source = TrustedBuiltInModuleSource.CreateForHostDistribution(temporary.FullName, modulesRoot);
+            var candidates = new ModuleCapsuleCandidateReader().ReadTrustedBuiltIn(source).ToArray();
+            var candidate = Assert.Single(candidates, module => module.ModuleId == "Organization");
             var compiler = new CanonicalModulePlanCompiler();
-            var plan = Assert.IsType<CanonicalModulePlan>(compiler.Compile("tree-actions", [candidate]).Plan);
-            Assert.Null(compiler.Compile("missing-resource-binding", [candidate with { FrontendBindings = candidate.FrontendBindings.Where(key => key != "organization.department.list").ToArray() }]).Plan);
+            var compiled = compiler.Compile("tree-actions", candidates, source.PlatformCompositionModuleId);
+            Assert.True(compiled.IsSuccess, JsonSerializer.Serialize(compiled.Diagnostics));
+            var plan = Assert.IsType<CanonicalModulePlan>(compiled.Plan);
+            Assert.Null(compiler.Compile("missing-resource-binding", candidates.Select(module => module.ModuleId == candidate.ModuleId
+                ? candidate with { FrontendBindings = candidate.FrontendBindings.Where(key => key != "organization.department.list").ToArray() } : module), source.PlatformCompositionModuleId).Plan);
             var install = Path.Combine(temporary.FullName, "install");
             var materializer = new RuntimeViewMaterializer(new InstalledPluginStateStore(install), new FrontendRuntimeManifestBuilder(), source);
             using var stage = materializer.Stage(install, plan);

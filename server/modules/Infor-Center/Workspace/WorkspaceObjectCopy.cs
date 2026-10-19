@@ -34,7 +34,8 @@ public sealed partial class WorkspaceContents
             if (endpoint.ModelKey is not ("Part" or "Document")) throw new LinkQueryException(400, "Workspace.ObjectCopySourceRequired");
             var target = await WritablePositionAsync(actor, targetPosition, cancellation);
             RequireContainer(targetPosition, target, endpoint.ModelKey);
-            var detail = await crud.GetDetailAsync(resources.FindByResourceKey(Resource(endpoint.ModelKey))!, endpoint.Id, cancellation)
+            var detail = await crud.GetDetailFromSourceAsync(resources.FindByResourceKey(Resource(endpoint.ModelKey))!, endpoint.Id,
+                new("workspace.objectCopy.detail", "workspace.backend", typeof(WorkspaceContents), nameof(PrepareObjectCopyAsync)), cancellation)
                 ?? throw new LinkQueryException(404, "Workspace.TargetUnavailable");
             var fields = detail.Fields;
             var document = endpoint.ModelKey == "Document" ? await documentCopies.ReadCopySourceAsync(endpoint.Id, cancellation) : null;

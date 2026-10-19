@@ -8,11 +8,93 @@ namespace ICP.Platform.Modules.Authorization.Services;
 /// <summary>正式执行仅消费装配结果，客户端声明引用不能替代目标、角色或固定下限。</summary>
 public sealed partial class DataExecutionAccess(CanonicalModulePlan plan, IHttpContextAccessor http,
     IDataScopeObjectAccess reads, IDataScopeObjectDecisionProvider decisions, IDataScopeResourceCatalog? resources = null,
-    IEnumerable<IDataExecutionTargetResolver>? resolvers = null) : IDataExecutionAccess
+    IEnumerable<IDataExecutionTargetResolver>? resolvers = null, IDataScopeReadPlanProvider? queryReads = null, IDataScopeReadableIds? targetReads = null) : IDataExecutionAccess
 {
     private readonly IReadOnlyList<IDataExecutionTargetResolver> _resolvers = (resolvers ?? []).ToArray();
     /// <inheritdoc/>
     public void Validate(IReadOnlyList<DataExecutionBindingReference> bindings, string resourceKey) => Resolve(bindings, resourceKey);
+
+    /// <inheritdoc/>
+    public Task<DataScopeReadPlan> GetQueryReadPlanAsync(DataExecutionQueryContext context, string resourceKey,
+        CancellationToken cancellationToken = default)
+    {
+        var effective = Resolve([context.Binding], resourceKey);
+        var requirement = Role(effective, context.Binding, context.Role, "query");
+        RequireReadPlanRole(requirement, resourceKey);
+        var targets = effective.Requirements!.Where(item => item.Stage == context.Binding.Stage && item.Role != context.Role
+            && (item.Branch is null || item.Branch == context.Binding.Branch)).ToArray();
+        if (context.TargetSets.Count != targets.Length || context.TargetSets.Select(set => set.Role).Distinct(StringComparer.Ordinal).Count() != targets.Length)
+            throw new ActionDataAccessException(400, "ActionDataAccess.QueryInvalid");
+        foreach (var target in targets)
+        {
+            var set = context.TargetSets.SingleOrDefault(set => set.Role == target.Role);
+            if (target.Shape != "objects" || set is null || set.Ids.Count < target.MinimumCount
+                || target.MaximumCount is { } maximum && set.Ids.Count > maximum || set.Ids.Any(string.IsNullOrWhiteSpace))
+                throw new ActionDataAccessException(400, "ActionDataAccess.QueryInvalid");
+            RequireReadPlanRole(target, resourceKey);
+        }
+        return (queryReads ?? throw new InvalidOperationException("DATA_EXECUTION_QUERY_READS_REQUIRED")).GetReadPlanAsync(resourceKey, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public Task<DataScopeReadPlan> GetObjectReadPlanAsync(IReadOnlyList<DataExecutionBindingReference> bindings,
+        string resourceKey, string role, string objectId, CancellationToken cancellationToken = default)
+    {
+        var effective = Resolve(bindings, resourceKey);
+        var binding = bindings.Single(item => item.Execution == effective.Execution && item.Provider == effective.Provider);
+        var requirement = Role(effective, binding, role, "object");
+        if (string.IsNullOrWhiteSpace(objectId) || requirement.MinimumCount != 1 || requirement.MaximumCount != 1
+            || effective.Requirements!.Count(item => item.Stage == binding.Stage
+                && (item.Branch is null || item.Branch == binding.Branch)) != 1)
+            throw new ActionDataAccessException(400, "ActionDataAccess.QueryInvalid");
+        RequireReadPlanRole(requirement, resourceKey);
+        return (queryReads ?? throw new InvalidOperationException("DATA_EXECUTION_QUERY_READS_REQUIRED")).GetReadPlanAsync(resourceKey, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public Task<IReadOnlySet<string>> GetInternalReadableIdsAsync(DataExecutionInternalReadBinding binding,
+        string resourceKey, IReadOnlyCollection<string> objectIds, CancellationToken cancellationToken = default)
+    {
+        ValidateInternalRead(binding, resourceKey, objectIds);
+        return (targetReads ?? throw new InvalidOperationException("DATA_EXECUTION_TARGET_READS_REQUIRED"))
+            .GetReadableIdsAsync(resourceKey, objectIds, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public Task<DataScopeReadPlan> GetInternalReadPlanAsync(DataExecutionInternalReadBinding binding,
+        string resourceKey, IReadOnlyCollection<string> objectIds, CancellationToken cancellationToken = default)
+    {
+        ValidateInternalRead(binding, resourceKey, objectIds);
+        return (queryReads ?? throw new InvalidOperationException("DATA_EXECUTION_QUERY_READS_REQUIRED"))
+            .GetReadPlanAsync(resourceKey, cancellationToken);
+    }
+
+    // 内部来源必须精确匹配真实调用者/方法及固定角色；不读取或伪造浏览器声明头。
+    private void ValidateInternalRead(DataExecutionInternalReadBinding binding, string resourceKey, IReadOnlyCollection<string> objectIds)
+    {
+        var contract = plan.Modules.SelectMany(module => module.DataExecutions).SingleOrDefault(item => item.Key == binding.Execution);
+        if (contract is null || contract.Boundary != "internal" || contract.Provider != binding.Provider
+            || contract.LegacyActions || !contract.FixedBindings.Any(source => source.Kind == "internal"
+                && source.Identity == binding.Execution && source.Caller == binding.CallerIdentity)
+            || binding.Member is not null && !binding.Caller.GetMethods().Any(method => method.Name == binding.Member)
+            || contract.Requirements.Count != 1)
+            throw new ActionDataAccessException(400, "ActionDataAccess.InternalBindingInvalid");
+        var requirement = contract.Requirements[0];
+        if (requirement.Role != "targets" || requirement.Stage != "read" || requirement.Shape != "objects"
+            || requirement.Branch is not null || requirement.ReadResolverKey is not null
+            || objectIds.Count < requirement.MinimumCount || requirement.MaximumCount is { } maximum && objectIds.Count > maximum
+            || objectIds.Any(string.IsNullOrWhiteSpace))
+            throw new ActionDataAccessException(400, "ActionDataAccess.QueryInvalid");
+        RequireReadPlanRole(requirement, resourceKey);
+    }
+
+    // 查询与伴随ID集合共用原SQL谓词；不将对象动作或OR悄悄忽略，也不逐ID预检。
+    private static void RequireReadPlanRole(DataExecutionRequirement role, string resourceKey)
+    {
+        if (!role.Resources.Contains(resourceKey, StringComparer.Ordinal) || role.AnyOf.Count != 1
+            || !role.AnyOf[0].SequenceEqual(["read"]) || role.ResourceAnyOf is not null || role.ReadResolverKey is not null)
+            throw new ActionDataAccessException(400, "ActionDataAccess.QueryInvalid");
+    }
 
     /// <inheritdoc/>
     public DataExecutionBindingReference? BindResourceEndpoint(string resourceKey)
@@ -106,7 +188,7 @@ public sealed partial class DataExecutionAccess(CanonicalModulePlan plan, IHttpC
         return requirement;
     }
 
-    // 当前首片只消费单对象和候选；其他形状由实际owner后续接入，不把首个对象代表整批。
+    // 单对象、候选和查询分别核对角色形状；集合由独立入口核完整基数，不把首个对象代表整批。
     private static DataExecutionRequirement Role(ActionDataAccessRequirement requirement, DataExecutionBindingReference binding, string role, string shape)
     {
         var matches = requirement.Requirements!.Where(item => item.Stage == binding.Stage && item.Role == role && item.Shape == shape

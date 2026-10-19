@@ -15,20 +15,22 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class DocumentHistoryDeclarationSqlServerTests
 {
-    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "独立Document四出口只消费自身read声明与EID，无Workspace资格，拒绝声明换绑和跨对象记录")]
-    public async Task IndependentDocument_AllDeclarationsUseReadWithoutWorkspace_AndRejectForgery()
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "Document履历保留Workspace功能祖先，四出口只消费自身read声明与EID，无需来源LID，拒绝换绑和跨对象记录")]
+    public async Task OwnedDocument_AllDeclarationsUseReadFromEid_AndRejectForgery()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeDocument: true);
         using var admin = await fixture.LoginAdministratorAsync();
         var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
-        Assert.DoesNotContain(plan.Modules, module => module.ModuleId is "Workspace" or "Part");
+        Assert.Contains(plan.Modules, module => module.ModuleId == "Workspace");
         var history = Point(fixture, "document.document.history");
+        var workspaceEntry = Assert.Single(plan.FeatureCatalog, feature => feature.ModuleId == "Workspace" && feature.Key == "workspace");
+        Assert.Contains(workspaceEntry.Position, history.EntryDependencies);
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "DocumentHistory303", "独立图文档履历", "document-history303", "图文档履历账号", history);
         using var ordinary = actor.Client;
         var id = await CreateAsync(fixture, admin, "DOC-HISTORY-303");
         var otherId = await CreateAsync(fixture, admin, "DOC-HISTORY-OTHER-303");
         await ConfigureAsync(fixture, admin, id, "allow");
-        var declarations = plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Document").ToArray();
+        var declarations = plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Document" && item.Execution.StartsWith("document.history.", StringComparison.Ordinal)).ToArray();
         Assert.All(declarations, item => Assert.Equal(new[] { "read" }, item.Actions));
         var basePath = "/api/document/documents/" + id + "/history";
         var list = Assert.Single(declarations, item => item.Execution == "document.history.list");
@@ -90,7 +92,7 @@ public sealed class DocumentHistoryDeclarationSqlServerTests
         using var ordinary = actor.Client;
         var id = await CreateAsync(fixture, admin, "DOC-RECHECK-303");
         await ConfigureAsync(fixture, admin, id, "allow");
-        var declarations = fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog.Where(item => item.ModuleId == "Document").ToArray();
+        var declarations = fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog.Where(item => item.ModuleId == "Document" && item.Execution.StartsWith("document.history.", StringComparison.Ordinal)).ToArray();
         var basePath = "/api/document/documents/" + id + "/history";
         var list = Assert.Single(declarations, item => item.Execution == "document.history.list");
         using var listed = await SendAsync(ordinary, history, list.Id, HttpMethod.Get, basePath);

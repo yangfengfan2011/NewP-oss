@@ -22,6 +22,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
     internal const string RestartScenario = "example-required-field.restart";
     internal const string DeclarationCrudScenario = "example-data-execution.browser-crud";
     internal const string DeclarationAuthorizationScenario = "example-authorization.browser";
+    internal const string DeclarationExportScenario = "standard-crud-export.browser";
 
     internal static IReadOnlyList<string> RequiredScenarios { get; } =
     [
@@ -63,17 +64,19 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
     private string? _browserCode;
     private readonly bool _declarationCrudOnly;
     private readonly bool _declarationAuthorizationOnly;
+    private readonly bool _declarationExportOnly;
     private ReusableSqlServerDatabase? _databaseLease;
 
     public ExampleRequiredFieldAcceptanceRunner(
         string repositoryRoot,
         string runDirectory,
         string runId,
-        bool declarationCrudOnly = false, bool declarationAuthorizationOnly = false)
+        bool declarationCrudOnly = false, bool declarationAuthorizationOnly = false, bool declarationExportOnly = false)
         : base(repositoryRoot, runDirectory, runId)
     {
-        _declarationCrudOnly = declarationCrudOnly || declarationAuthorizationOnly;
+        _declarationCrudOnly = declarationCrudOnly || declarationAuthorizationOnly || declarationExportOnly;
         _declarationAuthorizationOnly = declarationAuthorizationOnly;
+        _declarationExportOnly = declarationExportOnly;
     }
 
     /// <inheritdoc/>
@@ -83,7 +86,9 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
         if (_declarationCrudOnly)
         {
             await RunScenarioAsync("example-data-execution.prepare", PrepareDeclarationCrudAsync, cancellationToken);
-            await RunScenarioAsync(_declarationAuthorizationOnly ? DeclarationAuthorizationScenario : DeclarationCrudScenario, RunBrowserScenarioAsync, cancellationToken);
+            var browserScenario = _declarationExportOnly ? DeclarationExportScenario
+                : _declarationAuthorizationOnly ? DeclarationAuthorizationScenario : DeclarationCrudScenario;
+            await RunScenarioAsync(browserScenario, RunBrowserScenarioAsync, cancellationToken);
             return;
         }
         await RunScenarioAsync(BackfillRecoveryScenario, RunBackfillRecoveryScenarioAsync, cancellationToken);
@@ -406,6 +411,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
         });
         var context = await browser.NewContextAsync(new BrowserNewContextOptions
         {
+            AcceptDownloads = true,
             Locale = "zh-CN",
             ViewportSize = new ViewportSize { Width = 1440, Height = 1000 }
         });
@@ -428,6 +434,7 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
         {
             var path = new Uri(request.Url).AbsolutePath;
             if (!_declarationCrudOnly || !(path.StartsWith("/api/example/records", StringComparison.Ordinal)
+                || _declarationExportOnly && path.StartsWith("/api/organization/persons", StringComparison.Ordinal)
                 || _declarationAuthorizationOnly && path.StartsWith("/api/authorization/data-scope/objects/example.record/", StringComparison.Ordinal))) return;
             request.Headers.TryGetValue("x-newp-data-declaration", out var declaration);
             request.Headers.TryGetValue("x-newp-feature", out var feature);
@@ -466,6 +473,32 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
 
             var browserRow = page.Locator("tr").Filter(new LocatorFilterOptions { HasText = _browserCode });
             await browserRow.WaitForAsync();
+
+            if (_declarationExportOnly)
+            {
+                var downloads = new List<string>();
+                downloads.Add(await SaveListExportAsync(driver, "导出当前", "example-current.xlsx", cancellationToken));
+                downloads.Add(await SaveListExportAsync(driver, "导出全部", "example-all.xlsx", cancellationToken));
+                await driver.OpenOrganizationTabAsync("人员", "persons");
+                // URL切换先于懒加载列表就绪；动作出现后再让正式driver选择按钮/菜单路径。
+                await page.GetByRole(AriaRole.Button, new() { Name = "新建人员", Exact = true }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
+                var personNumber = $"EXP-{_runId[..10]}";
+                var personDrawer = await driver.OpenCreateDrawerAsync("新建人员");
+                await StandardCrudPageDriver.FillDrawerFieldAsync(personDrawer, "人员编号", personNumber);
+                await StandardCrudPageDriver.FillDrawerFieldAsync(personDrawer, "姓名", "Export Person " + _runId[..8]);
+                await driver.SaveAndCloseWithoutResponseAsync(personDrawer);
+                await driver.WaitForRowAsync(personNumber);
+                downloads.Add(await SaveListExportAsync(driver, "导出本页", "person-current.xlsx", cancellationToken));
+                downloads.Add(await SaveListExportAsync(driver, "导出筛选结果", "person-all.xlsx", cancellationToken));
+                await RecordScenarioSuccessAsync(DeclarationExportScenario, "standard-crud-export/browser.json", new
+                {
+                    status = "passed", downloads,
+                    assertions = new[] { "example-list-reachable", "example-current-downloaded", "example-all-downloaded",
+                        "person-list-reachable", "person-current-downloaded", "person-all-downloaded" },
+                    declarationRequests = declarationRequests.ToArray(), responses = responses.ToArray()
+                }, cancellationToken);
+                return;
+            }
 
             if (_declarationAuthorizationOnly)
             {
@@ -571,6 +604,25 @@ internal sealed class ExampleRequiredFieldAcceptanceRunner : AcceptanceRunner
             throw;
         }
 
+    }
+
+    // 先准备真实导出控件，再监听下载并保存文件；文件内容、行数及权限语义由API/SQL覆盖。
+    private async Task<string> SaveListExportAsync(StandardCrudPageDriver driver, string actionLabel, string fileName, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        // 父按钮的完整可访问名称包含两端装饰图标；父菜单与子项均由正式driver定位。
+        var action = await driver.PreparePageActionAsync(actionLabel, "download 导出 down");
+        var download = await driver.Page.RunAndWaitForDownloadAsync(() => action.ClickAsync());
+        var failure = await download.FailureAsync();
+        if (failure is not null) throw new InvalidOperationException($"Browser export download failed: {Sanitize(failure)}");
+        var relativePath = Path.Combine("standard-crud-export", fileName);
+        var path = Path.Combine(_runDirectory, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await download.SaveAsAsync(path);
+        token.ThrowIfCancellationRequested();
+        if (!File.Exists(path)) throw new InvalidOperationException("Browser export download did not arrive.");
+        AddArtifact(path);
+        return relativePath;
     }
 
     // 只验证真实菜单、配置草稿与根保存可达；资格、动作值和失权语义在API/SQL层核对。

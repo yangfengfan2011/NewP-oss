@@ -90,14 +90,20 @@ public sealed class OrganizationModule : ModuleCapsuleBindingBase
         services.AddScoped<IStandardCrudQueryCustomizer, DepartmentCrudQueryCustomizer>();
         services.AddScoped<IStandardCrudDisplayValueResolver>(provider => new PersonCrudDisplayValueResolver(
             provider.GetRequiredService<IOrganizationQuery>(),
-            provider.GetRequiredService<ICP.Platform.Authorization.Contracts.IDataScopeReadableIds>()));
+            new ICP.Platform.Authorization.Contracts.DataExecutionReadableIds(
+                () => provider.GetRequiredService<ICP.Platform.Authorization.Contracts.IDataExecutionAccess>(),
+                new("organization.person.display", "organization.backend", typeof(PersonCrudDisplayValueResolver)))));
         services.AddScoped<IStandardCrudDisplayValueResolver>(provider => new DepartmentCrudDisplayValueResolver(
             provider.GetRequiredService<IOrganizationQuery>(),
-            provider.GetRequiredService<ICP.Platform.Authorization.Contracts.IDataScopeReadableIds>()));
+            new ICP.Platform.Authorization.Contracts.DataExecutionReadableIds(
+                () => provider.GetRequiredService<ICP.Platform.Authorization.Contracts.IDataExecutionAccess>(),
+                new("organization.department.display", "organization.backend", typeof(DepartmentCrudDisplayValueResolver)))));
         services.AddScoped<IStandardCrudSummaryProvider>(provider => new PersonUserBindingSummaryProvider(
             provider.GetRequiredService<IOrganizationQuery>(),
             provider.GetRequiredService<ICP.Platform.Identity.Contracts.IIdentityAccountDirectory>(),
-            provider.GetRequiredService<ICP.Platform.Authorization.Contracts.IDataScopeReadableIds>()));
+            new ICP.Platform.Authorization.Contracts.DataExecutionReadableIds(
+                () => provider.GetRequiredService<ICP.Platform.Authorization.Contracts.IDataExecutionAccess>(),
+                new("organization.person.accountSummary", "organization.backend", typeof(PersonUserBindingSummaryProvider)))));
         services.AddScoped<IStandardCrudSummaryProvider, PersonAuthorizationSummaryProvider>();
         services.AddScoped<IStandardCrudValidator>(serviceProvider => new PersonCrudValidator(
             serviceProvider.GetRequiredService<ICompanyDirectory>(),

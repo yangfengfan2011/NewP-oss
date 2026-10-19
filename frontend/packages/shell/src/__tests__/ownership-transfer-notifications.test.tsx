@@ -15,7 +15,7 @@ import { buildPageEntriesFromNavDocuments } from '../navigation/pageEntryAdapter
 import { EntryNavigationProvider } from '../navigation/EntryNavigationContext';
 import { PageEntry, PageOutlet } from '../composition/PageOutlet';
 import { PageComposition } from '../composition/PageCompositionContext';
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import type { RuntimeMetadataState } from '../metadata/runtimeMetadataManifest';
 import { AuthProvider } from '../contexts/AuthContext';
 import { CurrentPermissionScope } from '../components/CurrentPermissionScope';

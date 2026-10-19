@@ -250,9 +250,11 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
         ValidateSelection([linkId]);
         var path = await WritablePositionAsync(actor, position, token);
         var target = (await ResolveTargetsAsync(path.FolderId, [linkId], "edit", token)).Single();
-        var fields = (await crud.GetDetailAsync(target.ModelKey == WorkspacePositions.FolderModel ? folderDescriptor.Value
-                : resources.FindByResourceKey(Resource(target.ModelKey))!, target.Id, token))?.Fields
-                ?? throw new LinkQueryException(404, "Workspace.TargetUnavailable");
+        var detail = target.ModelKey == WorkspacePositions.FolderModel
+            ? await crud.GetDetailAsync(folderDescriptor.Value, target.Id, token)
+            : await crud.GetDetailFromSourceAsync(resources.FindByResourceKey(Resource(target.ModelKey))!, target.Id,
+                new("workspace.editValues.detail", "workspace.backend", typeof(WorkspaceContents), nameof(ReadEditValuesAsync)), token);
+        var fields = detail?.Fields ?? throw new LinkQueryException(404, "Workspace.TargetUnavailable");
         string[] writable = target.ModelKey == WorkspacePositions.FolderModel ? ["ENAME", "Description"] : ["ECODE", "ENAME", "Description"];
         string[] names = [.. writable, "OwnerId", "OwnerDepartmentId", "OwnerId_DisplayValue", "OwnerDepartmentId_DisplayValue"];
         return names.ToDictionary(name => name, name => fields.GetValueOrDefault(name));

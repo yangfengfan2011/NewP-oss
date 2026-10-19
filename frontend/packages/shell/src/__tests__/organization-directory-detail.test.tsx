@@ -14,7 +14,7 @@ import departmentList from '../../../../modules/platform/organization/metadata/v
 import departmentDetail from '../../../../modules/platform/organization/metadata/views/DepartmentDetail.view.json';
 import departmentListDic from '../../../../modules/platform/organization/metadata/dictionaries/DepartmentListView.dic.json';
 import departmentDetailDic from '../../../../modules/platform/organization/metadata/dictionaries/DepartmentDetailView.dic.json';
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;

@@ -16,6 +16,14 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class DataScopeDisplaySqlServerTests(ITestOutputHelper output)
 {
+    // 此资产的调用点明确指定list/read；资源取已核对的真实读行为，绝不按URL或缺请求头猜测。
+    private static Task<JsonElement> DeclaredReadAsync(BusinessAuditHostFixture fixture, HttpClient client,
+        ICP.Platform.Kernel.ModulePlanning.FeaturePoint point, string operation, string path)
+    {
+        Assert.EndsWith(".read", point.BehaviorKey);
+        return OwnedResourceReadHttpRequests.ReadAsync(fixture, client, point, point.BehaviorKey[..^5], operation, path);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "正式 GET 不把目标读取故障当作名称或摘要不可用")]
     public async Task OrganizationDisplay_TargetAuthorizationFailurePropagatesFromHttp()
     {
@@ -45,14 +53,14 @@ public sealed class DataScopeDisplaySqlServerTests(ITestOutputHelper output)
 
         control.ResourceKey = "organization.company";
         using (var failed = await FeatureHttpTestRequests.SendAsync(ordinary, http.Organization("persons"),
-            HttpMethod.Get, $"/api/organization/persons/{person}"))
+            HttpMethod.Get, $"/api/organization/persons/{person}", dataAccess: OwnedResourceReadHttpRequests.Declaration(fixture, http.Organization("persons"), "organization.person", "read")))
             Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
         control.ResourceKey = "identity.account";
         using (var failed = await FeatureHttpTestRequests.SendAsync(ordinary, http.Organization("persons"),
-            HttpMethod.Get, $"/api/organization/persons/{person}"))
+            HttpMethod.Get, $"/api/organization/persons/{person}", dataAccess: OwnedResourceReadHttpRequests.Declaration(fixture, http.Organization("persons"), "organization.person", "read")))
             Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
         control.ResourceKey = null;
-        var recovered = await FeatureHttpTestRequests.ReadAsync(ordinary, http.Organization("persons"),
+        var recovered = await DeclaredReadAsync(fixture, ordinary, http.Organization("persons"), "read",
             $"/api/organization/persons/{person}");
         Assert.Equal("故障公司", recovered.GetProperty("fields").GetProperty("CompanyId_DisplayValue").GetString());
     }
@@ -115,7 +123,7 @@ public sealed class DataScopeDisplaySqlServerTests(ITestOutputHelper output)
         Assert.Equal("***", fields.GetProperty("PositionName").GetString());
         Assert.Equal(auditActor, fields.GetProperty("CreatedBy").GetString());
         Assert.Equal("***", fields.GetProperty("CreatedBy_DisplayValue").GetString());
-        var personDetail = await FeatureHttpTestRequests.ReadAsync(ordinary, readPerson, $"/api/organization/persons/{person}");
+        var personDetail = await DeclaredReadAsync(fixture, ordinary, readPerson, "read", $"/api/organization/persons/{person}");
         var summary = personDetail.GetProperty("summaries").GetProperty("userBinding").GetProperty("data");
         Assert.Equal(accountId, summary.GetProperty("accountEid").GetString());
         Assert.Equal("显示验证", summary.GetProperty("reason").GetString());
@@ -132,7 +140,7 @@ public sealed class DataScopeDisplaySqlServerTests(ITestOutputHelper output)
         Assert.Equal("***", department.GetProperty("CompanyId_DisplayValue").GetString());
         Assert.Equal("***", department.GetProperty("ParentDepartmentId_DisplayValue").GetString());
         Assert.Equal("***", department.GetProperty("CreatedBy_DisplayValue").GetString());
-        var departmentDetail = await FeatureHttpTestRequests.ReadAsync(ordinary, readDepartment,
+        var departmentDetail = await DeclaredReadAsync(fixture, ordinary, readDepartment, "read",
             $"/api/organization/departments/{child}");
         Assert.DoesNotContain("私有公司", departmentDetail.ToString());
         Assert.DoesNotContain("私有父部门", departmentDetail.ToString());
@@ -145,12 +153,12 @@ public sealed class DataScopeDisplaySqlServerTests(ITestOutputHelper output)
         JsonElement representative;
         try
         {
-            var single = await FeatureHttpTestRequests.ReadAsync(ordinary, readPerson,
+            var single = await DeclaredReadAsync(fixture, ordinary, readPerson, "list",
                 "/api/organization/persons?pageSize=1");
             Assert.Single(single.GetProperty("items").EnumerateArray());
             singleRowRoundTrips = observer.Commands.Count;
             observer.Commands.Clear();
-            representative = await FeatureHttpTestRequests.ReadAsync(ordinary, readPerson,
+            representative = await DeclaredReadAsync(fixture, ordinary, readPerson, "list",
                 "/api/organization/persons?pageSize=100");
         }
         finally { observer.Enabled = false; }
@@ -172,7 +180,7 @@ public sealed class DataScopeDisplaySqlServerTests(ITestOutputHelper output)
         {
             var detail = await ReadFieldsAsync(point, tab, id);
             Assert.Equal("***", detail.GetProperty("CreatedBy_DisplayValue").GetString());
-            var page = await FeatureHttpTestRequests.ReadAsync(ordinary, point, $"/api/organization/{tab}?pageSize=100");
+            var page = await DeclaredReadAsync(fixture, ordinary, point, "list", $"/api/organization/{tab}?pageSize=100");
             Assert.Contains(page.GetProperty("items").EnumerateArray(), row => row.GetProperty("EID").GetString() == id);
             Assert.DoesNotContain(page.GetProperty("items").EnumerateArray(), row =>
                 row.GetProperty("EID").GetString() == (tab == "companies" ? hiddenCompany : tab == "positions" ? hiddenPosition : hiddenParent));
@@ -185,7 +193,7 @@ public sealed class DataScopeDisplaySqlServerTests(ITestOutputHelper output)
         department = await ReadFieldsAsync(readDepartment, "departments", child);
         Assert.Equal("私有父部门", department.GetProperty("ParentDepartmentId_DisplayValue").GetString());
         Assert.Equal("***", fields.GetProperty("PositionName").GetString());
-        var adminVisible = (await FeatureHttpTestRequests.ReadAsync(admin, readPerson,
+        var adminVisible = (await DeclaredReadAsync(fixture, admin, readPerson, "read",
             $"/api/organization/persons/{person}")).GetProperty("fields");
         Assert.Equal("私有岗位", adminVisible.GetProperty("PositionName").GetString());
 
@@ -195,7 +203,7 @@ public sealed class DataScopeDisplaySqlServerTests(ITestOutputHelper output)
         using (var login = await readDisabled.PostAsJsonAsync("/api/auth/login",
             new { ECODE = "display-237", Password = "Audit-test-secure-938!" }))
             Assert.Equal(HttpStatusCode.OK, login.StatusCode);
-        var restored = (await FeatureHttpTestRequests.ReadAsync(readDisabled, readPerson,
+        var restored = (await DeclaredReadAsync(fixture, readDisabled, readPerson, "read",
             $"/api/organization/persons/{person}")).GetProperty("fields");
         Assert.Equal("私有岗位", restored.GetProperty("PositionName").GetString());
         Assert.NotEqual("***", restored.GetProperty("CreatedBy_DisplayValue").GetString());
@@ -205,7 +213,7 @@ public sealed class DataScopeDisplaySqlServerTests(ITestOutputHelper output)
                 http.Organization(tab, "create", "list.pageActions"), $"/api/organization/{tab}", payload));
 
         async Task<JsonElement> ReadFieldsAsync(ICP.Platform.Kernel.ModulePlanning.FeaturePoint point, string tab, string id) =>
-            (await FeatureHttpTestRequests.ReadAsync(ordinary, point, $"/api/organization/{tab}/{id}")).GetProperty("fields");
+            (await DeclaredReadAsync(fixture, ordinary, point, "read", $"/api/organization/{tab}/{id}")).GetProperty("fields");
 
         async Task DenyAsync(string ruleId, string resourceKey, string id)
         {

@@ -22,6 +22,7 @@ interface StandardCrudDetailEditorProps {
   resourceKey: string;
   featurePosition?: string;
   dataAccess?: ActionDataAccessRequirement;
+  lookupDataAccess?: Readonly<Record<string, ActionDataAccessRequirement>>;
   detail: { fields: Record<string, unknown> };
   reading?: boolean;
   fields: StandardCrudFieldDefinition[];
@@ -41,6 +42,7 @@ export default function StandardCrudDetailEditor({
   resourceKey,
   featurePosition,
   dataAccess,
+  lookupDataAccess,
   detail,
   reading = false,
   fields,
@@ -60,7 +62,8 @@ export default function StandardCrudDetailEditor({
   const formValues = editSession.draft?.values ?? {};
   const lookupRuntime = useStandardCrudLookupRuntime({
     resourceKey,
-  featurePosition,
+    featurePosition,
+    dataAccessByProvider: lookupDataAccess,
     fields,
     providers: registration.lookupProviders ?? [],
     values: formValues,

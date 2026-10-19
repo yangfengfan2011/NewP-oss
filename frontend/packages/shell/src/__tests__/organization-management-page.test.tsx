@@ -9,7 +9,7 @@ import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } fr
 import { ModuleRegistry } from '@icp-platform/sdk';
 import organizationBindings from '../../../../modules/platform/organization/src';
 import runtimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import { buildPageEntriesFromNavDocuments } from '../navigation/pageEntryAdapter';
 import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';
 import { renderPageEntry } from '../navigation/pageRouteRenderer';

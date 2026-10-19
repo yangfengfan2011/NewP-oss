@@ -45,6 +45,8 @@ public sealed class StandardCrudExportService
         var mode = NormalizeMode(request.Mode);
         var columns = NormalizeColumns(descriptor, request.Columns);
         var query = BuildQuery(request.Query, mode, columns, _maxRows);
+        if (descriptor.DataExecutions.TryGetValue("export", out var execution))
+            query = query with { ReadContext = new(new(execution, "standardCrud.export", "read"), "query") };
         var result = await _service.ListAsync(descriptor, query, cancellationToken);
         if (mode == "all" && result.Total > _maxRows)
         {

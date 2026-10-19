@@ -16,7 +16,7 @@ import { renderPageEntry } from '../navigation/pageRouteRenderer';
 import { FeaturePlacementContext } from '../authorization/FeaturePlacementContext';
 import { platformTestCatalogs } from './localizationTestCatalogs';
 import { PageComposition } from '../composition/PageCompositionContext';
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import type { RuntimeMetadataState } from '../metadata/runtimeMetadataManifest';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { CurrentPermissionScope } from '../components/CurrentPermissionScope';

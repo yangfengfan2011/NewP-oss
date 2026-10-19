@@ -1,0 +1,439 @@
+[
+  {
+    "id": "Organization/view:organization.company.detail/read",
+    "moduleId": "Organization",
+    "viewKey": "organization.company.detail",
+    "surface": "read",
+    "actionKey": "",
+    "execution": "organization.company.read",
+    "resources": [
+      "organization.company"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Organization/navigation:organization/navigation:organization.structure/tab:companies",
+      "Organization/navigation:organization/navigation:organization.structure/tab:companies/surface:list.rowActions/action:edit",
+      "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/surface:contextMenu/action:edit",
+      "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:information"
+    ],
+    "requirements": [
+      {
+        "role": "target",
+        "stage": "read",
+        "shape": "object",
+        "resources": [
+          "organization.company"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "standardCrud.read"
+  },
+  {
+    "id": "Organization/view:organization.company.list/read",
+    "moduleId": "Organization",
+    "viewKey": "organization.company.list",
+    "surface": "read",
+    "actionKey": "",
+    "execution": "organization.company.list",
+    "resources": [
+      "organization.company"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Organization/navigation:organization/navigation:organization.structure/tab:companies"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "organization.company"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      }
+    ],
+    "provider": "standardCrud.list"
+  },
+  {
+    "id": "Organization/view:organization.department.detail/read",
+    "moduleId": "Organization",
+    "viewKey": "organization.department.detail",
+    "surface": "read",
+    "actionKey": "",
+    "execution": "organization.department.read",
+    "resources": [
+      "organization.department"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Organization/navigation:organization/navigation:organization.structure/tab:departments",
+      "Organization/navigation:organization/navigation:organization.structure/tab:departments/surface:list.rowActions/action:edit",
+      "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct",
+      "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct/surface:list.rowActions/action:edit",
+      "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/surface:contextMenu/action:edit",
+      "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct",
+      "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct/surface:list.rowActions/action:edit",
+      "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:information"
+    ],
+    "requirements": [
+      {
+        "role": "target",
+        "stage": "read",
+        "shape": "object",
+        "resources": [
+          "organization.department"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "standardCrud.read"
+  },
+  {
+    "id": "Organization/view:organization.department.list/read",
+    "moduleId": "Organization",
+    "viewKey": "organization.department.list",
+    "surface": "read",
+    "actionKey": "",
+    "execution": "organization.department.list",
+    "resources": [
+      "organization.department"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Organization/navigation:organization/navigation:organization.structure/tab:departments",
+      "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:company/tab:direct",
+      "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:department/tab:direct"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "organization.department"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      }
+    ],
+    "provider": "standardCrud.list"
+  },
+  {
+    "id": "Organization/view:organization.person.detail/lookupBindings/action:organization.positions",
+    "moduleId": "Organization",
+    "viewKey": "organization.person.detail",
+    "surface": "lookupBindings",
+    "actionKey": "organization.positions",
+    "execution": "organization.position.options",
+    "resources": [
+      "organization.position"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:detail.pageActions/action:edit",
+      "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:person/surface:detail.pageActions/action:edit"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "organization.position"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      },
+      {
+        "role": "current",
+        "stage": "read",
+        "shape": "objects",
+        "resources": [
+          "organization.position"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      }
+    ],
+    "provider": "standardCrud.options"
+  },
+  {
+    "id": "Organization/view:organization.person.detail/read",
+    "moduleId": "Organization",
+    "viewKey": "organization.person.detail",
+    "surface": "read",
+    "actionKey": "",
+    "execution": "organization.person.read",
+    "resources": [
+      "organization.person"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Organization/navigation:organization/navigation:organization.structure/tab:persons",
+      "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:detail.pageActions/action:edit",
+      "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:list.rowActions/action:edit",
+      "Organization/navigation:organization/navigation:organization.structure/tab:structure",
+      "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:person/surface:contextMenu/action:edit",
+      "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:person/surface:detail.pageActions/action:edit"
+    ],
+    "requirements": [
+      {
+        "role": "target",
+        "stage": "read",
+        "shape": "object",
+        "resources": [
+          "organization.person"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "standardCrud.read"
+  },
+  {
+    "id": "Organization/view:organization.person.list/export/action:export",
+    "moduleId": "Organization",
+    "viewKey": "organization.person.list",
+    "surface": "export",
+    "actionKey": "export",
+    "execution": "organization.person.export",
+    "resources": [
+      "organization.person"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:list/action:export"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "organization.person"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      }
+    ],
+    "provider": "standardCrud.export"
+  },
+  {
+    "id": "Organization/view:organization.person.list/lookupBindings/action:organization.positions",
+    "moduleId": "Organization",
+    "viewKey": "organization.person.list",
+    "surface": "lookupBindings",
+    "actionKey": "organization.positions",
+    "execution": "organization.position.options",
+    "resources": [
+      "organization.position"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Organization/navigation:organization/navigation:organization.structure/tab:persons",
+      "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:list.pageActions/action:create",
+      "Organization/navigation:organization/navigation:organization.structure/tab:persons/surface:list.rowActions/action:edit",
+      "Organization/navigation:organization/navigation:organization.structure/tab:structure/node-type:person/surface:contextMenu/action:edit"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "organization.position"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      },
+      {
+        "role": "current",
+        "stage": "read",
+        "shape": "objects",
+        "resources": [
+          "organization.position"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      }
+    ],
+    "provider": "standardCrud.options"
+  },
+  {
+    "id": "Organization/view:organization.person.list/read",
+    "moduleId": "Organization",
+    "viewKey": "organization.person.list",
+    "surface": "read",
+    "actionKey": "",
+    "execution": "organization.person.list",
+    "resources": [
+      "organization.person"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Organization/navigation:organization/navigation:organization.structure/tab:persons"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "organization.person"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      }
+    ],
+    "provider": "standardCrud.list"
+  },
+  {
+    "id": "Organization/view:organization.position.detail/read",
+    "moduleId": "Organization",
+    "viewKey": "organization.position.detail",
+    "surface": "read",
+    "actionKey": "",
+    "execution": "organization.position.read",
+    "resources": [
+      "organization.position"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Organization/navigation:organization/navigation:organization.structure/tab:positions",
+      "Organization/navigation:organization/navigation:organization.structure/tab:positions/surface:list.rowActions/action:edit"
+    ],
+    "requirements": [
+      {
+        "role": "target",
+        "stage": "read",
+        "shape": "object",
+        "resources": [
+          "organization.position"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "standardCrud.read"
+  },
+  {
+    "id": "Organization/view:organization.position.list/read",
+    "moduleId": "Organization",
+    "viewKey": "organization.position.list",
+    "surface": "read",
+    "actionKey": "",
+    "execution": "organization.position.list",
+    "resources": [
+      "organization.position"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Organization/navigation:organization/navigation:organization.structure/tab:positions"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "organization.position"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      }
+    ],
+    "provider": "standardCrud.list"
+  }
+]

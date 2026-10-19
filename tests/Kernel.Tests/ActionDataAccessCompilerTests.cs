@@ -42,7 +42,14 @@ public sealed class ActionDataAccessCompilerTests(ITestOutputHelper output)
             "tests/Kernel.Tests/Fixtures/WorkspaceHistoryDataAccess.contract.json")), options);
         var historyIds = fixture!.Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
         var history = requirements.Where(item => historyIds.Contains(item.Id)).ToArray();
-        Assert.All(history, item => Assert.Equal(new[] { "read" }, item.Actions));
+        Assert.All(history, item =>
+        {
+            Assert.Equal(new[] { "read" }, item.Actions);
+            Assert.Equal("workspace.backend", item.Provider);
+            var target = Assert.Single(item.Requirements!);
+            Assert.Equal(("target", "read", "object"), (target.Role, target.Stage, target.Shape));
+            Assert.Equal(new[] { "read" }, Assert.Single(target.AnyOf));
+        });
         Assert.Equal(JsonSerializer.Serialize(history, options), JsonSerializer.Serialize(fixture, options));
     }
 
@@ -114,15 +121,18 @@ public sealed class ActionDataAccessCompilerTests(ITestOutputHelper output)
         var candidates = Candidates();
         var owner = Array.FindIndex(candidates, candidate => candidate.ModuleId == "Workspace");
         var features = candidates[owner].Features.ToArray();
-        var index = Array.FindIndex(features, feature => feature.DataAccess.Count > 0);
-        var first = features[index].DataAccess[0] with { Surface = "rowActions", ActionKey = "same", Actions = ["read"] };
-        var second = first with { Surface = "pageActions", Actions = ["edit"] };
-        features[index] = features[index] with { DataAccess = [.. features[index].DataAccess.Skip(1), first, second] };
-        candidates[owner] = candidates[owner] with { Features = features };
+        var index = Array.FindIndex(features, feature => feature.DataAccess.Any(item => item.Execution == "workspace.history.enter"));
+        var original = features[index].DataAccess.Single(item => item.Execution == "workspace.history.enter");
+        var first = original with { Surface = "rowActions", ActionKey = "same" };
+        var second = first with { Surface = "pageActions", AdditionalActions = ["edit"] };
+        features[index] = features[index] with { DataAccess = [.. features[index].DataAccess.Where(item => item != original), first, second] };
+        candidates[owner] = candidates[owner] with { Features = features,
+            DataExecutions = candidates[owner].DataExecutions.Select(contract => contract.Key == "workspace.history.enter"
+                ? contract with { AllowedAdditionalActions = ["edit"] } : contract).ToArray() };
         var result = new CanonicalModulePlanCompiler().Compile("independent", candidates);
         Assert.True(result.IsSuccess, JsonSerializer.Serialize(result.Diagnostics));
         Assert.Equal(new[] { "read" }, Assert.Single(result.Plan!.ActionDataAccessCatalog, item => item.Id == first.Id).Actions);
-        Assert.Equal(new[] { "edit" }, Assert.Single(result.Plan.ActionDataAccessCatalog, item => item.Id == second.Id).Actions);
+        Assert.Equal(new[] { "read", "edit" }, Assert.Single(result.Plan.ActionDataAccessCatalog, item => item.Id == second.Id).Actions);
         Assert.NotEqual(first.Id, second.Id);
     }
 

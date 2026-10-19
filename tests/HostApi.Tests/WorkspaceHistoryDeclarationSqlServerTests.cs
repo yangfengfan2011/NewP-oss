@@ -171,8 +171,10 @@ public sealed class WorkspaceHistoryDeclarationSqlServerTests
             var index = Array.FindIndex(features, feature => feature.DataAccess.Any(item => item.Execution == "workspace.history.enter"));
             var declared = features[index].DataAccess.Single(item => item.Execution == "workspace.history.enter");
             features[index] = features[index] with { DataAccess = [.. features[index].DataAccess,
-                declared with { ActionKey = "historyWithEdit", Actions = ["edit"] }] };
-            candidates[owner] = candidates[owner] with { Features = features };
+                declared with { ActionKey = "historyWithEdit", AdditionalActions = ["edit"] }] };
+            candidates[owner] = candidates[owner] with { Features = features,
+                DataExecutions = candidates[owner].DataExecutions.Select(contract => contract.Key == "workspace.history.enter"
+                    ? contract with { AllowedAdditionalActions = ["edit"] } : contract).ToArray() };
             var compiled = new CanonicalModulePlanCompiler().Compile("independent-button-requirements", candidates);
             Assert.True(compiled.IsSuccess, JsonSerializer.Serialize(compiled.Diagnostics));
             services.Replace(ServiceDescriptor.Singleton(compiled.Plan!));

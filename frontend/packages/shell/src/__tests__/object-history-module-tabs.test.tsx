@@ -12,8 +12,8 @@ import { buildPageEntriesFromNavDocuments } from '../navigation/pageEntryAdapter
 import { EntryNavigationProvider } from '../navigation/EntryNavigationContext';
 import { PageEntry, PageOutlet } from '../composition/PageOutlet';
 import { PageComposition } from '../composition/PageCompositionContext';
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
-import { authoring, installHistoryFeatures, mountIndependentHistory } from './independentHistoryHarness';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
+import { authoring, expectFixedReadHistoryRequests, installHistoryFeatures, mountIndependentHistory } from './independentHistoryHarness';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { CurrentPermissionScope } from '../components/CurrentPermissionScope';
 
@@ -120,7 +120,7 @@ async function mount(hasHistory = true, direct = false, editableInput = false, v
     await act(async () => root.unmount()); router.dispose(); container.remove(); ModuleRegistry.replaceAll([], 'object-history-cleanup'); vi.unstubAllGlobals();
   });
   await act(async () => root.render(<RouterProvider router={router} />));
-  return { container, router, requests, positions, editableHandler,
+  return { container, router, requests, positions, editableHandler, metadata,
     refreshUser: async (change: Partial<typeof user>) => { currentUser = { ...currentUser, ...change }; await refreshIdentity(); } };
 }
 
@@ -235,7 +235,7 @@ it('does not execute or mount an editable input through the standard view read q
 });
 
 it('opens the readonly output preview with no selection and prints all using the same compiled history identity', async () => {
-  const { container, requests, positions, editableHandler } = await mount(true, true);
+  const { container, requests, positions, editableHandler, metadata } = await mount(true, true);
   await vi.waitFor(() => expect(container.querySelector('tr[data-row-key="event-1"]')).not.toBeNull());
   const output = [...container.querySelectorAll('button')].find(button => button.textContent?.replace(/\s/g, '') === '输出');
   expect(output).toBeDefined(); act(() => output!.click());
@@ -246,6 +246,7 @@ it('opens the readonly output preview with no selection and prints all using the
   await vi.waitFor(() => expect(document.querySelector('.ant-modal-body table')?.textContent).toContain('列表操作者'));
   const request = requests.find(request => new URL(request.url).pathname.endsWith('/history/print'))!;
   expect(request.headers.get('X-NewP-Feature')).toBe(positions.historyPosition);
+  expectFixedReadHistoryRequests(metadata, requests);
   expect(JSON.parse(new URL(request.url).searchParams.get('queryScope')!)).toEqual(position);
   expect(await request.clone().json()).toEqual({ mode: 'all', filter: { pageIndex: 1, pageSize: 20 } });
   expect(editableHandler).not.toHaveBeenCalled();

@@ -15,7 +15,7 @@ const list = readComponentJson('Document', 'metadata/views/DocumentList.view.jso
 const detail = readComponentJson('Document', 'metadata/views/DocumentDetail.view.json');
 const dictionary = readComponentJson('Document', 'metadata/dictionaries/Document.dic.json');
 const navigation = readComponentJson('Document', 'metadata/navigation/Document.nav.json');
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import { PageEntry } from '../composition/PageOutlet';
 import { AuthProvider } from '../contexts/AuthContext';
 import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';

@@ -199,6 +199,10 @@ function StandardCrudDetailPageContent<TDetail>({
   const readDataAccess = view.dataAccess as ActionDataAccessRequirement | undefined;
   const editDataAccess = (Array.isArray(view.pageActions) ? view.pageActions : [])
     .find((action: { standardAction?: string }) => action.standardAction === 'edit')?.dataAccess as ActionDataAccessRequirement | undefined;
+  const lookupDataAccess = useMemo(() => Object.fromEntries(Object.entries(isStandardCrudRecord(view.lookupBindings) ? view.lookupBindings : {}).flatMap(([key, value]) => {
+    const dataAccess = isStandardCrudRecord(value) ? value.dataAccess as ActionDataAccessRequirement | undefined : undefined;
+    return dataAccess ? [[key, dataAccess]] : [];
+  })), [view.lookupBindings]);
   const [editorDetail, setEditorDetail] = useState<{ id: string; detail: { fields: Record<string, unknown> } } | null>(null);
   const [presentedOperationResult, setPresentedOperationResult] = useState<StandardCrudOperationResult | null>(null);
   const detailQuery = useStandardCrudDetailQuery({
@@ -206,7 +210,7 @@ function StandardCrudDetailPageContent<TDetail>({
     id,
     dataAdapter,
     featurePosition: editing && editDataAccess ? resolvedFeaturePosition(editResolution) : readPosition,
-    dataAccess: editing ? editDataAccess : readDataAccess,
+    dataAccess: editing ? editDataAccess ?? readDataAccess : readDataAccess,
     queryScope: host.input.queryScope,
     readSourceKey,
   });
@@ -413,6 +417,7 @@ function StandardCrudDetailPageContent<TDetail>({
                 resourceKey={schema.resourceKey}
                 featurePosition={resolvedFeaturePosition(editResolution)}
                 dataAccess={editDataAccess}
+                lookupDataAccess={lookupDataAccess}
                 detail={editorDetail.detail}
                 reading={detailQuery.loading || detailQuery.refreshing}
                 fields={editFields}

@@ -16,6 +16,7 @@ public sealed class RoleReadResource : IStandardCrudQueryCustomizer
             "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"];
         return new StandardCrudDescriptor
         {
+            DataExecutions = new Dictionary<string, string> { ["list"] = "authorization.role.list", ["read"] = "authorization.role.read" },
             ResourceKey = "authorization.role", ModuleId = "Authorization", ModelName = "Role",
             Route = "api/authorization/roles", MapStandardEndpoints = false, IdField = "EID", DisplayField = "ENAME",
             FieldSet = new StandardCrudFieldSet(fields, fields, [], []),

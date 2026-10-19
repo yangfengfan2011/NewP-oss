@@ -14,7 +14,7 @@ public sealed partial class WorkspaceContentsController
     /// <summary>点击进入前只验证当前声明与完整出现位置；成功不产生后续请求凭据。</summary>
     [HttpGet("content/{linkId}/history/check/{operation}"), RequireFeature("workspace.folder.history")]
     public async Task<IResult> CheckHistory(string linkId, string operation, [FromQuery] string? queryScope,
-        [FromServices] IActionDataAccess access, CancellationToken token)
+        [FromServices] IDataExecutionAccess access, CancellationToken token)
     {
         try
         {
@@ -30,7 +30,7 @@ public sealed partial class WorkspaceContentsController
     /// <summary>普通履历每次重解完整来源与真实EID；原功能资格与按钮声明都不能替代owner完整读取。</summary>
     [HttpGet("content/{linkId}/history"), RequireFeature("workspace.history.read")]
     public async Task<IResult> History(string linkId, [FromQuery] string? queryScope,
-        [FromQuery] ObjectHistoryFilter filter, [FromServices] IObjectHistoryQuery history, [FromServices] IActionDataAccess access, CancellationToken token)
+        [FromQuery] ObjectHistoryFilter filter, [FromServices] IObjectHistoryQuery history, [FromServices] IDataExecutionAccess access, CancellationToken token)
     {
         try
         {
@@ -47,7 +47,7 @@ public sealed partial class WorkspaceContentsController
     /// <summary>详情仍按当前来源与对象安全集合精确取记录；不能使用管理员按裸审计ID查询的出口。</summary>
     [HttpGet("content/{linkId}/history/{recordId}"), RequireFeature("workspace.folder.history")]
     public async Task<IResult> HistoryDetail(string linkId, string recordId, [FromQuery] string? queryScope,
-        [FromQuery] ObjectHistoryFilter filter, [FromServices] IObjectHistoryQuery history, [FromServices] IActionDataAccess access, CancellationToken token)
+        [FromQuery] ObjectHistoryFilter filter, [FromServices] IObjectHistoryQuery history, [FromServices] IDataExecutionAccess access, CancellationToken token)
     {
         try
         {
@@ -64,7 +64,7 @@ public sealed partial class WorkspaceContentsController
     /// <summary>导出保留原功能资格，并按自身正式声明和完整来源读取安全集合。</summary>
     [HttpPost("content/{linkId}/history/export"), RequireFeature("workspace.folder.history")]
     public async Task<IResult> ExportHistory(string linkId, [FromQuery] string? queryScope, [FromBody] ObjectHistoryOutputRequest request,
-        [FromServices] IObjectHistoryExport export, [FromServices] IActionDataAccess access, CancellationToken token)
+        [FromServices] IObjectHistoryExport export, [FromServices] IDataExecutionAccess access, CancellationToken token)
     {
         try
         {
@@ -81,7 +81,7 @@ public sealed partial class WorkspaceContentsController
     /// <summary>打印只返回与页面相同的安全集合；实际打印由受控前端视图触发，不返回任意HTML。</summary>
     [HttpPost("content/{linkId}/history/print"), RequireFeature("workspace.folder.history")]
     public async Task<IResult> PrintHistory(string linkId, [FromQuery] string? queryScope, [FromBody] ObjectHistoryOutputRequest request,
-        [FromServices] IObjectHistoryQuery history, [FromServices] IActionDataAccess access, CancellationToken token)
+        [FromServices] IObjectHistoryQuery history, [FromServices] IDataExecutionAccess access, CancellationToken token)
     {
         try
         {
@@ -95,12 +95,13 @@ public sealed partial class WorkspaceContentsController
         catch (ArgumentException) { return Results.BadRequest(new ProblemDetails { Title = "履历输出筛选或范围无效。", Status = 400 }); }
     }
 
-    // 声明只确定数据动作；来源owner每次以完整位置和LID重解真实资源，所有出口都重新检查。
+    // 正式执行绑定限定当前角色与阶段要求；来源owner每次以完整位置和LID重解真实资源，所有出口都重新检查。
     private async Task<(string ResourceKey, string ObjectId)> ResolveDeclaredHistoryTargetAsync(string linkId, string? queryScope,
-        string execution, IActionDataAccess access, CancellationToken token)
+        string execution, IDataExecutionAccess access, CancellationToken token)
     {
         var target = await contents.ResolvePermissionTargetAsync(Actor(), ReadHistoryPosition(queryScope), linkId, token);
-        if (!await access.IsAllowedAsync(execution, target.ResourceKey, target.ObjectId, token))
+        if (await access.EvaluateObjectAsync(new(execution, "workspace.backend", "read"),
+            target.ResourceKey, "target", target.ObjectId, token) != DataExecutionDecision.Allowed)
             throw new LinkQueryException(404, "ObjectHistory.Unavailable");
         return target;
     }

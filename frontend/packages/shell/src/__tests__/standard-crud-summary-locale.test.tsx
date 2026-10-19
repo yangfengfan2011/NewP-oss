@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider, useLocalization } from '@icp-platform/core';
 import { FeaturePlacementContext } from '../authorization/FeaturePlacementContext';
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import { PlatformRequestLocaleBridge } from '../localization/PlatformRequestLocaleBridge';
 import type { RuntimeMetadataManifest } from '../metadata/runtimeMetadataManifest';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';

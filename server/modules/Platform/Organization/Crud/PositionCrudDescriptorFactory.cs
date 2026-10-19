@@ -19,6 +19,7 @@ public static class PositionCrudDescriptorFactory
         return new StandardCrudDescriptor
         {
             LegacyDataExecutions = ["create", "update", "delete"],
+            DataExecutions = new Dictionary<string, string> { ["list"] = "organization.position.list", ["read"] = "organization.position.read", ["options"] = "organization.position.options" },
             ResourceKey = "organization.position",
             ModuleId = "Organization",
             ModelName = "Position",

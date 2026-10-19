@@ -2,6 +2,7 @@
   "schemaVersion": "1.0",
   "type": "view",
   "view": {
+    "dataAccess": { "execution": "organization.person.read", "resources": ["organization.person"] },
     "key": "organization.person.detail",
     "dicKey": "PersonDetailView",
     "titleKey": "Title",
@@ -12,7 +13,7 @@
     "lookupBindings": {
       "organization.companies": "organization.person.company.lookup",
       "organization.departments": "organization.person.department.lookup",
-      "organization.positions": "organization.position.lookup"
+      "organization.positions": { "behavior": "organization.position.lookup", "dataAccess": { "execution": "organization.position.options", "resources": ["organization.position"] } }
     },
     "sections": [
       {

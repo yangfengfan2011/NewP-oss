@@ -23,7 +23,9 @@ public sealed class ExampleAuthorizationExecutionContractTests
         });
         var root = Root();
         var json = JsonSerializer.Serialize(requirements, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
-        if (Environment.GetEnvironmentVariable("NEWP_AUTHORIZATION_FIXTURE_EXPORT") == "1")
+        if (Environment.GetEnvironmentVariable("NEWP_DATA_EXECUTION_FIXTURE_EXPORT_PATH") is { Length: > 0 } exportPath)
+            File.WriteAllText(exportPath, json);
+        else if (Environment.GetEnvironmentVariable("NEWP_AUTHORIZATION_FIXTURE_EXPORT") == "1")
             File.WriteAllText(Path.Combine(root, ".codex-temp", "issue-305", "307", "ExampleDataAccess.contract.json"), json);
         else
             Assert.Equal(JsonSerializer.Serialize(JsonSerializer.Deserialize<JsonElement>(json)), JsonSerializer.Serialize(JsonSerializer.Deserialize<JsonElement>(

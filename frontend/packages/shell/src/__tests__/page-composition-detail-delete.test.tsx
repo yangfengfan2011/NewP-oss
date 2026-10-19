@@ -7,7 +7,7 @@ import { expect, it, onTestFinished, vi } from 'vitest';
 import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } from '@icp-platform/core';
 import { ModuleRegistry } from '@icp-platform/sdk';
 import organizationBindings from '../../../../modules/platform/organization/src';
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import { PageEntry } from '../composition/PageOutlet';
 import list from '../../../../modules/platform/organization/metadata/views/DepartmentList.view.json';
 import detail from '../../../../modules/platform/organization/metadata/views/DepartmentDetail.view.json';

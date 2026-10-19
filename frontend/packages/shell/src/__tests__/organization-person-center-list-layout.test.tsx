@@ -15,7 +15,8 @@ import personListDictionary from '../../../../modules/platform/organization/meta
 import organizationRuntimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
 import personDetailViewDocument from '../../../../modules/platform/organization/metadata/views/PersonDetail.view.json';
 import personListViewDocument from '../../../../modules/platform/organization/metadata/views/PersonList.view.json';
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { formalDataAccessFor } from './formalRuntimeMetadataTestSupport';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -281,7 +282,7 @@ describe('organization person center list layout', () => {
 
     expect(fetch).toHaveBeenCalledWith(
       '/api/organization/persons?fields=EID%2CPersonNo%2CENAME%2CBirthDate%2CCompanyId%2CDepartmentName%2CPositionName%2CEmploymentStatus%2CEmploymentStartedAt%2CEmploymentEndedAt%2CIsEnabled%2CAccountEID&pageIndex=1&pageSize=20&sortBy=PersonNo&sortDirection=asc',
-      { method: 'GET', signal: expect.any(AbortSignal) },
+      { method: 'GET', headers: { 'X-NewP-Data-Declaration': formalDataAccessFor('organization.person.list', 'read').id }, signal: expect.any(AbortSignal) },
     );
     expect(container.querySelector('.ant-pro-table')).not.toBeNull();
     expect(container.querySelector('.np-standard-crud-table')).not.toBeNull();

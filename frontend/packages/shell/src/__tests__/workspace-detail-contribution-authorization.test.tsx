@@ -23,7 +23,7 @@ const partList = readComponentJson('Part', 'metadata/views/PartList.view.json');
 const documentDetail = readComponentJson('Document', 'metadata/views/DocumentDetail.view.json');
 const documentList = readComponentJson('Document', 'metadata/views/DocumentList.view.json');
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import { AuthProvider } from '../contexts/AuthContext';
 import { FeaturePlacementContext } from '../authorization/FeaturePlacementContext';
 

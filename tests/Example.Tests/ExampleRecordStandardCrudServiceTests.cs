@@ -5,6 +5,7 @@ using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Exports;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.Runtime;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Identity.Contracts;
 using ICP.Platform.Modules.Example.Crud;
 using ICP.Platform.Persistence.Auditing;
@@ -271,6 +272,7 @@ public sealed class ExampleRecordStandardCrudServiceTests
         IPlatformQueryExecutor executor,
         RecordingAccountDirectory directory) =>
         new StandardCrudService(
+            new QueryFixture(), new QueryFixture(),
             repository,
             executor,
             new StandardCrudDefaultWriter(repository, [], [], conditionalDeleteExecutors: [], auditValueProvider: new EntityAuditValueProvider(new SystemEntityAuditStampProvider(TimeProvider.System))),
@@ -280,6 +282,25 @@ public sealed class ExampleRecordStandardCrudServiceTests
                 temporalDisplayProjectionExecutor: new ICP.Platform.Presentation.TemporalDisplayProjectionExecutor(
                 new NoPresentationContext(), new ICP.Platform.Presentation.TemporalDisplayFormatter())),
             []);
+
+    // 此类只验证字段与批量display，显式提供不受限查询计划；完整资格由Host真实API覆盖。
+    private sealed class QueryFixture : IDataExecutionAccess, IDataScopeEvaluationScope, IDisposable
+    {
+        public DateTimeOffset ObservedAt => DateTimeOffset.UnixEpoch;
+        public IDisposable BeginOperation() => this;
+        public IDisposable BeginReadAfterWrite() => this;
+        public void Dispose() { }
+        public Task<DataScopeReadPlan> GetQueryReadPlanAsync(DataExecutionQueryContext context, string resourceKey, CancellationToken token = default)
+        {
+            Assert.Contains(context.Binding.Provider, new[] { "standardCrud.list", "standardCrud.export" });
+            return Task.FromResult(new DataScopeReadPlan(null));
+        }
+        public Task<DataScopeReadPlan> GetObjectReadPlanAsync(IReadOnlyList<DataExecutionBindingReference> bindings, string resourceKey,
+            string role, string objectId, CancellationToken token = default) => Task.FromResult(new DataScopeReadPlan(null));
+        public void Validate(IReadOnlyList<DataExecutionBindingReference> bindings, string resourceKey) => throw new NotSupportedException();
+        public Task<DataExecutionDecision> EvaluateObjectAsync(DataExecutionBindingReference binding, string resourceKey, string role, string objectId, CancellationToken token = default) => throw new NotSupportedException();
+        public Task<DataExecutionDecision> EvaluateCandidateAsync(DataExecutionBindingReference binding, string resourceKey, string role, IReadOnlyDictionary<string, object?> candidate, CancellationToken token = default) => throw new NotSupportedException();
+    }
 
     private sealed class NoPresentationContext : ICP.Platform.Presentation.IRequestPresentationContextAccessor
     {

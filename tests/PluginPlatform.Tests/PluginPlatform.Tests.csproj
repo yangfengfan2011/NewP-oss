@@ -27,4 +27,7 @@
     <ProjectReference Include="..\..\server\modules\Infor-Center\Workspace\Migrations.SqlServer\Workspace.SqlServerMigrations.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="../TestSupport/StandardData/StandardDataReadFixtureCatalog.cs" Link="TestSupport/StandardData/StandardDataReadFixtureCatalog.cs" />
+  </ItemGroup>
 </Project>

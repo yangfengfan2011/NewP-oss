@@ -143,6 +143,12 @@ export function bindActionDataAccess(document: RuntimeViewDocument, requirements
     const actions = view[surface];
     if (Array.isArray(actions)) view[surface] = actions.map(action => bind(action as Record<string, unknown>, surface, String(action.key)));
   }
+  if (typeof view.export === 'object' && view.export !== null && !Array.isArray(view.export))
+    view.export = bind(view.export as Record<string, unknown>, 'export', 'export');
+  if (typeof view.lookupBindings === 'object' && view.lookupBindings !== null && !Array.isArray(view.lookupBindings))
+    view.lookupBindings = Object.fromEntries(Object.entries(view.lookupBindings).map(([key, value]) => [key,
+      typeof value === 'object' && value !== null && !Array.isArray(value)
+        ? bind(value as Record<string, unknown>, 'lookupBindings', key) : value]));
   return { ...document, view: bind(view, 'read', '') };
 }
 

@@ -65,7 +65,9 @@
       "read"
     ],
     "featurePositions": [
-      "Example/navigation:example.group/navigation:example.records"
+      "Example/navigation:example.group/navigation:example.records",
+      "Example/navigation:example.group/navigation:example.records/surface:detail.pageActions/action:edit",
+      "Example/navigation:example.group/navigation:example.records/surface:list.rowActions/action:edit"
     ],
     "requirements": [
       {
@@ -85,6 +87,41 @@
       }
     ],
     "provider": "standardCrud.read"
+  },
+  {
+    "id": "Example/view:example.record.list/export/action:export",
+    "moduleId": "Example",
+    "viewKey": "example.record.list",
+    "surface": "export",
+    "actionKey": "export",
+    "execution": "example.record.export",
+    "resources": [
+      "example.record"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Example/navigation:example.group/navigation:example.records/surface:list/action:export"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "example.record"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      }
+    ],
+    "provider": "standardCrud.export"
   },
   {
     "id": "Example/view:example.record.list/pageActions/action:create",

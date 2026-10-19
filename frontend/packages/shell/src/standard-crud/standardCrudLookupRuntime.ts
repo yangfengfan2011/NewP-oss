@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { formatRequestError, useLocalization, usePlatformQuery, usePlatformQueryActions } from '@icp-platform/core';
 import {
   loadStandardCrudLookupPage,
+  type ActionDataAccessRequirement,
   type StandardCrudFieldDefinition,
   type StandardCrudLookupPage,
   type StandardCrudLookupRuntimeState as SdkStandardCrudLookupRuntimeState,
@@ -24,6 +25,7 @@ export type {
 export interface UseStandardCrudLookupRuntimeInput extends SdkUseStandardCrudLookupRuntimeInput {
   resourceKey: string;
   featurePosition?: string;
+  dataAccessByProvider?: Readonly<Record<string, ActionDataAccessRequirement>>;
 }
 
 export interface StandardCrudLookupRuntimeState extends SdkStandardCrudLookupRuntimeState {
@@ -59,6 +61,7 @@ class StandardCrudLookupQueryError extends Error {
 export function useStandardCrudLookupRuntime({
   resourceKey,
   featurePosition,
+  dataAccessByProvider,
   fields,
   providers = [],
   values,
@@ -76,7 +79,8 @@ export function useStandardCrudLookupRuntime({
   const previous = useRef<{ scope: typeof queryScope; key: string; data: StandardCrudLookupQueryData }>();
   const queryKey = createStandardCrudLookupQueryKey({
     resourceKey,
-  featurePosition,
+    featurePosition,
+    dataAccessByProvider,
     fields: lookupFields,
     providers,
     values,
@@ -89,7 +93,8 @@ export function useStandardCrudLookupRuntime({
     enabled: lookupFields.length > 0,
     load: async ({ signal }) => loadLookupQuery({
       resourceKey,
-  featurePosition,
+      featurePosition,
+      dataAccessByProvider,
       previous: previous.current?.scope === queryScope && previous.current.key !== serializedKey
         ? previous.current.data : undefined,
       lookupFields,
@@ -151,7 +156,7 @@ export function useStandardCrudLookupRuntime({
     const currentValue = values[field.key];
     const page = queryData?.lookupPages[field.key];
     const inputKey = JSON.stringify(createStandardCrudLookupQueryKey({
-      resourceKey, featurePosition, fields: [field], providers, values, detailFields, requests,
+      resourceKey, featurePosition, dataAccessByProvider, fields: [field], providers, values, detailFields, requests,
     }));
     const validPage = !query.isFetching && page?.inputKey === inputKey ? page : undefined;
     presentedErrors[field.key] = validPage?.error
@@ -204,6 +209,7 @@ export function useStandardCrudLookupRuntime({
 async function loadLookupQuery({
   resourceKey,
   featurePosition,
+  dataAccessByProvider,
   previous,
   lookupFields,
   providers,
@@ -214,6 +220,7 @@ async function loadLookupQuery({
 }: {
   resourceKey: string;
   featurePosition?: string;
+  dataAccessByProvider?: Readonly<Record<string, ActionDataAccessRequirement>>;
   previous?: StandardCrudLookupQueryData;
   lookupFields: StandardCrudFieldDefinition[];
   providers: NonNullable<SdkUseStandardCrudLookupRuntimeInput['providers']>;
@@ -229,7 +236,7 @@ async function loadLookupQuery({
 
   for (const field of lookupFields) {
     const request = requests[field.key] ?? { keyword: '', page: 1, pageSize: 20 };
-    const inputKey = JSON.stringify(createStandardCrudLookupQueryKey({ resourceKey, featurePosition, fields: [field], providers, values, detailFields, requests }));
+    const inputKey = JSON.stringify(createStandardCrudLookupQueryKey({ resourceKey, featurePosition, dataAccessByProvider, fields: [field], providers, values, detailFields, requests }));
     const retained = previous?.lookupPages[field.key];
     if (retained?.inputKey === inputKey && !retained.error) {
       data.lookupPages[field.key] = retained;
@@ -241,7 +248,8 @@ async function loadLookupQuery({
       values,
       detailFields,
       ...request,
-    }, { signal, ...(featurePosition ? { featurePosition } : {}) });
+    }, { signal, ...(featurePosition ? { featurePosition } : {}),
+      ...(dataAccessByProvider?.[field.lookup?.providerKey ?? ''] ? { dataAccess: dataAccessByProvider[field.lookup!.providerKey] } : {}) });
     data.lookupPages[field.key] = { ...result, inputKey };
     if (result.error && isProviderExecutionFailure(field, providers, values)) {
       providerFailed = true;

@@ -21,6 +21,7 @@ public static class PersonCrudDescriptorFactory
         return new StandardCrudDescriptor
         {
             LegacyDataExecutions = ["create", "update", "delete"],
+            DataExecutions = new Dictionary<string, string> { ["list"] = "organization.person.list", ["read"] = "organization.person.read", ["export"] = "organization.person.export" },
             ResourceKey = "organization.person",
             RequiresCreationRecord = true,
             RequiresUpdateRecord = true,

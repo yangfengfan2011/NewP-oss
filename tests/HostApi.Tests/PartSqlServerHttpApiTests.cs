@@ -39,9 +39,9 @@ public sealed class PartSqlServerHttpApiTests
         Assert.False(string.IsNullOrWhiteSpace(fields.GetProperty("UpdatedAt_DisplayValue").GetString()));
         var read = Entry(fixture);
         var id = result.GetProperty("fields").GetProperty("EID").GetString();
-        var detail = await FeatureHttpTestRequests.ReadAsync(admin, read, "/api/part/parts/" + id);
+        var detail = await OwnedResourceReadHttpRequests.ReadAsync(fixture, admin, read, "part.part", "read", "/api/part/parts/" + id);
         Assert.Equal(500, detail.GetProperty("fields").GetProperty("Description").GetString()!.Length);
-        var candidates = await FeatureHttpTestRequests.ReadAsync(admin, read, "/api/part/parts?keyword=PART-001&fields=EID,ECODE,ENAME&pageSize=1");
+        var candidates = await OwnedResourceReadHttpRequests.ReadAsync(fixture, admin, read, "part.part", "list", "/api/part/parts?keyword=PART-001&fields=EID,ECODE,ENAME&pageSize=1");
         var candidate = Assert.Single(candidates.GetProperty("items").EnumerateArray());
         Assert.Equal(id, candidate.GetProperty("EID").GetString());
         Assert.Equal(new[] { "EID", "ECODE", "ENAME" }, candidate.EnumerateObject().Select(p => p.Name));
@@ -51,7 +51,7 @@ public sealed class PartSqlServerHttpApiTests
         using var login = await relogged.PostAsJsonAsync("/api/auth/login", new { ECODE = "admin", Password = "Audit-test-secure-938!" });
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
         await BusinessAuditHostFixture.RefreshAntiforgeryAsync(relogged);
-        var restored = await FeatureHttpTestRequests.ReadAsync(relogged, Entry(fixture), "/api/part/parts/" + id);
+        var restored = await OwnedResourceReadHttpRequests.ReadAsync(fixture, relogged, Entry(fixture), "part.part", "read", "/api/part/parts/" + id);
         // 重启核对全部字段值，JSON 对象的成员顺序不参与详情契约。
         Assert.Equal(fields.EnumerateObject().OrderBy(property => property.Name).Select(property => (property.Name, property.Value.GetRawText())),
             restored.GetProperty("fields").EnumerateObject().OrderBy(property => property.Name).Select(property => (property.Name, property.Value.GetRawText())));
@@ -82,7 +82,7 @@ public sealed class PartSqlServerHttpApiTests
             Assert.Equal(code, error.GetProperty("code").GetString());
             Assert.Equal(field, Assert.Single(error.GetProperty("fieldErrors").EnumerateArray()).GetProperty("field").GetString());
         }
-        Assert.Equal(0, (await FeatureHttpTestRequests.ReadAsync(admin, Entry(fixture), "/api/part/parts")).GetProperty("total").GetInt32());
+        Assert.Equal(0, (await OwnedResourceReadHttpRequests.ReadAsync(fixture, admin, Entry(fixture), "part.part", "list", "/api/part/parts")).GetProperty("total").GetInt32());
         var responses = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => FeatureHttpTestRequests.SendAsync(admin, create,
             HttpMethod.Post, "/api/part/parts", new { ECODE = "RACE", ENAME = "同名允许" })));
         Assert.Single(responses, response => response.StatusCode == HttpStatusCode.Created);
@@ -108,7 +108,7 @@ public sealed class PartSqlServerHttpApiTests
         }
         using var options = await FeatureHttpTestRequests.SendAsync(admin, Entry(fixture), HttpMethod.Get, "/api/part/parts/options");
         Assert.Equal(HttpStatusCode.Forbidden, options.StatusCode);
-        Assert.Equal(2, (await FeatureHttpTestRequests.ReadAsync(admin, Entry(fixture), "/api/part/parts")).GetProperty("total").GetInt32());
+        Assert.Equal(2, (await OwnedResourceReadHttpRequests.ReadAsync(fixture, admin, Entry(fixture), "part.part", "list", "/api/part/parts")).GetProperty("total").GetInt32());
         Assert.Empty(scans.UnboundedReads);
     }
 
@@ -124,25 +124,27 @@ public sealed class PartSqlServerHttpApiTests
         using var noCreate = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post, "/api/part/parts", new { ECODE = "DENY", ENAME = "拒绝" });
         Assert.Equal(HttpStatusCode.Forbidden, noCreate.StatusCode);
         await RuleAsync(fixture, admin, "HidePart", "ECODE", "CAND-2", "read");
-        var first = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, "/api/part/parts?keyword=CAND&pageSize=2&fields=EID,ECODE,ENAME");
+        var first = await OwnedResourceReadHttpRequests.ReadAsync(fixture, ordinary, entry, "part.part", "list", "/api/part/parts?keyword=CAND&pageSize=2&fields=EID,ECODE,ENAME");
         Assert.Equal(6, first.GetProperty("total").GetInt32());
         Assert.Equal(new[] { "CAND-0", "CAND-1" }, first.GetProperty("items").EnumerateArray().Select(row => row.GetProperty("ECODE").GetString()));
-        var page = await FeatureHttpTestRequests.ReadAsync(ordinary, entry, "/api/part/parts?keyword=独立候选&pageSize=2&pageIndex=2&fields=EID,ECODE,ENAME");
+        var page = await OwnedResourceReadHttpRequests.ReadAsync(fixture, ordinary, entry, "part.part", "list", "/api/part/parts?keyword=独立候选&pageSize=2&pageIndex=2&fields=EID,ECODE,ENAME");
         Assert.Equal(new[] { "CAND-3", "CAND-4" }, page.GetProperty("items").EnumerateArray().Select(row => row.GetProperty("ECODE").GetString()));
-        var hiddenId = Assert.Single((await FeatureHttpTestRequests.ReadAsync(admin, entry, "/api/part/parts?keyword=CAND-2&fields=EID")).GetProperty("items").EnumerateArray()).GetProperty("EID").GetString();
-        using var hidden = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, "/api/part/parts/" + hiddenId);
+        var hiddenId = Assert.Single((await OwnedResourceReadHttpRequests.ReadAsync(fixture, admin, entry, "part.part", "list", "/api/part/parts?keyword=CAND-2&fields=EID")).GetProperty("items").EnumerateArray()).GetProperty("EID").GetString();
+        using var hidden = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, "/api/part/parts/" + hiddenId,
+            dataAccess: OwnedResourceReadHttpRequests.Declaration(fixture, entry, "part.part", "read"));
         Assert.Equal(HttpStatusCode.NotFound, hidden.StatusCode);
         await new FeatureHttpTestRequests(fixture).GrantAsync(admin, actor.RoleId, entry, create);
         await RuleAsync(fixture, admin, "HideCreated", "ECODE", "HIDDEN-NEW", "read");
         var receipt = await FeatureHttpTestRequests.CreateAsync(ordinary, create, "/api/part/parts", new { ECODE = "HIDDEN-NEW", ENAME = "创建后不可读" });
         Assert.Single(receipt.EnumerateObject()); Assert.True(receipt.GetProperty("succeeded").GetBoolean());
-        Assert.Equal(0, (await FeatureHttpTestRequests.ReadAsync(ordinary, entry, "/api/part/parts?keyword=HIDDEN-NEW")).GetProperty("total").GetInt32());
-        Assert.Equal(1, (await FeatureHttpTestRequests.ReadAsync(admin, entry, "/api/part/parts?keyword=HIDDEN-NEW")).GetProperty("total").GetInt32());
+        Assert.Equal(0, (await OwnedResourceReadHttpRequests.ReadAsync(fixture, ordinary, entry, "part.part", "list", "/api/part/parts?keyword=HIDDEN-NEW")).GetProperty("total").GetInt32());
+        Assert.Equal(1, (await OwnedResourceReadHttpRequests.ReadAsync(fixture, admin, entry, "part.part", "list", "/api/part/parts?keyword=HIDDEN-NEW")).GetProperty("total").GetInt32());
         await RuleAsync(fixture, admin, "DenyCreate", "ECODE", "DENY-NEW", "create");
         using var deniedCreate = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post, "/api/part/parts", new { ECODE = "DENY-NEW", ENAME = "数据动作拒绝" });
         Assert.Equal(HttpStatusCode.Forbidden, deniedCreate.StatusCode);
         await new FeatureHttpTestRequests(fixture).GrantAsync(admin, actor.RoleId);
-        using var noEntry = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, "/api/part/parts");
+        using var noEntry = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Get, "/api/part/parts",
+            dataAccess: OwnedResourceReadHttpRequests.Declaration(fixture, entry, "part.part", "list"));
         Assert.Equal(HttpStatusCode.Forbidden, noEntry.StatusCode);
     }
 
@@ -160,7 +162,7 @@ public sealed class PartSqlServerHttpApiTests
         Assert.False(fault.FailedInsideTransaction);
         fault.Enabled = false;
         for (var retry = 0; retry < 2; retry++)
-            Assert.Equal(1, (await FeatureHttpTestRequests.ReadAsync(admin, Entry(fixture), "/api/part/parts?keyword=READ-FAULT")).GetProperty("total").GetInt32());
+            Assert.Equal(1, (await OwnedResourceReadHttpRequests.ReadAsync(fixture, admin, Entry(fixture), "part.part", "list", "/api/part/parts?keyword=READ-FAULT")).GetProperty("total").GetInt32());
     }
 
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "零组件规范重读在唯一事务内，读取失败不得遗留已提交实体")]
@@ -175,7 +177,7 @@ public sealed class PartSqlServerHttpApiTests
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         Assert.True(fault.Triggered);
         fault.Enabled = false;
-        Assert.Equal(0, (await FeatureHttpTestRequests.ReadAsync(admin, Entry(fixture), "/api/part/parts?keyword=ROLLBACK")).GetProperty("total").GetInt32());
+        Assert.Equal(0, (await OwnedResourceReadHttpRequests.ReadAsync(fixture, admin, Entry(fixture), "part.part", "list", "/api/part/parts?keyword=ROLLBACK")).GetProperty("total").GetInt32());
         Assert.True(fault.FailedInsideTransaction);
     }
 

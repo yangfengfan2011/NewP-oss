@@ -186,11 +186,11 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
   expect(container.querySelector('.ant-table')).not.toBeNull();
   if (scenario === 'receipt') {
     await act(async () => container.querySelector<HTMLButtonElement>('.np-standard-crud-cell-action')!.click());
-    await vi.waitFor(() => expect(container.querySelector('.np-tree-context-header h2')?.textContent).toBe('公共根内容'));
+    await vi.waitFor(() => expect(container.querySelector('.np-tree-context-header [aria-current="page"]')?.textContent).toBe('公共根内容'));
     expect(document.querySelector('.ant-drawer')).toBeNull();
     expect(fetcher.mock.calls.some(([input]) => String(input instanceof Request ? input.url : input).endsWith('/folders/public-root-folder'))).toBe(false);
     await act(async () => container.querySelector<HTMLButtonElement>('.np-tree-breadcrumb-link')!.click());
-    await vi.waitFor(() => expect(container.querySelector('.np-tree-context-header h2')?.textContent).toBe('公共空间'));
+    await vi.waitFor(() => expect(container.querySelector('.np-tree-context-header [aria-current="page"]')?.textContent).toBe('公共空间'));
   }
   const publicListReads = (anchorId = 'public-root') => fetcher.mock.calls.filter(([input]) => {
     const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost');
@@ -237,7 +237,7 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
     const loadedReads = () => fetcher.mock.calls.filter(([input]) => String(input instanceof Request ? input.url : input).startsWith('/api/trees/workspace.structure/children?')).length;
     const beforeAddReads = loadedReads();
     await act(async () => [...container.querySelectorAll<HTMLElement>('.ant-tree-title')].find(item => item.textContent === '父A')!.click());
-    await vi.waitFor(() => expect(container.querySelector('.np-tree-context-header h2')?.textContent).toBe('父A'));
+    await vi.waitFor(() => expect(container.querySelector('.np-tree-context-header [aria-current="page"]')?.textContent).toBe('父A'));
     const folderListReads = () => publicListReads('a-folder');
     await openNewMenu();
     const createObject = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent === '新建图文档');

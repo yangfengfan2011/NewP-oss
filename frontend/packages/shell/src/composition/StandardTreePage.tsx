@@ -201,11 +201,9 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
     <TreeNodeActivationContext.Provider value={tree.locate}><section aria-label={t('Platform.TreeContent', '节点内容')} className="np-tree-content">
       {selected && <header className="np-tree-context-header">
         <Breadcrumb aria-label={t('PlatformShell.Breadcrumb', '面包屑')} items={selectedPath.map((node, index) => ({ key: node.nodeKey,
-          title: index === selectedPath.length - 1 ? <span>{node.labelKey ? t(node.labelKey, node.label) : node.label}</span>
+          title: index === selectedPath.length - 1 ? <span aria-current="page">{node.labelKey ? t(node.labelKey, node.label) : node.label}</span>
             : <button type="button" className="np-tree-breadcrumb-link" onClick={() => tree.select(node.nodeKey)}>{node.labelKey ? t(node.labelKey, node.label) : node.label}</button>,
         }))} />
-        <h2>{selected.labelKey ? t(selected.labelKey, selected.label) : selected.label}</h2>
-        {selectedType && <span>{t(`${view.dicKey}.${selectedType.titleKey}`, selectedType.titleKey)}</span>}
       </header>}
       <div className="np-tree-content-body">
       {selected && selectedType ? <PageOutlet key={`${selectedType.key}:${tree.contentEpoch}`} page={selectedType.pageRef} featurePlacement={features.placement ? { ...features.placement, staticScope: selectedType.key } : undefined} context={selected} navigation={navigation ? { tabKey: navigation.nodeTab, selectTab: key => runtime.leave(() => navigation.locate(selected.nodeKey, key)) } : null} /> : <p>{t('Platform.TreeSelectNode', '请选择节点')}</p>}

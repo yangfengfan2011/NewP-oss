@@ -147,7 +147,7 @@ async function mount(options: { actionSets?: Record<string, { column: string[]; 
   });
   await act(async () => container.querySelector<HTMLElement>('.ant-tree-switcher:not(.ant-tree-switcher-noop)')!.click());
   await waitFor(() => expect(container.querySelector('.ant-tree')?.textContent).toContain('A'));
-  const select = async (name: string) => { await act(async () => [...container.querySelectorAll<HTMLElement>('.ant-tree-title')].find(item => item.textContent === name)!.click()); await waitFor(() => expect(container.querySelector('.np-tree-context-header h2')?.textContent).toBe(name)); };
+  const select = async (name: string) => { await act(async () => [...container.querySelectorAll<HTMLElement>('.ant-tree-title')].find(item => item.textContent === name)!.click()); await waitFor(() => expect(container.querySelector('.np-tree-context-header [aria-current="page"]')?.textContent).toBe(name)); };
   const toolbar = () => container.querySelector('.np-tree-content-body')!;
   const button = (name: string) => [...toolbar().querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent?.replace(/\s/g, '') === name)!;
   const actionGroup = (name: string) => ['移除', '删除'].includes(name) ? '移除与删除' : '粘贴';
@@ -326,7 +326,7 @@ it('keeps failed menu registration unavailable and ignores a late registration f
   const copy = [...document.querySelectorAll<HTMLElement>('[role=menuitem]')].find(item => item.textContent === '复制')!;
   expect(copy.classList.contains('ant-dropdown-menu-item-disabled')).toBe(true);
   await act(async () => copy.click()); expect(failed.writes).toEqual([]);
-  expect(failed.container.querySelector('.np-tree-context-header h2')?.textContent).toBe('B');
+  expect(failed.container.querySelector('.np-tree-context-header [aria-current="page"]')?.textContent).toBe('B');
   await failed.cleanup();
   let finish!: () => Promise<void>;
   const page = await mount({ menuLoad: (load, call) => call !== 2 ? load() : new Promise(resolve => { finish = async () => resolve(await load()); }) });
@@ -449,7 +449,7 @@ it('opens a folder name at its exact tree occurrence without reading a details d
   await page.waitFor(() => expect(page.container.querySelector('tbody')?.textContent).toContain('WorkspaceFolder source'));
   const name = [...page.container.querySelectorAll<HTMLButtonElement>('tbody button')].find(button => button.textContent === 'WorkspaceFolder source')!;
   await act(async () => name.click());
-  await page.waitFor(() => expect(page.container.querySelector('.np-tree-context-header h2')?.textContent).toBe('WorkspaceFolder'));
+  await page.waitFor(() => expect(page.container.querySelector('.np-tree-context-header [aria-current="page"]')?.textContent).toBe('WorkspaceFolder'));
   expect(new URLSearchParams(page.router.state.location.search).get('node')).toBe('public:root:A-link:WorkspaceFolder-lid');
   expect(document.querySelector('.ant-drawer')).toBeNull();
   expect(page.request.mock.calls.some(([input]) => String(input instanceof Request ? input.url : input).includes('/api/workspace/folders/'))).toBe(false);

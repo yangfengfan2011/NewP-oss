@@ -231,7 +231,7 @@ export default function DataScopeRulesPage({ input, reportState }: PageProps) {
     if (key === 'sibling') addSibling();
     if (key === 'delete') setDeleteRoot(true);
   } };
-  return <AntdLocaleProvider><div className="data-scope-page">
+  return <AntdLocaleProvider><div className="data-scope-page np-page-fill">
     {messageHolder}
     {!!error && <Alert type="error" showIcon message={errorMessage} style={{ marginBottom: 16 }} />}
     <Spin spinning={loading}>

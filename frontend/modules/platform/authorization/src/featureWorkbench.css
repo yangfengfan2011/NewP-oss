@@ -1,0 +1,57 @@
+.feature-workbench > .ant-typography {
+  flex-shrink: 0;
+}
+
+.feature-workbench-panels {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 20px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.feature-workbench-panels > .ant-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.feature-workbench-panels > .ant-card > .ant-card-head {
+  flex-shrink: 0;
+}
+
+.feature-workbench-panels > .ant-card > .ant-card-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.feature-workbench-roles > .ant-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.feature-workbench-roles .ant-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.feature-workbench-roles .ant-input-search,
+.feature-workbench-roles .ant-pagination {
+  flex-shrink: 0;
+}
+
+@media (max-width: 900px) {
+  .feature-workbench { overflow: auto; }
+  .feature-workbench-panels {
+    flex: none;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    overflow: visible;
+  }
+}

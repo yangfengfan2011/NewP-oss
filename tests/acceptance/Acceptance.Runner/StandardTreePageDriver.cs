@@ -19,7 +19,6 @@ internal sealed class StandardTreePageDriver(IPage page)
             if (await node.GetAttributeAsync("aria-expanded") != "true") await node.Locator(".ant-tree-switcher").ClickAsync();
         }
         await Tree.GetByText(labels[^1], new() { Exact = true }).ClickAsync();
-        await Content.GetByRole(AriaRole.Heading, new() { Name = labels[^1], Exact = true }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
         await WaitForBreadcrumbAsync(labels);
     }
 

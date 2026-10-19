@@ -172,6 +172,15 @@
 }
 
 /* ---- Page Primitives ---- */
+/* 自定义页面显式请求剩余高度；面板与内容滚动由页面自身负责。 */
+.np-page-fill {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
 .sh-page {
   display: flex;
   flex-direction: column;

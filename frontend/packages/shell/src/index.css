@@ -1134,22 +1134,31 @@ a:hover {
   outline: none;
 }
 
-/* 标准列表占用页面剩余空间，纵向滚动交给表格体；其他页面保留原滚动方式。 */
-.np-app-layout:has(.np-page-content .np-crud-workspace) {
+/* 标准列表、树组合及显式填满的自定义页占用剩余空间，各自管理内容滚动。 */
+.np-app-layout:has(.np-page-content :is(.np-crud-workspace, .np-tree-workspace, .np-page-fill)) {
+  display: flex;
+  flex-direction: column;
   height: 100dvh;
   min-height: 0;
   overflow: hidden;
 }
-.np-app-body:has(.np-page-content .np-crud-workspace),
-.np-app-content:has(.np-crud-workspace),
-.np-page-container:has(.np-crud-workspace) {
+.np-app-layout:has(.np-page-content :is(.np-crud-workspace, .np-tree-workspace, .np-page-fill)) > .np-app-header {
+  flex-shrink: 0;
+}
+.np-app-body:has(.np-page-content :is(.np-crud-workspace, .np-tree-workspace, .np-page-fill)) > .np-app-sider {
+  min-height: 0;
+  overflow: auto;
+}
+.np-app-body:has(.np-page-content :is(.np-crud-workspace, .np-tree-workspace, .np-page-fill)),
+.np-app-content:has(:is(.np-crud-workspace, .np-tree-workspace, .np-page-fill)),
+.np-page-container:has(:is(.np-crud-workspace, .np-tree-workspace, .np-page-fill)) {
   flex: 1;
   min-height: 0;
 }
-.np-app-content:has(.np-crud-workspace) {
+.np-app-content:has(:is(.np-crud-workspace, .np-tree-workspace, .np-page-fill)) {
   overflow: hidden;
 }
-.np-page-content > .sh-page:has(.np-crud-workspace) {
+.np-page-content > .sh-page:has(:is(.np-crud-workspace, .np-tree-workspace, .np-page-fill)) {
   display: flex;
   flex: 1;
   flex-direction: column;

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Button, Card, Checkbox, Flex, Input, List, Modal, Pagination, Space, Spin, Tag, Tree, Typography } from "antd";
+import { Alert, Button, Card, Checkbox, Input, List, Modal, Pagination, Space, Spin, Tag, Tree, Typography } from "antd";
 import useMessage from "antd/es/message/useMessage";
 import { formatRequestError, platformFetch, useAuthorization, useLocalization } from "@icp-platform/core";
 import { StandardCrudRequestError, type PageProps } from "@icp-platform/sdk";
 import { AntdLocaleProvider } from '@icp-platform/ui/locale';
 import { requestRole } from "./roleResource";
 import { buildFeatureTree, changeBranch, featureDiff, featureTreeKeys, type FeaturePoint } from "./featureTree";
+import './featureWorkbench.css';
 
 interface RoleSummary { id: string; code: string; displayName: string; isEnabled: boolean }
 interface RoleState { role: RoleSummary; positions: string[] }
@@ -116,13 +117,13 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
     if (dirty) setSwitchTarget(id); else void loadRole(id);
   };
 
-  return <AntdLocaleProvider><div style={{ padding: 24 }}>
+  return <AntdLocaleProvider><div className="feature-workbench np-page-fill" style={{ padding: 24 }}>
     <Typography.Title level={3}>{t('RoleView.WorkbenchTitle', '功能授权')}</Typography.Title>
     <Typography.Paragraph type="secondary">{t('RoleView.WorkbenchHelp', '选择角色，按入口位置配置功能。保存一次提交该角色的完整授权集合。')}</Typography.Paragraph>
     {!!error && <Alert type="error" message={formatRequestError(error, t)} showIcon style={{ marginBottom: 16 }} />}
     {messageContextHolder}
-    <Flex gap={20} align="stretch" wrap>
-      <Card title={t('RoleView.Roles', '角色')} style={{ width: 280, flexShrink: 0 }}>
+    <div className="feature-workbench-panels">
+      <Card className="feature-workbench-roles" title={t('RoleView.Roles', '角色')}>
         <Input.Search aria-label={t('RoleView.SearchRoles', '搜索角色')} placeholder={t('RoleView.RoleSearchPlaceholder', '名称或代码')} onSearch={value => { setRoleQuery(value); setPage(1); }} disabled={saving} />
         <List dataSource={roles?.items ?? []} loading={!roles} renderItem={role => <List.Item>
           <Button type={current?.role.id === role.EID ? "primary" : "text"} block disabled={saving} onClick={() => chooseRole(role.EID)}
@@ -132,7 +133,7 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
         </List.Item>} />
         <Pagination simple current={page} pageSize={20} total={roles?.total ?? 0} onChange={setPage} disabled={saving} />
       </Card>
-      <Card style={{ flex: "1 1 460px", minWidth: 0 }} title={current ? `${current.role.displayName} · ${current.role.code}` : t('RoleView.ChooseRole', '选择一个角色')}>
+      <Card className="feature-workbench-detail" title={current ? `${current.role.displayName} · ${current.role.code}` : t('RoleView.ChooseRole', '选择一个角色')}>
         {!catalog ? <Spin /> : !current ? <Typography.Text type="secondary">{t('RoleView.ChooseRoleHelp', '从左侧选择角色以查看授权。')}</Typography.Text> : <Spin spinning={loading}>
           {!current.role.isEnabled && <Alert type="warning" message={t('RoleView.DisabledHelp', '此角色已停用，保留的授权当前不生效。')} style={{ marginBottom: 16 }} />}
           {readOnly && <Alert type="info" message={current.role.code.toLowerCase() === "localadmin" ? t('RoleView.AdminReadOnly', '本地管理员授权由活动目录维护，只读。') : t('RoleView.NoSavePermission', '当前账号可查看，未获保存授权。')} style={{ marginBottom: 16 }} />}
@@ -159,7 +160,7 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
           </Space>
         </Spin>}
       </Card>
-    </Flex>
+    </div>
     <Modal open={!!switchTarget} title={t('RoleView.UnsavedTitle', '当前角色有未保存的授权')} closable={!saving} onCancel={() => setSwitchTarget(undefined)} footer={[
       <Button key="cancel" disabled={saving} onClick={() => setSwitchTarget(undefined)}>{t('RoleView.Cancel', '取消')}</Button>,
       <Button key="discard" disabled={saving} onClick={() => { const target = switchTarget!; setSwitchTarget(undefined); void loadRole(target); }}>{t('RoleView.DiscardSwitch', '放弃并切换')}</Button>,

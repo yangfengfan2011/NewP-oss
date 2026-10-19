@@ -1,7 +1,9 @@
 /* 组合页面只拥有导航与外层面板；CRUD 内容样式由共享 UI 组件负责。 */
 .np-composed-page {
   gap: 12px;
+  flex: 1;
   min-width: 0;
+  min-height: 0;
 }
 
 .np-composed-tabs > .ant-tabs-nav {
@@ -40,20 +42,10 @@
 .np-tree-context-header {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 12px;
   min-height: var(--np-workspace-header-height);
   box-sizing: border-box;
   padding: 8px 16px;
   border-bottom: 1px solid var(--np-composition-border);
-}
-
-.np-tree-context-header h2 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 24px;
-  overflow-wrap: anywhere;
 }
 
 .np-tree-context-header .ant-breadcrumb {
@@ -68,11 +60,6 @@
   color: inherit;
   font: inherit;
   cursor: pointer;
-}
-
-.np-tree-context-header > span {
-  color: var(--np-composition-secondary);
-  font-size: 12px;
 }
 
 .np-tree-content-body {
@@ -105,32 +92,32 @@
   }
 }
 
-/* 树、Tab 只传递剩余高度，不承担标准列表的数据滚动。 */
-.np-composed-tabs:has(.np-crud-workspace),
-.np-composed-tabs:has(.np-crud-workspace) > .ant-tabs-content-holder,
-.np-composed-tabs:has(.np-crud-workspace) > .ant-tabs-content-holder > .ant-tabs-content,
-.np-composed-tabs:has(.np-crud-workspace) > .ant-tabs-content-holder > .ant-tabs-content > .ant-tabs-tabpane-active {
+/* 树、Tab 自身传递剩余高度，不依赖是否已打开列表；数据滚动仍由内容拥有。 */
+.np-composed-tabs,
+.np-composed-tabs > .ant-tabs-content-holder,
+.np-composed-tabs > .ant-tabs-content-holder > .ant-tabs-content,
+.np-composed-tabs > .ant-tabs-content-holder > .ant-tabs-content > .ant-tabs-tabpane-active {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-height: 0;
 }
-.np-tree-workspace:has(.np-crud-workspace) {
+.np-tree-workspace {
   flex: 1;
   min-height: 0;
 }
-.np-tree-workspace:has(.np-crud-workspace) > aside {
+.np-tree-workspace > aside {
   min-height: 0;
   overflow: auto;
 }
-.np-tree-workspace:has(.np-crud-workspace) > .np-tree-content,
-.np-tree-workspace:has(.np-crud-workspace) > .np-tree-content > .np-tree-content-body {
+.np-tree-workspace > .np-tree-content,
+.np-tree-workspace > .np-tree-content > .np-tree-content-body {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-height: 0;
 }
-.np-tree-workspace:has(.np-crud-workspace) > .np-tree-content > .np-tree-content-body {
+.np-tree-workspace > .np-tree-content > .np-tree-content-body {
   overflow: auto;
 }
 .np-tree-context-header,

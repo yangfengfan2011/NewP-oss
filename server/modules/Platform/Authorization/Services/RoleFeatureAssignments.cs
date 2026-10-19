@@ -1,4 +1,5 @@
 using ICP.Platform.Crud.ObjectIds;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Audit.Contracts;
 using ICP.Platform.Modules.Authorization.DTOs;
@@ -14,9 +15,10 @@ public sealed class RoleFeatureAssignments(EfPlatformDbContext db, IPlatformTran
     IEntityAuditStampProvider stamps, RoleManagementQuery roles)
 {
     /// <summary>读取目标角色及其仍属于当前活动目录的功能位置。</summary>
-    public async Task<RoleFeatureAssignmentsDto?> GetAsync(string roleId, CancellationToken cancellationToken)
+    public async Task<RoleFeatureAssignmentsDto?> GetAsync(string roleId, CancellationToken cancellationToken,
+        DataExecutionBindingReference? source = null)
     {
-        var role = await roles.GetAsync(roleId, cancellationToken);
+        var role = await roles.GetAsync(roleId, cancellationToken, source);
         if (role is null) return null;
         var snapshot = catalog.Snapshot;
         var assigned = await db.Set<Dictionary<string, object?>>(db.ResolveModelKey("RoleFunctionGrant")).AsNoTracking()

@@ -182,6 +182,16 @@ public sealed class StandardCrudService : IStandardCrudService
         CancellationToken cancellationToken = default) => GetDetailCoreAsync(descriptor, id, null, cancellationToken);
 
     /// <inheritdoc/>
+    public Task<StandardCrudDetail?> GetDetailFromEntryAsync(StandardCrudDescriptor descriptor, string id,
+        IReadOnlyList<ICP.Platform.Authorization.Contracts.DataExecutionBindingReference> bindings,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(bindings);
+        if (bindings.Count == 0) throw new ArgumentException("An entry read binding is required.", nameof(bindings));
+        return GetDetailCoreAsync(descriptor, id, null, cancellationToken, bindings);
+    }
+
+    /// <inheritdoc/>
     public Task<StandardCrudDetail?> GetDetailFromSourceAsync(StandardCrudDescriptor descriptor, string id,
         ICP.Platform.Authorization.Contracts.DataExecutionInternalReadBinding source, CancellationToken cancellationToken = default)
     {
@@ -191,11 +201,12 @@ public sealed class StandardCrudService : IStandardCrudService
 
     // 原详情SQL/摘要/display流程不变；明确的内部来源在同一原位取得一次读取计划。
     private async Task<StandardCrudDetail?> GetDetailCoreAsync(StandardCrudDescriptor descriptor, string id,
-        ICP.Platform.Authorization.Contracts.DataExecutionInternalReadBinding? source, CancellationToken cancellationToken)
+        ICP.Platform.Authorization.Contracts.DataExecutionInternalReadBinding? source, CancellationToken cancellationToken,
+        IReadOnlyList<ICP.Platform.Authorization.Contracts.DataExecutionBindingReference>? entryBindings = null)
     {
         using var operation = _evaluation?.BeginOperation();
         StandardCrudDescriptorValidator.Validate(descriptor);
-        var bindings = source is null ? ICP.Platform.Crud.Extensions.StandardCrudDataExecutions.DetailReadBindings(descriptor) : [];
+        var bindings = entryBindings ?? (source is null ? ICP.Platform.Crud.Extensions.StandardCrudDataExecutions.DetailReadBindings(descriptor) : []);
         if (source is not null || bindings.Count > 0 || _dataScope is not null)
         {
             if (source is null && bindings.Count == 0 && _executions is not null && !descriptor.LegacyDataExecutions.Contains("read", StringComparer.Ordinal))

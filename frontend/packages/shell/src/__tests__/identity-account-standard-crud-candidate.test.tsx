@@ -8,18 +8,21 @@ import './authorizedFeatureUiFixture';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { LocalizationProvider, PlatformQueryProvider, useLocalization } from '@icp-platform/core';
+import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider, useLocalization } from '@icp-platform/core';
 import { ModuleRegistry, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import identityModule from '../../../../modules/platform/identity/src/index';
 import accountDetailDictionary from '../../../../modules/platform/identity/metadata/dictionaries/AccountDetailView.dic.json';
 import accountListDictionary from '../../../../modules/platform/identity/metadata/dictionaries/AccountListView.dic.json';
 import identityRuntimeModels from '../../../../../tests/Kernel.Tests/Fixtures/IdentityRuntimeModels.contract.json';
+import identityExecutionRuntime from '../../../../../tests/Kernel.Tests/Fixtures/AuthorizationManagementRuntime.contract.json';
 import identityNavigationDocument from '../../../../modules/platform/identity/metadata/navigation/Identity.nav.json';
 import accountListViewDocument from '../../../../modules/platform/identity/metadata/views/AccountList.view.json';
 import accountDetailViewDocument from '../../../../modules/platform/identity/metadata/views/AccountDetail.view.json';
 import { formalDataAccessFor } from './formalRuntimeMetadataTestSupport';
 import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
+import { RouteCapabilityOutlet } from '../capabilities/RouteCapabilityOutlet';
+import { FeaturePlacementContext } from '../authorization/FeaturePlacementContext';
 import { resolveStandardCrudDetailSchema } from '../metadata/standardCrudSchemaResolver';
 import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
@@ -155,6 +158,41 @@ describe('Identity account Standard CRUD production route', () => {
       [],
     )).toThrow('STANDARD_CRUD_DETAIL_CAPABILITY_ORPHAN');
     expect(load).not.toHaveBeenCalled();
+  });
+
+  it('passes the actual detail read binding through the account snapshot and security summary without an edit precheck', async () => {
+    const read = formalDataAccessFor('identity.account.detail', 'read');
+    const featurePosition = 'Identity/navigation:identity/navigation:identity.accounts';
+    const reads: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (!url.includes('/api/identity/accounts/User_311/')) throw new Error(`Unexpected account request ${url}`);
+      expect(new Headers(init?.headers).get('X-NewP-Data-Declaration')).toBe(read.id);
+      expect(new Headers(init?.headers).get('X-NewP-Feature')).toBe(featurePosition);
+      reads.push(url);
+      return new Response(JSON.stringify(url.endsWith('/snapshot') ? {
+        eid: 'User_311', ecode: 'account311', ename: '正式账号读取', status: 'Enabled', revision: 1,
+        isLocalAdministrator: false, isPersonnelBound: false, personnelDisableHold: false,
+      } : { items: [], page: 1, pageSize: 20, totalCount: 0 }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    container = document.createElement('div'); document.body.append(container); root = createRoot(container);
+    await act(async () => root.render(<MemoryRouter initialEntries={['/identity/accounts/User_311']}>
+      <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={{ zhs: accountCatalogs.zhs }}>
+        <AuthorizationProvider featurePositions={identityExecutionRuntime.identityFeatures.map(point => point.position)}>
+        <RuntimeMetadataProvider value={{ ...runtimeMetadata, manifest: { modules: [{ moduleId: 'Identity', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: identityExecutionRuntime.identityFeatures }] } }}><PlatformQueryProvider scopeKey="identity-311-source">
+          <FeaturePlacementContext.Provider value={{ entryPosition: featurePosition }}>
+            <Routes><Route path="/identity/accounts/:id" element={<RouteCapabilityOutlet capability={{ kind: 'standard-crud-detail', targetKey: 'identity.account.detail' }} />} /></Routes>
+          </FeaturePlacementContext.Provider>
+        </PlatformQueryProvider></RuntimeMetadataProvider></AuthorizationProvider>
+      </LocalizationProvider>
+    </MemoryRouter>));
+    await waitForBodyText('暂无安全事件。');
+    expect(container.textContent).toContain('正式账号读取');
+    expect(reads).toEqual(['/api/identity/accounts/User_311/snapshot', '/api/identity/accounts/User_311/security-events?page=1&pageSize=20']);
+    const edit = [...container.querySelectorAll('button')].find(button => button.textContent?.replace(/\s/g, '') === '编辑');
+    expect(edit).toBeDefined(); await act(async () => edit!.click());
+    await flushRequests();
+    expect(reads).toHaveLength(2);
   });
 
   it('parses, queries and renders the candidate through the shared list host', async () => {

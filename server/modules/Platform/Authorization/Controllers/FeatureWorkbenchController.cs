@@ -1,11 +1,13 @@
 using ICP.Platform.Authorization;
 using ICP.Platform.Authorization.Http;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Modules.Authorization.Services;
 using Microsoft.AspNetCore.Mvc;
 namespace ICP.Platform.Modules.Authorization.Controllers;
 
 /// <summary>工作台业务只在 Authorization 内部组合；位置判权由平台在请求执行前完成。</summary>
 [ApiController, Route("api/authorization/workbench"), EndpointModule("Authorization")]
+[ServiceFilter(typeof(DataExecutionExceptionFilter))]
 public sealed class FeatureWorkbenchController(RoleManagementQuery roles, ActiveFeatureCatalog catalog,
     RoleFeatureAssignments assignments) : ControllerBase
 {
@@ -17,13 +19,13 @@ public sealed class FeatureWorkbenchController(RoleManagementQuery roles, Active
     [HttpGet("roles"), RequireFeature("authorization.workbench.read")]
     public async Task<IActionResult> Roles([FromQuery] string? query, [FromQuery] int pageIndex = 1,
         [FromQuery] int pageSize = 20, CancellationToken cancellationToken = default) =>
-        Ok(await roles.ListAsync(query, pageIndex, pageSize, cancellationToken));
+        Ok(await roles.ListAsync(query, pageIndex, pageSize, cancellationToken, new(ReadBinding("catalog"), "query")));
 
     /// <summary>只读取目标角色授权，切换角色不重新装载目录。</summary>
     [HttpGet("roles/{roleId}"), RequireFeature("authorization.workbench.read")]
     public async Task<IActionResult> Role(string roleId, CancellationToken cancellationToken)
     {
-        var result = await assignments.GetAsync(roleId, cancellationToken);
+        var result = await assignments.GetAsync(roleId, cancellationToken, ReadBinding("detail"));
         return result is null ? NotFound() : Ok(result);
     }
 
@@ -42,6 +44,10 @@ public sealed class FeatureWorkbenchController(RoleManagementQuery roles, Active
             return BadRequest(AuthorizationProblem.From(exception));
         }
     }
+
+    // 两个既有读取端点选择自己的有限形状；保存仍仅按原功能资格执行。
+    private static DataExecutionBindingReference ReadBinding(string branch) =>
+        new("authorization.workbench.read", "authorization.backend", "read") { Branch = branch };
 }
 /// <summary>角色授权的完整替换请求，空数组明确清空，省略集合无效。</summary>
 public sealed record FeatureGrantRequest(IReadOnlyList<string>? Positions);

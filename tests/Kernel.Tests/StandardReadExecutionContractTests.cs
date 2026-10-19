@@ -31,7 +31,7 @@ public sealed class StandardReadExecutionContractTests
         Assert.True(result.IsSuccess, JsonSerializer.Serialize(result.Diagnostics));
         foreach (var resource in new[] { "example.record", "organization.person", "organization.company", "organization.department", "organization.position", "identity.account", "authorization.role", "part.part", "document.document" })
         {
-            var list = Assert.Single(result.Plan!.ActionDataAccessCatalog, item => item.Execution == resource + ".list");
+            var list = Assert.Single(result.Plan!.ActionDataAccessCatalog, item => item.Execution == resource + ".list" && item.Surface == "read");
             var detail = Assert.Single(result.Plan.ActionDataAccessCatalog, item => item.Execution == resource + ".read");
             Assert.Empty(list.FeaturePositions.Except(detail.FeaturePositions, StringComparer.Ordinal));
             Assert.Equal("target", Assert.Single(detail.Requirements!).Role);

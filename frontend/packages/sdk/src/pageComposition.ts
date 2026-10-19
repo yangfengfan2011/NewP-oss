@@ -1,7 +1,11 @@
 import type { ComponentType } from 'react';
 
 /** 页面身份与固定配置分离；运行时节点从 context 传递。 */
-export interface PageRef { pageKey: string; parameters?: Record<string, unknown>; inputResolverKey?: string }
+export interface PageRef {
+  pageKey: string; parameters?: Record<string, unknown>; inputResolverKey?: string;
+  /** 自定义页面实际读取来源的正式装配结果，不由导航参数替代。 */
+  dataAccess?: import('./standardCrud.types').ActionDataAccessRequirement;
+}
 /** 模块在自己的 List View 声明只读详情入口；宿主传入已验证的 recordId，查询授权属于来源导航。 */
 export interface StandardCrudDetailContribution {
   /** 贡献按钮自身的正式数据声明，不改变来源导航的功能资格。 */
@@ -20,6 +24,7 @@ export interface TreeNodeDescriptor {
   contextMenuKeys?: readonly string[];
 }
 export interface PageInput {
+  dataAccess?: import('./standardCrud.types').ActionDataAccessRequirement;
   parameters: Record<string, unknown>; context?: TreeNodeDescriptor;
   treeScope?: Record<string, unknown>;
   recordId?: string; queryScope?: Record<string, string | null>; fixedCreateValues?: Record<string, unknown>;

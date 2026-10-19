@@ -82,6 +82,8 @@ Host 与组件包采用同一正式发行构建形态，入口由[组件化开�
 
 View 的 `resourceKey` 指定稳定资源；`lookupBindings` 按该 View 实际使用的 provider key 绑定只读来源。既有字符串形态绑定 behavior；采用正式 options 或业务自定义候选的来源使用 `{ behavior, dataAccess }`，其中 `dataAccess` 引用目标资源的执行合同，由正式装配投影到查询、创建和编辑的原功能位置。宿主通过 provider key 消费本 View 的编译要求，不能借用表单写入声明或任取一个位置。专用动作通过 `featureActions` 声明 `key`、`titleKey`、`behaviorKey` 及可选 `readBehaviors`。标准 `pageActions` / `rowActions` 也可声明 `readBehaviors`，补充动作输入所需的只读行为；它们与资源读取和实际表单 Lookup 一同随发起动作授权。这些绑定描述实际消费能力，不向管理员增加接口权限清单。
 
+既有自定义导航 PageRef 可用 `dataAccess` 引用正式读取执行。装配以实际 pageKey、read surface 和原 featureKey 位置投影唯一来源，Shell 将绑定结果作为 PageInput 独立字段交给实际页面；导航参数不能自报或覆盖声明。标准动作输入仍消费自身 surface/actionKey 的读取来源，不借列表根声明。
+
 完整位置由声明引用及其祖先、静态节点类型和动作所在位置编译产生，不能使用 URL、文案、数组序号或记录 ID。导航的 `featureOwner` 为重定向别名和独立详情指定已有入口引用；别名不创建重复授权点。`ReferenceKey`、`StaticScope`、`ActionScope`、`StaticScopeTitle` 和 `Container` 是标准适配器的派生事实，不能据此推断 Capsule 自定义声明已经支持这些输入字段。
 
 普通纯导航快捷动作以 `navigationTargetKey` 引用采用位置授权的真实导航，沿用现有 handler 与 navigation-result 跳转；按目标导航的位置资格呈现，不生成独立业务动作点，不能借用当前资源的查看或保存资格。另一个明确受限的组合只允许 `list.rowActions` 的标准 `view`（无 handler、input）指向已声明的只读呈现导航：目标必须 `routeOnly: true`、`featureAuthorization: false`、具有 PageRef，且无 feature owner、key 或 redirect。该组合沿当前资源 read 位置呈现，不新增查询、导航或 Tab 授权点；缺失或无效引用仍拒绝候选。运行时定位投影、来源位置及逐请求校验见[模块接入指南](../../frontend/docs/module-integration-guide.md#标准路径的位置授权)。

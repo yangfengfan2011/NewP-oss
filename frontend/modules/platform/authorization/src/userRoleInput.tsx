@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Alert, Checkbox, Pagination, Select, Spin, Typography } from 'antd';
 import { formatRequestError, platformFetch, useLocalization } from '@icp-platform/core';
-import { isStandardCrudRecord, type StandardCrudActionInputRenderContext } from '@icp-platform/sdk';
+import { isStandardCrudRecord, type ActionDataAccessRequirement, type StandardCrudActionInputRenderContext } from '@icp-platform/sdk';
 import { featureInit, requestRole } from './roleResource';
 
 interface Account { id: string; code: string; name: string; status: string }
 interface Role { ECODE: string; ENAME: string; IsEnabled: boolean }
-function RoleOptions({ selected, onChange, featurePosition }: { selected: string[]; featurePosition?: string; onChange: (codes: string[]) => void }) {
+function RoleOptions({ selected, onChange, featurePosition, dataAccess }: { selected: string[]; featurePosition?: string; dataAccess?: ActionDataAccessRequirement; onChange: (codes: string[]) => void }) {
   const { t } = useLocalization();
   const [page, setPage] = useState(1);
   const [catalog, setCatalog] = useState<{ items: Role[]; total: number }>();
@@ -15,14 +15,14 @@ function RoleOptions({ selected, onChange, featurePosition }: { selected: string
     const controller = new AbortController();
     setCatalog(undefined);
     setError('');
-    void requestRole(platformFetch as typeof fetch, `/api/authorization/roles/query?pageIndex=${page}&pageSize=20`, { signal: controller.signal, ...featureInit(featurePosition) })
+    void requestRole(platformFetch as typeof fetch, `/api/authorization/roles/query?pageIndex=${page}&pageSize=20`, { signal: controller.signal, ...featureInit(featurePosition, dataAccess) })
       .then(result => {
         if (controller.signal.aborted) return;
         if (!isStandardCrudRecord(result) || !Array.isArray(result.items) || typeof result.total !== 'number') throw new Error('角色目录响应无效');
         setCatalog({ items: (result.items as Role[]).filter(role => role.ECODE !== 'LocalAdmin'), total: result.total });
       }).catch((failure: unknown) => { if (!controller.signal.aborted) setError(failure); });
     return () => controller.abort();
-  }, [page, featurePosition]);
+  }, [page, featurePosition, dataAccess]);
   if (error) return <Alert type="error" message={formatRequestError(error, t)} />;
   if (!catalog) return <Spin />;
   return <>
@@ -33,7 +33,7 @@ function RoleOptions({ selected, onChange, featurePosition }: { selected: string
     <Pagination current={page} pageSize={20} total={catalog.total} showSizeChanger={false} onChange={setPage} />
   </>;
 }
-export function UserRoleInput({ value, onChange, featurePosition }: StandardCrudActionInputRenderContext) {
+export function UserRoleInput({ value, onChange, featurePosition, dataAccess }: StandardCrudActionInputRenderContext) {
   const { t } = useLocalization();
   const [query, setQuery] = useState('');
   const [accountId, setAccountId] = useState<string>();
@@ -74,6 +74,6 @@ export function UserRoleInput({ value, onChange, featurePosition }: StandardCrud
       options={accounts.map(account => ({ value: account.id, label: `${account.name} (${account.code})${account.status === 'Disabled' ? ' · ' + t('RoleView.DisabledAccount', '停用账号') : ''}` }))} />
     {!!error && <Alert type="error" message={formatRequestError(error, t)} />}
     {loading && <Spin />}
-    {ready && !error && <RoleOptions featurePosition={featurePosition} selected={selected} onChange={codes => onChange({ accountId, codes })} />}
+    {ready && !error && <RoleOptions featurePosition={featurePosition} dataAccess={dataAccess} selected={selected} onChange={codes => onChange({ accountId, codes })} />}
   </div>;
 }

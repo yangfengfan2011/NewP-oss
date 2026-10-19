@@ -10,7 +10,8 @@
         "featureKey": "authorization.workbench",
         "order": 5,
         "page": {
-          "pageKey": "authorization.workbench"
+          "pageKey": "authorization.workbench",
+          "dataAccess": { "execution": "authorization.workbench.read", "resources": ["authorization.role"] }
         }
       },
       {

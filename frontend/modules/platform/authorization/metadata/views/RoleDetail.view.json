@@ -48,13 +48,15 @@
         "labelKey": "UserRoles",
         "key": "userRoles",
         "handlerKey": "userRoles",
+        "dataAccess": { "execution": "authorization.role.list", "resources": ["authorization.role"] },
         "readBehaviors": ["authorization.userRoles.read"],
         "inputKey": "userRoles",
         "confirmMessageKey": "ConfirmUserRoles"
       }
     ],
     "featureActions": [
-      { "key": "authorize", "titleKey": "Action_Authorize", "behaviorKey": "authorization.role.authorize" }
+      { "key": "authorize", "titleKey": "Action_Authorize", "behaviorKey": "authorization.role.authorize",
+        "dataAccess": { "execution": "authorization.role.authorization.manage", "resources": ["authorization.role"] } }
     ]
   }
 }

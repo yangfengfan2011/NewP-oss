@@ -26,6 +26,10 @@ public static class StandardFeatureMetadataCompiler
                 && item.TryGetProperty("page", out var page) && page.TryGetProperty("parameters", out var parameters) && parameters.TryGetProperty("viewKey", out _))
                 Page(page, custom.ReferenceKey ?? custom.Key, null, []);
         foreach (var item in navigation.Values)
+            if (Optional(item, "featureKey") is { } featureKey && customFeatures?.SingleOrDefault(feature => feature.Key == featureKey && feature.Kind == "navigation") is { } custom
+                && item.TryGetProperty("page", out var page) && page.TryGetProperty("dataAccess", out _))
+                DataAccess(page, page, "read", "", custom.ReferenceKey ?? custom.Key, Text(page, "pageKey"));
+        foreach (var item in navigation.Values)
             if (Optional(item, "featureOwner") is { } owner && !item.TryGetProperty("redirectTo", out _))
                 View(Text(item, "targetKey"), owner, null, []);
         var customKeys = customFeatures?.Select(feature => feature.ReferenceKey ?? feature.Key).ToHashSet(StringComparer.Ordinal) ?? [];
@@ -217,7 +221,7 @@ public static class StandardFeatureMetadataCompiler
         }
 
         // 直接要求附在已有功能位置；查看和输出不因此增加可授权动作。
-        void DataAccess(JsonElement view, JsonElement action, string surface, string key, string owner)
+        void DataAccess(JsonElement view, JsonElement action, string surface, string key, string owner, string? sourceKey = null)
         {
             if (!action.TryGetProperty("dataAccess", out var declared)) return;
             var index = result.FindIndex(feature => (feature.ReferenceKey ?? feature.Key) == owner);
@@ -225,7 +229,7 @@ public static class StandardFeatureMetadataCompiler
             var node = result[index];
             if (declared.EnumerateObject().Any(property => property.Name is not ("execution" or "resources" or "actions" or "additionalActions")))
                 throw new InvalidOperationException("ACTION_DATA_ACCESS_DECLARATION_INVALID");
-            var declaration = new ActionDataAccessDeclaration(moduleId, Text(view, "key"), surface, key, Text(declared, "execution"),
+            var declaration = new ActionDataAccessDeclaration(moduleId, sourceKey ?? Text(view, "key"), surface, key, Text(declared, "execution"),
                 declared.GetProperty("resources").EnumerateArray().Select(item => item.GetString()!).ToArray(),
                 declared.TryGetProperty("actions", out var declaredActions) ? declaredActions.EnumerateArray().Select(item => item.GetString()!).ToArray() : [])
             { AdditionalActions = declared.TryGetProperty("additionalActions", out var additional) ? additional.EnumerateArray().Select(item => item.GetString()!).ToArray() : [] };

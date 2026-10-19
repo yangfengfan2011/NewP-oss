@@ -69,7 +69,8 @@ public sealed class RoleFeatureSqlServerHttpApiTests
         using var targetClient = await fixture.LoginAsync("member-target", target.GetProperty("temporaryCredential").GetString()!);
         var targetRoute = $"/api/authorization/users/{targetId}/roles";
         await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, member, HttpMethod.Get, "/api/authorization/users/candidates?query=member-target"), HttpStatusCode.OK);
-        await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, member, HttpMethod.Get, "/api/authorization/roles/query?pageIndex=1&pageSize=1"), HttpStatusCode.OK);
+        await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, member, HttpMethod.Get, "/api/authorization/roles/query?pageIndex=1&pageSize=1",
+            dataAccess: http.Declaration("authorization.role.list", member)), HttpStatusCode.OK);
         await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, member, HttpMethod.Get, targetRoute), HttpStatusCode.OK);
         await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, http.Role("create"), HttpMethod.Post, "/api/authorization/roles", new { Code = "NoCreate", Name = "不自动获得创建" }), HttpStatusCode.Forbidden);
         await ExpectAsync(FeatureHttpTestRequests.SendAsync(ordinary, http.Role("userRoles", "detail.pageActions"), HttpMethod.Put, targetRoute, new { RoleCodes = new[] { "TargetRead" } }), HttpStatusCode.Forbidden);

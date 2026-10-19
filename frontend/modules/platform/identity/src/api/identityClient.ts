@@ -84,7 +84,7 @@ export function getAccountSnapshot(
   return requestJson(`/api/identity/accounts/${encodeURIComponent(accountEid)}/snapshot`, {
     method: 'GET',
     ...(readContext?.signal ? { signal: readContext.signal } : {}),
-    ...(readContext?.featurePosition ? { headers: featureHeaders(readContext) } : {}),
+    ...(readContext?.featurePosition || readContext?.dataAccess ? { headers: readHeaders(readContext) } : {}),
   });
 }
 
@@ -99,7 +99,7 @@ export function listAccountSecurityEvents(
     {
       method: 'GET',
       ...(readContext?.signal ? { signal: readContext.signal } : {}),
-      ...(readContext?.featurePosition ? { headers: featureHeaders(readContext) } : {}),
+      ...(readContext?.featurePosition || readContext?.dataAccess ? { headers: readHeaders(readContext) } : {}),
     },
   );
 }
@@ -146,6 +146,10 @@ function jsonRequest(method: string, body: unknown, context?: StandardCrudFeatur
 
 function featureHeaders(context?: StandardCrudFeatureRequestContext): Record<string, string> {
   return context?.featurePosition ? { 'X-NewP-Feature': context.featurePosition } : {};
+}
+
+function readHeaders(context?: StandardCrudFeatureRequestContext): Record<string, string> {
+  return { ...featureHeaders(context), ...(context?.dataAccess ? { 'X-NewP-Data-Declaration': context.dataAccess.id } : {}) };
 }
 
 async function requestJson<T>(url: string, init: RequestInit): Promise<T> {

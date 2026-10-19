@@ -16,7 +16,10 @@ public sealed class IdentityFeatureSqlServerHttpApiTests
         using var admin = await fixture.LoginAdministratorAsync();
         var http = new FeatureHttpTestRequests(fixture);
         var create = http.Identity("create");
-        Assert.Equal(13, fixture.FeatureCatalog.Count(point => point.ModuleId == "Identity"));
+        // 745 正式目录已含原有非呈现 authorize；声明采用不增加功能位置。
+        Assert.Equal(14, fixture.FeatureCatalog.Count(point => point.ModuleId == "Identity"));
+        Assert.Single(fixture.FeatureCatalog.Where(point => point.ModuleId == "Identity"
+            && point.BehaviorKey == "identity.account.authorize" && point.ActionScope == "detail.custom"));
         foreach (var key in new[] { "edit", "enable", "disable", "delete", "credentialReset" })
         {
             var list = http.Identity(key);
@@ -34,7 +37,8 @@ public sealed class IdentityFeatureSqlServerHttpApiTests
         var revision = account.GetProperty("revision").GetInt64();
         foreach (var suffix in new[] { "", "/snapshot", "/security-events" })
         {
-            using var read = await SendAsync(admin, http.Identity(), HttpMethod.Get, $"/api/identity/accounts/{id}{suffix}");
+            using var read = await SendAsync(admin, http.Identity(), HttpMethod.Get, $"/api/identity/accounts/{id}{suffix}",
+                dataAccess: http.Declaration("identity.account.read", http.Identity()));
             Assert.Equal(HttpStatusCode.OK, read.StatusCode);
         }
         using var opposite = await SendAsync(admin, http.Identity("disable"), HttpMethod.Put, $"/api/identity/accounts/{id}/status/disable",

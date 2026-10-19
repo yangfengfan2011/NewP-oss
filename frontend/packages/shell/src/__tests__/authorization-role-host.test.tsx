@@ -9,6 +9,7 @@ import detail from '../../../../modules/platform/authorization/metadata/views/Ro
 import dictionary from '../../../../modules/platform/authorization/metadata/dictionaries/RoleView.dic.json';
 import { createRoleResource } from '../../../../modules/platform/authorization/src/roleResource';
 import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
+import { formalDataAccessFor } from './formalRuntimeMetadataTestSupport';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 import { FeaturePlacementContext } from '../authorization/FeaturePlacementContext';
@@ -95,6 +96,11 @@ it('角色列表、Drawer表单与独立详情消费正式runtime字段和动作
   }
   const roleOptions = fetcher.mock.calls.filter(([url, init]) => String(url).includes('/roles/query') && new Headers(init?.headers).get('X-NewP-Feature') === memberPosition);
   expect(roleOptions.length).toBeGreaterThanOrEqual(3);
+  const roleInputRead = formalDataAccessFor(detail.view.key, 'pageActions', 'userRoles');
+  for (const [, init] of roleOptions) expect(new Headers(init?.headers).get('X-NewP-Data-Declaration')).toBe(roleInputRead.id);
+  const roleDetails = fetcher.mock.calls.filter(([url, init]) => String(url).endsWith('/roles/role-1') && !init?.method);
+  expect(roleDetails.length).toBeGreaterThan(0);
+  for (const [, init] of roleDetails) expect(new Headers(init?.headers).get('X-NewP-Data-Declaration')).toBe(formalDataAccessFor(detail.view.key, 'read').id);
   await render(false);
   await vi.waitFor(async () => { await act(async () => undefined); expect(container.textContent).toContain('真实角色'); });
   const create = Array.from(container.querySelectorAll('button')).find(b => b.textContent === '新建角色');

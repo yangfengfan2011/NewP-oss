@@ -37,6 +37,7 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
   const loadRequest = useRef<AbortController>();
   const pending = useRef(false);
   const entryPosition = String(input.parameters.featurePosition ?? "");
+  const declarationId = input.dataAccess?.id;
   const saved = useMemo(() => new Set(current?.positions ?? []), [current]);
   const diff = useMemo(() => featureDiff(saved, draft), [saved, draft]);
   const dirty = diff.added.length + diff.removed.length > 0;
@@ -53,7 +54,7 @@ export default function FeatureWorkbench({ input, reportState }: PageProps) {
   })), [catalog, t]);
   const tree = useMemo(() => buildFeatureTree(localizedPoints, query, draft, grantedOnly, t), [localizedPoints, query, draft, grantedOnly, t]);
   const read = useCallback((path: string, signal?: AbortSignal) => requestRole(platformFetch as typeof fetch, endpoint + path,
-    { signal, headers: { "X-NewP-Feature": entryPosition } }), [entryPosition]);
+    { signal, headers: { "X-NewP-Feature": entryPosition, ...(declarationId ? { "X-NewP-Data-Declaration": declarationId } : {}) } }), [entryPosition, declarationId]);
 
   // 目录与角色查询分离；切换目标不重新抓取完整功能树。
   useEffect(() => {

@@ -2,6 +2,7 @@
   "schemaVersion": "1.0",
   "moduleId": "Identity",
   "dataExecutions": [
+    {"key":"identity.account.authorization.manage","moduleId":"Identity","provider":"authorization.object.manage","boundary":"entry","featureBehaviors":["identity.account.authorize"],"resourceKey":"identity.account"},
     {"key":"identity.account.displayNames","moduleId":"Identity","provider":"identity.backend","boundary":"internal","featureBehaviors":[],"requirements":[{"role":"targets","stage":"read","shape":"objects","resources":["identity.account"],"anyOf":[["read"]],"minimumCount":0,"maximumCount":null}],"fixedBindings":[{"kind":"internal","identity":"identity.account.displayNames","caller":"ICP.Platform.Modules.Identity.Application.IdentityUserDisplayNameDirectory"}]},
     {"key":"identity.account.list","moduleId":"Identity","provider":"standardCrud.list","boundary":"entry","featureBehaviors":["identity.account.read"],"resourceKey":"identity.account"},
     {"key":"identity.account.read","moduleId":"Identity","provider":"standardCrud.read","boundary":"entry","featureBehaviors":["identity.account.read"],"resourceKey":"identity.account"}

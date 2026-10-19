@@ -1,5 +1,5 @@
 import type { ActionDataAccessRequirement } from '@icp-platform/sdk';
-import { bindActionDataAccess } from '../metadata/runtimeMetadataLoader';
+import { bindActionDataAccess, bindNavigationDataAccess } from '../metadata/runtimeMetadataLoader';
 import type { RuntimeMetadataState } from '../metadata/runtimeMetadataManifest';
 import standardRead from '../../../../../tests/Kernel.Tests/Fixtures/StandardReadDataAccess.contract.json';
 import organization from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationDataAccess.contract.json';
@@ -10,11 +10,13 @@ import documentHistory from '../../../../../tests/Kernel.Tests/Fixtures/Document
 import workspaceHistory from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceHistoryDataAccess.contract.json';
 import documentFiles from '../../../../../tests/Kernel.Tests/Fixtures/DocumentFileDataAccess.contract.json';
 import clipboard from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceClipboardDataAccess.contract.json';
+import authorizationManagement from '../../../../../tests/Kernel.Tests/Fixtures/AuthorizationManagementRuntime.contract.json';
 
 const declarations = uniqueDeclarations([...(standardRead as ActionDataAccessRequirement[]), ...(organization as ActionDataAccessRequirement[]), ...(example as ActionDataAccessRequirement[]),
   ...(partWrite as ActionDataAccessRequirement[]), ...(partHistory as ActionDataAccessRequirement[]), ...(documentHistory as ActionDataAccessRequirement[]),
   ...(documentFiles.dataAccess as ActionDataAccessRequirement[]),
-  ...(workspaceHistory as ActionDataAccessRequirement[]), ...(clipboard.declarations as ActionDataAccessRequirement[])]);
+  ...(workspaceHistory as ActionDataAccessRequirement[]), ...(clipboard.declarations as ActionDataAccessRequirement[]),
+  ...(authorizationManagement.dataAccess as ActionDataAccessRequirement[]), ...(authorizationManagement.identityDataAccess as ActionDataAccessRequirement[])]);
 
 function uniqueDeclarations(items: readonly ActionDataAccessRequirement[]) {
   const byId = new Map<string, ActionDataAccessRequirement>();
@@ -44,6 +46,7 @@ function hasAuthoringReference(value: unknown): boolean {
 // 正常旧资产沿生产 binder 消费正式编译目录；已绑定快照及故意删声明的反例保持原样，不补单次请求上下文。
 export function bindFormalRuntimeMetadata(value: RuntimeMetadataState): RuntimeMetadataState {
   const viewKeys = new Set(value.viewDocuments.map(document => String(document.view.key)));
+  for (const item of value.navDocuments.flatMap(document => document.navigation.items)) if (item.page) viewKeys.add(item.page.pageKey);
   const relevant = declarations.filter(item => viewKeys.has(item.viewKey));
   const modules = value.manifest.modules.map(module => ({ ...module,
     dataAccess: uniqueDeclarations([...relevant.filter(item => item.moduleId === module.moduleId), ...(module.dataAccess ?? [])]),
@@ -53,6 +56,7 @@ export function bindFormalRuntimeMetadata(value: RuntimeMetadataState): RuntimeM
       dataAccess: relevant.filter(item => item.moduleId === moduleId) });
   }
   return { ...value, manifest: { ...value.manifest, modules },
+    navDocuments: value.navDocuments.map(document => hasAuthoringReference(document) ? bindNavigationDataAccess(document, declarations) : document),
     viewDocuments: value.viewDocuments.map(document => hasAuthoringReference(document.view) ? bindActionDataAccess(document, declarations) : document),
   };
 }

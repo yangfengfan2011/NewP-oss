@@ -3,10 +3,13 @@ export { requestAuthorization as requestRole } from './authorizationRequest';
 import { UserRoleInput } from './userRoleInput';
 import { platformFetch } from '@icp-platform/core';
 import { createStandardCrudRestDataAdapter, isStandardCrudRecord, StandardCrudRequestError,
-  type StandardCrudResourceRegistration } from '@icp-platform/sdk';
+  type ActionDataAccessRequirement, type StandardCrudResourceRegistration } from '@icp-platform/sdk';
 
-export const featureHeaders = (position?: string): Record<string, string> => position ? { 'X-NewP-Feature': position } : {};
-export const featureInit = (position?: string): RequestInit => position ? { headers: featureHeaders(position) } : {};
+export const featureHeaders = (position?: string, dataAccess?: ActionDataAccessRequirement): Record<string, string> => ({
+  ...(position ? { 'X-NewP-Feature': position } : {}), ...(dataAccess ? { 'X-NewP-Data-Declaration': dataAccess.id } : {}),
+});
+export const featureInit = (position?: string, dataAccess?: ActionDataAccessRequirement): RequestInit =>
+  position || dataAccess ? { headers: featureHeaders(position, dataAccess) } : {};
 
 const route = '/api/authorization/roles';
 function fields(value: unknown): Record<string, unknown> {
@@ -27,7 +30,7 @@ export function createRoleResource(fetcher: typeof fetch = platformFetch as type
     resourceKey: 'authorization.role', listViewKey: 'authorization.role.list', detailViewKey: 'authorization.role.detail',
     dataAdapter: {
       list: list.list, getRowId: list.getRowId,
-      get: async (id, context) => { const normalized = { fields: mapRole(await requestRole(fetcher, `${route}/${encodeURIComponent(id)}`, { signal: context?.signal, ...featureInit(context?.featurePosition) })), summaries: {} }; return { normalized, value: normalized }; },
+      get: async (id, context) => { const normalized = { fields: mapRole(await requestRole(fetcher, `${route}/${encodeURIComponent(id)}`, { signal: context?.signal, ...featureInit(context?.featurePosition, context?.dataAccess) })), summaries: {} }; return { normalized, value: normalized }; },
       create: async (values, _current, context) => ({ operation: 'create', payload: await requestRole(fetcher, route, { method: 'POST', headers: { 'Content-Type': 'application/json', ...featureHeaders(context?.featurePosition) }, body: JSON.stringify({ Code: values.ECODE, Name: values.ENAME, Description: values.Description }) }) }),
       update: async (id, values, current, context) => ({ operation: 'update', payload: await requestRole(fetcher, `${route}/${encodeURIComponent(id ?? '')}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...featureHeaders(context?.featurePosition) }, body: JSON.stringify({ Name: values.ENAME, Description: values.Description, IsEnabled: current?.IsEnabled }) }) }),
     },

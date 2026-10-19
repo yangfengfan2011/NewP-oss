@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { formatRequestError, useLocalization, usePlatformQuery } from '@icp-platform/core';
-import { StandardCrudRequestError, type StandardCrudSummaryRenderer } from '@icp-platform/sdk';
+import { StandardCrudRequestError, type ActionDataAccessRequirement, type StandardCrudSummaryRenderer } from '@icp-platform/sdk';
 import { Alert, Button, Card, Empty, Pagination, Space, Spin, Table } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -14,6 +14,7 @@ const EVENT_PAGE_SIZE = 20;
 interface IdentityAccountSecurityEventsSummaryProps {
   accountEid: string;
   featurePosition?: string;
+  dataAccess?: ActionDataAccessRequirement;
   title: string;
 }
 
@@ -21,6 +22,7 @@ interface IdentityAccountSecurityEventsSummaryProps {
 export function IdentityAccountSecurityEventsSummary({
   accountEid,
   featurePosition,
+  dataAccess,
   title,
 }: IdentityAccountSecurityEventsSummaryProps) {
   const { t } = useLocalization();
@@ -34,8 +36,8 @@ export function IdentityAccountSecurityEventsSummary({
   const [page, setPage] = useState(1);
   // 查询身份只包含影响安全事件事实的 Identity 输入；标题与安全命令状态不参与复用。
   const query = usePlatformQuery<IdentityPage<IdentitySecurityEvent>>({
-    key: ['identity.security-events', accountEid, page, EVENT_PAGE_SIZE, featurePosition ?? ''],
-    load: ({ signal }) => listAccountSecurityEvents(accountEid, page, EVENT_PAGE_SIZE, { signal, ...(featurePosition ? { featurePosition } : {}) }),
+    key: ['identity.security-events', accountEid, page, EVENT_PAGE_SIZE, featurePosition ?? '', dataAccess?.id ?? ''],
+    load: ({ signal }) => listAccountSecurityEvents(accountEid, page, EVENT_PAGE_SIZE, { signal, ...(featurePosition ? { featurePosition } : {}), ...(dataAccess ? { dataAccess } : {}) }),
   });
   const result = query.data;
   const loading = result === undefined && (query.status === 'idle' || query.isFetching);
@@ -96,6 +98,7 @@ export function IdentityAccountSecurityEventsSummary({
 export const identityAccountSecurityEventsSummaryRenderer: StandardCrudSummaryRenderer = ({
   block,
   title,
+  dataAccess,
 }) => {
   const accountEid = typeof block.data === 'object'
     && block.data !== null
@@ -106,7 +109,7 @@ export const identityAccountSecurityEventsSummaryRenderer: StandardCrudSummaryRe
   const featurePosition = typeof block.data === 'object' && block.data !== null
     && 'featurePosition' in block.data && typeof block.data.featurePosition === 'string' ? block.data.featurePosition : undefined;
   return accountEid
-    ? <IdentityAccountSecurityEventsSummary key={accountEid} accountEid={accountEid} title={title} featurePosition={featurePosition} />
+    ? <IdentityAccountSecurityEventsSummary key={accountEid} accountEid={accountEid} title={title} featurePosition={featurePosition} dataAccess={dataAccess} />
     : <IdentityEventsUnavailable />;
 };
 

@@ -110,6 +110,56 @@ public sealed class AcceptanceGateTests
 
     private const string RunEnvironmentVariable = "NEWP_RUN_ACCEPTANCE";
 
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "固定发行物的角色输入读取与功能授权PageRef最短接线")]
+    public async Task NativeAuthorizationManagementSources_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-authorization-management-sources");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
+        var code = "AUTH311-" + runId[..8];
+        var name = "正式授权来源 " + runId[..8];
+        string? roleId = null;
+        string? accountCode = null;
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, publishedFixture: fixture, browserAsAdministrator: true,
+            prepareJourney: async (client, features, actor, token) =>
+            {
+                var create = features.Action(features.Behavior("Authorization", "authorization.role.read"), "create", "list.pageActions");
+                var role = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Post, "/api/authorization/roles",
+                    new { Code = code, Name = name }, create.Position, token);
+                roleId = role.GetProperty("id").GetString()!;
+                accountCode = actor.ECode;
+            },
+            browserJourney: async (page, token) =>
+            {
+                token.ThrowIfCancellationRequested();
+                var driver = new StandardCrudPageDriver(page);
+                await page.Locator(".np-sidebar-menu").GetByRole(AriaRole.Link, new() { Name = "角色管理", Exact = true }).ClickAsync();
+                var row = await driver.WaitForRowAsync(code);
+                await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
+                await page.GetByRole(AriaRole.Menuitem, new() { Name = "账号角色", Exact = true }).ClickAsync();
+                var dialog = driver.VisibleModal();
+                var account = dialog.GetByRole(AriaRole.Combobox, new() { Name = "账号", Exact = true });
+                await account.WaitForAsync(new() { State = WaitForSelectorState.Visible });
+                await account.ClickAsync();
+                await account.FillAsync(accountCode!);
+                await page.GetByRole(AriaRole.Option, new() { NameRegex = new System.Text.RegularExpressions.Regex(System.Text.RegularExpressions.Regex.Escape(accountCode!)) }).ClickAsync();
+                var option = dialog.GetByRole(AriaRole.Checkbox, new() { Name = $"{name} ({code})", Exact = true });
+                await option.WaitForAsync(new() { State = WaitForSelectorState.Visible });
+                await option.CheckAsync();
+                await driver.ConfirmAsync(dialog, new("PUT", "/api/authorization/users/", 204, "角色配置", PathIsPrefix: true));
+                row = await driver.WaitForRowAsync(code);
+                await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
+                await page.GetByRole(AriaRole.Menuitem, new() { Name = "配置权限", Exact = true }).ClickAsync();
+                var workbench = new AuthorizationWorkbenchPageDriver(page);
+                await workbench.WaitForCurrentRoleTitleAsync(name, code);
+                await workbench.ClickFirstVisibleFeatureCheckboxAsync();
+                await workbench.SaveAsync(roleId!);
+                await workbench.WaitForRoleButtonEnabledAsync(name, code);
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
+                    new { url = page.Url, journey = "authorization-management-sources", browserActor = "administrator" }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "固定正式发行物的Organization树读取、详情及公司声明写入最短接线")]
     public async Task NativeOrganizationDataExecution_UsesFormalDriver()
     {

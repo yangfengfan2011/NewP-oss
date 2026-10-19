@@ -21,6 +21,11 @@ public interface IStandardCrudService
         string id,
         CancellationToken cancellationToken = default);
 
+    /// <summary>实际界面读取来源复用原详情计划；执行器仍核验当前请求的正式声明，不继承允许结果。</summary>
+    Task<StandardCrudDetail?> GetDetailFromEntryAsync(StandardCrudDescriptor descriptor, string id,
+        IReadOnlyList<ICP.Platform.Authorization.Contracts.DataExecutionBindingReference> bindings,
+        CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
     /// <summary>已验证真实来源的内部调用复用详情SQL与display，不借用独立模块的HTTP声明或功能位置。</summary>
     Task<StandardCrudDetail?> GetDetailFromSourceAsync(StandardCrudDescriptor descriptor, string id,
         ICP.Platform.Authorization.Contracts.DataExecutionInternalReadBinding source,

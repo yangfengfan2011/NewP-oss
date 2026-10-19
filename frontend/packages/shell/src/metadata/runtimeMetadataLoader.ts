@@ -77,7 +77,7 @@ async function loadRuntimeMetadataOnce(fetcher: typeof fetch): Promise<RuntimeMe
       const url = `${entry.metadataBasePath}/${relativePath}`;
       tasks.push(async () => ({
         kind: 'nav',
-        document: bindFeaturePositions(await loadJson<RuntimeNavItemDocument>(fetcher, url), entry.features ?? []),
+        document: bindNavigationDataAccess(bindFeaturePositions(await loadJson<RuntimeNavItemDocument>(fetcher, url), entry.features ?? []), entry.dataAccess ?? []),
       }));
     }
 
@@ -150,6 +150,17 @@ export function bindActionDataAccess(document: RuntimeViewDocument, requirements
       typeof value === 'object' && value !== null && !Array.isArray(value)
         ? bind(value as Record<string, unknown>, 'lookupBindings', key) : value]));
   return { ...document, view: bind(view, 'read', '') };
+}
+
+/** 自定义 PageRef 沿实际 pageKey 绑定读取来源，不生成虚构 View 或功能位置。 */
+export function bindNavigationDataAccess(document: RuntimeNavItemDocument, requirements: NonNullable<RuntimeMetadataManifest['modules'][number]['dataAccess']>): RuntimeNavItemDocument {
+  return { ...document, navigation: { ...document.navigation, items: document.navigation.items.map(item => {
+    if (!item.page) return item;
+    const matches = requirements.filter(requirement => requirement.viewKey === item.page!.pageKey && requirement.surface === 'read' && requirement.actionKey === '');
+    if (item.page.dataAccess === undefined && matches.length === 0) return item;
+    if (item.page.dataAccess === undefined || matches.length !== 1) throw new Error(`页面数据声明缺失或冲突：${item.page.pageKey}`);
+    return { ...item, page: { ...item.page, dataAccess: matches[0] } };
+  }) } };
 }
 
 async function mapWithConcurrency<T, TResult>(

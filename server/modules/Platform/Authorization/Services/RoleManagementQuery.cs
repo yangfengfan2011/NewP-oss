@@ -2,6 +2,7 @@ using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Modules.Authorization.DTOs;
+using ICP.Platform.Authorization.Contracts;
 
 namespace ICP.Platform.Modules.Authorization.Services;
 
@@ -12,18 +13,21 @@ public sealed class RoleManagementQuery(IStandardCrudService crud, IStandardCrud
         ?? throw new InvalidOperationException("Role read resource is unavailable.");
 
     /// <summary>筛选、稳定排序和分页在数据库执行，当前页审计名称一次批量解析。</summary>
-    public async Task<object> ListAsync(string? keyword, int pageIndex, int pageSize, CancellationToken cancellationToken)
+    public async Task<object> ListAsync(string? keyword, int pageIndex, int pageSize, CancellationToken cancellationToken,
+        DataExecutionQueryContext? source = null)
     {
         var result = await crud.ListAsync(Descriptor, new StandardCrudListQuery(
-            Page: pageIndex, PageSize: pageSize, Filters: new Dictionary<string, string?> { ["query"] = keyword }), cancellationToken);
+            Page: pageIndex, PageSize: pageSize, Filters: new Dictionary<string, string?> { ["query"] = keyword }) { ReadContext = source }, cancellationToken);
         return new { items = result.Items, total = result.Total, pageIndex = result.Page, pageSize = result.PageSize,
             sortBy = result.SortBy, sortDirection = result.SortDirection };
     }
 
     /// <summary>将公共 raw/display 投影映射回既有角色详情契约，不自行格式化时间或解析账号。</summary>
-    public async Task<RoleDto?> GetAsync(string id, CancellationToken cancellationToken)
+    public async Task<RoleDto?> GetAsync(string id, CancellationToken cancellationToken,
+        DataExecutionBindingReference? source = null)
     {
-        var detail = await crud.GetDetailAsync(Descriptor, id, cancellationToken);
+        var detail = source is null ? await crud.GetDetailAsync(Descriptor, id, cancellationToken)
+            : await crud.GetDetailFromEntryAsync(Descriptor, id, [source], cancellationToken);
         if (detail is null) return null;
         var row = detail.Fields;
         return new RoleDto

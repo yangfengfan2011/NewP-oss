@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import runtime from '../../../../../../tests/Kernel.Tests/Fixtures/AuthorizationManagementRuntime.contract.json';
+import type { ActionDataAccessRequirement } from '@icp-platform/sdk';
 
 const platformFetchMock = vi.hoisted(() => vi.fn());
 vi.mock('@icp-platform/core', () => ({ platformFetch: platformFetchMock }));
@@ -12,6 +14,21 @@ import {
 } from '../api/identityClient';
 
 describe('identity management client', () => {
+  it('carries the compiled account read source only on snapshot and event reads', async () => {
+    platformFetchMock.mockImplementation(async () => new Response('{}', { status: 200 }));
+    const sources = runtime.identityDataAccess.filter(item => item.execution === 'identity.account.read' && item.surface === 'read');
+    expect(sources).toHaveLength(1);
+    const dataAccess = sources[0] as ActionDataAccessRequirement;
+    const points = runtime.identityFeatures.filter(item => item.behaviorKey === 'identity.account.read');
+    expect(points).toHaveLength(1);
+    const context = { featurePosition: points[0].position, dataAccess };
+    await getAccountSnapshot('u1', context);
+    await listAccountSecurityEvents('u1', 1, 20, context);
+    await createAccount({ ecode: 'alice', ename: 'Alice' }, context);
+    for (const call of platformFetchMock.mock.calls.slice(0, 2))
+      expect(new Headers(call[1].headers).get('X-NewP-Data-Declaration')).toBe(dataAccess.id);
+    expect(new Headers(platformFetchMock.mock.calls[2][1].headers).get('X-NewP-Data-Declaration')).toBeNull();
+  });
   it('carries the initiating feature on reads and security writes with distinct status routes', async () => {
     platformFetchMock.mockImplementation(async () => new Response('{}', { status: 200 }));
     const context = { featurePosition: 'Identity/navigation:accounts/action:create' };

@@ -56,7 +56,7 @@ export function PageOutlet({ page, context, close, navigation, treeNavigation, a
   const parameters = { ...resolved.input.parameters };
   delete parameters.featurePosition;
   if (placement?.entryPosition) parameters.featurePosition = placement.entryPosition;
-  const props: PageProps = { input: { ...resolved.input, parameters }, reportState, active: parentActive && active };
+  const props: PageProps = { input: { ...resolved.input, parameters, dataAccess: page.dataAccess }, reportState, active: parentActive && active };
   return <FeaturePlacementContext.Provider value={placement}><PageActivityContext.Provider value={props.active!}><TreeNavigationContext.Provider value={treeNavigation ?? null}><PageNavigationContext.Provider value={navigation ?? null}><Suspense fallback={<div role="status">{t('Platform.LoadingPage', '正在加载页面…')}</div>}>
     {page.pageKey === 'platform.tree' ? <TreePage {...props} />
       : page.pageKey === 'platform.tabs' ? <TabPage {...props} />

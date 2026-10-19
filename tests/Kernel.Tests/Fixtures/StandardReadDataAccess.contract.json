@@ -1,5 +1,40 @@
 [
   {
+    "id": "Authorization/view:authorization.role.detail/pageActions/action:userRoles",
+    "moduleId": "Authorization",
+    "viewKey": "authorization.role.detail",
+    "surface": "pageActions",
+    "actionKey": "userRoles",
+    "execution": "authorization.role.list",
+    "resources": [
+      "authorization.role"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Authorization/navigation:authorization.roles/surface:detail.pageActions/action:userRoles"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "authorization.role"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      }
+    ],
+    "provider": "standardCrud.list"
+  },
+  {
     "id": "Authorization/view:authorization.role.detail/read",
     "moduleId": "Authorization",
     "viewKey": "authorization.role.detail",
@@ -51,6 +86,41 @@
     ],
     "featurePositions": [
       "Authorization/navigation:authorization.roles"
+    ],
+    "requirements": [
+      {
+        "role": "query",
+        "stage": "read",
+        "shape": "query",
+        "resources": [
+          "authorization.role"
+        ],
+        "anyOf": [
+          [
+            "read"
+          ]
+        ],
+        "minimumCount": 0,
+        "maximumCount": null
+      }
+    ],
+    "provider": "standardCrud.list"
+  },
+  {
+    "id": "Authorization/view:authorization.role.list/rowActions/action:userRoles",
+    "moduleId": "Authorization",
+    "viewKey": "authorization.role.list",
+    "surface": "rowActions",
+    "actionKey": "userRoles",
+    "execution": "authorization.role.list",
+    "resources": [
+      "authorization.role"
+    ],
+    "actions": [
+      "read"
+    ],
+    "featurePositions": [
+      "Authorization/navigation:authorization.roles/surface:list.rowActions/action:userRoles"
     ],
     "requirements": [
       {

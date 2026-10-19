@@ -25,7 +25,7 @@ public static class StandardCrudDataExecutions
                 .SelectMany(endpoint => endpoint.Metadata.GetOrderedMetadata<StandardCrudDataExecutionAttribute>())
                 .SelectMany(endpoint => endpoint.Bindings)).ToArray();
         foreach (var execution in plan.Modules.SelectMany(module => module.DataExecutions)
-            .Where(contract => contract.Provider.StartsWith("standardCrud.", StringComparison.Ordinal)))
+            .Where(contract => contract.Boundary == "entry" && contract.Provider.StartsWith("standardCrud.", StringComparison.Ordinal)))
             if (!bound.Any(binding => binding.Execution == execution.Key && binding.Provider == execution.Provider))
                 throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_ENDPOINT_MISSING");
     }
@@ -44,6 +44,11 @@ public static class StandardCrudDataExecutions
     public static RouteHandlerBuilder WithDataExecution(this RouteHandlerBuilder endpoint, IServiceProvider services,
         StandardCrudDescriptor descriptor, string operation)
     {
+        var capability = operation switch { "create" => StandardCrudOperation.Create, "update" => StandardCrudOperation.Update,
+            "delete" => StandardCrudOperation.Delete, "list" => StandardCrudOperation.List, "read" => StandardCrudOperation.Detail,
+            "options" => StandardCrudOperation.Options, "export" => StandardCrudOperation.Export, _ => (StandardCrudOperation?)null };
+        // 关闭URL的DenyAll保持原样；内部合同不能为它增加入口声明或启用能力。
+        if (capability is not null && !descriptor.Authorization!.FeatureOperations.Contains(capability.Value)) return endpoint;
         if (!descriptor.DataExecutions.TryGetValue(operation, out var execution))
         {
             var published = operation switch { "create" => StandardCrudOperation.Create, "update" => StandardCrudOperation.Update,
@@ -57,7 +62,7 @@ public static class StandardCrudDataExecutions
         var plan = services.GetRequiredService<CanonicalModulePlan>();
         var contract = plan.Modules.SelectMany(module => module.DataExecutions).SingleOrDefault(item => item.Key == execution);
         var provider = "standardCrud." + operation;
-        if (contract is null || contract.ModuleId != descriptor.ModuleId || contract.Provider != provider || contract.LegacyActions
+        if (contract is null || contract.Boundary != "entry" || contract.ModuleId != descriptor.ModuleId || contract.Provider != provider || contract.LegacyActions
             || !contract.Requirements.All(requirement => requirement.Resources.SequenceEqual([descriptor.ResourceKey]))
             || !plan.ActionDataAccessCatalog.Any(requirement => requirement.Execution == execution))
             throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_BINDING_INVALID");

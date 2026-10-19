@@ -277,6 +277,7 @@ public sealed class StandardCrudService : IStandardCrudService
         CancellationToken cancellationToken = default)
     {
         using var operationScope = _evaluation?.BeginOperation();
+        var source = EntryWriteSource(descriptor, "create", null);
         if (_objectOperations?.CanExecute(descriptor.ResourceKey, ObjectOperationAction.Create) == true)
         {
             try
@@ -286,6 +287,7 @@ public sealed class StandardCrudService : IStandardCrudService
                     ObjectOperationAction.Create,
                     null,
                     values,
+                    source,
                     cancellationToken);
                 return await BuildMutationDetailAsync(
                     descriptor,
@@ -299,7 +301,7 @@ public sealed class StandardCrudService : IStandardCrudService
             }
         }
 
-        var result = await _defaultWriter.CreateAsync(descriptor, values, cancellationToken);
+        var result = await _defaultWriter.CreateAsync(descriptor, values, source, cancellationToken);
         return await BuildMutationDetailAsync(
             descriptor,
             result,
@@ -318,6 +320,7 @@ public sealed class StandardCrudService : IStandardCrudService
         CancellationToken cancellationToken = default)
     {
         using var operationScope = _evaluation?.BeginOperation();
+        var source = EntryWriteSource(descriptor, "update", id);
         if (_objectOperations?.CanExecute(descriptor.ResourceKey, ObjectOperationAction.Update) == true)
         {
             try
@@ -327,6 +330,7 @@ public sealed class StandardCrudService : IStandardCrudService
                     ObjectOperationAction.Update,
                     id,
                     values,
+                    source,
                     cancellationToken);
                 return await BuildMutationDetailAsync(
                     descriptor,
@@ -340,7 +344,7 @@ public sealed class StandardCrudService : IStandardCrudService
             }
         }
 
-        var result = await _defaultWriter.UpdateAsync(descriptor, id, values, cancellationToken);
+        var result = await _defaultWriter.UpdateAsync(descriptor, id, values, source, cancellationToken);
         return await BuildMutationDetailAsync(
             descriptor,
             result,
@@ -392,6 +396,7 @@ public sealed class StandardCrudService : IStandardCrudService
         CancellationToken cancellationToken = default)
     {
         using var operationScope = _evaluation?.BeginOperation();
+        var source = EntryWriteSource(descriptor, "delete", id);
         if (_objectOperations?.CanExecute(descriptor.ResourceKey, ObjectOperationAction.Delete) == true)
         {
             return await _objectOperations.ExecuteAsync(
@@ -399,11 +404,18 @@ public sealed class StandardCrudService : IStandardCrudService
                 ObjectOperationAction.Delete,
                 id,
                 new Dictionary<string, object?>(StringComparer.Ordinal),
+                source,
                 cancellationToken);
         }
 
-        return await _defaultWriter.DeleteAsync(descriptor, id, cancellationToken);
+        return await _defaultWriter.DeleteAsync(descriptor, id, source, cancellationToken);
     }
+
+    // 仅已登记的入口生成本次目标绑定；正式来源仍由统一执行器核对原请求声明。
+    private static ObjectOperationWriteSource? EntryWriteSource(StandardCrudDescriptor descriptor, string operation, string? id)
+        => descriptor.DataExecutions.TryGetValue(operation, out var execution)
+            ? new ObjectOperationWriteSource.Declared(new(new(execution, "standardCrud." + operation, "submit"), descriptor.ResourceKey, id))
+            : null;
 
     // 查询扩展点只产出标准条件；列表真正执行统一收口到平台查询内核，避免模块逻辑直接进入持久化实现。
     private IReadOnlyList<StandardCrudQueryCondition> BuildConditions(StandardCrudDescriptor descriptor, StandardCrudListQuery query)

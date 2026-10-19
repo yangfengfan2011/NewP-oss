@@ -75,6 +75,7 @@ public abstract class ObjectBehaviorBase : IObjectBehavior
         ResolveDefaultOperations(context).CreateAsync(
             ResolveDescriptor(context),
             context.Values,
+            context.WriteSource,
             cancellationToken);
 
     // 未采用公共默认行为的对象必须显式实现更新，目标标识由统一入口单独保护。
@@ -85,6 +86,7 @@ public abstract class ObjectBehaviorBase : IObjectBehavior
             ResolveDescriptor(context),
             RequireTargetId(context),
             context.Values,
+            context.WriteSource,
             cancellationToken);
 
     // 未采用公共默认行为的对象必须显式实现删除，物理删除不写入审计四字段。
@@ -94,6 +96,7 @@ public abstract class ObjectBehaviorBase : IObjectBehavior
         ResolveDefaultOperations(context).DeleteAsync(
             ResolveDescriptor(context),
             RequireTargetId(context),
+            context.WriteSource,
             cancellationToken);
 
     // 专用动作保持明确名称，不把所有业务写入压成 Save。

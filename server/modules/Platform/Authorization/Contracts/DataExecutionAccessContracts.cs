@@ -70,4 +70,12 @@ public interface IDataExecutionAccess
     /// <summary>对服务端归一化后的真实候选执行候选角色要求，不读取不存在的对象。</summary>
     Task<DataExecutionDecision> EvaluateCandidateAsync(DataExecutionBindingReference binding, string resourceKey,
         string role, IReadOnlyDictionary<string, object?> candidate, CancellationToken cancellationToken = default);
+    /// <summary>在候选补齐身份、归属和审计字段后消费本次写绑定，不要求新对象已可读。</summary>
+    Task<DataExecutionDecision> EvaluateCandidateAsync(DataExecutionWriteContext source, string resourceKey, string role,
+        IReadOnlyDictionary<string, object?> candidate, CancellationToken token = default) => throw new NotSupportedException();
+
+    /// <summary>在原旧值保护位置核对单次写来源与实际目标，再按有效要求执行现有对象裁决。</summary>
+    Task<DataExecutionDecision> EvaluateObjectAsync(DataExecutionWriteContext source, string role,
+        DataExecutionWriteFacts before, CancellationToken token = default) => throw new NotSupportedException();
+
 }

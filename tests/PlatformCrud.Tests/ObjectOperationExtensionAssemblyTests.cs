@@ -17,7 +17,7 @@ using Xunit;
 
 namespace ICP.Platform.Crud.Tests;
 
-public sealed class ObjectOperationExtensionAssemblyTests
+public sealed partial class ObjectOperationExtensionAssemblyTests
 {
     [Fact]
     public async Task StartAsync_PlatformTargetDoesNotRequireRepeatedExplicitDependency()

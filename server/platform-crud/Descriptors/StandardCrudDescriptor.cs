@@ -9,6 +9,9 @@ public sealed record StandardCrudDescriptor
     public IReadOnlyDictionary<string, string> DataExecutions { get; init; } = new Dictionary<string, string>();
     /// <summary>迁移期保留的具体共享执行；随所属切片迁移删除，#321 退役整个过渡机制。</summary>
     public IReadOnlyList<string> LegacyDataExecutions { get; init; } = [];
+    /// <summary>仅保留尚未迁移的具体内部调用者/动作；缺少来源不能选择这些过渡项。</summary>
+    public IReadOnlyList<ICP.Platform.Crud.ObjectOperations.ObjectOperationLegacyBinding> LegacyObjectOperationBindings { get; init; } = [];
+
     /// <summary>创建必须登记业务事实；缺少资源登记实现或事务参与能力时失败关闭。</summary>
     public bool RequiresCreationRecord { get; init; }
     /// <summary>更新必须保护真实旧值并登记业务差异；缺少参与能力时失败关闭。</summary>

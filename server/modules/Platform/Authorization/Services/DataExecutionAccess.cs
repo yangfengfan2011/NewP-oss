@@ -123,20 +123,7 @@ public sealed partial class DataExecutionAccess(CanonicalModulePlan plan, IHttpC
         string role, string objectId, CancellationToken cancellationToken = default)
     {
         var requirement = Role(Resolve([binding], resourceKey), binding, role, "object");
-        foreach (var branch in requirement.AnyOf)
-        {
-            var allowed = true;
-            foreach (var action in branch)
-            {
-                if (action == "read")
-                {
-                    if (!await reads.IsReadableAsync(resourceKey, objectId, cancellationToken)) return DataExecutionDecision.NotFound;
-                }
-                else if (!await decisions.IsAllowedAsync(resourceKey, objectId, action, cancellationToken)) { allowed = false; break; }
-            }
-            if (allowed) return DataExecutionDecision.Allowed;
-        }
-        return DataExecutionDecision.Denied;
+        return await EvaluateObjectRequirementAsync(requirement, resourceKey, objectId, cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -144,14 +131,7 @@ public sealed partial class DataExecutionAccess(CanonicalModulePlan plan, IHttpC
         string role, IReadOnlyDictionary<string, object?> candidate, CancellationToken cancellationToken = default)
     {
         var requirement = Role(Resolve([binding], resourceKey), binding, role, "candidate");
-        foreach (var branch in requirement.AnyOf)
-        {
-            var allowed = true;
-            foreach (var action in branch)
-                if (!await decisions.IsCandidateAllowedAsync(resourceKey, candidate, action, cancellationToken)) { allowed = false; break; }
-            if (allowed) return DataExecutionDecision.Allowed;
-        }
-        return DataExecutionDecision.Denied;
+        return await EvaluateCandidateRequirementAsync(requirement, resourceKey, candidate, cancellationToken);
     }
 
     // 执行提供者由真实执行端限定；即使引用同一模块其他合法声明也不能串用。

@@ -73,12 +73,20 @@ public sealed class ObjectOperationExecutor : IObjectOperationExecutor
         && behavior.Definition.SupportedActions.Contains(action);
 
     /// <inheritdoc />
-    public async Task<StandardCrudMutationResult> ExecuteAsync(
-        string objectKey,
-        ObjectOperationAction action,
-        string? targetId,
-        IReadOnlyDictionary<string, object?> values,
+    public Task<StandardCrudMutationResult> ExecuteAsync(string objectKey, ObjectOperationAction action,
+        string? targetId, IReadOnlyDictionary<string, object?> values, CancellationToken cancellationToken = default)
+        => ExecuteCoreAsync(objectKey, action, targetId, values, null, cancellationToken);
+
+    /// <inheritdoc/>
+    public Task<StandardCrudMutationResult> ExecuteAsync(string objectKey, ObjectOperationAction action,
+        string? targetId, IReadOnlyDictionary<string, object?> values, ObjectOperationWriteSource? source,
         CancellationToken cancellationToken = default)
+        => ExecuteCoreAsync(objectKey, action, targetId, values, source, cancellationToken);
+
+    // 来源随每次嵌套调用显式传递，不继承外层许可；事务、扩展与审计顺序保持原owner。
+    private async Task<StandardCrudMutationResult> ExecuteCoreAsync(string objectKey, ObjectOperationAction action,
+        string? targetId, IReadOnlyDictionary<string, object?> values, ObjectOperationWriteSource? source,
+        CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(objectKey);
         ArgumentNullException.ThrowIfNull(action);
@@ -134,7 +142,7 @@ public sealed class ObjectOperationExecutor : IObjectOperationExecutor
                         }
                     }
 
-                    var context = new ObjectOperationContext(objectKey, action, targetId, before.SnapshotValues());
+                    var context = new ObjectOperationContext(objectKey, action, targetId, before.SnapshotValues(), source);
                     StandardCrudMutationResult result;
                     using (_executionContext.EnterCore())
                     {

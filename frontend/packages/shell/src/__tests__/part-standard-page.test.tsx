@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { loadComponentSource, readComponentJson } from '../../test-support/componentTestInputs';
-import type { FrontendBehaviorBindings } from '@icp-platform/sdk';
+import type { ActionDataAccessRequirement, FrontendBehaviorBindings } from '@icp-platform/sdk';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
@@ -9,6 +9,7 @@ import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } fr
 import { ModuleRegistry } from '@icp-platform/sdk';
 const { default: part } = await loadComponentSource<{ default: FrontendBehaviorBindings }>('Part', 'index.ts');
 import model from '../../../../../tests/Kernel.Tests/Fixtures/PartRuntime.contract.json';
+import partWrite from '../../../../../tests/Kernel.Tests/Fixtures/PartWriteDataAccess.contract.json';
 import historyFeatures from '../../../../../tests/Kernel.Tests/Fixtures/PartHistoryFeatures.contract.json';
 const history = readComponentJson('Part', 'metadata/views/PartObjectHistoryList.view.json');
 const list = readComponentJson('Part', 'metadata/views/PartList.view.json');
@@ -31,8 +32,16 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 it.each(['success', 'receipt'] as const)('uses the formal Part routes and standard create/read-only properties after %s', async scenario => {
   const writes: unknown[] = [];
+  const createDeclaration = (partWrite as ActionDataAccessRequirement[])[0];
+  const readPosition = historyFeatures.readPosition;
+  const createPosition = createDeclaration.featurePositions[0];
+  const writeBindings: Array<{ declaration: string | null; position: string | null }> = [];
+  expect(createDeclaration.execution).toBe('part.part.create');
+  expect(createDeclaration.resources).toEqual(['part.part']);
+  expect(createDeclaration.requirements).toEqual([{ role: 'candidate', stage: 'submit', shape: 'candidate',
+    resources: ['part.part'], anyOf: [['create']], minimumCount: 1, maximumCount: 1 }]);
   const user = { id: 'actor', ecode: 'actor', ename: '账号', revision: 1, mustChangePassword: false,
-    isLocalAdministrator: false, timeZoneId: 'Asia/Taipei', featurePositions: ['part-entry', 'part-create'] };
+    isLocalAdministrator: false, timeZoneId: 'Asia/Taipei', featurePositions: [readPosition, createPosition] };
   const fields = { EID: 'part-one', ECODE: 'P-001', ENAME: '首个零组件', Description: '说明', CreatedBy: 'actor', CreatedBy_DisplayValue: '账号',
     UpdatedBy: 'actor', UpdatedBy_DisplayValue: '账号', CreatedAt: '2026-10-08T00:00:00Z', CreatedAt_DisplayValue: '2026-10-08 08:00', UpdatedAt: '2026-10-08T00:00:00Z', UpdatedAt_DisplayValue: '2026-10-08 08:00' };
   const json = (value: unknown) => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } });
@@ -42,6 +51,8 @@ it.each(['success', 'receipt'] as const)('uses the formal Part routes and standa
     if (path.endsWith('antiforgery-token')) return json({ requestToken: 'token' });
     if (path.endsWith('current-user')) return json(user);
     if (path.startsWith('/api/part/parts') && method === 'POST') {
+      const headers = new Headers(input instanceof Request ? input.headers : init?.headers);
+      writeBindings.push({ declaration: headers.get('X-NewP-Data-Declaration'), position: headers.get('X-NewP-Feature') });
       writes.push(input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body)));
       return json(scenario === 'success' ? { fields, summaries: {} } : { succeeded: true });
     }
@@ -50,21 +61,20 @@ it.each(['success', 'receipt'] as const)('uses the formal Part routes and standa
     throw new Error(`Unexpected request ${method} ${path}`);
   }));
   ModuleRegistry.replaceAll([{ metadata: { moduleId: 'Part', displayName: '零组件', version: '1' }, ...part }], 'part-test');
-  const nav = { ...navigation, navigation: { items: navigation.navigation.items.map(item => ({ ...item, featurePosition: item.key === 'part.history' ? historyFeatures.historyPosition : 'part-entry' })) } };
+  const nav = { ...navigation, navigation: { items: navigation.navigation.items.map(item => ({ ...item, featurePosition: item.key === 'part.history' ? historyFeatures.historyPosition : readPosition })) } };
   const projection = compileStandardCrudRouteProjection(ModuleRegistry.getAllModules(), [nav], [list, detail, history], []);
-  expect(projection.detailEntries).toEqual([{ path: '/parts/:id', viewKey: detail.view.key, featurePosition: 'part-entry' }]);
+  expect(projection.detailEntries).toEqual([{ path: '/parts/:id', viewKey: detail.view.key, featurePosition: readPosition }]);
   const container = document.createElement('div'); document.body.append(container);
   const root = createRoot(container);
   const catalogs = { zhs: Object.fromEntries(Object.entries(dictionary.Part).map(([key, value]) => [`Part.${key}`, value.zhs])) };
   const wrap = (viewKey: string, pageKey: string) => <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={catalogs}>
     <AuthProvider initialUser={user}><AuthorizationProvider featurePositions={user.featurePositions}><PlatformQueryProvider scopeKey="part-test">
       <RuntimeMetadataProvider value={{ manifest: { modules: [{ moduleId: 'Part', metadataBasePath: '', navFiles: [], viewFiles: [], modelFiles: [], features: [
-        { key: 'part.parts', position: 'part-entry', kind: 'navigation' },
-        { key: 'part.parts', position: historyFeatures.readPosition, kind: 'navigation' },
+        { key: 'part.parts', position: readPosition, kind: 'navigation' },
         { key: 'part.history', position: historyFeatures.historyPosition, kind: 'navigation', parentPosition: historyFeatures.readPosition },
-        { key: 'create', position: 'part-create', kind: 'action', parentPosition: 'part-entry', actionScope: 'list.pageActions' },
+        { key: 'create', position: createPosition, kind: 'action', parentPosition: readPosition, actionScope: 'list.pageActions' },
       ] }] }, navDocuments: [nav], modelDocuments: [model], viewDocuments: [list, detail, history] }}>
-        <PageEntry page={{ pageKey, parameters: { viewKey, featurePosition: 'part-entry' } }} />
+        <PageEntry page={{ pageKey, parameters: { viewKey, featurePosition: readPosition } }} />
       </RuntimeMetadataProvider>
     </PlatformQueryProvider></AuthorizationProvider></AuthProvider>
   </LocalizationProvider>;
@@ -87,6 +97,8 @@ it.each(['success', 'receipt'] as const)('uses the formal Part routes and standa
   await act(async () => document.querySelector<HTMLFormElement>('.ant-drawer form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   await vi.waitFor(() => expect(writes, document.body.textContent ?? "").toEqual([{ ECODE: 'P-001', ENAME: '首个零组件', Description: '说明' }]));
   await vi.waitFor(() => expect(document.querySelector('.ant-drawer-open')).toBeNull());
+  // 真PageEntry和模块adapter消费同一正式编译声明，不在测试中补请求context或权限结果。
+  expect(writeBindings).toEqual([{ declaration: createDeclaration.id, position: createPosition }]);
   if (scenario === 'success') {
     await vi.waitFor(() => expect(container.querySelector('tr[data-row-key="part-one"]')).not.toBeNull());
     await act(async () => [...container.querySelectorAll<HTMLElement>('.ant-table *')].find(node => node.children.length === 0 && node.textContent === '更多')!.click());

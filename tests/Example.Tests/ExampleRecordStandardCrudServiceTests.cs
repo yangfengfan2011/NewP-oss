@@ -123,7 +123,7 @@ public sealed class ExampleRecordStandardCrudServiceTests
     [Fact]
     public async Task CreateAsync_ReturnsRawReviewerUserAndResolvedDisplayValue()
     {
-        var descriptor = ExampleCrudTestResources.Create();
+        var descriptor = FieldOnlyWriteResource();
         var repository = new RecordingMutationStandardCrudRepository([]);
         var directory = new RecordingAccountDirectory([Account("User_A", "Alice")]);
         var service = CreateService(repository, EmptyQueryExecutor(), directory);
@@ -149,7 +149,7 @@ public sealed class ExampleRecordStandardCrudServiceTests
     [Fact]
     public async Task UpdateAsync_ReturnsRawReviewerUserAndResolvedDisplayValue()
     {
-        var descriptor = ExampleCrudTestResources.Create();
+        var descriptor = FieldOnlyWriteResource();
         var createdAt = new DateTime(2026, 8, 27, 8, 0, 0, DateTimeKind.Utc);
         var repository = new RecordingMutationStandardCrudRepository(
             [
@@ -215,7 +215,7 @@ public sealed class ExampleRecordStandardCrudServiceTests
     [Fact]
     public async Task UpdateAsync_WhenRecordSourceIsBlank_ReturnsStableRequiredErrorWithoutWriting()
     {
-        var descriptor = ExampleCrudTestResources.Create();
+        var descriptor = FieldOnlyWriteResource();
         var repository = new RecordingMutationStandardCrudRepository(
         [
             new Dictionary<string, object?>
@@ -265,6 +265,19 @@ public sealed class ExampleRecordStandardCrudServiceTests
         Assert.Equal("standardCrud.displayValueFieldReadOnly", error.ReasonKey);
         var fieldError = Assert.Single(error.FieldErrors);
         Assert.Equal("ReviewerUserEID_DisplayValue", fieldError.Field);
+    }
+
+    // 这三例只观察字段/展示，未装写判权服务；显式隔离旧写输入，不把此fixture当正式权限证据。
+    private static StandardCrudDescriptor FieldOnlyWriteResource()
+    {
+        var descriptor = ExampleCrudTestResources.Create();
+        string[] writes = ["create", "update", "delete"];
+        return descriptor with
+        {
+            DataExecutions = descriptor.DataExecutions.Where(item => !writes.Contains(item.Key, StringComparer.Ordinal))
+                .ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal),
+            LegacyDataExecutions = descriptor.LegacyDataExecutions.Concat(writes).Distinct(StringComparer.Ordinal).ToArray()
+        };
     }
 
     private static StandardCrudService CreateService(

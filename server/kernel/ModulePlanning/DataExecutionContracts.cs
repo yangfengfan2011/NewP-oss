@@ -53,12 +53,14 @@ public static class DataExecutionContracts
             }
             if (item.GetProperty("provider").GetString() is { } provider && provider.StartsWith("standardCrud.", StringComparison.Ordinal))
             {
-                if (item.EnumerateObject().Any(property => property.Name is not ("key" or "moduleId" or "provider" or "boundary" or "featureBehaviors" or "resourceKey"))
-                    || item.GetProperty("moduleId").GetString() != moduleId)
+                if (item.EnumerateObject().Any(property => property.Name is not ("key" or "moduleId" or "provider" or "boundary" or "featureBehaviors" or "resourceKey" or "fixedBindings"))
+                    || item.GetProperty("moduleId").GetString() != moduleId
+                    || item.TryGetProperty("fixedBindings", out _) && provider is not ("standardCrud.create" or "standardCrud.update" or "standardCrud.delete"))
                     throw new InvalidOperationException("DATA_EXECUTION_REQUIREMENT_INVALID");
                 return new DataExecutionContract(item.GetProperty("key").GetString()!, moduleId, provider,
                     item.GetProperty("boundary").GetString()!, item.GetProperty("featureBehaviors").Deserialize<string[]>()!,
-                    StandardCrudRequirements(provider, item.GetProperty("resourceKey").GetString()!));
+                    StandardCrudRequirements(provider, item.GetProperty("resourceKey").GetString()!))
+                { FixedBindings = item.TryGetProperty("fixedBindings", out var fixedBindings) ? fixedBindings.Deserialize<DataExecutionFixedBinding[]>(options)! : [] };
             }
             var contract = item.Deserialize<DataExecutionContract>(options)
                 ?? throw new InvalidOperationException("DATA_EXECUTION_CONTRACT_INVALID");

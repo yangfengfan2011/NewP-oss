@@ -106,7 +106,8 @@ public static class StandardCrudServiceCollectionExtensions
         services.AddOptions<ObjectOperationAssemblyOptions>()
             .Configure(options => options.Behaviors.Add(new(
                 owner.ModuleId,
-                definition)));
+                definition,
+                owner.GetType())));
         services.AddScoped<IObjectBehaviorContribution>(provider =>
             new ObjectBehaviorContribution(
                 definition.ObjectKey,

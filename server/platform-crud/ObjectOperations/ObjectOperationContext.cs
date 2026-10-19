@@ -12,16 +12,24 @@ public sealed class ObjectOperationContext
         string objectKey,
         ObjectOperationAction action,
         string? targetId,
-        IReadOnlyDictionary<string, object?> values)
+        IReadOnlyDictionary<string, object?> values) : this(objectKey, action, targetId, values, null) { }
+
+    // 来源由执行器单独传入；Before扩展只能修改业务输入，不能替换来源。
+    internal ObjectOperationContext(string objectKey, ObjectOperationAction action, string? targetId,
+        IReadOnlyDictionary<string, object?> values, ObjectOperationWriteSource? source)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(objectKey);
         ArgumentNullException.ThrowIfNull(action);
         ArgumentNullException.ThrowIfNull(values);
+        WriteSource = source;
         ObjectKey = objectKey;
         Action = action;
         TargetId = targetId;
         Values = values.ToFrozenDictionary(StringComparer.Ordinal);
     }
+
+    /// <summary>本次写的正式或明确过渡来源；未知调用不能由业务值补入。</summary>
+    public ObjectOperationWriteSource? WriteSource { get; }
 
     /// <summary>当前对象的稳定标识。</summary>
     public string ObjectKey { get; }

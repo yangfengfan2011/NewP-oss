@@ -13,7 +13,7 @@ using Xunit;
 
 namespace ICP.Platform.HostApi.Tests;
 
-public sealed class WorkspaceObjectMutationSqlServerHttpApiTests
+public sealed partial class WorkspaceObjectMutationSqlServerHttpApiTests
 {
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "Document真实改码同步规范快照，重复码标准冲突与双侧回滚")]
     public async Task DocumentCodeEdit_CopiesCanonicalSnapshotAndDuplicateCodeKeepsBothSides()

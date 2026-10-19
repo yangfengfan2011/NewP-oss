@@ -162,7 +162,8 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
             throw new LinkQueryException(400, "Workspace.InvalidEndpoint");
         var result = model == "Document"
             ? await documentFiles.CreateWithFilesAsync(values, context.Values.GetValueOrDefault("Uploads") as DocumentUploadSet, cancellationToken)
-            : await operations.ExecuteAsync(resource, ObjectOperationAction.Create, null, values, cancellationToken);
+            : await operations.ExecuteAsync(resource, ObjectOperationAction.Create, null, values,
+                model == "Part" ? new ObjectOperationWriteSource.Legacy(typeof(WorkspaceContents), nameof(CreateObjectAsync), resource, "create", null) : null, cancellationToken);
         if (!result.Succeeded) return result;
         var id = result.Detail?.Fields.GetValueOrDefault("EID") as string
             ?? throw new InvalidOperationException("Created object identity is missing.");
@@ -212,7 +213,8 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
                 if (target.ModelKey == WorkspacePositions.FolderModel) await UpdateFolderAsync(target.Id, values, cancellationToken);
                 else
                 {
-                    var result = await operations.ExecuteAsync(Resource(target.ModelKey), ObjectOperationAction.Update, target.Id, values, cancellationToken);
+                    var result = await operations.ExecuteAsync(Resource(target.ModelKey), ObjectOperationAction.Update, target.Id, values,
+                        target.ModelKey == "Part" ? new ObjectOperationWriteSource.Legacy(typeof(WorkspaceContents), nameof(MutateObjectsAsync), "part.part", "update", target.Id) : null, cancellationToken);
                     if (!result.Succeeded) return result;
                 }
             }
@@ -236,7 +238,8 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
                 }
                 else
                 {
-                    var result = await operations.ExecuteAsync(Resource(target.ModelKey), ObjectOperationAction.Delete, target.Id, new Dictionary<string, object?>(), cancellationToken);
+                    var result = await operations.ExecuteAsync(Resource(target.ModelKey), ObjectOperationAction.Delete, target.Id, new Dictionary<string, object?>(),
+                        target.ModelKey == "Part" ? new ObjectOperationWriteSource.Legacy(typeof(WorkspaceContents), nameof(MutateObjectsAsync), "part.part", "delete", target.Id) : null, cancellationToken);
                     if (!result.Succeeded) return result;
                 }
             }

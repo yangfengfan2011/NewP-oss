@@ -13,7 +13,8 @@ internal sealed class ObjectOperationAssemblyOptions
 
 internal sealed record ObjectBehaviorRegistration(
     string OwnerModuleId,
-    ObjectBehaviorDefinition Definition);
+    ObjectBehaviorDefinition Definition,
+    Type? OwnerType = null);
 
 internal sealed record ObjectOperationExtensionRegistration(
     string ProviderModuleId,
@@ -190,6 +191,33 @@ internal sealed class ObjectOperationAssemblyPlan
     private ObjectOperationAssemblyPlan(ObjectOperationAssemblyOptions options, CanonicalModulePlan? modules = null)
     {
         Behaviors = Compile(options, modules);
+        if (modules is not null) ValidateInternalWriteBindings(modules, options.Behaviors);
+    }
+
+    // 内部标准写也必须落到实际owner行为；固定caller只从本次真实注册owner解析，避免不同加载上下文同名类型串用。
+    private void ValidateInternalWriteBindings(CanonicalModulePlan modules, IReadOnlyList<ObjectBehaviorRegistration> registrations)
+    {
+        foreach (var contract in modules.Modules.SelectMany(module => module.DataExecutions)
+            .Where(item => item.Boundary == "internal" && item.Provider is "standardCrud.create" or "standardCrud.update" or "standardCrud.delete"))
+        {
+            var resource = contract.Requirements.SelectMany(item => item.Resources).Distinct(StringComparer.Ordinal).SingleOrDefault();
+            var action = new ObjectOperationAction(contract.Provider["standardCrud.".Length..]);
+            if (resource is null || !Behaviors.TryGetValue(resource, out var behavior)
+                || behavior.Definition.OwnerModuleId != contract.ModuleId || !behavior.Definition.SupportedActions.Contains(action))
+                throw new InvalidOperationException("OBJECT_OPERATION_DATA_EXECUTION_BINDING_INVALID");
+            foreach (var binding in contract.FixedBindings)
+            {
+                var separator = binding.Caller?.LastIndexOf('.') ?? -1;
+                var typeName = separator > 0 ? binding.Caller![..separator] : "";
+                var member = separator > 0 ? binding.Caller![(separator + 1)..] : "";
+                var caller = registrations.Select(item => item.OwnerType?.Assembly).Where(assembly => assembly is not null).Distinct()
+                    .Select(assembly => assembly!.GetType(typeName, false)).SingleOrDefault(type => type is not null);
+                if (binding.Kind != "internal" || binding.Identity != contract.Key || caller is null
+                    || !caller.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static)
+                        .Any(method => method.Name == member))
+                    throw new InvalidOperationException("OBJECT_OPERATION_DATA_EXECUTION_CALLER_INVALID");
+            }
+        }
     }
 
     internal IReadOnlyDictionary<string, ObjectBehaviorPlan> Behaviors { get; }
@@ -202,7 +230,8 @@ internal sealed class ObjectOperationAssemblyPlan
         {
             options.Behaviors.Add(new(
                 behavior.Definition.OwnerModuleId,
-                behavior.Definition));
+                behavior.Definition,
+                behavior.GetType()));
         }
         return new ObjectOperationAssemblyPlan(options);
     }

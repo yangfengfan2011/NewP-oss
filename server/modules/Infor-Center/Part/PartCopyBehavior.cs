@@ -34,7 +34,8 @@ public sealed class PartCopyBehavior(EfPlatformDbContext db, IStandardCrudReposi
             return Rejected(409, "Workspace.CopySourceChanged");
         var values = (IReadOnlyDictionary<string, object?>)context.Values["Values"]!;
         if (values.Keys.Any(key => key is not ("ECODE" or "ENAME" or "Description"))) return Rejected(400, "Workspace.ServerFieldForbidden");
-        var result = await operations().ExecuteAsync("part.part", ObjectOperationAction.Create, null, values, cancellationToken);
+        var result = await operations().ExecuteAsync("part.part", ObjectOperationAction.Create, null, values,
+            new ObjectOperationWriteSource.Legacy(typeof(PartCopyBehavior), nameof(ExecuteAsync), "part.part", "create", null), cancellationToken);
         // 普通创建不取得目录图锁，可能在预检后赢得同码竞争；只在真实数据库确认编码重复时定位该字段。
         if (result.Error?.Code == "StandardCrud.PersistenceConflict" && values.GetValueOrDefault("ECODE") is string code
             && await db.Set<Dictionary<string, object?>>("Part").AsNoTracking().AnyAsync(row => EF.Property<string>(row, "ECODE") == code, cancellationToken))

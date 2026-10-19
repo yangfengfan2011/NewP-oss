@@ -1,0 +1,37 @@
+[
+  {
+    "id": "Part/view:part.part.list/pageActions/action:create",
+    "moduleId": "Part",
+    "viewKey": "part.part.list",
+    "surface": "pageActions",
+    "actionKey": "create",
+    "execution": "part.part.create",
+    "resources": [
+      "part.part"
+    ],
+    "actions": [
+      "create"
+    ],
+    "featurePositions": [
+      "Workspace/navigation:workspace/module:Part/navigation:part.parts/surface:list.pageActions/action:create"
+    ],
+    "requirements": [
+      {
+        "role": "candidate",
+        "stage": "submit",
+        "shape": "candidate",
+        "resources": [
+          "part.part"
+        ],
+        "anyOf": [
+          [
+            "create"
+          ]
+        ],
+        "minimumCount": 1,
+        "maximumCount": 1
+      }
+    ],
+    "provider": "standardCrud.create"
+  }
+]

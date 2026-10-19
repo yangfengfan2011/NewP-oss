@@ -22,8 +22,12 @@ public static class PartCrudDescriptor
         var fieldSet = new StandardCrudFieldSet(fields, fields, ["ECODE", "ENAME", "Description"], ["ECODE", "ENAME", "Description"]);
         return new()
         {
-            DataExecutions = new Dictionary<string, string> { ["list"] = "part.part.list", ["read"] = "part.part.read" },
-            LegacyDataExecutions = ["create", "update", "delete"],
+            DataExecutions = new Dictionary<string, string> { ["list"] = "part.part.list", ["read"] = "part.part.read", ["create"] = "part.part.create", ["update"] = "part.part.update", ["delete"] = "part.part.delete" },
+            LegacyObjectOperationBindings = [
+                new("ICP.Platform.Modules.Workspace.WorkspaceContents.CreateObjectAsync", "create"),
+                new("ICP.Platform.Modules.Workspace.WorkspaceContents.MutateObjectsAsync", "update"),
+                new("ICP.Platform.Modules.Workspace.WorkspaceContents.MutateObjectsAsync", "delete"),
+                new("ICP.Platform.Modules.Part.PartCopyBehavior.ExecuteAsync", "create")],
             RequiresCreationRecord = true, RequiresUpdateRecord = true,
             ResourceKey = "part.part", ModuleId = "Part", ModelName = "Part", Route = "api/part/parts",
             IdField = "EID", DisplayField = "ENAME", FieldSet = fieldSet, DeletePolicy = StandardCrudDeletePolicy.Hard,

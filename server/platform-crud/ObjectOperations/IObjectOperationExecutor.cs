@@ -17,4 +17,8 @@ public interface IObjectOperationExecutor
         string? targetId,
         IReadOnlyDictionary<string, object?> values,
         CancellationToken cancellationToken = default);
+    /// <summary>携带不可改写的正式写来源；原重载仅供明确未迁移的执行。</summary>
+    Task<StandardCrudMutationResult> ExecuteAsync(string objectKey, ObjectOperationAction action, string? targetId,
+        IReadOnlyDictionary<string, object?> values, ObjectOperationWriteSource? source, CancellationToken cancellationToken = default)
+        => source is null ? ExecuteAsync(objectKey, action, targetId, values, cancellationToken) : throw new NotSupportedException();
 }

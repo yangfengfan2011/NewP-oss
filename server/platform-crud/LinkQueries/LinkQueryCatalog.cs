@@ -52,7 +52,13 @@ public sealed class LinkQueryCatalog
                 var display = new ModelDisplayProjectionPlanner().Compile(target, plan.Models);
                 if (!display.IsSuccess)
                     throw Invalid(model, string.Join(Environment.NewLine, display.Diagnostics.Select(d => $"{d.Code}: {d.ModelName}.{d.FieldName}: {d.Message}")));
-                endpoints.Add(type, new(target, resource.ResourceKey, resource.IdField, mapping.ConstraintKey, mapping.TitleKey, mapping.Icon, display.Plan!));
+                var caller = typeof(LinkEndpointReadScopes).FullName + "." + nameof(LinkEndpointReadScopes.RowsAsync);
+                var internalRead = owner.DataExecutions.SingleOrDefault(contract => contract.Boundary == "internal"
+                    && contract.FixedBindings.Any(binding => binding.Kind == "internal" && binding.Identity == contract.Key && binding.Caller == caller)
+                    && contract.Requirements.Any(role => role.Resources.Contains(resource.ResourceKey, StringComparer.Ordinal)))
+                    ?? throw Invalid(model, "端点缺少固定内部读取来源");
+                endpoints.Add(type, new(target, resource.ResourceKey, resource.IdField, mapping.ConstraintKey, mapping.TitleKey, mapping.Icon, display.Plan!)
+                { InternalReadBinding = new(internalRead.Key, internalRead.Provider, typeof(LinkEndpointReadScopes), nameof(LinkEndpointReadScopes.RowsAsync)) });
             }
             foreach (var pair in model.LinkedTypes)
                 if (query.Parent.FixedModelKey is { } parent && parent != pair.Parent || query.Child.FixedModelKey is { } child && child != pair.Child)
@@ -89,7 +95,8 @@ public sealed class LinkQueryCatalog
             var displayFields = query.Columns.Where(column => column.Mappings.Any(mapping => mapping.Value == "$modelKey"
                 || endpoints[mapping.Key].DisplayProjectionPlan.Fields.Any(field => field.SourceField == mapping.Value)))
                 .Select(column => new PlatformDisplayValueField(column.Field + "_DisplayValue", column.Field, "link:" + column.Field, "", "")).ToArray();
-            definitions.Add(new(model, query, endpoints, displayFields, source is not null));
+            var readBindings = LinkQueryReadMetadata.Project(modules, owner.ModuleId, model.LogicalKey, query.ResourceKey);
+            definitions.Add(new(model, query, endpoints, displayFields, source is not null) { ReadBindings = readBindings });
         }
         if (definitions.Select(d => d.Metadata.ResourceKey).Distinct(StringComparer.Ordinal).Count() != definitions.Count)
             throw new InvalidOperationException("重复 Link 查询资源。");

@@ -41,42 +41,60 @@ public sealed class WorkspaceSpacesController(WorkspaceSpaces spaces, ILogger<Wo
         return await InitializationResultAsync(await spaces.EnsureAsync(ActorId(), true, token), token);
     }
 
-    /// <summary>读取当前可准入根，不隐式创建公共或个人空间。</summary>
+    /// <summary>固定外部API读取当前可准入根，不隐式创建空间或借用view声明。</summary>
     [HttpGet]
     [RequireFeature("workspace.spaces.access")]
     public async Task<ActionResult<IReadOnlyList<WorkspaceSpaceRoot>>> List(CancellationToken token)
     {
-        var roots = await spaces.ListAsync(ActorId(), token);
-        var result = new List<WorkspaceSpaceRoot>();
-        // 空间根最多两个；存在性由通用 Link 规划判定，不把第一页或关系数量当作树分支。
-        foreach (var root in roots)
+        try
         {
-            var scope = new Dictionary<string, string?> { ["spaceId"] = root.SpaceId, ["rootFolderId"] = root.RootFolderId, ["linkIds"] = "[]" };
-            result.Add(root with { HasChildren = await links.HasChildrenAsync("workspace.content", new("forward", new(WorkspacePositions.FolderModel, root.RootFolderId),
-                new ICP.Platform.Crud.Models.StandardCrudListQuery(QueryScope: scope), [WorkspacePositions.FolderModel]), token) });
+            var roots = await spaces.ListAsync(ActorId(), token);
+            var result = new List<WorkspaceSpaceRoot>();
+            // 空间根最多两个；存在性由通用Link规划判定，不把第一页或关系数量当作树分支。
+            foreach (var root in roots)
+            {
+                var scope = new Dictionary<string, string?> { ["spaceId"] = root.SpaceId, ["rootFolderId"] = root.RootFolderId, ["linkIds"] = "[]" };
+                result.Add(root with { HasChildren = await links.HasChildrenAsync("workspace.content", new("forward", new(WorkspacePositions.FolderModel, root.RootFolderId),
+                    new ICP.Platform.Crud.Models.StandardCrudListQuery(QueryScope: scope), [WorkspacePositions.FolderModel]), token) });
+            }
+            return Ok(result);
         }
-        return Ok(result);
+        catch (ActionDataAccessException exception) { return ApiSourceFailure(exception); }
     }
 
-    /// <summary>共享详情页读取当前空间的真实根，不接受裸文件夹 ID。</summary>
+    /// <summary>固定外部API读取当前空间真实根，不借view来源或接受裸文件夹ID。</summary>
     [HttpGet("{spaceId}/root")]
     [RequireFeature("workspace.spaces.access")]
     public async Task<IActionResult> Root(string spaceId, CancellationToken token)
     {
         if (Request.Query.Count > 0) return InvalidDetailQuery();
-        var fields = await spaces.ReadRootAsync(ActorId(), spaceId, token);
-        return fields is null ? NotFound() : Ok(new { id = fields["EID"], fields });
+        try
+        {
+            var fields = await spaces.ReadRootFromApiAsync(ActorId(), spaceId,
+                new(new("workspace.space.root.api", "workspace.backend", "read"), "workspace.space.root.api", "target"), token);
+            return fields is null ? NotFound() : Ok(new { id = fields["EID"], fields });
+        }
+        catch (ActionDataAccessException exception) { return ApiSourceFailure(exception); }
     }
 
-    /// <summary>标准详情使用真实 Folder EID；只允许具有有效空间归属和当前准入的根。</summary>
+    /// <summary>固定外部API按真实根EID读取；保留空间归属和当前准入。</summary>
     [HttpGet("roots/{rootFolderId}")]
     [RequireFeature("workspace.spaces.access")]
     public async Task<IActionResult> RootById(string rootFolderId, CancellationToken token)
     {
         if (Request.Query.Count > 0) return InvalidDetailQuery();
-        var fields = await spaces.ReadRootByIdAsync(ActorId(), rootFolderId, token);
-        return fields is null ? NotFound() : Ok(new { id = rootFolderId, fields });
+        try
+        {
+            var fields = await spaces.ReadRootByIdFromApiAsync(ActorId(), rootFolderId,
+                new(new("workspace.space.rootById.api", "workspace.backend", "read"), "workspace.space.rootById.api", "target"), token);
+            return fields is null ? NotFound() : Ok(new { id = rootFolderId, fields });
+        }
+        catch (ActionDataAccessException exception) { return ApiSourceFailure(exception); }
     }
+
+    // 只翻译固定API来源的稳定拒绝；不切换到entry或内部执行。
+    private ObjectResult ApiSourceFailure(ActionDataAccessException exception) => Problem(statusCode: exception.Status, title: exception.Code,
+        extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
 
     // 认证流水线的稳定账号 EID 是唯一个人主体来源；缺失时安全拒绝。
     private string ActorId() => User.FindFirstValue(ClaimTypes.NameIdentifier)

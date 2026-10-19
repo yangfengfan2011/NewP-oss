@@ -314,6 +314,15 @@ public sealed class WorkspaceAcceptanceFixtureTests
         Assert.True(deleted);
     }
 
+    // 准备协议控制消费当前正式编译目录，不能手填同一位置的两个读取 View 声明。
+    private static AcceptanceFeatureCatalog CurrentWorkspaceFeatures()
+    {
+        var compiled = new CanonicalModulePlanCompiler().Compile("workspace-acceptance-preparation",
+            new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")));
+        Assert.True(compiled.IsSuccess, JsonSerializer.Serialize(compiled.Diagnostics));
+        return new(compiled.Plan!.FeatureCatalog, compiled.Plan.ActionDataAccessCatalog);
+    }
+
     private static HttpResponseMessage Json(HttpStatusCode status, string text) =>
         new(status) { Content = new StringContent(text, Encoding.UTF8, "application/json") };
 
@@ -323,12 +332,15 @@ public sealed class WorkspaceAcceptanceFixtureTests
     [InlineData("Document")]
     public async Task ReversePreparation_UsesTypedAnchorAndSourceEntryWithoutForwardPositionScope(string model)
     {
-        var entry = new FeaturePoint("source-entry", "Workspace", "workspace", "navigation", "workspace", null, "workspace.spaces.access", [], 0);
+        var features = CurrentWorkspaceFeatures();
+        var entry = features.Behavior("Workspace", "workspace.spaces.access");
+        var declaration = features.ReadDeclaration("Workspace", "workspace.references.list", entry.Position);
         using var client = new HttpClient(new Handler(request =>
         {
             Assert.Equal(HttpMethod.Get, request.Method);
             Assert.Equal("/api/links/workspace.content", request.RequestUri!.AbsolutePath);
-            Assert.Equal("source-entry", Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
+            Assert.Equal(entry.Position, Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
+            Assert.Equal(declaration, Assert.Single(request.Headers.GetValues("X-NewP-Data-Declaration")));
             var query = System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query);
             Assert.Equal(["direction", "anchorModelKey", "anchorId"], query.AllKeys);
             Assert.Equal("reverse", query["direction"]);
@@ -338,15 +350,18 @@ public sealed class WorkspaceAcceptanceFixtureTests
             return Json(HttpStatusCode.OK, "{\"items\":[],\"total\":0}");
         })) { BaseAddress = new Uri("http://127.0.0.1:5000") };
 
-        await WorkspaceAcceptanceFixture.ReadDirectReferencesAsync(client, new([entry]), model, "same/id:with?reserved", CancellationToken.None);
+        await WorkspaceAcceptanceFixture.ReadDirectReferencesAsync(client, features, model, "same/id:with?reserved", CancellationToken.None);
     }
 
     [Fact]
     public async Task PositionCreation_PreservesFullChainAndUsesReturnedMatchingLinkForTheNewOccurrence()
     {
-        var entry = new FeaturePoint("entry", "Workspace", "workspace", "navigation", "workspace", null, "workspace.spaces.access", [], 0);
-        var create = new FeaturePoint("create", "Workspace", "create", "action", "create", "entry", "workspace.folder.create", [], 0)
-            { ActionScope = "list.pageActions", StaticScope = "folder" };
+        var features = CurrentWorkspaceFeatures();
+        var entry = features.Behavior("Workspace", "workspace.spaces.access");
+        var create = features.Action(entry, "create", "list.pageActions", "folder");
+        var createDeclaration = features.DeclarationAtView(create, "workspace.folder.list", "pageActions", "create");
+        var readDeclaration = features.ReadDeclaration("Workspace", "workspace.folder.list", entry.Position);
+        Assert.NotEqual(readDeclaration, features.ReadDeclaration("Workspace", "workspace.references.list", entry.Position));
         var parent = new WorkspaceFolderPosition("space", "root-EID", "parent-EID", ["first-LID"]);
         using var client = new HttpClient(new AsyncHandler(async (request, token) =>
         {
@@ -360,10 +375,13 @@ public sealed class WorkspaceAcceptanceFixtureTests
                 Assert.Equal("root-EID", position.GetProperty("rootFolderId").GetString());
                 Assert.Equal("first-LID", Assert.Single(position.GetProperty("linkIds").EnumerateArray()).GetString());
                 Assert.Equal("child", body.RootElement.GetProperty("values").GetProperty("ENAME").GetString());
-                Assert.Equal("create", Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
+                Assert.Equal(create.Position, Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
+                Assert.Equal(createDeclaration, Assert.Single(request.Headers.GetValues("X-NewP-Data-Declaration")));
                 return Json(HttpStatusCode.OK, "{\"id\":\"child-EID\",\"fields\":{}}");
             }
             Assert.Equal("/api/links/workspace.content", path);
+            Assert.Equal(entry.Position, Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
+            Assert.Equal(readDeclaration, Assert.Single(request.Headers.GetValues("X-NewP-Data-Declaration")));
             var query = System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query);
             Assert.Equal("parent-EID", query["anchorId"]);
             using var scope = JsonDocument.Parse(query["queryScope"]!);
@@ -373,7 +391,7 @@ public sealed class WorkspaceAcceptanceFixtureTests
             return Json(HttpStatusCode.OK, "{\"items\":[{\"linkId\":\"other-LID\",\"associatedObject\":{\"id\":\"other-EID\"}},{\"linkId\":\"child-LID\",\"associatedObject\":{\"id\":\"child-EID\"}}]}");
         })) { BaseAddress = new Uri("http://127.0.0.1:5000") };
 
-        var child = await WorkspaceAcceptanceFixture.CreateFolderAtPositionAsync(client, new([entry, create]), parent, "child", CancellationToken.None);
+        var child = await WorkspaceAcceptanceFixture.CreateFolderAtPositionAsync(client, features, parent, "child", CancellationToken.None);
 
         Assert.Equal("child-EID", child.FolderId);
         Assert.Equal(["first-LID", "child-LID"], child.LinkIds);
@@ -419,11 +437,8 @@ public sealed class WorkspaceAcceptanceFixtureTests
     [Fact]
     public async Task RestartPreparation_RebuildsDeletedBrowserContentUsingWorkspacePermissionsAndQueriesReceiptIdentities()
     {
-        var entry = new FeaturePoint("entry", "Workspace", "workspace", "navigation", "workspace", null, "workspace.spaces.access", [], 0);
-        var features = new AcceptanceFeatureCatalog([entry,
-            .. new[] { "create", "createPart", "createDocument" }.Select(action =>
-                new FeaturePoint(action, "Workspace", action, "action", action, "entry", action, [], 0)
-                    { ActionScope = "list.pageActions", StaticScope = "folder" })]);
+        var features = CurrentWorkspaceFeatures();
+        var entry = features.Behavior("Workspace", "workspace.spaces.access");
         using var roots = JsonDocument.Parse("""
             [{"spaceKind":"Public","spaceId":"public-space","rootFolderId":"public-root"},
              {"spaceKind":"Personal","spaceId":"personal-space","rootFolderId":"personal-root"}]
@@ -438,7 +453,7 @@ public sealed class WorkspaceAcceptanceFixtureTests
             if (path == "/api/auth/antiforgery-token") return Json(HttpStatusCode.OK, "{\"requestToken\":\"fixture-token\"}");
             if (request.Method == HttpMethod.Get)
             {
-                Assert.Equal("entry", Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
+                Assert.Equal(entry.Position, Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
                 if (path is "/api/workspace/spaces/public-space/root" or "/api/workspace/spaces/personal-space/root")
                     return Json(HttpStatusCode.OK, "{}");
                 Assert.Equal("/api/links/workspace.content", path);
@@ -463,7 +478,7 @@ public sealed class WorkspaceAcceptanceFixtureTests
                 "/api/workspace/content/documents" => ("createDocument", "Document", "document-EID"),
                 _ => throw new InvalidOperationException("重启准备不应扩大权限或使用其他写入入口：" + path)
             };
-            Assert.Equal(action, Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
+            Assert.Equal(features.Action(entry, action, "list.pageActions", "folder").Position, Assert.Single(request.Headers.GetValues("X-NewP-Feature")));
             using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(token));
             var position = body.RootElement.GetProperty("position");
             Assert.Equal("public-space", position.GetProperty("spaceId").GetString());
@@ -478,10 +493,10 @@ public sealed class WorkspaceAcceptanceFixtureTests
         })) { BaseAddress = new Uri("http://127.0.0.1:5000") };
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => WorkspaceAcceptanceFixture.ReadRestartContentAsync(
-            client, roots.RootElement, "entry", new("public-space", "public-root", "folder-EID", ["create-LID"]), CancellationToken.None));
+            client, roots.RootElement, entry.Position, new("public-space", "public-root", "folder-EID", ["create-LID"]), CancellationToken.None, features));
         var sampleFolder = await WorkspaceAcceptanceFixture.PrepareRestartContentAsync(client, features, roots.RootElement, "12345678-run", CancellationToken.None);
-        var before = await WorkspaceAcceptanceFixture.ReadRestartContentAsync(client, roots.RootElement, "entry", sampleFolder, CancellationToken.None);
-        var after = await WorkspaceAcceptanceFixture.ReadRestartContentAsync(client, roots.RootElement, "entry", sampleFolder, CancellationToken.None);
+        var before = await WorkspaceAcceptanceFixture.ReadRestartContentAsync(client, roots.RootElement, entry.Position, sampleFolder, CancellationToken.None, features);
+        var after = await WorkspaceAcceptanceFixture.ReadRestartContentAsync(client, roots.RootElement, entry.Position, sampleFolder, CancellationToken.None, features);
 
         Assert.Equal(3, writes);
         var expected = new[]
@@ -499,6 +514,8 @@ public sealed class WorkspaceAcceptanceFixtureTests
     [InlineData(true, "未在一页完整返回")]
     public async Task RestartSnapshot_RejectsMissingTypesAndPartialPages(bool partialPage, string failure)
     {
+        var features = CurrentWorkspaceFeatures();
+        var entry = features.Behavior("Workspace", "workspace.spaces.access");
         using var roots = JsonDocument.Parse("""
             [{"spaceKind":"Public","spaceId":"space","rootFolderId":"root"}]
             """);
@@ -511,7 +528,7 @@ public sealed class WorkspaceAcceptanceFixtureTests
             })))) { BaseAddress = new Uri("http://127.0.0.1:5000") };
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => WorkspaceAcceptanceFixture.ReadRestartContentAsync(
-            client, roots.RootElement, "entry", new("space", "root", "folder-EID", ["folder-LID"]), CancellationToken.None));
+            client, roots.RootElement, entry.Position, new("space", "root", "folder-EID", ["folder-LID"]), CancellationToken.None, features));
 
         Assert.Contains(failure, exception.Message);
     }

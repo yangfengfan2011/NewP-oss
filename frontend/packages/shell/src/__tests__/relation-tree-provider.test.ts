@@ -5,6 +5,7 @@ import { createRelationTreeProvider } from '../composition/relationTreeProvider'
 import organizationTree from '../../../../modules/platform/organization/metadata/views/OrganizationStructure.view.json';
 import workspaceTree from '../../../../modules/infor-center/workspace/metadata/views/WorkspaceStructure.view.json';
 import requirements from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationDataAccess.contract.json';
+import workspaceRequirements from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceClipboardDataAccess.contract.json';
 import type { ActionDataAccessRequirement } from '@icp-platform/sdk';
 import { bindActionDataAccess } from '../metadata/runtimeMetadataLoader';
 
@@ -93,7 +94,8 @@ it('reloads the real filtered organization tree while retaining declared parent 
 });
 
 it('uses standard Link source reads for the real Workspace view without an entry wrapper', async () => {
-  const provider = createRelationTreeProvider({ ...workspaceTree.view, providerKey: 'platform.relations' } as unknown as TreeView, 'formal-entry');
+  const bound = bindActionDataAccess({ ...workspaceTree, type: 'view' }, workspaceRequirements.declarations as ActionDataAccessRequirement[]);
+  const provider = createRelationTreeProvider({ ...bound.view, providerKey: 'platform.relations' } as unknown as TreeView, 'formal-entry');
   const currentUser = { kind: 'currentUser' }; const signal = new AbortController().signal;
   const key = 'space:root:parent-link:chosen-link';
   await provider.roots(currentUser, signal); await provider.children(currentUser, key, signal);

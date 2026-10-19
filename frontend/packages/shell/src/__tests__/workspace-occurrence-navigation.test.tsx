@@ -14,7 +14,7 @@ const tree = readComponentJson('Workspace', 'metadata/views/WorkspaceStructure.v
 const list = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderList.view.json');
 const detail = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderDetail.view.json');
 const dictionary = readComponentJson('Workspace', 'metadata/dictionaries/Workspace.dic.json');
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import { PageEntry } from '../composition/PageOutlet';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 

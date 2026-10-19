@@ -71,7 +71,7 @@ internal static class WorkspaceAcceptanceFixture
             features.Action(entry, "createPart", "list.pageActions", "folder").Position, token);
         if (!receipt.GetProperty("succeeded").GetBoolean() || receipt.TryGetProperty("id", out _))
             throw new InvalidOperationException("组合后的真实 Part 创建未返回受控成功回执。");
-        var contents = await ReadContentsAtPositionAsync(client, position, entry.Position, token);
+        var contents = await ReadContentsAtPositionAsync(client, position, entry.Position, token, features);
         var row = contents.GetProperty("items").EnumerateArray().Single(item => item.GetProperty("fields").GetProperty("Name").GetString() == name);
         var target = row.GetProperty("associatedObject");
         var id = target.GetProperty("id").GetString()!;
@@ -201,9 +201,11 @@ internal static class WorkspaceAcceptanceFixture
         var entry = features.Behavior("Workspace", "workspace.spaces.access");
         var created = await SendAsync(ordinary, HttpMethod.Post, "/api/workspace/content/folders",
             new { position = parent.CommandPosition, values = new { ENAME = name } },
-            features.Action(entry, "create", "list.pageActions", "folder").Position, token);
+            features.Action(entry, "create", "list.pageActions", "folder").Position, token,
+            features.DeclarationAtView(features.Action(entry, "create", "list.pageActions", "folder"),
+                "workspace.folder.list", "pageActions", "create"));
         var id = created.GetProperty("id").GetString()!;
-        var contents = await ReadContentsAtPositionAsync(ordinary, parent, entry.Position, token);
+        var contents = await ReadContentsAtPositionAsync(ordinary, parent, entry.Position, token, features);
         var link = contents.GetProperty("items").EnumerateArray().Single(item => item.GetProperty("associatedObject").GetProperty("id").GetString() == id);
         return parent with { FolderId = id, LinkIds = [.. parent.LinkIds, link.GetProperty("linkId").GetString()!] };
     }
@@ -220,7 +222,8 @@ internal static class WorkspaceAcceptanceFixture
     internal static Task<JsonElement> ReadDirectReferencesAsync(HttpClient ordinary, AcceptanceFeatureCatalog features,
         string modelKey, string id, CancellationToken token) => SendAsync(ordinary, HttpMethod.Get,
         $"/api/links/workspace.content?direction=reverse&anchorModelKey={Uri.EscapeDataString(modelKey)}&anchorId={Uri.EscapeDataString(id)}",
-        null, features.Behavior("Workspace", "workspace.spaces.access").Position, token);
+        null, features.Behavior("Workspace", "workspace.spaces.access").Position, token,
+        features.ReadDeclaration("Workspace", "workspace.references.list", features.Behavior("Workspace", "workspace.spaces.access").Position));
 
     // 元数据对象由已授权的普通主体正式创建，实体字段契约沿用所属模块。
     internal static async Task<string> CreateMetadataObjectAsync(HttpClient ordinary, AcceptanceFeatureCatalog features,
@@ -261,8 +264,9 @@ internal static class WorkspaceAcceptanceFixture
 
     // 根只接收文件夹；同时读取样本普通文件夹内的业务引用，不用空根或部分页证明持久性。
     internal static async Task<string[]> ReadRestartContentAsync(HttpClient client, JsonElement roots, string entryPosition,
-        WorkspaceFolderPosition sampleFolder, CancellationToken token)
+        WorkspaceFolderPosition sampleFolder, CancellationToken token, AcceptanceFeatureCatalog? features = null)
     {
+        features ??= await AcceptanceFeatureCatalog.LoadAsync(client, token);
         var identities = new List<string>();
         var models = new HashSet<string>(StringComparer.Ordinal);
         foreach (var root in roots.EnumerateArray())
@@ -270,14 +274,14 @@ internal static class WorkspaceAcceptanceFixture
             var space = root.GetProperty("spaceId").GetString()!;
             await SendAsync(client, HttpMethod.Get,
                 $"/api/workspace/spaces/{Uri.EscapeDataString(space)}/root", null, entryPosition, token);
-            var contents = await ReadRootContentsAsync(client, root, entryPosition, token);
+            var contents = await ReadRootContentsAsync(client, root, entryPosition, token, features);
             if (contents.GetProperty("total").GetInt32() != contents.GetProperty("items").GetArrayLength())
                 throw new InvalidOperationException("正式重启样本未在一页完整返回，不能以部分关系快照证明持久性。");
             identities.AddRange(ContentIdentities(contents).Select(identity => space + ":" + identity));
             foreach (var item in contents.GetProperty("items").EnumerateArray())
                 models.Add(item.GetProperty("associatedObject").GetProperty("modelKey").GetString()!);
         }
-        var samples = await ReadContentsAtPositionAsync(client, sampleFolder, entryPosition, token);
+        var samples = await ReadContentsAtPositionAsync(client, sampleFolder, entryPosition, token, features);
         if (samples.GetProperty("total").GetInt32() != samples.GetProperty("items").GetArrayLength())
             throw new InvalidOperationException("正式重启样本未在一页完整返回，不能以部分关系快照证明持久性。");
         var sampleModels = samples.GetProperty("items").EnumerateArray()
@@ -298,19 +302,22 @@ internal static class WorkspaceAcceptanceFixture
         .Order(StringComparer.Ordinal).ToArray();
 
     // 根内容查询与真实列表使用相同的正式 Link 入口；语义比较只留在 API 层。
-    internal static Task<JsonElement> ReadRootContentsAsync(HttpClient client, JsonElement root, string entryPosition, CancellationToken token)
+    internal static Task<JsonElement> ReadRootContentsAsync(HttpClient client, JsonElement root, string entryPosition, CancellationToken token,
+        AcceptanceFeatureCatalog? features = null)
     {
         var rootId = root.GetProperty("rootFolderId").GetString()!;
-        return ReadContentsAtPositionAsync(client, new(root.GetProperty("spaceId").GetString()!, rootId, rootId, []), entryPosition, token);
+        return ReadContentsAtPositionAsync(client, new(root.GetProperty("spaceId").GetString()!, rootId, rootId, []), entryPosition, token, features);
     }
 
     // 普通目录与根共用完整位置和正式 Link 查询，调用者不自行拼接或省略祖先链。
-    internal static Task<JsonElement> ReadContentsAtPositionAsync(HttpClient client, WorkspaceFolderPosition position, string entryPosition, CancellationToken token)
+    internal static async Task<JsonElement> ReadContentsAtPositionAsync(HttpClient client, WorkspaceFolderPosition position, string entryPosition, CancellationToken token,
+        AcceptanceFeatureCatalog? features = null)
     {
+        features ??= await AcceptanceFeatureCatalog.LoadAsync(client, token);
         var scope = JsonSerializer.Serialize(new { spaceId = position.SpaceId, rootFolderId = position.RootFolderId, linkIds = JsonSerializer.Serialize(position.LinkIds) });
-        return SendAsync(client, HttpMethod.Get,
+        return await SendAsync(client, HttpMethod.Get,
             $"/api/links/workspace.content?direction=forward&anchorModelKey=WorkspaceFolder&anchorId={Uri.EscapeDataString(position.FolderId)}&queryScope={Uri.EscapeDataString(scope)}&pageSize=20",
-            null, entryPosition, token);
+            null, entryPosition, token, features.ReadDeclaration("Workspace", "workspace.folder.list", entryPosition));
     }
 
     // 正式命令保留空请求体；所有写请求取得同会话防伪令牌，Secure Cookie 仅在 loopback client 显式回放。

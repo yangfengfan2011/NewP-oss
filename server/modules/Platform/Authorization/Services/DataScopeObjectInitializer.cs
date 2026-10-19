@@ -6,16 +6,25 @@ using ICP.Platform.Persistence.Abstractions;
 namespace ICP.Platform.Modules.Authorization.Services;
 
 /// <summary>仅在既有业务事务及stamp中克隆父直接项，不取得新的提交或操作者所有权。</summary>
-public sealed class DataScopeObjectInitializer(DataScopeObjectGrants grants, DataScopeCatalog catalog,
-    IPlatformTransactionExecutor transactions, IPlatformObjectIdGenerator ids) : IDataScopeObjectInitializer
+public sealed class DataScopeObjectInitializer(DataScopeObjectGrants grants,
+    IPlatformTransactionExecutor transactions, IPlatformObjectIdGenerator ids, DataScopeObjectInitializationSources sources) : IDataScopeObjectInitializer
 {
     /// <inheritdoc/>
-    public async Task<bool> InitializeFromParentAsync(string resourceKey, string parentObjectId, string newObjectId, CancellationToken token = default) =>
-        (await InitializeFromParentsAsync(resourceKey, [parentObjectId], newObjectId, token)).Initialized;
+    public Task<bool> InitializeFromParentAsync(string resourceKey, string parentObjectId, string newObjectId, CancellationToken token = default) =>
+        throw new ActionDataAccessException(400, "ActionDataAccess.InitializationSourceRequired");
+
+    /// <inheritdoc/>
+    public Task<DataScopeObjectInitialization> InitializeFromParentsAsync(string resourceKey, IReadOnlyList<string> parentObjectIds, string newObjectId,
+        CancellationToken token = default) => throw new ActionDataAccessException(400, "ActionDataAccess.InitializationSourceRequired");
+
+    /// <inheritdoc/>
+    public async Task<bool> InitializeFromParentAsync(string resourceKey, string parentObjectId, string newObjectId,
+        DataScopeObjectInitializationSource source, CancellationToken token = default) =>
+        (await InitializeFromParentsAsync(resourceKey, [parentObjectId], newObjectId, source, token)).Initialized;
 
     /// <inheritdoc/>
     public async Task<DataScopeObjectInitialization> InitializeFromParentsAsync(string resourceKey, IReadOnlyList<string> parentObjectIds, string newObjectId,
-        CancellationToken token = default)
+        DataScopeObjectInitializationSource source, CancellationToken token = default)
     {
         if (!transactions.IsActive) throw new InvalidOperationException("Direct authorization initialization requires an active business transaction.");
         ArgumentNullException.ThrowIfNull(parentObjectIds);
@@ -24,9 +33,9 @@ public sealed class DataScopeObjectInitializer(DataScopeObjectGrants grants, Dat
             throw new ArgumentException("Direct authorization initialization requires parent objects.", nameof(parentObjectIds));
         if (parentObjectIds.Contains(newObjectId, StringComparer.OrdinalIgnoreCase))
             throw new InvalidOperationException("Direct authorization initialization requires a new target object.");
-        catalog.Resolve(resourceKey);
         // 与手工替换共用父配置锁；读取后保留绝对期限、动态选择器和完整意见，不计算有效授权。
         var parents = parentObjectIds.Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.Ordinal).ToArray();
+        sources.Validate(resourceKey, parents, newObjectId, source);
         foreach (var id in parents) await grants.LockAsync(resourceKey, id, token);
         var parent = await grants.GetAsync(resourceKey, parents[0], token);
         var configuration = DataScopeObjectGrants.SemanticConfiguration(parent);

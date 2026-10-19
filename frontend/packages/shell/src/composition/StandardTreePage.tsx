@@ -41,8 +41,14 @@ export default function StandardTreePage({ input, active = true }: PageProps) {
   const { token } = theme.useToken();
   const view = metadata?.viewDocuments.find(document => document.view.key === input.parameters.viewKey)?.view as unknown as TreeView;
   const treeScope = input.treeScope!;
-  const provider = useMemo(() => view.providerKey === relationTreeProviderKey ? createRelationTreeProvider(view, readPosition)
-    : ModuleRegistry.getAllModules().flatMap(module => module.treeProviders ?? []).find(item => item.key === view.providerKey)!, [view, readPosition]);
+  const readDeclarationId = view.dataAccess?.id;
+  const provider = useMemo(() => {
+    if (view.providerKey === relationTreeProviderKey) return createRelationTreeProvider(view, readPosition);
+    const registered = ModuleRegistry.getAllModules().flatMap(module => module.treeProviders ?? []).find(item => item.key === view.providerKey)!;
+    return registered.bindRead ? registered.bindRead({ featurePosition: readPosition, dataAccess: view.dataAccess }) : registered;
+  // 声明身份也是实例边界：即使承载View对象复用，也不能沿用旧来源的请求。
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, readPosition, readDeclarationId]);
   const subjectId = useOptionalAuth()?.user?.id;
   // 主体决定容器身份；切换时必须重建，factory不读取主体数据。
   // eslint-disable-next-line react-hooks/exhaustive-deps

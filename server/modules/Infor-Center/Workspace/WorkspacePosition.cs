@@ -21,11 +21,20 @@ public sealed class WorkspacePositions(LinkTreeReader trees)
     internal const string ContentModel = "WorkspaceFolderContent";
 
     /// <summary>根归属、空间准入、链衔接与每层读取资格共同决定位置是否有效。</summary>
-    public async Task<WorkspacePositionPath> ResolveAsync(string actorId, WorkspacePosition position, CancellationToken token)
+    public Task<WorkspacePositionPath> ResolveAsync(string actorId, WorkspacePosition position, CancellationToken token) =>
+        ReadPositionAsync(() => trees.PathAsync("workspace.structure", new(position.SpaceId, position.RootFolderId, position.LinkIds), token));
+
+    /// <summary>公开路径API使用服务端固定读取来源，内部位置解析继续走其原显式内部来源。</summary>
+    public Task<WorkspacePositionPath> ResolveFromApiAsync(string actorId, WorkspacePosition position,
+        DataExecutionApiQueryContext source, CancellationToken token) =>
+        ReadPositionAsync(() => trees.PathFromApiAsync("workspace.structure", new(position.SpaceId, position.RootFolderId, position.LinkIds), source, token));
+
+    // 两条已固定来源的调用保留相同读取、结果及错误映射，不另枚举替代链。
+    private static async Task<WorkspacePositionPath> ReadPositionAsync(Func<Task<IReadOnlyList<LinkTreeNode>>> read)
     {
         try
         {
-            var path = await trees.PathAsync("workspace.structure", new(position.SpaceId, position.RootFolderId, position.LinkIds), token);
+            var path = await read();
             return new((string)path[^1].Context["id"]!, path.Select(node => (string)node.Context["id"]!).ToArray(), path.Select(node => node.Label).ToArray());
         }
         catch (LinkQueryException exception) when (exception.Code == "Platform.TreeInvalidPosition")

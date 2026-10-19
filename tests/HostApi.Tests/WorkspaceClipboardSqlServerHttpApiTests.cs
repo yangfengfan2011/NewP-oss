@@ -738,7 +738,11 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
     private static async Task<JsonElement> Command(BusinessAuditHostFixture fixture, HttpClient client, string behavior, string path, object? body = null)
     {
         var feature = Point(fixture, behavior);
-        using var response = await FeatureHttpTestRequests.SendAsync(client, feature, HttpMethod.Post, path, body, ClipboardDeclaration(fixture, feature));
+        var declaration = behavior == "workspace.folder.create"
+            ? Assert.Single(fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog,
+                item => item.Execution == "workspace.folder.create" && item.FeaturePositions.Contains(feature.Position))
+            : ClipboardDeclaration(fixture, feature);
+        using var response = await FeatureHttpTestRequests.SendAsync(client, feature, HttpMethod.Post, path, body, declaration);
         Assert.True(response.StatusCode == HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         return await response.Content.ReadFromJsonAsync<JsonElement>();
     }

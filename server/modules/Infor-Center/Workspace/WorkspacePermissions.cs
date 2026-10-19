@@ -15,7 +15,8 @@ public sealed partial class WorkspaceContents
         var descriptor = target.ResourceKey == folderDescriptor.Value.ResourceKey ? folderDescriptor.Value
             : resources.FindByResourceKey(target.ResourceKey) ?? throw new InvalidOperationException("Workspace object descriptor unavailable.");
         var detail = target.ResourceKey == folderDescriptor.Value.ResourceKey
-            ? await crud.GetDetailAsync(descriptor, target.ObjectId, token)
+            ? await crud.GetDetailFromEntryAsync(descriptor, target.ObjectId,
+                [new("workspace.folder.read", "workspace.backend", "read")], token)
             : await crud.GetDetailFromSourceAsync(descriptor, target.ObjectId,
                 new("workspace.properties.detail", "workspace.backend", typeof(WorkspaceContents), nameof(ReadPropertiesAsync)), token);
         return detail is null ? null : new(target.ResourceKey, target.ObjectId, detail);

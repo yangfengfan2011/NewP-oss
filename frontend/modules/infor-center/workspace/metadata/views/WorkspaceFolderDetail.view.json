@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0", "type": "view",
   "view": {
-    "key": "workspace.folder.detail", "mode": "detail", "model": "WorkspaceFolder", "resourceKey": "workspace.folder",
+    "key": "workspace.folder.detail", "mode": "detail", "dataAccess": {"execution":"workspace.folder.read","resources":["workspace.folder"]}, "model": "WorkspaceFolder", "resourceKey": "workspace.folder",
     "dicKey": "Workspace", "titleKey": "DetailTitle", "descriptionKey": "RootDescription",
     "sections": [{ "key": "basic", "titleKey": "Basic", "fields": ["ENAME", "Description", "OwnerId", "OwnerDepartmentId"] },
       { "key": "audit", "titleKey": "Audit", "fields": ["CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"] }]

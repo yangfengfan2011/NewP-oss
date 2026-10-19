@@ -15,7 +15,7 @@ public sealed record WorkspaceFolderCandidate(string Id, string Name);
 public sealed record WorkspaceFolderCandidates(IReadOnlyList<WorkspaceFolderCandidate> Items, int Total, int Page, int PageSize);
 
 /// <summary>独立详情、候选和 Link 端点共用来源或可读根路径范围；集合始终留在数据库命令内。</summary>
-public sealed class WorkspaceFolderScope(EfPlatformDbContext db, IDataScopeReadPlanProvider reads, IHttpContextAccessor context)
+public sealed class WorkspaceFolderScope(EfPlatformDbContext db, Func<IDataExecutionAccess> executions, IHttpContextAccessor context)
     : ILinkQueryEndpointConstraint, IDataScopeResourceReadConstraint
 {
     public string Key => "workspace.folder.scope";
@@ -42,12 +42,22 @@ public sealed class WorkspaceFolderScope(EfPlatformDbContext db, IDataScopeReadP
         await BuildAsync(context.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new LinkQueryException(403, "Workspace.SubjectRequired"), scopeName, token);
 
     /// <summary>仅普通边扩张空间范围；中性边复用既有对象资格，visited/frontier 不枚举共享路径。</summary>
-    public async Task<LinkQuerySqlScope> BuildAsync(string actorId, string name, CancellationToken token)
+    public Task<LinkQuerySqlScope> BuildAsync(string actorId, string name, CancellationToken token) =>
+        BuildScopeAsync(actorId, name, new ScopeReadSource.Internal(new("workspace.folder.scope.read", WorkspaceFolderExecutions.Provider,
+            typeof(WorkspaceFolderScope), nameof(BuildAsync))), token);
+
+    // 同一读取点按实际用途选择有限来源；不从缺声明或null来源回退，计划只用于当前命令。
+    private async Task<LinkQuerySqlScope> BuildScopeAsync(string actorId, string name, ScopeReadSource source, CancellationToken token)
     {
         if (name.Length == 0 || name.Any(character => !char.IsAsciiLetterOrDigit(character))) throw new ArgumentException("Invalid trusted scope name.", nameof(name));
         var parameters = new List<DbParameter>();
         var folders = db.Set<Dictionary<string, object?>>(WorkspacePositions.FolderModel).AsNoTracking();
-        var plan = await reads.GetReadPlanAsync("workspace.folder", token);
+        var plan = source switch
+        {
+            ScopeReadSource.Internal current => await executions().GetInternalQueryReadPlanAsync(current.Binding, ResourceKey, token),
+            ScopeReadSource.Api current => await executions().GetApiQueryReadPlanAsync(current.Context, ResourceKey, token),
+            _ => throw new InvalidOperationException("Workspace folder scope requires an explicit read source.")
+        };
         if (plan.Predicate is not null) folders = folders.Where(plan.Predicate);
         var readableSql = QuerySql(folders.Select(row => new { EID = EF.Property<string>(row, "EID"), OriginSpaceId = EF.Property<string>(row, "OriginSpaceId") }), name, parameters);
         var admittedSql = QuerySql(WorkspaceSpaces.Admitted(db, actorId).Select(row => new { EID = EF.Property<string>(row, "EID"), RootFolderId = EF.Property<string>(row, "RootFolderId") }), name, parameters);
@@ -96,7 +106,7 @@ public sealed class WorkspaceFolderScope(EfPlatformDbContext db, IDataScopeReadP
     {
         page = page <= 0 ? 1 : page; size = size <= 0 ? 20 : Math.Min(size, 100);
         if (page > int.MaxValue / size) throw new LinkQueryException(400, "Workspace.InvalidPage", "pageIndex");
-        var scope = await BuildAsync(actorId, "folderCandidates", token);
+        var scope = await BuildScopeAsync(actorId, "folderCandidates", new ScopeReadSource.Api(WorkspaceFolderExecutions.CandidatesQuery()), token);
         var parameters = scope.Parameters.ToList();
         var rows = db.Set<Dictionary<string, object?>>(WorkspacePositions.FolderModel).AsNoTracking();
         var spaces = db.Set<Dictionary<string, object?>>("WorkspaceSpace").AsNoTracking();
@@ -112,6 +122,13 @@ public sealed class WorkspaceFolderScope(EfPlatformDbContext db, IDataScopeReadP
             while (await reader.ReadAsync(token)) items.Add(new(reader.GetString(0), reader.GetString(1)));
             return new WorkspaceFolderCandidates(items, total, page, size);
         }, token);
+    }
+
+    // 外部候选与既有内部可达范围显式区分，调用者不能提供权限结果或任意读计划。
+    private abstract record ScopeReadSource
+    {
+        internal sealed record Internal(DataExecutionInternalReadBinding Binding) : ScopeReadSource;
+        internal sealed record Api(DataExecutionApiQueryContext Context) : ScopeReadSource;
     }
 
     // EF 的可信物理映射与参数类型保留；不同 scope 前缀隔离复合命令中的名称。

@@ -23,7 +23,11 @@ public sealed class ActionDataAccessCompilerTests(ITestOutputHelper output)
         Assert.NotEmpty(requirements);
         Assert.All(requirements, item =>
         {
-            Assert.Equal(new[] { "workspace.folder", "part.part", "document.document" }, item.Resources);
+            // 各真实入口具有自己的资源集合；编译与manifest不能把父要求扩成三个业务目标。
+            var authored = candidates.SelectMany(candidate => candidate.Features).SelectMany(feature => feature.DataAccess)
+                .Where(declaration => declaration.Id == item.Id).ToArray();
+            Assert.NotEmpty(authored);
+            Assert.All(authored, declaration => Assert.Equal(declaration.Resources, item.Resources));
             Assert.All(item.FeaturePositions, position => Assert.Contains(plan.FeatureCatalog, point => point.Position == position && point.ModuleId == item.ModuleId));
         });
         var manifest = new MetadataRuntimeManifestBuilder().Build(AppContext.BaseDirectory, plan.Modules.Select(module => module.ModuleId).ToArray(),

@@ -96,7 +96,7 @@ public sealed class WorkspaceTreeOrderSqlServerHttpApiTests
         await Rule(admin, fixture, "ParentNoEdit", root.RootFolderId, new() { ["edit"] = "deny" });
         var changesBeforeDenied = await Snapshot(fixture, "BusinessChange");
         using var refused = await FeatureHttpTestRequests.SendAsync(ordinary, OrderPoint(fixture, "down"), HttpMethod.Post,
-            "/api/workspace/content/tree-order", new { parentPosition = root, linkId = selected, direction = "down" });
+            "/api/workspace/content/tree-order", new { parentPosition = root, linkId = selected, direction = "down" }, OrderDeclaration(fixture, "down"));
         Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
         Assert.Equal("Workspace.ParentWriteDenied", (await refused.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
         Assert.Equal(JsonSerializer.Serialize(after), JsonSerializer.Serialize(await Rows(fixture, "WorkspaceFolderContent")));
@@ -198,7 +198,7 @@ public sealed class WorkspaceTreeOrderSqlServerHttpApiTests
         var changes = await Snapshot(fixture, "BusinessChange");
         control.Fail = true;
         using (var failed = await FeatureHttpTestRequests.SendAsync(admin, OrderPoint(fixture, "up"), HttpMethod.Post,
-            "/api/workspace/content/tree-order", new { parentPosition = root, linkId = control.SelectedLinkId, direction = "up" }))
+            "/api/workspace/content/tree-order", new { parentPosition = root, linkId = control.SelectedLinkId, direction = "up" }, OrderDeclaration(fixture, "up")))
             Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
         control.Fail = false;
         Assert.Equal(2, control.WrittenChanges); Assert.Equal(1L, control.WrittenOrdinal);
@@ -209,6 +209,7 @@ public sealed class WorkspaceTreeOrderSqlServerHttpApiTests
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/tree-order") {
             Content = JsonContent.Create(new { parentPosition = root, linkId = control.SelectedLinkId, direction = "up" }) };
         request.Headers.Add("X-NewP-Feature", OrderPoint(fixture, "up").Position);
+        request.Headers.Add("X-NewP-Data-Declaration", OrderDeclaration(fixture, "up").Id);
         var pending = admin.SendAsync(request, cancellation.Token);
         try
         {
@@ -374,10 +375,14 @@ public sealed class WorkspaceTreeOrderSqlServerHttpApiTests
     }
     private static FeaturePoint OrderPoint(BusinessAuditHostFixture fixture, string direction) =>
         fixture.FeatureCatalog.Single(point => point.ActionScope == "contextMenu" && point.Key == (direction == "up" ? "moveUp" : "moveDown"));
+    private static ActionDataAccessRequirement OrderDeclaration(BusinessAuditHostFixture fixture, string direction) =>
+        Assert.Single(fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog,
+            item => item.ViewKey == "workspace.folder.list" && item.Surface == "featureActions"
+                && item.ActionKey == (direction == "up" ? "moveUp" : "moveDown") && item.FeaturePositions.Contains(OrderPoint(fixture, direction).Position));
     private static async Task<JsonElement> Move(HttpClient client, BusinessAuditHostFixture fixture, Position parentPosition, string linkId, string direction)
     {
         using var response = await FeatureHttpTestRequests.SendAsync(client, OrderPoint(fixture, direction), HttpMethod.Post,
-            "/api/workspace/content/tree-order", new { parentPosition, linkId, direction });
+            "/api/workspace/content/tree-order", new { parentPosition, linkId, direction }, OrderDeclaration(fixture, direction));
         Assert.True(response.IsSuccessStatusCode, response.StatusCode + ": " + (await response.Content.ReadAsStringAsync()).Split('\n')[0]);
         return await response.Content.ReadFromJsonAsync<JsonElement>();
     }
@@ -412,8 +417,12 @@ public sealed class WorkspaceTreeOrderSqlServerHttpApiTests
             && (behavior != "workspace.folder.editObject" || point.ActionScope == "list.rowActions"));
     private static async Task<JsonElement> Create(HttpClient client, BusinessAuditHostFixture fixture, Position position, string name)
     {
-        using var response = await FeatureHttpTestRequests.SendAsync(client, Point(fixture, "workspace.folder.create"), HttpMethod.Post,
-            "/api/workspace/content/folders", new { position, values = new { ENAME = name } });
+        var feature = Point(fixture, "workspace.folder.create");
+        var declaration = Assert.Single(fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog,
+            item => item.ViewKey == "workspace.folder.list" && item.Surface == "pageActions" && item.ActionKey == "create"
+                && item.FeaturePositions.Contains(feature.Position));
+        using var response = await FeatureHttpTestRequests.SendAsync(client, feature, HttpMethod.Post,
+            "/api/workspace/content/folders", new { position, values = new { ENAME = name } }, declaration);
         Assert.True(response.StatusCode == HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         return await response.Content.ReadFromJsonAsync<JsonElement>();
     }

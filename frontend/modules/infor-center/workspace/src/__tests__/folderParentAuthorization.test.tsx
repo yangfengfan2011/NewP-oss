@@ -3,12 +3,14 @@ import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { LocalizationProvider, platformFetch } from '@icp-platform/core';
-import type { StandardCrudActionInstance } from '@icp-platform/sdk';
+import type { ActionDataAccessRequirement, StandardCrudActionInstance } from '@icp-platform/sdk';
 import resource from '../workspaceRootResource';
 import WorkspaceFolderCopyInput from '../WorkspaceFolderCopyInput';
+import WorkspaceObjectEditInput from '../WorkspaceObjectEditInput';
 import { workspaceClipboard } from '../workspaceClipboard';
 import workspaceDictionary from '../../metadata/dictionaries/Workspace.dic.json';
 import folderList from '../../metadata/views/WorkspaceFolderList.view.json';
+import compiledWorkspace from '../../../../../../tests/Kernel.Tests/Fixtures/WorkspaceClipboardDataAccess.contract.json';
 
 // 与既有模块组件测试一致，冷转换在收集期完成，交互断言只观察真实挂载结果。
 await import('../WorkspaceFolderCreateInput');
@@ -34,8 +36,16 @@ function lastBody() {
   const calls = vi.mocked(platformFetch).mock.calls;
   return JSON.parse(String(calls[calls.length - 1][1]?.body));
 }
+function createContext() {
+  const dataAccess = (compiledWorkspace.declarations as ActionDataAccessRequirement[]).find(item =>
+    item.execution === 'workspace.folder.create' && item.surface === 'pageActions' && item.actionKey === 'create');
+  if (!dataAccess) throw new Error('正式Workspace创建fixture缺失');
+  const featurePosition = dataAccess.featurePositions.find(position => position.endsWith('/surface:list.pageActions/action:create'));
+  if (!featurePosition) throw new Error('正式Workspace创建位置缺失');
+  return { featurePosition, dataAccess, action: { key: 'create', labelKey: 'Workspace.CreateFolder', dataAccess } };
+}
 
-it('keeps the create feature identity and sends the checked or opted-out choice outside model fields, preserving the old adapter', async () => {
+it('keeps the actual create binding and option outside model fields, rejecting an unbound adapter', async () => {
   const action = folderList.view.pageActions.find(item => item.key === 'create')!;
   expect(action).toMatchObject({ key: 'create', handlerKey: 'create', inputKey: 'createFolder' });
   const renderer = resource.actionInputRenderers!.createFolder;
@@ -52,16 +62,21 @@ it('keeps the create feature identity and sends the checked or opted-out choice 
   await fill(view.element, '新文件夹');
   vi.mocked(platformFetch).mockImplementation(async () => new Response('{"succeeded":true}'));
   const create = resource.actionHandlers![action.handlerKey!];
-  const result = await create({ input, queryScope: target, featurePosition: 'folder-create' });
+  const context = createContext();
+  const result = await create({ input, queryScope: target, ...context });
+  expect(platformFetch).toHaveBeenLastCalledWith('/api/workspace/content/folders', expect.objectContaining({ headers: expect.objectContaining({
+    'X-NewP-Feature': context.featurePosition, 'X-NewP-Data-Declaration': context.dataAccess.id,
+  }) }));
   expect(result).toMatchObject({ change: { operation: 'create', id: '' } });
   let body = lastBody();
   expect(body).toEqual({ position: { spaceId: 'public', rootFolderId: 'root', linkIds: ['target'] }, values: { ENAME: '新文件夹' }, copyParentAuthorization: true });
   await act(async () => checkbox.click());
-  await create({ input, queryScope: target, featurePosition: 'folder-create' });
+  await create({ input, queryScope: target, ...context });
   body = lastBody();
   expect(body.copyParentAuthorization).toBe(false);
   expect(body.values).not.toHaveProperty('copyParentAuthorization');
-  await resource.dataAdapter.create!({ WorkspacePosition: body.position, ENAME: '旧入口' });
+  await expect(resource.dataAdapter.create!({ WorkspacePosition: body.position, ENAME: '旧入口' })).rejects.toThrow('创建声明');
+  await resource.dataAdapter.create!({ WorkspacePosition: body.position, ENAME: '旧入口' }, undefined, context);
   body = lastBody();
   expect(body).toEqual({ position: { spaceId: 'public', rootFolderId: 'root', linkIds: ['target'] }, values: { ENAME: '旧入口' } });
 });
@@ -83,7 +98,7 @@ it('explains the space-root boundary and submits no parent initialization there'
   await fill(view.element, '根下文件夹');
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response('{"succeeded":true}'));
   const action = folderList.view.pageActions.find(item => item.key === 'create')!;
-  await resource.actionHandlers![action.handlerKey!]({ input, queryScope: rootScope });
+  await resource.actionHandlers![action.handlerKey!]({ input, queryScope: rootScope, ...createContext() });
   expect(JSON.parse(String(vi.mocked(platformFetch).mock.calls[0][1]?.body)).copyParentAuthorization).toBe(false);
 });
 
@@ -113,4 +128,28 @@ it.each(['pasteFolderCopy', 'pasteFolderStructure'] as const)('uses the existing
   expect(writes).toHaveLength(1);
   expect(JSON.parse(String(writes[0][1]?.body))).toEqual({ mode: 'copy', sourcePosition: { spaceId: 'public', rootFolderId: 'root', linkIds: [] },
     linkIds: ['source'], targetPosition: { spaceId: 'public', rootFolderId: 'root', linkIds: ['target'] }, name: '来源', copyParentAuthorization: false });
+});
+
+
+it('discards edit preparation when the current declaration disappears and never publishes the old fields', async () => {
+  const declaration = (compiledWorkspace.declarations as ActionDataAccessRequirement[]).find(item => item.execution === 'workspace.content.edit')!;
+  let finish!: (response: Response) => void;
+  let signal: AbortSignal | undefined;
+  vi.mocked(platformFetch).mockImplementation((_url, init) => { signal = init?.signal as AbortSignal; return new Promise(resolve => { finish = resolve; }); });
+  const change = vi.fn(); const draft = vi.fn(); const view = host();
+  const render = (dataAccess?: ActionDataAccessRequirement) => localized(<WorkspaceObjectEditInput
+    row={{ LID: 'edit-link', ObjectModelKey: 'WorkspaceFolder' }} queryScope={target}
+    featurePosition={declaration.featurePositions[0]} action={{ key: 'edit', labelKey: 'Edit', dataAccess }}
+    value={null} onChange={change} onDraftStateChange={draft} />);
+  await act(async () => view.root.render(render(declaration)));
+  expect(vi.mocked(platformFetch)).toHaveBeenCalledTimes(1);
+  expect(new Headers(vi.mocked(platformFetch).mock.calls[0][1]?.headers).get('X-NewP-Data-Declaration')).toBe(declaration.id);
+  await act(async () => view.root.render(render()));
+  expect(signal?.aborted).toBe(true);
+  await act(async () => finish(new Response(JSON.stringify({ fields: { ENAME: 'stale-edit', Description: 'must not publish' } }))));
+  expect(change).not.toHaveBeenCalled();
+  expect(view.element.querySelector('[role="alert"]')).not.toBeNull();
+  expect(view.element.textContent).not.toContain('stale-edit');
+  expect(draft).toHaveBeenLastCalledWith({ dirty: false, ready: false });
+  expect(vi.mocked(platformFetch)).toHaveBeenCalledTimes(1);
 });

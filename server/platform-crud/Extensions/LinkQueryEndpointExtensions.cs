@@ -47,12 +47,21 @@ public static class LinkQueryEndpointExtensions
                     var filters = new Dictionary<string, string?>(query.Filters ?? new Dictionary<string, string?>());
                     foreach (var key in new[] { "direction", "anchorModelKey", "anchorId", "types" }) filters.Remove(key);
                     var input = context.Request.Query;
+                    var headers = context.Request.Headers["X-NewP-Data-Declaration"];
+                    var declaration = headers.Count == 1 ? definition.ReadBindings.SingleOrDefault(item => item.Id == headers[0]) : null;
+                    if (declaration is null) throw new ICP.Platform.Authorization.Contracts.ActionDataAccessException(400, "ActionDataAccess.DeclarationInvalid");
+                    var source = new LinkReadSource.Entry(new(new(declaration.Execution, declaration.Provider!, "read"), "query"));
                     var result = await reader.QueryAsync(definition.Metadata.ResourceKey, new(input["direction"].ToString(),
                         new(input["anchorModelKey"].ToString(), input["anchorId"].ToString()), query with { Filters = filters },
-                        input.ContainsKey("types") ? input["types"].ToString().Split(',', StringSplitOptions.RemoveEmptyEntries) : null), token);
+                        input.ContainsKey("types") ? input["types"].ToString().Split(',', StringSplitOptions.RemoveEmptyEntries) : null), source, token);
                     return Results.Ok(result);
                 }
                 catch (LinkQueryException exception) { return Problem(exception); }
+                catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)
+                {
+                    return Results.Problem(statusCode: exception.Status, title: exception.Code,
+                        extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+                }
                 catch (PlatformQueryValidationException exception) { return Results.Problem(statusCode: 400, title: exception.Message, extensions: new Dictionary<string, object?> { ["code"] = exception.Code }); }
             }).WithMetadata(new EndpointModuleAttribute(definition.Model.OwnerModuleId)).RequireAuthorization(new RequireFeatureAttribute(definition.Metadata.ReadBehavior));
         }

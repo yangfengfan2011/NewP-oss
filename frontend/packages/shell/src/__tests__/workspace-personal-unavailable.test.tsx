@@ -15,7 +15,7 @@ const detail = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderDet
 import folder from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceFolderRuntime.contract.json';
 const content = readComponentJson('Workspace', 'metadata/models/WorkspaceFolderContent.model.json');
 const dictionary = readComponentJson('Workspace', 'metadata/dictionaries/Workspace.dic.json');
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import { PageEntry } from '../composition/PageOutlet';
 
 // 收集期装载真实模块，避免冷转换耗时进入生命周期 hook 的交互预算。

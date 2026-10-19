@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import resource from '../workspaceRootResource';
-import { StandardCrudRequestError } from '@icp-platform/sdk';
+import { StandardCrudRequestError, type ActionDataAccessRequirement } from '@icp-platform/sdk';
+import compiledWorkspace from '../../../../../../tests/Kernel.Tests/Fixtures/WorkspaceClipboardDataAccess.contract.json';
 
 afterEach(() => { vi.unstubAllGlobals(); });
 it('only classifies the confirmed duplicate-code field conflict as correctable input', () => {
@@ -29,7 +30,9 @@ it('uses LID as row identity and the associated Entity EID for properties', asyn
     total: 1, page: 2, pageSize: 20 })));
   vi.stubGlobal('fetch', request);
   const result = await resource.dataAdapter.list({ fields: 'LID,Name', pageIndex: 2 }, {
-    featurePosition: 'read', queryScope: { spaceId: 'public', rootFolderId: 'root', linkIds: '[]', anchorId: 'root' },
+    featurePosition: 'read', dataAccess: (compiledWorkspace.declarations as ActionDataAccessRequirement[])
+      .find(item => item.viewKey === 'workspace.folder.list' && item.surface === 'read'),
+    queryScope: { spaceId: 'public', rootFolderId: 'root', linkIds: '[]', anchorId: 'root' },
   });
   expect(resource.dataAdapter.getRowId(result.items[0])).toBe('relation');
   expect(result.items[0].ObjectId).toBe('folder');
@@ -46,7 +49,8 @@ it('edits and batch deletes through the current occurrence using LIDs', async ()
   const context = { featurePosition: 'write', queryScope: { spaceId: 'public', rootFolderId: 'root', linkIds: '[]' } };
   expect(resource.actionHandlers?.editObject).toBeTypeOf('function');
   expect(resource.actionHandlers?.deleteObjects).toBeTypeOf('function');
-  await resource.actionHandlers!.editObject({ ...context, id: 'relation', input: { ENAME: 'changed', Description: 'note' } });
+  const dataAccess = (compiledWorkspace.declarations as ActionDataAccessRequirement[]).find(item => item.execution === 'workspace.content.edit' && item.surface === 'rowActions')!;
+  await resource.actionHandlers!.editObject({ ...context, id: 'relation', input: { ENAME: 'changed', Description: 'note' }, action: { key: 'edit', labelKey: 'Edit', dataAccess } });
   await resource.actionHandlers!.deleteObjects({ ...context, selectedRows: [{ LID: 'a', ObjectId: 'entity-a' }, { LID: 'b', ObjectId: 'entity-b' }] });
   const writes = await Promise.all(request.mock.calls.filter(([input]) => String(input instanceof Request ? input.url : input).includes('/api/workspace/content/')).map(async ([input, init]) => input instanceof Request ? input.clone().json() : JSON.parse(String(init?.body))));
   expect(writes).toEqual([
@@ -68,15 +72,17 @@ it('reads the real folder EID for a tree action but preserves its LID row and pa
       ? { fields: { ENAME: 'Folder', Description: null } } : { succeeded: true })));
   vi.stubGlobal('fetch', request);
   const queryScope = { spaceId: 'public', rootFolderId: 'root', linkIds: '["parent-link"]', referenceObjectId: 'folder-eid' };
-  const result = await resource.dataAdapter.get!('terminal-link', { queryScope, featurePosition: 'tree-edit' });
+  const dataAccess = (compiledWorkspace.declarations as ActionDataAccessRequirement[]).find(item => item.viewKey === 'workspace.folder.detail' && item.surface === 'read')!;
+  const result = await resource.dataAdapter.get!('terminal-link', { queryScope, featurePosition: dataAccess.featurePositions[0], dataAccess });
   expect(result.normalized.fields).toEqual({ ENAME: 'Folder', Description: null, LID: 'terminal-link', ObjectModelKey: 'WorkspaceFolder', ObjectId: 'folder-eid' });
   expect(String(request.mock.calls[0][0])).toBe('/api/workspace/folders/folder-eid');
+  expect(new Headers(request.mock.calls[0][1]?.headers).get('X-NewP-Data-Declaration')).toBe(dataAccess.id);
   await resource.actionHandlers!.remove({ id: 'terminal-link', row: result.normalized.fields, queryScope, featurePosition: 'tree-remove' });
   const write = request.mock.calls.find(([input]) => String(input instanceof Request ? input.url : input).includes('/content/references/'))!;
   const body = write[0] instanceof Request ? await write[0].clone().json() : JSON.parse(String(write[1]?.body));
   expect(body).toEqual({ position: { spaceId: 'public', rootFolderId: 'root', linkIds: ['parent-link'] } });
   expect(write[0] instanceof Request ? write[0].method : write[1]?.method).toBe('DELETE');
-  const regular = await resource.dataAdapter.get!('folder-eid', { featurePosition: 'read' });
+  const regular = await resource.dataAdapter.get!('folder-eid', { featurePosition: dataAccess.featurePositions[0], dataAccess });
   expect(regular.normalized.fields).toEqual({ ENAME: 'Folder', Description: null });
 });
 

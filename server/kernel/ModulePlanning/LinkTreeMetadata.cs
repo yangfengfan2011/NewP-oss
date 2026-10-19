@@ -6,7 +6,11 @@ namespace ICP.Platform.Kernel.ModulePlanning;
 /// <summary>单一 Entity 的多父 Link 树；静态配置不包含 SQL 或请求表达式。</summary>
 public sealed record LinkTreeSource(string ResourceKey, string NodeType, string ModelKey, string LabelColumn, string OrderField, string RootPolicyKey,
     IReadOnlyList<string>? RootContextMenuKeys = null);
-public sealed record LinkTreeDefinition(string ModuleId, string ViewKey, LinkTreeSource Source);
+public sealed record LinkTreeDefinition(string ModuleId, string ViewKey, LinkTreeSource Source)
+{
+    [System.Text.Json.Serialization.JsonIgnore]
+    public ActionDataAccessRequirement? ReadBinding { get; init; }
+}
 
 /// <summary>从签发快照读取唯一 Link 树来源；模块包装不能另建查询目录。</summary>
 public static class LinkTreeMetadata
@@ -48,7 +52,13 @@ public static class LinkTreeMetadata
             {
                 using var document = JsonDocument.Parse(snapshot.ReadFile(path));
                 if (document.RootElement.TryGetProperty("view", out var view) && view.TryGetProperty("linkSource", out _))
-                    result.Add(new(module.ModuleId, view.GetProperty("key").GetString()!, Read(view)));
+                {
+                    var key = view.GetProperty("key").GetString()!;
+                    var binding = plan.ActionDataAccessCatalog.SingleOrDefault(item => item.ModuleId == module.ModuleId
+                        && item.ViewKey == key && item.Surface == "read" && item.ActionKey == "")
+                        ?? throw new InvalidOperationException("LINK_TREE_DATA_EXECUTION_MISSING");
+                    result.Add(new(module.ModuleId, key, Read(view)) { ReadBinding = binding });
+                }
             }
         }
         if (result.Select(tree => tree.ViewKey).Distinct(StringComparer.Ordinal).Count() != result.Count) throw new JsonException("Duplicate link tree key.");

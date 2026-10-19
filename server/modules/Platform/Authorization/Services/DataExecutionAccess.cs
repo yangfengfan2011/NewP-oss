@@ -69,6 +69,39 @@ public sealed partial class DataExecutionAccess(CanonicalModulePlan plan, IHttpC
             .GetReadPlanAsync(resourceKey, cancellationToken);
     }
 
+    /// <inheritdoc/>
+    public Task<DataScopeReadPlan> GetInternalQueryReadPlanAsync(DataExecutionInternalReadBinding binding,
+        string resourceKey, CancellationToken cancellationToken = default)
+    {
+        var contract = ResolveInternalQuerySource(binding);
+        if (contract.Requirements.Count != 1 || contract.Branches.Count != 0)
+            throw new ActionDataAccessException(400, "ActionDataAccess.QueryInvalid");
+        var requirement = contract.Requirements[0];
+        if (requirement.Role != "query" || requirement.Stage != "read" || requirement.Shape != "query"
+            || requirement.MinimumCount != 0 || requirement.MaximumCount is not null || requirement.Branch is not null)
+            throw new ActionDataAccessException(400, "ActionDataAccess.QueryInvalid");
+        RequireReadPlanRole(requirement, resourceKey);
+        return (queryReads ?? throw new InvalidOperationException("DATA_EXECUTION_QUERY_READS_REQUIRED"))
+            .GetReadPlanAsync(resourceKey, cancellationToken);
+    }
+
+    // 查询来源必须属于当前活动owner的实际backend，并精确登记真实类型和成员；存在性核验不能替代固定登记。
+    private DataExecutionContract ResolveInternalQuerySource(DataExecutionInternalReadBinding binding)
+    {
+        var sources = plan.Modules.SelectMany(module => module.DataExecutions.Where(contract => contract.Key == binding.Execution)
+            .Select(contract => (Module: module, Contract: contract))).ToArray();
+        if (sources.Length != 1) throw new ActionDataAccessException(400, "ActionDataAccess.InternalBindingInvalid");
+        var (module, contract) = sources[0];
+        if (contract.ModuleId != module.ModuleId || contract.Boundary != "internal" || contract.LegacyActions
+            || contract.Provider != binding.Provider || module.BackendBehaviorKey != binding.Provider
+            || string.IsNullOrWhiteSpace(binding.Member)
+            || !contract.FixedBindings.Any(source => source.Kind == "internal" && source.Identity == binding.Execution && source.Caller == binding.CallerIdentity)
+            || !binding.Caller.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic
+                | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static).Any(method => method.Name == binding.Member))
+            throw new ActionDataAccessException(400, "ActionDataAccess.InternalBindingInvalid");
+        return contract;
+    }
+
     // 内部来源必须精确匹配真实调用者/方法及固定角色；不读取或伪造浏览器声明头。
     private void ValidateInternalRead(DataExecutionInternalReadBinding binding, string resourceKey, IReadOnlyCollection<string> objectIds)
     {
@@ -76,7 +109,8 @@ public sealed partial class DataExecutionAccess(CanonicalModulePlan plan, IHttpC
         if (contract is null || contract.Boundary != "internal" || contract.Provider != binding.Provider
             || contract.LegacyActions || !contract.FixedBindings.Any(source => source.Kind == "internal"
                 && source.Identity == binding.Execution && source.Caller == binding.CallerIdentity)
-            || binding.Member is not null && !binding.Caller.GetMethods().Any(method => method.Name == binding.Member)
+            || binding.Member is not null && !binding.Caller.GetMethods(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static
+                | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic).Any(method => method.Name == binding.Member)
             || contract.Requirements.Count != 1)
             throw new ActionDataAccessException(400, "ActionDataAccess.InternalBindingInvalid");
         var requirement = contract.Requirements[0];

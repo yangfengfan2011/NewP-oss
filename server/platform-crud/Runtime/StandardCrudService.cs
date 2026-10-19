@@ -199,19 +199,31 @@ public sealed class StandardCrudService : IStandardCrudService
         return GetDetailCoreAsync(descriptor, id, source, cancellationToken);
     }
 
+    /// <inheritdoc/>
+    public Task<StandardCrudDetail?> GetDetailFromApiAsync(StandardCrudDescriptor descriptor, string id,
+        ICP.Platform.Authorization.Contracts.DataExecutionApiObjectContext source, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        return GetDetailCoreAsync(descriptor, id, null, cancellationToken, apiSource: source);
+    }
+
     // 原详情SQL/摘要/display流程不变；明确的内部来源在同一原位取得一次读取计划。
     private async Task<StandardCrudDetail?> GetDetailCoreAsync(StandardCrudDescriptor descriptor, string id,
         ICP.Platform.Authorization.Contracts.DataExecutionInternalReadBinding? source, CancellationToken cancellationToken,
-        IReadOnlyList<ICP.Platform.Authorization.Contracts.DataExecutionBindingReference>? entryBindings = null)
+        IReadOnlyList<ICP.Platform.Authorization.Contracts.DataExecutionBindingReference>? entryBindings = null,
+        ICP.Platform.Authorization.Contracts.DataExecutionApiObjectContext? apiSource = null)
     {
         using var operation = _evaluation?.BeginOperation();
         StandardCrudDescriptorValidator.Validate(descriptor);
-        var bindings = entryBindings ?? (source is null ? ICP.Platform.Crud.Extensions.StandardCrudDataExecutions.DetailReadBindings(descriptor) : []);
-        if (source is not null || bindings.Count > 0 || _dataScope is not null)
+        var bindings = entryBindings ?? (source is null && apiSource is null ? ICP.Platform.Crud.Extensions.StandardCrudDataExecutions.DetailReadBindings(descriptor) : []);
+        if (source is not null || apiSource is not null || bindings.Count > 0 || _dataScope is not null)
         {
-            if (source is null && bindings.Count == 0 && _executions is not null && !descriptor.LegacyDataExecutions.Contains("read", StringComparer.Ordinal))
+            if (source is null && apiSource is null && bindings.Count == 0 && _executions is not null && !descriptor.LegacyDataExecutions.Contains("read", StringComparer.Ordinal))
                 throw new InvalidOperationException("STANDARD_CRUD_DATA_EXECUTION_UNREGISTERED");
-            var scope = source is not null
+            var scope = apiSource is not null
+                ? await (_executions ?? throw new InvalidOperationException("DATA_EXECUTION_ACCESS_REQUIRED"))
+                    .GetApiObjectReadPlanAsync(apiSource, descriptor.ResourceKey, id, cancellationToken)
+                : source is not null
                 ? await (_executions ?? throw new InvalidOperationException("DATA_EXECUTION_ACCESS_REQUIRED"))
                     .GetInternalReadPlanAsync(source, descriptor.ResourceKey, [id], cancellationToken)
                 : bindings.Count > 0 ? await (_executions ?? throw new InvalidOperationException("DATA_EXECUTION_ACCESS_REQUIRED"))

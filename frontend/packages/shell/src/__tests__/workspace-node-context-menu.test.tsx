@@ -8,7 +8,8 @@ import { AuthorizationProvider, LocalizationProvider, PlatformQueryProvider } fr
 import { ModuleRegistry, type FrontendBehaviorBindings } from '@icp-platform/sdk';
 import { loadComponentSource, readComponentJson } from '../../test-support/componentTestInputs';
 import folder from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceFolderRuntime.contract.json';
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
+import { formalDataAccessFor } from './formalRuntimeMetadataTestSupport';
 import { PageEntry } from '../composition/PageOutlet';
 import '../composition/StandardTreePage';
 import '../pages/StandardCrudListPageHost';
@@ -44,7 +45,15 @@ it.each([['edit', 'zhs'], ['remove', 'zhs'], ['moveUp', 'zhs'], ['moveDown', 'zh
     }
     if (url.pathname === '/api/links/workspace.content') return json({ items: [], total: 0, page: 1, pageSize: 20 });
     if (url.pathname === '/api/workspace/folders/folder-eid') return json({ fields: { ENAME: name, Description: '原说明' } });
+    if (url.pathname === '/api/workspace/content/incoming-link/edit-values' || method === 'PUT') {
+      expect(new Headers(input instanceof Request ? input.headers : init?.headers).get('X-NewP-Data-Declaration'))
+        .toBe(formalDataAccessFor('workspace.folder.list', 'rowActions', 'edit').id);
+    }
     if (url.pathname === '/api/workspace/content/incoming-link/edit-values') return json({ fields: { ENAME: name, Description: '原说明' } });
+    if (url.pathname.endsWith('/tree-order')) {
+      expect(new Headers(input instanceof Request ? input.headers : init?.headers).get('X-NewP-Data-Declaration'))
+        .toBe(formalDataAccessFor('workspace.folder.list', 'featureActions', action).id);
+    }
     if (method === 'PUT' || method === 'DELETE' || url.pathname.endsWith('/tree-order')) {
       const body = input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body));
       writes.push({ path: url.pathname, method, body });

@@ -58,8 +58,15 @@ export type TreeChange = { kind: 'unrelated' } | { kind: 'unknown' } | {
 /** Provider 明确目标不存在；与权限、网络及路径损坏失败区分。 */
 export class TreeNodeNotFoundError extends Error {}
 export interface TreeNodePathItem { nodeKey: string; label: string; labelKey?: string }
+/** 当前页面真实view读取来源；只传声明与功能位置，不携带允许结果。 */
+export interface TreeReadContext {
+  featurePosition?: string;
+  dataAccess?: import('./standardCrud.types').ActionDataAccessRequirement;
+}
 export interface TreeProviderBinding {
   key: string;
+  /** 自有Provider按实际页面来源建立独立实例；旧Provider可继续原ABI。 */
+  bindRead?: (context: TreeReadContext) => TreeProviderBinding;
   roots: (treeScope: Record<string, unknown>, signal?: AbortSignal) => Promise<TreeNodeDescriptor[]>;
   children: (treeScope: Record<string, unknown>, nodeKey: string, signal?: AbortSignal) => Promise<TreeNodeDescriptor[]>;
   path: (treeScope: Record<string, unknown>, nodeKey: string, signal?: AbortSignal) => Promise<TreeNodePathItem[]>;

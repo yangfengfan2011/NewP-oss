@@ -769,7 +769,7 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
-    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通账号在固定发行物中通过正式树菜单单选上下移并看到刷新")]
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通账号在固定发行物中创建文件夹、编辑并打开属性，再通过树菜单上下移并看到刷新")]
     public async Task NativeWorkspaceTreeOrder_UsesFormalDriver()
     {
         var (root, runId) = PrepareRun("native-workspace-tree-order");
@@ -786,9 +786,13 @@ public sealed class AcceptanceGateTests
                 await driver.SelectRootAsync("公共空间");
                 await driver.CreateFolderAsync(previous);
                 await driver.CreateFolderAsync(target);
-                await driver.ExpandRootToFolderAsync("公共空间", target);
-                await driver.ReorderFolderAsync(target, "up", AcceptancePresentation.Enabled ? () => CaptureAsync("tree-order-menu.png") : null);
-                await driver.ReorderFolderAsync(target, "down");
+                var edited = target + " 已编辑";
+                await driver.EditObjectAsync(target, edited);
+                var properties = await driver.OpenFolderPropertiesAsync(edited);
+                await driver.ClosePropertiesAsync(properties);
+                await driver.ExpandRootToFolderAsync("公共空间", edited);
+                await driver.ReorderFolderAsync(edited, "up", AcceptancePresentation.Enabled ? () => CaptureAsync("tree-order-menu.png") : null);
+                await driver.ReorderFolderAsync(edited, "down");
                 await CaptureAsync("tree-order-saved.png");
                 if (AcceptancePresentation.Enabled)
                 {

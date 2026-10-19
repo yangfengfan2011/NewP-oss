@@ -1,4 +1,5 @@
 using System.Data;
+using ICP.Platform.Authorization.Contracts;
 using System.Data.Common;
 using System.Globalization;
 using System.Text.Json;
@@ -36,6 +37,18 @@ public sealed partial class LinkTreeReader(EfPlatformDbContext db, LinkTreeCatal
     /// <summary>调用方的范围只能等于可信策略的既定范围，不从请求接受主体。</summary>
     public string ScopeKind(LinkTreeDefinition definition) => Compile(definition).Policy.ScopeKind;
 
+    // 真实view冻结唯一声明，运行时仍由共享执行器核当前头和功能位置。
+    private static LinkReadSource.Entry EntryReadSource(LinkTreeDefinition definition)
+    {
+        var binding = definition.ReadBinding ?? throw new InvalidOperationException("LINK_TREE_DATA_EXECUTION_MISSING");
+        return new(new(new(binding.Execution, binding.Provider!, "read"), "query"));
+    }
+
+    // 旧模块位置调用是已登记的内部读用途，不能借创建/复制HTTP的树声明。
+    private LinkReadSource.Internal InternalReadSource(LinkTreeDefinition definition) =>
+        new(links.Get(definition.Source.ResourceKey).Endpoints[definition.Source.ModelKey].InternalReadBinding
+            ?? throw new InvalidOperationException("LINK_QUERY_INTERNAL_READ_SOURCE_REQUIRED"));
+
     // 物理映射与可用类型只来自正式目录，模块不能通过树配置越过拥有边界。
     private Plan Compile(LinkTreeDefinition definition)
     {
@@ -57,7 +70,8 @@ public sealed partial class LinkTreeReader(EfPlatformDbContext db, LinkTreeCatal
     /// <summary>根读取没有业务写入；策略根与正式端点读取范围共同决定可见根。</summary>
     public async Task<IReadOnlyList<LinkTreeNode>> RootsAsync(LinkTreeDefinition definition, CancellationToken token)
     {
-        var plan = Compile(definition); var roots = await ReadRootsAsync(plan, null, token);
+        var source = EntryReadSource(definition);
+        var plan = Compile(definition); var roots = await ReadRootsAsync(plan, null, source, token);
         var result = new List<LinkTreeNode>();
         foreach (var root in roots)
         {
@@ -69,17 +83,26 @@ public sealed partial class LinkTreeReader(EfPlatformDbContext db, LinkTreeCatal
 
     /// <summary>只重验提交的完整链，按路径长度读取，不调用搜索或枚举替代路径。</summary>
     public Task<IReadOnlyList<LinkTreeNode>> PathAsync(string viewKey, LinkTreePosition position, CancellationToken token) =>
-        PathAsync(trees.Get(viewKey), position, token);
+        ReadPathAsync(trees.Get(viewKey), position, InternalReadSource(trees.Get(viewKey)), token);
 
     /// <summary>空间根、每条关系衔接及每层读取共同裁决，失效不能改选同实体其他链。</summary>
-    public async Task<IReadOnlyList<LinkTreeNode>> PathAsync(LinkTreeDefinition definition, LinkTreePosition position, CancellationToken token)
+    public Task<IReadOnlyList<LinkTreeNode>> PathAsync(LinkTreeDefinition definition, LinkTreePosition position, CancellationToken token) =>
+        ReadPathAsync(definition, position, EntryReadSource(definition), token);
+
+    /// <summary>既有纯API路径恢复显式传入固定来源，不改变内部字符串入口或原路径读取SQL。</summary>
+    public Task<IReadOnlyList<LinkTreeNode>> PathFromApiAsync(string viewKey, LinkTreePosition position,
+        DataExecutionApiQueryContext source, CancellationToken token) =>
+        ReadPathAsync(trees.Get(viewKey), position, new LinkReadSource.Api(source), token);
+
+    // 内部位置恢复和外部树使用相同SQL及错误顺序，仅执行来源不同。
+    private async Task<IReadOnlyList<LinkTreeNode>> ReadPathAsync(LinkTreeDefinition definition, LinkTreePosition position, LinkReadSource readSource, CancellationToken token)
     {
         if (string.IsNullOrWhiteSpace(position.RootKey) || string.IsNullOrWhiteSpace(position.RootObjectId) || position.LinkIds is null
             || position.LinkIds.Any(string.IsNullOrWhiteSpace) || position.LinkIds.Distinct(StringComparer.Ordinal).Count() != position.LinkIds.Count)
             throw new LinkQueryException(400, "Platform.TreeInvalidPosition");
         var plan = Compile(definition);
         // SQL 等值可能接受大小写或尾空格别名；精确位置仍须逐字匹配可信根身份。
-        var root = (await ReadRootsAsync(plan, position, token)).SingleOrDefault(candidate =>
+        var root = (await ReadRootsAsync(plan, position, readSource, token)).SingleOrDefault(candidate =>
             string.Equals(candidate.Key, position.RootKey, StringComparison.Ordinal)
             && string.Equals(candidate.Id, position.RootObjectId, StringComparison.Ordinal))
             ?? throw new LinkQueryException(404, "Platform.TreePositionUnavailable");
@@ -98,7 +121,7 @@ public sealed partial class LinkTreeReader(EfPlatformDbContext db, LinkTreeCatal
             if (ids.Contains(edge.Child, StringComparer.Ordinal)) throw new LinkQueryException(400, "Platform.TreeInvalidPosition");
             ids.Add(edge.Child);
         }
-        var scope = await linkReads.ReadAsync(definition.Source.ResourceKey, definition.Source.ModelKey, "treeExact", token);
+        var scope = await linkReads.ReadAsync(definition.Source.ResourceKey, definition.Source.ModelKey, "treeExact", readSource, token);
         var source = await sourceReads.TreeSqlAsync(plan.Link, "treeExactSource", token);
         var parameters = scope.Parameters.Concat(source.Parameters).ToList(); parameters.Add(new SqlParameter("@treeIds", JsonSerializer.Serialize(ids)));
         parameters.Add(new SqlParameter("@exactModel", definition.Source.ModelKey));
@@ -122,12 +145,21 @@ public sealed partial class LinkTreeReader(EfPlatformDbContext db, LinkTreeCatal
     }
 
     /// <summary>直属读取复用精确链校验与数据库同级次序，右侧内容列表排序不参与。</summary>
-    public async Task<IReadOnlyList<LinkTreeNode>> ChildrenAsync(LinkTreeDefinition definition, LinkTreePosition position, CancellationToken token)
+    public Task<IReadOnlyList<LinkTreeNode>> ChildrenAsync(LinkTreeDefinition definition, LinkTreePosition position, CancellationToken token) =>
+        ReadChildrenAsync(definition, position, EntryReadSource(definition), token);
+
+    /// <summary>已有纯API入口显式传入固定来源，仍复用原路径和直属SQL；内部字符串入口不因此切换来源。</summary>
+    public Task<IReadOnlyList<LinkTreeNode>> ChildrenFromApiAsync(string viewKey, LinkTreePosition position,
+        DataExecutionApiQueryContext source, CancellationToken token) =>
+        ReadChildrenAsync(trees.Get(viewKey), position, new LinkReadSource.Api(source), token);
+
+    // 完整父路径和直属层复用同一当前来源，不因递归进入改选HTTP声明。
+    private async Task<IReadOnlyList<LinkTreeNode>> ReadChildrenAsync(LinkTreeDefinition definition, LinkTreePosition position, LinkReadSource readSource, CancellationToken token)
     {
-        var path = await PathAsync(definition, position, token); var plan = Compile(definition);
+        var path = await ReadPathAsync(definition, position, readSource, token); var plan = Compile(definition);
         var parent = (string)path[^1].Context["id"]!;
         var root = new Root(position.RootKey, position.RootObjectId, path[0].Label, path[0].LabelKey);
-        var scope = await linkReads.ReadAsync(definition.Source.ResourceKey, definition.Source.ModelKey, "treeLayer", token);
+        var scope = await linkReads.ReadAsync(definition.Source.ResourceKey, definition.Source.ModelKey, "treeLayer", readSource, token);
         var source = await sourceReads.TreeSqlAsync(plan.Link, "treeLayerSource", token);
         var parameters = scope.Parameters.Concat(source.Parameters).ToList(); parameters.Add(new SqlParameter("@treeParent", parent));
         var link = plan.Link.Metadata;
@@ -156,13 +188,13 @@ public sealed partial class LinkTreeReader(EfPlatformDbContext db, LinkTreeCatal
 
     /// <summary>模块兼容入口与正式平台 API 共用同一直属读取，位置仍须完整重验。</summary>
     public Task<IReadOnlyList<LinkTreeNode>> ChildrenAsync(string viewKey, LinkTreePosition position, CancellationToken token) =>
-        ChildrenAsync(trees.Get(viewKey), position, token);
+        ReadChildrenAsync(trees.Get(viewKey), position, InternalReadSource(trees.Get(viewKey)), token);
 
     // 只把匹配策略根及正式可读端点送入应用；精确恢复最多读取一根。
-    private async Task<Root[]> ReadRootsAsync(Plan plan, LinkTreePosition? position, CancellationToken token)
+    private async Task<Root[]> ReadRootsAsync(Plan plan, LinkTreePosition? position, LinkReadSource readSource, CancellationToken token)
     {
         var root = await plan.Policy.BuildAsync(plan.Definition, token);
-        var scope = await linkReads.ReadAsync(plan.Definition.Source.ResourceKey, plan.Definition.Source.ModelKey, "treeRoots", token);
+        var scope = await linkReads.ReadAsync(plan.Definition.Source.ResourceKey, plan.Definition.Source.ModelKey, "treeRoots", readSource, token);
         var source = await sourceReads.TreeSqlAsync(plan.Link, "treeRootsSource", token);
         var parameters = root.Parameters.Concat(scope.Parameters).Concat(source.Parameters).ToList();
         parameters.Add(new SqlParameter("@rootTraversalModel", plan.Definition.Source.ModelKey));

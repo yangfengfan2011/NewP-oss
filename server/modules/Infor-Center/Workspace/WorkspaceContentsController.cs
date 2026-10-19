@@ -163,6 +163,11 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
             return Results.Ok(new { fields = await contents.ReadEditValuesAsync(Actor(), input.Position, linkId, token) });
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)
+        {
+            return Results.Problem(statusCode: exception.Status, title: exception.Code,
+                extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+        }
     }
 
     /// <summary>编辑使用当前 LID 定位真实对象；字段规则由对象拥有者执行。</summary>
@@ -193,6 +198,11 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
             return result.Succeeded ? Results.Ok(new { succeeded = true }) : Results.Json(result.Error, statusCode: result.Error!.StatusCode);
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)
+        {
+            return Results.Problem(statusCode: exception.Status, title: exception.Code,
+                extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+        }
     }
 
     /// <summary>在当前文件夹内创建真实零组件，所属对象行为与内容关系共享事务。</summary>
@@ -259,6 +269,11 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
             return Results.Ok(await contents.ReorderAsync(Actor(), position, linkId.GetString()!, direction.GetString()!, token));
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)
+        {
+            return Results.Problem(statusCode: exception.Status, title: exception.Code,
+                extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+        }
     }
 
     /// <summary>移除所选关系始终带当前完整位置，裸父或对象 EID 不能替代 LID。</summary>
@@ -300,6 +315,11 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
             return Results.Ok(await folderScope.CandidatesAsync(Actor(), pageIndex, pageSize, keyword, token));
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)
+        {
+            return Results.Problem(statusCode: exception.Status, title: exception.Code,
+                extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+        }
     }
 
     /// <summary>创建已提交后展示失败只返回成功回执，不泄露结果、不重放创建。</summary>
@@ -313,6 +333,11 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
             id = await contents.CreateFolderAsync(Actor(), input.Position, input.Values, input.CopyParentAuthorization == true, token);
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)
+        {
+            return Results.Problem(statusCode: exception.Status, title: exception.Code,
+                extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+        }
         try
         {
             using var observation = evaluation?.BeginReadAfterWrite();
@@ -331,8 +356,16 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
     public async Task<IResult> Folder(string id, CancellationToken token)
     {
         if (Request.Query.Count > 0) return LinkQueryEndpointExtensions.Problem(new LinkQueryException(400, "Workspace.InvalidDetailQuery"));
-        var fields = await spaces.ReadFolderAsync(Actor(), id, token);
-        return fields is null ? Results.NotFound() : Results.Ok(new { id, fields });
+        try
+        {
+            var fields = await spaces.ReadFolderFromEntryAsync(Actor(), id, token);
+            return fields is null ? Results.NotFound() : Results.Ok(new { id, fields });
+        }
+        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)
+        {
+            return Results.Problem(statusCode: exception.Status, title: exception.Code,
+                extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+        }
     }
 
     /// <summary>受信任树入口完整读取当前层，只允许文件夹类型；右侧筛选不能改变树计划。</summary>
@@ -344,7 +377,8 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
             var scope = new Dictionary<string, string?> { ["spaceId"] = spaceId, ["rootFolderId"] = rootFolderId, ["linkIds"] = linkIds };
             if (Request.Query.Any(q => !scope.ContainsKey(q.Key) || q.Value.Count != 1)) throw new LinkQueryException(400, "Workspace.InvalidPosition");
             var path = await positions.ResolveAsync(Actor(), WorkspacePositions.FromScope(scope), token);
-            var nodes = await trees.ChildrenAsync("workspace.structure", new(spaceId, rootFolderId, WorkspacePositions.FromScope(scope).LinkIds), token);
+            var nodes = await trees.ChildrenFromApiAsync("workspace.structure", new(spaceId, rootFolderId, WorkspacePositions.FromScope(scope).LinkIds),
+                new(new("workspace.content.children.api", "workspace.backend", "read"), "workspace.content.children.api", "query"), token);
             var parent = new LinkObjectReference(WorkspacePositions.FolderModel, path.FolderId);
             var rows = nodes.Select(node =>
             {
@@ -355,6 +389,11 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
             return Results.Ok(new LinkQueryResult(rows, rows.Length, 1, rows.Length, null, null));
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)
+        {
+            return Results.Problem(statusCode: exception.Status, title: exception.Code,
+                extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+        }
     }
 
     /// <summary>已知位置恢复返回同一条经完整授权的链，不寻找替代根或父路径。</summary>
@@ -365,9 +404,15 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
         {
             var scope = new Dictionary<string, string?> { ["spaceId"] = spaceId, ["rootFolderId"] = rootFolderId, ["linkIds"] = linkIds };
             if (Request.Query.Any(q => !scope.ContainsKey(q.Key) || q.Value.Count != 1)) throw new LinkQueryException(400, "Workspace.InvalidPosition");
-            return Results.Ok(await positions.ResolveAsync(Actor(), WorkspacePositions.FromScope(scope), token));
+            return Results.Ok(await positions.ResolveFromApiAsync(Actor(), WorkspacePositions.FromScope(scope),
+                new(new("workspace.content.path.api", "workspace.backend", "read"), "workspace.content.path.api", "query"), token));
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)
+        {
+            return Results.Problem(statusCode: exception.Status, title: exception.Code,
+                extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+        }
     }
 
     // 只从已认证主体取得账号，客户端位置不携带所有者。

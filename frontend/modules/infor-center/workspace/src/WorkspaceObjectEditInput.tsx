@@ -1,44 +1,48 @@
 import { useEffect, useState } from 'react';
 import { formatRequestError, platformFetch, useLocalization } from '@icp-platform/core';
-import { readStandardCrudRequestError, type StandardCrudActionInputRenderContext, type StandardCrudFieldDefinition } from '@icp-platform/sdk';
+import { readStandardCrudRequestError, StandardCrudRequestError, type StandardCrudActionInputRenderContext, type StandardCrudFieldDefinition } from '@icp-platform/sdk';
 import { StandardCrudForm } from '@icp-platform/ui/crud-form';
 
 /** 编辑从当前 LID 重新读取完整业务字段；表单不会把列表投影当成可保存的完整对象。 */
-export default function WorkspaceObjectEditInput({ row, queryScope, featurePosition, value, onChange, onDraftStateChange, submitting }: StandardCrudActionInputRenderContext) {
+export default function WorkspaceObjectEditInput({ row, queryScope, featurePosition, action, value, onChange, onDraftStateChange, submitting }: StandardCrudActionInputRenderContext) {
   const { t } = useLocalization();
   const target = row as Record<string, unknown>;
   const folder = target.ObjectModelKey === 'WorkspaceFolder';
   const dictionary = folder ? 'Workspace' : target.ObjectModelKey === 'Part' ? 'Part' : 'Document';
   const position = JSON.stringify({ spaceId: queryScope?.spaceId, rootFolderId: queryScope?.rootFolderId,
     linkIds: JSON.parse(String(queryScope?.linkIds ?? '[]')) as unknown });
-  const [initial, setInitial] = useState<Record<string, unknown> | null>(null);
-  const [failure, setFailure] = useState<{ error: unknown } | null>(null);
+  const declarationId = action.dataAccess?.id;
+  const readKey = JSON.stringify([target.LID, position, featurePosition, declarationId]);
+  const [loaded, setLoaded] = useState<{ key: string; fields: Record<string, unknown> } | null>(null);
+  const initial = loaded?.key === readKey ? loaded.fields : null;
+  const [failure, setFailure] = useState<{ key: string; error: unknown } | null>(null);
   useEffect(() => {
     const controller = new AbortController();
-    setInitial(null); setFailure(null);
+    setLoaded(null); setFailure(null);
     void (async () => {
       try {
+        if (!declarationId) throw new StandardCrudRequestError('缺少当前编辑声明。', 400);
         const response = await platformFetch(`/api/workspace/content/${encodeURIComponent(String(target.LID))}/edit-values`, {
-          method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json', ...(featurePosition ? { 'X-NewP-Feature': featurePosition } : {}) },
+          method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json', 'X-NewP-Data-Declaration': declarationId, ...(featurePosition ? { 'X-NewP-Feature': featurePosition } : {}) },
           body: JSON.stringify({ position: JSON.parse(position) as unknown }),
         });
         if (!response.ok) throw await readStandardCrudRequestError(response);
         const payload = await response.json() as { fields: Record<string, unknown> };
         if (!controller.signal.aborted) {
-          setInitial(payload.fields);
+          setLoaded({ key: readKey, fields: payload.fields });
           onChange(Object.fromEntries(Object.entries(payload.fields).filter(([field]) => ['ECODE', 'ENAME', 'Description'].includes(field))));
         }
-      } catch (error) { if (!controller.signal.aborted) setFailure({ error }); }
+      } catch (error) { if (!controller.signal.aborted) setFailure({ key: readKey, error }); }
     })();
     return () => controller.abort();
-  }, [target.LID, position, featurePosition, onChange]);
+  }, [target.LID, position, featurePosition, declarationId, readKey, onChange]);
   const values = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {};
   const baseline = initial && Object.fromEntries(Object.entries(initial).filter(([field]) => ['ECODE', 'ENAME', 'Description'].includes(field)));
   const dirty = baseline !== null && JSON.stringify(values) !== JSON.stringify(baseline);
   const ready = initial !== null && (folder ? ['ENAME'] : ['ECODE', 'ENAME'])
     .every(key => typeof values[key] === 'string' && String(values[key]).trim().length > 0);
   useEffect(() => { onDraftStateChange?.({ dirty, ready: ready && !submitting }); }, [dirty, ready, submitting, onDraftStateChange]);
-  if (failure) return <div role="alert">{formatRequestError(failure.error, t)}</div>;
+  if (failure?.key === readKey) return <div role="alert">{formatRequestError(failure.error, t)}</div>;
   if (!initial) return <div role="status">{t('Platform.Loading', '加载中…')}</div>;
   const fields: StandardCrudFieldDefinition[] = [
     ...(!folder ? [{ key: 'ECODE', modelField: 'ECODE', labelKey: t(`${dictionary}.Code`, '编码'), kind: 'text' as const, required: true }] : []),

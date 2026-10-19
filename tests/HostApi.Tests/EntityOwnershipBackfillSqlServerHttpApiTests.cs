@@ -146,8 +146,11 @@ public sealed class EntityOwnershipBackfillSqlServerHttpApiTests
     {
         var values = new Dictionary<string, object?> { ["ENAME"] = name };
         if (model != "WorkspaceFolder") values["ECODE"] = name;
-        using var response = await FeatureHttpTestRequests.SendAsync(client, Point(fixture, "workspace.folder." + action), HttpMethod.Post,
-            "/api/workspace/content/" + kind, new { position, values });
+        var feature = Point(fixture, "workspace.folder." + action);
+        var declaration = model == "WorkspaceFolder" ? Assert.Single(fixture.Services.GetRequiredService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>()
+            .ActionDataAccessCatalog, binding => binding.Execution == "workspace.folder.create" && binding.FeaturePositions.Contains(feature.Position)) : null;
+        using var response = await FeatureHttpTestRequests.SendAsync(client, feature, HttpMethod.Post,
+            "/api/workspace/content/" + kind, new { position, values }, declaration);
         await ReadOkAsync(response);
         using var scope = fixture.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();

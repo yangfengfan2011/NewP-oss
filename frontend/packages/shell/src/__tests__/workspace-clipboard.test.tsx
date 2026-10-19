@@ -11,7 +11,7 @@ import clipboardContract from '../../../../../tests/Kernel.Tests/Fixtures/Worksp
 import { bindActionDataAccess } from '../metadata/runtimeMetadataLoader';
 import { loadComponentSource, readComponentJson } from '../../test-support/componentTestInputs';
 import folder from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceFolderRuntime.contract.json';
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import { PageEntry } from '../composition/PageOutlet';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import '../composition/StandardTreePage';

@@ -35,6 +35,7 @@ public static class StandardCrudServiceCollectionExtensions
         services.TryAddSingleton(provider => new ICP.Platform.Crud.LinkQueries.LinkQueryCatalog(
             provider.GetService<ICP.Platform.Persistence.Planning.CompiledPersistencePlan>(), provider.GetRequiredService<IStandardCrudResourceRegistry>(),
             provider.GetServices<ICP.Platform.Authorization.Contracts.DataScopeResource>(), provider.GetService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>()));
+        services.TryAddScoped<Func<ICP.Platform.Authorization.Contracts.IDataExecutionAccess>>(provider => () => provider.GetRequiredService<ICP.Platform.Authorization.Contracts.IDataExecutionAccess>());
         services.TryAddScoped<ICP.Platform.Crud.LinkQueries.LinkQueryReader>();
         services.TryAddScoped<ICP.Platform.Crud.LinkQueries.LinkEndpointReadScopes>();
         services.TryAddScoped<ICP.Platform.Crud.LinkQueries.LinkSourceReadScopes>();

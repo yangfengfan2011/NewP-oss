@@ -43,6 +43,7 @@ const documentDictionary = readComponentJson('Document', 'metadata/dictionaries/
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 import { PageEntry } from '../composition/PageOutlet';
 import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
+import { formalDataAccessFor } from './formalRuntimeMetadataTestSupport';
 import { AuthProvider } from '../contexts/AuthContext';
 import { FeaturePlacementContext } from '../authorization/FeaturePlacementContext';
 import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';
@@ -68,6 +69,11 @@ async function renderMixedProperties(type: 'part' | 'document') {
   const edits: unknown[] = [];
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost');
+    if (url.pathname === '/api/links/workspace.content') {
+      const source = url.searchParams.get('direction') === 'reverse' ? 'workspace.references.list' : 'workspace.folder.list';
+      expect(new Headers(input instanceof Request ? input.headers : init?.headers).get('X-NewP-Data-Declaration'))
+        .toBe(formalDataAccessFor(source, 'read').id);
+    }
     if (url.pathname.endsWith('antiforgery-token')) return json({ requestToken: 'token' });
     if (url.pathname.endsWith('current-user')) return json(user);
     if (url.pathname.endsWith('/personal/ensure')) return json({ initialized: true });
@@ -94,6 +100,10 @@ async function renderMixedProperties(type: 'part' | 'document') {
       expect(new Headers(input instanceof Request ? input.headers : init?.headers).get('X-NewP-Feature')).toBe('workspace-entry');
       return json({ items: [{ linkId: 'incoming-relation', associatedObject: { modelKey: 'WorkspaceFolder', id: 'parent-folder' },
         fields: { LID: 'incoming-relation', Name: '直接父文件夹', UpdatedBy: 'actor', UpdatedBy_DisplayValue: '更新账号', UpdatedAt: '2026-10-08T00:00:00Z', UpdatedAt_DisplayValue: '2026-10-08 08:00' } }], total: 1, page: 1, pageSize: 20 });
+    }
+    if (url.pathname === '/api/workspace/folders/parent-folder') {
+      expect(new Headers(input instanceof Request ? input.headers : init?.headers).get('X-NewP-Data-Declaration'))
+        .toBe(formalDataAccessFor('workspace.folder.detail', 'read').id);
     }
     if (url.pathname === '/api/workspace/folders/parent-folder') return json({ fields: { EID: 'parent-folder', ENAME: '父文件夹属性', Description: '只开对象不定位路径',
       CreatedBy: 'actor', CreatedBy_DisplayValue: '创建账号', UpdatedBy: 'actor', UpdatedBy_DisplayValue: '更新账号',

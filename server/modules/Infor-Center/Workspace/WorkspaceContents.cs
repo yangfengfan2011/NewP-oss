@@ -30,7 +30,12 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
 
     /// <summary>在有效位置内创建实体与 Link，同父名称比较及并发串行化由 SQL Server 事务锁保护。</summary>
     public ValueTask<string> CreateFolderAsync(string actorId, WorkspacePosition position, IReadOnlyDictionary<string, JsonElement> values,
-        bool copyParentAuthorization, CancellationToken token)
+        bool copyParentAuthorization, CancellationToken token) =>
+        CreateFolderCoreAsync(actorId, position, values, copyParentAuthorization, new FolderCreationSource.Declared(WorkspaceFolderExecutions.CreateBinding()), token);
+
+    // 正式创建与明确旧复制共享原事务；来源由实际调用分支选择，缺声明不能触发旧路径。
+    private ValueTask<string> CreateFolderCoreAsync(string actorId, WorkspacePosition position, IReadOnlyDictionary<string, JsonElement> values,
+        bool copyParentAuthorization, FolderCreationSource source, CancellationToken token)
     {
         if (values.Keys.Any(key => key is not ("ENAME" or "Description"))) throw new LinkQueryException(400, "Workspace.ServerFieldForbidden", values.Keys.First(key => key is not ("ENAME" or "Description")));
         if (!values.TryGetValue("ENAME", out var name) || name.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(name.GetString()) || name.GetString()!.Length > 256)
@@ -38,17 +43,18 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
         var description = values.GetValueOrDefault("Description");
         if (description.ValueKind is not (JsonValueKind.Undefined or JsonValueKind.Null or JsonValueKind.String) || description.ValueKind == JsonValueKind.String && description.GetString()!.Length > 500)
             throw new LinkQueryException(400, "Workspace.DescriptionTooLong", "Description");
+        if (source is FolderCreationSource.Declared declared) executionAccess.Validate([declared.Binding], "workspace.folder");
         return transactions.ExecuteAsync<string>(async cancellation =>
         {
             using var operation = audit.BeginOperation();
             await LockGraphAsync(cancellation);
-            var path = await WritablePositionAsync(actorId, position, cancellation);
+            var path = await ResolveFolderCreationPositionAsync(source, actorId, position, cancellation);
             var links = db.Set<Dictionary<string, object?>>(WorkspacePositions.ContentModel);
             var folders = db.Set<Dictionary<string, object?>>(WorkspacePositions.FolderModel);
             if (await links.AnyAsync(link => EF.Property<string>(link, "PEID") == path.FolderId && EF.Property<string>(link, "ChildModelKey") == WorkspacePositions.FolderModel
                 && folders.Any(folder => EF.Property<string>(folder, "EID") == EF.Property<string>(link, "CEID") && EF.Property<string>(folder, "ENAME") == name.GetString()), cancellation))
                 throw new LinkQueryException(409, "Workspace.SiblingNameConflict", "ENAME");
-            var candidate = await PrepareFolderCandidateAsync(name.GetString()!, description.ValueKind == JsonValueKind.String ? description.GetString() : null, position.SpaceId, cancellation);
+            var candidate = await PrepareFolderCandidateAsync(name.GetString()!, description.ValueKind == JsonValueKind.String ? description.GetString() : null, position.SpaceId, source, cancellation);
             var id = (string)candidate["EID"]!;
             // 实际端点及配对必须通过同一受信目录；新对象没有外部写入其类型的机会。
             var definition = catalog.Get("workspace.content");
@@ -61,9 +67,10 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
             // 空间根不是普通父授权来源；选项不扩大到Part/Document，也不复制源文件夹ACL。
             if (copyParentAuthorization && path.FolderId != position.RootFolderId)
             {
-                var initialized = await parentAuthorizations.InitializeFromParentAsync("workspace.folder", path.FolderId, id, cancellation);
+                var initialized = await parentAuthorizations.InitializeFromParentAsync("workspace.folder", path.FolderId, id,
+                    FolderInitializationSource(source, [path.FolderId], candidate), cancellation);
                 // 通用授权保存不取图锁；父ACL锁保持到提交，在此重验读取与edit，空配置也不能跳过。
-                await WritablePositionAsync(actorId, position, cancellation);
+                await ResolveFolderCreationPositionAsync(source, actorId, position, cancellation);
                 if (initialized) await referenceAudit.ParentAuthorizationInitializedAsync(path.FolderId, candidate, cancellation);
             }
             await transactions.FlushAsync(cancellation);
@@ -74,7 +81,8 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
     }
 
     // 普通创建和结构复制共用字段、目标归属、可信审计及实际候选create；准备不写入或要求新对象read。
-    private async Task<Dictionary<string, object?>> PrepareFolderCandidateAsync(string name, string? description, string spaceId, CancellationToken token)
+    private async Task<Dictionary<string, object?>> PrepareFolderCandidateAsync(string name, string? description, string spaceId,
+        FolderCreationSource source, CancellationToken token)
     {
         if (string.IsNullOrWhiteSpace(name) || name.Length > 256) throw new LinkQueryException(400, "Workspace.InvalidName", "ENAME");
         if (description?.Length > 500) throw new LinkQueryException(400, "Workspace.DescriptionTooLong", "Description");
@@ -82,8 +90,42 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
             ["Description"] = description, ["OriginSpaceId"] = spaceId };
         audit.ForCreate().ApplyTo(candidate);
         await ownership.ApplyCreateAsync(candidate, ["OwnerId", "OwnerDepartmentId"], token);
-        if (!await decisions.IsCandidateAllowedAsync("workspace.folder", candidate, "create", token)) throw new LinkQueryException(403, "Workspace.FolderCreateDenied");
+        var allowed = source switch
+        {
+            FolderCreationSource.Declared declared => await executionAccess.EvaluateCandidateAsync(declared.Binding, "workspace.folder", "candidate", candidate, token) == DataExecutionDecision.Allowed,
+            FolderCreationSource.Legacy => await decisions.IsCandidateAllowedAsync("workspace.folder", candidate, "create", token),
+            _ => throw new ActionDataAccessException(400, "ActionDataAccess.InitializationSourceInvalid")
+        };
+        if (!allowed) throw new LinkQueryException(403, "Workspace.FolderCreateDenied");
         return candidate;
+    }
+
+    private abstract record FolderCreationSource
+    {
+        public sealed record Declared(DataExecutionBindingReference Binding) : FolderCreationSource;
+        public sealed record Legacy(bool Structure) : FolderCreationSource;
+    }
+
+    // 正式parent角色复用原位置解析事实，旧复制仍明确保留原入口权限，后续复制票替换该分支。
+    private Task<WorkspacePositionPath> ResolveFolderCreationPositionAsync(FolderCreationSource source, string actor,
+        WorkspacePosition position, CancellationToken token) => source switch
+    {
+        FolderCreationSource.Declared declared => ResolveClipboardPositionAsync(declared.Binding, "parent", position, token),
+        FolderCreationSource.Legacy => WritablePositionAsync(actor, position, token),
+        _ => throw new ActionDataAccessException(400, "ActionDataAccess.InitializationSourceInvalid")
+    };
+
+    // 新目标身份与父集合来自刚形成的实际候选和锁内位置；源身份不来自JSON或允许标记。
+    private static DataScopeObjectInitializationSource FolderInitializationSource(FolderCreationSource source,
+        IReadOnlyList<string> parents, IReadOnlyDictionary<string, object?> candidate)
+    {
+        var target = new DataExecutionWriteFacts("workspace.folder", (string)candidate["EID"]!, candidate);
+        return source switch
+        {
+            FolderCreationSource.Declared declared => new DataScopeObjectInitializationSource.Declared(WorkspaceFolderExecutions.CreateCaller(), declared.Binding, parents, target),
+            FolderCreationSource.Legacy legacy => new DataScopeObjectInitializationSource.Legacy(WorkspaceFolderExecutions.CopyCaller(legacy.Structure), parents, target),
+            _ => throw new ActionDataAccessException(400, "ActionDataAccess.InitializationSourceInvalid")
+        };
     }
 
     /// <summary>已有对象引用共享真实实体；锁内重验位置、配对与目标读取，文件夹另维护完整图不变量。</summary>
@@ -103,11 +145,13 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
     public ValueTask<WorkspaceTreeOrderResult> ReorderAsync(string actorId, WorkspacePosition parentPosition, string linkId, string direction, CancellationToken token)
     {
         if (string.IsNullOrWhiteSpace(linkId) || direction is not ("up" or "down")) throw new LinkQueryException(400, "Workspace.InvalidTreeOrderInput");
+        var binding = WorkspaceFolderExecutions.ReorderBinding();
+        executionAccess.Validate([binding], "workspace.folder");
         return transactions.ExecuteAsync<WorkspaceTreeOrderResult>(async cancellation =>
         {
             using var operation = audit.BeginOperation();
             await LockGraphAsync(cancellation);
-            var path = await WritablePositionAsync(actorId, parentPosition, cancellation);
+            var path = await ResolveClipboardPositionAsync(binding, "parent", parentPosition, cancellation);
             return await treeOrder.ReorderAsync(actorId, path.FolderId, linkId, direction == "up", cancellation);
         }, token);
     }
@@ -195,9 +239,14 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
         ValidateSelection(linkIds);
         if (editing && linkIds.Length != 1) throw new LinkQueryException(400, "Workspace.InvalidSelection");
         // 与创建、引用变更取得同一图锁；等待之后重新验证整个位置和对象资格。
+        if (editing) executionAccess.Validate([WorkspaceFolderExecutions.EditBinding("submit")], "workspace.folder");
         await LockGraphAsync(cancellationToken);
-        var path = await WritablePositionAsync(actor, position, cancellationToken);
-        var targets = await ResolveTargetsAsync(path.FolderId, linkIds, editing ? "edit" : "delete", cancellationToken);
+        var path = editing
+            ? await ResolveClipboardPositionAsync(WorkspaceFolderExecutions.EditBinding("submit"), "parent", position, cancellationToken)
+            : await WritablePositionAsync(actor, position, cancellationToken);
+        var targets = editing
+            ? await ResolveFolderEditTargetsAsync(path.FolderId, linkIds, false, cancellationToken)
+            : await ResolveTargetsAsync(path.FolderId, linkIds, "delete", cancellationToken);
         if (!editing)
         {
             var folders = targets.Where(target => target.ModelKey == WorkspacePositions.FolderModel).Select(target => target.Id).ToArray();
@@ -251,12 +300,13 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
     public async Task<IReadOnlyDictionary<string, object?>> ReadEditValuesAsync(string actor, WorkspacePosition position, string linkId, CancellationToken token)
     {
         ValidateSelection([linkId]);
-        var path = await WritablePositionAsync(actor, position, token);
-        var target = (await ResolveTargetsAsync(path.FolderId, [linkId], "edit", token)).Single();
-        var detail = target.ModelKey == WorkspacePositions.FolderModel
-            ? await crud.GetDetailAsync(folderDescriptor.Value, target.Id, token)
-            : await crud.GetDetailFromSourceAsync(resources.FindByResourceKey(Resource(target.ModelKey))!, target.Id,
-                new("workspace.editValues.detail", "workspace.backend", typeof(WorkspaceContents), nameof(ReadEditValuesAsync)), token);
+        var binding = WorkspaceFolderExecutions.EditBinding("prepare");
+        executionAccess.Validate([binding], "workspace.folder");
+        var path = await ResolveClipboardPositionAsync(binding, "parent", position, token);
+        var target = (await ResolveFolderEditTargetsAsync(path.FolderId, [linkId], true, token)).Single();
+        var detail = await crud.GetDetailFromSourceAsync(target.ModelKey == WorkspacePositions.FolderModel
+                ? folderDescriptor.Value : resources.FindByResourceKey(Resource(target.ModelKey))!, target.Id,
+            new("workspace.editValues.detail", "workspace.backend", typeof(WorkspaceContents), nameof(ReadEditValuesAsync)), token);
         var fields = detail?.Fields ?? throw new LinkQueryException(404, "Workspace.TargetUnavailable");
         string[] writable = target.ModelKey == WorkspacePositions.FolderModel ? ["ENAME", "Description"] : ["ECODE", "ENAME", "Description"];
         string[] names = [.. writable, "OwnerId", "OwnerDepartmentId", "OwnerId_DisplayValue", "OwnerDepartmentId_DisplayValue"];
@@ -269,19 +319,56 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
     // 用本次已验证的父身份批量匹配 LID，再对最多一页对象重验端点和动作；不重新解析位置或接受客户端类型/EID。
     private async Task<LinkObjectReference[]> ResolveTargetsAsync(string parentId, string[] linkIds, string action, CancellationToken token)
     {
-        var rows = await Links.AsNoTracking().Where(row => linkIds.Contains(EF.Property<string>(row, "LID")) && EF.Property<string>(row, "PEID") == parentId)
-            .Select(row => new { Model = EF.Property<string>(row, "ChildModelKey"), Id = EF.Property<string>(row, "CEID") }).ToArrayAsync(token);
-        if (rows.Length != linkIds.Length) throw new LinkQueryException(404, "Workspace.ReferenceUnavailable");
-        var targets = rows.Select(row => new LinkObjectReference(row.Model, row.Id)).Distinct().ToArray();
+        var targets = await ReadMutationTargetsAsync(parentId, linkIds, token);
         foreach (var target in targets)
         {
             var resource = Resource(target.ModelKey);
             if (!await reader.IsEndpointReadableAsync("workspace.content", target, token)) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
             if (!await decisions.IsAllowedAsync(resource, target.Id, action, token)) throw new LinkQueryException(403, "Workspace.ObjectWriteDenied");
-            if (target.ModelKey == WorkspacePositions.FolderModel && await db.Set<Dictionary<string, object?>>("WorkspaceSpace")
-                .AnyAsync(row => EF.Property<string>(row, "RootFolderId") == target.Id, token)) throw new LinkQueryException(409, "Workspace.RootMutationForbidden");
+            await RequireNonRootMutationTargetAsync(target, token);
         }
         return targets;
+    }
+
+    // 共享原LID查询仍在父裁决之后执行一次；不预读目标、改选其他父或重新解析位置。
+    private async Task<LinkObjectReference[]> ReadMutationTargetsAsync(string parentId, string[] linkIds, CancellationToken token)
+    {
+        var rows = await Links.AsNoTracking().Where(row => linkIds.Contains(EF.Property<string>(row, "LID")) && EF.Property<string>(row, "PEID") == parentId)
+            .Select(row => new { Model = EF.Property<string>(row, "ChildModelKey"), Id = EF.Property<string>(row, "CEID") }).ToArrayAsync(token);
+        if (rows.Length != linkIds.Length) throw new LinkQueryException(404, "Workspace.ReferenceUnavailable");
+        return rows.Select(row => new LinkObjectReference(row.Model, row.Id)).Distinct().ToArray();
+    }
+
+    // 实际Folder消费自身内部目标合同；Part/Document明确保留315旧目标规则，不悬挂未消费的Folder角色。
+    private async Task<LinkObjectReference[]> ResolveFolderEditTargetsAsync(string parentId, string[] linkIds, bool preparing, CancellationToken token)
+    {
+        var targets = await ReadMutationTargetsAsync(parentId, linkIds, token);
+        foreach (var target in targets)
+        {
+            if (target.ModelKey == WorkspacePositions.FolderModel)
+            {
+                var result = await executionAccess.EvaluateInternalObjectAsync(WorkspaceFolderExecutions.EditTargetCaller(preparing),
+                    WorkspaceFolderExecutions.EditTargetRole(preparing), new("workspace.folder", target.Id, target), token);
+                if (result.Decision == DataExecutionDecision.NotFound) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
+                if (result.Decision == DataExecutionDecision.Denied) throw new LinkQueryException(403, "Workspace.ObjectWriteDenied");
+                if (result.Target?.ResourceKey != "workspace.folder" || result.Target.ObjectId != target.Id)
+                    throw new ActionDataAccessException(400, "ActionDataAccess.ShapeInvalid");
+            }
+            else
+            {
+                if (!await reader.IsEndpointReadableAsync("workspace.content", target, token)) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
+                if (!await decisions.IsAllowedAsync(Resource(target.ModelKey), target.Id, "edit", token)) throw new LinkQueryException(403, "Workspace.ObjectWriteDenied");
+            }
+            await RequireNonRootMutationTargetAsync(target, token);
+        }
+        return targets;
+    }
+
+    // 根约束保持在该对象read/edit裁决之后，不能因正式绑定而提前或省略。
+    private async Task RequireNonRootMutationTargetAsync(LinkObjectReference target, CancellationToken token)
+    {
+        if (target.ModelKey == WorkspacePositions.FolderModel && await db.Set<Dictionary<string, object?>>("WorkspaceSpace")
+            .AnyAsync(row => EF.Property<string>(row, "RootFolderId") == target.Id, token)) throw new LinkQueryException(409, "Workspace.RootMutationForbidden");
     }
 
     // 每个请求最多消费标准列表一页；不接受空、重复或无界选择。

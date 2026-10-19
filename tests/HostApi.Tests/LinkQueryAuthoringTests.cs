@@ -183,7 +183,17 @@ public sealed class LinkQueryAuthoringTests
         var plan = new CompiledPersistencePlan("query-test", "snapshot", "hash", default, "digest", [], models, []);
         var source = TrustedBuiltInModuleSource.CreateForHostDistribution(AppContext.BaseDirectory, Path.Combine(AppContext.BaseDirectory, "modules"));
         var candidates = new ModuleCapsuleCandidateReader().ReadBuiltIn(source.ModulesRoot).Select(candidate =>
-            omitBusinessDependency && candidate.ModuleId == "Workspace" ? candidate with { Dependencies = [] } : candidate);
+        {
+            if (candidate.ModuleId != "Workspace") return candidate;
+            // 合成模型增加真实平台端点时，同一个实际owner的固定Rows读取来源也必须显式采用该资源。
+            // 仅补测试目录，不改变资源owner核对或生产合同。
+            var executions = platformEndpoint is null ? candidate.DataExecutions : candidate.DataExecutions.Select(contract =>
+                contract.Boundary == "internal" && contract.FixedBindings.Any(binding => binding.Kind == "internal"
+                    && binding.Caller == typeof(LinkEndpointReadScopes).FullName + "." + nameof(LinkEndpointReadScopes.RowsAsync))
+                    ? contract with { Requirements = contract.Requirements.Select(role => role with
+                        { Resources = [.. role.Resources, platformEndpoint.ResourceKey] }).ToArray() } : contract).ToArray();
+            return candidate with { Dependencies = omitBusinessDependency ? [] : candidate.Dependencies, DataExecutions = executions };
+        });
         var compilation = new CanonicalModulePlanCompiler().Compile("link-test", candidates, source.PlatformCompositionModuleId);
         Assert.True(compilation.IsSuccess, string.Join(Environment.NewLine, compilation.Diagnostics));
         var resources = new List<DataScopeResource> { endpoint ?? new("workspace.folder", "Workspace", "WorkspaceFolder", "EID"),

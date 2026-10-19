@@ -32,6 +32,20 @@ public static class StandardFeatureMetadataCompiler
         foreach (var item in navigation.Values)
             if (Optional(item, "featureOwner") is { } owner && !item.TryGetProperty("redirectTo", out _))
                 View(Text(item, "targetKey"), owner, null, []);
+        // 自指贡献List沿已注册导航的原资格读取；不为它创建导航、View展开或额外read行为。
+        foreach (var view in views.Values.Where(view => Optional(view, "mode") == "list" && view.TryGetProperty("dataAccess", out _)))
+        {
+            if (!view.TryGetProperty("detailContributions", out var contributions)) continue;
+            foreach (var contribution in contributions.EnumerateArray())
+            {
+                var page = contribution.GetProperty("pageRef");
+                if (Text(page, "pageKey") != "platform.list" || Text(page.GetProperty("parameters"), "viewKey") != Text(view, "key")
+                    || !navigation.TryGetValue(Text(contribution, "navigationKey"), out var entry))
+                    throw new InvalidOperationException("贡献列表读取缺少实际页面或所属导航。");
+                var owner = Optional(entry, "featureKey") ?? "navigation:" + Text(entry, "key");
+                DataAccess(view, view, "read", "", owner);
+            }
+        }
         var customKeys = customFeatures?.Select(feature => feature.ReferenceKey ?? feature.Key).ToHashSet(StringComparer.Ordinal) ?? [];
         return includeCustomFeatures ? result : result.Where(feature => !customKeys.Contains(feature.ReferenceKey ?? feature.Key)).ToArray();
 

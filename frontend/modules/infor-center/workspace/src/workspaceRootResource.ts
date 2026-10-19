@@ -12,6 +12,11 @@ import { workspaceClipboard as clipboard, type FolderCopyDraft, type ObjectCopyD
 
 interface LinkRow { linkId: string; associatedObject: { modelKey: string; id: string }; fields: Record<string, unknown> }
 const headers = (featurePosition?: string): Record<string, string> => featurePosition ? { 'X-NewP-Feature': featurePosition } : {};
+// 创建只透传当前实际动作或adapter上下文的正式声明；无来源旧调用不能借列表read或默认值。
+function folderCreateHeaders(featurePosition?: string, declarationId?: string): Record<string, string> {
+  if (!declarationId) throw new StandardCrudRequestError('缺少文件夹创建声明。', 400);
+  return { ...headers(featurePosition), 'Content-Type': 'application/json', 'X-NewP-Data-Declaration': declarationId };
+}
 const WorkspaceBatchAuthorizationInput = lazy(() => import('./WorkspaceBatchAuthorizationInput'));
 const WorkspaceObjectCreateInput = lazy(() => import('./WorkspaceObjectCreateInput'));
 const WorkspaceFolderCreateInput = lazy(() => import('./WorkspaceFolderCreateInput'));
@@ -99,11 +104,11 @@ const resource: StandardCrudResourceRegistration = {
   },
   actionHandlers: {
     ...transfer.actionHandlers, ...ownership.actionHandlers,
-    create: async ({ input, queryScope, featurePosition }) => {
+    create: async ({ input, queryScope, featurePosition, action }) => {
       if (!isStandardCrudRecord(input)) throw new Error('缺少文件夹创建输入');
       const values = Object.fromEntries(['ENAME', 'Description'].filter(key => input[key] !== undefined).map(key => [key, input[key]]));
       const position = workspacePosition(queryScope);
-      const response = await platformFetch('/api/workspace/content/folders', { method: 'POST', headers: { ...headers(featurePosition), 'Content-Type': 'application/json' },
+      const response = await platformFetch('/api/workspace/content/folders', { method: 'POST', headers: folderCreateHeaders(featurePosition, action?.dataAccess?.id),
         body: JSON.stringify({ position, values, copyParentAuthorization: position.linkIds.length > 0 && input.copyParentAuthorization === true }) });
       if (!response.ok) throw await readStandardCrudRequestError(response);
       const payload: unknown = await response.json();
@@ -160,9 +165,10 @@ const resource: StandardCrudResourceRegistration = {
     },
     reorder: async ({ action, id, queryScope, featurePosition }) => {
       if (!id || !action || !['moveUp', 'moveDown'].includes(action.key)) throw new Error('无效文件夹排序动作');
+      if (!action.dataAccess?.id) throw new StandardCrudRequestError('缺少当前排序声明。', 400);
       const result = await referenceCommand('POST', '/api/workspace/content/tree-order', {
         parentPosition: workspacePosition(queryScope), linkId: id, direction: action.key === 'moveUp' ? 'up' : 'down',
-      }, featurePosition);
+      }, featurePosition, action.dataAccess.id);
       const receipt = result.payload as { moved: boolean; boundary: string | null };
       if (!receipt.moved && (receipt.boundary === 'first' || receipt.boundary === 'last')) return {
         operation: 'action', payload: receipt, noChange: true,
@@ -170,9 +176,10 @@ const resource: StandardCrudResourceRegistration = {
       };
       return result;
     },
-    editObject: async ({ id, input, queryScope, featurePosition }) => {
+    editObject: async ({ id, input, queryScope, featurePosition, action }) => {
       if (!id) throw new Error('缺少引用标识');
-      return referenceCommand('PUT', `/api/workspace/content/${encodeURIComponent(id)}`, { position: workspacePosition(queryScope), values: input }, featurePosition);
+      if (!action?.dataAccess?.id) throw new StandardCrudRequestError('缺少当前编辑声明。', 400);
+      return referenceCommand('PUT', `/api/workspace/content/${encodeURIComponent(id)}`, { position: workspacePosition(queryScope), values: input }, featurePosition, action.dataAccess.id);
     },
     deleteObject: async ({ id, queryScope, featurePosition }) => {
       if (!id) throw new Error('缺少引用标识');
@@ -230,7 +237,9 @@ const resource: StandardCrudResourceRegistration = {
       const parameters = new URLSearchParams({ direction: 'forward', anchorModelKey: 'WorkspaceFolder', anchorId,
         queryScope: JSON.stringify(position) });
       for (const [key, value] of Object.entries(query)) if (value !== undefined && value !== null && value !== '') parameters.set(key, String(value));
-      const response = await platformFetch(`/api/links/workspace.content?${parameters}`, { signal: context?.signal, headers: headers(context?.featurePosition) });
+      if (!context?.dataAccess?.id) throw new StandardCrudRequestError('缺少当前内容读取声明。', 400);
+      const response = await platformFetch(`/api/links/workspace.content?${parameters}`, { signal: context.signal,
+        headers: { ...headers(context.featurePosition), 'X-NewP-Data-Declaration': context.dataAccess.id } });
       if (!response.ok) throw await readStandardCrudRequestError(response);
       const payload = await response.json() as { items: LinkRow[]; total: number; page: number; pageSize: number };
       return { ...payload, items: payload.items.map(row => ({ ...row.fields, LID: row.linkId,
@@ -240,7 +249,8 @@ const resource: StandardCrudResourceRegistration = {
       // 树动作 recordId 是入向 LID；对象读取仍使用 resolver 提供的 EID，写入再重验源位置。
       const referenceObjectId = context?.queryScope?.referenceObjectId;
       const response = await platformFetch(`/api/workspace/folders/${encodeURIComponent(typeof referenceObjectId === 'string' ? referenceObjectId : id)}`, {
-        signal: context?.signal, headers: headers(context?.featurePosition),
+        signal: context?.signal, headers: { ...headers(context?.featurePosition),
+          ...(context?.dataAccess?.id ? { 'X-NewP-Data-Declaration': context.dataAccess.id } : {}) },
       });
       if (!response.ok) throw await readStandardCrudRequestError(response);
       const payload = await response.json() as { fields: Record<string, unknown> };
@@ -251,7 +261,7 @@ const resource: StandardCrudResourceRegistration = {
     create: async (values, _before, context) => {
       const { WorkspacePosition: position, ...fields } = values;
       if (!position) throw new Error('缺少工作空间创建位置');
-      const response = await platformFetch('/api/workspace/content/folders', { method: 'POST', headers: { ...headers(context?.featurePosition), 'Content-Type': 'application/json' },
+      const response = await platformFetch('/api/workspace/content/folders', { method: 'POST', headers: folderCreateHeaders(context?.featurePosition, context?.dataAccess?.id),
         body: JSON.stringify({ position, values: fields }) });
       if (!response.ok) throw await readStandardCrudRequestError(response);
       const payload: unknown = await response.json();

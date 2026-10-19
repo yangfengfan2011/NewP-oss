@@ -1,4 +1,6 @@
 using System.Linq.Expressions;
+using ICP.Platform.Authorization.Contracts;
+using ICP.Platform.Kernel.ModulePlanning;
 using System.Data.Common;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Modeling.Definitions;
@@ -20,8 +22,24 @@ public sealed record LinkQueryRequest(string Direction, LinkObjectReference Anch
     IReadOnlyList<string>? Types = null);
 /// <summary>已验证的唯一查询源，不建立独立于 linkedTypes 的业务类型清单。</summary>
 public sealed record LinkQueryDefinition(ModelDefinition Model, LinkQueryMetadata Metadata,
-    IReadOnlyDictionary<string, LinkQueryEndpoint> Endpoints, IReadOnlyList<PlatformDisplayValueField> DisplayValueFields, bool HasDataScopeResource = false);
-public sealed record LinkQueryEndpoint(ModelDefinition Model, string ResourceKey, string IdField, string? ConstraintKey, string? TitleKey, string? Icon, ModelDisplayProjectionPlan DisplayProjectionPlan);
+    IReadOnlyDictionary<string, LinkQueryEndpoint> Endpoints, IReadOnlyList<PlatformDisplayValueField> DisplayValueFields, bool HasDataScopeResource = false)
+{
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<ActionDataAccessRequirement> ReadBindings { get; init; } = [];
+}
+public sealed record LinkQueryEndpoint(ModelDefinition Model, string ResourceKey, string IdField, string? ConstraintKey, string? TitleKey, string? Icon, ModelDisplayProjectionPlan DisplayProjectionPlan)
+{
+    [System.Text.Json.Serialization.JsonIgnore]
+    public DataExecutionInternalReadBinding? InternalReadBinding { get; init; }
+}
+
+/// <summary>实际外部声明与固定内部读取明确区分，不接收允许结果或在缺来源时回退。</summary>
+public abstract record LinkReadSource
+{
+    public sealed record Entry(DataExecutionQueryContext Context) : LinkReadSource;
+    public sealed record Internal(DataExecutionInternalReadBinding Binding) : LinkReadSource;
+    public sealed record Api(DataExecutionApiQueryContext Context) : LinkReadSource;
+}
 
 /// <summary>查询源拥有者提供强制上下文验证和源级读取条件，失败必须传播。</summary>
 public interface ILinkQuerySourcePolicy

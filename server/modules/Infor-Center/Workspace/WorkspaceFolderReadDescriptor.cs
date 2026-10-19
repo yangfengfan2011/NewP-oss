@@ -15,8 +15,7 @@ public sealed class WorkspaceFolderReadDescriptor
         string[] fields = ["EID", "ENAME", "Description", "OwnerId", "OwnerDepartmentId", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"];
         Value = new StandardCrudResourceRegistry([new StandardCrudDescriptor
         {
-            // 此私有详情仍由Workspace完整来源读取拥有，#314接续正式绑定；不按缺声明选择旧路由。
-            LegacyDataExecutions = ["read"],
+            // 独立读取绑定真实详情声明；回执、初始化和API使用各自显式来源，不按缺声明选择旧路由。
             ResourceKey = "workspace.folder", ModuleId = "Workspace", ModelName = "WorkspaceFolder",
             Route = "api/workspace/folders", MapStandardEndpoints = false, IdField = "EID", DisplayField = "ENAME",
             FieldSet = new(fields, fields, [], []), SortableFields = ["ENAME"], DefaultSortField = "ENAME",

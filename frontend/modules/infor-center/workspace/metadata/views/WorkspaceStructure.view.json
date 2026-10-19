@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0", "type": "view",
   "view": {
-    "key": "workspace.structure", "mode": "tree", "dicKey": "Workspace", "titleKey": "Title",
+    "key": "workspace.structure", "mode": "tree", "dataAccess": {"execution":"workspace.structure.read","resources":["workspace.folder"]}, "dicKey": "Workspace", "titleKey": "Title",
     "providerKey": "workspace.spaces", "searchEnabled": true,
     "linkSource": { "resourceKey": "workspace.content", "nodeType": "folder", "modelKey": "WorkspaceFolder", "labelColumn": "Name", "orderField": "TreeOrdinal", "rootPolicyKey": "workspace.spaces", "rootContextMenuKeys": ["paste", "pasteFolderCopy", "pasteFolderStructure", "clearClipboard"] },
     "nodeTypes": [{ "key": "folder", "titleKey": "Folder", "pageRef": { "pageKey": "platform.list", "parameters": { "viewKey": "workspace.folder.list" }, "inputResolverKey": "workspace.folder.content" },

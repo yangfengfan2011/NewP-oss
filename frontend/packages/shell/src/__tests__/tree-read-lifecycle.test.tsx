@@ -299,3 +299,16 @@ it('waits for a newer pending location before applying an older refresh', async 
   expect(tree.read().snapshot.selected?.nodeKey).toBe('person');
   expect(tree.navigation.locate).toHaveBeenLastCalledWith('person', undefined);
 });
+
+
+it('cancels the prior binding provider even when the business tree scope is unchanged', async () => {
+  const pending = deferred<TreeNodeDescriptor[]>();
+  let oldSignal: AbortSignal | undefined;
+  const oldProvider = providerWith([]);
+  oldProvider.roots = async (_scope, signal) => { oldSignal = signal; return pending.promise; };
+  const tree = await renderLifecycle(oldProvider);
+  await tree.rerender({ provider: providerWith([node('current-binding')]) });
+  expect(oldSignal?.aborted).toBe(true);
+  await act(async () => pending.resolve([node('stale-binding')]));
+  expect(tree.read().snapshot.roots.map(item => item.nodeKey)).toEqual(['current-binding']);
+});

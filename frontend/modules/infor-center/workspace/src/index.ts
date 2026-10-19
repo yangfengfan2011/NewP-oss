@@ -12,7 +12,8 @@ async function readProperties(resourceKey: string, id: string, context: Standard
   if (typeof featurePosition !== 'string' || !featurePosition) throw new StandardCrudRequestError('缺少来源读取位置。', 400);
   const position = { spaceId: source.spaceId, rootFolderId: source.rootFolderId, linkIds: source.linkIds };
   const response = await platformFetch(`/api/workspace/content/${encodeURIComponent(source.sourceLinkId)}/properties?queryScope=${encodeURIComponent(JSON.stringify(position))}`,
-    { signal: context?.signal, headers: { 'X-NewP-Feature': featurePosition } });
+    { signal: context?.signal, headers: { 'X-NewP-Feature': featurePosition,
+      ...(context?.dataAccess?.id ? { 'X-NewP-Data-Declaration': context.dataAccess.id } : {}) } });
   if (!response.ok) throw await readStandardCrudRequestError(response);
   const payload = await response.json() as { resourceKey: string; objectId: string; detail: unknown };
   if (payload.resourceKey !== resourceKey || payload.objectId !== id) throw new StandardCrudRequestError('工作空间返回了不同目标。', 409);

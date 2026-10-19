@@ -19,6 +19,11 @@ public sealed partial class WorkspaceContentsController
             var result = await contents.ReadPropertiesAsync(Actor(), ReadOwnershipPosition(queryScope), linkId, token);
             return result is null ? Results.NotFound() : Results.Ok(result);
         }
+        catch (ActionDataAccessException exception)
+        {
+            return Results.Problem(statusCode: exception.Status, title: exception.Code,
+                extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+        }
         catch (JsonException) { return LinkQueryEndpointExtensions.Problem(new LinkQueryException(400, "Workspace.InvalidPosition")); }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
     }

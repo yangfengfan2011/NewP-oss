@@ -19,7 +19,7 @@ using ICP.Platform.Modules.Workspace;
 
 namespace ICP.Platform.HostApi.Tests;
 
-public sealed class DataExecutionQueryRoleTests
+public sealed partial class DataExecutionQueryRoleTests
 {
     [Fact]
     public async Task DisplayComposition_WithRealWorkspaceResolversConstructsBeforeResolvingItsBatchExecutor()

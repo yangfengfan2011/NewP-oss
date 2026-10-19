@@ -49,6 +49,17 @@ internal sealed class AcceptanceFeatureCatalog(IReadOnlyList<FeaturePoint> point
             && declaration.Execution == execution && declaration.Provider == provider
             && declaration.Resources.Contains(resourceKey) && declaration.FeaturePositions.Contains(point.Position)).Id;
 
+    // 同一功能位置可承载多个真实读取 View；准备请求同时核对实际 View、surface 和 action。
+    internal string DeclarationAtView(FeaturePoint point, string viewKey, string surface, string actionKey) =>
+        (declarations ?? []).Single(declaration => declaration.ModuleId == point.ModuleId
+            && declaration.ViewKey == viewKey && declaration.Surface == surface && declaration.ActionKey == actionKey
+            && declaration.FeaturePositions.Contains(point.Position)).Id;
+
+    // 位置来自正式目录，View 仍由实际准备消费入口明确给出。
+    internal string ReadDeclaration(string moduleId, string viewKey, string featurePosition) =>
+        DeclarationAtView(Require(point => point.ModuleId == moduleId && point.Position == featurePosition,
+            $"{moduleId} feature {featurePosition}"), viewKey, "read", "");
+
     private FeaturePoint Require(Func<FeaturePoint, bool> predicate, string description)
     {
         var matches = points.Where(predicate).ToArray();

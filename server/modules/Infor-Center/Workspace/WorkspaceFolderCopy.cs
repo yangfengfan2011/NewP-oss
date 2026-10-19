@@ -69,8 +69,9 @@ public sealed partial class WorkspaceContents
                     throw new LinkQueryException(409, "Workspace.FolderCopyUnavailable");
             }
             // 普通创建拥有名称、Description、目标归属和候选create规则；嵌套执行共享当前事务及图锁。
-            var createdId = await CreateFolderAsync(actor, targetPosition, new Dictionary<string, JsonElement> {
-                ["ENAME"] = JsonSerializer.SerializeToElement(name), ["Description"] = JsonSerializer.SerializeToElement(sourceFields.Description) }, copyParentAuthorization, cancellation);
+            var createdId = await CreateFolderCoreAsync(actor, targetPosition, new Dictionary<string, JsonElement> {
+                ["ENAME"] = JsonSerializer.SerializeToElement(name), ["Description"] = JsonSerializer.SerializeToElement(sourceFields.Description) },
+                copyParentAuthorization, new FolderCreationSource.Legacy(false), cancellation);
             var rootLinkId = (string)db.ChangeTracker.Entries<Dictionary<string, object?>>()
                 .Single(entry => entry.Metadata.Name == WorkspacePositions.ContentModel
                     && Equals(entry.Entity["PEID"], target.FolderId) && Equals(entry.Entity["CEID"], createdId)).Entity["LID"]!;

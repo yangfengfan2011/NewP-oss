@@ -13,7 +13,7 @@ import { CurrentPermissionScope } from '../components/CurrentPermissionScope';
 import type { StandardCrudActionDefinition } from '@icp-platform/sdk';
 import StandardCrudListPageHost from '../pages/StandardCrudListPageHost';
 import { FeaturePlacementContext } from '../authorization/FeaturePlacementContext';
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
 import { StandardCrudHostEnvironmentContext } from '../standard-crud/standardCrudHostEnvironment';
 import { ActionInstanceContext } from '../composition/pageCompositionRuntime';
 import { createEmbeddedHostEnvironment } from './standardCrudHostEnvironmentTestSupport';

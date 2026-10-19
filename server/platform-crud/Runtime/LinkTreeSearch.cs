@@ -16,10 +16,15 @@ public sealed partial class LinkTreeReader
         if (keyword.Length > 256) throw new LinkQueryException(400, "Platform.TreeInvalidKeyword", "keyword");
         if (page < 1 || size is < 1 or > 100) throw new LinkQueryException(400, "Platform.TreeInvalidPage");
         token.ThrowIfCancellationRequested();
-        if (keyword.Length == 0) return new([], 0, page, size);
+        var readSource = EntryReadSource(definition);
+        if (keyword.Length == 0)
+        {
+            linkReads.ValidateEntrySource(definition.Source.ResourceKey, definition.Source.ModelKey, readSource);
+            return new([], 0, page, size);
+        }
         var plan = Compile(definition);
         var rootSql = await plan.Policy.BuildAsync(definition, token);
-        var scope = await linkReads.ReadAsync(definition.Source.ResourceKey, definition.Source.ModelKey, "treeSearch", token);
+        var scope = await linkReads.ReadAsync(definition.Source.ResourceKey, definition.Source.ModelKey, "treeSearch", readSource, token);
         var source = await sourceReads.TreeSqlAsync(plan.Link, "treeSearchSource", token);
         var parameters = scope.Parameters.Concat(rootSql.Parameters).Concat(source.Parameters).ToList();
         var links = plan.LinkEntity; var folder = plan.NodeEntity;

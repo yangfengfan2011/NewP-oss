@@ -128,6 +128,11 @@ public static class RelationTreeExtensions
                             return Results.Ok(operation == "children" ? await reader.ChildrenAsync(tree, position, token) : await reader.PathAsync(tree, position, token));
                         }
                         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
+                        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)
+                        {
+                            return Results.Problem(statusCode: exception.Status, title: exception.Code,
+                                extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+                        }
                     }).WithMetadata(new EndpointModuleAttribute(tree.ModuleId)).RequireAuthorization(new RequireFeatureAttribute("tree:" + tree.ViewKey));
             }
         }

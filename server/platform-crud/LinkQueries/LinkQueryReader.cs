@@ -25,20 +25,24 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
 {
     /// <summary>公开查询只返回一页关系；关系身份与端点身份始终独立。</summary>
     public Task<LinkQueryResult> QueryAsync(string resourceKey, LinkQueryRequest request, CancellationToken token = default) =>
-        ReadAsync(resourceKey, request, false, false, token);
+        ReadAsync(resourceKey, request, false, false, InternalReadSource(resourceKey), token);
+
+    /// <summary>实际外部Link view入口只透传其冻结读取来源，其他规划与内部调用共用。</summary>
+    public Task<LinkQueryResult> QueryAsync(string resourceKey, LinkQueryRequest request, LinkReadSource.Entry source, CancellationToken token = default) =>
+        ReadAsync(resourceKey, request, false, false, source, token);
 
     /// <summary>可信模块可组合已声明字段的分组条件；所有条件仍在正式读取范围、Count和分页前执行。</summary>
     /// <remarks>HTTP查询保持原有字典协议，不接受此额外条件形状；字段和操作必须属于正式Link目录。</remarks>
     public Task<LinkQueryResult> QueryWithConditionsAsync(string resourceKey, LinkQueryRequest request,
         IReadOnlyList<PlatformQueryCondition> conditions, CancellationToken token = default) =>
-        ReadAsync(resourceKey, request, false, false, token, conditions);
+        ReadAsync(resourceKey, request, false, false, InternalReadSource(resourceKey), token, conditions);
 
     /// <summary>可信显式关系集合复用同一来源、端点、投影、筛选与分页；空集合保持空结果。</summary>
     public Task<LinkQueryResult> QuerySelectedAsync(string resourceKey, LinkQueryRequest request,
         IReadOnlyCollection<string> linkIds, IReadOnlyList<PlatformQueryCondition>? conditions = null, CancellationToken token = default)
     {
         ArgumentNullException.ThrowIfNull(linkIds);
-        return ReadAsync(resourceKey, request, false, false, token, conditions, linkIds);
+        return ReadAsync(resourceKey, request, false, false, InternalReadSource(resourceKey), token, conditions, linkIds);
     }
 
     /// <summary>引用写入复用正式端点目录和读取范围；没有任何 Link 的独立对象也能重新准入。</summary>
@@ -83,15 +87,23 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
 
     /// <summary>受信任树适配读取一层全部节点；不能由 HTTP 请求关闭分页，也不预取整树。</summary>
     public Task<LinkQueryResult> ReadDirectLayerAsync(string resourceKey, LinkQueryRequest request, CancellationToken token = default) =>
-        ReadAsync(resourceKey, request, true, true, token);
+        ReadAsync(resourceKey, request, true, true, InternalReadSource(resourceKey), token);
 
     /// <summary>hasChildren 与直属层共用相同类型、授权和条件规划，只取存在性。</summary>
     public async Task<bool> HasChildrenAsync(string resourceKey, LinkQueryRequest request, CancellationToken token = default) =>
-        (await ReadAsync(resourceKey, request with { Query = request.Query with { Page = 1, PageSize = 1, Fields = ["LID"] } }, false, false, token)).Total > 0;
+        (await ReadAsync(resourceKey, request with { Query = request.Query with { Page = 1, PageSize = 1, Fields = ["LID"] } }, false, false, InternalReadSource(resourceKey), token)).Total > 0;
+
+    // 内部用途只消费实际definition owner签发的唯一固定来源，不根据缺HTTP声明选旧路径。
+    private LinkReadSource.Internal InternalReadSource(string resourceKey)
+    {
+        var bindings = catalog.Get(resourceKey).Endpoints.Values.Select(endpoint => endpoint.InternalReadBinding).Distinct().ToArray();
+        if (bindings.Length != 1 || bindings[0] is null) throw new InvalidOperationException("LINK_QUERY_INTERNAL_READ_SOURCE_REQUIRED");
+        return new(bindings[0]!);
+    }
 
     // 同一计划用于标准列表和受信任直属层；权限故障、不可翻译条件及损坏存储类型均失败关闭。
     private async Task<LinkQueryResult> ReadAsync(string resourceKey, LinkQueryRequest request,
-        bool completeLayer, bool includeChildren, CancellationToken token, IReadOnlyList<PlatformQueryCondition>? extraConditions = null,
+        bool completeLayer, bool includeChildren, LinkReadSource readSource, CancellationToken token, IReadOnlyList<PlatformQueryCondition>? extraConditions = null,
         IReadOnlyCollection<string>? selectedLinkIds = null)
     {
         var definition = catalog.Get(resourceKey);
@@ -112,7 +124,7 @@ public sealed class LinkQueryReader(EfPlatformDbContext db, LinkQueryCatalog cat
         foreach (var endpoint in definition.Endpoints.Values)
         {
             preparedEndpoints.Add(endpoint.Model.LogicalKey,
-                await endpointScopes.PrepareAsync(endpoint, "linkEndpoint" + preparedEndpoints.Count, parameters, token));
+                await endpointScopes.PrepareAsync(endpoint, "linkEndpoint" + preparedEndpoints.Count, parameters, readSource, token));
         }
         var anchorValue = Parameter(request.Anchor.Id, parameters);
         var anchorAvailableSql = await preparedEndpoints[anchor.Model.LogicalKey].ReadAnchorAsync(request.Anchor.Id, anchorValue, parameters, token);

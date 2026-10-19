@@ -1,5 +1,5 @@
 import { platformFetch } from '@icp-platform/core';
-import { createTreeQueryTransport, readStandardCrudRequestError, StandardCrudRequestError, type PageInputResolverBinding, type TreeProviderBinding } from '@icp-platform/sdk';
+import { createTreeQueryTransport, readStandardCrudRequestError, StandardCrudRequestError, type PageInputResolverBinding, type TreeProviderBinding, type TreeReadContext } from '@icp-platform/sdk';
 
 const objectViews: Record<string, { resourceKey: string; viewKey: string }> = {
   WorkspaceFolder: { resourceKey: 'workspace.folder', viewKey: 'workspace.folder.detail' },
@@ -19,20 +19,25 @@ export function workspaceContentSource(value: Record<string, unknown> | undefine
 }
 
 const api = '/api/workspace/spaces';
-function headers(scope: Record<string, unknown>) {
+function headers(scope: Record<string, unknown>, featurePosition?: string) {
   if (scope.kind !== 'currentUser' || typeof scope.featurePosition !== 'string'
     || Object.keys(scope).some(key => !['kind', 'featurePosition'].includes(key))) throw new Error('缺少工作空间当前账号范围');
-  return { 'X-NewP-Feature': scope.featurePosition };
+  return { 'X-NewP-Feature': featurePosition ?? scope.featurePosition };
 }
 /** 准备状态只归本次页面范围；成功后的读取重试不会重放个人空间命令。 */
-export function createWorkspaceTreeProvider(fetcher: typeof fetch = platformFetch): TreeProviderBinding {
+export function createWorkspaceTreeProvider(fetcher: typeof fetch = platformFetch, readContext?: TreeReadContext): TreeProviderBinding {
   const prepared = new WeakMap<Record<string, unknown>, Promise<void>>();
-  const query = createTreeQueryTransport('workspace.structure', fetcher);
+  const transport = readContext?.dataAccess?.id && readContext.featurePosition
+    ? createTreeQueryTransport('workspace.structure', fetcher, readContext.featurePosition, readContext.dataAccess) : undefined;
+  const query = () => {
+    if (!transport) throw new StandardCrudRequestError('工作空间树缺少当前页面正式读取声明。', 400);
+    return transport;
+  };
   const prepare = (scope: Record<string, unknown>) => {
     let pending = prepared.get(scope);
     if (!pending) {
       // 显式进入命令不随树读取取消；离开后仍不会把其结果应用到另一个主体或重放普通创建。
-      pending = fetcher(`${api}/personal/ensure`, { method: 'POST', headers: headers(scope) }).then(async response => {
+      pending = fetcher(`${api}/personal/ensure`, { method: 'POST', headers: headers(scope, readContext?.featurePosition) }).then(async response => {
         if (!response.ok) throw await readStandardCrudRequestError(response);
       }).catch(error => { prepared.delete(scope); throw error; });
       prepared.set(scope, pending);
@@ -41,17 +46,19 @@ export function createWorkspaceTreeProvider(fetcher: typeof fetch = platformFetc
   };
   return {
     key: 'workspace.spaces',
+    bindRead: context => createWorkspaceTreeProvider(fetcher, context),
     roots: async (scope, signal) => {
+      const current = query();
       await prepare(scope);
       signal?.throwIfAborted();
-      const roots = await query.roots(scope, signal);
+      const roots = await current.roots(scope, signal);
       if (!roots.some(root => root.labelKey === 'Workspace.Public')) throw new StandardCrudRequestError('公共空间尚未初始化或不可读取。', 503, {}, { reasonKey: 'Workspace.PublicUnavailable' });
       if (!roots.some(root => root.labelKey === 'Workspace.Personal')) throw new StandardCrudRequestError('个人空间尚未初始化或不可读取，请重试或联系管理员。', 503, {}, { reasonKey: 'Workspace.PersonalUnavailable' });
       return roots;
     },
-    children: query.children,
-    path: query.path,
-    search: query.search,
+    children: async (scope, nodeKey, signal) => query().children(scope, nodeKey, signal),
+    path: async (scope, nodeKey, signal) => query().path(scope, nodeKey, signal),
+    search: async (scope, keyword, page, pageSize, signal) => query().search(scope, keyword, page, pageSize, signal),
     resolveChange: async change => ({ kind: change.resourceKey === 'workspace.folder' || change.resourceKey === 'workspace.content' ? 'unknown' : 'unrelated' }),
   };
 }

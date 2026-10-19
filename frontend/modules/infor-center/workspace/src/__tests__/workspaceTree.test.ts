@@ -1,5 +1,14 @@
 import { expect, it, vi } from 'vitest';
 import { createWorkspaceTreeProvider, workspacePageInputs } from '../workspaceTree';
+import type { ActionDataAccessRequirement } from '@icp-platform/sdk';
+import compiledWorkspace from '../../../../../../tests/Kernel.Tests/Fixtures/WorkspaceClipboardDataAccess.contract.json';
+
+const treeRead = (compiledWorkspace.declarations as ActionDataAccessRequirement[]).find(item => item.viewKey === 'workspace.structure' && item.surface === 'read');
+if (!treeRead) throw new Error('正式Workspace树读取fixture缺失');
+const readPosition = treeRead.featurePositions[0];
+function boundProvider(fetcher: typeof fetch) {
+  return createWorkspaceTreeProvider(fetcher).bindRead!({ featurePosition: readPosition, dataAccess: treeRead });
+}
 
 const spaces = [
   { spaceId: 'public', spaceKind: 'Public', rootFolderId: 'root-public', name: '公共空间' },
@@ -8,9 +17,15 @@ const spaces = [
 const roots = spaces.map(space => ({ nodeKey: `${space.spaceId}:${space.rootFolderId}`, nodeType: 'folder', label: space.name,
   labelKey: `Workspace.${space.spaceKind}`, hasChildren: false, contextMenuKeys: ['paste', 'clearClipboard'],
   context: { spaceId: space.spaceId, rootFolderId: space.rootFolderId, id: space.rootFolderId, linkIds: [] } }));
+it('rejects an unbound migrated provider before any preparation or query request', async () => {
+  const request = vi.fn(async () => new Response(JSON.stringify(roots)));
+  await expect(createWorkspaceTreeProvider(request).roots({ kind: 'currentUser', featurePosition: readPosition })).rejects.toThrow('正式读取声明');
+  expect(request).not.toHaveBeenCalled();
+});
+
 it('keeps roots under the existing folder feature scope while suppressing node mutation menus', async () => {
   const request = vi.fn(async () => new Response(JSON.stringify(roots)));
-  const values = await createWorkspaceTreeProvider(request).roots({ kind: 'currentUser', featurePosition: 'read' });
+  const values = await boundProvider(request).roots({ kind: 'currentUser', featurePosition: readPosition });
   expect(values.map(value => [value.nodeType, value.contextMenuKeys])).toEqual([['folder', ['paste', 'clearClipboard']], ['folder', ['paste', 'clearClipboard']]]);
 });
 
@@ -31,8 +46,8 @@ it.each([
   const request = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => new Response(JSON.stringify(
     init?.method === 'POST' ? { initialized: true } : unavailable ? roots.filter(root => root.labelKey !== `Workspace.${missingKind}`) : roots,
   )));
-  const provider = createWorkspaceTreeProvider(request);
-  const scope = { kind: 'currentUser', featurePosition: 'workspace-entry' };
+  const provider = boundProvider(request);
+  const scope = { kind: 'currentUser', featurePosition: readPosition };
   await expect(provider.roots(scope)).rejects.toMatchObject({ status: 503, reasonKey });
   await expect(provider.roots(scope)).rejects.toMatchObject({ status: 503, reasonKey });
   unavailable = false;
@@ -47,20 +62,20 @@ it('prepares the current account once and retries only reads after a successful 
     if (failRead) { failRead = false; throw new Error('read offline'); }
     return new Response(JSON.stringify(roots));
   });
-  const provider = createWorkspaceTreeProvider(request);
-  const scope = { kind: 'currentUser', featurePosition: 'workspace-entry' };
+  const provider = boundProvider(request);
+  const scope = { kind: 'currentUser', featurePosition: readPosition };
   await expect(provider.roots(scope)).rejects.toThrow('read offline');
   const nodes = await provider.roots(scope);
   expect(nodes.map(node => node.context)).toEqual(roots.map(root => root.context));
   expect(request.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
   expect(nodes.map(node => node.nodeKey)).toEqual(['public:root-public', 'mine:root-mine']);
   expect(nodes.every(node => !node.hasChildren)).toBe(true);
-  expect(new Headers(request.mock.calls[0][1]?.headers).get('X-NewP-Feature')).toBe('workspace-entry');
+  expect(new Headers(request.mock.calls[0][1]?.headers).get('X-NewP-Feature')).toBe(readPosition);
 });
 
 it('rejects a stale or forged root occurrence instead of returning another path', async () => {
-  const provider = createWorkspaceTreeProvider(async () => new Response('', { status: 404 }));
-  await expect(provider.path({ kind: 'currentUser', featurePosition: 'read' }, 'mine:stale-root')).rejects.toThrow();
+  const provider = boundProvider(async () => new Response('', { status: 404 }));
+  await expect(provider.path({ kind: 'currentUser', featurePosition: readPosition }, 'mine:stale-root')).rejects.toThrow();
   await expect(provider.roots({ kind: 'global', subjectId: 'other' })).rejects.toThrow();
 });
 
@@ -73,7 +88,7 @@ it('keeps the complete ordered occurrence chain and loads only the direct folder
     expect([...url.searchParams.keys()]).toEqual(['scope', 'nodeKey']);
     return new Response(JSON.stringify([{ nodeKey: 'space:root:first:shared-link', nodeType: 'folder', label: '共享文件夹', hasChildren: true, context: { spaceId: 'space', rootFolderId: 'root', linkIds: ['first', 'shared-link'], id: 'shared' } }]));
   });
-  const provider = createWorkspaceTreeProvider(request); const scope = { kind: 'currentUser', featurePosition: 'read' };
+  const provider = boundProvider(request); const scope = { kind: 'currentUser', featurePosition: readPosition };
   const nodes = await provider.children(scope, 'space:root:first');
   expect(nodes).toEqual([{ nodeKey: 'space:root:first:shared-link', nodeType: 'folder', label: '共享文件夹', hasChildren: true,
     context: { spaceId: 'space', rootFolderId: 'root', linkIds: ['first', 'shared-link'], id: 'shared' } }]);
@@ -83,14 +98,15 @@ it('keeps the complete ordered occurrence chain and loads only the direct folder
 });
 
 it('searches all occurrences with the trusted feature and preserves every prefix in nodes and paths', async () => {
-  const scope = { kind: 'currentUser', featurePosition: 'workspace-entry' };
+  const scope = { kind: 'currentUser', featurePosition: readPosition };
   const controller = new AbortController();
   const request = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://localhost');
     expect(url.pathname).toBe('/api/trees/workspace.structure/search');
     expect(Object.fromEntries(url.searchParams)).toEqual({ scope: 'currentUser', keyword: '共享%_', page: '2', pageSize: '20' });
     expect(init?.signal).toBe(controller.signal);
-    expect(new Headers(init?.headers).get('X-NewP-Feature')).toBe('workspace-entry');
+    expect(new Headers(init?.headers).get('X-NewP-Feature')).toBe(readPosition);
+    expect(new Headers(init?.headers).get('X-NewP-Data-Declaration')).toBe(treeRead.id);
     return new Response(JSON.stringify({ items: ['a', 'b'].map(prefix => ({
       node: { nodeKey: `public:root:${prefix}:shared-link`, nodeType: 'folder', label: '共享%_', hasChildren: false,
         context: { spaceId: 'public', rootFolderId: 'root', linkIds: [prefix, 'shared-link'], id: 'shared' } },
@@ -98,7 +114,7 @@ it('searches all occurrences with the trusted feature and preserves every prefix
         { nodeKey: `public:root:${prefix}:shared-link`, label: '共享%_' }],
     })), total: 22, page: 2, pageSize: 20 }));
   });
-  const result = await createWorkspaceTreeProvider(request).search(scope, '共享%_', 2, 20, controller.signal);
+  const result = await boundProvider(request).search(scope, '共享%_', 2, 20, controller.signal);
   expect(result.total).toBe(22);
   expect(result.items.map(item => item.node.nodeKey)).toEqual(['public:root:a:shared-link', 'public:root:b:shared-link']);
   expect(result.items.map(item => item.path.map(part => part.nodeKey))).toEqual([

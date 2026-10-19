@@ -47,8 +47,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
         using (var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.authorize"), HttpMethod.Put,
             PermissionsPath(parentOccurrence, position.LinkIds[^1]), new DataScopeObjectConfiguration("workspace.folder", parentId, subjects)))
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
-        using var created = await FeatureHttpTestRequests.SendAsync(ordinary, Point(fixture, "workspace.folder.create"), HttpMethod.Post,
-            "/api/workspace/content/folders", new { position, values = new { ENAME = "InheritedUnreadable298", Description = "创建后按新对象creator求值" }, copyParentAuthorization = true });
+        using var created = await CreateFolderRequest(fixture, ordinary, new { position, values = new { ENAME = "InheritedUnreadable298", Description = "创建后按新对象creator求值" }, copyParentAuthorization = true });
         var receipt = await ReadOkAsync(created);
         Target child;
         Dictionary<string, object?> childRow;
@@ -117,8 +116,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
 
         async Task CreateWithOptionAsync(string name, object input)
         {
-            using var response = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.create"), HttpMethod.Post,
-                "/api/workspace/content/folders", input);
+            using var response = await CreateFolderRequest(fixture, admin, input);
             await ReadOkAsync(response);
             var created = await FindFolderAsync(fixture, name);
             using var scope = fixture.Services.CreateScope();
@@ -266,8 +264,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
         using var ordinary = actor.Client;
         await SaveAsync(fixture, admin, position with { LinkIds = [] }, parent,
             [new("HistoryParent298", "creator", null, 4, new Dictionary<string, string> { ["delete"] = "allow" })]);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.create"), HttpMethod.Post,
-            "/api/workspace/content/folders", new { position, values = new { ENAME = "HistoryInitialized298" }, copyParentAuthorization = true }))
+        using (var response = await CreateFolderRequest(fixture, admin, new { position, values = new { ENAME = "HistoryInitialized298" }, copyParentAuthorization = true }))
             await ReadOkAsync(response);
         var child = await FindFolderAsync(fixture, "HistoryInitialized298");
         var row = await RowAsync(fixture, child);
@@ -343,8 +340,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
             Task<HttpResponseMessage>? creating = null;
             try
             {
-                creating = FeatureHttpTestRequests.SendAsync(ordinary, Point(fixture, "workspace.folder.create"), HttpMethod.Post,
-                    "/api/workspace/content/folders", new { position, values = new { ENAME = "RevokedParent298" }, copyParentAuthorization = true });
+                creating = CreateFolderRequest(fixture, ordinary, new { position, values = new { ENAME = "RevokedParent298" }, copyParentAuthorization = true });
                 await reached.Task.WaitAsync(TimeSpan.FromSeconds(30));
                 // generic正式管理入口只取ACL锁，不取Workspace图锁；此PUT从测试调用方独立提交，不能用owner来源路由制造锁等待。
                 DataScopeDirectSubjectDto[] revoked = clearConfiguration ? [] :
@@ -412,8 +408,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
         await SaveAsync(fixture, admin, parentOccurrence, parent, original);
         await SaveAsync(fixture, admin, position, destination,
             [new("IndependentDestinationDeny298", "all", null, 20, new Dictionary<string, string> { ["read"] = "deny" })]);
-        using (var created = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.create"), HttpMethod.Post,
-            "/api/workspace/content/folders", new { position, values = new { ENAME = "IndependentChild298" }, copyParentAuthorization = true }))
+        using (var created = await CreateFolderRequest(fixture, admin, new { position, values = new { ENAME = "IndependentChild298" }, copyParentAuthorization = true }))
             await ReadOkAsync(created);
         var child = await FindFolderAsync(fixture, "IndependentChild298");
         var configuration = await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(position, child.LinkId));
@@ -562,7 +557,8 @@ public sealed class FolderParentAuthorizationSqlServerTests
                 : new { mode = "copy", sourcePosition = position, linkIds = new[] { source.LinkId }, targetPosition = position, name, copyParentAuthorization = true };
             var feature = kind == "create" ? "create" : kind == "copy" ? "pasteFolderCopy" : "pasteFolderStructure";
             var path = "/api/workspace/content/folders" + (kind == "create" ? "" : "/" + kind);
-            using (var response = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder." + feature), HttpMethod.Post, path, body))
+            using (var response = kind == "create" ? await CreateFolderRequest(fixture, admin, body)
+                : await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder." + feature), HttpMethod.Post, path, body))
                 await ReadOkAsync(response);
             using var readScope = fixture.Services.CreateScope();
             var readDb = readScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
@@ -641,6 +637,14 @@ public sealed class FolderParentAuthorizationSqlServerTests
 
     private static string PermissionsPath(Position position, string linkId) => "/api/workspace/content/" + linkId + "/permissions?queryScope="
         + Uri.EscapeDataString(JsonSerializer.Serialize(position, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+
+    private static Task<HttpResponseMessage> CreateFolderRequest(BusinessAuditHostFixture fixture, HttpClient client, object body)
+    {
+        var feature = Point(fixture, "workspace.folder.create");
+        var declaration = Assert.Single(fixture.Services.GetRequiredService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>().ActionDataAccessCatalog,
+            binding => binding.Execution == "workspace.folder.create" && binding.FeaturePositions.Contains(feature.Position));
+        return FeatureHttpTestRequests.SendAsync(client, feature, HttpMethod.Post, "/api/workspace/content/folders", body, declaration);
+    }
 
     private sealed class AuditTicks { internal long Count; }
 

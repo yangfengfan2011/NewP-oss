@@ -59,6 +59,15 @@ public partial interface IDataExecutionAccess
     /// <summary>内部调用者在原单对象SQL读取位置组合完整read计划；ID只核角色基数，不逐项预检。</summary>
     Task<DataScopeReadPlan> GetInternalReadPlanAsync(DataExecutionInternalReadBinding binding,
         string resourceKey, IReadOnlyCollection<string> objectIds, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    /// <summary>固定内部查询来源在原SQL过滤位置取得read计划，不伪造对象ID集合或HTTP凭据。</summary>
+    Task<DataScopeReadPlan> GetInternalQueryReadPlanAsync(DataExecutionInternalReadBinding binding,
+        string resourceKey, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    /// <summary>纯固定API在原SQL过滤处核对真实路由/方法及资源后取得read计划，不作为entry缺声明回退。</summary>
+    Task<DataScopeReadPlan> GetApiQueryReadPlanAsync(DataExecutionApiQueryContext context,
+        string resourceKey, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    /// <summary>纯固定API在原详情SQL点核对来源和真实单目标后取得read计划，不作为普通entry的缺声明回退。</summary>
+    Task<DataScopeReadPlan> GetApiObjectReadPlanAsync(DataExecutionApiObjectContext context, string resourceKey, string objectId,
+        CancellationToken cancellationToken = default) => throw new NotSupportedException();
     /// <summary>通用端点由真实metadata及资源owner选择受控绑定；仅明确登记的旧消费者返回null。</summary>
     DataExecutionBindingReference? BindResourceEndpoint(string resourceKey) => throw new NotSupportedException();
     /// <summary>完整角色先核基数，再按输入顺序裁决；每次枚举均使用当前阶段事实。</summary>

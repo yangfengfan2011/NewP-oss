@@ -254,7 +254,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
                     installedFeatures.Behavior("Workspace", "workspace.spaces.access").Position, token);
                 var root = roots.EnumerateArray().Single(item => string.Equals(item.GetProperty("spaceKind").GetString(), "public", StringComparison.OrdinalIgnoreCase));
                 var position = new WorkspaceFolderPosition(root.GetProperty("spaceId").GetString()!, root.GetProperty("rootFolderId").GetString()!, root.GetProperty("rootFolderId").GetString()!, []);
-                var rootContents = await WorkspaceAcceptanceFixture.ReadContentsAtPositionAsync(installed, position, workspace!.Position, token);
+                var rootContents = await WorkspaceAcceptanceFixture.ReadContentsAtPositionAsync(installed, position, workspace!.Position, token, installedFeatures);
                 var folderLink = rootContents.GetProperty("items").EnumerateArray().Single(item => item.GetProperty("associatedObject").GetProperty("id").GetString() == _oldFolderId);
                 _documentPosition = position with { FolderId = _oldFolderId!, LinkIds = [folderLink.GetProperty("linkId").GetString()!] };
             }
@@ -371,7 +371,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             || position.StartsWith("Document/", StringComparison.Ordinal) || position.StartsWith("Audit/", StringComparison.Ordinal)))
             throw new InvalidOperationException("批量管理主体没有保持正式限定的功能集合。");
         var position = _documentPosition ?? throw new InvalidOperationException("批量授权缺少公共内容位置。");
-        var contents = await WorkspaceAcceptanceFixture.ReadContentsAtPositionAsync(client, position, browse.Position, token);
+        var contents = await WorkspaceAcceptanceFixture.ReadContentsAtPositionAsync(client, position, browse.Position, token, features);
         var selected = contents.GetProperty("items").EnumerateArray().Where(item =>
             item.GetProperty("associatedObject").GetProperty("id").GetString() == _oldPartId
             || item.GetProperty("associatedObject").GetProperty("id").GetString() == _oldDocumentId).ToArray();
@@ -441,7 +441,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
             || position.StartsWith("Document/", StringComparison.Ordinal) || position.StartsWith("Audit/", StringComparison.Ordinal)))
             throw new InvalidOperationException("普通履历主体没有保持本轮正式限定的功能集合。");
         var position = _documentPosition ?? throw new InvalidOperationException("普通履历缺少已准备的公共容器。");
-        var contents = await WorkspaceAcceptanceFixture.ReadContentsAtPositionAsync(client, position, browse.Position, token);
+        var contents = await WorkspaceAcceptanceFixture.ReadContentsAtPositionAsync(client, position, browse.Position, token, features);
         var source = contents.GetProperty("items").EnumerateArray().Single(item =>
             item.GetProperty("associatedObject").GetProperty("modelKey").GetString() == "Part"
             && item.GetProperty("associatedObject").GetProperty("id").GetString() == _oldPartId);
@@ -494,7 +494,7 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Post, "/api/workspace/content/" + route,
             new { position = position.CommandPosition, values = new { ECODE = code, ENAME = name } },
             features.Action(entry, "create" + model, "list.pageActions", "folder").Position, token);
-        var contents = await WorkspaceAcceptanceFixture.ReadContentsAtPositionAsync(client, position, entry.Position, token);
+        var contents = await WorkspaceAcceptanceFixture.ReadContentsAtPositionAsync(client, position, entry.Position, token, features);
         return contents.GetProperty("items").EnumerateArray().Single(item => item.GetProperty("fields").GetProperty("Name").GetString() == name)
             .GetProperty("associatedObject").GetProperty("id").GetString()!;
     }
@@ -531,13 +531,13 @@ internal sealed partial class PublishedComponentAcceptanceFixture(
         var roots = await WorkspaceAcceptanceFixture.SendAsync(client, HttpMethod.Get, "/api/workspace/spaces", null,
             features.Behavior("Workspace", "workspace.spaces.access").Position, token);
         var root = roots.EnumerateArray().Single(item => string.Equals(item.GetProperty("spaceKind").GetString(), "public", StringComparison.OrdinalIgnoreCase));
-        var contents = await WorkspaceAcceptanceFixture.ReadRootContentsAsync(client, root, features.Behavior("Workspace", "workspace.spaces.access").Position, token);
+        var contents = await WorkspaceAcceptanceFixture.ReadRootContentsAsync(client, root, features.Behavior("Workspace", "workspace.spaces.access").Position, token, features);
         var ids = contents.GetProperty("items").EnumerateArray().Select(item => item.GetProperty("associatedObject").GetProperty("id").GetString()).Order(StringComparer.Ordinal);
         if (!ids.SequenceEqual(new[] { oldId, _oldFolderId }.Order(StringComparer.Ordinal)))
             throw new InvalidOperationException("旧根内容 Link 未由正式 Workspace 查询连续读取。");
         var documentContents = await WorkspaceAcceptanceFixture.ReadContentsAtPositionAsync(client,
             _documentPosition ?? throw new InvalidOperationException("升级后的图文档目录尚未准备。"),
-            features.Behavior("Workspace", "workspace.spaces.access").Position, token);
+            features.Behavior("Workspace", "workspace.spaces.access").Position, token, features);
         if (!documentContents.GetProperty("items").EnumerateArray().Select(item => item.GetProperty("associatedObject").GetProperty("id").GetString()).SequenceEqual([_oldDocumentId]))
             throw new InvalidOperationException("升级后的图文档未在普通文件夹中由正式 Workspace 查询读取。");
         await WriteAsync(evidenceName, new { oldDocument, roots, contents, documentContents, modelOwners = _baselineOwners }, token);

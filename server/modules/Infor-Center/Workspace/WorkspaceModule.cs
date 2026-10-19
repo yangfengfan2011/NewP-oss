@@ -20,6 +20,10 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
         services.AddScoped<WorkspaceSpaces>();
         services.AddScoped<WorkspacePositions>();
         services.AddScoped<WorkspaceContents>();
+        services.AddSingleton(new DataScopeObjectInitializationBinding(ModuleId, "workspace.folder",
+            WorkspaceFolderExecutions.CreateCaller(), "submit", "parent", "candidate"));
+        services.AddSingleton(new DataScopeObjectInitializationLegacyBinding(ModuleId, "workspace.folder", WorkspaceFolderExecutions.CopyCaller(false)));
+        services.AddSingleton(new DataScopeObjectInitializationLegacyBinding(ModuleId, "workspace.folder", WorkspaceFolderExecutions.CopyCaller(true)));
         services.AddScoped<ICP.Platform.Crud.Ownership.EntityOwnershipTransfer>();
         services.AddScoped<ICP.Platform.Crud.Ownership.EntityOwnershipTransferDisplay>();
         services.AddScoped<ICP.Platform.Crud.Ownership.IEntityOwnershipTransferReceiver, WorkspaceOwnershipTransferReceiver>();

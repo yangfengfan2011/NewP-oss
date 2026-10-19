@@ -3,6 +3,7 @@
   "view": {
     "key": "workspace.references.list", "mode": "list", "model": "WorkspaceFolder", "resourceKey": "workspace.references",
     "querySource": { "kind": "link", "model": "WorkspaceFolderContent", "resourceKey": "workspace.content" },
+    "dataAccess": {"execution":"workspace.content.read","resources":["workspace.folder","part.part","document.document"]},
     "dicKey": "Workspace", "titleKey": "DirectReferences", "detailViewKey": "workspace.folder.detail",
     "query": { "fields": [{ "key": "keyword", "labelKey": "Keyword", "source": "preset", "preset": "keyword", "operator": "like" }], "defaultPageSize": 20, "defaultSort": { "field": "UpdatedAt", "direction": "desc" } },
     "columns": [

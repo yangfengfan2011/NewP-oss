@@ -26,6 +26,11 @@ public interface IStandardCrudService
         IReadOnlyList<ICP.Platform.Authorization.Contracts.DataExecutionBindingReference> bindings,
         CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
+    /// <summary>纯固定外部API使用真实单对象来源复用原详情SQL，不借用view或内部调用者身份。</summary>
+    Task<StandardCrudDetail?> GetDetailFromApiAsync(StandardCrudDescriptor descriptor, string id,
+        ICP.Platform.Authorization.Contracts.DataExecutionApiObjectContext source,
+        CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
     /// <summary>已验证真实来源的内部调用复用详情SQL与display，不借用独立模块的HTTP声明或功能位置。</summary>
     Task<StandardCrudDetail?> GetDetailFromSourceAsync(StandardCrudDescriptor descriptor, string id,
         ICP.Platform.Authorization.Contracts.DataExecutionInternalReadBinding source,

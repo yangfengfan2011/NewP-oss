@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
+using System.Xml.Linq;
 using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Testing;
@@ -159,7 +160,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             if (queries.TryGetValue(command.CommandText, out var sample)) queries[command.CommandText] = (sample.Parameters, sample.Calls + 1);
             else queries.Add(command.CommandText, (command.Parameters.Cast<SqlParameter>().Select(parameter => (SqlParameter)((ICloneable)parameter).Clone()).ToArray(), 1));
         }
-        public async Task<object[]> ExplainAsync(string connectionString)
+        public async Task<object[]> ExplainAsync(string connectionString, string? diagnosticDirectory = null)
         {
             var evidence = new List<object>();
             foreach (var (sql, sample) in queries)
@@ -173,16 +174,50 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
                 command.Parameters.AddRange(sample.Parameters.Select(parameter => (SqlParameter)((ICloneable)parameter).Clone()).ToArray());
                 await using var reader = await command.ExecuteReaderAsync();
                 var plans = new List<string>(); var returnedRows = 0;
+                var resultSets = new List<object>();
                 do
                 {
                     var isPlan = reader.FieldCount == 1 && reader.GetName(0).Contains("Showplan", StringComparison.OrdinalIgnoreCase);
-                    while (await reader.ReadAsync()) if (isPlan) plans.Add(reader.GetString(0)); else returnedRows++;
+                    var columns = Enumerable.Range(0, reader.FieldCount).Select(index => reader.GetName(index)).ToArray();
+                    var rows = 0;
+                    while (await reader.ReadAsync())
+                    {
+                        rows++;
+                        if (isPlan) plans.Add(reader.GetString(0)); else returnedRows++;
+                    }
+                    resultSets.Add(new { columns, rows, isPlan });
                 } while (await reader.NextResultAsync());
-                Assert.NotEmpty(plans); Assert.NotEmpty(statistics);
+                if (diagnosticDirectory is not null)
+                {
+                    Directory.CreateDirectory(diagnosticDirectory);
+                    await File.WriteAllTextAsync(Path.Combine(diagnosticDirectory, $"query-{evidence.Count}.json"), JsonSerializer.Serialize(new
+                    {
+                        sql, sample.Calls, returnedRows, resultSets, plans, statistics,
+                        parameters = sample.Parameters.Select(parameter => new
+                        {
+                            parameter.ParameterName, type = parameter.SqlDbType.ToString(), parameter.Size,
+                            value = parameter.Value is string text && text is "" or "[]" ? text : "<redacted>"
+                        })
+                    }, new JsonSerializerOptions { WriteIndented = true }));
+                }
+                Assert.NotEmpty(plans);
+                // 常量空结果不会访问表，也不会产生STATISTICS IO；必须由实际XML和返回行数共同证明。
+                if (!IsZeroIoConstantPlan(plans, returnedRows)) Assert.NotEmpty(statistics);
                 evidence.Add(new { sql, sample.Calls, returnedRows, statistics, plans, timing = "after-request-representative-query-shape" });
             }
             Assert.NotEmpty(evidence);
             return evidence.ToArray();
+        }
+        public static bool IsZeroIoConstantPlan(IReadOnlyList<string> plans, int returnedRows)
+        {
+            if (returnedRows != 0 || plans.Count == 0) return false;
+            return plans.All(plan =>
+            {
+                var xml = XDocument.Parse(plan);
+                var operations = xml.Descendants().Where(element => element.Name.LocalName == "RelOp").ToArray();
+                return operations.Length != 0 && operations.All(operation => (string?)operation.Attribute("PhysicalOp") == "Constant Scan")
+                    && !xml.Descendants().Any(element => element.Name.LocalName == "Object");
+            });
         }
         public void OnCompleted() { }
         public void OnError(Exception error) { }

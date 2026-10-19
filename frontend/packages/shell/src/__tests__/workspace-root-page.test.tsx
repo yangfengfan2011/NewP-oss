@@ -35,7 +35,8 @@ const detail = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderDet
 const incoming = readComponentJson('Workspace', 'metadata/views/WorkspaceReferencesList.view.json');
 const dictionary = readComponentJson('Workspace', 'metadata/dictionaries/Workspace.dic.json');
 const documentDictionary = readComponentJson('Document', 'metadata/dictionaries/Document.dic.json');
-import { RuntimeMetadataProvider } from '../metadata/runtimeMetadataContext';
+import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
+import { formalDataAccessFor } from './formalRuntimeMetadataTestSupport';
 import { PageEntry } from '../composition/PageOutlet';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { compileStandardCrudRouteProjection } from '../navigation/standardCrudRouteAdapter';
@@ -52,7 +53,7 @@ import '@ant-design/pro-descriptions';
 vi.unmock('@icp-platform/core');
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-it.each(['receipt', 'success'] as const)('mounts the real shared content list after %s creation and discards another account’s pending content', async scenario => {
+it.each(['receipt', 'success', 'missing-read'] as const)('mounts the real shared content list after %s creation and discards another account’s pending content', async scenario => {
   let account = 'a';
   const writes: unknown[] = [];
   const references: unknown[] = [];
@@ -77,6 +78,11 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = input instanceof Request ? new URL(input.url).pathname : String(input);
     const method = input instanceof Request ? input.method : init?.method;
+    if (path.startsWith('/api/trees/workspace.structure/')) {
+      const headers = new Headers(input instanceof Request ? input.headers : init?.headers);
+      expect(headers.get('X-NewP-Data-Declaration')).toBe(formalDataAccessFor('workspace.structure', 'read').id);
+      expect(headers.get('X-NewP-Feature')).toBe('workspace-entry');
+    }
     if (path.endsWith('antiforgery-token')) return json({ requestToken: 'token' });
     if (path.endsWith('current-user')) return json(user());
     if (path.startsWith('/api/workspace/folders/candidates')) return json({ items: [{ id: 'shared-folder', name: '已有共享文件夹' }], total: 1, page: 1, pageSize: 20 });
@@ -95,6 +101,8 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
       return json({ succeeded: true });
     }
     if (path === '/api/workspace/content/folders' && method === 'POST') {
+      expect(new Headers(input instanceof Request ? input.headers : init?.headers).get('X-NewP-Data-Declaration'))
+        .toBe(formalDataAccessFor('workspace.folder.list', 'pageActions', 'create').id);
       writes.push(input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body)));
       return json(scenario === 'success' ? rootDetail('created-folder', '创建后可读', '') : { succeeded: true });
     }
@@ -120,6 +128,8 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
           : chain.length === 2 ? [node('same-last-link', 'same-descendant', '共享后代', false)] : []));
     }
     if (path.startsWith('/api/links/workspace.content?')) {
+      expect(new Headers(input instanceof Request ? input.headers : init?.headers).get('X-NewP-Data-Declaration'))
+        .toBe(formalDataAccessFor('workspace.folder.list', 'read').id);
       if (failInitialRead) { failInitialRead = false; return new Response('initial read unavailable', { status: 503 }); }
       const id = new URL(path, 'http://localhost').searchParams.get('anchorId');
       if (id === 'a-root') return new Promise<Response>(resolve => { completeOld = resolve; });
@@ -138,7 +148,9 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
   ModuleRegistry.replaceAll([{ metadata: { moduleId: 'Workspace', displayName: '工作空间', version: '1' }, ...workspace },
     { metadata: { moduleId: 'Part', displayName: '零组件', version: '1' }, ...part },
     { metadata: { moduleId: 'Document', displayName: '图文档', version: '1' }, ...documentModule }], 'workspace-test');
-  const views = [tree, list, detail, incoming, partDetail, partList, documentDetail, documentList, ...historyViews, notifications];
+  const treeInput = structuredClone(tree);
+  if (scenario === 'missing-read') delete treeInput.view.dataAccess;
+  const views = [treeInput, list, detail, incoming, partDetail, partList, documentDetail, documentList, ...historyViews, notifications];
   const navs = [{ ...navigation, navigation: { items: navigation.navigation.items.map(item => ({ ...item, featurePosition: item.key === 'workspace.history' ? historyFeatures.Workspace.historyPosition : item.key === 'workspace.transfers' ? notificationFeatures.notificationsPosition : 'workspace-entry' })) } }, ...[partNavigation, documentNavigation].map((document, index) => ({ ...document, navigation: { items: document.navigation.items.map(item =>
     item.key === (index ? 'document.history' : 'part.history') ? { ...item, featurePosition: historyFeatures[index ? 'Document' : 'Part'].historyPosition } : item) } }))];
   // 实际 AppRoutes 先编译所有模块路由，再装载组合；直接挂 PageEntry 不能替代这一步。
@@ -176,6 +188,12 @@ it.each(['receipt', 'success'] as const)('mounts the real shared content list af
   }], { initialEntries: ['/workspace'] });
   onTestFinished(async () => { await act(async () => root.unmount()); router.dispose(); container.remove(); vi.unstubAllGlobals(); ModuleRegistry.replaceAll([], 'workspace-test-cleanup'); });
   await act(async () => root.render(<RouterProvider router={router} />));
+  if (scenario === 'missing-read') {
+    await vi.waitFor(() => expect(container.textContent).toContain('树读取失败'));
+    expect(fetcher.mock.calls.some(([input]) => String(input).startsWith('/api/trees/'))).toBe(false);
+    expect(fetcher.mock.calls.some(([input]) => String(input).endsWith('/personal/ensure'))).toBe(false);
+    return;
+  }
   if (scenario === 'receipt') {
     await vi.waitFor(() => expect(container.textContent).toContain('列表加载失败'));
     expect(container.textContent).not.toContain('已保存，刷新失败');

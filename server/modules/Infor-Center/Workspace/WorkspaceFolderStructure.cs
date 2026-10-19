@@ -62,7 +62,7 @@ public sealed partial class WorkspaceContents
                 && Folders.Any(folder => EF.Property<string>(folder, "EID") == EF.Property<string>(link, "CEID") && EF.Property<string>(folder, "ENAME") == name), cancellation))
                 throw new LinkQueryException(409, "Workspace.SiblingNameConflict", "ENAME");
             var candidates = new Dictionary<string, Dictionary<string, object?>>(StringComparer.OrdinalIgnoreCase);
-            foreach (var folder in plan.Folders) candidates.Add(folder.Id, await PrepareFolderCandidateAsync(StringComparer.OrdinalIgnoreCase.Equals(folder.Id, source.Id) ? name : folder.Name, folder.Description, targetPosition.SpaceId, cancellation));
+            foreach (var folder in plan.Folders) candidates.Add(folder.Id, await PrepareFolderCandidateAsync(StringComparer.OrdinalIgnoreCase.Equals(folder.Id, source.Id) ? name : folder.Name, folder.Description, targetPosition.SpaceId, new FolderCreationSource.Legacy(true), cancellation));
             // 全部候选及最终图先成立，之后才产生任何持久写入；新图只指向全新EID，目标为源后代也不会成环。
             foreach (var candidate in candidates.Values)
             {
@@ -80,7 +80,8 @@ public sealed partial class WorkspaceContents
                         : incoming[folder.Id].Select(edge => (string)candidates[edge.Parent]["EID"]!).ToArray();
                     if (parents.Length == 0) continue;
                     var candidate = candidates[folder.Id];
-                    var initialized = await parentAuthorizations.InitializeFromParentsAsync("workspace.folder", parents, (string)candidate["EID"]!, cancellation);
+                    var initialized = await parentAuthorizations.InitializeFromParentsAsync("workspace.folder", parents, (string)candidate["EID"]!,
+                        FolderInitializationSource(new FolderCreationSource.Legacy(true), parents, candidate), cancellation);
                     if (!initialized.Initialized) continue;
                     await referenceAudit.ParentAuthorizationInitializedAsync(initialized.ParentObjectId, candidate, cancellation);
                     // 后继必须从真实已保存新父读取；Flush不提交，整个结构仍由外层事务统一回滚。

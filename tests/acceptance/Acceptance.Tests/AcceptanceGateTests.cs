@@ -1225,16 +1225,13 @@ public sealed class AcceptanceGateTests
             }).RunAsync(CancellationToken.None);
     }
 
-    [EnvironmentGatedFact(RunEnvironmentVariable, "正式 Part 迁移、普通账号标准创建及 Drawer/独立只读属性 driver")]
+    [EnvironmentGatedFact(RunEnvironmentVariable, "当前固定 Part 发行物、普通账号标准创建及 Drawer/独立只读属性 driver")]
     public async Task PartCreation_UsesFormalDriver()
     {
         var (root, runId) = PrepareRun("part");
-        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false,
-            selectFeatures: features =>
-            {
-                var entry = features.Behavior("Part", "part.part.read");
-                return [entry, features.Action(entry, "create", "list.pageActions")];
-            },
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
             browserJourney: (page, token) => RunMetadataPageJourneyAsync(page, token, root, runId,
                 "part", "零组件旅程", new(page, "零组件", "/parts", "/api/part/parts", "新建零组件")))
             .RunAsync(CancellationToken.None);

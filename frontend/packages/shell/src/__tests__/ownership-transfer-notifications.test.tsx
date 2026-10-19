@@ -1,3 +1,4 @@
+import { toolbarMenuAction, toolbarActionDisabled } from './toolbarTestActions';
 // @vitest-environment jsdom
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -147,8 +148,9 @@ it('submits the actual Workspace ListHost selected rows as one fixed full-source
     await act(async () => container.querySelector<HTMLInputElement>(`tr[data-row-key="${id}"] input[type="checkbox"]`)!.click());
   }
   const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent?.replace(/\s/g, '') === label);
-  await vi.waitFor(() => expect(button('转交选中对象')?.disabled).toBe(false));
-  await act(async () => button('转交选中对象')!.click());
+  await vi.waitFor(async () => expect(toolbarActionDisabled(await toolbarMenuAction(container, '授权与归属', '转交选中对象'))).toBe(false));
+  const transferAction = await toolbarMenuAction(container, '授权与归属', '转交选中对象');
+  await act(async () => transferAction!.click());
   const accounts = () => requests.filter(request => new URL(request.url).pathname.endsWith('/transfer/accounts'));
   const select = () => document.querySelector('[role="dialog"] .ant-select');
   await vi.waitFor(async () => { await act(async () => undefined); expect(accounts()).toHaveLength(1); expect(select()?.classList.contains('ant-select-disabled')).toBe(false); });
@@ -156,7 +158,8 @@ it('submits the actual Workspace ListHost selected rows as one fixed full-source
   expect(cancel).toBeDefined(); await act(async () => cancel!.click());
   await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
   expect(requests.some(request => request.method === 'POST')).toBe(false);
-  await act(async () => button('转交选中对象')!.click());
+  const reopenedTransferAction = await toolbarMenuAction(container, '授权与归属', '转交选中对象');
+  await act(async () => reopenedTransferAction!.click());
   await vi.waitFor(async () => { await act(async () => undefined); expect(accounts()).toHaveLength(2); expect(select()?.classList.contains('ant-select-disabled')).toBe(false); });
   await act(async () => document.querySelector('[role="dialog"] [role="combobox"]')!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })));
   await vi.waitFor(() => expect(document.querySelector('[title="接收人 (recipient)"]')).not.toBeNull());

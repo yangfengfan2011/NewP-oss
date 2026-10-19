@@ -1,3 +1,4 @@
+import { toolbarMenuAction, toolbarActionDisabled } from './toolbarTestActions';
 // @vitest-environment jsdom
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -28,8 +29,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const source = { spaceId: 'public', rootFolderId: 'root', linkIds: ['container'] };
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
 
-async function waitFor(check: () => void) {
-  await vi.waitFor(async () => { await act(async () => undefined); check(); });
+async function waitFor(check: () => void | Promise<void>) {
+  await vi.waitFor(async () => { await act(async () => undefined); await check(); });
 }
 
 async function mount(prepare?: (body: Record<string, unknown>) => unknown, save?: () => Response, current?: () => Response | Promise<Response>) {
@@ -108,9 +109,10 @@ async function mount(prepare?: (body: Record<string, unknown>) => unknown, save?
     await waitFor(() => expect(element.querySelector(`tr[data-row-key="${id}"] input[type="checkbox"]`)).not.toBeNull());
     await act(async () => element.querySelector<HTMLInputElement>(`tr[data-row-key="${id}"] input[type="checkbox"]`)!.click());
   }
-  const open = () => [...element.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === catalog['Workspace.BatchAuthorize']);
-  await waitFor(() => expect(open()?.disabled).toBe(false));
-  await act(async () => open()!.click());
+  const open = () => toolbarMenuAction(element, catalog['Workspace.AccessAndOwnership'], catalog['Workspace.BatchAuthorize']);
+  await waitFor(async () => expect(toolbarActionDisabled(await open())).toBe(false));
+  const batchAction = await open();
+  await act(async () => batchAction!.click());
   await waitFor(() => expect(document.body.textContent).toContain('Part A'));
   expect(document.body.textContent).toContain('Document B');
   expect(document.querySelector<HTMLInputElement>('input[type="radio"][value="U"]')?.checked).toBe(true);
@@ -223,7 +225,7 @@ it('requires explicit whole-set current reconciliation after an unknown save and
   expect(reconcile()).toBeDefined();
   await act(async () => document.querySelector<HTMLButtonElement>('[role="dialog"] .ant-modal-footer button:not(.ant-btn-primary)')!.click());
   await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
-  const open = [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === '批量授权');
+  const open = await toolbarMenuAction(document.body, '授权与归属', '批量授权');
   await act(async () => open!.click());
   await waitFor(() => expect(reconcile()).toBeDefined());
   expect(confirm()?.disabled).toBe(true);

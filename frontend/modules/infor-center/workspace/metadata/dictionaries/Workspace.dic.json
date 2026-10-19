@@ -1,6 +1,9 @@
 {
   "schemaVersion": "1.0", "type": "dic",
   "Workspace": {
+    "Paste": { "zhs": "粘贴", "en": "Paste" },
+    "AccessAndOwnership": { "zhs": "授权与归属", "en": "Access and ownership" },
+    "RemoveAndDelete": { "zhs": "移除与删除", "en": "Remove and delete" },
     "BatchAppendClipboard": {"zhs": "追加剪贴板", "en": "Append clipboard"},
     "BatchAddDescendants": {"zhs": "加入文件夹后代", "en": "Add folder descendants"},
     "BatchTypeFilter": {"zhs": "对象类型筛选", "en": "Object type filter"},

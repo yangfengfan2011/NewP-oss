@@ -27,10 +27,13 @@ public sealed class WorkspacePageDriverTests
                 await route.FulfillAsync(new() { ContentType = "application/json", Body = "{}" });
             }
             else await route.FulfillAsync(new() { ContentType = "text/html", Body = """
-                <meta charset="utf-8"><button data-kind="copy">粘贴文件夹副本</button><button data-kind="copy-structure">粘贴文件夹结构</button>
+                <meta charset="utf-8"><button id="paste">粘贴</button><div role="menu" hidden>
+                <button role="menuitem" data-kind="copy">粘贴文件夹副本</button><button role="menuitem" data-kind="copy-structure">粘贴文件夹结构</button></div>
                 <table><tbody class="ant-table-tbody"></tbody></table>
                 <script>
+                  document.querySelector('#paste').onclick=()=>document.querySelector('[role=menu]').hidden=false;
                   document.querySelectorAll('[data-kind]').forEach(button=>button.onclick=async()=>{
+                    document.querySelector('[role=menu]').hidden=true;
                     const dialog=document.createElement('div'); dialog.role='dialog'; dialog.setAttribute('aria-label',button.textContent);
                     dialog.innerHTML='<label>新文件夹名称<input disabled></label><button>确 认</button>'; document.body.append(dialog);
                     const input=dialog.querySelector('input');
@@ -114,13 +117,15 @@ public sealed class WorkspacePageDriverTests
                     await route.FulfillAsync(new() { Status = 200, ContentType = "application/json", Body = "{}" });
                 else await route.FulfillAsync(new() { ContentType = "text/html", Body = """
                     <meta charset="utf-8"><section aria-label="节点内容">
-                    <button id="batch">ACTION_LABEL</button><table><tbody class="ant-table-tbody">
+                    <button id="remove">移除与删除</button><div role="menu" hidden><button id="batch" role="menuitem">ACTION_LABEL</button></div><table><tbody class="ant-table-tbody">
                     <tr class="ant-table-row"><td><input type="checkbox"></td><td>甲对象</td></tr>
                     <tr class="ant-table-row"><td><input type="checkbox"></td><td>乙对象</td></tr>
                     </tbody></table></section>
                     <div role="dialog" aria-label="删除" hidden><button id="confirm">确 认</button></div>
                     <script>
+                    document.querySelector('#remove').onclick=()=>document.querySelector('[role=menu]').hidden=false;
                     document.querySelector('#batch').onclick=()=>{
+                      document.querySelector('[role=menu]').hidden=true;
                       if(document.querySelectorAll('input:checked').length===2) document.querySelector('[role=dialog]').hidden=false;
                     };
                     document.querySelector('#confirm').onclick=async()=>{
@@ -157,13 +162,15 @@ public sealed class WorkspacePageDriverTests
                     await route.FulfillAsync(new() { Status = 200, ContentType = "application/json", Body = "{}" });
                 else await route.FulfillAsync(new() { ContentType = "text/html", Body = """
                     <meta charset="utf-8"><section aria-label="节点内容">
-                    <button id="batch">ACTION_LABEL</button><table><tbody class="ant-table-tbody">
+                    <button id="remove">移除与删除</button><div role="menu" hidden><button id="batch" role="menuitem">ACTION_LABEL</button></div><table><tbody class="ant-table-tbody">
                     <tr class="ant-table-row"><td><input type="checkbox"></td><td>甲对象</td></tr>
                     <tr class="ant-table-row"><td><input type="checkbox"></td><td>乙对象</td></tr>
                     </tbody></table></section>
                     <div role="dialog" hidden>仅从当前文件夹移除所选引用，保留对象及文件，确定继续？<button id="confirm">确 认</button></div>
                     <script>
+                    document.querySelector('#remove').onclick=()=>document.querySelector('[role=menu]').hidden=false;
                     document.querySelector('#batch').onclick=()=>{
+                      document.querySelector('[role=menu]').hidden=true;
                       if(document.querySelectorAll('input:checked').length===2) document.querySelector('[role=dialog]').hidden=false;
                     };
                     document.querySelector('#confirm').onclick=async()=>{

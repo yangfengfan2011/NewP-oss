@@ -1,3 +1,4 @@
+import { toolbarMenuAction, toolbarActionDisabled } from './toolbarTestActions';
 import { workspaceTreeRoots, workspaceTreePath, workspaceTreeChildren, workspaceTreePosition } from '../test-support/workspaceTreeFixtures';
 // @vitest-environment jsdom
 import { act, StrictMode } from 'react';
@@ -149,10 +150,16 @@ async function mount(options: { actionSets?: Record<string, { column: string[]; 
   const select = async (name: string) => { await act(async () => [...container.querySelectorAll<HTMLElement>('.ant-tree-title')].find(item => item.textContent === name)!.click()); await waitFor(() => expect(container.querySelector('.np-tree-context-header h2')?.textContent).toBe(name)); };
   const toolbar = () => container.querySelector('.np-tree-content-body')!;
   const button = (name: string) => [...toolbar().querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent?.replace(/\s/g, '') === name)!;
+  const actionGroup = (name: string) => ['移除', '删除'].includes(name) ? '移除与删除' : '粘贴';
+  const action = (name: string) => toolbarMenuAction(toolbar(), actionGroup(name), name);
+  const disabled = async (name: string) => toolbarActionDisabled(await action(name));
+  const click = async (name: string) => { const item = await action(name); expect(item).toBeDefined(); await act(async () => item!.click()); };
+  const hasAction = async (name: string) => Boolean(await action(name));
   const copyRows = async (types: string[], action = '复制') => {
     await select('A'); await waitFor(() => expect(container.querySelector('tbody')?.textContent).toContain('Document source'));
     await act(async () => { for (const type of types) [...container.querySelectorAll<HTMLTableRowElement>('tbody tr')].find(row => row.textContent?.includes(`${type} source`))!.querySelector<HTMLInputElement>('input[type=checkbox]')!.click(); });
-    await waitFor(() => expect(button(action).disabled).toBe(false)); await act(async () => button(action).click());
+    if (action === '移除') { await waitFor(async () => expect(await disabled(action)).toBe(false)); await click(action); }
+    else { await waitFor(() => expect(button(action).disabled).toBe(false)); await act(async () => button(action).click()); }
   };
   const openTreeMenu = async (name: string) => {
     await select(name);
@@ -160,7 +167,7 @@ async function mount(options: { actionSets?: Record<string, { column: string[]; 
     await act(async () => title.firstElementChild!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 60, clientY: 80 })));
     await waitFor(() => expect(document.querySelector('[role=menuitem]')).not.toBeNull());
   };
-  return { router, container, writes, request, select, button, copyRows, cleanup, openTreeMenu, waitFor };
+  return { router, container, writes, request, select, button, disabled, click, hasAction, copyRows, cleanup, openTreeMenu, waitFor };
 }
 
 it('ends an outstanding fixture wait when its mounted page is disposed', async () => {
@@ -175,7 +182,7 @@ it('ends an outstanding fixture wait when its mounted page is disposed', async (
 it('shows pending cut through existing granted actions across folders and clears on a confirmed same-parent success', async () => {
   const page = await mount({ grants: ['tree-cut', 'tree-paste', 'page-paste'], paste: async () => json({ succeeded: true, noChange: true }) });
   await page.openTreeMenu('A');
-  const menu = (label: string) => [...document.querySelectorAll<HTMLElement>('[role=menuitem]')].find(item => item.textContent === label)!;
+  const menu = (label: string) => [...document.querySelectorAll<HTMLElement>('.ant-dropdown:not(.ant-dropdown-hidden):not(.np-crud-header-menu) [role=menuitem]')].find(item => !item.closest('.np-crud-header-menu') && item.textContent === label)!;
   await waitFor(() => expect(menu('剪切')?.classList.contains('ant-dropdown-menu-item-disabled')).toBe(false));
   await act(async () => menu('剪切').click());
   await waitFor(() => expect(page.writes).toHaveLength(1));
@@ -183,12 +190,12 @@ it('shows pending cut through existing granted actions across folders and clears
     mode: 'cut', sourcePosition: { spaceId: 'public', rootFolderId: 'root', linkIds: [] }, linkIds: ['A-link'],
   } });
   await page.select('B');
-  await waitFor(() => expect(page.button('粘贴引用（待移动）')?.disabled).toBe(false));
+  await waitFor(async () => expect(await page.disabled('粘贴引用（待移动）')).toBe(false));
   expect(page.button('剪切（待移动）')).toBeUndefined();
   await page.openTreeMenu('B');
   await waitFor(() => expect(menu('剪切（待移动）')?.classList.contains('ant-dropdown-menu-item-disabled')).toBe(false));
   await act(async () => menu('粘贴引用（待移动）').click());
-  await waitFor(() => expect(page.button('粘贴引用')?.disabled).toBe(true));
+  await waitFor(async () => expect(await page.disabled('粘贴引用')).toBe(true));
   expect(page.writes).toHaveLength(2);
   expect(document.body.textContent).toContain('位置未改变');
 });
@@ -199,20 +206,20 @@ it('cuts the clicked row instead of another checked row and retains pending stat
   const rows = [...page.container.querySelectorAll<HTMLTableRowElement>('tbody tr')];
   await act(async () => rows.find(row => row.textContent?.includes('Part source'))!.querySelector<HTMLInputElement>('input[type=checkbox]')!.click());
   await act(async () => rows.find(row => row.textContent?.includes('Document source'))!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 60, clientY: 80 })));
-  const menu = (label: string) => [...document.querySelectorAll<HTMLElement>('[role=menuitem]')].find(item => item.textContent === label)!;
+  const menu = (label: string) => [...document.querySelectorAll<HTMLElement>('.ant-dropdown:not(.ant-dropdown-hidden):not(.np-crud-header-menu) [role=menuitem]')].find(item => !item.closest('.np-crud-header-menu') && item.textContent === label)!;
   await waitFor(() => expect(menu('剪切')?.classList.contains('ant-dropdown-menu-item-disabled')).toBe(false));
   await act(async () => menu('剪切').click());
   await waitFor(() => expect(page.writes).toHaveLength(1));
   expect(page.writes[0].body.linkIds).toEqual(['Document-lid']);
-  await page.select('B'); await waitFor(() => expect(page.button('粘贴引用（待移动）')?.disabled).toBe(false));
-  await act(async () => page.button('粘贴引用（待移动）').click());
-  await waitFor(() => expect(page.button('粘贴引用（待移动）')?.disabled).toBe(true));
+  await page.select('B'); await waitFor(async () => expect(await page.disabled('粘贴引用（待移动）')).toBe(false));
+  await page.click('粘贴引用（待移动）');
+  await waitFor(async () => expect(await page.disabled('粘贴引用（待移动）')).toBe(true));
   await page.openTreeMenu('B');
   await waitFor(() => expect(menu('粘贴引用（待移动）')?.classList.contains('ant-dropdown-menu-item-disabled')).toBe(true));
   expect(menu('粘贴引用（待移动）').querySelector('[title]')?.getAttribute('title')).toContain('核对源和目标');
   await act(async () => menu('粘贴引用（待移动）').click()); expect(page.writes).toHaveLength(2);
   await act(async () => menu('清空剪贴板').click());
-  await waitFor(() => expect(page.button('粘贴引用')?.disabled).toBe(true)); expect(page.writes).toHaveLength(2);
+  await waitFor(async () => expect(await page.disabled('粘贴引用')).toBe(true)); expect(page.writes).toHaveLength(2);
 });
 
 it('keeps toolbar cut selection through validation and clears pending after successful move even when the next read fails', async () => {
@@ -220,10 +227,10 @@ it('keeps toolbar cut selection through validation and clears pending after succ
   await page.copyRows(['Document', 'Part'], '剪切');
   await waitFor(() => expect(page.writes).toHaveLength(1));
   expect(page.writes[0].body.linkIds).toEqual(['Document-lid', 'Part-lid']);
-  await page.select('B'); await waitFor(() => expect(page.button('粘贴引用（待移动）')?.disabled).toBe(false));
-  await act(async () => page.button('粘贴引用（待移动）').click());
-  await waitFor(() => expect(page.button('粘贴引用')?.disabled).toBe(true));
-  expect(page.button('粘贴引用（待移动）')).toBeUndefined(); expect(page.writes).toHaveLength(2);
+  await page.select('B'); await waitFor(async () => expect(await page.disabled('粘贴引用（待移动）')).toBe(false));
+  await page.click('粘贴引用（待移动）');
+  await waitFor(async () => expect(await page.disabled('粘贴引用')).toBe(true));
+  expect(await page.hasAction('粘贴引用（待移动）')).toBe(false); expect(page.writes).toHaveLength(2);
   await page.openTreeMenu('B');
   await waitFor(() => expect([...document.querySelectorAll<HTMLElement>('[role=menuitem]')].some(item => item.textContent === '剪切')).toBe(true));
   expect(page.writes).toHaveLength(2);
@@ -241,25 +248,25 @@ it('confirms a fixed current-page batch removal and clears selection after succe
     position: { spaceId: 'public', rootFolderId: 'root', linkIds: ['A-link'] }, linkIds: ['Document-lid', 'Part-lid'],
   } });
   await waitFor(() => expect(document.querySelector('[role=dialog]')).toBeNull());
-  await waitFor(() => expect(page.button('移除')?.disabled).toBe(true)); expect(page.writes).toHaveLength(1);
+  await waitFor(async () => expect(await page.disabled('移除')).toBe(true)); expect(page.writes).toHaveLength(1);
 });
 
 it('replaces a cut with a new copy and restores the existing paste and cut labels', async () => {
   const page = await mount(); await page.openTreeMenu('A');
-  const menu = () => [...document.querySelectorAll<HTMLElement>('[role=menuitem]')].find(item => item.textContent === '剪切')!;
+  const menu = () => [...document.querySelectorAll<HTMLElement>('.ant-dropdown:not(.ant-dropdown-hidden):not(.np-crud-header-menu) [role=menuitem]')].find(item => !item.closest('.np-crud-header-menu') && item.textContent === '剪切')!;
   await waitFor(() => expect(menu()?.classList.contains('ant-dropdown-menu-item-disabled')).toBe(false));
   await act(async () => menu().click());
-  await waitFor(() => expect(page.button('粘贴引用（待移动）')?.disabled).toBe(false));
+  await waitFor(async () => expect(await page.disabled('粘贴引用（待移动）')).toBe(false));
   await page.copyRows(['Part']); await waitFor(() => expect(page.writes).toHaveLength(2));
-  await waitFor(() => expect(page.button('粘贴引用')?.disabled).toBe(false));
+  await waitFor(async () => expect(await page.disabled('粘贴引用')).toBe(false));
   expect(page.button('剪切（待移动）')).toBeUndefined(); expect(page.button('剪切')).toBeDefined();
-  await page.select('B'); await act(async () => page.button('粘贴引用').click());
+  await page.select('B'); await page.click('粘贴引用');
   await waitFor(() => expect(page.writes).toHaveLength(3)); expect(page.writes[2].body.mode).toBe('copy');
 });
 
 it('projects empty and ready clipboard states into tree menus without preparing an action or writing during preview', async () => {
   const page = await mount();
-  const menu = (label: string) => [...document.querySelectorAll<HTMLElement>('[role=menuitem]')].find(item => item.textContent === label)!;
+  const menu = (label: string) => [...document.querySelectorAll<HTMLElement>('.ant-dropdown:not(.ant-dropdown-hidden):not(.np-crud-header-menu) [role=menuitem]')].find(item => !item.closest('.np-crud-header-menu') && item.textContent === label)!;
   await page.openTreeMenu('B');
   await waitFor(() => expect(menu('粘贴引用').classList.contains('ant-dropdown-menu-item-disabled')).toBe(true));
   expect(menu('清空剪贴板').classList.contains('ant-dropdown-menu-item-disabled')).toBe(true);
@@ -275,24 +282,23 @@ it('projects empty and ready clipboard states into tree menus without preparing 
   expect(page.writes).toHaveLength(1);
 });
 
-it('disables an open tree menu during paste and keeps clear available after an unknown receipt', async () => {
+it('locks toolbar menus during paste and keeps tree clear available after an unknown receipt', async () => {
   let finish!: (value: Response) => void;
   const page = await mount({ paste: () => new Promise(resolve => { finish = resolve; }) });
-  const menu = (label: string) => [...document.querySelectorAll<HTMLElement>('[role=menuitem]')].find(item => item.textContent === label)!;
+  const menu = (label: string) => [...document.querySelectorAll<HTMLElement>('.ant-dropdown:not(.ant-dropdown-hidden):not(.np-crud-header-menu) [role=menuitem]')].find(item => !item.closest('.np-crud-header-menu') && item.textContent === label)!;
   await page.copyRows(['Document']); await waitFor(() => expect(page.writes).toHaveLength(1)); await page.openTreeMenu('B');
   await waitFor(() => expect(menu('粘贴引用').classList.contains('ant-dropdown-menu-item-disabled')).toBe(false));
-  await act(async () => page.button('粘贴引用').click()); await waitFor(() => expect(finish).toBeTypeOf('function'));
-  await waitFor(() => expect(menu('复制').classList.contains('ant-dropdown-menu-item-disabled')).toBe(true));
-  expect(menu('编辑').classList.contains('ant-dropdown-menu-item-disabled')).toBe(true);
-  expect(menu('移除引用').classList.contains('ant-dropdown-menu-item-disabled')).toBe(true);
-  await act(async () => menu('复制').click()); expect(page.writes).toHaveLength(2);
+  await page.click('粘贴引用'); await waitFor(() => expect(finish).toBeTypeOf('function'));
+  await waitFor(async () => expect(await page.disabled('粘贴引用')).toBe(true));
+  expect(page.button('复制').disabled).toBe(true);
+  await page.click('粘贴引用'); expect(page.writes).toHaveLength(2);
   await act(async () => finish(json({ code: 'Persistence.CommitOutcomeUnknown' }, 409)));
-  await waitFor(() => expect(page.button('粘贴引用').disabled).toBe(true));
+  await waitFor(async () => expect(await page.disabled('粘贴引用')).toBe(true));
   await page.openTreeMenu('B');
   await waitFor(() => expect(menu('粘贴引用').classList.contains('ant-dropdown-menu-item-disabled')).toBe(true));
   expect(menu('粘贴引用').querySelector('[title]')?.getAttribute('title')).toContain('结果未知');
   expect(menu('清空剪贴板').classList.contains('ant-dropdown-menu-item-disabled')).toBe(false);
-  await act(async () => menu('清空剪贴板').click()); await waitFor(() => expect(page.button('清空剪贴板').disabled).toBe(true));
+  await act(async () => menu('清空剪贴板').click()); await waitFor(async () => expect(await page.disabled('清空剪贴板')).toBe(true));
   await page.openTreeMenu('B');
   await waitFor(() => expect(menu('粘贴引用').classList.contains('ant-dropdown-menu-item-disabled')).toBe(true));
   expect(page.writes).toHaveLength(2);
@@ -302,14 +308,14 @@ it('settles an unfinished fixture response on disposal before another page mount
   let finish!: (value: Response) => void;
   const first = await mount({ paste: () => new Promise(resolve => { finish = resolve; }) });
   await first.copyRows(['Document']); await waitFor(() => expect(first.writes).toHaveLength(1)); await first.select('B');
-  await waitFor(() => expect(first.button('粘贴引用').disabled).toBe(false)); await act(async () => first.button('粘贴引用').click());
+  await waitFor(async () => expect(await first.disabled('粘贴引用')).toBe(false)); await first.click('粘贴引用');
   await waitFor(() => expect(finish).toBeTypeOf('function'));
   let settled = false;
   void (first.request.mock.results.at(-1)!.value as Promise<Response>).then(() => { settled = true; });
   await first.cleanup(); await waitFor(() => expect(settled).toBe(true));
   const next = await mount(); await next.select('B');
   await act(async () => finish(json({ succeeded: true })));
-  expect(next.button('粘贴引用').disabled).toBe(true); expect(next.writes).toEqual([]); expect(first.writes).toHaveLength(2);
+  expect(await next.disabled('粘贴引用')).toBe(true); expect(next.writes).toEqual([]); expect(first.writes).toHaveLength(2);
 });
 
 it('keeps failed menu registration unavailable and ignores a late registration from the previous actor', async () => {
@@ -344,7 +350,7 @@ it('blocks right-list input opening while a tree paste is pending and allows it 
   await waitFor(() => expect(create().classList.contains('ant-dropdown-menu-item-disabled')).toBe(true));
   await act(async () => create().click()); expect(document.querySelector('.ant-drawer input')).toBeNull(); expect(page.writes).toHaveLength(2);
   await act(async () => finish(json({ succeeded: true })));
-  await waitFor(() => expect(page.button('粘贴引用').disabled).toBe(false));
+  await waitFor(async () => expect(await page.disabled('粘贴引用')).toBe(false));
   await act(async () => page.button('新建').click());
   await waitFor(() => expect(create().classList.contains('ant-dropdown-menu-item-disabled')).toBe(false));
 });
@@ -362,8 +368,8 @@ it('binds row copy to the clicked LID, keeps the snapshot across directories and
   await waitFor(() => expect(page.writes).toHaveLength(1));
   expect(page.writes[0].body).toEqual({ mode: 'copy', sourcePosition: { spaceId: 'public', rootFolderId: 'root', linkIds: ['A-link'] }, linkIds: ['Document-lid'] });
   for (const name of ['B', 'C']) {
-    await page.select(name); await waitFor(() => expect(page.button('粘贴引用')?.disabled).toBe(false));
-    await act(async () => page.button('粘贴引用').click());
+    await page.select(name); await waitFor(async () => expect(await page.disabled('粘贴引用')).toBe(false));
+    await page.click('粘贴引用');
     await waitFor(() => expect(page.writes.filter(item => item.path.endsWith('/paste'))).toHaveLength(name === 'B' ? 1 : 2));
   }
   expect(page.writes.slice(1).map(item => item.body)).toEqual(['B', 'C'].map(name => ({ mode: 'copy', sourcePosition: { spaceId: 'public', rootFolderId: 'root', linkIds: ['A-link'] }, linkIds: ['Document-lid'], targetPosition: { spaceId: 'public', rootFolderId: 'root', linkIds: [`${name}-link`] } })));
@@ -374,10 +380,10 @@ it('uses current-page toolbar selection and shares tree action state with the ri
   // 两个真实页面共享浏览器transport；后挂的拦截器收集两者请求，实例状态仍须隔离。
   await first.copyRows(['Document', 'Part']); await waitFor(() => expect(second.writes).toHaveLength(1));
   expect(second.writes[0].body.linkIds).toEqual(['Document-lid', 'Part-lid']);
-  await first.select('B'); await waitFor(() => expect(first.button('粘贴引用').disabled).toBe(false));
-  await second.select('B'); await waitFor(() => expect(second.button('粘贴引用').disabled).toBe(true));
-  await act(async () => first.button('清空剪贴板').click());
-  await waitFor(() => expect(first.button('粘贴引用').disabled).toBe(true));
+  await first.select('B'); await waitFor(async () => expect(await first.disabled('粘贴引用')).toBe(false));
+  await second.select('B'); await waitFor(async () => expect(await second.disabled('粘贴引用')).toBe(true));
+  await first.click('清空剪贴板');
+  await waitFor(async () => expect(await first.disabled('粘贴引用')).toBe(true));
   const title = [...first.container.querySelectorAll<HTMLElement>('.ant-tree-title')].find(item => item.textContent === 'A')!;
   await act(async () => title.firstElementChild!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 60, clientY: 80 })));
   await waitFor(() => expect([...document.querySelectorAll('[role=menuitem]')].some(item => item.textContent === '复制')).toBe(true));
@@ -385,8 +391,8 @@ it('uses current-page toolbar selection and shares tree action state with the ri
   await waitFor(() => expect(second.writes).toHaveLength(2));
   expect(second.writes[1].body).toEqual({ mode: 'copy', sourcePosition: { spaceId: 'public', rootFolderId: 'root', linkIds: [] }, linkIds: ['A-link'] });
   expect(document.querySelector('[role=dialog]')).toBeNull();
-  await first.select('B'); await waitFor(() => expect(first.button('粘贴引用').disabled).toBe(false));
-  expect(second.button('粘贴引用').disabled).toBe(true);
+  await first.select('B'); await waitFor(async () => expect(await first.disabled('粘贴引用')).toBe(false));
+  expect(await second.disabled('粘贴引用')).toBe(true);
 });
 
 it('clears on actor change and ignores a late validation from the old tree instead of reviving it', async () => {
@@ -396,35 +402,35 @@ it('clears on actor change and ignores a late validation from the old tree inste
   await act(async () => [...page.container.querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent === 'Switch actor')!.click());
   await waitFor(() => expect(page.container.querySelector('[data-current-actor]')?.getAttribute('data-current-actor')).toBe('next'));
   await act(async () => finish(json({ mode: 'copy', items: [{ linkId: 'Document-lid' }] })));
-  await waitFor(() => expect(page.button('粘贴引用').disabled).toBe(true));
+  await waitFor(async () => expect(await page.disabled('粘贴引用')).toBe(true));
   expect(page.container.textContent).not.toContain('已复制引用');
 });
 
 it('locks unknown paste outcomes without replay and clears the snapshot when the page is destroyed and reloaded', async () => {
   const page = await mount({ paste: async () => json({ code: 'Persistence.CommitOutcomeUnknown' }, 409) });
   await page.copyRows(['Document']); await waitFor(() => expect(page.writes).toHaveLength(1)); await page.select('B');
-  await waitFor(() => expect(page.button('粘贴引用').disabled).toBe(false)); await act(async () => page.button('粘贴引用').click());
-  await waitFor(() => expect(page.button('粘贴引用').disabled).toBe(true));
+  await waitFor(async () => expect(await page.disabled('粘贴引用')).toBe(false)); await page.click('粘贴引用');
+  await waitFor(async () => expect(await page.disabled('粘贴引用')).toBe(true));
   // 共享Host通过Ant消息portal呈现执行错误，它在document.body而非页面container内。
   await waitFor(() => expect([...document.querySelectorAll('.ant-message-notice-content')].some(item => item.textContent?.includes('本次粘贴结果未知'))).toBe(true));
-  await act(async () => page.button('粘贴引用').click()); expect(page.writes.filter(item => item.path.endsWith('/paste'))).toHaveLength(1);
+  await page.click('粘贴引用'); expect(page.writes.filter(item => item.path.endsWith('/paste'))).toHaveLength(1);
   await page.cleanup(); const reloaded = await mount(); await reloaded.select('B');
-  await waitFor(() => expect(reloaded.button('粘贴引用').disabled).toBe(true));
+  await waitFor(async () => expect(await reloaded.disabled('粘贴引用')).toBe(true));
 });
 
 it('keeps a committed clipboard after refresh failure and retries only reading', async () => {
   const page = await mount({ failRefresh: true }); await page.copyRows(['Document']); await waitFor(() => expect(page.writes).toHaveLength(1));
-  await page.select('B'); await waitFor(() => expect(page.button('粘贴引用').disabled).toBe(false)); await act(async () => page.button('粘贴引用').click());
+  await page.select('B'); await waitFor(async () => expect(await page.disabled('粘贴引用')).toBe(false)); await page.click('粘贴引用');
   await waitFor(() => expect(page.container.textContent).toContain('已保存，刷新失败'));
   await act(async () => page.button('刷新').click()); await waitFor(() => expect(page.container.textContent).not.toContain('已保存，刷新失败'));
-  expect(page.writes.filter(item => item.path.endsWith('/paste'))).toHaveLength(1); expect(page.button('粘贴引用').disabled).toBe(false);
+  expect(page.writes.filter(item => item.path.endsWith('/paste'))).toHaveLength(1); expect(await page.disabled('粘贴引用')).toBe(false);
 });
 
 it.each(['copy', 'copy-structure'] as const)('submits the real prepared folder copy once and retries only reading after its committed refresh fails', async kind => {
   const page = await mount({ folderRow: true, failRefresh: true });
   await page.copyRows(['WorkspaceFolder']); await waitFor(() => expect(page.writes).toHaveLength(1));
-  await page.select('B'); await waitFor(() => expect(page.button(kind === 'copy' ? '粘贴文件夹副本' : '粘贴文件夹结构').disabled).toBe(false));
-  await act(async () => page.button(kind === 'copy' ? '粘贴文件夹副本' : '粘贴文件夹结构').click());
+  await page.select('B'); await waitFor(async () => expect(await page.disabled(kind === 'copy' ? '粘贴文件夹副本' : '粘贴文件夹结构')).toBe(false));
+  await page.click(kind === 'copy' ? '粘贴文件夹副本' : '粘贴文件夹结构');
   await waitFor(() => expect(document.querySelector<HTMLInputElement>('#workspace-copy-name')?.value).toBe('WorkspaceFolder source'));
   await act(async () => [...document.querySelectorAll<HTMLButtonElement>('.ant-modal button')].find(button => button.textContent?.replace(/\s/g, '') === '确认')!.click());
   await waitFor(() => expect(page.container.textContent).toContain('已保存，刷新失败'));
@@ -434,7 +440,7 @@ it.each(['copy', 'copy-structure'] as const)('submits the real prepared folder c
   await act(async () => page.button('刷新').click());
   await waitFor(() => expect(page.container.textContent).not.toContain('已保存，刷新失败'));
   expect(page.writes.filter(item => item.path.endsWith(`/folders/${kind}`))).toHaveLength(1);
-  expect(page.button(kind === 'copy' ? '粘贴文件夹副本' : '粘贴文件夹结构').disabled).toBe(false);
+  expect(await page.disabled(kind === 'copy' ? '粘贴文件夹副本' : '粘贴文件夹结构')).toBe(false);
 });
 
 it('opens a folder name at its exact tree occurrence without reading a details drawer', async () => {
@@ -500,7 +506,7 @@ it.each(['copy', 'copy-structure'] as const)('keeps the name after a %s collatio
   const page = await mount({ folderRow: true, folderCopy: async () => json({ code: 'Workspace.SiblingNameConflict', status: 409 }, 409) });
   await page.copyRows(['WorkspaceFolder']); await waitFor(() => expect(page.writes).toHaveLength(1)); await page.select('B');
   const label = kind === 'copy' ? '粘贴文件夹副本' : '粘贴文件夹结构';
-  await waitFor(() => expect(page.button(label).disabled).toBe(false)); await act(async () => page.button(label).click());
+  await waitFor(async () => expect(await page.disabled(label)).toBe(false)); await page.click(label);
   await waitFor(() => expect(document.querySelector<HTMLInputElement>('#workspace-copy-name')?.value).toBe('WorkspaceFolder source'));
   await act(async () => [...document.querySelectorAll<HTMLButtonElement>('.ant-modal button')].find(button => button.textContent?.replace(/\s/g, '') === '确认')!.click());
   await waitFor(() => expect(page.writes.filter(item => item.path.endsWith(`/folders/${kind}`))).toHaveLength(1));

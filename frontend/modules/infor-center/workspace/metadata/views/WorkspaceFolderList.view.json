@@ -14,9 +14,6 @@
       { "key": "updatedAt", "labelKey": "Field_UpdatedAt", "source": "projection", "field": "UpdatedAt", "sortable": true }
     ],
     "pageActions": [
-      { "key": "batchAuthorize", "labelKey": "BatchAuthorize", "handlerKey": "authorize", "inputKey": "batchAuthorization", "requiresSelection": true, "readBehaviors": ["workspace.folder.read"] },
-      { "key": "transferSelected", "labelKey": "TransferSelected", "handlerKey": "transfer", "inputKey": "transferOwnership", "requiresSelection": true, "readBehaviors": ["workspace.folder.read"] },
-      { "key": "initializeOwnershipPending", "labelKey": "OwnershipPendingObjects", "handlerKey": "initializeOwnership", "inputKey": "initializeOwnership" },
       {"key": "create", "labelKey": "CreateFolder", "handlerKey": "create", "inputKey": "createFolder", "variant": "primary"},
       {"key": "createPart", "labelKey": "CreatePart", "handlerKey": "createPart", "inputKey": "createObject"},
       {"key": "createDocument", "labelKey": "CreateDocument", "handlerKey": "createDocument", "inputKey": "createObject"},
@@ -28,9 +25,18 @@
       {"key": "pasteFolderStructure", "labelKey": "PasteFolderStructure", "handlerKey": "pasteFolderStructure", "inputKey": "copyFolder"},
       {"key": "resolveObjectCopy", "labelKey": "CopyResolve", "handlerKey": "resolveObjectCopy", "inputKey": "recoverObjectCopy", "confirmLabelKey": "CopyCloseAndRefresh"},
       {"key": "clearClipboard", "labelKey": "ClearClipboard", "handlerKey": "copy"},
+      {"key": "batchAuthorize", "labelKey": "BatchAuthorize", "handlerKey": "authorize", "inputKey": "batchAuthorization", "requiresSelection": true, "readBehaviors": ["workspace.folder.read"]},
+      {"key": "transferSelected", "labelKey": "TransferSelected", "handlerKey": "transfer", "inputKey": "transferOwnership", "requiresSelection": true, "readBehaviors": ["workspace.folder.read"]},
+      {"key": "initializeOwnershipPending", "labelKey": "OwnershipPendingObjects", "handlerKey": "initializeOwnership", "inputKey": "initializeOwnership"},
       {"key": "removeSelected", "labelKey": "RemoveSelected", "handlerKey": "removeSelected", "requiresSelection": true, "inputKey": "confirmReferences", "variant": "danger", "confirmMessageKey": "ConfirmRemoveReferences"},
-      {"key": "deleteObjects", "labelKey": "BatchDelete", "handlerKey": "deleteObjects", "requiresSelection": true, "inputKey": "confirmDelete", "variant": "danger", "confirmMessageKey": "ConfirmDeleteObjects"}],
-    "pageActionGroups": [{ "key": "new", "labelKey": "New", "variant": "primary", "actionKeys": ["create", "createPart", "createDocument"] }],
+      {"key": "deleteObjects", "labelKey": "BatchDelete", "handlerKey": "deleteObjects", "requiresSelection": true, "inputKey": "confirmDelete", "variant": "danger", "confirmMessageKey": "ConfirmDeleteObjects"}
+    ],
+    "pageActionGroups": [
+      {"key": "new", "labelKey": "New", "variant": "primary", "actionKeys": ["create", "createPart", "createDocument"]},
+      {"key": "pasteOptions", "labelKey": "Paste", "actionKeys": ["paste", "pasteObjectCopy", "pasteFolderCopy", "pasteFolderStructure", "resolveObjectCopy", "clearClipboard"]},
+      {"key": "accessAndOwnership", "labelKey": "AccessAndOwnership", "actionKeys": ["batchAuthorize", "transferSelected", "initializeOwnershipPending"]},
+      {"key": "removeAndDelete", "labelKey": "RemoveAndDelete", "variant": "danger", "actionKeys": ["removeSelected", "deleteObjects"]}
+    ],
     "featureActions": [
       { "key": "authorize", "titleKey": "Authorize", "behaviorKey": "workspace.folder.authorize" },
       { "key": "initializeOwnership", "titleKey": "InitializeOwnership", "behaviorKey": "workspace.folder.initializeOwnership", "readBehaviors": ["workspace.folder.read"] },

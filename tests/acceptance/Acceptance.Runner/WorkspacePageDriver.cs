@@ -84,7 +84,7 @@ internal sealed class WorkspacePageDriver(IPage page)
         }
         var preparing = page.WaitForResponseAsync(response => response.Request.Method == "POST"
             && new Uri(response.Url).AbsolutePath == "/api/workspace/content/permissions/batch/prepare");
-        await crud.ClickPageActionAsync("批量授权");
+        await crud.ClickPageActionAsync("批量授权", "授权与归属");
         var prepared = await preparing;
         if (!prepared.Ok) throw new InvalidOperationException($"批量授权准备失败：{prepared.Status} {await prepared.TextAsync()}");
         var dialog = crud.VisibleModal();
@@ -225,7 +225,7 @@ internal sealed class WorkspacePageDriver(IPage page)
     internal async Task<ILocator> OpenOwnershipInitializationAsync(string? rowName = null, bool english = false)
     {
         var crud = new StandardCrudPageDriver(page);
-        if (rowName is null) await crud.ClickPageActionAsync(english ? "Missing ownership" : "待补齐归属");
+        if (rowName is null) await crud.ClickPageActionAsync(english ? "Missing ownership" : "待补齐归属", english ? "Access and ownership" : "授权与归属");
         else
         {
             var row = await crud.WaitForRowAsync(rowName);
@@ -487,7 +487,7 @@ internal sealed class WorkspacePageDriver(IPage page)
     private async Task PasteNamedFolderAsync(string actionLabel, string endpoint, string name, Func<Task>? capture, bool? copyParentAuthorization)
     {
         var crud = new StandardCrudPageDriver(page);
-        await crud.ClickPageActionAsync(actionLabel);
+        await crud.ClickPageActionAsync(actionLabel, "粘贴");
         var dialog = page.GetByRole(AriaRole.Dialog, new() { Name = actionLabel, Exact = true });
         await dialog.GetByRole(AriaRole.Textbox, new() { Name = "新文件夹名称", Exact = true }).FillAsync(name);
         await SelectParentAuthorizationAsync(dialog, copyParentAuthorization);
@@ -523,7 +523,7 @@ internal sealed class WorkspacePageDriver(IPage page)
             if (response.Request.Method != "POST" || new Uri(response.Url).AbsolutePath != "/api/workspace/content/paste") return false;
             written = true; return true;
         });
-        await crud.ClickPageActionAsync(actionLabel);
+        await crud.ClickPageActionAsync(actionLabel, "粘贴");
         var response = await write;
         if (!response.Ok) throw new InvalidOperationException($"粘贴引用失败：{response.Status} {await response.TextAsync()}");
         var refreshed = await read;
@@ -559,9 +559,7 @@ internal sealed class WorkspacePageDriver(IPage page)
         var response = await pending;
         if (!response.Ok) throw new InvalidOperationException($"剪切预检失败：{response.Status} {await response.TextAsync()}");
         await response.FinishedAsync();
-        await page.GetByRole(AriaRole.Region, new() { Name = "节点内容", Exact = true })
-            .GetByRole(AriaRole.Button, new() { Name = "粘贴引用（待移动）", Exact = true })
-            .WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        await new StandardCrudPageDriver(page).PreparePageActionAsync("粘贴引用（待移动）", "粘贴");
     }
 
     /// <summary>经明确保留对象与文件的确认后移除所选引用，等待原行离开列表。</summary>
@@ -569,8 +567,7 @@ internal sealed class WorkspacePageDriver(IPage page)
     {
         var crud = new StandardCrudPageDriver(page);
         foreach (var name in names) await (await crud.WaitForRowAsync(name)).GetByRole(AriaRole.Checkbox).CheckAsync();
-        await page.GetByRole(AriaRole.Region, new() { Name = "节点内容", Exact = true })
-            .GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^移\s*除$") }).ClickAsync();
+        await crud.ClickPageActionAsync("移除", "移除与删除");
         var dialog = crud.ConfirmDialogWithText("仅从当前文件夹移除所选引用，保留对象及文件，确定继续？");
         await dialog.WaitForAsync(new() { State = WaitForSelectorState.Visible });
         if (capture is not null)
@@ -616,8 +613,7 @@ internal sealed class WorkspacePageDriver(IPage page)
             var row = await crud.WaitForRowAsync(name);
             await row.GetByRole(AriaRole.Checkbox).CheckAsync();
         }
-        await page.GetByRole(AriaRole.Region, new() { Name = "节点内容", Exact = true })
-            .GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^删\s*除$") }).ClickAsync();
+        await crud.ClickPageActionAsync("删除", "移除与删除");
         var dialog = page.GetByRole(AriaRole.Dialog, new() { Name = "删除", Exact = true });
         await crud.ConfirmAsync(dialog, new("POST", "/api/workspace/content/delete", 200, "批量删除对象"));
         foreach (var name in names)
@@ -744,7 +740,7 @@ internal sealed class WorkspacePageDriver(IPage page)
     /// <summary>集合确认等待真实异步字段就绪，不用单对象strict locator或只提交首行。</summary>
     internal async Task<ILocator> OpenDocumentCopiesAsync(bool english = false)
     {
-        var drawer = await new StandardCrudPageDriver(page).OpenCreateDrawerAsync(english ? "Paste independent object copy" : "粘贴对象副本");
+        var drawer = await new StandardCrudPageDriver(page).OpenCreateDrawerAsync(english ? "Paste independent object copy" : "粘贴对象副本", english ? "Paste" : "粘贴");
         await Assertions.Expect(drawer.GetByLabel(english ? "Code" : "编码", new() { Exact = true }).First).ToBeEnabledAsync();
         return drawer;
     }
@@ -780,7 +776,7 @@ internal sealed class WorkspacePageDriver(IPage page)
     /// <summary>副本输入等待真实异步来源准备；语言仅改变正式可访问名称。</summary>
     internal async Task<ILocator> OpenObjectCopyAsync(bool english = false)
     {
-        var drawer = await new StandardCrudPageDriver(page).OpenCreateDrawerAsync(english ? "Paste independent object copy" : "粘贴对象副本");
+        var drawer = await new StandardCrudPageDriver(page).OpenCreateDrawerAsync(english ? "Paste independent object copy" : "粘贴对象副本", english ? "Paste" : "粘贴");
         await Assertions.Expect(drawer.GetByLabel(english ? "Code" : "编码", new() { Exact = true })).ToBeEnabledAsync();
         return drawer;
     }

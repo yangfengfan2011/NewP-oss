@@ -149,6 +149,46 @@
 
 .np-search-table-page .ant-pro-table-list-toolbar-container {
   padding-block: 0 12px;
+  flex-wrap: nowrap;
+  flex-direction: row;
+}
+
+.np-search-table-page .ant-pro-table-list-toolbar-left,
+.np-search-table-page .ant-pro-table-list-toolbar-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.np-search-table-page .ant-pro-table-list-toolbar-left {
+  max-width: none;
+}
+
+.np-search-table-page .ant-pro-table-list-toolbar-right {
+  flex: 0 0 auto;
+}
+
+.np-action-toolbar {
+  display: flex;
+  position: relative;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+  white-space: nowrap;
+}
+
+.np-action-toolbar-item,
+.np-action-toolbar-more {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: max-content;
+}
+
+.np-action-toolbar [data-overflowed='true'] {
+  position: absolute;
+  inset: 0 auto auto 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .np-crud-detail-sections {

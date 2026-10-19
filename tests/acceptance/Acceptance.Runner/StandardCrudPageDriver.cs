@@ -57,17 +57,29 @@ internal sealed class StandardCrudPageDriver
             && (HasQueryValue(new Uri(url), "tab", key) || (key == "structure" && string.IsNullOrEmpty(new Uri(url).Query))));
     }
 
-    // 可先展开声明的父按钮；动作缺失仍返回局部诊断，不把菜单子项当作独立按钮。
-    internal async Task ClickPageActionAsync(string actionLabel, string? parentActionLabel = null)
+    // 按可见入口展开分组和溢出菜单；动作缺失仍返回局部诊断。
+    internal async Task<ILocator> PreparePageActionAsync(string actionLabel, string? parentActionLabel = null)
     {
-        var action = Page.GetByRole(
-            parentActionLabel is null ? AriaRole.Button : AriaRole.Menuitem,
-            new PageGetByRoleOptions { Name = actionLabel, Exact = true });
+        var actionName = new Regex("^" + string.Join(@"\s*", actionLabel.Select(character => Regex.Escape(character.ToString()))) + "$");
+        var button = Page.GetByRole(AriaRole.Button, new() { NameRegex = actionName });
+        var menuAction = Page.GetByRole(AriaRole.Menuitem, new() { NameRegex = actionName });
         try
         {
+            if (await menuAction.IsVisibleAsync()) return menuAction;
+            if (parentActionLabel is null && await button.IsVisibleAsync()) return button;
+            var triggerLabel = parentActionLabel ?? actionLabel;
+            var trigger = Page.GetByRole(AriaRole.Button, new() { Name = triggerLabel, Exact = true });
+            var more = Page.Locator(".np-action-toolbar-more:not([data-overflowed]) button");
+            if (!await trigger.IsVisibleAsync() && await more.IsVisibleAsync())
+            {
+                await more.ClickAsync();
+                trigger = Page.GetByRole(AriaRole.Menuitem, new() { Name = triggerLabel, Exact = true });
+            }
             if (parentActionLabel is not null)
-                await Page.GetByRole(AriaRole.Button, new() { Name = parentActionLabel, Exact = true }).ClickAsync();
+                await trigger.ClickAsync();
+            var action = parentActionLabel is null && await button.IsVisibleAsync() ? button : menuAction;
             await action.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+            return action;
         }
         catch (TimeoutException exception)
         {
@@ -76,9 +88,11 @@ internal sealed class StandardCrudPageDriver
                 $"Standard CRUD page did not expose '{actionLabel}'. {diagnostic}",
                 exception);
         }
-
-        await action.ClickAsync();
     }
+
+    // 准备入口可供状态等待复用；只有本方法执行最终动作。
+    internal async Task ClickPageActionAsync(string actionLabel, string? parentActionLabel = null) =>
+        await (await PreparePageActionAsync(actionLabel, parentActionLabel)).ClickAsync();
 
     // ---- Drawer ----
 

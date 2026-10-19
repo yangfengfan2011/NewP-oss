@@ -11,8 +11,8 @@
     "model": "Person",
     "resourceKey": "organization.person",
     "lookupBindings": {
-      "organization.companies": "organization.person.company.lookup",
-      "organization.departments": "organization.person.department.lookup",
+      "organization.companies": {"behavior":"organization.person.company.lookup","dataAccess":{"execution":"organization.person.company.lookup","resources":["organization.company"]}},
+      "organization.departments": {"behavior":"organization.person.department.lookup","dataAccess":{"execution":"organization.person.department.lookup","resources":["organization.department"]}},
       "organization.positions": {"behavior":"organization.position.lookup","dataAccess":{"execution":"organization.position.options","resources":["organization.position"]}}
     },
     "editorMode": "drawer",
@@ -189,7 +189,7 @@
       {
         "key": "create",
         "labelKey": "Action_Create",
-        "standardAction": "create",
+        "standardAction": "create", "dataAccess": { "execution": "organization.person.create", "resources": ["organization.person"] },
         "variant": "primary"
       }
     ],
@@ -197,12 +197,12 @@
       {
         "key": "edit",
         "labelKey": "Action_Edit",
-        "standardAction": "edit"
+        "standardAction": "edit", "dataAccess": { "execution": "organization.person.update", "resources": ["organization.person"] }
       },
       {
         "key": "delete",
         "labelKey": "Action_Delete",
-        "standardAction": "delete",
+        "standardAction": "delete", "dataAccess": { "execution": "organization.person.delete", "resources": ["organization.person"] },
         "variant": "danger",
         "confirmMessageKey": "Action_Delete_Confirm",
         "handlerKey": "delete",

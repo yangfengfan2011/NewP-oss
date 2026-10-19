@@ -105,15 +105,21 @@ internal static class WorkspaceAcceptanceFixture
 
         var company = await SendAsync(administrator, HttpMethod.Post, "/api/organization/companies",
             new { ECODE = $"WS-{suffix}", ENAME = $"工作空间验收公司 {suffix}", SortOrder = "9999" },
-            features.Action(features.OrganizationTab("companies"), "create", "list.pageActions").Position, token);
+            features.Action(features.OrganizationTab("companies"), "create", "list.pageActions").Position, token,
+            features.Declaration(features.Action(features.OrganizationTab("companies"), "create", "list.pageActions"),
+                "organization.company.create", "standardCrud.create", "organization.company"));
         var companyId = EntityId(company);
         var department = await SendAsync(administrator, HttpMethod.Post, "/api/organization/departments",
             new { ECODE = $"WS-{suffix}", ENAME = $"工作空间验收部门 {suffix}", CompanyId = companyId, SortOrder = "9999" },
-            features.Action(features.OrganizationTab("departments"), "create", "list.pageActions").Position, token);
+            features.Action(features.OrganizationTab("departments"), "create", "list.pageActions").Position, token,
+            features.Declaration(features.Action(features.OrganizationTab("departments"), "create", "list.pageActions"),
+                "organization.department.create", "standardCrud.create", "organization.department"));
         var person = await SendAsync(administrator, HttpMethod.Post, "/api/organization/persons",
             new { PersonNo = $"WS-{suffix}", ENAME = $"工作空间验收人员 {suffix}", CompanyId = companyId,
                 DepartmentId = EntityId(department), EmploymentStatus = "Active", IsEnabled = true },
-            features.Action(features.OrganizationTab("persons"), "create", "list.pageActions").Position, token);
+            features.Action(features.OrganizationTab("persons"), "create", "list.pageActions").Position, token,
+            features.Declaration(features.Action(features.OrganizationTab("persons"), "create", "list.pageActions"),
+                "organization.person.create", "standardCrud.create", "organization.person"));
         await SendAsync(administrator, HttpMethod.Put, $"/api/organization/persons/{EntityId(person)}/user-binding",
             new { accountEid = accountId, expectedRevision = accountData.GetProperty("revision").GetInt64(), reason = "准备工作空间普通验收主体" },
             features.Action(features.OrganizationTab("persons"), "linkUser", "detail.custom").Position, token);

@@ -11,8 +11,8 @@
     "model": "Person",
     "resourceKey": "organization.person",
     "lookupBindings": {
-      "organization.companies": "organization.person.company.lookup",
-      "organization.departments": "organization.person.department.lookup",
+      "organization.companies": {"behavior":"organization.person.company.lookup","dataAccess":{"execution":"organization.person.company.lookup","resources":["organization.company"]}},
+      "organization.departments": {"behavior":"organization.person.department.lookup","dataAccess":{"execution":"organization.person.department.lookup","resources":["organization.department"]}},
       "organization.positions": { "behavior": "organization.position.lookup", "dataAccess": { "execution": "organization.position.options", "resources": ["organization.position"] } }
     },
     "sections": [
@@ -72,12 +72,12 @@
       {
         "key": "edit",
         "labelKey": "Action_Edit",
-        "standardAction": "edit"
+        "standardAction": "edit", "dataAccess": { "execution": "organization.person.update", "resources": ["organization.person"] }
       },
       {
         "key": "authorize",
         "labelKey": "Action_Authorize",
-        "handlerKey": "authorize",
+        "handlerKey": "authorize", "dataAccess": { "execution": "organization.person.authorization.manage", "resources": ["organization.person"] },
         "inputKey": "objectAuthorization",
         "confirmLabelKey": "Action_SaveAuthorization"
       },

@@ -94,7 +94,7 @@
       {
         "key": "create",
         "labelKey": "Action_Create",
-        "standardAction": "create",
+        "standardAction": "create", "dataAccess": { "execution": "organization.company.create", "resources": ["organization.company"] },
         "variant": "primary"
       }
     ],
@@ -106,19 +106,19 @@
       {
         "key": "authorize",
         "labelKey": "Action_Authorize",
-        "handlerKey": "authorize",
+        "handlerKey": "authorize", "dataAccess": { "execution": "organization.company.authorization.manage", "resources": ["organization.company"] },
         "inputKey": "objectAuthorization",
         "confirmLabelKey": "Action_SaveAuthorization"
       },
       {
         "key": "edit",
         "labelKey": "Action_Edit",
-        "standardAction": "edit"
+        "standardAction": "edit", "dataAccess": { "execution": "organization.company.update", "resources": ["organization.company"] }
       },
       {
         "key": "delete",
         "labelKey": "Action_Delete",
-        "standardAction": "delete",
+        "standardAction": "delete", "dataAccess": { "execution": "organization.company.delete", "resources": ["organization.company"] },
         "variant": "danger",
         "confirmMessageKey": "Action_Delete_Confirm"
       }

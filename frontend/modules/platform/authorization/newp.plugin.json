@@ -52,10 +52,6 @@
       "legacyConsumers": [
         { "moduleId": "Identity", "resourceKey": "identity.account" },
         { "moduleId": "Authorization", "resourceKey": "authorization.role" },
-        { "moduleId": "Organization", "resourceKey": "organization.company" },
-        { "moduleId": "Organization", "resourceKey": "organization.department" },
-        { "moduleId": "Organization", "resourceKey": "organization.person" },
-        { "moduleId": "Organization", "resourceKey": "organization.position" },
         { "moduleId": "Part", "resourceKey": "part.part" },
         { "moduleId": "Document", "resourceKey": "document.document" },
         { "moduleId": "Workspace", "resourceKey": "workspace.folder" }

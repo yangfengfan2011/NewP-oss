@@ -4,10 +4,13 @@ import { TreeNodeNotFoundError } from '@icp-platform/sdk';
 import { createRelationTreeProvider } from '../composition/relationTreeProvider';
 import organizationTree from '../../../../modules/platform/organization/metadata/views/OrganizationStructure.view.json';
 import workspaceTree from '../../../../modules/infor-center/workspace/metadata/views/WorkspaceStructure.view.json';
+import requirements from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationDataAccess.contract.json';
+import type { ActionDataAccessRequirement } from '@icp-platform/sdk';
+import { bindActionDataAccess } from '../metadata/runtimeMetadataLoader';
 
 const { fetchMock } = vi.hoisted(() => ({ fetchMock: vi.fn() }));
 vi.mock('@icp-platform/core', () => ({ platformFetch: fetchMock }));
-const view = organizationTree.view as unknown as TreeView;
+const view = bindActionDataAccess(organizationTree, requirements as ActionDataAccessRequirement[]).view as unknown as TreeView;
 const scope = { kind: 'global' };
 beforeEach(() => { fetchMock.mockReset(); fetchMock.mockResolvedValue({ ok: true, json: async () => [] }); });
 
@@ -44,6 +47,7 @@ it('uses the same configured Provider for roots, branches, paths and paged searc
     ['roots', 'children', 'path', 'search'].map(operation => `/api/trees/organization.structure/${operation}`));
   expect(new URL(fetchMock.mock.calls[3][0], 'http://localhost').searchParams.get('page')).toBe('2');
   expect(fetchMock.mock.calls.every(([, options]) => options.signal === signal)).toBe(true);
+  expect(fetchMock.mock.calls.every(([, options]) => options.headers['X-NewP-Data-Declaration'] === view.dataAccess!.id)).toBe(true);
 });
 
 it('maps creation, movement and deletion from configured parent fields without membership filters', async () => {

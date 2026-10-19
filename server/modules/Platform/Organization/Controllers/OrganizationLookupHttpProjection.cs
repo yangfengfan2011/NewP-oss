@@ -22,6 +22,13 @@ internal static class OrganizationLookupHttpProjection
         ParseCurrentValueIds(currentValueIds),
         includeDisabled);
 
+    // 具体执行由Controller固定，当前值集合仅定位已有关系；不替代最终SQL读取计划。
+    internal static OrganizationDirectoryLookupRequest WithExecution(OrganizationDirectoryLookupRequest request, string execution) => request with
+    {
+        ReadContext = new(new(execution, "organization.backend", "read"), "query")
+        { TargetSets = [new("current", request.CurrentValueIds?.ToArray() ?? [])] }
+    };
+
     // 公司候选和当前值使用模块统一的停用标记与选择规则。
     internal static StandardCrudLookupResult Map(
         OrganizationDirectoryPage<Company> page,

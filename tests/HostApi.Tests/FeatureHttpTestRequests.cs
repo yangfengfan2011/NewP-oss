@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Testing.Authorization;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace ICP.Platform.HostApi.Tests;
@@ -10,14 +11,29 @@ namespace ICP.Platform.HostApi.Tests;
 /// <summary>测试调用方显式选择正式声明位置；不按 URL 猜测动作或修改客户端默认请求头。</summary>
 internal sealed class FeatureHttpTestRequests(IReadOnlyList<FeaturePoint> points)
 {
-    internal FeatureHttpTestRequests(BusinessAuditHostFixture fixture) : this(fixture.FeatureCatalog) { }
+    private IReadOnlyList<ActionDataAccessRequirement> _declarations = [];
+
+    internal FeatureHttpTestRequests(BusinessAuditHostFixture fixture) : this(fixture.FeatureCatalog)
+    {
+        _declarations = fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog;
+    }
 
     internal static async Task<FeatureHttpTestRequests> LoadAsync(HttpClient client)
     {
         using var manifest = await client.GetFromJsonAsync<JsonDocument>("/plugins/metadata-runtime-manifest.json")
             ?? throw new InvalidOperationException("Runtime metadata manifest was empty.");
-        return new(RuntimeFeatureCatalogTestSupport.Parse(manifest.RootElement));
+        return new(RuntimeFeatureCatalogTestSupport.Parse(manifest.RootElement))
+        {
+            _declarations = manifest.RootElement.GetProperty("modules").EnumerateArray()
+                .Where(module => module.TryGetProperty("dataAccess", out _))
+                .SelectMany(module => JsonSerializer.Deserialize<ActionDataAccessRequirement[]>(module.GetProperty("dataAccess"),
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web)) ?? []).ToArray()
+        };
     }
+
+    // 调用方固定实际执行与功能点；不按URL或缺失请求头选择声明，反例仍可直接SendAsync不带声明。
+    internal ActionDataAccessRequirement Declaration(string execution, FeaturePoint point) =>
+        _declarations.Single(item => item.Execution == execution && item.FeaturePositions.Contains(point.Position));
 
     internal FeaturePoint Organization(string tab, string? action = null, string? surface = null, string? nodeType = null)
     {
@@ -66,9 +82,9 @@ internal sealed class FeatureHttpTestRequests(IReadOnlyList<FeaturePoint> points
         using (request) return await client.SendAsync(request);
     }
 
-    internal static async Task<JsonElement> CreateAsync(HttpClient client, FeaturePoint point, string path, object body)
+    internal static async Task<JsonElement> CreateAsync(HttpClient client, FeaturePoint point, string path, object body, ActionDataAccessRequirement? dataAccess = null)
     {
-        using var response = await SendAsync(client, point, HttpMethod.Post, path, body);
+        using var response = await SendAsync(client, point, HttpMethod.Post, path, body, dataAccess);
         Assert.True(response.StatusCode == HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
         return await response.Content.ReadFromJsonAsync<JsonElement>();
     }

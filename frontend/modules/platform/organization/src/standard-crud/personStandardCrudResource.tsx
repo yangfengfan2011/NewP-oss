@@ -47,6 +47,7 @@ export const organizationCompanyLookupProvider: StandardCrudLookupProvider = {
     request.fieldKey === 'companyId',
     context?.signal,
     context?.featurePosition,
+    context?.dataAccess,
   ),
 };
 
@@ -71,7 +72,8 @@ const organizationLookupProviders: StandardCrudLookupProvider[] = [
         request,
         request.fieldKey === 'departmentId',
         context?.signal,
-    context?.featurePosition,
+        context?.featurePosition,
+        context?.dataAccess,
       );
     },
   },
@@ -156,12 +158,12 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Record
   actionEligibilityResolvers: personObjectAuthorization.actionEligibilityResolvers,
   actionHandlers: {
     ...personObjectAuthorization.actionHandlers,
-    delete: async ({ id, featurePosition }) => {
+    delete: async ({ id, featurePosition, dataAccess }) => {
       if (!id) {
         throw new StandardCrudRequestError('缺少人员标识，无法删除。', 400, {}, { code: 'Organization.Person.InvalidId' });
       }
 
-      await deletePerson(id, featurePosition);
+      await deletePerson(id, featurePosition, dataAccess);
     },
     disable: async ({ id, input, featurePosition }) => {
       if (!id) {

@@ -2,6 +2,7 @@
   "schemaVersion": "1.0",
   "type": "view",
   "view": {
+    "dataAccess": {"execution":"organization.structure.read","resources":["organization.company","organization.department","organization.person"]},
     "key": "organization.structure",
     "mode": "tree",
     "dicKey": "OrganizationComposition",

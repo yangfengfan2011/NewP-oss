@@ -80,7 +80,7 @@ Host 与组件包采用同一正式发行构建形态，入口由[组件化开�
 
 `FeatureCatalogCompiler.ValidateSelection` 的未知／失效位置和缺少本分支入口错误通过 `FeatureSelectionException` 保留稳定事实，该异常继承 `InvalidOperationException` 并保留原诊断。`Code` 分别为 `FeatureSelection.UnknownPosition`、`FeatureSelection.EntryDependencyMissing`；`Args.position` 保留原输入，缺入口另带依赖顺序中首个缺失的 `dependencyPosition`。模块负责将这些事实映射到自己的 API 错误及译文，内核不解析诊断或引用业务词典。
 
-View 的 `resourceKey` 指定稳定资源；`lookupBindings` 按该 View 实际使用的 provider key 绑定只读来源。既有字符串形态绑定 behavior；采用正式 options 的来源使用 `{ behavior, dataAccess }`，其中 `dataAccess` 引用目标资源的执行合同，由正式装配投影到查询、创建和编辑的原功能位置。宿主通过 provider key 消费本 View 的编译要求，不能借用表单写入声明或任取一个位置。专用动作通过 `featureActions` 声明 `key`、`titleKey`、`behaviorKey` 及可选 `readBehaviors`。标准 `pageActions` / `rowActions` 也可声明 `readBehaviors`，补充动作输入所需的只读行为；它们与资源读取和实际表单 Lookup 一同随发起动作授权。这些绑定描述实际消费能力，不向管理员增加接口权限清单。
+View 的 `resourceKey` 指定稳定资源；`lookupBindings` 按该 View 实际使用的 provider key 绑定只读来源。既有字符串形态绑定 behavior；采用正式 options 或业务自定义候选的来源使用 `{ behavior, dataAccess }`，其中 `dataAccess` 引用目标资源的执行合同，由正式装配投影到查询、创建和编辑的原功能位置。宿主通过 provider key 消费本 View 的编译要求，不能借用表单写入声明或任取一个位置。专用动作通过 `featureActions` 声明 `key`、`titleKey`、`behaviorKey` 及可选 `readBehaviors`。标准 `pageActions` / `rowActions` 也可声明 `readBehaviors`，补充动作输入所需的只读行为；它们与资源读取和实际表单 Lookup 一同随发起动作授权。这些绑定描述实际消费能力，不向管理员增加接口权限清单。
 
 完整位置由声明引用及其祖先、静态节点类型和动作所在位置编译产生，不能使用 URL、文案、数组序号或记录 ID。导航的 `featureOwner` 为重定向别名和独立详情指定已有入口引用；别名不创建重复授权点。`ReferenceKey`、`StaticScope`、`ActionScope`、`StaticScopeTitle` 和 `Container` 是标准适配器的派生事实，不能据此推断 Capsule 自定义声明已经支持这些输入字段。
 

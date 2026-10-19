@@ -14,6 +14,7 @@ public sealed class EfDepartmentDirectory : IDepartmentDirectory, IDepartmentHie
     private readonly EfPlatformDbContext _dbContext;
     private readonly IDepartmentHierarchyQuery _hierarchyQuery;
     private readonly IDataScopeReadPlanProvider? _readPlans;
+    private readonly Func<IDataExecutionAccess>? _executions;
 
     /// <summary>
     /// 使用 Organization 当前 SQL Server 层级查询构造部门目录。
@@ -32,6 +33,13 @@ public sealed class EfDepartmentDirectory : IDepartmentDirectory, IDepartmentHie
         _dbContext = dbContext;
         _hierarchyQuery = hierarchyQuery;
         _readPlans = readPlans;
+    }
+
+    // 正式读取由Controller固定来源；执行器只在原取计划位置解析，避免跨模块构造环。
+    internal EfDepartmentDirectory(EfPlatformDbContext dbContext, IDepartmentHierarchyQuery hierarchyQuery,
+        IDataScopeReadPlanProvider? readPlans, Func<IDataExecutionAccess> executions) : this(dbContext, hierarchyQuery, readPlans)
+    {
+        _executions = executions;
     }
 
     /// <inheritdoc/>
@@ -90,7 +98,7 @@ public sealed class EfDepartmentDirectory : IDepartmentDirectory, IDepartmentHie
         var rows = Entities
             .AsNoTracking()
             .Where(row => EF.Property<string>(row, "CompanyId") == companyId);
-        var readPredicate = await GetReadPredicateAsync(cancellationToken);
+        var readPredicate = await GetReadPredicateAsync(request, cancellationToken);
         if (readPredicate is not null) rows = rows.Where(readPredicate);
         if (!request.IncludeDisabled)
         {
@@ -132,7 +140,7 @@ public sealed class EfDepartmentDirectory : IDepartmentDirectory, IDepartmentHie
         }
 
         var (page, pageSize) = NormalizePage(request);
-        var readPredicate = await GetReadPredicateAsync(cancellationToken);
+        var readPredicate = await GetReadPredicateAsync(request, cancellationToken);
         var hierarchyPage = await _hierarchyQuery.LookupParentCandidatesAsync(
             companyId,
             currentDepartmentId,
@@ -169,8 +177,10 @@ public sealed class EfDepartmentDirectory : IDepartmentDirectory, IDepartmentHie
 
     // 模块候选始终消费规范部门资源的完整读取计划；未启用时返回无附加过滤。
     private async Task<System.Linq.Expressions.Expression<Func<Dictionary<string, object?>, bool>>?> GetReadPredicateAsync(
-        CancellationToken cancellationToken) => _readPlans is null ? null
-        : (await _readPlans.GetReadPlanAsync("organization.department", cancellationToken)).Predicate;
+        OrganizationDirectoryLookupRequest request, CancellationToken cancellationToken) => _executions is not null
+        ? (await _executions().GetQueryReadPlanAsync(request.ReadContext
+            ?? throw new ActionDataAccessException(400, "ActionDataAccess.ContextRequired"), "organization.department", cancellationToken)).Predicate
+        : _readPlans is null ? null : (await _readPlans.GetReadPlanAsync("organization.department", cancellationToken)).Predicate;
 
     // 目录排序必须在 Skip/Take 前落到数据源，并用 EID 消除同名项的不稳定顺序。
     private static IOrderedQueryable<Dictionary<string, object?>> Order(

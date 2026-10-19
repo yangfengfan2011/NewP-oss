@@ -68,6 +68,8 @@ export interface TabView {
   tabs: { key: string; titleKey: string; pageRef: PageRef }[];
 }
 export interface TreeView {
+  /** 当前树正式读取绑定；Provider透传原功能位置和此引用，不另选资源声明。 */
+  dataAccess?: import('./standardCrud.types').ActionDataAccessRequirement;
   key: string; mode: 'tree'; dicKey: string; providerKey: string;
   /** 缺省开启搜索；关闭后宿主不挂载搜索入口或发起搜索请求。 */
   searchEnabled?: boolean;

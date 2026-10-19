@@ -82,6 +82,7 @@ public static class StandardFeatureMetadataCompiler
             else if (mode == "tree")
             {
                 BindRead(owner, "tree:" + key);
+                DataAccess(view, view, "read", "", owner);
                 TreeActions(view, "treeActions", owner, scope, Optional(view, "dicKey"));
                 foreach (var type in view.GetProperty("nodeTypes").EnumerateArray())
                 {

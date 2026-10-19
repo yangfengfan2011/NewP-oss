@@ -18,6 +18,7 @@ public sealed class DepartmentCompanyLookupsController(ICompanyDirectory company
     /// </summary>
     [HttpGet]
     [RequireFeature("organization.department.company.lookup")]
+    [OrganizationLookupExecution("organization.department.company.lookup", "organization.company")]
     public async Task<ActionResult<StandardCrudLookupResult>> Companies(
         [FromQuery] string? keyword = null,
         [FromQuery] int page = 1,
@@ -27,8 +28,8 @@ public sealed class DepartmentCompanyLookupsController(ICompanyDirectory company
         CancellationToken cancellationToken = default)
     {
         var result = await companyDirectory.LookupAsync(
-            OrganizationLookupHttpProjection.CreateRequest(
-                keyword, page, pageSize, currentValueIds, includeDisabled),
+            OrganizationLookupHttpProjection.WithExecution(OrganizationLookupHttpProjection.CreateRequest(
+                keyword, page, pageSize, currentValueIds, includeDisabled), "organization.department.company.lookup"),
             cancellationToken);
         return Ok(OrganizationLookupHttpProjection.Map(result, includeDisabled));
     }

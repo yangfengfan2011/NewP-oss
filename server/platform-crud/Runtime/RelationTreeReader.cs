@@ -15,8 +15,25 @@ public sealed record RelationTreeSearchItem(RelationTreeNode Node, IReadOnlyList
 public sealed record RelationTreeSearchPage(IReadOnlyList<RelationTreeSearchItem> Items, int Total, int Page, int PageSize);
 
 /// <summary>统一执行根、直属节点、分页搜索与祖先链查询，不在应用内物化全树。</summary>
-public sealed class RelationTreeReader(EfPlatformDbContext db, RelationTreeSql compiler, IDataScopeReadPlanProvider? readPlans = null)
+public sealed class RelationTreeReader
 {
+    private readonly EfPlatformDbContext db;
+    private readonly RelationTreeSql compiler;
+    private readonly IDataScopeReadPlanProvider? readPlans;
+    private readonly IDataExecutionAccess? executions;
+
+    /// <summary>独立SQL/投影消费者保留原构造；正式模块通过含执行器的构造消费冻结来源。</summary>
+    public RelationTreeReader(EfPlatformDbContext db, RelationTreeSql compiler, IDataScopeReadPlanProvider? readPlans = null)
+    {
+        this.db = db; this.compiler = compiler; this.readPlans = readPlans;
+    }
+
+    /// <summary>正式树在原读取计划位置验证同一来源，不在入口枚举ID或预判节点。</summary>
+    public RelationTreeReader(EfPlatformDbContext db, RelationTreeSql compiler, IDataScopeReadPlanProvider? readPlans, IDataExecutionAccess executions)
+        : this(db, compiler, readPlans)
+    {
+        this.executions = executions;
+    }
     private const string Order = "SortOrder, Code, NodeType, NodeKey";
     // 十六进制身份不含路径分隔符，避免节点 ID 含竖线时被误判为祖先重复。
     private const string Ancestors = """
@@ -185,10 +202,14 @@ public sealed class RelationTreeReader(EfPlatformDbContext db, RelationTreeSql c
     {
         var filters = new Dictionary<string, string>(StringComparer.Ordinal);
         var parameters = new List<DbParameter>();
-        if (readPlans is null) return (filters, parameters);
+        if (executions is null && readPlans is null) return (filters, parameters);
         foreach (var node in definition.Source.Nodes.DistinctBy(node => node.ResourceKey))
         {
-            var plan = await readPlans.GetReadPlanAsync(node.ResourceKey, token);
+            var binding = definition.ReadBinding;
+            var plan = executions is null ? await readPlans!.GetReadPlanAsync(node.ResourceKey, token)
+                : await executions.GetQueryReadPlanAsync(new(new(
+                    binding?.Execution ?? throw new InvalidOperationException("RELATION_TREE_DATA_EXECUTION_MISSING"),
+                    binding.Provider!, "read"), "query"), node.ResourceKey, token);
             if (plan.Predicate is null) continue;
             var rows = db.Set<Dictionary<string, object?>>(db.ResolveModelKey(node.Model))
                 .AsNoTracking().Where(plan.Predicate).Select(row => EF.Property<string>(row, node.IdField));

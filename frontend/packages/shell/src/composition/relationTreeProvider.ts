@@ -11,7 +11,7 @@ export function createRelationTreeProvider(view: TreeView, featurePosition?: str
   const checkScope = (scope: Record<string, unknown>) => {
     if (scope.kind !== 'global' || Object.keys(scope).length !== 1) throw new Error('缺少或无效树读取范围');
   };
-  const transport = createTreeQueryTransport(view.key, platformFetch, featurePosition);
+  const transport = createTreeQueryTransport(view.key, platformFetch, featurePosition, view.dataAccess);
   return {
     key: relationTreeProviderKey,
     ...transport,

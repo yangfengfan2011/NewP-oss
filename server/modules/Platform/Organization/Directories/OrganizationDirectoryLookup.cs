@@ -13,7 +13,12 @@ public sealed record OrganizationDirectoryLookupRequest(
     int Page,
     int PageSize,
     IReadOnlyCollection<string>? CurrentValueIds = null,
-    bool IncludeDisabled = false);
+    bool IncludeDisabled = false)
+{
+    /// <summary>仅由实际读取端构造的正式来源，不接受HTTP载荷自报。</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public ICP.Platform.Authorization.Contracts.DataExecutionQueryContext? ReadContext { get; init; }
+}
 
 /// <summary>
 /// Organization 目录的一页候选与候选页外当前值。

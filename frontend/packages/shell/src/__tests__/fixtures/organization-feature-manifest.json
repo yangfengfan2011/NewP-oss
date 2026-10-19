@@ -115,6 +115,29 @@
           "container": false
         },
         {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:companies/surface:list.custom/action:initialize",
+          "moduleId": "Organization",
+          "key": "initialize",
+          "kind": "action",
+          "title": "\u521D\u59CB\u5316\u9ED8\u8BA4\u7EC4\u7EC7",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:companies",
+          "behaviorKey": "organization.company.initialize",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:companies"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:companies/surface:list.custom/action:initialize",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "titleKey": "CompanyListView.Action_Initialize",
+          "staticScopeTitleKey": null,
+          "actionScope": "list.custom",
+          "readBehaviors": [],
+          "container": false
+        },
+        {
           "position": "Organization/navigation:organization/navigation:organization.structure/tab:companies/surface:list.pageActions/action:create",
           "moduleId": "Organization",
           "key": "create",
@@ -132,6 +155,31 @@
           "staticScope": null,
           "staticScopeTitle": null,
           "titleKey": "CompanyListView.Action_Create",
+          "staticScopeTitleKey": null,
+          "actionScope": "list.pageActions",
+          "readBehaviors": [
+            "organization.company.read"
+          ],
+          "container": false
+        },
+        {
+          "position": "Organization/navigation:organization/navigation:organization.structure/tab:companies/surface:list.pageActions/action:initialize",
+          "moduleId": "Organization",
+          "key": "initialize",
+          "kind": "action",
+          "title": "\u521D\u59CB\u5316\u9ED8\u8BA4\u7EC4\u7EC7",
+          "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:companies",
+          "behaviorKey": "organization.company.initialize",
+          "entryDependencies": [
+            "Organization/navigation:organization",
+            "Organization/navigation:organization/navigation:organization.structure",
+            "Organization/navigation:organization/navigation:organization.structure/tab:companies"
+          ],
+          "order": 0,
+          "referenceKey": "navigation:organization.structure/tab:companies/surface:list.pageActions/action:initialize",
+          "staticScope": null,
+          "staticScopeTitle": null,
+          "titleKey": "CompanyListView.Action_Initialize",
           "staticScopeTitleKey": null,
           "actionScope": "list.pageActions",
           "readBehaviors": [
@@ -1474,7 +1522,8 @@
           ],
           "container": false
         }
-      ]
+      ],
+      "dataAccess": []
     }
   ]
 }

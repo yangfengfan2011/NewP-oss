@@ -43,7 +43,12 @@ public sealed record RelationTreeParentSource
 }
 
 /// <summary>已签发模块的树配置及其所有者。</summary>
-public sealed record RelationTreeDefinition(string ModuleId, string ViewKey, RelationTreeSource Source);
+public sealed record RelationTreeDefinition(string ModuleId, string ViewKey, RelationTreeSource Source)
+{
+    /// <summary>冻结计划中此树真实出现位置的完整读取要求，不从请求猜测执行。</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public ActionDataAccessRequirement? ReadBinding { get; init; }
+}
 
 /// <summary>标准树配置的静态验证与签发快照读取。</summary>
 public static class RelationTreeMetadata
@@ -113,7 +118,11 @@ public static class RelationTreeMetadata
                 using var document = JsonDocument.Parse(snapshot.ReadFile(path));
                 if (!document.RootElement.TryGetProperty("view", out var view)
                     || !view.TryGetProperty("providerKey", out var provider) || provider.GetString() != ProviderKey || view.TryGetProperty("linkSource", out _)) continue;
-                definitions.Add(new(module.ModuleId, view.GetProperty("key").GetString()!, Read(view)));
+                var key = view.GetProperty("key").GetString()!;
+                var binding = plan.ActionDataAccessCatalog.SingleOrDefault(item => item.ModuleId == module.ModuleId
+                    && item.ViewKey == key && item.Surface == "read" && item.ActionKey == "")
+                    ?? throw new InvalidOperationException("RELATION_TREE_DATA_EXECUTION_MISSING");
+                definitions.Add(new(module.ModuleId, key, Read(view)) { ReadBinding = binding });
             }
         }
         if (definitions.Select(definition => definition.ViewKey).Distinct(StringComparer.Ordinal).Count() != definitions.Count)

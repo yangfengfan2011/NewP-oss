@@ -2,6 +2,7 @@ import type { ActionDataAccessRequirement } from '@icp-platform/sdk';
 import { bindActionDataAccess } from '../metadata/runtimeMetadataLoader';
 import type { RuntimeMetadataState } from '../metadata/runtimeMetadataManifest';
 import standardRead from '../../../../../tests/Kernel.Tests/Fixtures/StandardReadDataAccess.contract.json';
+import organization from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationDataAccess.contract.json';
 import example from '../../../../../tests/Kernel.Tests/Fixtures/ExampleCrudDataAccess.contract.json';
 import partWrite from '../../../../../tests/Kernel.Tests/Fixtures/PartWriteDataAccess.contract.json';
 import partHistory from '../../../../../tests/Kernel.Tests/Fixtures/PartHistoryDataAccess.contract.json';
@@ -9,7 +10,7 @@ import documentHistory from '../../../../../tests/Kernel.Tests/Fixtures/Document
 import workspaceHistory from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceHistoryDataAccess.contract.json';
 import clipboard from '../../../../../tests/Kernel.Tests/Fixtures/WorkspaceClipboardDataAccess.contract.json';
 
-const declarations = uniqueDeclarations([...(standardRead as ActionDataAccessRequirement[]), ...(example as ActionDataAccessRequirement[]),
+const declarations = uniqueDeclarations([...(standardRead as ActionDataAccessRequirement[]), ...(organization as ActionDataAccessRequirement[]), ...(example as ActionDataAccessRequirement[]),
   ...(partWrite as ActionDataAccessRequirement[]), ...(partHistory as ActionDataAccessRequirement[]), ...(documentHistory as ActionDataAccessRequirement[]),
   ...(workspaceHistory as ActionDataAccessRequirement[]), ...(clipboard.declarations as ActionDataAccessRequirement[])]);
 

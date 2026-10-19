@@ -21,6 +21,7 @@ import featureManifest from './fixtures/organization-feature-manifest.json';
 import { FeaturePlacementContext } from '../authorization/FeaturePlacementContext';
 import { PageEntry } from '../composition/PageOutlet';
 import { RuntimeMetadataProvider } from './formalRuntimeMetadataProvider';
+import { formalDataAccessFor } from './formalRuntimeMetadataTestSupport';
 import type { RuntimeMetadataManifest, RuntimeMetadataState } from '../metadata/runtimeMetadataManifest';
 import StandardCrudDetailPageHost from '../pages/StandardCrudDetailPageHost';
 
@@ -115,6 +116,15 @@ describe('Organization feature placements in real Shell hosts', () => {
       expect(companyRequests).toHaveLength(1);
       expect(companyRequests[0].init?.method).toBe('POST');
       expect(companyRequests.every((request) => readFeatureHeader(request.init) === createCompanyPosition)).toBe(true);
+      const createDeclaration = formalDataAccessFor(companyList.view.key, 'pageActions', 'create');
+      expect(createDeclaration.featurePositions).toContain(createCompanyPosition);
+      expect(new Headers(companyRequests[0].init?.headers).get('X-NewP-Data-Declaration')).toBe(createDeclaration.id);
+      const treeReads = requests.filter(request => request.url.startsWith('/api/trees/organization.structure/'));
+      expect(treeReads.length).toBeGreaterThan(0);
+      const declaration = formalDataAccessFor(organizationTree.view.key, 'read');
+      expect(declaration.featurePositions).toContain(structurePosition);
+      expect(treeReads.every(request => readFeatureHeader(request.init) === structurePosition)).toBe(true);
+      expect(treeReads.every(request => new Headers(request.init?.headers).get('X-NewP-Data-Declaration') === declaration.id)).toBe(true);
     } finally {
       await rendered.dispose();
       fetchMock.mockRestore();

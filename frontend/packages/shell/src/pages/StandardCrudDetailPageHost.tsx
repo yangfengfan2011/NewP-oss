@@ -209,8 +209,8 @@ function StandardCrudDetailPageContent<TDetail>({
     resourceKey: registration.resourceKey,
     id,
     dataAdapter,
-    featurePosition: editing && editDataAccess ? resolvedFeaturePosition(editResolution) : readPosition,
-    dataAccess: editing ? editDataAccess ?? readDataAccess : readDataAccess,
+    featurePosition: readPosition,
+    dataAccess: readDataAccess,
     queryScope: host.input.queryScope,
     readSourceKey,
   });

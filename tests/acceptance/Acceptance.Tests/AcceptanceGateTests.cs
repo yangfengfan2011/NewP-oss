@@ -110,6 +110,42 @@ public sealed class AcceptanceGateTests
 
     private const string RunEnvironmentVariable = "NEWP_RUN_ACCEPTANCE";
 
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "固定正式发行物的Organization树读取、详情及公司声明写入最短接线")]
+    public async Task NativeOrganizationDataExecution_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-organization-data-execution");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, publishedFixture: fixture, browserAsAdministrator: true,
+            browserJourney: async (page, token) =>
+            {
+                token.ThrowIfCancellationRequested();
+                var driver = new StandardCrudPageDriver(page);
+                var code = "ORG-" + runId[..10];
+                var name = "组织声明公司 " + runId[..8];
+                await driver.OpenOrganizationTabAsync("组织结构", "structure");
+                await page.GetByRole(AriaRole.Button, new() { Name = "新建公司", Exact = true })
+                    .WaitForAsync(new() { State = WaitForSelectorState.Visible });
+                var create = await driver.OpenCreateDrawerAsync("新建公司");
+                await StandardCrudPageDriver.FillDrawerFieldAsync(create, "公司编码", code);
+                await StandardCrudPageDriver.FillDrawerFieldAsync(create, "公司名称", name);
+                await StandardCrudPageDriver.FillDrawerFieldAsync(create, "排序码", "0100");
+                await driver.SaveAndCloseWithoutResponseAsync(create);
+                await new StandardTreePageDriver(page).SelectPathAsync(name);
+                var content = page.GetByRole(AriaRole.Region, new() { Name = "节点内容", Exact = true });
+                await content.GetByText("基本信息", new() { Exact = true }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
+                await content.GetByText(code, new() { Exact = true }).WaitForAsync(new() { State = WaitForSelectorState.Visible });
+                await driver.OpenOrganizationTabAsync("公司", "companies");
+                var row = await driver.WaitForRowAsync(code);
+                await row.GetByRole(AriaRole.Button, new() { Name = "编辑", Exact = true }).ClickAsync();
+                var edit = await driver.WaitForVisibleDrawerAsync("Organization company edit");
+                await StandardCrudPageDriver.FillDrawerFieldAsync(edit, "公司名称", name + " 已编辑");
+                await driver.SaveChangesAsync(edit, new("PUT", "/api/organization/companies/", 200, "Organization company edit", PathIsPrefix: true));
+                await driver.WaitForRowAsync(code, name + " 已编辑");
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"), new { url = page.Url, code, journey = "organization-data-execution" }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "管理员显式组织初始化及三模型缺失归属的正式页面、批次和人工补齐最短路径")]
     public async Task NativeWorkspaceOwnership_UsesFormalDriver()
     {

@@ -1,9 +1,11 @@
 using ICP.Platform.Authorization.Http;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Crud.Runtime;
 using ICP.Platform.Crud.LinkQueries;
 using ICP.Platform.Kernel.ModulePlanning;
+using ICP.Platform.Persistence.EfCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -21,12 +23,24 @@ public static class RelationTreeExtensions
     public static IServiceCollection AddRelationTrees(this IServiceCollection services, CanonicalModulePlan plan)
     {
         var trees = RelationTreeMetadata.Project(plan);
+        foreach (var tree in trees)
+        {
+            var role = tree.ReadBinding?.Requirements?.SingleOrDefault();
+            if (role is null || role.Role != "query" || role.Stage != "read" || role.Shape != "query"
+                || role.MinimumCount != 0 || role.MaximumCount is not null || role.AnyOf.Count != 1
+                || !role.AnyOf[0].SequenceEqual(["read"]) || role.ReadResolverKey is not null || role.ResourceAnyOf is not null
+                || !role.Resources.Order().SequenceEqual(tree.Source.Nodes.Select(node => node.ResourceKey).Distinct().Order()))
+                throw new InvalidOperationException("RELATION_TREE_DATA_EXECUTION_INVALID");
+        }
         var featureTrees = trees.Where(tree => plan.FeatureCatalog.Any(point => point.ModuleId == tree.ModuleId
             && (point.BehaviorKey == "tree:" + tree.ViewKey || point.ReadBehaviors.Contains("tree:" + tree.ViewKey, StringComparer.Ordinal))))
             .Select(tree => tree.ViewKey).ToHashSet(StringComparer.Ordinal);
         services.AddSingleton(new Catalog(trees, featureTrees));
         services.AddScoped<RelationTreeSql>();
-        services.AddScoped<RelationTreeReader>();
+        // 正式装配不能因执行器漏注册而让DI选择旧手工构造，绕过声明来源校验。
+        services.AddScoped(provider => new RelationTreeReader(provider.GetRequiredService<EfPlatformDbContext>(),
+            provider.GetRequiredService<RelationTreeSql>(), provider.GetService<IDataScopeReadPlanProvider>(),
+            provider.GetRequiredService<IDataExecutionAccess>()));
         services.AddSingleton(new LinkTreeCatalog(LinkTreeMetadata.Project(plan)));
         services.AddScoped<LinkTreeReader>();
         return services;
@@ -70,6 +84,14 @@ public static class RelationTreeExtensions
                         if (string.IsNullOrWhiteSpace(nodeKey)) return Invalid("nodeKey", "缺少 nodeKey。");
                         var result = operation == "children" ? await reader.ChildrenAsync(tree, nodeKey, token) : await reader.PathAsync(tree, nodeKey, token);
                         return result is null ? Results.NotFound() : Results.Ok(result);
+                    }).AddEndpointFilter(async (invocation, next) =>
+                    {
+                        try { return await next(invocation); }
+                        catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)
+                        {
+                            return Results.Problem(statusCode: exception.Status, title: exception.Code,
+                                extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+                        }
                     }).WithMetadata(new EndpointModuleAttribute(tree.ModuleId)).RequireAuthorization(catalog.FeatureTrees.Contains(tree.ViewKey)
                         ? new RequireFeatureAttribute("tree:" + tree.ViewKey) : new DenyAllAttribute("该关系树没有活动功能声明。"));
             }

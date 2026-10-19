@@ -11,9 +11,9 @@
     "model": "Department",
     "resourceKey": "organization.department",
     "lookupBindings": {
-      "organization.companies": "organization.department.company.lookup",
-      "organization.department.parents": "organization.department.parent.lookup",
-      "organization.department.parent-filter": "organization.department.parent.lookup"
+      "organization.companies": {"behavior":"organization.department.company.lookup","dataAccess":{"execution":"organization.department.company.lookup","resources":["organization.company"]}},
+      "organization.department.parents": {"behavior":"organization.department.parent.lookup","dataAccess":{"execution":"organization.department.parent.lookup","resources":["organization.department"]}},
+      "organization.department.parent-filter": {"behavior":"organization.department.parent.lookup","dataAccess":{"execution":"organization.department.parent.lookup","resources":["organization.department"]}}
     },
     "editorMode": "drawer",
     "detailViewKey": "organization.department.detail",
@@ -38,15 +38,15 @@
       { "key": "updatedAt", "labelKey": "Column_UpdatedAt", "source": "model", "field": "UpdatedAt", "sortable": true, "responsivePriority": "low" }
     ],
     "pageActions": [
-      { "key": "create", "labelKey": "Action_Create", "standardAction": "create", "variant": "primary" }
+      { "key": "create", "labelKey": "Action_Create", "standardAction": "create", "dataAccess": { "execution": "organization.department.create", "resources": ["organization.department"] }, "variant": "primary" }
     ],
     "featureActions": [
       { "key": "authorize", "titleKey": "Action_Authorize", "behaviorKey": "organization.department.authorize" }
     ],
     "rowActions": [
-      { "key": "authorize", "labelKey": "Action_Authorize", "handlerKey": "authorize", "inputKey": "objectAuthorization", "confirmLabelKey": "Action_SaveAuthorization" },
-      { "key": "edit", "labelKey": "Action_Edit", "standardAction": "edit" },
-      { "key": "delete", "labelKey": "Action_Delete", "standardAction": "delete", "variant": "danger", "confirmMessageKey": "Action_Delete_Confirm" }
+      { "key": "authorize", "labelKey": "Action_Authorize", "handlerKey": "authorize", "dataAccess": { "execution": "organization.department.authorization.manage", "resources": ["organization.department"] }, "inputKey": "objectAuthorization", "confirmLabelKey": "Action_SaveAuthorization" },
+      { "key": "edit", "labelKey": "Action_Edit", "standardAction": "edit", "dataAccess": { "execution": "organization.department.update", "resources": ["organization.department"] } },
+      { "key": "delete", "labelKey": "Action_Delete", "standardAction": "delete", "dataAccess": { "execution": "organization.department.delete", "resources": ["organization.department"] }, "variant": "danger", "confirmMessageKey": "Action_Delete_Confirm" }
     ]
   }
 }

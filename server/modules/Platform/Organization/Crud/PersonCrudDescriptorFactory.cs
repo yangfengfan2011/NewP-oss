@@ -20,8 +20,7 @@ public static class PersonCrudDescriptorFactory
             UpdateFields: ["ENAME", "BirthDate", "CompanyId", "DepartmentId", "PositionId", "EmploymentStatus", "EmploymentStartedAt", "EmploymentEndedAt", "UpdatedAt"]);
         return new StandardCrudDescriptor
         {
-            LegacyDataExecutions = ["create", "update", "delete"],
-            DataExecutions = new Dictionary<string, string> { ["list"] = "organization.person.list", ["read"] = "organization.person.read", ["export"] = "organization.person.export" },
+            DataExecutions = new Dictionary<string, string> { ["create"] = "organization.person.create", ["update"] = "organization.person.update", ["delete"] = "organization.person.delete", ["list"] = "organization.person.list", ["read"] = "organization.person.read", ["export"] = "organization.person.export" },
             ResourceKey = "organization.person",
             RequiresCreationRecord = true,
             RequiresUpdateRecord = true,

@@ -7,10 +7,12 @@ import {
   readStandardCrudNullableString,
   readStandardCrudString,
   readStandardCrudRequestError,
+  type ActionDataAccessRequirement,
   type StandardCrudDetail,
   type StandardCrudListResult,
   type StandardCrudLookupPage,
   type StandardCrudLookupRequest,
+  type StandardCrudLookupExecutionContext,
   type StandardCrudMutationValues,
   type StandardCrudOption,
   type StandardCrudSummaryBlock,
@@ -143,8 +145,12 @@ async function requestJson<T>(path: string, init: RequestInit, errorMessage: str
   return response.json() as Promise<T>;
 }
 
-async function fetchJson<T>(path: string, errorMessage: string, signal?: AbortSignal, featurePosition?: string): Promise<T> {
-  return requestJson<T>(path, { method: 'GET', signal, ...(featurePosition ? { headers: { 'X-NewP-Feature': featurePosition } } : {}) }, errorMessage);
+async function fetchJson<T>(path: string, errorMessage: string, signal?: AbortSignal, featurePosition?: string,
+  dataAccess?: StandardCrudLookupExecutionContext['dataAccess']): Promise<T> {
+  return requestJson<T>(path, { method: 'GET', signal, ...(featurePosition || dataAccess ? { headers: {
+    ...(featurePosition ? { 'X-NewP-Feature': featurePosition } : {}),
+    ...(dataAccess ? { 'X-NewP-Data-Declaration': dataAccess.id } : {}),
+  } } : {}) }, errorMessage);
 }
 
 function readDateString(record: Record<string, unknown>, keys: string[], fallback = ''): string {
@@ -262,6 +268,7 @@ export async function getCompanyLookup(
   includeDisabled: boolean,
   signal?: AbortSignal,
   featurePosition?: string,
+  dataAccess?: StandardCrudLookupExecutionContext['dataAccess'],
 ): Promise<StandardCrudLookupPage> {
   const search = buildOrganizationLookupSearch(request, includeDisabled);
   return mapOrganizationLookupPage(await fetchJson<OrganizationLookupPageResponse>(
@@ -269,6 +276,7 @@ export async function getCompanyLookup(
     '加载公司列表失败',
     signal,
     featurePosition,
+    dataAccess,
   ));
 }
 
@@ -277,6 +285,7 @@ export async function getDepartmentCompanyLookup(
   includeDisabled: boolean,
   signal?: AbortSignal,
   featurePosition?: string,
+  dataAccess?: StandardCrudLookupExecutionContext['dataAccess'],
 ): Promise<StandardCrudLookupPage> {
   const search = buildOrganizationLookupSearch(request, includeDisabled);
   return mapOrganizationLookupPage(await fetchJson<OrganizationLookupPageResponse>(
@@ -284,6 +293,7 @@ export async function getDepartmentCompanyLookup(
     '加载公司列表失败',
     signal,
     featurePosition,
+    dataAccess,
   ));
 }
 
@@ -293,6 +303,7 @@ export async function getDepartmentLookup(
   includeDisabled: boolean,
   signal?: AbortSignal,
   featurePosition?: string,
+  dataAccess?: StandardCrudLookupExecutionContext['dataAccess'],
 ): Promise<StandardCrudLookupPage> {
   const search = buildOrganizationLookupSearch(request, includeDisabled);
   search.set('companyId', companyId);
@@ -301,6 +312,7 @@ export async function getDepartmentLookup(
     '加载部门列表失败',
     signal,
     featurePosition,
+    dataAccess,
   ));
 }
 
@@ -311,6 +323,7 @@ export async function getDepartmentParentLookup(
   includeDisabled: boolean,
   signal?: AbortSignal,
   featurePosition?: string,
+  dataAccess?: StandardCrudLookupExecutionContext['dataAccess'],
 ): Promise<StandardCrudLookupPage> {
   const search = buildOrganizationLookupSearch(request, includeDisabled);
   search.set('companyId', companyId);
@@ -320,6 +333,7 @@ export async function getDepartmentParentLookup(
     '加载上级部门列表失败',
     signal,
     featurePosition,
+    dataAccess,
   ));
 }
 
@@ -415,10 +429,13 @@ export async function updatePerson(personId: string, values: StandardCrudMutatio
   );
 }
 
-export async function deletePerson(personId: string, featurePosition?: string): Promise<void> {
+export async function deletePerson(personId: string, featurePosition?: string, dataAccess?: ActionDataAccessRequirement): Promise<void> {
   await requestJson<void>(
     `/api/organization/persons/${personId}`,
-    { method: 'DELETE', ...(featurePosition ? { headers: { 'X-NewP-Feature': featurePosition } } : {}) },
+    { method: 'DELETE', ...(featurePosition || dataAccess ? { headers: {
+      ...(featurePosition ? { 'X-NewP-Feature': featurePosition } : {}),
+      ...(dataAccess ? { 'X-NewP-Data-Declaration': dataAccess.id } : {}),
+    } } : {}) },
     '删除人员失败',
   );
 }

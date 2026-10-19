@@ -20,6 +20,7 @@ public sealed class DepartmentHierarchyLookupsController(
     /// </summary>
     [HttpGet("parents")]
     [RequireFeature("organization.department.parent.lookup")]
+    [OrganizationLookupExecution("organization.department.parent.lookup", "organization.department")]
     public async Task<ActionResult<StandardCrudLookupResult>> Parents(
         [FromQuery] string companyId,
         [FromQuery] string? currentDepartmentCode = null,
@@ -49,8 +50,8 @@ public sealed class DepartmentHierarchyLookupsController(
             var result = await hierarchyDirectory.LookupParentCandidatesAsync(
                 companyId,
                 current?.Id,
-                OrganizationLookupHttpProjection.CreateRequest(
-                    keyword, page, pageSize, currentValueIds, includeDisabled),
+                OrganizationLookupHttpProjection.WithExecution(OrganizationLookupHttpProjection.CreateRequest(
+                    keyword, page, pageSize, currentValueIds, includeDisabled), "organization.department.parent.lookup"),
                 cancellationToken);
             return Ok(OrganizationLookupHttpProjection.Map(result, includeDisabled));
         }

@@ -1,3 +1,6 @@
+import type { ActionDataAccessRequirement } from '@icp-platform/sdk';
+import compiledRequirements from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationDataAccess.contract.json';
+import { bindActionDataAccess } from '../metadata/runtimeMetadataLoader';
 import detailViewDocument from '../../../../modules/platform/organization/metadata/views/DepartmentDetail.view.json';
 import { describe, expect, it } from 'vitest';
 import { departmentStandardCrudResource } from '../../../../modules/platform/organization/src/standard-crud/departmentStandardCrudResource';
@@ -54,6 +57,18 @@ describe('organization department standard CRUD metadata', () => {
       'SortOrder',
       'IsEnabled',
     ]);
+  });
+
+  it('binds the actual read-only Department detail without inventing unused form lookup sources', () => {
+    const requirements = compiledRequirements as ActionDataAccessRequirement[];
+    expect(requirements.filter(item => item.viewKey === detailViewDocument.view.key && item.surface === 'lookupBindings')).toEqual([]);
+    const bound = bindActionDataAccess({ ...detailViewDocument, type: 'view' }, requirements);
+    expect(bound.view.dataAccess).toMatchObject({ id: expect.any(String), execution: 'organization.department.read' });
+    expect(bound.view.lookupBindings).toEqual({
+      'organization.companies': 'organization.department.company.lookup',
+      'organization.department.parents': 'organization.department.parent.lookup',
+      'organization.department.parent-filter': 'organization.department.parent.lookup',
+    });
   });
 
   it('resolves Department detail fields from the projected runtime field catalog', () => {

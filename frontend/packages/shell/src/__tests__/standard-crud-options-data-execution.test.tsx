@@ -11,7 +11,7 @@ import detail from '../../../../modules/platform/organization/metadata/views/Per
 import companyList from '../../../../modules/platform/organization/metadata/views/CompanyList.view.json';
 import companyDetail from '../../../../modules/platform/organization/metadata/views/CompanyDetail.view.json';
 import runtimeModels from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationRuntimeModels.contract.json';
-import compiledRequirements from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationStandardReadDataAccess.contract.json';
+import compiledRequirements from '../../../../../tests/Kernel.Tests/Fixtures/OrganizationDataAccess.contract.json';
 import listDictionary from '../../../../modules/platform/organization/metadata/dictionaries/PersonListView.dic.json';
 import detailDictionary from '../../../../modules/platform/organization/metadata/dictionaries/PersonDetailView.dic.json';
 import companyListDictionary from '../../../../modules/platform/organization/metadata/dictionaries/CompanyListView.dic.json';
@@ -54,6 +54,14 @@ const readDeclaration = (viewKey: string) => {
   const reads = declarations.filter(item => item.viewKey === viewKey && item.surface === 'read');
   expect(reads).toHaveLength(1);
   return reads[0];
+};
+const editDeclaration = (viewKey: string, surface: string) => {
+  const edits = declarations.filter(item => item.viewKey === viewKey && item.surface === surface && item.actionKey === 'edit');
+  expect(edits).toHaveLength(1);
+  expect(edits[0].execution).toBe('organization.person.update');
+  expect(edits[0].requirements?.find(role => role.stage === 'prepare')?.anyOf).toEqual([['read']]);
+  expect(edits[0].requirements?.find(role => role.stage === 'submit')?.anyOf).toEqual([['read', 'edit']]);
+  return edits[0];
 };
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
 
@@ -133,13 +141,15 @@ it('opens the real Company PageEntry detail drawer with its own read declaration
   expect(detailRead.id).not.toBe(listRead.id);
 });
 
-it('binds Position options through the real Person PageEntry and retains each query and editor position, current value and cancellation', async () => {
+it('binds Position and owned Organization lookups through the real Person PageEntry and retains each query and editor position, current value and cancellation', async () => {
   const user = { id: 'reader', ecode: 'reader', ename: '读取账号', revision: 1, mustChangePassword: false,
     isLocalAdministrator: false, timeZoneId: 'UTC', featurePositions: [...new Set([...declaration.featurePositions, ...detailDeclaration.featurePositions])] };
   const fields = { EID: 'person-one', PersonNo: 'P-1', ENAME: '人员', IsEnabled: true, PositionId: 'position-old',
-    CompanyId: null, DepartmentId: null, EmploymentStatus: 'Employed', CreatedBy: 'reader', UpdatedBy: 'reader',
+    CompanyId: null, DepartmentId: null, EmploymentStatus: 'FullTime', CreatedBy: 'reader', UpdatedBy: 'reader',
     CreatedAt: '2026-10-19T00:00:00Z', UpdatedAt: '2026-10-19T00:00:00Z' };
   const requests: Request[] = [];
+  const organizationRequests: Request[] = [];
+  const writes: Request[] = [];
   const reads: Request[] = [];
   let pending = false;
   let finish!: (response: Response) => void;
@@ -147,6 +157,7 @@ it('binds Position options through the real Person PageEntry and retains each qu
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin), init);
     const url = new URL(request.url);
     if (url.pathname.endsWith('/current-user')) return json(user);
+    if (url.pathname.endsWith('/antiforgery-token')) return json({ requestToken: 'options-test-token' });
     if (url.pathname === '/api/organization/positions/options') {
       requests.push(request);
       const expected = request.headers.get('X-NewP-Feature') === detailEditPosition ? detailDeclaration : declaration;
@@ -156,10 +167,28 @@ it('binds Position options through the real Person PageEntry and retains each qu
         currentItems: url.searchParams.get('currentValueIds') === 'position-old' ? [{ value: 'position-old', label: '当前职位' }] : [],
         page: 1, pageSize: 20, hasMore: false });
     }
-    if (url.pathname.includes('/person-lookups/')) return json({ items: [], currentItems: [], page: 1, pageSize: 20, hasMore: false });
+    if (url.pathname.includes('/person-lookups/')) {
+      organizationRequests.push(request);
+      const provider = url.pathname.endsWith('/companies') ? 'organization.companies' : 'organization.departments';
+      const viewKey = request.headers.get('X-NewP-Feature') === detailEditPosition ? detail.view.key : list.view.key;
+      const expected = declarations.filter(item => item.viewKey === viewKey && item.surface === 'lookupBindings' && item.actionKey === provider);
+      expect(expected).toHaveLength(1);
+      if (request.headers.get('X-NewP-Data-Declaration') !== expected[0].id) return json({ title: '专属候选声明缺失', code: 'DECLARATION_REQUIRED' }, 400);
+      return json({ items: [], currentItems: [], page: 1, pageSize: 20, hasMore: false });
+    }
     if (url.pathname === '/api/organization/persons/person-one') {
+      if (request.method === 'PUT') {
+        writes.push(request);
+        const expected = editDeclaration(detail.view.key, 'pageActions');
+        if (request.headers.get('X-NewP-Data-Declaration') !== expected.id || request.headers.get('X-NewP-Feature') !== detailEditPosition)
+          return json({ title: '提交未使用本详情编辑声明', code: 'DECLARATION_REQUIRED' }, 400);
+        return json({ fields, summaries: {} });
+      }
       reads.push(request);
-      if (request.headers.get('X-NewP-Data-Declaration') !== readDeclaration(detail.view.key).id) return json({ title: '详情读取声明缺失', code: 'DECLARATION_REQUIRED' }, 400);
+      const feature = request.headers.get('X-NewP-Feature');
+      const expected = feature === editPosition ? editDeclaration(list.view.key, 'rowActions')
+        : feature === detailEditPosition ? editDeclaration(detail.view.key, 'pageActions') : readDeclaration(detail.view.key);
+      if (request.headers.get('X-NewP-Data-Declaration') !== expected.id) return json({ title: '详情读取声明缺失', code: 'DECLARATION_REQUIRED' }, 400);
       return json({ fields, summaries: {} });
     }
     if (url.pathname === '/api/organization/persons') {
@@ -206,7 +235,7 @@ it('binds Position options through the real Person PageEntry and retains each qu
   const edit = () => [...container.querySelectorAll<HTMLButtonElement>('tr[data-row-key="person-one"] button')].find(node => node.textContent?.trim() === '编辑');
   await vi.waitFor(() => expect(edit()).toBeDefined()); await act(async () => edit()!.click());
   await vi.waitFor(() => expect(reads.some(request => request.headers.get('X-NewP-Feature') === editPosition)).toBe(true));
-  expect(reads.find(request => request.headers.get('X-NewP-Feature') === editPosition)?.headers.get('X-NewP-Data-Declaration')).toBe(readDeclaration(detail.view.key).id);
+  expect(reads.find(request => request.headers.get('X-NewP-Feature') === editPosition)?.headers.get('X-NewP-Data-Declaration')).toBe(editDeclaration(list.view.key, 'rowActions').id);
   await vi.waitFor(() => expect(document.querySelector('.ant-drawer')?.textContent).toContain('当前职位'));
   const currentRequest = requests.find(request => request.headers.get('X-NewP-Feature') === editPosition && new URL(request.url).searchParams.get('currentValueIds') === 'position-old');
   expect(currentRequest?.headers.get('X-NewP-Data-Declaration')).toBe(declaration.id);
@@ -231,6 +260,18 @@ it('binds Position options through the real Person PageEntry and retains each qu
   expect(detailRequest?.headers.get('X-NewP-Data-Declaration')).toBe(detailDeclaration.id);
   expect(new URL(detailRequest!.url).searchParams.get('currentValueIds')).toBe('position-old');
   expect(detailDeclaration.id).not.toBe(declaration.id);
-  // 完整详情已有正式read快照；旧编辑动作没有prepare契约，不因options的编辑位置再取一次详情。
+  // 完整详情复用已有read快照开编辑，不把提交声明改成强制读取预检；列表抽屉仍保留原prepare。
   expect(reads).toHaveLength(fullDetailReads);
+  for (const position of [entryPosition, createPosition, editPosition, detailEditPosition]) {
+    const companyRequest = organizationRequests.find(request => new URL(request.url).pathname.endsWith('/companies') && request.headers.get('X-NewP-Feature') === position);
+    expect(companyRequest, `正式公司候选来源 ${position}`).toBeDefined();
+    const viewKey = position === detailEditPosition ? detail.view.key : list.view.key;
+    const expected = declarations.filter(item => item.viewKey === viewKey && item.surface === 'lookupBindings' && item.actionKey === 'organization.companies');
+    expect(expected).toHaveLength(1);
+    expect(companyRequest!.headers.get('X-NewP-Data-Declaration')).toBe(expected[0].id);
+  }
+  await act(async () => container.querySelector<HTMLFormElement>('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  await vi.waitFor(() => expect(writes, document.querySelector('.np-standard-crud-form-edit')?.textContent ?? 'editor missing').toHaveLength(1));
+  expect(writes[0].headers.get('X-NewP-Data-Declaration')).toBe(editDeclaration(detail.view.key, 'pageActions').id);
+  await vi.waitFor(() => expect(container.querySelector('form')).toBeNull());
 });

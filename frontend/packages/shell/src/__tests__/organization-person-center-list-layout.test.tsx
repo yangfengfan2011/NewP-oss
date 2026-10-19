@@ -508,6 +508,7 @@ describe('organization person center list layout', () => {
       true,
       expect.any(AbortSignal),
       undefined,
+      formalDataAccessFor(personListViewDocument.view.key, 'lookupBindings', 'organization.companies'),
     );
     expect(fetchSpy.mock.calls.filter(([url, init]) => (
       typeof url === 'string'

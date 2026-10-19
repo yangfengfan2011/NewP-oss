@@ -18,8 +18,7 @@ public static class PositionCrudDescriptorFactory
             UpdateFields: ["ENAME", "Description", "IsEnabled"]);
         return new StandardCrudDescriptor
         {
-            LegacyDataExecutions = ["create", "update", "delete"],
-            DataExecutions = new Dictionary<string, string> { ["list"] = "organization.position.list", ["read"] = "organization.position.read", ["options"] = "organization.position.options" },
+            DataExecutions = new Dictionary<string, string> { ["create"] = "organization.position.create", ["update"] = "organization.position.update", ["delete"] = "organization.position.delete", ["list"] = "organization.position.list", ["read"] = "organization.position.read", ["options"] = "organization.position.options" },
             ResourceKey = "organization.position",
             ModuleId = "Organization",
             ModelName = "Position",

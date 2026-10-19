@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using ICP.Platform.Authorization.Contracts;
+using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Testing;
@@ -268,23 +269,23 @@ public sealed class DataScopePersonMutationSqlServerTests
         var rule = new DataScopeRuleDto("PersonWriteScopeRule", "PersonWriteScopeRule", null, "写入候选",
             true, "organization.person", new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement("禁止创建")),
             [new("PersonWriteScopeSubject", "all", null, 0, new Dictionary<string, string> { ["create"] = "deny" })], []);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await SendAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonWriteScopeRule", rule))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         var payload = new { PersonNo = "WRITE-SCOPE-DENIED", ENAME = "禁止创建", EmploymentStatus = "Active", IsEnabled = true };
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post,
+        using (var response = await SendAsync(ordinary, create, HttpMethod.Post,
             "/api/organization/persons", payload))
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
 
-        var visible = await FeatureHttpTestRequests.CreateAsync(ordinary, create, "/api/organization/persons",
+        var visible = await CreateAsync(ordinary, create, "/api/organization/persons",
             new { PersonNo = "WRITE-SCOPE-VISIBLE", ENAME = "可见人员", EmploymentStatus = "Active", IsEnabled = true });
         var id = BusinessAuditSqlServerHttpApiTests.Id(visible);
         var hidden = rule with { Condition = new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement("移出范围")),
             Subjects = [rule.Subjects[0] with { Actions = new Dictionary<string, string> { ["read"] = "deny" } }] };
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await SendAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonWriteScopeRule", hidden))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post,
+        using (var response = await SendAsync(ordinary, create, HttpMethod.Post,
             "/api/organization/persons", new { PersonNo = "WRITE-SCOPE-HIDDEN", ENAME = "移出范围", EmploymentStatus = "Active", IsEnabled = true }))
         {
             Assert.Equal(HttpStatusCode.Created, response.StatusCode);
@@ -303,71 +304,71 @@ public sealed class DataScopePersonMutationSqlServerTests
                     && EF.Property<string>(row, "ObjectId") == hiddenId);
             Assert.Equal(0, grants);
         }
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get,
+        using (var response = await SendAsync(ordinary, read, HttpMethod.Get,
             $"/api/organization/persons/{hiddenId}"))
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, edit, HttpMethod.Put,
+        using (var response = await SendAsync(ordinary, edit, HttpMethod.Put,
             $"/api/organization/persons/{id}", new { ENAME = "移出范围" }))
         {
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             Assert.DoesNotContain("移出范围", await response.Content.ReadAsStringAsync());
         }
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get,
+        using (var response = await SendAsync(ordinary, read, HttpMethod.Get,
             $"/api/organization/persons/{id}"))
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, edit, HttpMethod.Put,
+        using (var response = await SendAsync(ordinary, edit, HttpMethod.Put,
             $"/api/organization/persons/{id}", new { ENAME = "再编辑" }))
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, delete, HttpMethod.Delete,
+        using (var response = await SendAsync(ordinary, delete, HttpMethod.Delete,
             $"/api/organization/persons/{id}"))
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
 
-        var deletable = await FeatureHttpTestRequests.CreateAsync(ordinary, create, "/api/organization/persons",
+        var deletable = await CreateAsync(ordinary, create, "/api/organization/persons",
             new { PersonNo = "WRITE-SCOPE-DELETE", ENAME = "删除候选", EmploymentStatus = "Active", IsEnabled = true });
         var deleteId = BusinessAuditSqlServerHttpApiTests.Id(deletable);
         var deleteDenied = rule with { Condition = new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement("删除候选")),
             Subjects = [rule.Subjects[0] with { Actions = new Dictionary<string, string> { ["delete"] = "deny" } }] };
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await SendAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonWriteScopeRule", deleteDenied))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, delete, HttpMethod.Delete,
+        using (var response = await SendAsync(ordinary, delete, HttpMethod.Delete,
             $"/api/organization/persons/{deleteId}"))
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await SendAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonWriteScopeRule", deleteDenied with { Subjects = [] }))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, delete, HttpMethod.Delete,
+        using (var response = await SendAsync(ordinary, delete, HttpMethod.Delete,
             $"/api/organization/persons/{deleteId}"))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
 
-        var company = await FeatureHttpTestRequests.CreateAsync(admin,
+        var company = await CreateAsync(admin,
             http.Organization("companies", "create", "list.pageActions"), "/api/organization/companies",
             new { ECODE = "WRITE-SCOPE", ENAME = "写入范围公司", SortOrder = "0100" });
         var companyId = BusinessAuditSqlServerHttpApiTests.Id(company);
-        var department = await FeatureHttpTestRequests.CreateAsync(admin,
+        var department = await CreateAsync(admin,
             http.Organization("departments", "create", "list.pageActions"), "/api/organization/departments",
             new { ECODE = "WRITE-SCOPE-DEP", ENAME = "写入范围部门", CompanyId = companyId, SortOrder = "0100" });
-        var businessPerson = await FeatureHttpTestRequests.CreateAsync(admin, create, "/api/organization/persons",
+        var businessPerson = await CreateAsync(admin, create, "/api/organization/persons",
             new { PersonNo = "WRITE-SCOPE-BUSINESS", ENAME = "业务条件人员", CompanyId = companyId,
                 DepartmentId = BusinessAuditSqlServerHttpApiTests.Id(department), EmploymentStatus = "Active", IsEnabled = true });
         var businessId = BusinessAuditSqlServerHttpApiTests.Id(businessPerson);
         var businessRule = rule with { Condition = new("business", "", "", JsonSerializer.SerializeToElement((object?)null),
                 Key: "organization.person.departmentEnabled"),
             Subjects = [rule.Subjects[0] with { Actions = new Dictionary<string, string> { ["edit"] = "deny" } }] };
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await SendAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonWriteScopeRule", businessRule))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, read, HttpMethod.Get,
+        using (var response = await SendAsync(ordinary, read, HttpMethod.Get,
             $"/api/organization/persons/{businessId}"))
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, edit, HttpMethod.Put,
+        using (var response = await SendAsync(ordinary, edit, HttpMethod.Put,
             $"/api/organization/persons/{businessId}", new { ENAME = "不得修改" }))
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await SendAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonWriteScopeRule", businessRule with
             { Subjects = [rule.Subjects[0] with { Actions = new Dictionary<string, string> { ["create"] = "deny" } }] }))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post,
+        using (var response = await SendAsync(ordinary, create, HttpMethod.Post,
             "/api/organization/persons", new { PersonNo = "WRITE-SCOPE-VALID-BUSINESS", ENAME = "业务条件候选",
                 CompanyId = companyId, DepartmentId = BusinessAuditSqlServerHttpApiTests.Id(department),
                 EmploymentStatus = "Active", IsEnabled = true }))
@@ -375,26 +376,26 @@ public sealed class DataScopePersonMutationSqlServerTests
         var auditRule = rule with { Condition = new("attribute", "CreatedBy", "equal",
             JsonSerializer.SerializeToElement(actor.AccountId)),
             Subjects = [rule.Subjects[0] with { Actions = new Dictionary<string, string> { ["create"] = "deny" } }] };
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await SendAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonWriteScopeRule", auditRule))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post,
+        using (var response = await SendAsync(ordinary, create, HttpMethod.Post,
             "/api/organization/persons", new { PersonNo = "WRITE-SCOPE-AUDIT", ENAME = "服务端审计字段候选",
                 EmploymentStatus = "Active", IsEnabled = true }))
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await SendAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonWriteScopeRule", rule with
             { Condition = new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement("管理员仍可维护")) }))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post,
+        using (var response = await SendAsync(admin, create, HttpMethod.Post,
             "/api/organization/persons", new { PersonNo = "WRITE-SCOPE-ADMIN", ENAME = "管理员仍可维护",
                 EmploymentStatus = "Active", IsEnabled = true }))
             Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, create, HttpMethod.Post,
+        using (var response = await SendAsync(admin, create, HttpMethod.Post,
             "/api/organization/persons", new { PersonNo = "WRITE-SCOPE-INVALID", ENAME = "业务约束仍生效",
                 CompanyId = companyId, EmploymentStatus = "Active", IsEnabled = true }))
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        using (var response = await FeatureHttpTestRequests.SendAsync(admin, save, HttpMethod.Put,
+        using (var response = await SendAsync(admin, save, HttpMethod.Put,
             "/api/authorization/data-scope/rules/PersonWriteScopeRule", rule with
             { Condition = new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement("扩展候选")) }))
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
@@ -403,10 +404,27 @@ public sealed class DataScopePersonMutationSqlServerTests
         extension.SupplementedName = "扩展候选";
         try
         {
-            using var response = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post,
+            using var response = await SendAsync(ordinary, create, HttpMethod.Post,
                 "/api/organization/persons", new { PersonNo = "WRITE-SCOPE-EXTENSION", EmploymentStatus = "Active", IsEnabled = true });
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         }
         finally { extension.Mode = ObjectOperationExtensionProbeMode.None; }
+
+        // 这个既有业务语义资产消费实际正式绑定；缺失和串用反例仍在独立测试中直接发原始请求。
+        ActionDataAccessRequirement? BindingFor(FeaturePoint point)
+        {
+            var execution = point.Position == create.Position ? "organization.person.create"
+                : point.Position == edit.Position ? "organization.person.update"
+                : point.Position == delete.Position ? "organization.person.delete"
+                : point.Position == read.Position ? "organization.person.read"
+                : point.Position == http.Organization("companies", "create", "list.pageActions").Position ? "organization.company.create"
+                : point.Position == http.Organization("departments", "create", "list.pageActions").Position ? "organization.department.create"
+                : point.Position == save.Position ? null : throw new InvalidOperationException("测试未登记该执行来源。");
+            return execution is null ? null : http.Declaration(execution, point);
+        }
+        Task<HttpResponseMessage> SendAsync(HttpClient client, FeaturePoint point, HttpMethod method, string path, object? body = null) =>
+            FeatureHttpTestRequests.SendAsync(client, point, method, path, body, BindingFor(point));
+        Task<JsonElement> CreateAsync(HttpClient client, FeaturePoint point, string path, object body) =>
+            FeatureHttpTestRequests.CreateAsync(client, point, path, body, BindingFor(point));
     }
 }

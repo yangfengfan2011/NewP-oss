@@ -44,7 +44,8 @@ public sealed class StandardReadExecutionContractTests
     {
         var result = new CanonicalModulePlanCompiler().Compile("standard-read", new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")));
         Assert.True(result.IsSuccess, JsonSerializer.Serialize(result.Diagnostics));
-        var requirements = result.Plan!.ActionDataAccessCatalog.Where(item => item.ModuleId == "Organization" && item.Provider?.StartsWith("standardCrud.", StringComparison.Ordinal) == true).ToArray();
+        var requirements = result.Plan!.ActionDataAccessCatalog.Where(item => item.ModuleId == "Organization"
+            && item.Provider is "standardCrud.list" or "standardCrud.read" or "standardCrud.options" or "standardCrud.export").ToArray();
         var lookup = Assert.Single(requirements, item => item.Execution == "organization.position.options" && item.ViewKey == "organization.person.list");
         var detailLookup = Assert.Single(requirements, item => item.Execution == "organization.position.options" && item.ViewKey == "organization.person.detail");
         Assert.NotEqual(lookup.Id, detailLookup.Id);

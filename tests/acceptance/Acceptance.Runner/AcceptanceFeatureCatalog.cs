@@ -43,6 +43,12 @@ internal sealed class AcceptanceFeatureCatalog(IReadOnlyList<FeaturePoint> point
     internal string Declaration(FeaturePoint point) => (declarations ?? []).Single(declaration =>
         declaration.ModuleId == point.ModuleId && declaration.FeaturePositions.Contains(point.Position)).Id;
 
+    // 同一表单位置同时包含写入和候选读取来源；准备请求按真实执行选择，不借位置猜测。
+    internal string Declaration(FeaturePoint point, string execution, string provider, string resourceKey) =>
+        (declarations ?? []).Single(declaration => declaration.ModuleId == point.ModuleId
+            && declaration.Execution == execution && declaration.Provider == provider
+            && declaration.Resources.Contains(resourceKey) && declaration.FeaturePositions.Contains(point.Position)).Id;
+
     private FeaturePoint Require(Func<FeaturePoint, bool> predicate, string description)
     {
         var matches = points.Where(predicate).ToArray();

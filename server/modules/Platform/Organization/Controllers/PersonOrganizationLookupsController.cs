@@ -22,6 +22,7 @@ public sealed class PersonOrganizationLookupsController(
     /// </summary>
     [HttpGet("companies")]
     [RequireFeature("organization.person.company.lookup")]
+    [OrganizationLookupExecution("organization.person.company.lookup", "organization.company")]
     public async Task<ActionResult<StandardCrudLookupResult>> Companies(
         [FromQuery] string? keyword = null,
         [FromQuery] int page = 1,
@@ -31,8 +32,8 @@ public sealed class PersonOrganizationLookupsController(
         CancellationToken cancellationToken = default)
     {
         var result = await companyDirectory.LookupAsync(
-            OrganizationLookupHttpProjection.CreateRequest(
-                keyword, page, pageSize, currentValueIds, includeDisabled),
+            OrganizationLookupHttpProjection.WithExecution(OrganizationLookupHttpProjection.CreateRequest(
+                keyword, page, pageSize, currentValueIds, includeDisabled), "organization.person.company.lookup"),
             cancellationToken);
         return Ok(OrganizationLookupHttpProjection.Map(result, includeDisabled));
     }
@@ -42,6 +43,7 @@ public sealed class PersonOrganizationLookupsController(
     /// </summary>
     [HttpGet("departments")]
     [RequireFeature("organization.person.department.lookup")]
+    [OrganizationLookupExecution("organization.person.department.lookup", "organization.department")]
     public async Task<ActionResult<StandardCrudLookupResult>> Departments(
         [FromQuery] string companyId,
         [FromQuery] string? keyword = null,
@@ -61,8 +63,8 @@ public sealed class PersonOrganizationLookupsController(
 
         var result = await departmentDirectory.LookupAsync(
             companyId,
-            OrganizationLookupHttpProjection.CreateRequest(
-                keyword, page, pageSize, currentValueIds, includeDisabled),
+            OrganizationLookupHttpProjection.WithExecution(OrganizationLookupHttpProjection.CreateRequest(
+                keyword, page, pageSize, currentValueIds, includeDisabled), "organization.person.department.lookup"),
             cancellationToken);
         return Ok(OrganizationLookupHttpProjection.Map(result, includeDisabled));
     }

@@ -54,7 +54,7 @@ it('pins the real person, keeps a draft locally and reloads saved configuration 
   expect(add).toBeDefined();
   await act(async () => { add!.click(); });
   expect(draftState).toHaveBeenLastCalledWith({ ready: false, dirty: true });
-  const confirm = [...document.querySelectorAll('.ant-drawer button')].find(button => button.textContent?.replace(/\s/g, '') === '确定') as HTMLElement;
+  const confirm = [...document.querySelectorAll('section[data-subject-editor] button')].find(button => button.textContent?.replace(/\s/g, '') === '确定') as HTMLElement;
   await act(async () => confirm.click());
   expect(draftState).toHaveBeenLastCalledWith({ ready: true, dirty: true });
   expect(document.querySelector('tr[aria-label="主体授权项 1"]')).not.toBeNull();

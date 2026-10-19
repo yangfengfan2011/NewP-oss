@@ -108,13 +108,16 @@ internal static class HttpTestActors
         var suffix = accountId[^12..];
         var company = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(administrator,
             http.Organization("companies", "create", "list.pageActions"), "/api/organization/companies",
-            new { ECODE = "ACT-" + suffix, ENAME = "测试准入公司-" + suffix, SortOrder = "9999" }));
+            new { ECODE = "ACT-" + suffix, ENAME = "测试准入公司-" + suffix, SortOrder = "9999" },
+            http.Declaration("organization.company.create", http.Organization("companies", "create", "list.pageActions"))));
         var department = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(administrator,
             http.Organization("departments", "create", "list.pageActions"), "/api/organization/departments",
-            new { ECODE = "ACT-" + suffix, ENAME = "测试准入部门-" + suffix, CompanyId = company, SortOrder = "9999" }));
+            new { ECODE = "ACT-" + suffix, ENAME = "测试准入部门-" + suffix, CompanyId = company, SortOrder = "9999" },
+            http.Declaration("organization.department.create", http.Organization("departments", "create", "list.pageActions"))));
         var person = BusinessAuditSqlServerHttpApiTests.Id(await FeatureHttpTestRequests.CreateAsync(administrator,
             http.Organization("persons", "create", "list.pageActions"), "/api/organization/persons",
-            new { PersonNo = "ZZZ-ACTOR-" + suffix, ENAME = "测试准入人员-" + suffix, CompanyId = company, DepartmentId = department, EmploymentStatus = "Active", IsEnabled = true }));
+            new { PersonNo = "ZZZ-ACTOR-" + suffix, ENAME = "测试准入人员-" + suffix, CompanyId = company, DepartmentId = department, EmploymentStatus = "Active", IsEnabled = true },
+            http.Declaration("organization.person.create", http.Organization("persons", "create", "list.pageActions"))));
         using var binding = await FeatureHttpTestRequests.SendAsync(administrator, http.Organization("persons", "linkUser", "detail.custom"),
             HttpMethod.Put, $"/api/organization/persons/{person}/user-binding",
             new { accountEid = accountId, expectedRevision = account.GetProperty("revision").GetInt64(), reason = "准备普通测试主体" });

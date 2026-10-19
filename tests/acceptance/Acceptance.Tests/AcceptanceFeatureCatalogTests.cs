@@ -119,6 +119,31 @@ public sealed class AcceptanceFeatureCatalogTests
     }
 
     [Fact]
+    public void OrganizationPreparation_SelectsActualWriteInsteadOfOtherSourcesAtTheSameFormPosition()
+    {
+        var root = GetRepositoryRoot();
+        var documents = ReadMetadataDocuments(root, "Organization");
+        try
+        {
+            var declarations = JsonSerializer.Deserialize<ActionDataAccessRequirement[]>(File.ReadAllText(Path.Combine(root.FullName,
+                "tests", "Kernel.Tests", "Fixtures", "OrganizationDataAccess.contract.json")), new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+            var catalog = new AcceptanceFeatureCatalog(CompileFeatureCatalog(root, "Organization", documents), declarations);
+            foreach (var (tab, resource) in new[] { ("companies", "company"), ("departments", "department"), ("persons", "person") })
+            {
+                var point = catalog.Action(catalog.OrganizationTab(tab), "create", "list.pageActions");
+                var id = catalog.Declaration(point, "organization." + resource + ".create", "standardCrud.create", "organization." + resource);
+                Assert.Equal("organization." + resource + ".create", declarations.Single(item => item.Id == id).Execution);
+                Assert.Throws<InvalidOperationException>(() => catalog.Declaration(point, "organization." + resource + ".read", "standardCrud.read", "organization." + resource));
+            }
+            var departmentCreate = catalog.Action(catalog.OrganizationTab("departments"), "create", "list.pageActions");
+            Assert.Throws<InvalidOperationException>(() => catalog.Declaration(departmentCreate));
+            Assert.Contains(catalog.Action(catalog.OrganizationTab("structure"), "createCompany", "treeActions").Position,
+                declarations.Single(item => item.ViewKey == "organization.company.list" && item.Surface == "pageActions" && item.ActionKey == "create").FeaturePositions);
+        }
+        finally { foreach (var document in documents) document.Dispose(); }
+    }
+
+    [Fact]
     public void ActionSelection_PreservesEntryAndSurfaceIdentityAndDeclaredDependencies()
     {
         var management = Point("management", "navigation", "organization.structure", null);

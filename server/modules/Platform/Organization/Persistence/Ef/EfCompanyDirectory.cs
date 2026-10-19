@@ -14,6 +14,7 @@ public sealed class EfCompanyDirectory : ICompanyDirectory
     private readonly EfPlatformDbContext _dbContext;
     private readonly OrganizationEffectiveFacts _facts;
     private readonly IDataScopeReadPlanProvider? _readPlans;
+    private readonly Func<IDataExecutionAccess>? _executions;
 
     // Lookup 保留固定 SQL 入口，公司业务事实统一委托模块内部的来源选择者。
     internal EfCompanyDirectory(EfPlatformDbContext dbContext, OrganizationEffectiveFacts facts,
@@ -22,6 +23,13 @@ public sealed class EfCompanyDirectory : ICompanyDirectory
         _dbContext = dbContext;
         _facts = facts;
         _readPlans = readPlans;
+    }
+
+    // 正式模块延迟取得同作用域执行器，避免目录校验与跨模块读取解析器形成构造环。
+    internal EfCompanyDirectory(EfPlatformDbContext dbContext, OrganizationEffectiveFacts facts,
+        IDataScopeReadPlanProvider? readPlans, Func<IDataExecutionAccess> executions) : this(dbContext, facts, readPlans)
+    {
+        _executions = executions;
     }
 
     /// <inheritdoc/>
@@ -51,8 +59,10 @@ public sealed class EfCompanyDirectory : ICompanyDirectory
     {
         var (page, pageSize) = NormalizePage(request);
         var rows = Entities.AsNoTracking().AsQueryable();
-        var readPredicate = _readPlans is null ? null
-            : (await _readPlans.GetReadPlanAsync("organization.company", cancellationToken)).Predicate;
+        var readPredicate = _executions is not null
+            ? (await _executions().GetQueryReadPlanAsync(request.ReadContext
+                ?? throw new ActionDataAccessException(400, "ActionDataAccess.ContextRequired"), "organization.company", cancellationToken)).Predicate
+            : _readPlans is null ? null : (await _readPlans.GetReadPlanAsync("organization.company", cancellationToken)).Predicate;
         if (readPredicate is not null) rows = rows.Where(readPredicate);
         if (!request.IncludeDisabled)
         {

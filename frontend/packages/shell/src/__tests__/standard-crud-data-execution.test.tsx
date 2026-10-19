@@ -94,6 +94,7 @@ it.each(['list', 'detail'] as const)('selects formal read and mutation declarati
     : expect(container.textContent).toContain(fields.ENAME));
   expect(requests[0].declaration).toBe(idFor(entry === 'list' ? list.view.key : detail.view.key, 'read'));
   const button = (text: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find(node => node.textContent?.replace(/\s/g, '') === text);
+  const readsBeforeEdit = requests.filter(request => request.method === 'GET').length;
   if (entry === 'list') {
     await act(async () => button('新建记录')!.click());
     await vi.waitFor(() => expect(document.querySelector('.ant-drawer form')).not.toBeNull());
@@ -109,7 +110,8 @@ it.each(['list', 'detail'] as const)('selects formal read and mutation declarati
   await vi.waitFor(() => expect(document.querySelector('form #ENAME')).not.toBeNull());
   const editForm = () => document.querySelector<HTMLFormElement>(entry === 'list' ? '.ant-drawer form' : 'form')!;
   const editDeclaration = idFor(entry === 'list' ? list.view.key : detail.view.key, entry === 'list' ? 'rowActions' : 'pageActions', 'edit');
-  await vi.waitFor(() => expect(requests.some(request => request.method === 'GET' && request.declaration === editDeclaration)).toBe(true));
+  if (entry === 'list') await vi.waitFor(() => expect(requests.some(request => request.method === 'GET' && request.declaration === editDeclaration)).toBe(true));
+  else expect(requests.filter(request => request.method === 'GET')).toHaveLength(readsBeforeEdit);
   denyWrite = true;
   await act(async () => editForm().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   await vi.waitFor(() => expect(document.body.textContent).toContain('当前操作已被拒绝'));

@@ -18,7 +18,12 @@ namespace ICP.Platform.HostApi.Tests;
 public sealed class DataScopeOwnerAuthorizationConcurrencySqlServerTests
 {
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "owner authorization cannot overwrite a revocation committed while its ACL lock was pending")]
-    public async Task PartOwnerReplacement_RechecksObjectAuthorizationAfterWaitingForItsAclLock()
+    public Task PartOwnerReplacement_RechecksObjectAuthorizationAfterWaitingForItsAclLock() => RecheckAfterAclWaitAsync(false);
+
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "generic authorization cannot overwrite a revocation committed while its ACL lock was pending")]
+    public Task GenericReplacement_RechecksObjectAuthorizationAfterWaitingForItsAclLock() => RecheckAfterAclWaitAsync(true);
+
+    private static async Task RecheckAfterAclWaitAsync(bool generic)
     {
         var gate = new AclGate();
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
@@ -32,7 +37,7 @@ public sealed class DataScopeOwnerAuthorizationConcurrencySqlServerTests
             && point.ActionScope == "list.rowActions");
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "OwnerRace297", "Owner race manager", "ownerrace297", "Owner race manager", read, manage);
         using var ordinary = actor.Client;
-        var path = "/api/part/parts/" + part.Id + "/permissions";
+        var path = generic ? "/api/authorization/data-scope/objects/part.part/" + part.Id : "/api/part/parts/" + part.Id + "/permissions";
         DataScopeObjectDto Configuration(string opinion) => new("part.part", part.Id, [new("owner-race-entry", "user", actor.AccountId, 1,
             new Dictionary<string, string> { ["read"] = "allow", ["authorize"] = opinion })]);
         using (var initialized = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, path, Configuration("allow")))
@@ -58,7 +63,7 @@ public sealed class DataScopeOwnerAuthorizationConcurrencySqlServerTests
             var stored = await FeatureHttpTestRequests.ReadAsync(admin, manage, path);
             var eventDelta = await EventsAsync(fixture, part.Id) - previousEvents;
             Assert.True(response.StatusCode == HttpStatusCode.Forbidden,
-                $"Expected owner PUT 403 after committed revocation, got {(int)response.StatusCode}; current={stored.GetRawText()}; eventDelta={eventDelta}");
+                $"Expected PUT 403 after committed revocation, got {(int)response.StatusCode}; current={stored.GetRawText()}; eventDelta={eventDelta}");
             Assert.Equal("deny", Assert.Single(stored.GetProperty("subjects").EnumerateArray()).GetProperty("actions").GetProperty("authorize").GetString());
             Assert.Equal(1, eventDelta);
         }

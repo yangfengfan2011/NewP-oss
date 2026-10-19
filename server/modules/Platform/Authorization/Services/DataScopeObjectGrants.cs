@@ -8,7 +8,6 @@ using ICP.Platform.Crud.ObjectIds;
 using ICP.Platform.Modules.Audit.Contracts;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Persistence.Abstractions;
-using ICP.Platform.Persistence.Auditing;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,7 +16,7 @@ namespace ICP.Platform.Modules.Authorization.Services;
 /// <summary>对象主体关系及动作意见的单一持久化 owner；查询在数据库关联对象和当前主体。</summary>
 public sealed class DataScopeObjectGrants(EfPlatformDbContext db, IPlatformTransactionExecutor transactions,
     DataScopeCatalog catalog, DataScopeIdentities identities, IBusinessAuditRecorder audit, IPlatformObjectIdGenerator ids,
-    IEntityAuditValueProvider auditValues, ITemporalInputNormalizer? temporal = null)
+    ITemporalInputNormalizer? temporal = null)
 {
     private DbSet<Dictionary<string, object?>> Subjects => db.Set<Dictionary<string, object?>>(db.ResolveModelKey("DataScopeObjectSubject"));
     private DbSet<Dictionary<string, object?>> Actions => db.Set<Dictionary<string, object?>>(db.ResolveModelKey("DataScopeObjectAction"));
@@ -28,18 +27,6 @@ public sealed class DataScopeObjectGrants(EfPlatformDbContext db, IPlatformTrans
         var rows = await Subjects.AsNoTracking().Where(row => EF.Property<string>(row, "ResourceKey") == resourceKey
             && EF.Property<string>(row, "ObjectId") == objectId).ToListAsync(token);
         return await MaterializeAsync(resourceKey, objectId, rows, token);
-    }
-
-    /// <summary>完整校验后按目标锁读取实际旧值；关系、意见和审计在一次事务中提交。</summary>
-    public async Task SaveAsync(DataScopeObjectDto input, CancellationToken token)
-    {
-        var normalized = await PrepareAsync(input, token);
-        using var operation = auditValues.BeginOperation();
-        await transactions.ExecuteAsync(async cancellation =>
-        {
-            await LockAsync(normalized.ResourceKey, normalized.ObjectId, cancellation);
-            return await ApplyAsync(normalized, cancellation);
-        }, token);
     }
 
     // 仅克隆锁内核证的既有父配置；保留已存主体引用，复用结构校验及规范化但不把它当作新手工选主体。

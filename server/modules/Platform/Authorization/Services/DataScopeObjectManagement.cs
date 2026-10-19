@@ -4,19 +4,30 @@ using ICP.Platform.Authorization.Http;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Persistence.Abstractions;
+using ICP.Platform.Persistence.Auditing;
+using ICP.Platform.Crud.ObjectIds;
 using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
 
 namespace ICP.Platform.Modules.Authorization.Services;
 
 /// <summary>完整对象管理操作拥有目标资格、输入校验与执行顺序，调用方无需预先取得资格。</summary>
-public sealed class DataScopeObjectManagement(DataScopeCatalog catalog, CanonicalModulePlan plan,
+public sealed partial class DataScopeObjectManagement(DataScopeCatalog catalog, CanonicalModulePlan plan,
     IFeatureDecisionSource features, IDataScopeObjectDecisionProvider decisions, DataScopeObjectGrants grants,
-    DataScopeIdentities identities, IHttpContextAccessor context, IPlatformTransactionExecutor transactions, IDataScopeObjectAccess? access = null,
-    IDataScopeEvaluationScope? evaluation = null) : IDataScopeObjectAuthorization
+    DataScopeIdentities identities, IHttpContextAccessor context, IPlatformTransactionExecutor transactions, IEntityAuditValueProvider audit, IPlatformObjectIdGenerator ids,
+    IDataScopeObjectAccess? access = null,
+    IDataScopeEvaluationScope? evaluation = null) : IDataScopeObjectAuthorization, IDataScopeBatchAuthorization
 {
-    /// <summary>校验具体资源的授权功能位置，不能借另一资源的入口或请求头获得资格。</summary>
+    /// <summary>只读操作组合功能位置与当前数据资格；手工写入只前置功能资格，数据资格由锁内流程拥有。</summary>
     public async Task<DataScopeObjectEligibility> CheckAsync(string resourceKey, string objectId, CancellationToken token)
+    {
+        using var operation = evaluation?.BeginOperation();
+        var feature = await CheckFeatureAsync(resourceKey, token);
+        return feature == DataScopeObjectEligibility.Allowed ? await CheckDataAsync(resourceKey, objectId, token) : feature;
+    }
+
+    /// <summary>校验具体资源的授权功能位置，不能借另一资源的入口或请求头获得资格。</summary>
+    private async Task<DataScopeObjectEligibility> CheckFeatureAsync(string resourceKey, CancellationToken token)
     {
         using var operation = evaluation?.BeginOperation();
         var resource = catalog.Resolve(resourceKey);
@@ -33,7 +44,7 @@ public sealed class DataScopeObjectManagement(DataScopeCatalog catalog, Canonica
         if (feature == PermissionDecision.Indeterminate) throw new InvalidOperationException("DATA_SCOPE_FEATURE_DECISION_UNAVAILABLE");
         if (feature != PermissionDecision.Granted)
             return DataScopeObjectEligibility.Forbidden;
-        return await CheckDataAsync(resourceKey, objectId, token);
+        return DataScopeObjectEligibility.Allowed;
     }
 
     // 统一数据资格供旧generic功能门禁和已验证来源的owner入口复用，不接收skip或功能头替代值。
@@ -60,27 +71,13 @@ public sealed class DataScopeObjectManagement(DataScopeCatalog catalog, Canonica
         return new(DataScopeObjectStatus.Succeeded, await grants.GetAsync(resourceKey, objectId, token));
     }
 
-    /// <summary>资格仅在保存前验证；提交后失去自身资格仍返回成功。</summary>
+    /// <summary>功能资格前置；最终对象资格、配置和保存由共同锁内流程执行，成功后不回读自身资格。</summary>
     public async Task<DataScopeObjectResult> SaveAsync(string resourceKey, string objectId, DataScopeObjectDto input, CancellationToken token)
     {
         using var operation = evaluation?.BeginOperation();
-        var eligibility = await CheckAsync(resourceKey, objectId, token);
+        var eligibility = await CheckFeatureAsync(resourceKey, token);
         if (eligibility != DataScopeObjectEligibility.Allowed) return new(DeniedStatus(eligibility));
         return await SaveConfigurationAsync(resourceKey, objectId, input, token);
-    }
-
-    // 两个正式入口只在资格来源不同，目标一致性、校验和保存事务共用原实现。
-    private async Task<DataScopeObjectResult> SaveConfigurationAsync(string resourceKey, string objectId, DataScopeObjectDto input, CancellationToken token)
-    {
-        try
-        {
-            if (input.ResourceKey != resourceKey || input.ObjectId != objectId)
-                throw new RolePermissionValidationException("对象授权目标与请求不一致。", "DATA_SCOPE_OBJECT_TARGET_MISMATCH", field: "objectId");
-            await grants.SaveAsync(input, token);
-            return new(DataScopeObjectStatus.Succeeded);
-        }
-        catch (RolePermissionValidationException exception)
-        { return new(DataScopeObjectStatus.InvalidInput, exception.Message, exception); }
     }
 
     /// <summary>被分析账号必须存在；复用正式裁决实现，不改变操作者的管理资格或请求身份。</summary>
@@ -135,16 +132,8 @@ public sealed class DataScopeObjectManagement(DataScopeCatalog catalog, Canonica
     /// <inheritdoc/>
     async Task<DataScopeAuthorizationResult> IDataScopeObjectAuthorization.ReplaceAsync(string resourceKey, string objectId, DataScopeObjectConfiguration input, CancellationToken token)
     {
-        using var operation = evaluation?.BeginOperation();
-        return await transactions.ExecuteAsync<DataScopeAuthorizationResult>(async cancellation =>
-        {
-            await grants.LockAsync(resourceKey, objectId, cancellation);
-            var status = AuthorizationStatus(await CheckDataAsync(resourceKey, objectId, cancellation));
-            if (status != DataScopeAuthorizationStatus.Succeeded) return new(status);
-            var result = await SaveConfigurationAsync(resourceKey, objectId, new(input.ResourceKey, input.ObjectId, input.Subjects), cancellation);
-            return result.Status == DataScopeObjectStatus.Succeeded ? new(DataScopeAuthorizationStatus.Succeeded)
-                : new(DataScopeAuthorizationStatus.InvalidInput, Error(result.ValidationError!));
-        }, token);
+        var result = await SaveConfigurationAsync(resourceKey, objectId, input, token);
+        return new(AuthorizationStatus(result.Status), result.ValidationError is null ? null : Error(result.ValidationError));
     }
 
     /// <inheritdoc/>
@@ -169,6 +158,16 @@ public sealed class DataScopeObjectManagement(DataScopeCatalog catalog, Canonica
         DataScopeObjectEligibility.Forbidden => DataScopeAuthorizationStatus.Forbidden,
         DataScopeObjectEligibility.NotFound => DataScopeAuthorizationStatus.NotFound,
         _ => throw new ArgumentOutOfRangeException(nameof(eligibility))
+    };
+
+    // 手工操作保留原generic结果与owner合同，不依赖两个枚举的数值布局。
+    private static DataScopeAuthorizationStatus AuthorizationStatus(DataScopeObjectStatus status) => status switch
+    {
+        DataScopeObjectStatus.Succeeded => DataScopeAuthorizationStatus.Succeeded,
+        DataScopeObjectStatus.Forbidden => DataScopeAuthorizationStatus.Forbidden,
+        DataScopeObjectStatus.NotFound => DataScopeAuthorizationStatus.NotFound,
+        DataScopeObjectStatus.InvalidInput => DataScopeAuthorizationStatus.InvalidInput,
+        _ => throw new ArgumentOutOfRangeException(nameof(status))
     };
 
     // 资格拒绝属于完整操作的正常结果；事实源故障仍由原异常传播。

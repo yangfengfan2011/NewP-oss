@@ -30,11 +30,12 @@ public sealed class DataScopeObjectManagementTests
         Assert.Empty(fixture.Decisions.Calls);
     }
 
+    // 保存的数据资格依赖真实ACL锁，完整写入反例见HostApi的DataScopeObjectManagementSqlServerTests。
     public static IEnumerable<object[]> DeniedOperations()
     {
         foreach (var operation in new[] { "get", "save", "catalog", "subjects", "explain" })
             foreach (var denial in new[] { "feature", "read", "authorize" })
-                yield return [operation, denial];
+                if (operation != "save" || denial == "feature") yield return [operation, denial];
     }
 
     [Theory]
@@ -61,7 +62,6 @@ public sealed class DataScopeObjectManagementTests
     }
 
     [Theory]
-    [InlineData("save")]
     [InlineData("subjects")]
     public async Task EligibilityValidationFaultsAreNotConvertedToInputErrors(string operation)
     {
@@ -75,7 +75,6 @@ public sealed class DataScopeObjectManagementTests
 
     [Theory]
     [InlineData("get")]
-    [InlineData("save")]
     [InlineData("catalog")]
     [InlineData("subjects")]
     [InlineData("explain")]
@@ -90,40 +89,6 @@ public sealed class DataScopeObjectManagementTests
         Assert.Same(failure, await Assert.ThrowsAsync<OperationCanceledException>(() => Invoke(fixture, operation, cancellation.Token)));
         Assert.Equal(cancellation.Token, fixture.Decisions.Token);
         Assert.Empty(fixture.Directory.Searches);
-    }
-
-    [Theory]
-    [InlineData("authorization.role", "other-target")]
-    [InlineData("other.resource", "target")]
-    public async Task SaveChecksRouteTargetBeforeRejectingDifferentPayload(string resource, string id)
-    {
-        using var fixture = new Fixture();
-        var result = await fixture.Management.SaveAsync("authorization.role", "target", new(resource, id, []), default);
-
-        Assert.Equal(DataScopeObjectStatus.InvalidInput, result.Status);
-        Assert.Equal("对象授权目标与请求不一致。", result.ValidationMessage);
-        var controller = new ICP.Platform.Modules.Authorization.Controllers.DataScopeObjectsController(fixture.Management);
-        var response = Assert.IsType<Microsoft.AspNetCore.Mvc.BadRequestObjectResult>(
-            await controller.Save("authorization.role", "target", new(resource, id, []), default));
-        var problem = Assert.IsType<Microsoft.AspNetCore.Mvc.ProblemDetails>(response.Value);
-        Assert.Equal("DataScope.InvalidConfiguration", problem.Extensions["code"]);
-        Assert.True(problem.Extensions.TryGetValue("reasonKey", out var reason));
-        Assert.Equal("AuthorizationErrors.DATA_SCOPE_OBJECT_TARGET_MISMATCH", reason);
-        Assert.True(problem.Extensions.ContainsKey("fieldErrors"));
-        Assert.Equal(new[] { ("authorization.role", "target", "read"), ("authorization.role", "target", "authorize") }, fixture.Decisions.Calls.Take(2));
-        Assert.Empty(fixture.Directory.Searches);
-    }
-
-    [Fact]
-    public async Task SaveValidationAfterEligibilityRemainsConfigurationError()
-    {
-        using var fixture = new Fixture();
-        var result = await fixture.Management.SaveAsync("authorization.role", "target", new("authorization.role", "target",
-            [new("invalid", "user", "operator", 0, new Dictionary<string, string> { ["invented"] = "allow" })]), default);
-
-        Assert.Equal(DataScopeObjectStatus.InvalidInput, result.Status);
-        Assert.Equal("对象主体授权项或动作意见无效。", result.ValidationMessage);
-        Assert.Equal(2, fixture.Decisions.Calls.Count);
     }
 
     [Fact]
@@ -236,8 +201,8 @@ public sealed class DataScopeObjectManagementTests
             var plan = new CanonicalModulePlan("test", "1.0", "", "", [], [module]);
             var catalog = new DataScopeCatalog(new StandardCrudResourceRegistry([RoleReadResource.Create()]), plan, db, identities);
             Http.Request.Headers["X-NewP-Feature"] = plan.FeatureCatalog[0].Position;
-            var grants = new DataScopeObjectGrants(db, null!, catalog, identities, null!, null!, null!);
-            Management = new(catalog, plan, Features, Decisions, grants, identities, new HttpContextAccessor { HttpContext = Http }, null!);
+            var grants = new DataScopeObjectGrants(db, null!, catalog, identities, null!, null!);
+            Management = new(catalog, plan, Features, Decisions, grants, identities, new HttpContextAccessor { HttpContext = Http }, null!, null!, null!);
         }
 
         public void Dispose() => db.Dispose();

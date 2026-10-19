@@ -4,7 +4,8 @@ using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text.Json;
 using ICP.Platform.Modules.Authorization.DTOs;
-using ICP.Platform.Modules.Authorization.Services;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using ICP.Platform.Persistence.Abstractions;
 using ICP.Platform.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -90,12 +91,20 @@ public sealed class DataScopeDirectSubjectSqlServerTests
             finally { fixture.Fault.Mode = ""; }
             await AssertOriginalAsync();
         }
+        var administrator = await admin.GetFromJsonAsync<JsonElement>("/api/auth/current-user");
         using (var scope = fixture.Services.CreateScope())
         using (var cancellation = new CancellationTokenSource())
         {
             using var activity = new Activity("data-scope-direct-cancellation").Start();
             var flushed = false;
-            var grants = scope.ServiceProvider.GetRequiredService<DataScopeObjectGrants>();
+            var authorization = scope.ServiceProvider.GetRequiredService<IDataScopeObjectAuthorization>();
+            var context = scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>();
+            var previousContext = context.HttpContext;
+            context.HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier,
+                    administrator.GetProperty("id").GetString()!)], "test"))
+            };
             var transactions = scope.ServiceProvider.GetRequiredService<IPlatformTransactionExecutor>();
             fixture.Fault.AfterRegister = async (_, token) =>
             {
@@ -104,8 +113,8 @@ public sealed class DataScopeDirectSubjectSqlServerTests
                 cancellation.Cancel();
                 token.ThrowIfCancellationRequested();
             };
-            try { await Assert.ThrowsAnyAsync<OperationCanceledException>(() => grants.SaveAsync(changed, cancellation.Token)); }
-            finally { fixture.Fault.AfterRegister = null; }
+            try { await Assert.ThrowsAnyAsync<OperationCanceledException>(() => authorization.ReplaceAsync(changed.ResourceKey, changed.ObjectId, changed, cancellation.Token)); }
+            finally { fixture.Fault.AfterRegister = null; context.HttpContext = previousContext; }
             Assert.True(flushed);
         }
         await AssertOriginalAsync();

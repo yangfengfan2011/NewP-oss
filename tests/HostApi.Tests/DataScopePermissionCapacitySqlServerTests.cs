@@ -135,17 +135,23 @@ public sealed partial class DataScopePermissionCostSqlServerTests
         using (var activity = new Activity("permission-capacity-cancel").Start())
         {
             var executor = scope.ServiceProvider.GetRequiredService<IPlatformTransactionExecutor>();
+            var accessor = scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>();
+            var previous = accessor.HttpContext;
+            accessor.HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actor.AccountId)], "test"))
+            };
             fixture.Fault.AfterRegister = async (_, token) => { await executor.FlushAsync(token); flushed = true; cancel.Cancel(); token.ThrowIfCancellationRequested(); };
             try
             {
                 await MeasureAsync("flush-then-cancel", async () =>
                 {
-                    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => scope.ServiceProvider.GetRequiredService<DataScopeObjectGrants>()
-                        .SaveAsync(replacement with { Subjects = replacement.Subjects.Select(subject => subject with { Priority = 2 }).ToArray() }, cancel.Token));
+                    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => scope.ServiceProvider.GetRequiredService<IDataScopeObjectAuthorization>()
+                        .ReplaceAsync(replacement.ResourceKey, replacement.ObjectId, replacement with { Subjects = replacement.Subjects.Select(subject => subject with { Priority = 2 }).ToArray() }, cancel.Token));
                     return JsonSerializer.SerializeToElement(new { flushed, cancelled = cancel.IsCancellationRequested });
                 });
             }
-            finally { fixture.Fault.AfterRegister = null; }
+            finally { fixture.Fault.AfterRegister = null; accessor.HttpContext = previous; }
         }
         Assert.True(flushed);
         Assert.Equal(baseline.GetRawText(), (await FeatureHttpTestRequests.ReadAsync(admin, manage, path)).GetRawText());

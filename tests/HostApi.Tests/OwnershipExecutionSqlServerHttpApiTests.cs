@@ -1,6 +1,12 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json;
 using ICP.Platform.Kernel.ModulePlanning;
+using ICP.Platform.Authorization.Contracts;
+using ICP.Platform.Crud.Ownership;
+using ICP.Platform.Modules.Workspace;
+using ICP.Platform.Persistence.Ownership;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Testing;
@@ -291,7 +297,13 @@ public sealed class OwnershipExecutionSqlServerHttpApiTests
     {
         var slug = model.ToLowerInvariant();
         var resource = slug + "." + slug;
-        await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
+        var receivingFault = new TransferReceivingFault();
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
+        {
+            services.RemoveAll<IEntityOwnershipTransferReceiver>();
+            services.AddScoped<IEntityOwnershipTransferReceiver>(provider => new TransferReceiver(
+                ActivatorUtilities.CreateInstance<WorkspaceOwnershipTransferReceiver>(provider), receivingFault));
+        }, includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
         await InitializeAsync(fixture, admin);
         var position = await ContainerAsync(fixture, admin);
@@ -312,8 +324,8 @@ public sealed class OwnershipExecutionSqlServerHttpApiTests
         var target = await CreateAsync(fixture, sender, position, model, plural, "create" + model, "OWNERSHIP319-BOUND");
         using var services = fixture.Services.CreateScope();
         var plan = services.ServiceProvider.GetRequiredService<CanonicalModulePlan>();
-        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == resource + ".transfer"
-            && item.Provider == "entityOwnership.transfer" && item.Resources.SequenceEqual([resource])
+        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => (item.BusinessBinding ?? item.Execution) == resource + ".transfer"
+            && item.Resources.SequenceEqual([resource])
             && item.FeaturePositions.Contains(transfer.Position));
         var listPoint = Assert.Single(fixture.FeatureCatalog, point => point.ModuleId == model
             && point.Key == slug + "." + plural && point.Kind == "navigation");
@@ -322,41 +334,67 @@ public sealed class OwnershipExecutionSqlServerHttpApiTests
         var path = $"/api/{slug}/{plural}/{target.Id}/transfer";
         var input = new { recipientId = recipient.AccountId };
         await ConfigureAsync("allow", "allow");
+        using (var missing = await FeatureHttpTestRequests.SendAsync(sender, transfer, HttpMethod.Get, path + "/eligibility"))
+            Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        var otherModel = model == "Part" ? "Document" : "Part";
+        var otherSlug = otherModel.ToLowerInvariant();
+        var borrowed = Assert.Single(plan.ActionDataAccessCatalog, item => item.ModuleId == otherModel
+            && item.ViewKey == otherSlug + "." + otherSlug + ".list" && item.Surface == "rowActions" && item.ActionKey == "transfer");
+        using (var crossed = await SendTransferAsync(sender, HttpMethod.Get, "/eligibility", identity: borrowed))
+            Assert.Equal(HttpStatusCode.BadRequest, crossed.StatusCode);
 
-        using (var wrong = await FeatureHttpTestRequests.SendAsync(sender, transfer, HttpMethod.Get,
-                   path + "/eligibility", dataAccess: wrongSource))
+        using (var wrong = await SendTransferAsync(sender, HttpMethod.Get, "/eligibility", identity: wrongSource))
             Assert.Equal(HttpStatusCode.BadRequest, wrong.StatusCode);
-        using (var wrong = await FeatureHttpTestRequests.SendAsync(sender, transfer, HttpMethod.Post, path, input, wrongSource))
+        using (var wrong = await SendTransferAsync(sender, HttpMethod.Post, payload: input, identity: wrongSource))
             Assert.Equal(HttpStatusCode.BadRequest, wrong.StatusCode);
-        using (var prepared = await FeatureHttpTestRequests.SendAsync(sender, transfer, HttpMethod.Get,
-                   path + "/eligibility", dataAccess: declaration))
+        using (var prepared = await SendTransferAsync(sender, HttpMethod.Get, "/eligibility"))
             Assert.True((await ReadOkAsync(prepared)).GetProperty("allowed").GetBoolean());
-        using (var candidates = await FeatureHttpTestRequests.SendAsync(sender, transfer, HttpMethod.Get,
-                   path + "/accounts?query=ownership319-bound-recipient", dataAccess: declaration))
+        using (var candidates = await SendTransferAsync(sender, HttpMethod.Get, "/accounts?query=ownership319-bound-recipient"))
             Assert.Equal(recipient.AccountId, Assert.Single((await ReadOkAsync(candidates)).EnumerateArray()).GetProperty("accountId").GetString());
-        using (var notOwner = await FeatureHttpTestRequests.SendAsync(admin, transfer, HttpMethod.Post, path, input, declaration))
+        using (var notOwner = await SendTransferAsync(admin, HttpMethod.Post, payload: input))
             Assert.Equal(HttpStatusCode.Forbidden, notOwner.StatusCode);
 
         // 已准备不形成允许凭据；submit原位置重读当前edit及其read依赖，失败不产生接收事实。
         foreach (var permission in new[] { (Read: "allow", Edit: "deny"), (Read: "deny", Edit: "allow") })
         {
             await ConfigureAsync(permission.Read, permission.Edit);
-            using var denied = await FeatureHttpTestRequests.SendAsync(sender, transfer, HttpMethod.Post, path, input, declaration);
+            using var denied = await SendTransferAsync(sender, HttpMethod.Post, payload: input);
             Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
             Assert.Equal(owner.AccountId, (await RowAsync(fixture, target))["OwnerId"]);
             var db = services.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
             Assert.False(await db.Set<Dictionary<string, object?>>("WorkspaceTransferNotification").AnyAsync());
         }
         await ConfigureAsync("allow", "allow");
-        using (var succeeded = await FeatureHttpTestRequests.SendAsync(sender, transfer, HttpMethod.Post, path, input, declaration))
+        // 相同错误在平台目标检查之后从真实Receive边界抛出时，不能被目标拒绝403映射吞掉。
+        var beforeReceiveFailure = await EntityOwnershipTransferSqlServerHttpApiTests.SnapshotAsync(fixture,
+            model, "WorkspaceSpace", "WorkspaceFolder", "WorkspaceFolderContent", "BusinessChange", "WorkspaceTransferNotification");
+        receivingFault.Failure = new ActionDataAccessException(404, "StandardCrud.NotFound");
+        using (var businessFailure = await SendTransferAsync(sender, HttpMethod.Post, payload: input))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, businessFailure.StatusCode);
+            Assert.Equal("StandardCrud.NotFound", (await businessFailure.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
+        }
+        Assert.Equal(beforeReceiveFailure, await EntityOwnershipTransferSqlServerHttpApiTests.SnapshotAsync(fixture,
+            model, "WorkspaceSpace", "WorkspaceFolder", "WorkspaceFolderContent", "BusinessChange", "WorkspaceTransferNotification"));
+        receivingFault.Failure = null;
+        using (var succeeded = await SendTransferAsync(sender, HttpMethod.Post, payload: input))
             Assert.Equal(1, (await ReadOkAsync(succeeded)).GetProperty("changed").GetInt32());
         Assert.Equal(recipient.AccountId, (await RowAsync(fixture, target))["OwnerId"]);
-        using (var formerOwner = await FeatureHttpTestRequests.SendAsync(sender, transfer, HttpMethod.Get,
-                   path + "/eligibility", dataAccess: declaration))
+        using (var formerOwner = await SendTransferAsync(sender, HttpMethod.Get, "/eligibility"))
             Assert.Equal(HttpStatusCode.Forbidden, formerOwner.StatusCode);
-        using (var unreadableReceiver = await FeatureHttpTestRequests.SendAsync(receiver, transfer, HttpMethod.Get,
-                   path + "/eligibility", dataAccess: declaration))
+        using (var unreadableReceiver = await SendTransferAsync(receiver, HttpMethod.Get, "/eligibility"))
             Assert.Equal(HttpStatusCode.Forbidden, unreadableReceiver.StatusCode);
+
+        // 强制走实际新按钮头；即使authoring尚未迁移也必须到真实API产生RED，不能由测试自动回退旧声明。
+        async Task<HttpResponseMessage> SendTransferAsync(HttpClient client, HttpMethod method, string suffix = "", object? payload = null,
+            ActionDataAccessRequirement? identity = null)
+        {
+            using var request = new HttpRequestMessage(method, path + suffix);
+            request.Headers.Add("X-NewP-Feature", transfer.Position);
+            request.Headers.Add("X-NewP-Button", (identity ?? declaration).Id);
+            if (payload is not null) request.Content = JsonContent.Create(payload);
+            return await client.SendAsync(request);
+        }
 
         async Task ConfigureAsync(string read, string edit)
         {
@@ -368,4 +406,18 @@ public sealed class OwnershipExecutionSqlServerHttpApiTests
             Assert.Equal(HttpStatusCode.NoContent, configured.StatusCode);
         }
     }
+    private sealed class TransferReceivingFault
+    {
+        internal Exception? Failure;
+    }
+
+    // 注入点是接收模块稳定协作端口；准备与无故障接收仍调用真实Workspace业务，不替代目标或权限事实。
+    private sealed class TransferReceiver(IEntityOwnershipTransferReceiver actual, TransferReceivingFault fault) : IEntityOwnershipTransferReceiver
+    {
+        public ValueTask PrepareAsync(CancellationToken cancellationToken = default) => actual.PrepareAsync(cancellationToken);
+        public ValueTask ReceiveAsync(AccountOwnership recipient, IReadOnlyCollection<EntityOwnershipTransferTarget> targets,
+            CancellationToken cancellationToken = default) => fault.Failure is { } failure
+                ? ValueTask.FromException(failure) : actual.ReceiveAsync(recipient, targets, cancellationToken);
+    }
+
 }

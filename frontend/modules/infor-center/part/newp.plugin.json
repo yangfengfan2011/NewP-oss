@@ -15,7 +15,6 @@
     {"key": "part.part.authorization.manage", "moduleId": "Part", "provider": "authorization.object.manage", "boundary": "entry", "featureBehaviors": ["part.part.authorize", "part.part.read"], "resourceKey": "part.part"},
     {"key": "part.part.authorization.view", "moduleId": "Part", "provider": "authorization.object.view", "boundary": "entry", "featureBehaviors": ["part.part.read"], "resourceKey": "part.part"},
     {"key": "part.part.initializeOwnership", "moduleId": "Part", "provider": "entityOwnership.initialize", "boundary": "entry", "featureBehaviors": ["part.part.initializeOwnership"], "resources": ["part.part"]},
-    {"key": "part.part.transfer", "moduleId": "Part", "provider": "entityOwnership.transfer", "boundary": "entry", "featureBehaviors": ["part.part.transfer"], "resources": ["part.part"]},
     {"key": "part.part.internal.create", "moduleId": "Part", "provider": "standardCrud.create", "boundary": "internal", "featureBehaviors": [], "resourceKey": "part.part", "fixedBindings": [{"kind": "internal", "identity": "part.part.internal.create", "caller": "ICP.Platform.Modules.Part.PartCopyBehavior.ExecuteAsync"}]},
     {"key": "part.part.list", "moduleId": "Part", "provider": "standardCrud.list", "boundary": "entry", "featureBehaviors": ["part.part.read"], "resourceKey": "part.part"},
     {"key": "part.part.read", "moduleId": "Part", "provider": "standardCrud.read", "boundary": "entry", "featureBehaviors": ["part.part.read"], "resourceKey": "part.part"},

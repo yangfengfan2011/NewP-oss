@@ -74,11 +74,17 @@ public sealed class StandardCrudDefaultWriter
                 token => CreateAsync(descriptor, values, source, token).AsTask(),
                 cancellationToken);
         AssertWriteSource(descriptor, "create", null, source);
-        var preparation = source is ObjectOperationWriteSource.Button
+        var preparation = source is ObjectOperationWriteSource.Button or ObjectOperationWriteSource.CreateContinuation
             ? await PrepareCreateCandidateCoreAsync(descriptor, values, cancellationToken)
             : await PrepareCreateCandidateAsync(descriptor, values, source, cancellationToken);
         if (!preparation.Succeeded) return preparation;
         var candidate = preparation.Detail!.Fields;
+        if (source is ObjectOperationWriteSource.CreateContinuation continuation)
+            return await continuation.InvokeAsync(candidate, (official, token) =>
+            {
+                AssertWriteSource(descriptor, "create", null, source);
+                return CreateAuthorizedCoreAsync(descriptor, official, token);
+            }, cancellationToken);
         return source is ObjectOperationWriteSource.Button button
             ? await (_buttons ?? throw new InvalidOperationException("BUTTON_EXECUTION_REQUIRED")).ExecuteAsync(button.Context,
                 new ButtonCreationTarget(descriptor.ResourceKey, descriptor.ModelName, candidate),
@@ -142,6 +148,8 @@ public sealed class StandardCrudDefaultWriter
     public async Task<StandardCrudMutationResult> PrepareCreateCandidateAsync(StandardCrudDescriptor descriptor,
         IReadOnlyDictionary<string, object?> values, ObjectOperationWriteSource? source, CancellationToken cancellationToken = default)
     {
+        if (source is ObjectOperationWriteSource.CreateContinuation)
+            throw new ActionDataAccessException(400, "ObjectOperation.CreationPersistenceRequired");
         AssertWriteSource(descriptor, "create", null, source);
         var preparation = await PrepareCreateCandidateCoreAsync(descriptor, values, cancellationToken);
         if (!preparation.Succeeded) return preparation;
@@ -441,6 +449,13 @@ public sealed class StandardCrudDefaultWriter
     // 来源只能是本次正式写；资源、操作和目标必须与实际owner调用完全一致。
     private void AssertWriteSource(StandardCrudDescriptor descriptor, string operation, string? id, ObjectOperationWriteSource? source)
     {
+        if (source is ObjectOperationWriteSource.CreateContinuation continuation)
+        {
+            if (_transactionExecutor?.IsActive != true || operation != "create" || id is not null)
+                throw new ActionDataAccessException(400, "ObjectOperation.CreationContextRequired");
+            continuation.Validate(descriptor.ResourceKey, descriptor.ModelName);
+            return;
+        }
         if (source is ObjectOperationWriteSource.Internal internalSource)
         {
             if (_transactionExecutor?.IsActive != true) throw new ActionDataAccessException(400, "ObjectOperation.InternalContextRequired");

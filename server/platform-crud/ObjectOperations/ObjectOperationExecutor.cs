@@ -144,6 +144,7 @@ public sealed class ObjectOperationExecutor : IObjectOperationExecutor
 
                     var context = new ObjectOperationContext(objectKey, action, targetId, before.SnapshotValues(), source);
                     StandardCrudMutationResult result;
+                    using (context.ActivateCore())
                     using (_executionContext.EnterCore())
                     {
                         result = await behavior.ExecuteAsync(context, token);

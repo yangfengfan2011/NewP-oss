@@ -158,12 +158,12 @@ export const personStandardCrudResource: StandardCrudResourceRegistration<Record
   actionEligibilityResolvers: personObjectAuthorization.actionEligibilityResolvers,
   actionHandlers: {
     ...personObjectAuthorization.actionHandlers,
-    delete: async ({ id, featurePosition, dataAccess }) => {
+    delete: async ({ id, featurePosition, dataAccess, buttonId }) => {
       if (!id) {
         throw new StandardCrudRequestError('缺少人员标识，无法删除。', 400, {}, { code: 'Organization.Person.InvalidId' });
       }
 
-      await deletePerson(id, featurePosition, dataAccess);
+      await deletePerson(id, featurePosition, dataAccess, buttonId);
     },
     disable: async ({ id, input, featurePosition }) => {
       if (!id) {

@@ -18,16 +18,6 @@
     "behaviorKey": "organization.backend"
   },
   "dataExecutions": [
-    {"key":"organization.company.create","moduleId":"Organization","provider":"standardCrud.create","boundary":"entry","featureBehaviors":["organization.company.create"],"resourceKey":"organization.company"},
-    {"key":"organization.company.update","moduleId":"Organization","provider":"standardCrud.update","boundary":"entry","featureBehaviors":["organization.company.update"],"resourceKey":"organization.company"},
-    {"key":"organization.company.delete","moduleId":"Organization","provider":"standardCrud.delete","boundary":"entry","featureBehaviors":["organization.company.delete"],"resourceKey":"organization.company"},
-    {"key":"organization.department.create","moduleId":"Organization","provider":"standardCrud.create","boundary":"entry","featureBehaviors":["organization.department.create"],"resourceKey":"organization.department"},
-    {"key":"organization.department.update","moduleId":"Organization","provider":"standardCrud.update","boundary":"entry","featureBehaviors":["organization.department.update"],"resourceKey":"organization.department"},
-    {"key":"organization.department.delete","moduleId":"Organization","provider":"standardCrud.delete","boundary":"entry","featureBehaviors":["organization.department.delete"],"resourceKey":"organization.department"},
-    {"key":"organization.position.delete","moduleId":"Organization","provider":"standardCrud.delete","boundary":"entry","featureBehaviors":["organization.position.delete"],"resourceKey":"organization.position"},
-    {"key":"organization.person.create","moduleId":"Organization","provider":"standardCrud.create","boundary":"entry","featureBehaviors":["organization.person.create"],"resourceKey":"organization.person"},
-    {"key":"organization.person.update","moduleId":"Organization","provider":"standardCrud.update","boundary":"entry","featureBehaviors":["organization.person.update"],"resourceKey":"organization.person"},
-    {"key":"organization.person.delete","moduleId":"Organization","provider":"standardCrud.delete","boundary":"entry","featureBehaviors":["organization.person.delete"],"resourceKey":"organization.person"},
     {"key":"organization.company.authorization.manage","moduleId":"Organization","provider":"authorization.object.manage","boundary":"entry","featureBehaviors":["organization.company.authorize"],"resourceKey":"organization.company"},
     {"key":"organization.department.authorization.manage","moduleId":"Organization","provider":"authorization.object.manage","boundary":"entry","featureBehaviors":["organization.department.authorize"],"resourceKey":"organization.department"},
     {"key":"organization.position.authorization.manage","moduleId":"Organization","provider":"authorization.object.manage","boundary":"entry","featureBehaviors":["organization.position.authorize"],"resourceKey":"organization.position"},

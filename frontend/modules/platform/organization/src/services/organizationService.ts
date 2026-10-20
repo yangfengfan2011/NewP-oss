@@ -7,6 +7,7 @@ import {
   readStandardCrudNullableString,
   readStandardCrudString,
   readStandardCrudRequestError,
+  standardCrudRequestHeaders,
   type ActionDataAccessRequirement,
   type StandardCrudDetail,
   type StandardCrudListResult,
@@ -429,13 +430,10 @@ export async function updatePerson(personId: string, values: StandardCrudMutatio
   );
 }
 
-export async function deletePerson(personId: string, featurePosition?: string, dataAccess?: ActionDataAccessRequirement): Promise<void> {
+export async function deletePerson(personId: string, featurePosition?: string, dataAccess?: ActionDataAccessRequirement, buttonId?: string): Promise<void> {
   await requestJson<void>(
     `/api/organization/persons/${personId}`,
-    { method: 'DELETE', ...(featurePosition || dataAccess ? { headers: {
-      ...(featurePosition ? { 'X-NewP-Feature': featurePosition } : {}),
-      ...(dataAccess ? { 'X-NewP-Data-Declaration': dataAccess.id } : {}),
-    } } : {}) },
+    { method: 'DELETE', headers: standardCrudRequestHeaders({ featurePosition, dataAccess, buttonId }) },
     '删除人员失败',
   );
 }

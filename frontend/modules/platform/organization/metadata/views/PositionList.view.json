@@ -87,7 +87,7 @@
       {
         "key": "delete",
         "labelKey": "Action_Delete",
-        "standardAction": "delete", "dataAccess": { "execution": "organization.position.delete", "resources": ["organization.position"] },
+        "standardAction": "delete", "dataAccess": { "object": "Position", "actions": ["delete"] },
         "variant": "danger",
         "confirmMessageKey": "Action_Delete_Confirm"
       }

@@ -189,7 +189,7 @@
       {
         "key": "create",
         "labelKey": "Action_Create",
-        "standardAction": "create", "dataAccess": { "execution": "organization.person.create", "resources": ["organization.person"] },
+        "standardAction": "create", "dataAccess": { "object": "Person", "actions": ["create"] },
         "variant": "primary"
       }
     ],
@@ -197,12 +197,12 @@
       {
         "key": "edit",
         "labelKey": "Action_Edit",
-        "standardAction": "edit", "dataAccess": { "execution": "organization.person.update", "resources": ["organization.person"] }
+        "standardAction": "edit", "dataAccess": { "object": "Person", "actions": ["edit"] }
       },
       {
         "key": "delete",
         "labelKey": "Action_Delete",
-        "standardAction": "delete", "dataAccess": { "execution": "organization.person.delete", "resources": ["organization.person"] },
+        "standardAction": "delete", "dataAccess": { "object": "Person", "actions": ["delete"] },
         "variant": "danger",
         "confirmMessageKey": "Action_Delete_Confirm",
         "handlerKey": "delete",

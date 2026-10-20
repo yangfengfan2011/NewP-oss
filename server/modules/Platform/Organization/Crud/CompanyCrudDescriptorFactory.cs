@@ -18,7 +18,7 @@ public static class CompanyCrudDescriptorFactory
             UpdateFields: ["ENAME", "SortOrder", "IsEnabled"]);
         return new StandardCrudDescriptor
         {
-            DataExecutions = new Dictionary<string, string> { ["create"] = "organization.company.create", ["update"] = "organization.company.update", ["delete"] = "organization.company.delete", ["list"] = "organization.company.list", ["read"] = "organization.company.read" },
+            DataExecutions = new Dictionary<string, string> { ["list"] = "organization.company.list", ["read"] = "organization.company.read" },
             ResourceKey = "organization.company",
             ModuleId = "Organization",
             ModelName = "Company",

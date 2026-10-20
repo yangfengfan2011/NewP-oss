@@ -27,7 +27,7 @@ public static class DepartmentCrudDescriptorFactory
             UpdateFields: ["ParentDepartmentId", "ENAME", "SortOrder", "IsEnabled"]);
         return new StandardCrudDescriptor
         {
-            DataExecutions = new Dictionary<string, string> { ["create"] = "organization.department.create", ["update"] = "organization.department.update", ["delete"] = "organization.department.delete", ["list"] = "organization.department.list", ["read"] = "organization.department.read" },
+            DataExecutions = new Dictionary<string, string> { ["list"] = "organization.department.list", ["read"] = "organization.department.read" },
             ResourceKey = "organization.department",
             ModuleId = "Organization",
             ModelName = "Department",

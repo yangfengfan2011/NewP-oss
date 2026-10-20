@@ -66,6 +66,8 @@ public sealed class StandardCrudDefaultWriter
         IReadOnlyDictionary<string, object?> values,
         ObjectOperationWriteSource? source, CancellationToken cancellationToken)
     {
+        if (source is ObjectOperationWriteSource.Button && _transactionExecutor is null)
+            throw new InvalidOperationException("BUTTON_PROTECTED_CREATE_REQUIRED");
         if (_transactionExecutor is { IsActive: false } && (source is ObjectOperationWriteSource.Button || _transactionExecutor.HasParticipants(descriptor.ModelName)))
             return await ExecuteCoordinatedAsync(
                 descriptor,
@@ -310,19 +312,29 @@ public sealed class StandardCrudDefaultWriter
         string id,
         ObjectOperationWriteSource? source, CancellationToken cancellationToken)
     {
-        if (_transactionExecutor is { IsActive: false } && _transactionExecutor.HasParticipants(descriptor.ModelName))
-            return await ExecuteCoordinatedAsync(
-                descriptor,
-                token => DeleteAsync(descriptor, id, source, token).AsTask(),
-                cancellationToken);
+        if (_transactionExecutor is { IsActive: false } && (source is ObjectOperationWriteSource.Button || _transactionExecutor.HasParticipants(descriptor.ModelName)))
+            return await ExecuteCoordinatedAsync(descriptor, token => DeleteAsync(descriptor, id, source, token).AsTask(), cancellationToken);
         StandardCrudDescriptorValidator.Validate(descriptor);
         AssertWriteSource(descriptor, "delete", id, source);
+        if (source is ObjectOperationWriteSource.Button button)
         {
-            var existing = await _repository.GetByIdAsync(descriptor, id, cancellationToken);
-            if (existing is null) return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
-            var scopeError = await CheckExistingScopeAsync(descriptor, id, "delete", existing, source, cancellationToken);
-            if (scopeError is not null) return StandardCrudMutationResult.Failure(scopeError);
+            if (_transactionExecutor?.IsActive != true || _repository is not IStandardCrudUpdateParticipant participant)
+                throw new InvalidOperationException("BUTTON_PROTECTED_DELETE_REQUIRED");
+            var before = await participant.ReadForUpdateAsync(descriptor, id, cancellationToken);
+            if (before is null) return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
+            return await (_buttons ?? throw new InvalidOperationException("BUTTON_EXECUTION_REQUIRED")).ExecuteAsync(button.Context,
+                new ButtonExecutionTarget(descriptor.ResourceKey, descriptor.ModelName, id, before),
+                token => DeleteAuthorizedCoreAsync(descriptor, id, token), cancellationToken);
         }
+        var existing = await _repository.GetByIdAsync(descriptor, id, cancellationToken);
+        if (existing is null) return StandardCrudMutationResult.Failure(NotFound(descriptor, id));
+        var scopeError = await CheckExistingScopeAsync(descriptor, id, "delete", existing, source, cancellationToken);
+        return scopeError is not null ? StandardCrudMutationResult.Failure(scopeError) : await DeleteAuthorizedCoreAsync(descriptor, id, cancellationToken);
+    }
+
+    // 当前实际目标已经完成原事实判权；条件删除、模块守卫及审计/cache事务继续由原owner执行。
+    private async Task<StandardCrudMutationResult> DeleteAuthorizedCoreAsync(StandardCrudDescriptor descriptor, string id, CancellationToken cancellationToken)
+    {
         if (descriptor.DeletePolicy == StandardCrudDeletePolicy.None)
         {
             return StandardCrudMutationResult.Failure(new StandardCrudError
@@ -440,7 +452,7 @@ public sealed class StandardCrudDefaultWriter
         }
         if (source is ObjectOperationWriteSource.Button button)
         {
-            if (operation is not ("create" or "update") || button.Context.ResourceKey != descriptor.ResourceKey || button.Context.ObjectName != descriptor.ModelName
+            if (operation is not ("create" or "update" or "delete") || button.Context.ResourceKey != descriptor.ResourceKey || button.Context.ObjectName != descriptor.ModelName
                 || button.Context.ObjectId != id || button.Context.BusinessBinding != descriptor.ResourceKey + "." + operation
                 || descriptor.DataExecutions.ContainsKey(operation))
                 throw new ActionDataAccessException(400, "ButtonExecution.TargetMismatch");

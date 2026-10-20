@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using ICP.Platform.Kernel.ModulePlanning;
+using ICP.Platform.Modules.Organization.Crud;
 using ICP.Platform.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -9,7 +10,57 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class OrganizationWriteExecutionSqlServerTests
 {
-    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "四资源真实标准创建先核具体声明，管理资格与读取声明不能替代写来源")]
+    [Fact]
+    [Trait("Category", "ModuleMetadataConsumer")]
+    public async Task FourResourceButtons_UseTheCompiledIdentityAndTheExistingRequestHelper()
+    {
+        var result = new CanonicalModulePlanCompiler().Compile("organization-buttons", new ModuleCapsuleCandidateReader()
+            .ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")));
+        Assert.True(result.IsSuccess, System.Text.Json.JsonSerializer.Serialize(result.Diagnostics));
+        var plan = result.Plan!;
+        foreach (var descriptor in new[] { CompanyCrudDescriptorFactory.Create(), DepartmentCrudDescriptorFactory.Create(),
+            PositionCrudDescriptorFactory.Create(), PersonCrudDescriptorFactory.Create() })
+        {
+            Assert.True(descriptor.DataExecutions.ContainsKey("list"));
+            Assert.True(descriptor.DataExecutions.ContainsKey("read"));
+            foreach (var (operation, action) in new[] { ("create", "create"), ("update", "edit"), ("delete", "delete") })
+            {
+                Assert.False(descriptor.DataExecutions.ContainsKey(operation));
+                Assert.DoesNotContain(plan.Modules.SelectMany(module => module.DataExecutions), item => item.Key == descriptor.ResourceKey + "." + operation);
+                var buttons = plan.ActionDataAccessCatalog.Where(item => item.BusinessBinding == descriptor.ResourceKey + "." + operation).ToArray();
+                Assert.NotEmpty(buttons);
+                foreach (var button in buttons)
+                {
+                    Assert.Equal(descriptor.ModelName, button.Object);
+                    Assert.Equal(new[] { action }, button.Actions);
+                    Assert.Empty(button.Execution);
+                    var point = plan.FeatureCatalog.Single(item => item.Position == button.FeaturePositions[0]);
+                    using var capture = new HeaderCapture();
+                    using var client = new HttpClient(capture) { BaseAddress = new Uri("http://metadata-test") };
+                    using var response = await FeatureHttpTestRequests.SendAsync(client, point, HttpMethod.Post, "/source", dataAccess: button);
+                    Assert.Equal(button.Id, capture.Button);
+                    Assert.Equal(point.Position, capture.Feature);
+                    Assert.False(capture.Legacy);
+                }
+            }
+        }
+    }
+
+    private sealed class HeaderCapture : HttpMessageHandler
+    {
+        internal string? Button;
+        internal string? Feature;
+        internal bool Legacy;
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        {
+            Button = request.Headers.GetValues("X-NewP-Button").Single();
+            Feature = request.Headers.GetValues("X-NewP-Feature").Single();
+            Legacy = request.Headers.Contains("X-NewP-Data-Declaration");
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent));
+        }
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "四资源真实标准创建先核唯一按钮身份，管理资格与读取声明不能替代写来源")]
     public async Task FourCreateRoutes_RequireTheirExactWriteDeclaration()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
@@ -35,14 +86,14 @@ public sealed class OrganizationWriteExecutionSqlServerTests
                 && item.FeaturePositions.Contains(http.Organization(tab).Position));
             using (var swapped = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Post, endpoint, body, borrowed))
                 Assert.Equal(HttpStatusCode.BadRequest, swapped.StatusCode);
-            var binding = plan.ActionDataAccessCatalog.Single(item => item.Execution == resource + ".create" && item.FeaturePositions.Contains(feature.Position));
+            var binding = http.Declaration(resource + ".create", feature);
             using var created = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Post, endpoint, body, binding);
             Assert.Equal(HttpStatusCode.Created, created.StatusCode);
             if (tab == "companies") company = BusinessAuditSqlServerHttpApiTests.Id(await created.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>());
         }
     }
 
-    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "四资源更新删除保持各自声明及原条件删除，读取或创建声明不能替代写来源")]
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "四资源更新删除保持各自按钮及原条件删除，读取或创建身份不能替代写来源")]
     public async Task FourUpdateAndDeleteRoutes_RequireTheirExactWriteDeclarations()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();

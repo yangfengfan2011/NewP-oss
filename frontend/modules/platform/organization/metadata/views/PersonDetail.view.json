@@ -72,7 +72,7 @@
       {
         "key": "edit",
         "labelKey": "Action_Edit",
-        "standardAction": "edit", "dataAccess": { "execution": "organization.person.update", "resources": ["organization.person"] }
+        "standardAction": "edit", "dataAccess": { "object": "Person", "actions": ["edit"] }
       },
       {
         "key": "authorize",

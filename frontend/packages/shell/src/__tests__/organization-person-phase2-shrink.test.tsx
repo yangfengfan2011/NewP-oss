@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createObjectAuthorizationActions } from '../../../ui/src/objectAuthorizationActions';
 import { mapPersonDetailView, mapPersonListItem } from '../../../../modules/platform/organization/src/services/organizationService';
 import { personStandardCrudResource } from '../../../../modules/platform/organization/src/standard-crud/personStandardCrudResource';
 import personListViewDocument from '../../../../modules/platform/organization/metadata/views/PersonList.view.json';
@@ -17,7 +18,8 @@ describe('organization person standard CRUD phase 2 registration', () => {
       'organization.positions',
     ]);
     expect(Object.keys(personStandardCrudResource.summaryRenderers ?? {})).toEqual(['userBinding', 'authorizationSummary']);
-    expect(Object.keys(personStandardCrudResource.actionHandlers ?? {})).toEqual(['authorize', 'delete', 'disable', 'enable']);
+    const authorization = createObjectAuthorizationActions('organization.person', () => ({ title: 'Person' }));
+    expect(Object.keys(personStandardCrudResource.actionHandlers ?? {})).toEqual([...Object.keys(authorization.actionHandlers), 'delete', 'disable', 'enable']);
   });
 
   it('uses metadata ownership and exposes one runtime data adapter', () => {

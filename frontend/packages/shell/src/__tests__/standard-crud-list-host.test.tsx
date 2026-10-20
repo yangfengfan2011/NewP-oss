@@ -1953,7 +1953,7 @@ describe('StandardCrudListPageHost', () => {
     await flushProTableRequest();
     expect(fetchSpy).toHaveBeenCalledWith(
       '/api/authorization/data-scope/objects/organization.company/Company_1/eligibility',
-      expect.objectContaining({ headers: { 'X-NewP-Feature': authorize, 'X-NewP-Data-Declaration': formalDataAccessFor(companyListViewDocument.view.key, 'rowActions', 'authorize').id } }),
+      expect.objectContaining({ headers: { 'X-NewP-Feature': authorize, 'X-NewP-Button': formalDataAccessFor(companyListViewDocument.view.key, 'rowActions', 'authorize').id } }),
     );
     expect(document.body.textContent).not.toContain('对象授权');
     await act(async () => { more()?.click(); });
@@ -2003,7 +2003,7 @@ describe('StandardCrudListPageHost', () => {
     expect(get).toHaveBeenCalledTimes(1);
     expect(fetchSpy).toHaveBeenCalledWith(
       '/api/authorization/data-scope/objects/organization.company/Company_1/eligibility',
-      expect.objectContaining({ headers: { 'X-NewP-Feature': authorize, 'X-NewP-Data-Declaration': formalDataAccessFor(companyListViewDocument.view.key, 'rowActions', 'authorize').id } }),
+      expect.objectContaining({ headers: { 'X-NewP-Feature': authorize, 'X-NewP-Button': formalDataAccessFor(companyListViewDocument.view.key, 'rowActions', 'authorize').id } }),
     );
     expect(document.body.textContent).not.toContain('目标公司：平台公司');
   });

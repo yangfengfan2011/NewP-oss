@@ -119,13 +119,13 @@ public sealed class ObjectHistorySqlServerHttpApiTests(ITestOutputHelper output)
             await EntityOwnershipMigrationSqlServerTests.DeployAsync(owned, "install-native", package);
             await EntityOwnershipMigrationSqlServerTests.DeployAsync(owned, "enable-bundle", package);
         }, sourceHostRoot: input.RootElement.GetProperty("hostRoot").GetString()!);
-        var http = new FeatureHttpTestRequests(fixture.Catalog);
+        var http = new FeatureHttpTestRequests(fixture);
         var admin = fixture.Administrator;
         var historyRequests = await ObjectHistoryHttpTestRequests.LoadAsync(admin);
         var entry = fixture.Catalog.Single(point => point.BehaviorKey == "workspace.spaces.access");
         var read = fixture.Catalog.First(point => point.ReadBehaviors.Contains("workspace.folder.read"));
         var history = fixture.Catalog.First(point => point.BehaviorKey == "workspace.folder.history");
-        await Post("organization.company.initialize", "/api/organization/initialization");
+        await http.InitializeOrganizationAsync(admin);
         var root = await Post("workspace.spaces.access", "/api/workspace/spaces/public/initialize");
         var rootPosition = new Position(root.GetProperty("spaceId").GetString()!, root.GetProperty("rootFolderId").GetString()!, []);
         var container = await Post("workspace.folder.create", "/api/workspace/content/folders",
@@ -146,9 +146,9 @@ public sealed class ObjectHistorySqlServerHttpApiTests(ITestOutputHelper output)
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var roleCode = "History296" + suffix;
-        var role = await FeatureHttpTestRequests.CreateAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = roleCode, Name = "普通履历角色" });
+        var role = await http.CreateButtonAsync(admin, http.Role("create"), "/api/authorization/roles", new { Code = roleCode, Name = "普通履历角色" });
         var accountCode = "history296-" + suffix;
-        var account = await FeatureHttpTestRequests.CreateAsync(admin, http.Identity("create"), "/api/identity/accounts", new { ECODE = accountCode, ENAME = "普通履历账号" });
+        var account = await http.CreateButtonAsync(admin, http.Identity("create"), "/api/identity/accounts", new { ECODE = accountCode, ENAME = "普通履历账号" });
         var accountId = account.GetProperty("account").GetProperty("eid").GetString()!;
         await HttpTestActors.PrepareOrganizationAsync(admin, http, account.GetProperty("account"));
         using (var assigned = await historyRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put,

@@ -153,9 +153,7 @@ public sealed class OptionalComponentLifecycleSqlServerTests
     public async Task InforCenterDisableAndRestore_PreservesDataAndReferencesAndRemovesCapabilities()
     {
         await using var fixture = await FeatureCatalogHostFixture.CreateAsync([]);
-        var initialize = fixture.Catalog.First(point => point.BehaviorKey == "organization.company.initialize");
-        using var initialized = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, initialize, HttpMethod.Post, "/api/organization/initialization");
-        Assert.True(initialized.IsSuccessStatusCode, await initialized.Content.ReadAsStringAsync());
+        await new FeatureHttpTestRequests(fixture).InitializeOrganizationAsync(fixture.Administrator);
         var root = await Post(fixture, "workspace.spaces.access", "/api/workspace/spaces/public/initialize", null);
         var position = new { spaceId = root.GetProperty("spaceId").GetString(), rootFolderId = root.GetProperty("rootFolderId").GetString(), linkIds = Array.Empty<string>() };
         var container = await Post(fixture, "workspace.folder.create", "/api/workspace/content/folders", new { position, values = new { ENAME = "保留引用容器" } });

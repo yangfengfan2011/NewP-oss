@@ -24,9 +24,7 @@ public sealed class DataScopeExpirySqlServerTests
             services => services.AddSingleton<TimeProvider>(clock), includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
         var http = new FeatureHttpTestRequests(fixture);
-        var initialize = fixture.FeatureCatalog.First(point => point.BehaviorKey == "organization.company.initialize");
-        using (var initialized = await FeatureHttpTestRequests.SendAsync(admin, initialize, HttpMethod.Post, "/api/organization/initialization"))
-            Assert.Equal(HttpStatusCode.OK, initialized.StatusCode);
+        await http.InitializeOrganizationAsync(admin);
         var entry = fixture.FeatureCatalog.Single(point => point.BehaviorKey == "workspace.spaces.access");
         var read = fixture.FeatureCatalog.First(point => point.ReadBehaviors.Contains("workspace.folder.read"));
         var create = fixture.FeatureCatalog.Single(point => point.BehaviorKey == "workspace.folder.create");
@@ -47,7 +45,7 @@ public sealed class DataScopeExpirySqlServerTests
         var rule = new DataScopeRuleDto("Expiry295Rule", "Expiry295Rule", null, "到期回到规则拒绝", true, "workspace.folder",
             new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(id)),
             [new("Expiry295RuleAll", "all", null, 0, new Dictionary<string, string> { ["read"] = "deny", ["edit"] = "deny" })], []);
-        using (var savedRule = await FeatureHttpTestRequests.SendAsync(admin, ruleSave, HttpMethod.Put, "/api/authorization/data-scope/rules/Expiry295Rule", rule))
+        using (var savedRule = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, ruleSave, HttpMethod.Put, "/api/authorization/data-scope/rules/Expiry295Rule", rule))
             Assert.Equal(HttpStatusCode.NoContent, savedRule.StatusCode);
         var input = new DataScopeObjectDto("workspace.folder", id,
             [new("Expiry295Allow", "all", null, 1, new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "allow" }, ExpiresAt: "2026-10-17T12:00:00Z"),
@@ -108,13 +106,13 @@ public sealed class DataScopeExpirySqlServerTests
         var edit = http.Organization("persons", "edit", "detail.pageActions");
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "ExpiryWrite295", "期限写后读取", "expiry-write295", "期限写后账号", read, edit);
         using var ordinary = actor.Client;
-        var created = await FeatureHttpTestRequests.CreateAsync(admin, http.Organization("persons", "create", "list.pageActions"),
+        var created = await http.CreateButtonAsync(admin, http.Organization("persons", "create", "list.pageActions"),
             "/api/organization/persons", new { PersonNo = "EXPIRY-WRITE295", ENAME = "修改前", EmploymentStatus = "Active", IsEnabled = true });
         var id = BusinessAuditSqlServerHttpApiTests.Id(created);
         var rule = new DataScopeRuleDto("ExpiryWriteRule295", "ExpiryWriteRule295", null, "到期拒绝读取", true, "organization.person",
             new("attribute", "EID", "equal", JsonSerializer.SerializeToElement(id)),
             [new("ExpiryWriteAll295", "all", null, 0, new Dictionary<string, string> { ["read"] = "deny" })], []);
-        using (var savedRule = await FeatureHttpTestRequests.SendAsync(admin,
+        using (var savedRule = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin,
             fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save"), HttpMethod.Put,
             "/api/authorization/data-scope/rules/ExpiryWriteRule295", rule))
             Assert.Equal(HttpStatusCode.NoContent, savedRule.StatusCode);

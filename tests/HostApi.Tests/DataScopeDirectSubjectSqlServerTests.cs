@@ -21,10 +21,8 @@ public sealed class DataScopeDirectSubjectSqlServerTests
         await using var fixture = await BusinessAuditHostFixture.CreateAsync();
         var http = new FeatureHttpTestRequests(fixture);
         using var admin = await fixture.LoginAdministratorAsync();
-        using var initialized = await FeatureHttpTestRequests.SendAsync(admin,
-            fixture.FeatureCatalog.First(point => point.BehaviorKey == "organization.company.initialize"), HttpMethod.Post, "/api/organization/initialization");
-        Assert.Equal(HttpStatusCode.OK, initialized.StatusCode);
-        var department = (await initialized.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("departmentId").GetString()!;
+        var initialized = await http.InitializeOrganizationAsync(admin);
+        var department = initialized.GetProperty("departmentId").GetString()!;
         var create = http.Organization("persons", "create", "list.pageActions");
         var person = await FeatureHttpTestRequests.CreateAsync(admin, create,
             "/api/organization/persons", new { PersonNo = "SELECTOR295", ENAME = "部门选择器", EmploymentStatus = "Active", IsEnabled = true }, OwnedResourceReadHttpRequests.Declaration(fixture, create, "organization.person", "create"));

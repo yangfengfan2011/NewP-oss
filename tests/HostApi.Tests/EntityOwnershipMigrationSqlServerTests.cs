@@ -156,7 +156,7 @@ public sealed class EntityOwnershipMigrationSqlServerTests(ITestOutputHelper out
             await AssertNullableOwnershipAsync(fixture, sample, expectedDepartment: null);
         }
 
-        var organization = await PostAsync(fixture, admin, "organization.company.initialize", "/api/organization/initialization");
+        var organization = await new FeatureHttpTestRequests(fixture).InitializeOrganizationAsync(admin);
         var departmentId = organization.GetProperty("departmentId").GetString()!;
         var initialize = new { position, linkIds = samples.Select(sample => sample.LinkId).ToArray() };
         timer.Restart();

@@ -17,9 +17,7 @@ public sealed class DataScopeWorkspaceRootSqlServerTests(ITestOutputHelper outpu
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
-        var initialize = fixture.FeatureCatalog.First(point => point.BehaviorKey == "organization.company.initialize");
-        using var initialized = await FeatureHttpTestRequests.SendAsync(admin, initialize, HttpMethod.Post, "/api/organization/initialization");
-        Assert.Equal(HttpStatusCode.OK, initialized.StatusCode);
+        await new FeatureHttpTestRequests(fixture).InitializeOrganizationAsync(admin);
         var entry = fixture.FeatureCatalog.Single(point => point.BehaviorKey == "workspace.spaces.access");
         var manage = fixture.FeatureCatalog.First(point => point.BehaviorKey == "workspace.folder.authorize");
         var source = Assert.Single(fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog,

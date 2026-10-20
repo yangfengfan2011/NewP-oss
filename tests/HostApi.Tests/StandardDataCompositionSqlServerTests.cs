@@ -149,9 +149,7 @@ public sealed class StandardDataCompositionSqlServerTests
     public async Task PublicVersions_ComposeRestoreAndUninstallWithoutChangingDataOrHistory()
     {
         await using var fixture = await FeatureCatalogHostFixture.CreateAsync([]);
-        var initialize = fixture.Catalog.First(point => point.BehaviorKey == "organization.company.initialize");
-        using var initialized = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, initialize, HttpMethod.Post, "/api/organization/initialization");
-        Assert.True(initialized.IsSuccessStatusCode, await initialized.Content.ReadAsStringAsync());
+        await new FeatureHttpTestRequests(fixture).InitializeOrganizationAsync(fixture.Administrator);
         string CurrentVersion(string module) => JsonNode.Parse(File.ReadAllText(Path.Combine(fixture.HostRoot, "modules", module, "plugin.json")))!["version"]!.GetValue<string>();
         var partVersion = CurrentVersion("Part");
         var workspaceVersion = CurrentVersion("Workspace");

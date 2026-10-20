@@ -255,9 +255,7 @@ public sealed class OfflineComponentDeploymentSqlServerTests
 
     private static async Task<string> CreatePart(FeatureCatalogHostFixture fixture)
     {
-        var initialize = fixture.Catalog.First(point => point.BehaviorKey == "organization.company.initialize");
-        using var initialized = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, initialize, HttpMethod.Post, "/api/organization/initialization");
-        Assert.True(initialized.IsSuccessStatusCode, await initialized.Content.ReadAsStringAsync());
+        await new FeatureHttpTestRequests(fixture).InitializeOrganizationAsync(fixture.Administrator);
         var point = Assert.Single(fixture.Catalog, point => point.BehaviorKey == "part.part.create");
         using var response = await FeatureHttpTestRequests.SendAsync(fixture.Administrator, point, HttpMethod.Post, "/api/part/parts", new { ECODE = "OFFLINE264", ENAME = "离线保留264" });
         Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());

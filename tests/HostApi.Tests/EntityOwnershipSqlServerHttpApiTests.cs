@@ -15,10 +15,8 @@ public sealed class EntityOwnershipSqlServerHttpApiTests
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
-        var initialize = fixture.FeatureCatalog.First(point => point.BehaviorKey == "organization.company.initialize");
-        using var initialized = await FeatureHttpTestRequests.SendAsync(admin, initialize, HttpMethod.Post, "/api/organization/initialization");
-        Assert.True(initialized.StatusCode == HttpStatusCode.OK, await initialized.Content.ReadAsStringAsync());
-        var department = JsonSerializer.Deserialize<JsonElement>(await initialized.Content.ReadAsStringAsync()).GetProperty("departmentId").GetString()!;
+        var initialized = await new FeatureHttpTestRequests(fixture).InitializeOrganizationAsync(admin);
+        var department = initialized.GetProperty("departmentId").GetString()!;
         var entry = fixture.FeatureCatalog.Single(point => point.BehaviorKey == "workspace.spaces.access");
         using var rootResponse = await FeatureHttpTestRequests.SendAsync(admin, entry, HttpMethod.Post, "/api/workspace/spaces/public/initialize");
         Assert.Equal(HttpStatusCode.OK, rootResponse.StatusCode);

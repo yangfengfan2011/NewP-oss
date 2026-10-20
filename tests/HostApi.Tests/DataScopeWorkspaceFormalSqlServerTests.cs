@@ -21,12 +21,12 @@ public sealed class DataScopeWorkspaceFormalSqlServerTests
             await EntityOwnershipMigrationSqlServerTests.DeployAsync(owned, "install-native", package);
             await EntityOwnershipMigrationSqlServerTests.DeployAsync(owned, "enable-bundle", package);
         }, sourceHostRoot: input.RootElement.GetProperty("hostRoot").GetString()!);
-        var http = new FeatureHttpTestRequests(fixture.Catalog);
+        var http = new FeatureHttpTestRequests(fixture);
         var admin = fixture.Administrator;
         var entry = fixture.Catalog.Single(point => point.BehaviorKey == "workspace.spaces.access");
         var read = fixture.Catalog.First(point => point.ReadBehaviors.Contains("workspace.folder.read"));
         var create = fixture.Catalog.Single(point => point.BehaviorKey == "workspace.folder.create");
-        await PostAsync("organization.company.initialize", "/api/organization/initialization");
+        await http.InitializeOrganizationAsync(admin);
         var publicRoot = await PostAsync("workspace.spaces.access", "/api/workspace/spaces/public/initialize");
         var publicPosition = Position(publicRoot);
         var folder = await PostAsync("workspace.folder.create", "/api/workspace/content/folders",
@@ -36,13 +36,13 @@ public sealed class DataScopeWorkspaceFormalSqlServerTests
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var code = "scope295-" + suffix;
         var roleCode = "Scope295" + suffix;
-        var role = await FeatureHttpTestRequests.CreateAsync(admin, http.Role("create"), "/api/authorization/roles",
+        var role = await http.CreateButtonAsync(admin, http.Role("create"), "/api/authorization/roles",
             new { Code = roleCode, Name = "权限只读角色" + suffix });
-        var account = await FeatureHttpTestRequests.CreateAsync(admin, http.Identity("create"), "/api/identity/accounts",
+        var account = await http.CreateButtonAsync(admin, http.Identity("create"), "/api/identity/accounts",
             new { ECODE = code, ENAME = "权限只读账号" + suffix });
         var accountId = account.GetProperty("account").GetProperty("eid").GetString()!;
         await HttpTestActors.PrepareOrganizationAsync(admin, http, account.GetProperty("account"));
-        using (var assigned = await FeatureHttpTestRequests.SendAsync(admin, http.Role("userRoles"), HttpMethod.Put,
+        using (var assigned = await http.SendButtonAsync(admin, http.Role("userRoles"), HttpMethod.Put,
             $"/api/authorization/users/{accountId}/roles", new { RoleCodes = new[] { roleCode } }))
             Assert.Equal(HttpStatusCode.NoContent, assigned.StatusCode);
         await http.GrantAsync(admin, role.GetProperty("id").GetString()!, entry, read, create);

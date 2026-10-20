@@ -26,7 +26,7 @@ it('checks the Part button declaration before independent navigation and uses th
   expect(router.state.location.pathname).toBe('/parts');
   const check = checkRequests(requests)[0];
   expect(check.headers.get('X-NewP-Feature')).toBe(points.historyPosition);
-  expect(check.headers.get('X-NewP-Data-Declaration')).toContain('Part/view:part.part.list/rowActions/action:history');
+  expect(check.headers.get('X-NewP-Button')).toContain('Part/view:part.part.list/rowActions/action:history');
   await act(async () => finish(new Response(null, { status: 204 })));
   await vi.waitFor(() => expect(router.state.location.pathname).toBe('/parts/history'));
   await vi.waitFor(() => expect(container.querySelector('tr[data-row-key="event-1"]')).not.toBeNull());
@@ -37,7 +37,7 @@ it('checks the Part button declaration before independent navigation and uses th
   await act(async () => menuItem('详情')!.click());
   await vi.waitFor(() => expect(document.body.textContent).toContain('独立详情最新操作者'));
   const detail = requests.find(request => new URL(request.url).pathname.endsWith('/history/event-1'))!;
-  expect(detail.headers.get('X-NewP-Data-Declaration')).toContain('Part/view:part.history.list/rowActions/action:view');
+  expect(detail.headers.get('X-NewP-Button')).toContain('Part/view:part.history.list/rowActions/action:view');
   expect(requests.some(request => new URL(request.url).pathname.startsWith('/api/workspace/'))).toBe(false);
   expectFixedReadHistoryRequests(metadata, requests);
 });
@@ -75,7 +75,7 @@ it('checks the detail contribution own declaration before opening its history mo
   await vi.waitFor(() => expect(button('操作履历')).toBeDefined());
   await act(async () => button('操作履历')!.click());
   await vi.waitFor(() => expect(checkRequests(requests)).toHaveLength(1));
-  expect(checkRequests(requests)[0].headers.get('X-NewP-Data-Declaration')).toContain('Part/view:part.history.list/detailContributions/action:part.object.history');
+  expect(checkRequests(requests)[0].headers.get('X-NewP-Button')).toContain('Part/view:part.history.list/detailContributions/action:part.object.history');
   expect(document.querySelector('.ant-modal')).toBeNull();
   await act(async () => finish(new Response('{}', { status: 404 })));
   await vi.waitFor(() => expect(document.body.textContent).toContain('对象不存在或不可访问'));

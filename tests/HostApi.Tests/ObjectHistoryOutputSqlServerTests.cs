@@ -65,8 +65,9 @@ public sealed class ObjectHistoryOutputSqlServerTests
             [new("output-user", "user", actor.AccountId, 1, new Dictionary<string, string> { ["read"] = "allow" })]);
         foreach (var priority in new[] { 1, 2, 3 })
         {
-            using var saved = await historyRequests.SendAsync(admin, manage, HttpMethod.Put,
-                "/api/part/parts/" + part.Id + "/permissions", configuration with { Subjects = [configuration.Subjects[0] with { Priority = priority }] });
+            using var saved = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put,
+                "/api/part/parts/" + part.Id + "/permissions", configuration with { Subjects = [configuration.Subjects[0] with { Priority = priority }] },
+                OwnedResourceReadHttpRequests.ForExecution(fixture, manage, "part.part.authorization.manage", "authorization.object.manage", "part.part"));
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         }
         var scopeJson = Uri.EscapeDataString(JsonSerializer.Serialize(position, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
@@ -128,14 +129,15 @@ public sealed class ObjectHistoryOutputSqlServerTests
             {
                 using var http = new HttpRequestMessage(HttpMethod.Post, basePath + "/export" + queryScope) { Content = JsonContent.Create(request) };
                 http.Headers.Add("X-NewP-Feature", history.Position);
-                http.Headers.Add("X-NewP-Data-Declaration", fixture.Services.GetRequiredService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>().ActionDataAccessCatalog.Single(item => item.ModuleId == "Workspace" && item.ActionKey == "exportAll").Id);
+                http.Headers.Add("X-NewP-Button", fixture.Services.GetRequiredService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>().ActionDataAccessCatalog.Single(item => item.ModuleId == "Workspace" && item.ActionKey == "exportAll").Id);
                 await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ordinary.SendAsync(http, canceled.Token));
                 Assert.True(cancellation.Fired);
             }
             finally { cancellation.Cancel = null; }
         }
-        using (var denied = await historyRequests.SendAsync(admin, manage, HttpMethod.Put, "/api/part/parts/" + part.Id + "/permissions",
-            configuration with { Subjects = [configuration.Subjects[0] with { Actions = new Dictionary<string, string> { ["read"] = "deny" } }] }))
+        using (var denied = await FeatureHttpTestRequests.SendAsync(admin, manage, HttpMethod.Put, "/api/part/parts/" + part.Id + "/permissions",
+            configuration with { Subjects = [configuration.Subjects[0] with { Actions = new Dictionary<string, string> { ["read"] = "deny" } }] },
+            OwnedResourceReadHttpRequests.ForExecution(fixture, manage, "part.part.authorization.manage", "authorization.object.manage", "part.part")))
             Assert.Equal(HttpStatusCode.NoContent, denied.StatusCode);
         foreach (var output in new[] { "export", "print" })
         {

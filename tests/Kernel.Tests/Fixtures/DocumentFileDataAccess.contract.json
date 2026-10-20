@@ -732,7 +732,7 @@
       "viewKey": "document.document.list",
       "surface": "rowActions",
       "actionKey": "history",
-      "execution": "document.history.enter",
+      "execution": "",
       "resources": [
         "document.document"
       ],
@@ -742,24 +742,8 @@
       "featurePositions": [
         "Workspace/navigation:workspace/module:Document/navigation:document.documents/navigation:document.history"
       ],
-      "requirements": [
-        {
-          "role": "target",
-          "stage": "read",
-          "shape": "object",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
-        }
-      ],
-      "provider": "document.backend"
+      "object": "Document",
+      "businessBinding": "document.document.history"
     },
     {
       "id": "Document/view:document.document.list/rowActions/action:initializeOwnership",
@@ -985,7 +969,7 @@
       "viewKey": "document.history.list",
       "surface": "detailContributions",
       "actionKey": "document.object.history",
-      "execution": "document.history.enter",
+      "execution": "",
       "resources": [
         "document.document"
       ],
@@ -995,24 +979,8 @@
       "featurePositions": [
         "Workspace/navigation:workspace/module:Document/navigation:document.documents/navigation:document.history"
       ],
-      "requirements": [
-        {
-          "role": "target",
-          "stage": "read",
-          "shape": "object",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
-        }
-      ],
-      "provider": "document.backend"
+      "object": "Document",
+      "businessBinding": "document.document.history"
     },
     {
       "id": "Document/view:document.history.list/outputActions/action:exportAll",
@@ -1020,7 +988,7 @@
       "viewKey": "document.history.list",
       "surface": "outputActions",
       "actionKey": "exportAll",
-      "execution": "document.history.export",
+      "execution": "",
       "resources": [
         "document.document"
       ],
@@ -1030,24 +998,8 @@
       "featurePositions": [
         "Workspace/navigation:workspace/module:Document/navigation:document.documents/navigation:document.history"
       ],
-      "requirements": [
-        {
-          "role": "target",
-          "stage": "read",
-          "shape": "object",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
-        }
-      ],
-      "provider": "document.backend"
+      "object": "Document",
+      "businessBinding": "document.document.history"
     },
     {
       "id": "Document/view:document.history.list/outputActions/action:exportSelected",
@@ -1055,7 +1007,7 @@
       "viewKey": "document.history.list",
       "surface": "outputActions",
       "actionKey": "exportSelected",
-      "execution": "document.history.export",
+      "execution": "",
       "resources": [
         "document.document"
       ],
@@ -1065,24 +1017,8 @@
       "featurePositions": [
         "Workspace/navigation:workspace/module:Document/navigation:document.documents/navigation:document.history"
       ],
-      "requirements": [
-        {
-          "role": "target",
-          "stage": "read",
-          "shape": "object",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
-        }
-      ],
-      "provider": "document.backend"
+      "object": "Document",
+      "businessBinding": "document.document.history"
     },
     {
       "id": "Document/view:document.history.list/outputActions/action:printAll",
@@ -1090,7 +1026,7 @@
       "viewKey": "document.history.list",
       "surface": "outputActions",
       "actionKey": "printAll",
-      "execution": "document.history.print",
+      "execution": "",
       "resources": [
         "document.document"
       ],
@@ -1100,24 +1036,8 @@
       "featurePositions": [
         "Workspace/navigation:workspace/module:Document/navigation:document.documents/navigation:document.history"
       ],
-      "requirements": [
-        {
-          "role": "target",
-          "stage": "read",
-          "shape": "object",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
-        }
-      ],
-      "provider": "document.backend"
+      "object": "Document",
+      "businessBinding": "document.document.history"
     },
     {
       "id": "Document/view:document.history.list/outputActions/action:printSelected",
@@ -1125,7 +1045,7 @@
       "viewKey": "document.history.list",
       "surface": "outputActions",
       "actionKey": "printSelected",
-      "execution": "document.history.print",
+      "execution": "",
       "resources": [
         "document.document"
       ],
@@ -1135,24 +1055,8 @@
       "featurePositions": [
         "Workspace/navigation:workspace/module:Document/navigation:document.documents/navigation:document.history"
       ],
-      "requirements": [
-        {
-          "role": "target",
-          "stage": "read",
-          "shape": "object",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
-        }
-      ],
-      "provider": "document.backend"
+      "object": "Document",
+      "businessBinding": "document.document.history"
     },
     {
       "id": "Document/view:document.history.list/pageActions/action:output",
@@ -1160,7 +1064,7 @@
       "viewKey": "document.history.list",
       "surface": "pageActions",
       "actionKey": "output",
-      "execution": "document.history.preview",
+      "execution": "",
       "resources": [
         "document.document"
       ],
@@ -1170,24 +1074,8 @@
       "featurePositions": [
         "Workspace/navigation:workspace/module:Document/navigation:document.documents/navigation:document.history"
       ],
-      "requirements": [
-        {
-          "role": "target",
-          "stage": "read",
-          "shape": "object",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
-        }
-      ],
-      "provider": "document.backend"
+      "object": "Document",
+      "businessBinding": "document.document.history"
     },
     {
       "id": "Document/view:document.history.list/read",
@@ -1230,7 +1118,7 @@
       "viewKey": "document.history.list",
       "surface": "rowActions",
       "actionKey": "view",
-      "execution": "document.history.detail",
+      "execution": "",
       "resources": [
         "document.document"
       ],
@@ -1240,24 +1128,8 @@
       "featurePositions": [
         "Workspace/navigation:workspace/module:Document/navigation:document.documents/navigation:document.history"
       ],
-      "requirements": [
-        {
-          "role": "target",
-          "stage": "read",
-          "shape": "object",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1
-        }
-      ],
-      "provider": "document.backend"
+      "object": "Document",
+      "businessBinding": "document.document.history"
     }
   ]
 }

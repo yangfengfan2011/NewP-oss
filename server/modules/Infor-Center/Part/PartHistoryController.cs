@@ -8,24 +8,15 @@ namespace ICP.Platform.Modules.Part;
 
 /// <summary>对象履历按自身声明交集完整读取；使用自身履历功能位置与EID，不借用Workspace出现位置或LID。</summary>
 [ApiController, Route("api/part/parts/{objectId}/history"), EndpointModule("Part")]
-public sealed class PartHistoryController(IObjectHistoryQuery history, IObjectHistoryExport export, IDataExecutionAccess dataAccess) : ControllerBase
+public sealed class PartHistoryController(IObjectHistoryQuery history, IDataExecutionAccess dataAccess,
+    IButtonBusinessExecutor buttons, PartHistoryButtonHandler handler) : ControllerBase
 {
     private const string ResourceKey = "part.part";
 
     /// <summary>只读进入检查不签发凭据，正式出口仍重新核验其自身声明和当前对象。</summary>
-    [HttpGet("check/{operation}"), RequireFeature("part.part.history")]
-    public async Task<IResult> Check(string objectId, string operation, CancellationToken token)
-    {
-        if (operation is not ("enter" or "detail" or "preview")) return InvalidInput();
-        try
-        {
-            ValidateQuery();
-            return await dataAccess.EvaluateObjectAsync(new("part.history." + operation, "part.backend", "read"),
-                ResourceKey, "target", objectId, token) == DataExecutionDecision.Allowed ? Results.NoContent() : Unavailable();
-        }
-        catch (ActionDataAccessException error) { return DeclarationFailure(error); }
-        catch (ArgumentException) { return InvalidInput(); }
-    }
+    [HttpGet("check/{operation}"), RequireFeature("part.part.history"), ButtonBusinessHandler(typeof(PartHistoryButtonHandler))]
+    public Task<IResult> Check(string objectId, string operation, CancellationToken token) =>
+        operation is "enter" or "detail" or "preview" ? ButtonAsync(new(objectId, operation, new()), token) : Task.FromResult(InvalidInput());
 
     /// <summary>标准安全列表只接受已声明筛选，不接受其他对象或管理员查询参数。</summary>
     [HttpGet, RequireFeature("part.history.read")]
@@ -33,30 +24,31 @@ public sealed class PartHistoryController(IObjectHistoryQuery history, IObjectHi
         ReadAsync(objectId, "part.history.list", async () => await history.ListAsync(ResourceKey, objectId, filter, token), token);
 
     /// <summary>记录ID与当前对象、筛选同时相交，每次重验独立history功能。</summary>
-    [HttpGet("{recordId}"), RequireFeature("part.part.history")]
+    [HttpGet("{recordId}"), RequireFeature("part.part.history"), ButtonBusinessHandler(typeof(PartHistoryButtonHandler))]
     public Task<IResult> Detail(string objectId, string recordId, [FromQuery] ObjectHistoryFilter filter, CancellationToken token) =>
-        ReadAsync(objectId, "part.history.detail", async () => await history.GetAsync(ResourceKey, objectId, recordId, filter, token), token);
+        ButtonAsync(new(objectId, "detail", filter, recordId), token);
 
     /// <summary>输出文件编码复用Audit稳定合同，不能引用私有实现或管理员payload。</summary>
-    [HttpPost("export"), RequireFeature("part.part.history")]
-    public async Task<IResult> Export(string objectId, [FromBody] ObjectHistoryOutputRequest request, CancellationToken token)
+    [HttpPost("export"), RequireFeature("part.part.history"), ButtonBusinessHandler(typeof(PartHistoryButtonHandler))]
+    public Task<IResult> Export(string objectId, [FromBody] ObjectHistoryOutputRequest request, CancellationToken token) =>
+        ButtonAsync(new(objectId, "export", request.Filter, Output: request), token);
+
+    /// <summary>打印取得同一安全集合；浏览器受控视图承担实际print调用。</summary>
+    [HttpPost("print"), RequireFeature("part.part.history"), ButtonBusinessHandler(typeof(PartHistoryButtonHandler))]
+    public Task<IResult> Print(string objectId, [FromBody] ObjectHistoryOutputRequest request, CancellationToken token) =>
+        ButtonAsync(new(objectId, "print", request.Filter, Output: request), token);
+
+    // 每个按钮请求经统一执行器进入同一对象状态；列表继续保留独立读取合同。
+    private async Task<IResult> ButtonAsync(PartHistoryButtonInput input, CancellationToken token)
     {
         try
         {
             ValidateQuery();
-            if (await dataAccess.EvaluateObjectAsync(new("part.history.export", "part.backend", "read"),
-                ResourceKey, "target", objectId, token) != DataExecutionDecision.Allowed) return Unavailable();
-            var file = await export.ExportAsync(ResourceKey, objectId, request, token);
-            return file is null ? Results.NotFound() : Results.File(file.Content, file.ContentType, file.FileName);
+            return await buttons.ExecuteAsync(handler, input, token);
         }
         catch (ActionDataAccessException error) { return DeclarationFailure(error); }
         catch (ArgumentException) { return InvalidInput(); }
     }
-
-    /// <summary>打印取得同一安全集合；浏览器受控视图承担实际print调用。</summary>
-    [HttpPost("print"), RequireFeature("part.part.history")]
-    public Task<IResult> Print(string objectId, [FromBody] ObjectHistoryOutputRequest request, CancellationToken token) =>
-        ReadAsync(objectId, "part.history.print", async () => await history.OutputAsync(ResourceKey, objectId, request, token) is { } items ? new { items } : null, token);
 
     // 列表、详情与打印共用声明核验和安全读取；取消及依赖故障继续传播。
     private async Task<IResult> ReadAsync(string objectId, string execution, Func<Task<object?>> read, CancellationToken token)

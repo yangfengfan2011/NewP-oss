@@ -54,6 +54,7 @@ public sealed class PartModule : ModuleCapsuleBindingBase
             provider.GetRequiredService<ICP.Platform.Persistence.Ownership.IAccountOwnershipDirectory>()));
         // 插入与仓储规范重读属于同一事务；提交后的展示才由标准服务降级为成功回执。
         services.AddScoped<PartBusinessRecorder>();
+        services.AddScoped<PartHistoryButtonHandler>();
         services.AddScoped<IStandardCrudCreationRecorder>(provider => provider.GetRequiredService<PartBusinessRecorder>());
         services.AddScoped<IStandardCrudUpdateRecorder>(provider => provider.GetRequiredService<PartBusinessRecorder>());
         services.AddObjectBehavior<PartObjectBehavior>(this, PartObjectBehavior.BehaviorDefinition);

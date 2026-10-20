@@ -101,10 +101,10 @@
       }
     ],
     "outputActions": [
-      { "key": "exportSelected", "dataAccess": { "execution": "document.history.export", "resources": ["document.document"] } },
-      { "key": "exportAll", "dataAccess": { "execution": "document.history.export", "resources": ["document.document"] } },
-      { "key": "printSelected", "dataAccess": { "execution": "document.history.print", "resources": ["document.document"] } },
-      { "key": "printAll", "dataAccess": { "execution": "document.history.print", "resources": ["document.document"] } }
+      { "key": "exportSelected", "dataAccess": { "object": "Document", "actions": ["read"] } },
+      { "key": "exportAll", "dataAccess": { "object": "Document", "actions": ["read"] } },
+      { "key": "printSelected", "dataAccess": { "object": "Document", "actions": ["read"] } },
+      { "key": "printAll", "dataAccess": { "object": "Document", "actions": ["read"] } }
     ],
     "pageActions": [
       {
@@ -113,7 +113,7 @@
         "standardAction": "view",
         "handlerKey": "view",
         "inputKey": "objectHistoryOutput",
-        "dataAccess": { "execution": "document.history.preview", "resources": ["document.document"] }
+        "dataAccess": { "object": "Document", "actions": ["read"] }
       }
     ],
     "rowActions": [
@@ -123,13 +123,13 @@
         "standardAction": "view",
         "handlerKey": "view",
         "inputKey": "objectHistoryDetails",
-        "dataAccess": { "execution": "document.history.detail", "resources": ["document.document"] }
+        "dataAccess": { "object": "Document", "actions": ["read"] }
       }
     ],
     "detailContributions": [
       {
         "key": "document.object.history",
-        "dataAccess": { "execution": "document.history.enter", "resources": ["document.document"] },
+        "dataAccess": { "object": "Document", "actions": ["read"] },
         "targetViewKey": "document.document.detail",
         "navigationKey": "document.history",
         "pageRef": {

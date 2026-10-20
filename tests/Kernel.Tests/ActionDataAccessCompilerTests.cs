@@ -104,6 +104,30 @@ public sealed class ActionDataAccessCompilerTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void WorkspaceHistoryButtons_UseTheirActualObjectRequirementsAndKeepTheListSource()
+    {
+        var result = new CanonicalModulePlanCompiler().Compile("workspace-history-buttons", Candidates());
+        Assert.True(result.IsSuccess, JsonSerializer.Serialize(result.Diagnostics));
+        var buttons = result.Plan!.ActionDataAccessCatalog.Where(item => item.ModuleId == "Workspace"
+            && item.BusinessBinding == "workspace.folder.history").ToArray();
+        Assert.NotEmpty(buttons);
+        Assert.Equal(new[] { "exportAll", "exportSelected", "history", "output", "printAll", "printSelected", "view" },
+            buttons.Select(item => item.ActionKey).Order(StringComparer.Ordinal));
+        foreach (var button in buttons)
+        {
+            Assert.Empty(button.Execution);
+            Assert.Null(button.Object);
+            Assert.Equal(new[] { "WorkspaceFolder", "Part", "Document" }, button.GetObjectRequirements().Select(item => item.Object));
+            Assert.All(button.GetObjectRequirements(), item => Assert.Equal(new[] { "read" }, item.Actions));
+        }
+        var list = Assert.Single(result.Plan.ActionDataAccessCatalog, item => item.ModuleId == "Workspace"
+            && item.ViewKey == "workspace.history.list" && item.Surface == "read");
+        Assert.Equal("workspace.history.list", list.Execution);
+        Assert.Equal("workspace.backend", list.Provider);
+        Assert.Null(list.BusinessBinding);
+    }
+
+    [Fact]
     public void FormalPlan_ProjectsWorkspaceButtonsWithoutChangingFeaturePositions()
     {
         var candidates = Candidates();
@@ -142,11 +166,20 @@ public sealed class ActionDataAccessCompilerTests(ITestOutputHelper output)
         var history = requirements.Where(item => historyIds.Contains(item.Id)).ToArray();
         Assert.All(history, item =>
         {
-            Assert.Equal(new[] { "read" }, item.Actions);
-            Assert.Equal("workspace.backend", item.Provider);
-            var target = Assert.Single(item.Requirements!);
-            Assert.Equal(("target", "read", "object"), (target.Role, target.Stage, target.Shape));
-            Assert.Equal(new[] { "read" }, Assert.Single(target.AnyOf));
+            if (item.Surface == "read")
+            {
+                Assert.Equal(new[] { "read" }, item.Actions);
+                Assert.Equal("workspace.backend", item.Provider);
+                var target = Assert.Single(item.Requirements!);
+                Assert.Equal(("target", "read", "object"), (target.Role, target.Stage, target.Shape));
+                Assert.Equal(new[] { "read" }, Assert.Single(target.AnyOf));
+            }
+            else
+            {
+                Assert.Equal("workspace.folder.history", item.BusinessBinding);
+                Assert.All(item.GetObjectRequirements(), requirement => Assert.Equal(new[] { "read" }, requirement.Actions));
+                Assert.Null(item.Requirements);
+            }
         });
         Assert.Equal(JsonSerializer.Serialize(history, options), JsonSerializer.Serialize(fixture, options));
     }
@@ -229,23 +262,24 @@ public sealed class ActionDataAccessCompilerTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void SameExecutionButtons_KeepIndependentDataRequirementsAndStructuralIdentities()
+    public void SameBusinessButtons_KeepIndependentDataRequirementsAndStructuralIdentities()
     {
         var candidates = Candidates();
         var owner = Array.FindIndex(candidates, candidate => candidate.ModuleId == "Workspace");
         var features = candidates[owner].Features.ToArray();
-        var index = Array.FindIndex(features, feature => feature.DataAccess.Any(item => item.Execution == "workspace.history.enter"));
-        var original = features[index].DataAccess.Single(item => item.Execution == "workspace.history.enter");
+        var index = Array.FindIndex(features, feature => feature.DataAccess.Any(item => item.BusinessBinding == "workspace.folder.history" && item.ActionKey == "history"));
+        var original = features[index].DataAccess.Single(item => item.BusinessBinding == "workspace.folder.history" && item.ActionKey == "history");
         var first = original with { Surface = "rowActions", ActionKey = "same" };
-        var second = first with { Surface = "pageActions", AdditionalActions = ["edit"] };
+        var second = first with { Surface = "pageActions", ObjectRequirements = first.ObjectRequirements!
+            .Select(item => item.Object == "Part" ? item with { Actions = ["read", "edit"] } : item).ToArray() };
         features[index] = features[index] with { DataAccess = [.. features[index].DataAccess.Where(item => item != original), first, second] };
-        candidates[owner] = candidates[owner] with { Features = features,
-            DataExecutions = candidates[owner].DataExecutions.Select(contract => contract.Key == "workspace.history.enter"
-                ? contract with { AllowedAdditionalActions = ["edit"] } : contract).ToArray() };
+        candidates[owner] = candidates[owner] with { Features = features };
         var result = new CanonicalModulePlanCompiler().Compile("independent", candidates);
         Assert.True(result.IsSuccess, JsonSerializer.Serialize(result.Diagnostics));
-        Assert.Equal(new[] { "read" }, Assert.Single(result.Plan!.ActionDataAccessCatalog, item => item.Id == first.Id).Actions);
-        Assert.Equal(new[] { "read", "edit" }, Assert.Single(result.Plan.ActionDataAccessCatalog, item => item.Id == second.Id).Actions);
+        Assert.Equal(new[] { "read" }, Assert.Single(result.Plan!.ActionDataAccessCatalog, item => item.Id == first.Id)
+            .GetObjectRequirements().Single(item => item.Object == "Part").Actions);
+        Assert.Equal(new[] { "read", "edit" }, Assert.Single(result.Plan.ActionDataAccessCatalog, item => item.Id == second.Id)
+            .GetObjectRequirements().Single(item => item.Object == "Part").Actions);
         Assert.NotEqual(first.Id, second.Id);
     }
 

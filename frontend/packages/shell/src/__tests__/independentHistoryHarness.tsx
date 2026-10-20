@@ -76,13 +76,24 @@ export function expectFixedReadHistoryRequests(metadata: RuntimeMetadataState, r
   const historyRequests = requests.filter(request => new URL(request.url).pathname.includes('/history'));
   expect(historyRequests.length).toBeGreaterThan(0);
   for (const request of historyRequests) {
-    const matches = declarations.filter(declaration => declaration.id === request.headers.get('X-NewP-Data-Declaration'));
+    const matches = declarations.filter(declaration => declaration.id === (request.headers.get('X-NewP-Button') ?? request.headers.get('X-NewP-Data-Declaration')));
     expect(matches).toHaveLength(1);
     const declaration = matches[0];
-    expect(declaration.provider).toBe(`${declaration.moduleId.toLowerCase()}.backend`);
     expect(declaration.featurePositions).toContain(request.headers.get('X-NewP-Feature'));
-    expect(declaration.requirements).toEqual([{ role: 'target', stage: 'read', shape: 'object', resources: declaration.resources,
-      anyOf: [['read']], minimumCount: 1, maximumCount: 1 }]);
+    if (declaration.businessBinding) {
+      expect(request.headers.has('X-NewP-Data-Declaration')).toBe(false);
+      const objects = declaration.objectRequirements ?? [{ object: declaration.object, actions: declaration.actions }];
+      expect(objects.length).toBeGreaterThan(0);
+      expect(objects.map(requirement => requirement.object)).toEqual(declaration.moduleId === 'Workspace'
+        ? ['WorkspaceFolder', 'Part', 'Document'] : [declaration.moduleId]);
+      objects.forEach(requirement => expect(requirement.actions).toEqual(['read']));
+      expect(declaration.requirements).toBeUndefined();
+    } else {
+      expect(request.headers.has('X-NewP-Button')).toBe(false);
+      expect(declaration.provider).toBe(`${declaration.moduleId.toLowerCase()}.backend`);
+      expect(declaration.requirements).toEqual([{ role: 'target', stage: 'read', shape: 'object', resources: declaration.resources,
+        anyOf: [['read']], minimumCount: 1, maximumCount: 1 }]);
+    }
   }
 }
 

@@ -73,6 +73,7 @@ public static class StandardCrudServiceCollectionExtensions
         services.AddScoped<IStandardCrudService>(static provider =>
             provider.GetRequiredService<StandardCrudService>());
         services.AddScoped<StandardCrudExportService>();
+        services.TryAddScoped<StandardCrudExportHandler>();
         services.AddScoped<StandardCrudEndpoint>();
         return services;
     }

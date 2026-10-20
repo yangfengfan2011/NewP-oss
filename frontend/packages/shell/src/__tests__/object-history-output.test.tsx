@@ -9,6 +9,24 @@ import { StandardCrudActionReviewDialog } from '../standard-crud/StandardCrudAct
 import { createObjectHistoryResource } from '../../../ui/src/objectHistoryResource';
 import type { StandardCrudActionInputRenderContext } from '@icp-platform/sdk';
 
+it('uses each formal output button identity without mixing the list read declaration', async () => {
+  const requests: Request[] = [];
+  const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push(new Request(new URL(String(input), 'http://test.local'), init));
+    return new Response(new Blob(['xlsx']));
+  });
+  downloadSpies();
+  const declarations = ['exportSelected', 'exportAll', 'printSelected', 'printAll'].map(actionKey => ({
+    id: 'button-' + actionKey, moduleId: 'Part', viewKey: 'part.history.list', surface: 'outputActions', actionKey,
+    execution: '', object: 'Part', businessBinding: 'part.part.history', actions: ['read'], resources: ['part.part'], featurePositions: [featurePosition],
+  }));
+  await mount(fetcher, { dataAccessDeclarations: declarations });
+  await click('导出选中');
+  await click('导出全部');
+  expect(requests.map(request => request.headers.get('X-NewP-Button'))).toEqual(['button-exportSelected', 'button-exportAll']);
+  expect(requests.every(request => !request.headers.has('X-NewP-Data-Declaration'))).toBe(true);
+});
+
 const position = { spaceId: 'space', rootFolderId: 'root', linkIds: ['container'] };
 const target = { resourceKey: 'part.part', id: 'part-eid', basePath: `/api/workspace/content/part-lid/history?queryScope=${encodeURIComponent(JSON.stringify(position))}` };
 const featurePosition = 'transport-history-primary';

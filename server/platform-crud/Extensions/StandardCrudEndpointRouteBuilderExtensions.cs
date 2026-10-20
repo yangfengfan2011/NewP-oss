@@ -1,5 +1,6 @@
 using System.Text.Json;
 using ICP.Platform.Authorization.Extensions;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Abstractions;
 using ICP.Platform.Crud.Descriptors;
@@ -111,7 +112,10 @@ public static class StandardCrudEndpointRouteBuilderExtensions
 
             try
             {
-                var file = await exportService.ExportAsync(descriptor, request, cancellationToken);
+                var file = context.GetEndpoint()?.Metadata.GetMetadata<ButtonBusinessHandlerAttribute>()?.HandlerType == typeof(StandardCrudExportHandler)
+                    ? await context.RequestServices.GetRequiredService<IButtonBusinessExecutor>().ExecuteAsync(
+                        context.RequestServices.GetRequiredService<StandardCrudExportHandler>(), new StandardCrudExportInput(descriptor, request), cancellationToken)
+                    : await exportService.ExportAsync(descriptor, request, cancellationToken);
                 return Results.File(file.Content, file.ContentType, file.FileName);
             }
             catch (PlatformQueryValidationException ex)

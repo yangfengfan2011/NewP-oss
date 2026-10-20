@@ -131,8 +131,29 @@ internal sealed class WorkspacePageDriver(IPage page)
         await page.GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^履\s*历$") }).ClickAsync();
         var list = await listLoaded;
         if (!list.Ok) throw new InvalidOperationException($"操作履历读取失败：{list.Status}");
-        var historyPath = new Uri(list.Url).AbsolutePath;
         await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == "/workspace/history");
+        await InspectHistoryOutputAsync(new Uri(list.Url).AbsolutePath, downloadPath, print: true);
+    }
+
+    /// <summary>从独立模块的正式routeOnly列表进入履历，复用详情和一次选中导出，不复测输出语义矩阵。</summary>
+    internal async Task InspectIndependentObjectHistoryAndOutputAsync(string listPath, string itemName,
+        string historyPagePath, string apiRoot, string downloadPath)
+    {
+        await page.GotoAsync(new Uri(new Uri(page.Url), listPath).AbsoluteUri);
+        var row = await new StandardCrudPageDriver(page).WaitForRowAsync(itemName);
+        await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
+        var loaded = page.WaitForResponseAsync(response => response.Request.Method == "GET"
+            && new Uri(response.Url).AbsolutePath.StartsWith(apiRoot + "/", StringComparison.Ordinal)
+            && new Uri(response.Url).AbsolutePath.EndsWith("/history", StringComparison.Ordinal));
+        await page.GetByRole(AriaRole.Menuitem, new() { NameRegex = new Regex(@"^履\s*历$") }).ClickAsync();
+        var list = await loaded;
+        if (!list.Ok) throw new InvalidOperationException($"独立对象履历读取失败：{list.Status}");
+        await page.WaitForURLAsync(url => new Uri(url).AbsolutePath == historyPagePath);
+        await InspectHistoryOutputAsync(new Uri(list.Url).AbsolutePath, downloadPath, print: false);
+    }
+
+    private async Task InspectHistoryOutputAsync(string historyPath, string downloadPath, bool print)
+    {
         var row = page.Locator(".ant-table-tbody tr[data-row-key]").First;
         await row.WaitForAsync(new() { State = WaitForSelectorState.Visible });
         await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
@@ -155,13 +176,16 @@ internal sealed class WorkspacePageDriver(IPage page)
         var download = await downloaded;
         if (await download.FailureAsync() is { } failure) throw new InvalidOperationException("履历下载失败：" + failure);
         await download.SaveAsAsync(downloadPath);
-        var printLoaded = page.WaitForResponseAsync(response => response.Request.Method == "POST"
-            && new Uri(response.Url).AbsolutePath == historyPath + "/print");
-        await output.GetByRole(AriaRole.Button, new() { Name = "打印选中", Exact = true }).ClickAsync();
-        var print = await printLoaded;
-        if (!print.Ok) throw new InvalidOperationException($"操作履历打印数据读取失败：{print.Status}");
-        await output.Locator("table").WaitForAsync(new() { State = WaitForSelectorState.Visible });
-        await output.GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^打\s*印$") }).ClickAsync();
+        if (print)
+        {
+            var printLoaded = page.WaitForResponseAsync(response => response.Request.Method == "POST"
+                && new Uri(response.Url).AbsolutePath == historyPath + "/print");
+            await output.GetByRole(AriaRole.Button, new() { Name = "打印选中", Exact = true }).ClickAsync();
+            var printed = await printLoaded;
+            if (!printed.Ok) throw new InvalidOperationException($"操作履历打印数据读取失败：{printed.Status}");
+            await output.Locator("table").WaitForAsync(new() { State = WaitForSelectorState.Visible });
+            await output.GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^打\s*印$") }).ClickAsync();
+        }
         await output.Locator(".ant-modal-footer").GetByRole(AriaRole.Button, new() { NameRegex = new Regex(@"^关\s*闭$") }).ClickAsync();
         await output.WaitForAsync(new() { State = WaitForSelectorState.Hidden });
         await page.Locator("iframe[title=\"操作履历打印\"]").WaitForAsync(new() { State = WaitForSelectorState.Hidden });

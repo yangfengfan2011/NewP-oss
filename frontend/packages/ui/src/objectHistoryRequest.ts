@@ -1,4 +1,4 @@
-import { isStandardCrudRecord, readStandardCrudRequestError, StandardCrudRequestError } from '@icp-platform/sdk';
+import { isStandardCrudRecord, readStandardCrudRequestError, standardCrudRequestHeaders, StandardCrudRequestError } from '@icp-platform/sdk';
 
 export interface ObjectHistoryTarget { resourceKey: string; id: string; basePath: string }
 export interface ObjectHistoryFilter { from?: string; to?: string; actorId?: string; eventType?: string; objectType?: string; ipAddress?: string; description?: string }
@@ -17,7 +17,7 @@ export interface ObjectHistoryReadContext { featurePosition?: string; signal?: A
 
 /** 每次请求只传正式声明身份；从不携带允许结果或客户端数据动作要求。 */
 function headers(context: ObjectHistoryReadContext) {
-  return { 'X-NewP-Feature': context.featurePosition!, ...(context.dataAccess ? { 'X-NewP-Data-Declaration': context.dataAccess.id } : {}) };
+  return standardCrudRequestHeaders(context);
 }
 
 function invalidResponse(): never {

@@ -224,9 +224,28 @@ public sealed class PersistenceDeploymentTests : IDisposable
         foreach (var viewPath in Directory.GetFiles(Path.Combine(root, "modules", owner, "metadata", "views"), "*.view.json"))
         {
             var document = JsonNode.Parse(File.ReadAllText(viewPath))!;
-            if (document["view"]?["model"]?.GetValue<string>() != previous) continue;
-            document["view"]!["model"] = current;
+            if (document["view"]?["model"]?.GetValue<string>() == previous) document["view"]!["model"] = current;
+            RenameButtonObjects(document);
             File.WriteAllText(viewPath, document.ToJsonString());
+        }
+
+        // 同owner无model的履历视图也引用对象；同步单条与数组声明，保持候选先通过正式输入校验。
+        void RenameButtonObjects(JsonNode? node)
+        {
+            if (node is JsonObject value)
+            {
+                if (value["dataAccess"] is JsonObject single) RenameDeclaredObject(single);
+                if (value["dataAccess"] is JsonArray declarations)
+                    foreach (var declaration in declarations.OfType<JsonObject>()) RenameDeclaredObject(declaration);
+                foreach (var property in value) RenameButtonObjects(property.Value);
+            }
+            else if (node is JsonArray children)
+                foreach (var child in children) RenameButtonObjects(child);
+        }
+
+        void RenameDeclaredObject(JsonObject declaration)
+        {
+            if (declaration["object"]?.GetValue<string>() == previous) declaration["object"] = current;
         }
     }
 

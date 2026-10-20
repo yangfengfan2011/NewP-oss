@@ -5,38 +5,40 @@
     "viewKey": "workspace.folder.list",
     "surface": "rowActions",
     "actionKey": "history",
-    "execution": "workspace.history.enter",
+    "execution": "",
     "resources": [
       "workspace.folder",
       "part.part",
       "document.document"
     ],
-    "actions": [
-      "read"
-    ],
+    "actions": [],
     "featurePositions": [
       "Workspace/navigation:workspace/navigation:workspace.history"
     ],
-    "requirements": [
+    "businessBinding": "workspace.folder.history",
+    "objectRequirements": [
       {
-        "role": "target",
-        "stage": "read",
-        "shape": "object",
-        "resources": [
-          "workspace.folder",
-          "part.part",
-          "document.document"
+        "object": "WorkspaceFolder",
+        "actions": [
+          "read"
         ],
-        "anyOf": [
-          [
-            "read"
-          ]
+        "resourceKey": "workspace.folder"
+      },
+      {
+        "object": "Part",
+        "actions": [
+          "read"
         ],
-        "minimumCount": 1,
-        "maximumCount": 1
+        "resourceKey": "part.part"
+      },
+      {
+        "object": "Document",
+        "actions": [
+          "read"
+        ],
+        "resourceKey": "document.document"
       }
-    ],
-    "provider": "workspace.backend"
+    ]
   },
   {
     "id": "Workspace/view:workspace.history.list/outputActions/action:exportAll",
@@ -44,38 +46,40 @@
     "viewKey": "workspace.history.list",
     "surface": "outputActions",
     "actionKey": "exportAll",
-    "execution": "workspace.history.export",
+    "execution": "",
     "resources": [
       "workspace.folder",
       "part.part",
       "document.document"
     ],
-    "actions": [
-      "read"
-    ],
+    "actions": [],
     "featurePositions": [
       "Workspace/navigation:workspace/navigation:workspace.history"
     ],
-    "requirements": [
+    "businessBinding": "workspace.folder.history",
+    "objectRequirements": [
       {
-        "role": "target",
-        "stage": "read",
-        "shape": "object",
-        "resources": [
-          "workspace.folder",
-          "part.part",
-          "document.document"
+        "object": "WorkspaceFolder",
+        "actions": [
+          "read"
         ],
-        "anyOf": [
-          [
-            "read"
-          ]
+        "resourceKey": "workspace.folder"
+      },
+      {
+        "object": "Part",
+        "actions": [
+          "read"
         ],
-        "minimumCount": 1,
-        "maximumCount": 1
+        "resourceKey": "part.part"
+      },
+      {
+        "object": "Document",
+        "actions": [
+          "read"
+        ],
+        "resourceKey": "document.document"
       }
-    ],
-    "provider": "workspace.backend"
+    ]
   },
   {
     "id": "Workspace/view:workspace.history.list/outputActions/action:exportSelected",
@@ -83,38 +87,40 @@
     "viewKey": "workspace.history.list",
     "surface": "outputActions",
     "actionKey": "exportSelected",
-    "execution": "workspace.history.export",
+    "execution": "",
     "resources": [
       "workspace.folder",
       "part.part",
       "document.document"
     ],
-    "actions": [
-      "read"
-    ],
+    "actions": [],
     "featurePositions": [
       "Workspace/navigation:workspace/navigation:workspace.history"
     ],
-    "requirements": [
+    "businessBinding": "workspace.folder.history",
+    "objectRequirements": [
       {
-        "role": "target",
-        "stage": "read",
-        "shape": "object",
-        "resources": [
-          "workspace.folder",
-          "part.part",
-          "document.document"
+        "object": "WorkspaceFolder",
+        "actions": [
+          "read"
         ],
-        "anyOf": [
-          [
-            "read"
-          ]
+        "resourceKey": "workspace.folder"
+      },
+      {
+        "object": "Part",
+        "actions": [
+          "read"
         ],
-        "minimumCount": 1,
-        "maximumCount": 1
+        "resourceKey": "part.part"
+      },
+      {
+        "object": "Document",
+        "actions": [
+          "read"
+        ],
+        "resourceKey": "document.document"
       }
-    ],
-    "provider": "workspace.backend"
+    ]
   },
   {
     "id": "Workspace/view:workspace.history.list/outputActions/action:printAll",
@@ -122,38 +128,40 @@
     "viewKey": "workspace.history.list",
     "surface": "outputActions",
     "actionKey": "printAll",
-    "execution": "workspace.history.print",
+    "execution": "",
     "resources": [
       "workspace.folder",
       "part.part",
       "document.document"
     ],
-    "actions": [
-      "read"
-    ],
+    "actions": [],
     "featurePositions": [
       "Workspace/navigation:workspace/navigation:workspace.history"
     ],
-    "requirements": [
+    "businessBinding": "workspace.folder.history",
+    "objectRequirements": [
       {
-        "role": "target",
-        "stage": "read",
-        "shape": "object",
-        "resources": [
-          "workspace.folder",
-          "part.part",
-          "document.document"
+        "object": "WorkspaceFolder",
+        "actions": [
+          "read"
         ],
-        "anyOf": [
-          [
-            "read"
-          ]
+        "resourceKey": "workspace.folder"
+      },
+      {
+        "object": "Part",
+        "actions": [
+          "read"
         ],
-        "minimumCount": 1,
-        "maximumCount": 1
+        "resourceKey": "part.part"
+      },
+      {
+        "object": "Document",
+        "actions": [
+          "read"
+        ],
+        "resourceKey": "document.document"
       }
-    ],
-    "provider": "workspace.backend"
+    ]
   },
   {
     "id": "Workspace/view:workspace.history.list/outputActions/action:printSelected",
@@ -161,38 +169,40 @@
     "viewKey": "workspace.history.list",
     "surface": "outputActions",
     "actionKey": "printSelected",
-    "execution": "workspace.history.print",
+    "execution": "",
     "resources": [
       "workspace.folder",
       "part.part",
       "document.document"
     ],
-    "actions": [
-      "read"
-    ],
+    "actions": [],
     "featurePositions": [
       "Workspace/navigation:workspace/navigation:workspace.history"
     ],
-    "requirements": [
+    "businessBinding": "workspace.folder.history",
+    "objectRequirements": [
       {
-        "role": "target",
-        "stage": "read",
-        "shape": "object",
-        "resources": [
-          "workspace.folder",
-          "part.part",
-          "document.document"
+        "object": "WorkspaceFolder",
+        "actions": [
+          "read"
         ],
-        "anyOf": [
-          [
-            "read"
-          ]
+        "resourceKey": "workspace.folder"
+      },
+      {
+        "object": "Part",
+        "actions": [
+          "read"
         ],
-        "minimumCount": 1,
-        "maximumCount": 1
+        "resourceKey": "part.part"
+      },
+      {
+        "object": "Document",
+        "actions": [
+          "read"
+        ],
+        "resourceKey": "document.document"
       }
-    ],
-    "provider": "workspace.backend"
+    ]
   },
   {
     "id": "Workspace/view:workspace.history.list/pageActions/action:output",
@@ -200,38 +210,40 @@
     "viewKey": "workspace.history.list",
     "surface": "pageActions",
     "actionKey": "output",
-    "execution": "workspace.history.preview",
+    "execution": "",
     "resources": [
       "workspace.folder",
       "part.part",
       "document.document"
     ],
-    "actions": [
-      "read"
-    ],
+    "actions": [],
     "featurePositions": [
       "Workspace/navigation:workspace/navigation:workspace.history"
     ],
-    "requirements": [
+    "businessBinding": "workspace.folder.history",
+    "objectRequirements": [
       {
-        "role": "target",
-        "stage": "read",
-        "shape": "object",
-        "resources": [
-          "workspace.folder",
-          "part.part",
-          "document.document"
+        "object": "WorkspaceFolder",
+        "actions": [
+          "read"
         ],
-        "anyOf": [
-          [
-            "read"
-          ]
+        "resourceKey": "workspace.folder"
+      },
+      {
+        "object": "Part",
+        "actions": [
+          "read"
         ],
-        "minimumCount": 1,
-        "maximumCount": 1
+        "resourceKey": "part.part"
+      },
+      {
+        "object": "Document",
+        "actions": [
+          "read"
+        ],
+        "resourceKey": "document.document"
       }
-    ],
-    "provider": "workspace.backend"
+    ]
   },
   {
     "id": "Workspace/view:workspace.history.list/read",
@@ -278,37 +290,39 @@
     "viewKey": "workspace.history.list",
     "surface": "rowActions",
     "actionKey": "view",
-    "execution": "workspace.history.detail",
+    "execution": "",
     "resources": [
       "workspace.folder",
       "part.part",
       "document.document"
     ],
-    "actions": [
-      "read"
-    ],
+    "actions": [],
     "featurePositions": [
       "Workspace/navigation:workspace/navigation:workspace.history"
     ],
-    "requirements": [
+    "businessBinding": "workspace.folder.history",
+    "objectRequirements": [
       {
-        "role": "target",
-        "stage": "read",
-        "shape": "object",
-        "resources": [
-          "workspace.folder",
-          "part.part",
-          "document.document"
+        "object": "WorkspaceFolder",
+        "actions": [
+          "read"
         ],
-        "anyOf": [
-          [
-            "read"
-          ]
+        "resourceKey": "workspace.folder"
+      },
+      {
+        "object": "Part",
+        "actions": [
+          "read"
         ],
-        "minimumCount": 1,
-        "maximumCount": 1
+        "resourceKey": "part.part"
+      },
+      {
+        "object": "Document",
+        "actions": [
+          "read"
+        ],
+        "resourceKey": "document.document"
       }
-    ],
-    "provider": "workspace.backend"
+    ]
   }
 ]

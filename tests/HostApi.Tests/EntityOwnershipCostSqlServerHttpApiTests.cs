@@ -85,7 +85,7 @@ public sealed class EntityOwnershipCostSqlServerHttpApiTests(ITestOutputHelper o
             {
                 using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/ownership/initialize") { Content = JsonContent.Create(new { position, linkIds = ids }) };
                 request.Headers.Add("X-NewP-Feature", point.Position);
-                request.Headers.Add("X-NewP-Data-Declaration", OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", point).Id);
+                request.Headers.Add("X-NewP-Button", OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", point).Id);
                 await Assert.ThrowsAnyAsync<OperationCanceledException>(() => admin.SendAsync(request, cancellation.Token));
             }
             finally { fixture.Fault.AfterRegister = null; }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Radio, Select, Space, Table } from 'antd';
 import { formatRequestError, platformFetch, useLocalization } from '@icp-platform/core';
-import { readStandardCrudRequestError, type StandardCrudActionInputRenderContext } from '@icp-platform/sdk';
+import { standardCrudInputReadSource, readStandardCrudRequestError, type StandardCrudActionInputRenderContext } from '@icp-platform/sdk';
 import { ownershipInitializationHeaders, ownershipInitializationSource, type ObjectOwnershipInitializationTarget, type OwnershipInitializationDraft } from './ownershipInitializationRequest';
 export type { ObjectOwnershipInitializationTarget, OwnershipInitializationDraft } from './ownershipInitializationRequest';
 
@@ -9,10 +9,11 @@ interface Candidate { accountId: string; code: string; name: string; departmentI
 interface PendingItem { id: string; name: string }
 
 /** 拥有者提供真实端点与上下文；共享输入管理显式批次、人工单选、候选和可取消请求。 */
-export default function ObjectOwnershipInitializationInput({ target, featurePosition, action, dataAccess, value, onChange: updateDraft, onDraftStateChange, submitting }: StandardCrudActionInputRenderContext & { target: ObjectOwnershipInitializationTarget }) {
+export default function ObjectOwnershipInitializationInput({ target, featurePosition, action, dataAccess, dataAccessDeclarations, value, onChange: updateDraft, onDraftStateChange, submitting }: StandardCrudActionInputRenderContext & { target: ObjectOwnershipInitializationTarget }) {
   const { t } = useLocalization();
   const binding = action.dataAccess ?? dataAccess;
-  const source = ownershipInitializationSource(target, featurePosition, binding);
+  const readBinding = standardCrudInputReadSource({ action, featurePosition, dataAccessDeclarations });
+  const source = ownershipInitializationSource(target, featurePosition, binding, action.inputReadSourceKey);
   const saved = typeof value === 'object' && value !== null ? value as Partial<OwnershipInitializationDraft> : {};
   const draft = saved.source === source ? saved : {};
   const onChange = (next: Omit<OwnershipInitializationDraft, 'source'>) => updateDraft({ ...next, source });
@@ -31,7 +32,7 @@ export default function ObjectOwnershipInitializationInput({ target, featurePosi
       try {
         const response = await platformFetch(`${target.pendingPath}${target.pendingPath.includes('?') ? '&' : '?'}page=${page}&pageSize=20`, {
           method: 'GET', signal: controller.signal,
-          headers: ownershipInitializationHeaders(featurePosition, binding),
+          headers: ownershipInitializationHeaders(featurePosition, readBinding),
         });
         if (!response.ok) throw await readStandardCrudRequestError(response);
         const loaded = await response.json() as { items: PendingItem[]; total: number };
@@ -39,7 +40,7 @@ export default function ObjectOwnershipInitializationInput({ target, featurePosi
       } catch (error) { if (!controller.signal.aborted) setFailure({ error }); }
     })();
     return () => controller.abort();
-  }, [selectedId, target.pendingPath, page, featurePosition, binding]);
+  }, [selectedId, target.pendingPath, page, featurePosition, binding, readBinding]);
   useEffect(() => {
     if (!selectedId) { setMissing(null); return; }
     const controller = new AbortController(); setMissing(null); setFailure(null);
@@ -61,7 +62,7 @@ export default function ObjectOwnershipInitializationInput({ target, featurePosi
     void (async () => {
       try {
         const response = await platformFetch(`${target.accountsPath}?query=${encodeURIComponent(query)}`, {
-          signal: controller.signal, headers: ownershipInitializationHeaders(featurePosition, binding),
+          signal: controller.signal, headers: ownershipInitializationHeaders(featurePosition),
         });
         if (!response.ok) throw await readStandardCrudRequestError(response);
         const items = await response.json() as Candidate[];

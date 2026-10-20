@@ -18,10 +18,11 @@ public sealed partial class WorkspaceContentsController
     public sealed record OwnershipBatchInput(WorkspacePosition? Position, string[]? LinkIds);
 
     /// <summary>明确选择集合自动按创建账号补齐；单项资格或写入失败整体回滚，不自动把未知账号归给管理员。</summary>
-    [HttpPost("ownership/initialize"), Authorize(Policy = "AdminOnly"), RequireFeature("workspace.folder.initializeOwnership")]
-    public async Task<IResult> InitializeOwnershipMany(OwnershipBatchInput input, [FromServices] EntityOwnershipBackfill backfill, CancellationToken token)
+    [HttpPost("ownership/initialize"), Authorize(Policy = "AdminOnly"), RequireFeature("workspace.folder.initializeOwnership"), ButtonBusinessHandler(typeof(WorkspaceOwnershipInitializationButtonHandler))]
+    public async Task<IResult> InitializeOwnershipMany(OwnershipBatchInput input, [FromServices] IButtonBusinessExecutor buttons,
+        [FromServices] WorkspaceOwnershipInitializationButtonHandler handler, CancellationToken token)
     {
-        try { return Results.Ok(await contents.InitializeOwnershipManyAsync(Actor(), RequireOwnershipPosition(input.Position), input.LinkIds ?? [], backfill, token)); }
+        try { return await buttons.ExecuteAsync(handler, new(Actor(), RequireOwnershipPosition(input.Position), input.LinkIds ?? [], "batch"), token); }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
         catch (ActionDataAccessException exception) { return OwnershipDeclarationFailure(exception); }
     }
@@ -41,12 +42,13 @@ public sealed partial class WorkspaceContentsController
     }
 
     /// <summary>受控补齐先读取真实缺失状态；不以裸对象ID或调用方所称模型旁路来源。</summary>
-    [HttpGet("content/{linkId}/ownership/status"), Authorize(Policy = "AdminOnly"), RequireFeature("workspace.folder.initializeOwnership")]
-    public async Task<IResult> OwnershipStatus(string linkId, [FromQuery] string? queryScope, CancellationToken token)
+    [HttpGet("content/{linkId}/ownership/status"), Authorize(Policy = "AdminOnly"), RequireFeature("workspace.folder.initializeOwnership"), ButtonBusinessHandler(typeof(WorkspaceOwnershipInitializationButtonHandler))]
+    public async Task<IResult> OwnershipStatus(string linkId, [FromQuery] string? queryScope, [FromServices] IButtonBusinessExecutor buttons,
+        [FromServices] WorkspaceOwnershipInitializationButtonHandler handler, CancellationToken token)
     {
         try
         {
-            return Results.Ok(await contents.ReadOwnershipAsync(Actor(), ReadOwnershipPosition(queryScope), linkId, token));
+            return await buttons.ExecuteAsync(handler, new(Actor(), ReadOwnershipPosition(queryScope), [linkId], "status"), token);
         }
         catch (JsonException) { return LinkQueryEndpointExtensions.Problem(new LinkQueryException(400, "Workspace.InvalidPosition")); }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
@@ -54,13 +56,13 @@ public sealed partial class WorkspaceContentsController
     }
 
     /// <summary>缺失旧对象的归属可由管理员显式初始化；已完整对象保持不变，不成为代转入口。</summary>
-    [HttpPost("content/{linkId}/ownership"), Authorize(Policy = "AdminOnly"), RequireFeature("workspace.folder.initializeOwnership")]
-    public async Task<IResult> InitializeOwnership(string linkId, OwnershipInput input, [FromServices] EntityOwnershipBackfill backfill, CancellationToken token)
+    [HttpPost("content/{linkId}/ownership"), Authorize(Policy = "AdminOnly"), RequireFeature("workspace.folder.initializeOwnership"), ButtonBusinessHandler(typeof(WorkspaceOwnershipInitializationButtonHandler))]
+    public async Task<IResult> InitializeOwnership(string linkId, OwnershipInput input, [FromServices] IButtonBusinessExecutor buttons,
+        [FromServices] WorkspaceOwnershipInitializationButtonHandler handler, CancellationToken token)
     {
         try
         {
-            var changed = await contents.InitializeOwnershipAsync(Actor(), RequireOwnershipPosition(input.Position), linkId, input.AccountId, backfill, token);
-            return Results.Ok(new { succeeded = true, changed });
+            return await buttons.ExecuteAsync(handler, new(Actor(), RequireOwnershipPosition(input.Position), [linkId], "single", input.AccountId), token);
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
         catch (ActionDataAccessException exception) { return OwnershipDeclarationFailure(exception); }

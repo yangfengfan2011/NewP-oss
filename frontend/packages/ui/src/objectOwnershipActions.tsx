@@ -9,7 +9,7 @@ const Input = lazy(() => import('./ObjectOwnershipInitializationInput'));
 export function createObjectOwnershipActions(getTarget: (context: StandardCrudActionContext) => ObjectOwnershipInitializationTarget, eligibilityPath: string) {
   const eligibility: StandardCrudActionEligibilityResolver = async context => {
     const response = await platformFetch(eligibilityPath, {
-      signal: context.signal, headers: ownershipInitializationHeaders(context.featurePosition, context.dataAccess),
+      signal: context.signal, headers: ownershipInitializationHeaders(context.featurePosition),
     });
     if (response.status === 403) return { visible: false, available: false };
     if (!response.ok) throw await readStandardCrudRequestError(response);
@@ -19,7 +19,7 @@ export function createObjectOwnershipActions(getTarget: (context: StandardCrudAc
     actionEligibilityResolvers: { initializeOwnership: eligibility, initializeOwnershipPending: eligibility },
     actionInputRenderers: { initializeOwnership: (context: StandardCrudActionInputRenderContext) => {
       const target = getTarget(context);
-      return <Suspense fallback={null}><Input key={ownershipInitializationSource(target, context.featurePosition, context.action.dataAccess ?? context.dataAccess)} {...context} target={target} /></Suspense>;
+      return <Suspense fallback={null}><Input key={ownershipInitializationSource(target, context.featurePosition, context.action.dataAccess ?? context.dataAccess, context.action.inputReadSourceKey)} {...context} target={target} /></Suspense>;
     } },
     actionHandlers: {
       initializeOwnership: Object.assign(async (context: StandardCrudActionContext) => {
@@ -27,7 +27,7 @@ export function createObjectOwnershipActions(getTarget: (context: StandardCrudAc
         const binding = context.action?.dataAccess ?? context.dataAccess;
         const input = context.input as OwnershipInitializationDraft | undefined;
         const batch = !target.initialId && (input?.targetIds?.length ?? 0) > 0;
-        if (!input || input.source !== ownershipInitializationSource(target, context.featurePosition, binding)
+        if (!input || input.source !== ownershipInitializationSource(target, context.featurePosition, binding, context.action?.inputReadSourceKey)
           || !batch && (!input.targetId || target.initialId && target.initialId !== input.targetId))
           throw new StandardCrudRequestError('归属补齐对象已变化，请重新选择。', 409, {}, { reasonKey: 'Platform.OwnershipTargetChanged' });
         const response = await platformFetch(batch ? target.batchPath : target.savePath.replace('{id}', encodeURIComponent(input.targetId!)), {

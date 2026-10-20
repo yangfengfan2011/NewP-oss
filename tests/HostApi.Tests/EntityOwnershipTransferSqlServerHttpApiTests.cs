@@ -49,7 +49,7 @@ public sealed class EntityOwnershipTransferSqlServerHttpApiTests
                 $"/api/part/parts/{target.Id}/permissions", configuration);
             Assert.True(configured.StatusCode == HttpStatusCode.NoContent, await configured.Content.ReadAsStringAsync());
             using var unreadable = await FeatureHttpTestRequests.SendAsync(recipientClient, browse, HttpMethod.Get,
-                PropertiesUrl(position, target.LinkId));
+                PropertiesUrl(position, target.LinkId), dataAccess: OwnershipReadDeclaration(fixture, "workspace.folder.read", browse));
             Assert.Equal(HttpStatusCode.NotFound, unreadable.StatusCode);
         }
         var before = new Dictionary<string, Dictionary<string, object?>>();
@@ -97,10 +97,10 @@ public sealed class EntityOwnershipTransferSqlServerHttpApiTests
             Assert.Equal(before[target.Id]["CreatedBy"], after["CreatedBy"]);
             Assert.Equal(before[target.Id]["CreatedAt"], after["CreatedAt"]);
             using var unreadable = await FeatureHttpTestRequests.SendAsync(recipientClient, browse, HttpMethod.Get,
-                PropertiesUrl(position, target.LinkId));
+                PropertiesUrl(position, target.LinkId), dataAccess: OwnershipReadDeclaration(fixture, "workspace.folder.read", browse));
             Assert.Equal(HttpStatusCode.NotFound, unreadable.StatusCode);
             using var saved = await FeatureHttpTestRequests.SendAsync(ownerClient, edit, HttpMethod.Put,
-                $"/api/workspace/content/{target.LinkId}", new { position, values = new { Description = "转交后的普通保存" } });
+                $"/api/workspace/content/{target.LinkId}", new { position, values = new { Description = "转交后的普通保存" } }, OwnershipDeclaration(fixture, "workspace.folder.editObject", edit));
             await ReadOkAsync(saved);
             var persisted = await RowAsync(fixture, target);
             Assert.Equal(recipient.AccountId, persisted["OwnerId"]);

@@ -15,17 +15,17 @@ namespace ICP.Platform.Modules.Part;
 /// <summary>无目录引用的旧对象也由真实owner提供受控归属补齐，不开放普通编辑代转。</summary>
 [ApiController, Route("api/part/parts/ownership"), EndpointModule("Part"), Authorize(Policy = "AdminOnly")]
 public sealed class PartOwnershipController(EntityOwnershipMaintenance maintenance, IStandardCrudResourceRegistry resources,
-    IAccountOwnershipDirectory accounts) : ControllerBase
+    IAccountOwnershipDirectory accounts, IButtonBusinessExecutor buttons, PartOwnershipInitializationButtonHandler handler) : ControllerBase
 {
     public sealed record InitializeInput(string? AccountId = null);
 
     public sealed record InitializeBatchInput(string[]? Ids);
 
     /// <summary>明确选择的旧对象同事务自动补齐；未知账号留待人工，不扩展为全库任务或代转。</summary>
-    [HttpPost("initialize"), RequireFeature("part.part.initializeOwnership")]
+    [HttpPost("initialize"), RequireFeature("part.part.initializeOwnership"), ButtonBusinessHandler(typeof(PartOwnershipInitializationButtonHandler))]
     public async Task<IResult> InitializeBatch(InitializeBatchInput input, CancellationToken token)
     {
-        try { return Results.Ok(await maintenance.InitializeManyAsync(resources.FindByResourceKey("part.part")!, input.Ids ?? [], Source("submit"), token)); }
+        try { return await buttons.ExecuteAsync(handler, new(input.Ids ?? [], "batch"), token); }
         catch (EntityOwnershipException exception) { return Failure(exception); }
         catch (ActionDataAccessException exception) { return DeclarationFailure(exception); }
     }
@@ -46,24 +46,24 @@ public sealed class PartOwnershipController(EntityOwnershipMaintenance maintenan
     public async Task<IResult> Accounts([FromQuery] string? query, CancellationToken token) => Results.Ok(await accounts.SearchAsync(query, token));
 
     /// <summary>对象状态核对沿真实read/edit，不信任客户端声明的归属或授权。</summary>
-    [HttpGet("{id}/status"), RequireFeature("part.part.initializeOwnership")]
+    [HttpGet("{id}/status"), RequireFeature("part.part.initializeOwnership"), ButtonBusinessHandler(typeof(PartOwnershipInitializationButtonHandler))]
     public async Task<IResult> Status(string id, CancellationToken token)
     {
-        try { return Results.Ok(await maintenance.ReadAsync(resources.FindByResourceKey("part.part")!, id, Source("prepare"), token)); }
+        try { return await buttons.ExecuteAsync(handler, new([id], "status"), token); }
         catch (EntityOwnershipException exception) { return Failure(exception); }
         catch (ActionDataAccessException exception) { return DeclarationFailure(exception); }
     }
 
     /// <summary>仅初始化NULL归属，完整对象无变化不记成功事件，事务失败全部回滚。</summary>
-    [HttpPost("{id}"), RequireFeature("part.part.initializeOwnership")]
+    [HttpPost("{id}"), RequireFeature("part.part.initializeOwnership"), ButtonBusinessHandler(typeof(PartOwnershipInitializationButtonHandler))]
     public async Task<IResult> Initialize(string id, InitializeInput input, CancellationToken token)
     {
-        try { return Results.Ok(new { succeeded = true, changed = await maintenance.InitializeAsync(resources.FindByResourceKey("part.part")!, id, input.AccountId, Source("submit"), token) }); }
+        try { return await buttons.ExecuteAsync(handler, new([id], "single", input.AccountId), token); }
         catch (EntityOwnershipException exception) { return Failure(exception); }
         catch (ActionDataAccessException exception) { return DeclarationFailure(exception); }
     }
 
-    // 维护端点固定自己的读取/准备/提交来源，资格及账号候选不新增对象裁决。
+    // 待补齐SQL查询保留独立读取来源；资格及账号候选仍不新增对象裁决。
     private static DataExecutionBindingReference Source(string stage) => new("part.part.initializeOwnership", "entityOwnership.initialize", stage);
 
     // 只翻译正式来源错误，不捕获事务、取消或持久化故障。

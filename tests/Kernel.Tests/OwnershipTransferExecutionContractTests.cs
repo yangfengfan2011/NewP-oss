@@ -73,13 +73,15 @@ public sealed class OwnershipTransferExecutionContractTests
         var result = new CanonicalModulePlanCompiler().Compile("ownership-formal-bindings", candidates);
         Assert.True(result.IsSuccess, JsonSerializer.Serialize(result.Diagnostics));
         var declarations = result.Plan!.ActionDataAccessCatalog.Where(item => item.Provider == "entityOwnership.initialize"
-            || item.Execution == "workspace.folder.initializeOwnership" || item.BusinessBinding?.EndsWith(".transfer", StringComparison.Ordinal) == true).ToArray();
+            || item.Execution == "workspace.folder.initializeOwnership" || item.BusinessBinding?.EndsWith(".transfer", StringComparison.Ordinal) == true
+            || item.BusinessBinding?.EndsWith(".initializeOwnership", StringComparison.Ordinal) == true).ToArray();
         Assert.NotEmpty(declarations);
         Assert.DoesNotContain(result.Plan.Modules.SelectMany(module => module.DataExecutions), contract => contract.Provider == "entityOwnership.transfer");
         Assert.All(declarations.Where(item => item.BusinessBinding is not null), declaration =>
         {
             Assert.False(string.IsNullOrWhiteSpace(declaration.ActionKey));
-            Assert.Contains(declaration.Surface, new[] { "rowActions", "pageActions" });
+            Assert.Contains(declaration.Surface, declaration.BusinessBinding!.EndsWith(".initializeOwnership", StringComparison.Ordinal)
+                ? new[] { "rowActions", "pageActions", "featureActions" } : new[] { "rowActions", "pageActions" });
             Assert.Empty(declaration.Execution); Assert.Null(declaration.Provider);
             Assert.NotEmpty(declaration.GetObjectRequirements());
             Assert.All(declaration.GetObjectRequirements(), requirement => Assert.Equal(new[] { "edit" }, requirement.Actions));
@@ -89,10 +91,22 @@ public sealed class OwnershipTransferExecutionContractTests
         var workspace = Assert.Single(result.Plan.Modules, module => module.ModuleId == "Workspace");
         var initialization = Assert.Single(workspace.DataExecutions, contract => contract.Key == "workspace.folder.initializeOwnership");
         Assert.Equal("workspace.backend", initialization.Provider);
-        Assert.Equal(new[] { ("query", "read"), ("target", "prepare"), ("target", "submit") },
-            initialization.Requirements.Select(requirement => (requirement.Role, requirement.Stage)));
-        Assert.All(initialization.Requirements, requirement => Assert.Equal(new[] { requirement.Role == "query" ? "read" : "edit" }, Assert.Single(requirement.AnyOf)));
+        Assert.Equal(new[] { ("query", "read") }, initialization.Requirements.Select(requirement => (requirement.Role, requirement.Stage)));
+        Assert.All(initialization.Requirements, requirement => Assert.Equal(new[] { "read" }, Assert.Single(requirement.AnyOf)));
         Assert.DoesNotContain(initialization.Requirements, requirement => requirement.Role == "visibility");
+        foreach (var buttons in declarations.Where(item => item.BusinessBinding?.EndsWith(".initializeOwnership", StringComparison.Ordinal) == true)
+                     .GroupBy(item => item.BusinessBinding!))
+        {
+            var source = Assert.Single(declarations, item => item.Surface == "read" && item.ViewKey == buttons.Key && item.Execution == buttons.Key);
+            Assert.Equal(new[] { "read" }, source.Actions);
+            Assert.Equal(buttons.SelectMany(item => item.FeaturePositions).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal),
+                source.FeaturePositions.Order(StringComparer.Ordinal));
+            var contract = Assert.Single(result.Plan.Modules.SelectMany(module => module.DataExecutions), item => item.Key == buttons.Key);
+            Assert.Equal(contract.Provider, source.Provider);
+            var query = Assert.Single(source.Requirements!);
+            Assert.Equal(("query", "read", "query", 0), (query.Role, query.Stage, query.Shape, query.MinimumCount));
+            Assert.Null(query.MaximumCount);
+        }
         Assert.All(new[] { (Key: "workspace.ownership.display.targets", Caller: "ICP.Platform.Crud.Ownership.EntityOwnershipTransferDisplay.FindNamesAsync"),
             (Key: "workspace.ownership.display.senders", Caller: "ICP.Platform.Modules.Workspace.WorkspaceTransferNotifications.ListAsync") }, entry =>
         {
@@ -120,8 +134,8 @@ public sealed class OwnershipTransferExecutionContractTests
     {
         var candidates = new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")).ToArray();
         var index = Array.FindIndex(candidates, candidate => candidate.ModuleId == "Part");
-        candidates[index] = candidates[index] with { DataExecutions = candidates[index].DataExecutions.Select(contract =>
-            contract.Provider == "entityOwnership.transfer" ? contract with { Provider = "entityOwnership.unregistered" } : contract).ToArray() };
+        candidates[index] = candidates[index] with { DataExecutions = [.. candidates[index].DataExecutions,
+            Read().Single() with { Provider = "entityOwnership.unregistered" }] };
         Assert.False(new CanonicalModulePlanCompiler().Compile("unregistered-ownership-provider", candidates).IsSuccess);
     }
 

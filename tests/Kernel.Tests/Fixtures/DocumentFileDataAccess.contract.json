@@ -327,6 +327,43 @@
       "provider": "standardCrud.read"
     },
     {
+      "id": "Document/view:document.document.initializeOwnership/read",
+      "moduleId": "Document",
+      "viewKey": "document.document.initializeOwnership",
+      "surface": "read",
+      "actionKey": "",
+      "execution": "document.document.initializeOwnership",
+      "resources": [
+        "document.document"
+      ],
+      "actions": [
+        "read"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.custom/action:initializeOwnership",
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.pageActions/action:initializeOwnershipPending",
+        "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:initializeOwnership"
+      ],
+      "requirements": [
+        {
+          "role": "query",
+          "stage": "read",
+          "shape": "query",
+          "resources": [
+            "document.document"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 0,
+          "maximumCount": null
+        }
+      ],
+      "provider": "entityOwnership.initialize"
+    },
+    {
       "id": "Document/view:document.document.list/featureActions/action:authorize",
       "moduleId": "Document",
       "viewKey": "document.document.list",
@@ -401,95 +438,18 @@
       "viewKey": "document.document.list",
       "surface": "featureActions",
       "actionKey": "initializeOwnership",
-      "execution": "document.document.initializeOwnership",
+      "execution": "",
       "resources": [
         "document.document"
       ],
       "actions": [
-        "read",
         "edit"
       ],
       "featurePositions": [
         "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.custom/action:initializeOwnership"
       ],
-      "requirements": [
-        {
-          "role": "query",
-          "stage": "read",
-          "shape": "query",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 0,
-          "maximumCount": null
-        },
-        {
-          "role": "visibility",
-          "stage": "prepare",
-          "shape": "objects",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": null
-        },
-        {
-          "role": "target",
-          "stage": "prepare",
-          "shape": "objects",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": null
-        },
-        {
-          "role": "visibility",
-          "stage": "submit",
-          "shape": "objects",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": null
-        },
-        {
-          "role": "target",
-          "stage": "submit",
-          "shape": "objects",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": null
-        }
-      ],
-      "provider": "entityOwnership.initialize"
+      "object": "Document",
+      "businessBinding": "document.document.initializeOwnership"
     },
     {
       "id": "Document/view:document.document.list/pageActions/action:create",
@@ -532,95 +492,18 @@
       "viewKey": "document.document.list",
       "surface": "pageActions",
       "actionKey": "initializeOwnershipPending",
-      "execution": "document.document.initializeOwnership",
+      "execution": "",
       "resources": [
         "document.document"
       ],
       "actions": [
-        "read",
         "edit"
       ],
       "featurePositions": [
         "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.pageActions/action:initializeOwnershipPending"
       ],
-      "requirements": [
-        {
-          "role": "query",
-          "stage": "read",
-          "shape": "query",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 0,
-          "maximumCount": null
-        },
-        {
-          "role": "visibility",
-          "stage": "prepare",
-          "shape": "objects",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": null
-        },
-        {
-          "role": "target",
-          "stage": "prepare",
-          "shape": "objects",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": null
-        },
-        {
-          "role": "visibility",
-          "stage": "submit",
-          "shape": "objects",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": null
-        },
-        {
-          "role": "target",
-          "stage": "submit",
-          "shape": "objects",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": null
-        }
-      ],
-      "provider": "entityOwnership.initialize"
+      "object": "Document",
+      "businessBinding": "document.document.initializeOwnership"
     },
     {
       "id": "Document/view:document.document.list/read",
@@ -751,95 +634,18 @@
       "viewKey": "document.document.list",
       "surface": "rowActions",
       "actionKey": "initializeOwnership",
-      "execution": "document.document.initializeOwnership",
+      "execution": "",
       "resources": [
         "document.document"
       ],
       "actions": [
-        "read",
         "edit"
       ],
       "featurePositions": [
         "Workspace/navigation:workspace/module:Document/navigation:document.documents/surface:list.rowActions/action:initializeOwnership"
       ],
-      "requirements": [
-        {
-          "role": "query",
-          "stage": "read",
-          "shape": "query",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 0,
-          "maximumCount": null
-        },
-        {
-          "role": "visibility",
-          "stage": "prepare",
-          "shape": "objects",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": null
-        },
-        {
-          "role": "target",
-          "stage": "prepare",
-          "shape": "objects",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": null
-        },
-        {
-          "role": "visibility",
-          "stage": "submit",
-          "shape": "objects",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "read"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": null
-        },
-        {
-          "role": "target",
-          "stage": "submit",
-          "shape": "objects",
-          "resources": [
-            "document.document"
-          ],
-          "anyOf": [
-            [
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": null
-        }
-      ],
-      "provider": "entityOwnership.initialize"
+      "object": "Document",
+      "businessBinding": "document.document.initializeOwnership"
     },
     {
       "id": "Document/view:document.document.list/rowActions/action:transfer",

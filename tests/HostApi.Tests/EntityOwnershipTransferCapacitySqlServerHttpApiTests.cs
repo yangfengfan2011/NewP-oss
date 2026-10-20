@@ -149,7 +149,7 @@ public sealed class EntityOwnershipTransferCapacitySqlServerHttpApiTests(ITestOu
                 using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/ownership/transfer")
                 { Content = JsonContent.Create(new { position, linkIds = input.linkIds, recipientId = owner.AccountId }) };
                 request.Headers.Add("X-NewP-Feature", transfer.Position);
-                request.Headers.Add("X-NewP-Data-Declaration", OwnershipDeclaration(fixture, "workspace.folder.transfer", transfer).Id);
+                request.Headers.Add("X-NewP-Button", OwnershipDeclaration(fixture, "workspace.folder.transfer", transfer).Id);
                 await Assert.ThrowsAnyAsync<OperationCanceledException>(() => recipientClient.SendAsync(request, cancellation.Token));
                 Assert.True(cancellationProbe.NotificationSqlCompleted); Assert.Equal(size, cancellationProbe.SavedNotifications);
             }

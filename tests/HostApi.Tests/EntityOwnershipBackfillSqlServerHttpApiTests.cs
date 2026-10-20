@@ -32,10 +32,12 @@ public sealed class EntityOwnershipBackfillSqlServerHttpApiTests
                 if (state == "complete")
                 {
                     using var forged = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.editObject"), HttpMethod.Put,
-                        $"/api/workspace/content/{target.LinkId}", new { position, values = new { OwnerId = "forged-owner", OwnerDepartmentId = "forged-department" } });
+                        $"/api/workspace/content/{target.LinkId}", new { position, values = new { OwnerId = "forged-owner", OwnerDepartmentId = "forged-department" } },
+                        OwnershipDeclaration(fixture, "workspace.folder.editObject", Point(fixture, "workspace.folder.editObject")));
                     Assert.Equal(HttpStatusCode.BadRequest, forged.StatusCode);
                     using var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.editObject"), HttpMethod.Put,
-                        $"/api/workspace/content/{target.LinkId}", new { position, values = new { Description = "ordinary update" } });
+                        $"/api/workspace/content/{target.LinkId}", new { position, values = new { Description = "ordinary update" } },
+                        OwnershipDeclaration(fixture, "workspace.folder.editObject", Point(fixture, "workspace.folder.editObject")));
                     await ReadOkAsync(saved);
                     var persisted = await RowAsync(fixture, target);
                     foreach (var name in new[] { "OwnerId", "OwnerDepartmentId", "CreatedBy", "CreatedAt" }) Assert.Equal(row[name], persisted[name]);
@@ -57,7 +59,7 @@ public sealed class EntityOwnershipBackfillSqlServerHttpApiTests
         var before = new Dictionary<string, Dictionary<string, object?>>();
         foreach (var target in targets) before[target.Id] = await RowAsync(fixture, target);
         var ownership = Point(fixture, "workspace.folder.initializeOwnership");
-        using var pending = await FeatureHttpTestRequests.SendAsync(admin, ownership, HttpMethod.Get, PendingUrl(position, pageSize: 2), dataAccess: OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", ownership));
+        using var pending = await FeatureHttpTestRequests.SendAsync(admin, ownership, HttpMethod.Get, PendingUrl(position, pageSize: 2), dataAccess: OwnershipReadDeclaration(fixture, "workspace.folder.initializeOwnership", ownership));
         var page = await ReadOkAsync(pending);
         Assert.Equal(9, page.GetProperty("total").GetInt32());
         Assert.Equal(2, page.GetProperty("items").GetArrayLength());
@@ -66,7 +68,7 @@ public sealed class EntityOwnershipBackfillSqlServerHttpApiTests
         {
             var slug = model.ToLowerInvariant();
             using var ownerPending = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, $"{slug}.{slug}.initializeOwnership"), HttpMethod.Get,
-                $"/api/{slug}/{(model == "Part" ? "parts" : "documents")}/ownership/pending?page=1&pageSize=2", dataAccess: OwnershipDeclaration(fixture, $"{slug}.{slug}.initializeOwnership", Point(fixture, $"{slug}.{slug}.initializeOwnership")));
+                $"/api/{slug}/{(model == "Part" ? "parts" : "documents")}/ownership/pending?page=1&pageSize=2", dataAccess: OwnershipReadDeclaration(fixture, $"{slug}.{slug}.initializeOwnership", Point(fixture, $"{slug}.{slug}.initializeOwnership")));
             var ownPage = await ReadOkAsync(ownerPending);
             Assert.Equal(3, ownPage.GetProperty("total").GetInt32());
             Assert.Equal(2, ownPage.GetProperty("items").GetArrayLength());
@@ -100,7 +102,7 @@ public sealed class EntityOwnershipBackfillSqlServerHttpApiTests
                 Assert.Equal(department, current["OwnerDepartmentId"]);
             }
         }
-        using var finalPending = await FeatureHttpTestRequests.SendAsync(admin, ownership, HttpMethod.Get, PendingUrl(position), dataAccess: OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", ownership));
+        using var finalPending = await FeatureHttpTestRequests.SendAsync(admin, ownership, HttpMethod.Get, PendingUrl(position), dataAccess: OwnershipReadDeclaration(fixture, "workspace.folder.initializeOwnership", ownership));
         Assert.Equal(0, (await ReadOkAsync(finalPending)).GetProperty("total").GetInt32());
         using var finalScope = fixture.Services.CreateScope();
         var changes = await finalScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>().Set<Dictionary<string, object?>>("BusinessChange")
@@ -122,9 +124,13 @@ public sealed class EntityOwnershipBackfillSqlServerHttpApiTests
     internal sealed record Position(string SpaceId, string RootFolderId, string[] LinkIds);
     internal sealed record Target(string Model, string Id, string LinkId, string Name);
     internal static FeaturePoint Point(BusinessAuditHostFixture fixture, string behavior) => fixture.FeatureCatalog.First(point => point.BehaviorKey == behavior);
-    // 正常业务消费者显式指定执行及已有功能来源；缺失/串用反例继续直接发送，不按URL补头。
+    // 实际按钮或明确的旧非read准备来源由调用者固定；不能把同key的独立查询声明当作按钮。
     internal static ActionDataAccessRequirement OwnershipDeclaration(BusinessAuditHostFixture fixture, string execution, FeaturePoint point) =>
-        new FeatureHttpTestRequests(fixture).Declaration(execution, point);
+        fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog.Single(item => item.Surface != "read"
+            && (item.BusinessBinding == execution || item.Execution == execution) && item.FeaturePositions.Contains(point.Position));
+    // 待补齐查询明确指定自己的原read合同，不按HTTP路径或缺头猜测来源。
+    internal static ActionDataAccessRequirement OwnershipReadDeclaration(BusinessAuditHostFixture fixture, string execution, FeaturePoint point) =>
+        new FeatureHttpTestRequests(fixture).ReadDeclaration(execution, point);
     internal static async Task<JsonElement> ReadOkAsync(HttpResponseMessage response)
     {
         var text = await response.Content.ReadAsStringAsync();

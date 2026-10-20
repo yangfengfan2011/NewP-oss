@@ -83,10 +83,12 @@ async function mount(initialTarget: ObjectOwnershipInitializationTarget = target
     const [currentBinding, setBinding] = useState(binding); changeBinding = setBinding;
     const registration = createObjectOwnershipActions(() => currentTarget, currentTarget.eligibilityPath);
     return <StandardCrudActions actions={[{ key: 'initializeOwnership', labelKey: '归属补齐',
-      inputKey: 'initializeOwnership', confirmLabel: '确认补齐', dataAccess: currentBinding }]}
-      featureResolutionForAction={() => ({ kind: 'allowed', position: 'ownership' })}
+      inputKey: 'initializeOwnership', confirmLabel: '确认补齐', dataAccess: currentBinding,
+      inputReadSourceKey: currentBinding?.businessBinding }]}
+      featureResolutionForAction={() => ({ kind: 'allowed', position: currentBinding?.featurePositions[0] ?? 'ownership' })}
       handlers={registration.actionHandlers} actionInputs={registration.actionInputRenderers}
-      actionEligibilityResolvers={registration.actionEligibilityResolvers} context={{ id: currentTarget.initialId }}
+      actionEligibilityResolvers={registration.actionEligibilityResolvers} context={{ id: currentTarget.initialId,
+        dataAccessDeclarations: requirements as ActionDataAccessRequirement[] }}
       refresh={refresh} onResult={result => results.push(result)} />;
   }
   container = document.createElement('div'); document.body.append(container); root = createRoot(container);
@@ -306,30 +308,41 @@ it('preserves an unknown mutation outcome and never automatically replays the bu
 it('aborts the old pending request and clears selection when the formal initialization binding changes', async () => {
   const binding = (surface: string) => {
     const matches = (requirements as ActionDataAccessRequirement[]).filter(item => item.viewKey === 'part.part.list'
-      && item.execution === 'part.part.initializeOwnership' && item.surface === surface);
+      && item.businessBinding === 'part.part.initializeOwnership' && item.surface === surface);
     expect(matches).toHaveLength(1);
     return matches[0];
   };
   const original = binding('pageActions');
   const replacement = binding('featureActions');
+  const read = (requirements as ActionDataAccessRequirement[]).find(item => item.viewKey === original.businessBinding && item.surface === 'read')!;
+  expect(read.execution).toBe(original.businessBinding);
   let finish!: (response: Response) => void;
   let pendingCalls = 0;
   await mount(target, { pending: () => ++pendingCalls === 1 ? new Promise<Response>(resolve => { finish = resolve; })
     : json({ items: [{ id: 'fresh', name: '新来源对象' }], total: 1 }) }, original);
   await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
   const obsolete = requests.find(request => new URL(request.url).pathname.endsWith('/pending'))!;
-  expect(obsolete.headers.get('X-NewP-Data-Declaration')).toBe(original.id);
+  expect(obsolete.headers.get('X-NewP-Data-Declaration')).toBe(read.id);
+  expect(obsolete.headers.has('X-NewP-Button')).toBe(false);
+  expect(obsolete.headers.get('X-NewP-Feature')).toBe(original.featurePositions[0]);
   await act(async () => changeBinding(replacement));
-  await vi.waitFor(() => expect(document.body.textContent).toContain('新来源对象'));
+  // 正式功能位置改变使原输入实例结束；新位置必须重新显式打开，不能复用旧选择。
+  await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
   expect(obsolete.signal.aborted).toBe(true);
+  await click('归属补齐');
+  await vi.waitFor(() => expect(document.body.textContent).toContain('新来源对象'));
   await act(async () => finish(json({ items: [{ id: 'obsolete', name: '旧来源对象' }], total: 1 })));
   expect(document.body.textContent).not.toContain('旧来源对象');
   expect(button('确认补齐')?.disabled).toBe(true);
   expect(requests.filter(request => new URL(request.url).pathname.endsWith('/pending')).at(-1)!
-    .headers.get('X-NewP-Data-Declaration')).toBe(replacement.id);
+    .headers.get('X-NewP-Data-Declaration')).toBe(read.id);
+  const current = requests.filter(request => new URL(request.url).pathname.endsWith('/pending')).at(-1)!;
+  expect(current.headers.has('X-NewP-Button')).toBe(false);
+  expect(current.headers.get('X-NewP-Feature')).toBe(replacement.featurePositions[0]);
   const registration = createObjectOwnershipActions(() => target, target.eligibilityPath);
-  await expect(registration.actionHandlers.initializeOwnership({ featurePosition: 'ownership', dataAccess: replacement,
-    input: { targetIds: ['obsolete'], source: ownershipInitializationSource(target, 'ownership', original) } }))
+  await expect(registration.actionHandlers.initializeOwnership({ featurePosition: replacement.featurePositions[0], dataAccess: replacement,
+    action: { key: 'initializeOwnership', inputReadSourceKey: replacement.businessBinding },
+    input: { targetIds: ['obsolete'], source: ownershipInitializationSource(target, original.featurePositions[0], original, original.businessBinding) } }))
     .rejects.toMatchObject({ status: 409 });
   expect(writes()).toHaveLength(0);
 });

@@ -15,22 +15,10 @@ public sealed record EntityOwnershipTransferResult(bool Succeeded, int Changed);
 
 /// <summary>规范对象转交只改变归属；接收、记录与结果共享原数据库事务。</summary>
 public sealed class EntityOwnershipTransfer(EfPlatformDbContext db, IPlatformTransactionExecutor transactions,
-    IEntityAuditValueProvider audit, IDataExecutionAccess executions, IStandardCrudResourceRegistry registry,
+    IEntityAuditValueProvider audit, IStandardCrudResourceRegistry registry,
     IEnumerable<DataScopeResource> declaredResources,
     IEnumerable<IEntityOwnershipTransferReceiver> receivers, IBusinessAuditRecorder recorder, ITransactionalAccountOwnershipDirectory? accounts = null)
 {
-    /// <summary>未迁移入口暂沿原来源检查；实际对象、锁序与接收仍共用同一业务边界。</summary>
-    public async ValueTask<EntityOwnershipTransferResult> TransferAsync(IReadOnlyCollection<EntityOwnershipTransferTarget> targets,
-        string recipientId, DataExecutionBindingReference source, CancellationToken token = default)
-    {
-        ValidateTransferSource(source, "submit", targets);
-        return await WithinTransferAsync(targets, recipientId, async (state, cancellation) =>
-        {
-            await RequireBoundEditAsync(state, source, cancellation);
-            return await CommitAsync(state, cancellation);
-        }, token);
-    }
-
     /// <summary>原接收协调及对象行锁内取得当前所属人事实，平台在接收账号读取前检查本次按钮的同一目标。</summary>
     public async Task<TResult> WithinTransferAsync<TResult>(IReadOnlyCollection<EntityOwnershipTransferTarget> targets,
         string recipientId, Func<EntityOwnershipTransferState, CancellationToken, Task<TResult>> execute, CancellationToken token = default)
@@ -92,26 +80,6 @@ public sealed class EntityOwnershipTransfer(EfPlatformDbContext db, IPlatformTra
         return new(true, changed.Count);
     }
 
-    /// <summary>未迁移准备入口独立消费原声明，不能将本次允许用于后续提交。</summary>
-    public async ValueTask CheckAsync(IReadOnlyCollection<EntityOwnershipTransferTarget> targets,
-        DataExecutionBindingReference source, CancellationToken token = default)
-    {
-        ValidateTransferSource(source, "prepare", targets);
-        await WithinPreparationAsync(targets, async (state, cancellation) =>
-        {
-            await RequireBoundEditAsync(state, source, cancellation);
-            return true;
-        }, token);
-    }
-
-    // 只有明确尚未迁移的旧入口使用执行合同；新按钮在同一状态点由平台检查，不重复固定edit。
-    private async Task RequireBoundEditAsync(EntityOwnershipTransferState state, DataExecutionBindingReference source, CancellationToken token)
-    {
-        foreach (var item in state.Objects)
-            if (!await BoundEditAsync(source, item.ResourceKey, item.ObjectId, token))
-                throw new EntityOwnershipException(403, "EntityOwnership.TransferDenied");
-    }
-
     // 模型来自正式注册；选择去重和锁序只由真实业务对象决定，不包含接收账号。
     private (EntityOwnershipTransferTarget Target, string Model)[] ResolveSelection(IReadOnlyCollection<EntityOwnershipTransferTarget> targets)
     {
@@ -146,22 +114,6 @@ public sealed class EntityOwnershipTransfer(EfPlatformDbContext db, IPlatformTra
                 }
             }
         return facts;
-    }
-
-    // 来源固定于执行端，真实对象仍在原时点传入共同对象角色执行器。
-    private async Task<bool> BoundEditAsync(DataExecutionBindingReference source, string resource, string id, CancellationToken token)
-    {
-        await foreach (var decision in executions.EvaluateObjectsAsync(source, "target", [new(resource, id)], token))
-            return decision.Decision == DataExecutionDecision.Allowed;
-        throw new InvalidOperationException("Transfer target evaluation returned no decision.");
-    }
-
-    // 核实际HTTP声明及资源；prepare/submit由真实方法选择，客户端不能指定另一执行或阶段。
-    private void ValidateTransferSource(DataExecutionBindingReference source, string stage, IReadOnlyCollection<EntityOwnershipTransferTarget> targets)
-    {
-        if (source.Provider != "entityOwnership.transfer" || source.Stage != stage)
-            throw new ActionDataAccessException(400, "ActionDataAccess.DeclarationInvalid");
-        foreach (var resource in targets.Select(target => target.ResourceKey).Distinct(StringComparer.Ordinal)) executions.Validate([source], resource);
     }
 
     // 只消费真实 owner 已登记的规范资源；选用归属字段的模型才可转交，不引入业务模块白名单。

@@ -22,7 +22,7 @@ public sealed class EntityOwnershipTransferReceivingSqlServerHttpApiTests
         using var admin = await fixture.LoginAdministratorAsync();
         await InitializeAsync(fixture, admin);
         var read = Point(fixture, "workspace.spaces.access"); var transfer = Point(fixture, "workspace.folder.transfer");
-        var folderRead = OwnershipDeclaration(fixture, "workspace.folder.read", read);
+        var folderRead = OwnershipReadDeclaration(fixture, "workspace.folder.read", read);
         var notices = Point(fixture, "workspace.transfers.read");
         var manage = fixture.FeatureCatalog.Single(point => point.ModuleId == "Workspace" && point.Key == "authorizeContent" && point.ActionScope == "list.rowActions");
         var owner = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "PrivateTransferOwner", "私人转交人",

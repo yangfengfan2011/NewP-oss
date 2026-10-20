@@ -56,6 +56,7 @@ public sealed class PartModule : ModuleCapsuleBindingBase
         services.AddScoped<PartBusinessRecorder>();
         services.AddScoped<PartHistoryButtonHandler>();
         services.AddScoped<PartOwnershipTransferButtonHandler>();
+        services.AddScoped<PartOwnershipInitializationButtonHandler>();
         services.AddScoped<IStandardCrudCreationRecorder>(provider => provider.GetRequiredService<PartBusinessRecorder>());
         services.AddScoped<IStandardCrudUpdateRecorder>(provider => provider.GetRequiredService<PartBusinessRecorder>());
         services.AddObjectBehavior<PartObjectBehavior>(this, PartObjectBehavior.BehaviorDefinition);

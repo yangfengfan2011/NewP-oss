@@ -20,6 +20,7 @@ public sealed class DocumentModule : ModuleCapsuleBindingBase
     {
         services.AddScoped<DocumentHistoryButtonHandler>();
         services.AddScoped<DocumentOwnershipTransferButtonHandler>();
+        services.AddScoped<DocumentOwnershipInitializationButtonHandler>();
         services.AddSingleton(new ICP.Platform.Authorization.Contracts.DataScopeResourceActionBinding("document.document", ModuleId,
             ["read", "create", "edit", "delete", "authorize", "documentCopy", "documentObjectCopy", "download"]));
         services.AddSingleton(new ICP.Platform.Modules.Audit.Contracts.ObjectHistoryEventPolicy(ModuleId,

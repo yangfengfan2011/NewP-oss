@@ -54,7 +54,7 @@ public sealed class EntityOwnershipTransferTransactionSqlServerHttpApiTests(ITes
             {
                 using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/ownership/transfer") { Content = JsonContent.Create(input) };
                 request.Headers.Add("X-NewP-Feature", transfer.Position);
-                request.Headers.Add("X-NewP-Data-Declaration", OwnershipDeclaration(fixture, "workspace.folder.transfer", transfer).Id);
+                request.Headers.Add("X-NewP-Button", OwnershipDeclaration(fixture, "workspace.folder.transfer", transfer).Id);
                 if (mode == "cancel")
                     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => admin.SendAsync(request, cancellation.Token));
                 else

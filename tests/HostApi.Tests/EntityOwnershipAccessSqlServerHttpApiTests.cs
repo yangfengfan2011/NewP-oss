@@ -34,7 +34,7 @@ public sealed class EntityOwnershipAccessSqlServerHttpApiTests
         var point = Point(fixture, "workspace.folder.initializeOwnership");
         var input = new { position, linkIds = targets.Select(target => target.LinkId).ToArray() };
         access.HiddenId = targets[1].Id;
-        using var pending = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Get, PendingUrl(position), dataAccess: OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", point));
+        using var pending = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Get, PendingUrl(position), dataAccess: OwnershipReadDeclaration(fixture, "workspace.folder.initializeOwnership", point));
         Assert.Equal(2, (await ReadOkAsync(pending)).GetProperty("total").GetInt32());
         using var unreadable = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Post, "/api/workspace/ownership/initialize", input, OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", point));
         Assert.Equal(HttpStatusCode.NotFound, unreadable.StatusCode);

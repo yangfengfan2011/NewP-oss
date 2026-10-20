@@ -60,13 +60,13 @@ public sealed class OwnershipExecutionSqlServerHttpApiTests
         }
         var maintenance = Assert.Single(fixture.FeatureCatalog, point => point.ModuleId == "Workspace" && point.Key == "initializeOwnership" && point.ActionScope == "list.custom");
         using (var pending = await FeatureHttpTestRequests.SendAsync(admin, maintenance, HttpMethod.Get, PendingUrl(position, pageSize: 100),
-                   dataAccess: OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", maintenance)))
+                   dataAccess: OwnershipReadDeclaration(fixture, "workspace.folder.initializeOwnership", maintenance)))
             Assert.Equal(legacy.LinkId, Assert.Single((await ReadOkAsync(pending)).GetProperty("items").EnumerateArray()).GetProperty("id").GetString());
         using (var initialized = await FeatureHttpTestRequests.SendAsync(admin, maintenance, HttpMethod.Post, "/api/workspace/ownership/initialize",
             new { position, linkIds = new[] { legacy.LinkId } }, OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", maintenance)))
             Assert.Equal(1, (await ReadOkAsync(initialized)).GetProperty("changed").GetInt32());
         using (var pending = await FeatureHttpTestRequests.SendAsync(admin, maintenance, HttpMethod.Get, PendingUrl(position, pageSize: 100),
-                   dataAccess: OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", maintenance)))
+                   dataAccess: OwnershipReadDeclaration(fixture, "workspace.folder.initializeOwnership", maintenance)))
             Assert.Equal(0, (await ReadOkAsync(pending)).GetProperty("total").GetInt32());
     }
 
@@ -143,8 +143,10 @@ public sealed class OwnershipExecutionSqlServerHttpApiTests
         var plan = services.ServiceProvider.GetRequiredService<CanonicalModulePlan>();
         var transferSource = Assert.Single(plan.ActionDataAccessCatalog, item => (item.BusinessBinding ?? item.Execution) == "workspace.folder.transfer"
             && item.Surface == "rowActions" && item.ActionKey == "transfer" && item.FeaturePositions.Contains(transfer.Position));
-        var maintenanceSource = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "workspace.folder.initializeOwnership"
+        var maintenanceSource = Assert.Single(plan.ActionDataAccessCatalog, item => item.BusinessBinding == "workspace.folder.initializeOwnership"
             && item.Surface == "featureActions" && item.FeaturePositions.Contains(maintenance.Position));
+        var maintenanceReadSource = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "workspace.folder.initializeOwnership"
+            && item.Surface == "read" && item.FeaturePositions.Contains(maintenance.Position));
         var wrongSource = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "workspace.content.read"
             && item.ViewKey == "workspace.folder.list" && item.Surface == "read");
         var scope = Uri.EscapeDataString(JsonSerializer.Serialize(position, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
@@ -199,7 +201,7 @@ public sealed class OwnershipExecutionSqlServerHttpApiTests
         foreach (var target in targets) await EntityOwnershipFailureSqlServerHttpApiTests.ClearOwnershipAsync(fixture, target);
         using (var missing = await FeatureHttpTestRequests.SendAsync(admin, maintenance, HttpMethod.Get, PendingUrl(position)))
             Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
-        using (var pending = await FeatureHttpTestRequests.SendAsync(admin, maintenance, HttpMethod.Get, PendingUrl(position), dataAccess: maintenanceSource))
+        using (var pending = await FeatureHttpTestRequests.SendAsync(admin, maintenance, HttpMethod.Get, PendingUrl(position), dataAccess: maintenanceReadSource))
             Assert.Equal(3, (await ReadOkAsync(pending)).GetProperty("total").GetInt32());
         using (var initialized = await FeatureHttpTestRequests.SendAsync(admin, maintenance, HttpMethod.Post, "/api/workspace/ownership/initialize",
                    new { position, input.linkIds }, maintenanceSource))
@@ -248,16 +250,38 @@ public sealed class OwnershipExecutionSqlServerHttpApiTests
         var feature = Assert.Single(fixture.FeatureCatalog, point => point.ModuleId == model && point.Key == "initializeOwnership" && point.ActionScope == "list.custom");
         using var services = fixture.Services.CreateScope();
         var plan = services.ServiceProvider.GetRequiredService<CanonicalModulePlan>();
-        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == resource + ".initializeOwnership"
+        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => (item.BusinessBinding ?? item.Execution) == resource + ".initializeOwnership"
             && item.ViewKey == resource + ".list" && item.Surface == "featureActions" && item.ActionKey == "initializeOwnership"
             && item.FeaturePositions.Contains(feature.Position));
         var wrong = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == resource + ".list" && item.Surface == "read");
+        var readDeclaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == resource + ".initializeOwnership"
+            && item.ViewKey == resource + ".initializeOwnership" && item.Surface == "read");
         var path = $"/api/{slug}/{plural}/ownership";
+        var rowFeature = Assert.Single(fixture.FeatureCatalog, point => point.ModuleId == model
+            && point.Key == "initializeOwnership" && point.ActionScope == "list.rowActions");
+        var rowButton = Assert.Single(plan.ActionDataAccessCatalog, item => (item.BusinessBinding ?? item.Execution) == resource + ".initializeOwnership"
+            && item.Surface == "rowActions" && item.FeaturePositions.Contains(rowFeature.Position));
+        using (var missingButton = await FeatureHttpTestRequests.SendAsync(admin, rowFeature, HttpMethod.Get, path + "/" + target.Id + "/status"))
+            Assert.Equal(HttpStatusCode.BadRequest, missingButton.StatusCode);
+        using (var borrowed = await MaintenanceStatusAsync(wrong))
+            Assert.Equal(HttpStatusCode.BadRequest, borrowed.StatusCode);
+        using (var readAsButton = await MaintenanceStatusAsync(readDeclaration))
+            Assert.Equal(HttpStatusCode.BadRequest, readAsButton.StatusCode);
+        using (var actualButton = await MaintenanceStatusAsync(rowButton))
+            Assert.True((await ReadOkAsync(actualButton)).GetProperty("missing").GetBoolean());
+        var pendingFeature = Assert.Single(fixture.FeatureCatalog, point => point.ModuleId == model
+            && point.Key == "initializeOwnershipPending" && point.ActionScope == "list.pageActions");
+        Assert.Equal(new[] { feature.Position, rowFeature.Position, pendingFeature.Position }.Order(StringComparer.Ordinal),
+            readDeclaration.FeaturePositions.Order(StringComparer.Ordinal));
+        Assert.DoesNotContain(wrong.FeaturePositions, position => readDeclaration.FeaturePositions.Contains(position));
+
         using (var absentSource = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Get, path + "/pending"))
             Assert.Equal(HttpStatusCode.BadRequest, absentSource.StatusCode);
         using (var swapped = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Get, path + "/pending", dataAccess: wrong))
             Assert.Equal(HttpStatusCode.BadRequest, swapped.StatusCode);
-        using (var pending = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Get, path + "/pending?page=1&pageSize=100", dataAccess: declaration))
+        using (var buttonAsRead = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Get, path + "/pending", dataAccess: declaration))
+            Assert.Equal(HttpStatusCode.BadRequest, buttonAsRead.StatusCode);
+        using (var pending = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Get, path + "/pending?page=1&pageSize=100", dataAccess: readDeclaration))
         {
             var page = await ReadOkAsync(pending);
             Assert.Equal(1, page.GetProperty("total").GetInt32());
@@ -277,6 +301,8 @@ public sealed class OwnershipExecutionSqlServerHttpApiTests
         Assert.Equal(department, after["OwnerDepartmentId"]);
         Assert.Equal(before["CreatedBy"], after["CreatedBy"]);
         Assert.Equal(before["CreatedAt"], after["CreatedAt"]);
+        Assert.Equal(before["UpdatedBy"], after["UpdatedBy"]);
+        Assert.Equal(before["UpdatedAt"], after["UpdatedAt"]);
         var db = services.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
         var events = await db.Set<Dictionary<string, object?>>("BusinessChange").AsNoTracking()
             .CountAsync(row => EF.Property<string>(row, "EventType") == "entity.ownership.backfilled");
@@ -285,8 +311,17 @@ public sealed class OwnershipExecutionSqlServerHttpApiTests
             Assert.False((await ReadOkAsync(unchanged)).GetProperty("changed").GetBoolean());
         Assert.Equal(events, await db.Set<Dictionary<string, object?>>("BusinessChange").AsNoTracking()
             .CountAsync(row => EF.Property<string>(row, "EventType") == "entity.ownership.backfilled"));
-        using (var pending = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Get, path + "/pending", dataAccess: declaration))
+        using (var pending = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Get, path + "/pending", dataAccess: readDeclaration))
             Assert.Equal(0, (await ReadOkAsync(pending)).GetProperty("total").GetInt32());
+
+        // 状态与提交按钮身份来自实际行入口；原待补齐查询仍独立消费自己的SQL读取来源。
+        async Task<HttpResponseMessage> MaintenanceStatusAsync(ActionDataAccessRequirement identity)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, path + "/" + target.Id + "/status");
+            request.Headers.Add("X-NewP-Feature", rowFeature.Position);
+            request.Headers.Add("X-NewP-Button", identity.Id);
+            return await admin.SendAsync(request);
+        }
     }
 
     private static async Task MissingDeclarationAsync(string model, string plural)

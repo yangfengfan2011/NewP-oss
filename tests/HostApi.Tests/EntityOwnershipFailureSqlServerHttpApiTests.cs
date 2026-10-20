@@ -62,7 +62,7 @@ public sealed class EntityOwnershipFailureSqlServerHttpApiTests(ITestOutputHelpe
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/ownership/initialize") { Content = JsonContent.Create(body) };
             request.Headers.Add("X-NewP-Feature", point.Position);
-            request.Headers.Add("X-NewP-Data-Declaration", OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", point).Id);
+            request.Headers.Add("X-NewP-Button", OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", point).Id);
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => admin.SendAsync(request, cancellation.Token));
         }
         finally { fixture.Fault.AfterRegister = null; }

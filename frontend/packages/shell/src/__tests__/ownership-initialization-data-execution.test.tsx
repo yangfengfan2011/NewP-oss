@@ -29,6 +29,12 @@ it('carries the actual pending initialization binding from PageEntry through sel
     && item.surface === 'pageActions' && item.actionKey === 'initializeOwnershipPending');
   expect(matches).toHaveLength(1);
   const declaration = matches[0];
+  const sourceKey = list.view.pageActions.find((action: { key: string; inputReadSourceKey?: string }) => action.key === 'initializeOwnershipPending')!.inputReadSourceKey;
+  const readMatches = (requirements as ActionDataAccessRequirement[]).filter(item => item.viewKey === sourceKey && item.surface === 'read');
+  expect(readMatches).toHaveLength(1);
+  const read = readMatches[0];
+  expect(declaration.businessBinding).toBe('part.part.initializeOwnership');
+  expect(read.execution).toBe('part.part.initializeOwnership');
   expect(declaration.featurePositions).toHaveLength(1);
   const actionPosition = declaration.featurePositions[0];
   const readPositions = formalDataAccessFor(list.view.key, 'read').featurePositions
@@ -48,10 +54,14 @@ it('carries the actual pending initialization binding from PageEntry through sel
     if (url.pathname.endsWith('current-user')) return json(user);
     if (url.pathname.includes('/ownership')) {
       if (url.pathname.endsWith('/eligibility')) return json({ allowed: true });
-      if (request.headers.get('X-NewP-Data-Declaration') !== declaration.id)
-        return json({ code: 'ActionDataAccess.DeclarationInvalid' }, 400);
-      if (url.pathname.endsWith('/pending')) return json({ items: [{ id: fields.EID, name: fields.ENAME }], total: 1 });
-      if (request.method === 'POST') return json({ changed: 1, unresolved: 0 });
+      if (url.pathname.endsWith('/pending')) {
+        if (request.headers.get('X-NewP-Data-Declaration') !== read.id || request.headers.has('X-NewP-Button'))
+          return json({ code: 'ActionDataAccess.DeclarationInvalid' }, 400);
+        return json({ items: [{ id: fields.EID, name: fields.ENAME }], total: 1 });
+      }
+      if (request.method === 'POST' && request.headers.get('X-NewP-Button') === declaration.id && !request.headers.has('X-NewP-Data-Declaration'))
+        return json({ changed: 1, unresolved: 0 });
+      return json({ code: 'ButtonExecution.BindingInvalid' }, 400);
     }
     if (url.pathname === '/api/part/parts') return json({ items: [fields], total: 1, page: 1, pageSize: 20 });
     throw new Error(`Unexpected ownership initialization request ${request.method} ${url.pathname}`);
@@ -84,7 +94,7 @@ it('carries the actual pending initialization binding from PageEntry through sel
   await vi.waitFor(() => expect(button('待补齐归属')).toBeDefined());
   await act(async () => button('待补齐归属')!.click());
   await vi.waitFor(() => expect(requests.some(request => new URL(request.url).pathname.endsWith('/ownership/pending'))).toBe(true));
-  expect(requests.find(request => new URL(request.url).pathname.endsWith('/ownership/pending'))!.headers.get('X-NewP-Data-Declaration')).toBe(declaration.id);
+  expect(requests.find(request => new URL(request.url).pathname.endsWith('/ownership/pending'))!.headers.get('X-NewP-Data-Declaration')).toBe(read.id);
   await vi.waitFor(() => expect(button('选择当前许可页')?.disabled).toBe(false));
   await act(async () => button('选择当前许可页')!.click());
   await vi.waitFor(() => expect(button('确认')?.disabled).toBe(false));
@@ -93,6 +103,7 @@ it('carries the actual pending initialization binding from PageEntry through sel
   const writes = requests.filter(request => request.method === 'POST' && new URL(request.url).pathname.endsWith('/ownership/initialize'));
   expect(writes, requests.map(request => `${request.method} ${new URL(request.url).pathname}`).join('\n')).toHaveLength(1);
   expect(await writes[0].clone().json()).toEqual({ ids: [fields.EID] });
-  expect(writes[0].headers.get('X-NewP-Data-Declaration')).toBe(declaration.id);
+  expect(writes[0].headers.get('X-NewP-Button')).toBe(declaration.id);
+  expect(writes[0].headers.has('X-NewP-Data-Declaration')).toBe(false);
   expect(writes[0].headers.get('X-NewP-Feature')).toBe(actionPosition);
 });

@@ -78,6 +78,47 @@ await Promise.all([
 ]);
 
 describe('Organization feature placements in real Shell hosts', () => {
+  it('deletes the real company through overflow and its modal with the exact button context once', async () => {
+    const companyEntry = featurePoint('tab', 'companies').position;
+    const deletion = organizationFeatures.find(point => point.parentPosition === companyEntry
+      && point.key === 'delete' && point.actionScope === 'list.rowActions')!;
+    expect(deletion).toBeDefined();
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    let deleted = false;
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (init?.method === 'DELETE') { deleted = true; return new Response(null, { status: 204 }); }
+      return jsonResponse({ items: deleted ? [] : [{ EID: 'Company_delete325', ECODE: 'DELETE325', ENAME: '待删除公司',
+        SortOrder: '0100', IsEnabled: true }], total: deleted ? 0 : 1, page: 1, pageSize: 20 });
+    });
+    const rendered = await renderOrganizationPage([companyEntry, deletion.position], {
+      pageKey: 'platform.list', parameters: { viewKey: companyList.view.key, featurePosition: companyEntry },
+    });
+    try {
+      await rendered.waitFor(() => Boolean(document.querySelector('tr[data-row-key="Company_delete325"]')));
+      const row = document.querySelector('tr[data-row-key="Company_delete325"]')!;
+      expect([...row.querySelectorAll('button')].some(button => button.textContent?.trim() === '删除')).toBe(false);
+      await act(async () => [...row.querySelectorAll<HTMLButtonElement>('button')].find(button => button.getAttribute('aria-label') === '更多')!.click());
+      const menuDelete = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent?.trim() === '删除');
+      await rendered.waitFor(() => Boolean(menuDelete()));
+      await act(async () => menuDelete()!.click());
+      await rendered.waitFor(() => Boolean(document.querySelector('[role="dialog"]')?.textContent?.includes('确认删除该公司吗？')));
+      expect(requests.filter(request => request.init?.method === 'DELETE')).toHaveLength(0);
+      const modal = document.querySelector('[role="dialog"]')!;
+      await act(async () => [...modal.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.replace(/\s/g, '') === '确认')!.click());
+      await rendered.waitFor(() => !document.querySelector('tr[data-row-key="Company_delete325"]'));
+      await rendered.waitFor(() => !document.querySelector('[role="dialog"]'));
+      const writes = requests.filter(request => request.init?.method === 'DELETE');
+      expect(writes).toHaveLength(1);
+      expect(writes[0].url).toBe('/api/organization/companies/Company_delete325');
+      const headers = new Headers(writes[0].init?.headers);
+      expect(headers.get('X-NewP-Button')).toBe(formalDataAccessFor(companyList.view.key, 'rowActions', 'delete').id);
+      expect(headers.get('X-NewP-Feature')).toBe(deletion.position);
+      expect(headers.has('X-NewP-Data-Declaration')).toBe(false);
+    } finally { await rendered.dispose(); fetchMock.mockRestore(); }
+  });
+
   it('opens the real company drawer from the tree toolbar and carries the tree action position', async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -210,6 +251,13 @@ describe('Organization feature placements in real Shell hosts', () => {
 });
 
 async function renderTree(featurePositions: string[]) {
+  return renderOrganizationPage(featurePositions, {
+    pageKey: 'platform.tree', parameters: { viewKey: organizationTree.view.key, featurePosition: structurePosition },
+    inputResolverKey: 'organization.tree.global',
+  });
+}
+
+async function renderOrganizationPage(featurePositions: string[], page: Parameters<typeof PageEntry>[0]['page']) {
   ModuleRegistry.replaceAll([{
     ...organizationBindings,
     metadata: { moduleId: 'Organization', displayName: 'Organization', version: '1' },
@@ -234,11 +282,7 @@ async function renderTree(featurePositions: string[]) {
         <AuthorizationProvider featurePositions={featurePositions}>
           <PlatformQueryProvider scopeKey="organization-feature-placement-tree">
             <RuntimeMetadataProvider value={metadata}>
-              <PageEntry page={{
-                pageKey: 'platform.tree',
-                parameters: { viewKey: organizationTree.view.key, featurePosition: structurePosition },
-                inputResolverKey: 'organization.tree.global',
-              }} />
+              <PageEntry page={page} />
             </RuntimeMetadataProvider>
           </PlatformQueryProvider>
         </AuthorizationProvider>

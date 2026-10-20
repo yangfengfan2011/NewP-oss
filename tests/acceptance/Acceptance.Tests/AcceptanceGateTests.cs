@@ -270,8 +270,9 @@ public sealed class AcceptanceGateTests
                 await StandardCrudPageDriver.FillDrawerFieldAsync(edit, "公司名称", name + " 已编辑");
                 await driver.SaveChangesAsync(edit, new("PUT", "/api/organization/companies/", 200, "Organization company edit", PathIsPrefix: true));
                 row = await driver.WaitForRowAsync(code, name + " 已编辑");
-                await row.GetByRole(AriaRole.Button, new() { NameRegex = new System.Text.RegularExpressions.Regex(@"^删\s*除$") }).ClickAsync();
-                var confirm = driver.DangerConfirmation("确认删除该公司吗？");
+                await row.GetByRole(AriaRole.Button, new() { Name = "更多", Exact = true }).ClickAsync();
+                await page.GetByRole(AriaRole.Menuitem, new() { Name = "删除", Exact = true }).ClickAsync();
+                var confirm = driver.ConfirmDialogWithText("确认删除该公司吗？");
                 await driver.ConfirmAsync(confirm, new("DELETE", "/api/organization/companies/", 204, "Organization company delete", PathIsPrefix: true));
                 await row.WaitForAsync(new() { State = WaitForSelectorState.Hidden });
                 await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"), new { url = page.Url, code, journey = "organization-data-execution" }, token);

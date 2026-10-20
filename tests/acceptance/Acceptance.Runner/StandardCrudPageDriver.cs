@@ -175,10 +175,6 @@ internal sealed class StandardCrudPageDriver
     internal ILocator ConfirmDialogWithText(string text) =>
         Page.GetByRole(AriaRole.Dialog).Filter(new LocatorFilterOptions { HasTextString = text });
 
-    // 标准危险行操作使用Popconfirm，限定可见弹出层及真实确认文案。
-    internal ILocator DangerConfirmation(string text) =>
-        Page.Locator(".ant-popconfirm:visible").Filter(new LocatorFilterOptions { HasTextString = text });
-
     // 在弹窗内点击确认，等待期望响应并校验，再等待弹窗关闭。
     internal async Task<IResponse> ConfirmAsync(ILocator dialog, ApiExpectation expectation, string? buttonLabel = null)
     {

@@ -17,6 +17,88 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class PartWriteExecutionSqlServerTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "正式DI内部Part创建不暗加create/read/edit下限，字段、归属、记录器与原子事务保持")]
+    public async Task ExplicitInternalCreate_UsesTheRegisteredPartBehaviorWithoutAddingAnAuthorizationFloor()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(includePart: true);
+        using var admin = await fixture.LoginAdministratorAsync();
+        var read = Assert.Single(fixture.FeatureCatalog, point => point.ModuleId == "Part" && point.Kind == "navigation" && point.Key == "part.parts");
+        var create = Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "part.part.create");
+        var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "PartOptionalFloor", "内部组合",
+            "part-optional-floor", "内部组合账号", read, create);
+        using var ordinary = actor.Client;
+        const string name = "内部组合无固定下限";
+        var rule = new ICP.Platform.Modules.Authorization.DTOs.DataScopeRuleDto("PartOptionalFloor", "PartOptionalFloor", null, "PartOptionalFloor", true, "part.part",
+            new("attribute", "ENAME", "equal", JsonSerializer.SerializeToElement(name)),
+            [new("PartOptionalFloorSubject", "all", null, 0, new Dictionary<string, string> { ["create"] = "deny", ["read"] = "deny", ["edit"] = "deny" })], []);
+        using (var saved = await FeatureHttpTestRequests.SendAsync(admin, fixture.FeatureCatalog.Single(point => point.BehaviorKey == "authorization.dataScope.save"),
+            HttpMethod.Put, "/api/authorization/data-scope/rules/PartOptionalFloor", rule)) Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
+        var declaration = OwnedResourceReadHttpRequests.Declaration(fixture, create, "part.part", "create");
+        using (var denied = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post, "/api/part/parts",
+            new { ECODE = "PART-PUBLIC-DENIED", ENAME = name }, declaration)) Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        using (var missing = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post, "/api/part/parts",
+            new { ECODE = "PART-PUBLIC-MISSING", ENAME = name })) Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+
+        using var scope = fixture.Services.CreateScope();
+        var accessor = scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>();
+        var previous = accessor.HttpContext;
+        accessor.HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, actor.AccountId)], "part-explicit-internal")) };
+        using var trace = new Activity(nameof(ExplicitInternalCreate_UsesTheRegisteredPartBehaviorWithoutAddingAnAuthorizationFloor)).Start();
+        try
+        {
+            var executor = scope.ServiceProvider.GetRequiredService<IObjectOperationExecutor>();
+            var transaction = scope.ServiceProvider.GetRequiredService<ICP.Platform.Persistence.Abstractions.IPlatformTransactionExecutor>();
+            var source = new ObjectOperationWriteSource.Internal("part.part", "Part", ObjectOperationAction.Create, null);
+            var descriptor = scope.ServiceProvider.GetRequiredService<ICP.Platform.Crud.Abstractions.IStandardCrudResourceRegistry>().FindByResourceKey("part.part")!;
+            var outside = await Assert.ThrowsAsync<ActionDataAccessException>(() => scope.ServiceProvider.GetRequiredService<ICP.Platform.Crud.Runtime.StandardCrudDefaultWriter>()
+                .PrepareCreateCandidateAsync(descriptor, new Dictionary<string, object?> { ["ECODE"] = "OUTSIDE", ["ENAME"] = name }, source));
+            Assert.Equal("ObjectOperation.InternalContextRequired", outside.Code);
+            foreach (var wrong in new[] { source with { ResourceKey = "document.document" }, source with { ObjectName = "Document" },
+                source with { Action = ObjectOperationAction.Update }, source with { ObjectId = "Part_borrowed" } })
+            {
+                var error = await Assert.ThrowsAsync<ActionDataAccessException>(() => executor.ExecuteAsync("part.part", ObjectOperationAction.Create, null,
+                    new Dictionary<string, object?> { ["ECODE"] = "WRONG", ["ENAME"] = name }, wrong));
+                Assert.Equal("ObjectOperation.InternalBindingInvalid", error.Code);
+            }
+            var ids = await transaction.ExecuteAsync(async token =>
+            {
+                var created = new List<string>();
+                foreach (var code in new[] { "PART-INTERNAL-ONE", "PART-INTERNAL-TWO" })
+                {
+                    var result = await executor.ExecuteAsync("part.part", ObjectOperationAction.Create, null,
+                        new Dictionary<string, object?> { ["ECODE"] = code, ["ENAME"] = name }, source, token);
+                    Assert.True(result.Succeeded, result.Error?.Code);
+                    Assert.Equal(actor.AccountId, result.Detail!.Fields["OwnerId"]);
+                    Assert.Equal(actor.AccountId, result.Detail.Fields["CreatedBy"]);
+                    created.Add((string)result.Detail.Fields["EID"]!);
+                }
+                return created;
+            });
+            var db = scope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
+            var rows = await db.Set<Dictionary<string, object?>>("Part").AsNoTracking().ToArrayAsync();
+            Assert.Equal(2, rows.Length);
+            var check = scope.ServiceProvider.GetRequiredService<IObjectActionAccess>();
+            Assert.Equal(DataExecutionDecision.NotFound, await check.CheckAsync("Part", ids[0], ["edit"]));
+            var audits = await db.Set<Dictionary<string, object?>>("BusinessChange").AsNoTracking()
+                .Where(row => EF.Property<string>(row, "EventType") == "part.created").ToArrayAsync();
+            Assert.Equal(ids.Order(), audits.Select(row => (string)row["TargetId"]!).Order());
+            Assert.All(audits, change => { Assert.Equal(actor.AccountId, change["ActorId"]); Assert.False(string.IsNullOrWhiteSpace(change["TraceId"] as string)); });
+            var before = JsonSerializer.Serialize(await db.Set<Dictionary<string, object?>>("BusinessChange").AsNoTracking().ToArrayAsync());
+            // 执行器已经flush两行和记录器后故障，外层真实SQL事务仍必须一并回滚。
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await transaction.ExecuteAsync<bool>(async token =>
+            {
+                foreach (var code in new[] { "PART-ROLLBACK-ONE", "PART-ROLLBACK-TWO" })
+                    Assert.True((await executor.ExecuteAsync("part.part", ObjectOperationAction.Create, null,
+                        new Dictionary<string, object?> { ["ECODE"] = code, ["ENAME"] = name }, source, token)).Succeeded);
+                throw new InvalidOperationException("Injected after actual Part and audit flush.");
+            }));
+            Assert.Equal(2, await db.Set<Dictionary<string, object?>>("Part").CountAsync());
+            Assert.Equal(before, JsonSerializer.Serialize(await db.Set<Dictionary<string, object?>>("BusinessChange").AsNoTracking().ToArrayAsync()));
+        }
+        finally { accessor.HttpContext = previous; }
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "真实Part服务端写入缺可信来源时在写前拒绝，管理员也不豁免绑定")]
     public async Task InternalCreate_WithoutTrustedWriteSourceRejectsBeforeInsertingPart()
     {

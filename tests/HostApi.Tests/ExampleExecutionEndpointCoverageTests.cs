@@ -85,8 +85,11 @@ public sealed class ExampleExecutionEndpointCoverageTests
         builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Document.DocumentCrudDescriptor.Create());
         builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Identity.Application.IdentityAccountCrudResource.Create());
         builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Authorization.Services.RoleReadResource.Create());
+        // 完整活动计划含已迁移排序按钮，端点合同fixture也登记其真实处理器；不执行该业务。
+        builder.Services.AddScoped<ICP.Platform.Modules.Workspace.WorkspaceReorderHandler>();
         builder.Services.AddControllers().AddApplicationPart(typeof(ICP.Platform.Modules.Identity.Controllers.IdentityAccountsController).Assembly)
-            .AddApplicationPart(typeof(ICP.Platform.Modules.Authorization.Controllers.RoleController).Assembly);
+            .AddApplicationPart(typeof(ICP.Platform.Modules.Authorization.Controllers.RoleController).Assembly)
+            .AddApplicationPart(typeof(ICP.Platform.Modules.Workspace.WorkspaceContentsController).Assembly);
         var app = builder.Build();
         app.MapControllers();
         return app;

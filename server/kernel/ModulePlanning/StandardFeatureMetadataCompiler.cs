@@ -275,9 +275,7 @@ public static class StandardFeatureMetadataCompiler
                     || !declared.TryGetProperty("actions", out var actionKeys) || actionKeys.ValueKind != JsonValueKind.Array))
                     throw new InvalidOperationException("BUTTON_DATA_ACCESS_DECLARATION_INVALID");
                 var objectName = hasDataAccess ? Text(declared, "object") : null;
-                var model = Optional(view, "model");
-                if (objectName is not null && (objectName != model
-                    || !all.Any(document => document.TryGetProperty(objectName, out var definition) && Optional(definition, "kind") == "Entity")))
+                if (objectName is not null && !all.Any(document => document.TryGetProperty(objectName, out var definition) && Optional(definition, "kind") == "Entity"))
                     throw new InvalidOperationException("BUTTON_DATA_ACCESS_OBJECT_UNKNOWN");
                 var button = new ActionDataAccessDeclaration(moduleId, sourceKey ?? Text(view, "key"), surface, key, "",
                     [Text(view, "resourceKey")], hasDataAccess ? declared.GetProperty("actions").EnumerateArray().Select(item => item.GetString()!).ToArray() : [])

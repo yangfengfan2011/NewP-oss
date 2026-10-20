@@ -399,7 +399,8 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
             var parentScope = new { spaceId = position.SpaceId, rootFolderId = position.RootFolderId, linkIds = position.LinkIds[..^1] };
             using (var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.authorize"), HttpMethod.Put,
                 "/api/workspace/content/" + parentLink + "/permissions?queryScope=" + Uri.EscapeDataString(JsonSerializer.Serialize(parentScope)),
-                new DataScopeObjectConfiguration("workspace.folder", parentId, subjects)))
+                new DataScopeObjectConfiguration("workspace.folder", parentId, subjects),
+                new FeatureHttpTestRequests(fixture).Declaration("workspace.content.authorization.manage", Point(fixture, "workspace.folder.authorize"))))
                 Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
             probe.TargetCommands = 0; probe.Capturing = true;
             try

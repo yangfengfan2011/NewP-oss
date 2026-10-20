@@ -35,8 +35,12 @@ public sealed class WorkspaceClipboardDataExecutionContractTests
                 position => compiled.Plan.FeatureCatalog.Any(point => point.Position == position && point.ActionScope == "contextMenu"));
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "AGENTS.md"))) root = root.Parent;
-        // 这份旧合同fixture只覆盖仍有execution的入口；无数据要求按钮身份由新声明测试独立覆盖。
-        var allDeclarations = compiled.Plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Workspace" && item.BusinessBinding is null).ToArray();
+        // 真实消费者fixture同时保留旧读取/动作与已迁移按钮；两种权限语义分别由各自断言拥有。
+        var allDeclarations = compiled.Plan.ActionDataAccessCatalog.Where(item => item.ModuleId == "Workspace").ToArray();
+        var reorder = allDeclarations.Where(item => item.BusinessBinding == "workspace.folder.reorder").ToArray();
+        Assert.Equal(2, reorder.Length);
+        Assert.All(reorder, item => { Assert.Equal("WorkspaceFolder", item.Object); Assert.Equal(new[] { "edit" }, item.Actions); Assert.Null(item.Requirements); });
+        Assert.DoesNotContain(owner.DataExecutions, item => item.Key == "workspace.folder.reorder");
         // 同一正式fixture也覆盖已存在树动作的目标读取来源，位置仍取实际编译目录。
         var clipboardKeys = new[] { "copy", "copySelected", "cut", "cutSelected", "paste", "remove", "removeSelected", "clearClipboard", "edit", "moveUp", "moveDown", "createPart", "createDocument", "delete", "deleteObjects", "pasteFolderCopy", "pasteFolderStructure", "pasteObjectCopy", "resolveObjectCopy" };
         var features = compiled.Plan.FeatureCatalog.Where(point => point.ModuleId == "Workspace"

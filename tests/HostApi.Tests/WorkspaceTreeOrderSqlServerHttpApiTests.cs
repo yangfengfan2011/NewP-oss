@@ -3,6 +3,11 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Testing;
+using ICP.Platform.Authorization.Contracts;
+using ICP.Platform.Modules.Authorization.Services;
+using ICP.Platform.Modules.Workspace;
+using Microsoft.AspNetCore.Http;
+using System.Security.Claims;
 using ICP.Platform.Persistence.EfCore;
 using ICP.Platform.Modules.Authorization.DTOs;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +22,164 @@ namespace ICP.Platform.HostApi.Tests;
 
 public sealed class WorkspaceTreeOrderSqlServerHttpApiTests
 {
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "正式位置读取上下文保留根隔离、完整链和私人空间边界，故障不变为允许")]
+    public async Task Reorder_ReadContextRevalidatesTheSameParentWithoutChangingOrdinaryRootIsolation()
+    {
+        var fault = new ReadContextFault();
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(services => services.AddScoped<IDataScopeObjectDecisionProvider>(provider =>
+            new ReadContextDecisions((DataScopeReadPlans)provider.GetRequiredService<IDataScopeReadPlanProvider>(), fault)), includeWorkspace: true);
+        using var admin = await fixture.LoginAdministratorAsync();
+        var entry = Point(fixture, "workspace.spaces.access");
+        var root = await Initialize(admin, entry);
+        var folder = await Create(admin, fixture, root, "父文件夹");
+        var folderId = folder.GetProperty("id").GetString()!;
+        var linkId = (await Children(admin, entry, root)).GetProperty("items")[0].GetProperty("linkId").GetString()!;
+        var other = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "ReadContextPrivate", "私人位置",
+            "read-context-private", "私人位置账号", entry);
+        using var owner = other.Client;
+        using var personal = await FeatureHttpTestRequests.SendAsync(owner, entry, HttpMethod.Post, "/api/workspace/spaces/personal/ensure");
+        Assert.Equal(HttpStatusCode.OK, personal.StatusCode);
+        var privateRoot = await personal.Content.ReadFromJsonAsync<JsonElement>();
+        var privatePosition = new WorkspacePosition(privateRoot.GetProperty("spaceId").GetString()!, privateRoot.GetProperty("rootFolderId").GetString()!, []);
+        var references = await Snapshot(fixture, "WorkspaceFolderContent");
+        var changes = await Snapshot(fixture, "BusinessChange");
+        using var scope = fixture.Services.CreateScope();
+        var accessor = scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>();
+        var previous = accessor.HttpContext;
+        accessor.HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, fixture.ActorId)], "formal-parent-read-context")) };
+        try
+        {
+            var check = scope.ServiceProvider.GetRequiredService<IObjectActionAccess>();
+            var position = new WorkspacePosition(root.SpaceId, root.RootFolderId, []);
+            Assert.Equal(DataExecutionDecision.NotFound, await check.CheckAsync("WorkspaceFolder", root.RootFolderId, ["edit"]));
+            Assert.Equal(DataExecutionDecision.Allowed, await check.CheckAsync("WorkspaceFolder", root.RootFolderId, ["edit"], position));
+            Assert.Equal(DataExecutionDecision.Allowed, await check.CheckAsync("WorkspaceFolder", folderId, ["read"], position with { LinkIds = [linkId] }));
+            Assert.Equal(DataExecutionDecision.NotFound, await check.CheckAsync("WorkspaceFolder", folderId, ["edit"], position));
+            await Assert.ThrowsAsync<ICP.Platform.Crud.LinkQueries.LinkQueryException>(() =>
+                check.CheckAsync("WorkspaceFolder", root.RootFolderId, ["edit"], position with { LinkIds = ["invalid-link"] }));
+            await Assert.ThrowsAsync<ICP.Platform.Crud.LinkQueries.LinkQueryException>(() =>
+                check.CheckAsync("WorkspaceFolder", privatePosition.RootFolderId, ["edit"], privatePosition));
+            fault.Throw = true;
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() => check.CheckAsync("WorkspaceFolder", root.RootFolderId, ["edit"], position));
+            Assert.Equal("Injected formal read context dependency failure.", error.Message);
+        }
+        finally { fault.Throw = false; accessor.HttpContext = previous; }
+        Assert.Equal(references, await Snapshot(fixture, "WorkspaceFolderContent"));
+        Assert.Equal(changes, await Snapshot(fixture, "BusinessChange"));
+    }
+
+    private sealed class ReadContextFault { internal bool Throw; }
+    private sealed class ReadContextDecisions(IDataScopeObjectDecisionProvider inner, ReadContextFault fault) : IDataScopeObjectDecisionProvider
+    {
+        public Task<bool> IsAllowedAsync(string resourceKey, string objectId, string actionKey, CancellationToken cancellationToken = default) =>
+            fault.Throw && resourceKey == "workspace.folder" ? throw new InvalidOperationException("Injected formal read context dependency failure.")
+                : inner.IsAllowedAsync(resourceKey, objectId, actionKey, cancellationToken);
+        public Task<bool> IsCandidateAllowedAsync(string resourceKey, IReadOnlyDictionary<string, object?> candidate, string actionKey, CancellationToken cancellationToken = default) =>
+            inner.IsCandidateAllowedAsync(resourceKey, candidate, actionKey, cancellationToken);
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "真实自定义排序处理器消费按钮身份，以正式父位置而非所选LID判权")]
+    public async Task Reorder_ButtonIdentityUsesFormalParentAndRejectsBorrowedIdentity()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
+        using var admin = await fixture.LoginAdministratorAsync();
+        var root = await Initialize(admin, Point(fixture, "workspace.spaces.access"));
+        await Create(admin, fixture, root, "A"); await Create(admin, fixture, root, "B");
+        var selected = (await Children(admin, Point(fixture, "workspace.spaces.access"), root)).GetProperty("items")[1].GetProperty("linkId").GetString()!;
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/tree-order")
+        { Content = JsonContent.Create(new { parentPosition = root, linkId = selected, direction = "up" }) };
+        request.Headers.Add("X-NewP-Feature", OrderPoint(fixture, "up").Position);
+        request.Headers.Add("X-NewP-Button", OrderDeclaration(fixture, "up").Id);
+        using var moved = await admin.SendAsync(request);
+        Assert.True(moved.StatusCode == HttpStatusCode.OK, moved.StatusCode + ": " + await moved.Content.ReadAsStringAsync());
+        Assert.True((await moved.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("moved").GetBoolean());
+        var references = await Snapshot(fixture, "WorkspaceFolderContent");
+        var changes = await Snapshot(fixture, "BusinessChange");
+        foreach (var (button, feature, direction, legacy, expected) in new[]
+        {
+            ((string?)null, OrderPoint(fixture, "up"), "up", (string?)null, HttpStatusCode.BadRequest),
+            ((string?)"unknown/button", OrderPoint(fixture, "up"), "up", (string?)null, HttpStatusCode.BadRequest),
+            ((string?)OrderDeclaration(fixture, "up").Id, OrderPoint(fixture, "down"), "down", (string?)null, HttpStatusCode.Forbidden),
+            ((string?)OrderDeclaration(fixture, "up").Id, OrderPoint(fixture, "up"), "down", (string?)null, HttpStatusCode.BadRequest),
+            ((string?)OrderDeclaration(fixture, "up").Id, OrderPoint(fixture, "up"), "up", (string?)OrderDeclaration(fixture, "up").Id, HttpStatusCode.BadRequest)
+        })
+        {
+            using var invalid = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/tree-order")
+            { Content = JsonContent.Create(new { parentPosition = root, linkId = selected, direction }) };
+            invalid.Headers.Add("X-NewP-Feature", feature.Position);
+            if (button is not null) invalid.Headers.Add("X-NewP-Button", button);
+            if (legacy is not null) invalid.Headers.Add("X-NewP-Data-Declaration", legacy);
+            using var rejected = await admin.SendAsync(invalid);
+            Assert.Equal(expected, rejected.StatusCode);
+        }
+        Assert.Equal(references, await Snapshot(fixture, "WorkspaceFolderContent"));
+        Assert.Equal(changes, await Snapshot(fixture, "BusinessChange"));
+    }
+
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "排序在正式图锁取得后重新判断父权限，撤权及依赖故障均不改关系或审计")]
+    public async Task Reorder_RechecksParentPermissionAfterTheFormalGraphLock()
+    {
+        var pause = new ReorderGraphPause();
+        var fault = new ReadContextFault();
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
+        {
+            services.AddDbContext<EfPlatformDbContext>((_, options) => options.AddInterceptors(pause));
+            services.AddScoped<IDataScopeObjectDecisionProvider>(provider =>
+                new ReadContextDecisions((DataScopeReadPlans)provider.GetRequiredService<IDataScopeReadPlanProvider>(), fault));
+        }, includeWorkspace: true);
+        using var admin = await fixture.LoginAdministratorAsync();
+        var entry = Point(fixture, "workspace.spaces.access");
+        var root = await Initialize(admin, entry);
+        await Create(admin, fixture, root, "A"); await Create(admin, fixture, root, "B");
+        var selected = (await Children(admin, entry, root)).GetProperty("items")[1].GetProperty("linkId").GetString()!;
+        var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "ReorderGraph", "排序锁内撤权",
+            "reorder-graph", "排序锁内账号", entry, OrderPoint(fixture, "up"));
+        using var ordinary = actor.Client;
+        var references = await Snapshot(fixture, "WorkspaceFolderContent");
+        pause.Enabled = true;
+        var pending = FeatureHttpTestRequests.SendAsync(ordinary, OrderPoint(fixture, "up"), HttpMethod.Post,
+            "/api/workspace/content/tree-order", new { parentPosition = root, linkId = selected, direction = "up" }, OrderDeclaration(fixture, "up"));
+        string changes;
+        try
+        {
+            await pause.Reached.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            await Rule(admin, fixture, "ReorderRevokedUnderLock", root.RootFolderId, new() { ["edit"] = "deny" });
+            changes = await Snapshot(fixture, "BusinessChange");
+        }
+        finally { pause.Resume.TrySetResult(); }
+        using var denied = await pending;
+        Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        Assert.Equal(references, await Snapshot(fixture, "WorkspaceFolderContent"));
+        Assert.Equal(changes, await Snapshot(fixture, "BusinessChange"));
+        pause.Enabled = false;
+        await Rule(admin, fixture, "ReorderRevokedUnderLock", root.RootFolderId, new() { ["edit"] = "allow" });
+        changes = await Snapshot(fixture, "BusinessChange");
+        fault.Throw = true;
+        try
+        {
+            using var failed = await FeatureHttpTestRequests.SendAsync(ordinary, OrderPoint(fixture, "up"), HttpMethod.Post,
+                "/api/workspace/content/tree-order", new { parentPosition = root, linkId = selected, direction = "up" }, OrderDeclaration(fixture, "up"));
+            Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
+        }
+        finally { fault.Throw = false; }
+        Assert.Equal(references, await Snapshot(fixture, "WorkspaceFolderContent"));
+        Assert.Equal(changes, await Snapshot(fixture, "BusinessChange"));
+    }
+
+    private sealed class ReorderGraphPause : DbCommandInterceptor
+    {
+        internal bool Enabled;
+        internal TaskCompletionSource Reached { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal TaskCompletionSource Resume { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public override async ValueTask<int> NonQueryExecutedAsync(DbCommand command, CommandExecutedEventData eventData, int result, CancellationToken cancellationToken = default)
+        {
+            if (Enabled && command.CommandText.Contains("Workspace.FolderGraph", StringComparison.Ordinal))
+            { Reached.TrySetResult(); await Resume.Task.WaitAsync(cancellationToken); }
+            return result;
+        }
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "文件夹新增沿持久树次序追加，列表仍按自己的查询排序")]
     public async Task NewFolders_AppendToTreeWhileListKeepsItsQueryOrder()
     {
@@ -144,7 +307,7 @@ public sealed class WorkspaceTreeOrderSqlServerHttpApiTests
         var changesBeforeFailure = await Snapshot(fixture, "BusinessChange");
         fault.Enabled = true;
         using var failed = await FeatureHttpTestRequests.SendAsync(admin, OrderPoint(fixture, "down"), HttpMethod.Post,
-            "/api/workspace/content/tree-order", new { parentPosition = root, linkId = link, direction = "down" });
+            "/api/workspace/content/tree-order", new { parentPosition = root, linkId = link, direction = "down" }, OrderDeclaration(fixture, "down"));
         Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode); Assert.Equal(2, fault.Writes); fault.Enabled = false;
         Assert.Equal(before, await Snapshot(fixture, "WorkspaceFolderContent")); Assert.Equal(objects, await Snapshot(fixture, "WorkspaceFolder"));
         Assert.Equal(changesBeforeFailure, await Snapshot(fixture, "BusinessChange"));
@@ -172,7 +335,7 @@ public sealed class WorkspaceTreeOrderSqlServerHttpApiTests
             try
             {
                 using var failed = await FeatureHttpTestRequests.SendAsync(admin, OrderPoint(fixture, "up"), HttpMethod.Post,
-                    "/api/workspace/content/tree-order", new { parentPosition = root, linkId = selected, direction = "up" });
+                    "/api/workspace/content/tree-order", new { parentPosition = root, linkId = selected, direction = "up" }, OrderDeclaration(fixture, "up"));
                 Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
             }
             finally { fixture.Fault.Mode = ""; fixture.Fault.AfterRegister = null; }
@@ -209,7 +372,7 @@ public sealed class WorkspaceTreeOrderSqlServerHttpApiTests
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/tree-order") {
             Content = JsonContent.Create(new { parentPosition = root, linkId = control.SelectedLinkId, direction = "up" }) };
         request.Headers.Add("X-NewP-Feature", OrderPoint(fixture, "up").Position);
-        request.Headers.Add("X-NewP-Data-Declaration", OrderDeclaration(fixture, "up").Id);
+        request.Headers.Add("X-NewP-Button", OrderDeclaration(fixture, "up").Id);
         var pending = admin.SendAsync(request, cancellation.Token);
         try
         {
@@ -308,13 +471,14 @@ public sealed class WorkspaceTreeOrderSqlServerHttpApiTests
             new { parentPosition = new { root.SpaceId, root.RootFolderId, root.LinkIds, extra = "unknown" }, linkId, direction = "up" }
         })
         {
-            using var rejected = await FeatureHttpTestRequests.SendAsync(admin, OrderPoint(fixture, "up"), HttpMethod.Post, "/api/workspace/content/tree-order", input);
+            using var rejected = await FeatureHttpTestRequests.SendAsync(admin, OrderPoint(fixture, "up"), HttpMethod.Post, "/api/workspace/content/tree-order", input, OrderDeclaration(fixture, "up"));
             Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
             Assert.Equal("Workspace.InvalidTreeOrderInput", (await rejected.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
         }
         using (var duplicate = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/tree-order"))
         {
             duplicate.Headers.Add("X-NewP-Feature", OrderPoint(fixture, "up").Position);
+            duplicate.Headers.Add("X-NewP-Button", OrderDeclaration(fixture, "up").Id);
             duplicate.Content = new StringContent($$"""{"parentPosition":{{JsonSerializer.Serialize(root)}},"linkId":"{{linkId}}","direction":"up","direction":"down"}""", System.Text.Encoding.UTF8, "application/json");
             using var response = await admin.SendAsync(duplicate); Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         }
@@ -322,27 +486,29 @@ public sealed class WorkspaceTreeOrderSqlServerHttpApiTests
             (root with { SpaceId = "wrong-space" }, linkId) })
         {
             using var rejected = await FeatureHttpTestRequests.SendAsync(admin, OrderPoint(fixture, "up"), HttpMethod.Post,
-                "/api/workspace/content/tree-order", new { parentPosition = position, linkId = id, direction = "up" });
+                "/api/workspace/content/tree-order", new { parentPosition = position, linkId = id, direction = "up" }, OrderDeclaration(fixture, "up"));
             Assert.Equal(HttpStatusCode.NotFound, rejected.StatusCode);
         }
         var partPosition = root with { LinkIds = [linkId] };
         using (var createdPart = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.createPart"), HttpMethod.Post,
-            "/api/workspace/content/parts", new { position = partPosition, values = new { ECODE = "ORDER-PART", ENAME = "业务对象" } })) Assert.Equal(HttpStatusCode.OK, createdPart.StatusCode);
+            "/api/workspace/content/parts", new { position = partPosition, values = new { ECODE = "ORDER-PART", ENAME = "业务对象" } },
+            new FeatureHttpTestRequests(fixture).Declaration("workspace.content.createPart", Point(fixture, "workspace.folder.createPart")))) Assert.Equal(HttpStatusCode.OK, createdPart.StatusCode);
         var partLink = (string)(await Rows(fixture, "WorkspaceFolderContent")).Single(row => (string)row["ChildModelKey"]! == "Part")["LID"]!;
         using (var business = await FeatureHttpTestRequests.SendAsync(admin, OrderPoint(fixture, "up"), HttpMethod.Post,
-            "/api/workspace/content/tree-order", new { parentPosition = partPosition, linkId = partLink, direction = "up" })) Assert.Equal(HttpStatusCode.NotFound, business.StatusCode);
+            "/api/workspace/content/tree-order", new { parentPosition = partPosition, linkId = partLink, direction = "up" }, OrderDeclaration(fixture, "up"))) Assert.Equal(HttpStatusCode.NotFound, business.StatusCode);
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "TreeRead", "树读取", "tree-read", "读取账号", entry, OrderPoint(fixture, "up"));
         using var ordinary = actor.Client;
         await Rule(admin, fixture, "SelectedUnreadable", first.GetProperty("id").GetString()!, new() { ["read"] = "deny" });
         using (var hidden = await FeatureHttpTestRequests.SendAsync(ordinary, OrderPoint(fixture, "up"), HttpMethod.Post,
-            "/api/workspace/content/tree-order", new { parentPosition = root, linkId, direction = "up" })) Assert.Equal(HttpStatusCode.NotFound, hidden.StatusCode);
+            "/api/workspace/content/tree-order", new { parentPosition = root, linkId, direction = "up" }, OrderDeclaration(fixture, "up"))) Assert.Equal(HttpStatusCode.NotFound, hidden.StatusCode);
         var before = await Snapshot(fixture, "WorkspaceFolderContent");
         using (var wrongFeature = await FeatureHttpTestRequests.SendAsync(ordinary, entry, HttpMethod.Post,
-            "/api/workspace/content/tree-order", new { parentPosition = root, linkId, direction = "up" })) Assert.Equal(HttpStatusCode.Forbidden, wrongFeature.StatusCode);
+            "/api/workspace/content/tree-order", new { parentPosition = root, linkId, direction = "up" }, OrderDeclaration(fixture, "up"))) Assert.Equal(HttpStatusCode.Forbidden, wrongFeature.StatusCode);
         Assert.Equal(before, await Snapshot(fixture, "WorkspaceFolderContent"));
         Assert.DoesNotContain(await Rows(fixture, "BusinessChange"), row => Equals(row["EventType"], "workspace.reference.reordered"));
         using (var renamed = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.editObject"), HttpMethod.Put,
-            "/api/workspace/content/" + linkId, new { position = root, values = new { ENAME = "B" } })) Assert.Equal(HttpStatusCode.OK, renamed.StatusCode);
+            "/api/workspace/content/" + linkId, new { position = root, values = new { ENAME = "B" } },
+            new FeatureHttpTestRequests(fixture).Declaration("workspace.content.edit", Point(fixture, "workspace.folder.editObject")))) Assert.Equal(HttpStatusCode.OK, renamed.StatusCode);
         Assert.Equal(new[] { "B", "A" }, Names(await Children(admin, entry, root)));
         Assert.Equal(before, await Snapshot(fixture, "WorkspaceFolderContent"));
     }

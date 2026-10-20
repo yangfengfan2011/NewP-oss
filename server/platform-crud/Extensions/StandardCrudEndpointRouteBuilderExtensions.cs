@@ -48,7 +48,7 @@ public static class StandardCrudEndpointRouteBuilderExtensions
 
         endpoints.MapLinkQueries();
         if (endpoints.ServiceProvider.GetService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>() is { } plan)
-            StandardCrudDataExecutions.ValidateCoverage(endpoints.DataSources, plan);
+            StandardCrudDataExecutions.ValidateCoverage(endpoints.DataSources, plan, endpoints.ServiceProvider);
 
         return endpoints;
     }

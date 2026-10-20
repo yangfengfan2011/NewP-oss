@@ -137,20 +137,25 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
             return true;
         }, token);
 
-    /// <summary>树排序只接受完整父位置与单条关系，父写入和两端读取在同一图锁事务内重验。</summary>
-    public ValueTask<WorkspaceTreeOrderResult> ReorderAsync(string actorId, WorkspacePosition parentPosition, string linkId, string direction, CancellationToken token)
+    // 正式输入在原图锁内解析父对象；平台continuation在同一范围检查并执行，不把所选LID当作父EID。
+    internal ValueTask<WorkspaceTreeOrderResult> WithReorderBoundaryAsync(WorkspaceReorderInput input, string actionKey,
+        Func<WorkspaceReorderState, CancellationToken, Task<WorkspaceTreeOrderResult>> execute, CancellationToken token)
     {
-        if (string.IsNullOrWhiteSpace(linkId) || direction is not ("up" or "down")) throw new LinkQueryException(400, "Workspace.InvalidTreeOrderInput");
-        var binding = WorkspaceFolderExecutions.ReorderBinding();
-        executionAccess.Validate([binding], "workspace.folder");
+        if (string.IsNullOrWhiteSpace(input.LinkId) || input.Direction is not ("up" or "down")
+            || actionKey != (input.Direction == "up" ? "moveUp" : "moveDown")) throw new LinkQueryException(400, "Workspace.InvalidTreeOrderInput");
         return transactions.ExecuteAsync<WorkspaceTreeOrderResult>(async cancellation =>
         {
             using var operation = audit.BeginOperation();
             await LockGraphAsync(cancellation);
-            var path = await ResolveClipboardPositionAsync(binding, "parent", parentPosition, cancellation);
-            return await treeOrder.ReorderAsync(actorId, path.FolderId, linkId, direction == "up", cancellation);
+            var path = await positions.ResolveAsync(input.ActorId, input.ParentPosition, cancellation);
+            var before = await Folders.AsNoTracking().SingleAsync(row => EF.Property<string>(row, "EID") == path.FolderId, cancellation);
+            return await execute(new(input.ActorId, path.FolderId, input.LinkId, input.Direction == "up", before, input.ParentPosition), cancellation);
         }, token);
     }
+
+    // 只有统一处理器完成当前父目标检查后进入实际交换；所选和邻居读取继续由原排序模块拥有。
+    internal Task<WorkspaceTreeOrderResult> ExecuteReorderAsync(WorkspaceReorderState state, CancellationToken token) =>
+        treeOrder.ReorderAsync(state.ActorId, state.ParentId, state.LinkId, state.Up, token);
 
     /// <summary>移除只删除指定 LID；关系当前父端、目标读取与有效出现位置均由提交时事实决定。</summary>
     public ValueTask<bool> RemoveAsync(string actorId, WorkspacePosition position, string linkId, CancellationToken token) =>

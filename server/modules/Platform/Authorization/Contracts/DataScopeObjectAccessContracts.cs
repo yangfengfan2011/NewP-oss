@@ -15,6 +15,9 @@ public interface IDataScopeResourceReadConstraint
 
     /// <summary>按可信请求主体检查实际目标可达范围；不能输出私人位置事实。</summary>
     Task<bool> IsReadableAsync(string objectId, CancellationToken token = default);
+    /// <summary>按正式业务读取上下文重新核验同一对象；不接收允许标志，未支持的上下文明确拒绝。</summary>
+    Task<bool> IsReadableAsync(string objectId, object readContext, CancellationToken token = default) =>
+        throw new InvalidOperationException("DATA_SCOPE_READ_CONTEXT_UNSUPPORTED");
 }
 
 /// <summary>已经按活动模型、owner、主键及静态约束绑定准备的唯一资源目录。</summary>
@@ -30,6 +33,9 @@ public interface IDataScopeObjectAccess
 {
     /// <summary>按当前可信主体检查既有规范对象；不存在、不规范或不可达均返回false。</summary>
     Task<bool> IsReadableAsync(string resourceKey, string objectId, CancellationToken token = default);
+    /// <summary>将正式业务读取上下文交给资源原约束重新核验，不把先前允许作为凭证。</summary>
+    Task<bool> IsReadableAsync(string resourceKey, string objectId, object readContext, CancellationToken token = default) =>
+        throw new InvalidOperationException("DATA_SCOPE_READ_CONTEXT_UNSUPPORTED");
 }
 
 /// <summary>真实owner在自身入口验证位置/功能后复用同一权限引擎查询，不切换请求主体。</summary>

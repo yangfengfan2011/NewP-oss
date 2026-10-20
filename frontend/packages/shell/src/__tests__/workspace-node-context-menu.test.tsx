@@ -66,7 +66,8 @@ it.each([['edit', 'zhs'], ['remove', 'zhs'], ['moveUp', 'zhs'], ['moveDown', 'zh
     }
     if (url.pathname === '/api/workspace/content/incoming-link/edit-values') return json({ fields: { ENAME: name, Description: '原说明' } });
     if (url.pathname.endsWith('/tree-order')) {
-      expect(new Headers(input instanceof Request ? input.headers : init?.headers).get('X-NewP-Data-Declaration'))
+      expect(new Headers(input instanceof Request ? input.headers : init?.headers).has('X-NewP-Data-Declaration')).toBe(false);
+      expect(new Headers(input instanceof Request ? input.headers : init?.headers).get('X-NewP-Button'))
         .toBe(formalDataAccessFor('workspace.folder.list', 'featureActions', action).id);
     }
     if (method === 'PUT' || method === 'DELETE' || url.pathname.endsWith('/tree-order')) {

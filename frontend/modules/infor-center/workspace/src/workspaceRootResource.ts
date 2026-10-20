@@ -44,9 +44,9 @@ function authorization(context: Pick<StandardCrudActionContext, 'id' | 'row' | '
   return createObjectAuthorizationActions(source.resourceKey, () => ({ id: source.objectId, title: '对象', titleKey: 'Workspace.Object',
     basePath: `/api/workspace/content/${encodeURIComponent(source.sourceLinkId)}/permissions?queryScope=${encodeURIComponent(JSON.stringify({ spaceId: source.spaceId, rootFolderId: source.rootFolderId, linkIds: source.linkIds }))}` }));
 }
-async function referenceCommand(method: string, path: string, body: unknown, featurePosition?: string, declarationId?: string) {
+async function referenceCommand(method: string, path: string, body: unknown, featurePosition?: string, declarationId?: string, buttonId?: string) {
   const response = await platformFetch(path, { method, headers: { ...headers(featurePosition), 'Content-Type': 'application/json',
-    ...(declarationId ? { 'X-NewP-Data-Declaration': declarationId } : {}) }, body: JSON.stringify(body) });
+    ...(buttonId ? { 'X-NewP-Button': buttonId } : declarationId ? { 'X-NewP-Data-Declaration': declarationId } : {}) }, body: JSON.stringify(body) });
   if (!response.ok) throw await readStandardCrudRequestError(response);
   return { operation: 'action' as const, payload: await response.json() as unknown, change: { operation: 'update' as const, id: '' } };
 }
@@ -163,12 +163,12 @@ const resource: StandardCrudResourceRegistration = {
       return { operation: 'action', payload: receipt, ...(receipt.noChange ? { noChange: true as const } : { change: { operation: 'update' as const, id: '' } }),
         notice: { reasonKey: receipt.noChange ? 'Workspace.PositionUnchanged' : mode === 'cut' ? 'Workspace.Moved' : 'Workspace.Pasted' } };
     },
-    reorder: async ({ action, id, queryScope, featurePosition }) => {
+    reorder: async ({ action, id, queryScope, featurePosition, buttonId }) => {
       if (!id || !action || !['moveUp', 'moveDown'].includes(action.key)) throw new Error('无效文件夹排序动作');
-      if (!action.dataAccess?.id) throw new StandardCrudRequestError('缺少当前排序声明。', 400);
+      if (!buttonId || buttonId !== action.buttonId) throw new StandardCrudRequestError('缺少当前排序按钮身份。', 400);
       const result = await referenceCommand('POST', '/api/workspace/content/tree-order', {
         parentPosition: workspacePosition(queryScope), linkId: id, direction: action.key === 'moveUp' ? 'up' : 'down',
-      }, featurePosition, action.dataAccess.id);
+      }, featurePosition, undefined, buttonId);
       const receipt = result.payload as { moved: boolean; boundary: string | null };
       if (!receipt.moved && (receipt.boundary === 'first' || receipt.boundary === 'last')) return {
         operation: 'action', payload: receipt, noChange: true,

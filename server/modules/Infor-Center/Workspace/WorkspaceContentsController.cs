@@ -17,6 +17,7 @@ namespace ICP.Platform.Modules.Workspace;
 [ApiController, Route("api/workspace"), EndpointModule("Workspace"), PlatformRequestValidation]
 public sealed partial class WorkspaceContentsController(WorkspaceContents contents, WorkspaceSpaces spaces, WorkspacePositions positions,
     ILogger<WorkspaceContentsController> logger, WorkspaceFolderScope folderScope, IObjectOperationExecutor operations, ICP.Platform.Crud.Runtime.LinkTreeReader trees,
+    ICP.Platform.Authorization.Contracts.IButtonBusinessExecutor buttonBusiness, WorkspaceReorderHandler reorderHandler,
     ICP.Platform.Authorization.Contracts.IDataScopeEvaluationScope? evaluation = null) : ControllerBase
 {
     public sealed record CreateFolderInput(WorkspacePosition Position, Dictionary<string, JsonElement> Values)
@@ -286,7 +287,7 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
     }
 
     /// <summary>正式排序权限独立于列表位置；服务器不接受客户端邻居、序号或批量选择。</summary>
-    [HttpPost("content/tree-order"), RequireFeature("workspace.folder.reorder")]
+    [HttpPost("content/tree-order"), RequireFeature("workspace.folder.reorder"), ButtonBusinessHandler(typeof(WorkspaceReorderHandler))]
     public async Task<IResult> Reorder(JsonElement input, CancellationToken token)
     {
         try
@@ -301,13 +302,15 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
                 || linkId.ValueKind != JsonValueKind.String || direction.ValueKind != JsonValueKind.String)
                 throw new LinkQueryException(400, "Workspace.InvalidTreeOrderInput");
             var position = new WorkspacePosition(space.GetString()!, root.GetString()!, chain.EnumerateArray().Select(item => item.GetString()!).ToArray());
-            return Results.Ok(await contents.ReorderAsync(Actor(), position, linkId.GetString()!, direction.GetString()!, token));
+            return Results.Ok(await buttonBusiness.ExecuteAsync(reorderHandler,
+                new WorkspaceReorderInput(Actor(), position, linkId.GetString()!, direction.GetString()!), token));
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
         catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)
         {
-            return Results.Problem(statusCode: exception.Status, title: exception.Code,
-                extensions: new Dictionary<string, object?> { ["code"] = exception.Code });
+            var code = exception.Code switch { "DataScope.ActionDenied" => "Workspace.ParentWriteDenied", "StandardCrud.NotFound" => "Workspace.PositionUnavailable", _ => exception.Code };
+            return Results.Problem(statusCode: exception.Status, title: code,
+                extensions: new Dictionary<string, object?> { ["code"] = code });
         }
     }
 

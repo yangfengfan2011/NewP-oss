@@ -153,6 +153,8 @@ public sealed class ProductionEndpointAccessCoverageTests
         Assert.True(compiled.IsSuccess, System.Text.Json.JsonSerializer.Serialize(compiled.Diagnostics));
         var builder = WebApplication.CreateBuilder();
         builder.Services.AddSingleton(compiled.Plan!);
+        // 本fixture只编译真实终态规则；已映射的排序端点必须同时登记正式处理器类型。
+        builder.Services.AddScoped<ICP.Platform.Modules.Workspace.WorkspaceReorderHandler>();
         builder.Services.AddControllers()
             .AddApplicationPart(typeof(AuthController).Assembly)
             .AddApplicationPart(typeof(AccessLogsController).Assembly)

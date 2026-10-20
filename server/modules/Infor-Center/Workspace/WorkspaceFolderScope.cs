@@ -15,7 +15,8 @@ public sealed record WorkspaceFolderCandidate(string Id, string Name);
 public sealed record WorkspaceFolderCandidates(IReadOnlyList<WorkspaceFolderCandidate> Items, int Total, int Page, int PageSize);
 
 /// <summary>独立详情、候选和 Link 端点共用来源或可读根路径范围；集合始终留在数据库命令内。</summary>
-public sealed class WorkspaceFolderScope(EfPlatformDbContext db, Func<IDataExecutionAccess> executions, IHttpContextAccessor context)
+public sealed class WorkspaceFolderScope(EfPlatformDbContext db, Func<IDataExecutionAccess> executions, IHttpContextAccessor context,
+    Func<WorkspacePositions> positions)
     : ILinkQueryEndpointConstraint, IDataScopeResourceReadConstraint
 {
     public string Key => "workspace.folder.scope";
@@ -31,6 +32,16 @@ public sealed class WorkspaceFolderScope(EfPlatformDbContext db, Func<IDataExecu
             .AnyAsync(space => EF.Property<string>(space, "RootFolderId") == objectId, token)) return false;
         return await ContainsAsync(context.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? throw new LinkQueryException(403, "Workspace.SubjectRequired"), objectId, token);
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> IsReadableAsync(string objectId, object readContext, CancellationToken token = default)
+    {
+        if (readContext is not WorkspacePosition position) throw new LinkQueryException(400, "Workspace.InvalidPosition");
+        var actor = context.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new LinkQueryException(403, "Workspace.SubjectRequired");
+        // 普通对象仍排除空间根；只有同一正式位置经当前空间、链与每层读取重新核验后才能成为父目标。
+        var path = await positions().ResolveAsync(actor, position, token);
+        return path.FolderId == objectId;
     }
 
     /// <inheritdoc/>

@@ -1,4 +1,5 @@
 using ICP.Platform.Authorization.Contracts;
+using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.Descriptors;
 using ICP.Platform.Kernel.ModulePlanning;
 using Microsoft.AspNetCore.Builder;
@@ -15,8 +16,8 @@ public sealed record StandardCrudDataExecutionEndpoint(string ResourceKey, strin
 /// <summary>服务端具体执行登记决定迁移路径；请求不能通过缺失或新增声明改变路由。</summary>
 public static class StandardCrudDataExecutions
 {
-    /// <summary>从实际映射的端点核对所有活动标准执行；未绑定的合同不能只靠存在下限启用。</summary>
-    public static void ValidateCoverage(IEnumerable<EndpointDataSource> sources, CanonicalModulePlan plan)
+    /// <summary>核对实际标准执行与新按钮处理器绑定；活动对象按钮缺真实端点或处理器注册时拒绝启动。</summary>
+    public static void ValidateCoverage(IEnumerable<EndpointDataSource> sources, CanonicalModulePlan plan, IServiceProvider? services = null)
     {
         var bound = sources.SelectMany(source => source.Endpoints)
             .Select(endpoint => endpoint.Metadata.GetMetadata<StandardCrudDataExecutionEndpoint>())
@@ -26,9 +27,24 @@ public static class StandardCrudDataExecutions
                 .SelectMany(endpoint => endpoint.Bindings)).ToArray();
         var buttonBindings = sources.SelectMany(source => source.Endpoints)
             .Select(endpoint => endpoint.Metadata.GetMetadata<ButtonExecutionEndpoint>()).Where(item => item is not null).ToArray();
+        var handlers = sources.SelectMany(source => source.Endpoints)
+            .Where(endpoint => endpoint.Metadata.GetMetadata<ButtonBusinessHandlerAttribute>() is not null).ToArray();
+        foreach (var endpoint in handlers)
+        {
+            var handler = endpoint.Metadata.GetMetadata<ButtonBusinessHandlerAttribute>()!.HandlerType;
+            var owners = endpoint.Metadata.GetOrderedMetadata<EndpointModuleAttribute>();
+            var features = endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>();
+            if (handler.IsAbstract || !handler.GetInterfaces().Any(type => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IButtonBusinessHandler<,,>))
+                || services is not null && services.GetRequiredService<IServiceProviderIsService>().IsService(handler) != true
+                || owners.Count != 1 || features.Count != 1 || !plan.ActionDataAccessCatalog.Any(button =>
+                    button.ModuleId == owners[0].ModuleId && button.BusinessBinding == features[0].BehaviorKey))
+                throw new InvalidOperationException("BUTTON_BUSINESS_HANDLER_INVALID");
+        }
         foreach (var button in plan.ActionDataAccessCatalog.Where(item => item.BusinessBinding is not null && item.Object is not null))
             if (!buttonBindings.Any(binding => binding!.BusinessBinding == button.BusinessBinding
-                && binding.ObjectName == button.Object && button.Resources.SequenceEqual([binding.ResourceKey])))
+                && binding.ObjectName == button.Object && button.Resources.SequenceEqual([binding.ResourceKey]))
+                && !handlers.Any(endpoint => endpoint.Metadata.GetMetadata<EndpointModuleAttribute>()!.ModuleId == button.ModuleId
+                    && endpoint.Metadata.GetMetadata<RequireFeatureAttribute>()!.BehaviorKey == button.BusinessBinding))
                 throw new InvalidOperationException("BUTTON_EXECUTION_ENDPOINT_MISSING");
         foreach (var execution in plan.Modules.SelectMany(module => module.DataExecutions)
             .Where(contract => contract.Boundary == "entry" && contract.Provider.StartsWith("standardCrud.", StringComparison.Ordinal)))

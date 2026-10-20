@@ -123,7 +123,7 @@ public sealed class StandardCrudDefaultWriter
         });
     }
 
-    /// <summary>只读预检正式创建候选；复用字段、可信审计及数据 create 裁决，不登记对象或开启写事务。</summary>
+    /// <summary>准备正式创建候选及可信归属审计；旧声明消费原create要求，显式内部来源不附加动作下限，不登记对象或开启事务。</summary>
     /// <remarks>内部候选包含本次服务端身份，仅供业务预检；不能公开它或把成功当作后续提交的凭证。</remarks>
     public async Task<StandardCrudMutationResult> PrepareCreateCandidateAsync(StandardCrudDescriptor descriptor,
         IReadOnlyDictionary<string, object?> values, ObjectOperationWriteSource? source, CancellationToken cancellationToken = default)
@@ -143,8 +143,7 @@ public sealed class StandardCrudDefaultWriter
         {
             [descriptor.IdField] = _objectIds.NewId(descriptor.ModelName)
         };
-        var declared = (ObjectOperationWriteSource.Declared)source!;
-        if (await _executions.EvaluateCandidateAsync(declared.Context, descriptor.ResourceKey,
+        if (source is ObjectOperationWriteSource.Declared declared && await _executions.EvaluateCandidateAsync(declared.Context, descriptor.ResourceKey,
             "candidate", candidate, cancellationToken) != DataExecutionDecision.Allowed)
             return StandardCrudMutationResult.Failure(ScopeDenied(descriptor));
         return StandardCrudMutationResult.Success(new StandardCrudDetail { Fields = candidate });
@@ -395,6 +394,7 @@ public sealed class StandardCrudDefaultWriter
     private async Task<StandardCrudError?> CheckExistingScopeAsync(StandardCrudDescriptor descriptor, string id,
         string action, IReadOnlyDictionary<string, object?> existing, ObjectOperationWriteSource? source, CancellationToken token)
     {
+        if (source is ObjectOperationWriteSource.Internal) return null;
         var declared = (ObjectOperationWriteSource.Declared)source!;
         var result = await _executions.EvaluateObjectAsync(declared.Context, "target",
             new DataExecutionWriteFacts(descriptor.ResourceKey, id, existing), token);
@@ -402,8 +402,17 @@ public sealed class StandardCrudDefaultWriter
     }
 
     // 来源只能是本次正式写；资源、操作和目标必须与实际owner调用完全一致。
-    private static void AssertWriteSource(StandardCrudDescriptor descriptor, string operation, string? id, ObjectOperationWriteSource? source)
+    private void AssertWriteSource(StandardCrudDescriptor descriptor, string operation, string? id, ObjectOperationWriteSource? source)
     {
+        if (source is ObjectOperationWriteSource.Internal internalSource)
+        {
+            if (_transactionExecutor?.IsActive != true) throw new ActionDataAccessException(400, "ObjectOperation.InternalContextRequired");
+            if (internalSource.ResourceKey != descriptor.ResourceKey || internalSource.ObjectName != descriptor.ModelName
+                || internalSource.Action?.Value != operation || internalSource.ObjectId != id
+                || id is not null && !id.StartsWith(descriptor.ModelName + "_", StringComparison.Ordinal))
+                throw new ActionDataAccessException(400, "ObjectOperation.InternalBindingInvalid");
+            return;
+        }
         if (source is ObjectOperationWriteSource.Button button)
         {
             if (operation != "update" || button.Context.ResourceKey != descriptor.ResourceKey || button.Context.ObjectName != descriptor.ModelName

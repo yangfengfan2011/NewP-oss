@@ -19,7 +19,10 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
         services.AddScoped<WorkspaceSpaceInitialization>();
         services.AddScoped<WorkspaceSpaces>();
         services.AddScoped<WorkspacePositions>();
+        // 资源读取约束在调用时复核原位置，惰性取得解析器以避开FolderScope与LinkTreeReader的构造环。
+        services.AddScoped<Func<WorkspacePositions>>(provider => () => provider.GetRequiredService<WorkspacePositions>());
         services.AddScoped<WorkspaceContents>();
+        services.AddScoped<WorkspaceReorderHandler>();
         services.AddSingleton(new DataScopeObjectInitializationBinding(ModuleId, "workspace.folder",
             WorkspaceFolderExecutions.CreateCaller(), "submit", "parent", "candidate"));
         services.AddSingleton(new DataScopeObjectInitializationBinding(ModuleId, "workspace.folder",

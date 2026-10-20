@@ -316,38 +316,19 @@
       "viewKey": "workspace.folder.list",
       "surface": "featureActions",
       "actionKey": "moveDown",
-      "execution": "workspace.folder.reorder",
+      "execution": "",
       "resources": [
         "workspace.folder"
       ],
       "actions": [
-        "read",
         "edit"
       ],
       "featurePositions": [
         "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:moveDown",
         "Workspace/navigation:workspace/node-type:folder/surface:list.custom/action:moveDown"
       ],
-      "requirements": [
-        {
-          "role": "parent",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "workspace.folder"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "readResolverKey": "workspace.position"
-        }
-      ],
-      "provider": "workspace.backend"
+      "object": "WorkspaceFolder",
+      "businessBinding": "workspace.folder.reorder"
     },
     {
       "id": "Workspace/view:workspace.folder.list/featureActions/action:moveUp",
@@ -355,38 +336,19 @@
       "viewKey": "workspace.folder.list",
       "surface": "featureActions",
       "actionKey": "moveUp",
-      "execution": "workspace.folder.reorder",
+      "execution": "",
       "resources": [
         "workspace.folder"
       ],
       "actions": [
-        "read",
         "edit"
       ],
       "featurePositions": [
         "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:moveUp",
         "Workspace/navigation:workspace/node-type:folder/surface:list.custom/action:moveUp"
       ],
-      "requirements": [
-        {
-          "role": "parent",
-          "stage": "submit",
-          "shape": "object",
-          "resources": [
-            "workspace.folder"
-          ],
-          "anyOf": [
-            [
-              "read",
-              "edit"
-            ]
-          ],
-          "minimumCount": 1,
-          "maximumCount": 1,
-          "readResolverKey": "workspace.position"
-        }
-      ],
-      "provider": "workspace.backend"
+      "object": "WorkspaceFolder",
+      "businessBinding": "workspace.folder.reorder"
     },
     {
       "id": "Workspace/view:workspace.folder.list/pageActions/action:batchAuthorize",
@@ -464,6 +426,23 @@
       ],
       "provider": "authorization.collection.manage",
       "providerModuleId": "Authorization"
+    },
+    {
+      "id": "Workspace/view:workspace.folder.list/pageActions/action:clearClipboard",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.folder.list",
+      "surface": "pageActions",
+      "actionKey": "clearClipboard",
+      "execution": "",
+      "resources": [
+        "workspace.folder"
+      ],
+      "actions": [],
+      "featurePositions": [
+        "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:clearClipboard",
+        "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:clearClipboard"
+      ],
+      "businessBinding": "workspace.folder.copy"
     },
     {
       "id": "Workspace/view:workspace.folder.list/pageActions/action:copySelected",
@@ -1688,6 +1667,22 @@
         }
       ],
       "provider": "workspace.backend"
+    },
+    {
+      "id": "Workspace/view:workspace.folder.list/pageActions/action:resolveObjectCopy",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.folder.list",
+      "surface": "pageActions",
+      "actionKey": "resolveObjectCopy",
+      "execution": "",
+      "resources": [
+        "workspace.folder"
+      ],
+      "actions": [],
+      "featurePositions": [
+        "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:resolveObjectCopy"
+      ],
+      "businessBinding": "workspace.folder.resolveObjectCopy"
     },
     {
       "id": "Workspace/view:workspace.folder.list/pageActions/action:transferSelected",

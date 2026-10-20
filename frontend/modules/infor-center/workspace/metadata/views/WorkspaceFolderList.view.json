@@ -41,8 +41,8 @@
     "featureActions": [
       { "key": "authorize", "titleKey": "Authorize", "behaviorKey": "workspace.folder.authorize", "dataAccess": {"execution":"workspace.content.authorization.manage", "resources": ["workspace.folder", "part.part", "document.document"]} },
       { "key": "initializeOwnership", "titleKey": "InitializeOwnership", "behaviorKey": "workspace.folder.initializeOwnership", "readBehaviors": ["workspace.folder.read"], "dataAccess": { "execution": "workspace.folder.initializeOwnership", "resources": ["workspace.folder", "part.part", "document.document"] } },
-      { "key": "moveUp", "titleKey": "MoveUp", "labelKey": "MoveUp", "behaviorKey": "workspace.folder.reorder", "handlerKey": "reorder", "readBehaviors": ["workspace.folder.read"], "dataAccess": {"execution":"workspace.folder.reorder","resources":["workspace.folder"]} },
-      { "key": "moveDown", "titleKey": "MoveDown", "labelKey": "MoveDown", "behaviorKey": "workspace.folder.reorder", "handlerKey": "reorder", "readBehaviors": ["workspace.folder.read"], "dataAccess": {"execution":"workspace.folder.reorder","resources":["workspace.folder"]} },
+      { "key": "moveUp", "titleKey": "MoveUp", "labelKey": "MoveUp", "behaviorKey": "workspace.folder.reorder", "handlerKey": "reorder", "readBehaviors": ["workspace.folder.read"], "dataAccess": {"object":"WorkspaceFolder","actions":["edit"]} },
+      { "key": "moveDown", "titleKey": "MoveDown", "labelKey": "MoveDown", "behaviorKey": "workspace.folder.reorder", "handlerKey": "reorder", "readBehaviors": ["workspace.folder.read"], "dataAccess": {"object":"WorkspaceFolder","actions":["edit"]} },
       { "key": "add", "titleKey": "AddFolder", "behaviorKey": "workspace.folder.add", "readBehaviors": ["workspace.folder.read"] }],
     "rowActionColumn": "menu",
     "rowActionSets": {

@@ -61,7 +61,7 @@ public sealed class EntityOwnershipCostSqlServerHttpApiTests(ITestOutputHelper o
         var allocated = GC.GetTotalAllocatedBytes();
         observation.Begin();
         measurement.Begin("pending-100-of-101", currentReadOnly: true);
-        using var pending = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Get, PendingUrl(position, pageSize: measurement.Enabled ? 100 : 20), dataAccess: OwnershipDeclaration(fixture, "workspace.folder.initializeOwnership", point));
+        using var pending = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Get, PendingUrl(position, pageSize: measurement.Enabled ? 100 : 20), dataAccess: OwnershipReadDeclaration(fixture, "workspace.folder.initializeOwnership", point));
         var page = await ReadOkAsync(pending);
         var pendingCost = observation.End();
         await measurement.EndAsync(Encoding.UTF8.GetByteCount(page.GetRawText()), observation.CommandCount, diagnosticConnection);

@@ -18,11 +18,12 @@ public sealed class ButtonExecutionAccess(CanonicalModulePlan plan, IHttpContext
         var positions = request.Request.Headers["X-NewP-Feature"];
         var declaration = ids.Count == 1 ? plan.ActionDataAccessCatalog.SingleOrDefault(item => item.Id == ids[0]) : null;
         var endpoint = request.GetEndpoint();
-        var owners = endpoint?.Metadata.GetOrderedMetadata<EndpointModuleAttribute>();
-        var bindings = endpoint?.Metadata.GetOrderedMetadata<RequireFeatureAttribute>();
+        var resource = resources.Resources.SingleOrDefault(item => item.ResourceKey == request.Request.RouteValues["resourceKey"]?.ToString());
         if (request.Request.Headers.ContainsKey("X-NewP-Data-Declaration") || declaration?.BusinessBinding is null
-            || declaration.Execution.Length != 0 || owners?.Count != 1 || owners[0].ModuleId != declaration.ModuleId
-            || bindings?.Count != 1 || bindings[0].BehaviorKey != declaration.BusinessBinding
+            || declaration.Execution.Length != 0
+            || !ButtonBusinessEndpointBindings.Matches(endpoint, declaration.ModuleId, declaration.BusinessBinding, resource)
+            || endpoint?.Metadata.GetOrderedMetadata<ResourceFeatureBindingAttribute>().Count > 0
+                && string.IsNullOrWhiteSpace(request.Request.RouteValues["objectId"]?.ToString())
             || endpoint?.Metadata.GetMetadata<ButtonBusinessHandlerAttribute>()?.HandlerType != handlerType)
             throw new ActionDataAccessException(400, "ButtonExecution.BindingInvalid");
         if (positions.Count != 1 || !declaration.FeaturePositions.Contains(positions[0]!, StringComparer.Ordinal))
@@ -36,6 +37,12 @@ public sealed class ButtonExecutionAccess(CanonicalModulePlan plan, IHttpContext
     {
         if (BindHandler(invocation.HandlerType) != invocation) throw new ActionDataAccessException(400, "ButtonExecution.BindingInvalid");
         var declaration = plan.ActionDataAccessCatalog.Single(item => item.Id == invocation.ButtonId);
+        var request = http.HttpContext!;
+        if (request.GetEndpoint()!.Metadata.GetOrderedMetadata<ResourceFeatureBindingAttribute>().Count > 0
+            && (target is not ButtonExecutionTarget existing
+                || existing.ResourceKey != request.Request.RouteValues["resourceKey"]?.ToString()
+                || existing.ObjectId != request.Request.RouteValues["objectId"]?.ToString()))
+            throw new ActionDataAccessException(400, "ButtonExecution.TargetMismatch");
         await CheckTargetAsync(declaration, target, cancellationToken);
         using var querySource = target is ButtonQueryTarget query
             ? (queries ?? throw new ActionDataAccessException(400, "ButtonExecution.QueryContextRequired")).Enter(invocation, query) : null;

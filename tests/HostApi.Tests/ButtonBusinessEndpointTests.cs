@@ -14,7 +14,7 @@ using Xunit;
 namespace ICP.Platform.HostApi.Tests;
 
 [Trait("Category", "ModuleMetadataConsumer")]
-public sealed class ButtonBusinessEndpointTests
+public sealed partial class ButtonBusinessEndpointTests
 {
     [Theory]
     [InlineData("valid")]

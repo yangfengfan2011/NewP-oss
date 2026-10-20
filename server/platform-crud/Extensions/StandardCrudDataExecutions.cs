@@ -30,22 +30,24 @@ public static class StandardCrudDataExecutions
             .Select(endpoint => endpoint.Metadata.GetMetadata<ButtonExecutionEndpoint>()).Where(item => item is not null).ToArray();
         var handlers = sources.SelectMany(source => source.Endpoints)
             .Where(endpoint => endpoint.Metadata.GetMetadata<ButtonBusinessHandlerAttribute>() is not null).ToArray();
+        var resourceCatalog = services?.GetService<IDataScopeResourceCatalog>();
+        // 通用资源端点的声明仍由资源拥有者发布，不能从端点模块推导或补造按钮。
+        bool MatchesHandler(Endpoint endpoint, ActionDataAccessRequirement button) =>
+            ButtonBusinessEndpointBindings.Matches(endpoint, button.ModuleId, button.BusinessBinding!)
+            || resourceCatalog?.Resources.Any(resource => ButtonBusinessEndpointBindings.Matches(endpoint,
+                button.ModuleId, button.BusinessBinding!, resource)) == true;
         foreach (var endpoint in handlers)
         {
             var handler = endpoint.Metadata.GetMetadata<ButtonBusinessHandlerAttribute>()!.HandlerType;
-            var owners = endpoint.Metadata.GetOrderedMetadata<EndpointModuleAttribute>();
-            var features = endpoint.Metadata.GetOrderedMetadata<RequireFeatureAttribute>();
             if (handler.IsAbstract || !handler.GetInterfaces().Any(type => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IButtonBusinessHandler<,,>))
                 || services is not null && services.GetRequiredService<IServiceProviderIsService>().IsService(handler) != true
-                || owners.Count != 1 || features.Count != 1 || !plan.ActionDataAccessCatalog.Any(button =>
-                    button.ModuleId == owners[0].ModuleId && button.BusinessBinding == features[0].BehaviorKey))
+                || !plan.ActionDataAccessCatalog.Any(button => button.BusinessBinding is not null && MatchesHandler(endpoint, button)))
                 throw new InvalidOperationException("BUTTON_BUSINESS_HANDLER_INVALID");
         }
         foreach (var button in plan.ActionDataAccessCatalog.Where(item => item.BusinessBinding is not null && item.GetObjectRequirements().Count > 0))
             if (!buttonBindings.Any(binding => binding!.BusinessBinding == button.BusinessBinding
                 && button.GetObjectRequirements().Any(item => item.Object == binding.ObjectName && item.ResourceKey == binding.ResourceKey))
-                && !handlers.Any(endpoint => endpoint.Metadata.GetMetadata<EndpointModuleAttribute>()!.ModuleId == button.ModuleId
-                    && endpoint.Metadata.GetMetadata<RequireFeatureAttribute>()!.BehaviorKey == button.BusinessBinding))
+                && !handlers.Any(endpoint => MatchesHandler(endpoint, button)))
                 throw new InvalidOperationException("BUTTON_EXECUTION_ENDPOINT_MISSING");
         foreach (var execution in plan.Modules.SelectMany(module => module.DataExecutions)
             .Where(contract => contract.Boundary == "entry" && contract.Provider.StartsWith("standardCrud.", StringComparison.Ordinal)))

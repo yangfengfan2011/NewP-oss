@@ -586,6 +586,45 @@ public sealed class AcceptanceGateTests
                 await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"), new { url = page.Url, actor = "ordinary", journey = "document-batch-copy" }, token);
             }).RunAsync(CancellationToken.None);
     }
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通主体从正式Document单个及整批确认提交真实主附件副本，并沿owner详情下载；不重放编辑删除旅程")]
+    public async Task NativeDocumentObjectCopyBinding_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-document-object-copy-binding");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
+            browserJourney: async (page, token) =>
+            {
+                var driver = new WorkspacePageDriver(page);
+                var suffix = runId[..8];
+                var source = "正式文件来源 " + suffix;
+                var single = "正式单个副本 " + suffix;
+                var target = "正式图文档目标 " + suffix;
+                var batchExisting = "正式整批副本一 " + suffix;
+                var batchFiles = "正式整批文件副本 " + suffix;
+                await driver.OpenAsync();
+                await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
+                var sourceAddress = page.Url;
+                await driver.CreateDocumentWithFilesAsync("FORMAL-DOC-SOURCE-" + suffix, source,
+                    WorkspacePageDriver.SmallMainFile(), attachments: WorkspacePageDriver.SmallAttachmentFiles());
+                await driver.CopyReferenceFromContextMenuAsync(source);
+                await driver.SelectRootAsync("公共空间");
+                await driver.CreateFolderAsync(target);
+                await driver.SelectTreePathAsync("公共空间", target);
+                await driver.PasteObjectCopyAsync("FORMAL-DOC-SINGLE-" + suffix, single);
+                await driver.RestorePositionAsync(sourceAddress, "公共空间", fixture.ExistingFolderName);
+                await driver.CopySelectedAsync(fixture.ExistingDocumentName, source);
+                await driver.SelectTreePathAsync("公共空间", target);
+                await driver.PasteDocumentCopiesAsync([(fixture.ExistingDocumentName, "FORMAL-DOC-BATCH-A-" + suffix, batchExisting),
+                    (source, "FORMAL-DOC-BATCH-B-" + suffix, batchFiles)]);
+                await driver.OpenOwnedPropertiesAsync(batchFiles, "/documents");
+                await driver.DownloadFileAsync(WorkspacePageDriver.SmallMainFile().Name, Path.Combine(root, "copied-main.pdf"));
+                await driver.DownloadFileAsync(WorkspacePageDriver.SmallAttachmentFiles()[0].Name, Path.Combine(root, "copied-attachment.pdf"));
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
+                    new { url = page.Url, actor = "ordinary", journey = "document-single-batch-copy-binding-and-owner-files" }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通主体从真实复制选择进入Part副本确认，正式来源沿原Provider提交并看到目标行")]
     public async Task NativePartObjectCopyBinding_UsesFormalDriver()
     {

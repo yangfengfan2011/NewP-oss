@@ -33,7 +33,7 @@ public sealed class DocumentFileCreationScope(EfPlatformDbContext db)
         && ReferenceEquals(_source, source) && Equals(_identity!.Master["EID"], source.ObjectId);
 
     /// <summary>复制证明仅由所属复制行为在真实新regular事务内建立，不能以旧上传证明替代。</summary>
-    public bool ProvesCopyIteration(string iterationId) => _copy && ProvesIteration(iterationId);
+    public bool ProvesCopyIteration(string iterationId, FileOwnerCreationContext source) => _copy && ProvesIteration(iterationId, source);
 
     // 生命周期结束清除证明，后续已有对象无法借上次创建追加文件。
     private sealed class Scope(DocumentFileCreationScope owner) : IDisposable

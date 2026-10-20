@@ -75,12 +75,12 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
 
     private static async Task AssertCopiedDocumentDownloads(BusinessAuditHostFixture fixture, HttpClient client, string id)
     {
-        var list = await FeatureHttpTestRequests.ReadAsync(client, DocFiles.Point(fixture, "document.document.read"), $"/api/document/documents/{id}/files");
+        var list = await DocumentFileHttpTestRequests.ReadAsync(fixture, client, DocFiles.Point(fixture, "document.document.read"), $"/api/document/documents/{id}/files");
         var files = list.GetProperty("files").EnumerateArray().ToArray(); Assert.Equal(3, files.Length);
         for (var index = 0; index < files.Length; index++)
         {
             Assert.Equal(index == 0 ? "main" : "attachment", files[index].GetProperty("role").GetString());
-            using var download = await FeatureHttpTestRequests.SendAsync(client, DocFiles.Point(fixture, "document.document.download"), HttpMethod.Get,
+            using var download = await DocumentFileHttpTestRequests.SendAsync(fixture, client, DocFiles.Point(fixture, "document.document.download"), HttpMethod.Get,
                 $"/api/document/documents/{id}/files/{files[index].GetProperty("fileLinkId").GetString()}/content");
             Assert.Equal(HttpStatusCode.OK, download.StatusCode); Assert.Equal(new byte[] { 1, 2, 3, (byte)index }, await download.Content.ReadAsByteArrayAsync());
         }

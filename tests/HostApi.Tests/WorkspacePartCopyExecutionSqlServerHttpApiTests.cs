@@ -35,7 +35,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         Assert.Equal("ActionDataAccess.DeclarationInvalid", (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
         Assert.Empty(await Rows(fixture, "WorkspaceObjectCopy"));
         Assert.Single(await Rows(fixture, "Part"));
-        var declaration = new FeatureHttpTestRequests(fixture).Declaration("workspace.objectCopy.part", copy);
+        var declaration = new FeatureHttpTestRequests(fixture).Declaration("workspace.objectCopy", copy);
         var sourceId = (string)link["CEID"]!;
         await Rule(fixture, admin, "PartPrepareNoSourceEdit", "part.part", sourceId, "edit", "deny");
         using (var allowed = await FeatureHttpTestRequests.SendAsync(ordinary, copy, HttpMethod.Post,
@@ -68,8 +68,8 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         Assert.Single(await Rows(fixture, "WorkspaceObjectCopy"));
         Assert.Single(await Rows(fixture, "Part"));
     }
-    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "实际Part提交拒缺失/串用来源，Document真实模型只沿317前无声明过渡，恢复仍用原操作凭据")]
-    public async Task ObjectCopy_PartSubmitAndDeferredDocumentRejectCrossedSourcesWithoutChangingRecovery()
+    [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "Part与Document实际prepare/submit均拒缺失和串用来源，共用声明由真实模型选分支，恢复仍用原凭据")]
+    public async Task ObjectCopy_PartAndDocumentRejectCrossedSourcesWithoutChangingRecovery()
     {
         await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
@@ -98,15 +98,17 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             new { position = source, values, uploads = new { mainUploadId = uploaded.GetProperty("uploadId").GetString(), attachmentUploadIds = Array.Empty<string>() } });
         var document = Assert.Single(await Rows(fixture, "WorkspaceFolderContent"), row => Equals(row["ChildModelKey"], "Document"));
         var documentInput = new { mode = "copy", sourcePosition = source, linkIds = new[] { document["LID"] }, targetPosition = target };
-        var partDeclaration = new FeatureHttpTestRequests(fixture).Declaration("workspace.objectCopy.part", point).Id;
-        foreach (var header in new[] { " ", "not-a-declaration", partDeclaration })
+        var wrongDeclaration = wrong.Id;
+        foreach (var header in new[] { " ", "not-a-declaration", wrongDeclaration })
         {
             using var rejected = await WithDeclaration("objects/copy/prepare", documentInput, header);
             await Problem(rejected, HttpStatusCode.BadRequest, "ActionDataAccess.DeclarationInvalid");
         }
         var docPrepared = await Command(fixture, admin, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy/prepare", documentInput);
-        var docSubmit = new { operationId = docPrepared.GetProperty("operationId").GetString(), values = new { ECODE = "STAGE-DOCUMENT-COPY", ENAME = "显式过渡副本" } };
-        foreach (var header in new[] { " ", "not-a-declaration", partDeclaration })
+        var docSubmit = new { operationId = docPrepared.GetProperty("operationId").GetString(), values = new { ECODE = "STAGE-DOCUMENT-COPY", ENAME = "正式Document副本" } };
+        using (var missing = await FeatureHttpTestRequests.SendAsync(admin, point, HttpMethod.Post, "/api/workspace/content/objects/copy", docSubmit))
+            await Problem(missing, HttpStatusCode.BadRequest, "ActionDataAccess.DeclarationInvalid");
+        foreach (var header in new[] { " ", "not-a-declaration", wrongDeclaration })
         {
             using var rejected = await WithDeclaration("objects/copy", docSubmit, header);
             await Problem(rejected, HttpStatusCode.BadRequest, "ActionDataAccess.DeclarationInvalid");
@@ -117,7 +119,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         Assert.Equal(2, (await Rows(fixture, "Document")).Length);
         Assert.Single(await Rows(fixture, "Part"));
 
-        // TestServer会移除零长度头；使用已证实到达服务端的空白/错误/Part声明，不伪称空值已送达。
+        // TestServer会移除零长度头；使用已证实到达服务端的空白/错误/其他执行声明，不伪称空值已送达。
         async Task<HttpResponseMessage> WithDeclaration(string path, object body, string declaration)
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/" + path) { Content = JsonContent.Create(body) };
@@ -152,7 +154,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         PartCopyDataPhase phase, object body)
     {
         var point = Point(fixture, "workspace.folder.pasteObjectCopy");
-        var declaration = new FeatureHttpTestRequests(fixture).Declaration("workspace.objectCopy.part", point);
+        var declaration = new FeatureHttpTestRequests(fixture).Declaration("workspace.objectCopy", point);
         return FeatureHttpTestRequests.SendAsync(client, point, HttpMethod.Post,
             phase == PartCopyDataPhase.Prepare ? "/api/workspace/content/objects/copy/prepare" : "/api/workspace/content/objects/copy", body, declaration);
     }

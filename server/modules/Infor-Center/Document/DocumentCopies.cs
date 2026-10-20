@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Crud.Models;
 using ICP.Platform.Crud.ObjectOperations;
 using ICP.Platform.Modules.Document.Contracts;
@@ -18,7 +19,7 @@ public sealed partial class DocumentFiles
     public async Task<StandardCrudError?> ValidateCopyCandidateAsync(IReadOnlyDictionary<string, object?> values, CancellationToken token = default)
     {
         var candidate = await writer.PrepareCreateCandidateAsync(resources.FindByResourceKey("document.document")!, values,
-            new ObjectOperationWriteSource.Legacy(typeof(DocumentFiles), nameof(ValidateCopyCandidateAsync), "document.document", "create", null), token);
+            InternalCreateSource(nameof(ValidateCopyCandidateAsync)), token);
         return candidate.Error;
     }
 
@@ -31,15 +32,17 @@ public sealed partial class DocumentFiles
         {
             if (openedHere) await db.Database.OpenConnectionAsync(token);
             DocumentCopyFields.RequireRuntime(db);
-            await RequireReadAsync(documentId, token);
-            if (!await decisions.IsAllowedAsync("document.document", documentId, "documentObjectCopy", token)) throw new FileLifecycleException(403, "Document.CopyDenied");
+            if ((await access.EvaluateInternalObjectAsync(DocumentCopyExecutions.Source(), "visibility", new("document.document", documentId), token)).Decision != DataExecutionDecision.Allowed
+                || !await db.Set<Dictionary<string, object?>>("Document").AsNoTracking().AnyAsync(row => EF.Property<string>(row, "EID") == documentId, token))
+                throw new FileLifecycleException(404, "Files.UsageUnavailable");
+            if ((await access.EvaluateInternalObjectAsync(DocumentCopyExecutions.Source(), "copy", new("document.document", documentId), token)).Decision != DataExecutionDecision.Allowed) throw new FileLifecycleException(403, "Document.CopyDenied");
             var current = await identities.ReadCurrentAsync(documentId, token, tracking: false);
             foreach (var key in new[] { "ECODE", "ENAME", "Description" })
                 if (!Equals(current.Master.GetValueOrDefault(key), current.Iteration.GetValueOrDefault(key))) throw new InvalidOperationException("Document.IdentityCorrupted");
             var links = await ReadLinksAsync((string)current.Iteration["EID"]!, false, token);
             long totalBytes = 0;
             foreach (var batch in links.Select(Reference).Chunk(files.MaxReadBatchSize))
-                foreach (var item in await files.ReadUsageMetadataAsync(batch, new FileOwnerLegacyCopyReadContext(typeof(DocumentFiles), nameof(ReadCopySourceAsync)), token)) totalBytes = checked(totalBytes + item.Length);
+                foreach (var item in await files.ReadUsageMetadataAsync(batch, DocumentCopyExecutions.Metadata(documentId), token)) totalBytes = checked(totalBytes + item.Length);
             var snapshot = new DocumentCopySnapshot(documentId, (string)current.Master["ECODE"]!, (string)current.Master["ENAME"]!, current.Master["Description"] as string,
                 (string)current.Version["EID"]!, (long)current.Version["VersionOrdinal"]!, (string)current.Version["VersionLabel"]!, (string)current.Version["State"]!,
                 (string)current.Iteration["EID"]!, (long)current.Iteration["IterationOrdinal"]!, (string)current.Iteration["DatasetTypeKey"]!,
@@ -55,7 +58,7 @@ public sealed partial class DocumentFiles
         if (transactions.IsActive) throw new InvalidOperationException("Document.CopyPreparationRequiresNoTransaction");
         var source = await RequireCopySnapshotAsync(confirmation, token);
         foreach (var file in source.Files)
-            await copies.PrepareCopyAsync(CopyKey(operationKey, file), file.Source, DocumentFileOwnerPolicy.Key, token);
+            await copies.PrepareCopyAsync(CopyKey(operationKey, file), file.Source, DocumentFileOwnerPolicy.Key, DocumentCopyExecutions.Files(source.DocumentId, nameof(PrepareCopyFilesAsync)), token);
     }
 
     /// <inheritdoc/>
@@ -79,8 +82,8 @@ public sealed partial class DocumentFiles
             if (item.State != "prepared" || string.IsNullOrWhiteSpace(item.FileId)) throw new FileLifecycleException(409, "Files.CopyNotPrepared");
             prepared.Add((file, item));
         }
-        var result = await operations().ExecuteAsync("document.document", ObjectOperationAction.Create, null, values,
-            new ObjectOperationWriteSource.Legacy(typeof(DocumentFiles), nameof(CopyAsync), "document.document", "create", null), token);
+        var creationSource = InternalCreateSource(nameof(CopyAsync));
+        var result = await operations().ExecuteAsync("document.document", ObjectOperationAction.Create, null, values, creationSource, token);
         // 普通创建可在文件准备后赢得唯一编码；仅在真实数据库核实重复时转换为可修正的编码错误。
         if (result.Error?.Code == "StandardCrud.PersistenceConflict" && values.GetValueOrDefault("ECODE") is string code
             && await db.Set<Dictionary<string, object?>>("Document").AsNoTracking().AnyAsync(row => EF.Property<string>(row, "ECODE") == code, token))
@@ -88,7 +91,8 @@ public sealed partial class DocumentFiles
                 Message = "图文档编码必须唯一。", FieldErrors = [new("ECODE", "Document.CodeDuplicated", "图文档编码必须唯一。")] });
         if (!result.Succeeded) return result;
         var identity = await identities.ReadCurrentAsync((string)result.Detail!.Fields["EID"]!, token);
-        using var proof = creation.Begin(identity, copying: true);
+        var targetSource = new FileOwnerCreationContext(creationSource.Context, (string)identity.Master["EID"]!);
+        using var proof = creation.Begin(identity, copying: true, source: targetSource);
         var stamp = audit.Current();
         var links = prepared.Select(item => new Dictionary<string, object?> {
             ["LID"] = ids.NewId("DocumentFileLink"), ["PEID"] = identity.Iteration["EID"], ["CEID"] = item.Copy.FileId,
@@ -97,7 +101,8 @@ public sealed partial class DocumentFiles
         db.Set<Dictionary<string, object?>>("DocumentFileLink").AddRange(links);
         foreach (var item in prepared.Select((item, index) => (item.Copy, Link: links[index])).OrderBy(item => item.Copy.FileId, StringComparer.Ordinal))
         {
-            var confirmed = await copies.ConfirmCopyAsync(item.Copy.RequestKey, new(DocumentFileOwnerPolicy.Key, (string)item.Link["LID"]!), token);
+            var confirmed = await copies.ConfirmCopyAsync(item.Copy.RequestKey, new(DocumentFileOwnerPolicy.Key, (string)item.Link["LID"]!),
+                DocumentCopyExecutions.Files(source.DocumentId, nameof(CopyAsync)), targetSource, token);
             if (confirmed.FileId != item.Copy.FileId) throw new InvalidOperationException("Document.FileAssociationCorrupted");
             item.Link["FileUsageId"] = confirmed.UsageId;
         }

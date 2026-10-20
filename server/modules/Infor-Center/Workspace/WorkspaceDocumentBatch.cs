@@ -15,21 +15,20 @@ public sealed partial class WorkspaceContents
 {
     // 同一页已核证LID的请求顺序就是确认顺序；集合不去重、不按EID换路，也不静默筛掉非Document。
     private ValueTask<WorkspaceObjectCopyPreparation> PrepareDocumentBatchAsync(string actor, WorkspacePosition sourcePosition,
-        string[] linkIds, WorkspacePosition targetPosition, bool declarationSpecified, CancellationToken token) => transactions.ExecuteAsync<WorkspaceObjectCopyPreparation>(async cancellation =>
+        string[] linkIds, WorkspacePosition targetPosition, CancellationToken token) => transactions.ExecuteAsync<WorkspaceObjectCopyPreparation>(async cancellation =>
     {
         using var operation = audit.BeginOperation();
         await LockGraphAsync(cancellation);
         var parent = await positions.ResolveAsync(actor, sourcePosition, cancellation);
-        var endpoints = await ResolveDeferredClipboardTargetsAsync(parent.FolderId, linkIds, DeferredClipboardExecution.DocumentPreparation, cancellation);
+        var endpoints = await ResolveDocumentCopyTargetsAsync(parent.FolderId, linkIds, "prepare", cancellation);
         if (endpoints.Any(endpoint => endpoint.ModelKey != "Document")) throw new LinkQueryException(400, "Workspace.ObjectCopySourceRequired");
-        WorkspaceObjectCopyExecutions.RequireDeferredDocumentRequest(declarationSpecified);
-        var target = await WritablePositionAsync(actor, targetPosition, cancellation);
+        var target = await ObjectCopyTargetPositionAsync(actor, targetPosition, "Document", "prepare", cancellation, batch: true);
         RequireContainer(targetPosition, target, "Document");
         var sources = new List<WorkspaceDocumentCopySource>();
         var items = new List<WorkspaceDocumentCopyItemPreparation>();
         for (var index = 0; index < endpoints.Length; index++)
         {
-            if (!await decisions.IsAllowedAsync("document.document", endpoints[index].Id, "documentObjectCopy", cancellation)) throw new LinkQueryException(403, "Workspace.ObjectCopyDenied");
+            if (!await ObjectCopyAllowedAsync("prepare", "source", "Document", endpoints[index].Id, cancellation, batch: true)) throw new LinkQueryException(403, "Workspace.ObjectCopyDenied");
             var source = await documentCopies.ReadCopySourceAsync(endpoints[index].Id, cancellation);
             sources.Add(new(linkIds[index], endpoints[index].Id, source.Code, source.Name, source.Description, source.Confirmation));
             items.Add(new(linkIds[index], [.. parent.Names, source.Name], new Dictionary<string, object?> {
@@ -88,12 +87,12 @@ public sealed partial class WorkspaceContents
     {
         var parent = await positions.ResolveAsync(actor, input.SourcePosition, token);
         var sources = CopySources(input);
-        var endpoints = await ResolveDeferredClipboardTargetsAsync(parent.FolderId, input.LinkIds, DeferredClipboardExecution.DocumentSources, token);
+        var endpoints = await ResolveDocumentCopyTargetsAsync(parent.FolderId, input.LinkIds, "submit", token, input.Documents is not null);
         if (endpoints.Length != sources.Length) throw new LinkQueryException(404, "Workspace.ReferenceUnavailable");
         for (var index = 0; index < sources.Length; index++)
         {
             if (endpoints[index].ModelKey != "Document" || endpoints[index].Id != sources[index].Id) throw new LinkQueryException(404, "Workspace.ReferenceUnavailable");
-            if (!await decisions.IsAllowedAsync("document.document", sources[index].Id, "documentObjectCopy", token)) throw new LinkQueryException(403, "Workspace.ObjectCopyDenied");
+            if (!await ObjectCopyAllowedAsync("submit", "source", "Document", sources[index].Id, token, input.Documents is not null)) throw new LinkQueryException(403, "Workspace.ObjectCopyDenied");
             var current = await documentCopies.ReadCopySourceAsync(sources[index].Id, token);
             if (current.Confirmation != sources[index].Confirmation) throw new LinkQueryException(409, "Workspace.CopySourceChanged");
         }
@@ -107,7 +106,7 @@ public sealed partial class WorkspaceContents
         var candidates = ReadCopyValues(input, values);
         await RequireDocumentSourcesAsync(actor, input, token);
         var parent = await positions.ResolveAsync(actor, input.SourcePosition, token);
-        var target = await WritablePositionAsync(actor, input.TargetPosition, token);
+        var target = await ObjectCopyTargetPositionAsync(actor, input.TargetPosition, "Document", "submit", token, batch: true);
         RequireContainer(input.TargetPosition, target, "Document");
         var created = new List<IReadOnlyDictionary<string, object?>>();
         for (var index = 0; index < input.Documents!.Length; index++)
@@ -123,9 +122,10 @@ public sealed partial class WorkspaceContents
         }
         // 最后一行的操作也可能触发授权变化；所有来源和新候选要在提交前再次裁决。
         await RequireDocumentSourcesAsync(actor, input, token);
-        await WritablePositionAsync(actor, input.TargetPosition, token);
+        await ObjectCopyTargetPositionAsync(actor, input.TargetPosition, "Document", "submit", token, batch: true);
         foreach (var fields in created)
-            if (!await decisions.IsCandidateAllowedAsync("document.document", fields, "create", token)) throw new LinkQueryException(403, "Workspace.ObjectCreateDenied");
+            if (await executionAccess.EvaluateCandidateAsync(DocumentCopyFinalCandidateSource(nameof(CopyDocumentBatchAsync)), "document.document", "candidate", fields, token)
+                != ICP.Platform.Authorization.Contracts.DataExecutionDecision.Allowed) throw new LinkQueryException(403, "Workspace.ObjectCreateDenied");
         row["State"] = "committed";
         audit.ForUpdate((string)row["CreatedBy"]!, (DateTime)row["CreatedAt"]!).ApplyTo(row);
         return StandardCrudMutationResult.Success();

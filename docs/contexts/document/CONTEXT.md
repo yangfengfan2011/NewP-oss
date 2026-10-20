@@ -6,7 +6,7 @@ Document 拥有稳定主身份、初始 DocumentVersion/DocumentIteration 及当
 
 稳定资源 `document.document` 提供 `/api/document/documents` 标准创建和读取，页面 `/documents` 使用共享标准列表与创建 Drawer，`document.document.detail` 提供只读属性 Drawer 和正式 `/documents/:id` 详情。创建提交后不可读或展示失败继续返回不含对象标识的成功回执，客户端只重试读取。
 
-标准创建入口绑定 `document.document.create`，固定 `candidate/submit` 要求由 Standard CRUD 提供者生成；页面仅引用执行与本资源，服务端在原补齐候选、所属与审计字段后判 create。上传预检与带文件创建在各自原候选位置使用 Document owner 登记的固定内部来源，不借用公开 POST 的声明，也不增加新对象 read。原独立 PUT/DELETE 保持关闭；组合编辑/删除的 `WorkspaceContents.MutateObjectsAsync` 仅保留逐调用者、动作和目标的显式旧来源，由 #315 迁移。真副本的 `DocumentFiles.ValidateCopyCandidateAsync/CopyAsync` 同样独立登记旧 create 来源，由 #317 迁移；缺来源不能回退到它们。
+标准创建入口绑定 `document.document.create`，固定 `candidate/submit` 要求由 Standard CRUD 提供者生成；页面仅引用执行与本资源，服务端在原补齐候选、所属与审计字段后判 create。上传预检与带文件创建在各自原候选位置使用 Document owner 登记的固定内部来源，不借用公开 POST 的声明，也不增加新对象 read。原独立 PUT/DELETE 保持关闭；组合编辑/删除的 `WorkspaceContents.MutateObjectsAsync` 使用其正式内部写来源。真副本的 `DocumentFiles.ValidateCopyCandidateAsync/CopyAsync` 在各自原候选位置消费同一正常创建能力的精确内部来源；最终每个新候选由Workspace实际复制方法再次固定来源核验。两条复制旧create登记已删除，缺来源不能回退。
 
 侧栏不提供独立图文档入口；用户从 Workspace 选中文件夹后新建，由 Workspace 在同一对象操作事务内调用 `document.document` 创建行为并建立内容关系。原页面路由保持 routeOnly；功能入口通过 `parentModuleId: Workspace`、`parentKey: workspace` 显式归入工作空间，详情和全部子操作共享这条授权祖先链，不再发布独立顶层授权入口。数据资源、对象行为和接口执行归属仍由 Document 拥有。
 
@@ -32,7 +32,7 @@ Document.Contracts 的文件创建复用原所属 Create，在同一业务事务
 
 文件列表使用当前详情的正式 root read 绑定；`featureActions.download` 单独绑定 `document.files.download`，固定 read + download 下限由 Document provider 唯一定义，仍使用原下载功能位置。`downloadAllowed` 从同一有效要求派生，但只消费本次列表已经完成的 read 与真实回链事实；它不附加 download 功能资格，也不授权后续请求。正式 Open 与 Files owner policy 各自在原判权时点重建独立事实，核 HTTP、主体、真实 Document EID、阶段及同一 typed Source 引用，不缓存允许结果或增加重复读取。
 
-首次 Confirm 同时接收实际内部候选来源和本次新对象身份，并核对同一事务中真实 Added FileLink、版次和创建证明；重复确认保留原 actor/lease 与持久回链保护，不新增 read。Release 在原文件锁、独立 batch read 与实际 Link→Iteration→Version→Document 回链后，消费固定内部 `document.files.release` 的 read + delete 要求；与 Open、metadata 的读取事实互不替代。两者仍只登记原业务事务的 tracker 变更，不 Flush、不独立提交。Files 的旧 CopySource 仅接受真实 `FileLifecycleService.PrepareCopyAsync/ConfirmCopyAsync` 两处来源读取，ConfirmCopy 操作本身只接受 `ConfirmCopyAsync`；不能因缺上下文自动进入旧分支。
+首次 Confirm 同时接收实际内部候选来源和本次新对象身份，并核对同一事务中真实 Added FileLink、版次和创建证明；重复确认保留原 actor/lease 与持久回链保护，不新增 read。Release 在原文件锁、独立 batch read 与实际 Link→Iteration→Version→Document 回链后，消费固定内部 `document.files.release` 的 read + delete 要求；与 Open、metadata 的读取事实互不替代。两者仍只登记原业务事务的 tracker 变更，不 Flush、不独立提交。CopySource显式消费 `DocumentFiles.PrepareCopyFilesAsync/CopyAsync` 提供的内部来源与真实源Document EID；policy独立完成原批read和文件回链后建立本阶段事实，不能借metadata/download/release或另一个HTTP的事实。`ReadCopySourceAsync` 的文件元数据另用固定read-only来源，不重复documentObjectCopy。ConfirmCopy由正常Create产生的实际typed创建来源、同一事务/新版次与真实Added FileLink共同证明，所有文件使用同一个创建来源引用；复制目标不增加read。confirmed重试保留原actor、lease及持久目标回链，只核源上下文形状，不重读源或重放copy。旧复制context/无source ABI已退役。
 
 属性文件列表沿当前身份和真实关联批量读取安全元数据，最多 101 项，按 Ordinal/LID 稳定读取。只公开 FileLink 身份、角色、次序及文件显示信息，不公开 File/Usage 身份或存储键。新建附件配置调低不改变既有合法集合的读取、下载或释放。read 允许而 download 拒绝时仍可看列表；下载分别重验正式功能与数据 download 资格，并核对 Document/版次/FileLink/Usage/File 回链。不可读或错目标安全拒绝；已授权的关联损坏、空或重复使用身份及内容缺失保持明确故障。存储配置、接收意图、取消、TTL 与回收状态的唯一事实见 [Files README](../../../server/modules/Platform/Files/README.md)。
 

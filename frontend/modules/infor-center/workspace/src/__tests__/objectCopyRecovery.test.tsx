@@ -8,6 +8,9 @@ import WorkspaceObjectCopyRecovery from '../WorkspaceObjectCopyRecovery';
 import { workspaceClipboard } from '../workspaceClipboard';
 import dictionary from '../../metadata/dictionaries/Workspace.dic.json';
 
+import compiled from '../../../../../../tests/Kernel.Tests/Fixtures/WorkspaceClipboardDataAccess.contract.json';
+const declaration = compiled.declarations.find(item => item.viewKey === 'workspace.folder.list' && item.surface === 'pageActions' && item.actionKey === 'pasteObjectCopy')!;
+
 vi.mock('@icp-platform/core', async original => ({ ...await original<typeof import('@icp-platform/core')>(), platformFetch: vi.fn() }));
 
 it.each([false, true])('recovers without replay and never lets a stale read overwrite cancellation (strict=%s)', async strict => {
@@ -20,11 +23,11 @@ it.each([false, true])('recovers without replay and never lets a stale read over
   const target = { ...source, linkIds: ['target'] };
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ linkId: 'document', modelKey: 'Document' }] })));
   await session.copy(source, ['document'], 'select-feature');
-  const draft = session.prepareObjectCopy(target, 'paste-feature');
+  const draft = session.prepareObjectCopy(target, 'paste-feature', declaration.id);
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ operationId: 'durable-operation', values: { ECODE: '', ENAME: '源' }, sourcePath: ['源'], targetPath: ['目标'] })));
   await session.readObjectCopyInput(draft, new AbortController().signal);
   vi.mocked(platformFetch).mockRejectedValueOnce(new TypeError('lost receipt'));
-  await expect(session.pasteObjectCopy(draft, { ECODE: 'NEW', ENAME: '副本' }, target, 'paste-feature')).rejects.toThrow();
+  await expect(session.pasteObjectCopy(draft, { ECODE: 'NEW', ENAME: '副本' }, target, 'paste-feature', declaration.id)).rejects.toThrow();
   let finishOld!: (response: Response) => void;
   if (strict) vi.mocked(platformFetch).mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; }));
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ state: 'preparing', succeeded: false })));

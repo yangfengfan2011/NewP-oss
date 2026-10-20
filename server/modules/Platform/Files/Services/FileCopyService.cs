@@ -9,12 +9,12 @@ namespace ICP.Platform.Modules.Files.Services;
 public sealed partial class FileLifecycleService
 {
     /// <inheritdoc/>
-    public async Task<FileCopyPreparation> PrepareCopyAsync(string requestKey, FileUsageReference source, string targetOwnerKey, CancellationToken token = default)
+    public async Task<FileCopyPreparation> PrepareCopyAsync(string requestKey, FileUsageReference source, string targetOwnerKey, FileOwnerInternalExecutionContext context, CancellationToken token = default)
     {
         if (transactions.IsActive) throw new InvalidOperationException("Files.CopyRequiresIndependentTransaction");
         ValidateCopyKey(requestKey); Policy(targetOwnerKey);
         var actor = Actor();
-        var facts = await ReadUsageFactsAsync([source], FileOwnerOperation.CopySource, new FileOwnerLegacyCopyReadContext(typeof(FileLifecycleService), nameof(PrepareCopyAsync)), token);
+        var facts = await ReadUsageFactsAsync([source], FileOwnerOperation.CopySource, context, token);
         var original = facts[source.UsageId];
         var existing = await InScopeAsync(store => store.ReadCopyPairAsync(requestKey, actor, targetOwnerKey, false, token));
         if (existing is not null)
@@ -60,7 +60,7 @@ public sealed partial class FileLifecycleService
     }
 
     /// <inheritdoc/>
-    public async Task<ConfirmedFileUsage> ConfirmCopyAsync(string requestKey, FileOwnerReference target, CancellationToken token = default)
+    public async Task<ConfirmedFileUsage> ConfirmCopyAsync(string requestKey, FileOwnerReference target, FileOwnerInternalExecutionContext sourceContext, FileOwnerCreationContext creation, CancellationToken token = default)
     {
         state.RequireTransaction(); ValidateCopyKey(requestKey);
         var known = await state.ReadCopyPairAsync(requestKey, Actor(), target.Key, false, token) ?? throw CopyUnavailable();
@@ -70,19 +70,21 @@ public sealed partial class FileLifecycleService
         var fileId = Text(pair.File, "EID");
         if (Text(pair.Lease, "State") == "confirmed")
         {
+            // 已确认操作只核持久source owner的上下文形状，不重读源对象或重放source权限。
+            await Policy(Text(pair.Lease, "SourceOwnerKey")).VerifyBatchAsync([], FileOwnerOperation.CopySource, sourceContext, token);
             var usageId = Text(pair.Lease, "ConfirmedUsageId");
             var usage = await state.Usages.SingleOrDefaultAsync(row => EF.Property<string>(row, "EID") == usageId, token) ?? throw Corrupted();
             if (Text(usage, "FileId") != fileId || Text(usage, "OwnerKey") != target.Key || Text(usage, "OwnerObjectId") != target.Id
                 || Text(usage, "State") != "active") throw new FileLifecycleException(409, "Files.CopyAlreadyConfirmed");
-            await Policy(target.Key).VerifyAsync(target, fileId, usageId, FileOwnerOperation.ConfirmCopy, new FileOwnerLegacyCopyReadContext(typeof(FileLifecycleService), nameof(ConfirmCopyAsync)), token);
+            await Policy(target.Key).VerifyAsync(target, fileId, usageId, FileOwnerOperation.ConfirmCopy, creation, token);
             return new(usageId, fileId);
         }
         if (Text(pair.Lease, "State") != "prepared" || state.Expired(pair.Lease)) throw new FileLifecycleException(409, "Files.CopyNotPrepared");
         RequireReady(pair.File);
         var source = new FileUsageReference(Text(pair.Lease, "SourceUsageId"), Text(pair.Lease, "SourceFileId"),
             new(Text(pair.Lease, "SourceOwnerKey"), Text(pair.Lease, "SourceOwnerId")));
-        await ReadUsageFactsAsync([source], FileOwnerOperation.CopySource, new FileOwnerLegacyCopyReadContext(typeof(FileLifecycleService), nameof(ConfirmCopyAsync)), token);
-        await Policy(target.Key).VerifyAsync(target, fileId, null, FileOwnerOperation.ConfirmCopy, new FileOwnerLegacyCopyReadContext(typeof(FileLifecycleService), nameof(ConfirmCopyAsync)), token);
+        await ReadUsageFactsAsync([source], FileOwnerOperation.CopySource, sourceContext, token);
+        await Policy(target.Key).VerifyAsync(target, fileId, null, FileOwnerOperation.ConfirmCopy, creation, token);
         if (await state.Usages.AnyAsync(row => EF.Property<string>(row, "OwnerKey") == target.Key && EF.Property<string>(row, "OwnerObjectId") == target.Id, token)
             || state.LocalRows(UsageModel).Any(row => Text(row, "OwnerKey") == target.Key && Text(row, "OwnerObjectId") == target.Id)) throw CopyUnavailable();
         var id = ids.NewId(UsageModel);

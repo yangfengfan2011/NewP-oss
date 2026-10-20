@@ -95,24 +95,24 @@ public sealed class DocumentFileExecutionScopeTests
     }
 
     [Fact]
-    public async Task LegacyCopyRead_RejectsAnArbitraryImplementationIdentityBeforeAnyQuery()
+    public async Task InternalCopyRead_RejectsAnArbitraryImplementationIdentityBeforeAnyQuery()
     {
         // 未构造后续基础设施，证明明确caller守卫在任何查询之前拒绝。
-        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, null!, Microsoft.Extensions.Options.Options.Create(new DocumentOptions()), null!, null!);
-        var source = new ICP.Platform.Modules.Files.Contracts.FileOwnerLegacyCopyReadContext(typeof(ICP.Platform.Modules.Files.Contracts.IFileCopyService), "PrepareCopyAsync");
+        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, Microsoft.Extensions.Options.Options.Create(new DocumentOptions()), null!, null!);
+        var source = new FileOwnerInternalExecutionContext(new("document.files.copySource", "document.files.copySource", typeof(IFileCopyService), "PrepareCopyAsync"), "document.document", "document-one");
         var failure = await Assert.ThrowsAsync<ICP.Platform.Modules.Files.Contracts.FileLifecycleException>(() => policy.VerifyBatchAsync([], ICP.Platform.Modules.Files.Contracts.FileOwnerOperation.CopySource, source, default));
         Assert.Equal("Document.FileReadContextInvalid", failure.Code);
     }
 
     [Theory]
-    [InlineData("PrepareCopyAsync", true)]
-    [InlineData("ConfirmCopyAsync", true)]
+    [InlineData("PrepareCopyFilesAsync", true)]
+    [InlineData("CopyAsync", true)]
     [InlineData("CancelCopyAsync", false)]
     [InlineData("ReadCopyAsync", false)]
-    public async Task LegacyCopySource_AcceptsOnlyItsTwoActualSourceReadingMembers(string member, bool allowed)
+    public async Task InternalCopySource_AcceptsOnlyItsTwoActualSourceReadingMembers(string member, bool allowed)
     {
-        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, null!, null!, null!, null!);
-        var source = new FileOwnerLegacyCopyReadContext(typeof(ICP.Platform.Modules.Files.Services.FileLifecycleService), member);
+        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, null!, null!, null!);
+        var source = new FileOwnerInternalExecutionContext(new("document.files.copySource", "document.files.copySource", typeof(DocumentFiles), member), "document.document", "document-one");
         if (allowed) await policy.VerifyBatchAsync([], FileOwnerOperation.CopySource, source, default);
         else
         {
@@ -121,14 +121,41 @@ public sealed class DocumentFileExecutionScopeTests
         }
     }
 
-    [Fact]
-    public async Task LegacyCopyConfirmation_DoesNotBorrowThePrepareSourceIdentity()
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("execution")]
+    [InlineData("provider")]
+    [InlineData("resource")]
+    [InlineData("object")]
+    [InlineData("caller")]
+    [InlineData("member")]
+    public async Task CopySource_RejectsCrossedContextsBeforeTheEmptyBatchCanReturn(string problem)
     {
-        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, null!, null!, null!, null!);
-        var source = new FileOwnerLegacyCopyReadContext(typeof(ICP.Platform.Modules.Files.Services.FileLifecycleService), "PrepareCopyAsync");
+        var source = DocumentCopyExecutions.Files("document-one", nameof(DocumentFiles.CopyAsync));
+        FileOwnerOperationContext? crossed = problem switch
+        {
+            "missing" => null,
+            "execution" => source with { Source = source.Source with { Execution = "document.files.download" } },
+            "provider" => source with { Source = source.Source with { Provider = "document.backend" } },
+            "resource" => source with { ResourceKey = "part.part" },
+            "object" => source with { ObjectId = "" },
+            "caller" => source with { Source = source.Source with { Caller = typeof(IFileCopyService) } },
+            _ => source with { Source = source.Source with { Member = "ReadCopyAsync" } }
+        };
+        // 没有任何DB或evaluator；guard必须在空批返回及任何读取前拒绝串用来源。
+        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, null!, null!, null!);
+        var failure = await Assert.ThrowsAsync<FileLifecycleException>(() => policy.VerifyBatchAsync([], FileOwnerOperation.CopySource, crossed, default));
+        Assert.Equal("Document.FileReadContextInvalid", failure.Code);
+    }
+
+    [Fact]
+    public async Task CopyConfirmation_DoesNotBorrowThePrepareSourceIdentity()
+    {
+        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, null!, null!, null!);
+        var source = new FileOwnerInternalExecutionContext(new("document.files.copySource", "document.files.copySource", typeof(DocumentFiles), nameof(DocumentFiles.PrepareCopyFilesAsync)), "document.document", "document-one");
         var failure = await Assert.ThrowsAsync<FileLifecycleException>(() => policy.VerifyAsync(new(DocumentFileOwnerPolicy.Key, "target-link"),
             "target-file", null, FileOwnerOperation.ConfirmCopy, source, default));
-        Assert.Equal("Document.FileReadContextInvalid", failure.Code);
+        Assert.Equal("Document.FileWriteContextInvalid", failure.Code);
     }
 
     [Fact]
@@ -166,7 +193,7 @@ public sealed class DocumentFileExecutionScopeTests
             _ => source
         };
         FileOwnerOperationContext? context = problem == "missing" ? null : new FileOwnerCreationContext(source, problem == "object" ? "" : "document-one");
-        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, null!, null!, null!, null!);
+        var policy = new DocumentFileOwnerPolicy(null!, null!, null!, null!, null!, null!);
         var failure = await Assert.ThrowsAsync<FileLifecycleException>(() => policy.VerifyAsync(new(DocumentFileOwnerPolicy.Key, "link-one"), "file-one", null,
             FileOwnerOperation.Confirm, context, default));
         Assert.Equal("Document.FileWriteContextInvalid", failure.Code);

@@ -45,12 +45,12 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         for (var index = 0; index < links.Count; index++)
         {
             var copy = Assert.Single(await Rows(fixture, "Document"), row => Equals(row["ECODE"], "BATCH-OK-" + index));
-            var list = await FeatureHttpTestRequests.ReadAsync(admin, DocFiles.Point(fixture, "document.document.read"), $"/api/document/documents/{copy["EID"]}/files");
+            var list = await DocumentFileHttpTestRequests.ReadAsync(fixture, admin, DocFiles.Point(fixture, "document.document.read"), $"/api/document/documents/{copy["EID"]}/files");
             var files = list.GetProperty("files").EnumerateArray().ToArray(); Assert.Equal(2, files.Length);
             for (var file = 0; file < files.Length; file++)
             {
                 Assert.Equal($"batch-{index + 1}-{file}.pdf", files[file].GetProperty("fileName").GetString());
-                using var content = await FeatureHttpTestRequests.SendAsync(admin, DocFiles.Point(fixture, "document.document.download"), HttpMethod.Get,
+                using var content = await DocumentFileHttpTestRequests.SendAsync(fixture, admin, DocFiles.Point(fixture, "document.document.download"), HttpMethod.Get,
                     $"/api/document/documents/{copy["EID"]}/files/{files[file].GetProperty("fileLinkId").GetString()}/content");
                 Assert.Equal(HttpStatusCode.OK, content.StatusCode); Assert.Equal(new byte[] { (byte)(index + 1), (byte)file, 97, 98 }, await content.Content.ReadAsByteArrayAsync());
             }

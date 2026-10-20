@@ -744,6 +744,8 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
             ? Assert.Single(fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog,
                 item => item.Execution == execution && item.ViewKey == "workspace.folder.list" && item.Surface == "pageActions" && item.FeaturePositions.Contains(feature.Position))
             : ClipboardDeclaration(fixture, feature);
+        // 结果/取消是原actor+操作凭据通道，不能假消费prepare/submit的数据声明。
+        if (path is "/api/workspace/content/objects/copy/result" or "/api/workspace/content/objects/copy/cancel") declaration = null;
         using var response = await FeatureHttpTestRequests.SendAsync(client, feature, HttpMethod.Post, path, body, declaration);
         Assert.True(response.StatusCode == HttpStatusCode.OK, $"{behavior} returned HTTP {(int)response.StatusCode}.");
         return await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -756,13 +758,15 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests(ITestOutputH
     private static Task<HttpResponseMessage> Send(BusinessAuditHostFixture fixture, HttpClient client, string behavior, string path, object body)
     {
         var feature = Point(fixture, behavior);
-        return FeatureHttpTestRequests.SendAsync(client, feature, HttpMethod.Post, "/api/workspace/content/" + path, body, ClipboardDeclaration(fixture, feature));
+        var declaration = path is "objects/copy/result" or "objects/copy/cancel" ? null : ClipboardDeclaration(fixture, feature);
+        return FeatureHttpTestRequests.SendAsync(client, feature, HttpMethod.Post, "/api/workspace/content/" + path, body, declaration);
     }
     // 正常copy准备/提交按真实behavior选声明，裸请求反例仍自行构造，不按URL或缺头回退。
     internal static ActionDataAccessRequirement? ClipboardDeclaration(BusinessAuditHostFixture fixture, FeaturePoint feature)
     {
         var folderExecution = feature.BehaviorKey switch
         {
+            "workspace.folder.pasteObjectCopy" => "workspace.objectCopy",
             "workspace.folder.pasteFolderCopy" => "workspace.folder.shallowCopy",
             "workspace.folder.pasteFolderStructure" => "workspace.folder.structureCopy",
             _ => null

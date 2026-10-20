@@ -10,8 +10,8 @@ public sealed record FileOwnerCreationContext(DataExecutionWriteContext Source, 
 public sealed record FileOwnerReleaseContext(string ResourceKey, string ObjectId) : FileOwnerOperationContext;
 /// <summary>由业务owner选定的正式读取/下载执行、资源与真实对象；Files不接受客户端关联替代目标。</summary>
 public sealed record FileOwnerExecutionContext(DataExecutionBindingReference Binding, string ResourceKey, string ObjectId) : FileOwnerOperationContext;
-/// <summary>第317片迁移前的明确旧复制调用；缺少正式上下文不自动进入此分支。</summary>
-public sealed record FileOwnerLegacyCopyReadContext(Type Caller, string Member) : FileOwnerOperationContext;
+/// <summary>业务owner固定的内部执行、资源与真实所属对象；不携带权限结果或客户端功能头。</summary>
+public sealed record FileOwnerInternalExecutionContext(DataExecutionInternalBinding Source, string ResourceKey, string ObjectId) : FileOwnerOperationContext;
 
 /// <summary>业务拥有者从实际关联生成的身份；HTTP 客户端不能提供它。</summary>
 public sealed record FileOwnerReference(string Key, string Id);

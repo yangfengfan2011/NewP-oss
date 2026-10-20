@@ -119,7 +119,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
                     try { await Task.Delay(20, stopping.Token); } catch (OperationCanceledException) when (stopping.IsCancellationRequested) { }
                 }
             });
-            costs.Begin(); clock.Begin(); var watch = Stopwatch.StartNew();
+            costs.Begin(!scenario.StartsWith("cancel", StringComparison.Ordinal) && !scenario.StartsWith("reclaim", StringComparison.Ordinal)); clock.Begin(); var watch = Stopwatch.StartNew();
             Exception? failure = null;
             try { await action(); }
             catch (Exception exception) { failure = exception; throw; }
@@ -129,13 +129,19 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
                 var sql = costs.End();
                 var finalFiles = Directory.EnumerateFiles(fixture.StorageRoot).Select(path => new FileInfo(path)).ToArray();
                 var finalBytes = finalFiles.Sum(file => file.Length);
+                // 原请求计时、计数与锁采样已经结束；只解释成功复制后仍稳定的权限SELECT。
+                var plans = new List<ExampleExecutionSqlPlanTests.Measurement>();
+                if (failure is null && !scenario.StartsWith("cancel", StringComparison.Ordinal) && !scenario.StartsWith("reclaim", StringComparison.Ordinal))
+                    foreach (var sample in costs.SelectedPermissionReads())
+                        plans.Add((await ExampleExecutionSqlPlanTests.ExplainAsync(observerConnectionString, sample.Value, requireIo: false)) with
+                        { Timing = "after-successful-copy-end-stable-permission-configuration-only" });
                 var evidence = new { scenario, documents, requestConcurrency, filesPerDocument = 2, singleLengths = new[] { 1048576, 262144 }, totalBytes = documents * 1310720L * requestConcurrency,
                     elapsedMs = watch.Elapsed.TotalMilliseconds, bytesPerSecond = failure is null && !scenario.StartsWith("cancel", StringComparison.Ordinal) && !scenario.StartsWith("reclaim", StringComparison.Ordinal) ? (double?)(documents * 1310720L * requestConcurrency / watch.Elapsed.TotalSeconds) : null,
-                    succeeded = failure is null, failureType = failure?.GetType().Name, baselineFileCount, baselineBytes, finalFileCount = finalFiles.Length, finalBytes, measuredByteDelta = finalBytes - baselineBytes, samples, sqlWaitSamples, sql, transactions = clock.Snapshot(), environment = new { runtime = Environment.Version.ToString(), processors = Environment.ProcessorCount,
+                    succeeded = failure is null, failureType = failure?.GetType().Name, baselineFileCount, baselineBytes, finalFileCount = finalFiles.Length, finalBytes, measuredByteDelta = finalBytes - baselineBytes, samples, sqlWaitSamples, sql, statements = costs.Sql.ToArray(), plans, selectedPlanKinds = costs.SelectedPermissionReads().Select(item => item.Key).ToArray(), transactions = clock.Snapshot(), environment = new { runtime = Environment.Version.ToString(), processors = Environment.ProcessorCount,
                         os = Environment.OSVersion.ToString(), processId = Environment.ProcessId, pooling = false, clientTimeoutMs = ordinary.Timeout.TotalMilliseconds, host = "real HTTP TestServer / real configured SQL Server / LocalStorageProvider / Release" },
                     measurement = "Copy excludes source uploads/prepare/readback; process memory includes test host/client, not isolated published Host. Graph acquire elapsed includes SQL/network; hold interval is acquire-return through transaction-return, not engine-only ticks. Own graph-session DMV snapshots target100ms and are outside product SQL statistics; observed wait_time is not cumulative engine wait. Cancel/reclaim bytes describe selected input, not transferred throughput." };
                 await File.WriteAllTextAsync(Path.Combine(artifactRoot, scenario + ".json"), JsonSerializer.Serialize(evidence, new JsonSerializerOptions { WriteIndented = true }));
-                output.WriteLine("DOCUMENT_COPY_CAPACITY " + JsonSerializer.Serialize(new { scenario, documents, watch.Elapsed.TotalMilliseconds, sql }));
+                output.WriteLine("DOCUMENT_COPY_CAPACITY " + JsonSerializer.Serialize(new { scenario, documents, watch.Elapsed.TotalMilliseconds, sql, selectedPlans = plans.Count }));
             }
         }
     }
@@ -144,11 +150,37 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
     private sealed class BatchSqlCosts : DbCommandInterceptor
     {
         internal volatile bool Active; private readonly object gate = new(); private readonly HashSet<SqlConnection> connections = []; private long commands;
-        internal void Begin() { lock (gate) { connections.Clear(); commands = 0; Active = true; } }
+        private bool captureSql, capturePlans;
+        private readonly Dictionary<string, ExampleExecutionSqlPlanTests.Sample> permissionReads = new(StringComparer.Ordinal);
+        internal ConcurrentQueue<string> Sql { get; } = new();
+        internal void Begin(bool explainStableReads) { lock (gate) { connections.Clear(); commands = 0; permissionReads.Clear(); Sql.Clear();
+            captureSql = Environment.GetEnvironmentVariable("NEWP_DOCUMENT_OBJECT_COPY_COST_STAGE") is not null;
+            capturePlans = captureSql && explainStableReads; Active = true; } }
+        internal KeyValuePair<string, ExampleExecutionSqlPlanTests.Sample>[] SelectedPermissionReads() { lock (gate) return permissionReads.ToArray(); }
+        // 仅纯权限和owner原关联解析；三种固定代表各留一次，绝不捕获租约或operation凭据。
+        private static string? SelectedReadKind(string sql)
+        {
+            if (!sql.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)
+                || new[] { "[FileCopyLease]", "[WorkspaceObjectCopy]", "[Authentication", "[Identity" }.Any(table => sql.Contains(table, StringComparison.Ordinal))) return null;
+            if (sql.Contains("[DocumentFileLink]", StringComparison.Ordinal) && sql.Contains("@__lids", StringComparison.Ordinal)) return "owner-file-link-by-lids";
+            if (sql.Contains("[DocumentIteration]", StringComparison.Ordinal) && sql.Contains("@__iterationIds", StringComparison.Ordinal)) return "owner-iteration-by-ids";
+            return sql.Contains("[DataScope", StringComparison.Ordinal)
+                && !new[] { "[Part]", "[Document]", "[Workspace", "[File" }.Any(table => sql.Contains(table, StringComparison.Ordinal)) ? "permission-configuration" : null;
+        }
         private void Observe(DbCommand command)
         {
             if (!Active) return;
-            lock (gate) { commands++; if (command.Connection is SqlConnection connection && connections.Add(connection)) { connection.StatisticsEnabled = true; connection.ResetStatistics(); } }
+            lock (gate)
+            {
+                commands++;
+                if (command.Connection is SqlConnection connection && connections.Add(connection)) { connection.StatisticsEnabled = true; connection.ResetStatistics(); }
+                if (!captureSql) return;
+                Sql.Enqueue(command.CommandText);
+                // 每类最多一个SELECT才克隆必要参数；原SQL与统计计数仍覆盖全部五阶段。
+                if (capturePlans && SelectedReadKind(command.CommandText) is { } kind && !permissionReads.ContainsKey(kind))
+                    permissionReads.Add(kind, new(command.CommandText, command.Parameters.Cast<SqlParameter>()
+                        .Select(parameter => (SqlParameter)((ICloneable)parameter).Clone()).ToArray()));
+            }
         }
         internal object End()
         {

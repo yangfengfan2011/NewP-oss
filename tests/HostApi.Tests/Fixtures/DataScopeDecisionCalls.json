@@ -10,15 +10,7 @@
   "ICP.Platform.Modules.Authorization.Services.DataScopeObjectAccess.IsReadableAsync[0] -> IsAllowedAsync": "底层完整对象读取裁决；保留read和资源owner读取约束。",
   "ICP.Platform.Modules.Authorization.Services.DataScopeObjectManagement.CheckDataAsync[0] -> IsAllowedAsync": "仅供手工无执行器低层构造及明确legacyExampleAuthorization测试输入的完整read兼容；全部内建通用和owner管理已消费正式来源，正式DI旧ABI及新重载空来源均拒绝，#321删除兼容构造。",
   "ICP.Platform.Modules.Authorization.Services.DataScopeObjectManagement.CheckDataAsync[1] -> IsAllowedAsync": "仅供手工无执行器低层构造及明确legacyExampleAuthorization测试输入的authorize兼容；全部内建通用和owner管理已消费正式来源，正式DI旧ABI及新重载空来源均拒绝，#321删除兼容构造。",
-  "ICP.Platform.Modules.Document.DocumentFileOwnerPolicy.VerifyBatchAsync[0] -> IsAllowedAsync": "原read与真实回链后仅保留CopySource/documentObjectCopy旧分支；download/Release已采用正式执行合同，#317迁移CopySource。",
-  "ICP.Platform.Modules.Document.DocumentFiles.ReadCopySourceAsync[0] -> IsAllowedAsync": "第317片前独立保留CopySource来源的实际read裁决，不借download；其Files读取使用明确Document ReadCopySource caller，#317迁移。",
-  "ICP.Platform.Modules.Document.DocumentFiles.RequireReadAsync[0] -> IsAllowedAsync": "Document owner原full-read与存在核验；read/download由实际入口先核正式绑定，旧Copy读取按独立caller隔离。同阶段事实供受控resolver消费，不加SQL或改原时点。",
-  "ICP.Platform.Modules.Workspace.WorkspaceContents.CopyDocumentBatchAsync[0] -> IsCandidateAllowedAsync": "现有Workspace具体方法拥有的候选/来源/目标/父容器要求；保留原动作参数与错误顺序，后续对应切片迁移，#321核清。",
-  "ICP.Platform.Modules.Workspace.WorkspaceContents.CopyObjectAsync[0] -> IsCandidateAllowedAsync": "仅真实Document提交的最终candidate create旧裁决；Part固定内部候选来源在原时点执行，Document由#317迁移。",
-  "ICP.Platform.Modules.Workspace.WorkspaceContents.PrepareDocumentBatchAsync.lambda[0] -> IsAllowedAsync": "现有Workspace具体方法拥有的候选/来源/目标/父容器要求；保留原动作参数与错误顺序，后续对应切片迁移，#321核清。",
-  "ICP.Platform.Modules.Workspace.WorkspaceContents.RequireDocumentSourcesAsync[0] -> IsAllowedAsync": "现有Workspace具体方法拥有的候选/来源/目标/父容器要求；保留原动作参数与错误顺序，后续对应切片迁移，#321核清。",
-  "ICP.Platform.Modules.Workspace.WorkspaceContents.ResolveObjectCopySourceAsync[0] -> IsAllowedAsync": "仅真实Document/不支持模型保留原read后拒绝顺序；Part各原read/copy时点已消费正式合同，Document真副本由#317迁移。",
-  "ICP.Platform.Modules.Workspace.WorkspaceContents.ResolveObjectCopySourceAsync[1] -> IsAllowedAsync": "仅真实Document的documentObjectCopy旧裁决；Part真副本已采用正式来源，#317退出此精确分支。",
+  "ICP.Platform.Modules.Document.DocumentFiles.RequireReadAsync[0] -> IsAllowedAsync": "Document owner原full-read与存在核验；read/download由实际入口先核正式绑定，复制原读取点已采用固定内部合同。同阶段事实供受控resolver消费，不加SQL或改原时点。",
   "ICP.Platform.Modules.Workspace.WorkspaceContents.ResolveTargetsAsync[0] -> IsAllowedAsync": "现有Workspace具体方法拥有的候选/来源/目标/父容器要求；保留原动作参数与错误顺序，后续对应切片迁移，#321核清。",
   "ICP.Platform.Modules.Workspace.WorkspaceContents.WritablePositionAsync[0] -> IsAllowedAsync": "现有Workspace具体方法拥有的候选/来源/目标/父容器要求；保留原动作参数与错误顺序，后续对应切片迁移，#321核清。"
 }

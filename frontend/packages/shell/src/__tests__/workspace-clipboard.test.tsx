@@ -53,7 +53,7 @@ async function waitForActive(check: () => void | Promise<void>, signal: AbortSig
 const waitFor = (check: () => void | Promise<void>) => waitForActive(check, testLifetime.signal);
 
 async function mount(options: { actionSets?: Record<string, { column: string[]; contextMenu: string[] }>; columnMode?: 'default' | 'menu'; folderRow?: boolean; validate?: (body: Record<string, unknown>) => Promise<Response>; paste?: (body: Record<string, unknown>) => Promise<Response>; failRefresh?: boolean;
-  folderCopy?: (body: Record<string, unknown>) => Promise<Response>; objectCopy?: (body: Record<string, unknown>) => Promise<Response>; grants?: readonly string[]; remove?: (body: Record<string, unknown>) => Promise<Response>; formalDeclarations?: boolean;
+  folderCopy?: (body: Record<string, unknown>) => Promise<Response>; objectCopy?: (body: Record<string, unknown>) => Promise<Response>; grants?: readonly string[]; remove?: (body: Record<string, unknown>) => Promise<Response>; formalDeclarations?: boolean; documentBatch?: boolean;
   menuLoad?: (load: () => Promise<{ default: StandardCrudResourceRegistration }>, call: number) => Promise<{ default: StandardCrudResourceRegistration }> } = {}) {
   const lifetime = new AbortController();
   const waitFor = (check: () => void | Promise<void>) => waitForActive(check, lifetime.signal);
@@ -88,19 +88,29 @@ async function mount(options: { actionSets?: Record<string, { column: string[]; 
       const source = url.searchParams.get('anchorId') === 'A';
       const items = source ? [...(options.folderRow ? ['WorkspaceFolder'] : []), 'Document', 'Part'].map(modelKey => ({ linkId: `${modelKey}-lid`, associatedObject: { modelKey, id: `${modelKey}-eid` },
         fields: { Name: `${modelKey} source`, ObjectType: modelKey, UpdatedAt: '2026-10-14T00:00:00Z' } })) : [];
+      if (source && options.documentBatch) items.push({ linkId: 'Document-second-lid', associatedObject: { modelKey: 'Document', id: 'Document-second-eid' },
+        fields: { Name: 'SecondDocument source', ObjectType: 'Document', UpdatedAt: '2026-10-14T00:00:00Z' } });
       return json({ items, total: items.length, page: 1, pageSize: 20 });
     }
     if (url.pathname.startsWith('/api/workspace/folders/')) return json({ fields: { ENAME: 'A' } });
     if (url.pathname.endsWith('/objects/copy/prepare')) {
       const body = input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body));
       writes.push({ path: url.pathname, body });
+      if (body.linkIds.length > 1) {
+        const items = body.linkIds.map((sourceLinkId: string) => ({ sourceLinkId,
+          values: { ECODE: '', ENAME: sourceLinkId === 'Document-lid' ? 'Document source' : 'SecondDocument source', Description: '' },
+          sourcePath: ['公共空间', 'A', sourceLinkId === 'Document-lid' ? 'Document source' : 'SecondDocument source'], fileCount: 2, totalBytes: 8 }));
+        return json({ operationId: 'actual-operation', modelKey: 'Document', items, values: { items: items.map(({ sourceLinkId, values }: { sourceLinkId: string; values: Record<string, unknown> }) => ({ sourceLinkId, values })) },
+          sourcePath: ['公共空间', 'A'], targetPath: ['公共空间', 'B'], fileCount: 4, totalBytes: 16 });
+      }
       return json({ operationId: 'actual-operation', modelKey: body.linkIds[0].startsWith('Part') ? 'Part' : 'Document',
         values: { ECODE: '', ENAME: '确认的来源', Description: '' }, sourcePath: ['公共空间', 'A'], targetPath: ['公共空间', 'B'] });
     }
     if (url.pathname.endsWith('/objects/copy')) {
       const body = input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body));
       writes.push({ path: url.pathname, body });
-      return options.objectCopy ? controlledResponse(() => options.objectCopy!(body)) : json({ succeeded: true, state: 'committed' });
+      return options.objectCopy ? controlledResponse(() => options.objectCopy!(body)) : json({ succeeded: true, state: 'committed',
+        ...(Array.isArray(body.values?.items) ? { items: body.values.items.map((item: { sourceLinkId: string }) => ({ sourceLinkId: item.sourceLinkId, succeeded: true, state: 'committed' })) } : {}) });
     }
     if (['/folders/copy/prepare', '/folders/copy-structure/prepare'].some(path => url.pathname.endsWith(path))) return json({ sourceName: 'WorkspaceFolder source', sourcePath: ['公共空间', 'A', 'WorkspaceFolder source'], targetPath: ['公共空间', 'B'] });
     if (['/folders/copy', '/folders/copy-structure'].some(path => url.pathname.endsWith(path))) {
@@ -200,7 +210,7 @@ it.each(['Part', 'Document'] as const)('routes the actual %s object-copy drawer 
   const declarations = clipboardContract.declarations.filter(item => item.viewKey === list.view.key && item.surface === 'pageActions' && item.actionKey === 'pasteObjectCopy');
   expect(declarations).toHaveLength(1);
   const declaration = declarations[0];
-  expect(declaration.execution).toBe('workspace.objectCopy.part');
+  expect(declaration.execution).toBe('workspace.objectCopy');
   await page.copyRows([model]);
   await page.select('B');
   await page.waitFor(async () => expect(await page.disabled('粘贴对象副本')).toBe(false));
@@ -218,11 +228,46 @@ it.each(['Part', 'Document'] as const)('routes the actual %s object-copy drawer 
     expect(calls.length).toBeGreaterThan(0);
     for (const call of calls) {
       const headers = new Headers(call[0] instanceof Request ? call[0].headers : call[1]?.headers);
-      expect(headers.get('X-NewP-Data-Declaration')).toBe(model === 'Part' ? declaration.id : null);
+      expect(headers.get('X-NewP-Data-Declaration')).toBe(declaration.id);
       expect(declaration.featurePositions).toContain(headers.get('X-NewP-Feature'));
     }
   }
   expect(page.writes.filter(write => write.path.endsWith('/objects/copy'))).toHaveLength(1);
+});
+
+it('routes every Document batch row through the actual PageEntry Provider and the same formal copy declaration', async () => {
+  const page = await mount({ formalDeclarations: true, documentBatch: true });
+  const declarations = clipboardContract.declarations.filter(item => item.viewKey === list.view.key && item.surface === 'pageActions' && item.actionKey === 'pasteObjectCopy');
+  expect(declarations).toHaveLength(1);
+  const declaration = declarations[0];
+  await page.copyRows(['Document', 'SecondDocument']);
+  await page.select('B');
+  await page.waitFor(async () => expect(await page.disabled('粘贴对象副本')).toBe(false));
+  await page.click('粘贴对象副本');
+  await page.waitFor(() => expect(document.querySelectorAll('.ant-drawer section[aria-label]')).toHaveLength(2));
+  const codes = ['BATCH-FIRST', 'BATCH-SECOND'];
+  for (let index = 0; index < codes.length; index++) {
+    const code = document.querySelector<HTMLInputElement>(`.ant-drawer input[id="object-copy-${index}-ECODE"]`)!;
+    expect(code).not.toBeNull();
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(code, codes[index]); code.dispatchEvent(new Event('input', { bubbles: true })); });
+  }
+  const save = () => [...document.querySelectorAll<HTMLButtonElement>('.ant-drawer button')].find(button => button.textContent?.replace(/\s/g, '') === '保存并关闭')!;
+  await page.waitFor(() => expect(save()?.disabled).toBe(false));
+  await act(async () => save().click());
+  await page.waitFor(() => expect(page.writes.some(write => write.path.endsWith('/objects/copy'))).toBe(true));
+  const submission = page.writes.filter(write => write.path.endsWith('/objects/copy'));
+  expect(submission).toHaveLength(1);
+  expect(submission[0].body.values).toEqual({ items: ['Document-lid', 'Document-second-lid'].map((sourceLinkId, index) => ({ sourceLinkId,
+    values: { ECODE: codes[index], ENAME: index === 0 ? 'Document source' : 'SecondDocument source', Description: '' } })) });
+  await page.waitFor(() => expect(document.querySelector('.ant-drawer-open')).toBeNull());
+  await page.waitFor(() => expect(document.querySelector('.ant-modal')?.textContent).toContain('对象副本结果'));
+  const close = [...document.querySelectorAll<HTMLButtonElement>('.ant-modal button')].find(button => button.textContent?.replace(/\s/g, '') === '关闭')!;
+  await act(async () => close.click());
+  for (const call of page.request.mock.calls.filter(([input]) => /\/objects\/copy(?:\/prepare)?$/.test(new URL(input instanceof Request ? input.url : String(input), 'http://localhost').pathname))) {
+    const headers = new Headers(call[0] instanceof Request ? call[0].headers : call[1]?.headers);
+    expect(headers.get('X-NewP-Data-Declaration')).toBe(declaration.id);
+    expect(declaration.featurePositions).toContain(headers.get('X-NewP-Feature'));
+  }
 });
 
 it.each(['copy', 'cut'] as const)('uses the compiled %s declaration through the actual tree Provider and current paste occurrence', async mode => {

@@ -27,6 +27,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var source = await Folder(fixture, admin, root, "准备提交来源");
         await CreateCopyDocument(fixture, admin, source, "DOC-PREP-COMMIT");
         var link = (await Rows(fixture, "DocumentFileLink")).OrderBy(item => (long)item["Ordinal"]!).First();
+        var documentId = (string)Assert.Single(await Rows(fixture, "Document"))["EID"]!;
         var reference = new FileUsageReference((string)link["FileUsageId"]!, (string)link["CEID"]!, new(DocumentFileOwnerPolicy.Key, (string)link["LID"]!));
         foreach (var phase in new[] { "intent", "ready" })
             foreach (var after in new[] { false, true })
@@ -34,7 +35,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
                 var key = "prepare-" + phase + "-" + after;
                 fault.Arm(phase, after);
                 await AsCopyActor(fixture, async provider => {
-                    await Assert.ThrowsAnyAsync<Exception>(() => provider.GetRequiredService<IFileCopyService>().PrepareCopyAsync(key, reference, DocumentFileOwnerPolicy.Key));
+                    await Assert.ThrowsAnyAsync<Exception>(() => provider.GetRequiredService<IFileCopyService>().PrepareCopyAsync(key, reference, DocumentFileOwnerPolicy.Key, CopyFileSource(documentId)));
                     return true;
                 });
                 Assert.Equal(1, fault.Injected);
@@ -45,7 +46,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
                 {
                     await AsCopyActor(fixture, async provider => {
                         var exception = await Assert.ThrowsAsync<FileLifecycleException>(async () => await provider.GetRequiredService<IPlatformTransactionExecutor>()
-                            .ExecuteAsync(token => new ValueTask<ConfirmedFileUsage>(provider.GetRequiredService<IFileCopyService>().ConfirmCopyAsync(key, reference.Owner, token))));
+                            .ExecuteAsync(token => new ValueTask<ConfirmedFileUsage>(provider.GetRequiredService<IFileCopyService>().ConfirmCopyAsync(key, reference.Owner, CopyFileSource(documentId, confirming: true), CopyFileTarget(documentId), token))));
                         Assert.Equal("Document.CreationProofRequired", exception.Code);
                         return true;
                     });

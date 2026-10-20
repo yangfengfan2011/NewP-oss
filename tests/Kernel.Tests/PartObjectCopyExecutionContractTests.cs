@@ -13,7 +13,7 @@ public sealed class PartObjectCopyExecutionContractTests
         var candidates = new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules"));
         var result = new CanonicalModulePlanCompiler().Compile("part-object-copy", candidates);
         Assert.True(result.IsSuccess, string.Join(";", result.Diagnostics.Select(item => item.Message)));
-        var declaration = Assert.Single(result.Plan!.ActionDataAccessCatalog, item => item.Execution == "workspace.objectCopy.part");
+        var declaration = Assert.Single(result.Plan!.ActionDataAccessCatalog, item => item.Execution == "workspace.objectCopy");
         Assert.Equal("Workspace", declaration.ModuleId);
         Assert.Equal("workspace.backend", declaration.Provider);
         Assert.Equal("workspace.folder.list", declaration.ViewKey);
@@ -21,7 +21,7 @@ public sealed class PartObjectCopyExecutionContractTests
         Assert.Equal("pasteObjectCopy", declaration.ActionKey);
         Assert.All(new[] { "prepare", "submit" }, stage =>
         {
-            var roles = declaration.Requirements!.Where(requirement => requirement.Stage == stage).ToArray();
+            var roles = declaration.Requirements!.Where(requirement => requirement.Stage == stage && (requirement.Branch is null or "part")).ToArray();
             Assert.Equal(new[] { "visibility", "source", "parent" }, roles.Select(requirement => requirement.Role));
             Assert.Equal(new[] { "read" }, Assert.Single(roles[0].AnyOf));
             Assert.Equal(new[] { "partObjectCopy" }, Assert.Single(roles[1].AnyOf));
@@ -48,7 +48,7 @@ public sealed class PartObjectCopyExecutionContractTests
         Assert.Equal(("internal", "standardCrud.create"), (final.Boundary, final.Provider));
         Assert.Equal("ICP.Platform.Modules.Workspace.WorkspaceContents.CopyObjectAsync", Assert.Single(final.FixedBindings).Caller);
         Assert.DoesNotContain(result.Plan.ActionDataAccessCatalog, item => item.Execution == source.Key || item.Execution == final.Key);
-        Assert.DoesNotContain(result.Plan.ActionDataAccessCatalog, item => item.Execution == "workspace.objectCopy.part"
+        Assert.DoesNotContain(result.Plan.ActionDataAccessCatalog, item => item.Execution == "workspace.objectCopy"
             && item.ActionKey == "resolveObjectCopy");
     }
 }

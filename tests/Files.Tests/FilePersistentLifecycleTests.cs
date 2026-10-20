@@ -1,6 +1,7 @@
 using System.Data.Common;
 using System.Text.RegularExpressions;
 using ICP.Platform.Crud.ObjectIds;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Modeling.Metadata;
 using ICP.Platform.Modeling.Projection;
 using ICP.Platform.Modules.Files;
@@ -24,7 +25,7 @@ namespace ICP.Platform.Tests.Files;
 public sealed class FilePersistentLifecycleTests
 {
     [Fact]
-    public async Task Copy_PropagatesEachActualLegacyCallerForSourceAndConfirmation()
+    public async Task Copy_PropagatesTheExplicitSourceAndCreationByReference()
     {
         var calls = new List<(FileOwnerOperation Operation, FileOwnerOperationContext? Context)>();
         await using var fixture = await LifecycleFixture.CreateAsync(observeOwnerContext: (operation, context) => calls.Add((operation, context)));
@@ -34,15 +35,24 @@ public sealed class FilePersistentLifecycleTests
         calls.Clear();
         using var scope = fixture.Services.CreateScope();
         var copy = scope.ServiceProvider.GetRequiredService<IFileCopyService>();
-        await copy.PrepareCopyAsync("caller-proof", new(usage.UsageId, staged.FileId, owner), OwnerPolicy.Key);
+        var source = new FileOwnerInternalExecutionContext(new("test.copy.source", "test.owner", typeof(FilePersistentLifecycleTests),
+            nameof(Copy_PropagatesTheExplicitSourceAndCreationByReference)), "test.owner", "source-object");
+        var creation = new FileOwnerCreationContext(new(new("test.create", "standardCrud.create", "submit"), "test.owner", null), "target-object");
+        await copy.PrepareCopyAsync("caller-proof", new(usage.UsageId, staged.FileId, owner), OwnerPolicy.Key, source);
         await scope.ServiceProvider.GetRequiredService<IPlatformTransactionExecutor>().ExecuteAsync(token =>
-            new ValueTask<ConfirmedFileUsage>(copy.ConfirmCopyAsync("caller-proof", new(OwnerPolicy.Key, "target-link"), token)));
-        var sources = calls.Where(item => item.Operation == FileOwnerOperation.CopySource).Select(item => Assert.IsType<FileOwnerLegacyCopyReadContext>(item.Context)).ToArray();
-        Assert.Equal(new[] { nameof(FileLifecycleService.PrepareCopyAsync), nameof(FileLifecycleService.ConfirmCopyAsync) }, sources.Select(item => item.Member));
-        Assert.All(sources, source => Assert.Equal(typeof(FileLifecycleService), source.Caller));
-        var confirmation = Assert.IsType<FileOwnerLegacyCopyReadContext>(Assert.Single(calls, item => item.Operation == FileOwnerOperation.ConfirmCopy).Context);
-        Assert.Equal(typeof(FileLifecycleService), confirmation.Caller);
-        Assert.Equal(nameof(FileLifecycleService.ConfirmCopyAsync), confirmation.Member);
+            new ValueTask<ConfirmedFileUsage>(copy.ConfirmCopyAsync("caller-proof", new(OwnerPolicy.Key, "target-link"), source, creation, token)));
+        var sources = calls.Where(item => item.Operation == FileOwnerOperation.CopySource).ToArray();
+        Assert.Equal(2, sources.Length);
+        Assert.All(sources, item => Assert.Same(source, item.Context));
+        Assert.Same(creation, Assert.Single(calls, item => item.Operation == FileOwnerOperation.ConfirmCopy).Context);
+        calls.Clear();
+        var policy = Assert.IsType<OwnerPolicy>(scope.ServiceProvider.GetRequiredService<IFileOwnerPolicy>());
+        policy.Batches.Clear();
+        await scope.ServiceProvider.GetRequiredService<IPlatformTransactionExecutor>().ExecuteAsync(token =>
+            new ValueTask<ConfirmedFileUsage>(copy.ConfirmCopyAsync("caller-proof", new(OwnerPolicy.Key, "target-link"), source, creation, token)));
+        Assert.Equal((FileOwnerOperation.CopySource, 0), Assert.Single(policy.Batches));
+        Assert.Same(source, Assert.Single(calls, item => item.Operation == FileOwnerOperation.CopySource).Context);
+        Assert.Same(creation, Assert.Single(calls, item => item.Operation == FileOwnerOperation.ConfirmCopy).Context);
     }
 
     [Fact]
@@ -654,12 +664,13 @@ public sealed class FilePersistentLifecycleTests
     {
         public const string Key = "tests.fileState";
         internal Action<FileOwnerOperation, FileOwnerOperationContext?>? Observe;
+        internal readonly List<(FileOwnerOperation Operation, int References)> Batches = [];
         public string OwnerKey => Key;
         public void ValidateUpload(string safeFileName, string contentType) { }
         public Task VerifyAsync(FileOwnerReference owner, string fileId, string? usageId, FileOwnerOperation operation, FileOwnerOperationContext? context, CancellationToken token)
         { Observe?.Invoke(operation, context); return Task.CompletedTask; }
         public Task VerifyBatchAsync(IReadOnlyList<FileUsageReference> references, FileOwnerOperation operation, FileOwnerOperationContext? context, CancellationToken token)
-        { Observe?.Invoke(operation, context); return Task.CompletedTask; }
+        { Batches.Add((operation, references.Count)); Observe?.Invoke(operation, context); return Task.CompletedTask; }
     }
     private sealed class InjectedFailure : Exception { }
     private sealed class ContentFaultStore(LocalStorageProvider inner) : IFileContentStore

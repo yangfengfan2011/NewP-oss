@@ -30,7 +30,7 @@ Files 的正式身份、模型和迁移来自 `frontend/modules/platform/files/n
 
 Files 不另设暂存集合总量上限；业务 owner 约束整个输入（当前 Document 最多 101 项），完整结果及身份校验占用 O(N) 空间。`MaxReadBatchSize` 限制内部每次数据库读取，不能据此声称整个调用具有固定内存或总工作量上界。
 
-读取和开流接收实际入口的 `FileOwnerExecutionContext`，包含正式绑定、资源与真实对象 EID；FileId、UsageId、LinkId 不能代替授权对象。Document provider 对下载唯一定义 read + download，下层 policy 从自身完整回链与当前读取事实执行同一要求；元数据反馈与正式下载独立判权。`FileOwnerLegacyCopyReadContext` 仅保留 #317 前明确的真实复制方法：CopySource 限定 `FileLifecycleService.PrepareCopyAsync/ConfirmCopyAsync` 两处来源读取，ConfirmCopy 操作只接受 `ConfirmCopyAsync`。Document 内部 ReadCopySource 的 read 来源单独登记；缺正式上下文不进入旧分支。
+读取和开流接收实际入口的 `FileOwnerExecutionContext`，包含正式绑定、资源与真实对象 EID；FileId、UsageId、LinkId 不能代替授权对象。Document provider 对下载唯一定义 read + download，下层 policy 从自身完整回链与当前读取事实执行同一要求；元数据反馈与正式下载独立判权。复制准备显式接收 `FileOwnerInternalExecutionContext`，其中只有真实owner选定的固定内部 binding、资源和对象；Files不自产来源或接受允许结果。确认同时接收该源上下文与原 `FileOwnerCreationContext`，将二者分别交给来源和目标owner。Document 的文件元数据只消费固定内部read；CopySource在原独立完整批read和真实文件回链后消费唯一read + documentObjectCopy floor。首次ConfirmCopy匹配同事务真实Added关联与同引用创建来源，不读取不存在的新对象；confirmed重试只校验源上下文形状、原actor/lease和目标持久回链，不重新读取源或重放copy裁决。无上下文旧ABI及旧复制context已删除。
 
 安全元数据 `ReadUsageMetadataAsync` 仍限制单次输入不超过 `MaxReadBatchSize`，超界拒绝，由调用方分批，同用途 policy 批量验证。开流另行判定 read/download；可信目标的持久关联损坏、物理内容缺失或长度不匹配是明确故障。返回流由调用方释放，请求取消也关闭真实文件句柄。
 

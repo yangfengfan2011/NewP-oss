@@ -11,13 +11,12 @@ public sealed partial class WorkspaceContents
 {
     /// <summary>Document先在短图事务重验并固定操作，再于事务外准备字节，最后进入唯一业务提交；Part保持原短事务。</summary>
     public async Task<StandardCrudMutationResult> SubmitObjectCopyAsync(string actor, string operationId,
-        IReadOnlyDictionary<string, JsonElement> values, IObjectOperationExecutor operations, bool declarationSpecified, CancellationToken token)
+        IReadOnlyDictionary<string, JsonElement> values, IObjectOperationExecutor operations, CancellationToken token)
     {
         var existing = await ObjectCopies.AsNoTracking().SingleOrDefaultAsync(row => EF.Property<string>(row, "EID") == operationId
             && EF.Property<string>(row, "ActorId") == actor, token) ?? throw new LinkQueryException(404, "Workspace.CopyOperationUnavailable");
         var input = JsonSerializer.Deserialize<WorkspaceObjectCopyInput>((string)existing["Input"]!)!;
-        if (input.SourceModel == "Part") executionAccess.Validate([WorkspaceObjectCopyExecutions.Binding("submit")], "part.part");
-        else if (input.SourceModel == "Document") WorkspaceObjectCopyExecutions.RequireDeferredDocumentRequest(declarationSpecified);
+        if (input.SourceModel is "Part" or "Document") executionAccess.Validate([WorkspaceObjectCopyExecutions.Binding("submit", input.SourceModel, input.Documents is not null)], Resource(input.SourceModel));
         else throw new LinkQueryException(400, "Workspace.ObjectCopySourceRequired");
         if (Equals(existing["State"], "committed")) return StandardCrudMutationResult.Success();
         if (input.SourceModel == "Part") return await Execute(WorkspaceObjectCopyBehavior.CopyPart);
@@ -35,7 +34,7 @@ public sealed partial class WorkspaceContents
                 if (error is not null) return CopyRowError(input, index, error);
             }
             await RequireDocumentSourcesAsync(actor, input, cancellation);
-            var target = await WritablePositionAsync(actor, input.TargetPosition, cancellation);
+            var target = await ObjectCopyTargetPositionAsync(actor, input.TargetPosition, "Document", "submit", cancellation, input.Documents is not null);
             RequireContainer(input.TargetPosition, target, "Document");
             row["State"] = "preparing";
             audit.ForUpdate((string)row["CreatedBy"]!, (DateTime)row["CreatedAt"]!).ApplyTo(row);

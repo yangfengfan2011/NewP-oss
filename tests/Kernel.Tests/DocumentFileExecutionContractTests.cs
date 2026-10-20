@@ -61,7 +61,8 @@ public sealed class DocumentFileExecutionContractTests
         Assert.Equal(new[] { "create" }, Assert.Single(candidate.AnyOf));
         var internalCreate = Assert.Single(owner.DataExecutions, item => item.Key == "document.document.internal.create");
         Assert.Equal("internal", internalCreate.Boundary);
-        Assert.Equal(new[] { "ICP.Platform.Modules.Document.DocumentFiles.ValidateUploadAsync", "ICP.Platform.Modules.Document.DocumentFiles.CreateWithFilesAsync" }, internalCreate.FixedBindings.Select(item => item.Caller));
+        Assert.Equal(new[] { "ICP.Platform.Modules.Document.DocumentFiles.ValidateUploadAsync", "ICP.Platform.Modules.Document.DocumentFiles.CreateWithFilesAsync",
+            "ICP.Platform.Modules.Document.DocumentFiles.ValidateCopyCandidateAsync", "ICP.Platform.Modules.Document.DocumentFiles.CopyAsync" }, internalCreate.FixedBindings.Select(item => item.Caller));
         var release = Assert.Single(owner.DataExecutions, item => item.Key == "document.files.release");
         Assert.Equal("internal", release.Boundary);
         Assert.Equal("ICP.Platform.Modules.Document.DocumentFileOwnerPolicy.VerifyBatchAsync", Assert.Single(release.FixedBindings).Caller);
@@ -73,9 +74,7 @@ public sealed class DocumentFileExecutionContractTests
         Assert.DoesNotContain(plan.ActionDataAccessCatalog, item => item.Execution is "document.document.internal.create" or "document.document.update" or "document.document.delete" or "document.files.release");
         var descriptor = ICP.Platform.Modules.Document.DocumentCrudDescriptor.Create();
         Assert.Empty(descriptor.LegacyDataExecutions);
-        Assert.Equal(new[] { ("ICP.Platform.Modules.Document.DocumentFiles.ValidateCopyCandidateAsync", "create"),
-            ("ICP.Platform.Modules.Document.DocumentFiles.CopyAsync", "create") },
-            descriptor.LegacyObjectOperationBindings.Select(binding => (binding.Caller, binding.Operation)));
+        Assert.Empty(descriptor.LegacyObjectOperationBindings);
     }
 
     [Theory]

@@ -3,12 +3,15 @@ import { act, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import { LocalizationProvider, platformFetch } from '@icp-platform/core';
-import { StandardCrudRequestError, type StandardCrudActionInstance } from '@icp-platform/sdk';
+import { StandardCrudRequestError, type ActionDataAccessRequirement, type StandardCrudActionInstance } from '@icp-platform/sdk';
 import resource from '../workspaceRootResource';
 import WorkspaceObjectCopyInput from '../WorkspaceObjectCopyInput';
 import { workspaceClipboard, type ObjectCopyDraft } from '../workspaceClipboard';
 import workspaceDictionary from '../../metadata/dictionaries/Workspace.dic.json';
 import documentDictionary from '../../../document/metadata/dictionaries/Document.dic.json';
+import compiled from '../../../../../../tests/Kernel.Tests/Fixtures/WorkspaceClipboardDataAccess.contract.json';
+const declaration = compiled.declarations.find(item => item.viewKey === 'workspace.folder.list' && item.surface === 'pageActions' && item.actionKey === 'pasteObjectCopy') as ActionDataAccessRequirement;
+
 vi.mock('@icp-platform/core', async original => ({ ...await original<typeof import('@icp-platform/core')>(), platformFetch: vi.fn() }));
 
 it('confirms every Document row, preserves row values and locates a later-row code error without replaying the batch', async () => {
@@ -27,8 +30,8 @@ it('confirms every Document row, preserves row values and locates a later-row co
     const [ready, setReady] = useState(false);
     const catalogs = { zhs: Object.fromEntries([...Object.entries(workspaceDictionary.Workspace).map(([key, entry]) => [`Workspace.${key}`, entry.zhs]), ...Object.entries(documentDictionary.Document).map(([key, entry]) => [`Document.${key}`, entry.zhs])]) };
     return <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={catalogs}>
-      <WorkspaceObjectCopyInput instance={currentInstance} action={{ key: 'pasteObjectCopy', labelKey: 'Workspace.PasteObjectCopy' }} featurePosition="copy" queryScope={{ ...target, linkIds: JSON.stringify(target.linkIds) }} value={value} onChange={change} onDraftStateChange={state => { draftState(state); setReady(state.ready); }} />
-      <button disabled={!ready} onClick={() => { pending = session.pasteObjectCopy(draft.draft, draft.values, target, 'copy').catch(error => error); }}>提交集合</button>
+      <WorkspaceObjectCopyInput instance={currentInstance} action={{ key: 'pasteObjectCopy', labelKey: 'Workspace.PasteObjectCopy' }} dataAccess={declaration} featurePosition="copy" queryScope={{ ...target, linkIds: JSON.stringify(target.linkIds) }} value={value} onChange={change} onDraftStateChange={state => { draftState(state); setReady(state.ready); }} />
+      <button disabled={!ready} onClick={() => { pending = session.pasteObjectCopy(draft.draft, draft.values, target, 'copy', declaration.id).catch(error => error); }}>提交集合</button>
     </LocalizationProvider>;
   }
   const element = document.createElement('div'); document.body.append(element); const root = createRoot(element);
@@ -56,7 +59,7 @@ it('confirms every Document row, preserves row values and locates a later-row co
     vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ operationId: 'another-actor', modelKey: 'Document', values, items, sourcePath: ['公共空间'], targetPath: ['公共空间', '目标'] })));
     await act(async () => root.render(<Harness currentInstance={otherInstance} />));
     expect(inputs()[0].value).toBe(''); expect(inputs()[2].value).toBe(''); expect(inputs()[3].value).toBe('来源 b');
-    await expect(session.pasteObjectCopy(oldDraft.draft, oldDraft.values, target, 'copy')).rejects.toThrow();
+    await expect(session.pasteObjectCopy(oldDraft.draft, oldDraft.values, target, 'copy', declaration.id)).rejects.toThrow();
   } finally { await act(async () => root.unmount()); element.remove(); vi.resetAllMocks(); }
 });
 it('keeps a real row validation error correctable while server failures remain unknown', () => {

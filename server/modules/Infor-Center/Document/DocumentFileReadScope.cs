@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Http;
 
 namespace ICP.Platform.Modules.Document;
 
-internal enum DocumentFileReadPhase { Metadata, Open, PolicyDownload, PolicyRelease }
+internal enum DocumentFileReadPhase { Metadata, Open, PolicyDownload, PolicyRelease, PolicyCopyMetadata, PolicyCopySource }
 
 /// <summary>只保存当前阶段实际读取的目标事实，不保存允许结果。</summary>
 internal sealed record DocumentFileReadFacts(HttpContext Context, string ActorId, string DocumentId, DocumentFileReadPhase Phase,

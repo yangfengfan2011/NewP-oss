@@ -167,7 +167,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/objects/copy") { Content = JsonContent.Create(new { operationId, values = new { ECODE = "DURABLE-COPY", ENAME = "中断副本" } }, options: new JsonSerializerOptions()) };
         var submitPoint = Point(fixture, "workspace.folder.pasteObjectCopy");
         request.Headers.Add("X-NewP-Feature", submitPoint.Position);
-        request.Headers.Add("X-NewP-Data-Declaration", new FeatureHttpTestRequests(fixture).Declaration("workspace.objectCopy.part", submitPoint).Id);
+        request.Headers.Add("X-NewP-Data-Declaration", new FeatureHttpTestRequests(fixture).Declaration("workspace.objectCopy", submitPoint).Id);
         var pending = admin.SendAsync(request, cancellation.Token);
         try
         {

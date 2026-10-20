@@ -69,9 +69,9 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
     }
     private sealed class ProfiledFileCopies(IFileCopyService inner, CopyPhaseProfile profile) : IFileCopyService
     {
-        public Task<FileCopyPreparation> PrepareCopyAsync(string key, FileUsageReference source, string owner, CancellationToken token = default) => profile.Measure("Files.Prepare", () => inner.PrepareCopyAsync(key, source, owner, token));
+        public Task<FileCopyPreparation> PrepareCopyAsync(string key, FileUsageReference source, string owner, FileOwnerInternalExecutionContext context, CancellationToken token = default) => profile.Measure("Files.Prepare", () => inner.PrepareCopyAsync(key, source, owner, context, token));
         public Task<FileCopyPreparation?> ReadCopyAsync(string key, string owner, CancellationToken token = default) => profile.Measure("Files.ReadPreparation", () => inner.ReadCopyAsync(key, owner, token));
-        public Task<ConfirmedFileUsage> ConfirmCopyAsync(string key, FileOwnerReference owner, CancellationToken token = default) => profile.Measure("Files.Confirm", () => inner.ConfirmCopyAsync(key, owner, token));
+        public Task<ConfirmedFileUsage> ConfirmCopyAsync(string key, FileOwnerReference owner, FileOwnerInternalExecutionContext source, FileOwnerCreationContext creation, CancellationToken token = default) => profile.Measure("Files.Confirm", () => inner.ConfirmCopyAsync(key, owner, source, creation, token));
         public Task CancelCopyAsync(string key, string owner, CancellationToken token = default) => profile.Measure("Files.Cancel", () => inner.CancelCopyAsync(key, owner, token));
     }
     private sealed class ProfiledCopyStorage(IFileContentStore inner, CopyPhaseProfile profile) : IFileContentStore

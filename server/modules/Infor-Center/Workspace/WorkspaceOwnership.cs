@@ -81,6 +81,15 @@ public sealed partial class WorkspaceContents
     // 批次先匹配本位置全部LID，再按模型批量复用端点读取范围及根排除；edit仍由既有真实对象裁决逐项决定。
     private async Task<LinkObjectReference[]> ResolveOwnershipTargetsAsync(string parentId, string[] linkIds, DataExecutionBindingReference source, CancellationToken token)
     {
+        var targets = await ReadOwnershipTargetsAsync(parentId, linkIds, token);
+        foreach (var target in targets)
+            await RequireOwnershipEditAsync(Resource(target.ModelKey), target.Id, source, token);
+        return targets;
+    }
+
+    // 完整LID位置、端点读取及根排除由业务保留；转交按钮在规范对象状态点检查自己的动作要求。
+    private async Task<LinkObjectReference[]> ReadOwnershipTargetsAsync(string parentId, string[] linkIds, CancellationToken token)
+    {
         var targets = new List<LinkObjectReference>();
         foreach (var batch in linkIds.Chunk(100))
         {
@@ -92,7 +101,6 @@ public sealed partial class WorkspaceContents
         var distinct = targets.Distinct().ToArray();
         foreach (var group in distinct.GroupBy(target => target.ModelKey))
         {
-            var resource = Resource(group.Key);
             var ids = group.Select(target => target.Id).ToArray();
             var readable = await reader.GetReadableEndpointIdsAsync("workspace.content", group.Key, ids, token);
             if (ids.Any(id => !readable.Contains(id))) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
@@ -100,8 +108,6 @@ public sealed partial class WorkspaceContents
                 foreach (var batch in ids.Chunk(500))
                     if (await db.Set<Dictionary<string, object?>>("WorkspaceSpace").AnyAsync(row => batch.Contains(EF.Property<string>(row, "RootFolderId")), token))
                         throw new LinkQueryException(409, "Workspace.RootMutationForbidden");
-            foreach (var id in ids)
-                await RequireOwnershipEditAsync(resource, id, source, token);
         }
         return distinct;
     }

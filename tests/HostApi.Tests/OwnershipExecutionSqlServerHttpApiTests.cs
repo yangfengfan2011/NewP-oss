@@ -125,12 +125,13 @@ public sealed class OwnershipExecutionSqlServerHttpApiTests
         var position = await ContainerAsync(fixture, admin);
         var browse = Assert.Single(fixture.FeatureCatalog, point => point.ModuleId == "Workspace" && point.Key == "workspace" && point.Kind == "navigation");
         var transfer = Assert.Single(fixture.FeatureCatalog, point => point.ModuleId == "Workspace" && point.Key == "transfer" && point.ActionScope == "list.rowActions");
+        var batchTransfer = Assert.Single(fixture.FeatureCatalog, point => point.ModuleId == "Workspace" && point.Key == "transferSelected" && point.ActionScope == "list.pageActions");
         var maintenance = Assert.Single(fixture.FeatureCatalog, point => point.ModuleId == "Workspace" && point.Key == "initializeOwnership" && point.ActionScope == "list.custom");
         var notices = Assert.Single(fixture.FeatureCatalog, point => point.ModuleId == "Workspace" && point.Key == "workspace.transfers" && point.Kind == "navigation");
         var create = Kinds.Select(kind => Assert.Single(fixture.FeatureCatalog, point => point.ModuleId == "Workspace"
             && point.BehaviorKey == "workspace.folder." + kind.Action && point.ActionScope == "list.pageActions")).ToArray();
         var owner = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "Ownership319WorkspaceOwner", "混合来源所属人",
-            "ownership319-workspace-owner", "混合来源所属人", [browse, transfer, .. create]);
+            "ownership319-workspace-owner", "混合来源所属人", [browse, transfer, batchTransfer, .. create]);
         var recipient = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "Ownership319WorkspaceRecipient", "混合接收人",
             "ownership319-workspace-recipient", "混合接收人", browse, notices);
         using var sender = owner.Client;
@@ -140,7 +141,7 @@ public sealed class OwnershipExecutionSqlServerHttpApiTests
             targets.Add(await CreateAsync(fixture, sender, position, kind.Model, kind.Kind, kind.Action, "OWNERSHIP319-WS-" + kind.Model));
         using var services = fixture.Services.CreateScope();
         var plan = services.ServiceProvider.GetRequiredService<CanonicalModulePlan>();
-        var transferSource = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "workspace.folder.transfer"
+        var transferSource = Assert.Single(plan.ActionDataAccessCatalog, item => (item.BusinessBinding ?? item.Execution) == "workspace.folder.transfer"
             && item.Surface == "rowActions" && item.ActionKey == "transfer" && item.FeaturePositions.Contains(transfer.Position));
         var maintenanceSource = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "workspace.folder.initializeOwnership"
             && item.Surface == "featureActions" && item.FeaturePositions.Contains(maintenance.Position));
@@ -152,27 +153,41 @@ public sealed class OwnershipExecutionSqlServerHttpApiTests
         var input = new { position, linkIds = targets.Select(target => target.LinkId).ToArray(), recipientId = recipient.AccountId };
         using (var missing = await FeatureHttpTestRequests.SendAsync(sender, transfer, HttpMethod.Get, Eligibility(input.linkIds)))
             Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
-        using (var swapped = await FeatureHttpTestRequests.SendAsync(sender, transfer, HttpMethod.Get, Eligibility(input.linkIds), dataAccess: wrongSource))
+        using (var swapped = await TransferRequestAsync(HttpMethod.Get, Eligibility(input.linkIds), identity: wrongSource))
             Assert.Equal(HttpStatusCode.BadRequest, swapped.StatusCode);
-        using (var wrongLink = await FeatureHttpTestRequests.SendAsync(sender, transfer, HttpMethod.Get, Eligibility([targets[1].Id]), dataAccess: transferSource))
+        using (var actualButton = await TransferRequestAsync(HttpMethod.Get, Eligibility(input.linkIds)))
+            Assert.True((await ReadOkAsync(actualButton)).GetProperty("allowed").GetBoolean());
+        var batchSource = Assert.Single(plan.ActionDataAccessCatalog, item => item.BusinessBinding == "workspace.folder.transfer"
+            && item.Surface == "pageActions" && item.ActionKey == "transferSelected" && item.FeaturePositions.Contains(batchTransfer.Position));
+        using (var batch = await FeatureHttpTestRequests.SendAsync(sender, batchTransfer, HttpMethod.Get, Eligibility(input.linkIds), dataAccess: batchSource))
+            Assert.True((await ReadOkAsync(batch)).GetProperty("allowed").GetBoolean());
+        using (var mixedIdentity = new HttpRequestMessage(HttpMethod.Get, Eligibility(input.linkIds)))
+        {
+            mixedIdentity.Headers.Add("X-NewP-Feature", transfer.Position);
+            mixedIdentity.Headers.Add("X-NewP-Button", transferSource.Id);
+            mixedIdentity.Headers.Add("X-NewP-Data-Declaration", wrongSource.Id);
+            using var rejected = await sender.SendAsync(mixedIdentity);
+            Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        }
+        using (var wrongLink = await TransferRequestAsync(HttpMethod.Get, Eligibility([targets[1].Id])))
             Assert.Equal(HttpStatusCode.NotFound, wrongLink.StatusCode);
         await ConfigureAsync(targets[1], "deny", "allow");
-        using (var unreadable = await FeatureHttpTestRequests.SendAsync(sender, transfer, HttpMethod.Get, Eligibility(input.linkIds), dataAccess: transferSource))
+        using (var unreadable = await TransferRequestAsync(HttpMethod.Get, Eligibility(input.linkIds)))
             Assert.Equal(HttpStatusCode.NotFound, unreadable.StatusCode);
         await ConfigureAsync(targets[1], "allow", "deny");
-        using (var uneditable = await FeatureHttpTestRequests.SendAsync(sender, transfer, HttpMethod.Get, Eligibility(input.linkIds), dataAccess: transferSource))
+        using (var uneditable = await TransferRequestAsync(HttpMethod.Get, Eligibility(input.linkIds)))
             Assert.Equal(HttpStatusCode.Forbidden, uneditable.StatusCode);
         await ConfigureAsync(targets[1], "allow", "allow");
-        using (var allowed = await FeatureHttpTestRequests.SendAsync(sender, transfer, HttpMethod.Get, Eligibility(input.linkIds), dataAccess: transferSource))
+        using (var allowed = await TransferRequestAsync(HttpMethod.Get, Eligibility(input.linkIds)))
             Assert.True((await ReadOkAsync(allowed)).GetProperty("allowed").GetBoolean());
         await ConfigureAsync(targets[2], "allow", "deny");
-        using (var laterDenied = await FeatureHttpTestRequests.SendAsync(sender, transfer, HttpMethod.Post, "/api/workspace/ownership/transfer", input, transferSource))
+        using (var laterDenied = await TransferRequestAsync(HttpMethod.Post, "/api/workspace/ownership/transfer", input))
             Assert.Equal(HttpStatusCode.Forbidden, laterDenied.StatusCode);
         foreach (var target in targets) Assert.Equal(owner.AccountId, (await RowAsync(fixture, target))["OwnerId"]);
         var db = services.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
         Assert.False(await db.Set<Dictionary<string, object?>>("WorkspaceTransferNotification").AnyAsync());
         await ConfigureAsync(targets[2], "allow", "allow");
-        using (var transferred = await FeatureHttpTestRequests.SendAsync(sender, transfer, HttpMethod.Post, "/api/workspace/ownership/transfer", input, transferSource))
+        using (var transferred = await TransferRequestAsync(HttpMethod.Post, "/api/workspace/ownership/transfer", input))
             Assert.Equal(3, (await ReadOkAsync(transferred)).GetProperty("changed").GetInt32());
         using (var received = await FeatureHttpTestRequests.SendAsync(receiver, notices, HttpMethod.Get, "/api/workspace/transfers/notifications?page=1&pageSize=100"))
         {
@@ -190,6 +205,17 @@ public sealed class OwnershipExecutionSqlServerHttpApiTests
                    new { position, input.linkIds }, maintenanceSource))
             Assert.Equal(3, (await ReadOkAsync(initialized)).GetProperty("changed").GetInt32());
         foreach (var target in targets) Assert.Equal(owner.AccountId, (await RowAsync(fixture, target))["OwnerId"]);
+
+        // 新按钮读取与真实混合LID来源一起提交；不能由测试辅助器回退成旧执行声明。
+        async Task<HttpResponseMessage> TransferRequestAsync(HttpMethod method, string path, object? payload = null,
+            ActionDataAccessRequirement? identity = null)
+        {
+            using var request = new HttpRequestMessage(method, path);
+            request.Headers.Add("X-NewP-Feature", transfer.Position);
+            request.Headers.Add("X-NewP-Button", (identity ?? transferSource).Id);
+            if (payload is not null) request.Content = JsonContent.Create(payload);
+            return await sender.SendAsync(request);
+        }
 
         async Task ConfigureAsync(Target target, string read, string edit)
         {

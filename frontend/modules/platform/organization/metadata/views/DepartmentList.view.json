@@ -44,7 +44,7 @@
       { "key": "authorize", "titleKey": "Action_Authorize", "behaviorKey": "organization.department.authorize" }
     ],
     "rowActions": [
-      { "key": "authorize", "labelKey": "Action_Authorize", "handlerKey": "authorize", "dataAccess": { "execution": "organization.department.authorization.manage", "resources": ["organization.department"] }, "inputKey": "objectAuthorization", "confirmLabelKey": "Action_SaveAuthorization" },
+      { "key": "authorize", "labelKey": "Action_Authorize", "handlerKey": "authorize", "dataAccess": {"object":"Department","actions":["authorize"]}, "inputKey": "objectAuthorization", "confirmLabelKey": "Action_SaveAuthorization" },
       { "key": "edit", "labelKey": "Action_Edit", "standardAction": "edit", "dataAccess": { "object": "Department", "actions": ["edit"] } },
       { "key": "delete", "labelKey": "Action_Delete", "standardAction": "delete", "dataAccess": { "object": "Department", "actions": ["delete"] }, "variant": "danger", "confirmMessageKey": "Action_Delete_Confirm" }
     ]

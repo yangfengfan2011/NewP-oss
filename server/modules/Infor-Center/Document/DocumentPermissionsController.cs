@@ -7,7 +7,8 @@ namespace ICP.Platform.Modules.Document;
 
 /// <summary>独立对象入口沿本owner功能资格，查询和直接项管理分别复用公共服务。</summary>
 [ApiController, Route("api/document/documents/{objectId}/permissions"), EndpointModule("Document")]
-public sealed class DocumentPermissionsController(IDataScopeObjectPermissionQueries queries, IDataScopeObjectAuthorization authorization) : ControllerBase
+public sealed class DocumentPermissionsController(IDataScopeObjectPermissionQueries queries,
+    IButtonBusinessExecutor buttons, DocumentAuthorizationSaveHandler saveHandler, DocumentAuthorizationReadHandler readHandler) : ControllerBase
 {
     private const string ResourceKey = "document.document";
 
@@ -40,38 +41,33 @@ public sealed class DocumentPermissionsController(IDataScopeObjectPermissionQuer
         await WithDataAccessAsync(async () => Read(await queries.UsersAsync(ResourceKey, objectId, query, page ?? 1, currentIds ?? [], ViewSources, token)));
 
     /// <summary>其他授权主体候选仍需完整对象管理资格。</summary>
-    [HttpGet("subjects/{type}"), RequireFeature("document.document.authorize")]
+    [HttpGet("subjects/{type}"), RequireFeature("document.document.authorize"), ButtonBusinessHandler(typeof(DocumentAuthorizationReadHandler))]
     public async Task<IResult> Subjects(string objectId, string type, [FromQuery] string? query, [FromQuery] int? page,
         [FromQuery] string[]? currentIds, CancellationToken token) =>
-        await WithDataAccessAsync(async () => Read(await authorization.SubjectsAsync(ResourceKey, objectId, type, query, page ?? 1, currentIds ?? [], Management("prepare"), token)));
+        await WithDataAccessAsync(async () => Read(await buttons.ExecuteAsync(readHandler, new DataScopeObjectReadInput(ResourceKey, objectId, "subjects", type, query, page ?? 1, currentIds), token)));
 
     /// <summary>管理资格与业务动作分离，每次检查当前read及data-authorize。</summary>
-    [HttpGet("eligibility"), RequireFeature("document.document.authorize")]
+    [HttpGet("eligibility"), RequireFeature("document.document.authorize"), ButtonBusinessHandler(typeof(DocumentAuthorizationReadHandler))]
     public async Task<IResult> Eligibility(string objectId, CancellationToken token) =>
-        await WithDataAccessAsync(async () => Failure(await authorization.CheckAsync(ResourceKey, objectId, Management("prepare"), token)));
+        await WithDataAccessAsync(async () => Failure((await buttons.ExecuteAsync(readHandler, new DataScopeObjectReadInput(ResourceKey, objectId, "eligibility"), token)).Status));
 
     /// <summary>配置只对当前仍有完整管理资格的调用者公开。</summary>
-    [HttpGet, RequireFeature("document.document.authorize")]
+    [HttpGet, RequireFeature("document.document.authorize"), ButtonBusinessHandler(typeof(DocumentAuthorizationReadHandler))]
     public async Task<IResult> Configuration(string objectId, CancellationToken token) =>
-        await WithDataAccessAsync(async () => Read(await authorization.ReadAsync(ResourceKey, objectId, Management("prepare"), token)));
+        await WithDataAccessAsync(async () => Read(await buttons.ExecuteAsync(readHandler, new DataScopeObjectReadInput(ResourceKey, objectId, "configuration"), token)));
 
     /// <summary>完整替换由同一事务提交；成功后不回读配置，保留自身失权的安全成功。</summary>
-    [HttpPut, RequireFeature("document.document.authorize")]
+    [HttpPut, RequireFeature("document.document.authorize"), ButtonBusinessHandler(typeof(DocumentAuthorizationSaveHandler))]
     public async Task<IResult> Replace(string objectId, DataScopeObjectConfiguration input, CancellationToken token)
         => await WithDataAccessAsync(async () =>
     {
-        var result = await authorization.ReplaceAsync(ResourceKey, objectId, input, Management("submit"), token);
+        var result = await buttons.ExecuteAsync(saveHandler, new DataScopeObjectSaveInput(ResourceKey, objectId, input), token);
         return result.Status == DataScopeAuthorizationStatus.Succeeded ? Results.NoContent() : Failure(result.Status, result.Error);
     });
 
-    // 原owner入口固定执行和阶段；客户端只能引用自己的正式动作声明，不能选择另一个管理能力。
-    private static DataExecutionBindingReference Management(string stage) =>
-        new("document.document.authorization.manage", "authorization.object.manage", stage);
-
-    // 同一原read端点接受实际查看来源及管理输入的辅助read来源，不能把view借到管理入口。
+    // 输入与原只读页面使用同一真实view来源；该来源不能借到完整管理入口。
     private static readonly IReadOnlyList<DataExecutionBindingReference> ViewSources = [
-        new("document.document.authorization.view", "authorization.object.view", "prepare"),
-        new("document.document.authorization.manage", "authorization.object.manage", "prepare")];
+        new("document.document.authorization.view", "authorization.object.view", "prepare")];
 
     // owner只翻译稳定声明异常，不引用Authorization实现或拦截原事务、取消和事实源故障。
     private static async Task<IResult> WithDataAccessAsync(Func<Task<IResult>> operation)

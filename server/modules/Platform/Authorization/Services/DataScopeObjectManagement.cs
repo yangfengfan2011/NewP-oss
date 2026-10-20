@@ -15,10 +15,8 @@ namespace ICP.Platform.Modules.Authorization.Services;
 public sealed partial class DataScopeObjectManagement(IDataExecutionAccess executions, DataScopeCatalog catalog, CanonicalModulePlan plan,
     IFeatureDecisionSource features, IDataScopeObjectDecisionProvider decisions, DataScopeObjectGrants grants,
     DataScopeIdentities identities, IHttpContextAccessor context, IPlatformTransactionExecutor transactions, IEntityAuditValueProvider audit, IPlatformObjectIdGenerator ids,
-    IDataScopeEvaluationScope? evaluation = null, IObjectActionAccess? objectActions = null,
-    ICP.Platform.Crud.Abstractions.IStandardCrudResourceRegistry? objectResources = null,
-    ICP.Platform.Crud.Abstractions.IStandardCrudRepository? objectRepository = null)
-    : IDataScopeObjectAuthorization, IDataScopeBatchAuthorization, IDataScopeObjectSaveHandler
+    IDataScopeEvaluationScope? evaluation = null, IObjectActionAccess? objectActions = null)
+    : IDataScopeObjectAuthorization, IDataScopeBatchAuthorization, IDataScopeObjectSaveHandler, IDataScopeObjectReadHandler, IDataScopeBatchSaveHandler, IDataScopeBatchReadHandler
 {
     /// <summary>只读操作组合功能位置与当前数据资格；手工写入只前置功能资格，数据资格由锁内流程拥有。</summary>
     public async Task<DataScopeObjectEligibility> CheckAsync(string resourceKey, string objectId, CancellationToken token)
@@ -30,7 +28,7 @@ public sealed partial class DataScopeObjectManagement(IDataExecutionAccess execu
     }
 
     /// <summary>校验具体资源的授权功能位置，不能借另一资源的入口或请求头获得资格。</summary>
-    private async Task<DataScopeObjectEligibility> CheckFeatureAsync(string resourceKey, CancellationToken token)
+    internal async Task<DataScopeObjectEligibility> CheckFeatureAsync(string resourceKey, CancellationToken token)
     {
         using var operation = evaluation?.BeginOperation();
         var resource = catalog.Resolve(resourceKey);

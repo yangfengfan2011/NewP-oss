@@ -78,7 +78,7 @@
       { "key": "authorize", "titleKey": "Action_Authorize", "behaviorKey": "organization.position.authorize" }
     ],
     "rowActions": [
-      { "key": "authorize", "labelKey": "Action_Authorize", "handlerKey": "authorize", "dataAccess": { "execution": "organization.position.authorization.manage", "resources": ["organization.position"] }, "inputKey": "objectAuthorization", "confirmLabelKey": "Action_SaveAuthorization" },
+      { "key": "authorize", "labelKey": "Action_Authorize", "handlerKey": "authorize", "dataAccess": {"object":"Position","actions":["authorize"]}, "inputKey": "objectAuthorization", "confirmLabelKey": "Action_SaveAuthorization" },
       {
         "key": "edit",
         "labelKey": "Action_Edit",

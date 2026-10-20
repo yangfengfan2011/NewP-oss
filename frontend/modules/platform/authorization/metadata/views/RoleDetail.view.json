@@ -55,7 +55,7 @@
     ],
     "featureActions": [
       { "key": "authorize", "titleKey": "Action_Authorize", "behaviorKey": "authorization.role.authorize",
-        "dataAccess": { "execution": "authorization.role.authorization.manage", "resources": ["authorization.role"] } }
+        "dataAccess": {"object":"Role","actions":["authorize"]} }
     ]
   }
 }

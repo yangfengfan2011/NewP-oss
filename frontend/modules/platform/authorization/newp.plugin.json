@@ -1,7 +1,6 @@
 {
   "moduleId": "Authorization",
   "dataExecutions": [
-    {"key":"authorization.role.authorization.manage","moduleId":"Authorization","provider":"authorization.object.manage","boundary":"entry","featureBehaviors":["authorization.role.authorize"],"resourceKey":"authorization.role"},
     {"key":"authorization.workbench.read","moduleId":"Authorization","provider":"authorization.backend","boundary":"entry","featureBehaviors":["authorization.workbench.read"],"branches":["catalog","detail"],"requirements":[{"role":"query","stage":"read","shape":"query","resources":["authorization.role"],"anyOf":[["read"]],"minimumCount":0,"maximumCount":null,"branch":"catalog"},{"role":"target","stage":"read","shape":"object","resources":["authorization.role"],"anyOf":[["read"]],"minimumCount":1,"maximumCount":1,"branch":"detail"}]},
     {"key":"authorization.role.list","moduleId":"Authorization","provider":"standardCrud.list","boundary":"entry","featureBehaviors":["authorization.role.read"],"resourceKey":"authorization.role"},
     {"key":"authorization.role.read","moduleId":"Authorization","provider":"standardCrud.read","boundary":"entry","featureBehaviors":["authorization.role.read"],"resourceKey":"authorization.role"}

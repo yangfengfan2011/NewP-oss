@@ -8,16 +8,13 @@ public sealed partial class DataScopeObjectManagement
     public async Task<DataScopeAuthorizationResult> WithinBoundaryAsync(DataScopeObjectSaveInput input, string actionKey,
         Func<DataScopeObjectSaveState, CancellationToken, Task<DataScopeAuthorizationResult>> execute, CancellationToken token)
     {
-        if (actionKey != "authorize") throw new ActionDataAccessException(400, "ButtonExecution.BindingInvalid");
         var entered = false;
         var result = await SaveConfigurationAsync(input.ResourceKey, input.ObjectId, input.Configuration, token, null,
             async (targets, save, cancellation) =>
             {
                 var target = targets.Single();
                 var resource = catalog.Resolve(target.ResourceKey);
-                var descriptor = objectResources?.FindByResourceKey(target.ResourceKey)
-                    ?? throw new InvalidOperationException("DATA_SCOPE_OBJECT_DESCRIPTOR_REQUIRED");
-                var before = await objectRepository!.GetByIdAsync(descriptor, target.ObjectId, cancellation)
+                var before = await catalog.ReadObjectAsync(target.ResourceKey, target.ObjectId, cancellation)
                     ?? throw new ActionDataAccessException(404, "StandardCrud.NotFound");
                 DataScopeObjectResult<DataScopeBatchAuthorizationReceipt>? committed = null;
                 var active = true;

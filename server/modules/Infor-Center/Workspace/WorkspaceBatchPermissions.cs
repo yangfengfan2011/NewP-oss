@@ -10,26 +10,14 @@ public sealed record WorkspaceBatchPermissionSource(WorkspacePosition Position, 
 
 public sealed partial class WorkspaceContents
 {
-    /// <summary>一个图事务内重解全部来源、归一真实对象，再交公共批服务全量资格/配置校验与写入。</summary>
-    public ValueTask<DataScopeAuthorizationResult<DataScopeBatchAuthorizationReceipt>> ReplaceBatchPermissionsAsync(string actor,
-        IReadOnlyList<WorkspaceBatchPermissionSource> sources, DataScopeBatchConfiguration input,
-        IDataScopeBatchAuthorization authorization, CancellationToken token) =>
-        transactions.ExecuteAsync<DataScopeAuthorizationResult<DataScopeBatchAuthorizationReceipt>>(async cancellation =>
+    // 单次图事务交出同一完整目标集合；共享授权能力随后锁齐ACL并重验，核对也不借历史允许。
+    internal Task<TResult> WithinBatchPermissionBoundaryAsync<TResult>(string actor, IReadOnlyList<WorkspaceBatchPermissionSource> sources,
+        Func<IReadOnlyList<DataScopeAuthorizationTarget>, CancellationToken, Task<TResult>> execute, CancellationToken token) =>
+        transactions.ExecuteAsync<TResult>(async cancellation =>
         {
-            ValidatePermissionSources([WorkspacePermissionExecutions.Batch("submit")]);
             var targets = await ResolveBatchPermissionTargetsAsync(actor, sources, cancellation);
-            return await authorization.ReplaceAsync(targets, input, WorkspacePermissionExecutions.Batch("submit"), cancellation);
-        }, token);
-
-    /// <summary>核对使用与保存相同的真实来源，不把失效来源解释为原保存未提交。</summary>
-    public ValueTask<DataScopeAuthorizationResult<IReadOnlyList<DataScopeObjectConfiguration>>> ReadCurrentBatchPermissionsAsync(string actor,
-        IReadOnlyList<WorkspaceBatchPermissionSource> sources, IDataScopeBatchAuthorization authorization, CancellationToken token) =>
-        transactions.ExecuteAsync<DataScopeAuthorizationResult<IReadOnlyList<DataScopeObjectConfiguration>>>(async cancellation =>
-        {
-            ValidatePermissionSources([WorkspacePermissionExecutions.Batch("prepare")]);
-            var targets = await ResolveBatchPermissionTargetsAsync(actor, sources, cancellation);
-            return await authorization.ReadCurrentAsync(targets, WorkspacePermissionExecutions.Batch("prepare"), cancellation);
-        }, token);
+            return await execute(targets, cancellation);
+        }, token).AsTask();
 
     // 来源只产出真实对象身份；图锁先于公共批服务的全部ACL锁，核对和保存保持同一顺序。
     private async Task<DataScopeAuthorizationTarget[]> ResolveBatchPermissionTargetsAsync(string actor,

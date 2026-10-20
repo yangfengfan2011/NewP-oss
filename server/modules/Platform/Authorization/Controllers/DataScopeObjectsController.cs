@@ -11,82 +11,63 @@ namespace ICP.Platform.Modules.Authorization.Controllers;
  AuthenticatedOnly, ResourceFeatureBinding("authorize"), ServiceFilter(typeof(DataExecutionExceptionFilter))]
 public sealed class DataScopeObjectsController(DataScopeObjectManagement management, IButtonBusinessExecutor buttons) : ControllerBase
 {
-    /// <summary>完整解释操作保留操作者身份，HTTP 层只翻译操作结果。</summary>
-    [HttpGet("explanation")]
-    [DataExecutionEndpoint("authorization.object.manage", "prepare"), DataExecutionEndpoint("authorization.object.inspect", "prepare"), DataExecutionEndpoint("authorization.collection.manage", "prepare")]
-    public async Task<IActionResult> Explanation(string resourceKey, string objectId, [FromQuery] string? accountId,
-        CancellationToken cancellationToken) =>
-        ReadResult(await management.ExplainAsync(resourceKey, objectId, accountId, cancellationToken));
+    /// <summary>完整解释保留管理资格和被分析账号，不切换操作者。</summary>
+    [HttpGet("explanation"), ButtonBusinessHandler(typeof(DataScopeObjectManagement))]
+    public Task<IActionResult> Explanation(string resourceKey, string objectId, [FromQuery] string? accountId, CancellationToken cancellationToken) =>
+        ReadAsync(new(resourceKey, objectId, "explanation", AccountId: accountId), cancellationToken);
 
-    /// <summary>按钮在发起编辑前取得真实服务端资格；响应不公开整份配置。</summary>
-    [HttpGet("eligibility")]
-    [DataExecutionEndpoint("authorization.object.manage", "prepare"), DataExecutionEndpoint("authorization.object.inspect", "prepare"), DataExecutionEndpoint("authorization.collection.manage", "prepare")]
-    public async Task<IActionResult> Eligibility(string resourceKey, string objectId, CancellationToken cancellationToken) =>
-        await management.CheckAsync(resourceKey, objectId, cancellationToken) switch
-        {
-            DataScopeObjectEligibility.Allowed => Ok(),
-            DataScopeObjectEligibility.NotFound => NotFound(),
-            _ => Forbid()
-        };
+    /// <summary>编辑前的资格探测使用正式管理按钮，不公开完整配置。</summary>
+    [HttpGet("eligibility"), ButtonBusinessHandler(typeof(DataScopeObjectManagement))]
+    public Task<IActionResult> Eligibility(string resourceKey, string objectId, CancellationToken cancellationToken) =>
+        ReadAsync(new(resourceKey, objectId, "eligibility"), cancellationToken);
 
-    /// <summary>读取完整操作自行检查目标资格；拒绝保持原有 404/403 响应。</summary>
-    [HttpGet]
-    [DataExecutionEndpoint("authorization.object.manage", "prepare"), DataExecutionEndpoint("authorization.object.inspect", "prepare"), DataExecutionEndpoint("authorization.collection.manage", "prepare")]
-    public async Task<IActionResult> Get(string resourceKey, string objectId, CancellationToken cancellationToken) =>
-        ReadResult(await management.GetAsync(resourceKey, objectId, cancellationToken));
+    /// <summary>配置读取仍需当前完整管理资格，不借资源owner的纯查看入口。</summary>
+    [HttpGet, ButtonBusinessHandler(typeof(DataScopeObjectManagement))]
+    public Task<IActionResult> Get(string resourceKey, string objectId, CancellationToken cancellationToken) =>
+        ReadAsync(new(resourceKey, objectId, "configuration"), cancellationToken);
 
-    /// <summary>完整保存成功返回 204，不在 HTTP 层刷新配置或复判保存后的资格。</summary>
-    [HttpPut]
-    [ButtonBusinessHandler(typeof(DataScopeObjectManagement))]
+    /// <summary>完整保存成功返回204；功能前置和原锁内对象重验保持，不追加成功后回读。</summary>
+    [HttpPut, ButtonBusinessHandler(typeof(DataScopeObjectManagement))]
     public async Task<IActionResult> Save(string resourceKey, string objectId, DataScopeObjectDto input, CancellationToken cancellationToken)
     {
-        var result = await buttons.ExecuteAsync(management,
-            new DataScopeObjectSaveInput(resourceKey, objectId, input), cancellationToken);
-        return result.Status switch
-        {
-            DataScopeAuthorizationStatus.Succeeded => NoContent(),
-            DataScopeAuthorizationStatus.NotFound => NotFound(),
-            DataScopeAuthorizationStatus.Forbidden => Forbid(),
-            DataScopeAuthorizationStatus.InvalidInput when result.Error is null => BadRequest(),
-            DataScopeAuthorizationStatus.InvalidInput => BadRequest(new ProblemDetails
-            {
-                Status = 400, Title = result.Error!.Message,
-                Extensions = { ["code"] = "DataScope.InvalidConfiguration", ["reasonKey"] = result.Error.ReasonKey,
-                    ["args"] = result.Error.Args, ["fieldErrors"] = result.Error.Field is null ? null : new[]
-                    { new { field = result.Error.Field, code = result.Error.Code, reasonKey = result.Error.ReasonKey,
-                        args = result.Error.Args, message = result.Error.Message } } }
-            }),
-            _ => throw new ArgumentOutOfRangeException(nameof(result))
-        };
+        if (await management.CheckFeatureAsync(resourceKey, cancellationToken) != DataScopeObjectEligibility.Allowed) return Forbid();
+        var result = await buttons.ExecuteAsync((IDataScopeObjectSaveHandler)management, new DataScopeObjectSaveInput(resourceKey, objectId, input), cancellationToken);
+        return result.Status == DataScopeAuthorizationStatus.Succeeded ? NoContent() : Failure(result);
     }
 
-    /// <summary>对象入口提供已通过目标管理资格检查的完整配置目录。</summary>
-    [HttpGet("catalog")]
-    [DataExecutionEndpoint("authorization.object.manage", "prepare"), DataExecutionEndpoint("authorization.object.inspect", "prepare"), DataExecutionEndpoint("authorization.collection.manage", "prepare")]
-    public async Task<IActionResult> Catalog(string resourceKey, string objectId, CancellationToken cancellationToken) =>
-        ReadResult(await management.CatalogAsync(resourceKey, objectId, cancellationToken));
+    /// <summary>通用目录保持原管理门槛；纯read目录仍由资源owner拥有。</summary>
+    [HttpGet("catalog"), ButtonBusinessHandler(typeof(DataScopeObjectManagement))]
+    public Task<IActionResult> Catalog(string resourceKey, string objectId, CancellationToken cancellationToken) =>
+        ReadAsync(new(resourceKey, objectId, "catalog"), cancellationToken);
 
-    /// <summary>最小主体候选与已有项名称由完整操作保护，HTTP 参数仅作输入适配。</summary>
-    [HttpGet("subjects/{type}")]
-    [DataExecutionEndpoint("authorization.object.manage", "prepare"), DataExecutionEndpoint("authorization.object.inspect", "prepare"), DataExecutionEndpoint("authorization.collection.manage", "prepare")]
-    public async Task<IActionResult> Subjects(string resourceKey, string objectId, string type, [FromQuery] string? query,
+    /// <summary>通用主体目录保留完整管理资格与原分页/当前值协议。</summary>
+    [HttpGet("subjects/{type}"), ButtonBusinessHandler(typeof(DataScopeObjectManagement))]
+    public Task<IActionResult> Subjects(string resourceKey, string objectId, string type, [FromQuery] string? query,
         [FromQuery] int page = 1, [FromQuery] string[]? currentIds = null, CancellationToken cancellationToken = default) =>
-        ReadResult(await management.SubjectsAsync(resourceKey, objectId, type, query, page, currentIds ?? [], cancellationToken));
+        ReadAsync(new(resourceKey, objectId, "subjects", type, query, page, currentIds), cancellationToken);
 
-    // 成功仍使用既有 payload，不把模块操作结果包装成新的 HTTP 契约。
-    private IActionResult ReadResult<T>(DataScopeObjectResult<T> result) =>
-        result.Status == DataScopeObjectStatus.Succeeded ? Ok(result.Value) : Failure(result);
-
-    // 响应只翻译已判定的拒绝与输入错误，不捕获事实源或配置故障。
-    private IActionResult Failure(DataScopeObjectResult result) => result.Status switch
+    // ResourceFeatureBinding提供动态资源身份；原generic功能评估仍在业务处理器前执行。
+    private async Task<IActionResult> ReadAsync(DataScopeObjectReadInput input, CancellationToken token)
     {
-        DataScopeObjectStatus.NotFound => NotFound(),
-        DataScopeObjectStatus.Forbidden => Forbid(),
-        DataScopeObjectStatus.InvalidInput when result.ValidationMessage is null => BadRequest(),
-        DataScopeObjectStatus.InvalidInput when result.ValidationError is not null => BadRequest(AuthorizationProblem.From(result.ValidationError, "DataScope.InvalidConfiguration")),
-        DataScopeObjectStatus.InvalidInput => BadRequest(new ProblemDetails
+        if (await management.CheckFeatureAsync(input.ResourceKey, token) != DataScopeObjectEligibility.Allowed) return Forbid();
+        var result = await buttons.ExecuteAsync((IDataScopeObjectReadHandler)management, input, token);
+        return result.Status == DataScopeAuthorizationStatus.Succeeded
+            ? input.Operation == "eligibility" ? Ok() : Ok(result.Value) : Failure(result);
+    }
+
+    // 只翻译既有资格和配置错误事实，依赖故障及取消继续由原边界处理。
+    private IActionResult Failure(DataScopeAuthorizationResult result) => result.Status switch
+    {
+        DataScopeAuthorizationStatus.NotFound => NotFound(),
+        DataScopeAuthorizationStatus.Forbidden => Forbid(),
+        DataScopeAuthorizationStatus.InvalidInput when result.Error is null => BadRequest(),
+        DataScopeAuthorizationStatus.InvalidInput => BadRequest(new ProblemDetails
         {
-            Status = 400, Title = result.ValidationMessage, Extensions = { ["code"] = "DataScope.InvalidConfiguration" }
+            Status = 400, Title = result.Error!.Message,
+            Extensions = { ["code"] = "DataScope.InvalidConfiguration", ["reasonKey"] = result.Error.ReasonKey,
+                ["args"] = result.Error.Args, ["fieldErrors"] = result.Error.Field is null ? null : new[]
+                { new { field = result.Error.Field, code = result.Error.Code, reasonKey = result.Error.ReasonKey,
+                    args = result.Error.Args, message = result.Error.Message } } }
         }),
         _ => throw new ArgumentOutOfRangeException(nameof(result))
     };

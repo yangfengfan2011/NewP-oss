@@ -74,23 +74,17 @@ public sealed partial class WorkspaceContentsController
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
     }
 
-    /// <summary>其他最小主体候选只供当前对象的授权管理使用，不因查询解释而扩大候选目录。</summary>
-    [HttpGet("content/{linkId}/permissions/subjects/{type}"), RequireFeature("workspace.folder.authorize")]
-    public async Task<IResult> PermissionSubjects(string linkId, string type, [FromQuery] string? queryScope,
+    /// <summary>其他最小主体候选只供真实对象管理，不借纯用户目录来源。</summary>
+    [HttpGet("content/{linkId}/permissions/subjects/{type}"), RequireFeature("workspace.folder.authorize"), ButtonBusinessHandler(typeof(WorkspaceAuthorizationReadHandler))]
+    public Task<IResult> PermissionSubjects(string linkId, string type, [FromQuery] string? queryScope,
         [FromQuery] string? query, [FromQuery] int? page, [FromQuery] string[]? currentIds,
-        [FromServices] IDataScopeObjectAuthorization authorization, CancellationToken token)
-    {
-        try
+        [FromServices] WorkspaceAuthorizationReadHandler handler, CancellationToken token) =>
+        WithPermissionRequestAsync(async () =>
         {
-            contents.ValidatePermissionSources(WorkspacePermissionExecutions.ManagementSources);
-            var target = await contents.ResolvePermissionTargetAsync(Actor(), ReadPermissionSubjectsPosition(queryScope), linkId, token);
-            var result = await authorization.SubjectsAsync(target.ResourceKey, target.ObjectId, type, query, page ?? 1, currentIds ?? [], WorkspacePermissionExecutions.ManagementSources, token);
+            var result = await buttonBusiness.ExecuteAsync(handler, new WorkspaceAuthorizationReadInput(Actor(),
+                ReadPermissionSubjectsPosition(queryScope), linkId, "subjects", type, query, page ?? 1, currentIds), token);
             return result.Status == DataScopeAuthorizationStatus.Succeeded ? Results.Ok(result.Value) : PermissionFailure(result.Status, result.Error);
-        }
-        catch (ActionDataAccessException exception) { return Results.Problem(statusCode: exception.Status, title: exception.Message, extensions: new Dictionary<string, object?> { ["code"] = exception.Code }); }
-        catch (JsonException) { return LinkQueryEndpointExtensions.Problem(new LinkQueryException(400, "Workspace.InvalidPosition")); }
-        catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
-    }
+        });
 
     // 只允许目录的既有分页/搜索与当前值输入；重复currentIds仍按owner已有分块解析，不设置业务数量上限。
     private WorkspacePosition ReadPermissionSubjectsPosition(string? queryScope)
@@ -102,32 +96,39 @@ public sealed partial class WorkspaceContentsController
         return ParseOwnershipPosition(queryScope);
     }
 
-    /// <summary>工作空间操作功能与实际对象data-authorize分别检查，不能借功能头切换资源owner。</summary>
-    [HttpGet("content/{linkId}/permissions/eligibility"), RequireFeature("workspace.folder.authorize")]
+    /// <summary>实际位置每次解析为规范对象，入口功能与当前对象管理资格分别保持。</summary>
+    [HttpGet("content/{linkId}/permissions/eligibility"), RequireFeature("workspace.folder.authorize"), ButtonBusinessHandler(typeof(WorkspaceAuthorizationReadHandler))]
     public Task<IResult> PermissionEligibility(string linkId, [FromQuery] string? queryScope,
-        [FromServices] IDataScopeObjectAuthorization authorization, CancellationToken token) =>
-        WithPermissionTarget(linkId, queryScope, async target => PermissionFailure(await authorization.CheckAsync(target.ResourceKey, target.ObjectId, WorkspacePermissionExecutions.Management("prepare"), token)), [WorkspacePermissionExecutions.Management("prepare")], token);
+        [FromServices] WorkspaceAuthorizationReadHandler handler, CancellationToken token) =>
+        WithPermissionRequestAsync(async () => PermissionFailure((await buttonBusiness.ExecuteAsync(handler,
+            new WorkspaceAuthorizationReadInput(Actor(), ReadOwnershipPosition(queryScope), linkId, "eligibility"), token)).Status));
 
-    /// <summary>配置读取先重验完整真实位置，再交同一对象管理服务。</summary>
-    [HttpGet("content/{linkId}/permissions"), RequireFeature("workspace.folder.authorize")]
+    /// <summary>完整配置仍需真实管理按钮和当前完整管理资格。</summary>
+    [HttpGet("content/{linkId}/permissions"), RequireFeature("workspace.folder.authorize"), ButtonBusinessHandler(typeof(WorkspaceAuthorizationReadHandler))]
     public Task<IResult> PermissionConfiguration(string linkId, [FromQuery] string? queryScope,
-        [FromServices] IDataScopeObjectAuthorization authorization, CancellationToken token) =>
-        WithPermissionTarget(linkId, queryScope, async target =>
+        [FromServices] WorkspaceAuthorizationReadHandler handler, CancellationToken token) =>
+        WithPermissionRequestAsync(async () =>
         {
-            var result = await authorization.ReadAsync(target.ResourceKey, target.ObjectId, WorkspacePermissionExecutions.Management("prepare"), token);
+            var result = await buttonBusiness.ExecuteAsync(handler,
+                new WorkspaceAuthorizationReadInput(Actor(), ReadOwnershipPosition(queryScope), linkId, "configuration"), token);
             return result.Status == DataScopeAuthorizationStatus.Succeeded ? Results.Ok(result.Value) : PermissionFailure(result.Status, result.Error);
-        }, [WorkspacePermissionExecutions.Management("prepare")], token);
+        });
 
-    /// <summary>完整配置目标由当前LID解析决定；保存成功不回读，避免自身失权后的泄漏或重放。</summary>
-    [HttpPut("content/{linkId}/permissions"), RequireFeature("workspace.folder.authorize")]
-    public async Task<IResult> ReplacePermissions(string linkId, [FromQuery] string? queryScope, DataScopeObjectConfiguration input,
-        [FromServices] IDataScopeObjectAuthorization authorization, CancellationToken token)
-    {
-        try
+    /// <summary>同一图锁及ACL保护内解析并保存；自身失权后不追加配置回读。</summary>
+    [HttpPut("content/{linkId}/permissions"), RequireFeature("workspace.folder.authorize"), ButtonBusinessHandler(typeof(WorkspaceAuthorizationSaveHandler))]
+    public Task<IResult> ReplacePermissions(string linkId, [FromQuery] string? queryScope, DataScopeObjectConfiguration input,
+        [FromServices] WorkspaceAuthorizationSaveHandler handler, CancellationToken token) =>
+        WithPermissionRequestAsync(async () =>
         {
-            var result = await contents.ReplacePermissionsAsync(Actor(), ReadOwnershipPosition(queryScope), linkId, input, authorization, token);
+            var result = await buttonBusiness.ExecuteAsync(handler,
+                new WorkspaceAuthorizationSaveInput(Actor(), ReadOwnershipPosition(queryScope), linkId, input), token);
             return result.Status == DataScopeAuthorizationStatus.Succeeded ? Results.NoContent() : PermissionFailure(result.Status, result.Error);
-        }
+        });
+
+    // 仅翻译原请求/来源错误，不捕获裁决、持久化或取消故障。
+    private static async Task<IResult> WithPermissionRequestAsync(Func<Task<IResult>> operation)
+    {
+        try { return await operation(); }
         catch (ActionDataAccessException exception) { return Results.Problem(statusCode: exception.Status, title: exception.Message, extensions: new Dictionary<string, object?> { ["code"] = exception.Code }); }
         catch (JsonException) { return LinkQueryEndpointExtensions.Problem(new LinkQueryException(400, "Workspace.InvalidPosition")); }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }

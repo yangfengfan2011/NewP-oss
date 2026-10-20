@@ -75,6 +75,8 @@ public sealed class DocumentModule : ModuleCapsuleBindingBase
             provider.GetRequiredService<ICP.Platform.Persistence.Ownership.IAccountOwnershipDirectory>()));
         services.AddObjectBehavior<DocumentObjectBehavior>(this, DocumentObjectBehavior.BehaviorDefinition);
         services.AddObjectBehavior<DocumentCopyBehavior>(this, DocumentCopyBehavior.BehaviorDefinition);
+        services.AddScoped<DocumentAuthorizationSaveHandler>();
+        services.AddScoped<DocumentAuthorizationReadHandler>();
         services.AddScoped<DocumentInitialIdentity>();
         services.AddOptions<DocumentOptions>().BindConfiguration("Document")
             .Validate(options => options.MaxAttachmentsPerDocument is >= 0 and <= 100

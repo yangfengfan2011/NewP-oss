@@ -28,7 +28,7 @@ public sealed partial class WorkspaceContents
     /// <summary>沿真实可读图分层分页并按EID访问一次Folder；共享路径不指数展开，筛选仍由现查询内核下推。</summary>
     public ValueTask<WorkspaceBatchPermissionCollection> PrepareBatchPermissionsAsync(string actor,
         IReadOnlyList<WorkspaceBatchPermissionSource> sources, bool includeDescendants, WorkspaceBatchPermissionFilters? filters,
-        IDataScopeObjectAuthorization authorization, IDataScopeObjectPermissionQueries queries, CancellationToken token) =>
+        IDataScopeObjectPermissionQueries queries, CancellationToken token) =>
         transactions.ExecuteAsync<WorkspaceBatchPermissionCollection>(async cancellation =>
         {
             if (sources is null || sources.Count == 0) throw new LinkQueryException(400, "Workspace.InvalidSelection");
@@ -37,9 +37,8 @@ public sealed partial class WorkspaceContents
                 || filters?.CreatedBy is { } creator && (string.IsNullOrWhiteSpace(creator) || creator.Length > 128)
                 || filters?.OwnerId is { } owner && (string.IsNullOrWhiteSpace(owner) || owner.Length > 128))
                 throw new LinkQueryException(400, "Workspace.InvalidSelection");
-            ValidatePermissionSources([WorkspacePermissionExecutions.Batch("prepare")]);
-            // 可空筛选结果也消费真实prepare角色的0基数；不把空结果变成缺声明的回退。
-            await foreach (var _ in executionAccess.EvaluateObjectsAsync(WorkspacePermissionExecutions.Batch("prepare"), "target", [], cancellation)) { }
+            // 可空筛选仍先核输入显式引用的真实读取来源；管理资格在各实际候选上独立重验。
+            ValidatePermissionSources(WorkspacePermissionExecutions.ViewSources);
             await LockGraphAsync(cancellation);
             var items = new Dictionary<DataScopeAuthorizationTarget, WorkspaceBatchPermissionItem>();
             var visited = new HashSet<string>(StringComparer.Ordinal);
@@ -66,7 +65,7 @@ public sealed partial class WorkspaceContents
             var catalogs = new List<WorkspaceBatchPermissionCatalog>();
             foreach (var group in ordered.GroupBy(item => item.ResourceKey))
             {
-                var value = await queries.CatalogAsync(group.Key, group.First().ObjectId, [WorkspacePermissionExecutions.Batch("prepare")], cancellation)
+                var value = await queries.CatalogAsync(group.Key, group.First().ObjectId, WorkspacePermissionExecutions.ViewSources, cancellation)
                     ?? throw new LinkQueryException(404, "Workspace.TargetUnavailable");
                 catalogs.Add(new(group.Key, value.Actions, value.SubjectTypes));
             }
@@ -79,10 +78,10 @@ public sealed partial class WorkspaceContents
                 {
                     var key = new DataScopeAuthorizationTarget(Resource(row.AssociatedObject.ModelKey), row.AssociatedObject.Id);
                     if (items.ContainsKey(key)) continue;
-                    var status = await authorization.CheckAsync(key.ResourceKey, key.ObjectId, WorkspacePermissionExecutions.Batch("prepare"), cancellation);
-                    if (status == DataScopeAuthorizationStatus.NotFound) continue;
+                    var status = await objectActions.CheckAsync(row.AssociatedObject.ModelKey, key.ObjectId, ["read", "authorize"], cancellation);
+                    if (status == DataExecutionDecision.NotFound) continue;
                     items.Add(key, new(key.ResourceKey, key.ObjectId, row.Fields["Name"] as string ?? "", row.Fields["Code"] as string,
-                        status == DataScopeAuthorizationStatus.Succeeded, new(position, [row.LinkId])));
+                        status == DataExecutionDecision.Allowed, new(position, [row.LinkId])));
                 }
             }
 

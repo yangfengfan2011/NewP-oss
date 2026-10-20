@@ -29,16 +29,15 @@ public sealed partial class WorkspaceContents
         return await queries.InspectAsync(target.ResourceKey, target.ObjectId, accountId, WorkspacePermissionExecutions.ViewSources, token);
     }
 
-    /// <summary>真实来源与授权替换共用图事务；先锁图，再解析当前LID及取得对象ACL锁，避免移除来源交错提交。</summary>
-    public ValueTask<DataScopeAuthorizationResult> ReplacePermissionsAsync(string actor, WorkspacePosition position, string linkId,
-        DataScopeObjectConfiguration configuration, IDataScopeObjectAuthorization authorization, CancellationToken token) =>
+    // 原图事务贯穿目标解析、全部ACL锁和保存；按钮检查与真正提交共用同一规范对象。
+    internal Task<DataScopeAuthorizationResult> WithinPermissionWriteAsync(string actor, WorkspacePosition position, string linkId,
+        Func<(string ResourceKey, string ObjectId), CancellationToken, Task<DataScopeAuthorizationResult>> execute, CancellationToken token) =>
         transactions.ExecuteAsync<DataScopeAuthorizationResult>(async cancellation =>
         {
-            ValidatePermissionSources([WorkspacePermissionExecutions.Management("submit")]);
             await LockGraphAsync(cancellation);
             var target = await ResolvePermissionTargetAsync(actor, position, linkId, cancellation);
-            return await authorization.ReplaceAsync(target.ResourceKey, target.ObjectId, configuration, WorkspacePermissionExecutions.Management("submit"), cancellation);
-        }, token);
+            return await execute(target, cancellation);
+        }, token).AsTask();
 
     // 所有权限操作每次重解完整位置和当前LID，不把首次加载后的裸EID当来源证明。
     internal async Task<(string ResourceKey, string ObjectId)> ResolvePermissionTargetAsync(string actor, WorkspacePosition position, string linkId, CancellationToken token)

@@ -4,6 +4,7 @@ using ICP.Platform.Kernel.ModulePlanning;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Persistence.EfCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore;
 using ICP.Platform.Presentation;
 
 namespace ICP.Platform.Modules.Authorization.Services;
@@ -61,6 +62,14 @@ public sealed class DataScopeCatalog(IStandardCrudResourceRegistry resources, Ca
     /// <summary>定位明确登记的资源；不从模型名或页面猜测身份。</summary>
     public DataScopeResource Resolve(string key) => Resources.SingleOrDefault(resource => resource.ResourceKey == key)
         ?? throw new RolePermissionValidationException("数据资源未登记。", "DATA_SCOPE_RESOURCE_UNKNOWN", field: "resourceKey");
+
+    // 规范授权目标不要求公开普通CRUD；事实仍来自已验证owner/model/IdField的实际对象行。
+    internal async Task<IReadOnlyDictionary<string, object?>?> ReadObjectAsync(string resourceKey, string objectId, CancellationToken token)
+    {
+        var resource = Resolve(resourceKey);
+        return await db.Set<Dictionary<string, object?>>(db.ResolveModelKey(resource.ModelKey)).AsNoTracking()
+            .SingleOrDefaultAsync(row => EF.Property<string>(row, resource.IdField) == objectId, token);
+    }
 
     /// <summary>返回正式模型的原始规范字段，不包含 Display companion。</summary>
     public IReadOnlyList<IProperty> Fields(string key)

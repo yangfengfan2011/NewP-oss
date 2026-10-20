@@ -40,6 +40,7 @@ public sealed class PartModule : ModuleCapsuleBindingBase
             ICP.Platform.Modules.Audit.Contracts.ObjectHistoryTargetFormat.ObjectId, "Part.HistoryDeleted")
         { TextSnapshot = new("ObjectName", "ObjectCode") });
         services.AddScoped<PartAuthorizationSaveHandler>();
+        services.AddScoped<PartAuthorizationReadHandler>();
         services.AddStandardCrudKernel();
         services.TryAddScoped<ICP.Platform.Crud.Ownership.EntityOwnershipTransfer>();
         services.AddStandardCrudResource(provider =>

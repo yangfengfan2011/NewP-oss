@@ -100,7 +100,7 @@
     ],
     "featureActions": [
       { "key": "authorize", "titleKey": "Action_Authorize", "behaviorKey": "identity.account.authorize",
-        "dataAccess": { "execution": "identity.account.authorization.manage", "resources": ["identity.account"] } }
+        "dataAccess": {"object":"IdentityAccount","actions":["authorize"]} }
     ]
   }
 }

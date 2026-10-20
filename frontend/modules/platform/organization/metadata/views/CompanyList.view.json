@@ -106,7 +106,7 @@
       {
         "key": "authorize",
         "labelKey": "Action_Authorize",
-        "handlerKey": "authorize", "dataAccess": { "execution": "organization.company.authorization.manage", "resources": ["organization.company"] },
+        "handlerKey": "authorize", "dataAccess": {"object":"Company","actions":["authorize"]},
         "inputKey": "objectAuthorization",
         "confirmLabelKey": "Action_SaveAuthorization"
       },

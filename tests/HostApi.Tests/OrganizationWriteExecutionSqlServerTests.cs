@@ -163,6 +163,28 @@ public sealed class OrganizationWriteExecutionSqlServerTests
         }
     }
 
+    /// <summary>正式永久绑定准备不因基础删除迁移而失去保护，失败没有实体、审计或缓存副作用。</summary>
+    [EnvironmentGatedFact("NEWP_RUN_ORGANIZATION_SQLSERVER_INTEGRATION", "有效人员删除按钮仍拒绝永久绑定人员且不提交任何变化")]
+    public async Task PersonDeleteButton_PreservesThePermanentBindingGuard()
+    {
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync();
+        using var admin = await fixture.LoginAdministratorAsync();
+        var http = new FeatureHttpTestRequests(fixture);
+        var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "BoundDelete325", "永久绑定删除保护",
+            "bound-delete-325", "受保护人员", http.Organization("persons"));
+        using var ordinary = actor.Client;
+        var query = fixture.Services.GetRequiredService<IOrganizationQuery>();
+        var bound = (await query.ReadAsync()).FindByAccount(actor.AccountId)!;
+        var id = Assert.IsType<string>(bound.Person["EID"]);
+        var delete = http.Organization("persons", "delete", "list.rowActions");
+        var before = await SnapshotAsync(fixture);
+        using var response = await FeatureHttpTestRequests.SendAsync(admin, delete, HttpMethod.Delete,
+            "/api/organization/persons/" + id, dataAccess: http.Declaration("organization.person.delete", delete));
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal(before, await SnapshotAsync(fixture));
+        Assert.Equal(id, (await query.ReadAsync()).FindByAccount(actor.AccountId)!.Person["EID"]);
+    }
+
     private static OrganizationRecordKind Kind(string resource) => Enum.Parse<OrganizationRecordKind>(resource.Split('.')[1], true);
 
     private static async Task<string> SnapshotAsync(BusinessAuditHostFixture fixture)

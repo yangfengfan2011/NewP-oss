@@ -45,7 +45,7 @@ public sealed class EntityOwnershipTransferNotificationSqlServerHttpApiTests
             + Uri.EscapeDataString(JsonSerializer.Serialize(position, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
         using (var denied = await new FeatureHttpTestRequests(fixture).SendButtonAsync(admin, manage, HttpMethod.Put, originalUrl,
                    new DataScopeObjectDto("workspace.folder", target.Id, [new("deny-notification-recipient", "user", recipient.AccountId, 0,
-                       new Dictionary<string, string> { ["read"] = "deny" })]), OwnershipDeclaration(fixture, "workspace.content.authorization.manage", manage)))
+                       new Dictionary<string, string> { ["read"] = "deny" })])))
             Assert.True(denied.StatusCode == HttpStatusCode.NoContent, await denied.Content.ReadAsStringAsync());
         using (var stale = await FeatureHttpTestRequests.SendAsync(recipientClient, browse, HttpMethod.Get, sourceUrl, dataAccess: OwnershipReadDeclaration(fixture, "workspace.properties.read", browse, "workspace.content.receivedProperties")))
             Assert.Equal(HttpStatusCode.NotFound, stale.StatusCode);

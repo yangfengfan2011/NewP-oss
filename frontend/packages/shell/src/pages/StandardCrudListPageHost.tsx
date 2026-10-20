@@ -109,6 +109,8 @@ interface CrudDrawerState {
   mode: CrudDrawerMode;
   id?: string;
   source: 'user-action' | 'route-compatibility';
+  editAction?: StandardCrudRuntimeActionSchema;
+  editActionScope?: 'list.rowActions' | 'detail.pageActions';
 }
 
 interface StandardCrudDrawerFormSchema {
@@ -1007,11 +1009,11 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const [drawerState, setDrawerState] = useState<CrudDrawerState>(CLOSED_DRAWER_STATE);
   const drawerActionResolution = features.action(
     drawerState.mode === 'create' ? 'create' : 'edit',
-    drawerState.mode === 'create' ? 'list.pageActions' : 'list.rowActions',
+    drawerState.mode === 'create' ? 'list.pageActions' : drawerState.editActionScope ?? 'list.rowActions',
   );
   const drawerDataAccess = (drawerState.mode === 'create'
     ? schema.pageActions.find(action => action.standardAction === 'create')
-    : schema.rowActions.find(action => action.standardAction === 'edit'))?.dataAccess;
+    : drawerState.editAction ?? schema.rowActions.find(action => action.standardAction === 'edit'))?.dataAccess;
   const drawerDetailQuery = useStandardCrudDetailQuery({
     resourceKey: registration.resourceKey,
     id: drawerState.mode === 'view' || drawerState.mode === 'edit' ? drawerState.id : null,
@@ -1615,9 +1617,9 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
   const openViewDrawer = async (
     id: string,
     source: CrudDrawerState['source'] = 'user-action',
-    options: { syncRoute?: boolean; targetMode?: 'view' | 'edit' } = {},
+    options: { syncRoute?: boolean; targetMode?: 'view' | 'edit'; editAction?: StandardCrudRuntimeActionSchema; editActionScope?: 'list.rowActions' | 'detail.pageActions' } = {},
   ): Promise<boolean> => {
-    setDrawerState({ mode: options.targetMode ?? 'view', id, source });
+    setDrawerState({ mode: options.targetMode ?? 'view', id, source, editAction: options.editAction, editActionScope: options.editActionScope });
     setCreateFormValues({});
     initialCreateValuesRef.current = {};
     if (source === 'user-action') drawerTriggerRef.current = document.activeElement as HTMLElement | null;
@@ -1640,11 +1642,11 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
     }
   };
 
-  const openEditDrawer = async (id: string, source: CrudDrawerState['source'] = 'user-action') => {
+  const openEditDrawer = async (id: string, source: CrudDrawerState['source'] = 'user-action', editAction?: StandardCrudRuntimeActionSchema) => {
     if (source === 'user-action') {
       syncDrawerRoute('edit', id);
     }
-    const loaded = await openViewDrawer(id, source, { syncRoute: false, targetMode: 'edit' });
+    const loaded = await openViewDrawer(id, source, { syncRoute: false, targetMode: 'edit', editAction, editActionScope: editAction ? 'detail.pageActions' : 'list.rowActions' });
     if (!loaded) {
       return;
     }
@@ -1668,7 +1670,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
       mode: drawerState.mode === 'create' ? 'create' : 'edit',
       featurePosition: resolvedFeaturePosition(drawerActionResolution),
       dataAccess: drawerDataAccess,
-      buttonId: (drawerState.mode === 'create' ? schema.pageActions : schema.rowActions)
+      buttonId: drawerState.editAction?.buttonId ?? (drawerState.mode === 'create' ? schema.pageActions : schema.rowActions)
         .find(action => action.standardAction === (drawerState.mode === 'create' ? 'create' : 'edit'))?.buttonId,
       id: drawerState.id,
       fields: drawerState.mode === 'create' ? createFields : editFields,
@@ -2251,11 +2253,13 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
         row: drawerRow,
       })
     : undefined;
+  const detailEditAction = resolvedDrawerDetailSchema?.pageActions.find(action => action.standardAction === 'edit');
+  const detailButtonAction = detailEditAction?.buttonId ? detailEditAction : undefined;
   const canEdit = Boolean(
     editAction
     && drawerDetailPresentation?.kind === 'ready'
     && !drawerDetailQuery.refreshing
-    && allowAction(editAction)
+    && (detailButtonAction ? features.action(detailButtonAction.key, 'detail.pageActions').kind === 'allowed' : allowAction(editAction))
     && drawerEditActionState?.visible !== false
     && drawerEditActionState?.available !== false,
   );
@@ -2513,7 +2517,7 @@ function StandardCrudListPageContent<TFilter extends Record<string, unknown>, TR
             ) : undefined}
             onChange={handleFormChange}
             onEdit={() => {
-              if (drawerState.id) void openEditDrawer(drawerState.id);
+              if (drawerState.id) void openEditDrawer(drawerState.id, 'user-action', detailButtonAction);
             }}
             onSubmit={() => void handleDrawerSave()}
             onClose={requestCloseDrawer}

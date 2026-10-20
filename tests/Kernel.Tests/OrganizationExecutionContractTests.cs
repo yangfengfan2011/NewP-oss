@@ -46,7 +46,7 @@ public sealed class OrganizationExecutionContractTests
             var execution = "organization." + resource + "." + operation;
             if (resource == "position" && operation == "update")
             {
-                var button = Assert.Single(result.Plan!.ActionDataAccessCatalog, item => item.BusinessBinding == execution);
+                var button = Assert.Single(result.Plan!.ActionDataAccessCatalog, item => item.BusinessBinding == execution && item.Surface == "rowActions");
                 Assert.Equal("Position", button.Object);
                 Assert.Equal(new[] { "edit" }, button.Actions);
                 Assert.Null(button.Requirements);
@@ -80,6 +80,17 @@ public sealed class OrganizationExecutionContractTests
             new ModuleCapsuleCandidateReader().ReadBuiltIn(Path.Combine(AppContext.BaseDirectory, "modules")));
         Assert.True(result.IsSuccess, JsonSerializer.Serialize(result.Diagnostics));
         var requirements = result.Plan!.ActionDataAccessCatalog.Where(item => item.ModuleId == "Organization").ToArray();
+        var positionButtons = requirements.Where(item => item.BusinessBinding == "organization.position.update").ToArray();
+        Assert.Equal(new[] { "pageActions", "rowActions" }, positionButtons.Select(item => item.Surface).Order());
+        Assert.All(positionButtons, item => Assert.Equal("Position", item.Object));
+        Assert.Empty(positionButtons[0].FeaturePositions.Intersect(positionButtons[1].FeaturePositions));
+        var positions = requirements.Where(item => item.ViewKey is "organization.position.list" or "organization.position.detail")
+            .SelectMany(item => item.FeaturePositions).ToHashSet(StringComparer.Ordinal);
+        var featureJson = JsonSerializer.Serialize(result.Plan.FeatureCatalog.Where(item => positions.Contains(item.Position)
+                || positions.Any(position => position.StartsWith(item.Position + "/", StringComparison.Ordinal))),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
+        if (Environment.GetEnvironmentVariable("NEWP_POSITION_BUTTON_FEATURES_EXPORT") is { Length: > 0 } featureExport)
+            File.WriteAllText(featureExport, featureJson.Replace("\r\n", "\n").Replace("\n", "\r\n"));
         if (Environment.GetEnvironmentVariable("NEWP_ORGANIZATION_FEATURE_SNAPSHOT") is { Length: > 0 } snapshot)
             File.WriteAllText(snapshot, JsonSerializer.Serialize(new { FeatureCatalog = result.Plan.FeatureCatalog }));
         var sources = new[] { "organization.person.company.lookup", "organization.person.department.lookup",
@@ -91,6 +102,8 @@ public sealed class OrganizationExecutionContractTests
         Assert.Equal(new[] { "organization.company", "organization.department", "organization.person" }, role.Resources);
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "AGENTS.md"))) root = root.Parent;
+        Assert.Equal(JsonSerializer.Serialize(JsonSerializer.Deserialize<JsonElement>(featureJson)), JsonSerializer.Serialize(JsonSerializer.Deserialize<JsonElement>(
+            File.ReadAllText(Path.Combine(root!.FullName, "tests", "Kernel.Tests", "Fixtures", "PositionButtonFeatures.contract.json")))));
         var json = JsonSerializer.Serialize(requirements, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
         if (Environment.GetEnvironmentVariable("NEWP_ORGANIZATION_DATA_ACCESS_FIXTURE_EXPORT") is { Length: > 0 } export)
             File.WriteAllText(export, json.Replace("\r\n", "\n").Replace("\n", "\r\n"));

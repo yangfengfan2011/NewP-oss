@@ -383,6 +383,7 @@
     ],
     "featurePositions": [
       "Organization/navigation:organization/navigation:organization.structure/tab:positions",
+      "Organization/navigation:organization/navigation:organization.structure/tab:positions/surface:detail.pageActions/action:edit",
       "Organization/navigation:organization/navigation:organization.structure/tab:positions/surface:list.rowActions/action:edit"
     ],
     "requirements": [

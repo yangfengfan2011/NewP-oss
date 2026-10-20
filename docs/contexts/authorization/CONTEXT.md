@@ -70,7 +70,7 @@ _Avoid_: 角色详情授权弹窗、角色基础信息编辑、用户角色分�
 
 本节目标及其与现有执行合同的替代范围见 [ADR-0057](../../adr/0057-buttons-declare-object-actions-and-business-inputs-own-targets.md)。岗位列表与查看 Drawer 的编辑已采用 `dataAccess: { object: "Position", actions: ["edit"] }`；其他按钮及所有查询来源继续使用各自现行协议，不因声明解析失败切换路径。
 
-Kernel 从按钮结构派生身份、业务绑定和合法功能位置，运行时投影由平台生成。SDK 传递 `X-NewP-Button` 与 `X-NewP-Feature`，服务端 `IButtonExecutionAccess` 核对活动声明、真实端点业务绑定和正式目标，全部要求允许后调用业务；新旧身份混写、缺失、未知或串用均拒绝。未配置数据要求的已登记业务按钮同样有身份，不自动追加对象动作。
+Kernel 从按钮结构派生身份、业务绑定和合法功能位置，运行时投影由平台生成。SDK 传递 `X-NewP-Button` 与 `X-NewP-Feature`，服务端 `IButtonExecutionAccess` 核对活动声明、真实端点业务绑定和正式目标，全部要求允许后调用业务；新旧身份混写、缺失、未知或串用均拒绝。未配置数据要求的已登记业务按钮同样有身份，不自动追加对象动作。岗位详情编辑沿真实 List 到 Detail 引用展开独立 detail.pageActions 位置；列表与详情各自传递实际按钮身份和功能位置，交叉串用拒绝。已有列表资格不隐式授予新增详情动作。
 
 `IObjectActionAccess.CheckAsync(objectName, objectId, actions)` 是 Authorization 拥有的通用接口，不要求执行合同；逐动作复用完整读取约束、动作启停和原对象裁决，全部允许才成功，依赖故障传播。岗位编辑在原事务内保护读取旧值，以路由目标与旧值 EID 核验后进入该管线；写后读取仍只决定详情或成功回执。下文执行合同说明适用于尚未迁移的入口与独立读取来源。
 

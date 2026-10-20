@@ -1457,6 +1457,25 @@
     "businessBinding": "organization.person.enable"
   },
   {
+    "id": "Organization/view:organization.position.detail/pageActions/action:edit",
+    "moduleId": "Organization",
+    "viewKey": "organization.position.detail",
+    "surface": "pageActions",
+    "actionKey": "edit",
+    "execution": "",
+    "resources": [
+      "organization.position"
+    ],
+    "actions": [
+      "edit"
+    ],
+    "featurePositions": [
+      "Organization/navigation:organization/navigation:organization.structure/tab:positions/surface:detail.pageActions/action:edit"
+    ],
+    "object": "Position",
+    "businessBinding": "organization.position.update"
+  },
+  {
     "id": "Organization/view:organization.position.detail/read",
     "moduleId": "Organization",
     "viewKey": "organization.position.detail",
@@ -1471,6 +1490,7 @@
     ],
     "featurePositions": [
       "Organization/navigation:organization/navigation:organization.structure/tab:positions",
+      "Organization/navigation:organization/navigation:organization.structure/tab:positions/surface:detail.pageActions/action:edit",
       "Organization/navigation:organization/navigation:organization.structure/tab:positions/surface:list.rowActions/action:edit"
     ],
     "requirements": [

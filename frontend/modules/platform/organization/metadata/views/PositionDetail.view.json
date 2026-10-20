@@ -10,6 +10,9 @@
     "mode": "detail",
     "model": "Position",
     "resourceKey": "organization.position",
+    "pageActions": [
+      { "key": "edit", "labelKey": "Action_Edit", "standardAction": "edit", "dataAccess": { "object": "Position", "actions": ["edit"] } }
+    ],
     "sections": [
       {
         "key": "basic",

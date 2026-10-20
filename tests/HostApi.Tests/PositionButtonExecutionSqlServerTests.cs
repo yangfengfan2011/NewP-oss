@@ -34,6 +34,24 @@ public sealed class PositionButtonExecutionSqlServerTests
         using var response = await admin.SendAsync(request);
         Assert.True(response.StatusCode == HttpStatusCode.OK, $"{response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
         var path = "/api/organization/positions/" + id;
+        var detailFeature = http.Organization("positions", "edit", "detail.pageActions");
+        var detailButton = plan.ActionDataAccessCatalog.Single(item => item.ViewKey == "organization.position.detail" && item.ActionKey == "edit");
+        using (var rejected = await SendAsync(admin, detailFeature, path, button.Id, new { ENAME = "列表身份不得借详情位置" }))
+            Assert.Equal(HttpStatusCode.Forbidden, rejected.StatusCode);
+        using (var rejected = await SendAsync(admin, edit, path, detailButton.Id, new { ENAME = "详情身份不得借列表位置" }))
+            Assert.Equal(HttpStatusCode.Forbidden, rejected.StatusCode);
+        using (var detailWrite = await SendAsync(admin, detailFeature, path, detailButton.Id, new { ENAME = "按钮编辑成功323" }))
+            Assert.Equal(HttpStatusCode.OK, detailWrite.StatusCode);
+        // 同一业务的两个按钮独立赋权；合法详情身份不能继承仅授予列表按钮的主体资格。
+        var rowActor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "ButtonRowOnly323", "仅岗位列表编辑",
+            "button-row-only-323", "岗位列表用户", [http.Organization("positions"), edit]);
+        using (var ordinary = rowActor.Client)
+        {
+            using var denied = await SendAsync(ordinary, detailFeature, path, detailButton.Id, new { ENAME = "不得隐式授予详情编辑" });
+            Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+            using var allowed = await SendAsync(ordinary, edit, path, button.Id, new { ENAME = "按钮编辑成功323" });
+            Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
+        }
         using (var missingFeature = new HttpRequestMessage(HttpMethod.Put, path))
         {
             missingFeature.Headers.Add("X-NewP-Button", button.Id);

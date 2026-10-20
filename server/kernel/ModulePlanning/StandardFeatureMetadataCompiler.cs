@@ -117,7 +117,13 @@ public static class StandardFeatureMetadataCompiler
                 BindRead(owner, resource + ".read");
                 BindDataResource(owner, view, resource);
                 DataAccess(view, view, "read", "", owner);
-                if (mode == "list") BindDetailRead(view, owner);
+                if (mode == "list")
+                {
+                    BindDetailRead(view, owner);
+                    // 新协议详情按钮沿真实List→Detail关系拥有独立位置；旧详情来源逐片迁移，不能凭呈现复用行按钮身份。
+                    if (Optional(view, "detailViewKey") is { } detailKey && views.TryGetValue(detailKey, out var detail))
+                        Actions(detail, "pageActions", owner, scope, resource, newButtonsOnly: true);
+                }
                 if (view.TryGetProperty("outputActions", out var outputs))
                 {
                     if (outputs.EnumerateArray().GroupBy(output => Text(output, "key"), StringComparer.Ordinal).Any(group => group.Count() > 1))
@@ -182,7 +188,7 @@ public static class StandardFeatureMetadataCompiler
         }
 
         // 查看、排序等纯交互随入口；真实业务动作仍使用稳定动作键。
-        void Actions(JsonElement view, string property, string owner, string? scope, string resource)
+        void Actions(JsonElement view, string property, string owner, string? scope, string resource, bool newButtonsOnly = false)
         {
             if (!view.TryGetProperty(property, out var actions)) return;
             if (actions.EnumerateArray().GroupBy(action => Text(action, "key"), StringComparer.Ordinal)
@@ -190,6 +196,7 @@ public static class StandardFeatureMetadataCompiler
                 throw new InvalidOperationException("按钮声明身份冲突。");
             foreach (var action in actions.EnumerateArray())
             {
+                if (newButtonsOnly && (!action.TryGetProperty("dataAccess", out var buttonAccess) || !buttonAccess.TryGetProperty("object", out _))) continue;
                 // 普通快捷跳转复用目标资格；标准行查看可沿当前读取资格进入无独立授权的呈现页。
                 if (Optional(action, "navigationTargetKey") is { } target)
                 {

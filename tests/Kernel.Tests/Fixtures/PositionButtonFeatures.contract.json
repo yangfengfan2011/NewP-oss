@@ -1,0 +1,191 @@
+[
+  {
+    "position": "Organization/navigation:organization",
+    "moduleId": "Organization",
+    "key": "organization",
+    "kind": "navigation",
+    "title": "\u7EC4\u7EC7\u7ED3\u6784",
+    "parentPosition": null,
+    "behaviorKey": "",
+    "entryDependencies": [],
+    "order": 0,
+    "referenceKey": "navigation:organization",
+    "staticScope": null,
+    "staticScopeTitle": null,
+    "titleKey": "Navigation.Organization",
+    "staticScopeTitleKey": null,
+    "actionScope": null,
+    "readBehaviors": [],
+    "container": true
+  },
+  {
+    "position": "Organization/navigation:organization/navigation:organization.structure",
+    "moduleId": "Organization",
+    "key": "organization.structure",
+    "kind": "navigation",
+    "title": "\u7EC4\u7EC7\u7BA1\u7406",
+    "parentPosition": "Organization/navigation:organization",
+    "behaviorKey": "",
+    "entryDependencies": [
+      "Organization/navigation:organization"
+    ],
+    "order": 0,
+    "referenceKey": "navigation:organization.structure",
+    "staticScope": null,
+    "staticScopeTitle": null,
+    "titleKey": "Navigation.OrganizationManagement",
+    "staticScopeTitleKey": null,
+    "actionScope": null,
+    "readBehaviors": [],
+    "container": true
+  },
+  {
+    "position": "Organization/navigation:organization/navigation:organization.structure/tab:positions",
+    "moduleId": "Organization",
+    "key": "positions",
+    "kind": "tab",
+    "title": "\u5C97\u4F4D",
+    "parentPosition": "Organization/navigation:organization/navigation:organization.structure",
+    "behaviorKey": "organization.position.read",
+    "entryDependencies": [
+      "Organization/navigation:organization",
+      "Organization/navigation:organization/navigation:organization.structure"
+    ],
+    "order": 0,
+    "referenceKey": "navigation:organization.structure/tab:positions",
+    "staticScope": null,
+    "staticScopeTitle": null,
+    "titleKey": "OrganizationComposition.Position",
+    "staticScopeTitleKey": null,
+    "actionScope": null,
+    "readBehaviors": [
+      "organization.position.read"
+    ],
+    "container": false
+  },
+  {
+    "position": "Organization/navigation:organization/navigation:organization.structure/tab:positions/surface:detail.pageActions/action:edit",
+    "moduleId": "Organization",
+    "key": "edit",
+    "kind": "action",
+    "title": "\u7F16\u8F91",
+    "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:positions",
+    "behaviorKey": "organization.position.update",
+    "entryDependencies": [
+      "Organization/navigation:organization",
+      "Organization/navigation:organization/navigation:organization.structure",
+      "Organization/navigation:organization/navigation:organization.structure/tab:positions"
+    ],
+    "order": 0,
+    "referenceKey": "navigation:organization.structure/tab:positions/surface:detail.pageActions/action:edit",
+    "staticScope": null,
+    "staticScopeTitle": null,
+    "titleKey": "PositionDetailView.Action_Edit",
+    "staticScopeTitleKey": null,
+    "actionScope": "detail.pageActions",
+    "readBehaviors": [
+      "organization.position.read"
+    ],
+    "container": false
+  },
+  {
+    "position": "Organization/navigation:organization/navigation:organization.structure/tab:positions/surface:list.pageActions/action:create",
+    "moduleId": "Organization",
+    "key": "create",
+    "kind": "action",
+    "title": "\u65B0\u5EFA\u5C97\u4F4D",
+    "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:positions",
+    "behaviorKey": "organization.position.create",
+    "entryDependencies": [
+      "Organization/navigation:organization",
+      "Organization/navigation:organization/navigation:organization.structure",
+      "Organization/navigation:organization/navigation:organization.structure/tab:positions"
+    ],
+    "order": 0,
+    "referenceKey": "navigation:organization.structure/tab:positions/surface:list.pageActions/action:create",
+    "staticScope": null,
+    "staticScopeTitle": null,
+    "titleKey": "PositionListView.Action_Create",
+    "staticScopeTitleKey": null,
+    "actionScope": "list.pageActions",
+    "readBehaviors": [
+      "organization.position.read"
+    ],
+    "container": false
+  },
+  {
+    "position": "Organization/navigation:organization/navigation:organization.structure/tab:positions/surface:list.rowActions/action:authorize",
+    "moduleId": "Organization",
+    "key": "authorize",
+    "kind": "action",
+    "title": "\u5BF9\u8C61\u6388\u6743",
+    "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:positions",
+    "behaviorKey": "organization.position.authorize",
+    "entryDependencies": [
+      "Organization/navigation:organization",
+      "Organization/navigation:organization/navigation:organization.structure",
+      "Organization/navigation:organization/navigation:organization.structure/tab:positions"
+    ],
+    "order": 0,
+    "referenceKey": "navigation:organization.structure/tab:positions/surface:list.rowActions/action:authorize",
+    "staticScope": null,
+    "staticScopeTitle": null,
+    "titleKey": "PositionListView.Action_Authorize",
+    "staticScopeTitleKey": null,
+    "actionScope": "list.rowActions",
+    "readBehaviors": [
+      "organization.position.read"
+    ],
+    "container": false
+  },
+  {
+    "position": "Organization/navigation:organization/navigation:organization.structure/tab:positions/surface:list.rowActions/action:delete",
+    "moduleId": "Organization",
+    "key": "delete",
+    "kind": "action",
+    "title": "\u5220\u9664",
+    "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:positions",
+    "behaviorKey": "organization.position.delete",
+    "entryDependencies": [
+      "Organization/navigation:organization",
+      "Organization/navigation:organization/navigation:organization.structure",
+      "Organization/navigation:organization/navigation:organization.structure/tab:positions"
+    ],
+    "order": 0,
+    "referenceKey": "navigation:organization.structure/tab:positions/surface:list.rowActions/action:delete",
+    "staticScope": null,
+    "staticScopeTitle": null,
+    "titleKey": "PositionListView.Action_Delete",
+    "staticScopeTitleKey": null,
+    "actionScope": "list.rowActions",
+    "readBehaviors": [
+      "organization.position.read"
+    ],
+    "container": false
+  },
+  {
+    "position": "Organization/navigation:organization/navigation:organization.structure/tab:positions/surface:list.rowActions/action:edit",
+    "moduleId": "Organization",
+    "key": "edit",
+    "kind": "action",
+    "title": "\u7F16\u8F91",
+    "parentPosition": "Organization/navigation:organization/navigation:organization.structure/tab:positions",
+    "behaviorKey": "organization.position.update",
+    "entryDependencies": [
+      "Organization/navigation:organization",
+      "Organization/navigation:organization/navigation:organization.structure",
+      "Organization/navigation:organization/navigation:organization.structure/tab:positions"
+    ],
+    "order": 0,
+    "referenceKey": "navigation:organization.structure/tab:positions/surface:list.rowActions/action:edit",
+    "staticScope": null,
+    "staticScopeTitle": null,
+    "titleKey": "PositionListView.Action_Edit",
+    "staticScopeTitleKey": null,
+    "actionScope": "list.rowActions",
+    "readBehaviors": [
+      "organization.position.read"
+    ],
+    "container": false
+  }
+]

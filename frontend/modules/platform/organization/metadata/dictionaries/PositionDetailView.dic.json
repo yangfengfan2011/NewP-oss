@@ -2,6 +2,7 @@
   "schemaVersion": "1.0",
   "type": "dic",
   "PositionDetailView": {
+    "Action_Edit": { "zhs": "编辑", "en": "Edit" },
     "Section_Basic": {
       "zhs": "基本信息",
       "en": "Basic Information"

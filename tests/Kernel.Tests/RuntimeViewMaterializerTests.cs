@@ -12,6 +12,20 @@ namespace ICP.Platform.Kernel.Tests;
 [Trait("Category", "ModuleMetadataConsumer")]
 public class RuntimeViewMaterializerTests : IDisposable
 {
+    [Fact]
+    public void Project_RealPosition_ProducesButtonHostRuntimeContract()
+    {
+        var sourcePath = Path.Combine(ICP.Platform.Modeling.Metadata.ModuleAuthoringPaths.ResolveModuleRoot(FindRepositoryRoot(), "Organization"),
+            "metadata", "models", "Position.model.json");
+        var authoring = File.ReadAllBytes(sourcePath);
+        var runtime = new ModelRuntimeMetadataProjector().Project(authoring, sourcePath);
+        var contract = Path.Combine(FindRepositoryRoot(), "tests", "Kernel.Tests", "Fixtures", "PositionRuntime.contract.json");
+        if (Environment.GetEnvironmentVariable("NEWP_POSITION_MODEL_FIXTURE_EXPORT") == "1")
+            File.WriteAllText(contract, Encoding.UTF8.GetString(runtime).Replace("\r\n", "\n").Replace("\n", "\r\n"));
+        else Assert.True(JsonNode.DeepEquals(JsonNode.Parse(File.ReadAllBytes(contract)), JsonNode.Parse(runtime)));
+        Assert.Equal(authoring, File.ReadAllBytes(sourcePath));
+    }
+
     private readonly UnifiedPluginPackageTestData _testData;
     private readonly List<string> _installRoots = new();
 

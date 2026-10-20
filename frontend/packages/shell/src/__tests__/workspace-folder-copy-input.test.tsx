@@ -16,6 +16,13 @@ function copyContext(actionKey: string) {
   const dataAccess = (compiled.declarations as ActionDataAccessRequirement[]).find(item => item.viewKey === 'workspace.folder.list' && item.surface === 'pageActions' && item.actionKey === actionKey)!;
   return { action: { key: actionKey, labelKey: '粘贴文件夹副本', dataAccess }, featurePosition: dataAccess.featurePositions.find(position => position.includes('/surface:list.pageActions/'))! };
 }
+// 共享选择使用真实行复制按钮；副本输入继续消费自己的独立旧来源。
+function selectionContext() {
+  const declaration = (compiled.declarations as ActionDataAccessRequirement[]).find(item => item.viewKey === 'workspace.folder.list' && item.surface === 'rowActions' && item.actionKey === 'copy')!;
+  const action = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderList.view.json').view.rowActions.find((item: { key: string }) => item.key === 'copy')!;
+  return { action: { ...action, buttonId: declaration.id }, buttonId: declaration.id,
+    featurePosition: declaration.featurePositions.find(position => position.includes('/surface:list.rowActions/'))! };
+}
 const source = { spaceId: 'public', rootFolderId: 'root', linkIds: '[]' };
 const target = { ...source, linkIds: '["target-link"]' };
 const dictionary = readComponentJson('Workspace', 'metadata/dictionaries/Workspace.dic.json').Workspace as Record<string, { zhs: string }>;
@@ -30,7 +37,7 @@ it.each((['pasteFolderCopy', 'pasteFolderStructure'] as const).flatMap(action =>
     ? { sourceName: '来源', sourcePath: ['公共空间', '来源'], targetPath: ['公共空间', '目标'] }
     : { items: [{ linkId: 'source-link', modelKey: 'WorkspaceFolder' }] })));
   const instance = new ActionInstanceScope(); const dispose = instance.activate(); const cancel = vi.fn(); let draft: unknown;
-  await resource.actionHandlers!.copy({ instance, id: 'source-link', queryScope: source, featurePosition: 'copy' });
+  await resource.actionHandlers!.copy({ instance, id: 'source-link', queryScope: source, ...selectionContext() });
   function Harness({ scope = target }: { scope?: Record<string, unknown> }) {
     const [value, setValue] = useState<unknown>(); draft = value;
     return <StandardCrudActionReviewDialog instance={instance} {...copyContext(actionKey)} title="粘贴文件夹副本"
@@ -46,7 +53,7 @@ it.each((['pasteFolderCopy', 'pasteFolderStructure'] as const).flatMap(action =>
     expect(document.body.textContent).toContain('提交时会重新读取来源内容');
     expect(document.body.textContent).toContain(actionKey === 'pasteFolderStructure' ? '仅复制文件夹，保留副本内部共享关系' : '全部直接子内容仍共享原对象');
     if (change === 'position') await act(async () => root.render(<Harness scope={{ ...target, linkIds: '["elsewhere"]' }} />));
-    else if (change === 'snapshot') await act(async () => resource.actionHandlers!.copy({ instance, id: 'source-link', queryScope: source, featurePosition: 'copy' }));
+    else if (change === 'snapshot') await act(async () => resource.actionHandlers!.copy({ instance, id: 'source-link', queryScope: source, ...selectionContext() }));
     else await act(async () => dispose());
     if (change !== 'position') expect(document.querySelector<HTMLInputElement>('#workspace-copy-name')!.disabled).toBe(true);
     await expect(resource.actionHandlers![actionKey]({ instance, input: { ...old, name: 'stale' }, queryScope: target, ...copyContext(actionKey) })).rejects.toThrow();
@@ -58,7 +65,7 @@ it.each(['pasteFolderCopy', 'pasteFolderStructure'] as const)('locks the actual 
   const request = vi.spyOn(core, 'platformFetch').mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ linkId: 'source-link', modelKey: 'WorkspaceFolder' }] })))
     .mockResolvedValueOnce(new Response(JSON.stringify({ sourceName: '来源', sourcePath: ['公共空间', '来源'], targetPath: ['公共空间', '目标'] })));
   const instance = new ActionInstanceScope(); const dispose = instance.activate(); let draft: unknown;
-  await resource.actionHandlers!.copy({ instance, id: 'source-link', queryScope: source, featurePosition: 'copy' });
+  await resource.actionHandlers!.copy({ instance, id: 'source-link', queryScope: source, ...selectionContext() });
   function Harness({ pending }: { pending: boolean }) {
     const [value, setValue] = useState<unknown>(); draft = value;
     return <StandardCrudActionReviewDialog instance={instance} {...copyContext(actionKey)} title="粘贴文件夹副本"

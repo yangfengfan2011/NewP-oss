@@ -1679,8 +1679,10 @@ internal sealed class BusinessAuditHostFixture : IAsyncDisposable
         if (!_defaultOrganizationInitialized && (_includeWorkspace || _includePart || _includeDocument))
         {
             // 真实选用归属的消费者显式准备默认组织；生产GET和DI仍然没有初始化副作用。
-            var point = FeatureCatalog.First(point => point.BehaviorKey == "organization.company.initialize");
-            using var response = await FeatureHttpTestRequests.SendAsync(client, point, HttpMethod.Post, "/api/organization/initialization");
+            var http = new FeatureHttpTestRequests(this);
+            var point = http.Organization("companies", "initialize", "list.pageActions");
+            using var response = await FeatureHttpTestRequests.SendAsync(client, point, HttpMethod.Post, "/api/organization/initialization",
+                dataAccess: http.Declaration(point.BehaviorKey, point));
             Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
             _defaultOrganizationInitialized = true;
         }

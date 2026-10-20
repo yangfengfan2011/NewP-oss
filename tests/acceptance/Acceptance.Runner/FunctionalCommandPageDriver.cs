@@ -21,8 +21,12 @@ internal sealed class FunctionalCommandPageDriver(IPage page)
     internal async Task InitializeOrganizationAsync()
     {
         await _crud.OpenOrganizationTabAsync("公司", "companies");
+        // 列表无输入的页动作直接提交；沿既有Ownership场景的实际入口先登记响应等待。
+        var initialized = page.WaitForResponseAsync(response => response.Request.Method == "POST"
+            && new Uri(response.Url).AbsolutePath == "/api/organization/initialization");
         await _crud.ClickPageActionAsync("初始化默认组织");
-        await _crud.ConfirmAsync(_crud.VisibleModal(), new("POST", "/api/organization/initialization", 200, "默认组织初始化"));
+        var response = await initialized;
+        if (response.Status != 200) throw new InvalidOperationException($"默认组织初始化返回 {response.Status}。");
         await _crud.WaitForTableReadyAsync();
     }
 

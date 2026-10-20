@@ -153,7 +153,10 @@ public sealed class ProductionEndpointAccessCoverageTests
         Assert.True(compiled.IsSuccess, System.Text.Json.JsonSerializer.Serialize(compiled.Diagnostics));
         var builder = WebApplication.CreateBuilder();
         builder.Services.AddSingleton(compiled.Plan!);
-        // 本fixture只编译真实终态规则；已映射的排序端点必须同时登记正式处理器类型。
+        // 端点合同复用模块正式装配；新增按钮处理器不能靠测试侧逐路由许可清单登记。
+        new ICP.Platform.Modules.Organization.OrganizationModule().ConfigureServices(builder.Services);
+        new ICP.Platform.Modules.Identity.IdentityModule().ConfigureServices(builder.Services);
+        new ICP.Platform.Modules.Authorization.AuthorizationModule().ConfigureServices(builder.Services);
         builder.Services.AddScoped<ICP.Platform.Modules.Workspace.WorkspaceReorderHandler>();
         builder.Services.AddControllers()
             .AddApplicationPart(typeof(AuthController).Assembly)
@@ -169,12 +172,6 @@ public sealed class ProductionEndpointAccessCoverageTests
             .AddApplicationPart(typeof(ICP.Platform.Modules.Document.DocumentFilesController).Assembly)
             .AddApplicationPart(typeof(ExampleModule).Assembly);
         builder.Services.AddStandardCrudKernel();
-        builder.Services.AddStandardCrudResource(PersonCrudDescriptorFactory.Create());
-        builder.Services.AddStandardCrudResource(CompanyCrudDescriptorFactory.Create());
-        builder.Services.AddStandardCrudResource(DepartmentCrudDescriptorFactory.Create());
-        builder.Services.AddStandardCrudResource(PositionCrudDescriptorFactory.Create());
-        builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Identity.Application.IdentityAccountCrudResource.Create());
-        builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Authorization.Services.RoleReadResource.Create());
         builder.Services.AddStandardCrudResource(ExampleRecordCrudDescriptorFactory.Create());
         builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Part.PartCrudDescriptor.Create());
         builder.Services.AddStandardCrudResource(ICP.Platform.Modules.Document.DocumentCrudDescriptor.Create());

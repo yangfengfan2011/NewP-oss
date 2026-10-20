@@ -58,9 +58,10 @@ const readDeclaration = (viewKey: string) => {
 const editDeclaration = (viewKey: string, surface: string) => {
   const edits = declarations.filter(item => item.viewKey === viewKey && item.surface === surface && item.actionKey === 'edit');
   expect(edits).toHaveLength(1);
-  expect(edits[0].execution).toBe('organization.person.update');
-  expect(edits[0].requirements?.find(role => role.stage === 'prepare')?.anyOf).toEqual([['read']]);
-  expect(edits[0].requirements?.find(role => role.stage === 'submit')?.anyOf).toEqual([['read', 'edit']]);
+  expect(edits[0].execution).toBe('');
+  expect(edits[0].businessBinding).toBe('organization.person.update');
+  expect(edits[0].object).toBe('Person');
+  expect(edits[0].actions).toEqual(['edit']);
   return edits[0];
 };
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
@@ -180,14 +181,12 @@ it('binds Position and owned Organization lookups through the real Person PageEn
       if (request.method === 'PUT') {
         writes.push(request);
         const expected = editDeclaration(detail.view.key, 'pageActions');
-        if (request.headers.get('X-NewP-Data-Declaration') !== expected.id || request.headers.get('X-NewP-Feature') !== detailEditPosition)
+        if (request.headers.get('X-NewP-Button') !== expected.id || request.headers.has('X-NewP-Data-Declaration') || request.headers.get('X-NewP-Feature') !== detailEditPosition)
           return json({ title: '提交未使用本详情编辑声明', code: 'DECLARATION_REQUIRED' }, 400);
         return json({ fields, summaries: {} });
       }
       reads.push(request);
-      const feature = request.headers.get('X-NewP-Feature');
-      const expected = feature === editPosition ? editDeclaration(list.view.key, 'rowActions')
-        : feature === detailEditPosition ? editDeclaration(detail.view.key, 'pageActions') : readDeclaration(detail.view.key);
+      const expected = readDeclaration(detail.view.key);
       if (request.headers.get('X-NewP-Data-Declaration') !== expected.id) return json({ title: '详情读取声明缺失', code: 'DECLARATION_REQUIRED' }, 400);
       return json({ fields, summaries: {} });
     }
@@ -235,7 +234,7 @@ it('binds Position and owned Organization lookups through the real Person PageEn
   const edit = () => [...container.querySelectorAll<HTMLButtonElement>('tr[data-row-key="person-one"] button')].find(node => node.textContent?.trim() === '编辑');
   await vi.waitFor(() => expect(edit()).toBeDefined()); await act(async () => edit()!.click());
   await vi.waitFor(() => expect(reads.some(request => request.headers.get('X-NewP-Feature') === editPosition)).toBe(true));
-  expect(reads.find(request => request.headers.get('X-NewP-Feature') === editPosition)?.headers.get('X-NewP-Data-Declaration')).toBe(editDeclaration(list.view.key, 'rowActions').id);
+  expect(reads.find(request => request.headers.get('X-NewP-Feature') === editPosition)?.headers.get('X-NewP-Data-Declaration')).toBe(readDeclaration(detail.view.key).id);
   await vi.waitFor(() => expect(document.querySelector('.ant-drawer')?.textContent).toContain('当前职位'));
   const currentRequest = requests.find(request => request.headers.get('X-NewP-Feature') === editPosition && new URL(request.url).searchParams.get('currentValueIds') === 'position-old');
   expect(currentRequest?.headers.get('X-NewP-Data-Declaration')).toBe(declaration.id);
@@ -260,7 +259,7 @@ it('binds Position and owned Organization lookups through the real Person PageEn
   expect(detailRequest?.headers.get('X-NewP-Data-Declaration')).toBe(detailDeclaration.id);
   expect(new URL(detailRequest!.url).searchParams.get('currentValueIds')).toBe('position-old');
   expect(detailDeclaration.id).not.toBe(declaration.id);
-  // 完整详情复用已有read快照开编辑，不把提交声明改成强制读取预检；列表抽屉仍保留原prepare。
+  // 完整详情复用已有read快照开编辑，不把提交声明改成强制读取预检；列表抽屉保留独立详情read准备来源。
   expect(reads).toHaveLength(fullDetailReads);
   for (const position of [entryPosition, createPosition, editPosition, detailEditPosition]) {
     const companyRequest = organizationRequests.find(request => new URL(request.url).pathname.endsWith('/companies') && request.headers.get('X-NewP-Feature') === position);
@@ -272,6 +271,7 @@ it('binds Position and owned Organization lookups through the real Person PageEn
   }
   await act(async () => container.querySelector<HTMLFormElement>('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   await vi.waitFor(() => expect(writes, document.querySelector('.np-standard-crud-form-edit')?.textContent ?? 'editor missing').toHaveLength(1));
-  expect(writes[0].headers.get('X-NewP-Data-Declaration')).toBe(editDeclaration(detail.view.key, 'pageActions').id);
+  expect(writes[0].headers.get('X-NewP-Button')).toBe(editDeclaration(detail.view.key, 'pageActions').id);
+  expect(writes[0].headers.has('X-NewP-Data-Declaration')).toBe(false);
   await vi.waitFor(() => expect(container.querySelector('form')).toBeNull());
 });

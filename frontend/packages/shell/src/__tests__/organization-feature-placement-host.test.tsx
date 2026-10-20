@@ -118,7 +118,9 @@ describe('Organization feature placements in real Shell hosts', () => {
       expect(companyRequests.every((request) => readFeatureHeader(request.init) === createCompanyPosition)).toBe(true);
       const createDeclaration = formalDataAccessFor(companyList.view.key, 'pageActions', 'create');
       expect(createDeclaration.featurePositions).toContain(createCompanyPosition);
-      expect(new Headers(companyRequests[0].init?.headers).get('X-NewP-Data-Declaration')).toBe(createDeclaration.id);
+      expect(createDeclaration.businessBinding).toBe('organization.company.create');
+      expect(new Headers(companyRequests[0].init?.headers).get('X-NewP-Button')).toBe(createDeclaration.id);
+      expect(new Headers(companyRequests[0].init?.headers).has('X-NewP-Data-Declaration')).toBe(false);
       const treeReads = requests.filter(request => request.url.startsWith('/api/trees/organization.structure/'));
       expect(treeReads.length).toBeGreaterThan(0);
       const declaration = formalDataAccessFor(organizationTree.view.key, 'read');

@@ -7,7 +7,8 @@ namespace ICP.Platform.Modules.Part;
 
 /// <summary>独立对象入口沿本owner功能资格，查询和直接项管理分别复用公共服务。</summary>
 [ApiController, Route("api/part/parts/{objectId}/permissions"), EndpointModule("Part")]
-public sealed class PartPermissionsController(IDataScopeObjectPermissionQueries queries, IDataScopeObjectAuthorization authorization) : ControllerBase
+public sealed class PartPermissionsController(IDataScopeObjectPermissionQueries queries, IDataScopeObjectAuthorization authorization,
+    IButtonBusinessExecutor buttons, PartAuthorizationSaveHandler saveHandler) : ControllerBase
 {
     private const string ResourceKey = "part.part";
 
@@ -56,11 +57,11 @@ public sealed class PartPermissionsController(IDataScopeObjectPermissionQueries 
         await WithDataAccessAsync(async () => Read(await authorization.ReadAsync(ResourceKey, objectId, Management("prepare"), token)));
 
     /// <summary>完整替换由同一事务提交；成功后不回读配置，保留自身失权的安全成功。</summary>
-    [HttpPut, RequireFeature("part.part.authorize")]
+    [HttpPut, RequireFeature("part.part.authorize"), ButtonBusinessHandler(typeof(PartAuthorizationSaveHandler))]
     public async Task<IResult> Replace(string objectId, DataScopeObjectConfiguration input, CancellationToken token)
         => await WithDataAccessAsync(async () =>
     {
-        var result = await authorization.ReplaceAsync(ResourceKey, objectId, input, Management("submit"), token);
+        var result = await buttons.ExecuteAsync(saveHandler, new DataScopeObjectSaveInput(ResourceKey, objectId, input), token);
         return result.Status == DataScopeAuthorizationStatus.Succeeded ? Results.NoContent() : Failure(result.Status, result.Error);
     });
 

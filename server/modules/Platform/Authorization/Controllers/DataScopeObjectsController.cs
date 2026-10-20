@@ -1,4 +1,5 @@
 using ICP.Platform.Authorization.Http;
+using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Modules.Authorization.DTOs;
 using ICP.Platform.Modules.Authorization.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -8,7 +9,7 @@ namespace ICP.Platform.Modules.Authorization.Controllers;
 /// <summary>所有已登记资源共用对象授权管理协议，资格由资源所属功能位置判定。</summary>
 [ApiController, Route("api/authorization/data-scope/objects/{resourceKey}/{objectId}"), EndpointModule("Authorization"),
  AuthenticatedOnly, ResourceFeatureBinding("authorize"), ServiceFilter(typeof(DataExecutionExceptionFilter))]
-public sealed class DataScopeObjectsController(DataScopeObjectManagement management) : ControllerBase
+public sealed class DataScopeObjectsController(DataScopeObjectManagement management, IButtonBusinessExecutor buttons) : ControllerBase
 {
     /// <summary>完整解释操作保留操作者身份，HTTP 层只翻译操作结果。</summary>
     [HttpGet("explanation")]
@@ -36,11 +37,27 @@ public sealed class DataScopeObjectsController(DataScopeObjectManagement managem
 
     /// <summary>完整保存成功返回 204，不在 HTTP 层刷新配置或复判保存后的资格。</summary>
     [HttpPut]
-    [DataExecutionEndpoint("authorization.object.manage", "submit"), DataExecutionEndpoint("authorization.collection.manage", "submit")]
+    [ButtonBusinessHandler(typeof(DataScopeObjectManagement))]
     public async Task<IActionResult> Save(string resourceKey, string objectId, DataScopeObjectDto input, CancellationToken cancellationToken)
     {
-        var result = await management.SaveAsync(resourceKey, objectId, input, cancellationToken);
-        return result.Status == DataScopeObjectStatus.Succeeded ? NoContent() : Failure(result);
+        var result = await buttons.ExecuteAsync(management,
+            new DataScopeObjectSaveInput(resourceKey, objectId, input), cancellationToken);
+        return result.Status switch
+        {
+            DataScopeAuthorizationStatus.Succeeded => NoContent(),
+            DataScopeAuthorizationStatus.NotFound => NotFound(),
+            DataScopeAuthorizationStatus.Forbidden => Forbid(),
+            DataScopeAuthorizationStatus.InvalidInput when result.Error is null => BadRequest(),
+            DataScopeAuthorizationStatus.InvalidInput => BadRequest(new ProblemDetails
+            {
+                Status = 400, Title = result.Error!.Message,
+                Extensions = { ["code"] = "DataScope.InvalidConfiguration", ["reasonKey"] = result.Error.ReasonKey,
+                    ["args"] = result.Error.Args, ["fieldErrors"] = result.Error.Field is null ? null : new[]
+                    { new { field = result.Error.Field, code = result.Error.Code, reasonKey = result.Error.ReasonKey,
+                        args = result.Error.Args, message = result.Error.Message } } }
+            }),
+            _ => throw new ArgumentOutOfRangeException(nameof(result))
+        };
     }
 
     /// <summary>对象入口提供已通过目标管理资格检查的完整配置目录。</summary>

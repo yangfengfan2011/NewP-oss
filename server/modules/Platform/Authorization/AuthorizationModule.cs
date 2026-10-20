@@ -39,6 +39,7 @@ public class AuthorizationModule : ModuleCapsuleBindingBase
             ActivatorUtilities.CreateInstance<DataScopeObjectManagement>(provider, provider.GetRequiredService<IDataExecutionAccess>()));
         services.AddScoped<IDataScopeBatchAuthorization>(provider => provider.GetRequiredService<DataScopeObjectManagement>());
         services.AddScoped<IDataScopeObjectAuthorization>(provider => provider.GetRequiredService<DataScopeObjectManagement>());
+        services.AddScoped<IDataScopeObjectSaveHandler>(provider => provider.GetRequiredService<DataScopeObjectManagement>());
         services.AddScoped<IDataScopeReadPlanProvider, DataScopeReadPlans>();
         services.AddScoped<IDataScopeReadableIds>(provider =>
             (DataScopeReadPlans)provider.GetRequiredService<IDataScopeReadPlanProvider>());

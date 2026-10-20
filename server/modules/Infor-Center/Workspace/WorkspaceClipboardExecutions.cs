@@ -1,4 +1,5 @@
 using ICP.Platform.Authorization.Contracts;
+using ICP.Platform.Authorization.Http;
 using ICP.Platform.Crud.LinkQueries;
 using Microsoft.AspNetCore.Mvc.Filters;
 
@@ -29,12 +30,7 @@ public sealed class WorkspaceClipboardExecutionAttribute(string execution, strin
     {
         if (context.Exception is ActionDataAccessException exception)
         {
-            context.Result = new Microsoft.AspNetCore.Mvc.ObjectResult(new Microsoft.AspNetCore.Mvc.ProblemDetails
-            {
-                Status = exception.Status,
-                Title = exception.Code,
-                Extensions = { ["code"] = exception.Code }
-            }) { StatusCode = exception.Status };
+            context.Result = ActionDataAccessProblem.ToResult(exception, exception.Code);
             context.ExceptionHandled = true;
         }
         return Task.CompletedTask;

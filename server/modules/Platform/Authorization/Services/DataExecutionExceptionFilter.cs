@@ -1,5 +1,5 @@
 using ICP.Platform.Authorization.Contracts;
-using Microsoft.AspNetCore.Mvc;
+using ICP.Platform.Authorization.Http;
 using Microsoft.AspNetCore.Mvc.Filters;
 
 namespace ICP.Platform.Modules.Authorization.Services;
@@ -11,8 +11,7 @@ public sealed class DataExecutionExceptionFilter : IExceptionFilter
     public void OnException(ExceptionContext context)
     {
         if (context.Exception is not ActionDataAccessException error) return;
-        context.Result = new ObjectResult(new ProblemDetails { Status = error.Status, Title = error.Message,
-            Extensions = { ["code"] = error.Code } }) { StatusCode = error.Status };
+        context.Result = ActionDataAccessProblem.ToResult(error, error.Message);
         context.ExceptionHandled = true;
     }
 }

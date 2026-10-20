@@ -1,5 +1,5 @@
 using ICP.Platform.Authorization.Contracts;
-using Microsoft.AspNetCore.Mvc;
+using ICP.Platform.Authorization.Http;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -22,9 +22,7 @@ public sealed class OrganizationLookupExecutionAttribute(string execution, strin
         }
         catch (ActionDataAccessException exception)
         {
-            var problem = new ProblemDetails { Status = exception.Status, Title = exception.Code };
-            problem.Extensions["code"] = exception.Code;
-            context.Result = new ObjectResult(problem) { StatusCode = exception.Status };
+            context.Result = ActionDataAccessProblem.ToResult(exception, exception.Code);
         }
     }
 }

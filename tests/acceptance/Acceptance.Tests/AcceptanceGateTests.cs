@@ -586,6 +586,35 @@ public sealed class AcceptanceGateTests
                 await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"), new { url = page.Url, actor = "ordinary", journey = "document-batch-copy" }, token);
             }).RunAsync(CancellationToken.None);
     }
+    [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "普通主体从真实复制选择进入Part副本确认，正式来源沿原Provider提交并看到目标行")]
+    public async Task NativePartObjectCopyBinding_UsesFormalDriver()
+    {
+        var (root, runId) = PrepareRun("native-part-copy-binding");
+        var fixture = PublishedComponentAcceptanceFixture.FromWorkspaceDelivery(RepositoryRoot, root, runId,
+            exerciseCompositionLifecycle: false, preparation: PublishedWorkspacePreparation.CurrentRelease);
+        await new WorkspaceAcceptanceRunner(RepositoryRoot, root, runId, includeSpaceLifecycle: false, publishedFixture: fixture,
+            browserJourney: async (page, token) =>
+            {
+                token.ThrowIfCancellationRequested();
+                var driver = new WorkspacePageDriver(page);
+                var suffix = runId[..8];
+                var name = "正式Part来源 " + suffix;
+                var copy = "正式Part副本 " + suffix;
+                var target = "正式副本目标 " + suffix;
+                await driver.OpenAsync();
+                await driver.SelectTreePathAsync("公共空间", fixture.ExistingFolderName);
+                await driver.CreateObjectAsync("零组件", "BIND-SOURCE-" + suffix, name);
+                await driver.CopyReferenceFromContextMenuAsync(name);
+                await driver.SelectRootAsync("公共空间");
+                await driver.CreateFolderAsync(target);
+                await driver.SelectTreePathAsync("公共空间", target);
+                await driver.PastePartCopyAsync("BIND-COPY-" + suffix, copy);
+                // driver等待真实目标行；语义和拒绝边界由API承担，新行随原专属schema清理。
+                await AcceptanceInfrastructure.WriteJsonAsync(Path.Combine(root, "browser.json"),
+                    new { url = page.Url, actor = "ordinary", journey = "part-copy-bound-source" }, token);
+            }).RunAsync(CancellationToken.None);
+    }
+
     [EnvironmentGatedFact("NEWP_RUN_NATIVE_WORKSPACE_ACCEPTANCE", "正式三成员包的单Part真副本、查看、独立编辑删除沿唯一Workspace driver贯通，按需补双语呈现")]
     public async Task NativeWorkspaceObjectCopy_UsesFormalDriver()
     {

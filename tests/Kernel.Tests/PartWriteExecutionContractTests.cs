@@ -17,8 +17,7 @@ public sealed class PartWriteExecutionContractTests
         var plan = compiled.Plan!;
         var descriptor = PartCrudDescriptor.Create();
         Assert.Empty(descriptor.LegacyDataExecutions);
-        Assert.Equal(new[] { ("ICP.Platform.Modules.Part.PartCopyBehavior.ExecuteAsync", "create") },
-            descriptor.LegacyObjectOperationBindings.Select(binding => (binding.Caller, binding.Operation)));
+        Assert.Empty(descriptor.LegacyObjectOperationBindings);
         var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "part.part.create");
         Assert.Equal(("part.part.list", "pageActions", "create", "standardCrud.create"),
             (declaration.ViewKey, declaration.Surface, declaration.ActionKey, declaration.Provider));

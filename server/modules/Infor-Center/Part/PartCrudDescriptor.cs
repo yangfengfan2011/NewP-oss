@@ -23,8 +23,6 @@ public static class PartCrudDescriptor
         return new()
         {
             DataExecutions = new Dictionary<string, string> { ["list"] = "part.part.list", ["read"] = "part.part.read", ["create"] = "part.part.create", ["update"] = "part.part.update", ["delete"] = "part.part.delete" },
-            LegacyObjectOperationBindings = [
-                new("ICP.Platform.Modules.Part.PartCopyBehavior.ExecuteAsync", "create")],
             RequiresCreationRecord = true, RequiresUpdateRecord = true,
             ResourceKey = "part.part", ModuleId = "Part", ModelName = "Part", Route = "api/part/parts",
             IdField = "EID", DisplayField = "ENAME", FieldSet = fieldSet, DeletePolicy = StandardCrudDeletePolicy.Hard,

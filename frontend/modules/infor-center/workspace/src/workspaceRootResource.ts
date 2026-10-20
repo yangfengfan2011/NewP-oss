@@ -117,10 +117,10 @@ const resource: StandardCrudResourceRegistration = {
     authorizeContent: context => authorization(context).actionHandlers.authorize(context),
     authorize: Object.assign((context: StandardCrudActionContext) => context.action?.inputKey === 'batchAuthorization' ? saveBatch(context) : authorization(context).actionHandlers.authorize(context),
       { isCorrectableInputError: batchOutcomeUnknown }),
-    pasteObjectCopy: Object.assign(async ({ instance, input, queryScope, featurePosition }: import('@icp-platform/sdk').StandardCrudActionContext) => {
+    pasteObjectCopy: Object.assign(async ({ instance, input, queryScope, featurePosition, action }: import('@icp-platform/sdk').StandardCrudActionContext) => {
       const value = input as { draft?: ObjectCopyDraft; values?: Record<string, unknown> } | undefined;
       if (!value?.draft || !value.values) throw new StandardCrudRequestError('Workspace.CopyInputExpired', 409, {}, { code: 'Workspace.CopyInputExpired' });
-      const receipt = await clipboard(instance).pasteObjectCopy(value.draft, value.values, workspacePosition(queryScope), featurePosition);
+      const receipt = await clipboard(instance).pasteObjectCopy(value.draft, value.values, workspacePosition(queryScope), featurePosition, action?.dataAccess?.id);
       return { operation: 'action' as const, payload: { kind: 'workspace.objectCopy', receipt, rows: value.values.items as ObjectCopyValuesRow[] | undefined }, change: { operation: 'create' as const, id: '' }, notice: { reasonKey: 'Workspace.ObjectCopied' } };
     }, { isCorrectableInputError: (failure: unknown) => failure instanceof StandardCrudRequestError
       && (['Part.CodeDuplicated', 'Document.CodeDuplicated', 'StandardCrud.PersistenceConflict', 'Workspace.CopySourceChanged', 'Workspace.CopyOutcomeUnknown'].includes(failure.code ?? '')

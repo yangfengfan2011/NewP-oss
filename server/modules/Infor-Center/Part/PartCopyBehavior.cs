@@ -9,7 +9,7 @@ namespace ICP.Platform.Modules.Part;
 
 /// <summary>零组件拥有者核证真实源及完整字段清单，再采用正常创建规则产生独立身份。</summary>
 public sealed class PartCopyBehavior(EfPlatformDbContext db, IStandardCrudRepository repository, IStandardCrudResourceRegistry resources,
-    IDataScopeObjectDecisionProvider decisions, Func<IObjectOperationExecutor> operations) : IObjectBehavior
+    IDataExecutionAccess executionAccess, Func<IObjectOperationExecutor> operations) : IObjectBehavior
 {
     private static readonly string[] ClassifiedFields = ["EID", "ECODE", "ENAME", "Description", "OwnerId", "OwnerDepartmentId", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt"];
     public static readonly ObjectOperationAction Copy = new("copy");
@@ -22,8 +22,8 @@ public sealed class PartCopyBehavior(EfPlatformDbContext db, IStandardCrudReposi
     {
         var sourceId = (string)context.Values["SourceId"]!;
         var descriptor = resources.FindByResourceKey("part.part")!;
-        if (!await decisions.IsAllowedAsync("part.part", sourceId, "read", cancellationToken)) return Rejected(404, "Workspace.TargetUnavailable");
-        if (!await decisions.IsAllowedAsync("part.part", sourceId, "partObjectCopy", cancellationToken)) return Rejected(403, "Workspace.ObjectCopyDenied");
+        if ((await executionAccess.EvaluateInternalObjectAsync(PartCopyExecutions.Source(), "visibility", new("part.part", sourceId), cancellationToken)).Decision != DataExecutionDecision.Allowed) return Rejected(404, "Workspace.TargetUnavailable");
+        if ((await executionAccess.EvaluateInternalObjectAsync(PartCopyExecutions.Source(), "copy", new("part.part", sourceId), cancellationToken)).Decision != DataExecutionDecision.Allowed) return Rejected(403, "Workspace.ObjectCopyDenied");
         var source = await repository.GetByIdAsync(descriptor, sourceId, cancellationToken);
         if (source is null) return Rejected(404, "Workspace.TargetUnavailable");
         // 全部实际业务字段必须分类；正式字段演进时失败关闭，避免新增业务数据被静默遗漏。
@@ -35,7 +35,7 @@ public sealed class PartCopyBehavior(EfPlatformDbContext db, IStandardCrudReposi
         var values = (IReadOnlyDictionary<string, object?>)context.Values["Values"]!;
         if (values.Keys.Any(key => key is not ("ECODE" or "ENAME" or "Description"))) return Rejected(400, "Workspace.ServerFieldForbidden");
         var result = await operations().ExecuteAsync("part.part", ObjectOperationAction.Create, null, values,
-            new ObjectOperationWriteSource.Legacy(typeof(PartCopyBehavior), nameof(ExecuteAsync), "part.part", "create", null), cancellationToken);
+            new ObjectOperationWriteSource.Declared(PartCopyExecutions.Create()), cancellationToken);
         // 普通创建不取得目录图锁，可能在预检后赢得同码竞争；只在真实数据库确认编码重复时定位该字段。
         if (result.Error?.Code == "StandardCrud.PersistenceConflict" && values.GetValueOrDefault("ECODE") is string code
             && await db.Set<Dictionary<string, object?>>("Part").AsNoTracking().AnyAsync(row => EF.Property<string>(row, "ECODE") == code, cancellationToken))

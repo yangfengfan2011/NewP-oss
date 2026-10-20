@@ -3,12 +3,14 @@ import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { LocalizationProvider, platformFetch } from '@icp-platform/core';
-import type { StandardCrudActionInstance } from '@icp-platform/sdk';
+import type { ActionDataAccessRequirement, StandardCrudActionInstance } from '@icp-platform/sdk';
 import WorkspaceObjectCopyInput from '../WorkspaceObjectCopyInput';
 import { workspaceClipboard, type ObjectCopyDraft } from '../workspaceClipboard';
 import workspaceDictionary from '../../metadata/dictionaries/Workspace.dic.json';
 import partDictionary from '../../../part/metadata/dictionaries/Part.dic.json';
 import documentDictionary from '../../../document/metadata/dictionaries/Document.dic.json';
+import compiled from '../../../../../../tests/Kernel.Tests/Fixtures/WorkspaceClipboardDataAccess.contract.json';
+const declaration = compiled.declarations.find(item => item.viewKey === 'workspace.folder.list' && item.surface === 'pageActions' && item.actionKey === 'pasteObjectCopy') as ActionDataAccessRequirement;
 
 vi.mock('@icp-platform/core', async original => ({ ...await original<typeof import('@icp-platform/core')>(), platformFetch: vi.fn() }));
 const roots: { root: Root; element: HTMLElement }[] = [];
@@ -34,14 +36,14 @@ async function mount(preparation?: Promise<Response>, modelKey = 'Part') {
   let draft: { draft: ObjectCopyDraft; values: Record<string, unknown> } | undefined;
   let submission: Promise<unknown> | undefined;
   const draftState = vi.fn();
-  function Harness({ scope = target }: { scope?: Record<string, unknown> }) {
+  function Harness({ scope = target, binding = declaration }: { scope?: Record<string, unknown>; binding?: ActionDataAccessRequirement }) {
     const [value, change] = useState<unknown>(); draft = value as typeof draft;
     const [ready, setReady] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     return <LocalizationProvider defaultLanguage="zhs" supportedLanguages={[{ code: 'zhs', displayName: '中文' }]} catalogs={catalogs}>
       <WorkspaceObjectCopyInput instance={instance} action={{ key: 'pasteObjectCopy', labelKey: 'Workspace.PasteObjectCopy' }}
-        featurePosition="object-copy" queryScope={scope} value={value} onChange={change} submitting={submitting} onDraftStateChange={state => { draftState(state); setReady(state.ready); }} />
-      <button disabled={!ready} onClick={() => { setSubmitting(true); submission = session.pasteObjectCopy(draft!.draft, draft!.values, { ...source, linkIds: ['target'] }, 'object-copy').catch(failure => failure).finally(() => setSubmitting(false)); }}>提交</button>
+        featurePosition="object-copy" dataAccess={binding} queryScope={scope} value={value} onChange={change} submitting={submitting} onDraftStateChange={state => { draftState(state); setReady(state.ready); }} />
+      <button disabled={!ready} onClick={() => { setSubmitting(true); submission = session.pasteObjectCopy(draft!.draft, draft!.values, { ...source, linkIds: ['target'] }, 'object-copy', binding?.id).catch(failure => failure).finally(() => setSubmitting(false)); }}>提交</button>
     </LocalizationProvider>;
   }
   const element = document.createElement('div'); document.body.append(element); const root = createRoot(element); roots.push({ element, root });
@@ -176,4 +178,16 @@ it.each(['Part', 'Document'])('locates duplicate code on the single %s field and
   const writes = vi.mocked(platformFetch).mock.calls.filter(([url]) => String(url).endsWith('/objects/copy'));
   expect(writes).toHaveLength(1);
   expect(JSON.parse(String(writes[0][1]?.body))).toEqual({ operationId: 'single-code-error', values: { ECODE: 'DUPLICATED', ENAME: '保留名称', Description: '保留说明' } });
+});
+
+it('aborts the old preparation and discards its draft when the bound declaration changes', async () => {
+  const view = await mount();
+  await fill(view.element, '编码', 'OLD-BINDING');
+  const old = view.draft();
+  const request = vi.mocked(platformFetch).mock.calls.find(([path]) => String(path).endsWith('/objects/copy/prepare'))!;
+  await act(async () => view.root.render(<view.Harness binding={{ ...declaration, id: declaration.id + '/changed' }} />));
+  expect(request[1]?.signal?.aborted).toBe(true);
+  expect(old.draft.closed).toBe(true);
+  expect(view.draft().values.ECODE).toBe('');
+  await expect(view.session.pasteObjectCopy(old.draft, old.values, { ...source, linkIds: ['target'] }, 'object-copy', declaration.id)).rejects.toThrow();
 });

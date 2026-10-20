@@ -23,11 +23,11 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var source = await Folder(fixture, admin, root, "固定快照来源"); var target = await Folder(fixture, admin, root, "固定快照目标");
         await Command(fixture, admin, "workspace.folder.createPart", "/api/workspace/content/parts", new { position = source, values = new { ECODE = "SNAPSHOT-SOURCE", ENAME = "确认的源", Description = "确认的说明" } });
         var link = Assert.Single(await Rows(fixture, "WorkspaceFolderContent"), row => Equals(row["ChildModelKey"], "Part"));
-        var prepared = await Command(fixture, admin, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy/prepare", new { mode = "copy", sourcePosition = source, linkIds = new[] { link["LID"] }, targetPosition = target });
+        var prepared = await PartCopyCommand(fixture, admin, PartCopyDataPhase.Prepare, new { mode = "copy", sourcePosition = source, linkIds = new[] { link["LID"] }, targetPosition = target });
         var reached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var resume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         fixture.Fault.AfterRegister = async (change, token) => { if (change.EventType == "workspace.object.copied") { reached.TrySetResult(); await resume.Task.WaitAsync(token); } };
-        var pending = Send(fixture, admin, "workspace.folder.pasteObjectCopy", "objects/copy", new { operationId = prepared.GetProperty("operationId").GetString(), values = new { ECODE = "SNAPSHOT-COPY", ENAME = "确认的源", Description = "确认的说明" } });
+        var pending = PartCopySend(fixture, admin, PartCopyDataPhase.Submit, new { operationId = prepared.GetProperty("operationId").GetString(), values = new { ECODE = "SNAPSHOT-COPY", ENAME = "确认的源", Description = "确认的说明" } });
         Task<HttpResponseMessage>? edit = null;
         try
         {
@@ -56,9 +56,9 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var source = await Folder(fixture, admin, root, "编码并发来源"); var target = await Folder(fixture, admin, root, "编码并发目标");
         await Command(fixture, admin, "workspace.folder.createPart", "/api/workspace/content/parts", new { position = source, values = new { ECODE = "NORMAL-RACE-SOURCE", ENAME = "来源" } });
         var lid = (string)Assert.Single(await Rows(fixture, "WorkspaceFolderContent"), row => Equals(row["ChildModelKey"], "Part"))["LID"]!;
-        var preparation = await Command(fixture, admin, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy/prepare", new { mode = "copy", sourcePosition = source, linkIds = new[] { lid }, targetPosition = target });
+        var preparation = await PartCopyCommand(fixture, admin, PartCopyDataPhase.Prepare, new { mode = "copy", sourcePosition = source, linkIds = new[] { lid }, targetPosition = target });
         barrier.PauseTable = "Part"; barrier.Pause = true;
-        var pending = Send(fixture, admin, "workspace.folder.pasteObjectCopy", "objects/copy", new { operationId = preparation.GetProperty("operationId").GetString(), values = new { ECODE = "NORMAL-RACE-CODE", ENAME = "副本" } });
+        var pending = PartCopySend(fixture, admin, PartCopyDataPhase.Submit, new { operationId = preparation.GetProperty("operationId").GetString(), values = new { ECODE = "NORMAL-RACE-CODE", ENAME = "副本" } });
         try
         {
             await barrier.Reached.Task.WaitAsync(TimeSpan.FromSeconds(20));
@@ -96,19 +96,19 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         await Command(fixture, alice, "workspace.folder.createPart", "/api/workspace/content/parts", new { position = source, values = new { ECODE = "PRIVATE-PART-SOURCE", ENAME = "不可泄露零组件" } });
         var link = Assert.Single(await Rows(fixture, "WorkspaceFolderContent"), row => Equals(row["ChildModelKey"], "Part"));
         var input = new { mode = "copy", sourcePosition = source, linkIds = new[] { link["LID"] }, targetPosition = target };
-        using (var foreign = await Send(fixture, bob, "workspace.folder.pasteObjectCopy", "objects/copy/prepare", input))
+        using (var foreign = await PartCopySend(fixture, bob, PartCopyDataPhase.Prepare, input))
         { Assert.Equal(HttpStatusCode.NotFound, foreign.StatusCode); Assert.DoesNotContain("不可泄露", await foreign.Content.ReadAsStringAsync()); }
         await Rule(fixture, admin, "PrivateSourceHidden", "part.part", (string)link["CEID"]!, "read", "deny");
-        using (var unreadable = await Send(fixture, alice, "workspace.folder.pasteObjectCopy", "objects/copy/prepare", input))
+        using (var unreadable = await PartCopySend(fixture, alice, PartCopyDataPhase.Prepare, input))
         { Assert.Equal(HttpStatusCode.NotFound, unreadable.StatusCode); Assert.DoesNotContain("不可泄露", await unreadable.Content.ReadAsStringAsync()); }
         await Rule(fixture, admin, "PrivateSourceHidden", "part.part", (string)link["CEID"]!, "read", "allow");
-        var prepared = await Command(fixture, alice, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy/prepare", input);
-        await Command(fixture, alice, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy", new { operationId = prepared.GetProperty("operationId").GetString(), values = new { ECODE = "PUBLIC-NEW-PART", ENAME = "独立公开副本" } });
+        var prepared = await PartCopyCommand(fixture, alice, PartCopyDataPhase.Prepare, input);
+        await PartCopyCommand(fixture, alice, PartCopyDataPhase.Submit, new { operationId = prepared.GetProperty("operationId").GetString(), values = new { ECODE = "PUBLIC-NEW-PART", ENAME = "独立公开副本" } });
         var copiedId = Assert.Single(await Rows(fixture, "Part"), row => Equals(row["ECODE"], "PUBLIC-NEW-PART"))["EID"];
         Assert.Equal(false, Assert.Single(await Rows(fixture, "WorkspaceFolderContent"), row => Equals(row["CEID"], copiedId))["IsScopeNeutral"]);
-        prepared = await Command(fixture, alice, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy/prepare", input);
+        prepared = await PartCopyCommand(fixture, alice, PartCopyDataPhase.Prepare, input);
         await Command(fixture, admin, "workspace.folder.removeSelected", "/api/workspace/content/references/remove", new { position = root, linkIds = new[] { target.LinkIds[^1] } });
-        using var removed = await Send(fixture, alice, "workspace.folder.pasteObjectCopy", "objects/copy", new { operationId = prepared.GetProperty("operationId").GetString(), values = new { ECODE = "NO-TARGET", ENAME = "不能换目标" } });
+        using var removed = await PartCopySend(fixture, alice, PartCopyDataPhase.Submit, new { operationId = prepared.GetProperty("operationId").GetString(), values = new { ECODE = "NO-TARGET", ENAME = "不能换目标" } });
         Assert.Equal(HttpStatusCode.NotFound, removed.StatusCode);
         Assert.Equal(2, (await Rows(fixture, "Part")).Length);
     }
@@ -124,24 +124,32 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var actor = await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "LateCopyActor", "最终资格", "late-copy", "最终资格账号",
             Point(fixture, "workspace.spaces.access"), Point(fixture, "workspace.folder.pasteObjectCopy"));
         using var ordinary = actor.Client;
-        var prepared = await Command(fixture, ordinary, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy/prepare", new { mode = "copy", sourcePosition = source, linkIds = new[] { link["LID"] }, targetPosition = target });
-        var operationId = prepared.GetProperty("operationId").GetString();
-        var reached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var resume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        fixture.Fault.AfterRegister = async (change, token) => { if (change.EventType == "workspace.object.copied") { reached.TrySetResult(); await resume.Task.WaitAsync(token); } };
-        var pending = Send(fixture, ordinary, "workspace.folder.pasteObjectCopy", "objects/copy", new { operationId, values = new { ECODE = "LATE-DENIED", ENAME = "不得提交" } });
-        try
+        var parentId = FolderId(target, await Rows(fixture, "WorkspaceFolderContent"));
+        foreach (var (resource, id, action, code) in new[] {
+            ("part.part", (string)link["CEID"]!, "partObjectCopy", "Workspace.ObjectCopyDenied"),
+            ("workspace.folder", parentId, "edit", "Workspace.ParentWriteDenied") })
         {
-            await reached.Task.WaitAsync(TimeSpan.FromSeconds(20));
-            await Rule(fixture, admin, "LateCopyDenied", "part.part", (string)link["CEID"]!, "partObjectCopy", "deny");
-            resume.TrySetResult();
-            using var response = await pending;
-            await Problem(response, HttpStatusCode.Forbidden, "Workspace.ObjectCopyDenied");
+            var prepared = await PartCopyCommand(fixture, ordinary, PartCopyDataPhase.Prepare,
+                new { mode = "copy", sourcePosition = source, linkIds = new[] { link["LID"] }, targetPosition = target });
+            var operationId = prepared.GetProperty("operationId").GetString();
+            var reached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var resume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            fixture.Fault.AfterRegister = async (change, token) => { if (change.EventType == "workspace.object.copied") { reached.TrySetResult(); await resume.Task.WaitAsync(token); } };
+            var pending = PartCopySend(fixture, ordinary, PartCopyDataPhase.Submit, new { operationId, values = new { ECODE = "LATE-DENIED", ENAME = "不得提交" } });
+            try
+            {
+                await reached.Task.WaitAsync(TimeSpan.FromSeconds(20));
+                await Rule(fixture, admin, "LateCopyDenied-" + action, resource, id, action, "deny");
+                resume.TrySetResult();
+                using var response = await pending;
+                await Problem(response, HttpStatusCode.Forbidden, code);
+            }
+            finally { resume.TrySetResult(); (await pending).Dispose(); fixture.Fault.AfterRegister = null; }
+            Assert.Single(await Rows(fixture, "Part"));
+            Assert.Single(await Rows(fixture, "WorkspaceFolderContent"), row => Equals(row["ChildModelKey"], "Part"));
+            Assert.DoesNotContain(await Rows(fixture, "BusinessChange"), row => Equals(row["EventType"], "workspace.object.copied"));
+            await Rule(fixture, admin, "LateCopyDenied-" + action, resource, id, action, "allow");
         }
-        finally { resume.TrySetResult(); (await pending).Dispose(); fixture.Fault.AfterRegister = null; }
-        Assert.Single(await Rows(fixture, "Part"));
-        Assert.Single(await Rows(fixture, "WorkspaceFolderContent"), row => Equals(row["ChildModelKey"], "Part"));
-        Assert.DoesNotContain(await Rows(fixture, "BusinessChange"), row => Equals(row["EventType"], "workspace.object.copied"));
     }
 
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "真实提交前取消回滚；提交后丢失回执保留对象/Link/审计，重启后受控结果核对不重放")]
@@ -153,11 +161,13 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var source = await Folder(fixture, admin, root, "中断来源"); var target = await Folder(fixture, admin, root, "中断目标");
         await Command(fixture, admin, "workspace.folder.createPart", "/api/workspace/content/parts", new { position = source, values = new { ECODE = "DURABLE-SOURCE", ENAME = "持久源" } });
         var lid = (string)Assert.Single(await Rows(fixture, "WorkspaceFolderContent"), row => Equals(row["ChildModelKey"], "Part"))["LID"]!;
-        var preparation = await Command(fixture, admin, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy/prepare", new { mode = "copy", sourcePosition = source, linkIds = new[] { lid }, targetPosition = target });
+        var preparation = await PartCopyCommand(fixture, admin, PartCopyDataPhase.Prepare, new { mode = "copy", sourcePosition = source, linkIds = new[] { lid }, targetPosition = target });
         var operationId = preparation.GetProperty("operationId").GetString();
         beforeCommit.Pause = true; using var cancellation = new CancellationTokenSource();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/objects/copy") { Content = JsonContent.Create(new { operationId, values = new { ECODE = "DURABLE-COPY", ENAME = "中断副本" } }, options: new JsonSerializerOptions()) };
-        request.Headers.Add("X-NewP-Feature", Point(fixture, "workspace.folder.pasteObjectCopy").Position);
+        var submitPoint = Point(fixture, "workspace.folder.pasteObjectCopy");
+        request.Headers.Add("X-NewP-Feature", submitPoint.Position);
+        request.Headers.Add("X-NewP-Data-Declaration", new FeatureHttpTestRequests(fixture).Declaration("workspace.objectCopy.part", submitPoint).Id);
         var pending = admin.SendAsync(request, cancellation.Token);
         try
         {
@@ -170,7 +180,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var ready = await Command(fixture, admin, "workspace.folder.resolveObjectCopy", "/api/workspace/content/objects/copy/result", new { operationId });
         Assert.Equal("ready", ready.GetProperty("state").GetString());
         afterCommit.Enabled = true;
-        using (var unknown = await Send(fixture, admin, "workspace.folder.pasteObjectCopy", "objects/copy", new { operationId, values = new { ECODE = "DURABLE-COPY", ENAME = "已提交副本" } }))
+        using (var unknown = await PartCopySend(fixture, admin, PartCopyDataPhase.Submit, new { operationId, values = new { ECODE = "DURABLE-COPY", ENAME = "已提交副本" } }))
             Assert.False(unknown.IsSuccessStatusCode);
         Assert.True(afterCommit.Triggered);
         Assert.Equal(2, (await Rows(fixture, "Part")).Length);
@@ -209,9 +219,9 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var parts = Snapshot(await Rows(fixture, "Part")); var links = Snapshot(await Rows(fixture, "WorkspaceFolderContent")); var audit = Snapshot(await Rows(fixture, "BusinessChange"));
         foreach (var table in new[] { "Part", "WorkspaceFolderContent", "BusinessChange" })
         {
-            var prepared = await Command(fixture, admin, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy/prepare", new { mode = "copy", sourcePosition = source, linkIds = new[] { lid }, targetPosition = target });
+            var prepared = await PartCopyCommand(fixture, admin, PartCopyDataPhase.Prepare, new { mode = "copy", sourcePosition = source, linkIds = new[] { lid }, targetPosition = target });
             var operationId = prepared.GetProperty("operationId").GetString(); fault.Table = table;
-            using (var failed = await Send(fixture, admin, "workspace.folder.pasteObjectCopy", "objects/copy", new { operationId, values = new { ECODE = "FAULT-" + table, ENAME = "不会残留" } })) Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
+            using (var failed = await PartCopySend(fixture, admin, PartCopyDataPhase.Submit, new { operationId, values = new { ECODE = "FAULT-" + table, ENAME = "不会残留" } })) Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
             fault.Table = null;
             Assert.True(fault.Triggered); fault.Triggered = false;
             Assert.Equal(parts, Snapshot(await Rows(fixture, "Part"))); Assert.Equal(links, Snapshot(await Rows(fixture, "WorkspaceFolderContent"))); Assert.Equal(audit, Snapshot(await Rows(fixture, "BusinessChange")));
@@ -223,21 +233,27 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "提交与取消竞争报告真实已提交事实，并发同码只产生一个对象，记录单Part和并发关键成本")]
     public async Task ObjectCopy_CancelRaceAndConcurrentCodeHaveDurableOutcomesAndMeasuredCosts()
     {
-        var barrier = new ObjectCopyWriteFault(); var costs = new ObjectCopyCost();
-        await using var fixture = await BusinessAuditHostFixture.CreateAsync(services => services.AddDbContext<EfPlatformDbContext>((_, options) => options.AddInterceptors(barrier, costs)), includeWorkspace: true);
+        var barrier = new ObjectCopyWriteFault(); var costs = new ObjectCopyCost(); var connections = new ObjectCopyCostConnections();
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(services => services.AddDbContext<EfPlatformDbContext>((_, options) => options.AddInterceptors(barrier, costs, connections)), includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync(); var root = await Root(fixture, admin);
         var source = await Folder(fixture, admin, root, "竞争来源"); var target = await Folder(fixture, admin, root, "竞争目标");
         await Command(fixture, admin, "workspace.folder.createPart", "/api/workspace/content/parts", new { position = source, values = new { ECODE = "RACE-SOURCE", ENAME = "并发源" } });
         var lid = (string)Assert.Single(await Rows(fixture, "WorkspaceFolderContent"), row => Equals(row["ChildModelKey"], "Part"))["LID"]!;
+        // 成本前后使用同一普通主体；默认完整回归仍沿原管理员、竞争与取消流程。
+        var measurement = Environment.GetEnvironmentVariable("NEWP_PART_OBJECT_COPY_COST_STAGE") is not null;
+        using var ordinary = measurement ? (await HttpTestActors.CreateAuthorizedActorAsync(fixture, admin, "PartCopyCostActor", "Part复制成本",
+            "part-copy-cost", "Part复制成本账号", Point(fixture, "workspace.spaces.access"), Point(fixture, "workspace.folder.pasteObjectCopy"),
+            Point(fixture, "workspace.folder.resolveObjectCopy"))).Client : null;
+        var copyClient = ordinary ?? admin;
         var input = new { mode = "copy", sourcePosition = source, linkIds = new[] { lid }, targetPosition = target };
-        var prepared = await Command(fixture, admin, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy/prepare", input);
+        var prepared = await PartCopyCommand(fixture, copyClient, PartCopyDataPhase.Prepare, input);
         var operationId = prepared.GetProperty("operationId").GetString();
         barrier.Pause = true;
-        var pending = Send(fixture, admin, "workspace.folder.pasteObjectCopy", "objects/copy", new { operationId, values = new { ECODE = "RACE-WINNER", ENAME = "已提交副本" } });
+        var pending = PartCopySend(fixture, copyClient, PartCopyDataPhase.Submit, new { operationId, values = new { ECODE = "RACE-WINNER", ENAME = "已提交副本" } });
         try
         {
             await barrier.Reached.Task.WaitAsync(TimeSpan.FromSeconds(20));
-            var cancelling = Send(fixture, admin, "workspace.folder.pasteObjectCopy", "objects/copy/cancel", new { operationId });
+            var cancelling = Send(fixture, copyClient, "workspace.folder.pasteObjectCopy", "objects/copy/cancel", new { operationId });
             barrier.Release.TrySetResult();
             using (var result = await pending) Assert.Equal(HttpStatusCode.OK, result.StatusCode);
             using (var cancelled = await cancelling)
@@ -245,28 +261,35 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         }
         finally { barrier.Release.TrySetResult(); (await pending).Dispose(); }
         barrier.Pause = false;
-        var single = await Command(fixture, admin, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy/prepare", input);
-        costs.Begin(); var singleAllocated = GC.GetTotalAllocatedBytes(); var singleWatch = System.Diagnostics.Stopwatch.StartNew();
-        await Command(fixture, admin, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy", new { operationId = single.GetProperty("operationId").GetString(), values = new { ECODE = "SINGLE-COST", ENAME = "单对象测量" } });
-        singleWatch.Stop(); var singleCost = costs.End();
-        output.WriteLine(JsonSerializer.Serialize(new { scenario = "PartObjectCopySingle", elapsedMilliseconds = singleWatch.Elapsed.TotalMilliseconds,
+        var single = await PartCopyCommand(fixture, copyClient, PartCopyDataPhase.Prepare, input);
+        costs.Begin(); connections.Begin(); var singleAllocated = GC.GetTotalAllocatedBytes(); var singleWatch = System.Diagnostics.Stopwatch.StartNew();
+        await PartCopyCommand(fixture, copyClient, PartCopyDataPhase.Submit, new { operationId = single.GetProperty("operationId").GetString(), values = new { ECODE = "SINGLE-COST", ENAME = "单对象测量" } });
+        singleWatch.Stop(); var singleCost = costs.End(); connections.End();
+        var singleReport = new { scenario = "PartObjectCopySingle", elapsedMilliseconds = singleWatch.Elapsed.TotalMilliseconds,
             sqlCommands = singleCost.Commands, graphLocks = singleCost.GraphLocks, graphLockWaitMilliseconds = singleCost.LockWaitMilliseconds,
-            graphLockHoldUpperBoundMilliseconds = singleWatch.Elapsed.TotalMilliseconds, allocatedBytes = GC.GetTotalAllocatedBytes() - singleAllocated, temporaryFileBytes = 0 }));
+            graphLockHoldUpperBoundMilliseconds = singleWatch.Elapsed.TotalMilliseconds, allocatedBytes = GC.GetTotalAllocatedBytes() - singleAllocated, temporaryFileBytes = 0 };
+        output.WriteLine(JsonSerializer.Serialize(singleReport));
+        await SavePartCopyCostAsync(fixture, costs, connections, "single", singleReport);
         var ids = new List<string>();
-        for (var index = 0; index < 4; index++) ids.Add((await Command(fixture, admin, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy/prepare", input)).GetProperty("operationId").GetString()!);
-        costs.Begin(); var allocated = GC.GetTotalAllocatedBytes();
+        for (var index = 0; index < 4; index++) ids.Add((await PartCopyCommand(fixture, copyClient, PartCopyDataPhase.Prepare, input)).GetProperty("operationId").GetString()!);
+        costs.Begin(); connections.Begin(); var allocated = GC.GetTotalAllocatedBytes();
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        var replies = await Task.WhenAll(ids.Select(id => Send(fixture, admin, "workspace.folder.pasteObjectCopy", "objects/copy", new { operationId = id, values = new { ECODE = "CONCURRENT-CODE", ENAME = "并发确认" } })));
+        var replies = await Task.WhenAll(ids.Select(id => PartCopySend(fixture, copyClient, PartCopyDataPhase.Submit, new { operationId = id, values = new { ECODE = "CONCURRENT-CODE", ENAME = "并发确认" } })));
         watch.Stop();
         try { Assert.Single(replies, reply => reply.StatusCode == HttpStatusCode.OK); Assert.Equal(3, replies.Count(reply => reply.StatusCode == HttpStatusCode.Conflict)); }
         finally { foreach (var reply in replies) reply.Dispose(); }
-        var after = costs.End();
-        output.WriteLine(JsonSerializer.Serialize(new { scenario = "PartObjectCopy", environment = "net10 Release TestServer / real SQL Server", concurrency = 4,
+        var after = costs.End(); connections.End();
+        var concurrentReport = new { scenario = "PartObjectCopy", environment = "net10 Release TestServer / real SQL Server", concurrency = 4,
             elapsedMilliseconds = watch.Elapsed.TotalMilliseconds, allocatedBytes = GC.GetTotalAllocatedBytes() - allocated, managedHeapBytes = GC.GetTotalMemory(false),
             sqlCommands = after.Commands, graphLocks = after.GraphLocks, graphLockWaitMilliseconds = after.LockWaitMilliseconds,
-            graphLockHoldUpperBoundMilliseconds = watch.Elapsed.TotalMilliseconds, success = 1, conflict = 3, temporaryFileBytes = 0 }));
+            graphLockHoldUpperBoundMilliseconds = watch.Elapsed.TotalMilliseconds, success = 1, conflict = 3, temporaryFileBytes = 0 };
+        output.WriteLine(JsonSerializer.Serialize(concurrentReport));
+        await SavePartCopyCostAsync(fixture, costs, connections, "concurrency-4", concurrentReport);
         Assert.Equal(4, (await Rows(fixture, "Part")).Length);
-        await Command(fixture, admin, "workspace.folder.deleteObjects", "/api/workspace/content/delete", new { position = source, linkIds = new[] { lid } });
+        var delete = Point(fixture, "workspace.folder.deleteObjects");
+        using (var cleanup = await FeatureHttpTestRequests.SendAsync(admin, delete, HttpMethod.Post, "/api/workspace/content/delete",
+            new { position = source, linkIds = new[] { lid } }, new FeatureHttpTestRequests(fixture).Declaration("workspace.content.delete", delete)))
+            Assert.Equal(HttpStatusCode.OK, cleanup.StatusCode);
         Assert.Equal(3, (await Rows(fixture, "Part")).Length);
         Assert.Equal(3, (await Rows(fixture, "WorkspaceFolderContent")).Count(row => Equals(row["ChildModelKey"], "Part")));
     }
@@ -274,19 +297,33 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
     private sealed class ObjectCopyCost : DbCommandInterceptor
     {
         private int active, commands, graphLocks; private long lockWaitTicks;
-        public void Begin() { commands = graphLocks = 0; lockWaitTicks = 0; active = 1; }
+        internal System.Collections.Concurrent.ConcurrentQueue<string> Sql { get; } = new();
+        internal System.Collections.Concurrent.ConcurrentQueue<ExampleExecutionSqlPlanTests.Sample> Reads { get; } = new();
+        public void Begin() { commands = graphLocks = 0; lockWaitTicks = 0; Sql.Clear(); Reads.Clear(); active = 1; }
         public (int Commands, int GraphLocks, double LockWaitMilliseconds) End()
         { active = 0; return (commands, graphLocks, TimeSpan.FromTicks(lockWaitTicks).TotalMilliseconds); }
+        // 同原Before计数点快照SQL/参数；不订阅全局事件，也不引入终结配对或取消协议。
+        private void Record(DbCommand command)
+        {
+            if (active != 1) return;
+            Interlocked.Increment(ref commands);
+            if (Environment.GetEnvironmentVariable("NEWP_PART_OBJECT_COPY_COST_STAGE") is null) return;
+            Sql.Enqueue(command.CommandText);
+            if (command.CommandText.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)
+                && new[] { "[DataScope", "[Role]", "[UserRole]" }.Any(table => command.CommandText.Contains(table, StringComparison.Ordinal))
+                && !new[] { "[Part]", "[Workspace", "[Authentication", "[Identity" }.Any(table => command.CommandText.Contains(table, StringComparison.Ordinal)))
+                Reads.Enqueue(new(command.CommandText, command.Parameters.Cast<Microsoft.Data.SqlClient.SqlParameter>()
+                    .Select(parameter => (Microsoft.Data.SqlClient.SqlParameter)((ICloneable)parameter).Clone()).ToArray()));
+        }
         public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData data, InterceptionResult<DbDataReader> result, CancellationToken token = default)
-        { if (active == 1) Interlocked.Increment(ref commands); return ValueTask.FromResult(result); }
+        { Record(command); return ValueTask.FromResult(result); }
         public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData data, InterceptionResult<int> result, CancellationToken token = default)
-        { if (active == 1) { Interlocked.Increment(ref commands); if (command.CommandText.Contains("Workspace.FolderGraph", StringComparison.Ordinal)) Interlocked.Increment(ref graphLocks); } return ValueTask.FromResult(result); }
+        { Record(command); if (active == 1 && command.CommandText.Contains("Workspace.FolderGraph", StringComparison.Ordinal)) Interlocked.Increment(ref graphLocks); return ValueTask.FromResult(result); }
         public override ValueTask<int> NonQueryExecutedAsync(DbCommand command, CommandExecutedEventData data, int result, CancellationToken token = default)
         { if (active == 1 && command.CommandText.Contains("Workspace.FolderGraph", StringComparison.Ordinal)) Interlocked.Add(ref lockWaitTicks, data.Duration.Ticks); return ValueTask.FromResult(result); }
         public override ValueTask<InterceptionResult<object>> ScalarExecutingAsync(DbCommand command, CommandEventData data, InterceptionResult<object> result, CancellationToken token = default)
-        { if (active == 1) Interlocked.Increment(ref commands); return ValueTask.FromResult(result); }
+        { Record(command); return ValueTask.FromResult(result); }
     }
-
     private sealed class ObjectCopyWriteFault : DbCommandInterceptor
     {
         public bool WatchEditGraph { get; set; }
@@ -320,7 +357,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var part = Assert.Single(await Rows(fixture, "Part"));
         var link = Assert.Single(await Rows(fixture, "WorkspaceFolderContent"), row => Equals(row["ChildModelKey"], "Part"));
         var lid = (string)link["LID"]!;
-        var prepared = await Command(fixture, admin, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy/prepare", new { mode = "copy", sourcePosition = source, linkIds = new[] { lid }, targetPosition = target });
+        var prepared = await PartCopyCommand(fixture, admin, PartCopyDataPhase.Prepare, new { mode = "copy", sourcePosition = source, linkIds = new[] { lid }, targetPosition = target });
         foreach (var invalid in new object[] {
             new { mode = "cut", sourcePosition = source, linkIds = new[] { lid }, targetPosition = target },
             new { mode = "copy", sourcePosition = source, linkIds = new[] { lid, lid }, targetPosition = target },
@@ -328,18 +365,18 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             new { mode = "copy", sourcePosition = root, linkIds = new[] { source.LinkIds[^1] }, targetPosition = target },
             new { mode = "copy", sourcePosition = source, linkIds = new[] { lid }, targetPosition = root } })
         {
-            using var response = await Send(fixture, admin, "workspace.folder.pasteObjectCopy", "objects/copy/prepare", invalid);
+            using var response = await PartCopySend(fixture, admin, PartCopyDataPhase.Prepare, invalid);
             Assert.InRange((int)response.StatusCode, 400, 499);
         }
         var operationId = prepared.GetProperty("operationId").GetString();
         foreach (var field in new[] { "EID", "CreatedBy", "UpdatedAt", "Owner", "StorageKey" })
         {
-            using var forged = await Send(fixture, admin, "workspace.folder.pasteObjectCopy", "objects/copy", new { operationId, values = new Dictionary<string, object?> { ["ECODE"] = "FORGED", ["ENAME"] = "输入", [field] = "forged" } });
+            using var forged = await PartCopySend(fixture, admin, PartCopyDataPhase.Submit, new { operationId, values = new Dictionary<string, object?> { ["ECODE"] = "FORGED", ["ENAME"] = "输入", [field] = "forged" } });
             await Problem(forged, HttpStatusCode.BadRequest, "Workspace.ServerFieldForbidden");
         }
         await Command(fixture, admin, "workspace.folder.paste", "/api/workspace/content/paste", new { mode = "copy", sourcePosition = source, linkIds = new[] { lid }, targetPosition = target });
         await Command(fixture, admin, "workspace.folder.removeSelected", "/api/workspace/content/references/remove", new { position = source, linkIds = new[] { lid } });
-        using var removed = await Send(fixture, admin, "workspace.folder.pasteObjectCopy", "objects/copy", new { operationId, values = new { ECODE = "REMOVED", ENAME = "不换路径" } });
+        using var removed = await PartCopySend(fixture, admin, PartCopyDataPhase.Submit, new { operationId, values = new { ECODE = "REMOVED", ENAME = "不换路径" } });
         await Problem(removed, HttpStatusCode.NotFound, "Workspace.ReferenceUnavailable");
         Assert.Single(await Rows(fixture, "Part"));
         Assert.Equal(part["EID"], Assert.Single(await Rows(fixture, "Part"))["EID"]);
@@ -355,35 +392,38 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         await Command(fixture, admin, "workspace.folder.createPart", "/api/workspace/content/parts", new { position = source, values = new { ECODE = "CHANGE-SOURCE", ENAME = "打开时名称", Description = "旧说明" } });
         var lid = (string)Assert.Single(await Rows(fixture, "WorkspaceFolderContent"), row => Equals(row["ChildModelKey"], "Part"))["LID"]!;
         var input = new { mode = "copy", sourcePosition = source, linkIds = new[] { lid }, targetPosition = target };
-        var prepared = await Command(fixture, admin, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy/prepare", input);
+        var prepared = await PartCopyCommand(fixture, admin, PartCopyDataPhase.Prepare, input);
         var operationId = prepared.GetProperty("operationId").GetString();
         using (var update = await FeatureHttpTestRequests.SendAsync(admin, RowPoint(fixture, "edit"), HttpMethod.Put, "/api/workspace/content/" + lid,
-            new { position = source, values = new { ENAME = "提交前名称", Description = "新说明" } })) Assert.Equal(HttpStatusCode.OK, update.StatusCode);
-        using (var changed = await Send(fixture, admin, "workspace.folder.pasteObjectCopy", "objects/copy", new { operationId, values = new { ECODE = "CHANGED-COPY", ENAME = "我的编辑", Description = "我的说明" } }))
+            new { position = source, values = new { ENAME = "提交前名称", Description = "新说明" } }, new FeatureHttpTestRequests(fixture).Declaration("workspace.content.edit", RowPoint(fixture, "edit")))) Assert.Equal(HttpStatusCode.OK, update.StatusCode);
+        using (var changed = await PartCopySend(fixture, admin, PartCopyDataPhase.Submit, new { operationId, values = new { ECODE = "CHANGED-COPY", ENAME = "我的编辑", Description = "我的说明" } }))
             await Problem(changed, HttpStatusCode.Conflict, "Workspace.CopySourceChanged");
         Assert.Single(await Rows(fixture, "Part"));
-        prepared = await Command(fixture, admin, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy/prepare", input);
+        prepared = await PartCopyCommand(fixture, admin, PartCopyDataPhase.Prepare, input);
         operationId = prepared.GetProperty("operationId").GetString();
-        using (var duplicate = await Send(fixture, admin, "workspace.folder.pasteObjectCopy", "objects/copy", new { operationId, values = new { ECODE = "CHANGE-SOURCE", ENAME = "我的编辑" } }))
+        using (var duplicate = await PartCopySend(fixture, admin, PartCopyDataPhase.Submit, new { operationId, values = new { ECODE = "CHANGE-SOURCE", ENAME = "我的编辑" } }))
         { Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode); Assert.Contains("ECODE", await duplicate.Content.ReadAsStringAsync()); }
-        using (var unnormalized = await Send(fixture, admin, "workspace.folder.pasteObjectCopy", "objects/copy", new { operationId, values = new { ECODE = " NEW-COPY ", ENAME = "我的编辑" } }))
+        using (var unnormalized = await PartCopySend(fixture, admin, PartCopyDataPhase.Submit, new { operationId, values = new { ECODE = " NEW-COPY ", ENAME = "我的编辑" } }))
             await Problem(unnormalized, HttpStatusCode.BadRequest, "StandardCrud.ShortTextNotNormalized");
-        await Command(fixture, admin, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy", new { operationId, values = new { ECODE = "NEW-COPY", ENAME = "我的编辑", Description = "我的说明" } });
+        await PartCopyCommand(fixture, admin, PartCopyDataPhase.Submit, new { operationId, values = new { ECODE = "NEW-COPY", ENAME = "我的编辑", Description = "我的说明" } });
         var copied = Assert.Single(await Rows(fixture, "Part"), row => Equals(row["ECODE"], "NEW-COPY"));
         Assert.Equal("我的编辑", copied["ENAME"]); Assert.Equal("我的说明", copied["Description"]);
         var committedCancel = await Command(fixture, admin, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy/cancel", new { operationId });
         Assert.Equal("committed", committedCancel.GetProperty("state").GetString());
-        var fresh = await Command(fixture, admin, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy/prepare", input);
+        var fresh = await PartCopyCommand(fixture, admin, PartCopyDataPhase.Prepare, input);
         var cancelledId = fresh.GetProperty("operationId").GetString();
         var cancelled = await Command(fixture, admin, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy/cancel", new { operationId = cancelledId });
         Assert.Equal("cancelled", cancelled.GetProperty("state").GetString());
-        using var afterCancel = await Send(fixture, admin, "workspace.folder.pasteObjectCopy", "objects/copy", new { operationId = cancelledId, values = new { ECODE = "CANCELLED", ENAME = "不会创建" } });
+        using var afterCancel = await PartCopySend(fixture, admin, PartCopyDataPhase.Submit, new { operationId = cancelledId, values = new { ECODE = "CANCELLED", ENAME = "不会创建" } });
         await Problem(afterCancel, HttpStatusCode.Conflict, "Workspace.CopyCancelled");
         Assert.Equal(2, (await Rows(fixture, "Part")).Length);
         var copyLink = Assert.Single(await Rows(fixture, "WorkspaceFolderContent"), row => Equals(row["CEID"], copied["EID"]));
-        using (var editCopy = await FeatureHttpTestRequests.SendAsync(admin, RowPoint(fixture, "edit"), HttpMethod.Put, "/api/workspace/content/" + copyLink["LID"], new { position = target, values = new { ENAME = "只编辑副本" } })) Assert.Equal(HttpStatusCode.OK, editCopy.StatusCode);
+        using (var editCopy = await FeatureHttpTestRequests.SendAsync(admin, RowPoint(fixture, "edit"), HttpMethod.Put, "/api/workspace/content/" + copyLink["LID"], new { position = target, values = new { ENAME = "只编辑副本" } }, new FeatureHttpTestRequests(fixture).Declaration("workspace.content.edit", RowPoint(fixture, "edit")))) Assert.Equal(HttpStatusCode.OK, editCopy.StatusCode);
         Assert.Equal("提交前名称", Assert.Single(await Rows(fixture, "Part"), row => Equals(row["ECODE"], "CHANGE-SOURCE"))["ENAME"]);
-        await Command(fixture, admin, "workspace.folder.deleteObjects", "/api/workspace/content/delete", new { position = target, linkIds = new[] { copyLink["LID"] } });
+        var delete = Point(fixture, "workspace.folder.deleteObjects");
+        using (var deleted = await FeatureHttpTestRequests.SendAsync(admin, delete, HttpMethod.Post, "/api/workspace/content/delete",
+            new { position = target, linkIds = new[] { copyLink["LID"] } }, new FeatureHttpTestRequests(fixture).Declaration("workspace.content.delete", delete)))
+            Assert.Equal(HttpStatusCode.OK, deleted.StatusCode);
         Assert.Equal("CHANGE-SOURCE", Assert.Single(await Rows(fixture, "Part"))["ECODE"]);
     }
 
@@ -402,7 +442,7 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var input = new { mode = "copy", sourcePosition = source, linkIds = new[] { lid }, targetPosition = target };
         await Rule(fixture, admin, "NoTrueCopy", "part.part", sourceId, "partObjectCopy", "deny");
         await Command(fixture, ordinary, "workspace.folder.copy", "/api/workspace/content/clipboard/validate", new { mode = "copy", sourcePosition = source, linkIds = new[] { lid } });
-        using (var denied = await Send(fixture, ordinary, "workspace.folder.pasteObjectCopy", "objects/copy/prepare", input)) Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        using (var denied = await PartCopySend(fixture, ordinary, PartCopyDataPhase.Prepare, input)) Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
         await Rule(fixture, admin, "NoTrueCopy", "part.part", sourceId, "partObjectCopy", "allow");
         await Rule(fixture, admin, "NoReferenceCopy", "part.part", sourceId, "partCopy", "deny");
         await Rule(fixture, admin, "NoSourceEdit", "part.part", sourceId, "edit", "deny");
@@ -410,14 +450,14 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         await Rule(fixture, admin, "NoSourceParentEdit", "workspace.folder", FolderId(source, await Rows(fixture, "WorkspaceFolderContent")), "edit", "deny");
         await Command(fixture, ordinary, "workspace.folder.copy", "/api/workspace/content/clipboard/validate", new { mode = "copy", sourcePosition = source, linkIds = new[] { lid } });
         using (var oldPaste = await Send(fixture, ordinary, "workspace.folder.paste", "paste", input)) await Problem(oldPaste, HttpStatusCode.Forbidden, "Workspace.ObjectCopyDenied");
-        var preparation = await Command(fixture, ordinary, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy/prepare", input);
+        var preparation = await PartCopyCommand(fixture, ordinary, PartCopyDataPhase.Prepare, input);
         var operationId = preparation.GetProperty("operationId").GetString();
         var submit = new { operationId, values = new { ECODE = "HIDDEN-COPY", ENAME = "新对象" } };
         await Rule(fixture, admin, "NoTrueCopy", "part.part", sourceId, "partObjectCopy", "deny");
-        using (var revoked = await Send(fixture, ordinary, "workspace.folder.pasteObjectCopy", "objects/copy", submit)) Assert.Equal(HttpStatusCode.Forbidden, revoked.StatusCode);
+        using (var revoked = await PartCopySend(fixture, ordinary, PartCopyDataPhase.Submit, submit)) Assert.Equal(HttpStatusCode.Forbidden, revoked.StatusCode);
         await Rule(fixture, admin, "NoTrueCopy", "part.part", sourceId, "partObjectCopy", "allow");
         await Rule(fixture, admin, "NoTargetEdit", "workspace.folder", FolderId(target, await Rows(fixture, "WorkspaceFolderContent")), "edit", "deny");
-        using (var parentDenied = await Send(fixture, ordinary, "workspace.folder.pasteObjectCopy", "objects/copy", submit)) await Problem(parentDenied, HttpStatusCode.Forbidden, "Workspace.ParentWriteDenied");
+        using (var parentDenied = await PartCopySend(fixture, ordinary, PartCopyDataPhase.Submit, submit)) await Problem(parentDenied, HttpStatusCode.Forbidden, "Workspace.ParentWriteDenied");
         await Rule(fixture, admin, "NoTargetEdit", "workspace.folder", FolderId(target, await Rows(fixture, "WorkspaceFolderContent")), "edit", "allow");
         foreach (var action in new[] { "create", "read" })
         {
@@ -427,9 +467,9 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
             using var write = await FeatureHttpTestRequests.SendAsync(admin, Assert.Single(fixture.FeatureCatalog, point => point.BehaviorKey == "authorization.dataScope.save"), HttpMethod.Put, "/api/authorization/data-scope/rules/CopyCandidate", rule);
             Assert.Equal(HttpStatusCode.NoContent, write.StatusCode);
             if (action == "create")
-            { using var createDenied = await Send(fixture, ordinary, "workspace.folder.pasteObjectCopy", "objects/copy", submit); Assert.Equal(HttpStatusCode.Forbidden, createDenied.StatusCode); Assert.Single(await Rows(fixture, "Part")); }
+            { using var createDenied = await PartCopySend(fixture, ordinary, PartCopyDataPhase.Submit, submit); Assert.Equal(HttpStatusCode.Forbidden, createDenied.StatusCode); Assert.Single(await Rows(fixture, "Part")); }
         }
-        var result = await Command(fixture, ordinary, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy", submit);
+        var result = await PartCopyCommand(fixture, ordinary, PartCopyDataPhase.Submit, submit);
         Assert.True(result.GetProperty("succeeded").GetBoolean()); Assert.False(result.TryGetProperty("id", out _));
         using var otherActorResult = await Send(fixture, admin, "workspace.folder.resolveObjectCopy", "objects/copy/result", new { operationId });
         await Problem(otherActorResult, HttpStatusCode.NotFound, "Workspace.CopyOperationUnavailable");
@@ -449,11 +489,11 @@ public sealed partial class WorkspaceClipboardSqlServerHttpApiTests
         var original = Assert.Single(await Rows(fixture, "Part"));
         var originalLink = Assert.Single((await Rows(fixture, "WorkspaceFolderContent")).Where(row => Equals(row["ChildModelKey"], "Part")));
         var input = new { mode = "copy", sourcePosition = source, linkIds = new[] { originalLink["LID"] }, targetPosition = target };
-        var preparation = await Command(fixture, admin, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy/prepare", input);
+        var preparation = await PartCopyCommand(fixture, admin, PartCopyDataPhase.Prepare, input);
         Assert.Equal("", preparation.GetProperty("values").GetProperty("ECODE").GetString());
         Assert.Equal("源零组件", preparation.GetProperty("values").GetProperty("ENAME").GetString());
         var operationId = preparation.GetProperty("operationId").GetString();
-        var result = await Command(fixture, admin, "workspace.folder.pasteObjectCopy", "/api/workspace/content/objects/copy", new {
+        var result = await PartCopyCommand(fixture, admin, PartCopyDataPhase.Submit, new {
             operationId, values = new { ECODE = "COPY-PART-TARGET", ENAME = "独立零组件", Description = "确认说明" } });
         Assert.True(result.GetProperty("succeeded").GetBoolean());
         Assert.Equal("committed", result.GetProperty("state").GetString());

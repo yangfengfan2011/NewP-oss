@@ -25,7 +25,8 @@ public sealed class WorkspaceClipboardExecutionEndpointCoverageTests
             .Select(endpoint => endpoint.Metadata.GetMetadata<WorkspaceClipboardExecutionAttribute>()).Where(binding => binding is not null).ToArray();
         Assert.NotEmpty(endpoints);
         var contracts = compiled.Plan!.Modules.SelectMany(module => module.DataExecutions)
-            .Where(contract => contract.Key.StartsWith("workspace.clipboard.", StringComparison.Ordinal)).ToArray();
+            .Where(contract => contract.Key.StartsWith("workspace.clipboard.", StringComparison.Ordinal)
+                || contract.Key == WorkspaceObjectCopyExecutions.Part).ToArray();
         Assert.NotEmpty(contracts);
         Assert.All(contracts, contract => Assert.Contains(endpoints, endpoint => endpoint!.Binding.Execution == contract.Key
             && endpoint.Binding.Provider == contract.Provider && contract.Requirements.Any(requirement => requirement.Stage == endpoint.Binding.Stage)));

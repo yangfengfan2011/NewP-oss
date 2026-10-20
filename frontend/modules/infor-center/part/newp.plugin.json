@@ -7,6 +7,11 @@
   "features": [{ "key": "part.history", "kind": "navigation", "parentKey": "navigation:part.parts", "title": "对象履历", "titleKey": "Part.History", "behaviorKey": "part.part.history" }],
   "dataActions": [{ "key": "partCopy", "title": "复制零组件引用", "behaviorKey": "data.part.copy", "requiresRead": true }, { "key": "partObjectCopy", "title": "创建零组件真副本", "behaviorKey": "data.part.objectCopy", "requiresRead": true }],
   "dataExecutions": [
+    {"key":"part.part.copy.source","moduleId":"Part","provider":"part.backend","boundary":"internal","featureBehaviors":[],"requirements":[
+      {"role":"visibility","stage":"read","shape":"object","resources":["part.part"],"anyOf":[["read"]],"minimumCount":1,"maximumCount":1},
+      {"role":"copy","stage":"read","shape":"object","resources":["part.part"],"anyOf":[["partObjectCopy"]],"minimumCount":1,"maximumCount":1}
+    ],"fixedBindings":[{"kind":"internal","identity":"part.part.copy.source","caller":"ICP.Platform.Modules.Part.PartCopyBehavior.ExecuteAsync"}]},
+    {"key":"part.part.copy.finalCandidate","moduleId":"Part","provider":"standardCrud.create","boundary":"internal","featureBehaviors":[],"resourceKey":"part.part","fixedBindings":[{"kind":"internal","identity":"part.part.copy.finalCandidate","caller":"ICP.Platform.Modules.Workspace.WorkspaceContents.CopyObjectAsync"}]},
     {"key": "part.part.authorization.manage", "moduleId": "Part", "provider": "authorization.object.manage", "boundary": "entry", "featureBehaviors": ["part.part.authorize", "part.part.read"], "resourceKey": "part.part"},
     {"key": "part.part.authorization.view", "moduleId": "Part", "provider": "authorization.object.view", "boundary": "entry", "featureBehaviors": ["part.part.read"], "resourceKey": "part.part"},
     {"key": "part.part.initializeOwnership", "moduleId": "Part", "provider": "entityOwnership.initialize", "boundary": "entry", "featureBehaviors": ["part.part.initializeOwnership"], "resources": ["part.part"]},

@@ -20,11 +20,14 @@ import '../pages/StandardCrudListOverlayRuntime';
 const { default: workspace } = await loadComponentSource<{ default: FrontendBehaviorBindings }>('Workspace', 'index.ts');
 await loadComponentSource('Workspace', 'workspaceRootResource.ts');
 await loadComponentSource('Workspace', 'WorkspaceFolderCopyInput.tsx');
+await loadComponentSource('Workspace', 'WorkspaceObjectCopyInput.tsx');
 const content = readComponentJson('Workspace', 'metadata/models/WorkspaceFolderContent.model.json');
 const tree = readComponentJson('Workspace', 'metadata/views/WorkspaceStructure.view.json');
 const list = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderList.view.json');
 const detail = readComponentJson('Workspace', 'metadata/views/WorkspaceFolderDetail.view.json');
 const dictionary = readComponentJson('Workspace', 'metadata/dictionaries/Workspace.dic.json');
+const partDictionary = readComponentJson('Part', 'metadata/dictionaries/Part.dic.json');
+const documentDictionary = readComponentJson('Document', 'metadata/dictionaries/Document.dic.json');
 vi.unmock('@icp-platform/core');
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
@@ -50,7 +53,7 @@ async function waitForActive(check: () => void | Promise<void>, signal: AbortSig
 const waitFor = (check: () => void | Promise<void>) => waitForActive(check, testLifetime.signal);
 
 async function mount(options: { actionSets?: Record<string, { column: string[]; contextMenu: string[] }>; columnMode?: 'default' | 'menu'; folderRow?: boolean; validate?: (body: Record<string, unknown>) => Promise<Response>; paste?: (body: Record<string, unknown>) => Promise<Response>; failRefresh?: boolean;
-  folderCopy?: (body: Record<string, unknown>) => Promise<Response>; grants?: readonly string[]; remove?: (body: Record<string, unknown>) => Promise<Response>; formalDeclarations?: boolean;
+  folderCopy?: (body: Record<string, unknown>) => Promise<Response>; objectCopy?: (body: Record<string, unknown>) => Promise<Response>; grants?: readonly string[]; remove?: (body: Record<string, unknown>) => Promise<Response>; formalDeclarations?: boolean;
   menuLoad?: (load: () => Promise<{ default: StandardCrudResourceRegistration }>, call: number) => Promise<{ default: StandardCrudResourceRegistration }> } = {}) {
   const lifetime = new AbortController();
   const waitFor = (check: () => void | Promise<void>) => waitForActive(check, lifetime.signal);
@@ -88,6 +91,17 @@ async function mount(options: { actionSets?: Record<string, { column: string[]; 
       return json({ items, total: items.length, page: 1, pageSize: 20 });
     }
     if (url.pathname.startsWith('/api/workspace/folders/')) return json({ fields: { ENAME: 'A' } });
+    if (url.pathname.endsWith('/objects/copy/prepare')) {
+      const body = input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body));
+      writes.push({ path: url.pathname, body });
+      return json({ operationId: 'actual-operation', modelKey: body.linkIds[0].startsWith('Part') ? 'Part' : 'Document',
+        values: { ECODE: '', ENAME: '确认的来源', Description: '' }, sourcePath: ['公共空间', 'A'], targetPath: ['公共空间', 'B'] });
+    }
+    if (url.pathname.endsWith('/objects/copy')) {
+      const body = input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body));
+      writes.push({ path: url.pathname, body });
+      return options.objectCopy ? controlledResponse(() => options.objectCopy!(body)) : json({ succeeded: true, state: 'committed' });
+    }
     if (['/folders/copy/prepare', '/folders/copy-structure/prepare'].some(path => url.pathname.endsWith(path))) return json({ sourceName: 'WorkspaceFolder source', sourcePath: ['公共空间', 'A', 'WorkspaceFolder source'], targetPath: ['公共空间', 'B'] });
     if (['/folders/copy', '/folders/copy-structure'].some(path => url.pathname.endsWith(path))) {
       const body = input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body));
@@ -120,7 +134,11 @@ async function mount(options: { actionSets?: Record<string, { column: string[]; 
   const bindings = { ...workspace, standardCrudCapabilities: workspace.standardCrudCapabilities?.map(binding => binding.targetKey === list.view.key
     ? { ...binding, load: () => { ++registrationLoads; return registrationLoads > 1 && options.menuLoad ? options.menuLoad(binding.load, registrationLoads) : binding.load(); } } : binding) };
   ModuleRegistry.replaceAll([{ metadata: { moduleId: 'Workspace', displayName: 'Workspace', version: '1' }, ...bindings }], 'clipboard-test');
-  const catalog = Object.fromEntries(Object.entries(dictionary.Workspace).map(([key, value]) => [`Workspace.${key}`, value.zhs]));
+  const catalog = Object.fromEntries([
+    ...Object.entries(dictionary.Workspace).map(([key, value]) => [`Workspace.${key}`, value.zhs]),
+    ...Object.entries(partDictionary.Part).map(([key, value]) => [`Part.${key}`, value.zhs]),
+    ...Object.entries(documentDictionary.Document).map(([key, value]) => [`Document.${key}`, value.zhs]),
+  ]);
   const actions = options.formalDeclarations ? clipboardContract.features.filter(point => point.kind === 'action') : [...list.view.pageActions.map((action: { key: string }) => ({ key: action.key, position: `page-${action.key}`, kind: 'action', parentPosition: 'entry', staticScope: 'folder', actionScope: 'list.pageActions' })),
     ...list.view.rowActions.map((action: { key: string }) => ({ key: action.key, position: `row-${action.key}`, kind: 'action', parentPosition: 'entry', staticScope: 'folder', actionScope: 'list.rowActions' })),
     ...tree.view.nodeTypes[0].contextMenu.map((action: { key: string }) => ({ key: action.key, position: `tree-${action.key}`, kind: 'action', parentPosition: 'entry', staticScope: 'folder', actionScope: 'contextMenu' }))];
@@ -176,6 +194,36 @@ async function mount(options: { actionSets?: Record<string, { column: string[]; 
   };
   return { router, container, writes, request, select, button, disabled, click, hasAction, copyRows, cleanup, openTreeMenu, waitFor };
 }
+
+it.each(['Part', 'Document'] as const)('routes the actual %s object-copy drawer through the bound Provider and the explicit model transport', async model => {
+  const page = await mount({ formalDeclarations: true });
+  const declarations = clipboardContract.declarations.filter(item => item.viewKey === list.view.key && item.surface === 'pageActions' && item.actionKey === 'pasteObjectCopy');
+  expect(declarations).toHaveLength(1);
+  const declaration = declarations[0];
+  expect(declaration.execution).toBe('workspace.objectCopy.part');
+  await page.copyRows([model]);
+  await page.select('B');
+  await page.waitFor(async () => expect(await page.disabled('粘贴对象副本')).toBe(false));
+  await page.click('粘贴对象副本');
+  await page.waitFor(() => expect(document.querySelector('.ant-drawer input[id="ECODE"]')).not.toBeNull());
+  const code = document.querySelector<HTMLInputElement>('.ant-drawer input[id="ECODE"]')!;
+  await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(code, 'PAGE-COPY'); code.dispatchEvent(new Event('input', { bubbles: true })); });
+  const save = () => [...document.querySelectorAll<HTMLButtonElement>('.ant-drawer button')].find(button => button.textContent?.replace(/\s/g, '') === '保存并关闭')!;
+  await page.waitFor(() => expect(save()?.disabled).toBe(false));
+  await act(async () => save().click());
+  await page.waitFor(() => expect(page.writes.some(write => write.path.endsWith('/objects/copy')), document.querySelector('.ant-drawer')?.textContent ?? 'drawer closed').toBe(true));
+  await page.waitFor(() => expect(document.querySelector('.ant-drawer-open')).toBeNull());
+  for (const path of ['/objects/copy/prepare', '/objects/copy']) {
+    const calls = page.request.mock.calls.filter(([input]) => new URL(input instanceof Request ? input.url : String(input), 'http://localhost').pathname.endsWith(path));
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) {
+      const headers = new Headers(call[0] instanceof Request ? call[0].headers : call[1]?.headers);
+      expect(headers.get('X-NewP-Data-Declaration')).toBe(model === 'Part' ? declaration.id : null);
+      expect(declaration.featurePositions).toContain(headers.get('X-NewP-Feature'));
+    }
+  }
+  expect(page.writes.filter(write => write.path.endsWith('/objects/copy'))).toHaveLength(1);
+});
 
 it.each(['copy', 'cut'] as const)('uses the compiled %s declaration through the actual tree Provider and current paste occurrence', async mode => {
   const page = await mount({ formalDeclarations: true });

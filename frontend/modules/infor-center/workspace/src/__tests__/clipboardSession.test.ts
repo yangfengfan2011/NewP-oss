@@ -10,12 +10,12 @@ it('recovers a lost object-copy receipt by reading its operation and never repea
   const session = new WorkspaceClipboardSession(vi.fn());
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ linkId: 'part', modelKey: 'Part' }] })));
   await session.copy(source, ['part'], 'copy');
-  const draft = session.prepareObjectCopy(target, 'object-copy');
+  const draft = session.prepareObjectCopy(target, 'object-copy', 'part-source');
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ operationId: 'operation', values: { ECODE: '', ENAME: 'Source', Description: 'Original' }, sourcePath: ['Public', 'Source'], targetPath: ['Public', 'Target'] })));
   await session.readObjectCopyInput(draft, new AbortController().signal);
   vi.mocked(platformFetch).mockRejectedValueOnce(new TypeError('lost receipt'));
-  await expect(session.pasteObjectCopy(draft, { ECODE: 'NEW', ENAME: 'My edit' }, target, 'object-copy')).rejects.toThrow();
-  await expect(session.pasteObjectCopy(draft, { ECODE: 'REPLAY', ENAME: 'Must not write' }, target, 'object-copy')).rejects.toThrow();
+  await expect(session.pasteObjectCopy(draft, { ECODE: 'NEW', ENAME: 'My edit' }, target, 'object-copy', 'part-source')).rejects.toThrow();
+  await expect(session.pasteObjectCopy(draft, { ECODE: 'REPLAY', ENAME: 'Must not write' }, target, 'object-copy', 'part-source')).rejects.toThrow();
   expect(platformFetch).toHaveBeenCalledTimes(3);
   vi.mocked(platformFetch).mockResolvedValueOnce(new Response(JSON.stringify({ state: 'committed', succeeded: true })));
   expect(await session.resolveObjectCopy()).toEqual({ state: 'committed', succeeded: true });

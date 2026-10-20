@@ -15,13 +15,14 @@ public sealed partial class WorkspaceContents
 {
     // 同一页已核证LID的请求顺序就是确认顺序；集合不去重、不按EID换路，也不静默筛掉非Document。
     private ValueTask<WorkspaceObjectCopyPreparation> PrepareDocumentBatchAsync(string actor, WorkspacePosition sourcePosition,
-        string[] linkIds, WorkspacePosition targetPosition, CancellationToken token) => transactions.ExecuteAsync<WorkspaceObjectCopyPreparation>(async cancellation =>
+        string[] linkIds, WorkspacePosition targetPosition, bool declarationSpecified, CancellationToken token) => transactions.ExecuteAsync<WorkspaceObjectCopyPreparation>(async cancellation =>
     {
         using var operation = audit.BeginOperation();
         await LockGraphAsync(cancellation);
         var parent = await positions.ResolveAsync(actor, sourcePosition, cancellation);
         var endpoints = await ResolveDeferredClipboardTargetsAsync(parent.FolderId, linkIds, DeferredClipboardExecution.DocumentPreparation, cancellation);
         if (endpoints.Any(endpoint => endpoint.ModelKey != "Document")) throw new LinkQueryException(400, "Workspace.ObjectCopySourceRequired");
+        WorkspaceObjectCopyExecutions.RequireDeferredDocumentRequest(declarationSpecified);
         var target = await WritablePositionAsync(actor, targetPosition, cancellation);
         RequireContainer(targetPosition, target, "Document");
         var sources = new List<WorkspaceDocumentCopySource>();

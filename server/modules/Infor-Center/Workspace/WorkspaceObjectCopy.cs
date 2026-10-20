@@ -19,20 +19,20 @@ public sealed partial class WorkspaceContents
 {
     /// <summary>短事务保存本主体的确认输入及精确位置；该记录只用于恢复，不替代随后提交授权。</summary>
     public ValueTask<WorkspaceObjectCopyPreparation> PrepareObjectCopyAsync(string actor, string mode, WorkspacePosition sourcePosition,
-        string[] linkIds, WorkspacePosition targetPosition, CancellationToken token)
+        string[] linkIds, WorkspacePosition targetPosition, bool declarationSpecified, CancellationToken token)
     {
         ValidateSelection(linkIds);
         if (mode != "copy")
             throw new LinkQueryException(400, "Workspace.ObjectCopySourceRequired");
-        if (linkIds.Length > 1) return PrepareDocumentBatchAsync(actor, sourcePosition, linkIds, targetPosition, token);
+        if (linkIds.Length > 1) return PrepareDocumentBatchAsync(actor, sourcePosition, linkIds, targetPosition, declarationSpecified, token);
         return transactions.ExecuteAsync<WorkspaceObjectCopyPreparation>(async cancellation =>
         {
             using var operation = audit.BeginOperation();
             await LockGraphAsync(cancellation);
             var parent = await positions.ResolveAsync(actor, sourcePosition, cancellation);
-            var endpoint = await ResolveObjectCopySourceAsync(parent.FolderId, linkIds, cancellation);
+            var endpoint = await ResolveObjectCopySourceAsync(parent.FolderId, linkIds, "prepare", declarationSpecified, cancellation);
             if (endpoint.ModelKey is not ("Part" or "Document")) throw new LinkQueryException(400, "Workspace.ObjectCopySourceRequired");
-            var target = await WritablePositionAsync(actor, targetPosition, cancellation);
+            var target = await ObjectCopyTargetPositionAsync(actor, targetPosition, endpoint.ModelKey, "prepare", cancellation);
             RequireContainer(targetPosition, target, endpoint.ModelKey);
             var detail = await crud.GetDetailFromSourceAsync(resources.FindByResourceKey(Resource(endpoint.ModelKey))!, endpoint.Id,
                 new("workspace.objectCopy.detail", "workspace.backend", typeof(WorkspaceContents), nameof(PrepareObjectCopyAsync)), cancellation)
@@ -63,9 +63,9 @@ public sealed partial class WorkspaceContents
         if (prepared.Documents is not null) return await CopyDocumentBatchAsync(actor, operationId, row, prepared, input, operations, cancellation);
         if (!Equals(row["State"], prepared.SourceModel == "Document" ? "preparing" : "ready")) throw new LinkQueryException(409, "Workspace.CopyCancelled");
         var parent = await positions.ResolveAsync(actor, prepared.SourcePosition, cancellation);
-        var endpoint = await ResolveObjectCopySourceAsync(parent.FolderId, prepared.LinkIds, cancellation);
+        var endpoint = await ResolveObjectCopySourceAsync(parent.FolderId, prepared.LinkIds, "submit", false, cancellation);
         if (endpoint.ModelKey != prepared.SourceModel || endpoint.Id != prepared.SourceId) throw new LinkQueryException(404, "Workspace.ReferenceUnavailable");
-        var target = await WritablePositionAsync(actor, prepared.TargetPosition, cancellation);
+        var target = await ObjectCopyTargetPositionAsync(actor, prepared.TargetPosition, endpoint.ModelKey, "submit", cancellation);
         RequireContainer(prepared.TargetPosition, target, endpoint.ModelKey);
         if (!catalog.Get("workspace.content").Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == endpoint.ModelKey))
             throw new LinkQueryException(400, "Workspace.InvalidEndpoint");
@@ -81,10 +81,14 @@ public sealed partial class WorkspaceContents
         await referenceAudit.ObjectCopiedAsync(prepared.LinkIds[0], parent.FolderId, endpoint, linkId, target.FolderId, id, cancellation);
         // 授权规则写入不取得目录图锁；在业务图和审计登记之后再次裁决，不能把前次允许沿用到提交。
         var finalParent = await positions.ResolveAsync(actor, prepared.SourcePosition, cancellation);
-        var finalSource = await ResolveObjectCopySourceAsync(finalParent.FolderId, prepared.LinkIds, cancellation);
+        var finalSource = await ResolveObjectCopySourceAsync(finalParent.FolderId, prepared.LinkIds, "submit", false, cancellation);
         if (finalSource != endpoint) throw new LinkQueryException(404, "Workspace.ReferenceUnavailable");
-        await WritablePositionAsync(actor, prepared.TargetPosition, cancellation);
-        if (!await decisions.IsCandidateAllowedAsync(Resource(endpoint.ModelKey), result.Detail.Fields, "create", cancellation))
+        await ObjectCopyTargetPositionAsync(actor, prepared.TargetPosition, endpoint.ModelKey, "submit", cancellation);
+        var candidateAllowed = endpoint.ModelKey == "Part"
+            ? await executionAccess.EvaluateCandidateAsync(PartCopyFinalCandidateSource(), "part.part", "candidate", result.Detail.Fields, cancellation)
+                == ICP.Platform.Authorization.Contracts.DataExecutionDecision.Allowed
+            : await decisions.IsCandidateAllowedAsync("document.document", result.Detail.Fields, "create", cancellation);
+        if (!candidateAllowed)
             throw new LinkQueryException(403, "Workspace.ObjectCreateDenied");
         row["State"] = "committed";
         audit.ForUpdate((string)row["CreatedBy"]!, (DateTime)row["CreatedAt"]!).ApplyTo(row);
@@ -117,15 +121,28 @@ public sealed partial class WorkspaceContents
 
     private DbSet<Dictionary<string, object?>> ObjectCopies => db.Set<Dictionary<string, object?>>("WorkspaceObjectCopy");
 
-    // 来源资格使用真副本专属拒绝，不能以“写入”提示误导用户额外申请源edit。
-    private async Task<ICP.Platform.Crud.LinkQueries.LinkObjectReference> ResolveObjectCopySourceAsync(string parentId, string[] linkIds, CancellationToken token)
+    // 先按真实LID解析类型；Part不因缺声明进入旧分支，Doc保留精确过渡且不借Part声明。
+    private async Task<ICP.Platform.Crud.LinkQueries.LinkObjectReference> ResolveObjectCopySourceAsync(string parentId,
+        string[] linkIds, string stage, bool declarationSpecified, CancellationToken token)
     {
-        var source = (await ResolveTargetsAsync(parentId, linkIds, "read", token)).Single();
-        var action = source.ModelKey switch { "Part" => "partObjectCopy", "Document" => "documentObjectCopy", _ => throw new LinkQueryException(400, "Workspace.ObjectCopySourceRequired") };
-        if (!await decisions.IsAllowedAsync(Resource(source.ModelKey), source.Id, action, token)) throw new LinkQueryException(403, "Workspace.ObjectCopyDenied");
+        var source = (await ReadMutationTargetsAsync(parentId, linkIds, token)).Single();
+        if (source.ModelKey == "Part") executionAccess.Validate([WorkspaceObjectCopyExecutions.Binding(stage)], "part.part");
+        else if (source.ModelKey == "Document") WorkspaceObjectCopyExecutions.RequireDeferredDocumentRequest(declarationSpecified);
+        if (!await reader.IsEndpointReadableAsync("workspace.content", source, token)) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
+        // Doc及不支持的类型保留原先read后拒绝顺序；该直接read槽随317退出。
+        var readable = source.ModelKey == "Part" ? await PartCopyAllowedAsync(stage, "visibility", source.Id, token)
+            : await decisions.IsAllowedAsync(Resource(source.ModelKey), source.Id, "read", token);
+        if (!readable) throw new LinkQueryException(403, "Workspace.ObjectWriteDenied");
+        await RequireNonRootMutationTargetAsync(source, token);
+        var allowed = source.ModelKey switch
+        {
+            "Part" => await PartCopyAllowedAsync(stage, "source", source.Id, token),
+            "Document" => await decisions.IsAllowedAsync("document.document", source.Id, "documentObjectCopy", token),
+            _ => throw new LinkQueryException(400, "Workspace.ObjectCopySourceRequired")
+        };
+        if (!allowed) throw new LinkQueryException(403, "Workspace.ObjectCopyDenied");
         return source;
     }
-
     // actor 来自认证主体；不存在与属于他人使用同一拒绝，不暴露状态、名称和目标。
     private async Task<Dictionary<string, object?>> ReadObjectCopyAsync(string actor, string operationId, CancellationToken token) =>
         await ObjectCopies.SingleOrDefaultAsync(row => EF.Property<string>(row, "EID") == operationId && EF.Property<string>(row, "ActorId") == actor, token)

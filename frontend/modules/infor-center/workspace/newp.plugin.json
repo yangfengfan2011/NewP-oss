@@ -11,6 +11,14 @@
   "features": [{"key": "workspace", "kind": "navigation", "title": "工作空间", "titleKey": "Workspace.Title", "behaviorKey": "workspace.spaces.access"}, {"key": "workspace.history", "kind": "navigation", "parentKey": "workspace", "title": "对象履历", "titleKey": "Workspace.History", "behaviorKey": "workspace.folder.history"}, {"key": "workspace.transfers", "kind": "navigation", "parentKey": "workspace", "title": "接收通知", "titleKey": "Workspace.TransferNotifications", "behaviorKey": "workspace.transfers.read"}],
   "dataActions": [{ "key": "workspaceCopy", "title": "复制文件夹引用", "behaviorKey": "data.workspace.copy", "requiresRead": true }],
   "dataExecutions": [
+    {"key":"workspace.objectCopy.part","moduleId":"Workspace","provider":"workspace.backend","boundary":"entry","featureBehaviors":["workspace.folder.pasteObjectCopy"],"requirements":[
+      {"role":"visibility","stage":"prepare","shape":"object","resources":["part.part"],"anyOf":[["read"]],"minimumCount":1,"maximumCount":1},
+      {"role":"source","stage":"prepare","shape":"object","resources":["part.part"],"anyOf":[["partObjectCopy"]],"minimumCount":1,"maximumCount":1},
+      {"role":"parent","stage":"prepare","shape":"object","resources":["workspace.folder"],"anyOf":[["read","edit"]],"readResolverKey":"workspace.position","minimumCount":1,"maximumCount":1},
+      {"role":"visibility","stage":"submit","shape":"object","resources":["part.part"],"anyOf":[["read"]],"minimumCount":1,"maximumCount":1},
+      {"role":"source","stage":"submit","shape":"object","resources":["part.part"],"anyOf":[["partObjectCopy"]],"minimumCount":1,"maximumCount":1},
+      {"role":"parent","stage":"submit","shape":"object","resources":["workspace.folder"],"anyOf":[["read","edit"]],"readResolverKey":"workspace.position","minimumCount":1,"maximumCount":1}
+    ]},
     {"key":"workspace.content.authorization.manage","moduleId":"Workspace","provider":"authorization.collection.manage","boundary":"entry","featureBehaviors":["workspace.folder.authorize","workspace.folder.read"],"resources":["workspace.folder","part.part","document.document"]},
     {"key":"workspace.content.authorization.batch","moduleId":"Workspace","provider":"authorization.collection.manage","boundary":"entry","featureBehaviors":["workspace.folder.authorize","workspace.folder.read"],"resources":["workspace.folder","part.part","document.document"]},
     {"key":"workspace.content.authorization.view","moduleId":"Workspace","provider":"authorization.collection.view","boundary":"entry","featureBehaviors":["workspace.folder.read"],"resources":["workspace.folder","part.part","document.document"]},

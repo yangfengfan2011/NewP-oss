@@ -1283,6 +1283,124 @@
       "provider": "workspace.backend"
     },
     {
+      "id": "Workspace/view:workspace.folder.list/pageActions/action:pasteObjectCopy",
+      "moduleId": "Workspace",
+      "viewKey": "workspace.folder.list",
+      "surface": "pageActions",
+      "actionKey": "pasteObjectCopy",
+      "execution": "workspace.objectCopy.part",
+      "resources": [
+        "part.part",
+        "workspace.folder"
+      ],
+      "actions": [
+        "read",
+        "partObjectCopy",
+        "edit"
+      ],
+      "featurePositions": [
+        "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:pasteObjectCopy",
+        "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:pasteObjectCopy"
+      ],
+      "requirements": [
+        {
+          "role": "visibility",
+          "stage": "prepare",
+          "shape": "object",
+          "resources": [
+            "part.part"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        },
+        {
+          "role": "source",
+          "stage": "prepare",
+          "shape": "object",
+          "resources": [
+            "part.part"
+          ],
+          "anyOf": [
+            [
+              "partObjectCopy"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        },
+        {
+          "role": "parent",
+          "stage": "prepare",
+          "shape": "object",
+          "resources": [
+            "workspace.folder"
+          ],
+          "anyOf": [
+            [
+              "read",
+              "edit"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1,
+          "readResolverKey": "workspace.position"
+        },
+        {
+          "role": "visibility",
+          "stage": "submit",
+          "shape": "object",
+          "resources": [
+            "part.part"
+          ],
+          "anyOf": [
+            [
+              "read"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        },
+        {
+          "role": "source",
+          "stage": "submit",
+          "shape": "object",
+          "resources": [
+            "part.part"
+          ],
+          "anyOf": [
+            [
+              "partObjectCopy"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1
+        },
+        {
+          "role": "parent",
+          "stage": "submit",
+          "shape": "object",
+          "resources": [
+            "workspace.folder"
+          ],
+          "anyOf": [
+            [
+              "read",
+              "edit"
+            ]
+          ],
+          "minimumCount": 1,
+          "maximumCount": 1,
+          "readResolverKey": "workspace.position"
+        }
+      ],
+      "provider": "workspace.backend"
+    },
+    {
       "id": "Workspace/view:workspace.folder.list/pageActions/action:removeSelected",
       "moduleId": "Workspace",
       "viewKey": "workspace.folder.list",
@@ -2598,6 +2716,29 @@
       "container": false
     },
     {
+      "position": "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:pasteObjectCopy",
+      "moduleId": "Workspace",
+      "key": "pasteObjectCopy",
+      "kind": "action",
+      "title": "\u7C98\u8D34\u5BF9\u8C61\u526F\u672C",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "workspace.folder.pasteObjectCopy",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "workspace/node-type:folder/surface:contextMenu/action:pasteObjectCopy",
+      "staticScope": "folder",
+      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "titleKey": "Workspace.PasteObjectCopy",
+      "staticScopeTitleKey": "Workspace.Folder",
+      "actionScope": "contextMenu",
+      "readBehaviors": [
+        "workspace.folder.read"
+      ],
+      "container": false
+    },
+    {
       "position": "Workspace/navigation:workspace/node-type:folder/surface:contextMenu/action:remove",
       "moduleId": "Workspace",
       "key": "remove",
@@ -2874,6 +3015,29 @@
       "container": false
     },
     {
+      "position": "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:pasteObjectCopy",
+      "moduleId": "Workspace",
+      "key": "pasteObjectCopy",
+      "kind": "action",
+      "title": "\u7C98\u8D34\u5BF9\u8C61\u526F\u672C",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "workspace.folder.pasteObjectCopy",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "workspace/node-type:folder/surface:list.pageActions/action:pasteObjectCopy",
+      "staticScope": "folder",
+      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "titleKey": "Workspace.PasteObjectCopy",
+      "staticScopeTitleKey": "Workspace.Folder",
+      "actionScope": "list.pageActions",
+      "readBehaviors": [
+        "workspace.folder.read"
+      ],
+      "container": false
+    },
+    {
       "position": "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:removeSelected",
       "moduleId": "Workspace",
       "key": "removeSelected",
@@ -2889,6 +3053,29 @@
       "staticScope": "folder",
       "staticScopeTitle": "\u6587\u4EF6\u5939",
       "titleKey": "Workspace.RemoveSelected",
+      "staticScopeTitleKey": "Workspace.Folder",
+      "actionScope": "list.pageActions",
+      "readBehaviors": [
+        "workspace.folder.read"
+      ],
+      "container": false
+    },
+    {
+      "position": "Workspace/navigation:workspace/node-type:folder/surface:list.pageActions/action:resolveObjectCopy",
+      "moduleId": "Workspace",
+      "key": "resolveObjectCopy",
+      "kind": "action",
+      "title": "\u6838\u5BF9\u526F\u672C\u7ED3\u679C",
+      "parentPosition": "Workspace/navigation:workspace",
+      "behaviorKey": "workspace.folder.resolveObjectCopy",
+      "entryDependencies": [
+        "Workspace/navigation:workspace"
+      ],
+      "order": 0,
+      "referenceKey": "workspace/node-type:folder/surface:list.pageActions/action:resolveObjectCopy",
+      "staticScope": "folder",
+      "staticScopeTitle": "\u6587\u4EF6\u5939",
+      "titleKey": "Workspace.CopyResolve",
       "staticScopeTitleKey": "Workspace.Folder",
       "actionScope": "list.pageActions",
       "readBehaviors": [

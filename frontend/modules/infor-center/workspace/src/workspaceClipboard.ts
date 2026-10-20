@@ -8,7 +8,7 @@ export interface ClipboardState { readonly phase: 'idle' | 'validating' | 'pasti
 export type FolderCopyKind = 'copy' | 'copy-structure';
 export interface FolderCopyDraft { readonly kind: FolderCopyKind; readonly declarationId: string; readonly source: WorkspaceClipboard; readonly targetKey: string; readonly featurePosition?: string; closed: boolean }
 export interface FolderCopyPreparation { readonly sourceName: string; readonly sourcePath: readonly string[]; readonly targetPath: readonly string[] }
-export interface ObjectCopyDraft { readonly source: WorkspaceClipboard; readonly targetKey: string; readonly featurePosition?: string; operationId?: string; requiresReconfirmation?: boolean; fieldErrors?: Record<string, string>; closed: boolean }
+export interface ObjectCopyDraft { readonly source: WorkspaceClipboard; readonly model: 'Part' | 'Document'; readonly declarationId?: string; readonly targetKey: string; readonly featurePosition?: string; operationId?: string; requiresReconfirmation?: boolean; fieldErrors?: Record<string, string>; closed: boolean }
 export interface ObjectCopyValuesRow { sourceLinkId: string; values: Record<string, unknown> }
 export interface ObjectCopyPreparationItem extends ObjectCopyValuesRow { sourcePath: readonly string[]; fileCount: number; totalBytes: number }
 export interface ObjectCopyPreparation { operationId: string; values: Record<string, unknown>; sourcePath: readonly string[]; targetPath: readonly string[]; modelKey?: 'Part' | 'Document'; fileCount?: number; totalBytes?: number; items?: ObjectCopyPreparationItem[] }
@@ -35,7 +35,7 @@ export class WorkspaceClipboardSession {
   private validation?: AbortController;
   private validationBase?: ClipboardState;
   private folderSource?: WorkspaceClipboard;
-  private objectSource?: WorkspaceClipboard;
+  private objectSource?: { clipboard: WorkspaceClipboard; model: 'Part' | 'Document' };
   private objectOperation?: { id: string; featurePosition?: string; draft: ObjectCopyDraft; receipt?: ObjectCopyReceipt };
   private readonly objectDrafts = new WeakSet<ObjectCopyDraft>();
   private readonly folderDrafts = new WeakSet<FolderCopyDraft>();
@@ -66,7 +66,8 @@ export class WorkspaceClipboardSession {
       if (!Array.isArray(receipt.items) || receipt.items.length !== linkIds.length || receipt.items.some((item, index) => item.linkId !== linkIds[index]))
         throw this.failure('Workspace.InvalidClipboardInput');
       this.folderSource = mode === 'copy' && receipt.items.length === 1 && receipt.items[0].modelKey === 'WorkspaceFolder' ? clipboard : undefined;
-      this.objectSource = mode === 'copy' && (receipt.items.length === 1 && receipt.items[0].modelKey === 'Part' || receipt.items.every(item => item.modelKey === 'Document')) ? clipboard : undefined;
+      this.objectSource = mode !== 'copy' ? undefined : receipt.items.length === 1 && receipt.items[0].modelKey === 'Part'
+        ? { clipboard, model: 'Part' } : receipt.items.every(item => item.modelKey === 'Document') ? { clipboard, model: 'Document' } : undefined;
       this.publish({ phase: 'idle', clipboard }); return true;
     } catch (failure) {
       if (this.closed || generation !== this.generation) return false;
@@ -75,16 +76,19 @@ export class WorkspaceClipboardSession {
   }
 
   canCopyFolder(): boolean { return !this.closed && this.state.phase === 'idle' && !!this.folderSource && this.folderSource === this.state.clipboard; }
-  canCopyObject(): boolean { return !this.closed && this.state.phase === 'idle' && !!this.objectSource && this.objectSource === this.state.clipboard; }
+  canCopyObject(): boolean { return !this.closed && this.state.phase === 'idle' && !!this.objectSource && this.objectSource.clipboard === this.state.clipboard; }
   canResolveObjectCopy(): boolean { return !this.closed && !!this.objectOperation && this.state.phase === 'unknown'; }
-  prepareObjectCopy(target: ClipboardPosition, featurePosition?: string): ObjectCopyDraft {
+  prepareObjectCopy(target: ClipboardPosition, featurePosition?: string, declarationId?: string): ObjectCopyDraft {
     if (!this.canCopyObject() || target.linkIds.length === 0) throw this.failure('Workspace.ObjectCopySourceRequired');
-    const draft = { source: this.state.clipboard!, targetKey: JSON.stringify(target), featurePosition, closed: false };
+    // Part声明来自实际动作；Document仅由已验证的真实模型进入317前的明确过渡。
+    const model = this.objectSource!.model;
+    if (model === 'Part' && !declarationId) throw this.failure('Workspace.CopyInputExpired');
+    const draft = { source: this.state.clipboard!, model, declarationId, targetKey: JSON.stringify(target), featurePosition, closed: false };
     this.objectDrafts.add(draft); return draft;
   }
   async readObjectCopyInput(draft: ObjectCopyDraft, signal: AbortSignal): Promise<ObjectCopyPreparation> {
     this.requireObjectDraft(draft);
-    const preparation = await command('objects/copy/prepare', { ...draft.source, targetPosition: JSON.parse(draft.targetKey) as ClipboardPosition }, draft.featurePosition, signal) as ObjectCopyPreparation;
+    const preparation = await command('objects/copy/prepare', { ...draft.source, targetPosition: JSON.parse(draft.targetKey) as ClipboardPosition }, draft.featurePosition, signal, draft.model === 'Part' ? draft.declarationId : undefined) as ObjectCopyPreparation;
     this.requireObjectDraft(draft);
     const batch = draft.source.linkIds.length > 1;
     if (!preparation || typeof preparation.operationId !== 'string' || !preparation.values || !Array.isArray(preparation.sourcePath) || !Array.isArray(preparation.targetPath)
@@ -97,17 +101,17 @@ export class WorkspaceClipboardSession {
     this.objectOperation = { id: preparation.operationId, featurePosition: draft.featurePosition, draft };
     return preparation;
   }
-  async pasteObjectCopy(draft: ObjectCopyDraft, values: Record<string, unknown>, target: ClipboardPosition, featurePosition?: string): Promise<ObjectCopyReceipt> {
+  async pasteObjectCopy(draft: ObjectCopyDraft, values: Record<string, unknown>, target: ClipboardPosition, featurePosition?: string, declarationId?: string): Promise<ObjectCopyReceipt> {
     this.requireObjectDraft(draft);
     if (draft.requiresReconfirmation) throw this.failure('Workspace.CopySourceChanged');
-    if (!this.canCopyObject() || !draft.operationId || draft.targetKey !== JSON.stringify(target) || draft.featurePosition !== featurePosition)
+    if (!this.canCopyObject() || !draft.operationId || draft.targetKey !== JSON.stringify(target) || draft.featurePosition !== featurePosition || draft.declarationId !== declarationId)
       throw this.failure('Workspace.CopyInputExpired');
     const operation = { id: draft.operationId, featurePosition, draft, receipt: undefined as ObjectCopyReceipt | undefined };
     this.objectOperation = operation;
     const clipboard = this.state.clipboard!;
     this.publish({ phase: 'pasting', clipboard });
     try {
-      const result = await command('objects/copy', { operationId: draft.operationId, values: { ...values } }, featurePosition) as ObjectCopyReceipt;
+      const result = await command('objects/copy', { operationId: draft.operationId, values: { ...values } }, featurePosition, undefined, draft.model === 'Part' ? draft.declarationId : undefined) as ObjectCopyReceipt;
       if (result.state !== 'committed' || result.succeeded !== true) throw this.failure('Workspace.CopyOutcomeUnknown');
       draft.closed = true;
       if (this.objectOperation === operation) {

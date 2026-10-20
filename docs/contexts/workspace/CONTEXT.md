@@ -57,6 +57,10 @@ Folder、Part、Document 在 ENTITY 的 `builtinFields` 显式选用 `OwnerId`�
 
 单 Part 或当前页同模型 Document 集合（含单对象）真副本通过正式“复制”来源与“粘贴对象副本”进入共享 Drawer；新编码留空必填，名称及说明从可信源预填。来源必须是精确父出现位置和按确认顺序绑定的实际 LID；多 Part、混合、cut 和空间根目标拒绝，不取首项或跳项。剪贴板预检可以接受引用复制或所属真副本资格，真正粘贴引用仍独立执行旧引用资格；新功能不放宽旧粘贴。目标完整位置、父 read/edit 和新对象候选 create 在提交时重验，源只需 read/真副本，不要求 edit/delete；Document 内部文件复制不额外要求 download。
 
+Part 真副本的 prepare/submit 分别消费当前 `pasteObjectCopy` 动作的 `workspace.objectCopy.part` 正式声明，在原 read、partObjectCopy 和完整目标父 read/edit 时点裁决；select-copy 的引用或真副本 OR 资格不替代实际 copy。Part owner 在真实 `PartCopyBehavior.ExecuteAsync` 通过固定内部来源重验 read/copy，正常创建和最后候选复核各用自己的固定 create 来源，不复用先前允许结果。图锁、字段核证、业务事务和最终后目标重验保持原有顺序。
+
+服务端按真实 LID 或持久 SourceModel 区分执行：Part 缺失/串用声明在写前拒绝；Document 暂由 #317 前的明确旧边界处理，其 prepare/submit 不能携带 Part 或其它声明。客户端只从正式 select-copy 结果保留模型种类，Part 的声明身份进入草稿和准备读取的取消隔离；Document 不发送 Part 声明。result/cancel 仍是主体、持久操作凭据及原功能资格通道，不新增对象 read、父 edit 或候选要求，也不假消费 prepare 合同。迁移 #317 后删除这段 Document 临时运输分支；不按缺头推断来源。
+
 `WorkspaceObjectCopy` 是 Workspace 私有的最小持久恢复事实，保存可信主体、确认的精确来源/目标和相关源值，状态为 ready、preparing、committed 或 cancelled。准备是短事务，不是后续写入凭据。Part 保持短事务；Document 先短事务重验并置 preparing，退出图事务后经所属合同准备完整文件，再由 `workspace.content.copy` 唯一对象操作根协调 owner。新对象、普通目标 Link、`workspace.object.copied` 审计和 committed 状态同事务；多个 Document 共用这个唯一事务，后行失败回滚此前所有业务行和使用。Document 的确认覆盖 current regular 和完整文件集合，来源变化拒绝并要求重新确认；重新装载只更新未编辑的预填值。提交后不可读仍返回无对象标识的安全成功；刷新失败只重读。集合持久输入逐行保存可信 LID、对象及 owner 不透明确认；服务器以稳定行序号分配文件操作 key，输入必须按原 LID/顺序完整对应，不能跨文档或请求调包。历史没有 SourceModel 的已确认 Part 输入继续按 Part 解释，旧单 Document key 与载荷保持。
 
 取消与结果核对按主体读取并等待相同图事务，已提交状态不能被取消覆盖。Document 取消持久操作后，在图事务外从持久确认逐行取消全部 owner 文件，尚未开始的行也建立确定取消事实。丢失回执后 UI 封闭重写，用正式“核对副本结果” Drawer 读取状态或取消准备；核对不重放创建或删除未知结果。preparing 仅表示没有已记录提交，不能推断进程仍在工作，重启后仍可受控取消。输入逐行展示新编码/属性、完整文件数与字节规模；字段错误按原 LID 定位并保留可纠正输入，源重核只更新未编辑值，换主体/快照/目标不沿用旧输入。阶段不伪造百分比。集合安全回执逐 LID 对应同一个整批状态，模块用正式 operationResultPresenter 展示确认顺序及客户端本来已输入的值，恢复结果不读取隐藏新对象。状态接口不返回源字段、路径或新对象身份，他人的操作与不存在统一拒绝。账号、来源快照或目标变化使旧草稿失效；成功保留 copy 来源以便明确输入另一新编码。操作记录与已创建对象在前向迁移后保留，回退先撤销真副本动作并保留集合恢复读取/取消能力，不降回只解释首项的旧消费者，不执行 Down 或清除未知结果。

@@ -106,7 +106,9 @@ public sealed partial class WorkspaceContents
         bool selection, CancellationToken token)
     {
         var targets = await ReadClipboardTargetsAsync(parentId, linkIds, token);
-        foreach (var target in targets)
+        // 先核整批存储类型，保留原损坏来源首错；对象读取和动作仍逐项执行。
+        var endpoints = targets.Select(target => (Target: target, ResourceKey: Resource(target.ModelKey))).ToArray();
+        foreach (var (target, resourceKey) in endpoints)
         {
             if (!await reader.IsEndpointReadableAsync("workspace.content", target, token)) throw new LinkQueryException(404, "Workspace.TargetUnavailable");
             string[] actions = mode == "cut" ? ["edit"] : target.ModelKey switch
@@ -118,7 +120,7 @@ public sealed partial class WorkspaceContents
             };
             var allowed = false;
             foreach (var action in actions)
-                if (await objectDecisions.IsAllowedAsync(Resource(target.ModelKey), target.Id, action, token)) { allowed = true; break; }
+                if (await objectDecisions.IsAllowedAsync(resourceKey, target.Id, action, token)) { allowed = true; break; }
             if (!allowed) throw new LinkQueryException(403, mode == "cut" ? "Workspace.ObjectWriteDenied" : "Workspace.ObjectCopyDenied");
             await RequireNonRootClipboardTargetAsync(target, token);
         }

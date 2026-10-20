@@ -30,11 +30,7 @@ public sealed partial class WorkspaceContents
     // 整批目标来自同一个父位置与LID集合，不以类型或额外引用替代用户实际输入。
     private async Task<WorkspaceMutationState> ReadButtonMutationStateAsync(WorkspaceMutationInput input, bool protect, CancellationToken token)
     {
-        var path = await positions.ResolveAsync(input.ActorId, input.Position, token);
-        // 父资格是本业务的关联检查，不能把它当成所选对象的按钮要求或以LID冒充父EID。
-        var parent = await objectActions.CheckAsync(WorkspacePositions.FolderModel, path.FolderId, ["read", "edit"], input.Position, token);
-        if (parent == DataExecutionDecision.NotFound) throw new LinkQueryException(404, "Workspace.PositionUnavailable");
-        if (parent != DataExecutionDecision.Allowed) throw new LinkQueryException(403, "Workspace.ParentWriteDenied");
+        var path = await ResolveWritableButtonPositionAsync(input.ActorId, input.Position, token);
         var rows = await Links.AsNoTracking().Where(row => input.LinkIds.Contains(EF.Property<string>(row, "LID"))
                 && EF.Property<string>(row, "PEID") == path.FolderId)
             .Select(row => new { Link = EF.Property<string>(row, "LID"), Model = EF.Property<string>(row, "ChildModelKey"),
@@ -109,5 +105,35 @@ public sealed partial class WorkspaceContents
             throw new InvalidOperationException("WORKSPACE_BUTTON_ACTION_INVALID");
         if (input.Action == ObjectOperationAction.Update && (input.LinkIds.Length != 1 || input.Values is null))
             throw new LinkQueryException(400, "Workspace.InvalidSelection");
+    }
+    // 同一正式位置必须同时满足空间/整链读取与父read/edit，调用方先取得原业务图锁（准备读取除外）。
+    private async Task<WorkspacePositionPath> ResolveWritableButtonPositionAsync(string actor, WorkspacePosition position, CancellationToken token)
+    {
+        var path = await positions.ResolveAsync(actor, position, token);
+        var parent = await objectActions.CheckAsync(WorkspacePositions.FolderModel, path.FolderId, ["read", "edit"], position, token);
+        if (parent == DataExecutionDecision.NotFound) throw new LinkQueryException(404, "Workspace.PositionUnavailable");
+        if (parent != DataExecutionDecision.Allowed) throw new LinkQueryException(403, "Workspace.ParentWriteDenied");
+        return path;
+    }
+
+    // 原root持有图锁与事务；唯一Part候选由实际owner writer补齐，再交平台检查后建立实体与引用。
+    private async ValueTask<StandardCrudMutationResult> CreatePartFromButtonAsync(ObjectOperationContext context,
+        WorkspacePartCreationContinuation continuation, IObjectOperationExecutor operations, CancellationToken token)
+    {
+        var input = continuation.ReadInput(context);
+        var values = ReadValues(input.Values, "Part", true);
+        await LockGraphAsync(token);
+        var path = await ResolveWritableButtonPositionAsync(input.ActorId, input.Position, token);
+        RequireContainer(input.Position, path, "Part");
+        if (!catalog.Get("workspace.content").Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == "Part"))
+            throw new LinkQueryException(400, "Workspace.InvalidEndpoint");
+        var source = context.ContinueCreate("part.part", "Part", (candidate, persist, cancellation) =>
+            continuation.Execute(new(candidate, persist), cancellation));
+        var result = await operations.ExecuteAsync("part.part", ObjectOperationAction.Create, null, values, source, token);
+        if (!result.Succeeded) return result;
+        var id = result.Detail?.Fields.GetValueOrDefault("EID") as string ?? throw new InvalidOperationException("Created object identity is missing.");
+        var link = await RegisterCreatedReferenceAsync(path.FolderId, "Part", id, token);
+        await referenceAudit.AddedAsync(link, path.FolderId, new("Part", id), token);
+        return StandardCrudMutationResult.Success();
     }
 }

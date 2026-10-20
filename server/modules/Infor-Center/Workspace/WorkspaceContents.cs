@@ -186,9 +186,12 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
     internal async ValueTask<StandardCrudMutationResult> CreateObjectAsync(ObjectOperationContext context,
         IObjectOperationExecutor operations, CancellationToken cancellationToken)
     {
-        var (resource, model) = context.Action == WorkspaceObjectCreation.CreatePart ? ("part.part", "Part")
-            : context.Action == WorkspaceObjectCreation.CreateDocument ? ("document.document", "Document")
-            : throw new InvalidOperationException("Unsupported Workspace creation action.");
+        if (context.Action == WorkspaceObjectCreation.CreatePart)
+            return context.Values.GetValueOrDefault(WorkspacePartCreationHandler.ContinuationField) is WorkspacePartCreationContinuation continuation
+                ? await CreatePartFromButtonAsync(context, continuation, operations, cancellationToken)
+                : throw new InvalidOperationException("WORKSPACE_BUTTON_CONTINUATION_REQUIRED");
+        if (context.Action != WorkspaceObjectCreation.CreateDocument) throw new InvalidOperationException("Unsupported Workspace creation action.");
+        const string model = "Document";
         var actor = (string)context.Values["ActorId"]!;
         var position = (WorkspacePosition)context.Values["Position"]!;
         var input = (IReadOnlyDictionary<string, JsonElement>)context.Values["Values"]!;
@@ -201,17 +204,14 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
                 throw new LinkQueryException(400, "Workspace.InvalidCreateInput", field);
             values[field] = value.ValueKind == JsonValueKind.Null ? null : value.GetString();
         }
-        var binding = model == "Part" ? WorkspaceObjectExecutions.CreatePartBinding() : WorkspaceObjectExecutions.CreateDocumentBinding("submit");
+        var binding = WorkspaceObjectExecutions.CreateDocumentBinding("submit");
         executionAccess.Validate([binding], "workspace.folder");
         await LockGraphAsync(cancellationToken);
         var path = await ResolveClipboardPositionAsync(binding, "parent", position, cancellationToken);
         RequireContainer(position, path, model);
         if (!catalog.Get("workspace.content").Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == model))
             throw new LinkQueryException(400, "Workspace.InvalidEndpoint");
-        var result = model == "Document"
-            ? await documentFiles.CreateWithFilesAsync(values, context.Values.GetValueOrDefault("Uploads") as DocumentUploadSet, cancellationToken)
-            : await operations.ExecuteAsync(resource, ObjectOperationAction.Create, null, values,
-                WorkspaceObjectExecutions.PartCreateSource(), cancellationToken);
+        var result = await documentFiles.CreateWithFilesAsync(values, context.Values.GetValueOrDefault("Uploads") as DocumentUploadSet, cancellationToken);
         if (!result.Succeeded) return result;
         var id = result.Detail?.Fields.GetValueOrDefault("EID") as string
             ?? throw new InvalidOperationException("Created object identity is missing.");
@@ -311,14 +311,14 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
     };
 
     // 请求字段白名单在进入目标行为前检查；所属模块仍执行规范化、长度和唯一性规则。
-    private static Dictionary<string, object?> ReadValues(IReadOnlyDictionary<string, JsonElement> input, string model)
+    private static Dictionary<string, object?> ReadValues(IReadOnlyDictionary<string, JsonElement> input, string model, bool creating = false)
     {
         var values = new Dictionary<string, object?>(StringComparer.Ordinal);
         foreach (var (key, value) in input)
         {
             if (key is not ("ENAME" or "Description") && (key != "ECODE" || model == WorkspacePositions.FolderModel))
                 throw new LinkQueryException(400, "Workspace.ServerFieldForbidden", key);
-            if (value.ValueKind is not (JsonValueKind.String or JsonValueKind.Null)) throw new LinkQueryException(400, "Workspace.InvalidEditInput", key);
+            if (value.ValueKind is not (JsonValueKind.String or JsonValueKind.Null)) throw new LinkQueryException(400, creating ? "Workspace.InvalidCreateInput" : "Workspace.InvalidEditInput", key);
             values[key] = value.ValueKind == JsonValueKind.Null ? null : value.GetString();
         }
         return values;

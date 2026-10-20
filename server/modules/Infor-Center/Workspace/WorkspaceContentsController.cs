@@ -18,6 +18,7 @@ namespace ICP.Platform.Modules.Workspace;
 public sealed partial class WorkspaceContentsController(WorkspaceContents contents, WorkspaceSpaces spaces, WorkspacePositions positions,
     ILogger<WorkspaceContentsController> logger, WorkspaceFolderScope folderScope, IObjectOperationExecutor operations, ICP.Platform.Crud.Runtime.LinkTreeReader trees,
     ICP.Platform.Authorization.Contracts.IButtonBusinessExecutor buttonBusiness, WorkspaceReorderHandler reorderHandler, WorkspaceMutationHandler mutationHandler, WorkspaceEditValuesHandler editValuesHandler,
+    WorkspacePartCreationHandler partCreationHandler,
     ICP.Platform.Authorization.Contracts.IDataScopeEvaluationScope? evaluation = null) : ControllerBase
 {
     public sealed record CreateFolderInput(WorkspacePosition Position, Dictionary<string, JsonElement> Values)
@@ -226,7 +227,7 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
     }
 
     /// <summary>在当前文件夹内创建真实零组件，所属对象行为与内容关系共享事务。</summary>
-    [HttpPost("content/parts"), RequireFeature("workspace.folder.createPart")]
+    [HttpPost("content/parts"), RequireFeature("workspace.folder.createPart"), ButtonBusinessHandler(typeof(WorkspacePartCreationHandler))]
     public Task<IResult> CreatePart(CreateFolderInput input, CancellationToken token) => CreateObjectAsync(input, WorkspaceObjectCreation.CreatePart, token);
 
     /// <summary>在当前文件夹内创建真实图文档，不通过两个 HTTP 写入拼接。</summary>
@@ -255,10 +256,10 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
         try
         {
             if (input.Position is null || input.Values is null) throw new LinkQueryException(400, "Workspace.InvalidCreateInput");
-            var result = await operations.ExecuteAsync(WorkspaceObjectCreation.BehaviorDefinition.ObjectKey, action, null,
-                new Dictionary<string, object?> { ["ActorId"] = Actor(), ["Position"] = input.Position, ["Values"] = input.Values }, token);
+            var result = await buttonBusiness.ExecuteAsync(partCreationHandler, new WorkspacePartCreationInput(Actor(), input.Position, input.Values), token);
             return result.Succeeded ? Results.Ok(new { succeeded = true }) : Results.Json(result.Error, statusCode: result.Error!.StatusCode);
         }
+        catch (WorkspaceCreationRejectedException exception) { return Results.Json(exception.Error, statusCode: exception.Error.StatusCode); }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
         catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)
         {

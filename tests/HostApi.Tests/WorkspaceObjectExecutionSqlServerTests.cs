@@ -21,7 +21,10 @@ public sealed class WorkspaceObjectExecutionSqlServerTests
     [EnvironmentGatedFact("NEWP_RUN_WORKSPACE_SQLSERVER_INTEGRATION", "Workspace真实Part创建缺声明在写前拒绝；合法普通候选创建后不可读仍成功")]
     public async Task PartCreate_RequiresItsOwnDeclarationAndKeepsUnreadableSuccess()
     {
-        await using var fixture = await BusinessAuditHostFixture.CreateAsync(includeWorkspace: true);
+        var candidates = new List<IReadOnlyDictionary<string, object?>>();
+        await using var fixture = await BusinessAuditHostFixture.CreateAsync(services =>
+            services.Replace(ServiceDescriptor.Scoped<IObjectActionAccess>(provider =>
+                new TracedObjectActions(ActivatorUtilities.CreateInstance<ObjectActionAccess>(provider), [], candidates))), includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
         var position = await ContainerAsync(fixture, admin);
         var entry = Assert.Single(fixture.FeatureCatalog, point => point.ModuleId == "Workspace" && point.Kind == "navigation" && point.Key == "workspace");
@@ -46,10 +49,16 @@ public sealed class WorkspaceObjectExecutionSqlServerTests
             "/api/authorization/data-scope/rules/WorkspacePartHidden315", rule))
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         var plan = fixture.Services.GetRequiredService<CanonicalModulePlan>();
-        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "workspace.content.createPart"
+        var declaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.ActionKey == "createPart" && item.Surface == "pageActions"
             && item.FeaturePositions.Contains(create.Position));
-        using (var created = await FeatureHttpTestRequests.SendAsync(ordinary, create, HttpMethod.Post,
-            "/api/workspace/content/parts", body, declaration))
+        await SaveRule(fixture, admin, "WorkspacePartCandidate327", "part.part", "ECODE", body.values.ECODE, "create", "deny");
+        var deniedBefore = await Snapshot();
+        using (var denied = await SendButtonAsync(ordinary, create, HttpMethod.Post, "/api/workspace/content/parts", body, declaration.Id))
+            Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        Assert.Equal(deniedBefore, await Snapshot());
+        await SaveRule(fixture, admin, "WorkspacePartCandidate327", "part.part", "ECODE", body.values.ECODE, "create", "allow");
+        using (var created = await SendButtonAsync(ordinary, create, HttpMethod.Post,
+            "/api/workspace/content/parts", body, declaration.Id))
         {
             Assert.Equal(HttpStatusCode.OK, created.StatusCode);
             var receipt = JsonSerializer.Deserialize<JsonElement>(await created.Content.ReadAsStringAsync());
@@ -61,6 +70,12 @@ public sealed class WorkspaceObjectExecutionSqlServerTests
         var part = await db.Set<Dictionary<string, object?>>("Part").AsNoTracking()
             .SingleAsync(row => EF.Property<string>(row, "ECODE") == body.values.ECODE);
         var id = (string)part["EID"]!;
+        Assert.Equal(2, candidates.Count);
+        var deniedId = Assert.IsType<string>(candidates[0]["EID"]);
+        Assert.False(await db.Set<Dictionary<string, object?>>("Part").AnyAsync(row => EF.Property<string>(row, "EID") == deniedId));
+        Assert.Equal(id, candidates[1]["EID"]);
+        foreach (var field in new[] { "ECODE", "ENAME", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt", "OwnerId", "OwnerDepartmentId" })
+            Assert.Equal(part[field], candidates[1][field]);
         Assert.True(await db.Set<Dictionary<string, object?>>("WorkspaceFolderContent").AsNoTracking()
             .AnyAsync(row => EF.Property<string>(row, "ChildModelKey") == "Part" && EF.Property<string>(row, "CEID") == id));
         var readDeclaration = Assert.Single(plan.ActionDataAccessCatalog, item => item.Execution == "part.part.read"
@@ -74,7 +89,7 @@ public sealed class WorkspaceObjectExecutionSqlServerTests
             using var snapshotScope = fixture.Services.CreateScope();
             var snapshotDb = snapshotScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
             var counts = new List<int>();
-            foreach (var model in new[] { "Part", "WorkspaceFolderContent", "BusinessChange" })
+            foreach (var model in new[] { "Part", "WorkspaceFolderContent", "BusinessChange", "DataScopeObjectSubject" })
                 counts.Add(await snapshotDb.Set<Dictionary<string, object?>>(model).CountAsync());
             return JsonSerializer.Serialize(counts);
         }
@@ -200,9 +215,13 @@ public sealed class WorkspaceObjectExecutionSqlServerTests
     }
 
     // 请求身份取自实际编译条目；迁移前旧条目不能用新header冒充可执行按钮。
-    private static async Task<HttpResponseMessage> SendButtonAsync(HttpClient client, FeaturePoint point, string buttonId, object body)
+    private static Task<HttpResponseMessage> SendButtonAsync(HttpClient client, FeaturePoint point, string buttonId, object body) =>
+        SendButtonAsync(client, point, HttpMethod.Post, "/api/workspace/content/delete", body, buttonId);
+
+    private static async Task<HttpResponseMessage> SendButtonAsync(HttpClient client, FeaturePoint point, HttpMethod method, string path,
+        object body, string buttonId)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/delete");
+        using var request = new HttpRequestMessage(method, path);
         request.Headers.Add("X-NewP-Feature", point.Position);
         request.Headers.Add("X-NewP-Button", buttonId);
         request.Content = JsonContent.Create(body, options: new JsonSerializerOptions());
@@ -211,7 +230,8 @@ public sealed class WorkspaceObjectExecutionSqlServerTests
 
     // 只记录真实通用判权调用；仍由正式资源读取与规则引擎给出结果，不替换允许/拒绝。
     private sealed class TracedObjectActions(ObjectActionAccess inner,
-        List<(string Object, string Id, string[] Actions)> calls) : IObjectActionAccess
+        List<(string Object, string Id, string[] Actions)> calls,
+        List<IReadOnlyDictionary<string, object?>>? candidates = null) : IObjectActionAccess
     {
         public Task<DataExecutionDecision> CheckAsync(string name, string id, IReadOnlyList<string> actions,
             CancellationToken token = default)
@@ -226,7 +246,11 @@ public sealed class WorkspaceObjectExecutionSqlServerTests
             return inner.CheckAsync(name, id, actions, context, token);
         }
         public Task<DataExecutionDecision> CheckCandidateAsync(string name, IReadOnlyDictionary<string, object?> candidate,
-            IReadOnlyList<string> actions, CancellationToken token = default) => inner.CheckCandidateAsync(name, candidate, actions, token);
+            IReadOnlyList<string> actions, CancellationToken token = default)
+        {
+            if (name == "Part") candidates?.Add(new Dictionary<string, object?>(candidate));
+            return inner.CheckCandidateAsync(name, candidate, actions, token);
+        }
     }
 
     // 使用真实规则API，Id/RootId保持同一根；不注入恒真provider或伪造主体权限。

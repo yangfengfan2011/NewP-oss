@@ -1,4 +1,6 @@
 using System.Reflection;
+using ICP.Platform.Persistence.EfCore;
+using Microsoft.EntityFrameworkCore;
 using ICP.Platform.Authorization.Contracts;
 using ICP.Platform.Kernel.ModulePlanning;
 
@@ -8,13 +10,13 @@ namespace ICP.Platform.Modules.Authorization.Services;
 public sealed class DataScopeObjectInitializationSources(DataScopeCatalog catalog, CanonicalModulePlan plan, IDataExecutionAccess execution,
     IEnumerable<DataScopeObjectInitializationBinding> declared,
     IEnumerable<DataScopeObjectInitializationCreatedParentsBinding> createdParents,
-    ICP.Platform.Persistence.Abstractions.IPlatformTransactionExecutor transactions)
+    ICP.Platform.Persistence.Abstractions.IPlatformTransactionExecutor transactions, EfPlatformDbContext db)
 {
     /// <summary>在任何配置锁、读取或克隆前核验真实父集合、新对象和有限调用者来源。</summary>
     public void Validate(string resourceKey, IReadOnlyList<string> parents, string newObjectId, DataScopeObjectInitializationSource source)
     {
         var resource = catalog.Resolve(resourceKey);
-        if (source is null || source.Caller is null || source.Target is null || source.Target.Values is null
+        if (source is null || source.Target is null || source.Target.Values is null
             || source.Target.ResourceKey != resourceKey || source.Target.ObjectId != newObjectId
             || !source.Target.Values.TryGetValue(resource.IdField, out var actualId) || actualId is not string id || id != newObjectId
             || source.ParentObjectIds is null || source.ParentObjectIds.Any(string.IsNullOrWhiteSpace)
@@ -22,24 +24,46 @@ public sealed class DataScopeObjectInitializationSources(DataScopeCatalog catalo
             throw Invalid();
         switch (source)
         {
-            case DataScopeObjectInitializationSource.Declared current:
+            case DataScopeObjectInitializationSource.Created current:
+                ValidateAddedTarget(resource, newObjectId, current);
+                break;
+            case DataScopeObjectInitializationSource.Declared current when current.Caller is not null:
                 ValidateDeclared(resource, parents.Count, current);
                 break;
-            case DataScopeObjectInitializationSource.DeclaredFromCreatedParents graph:
+            case DataScopeObjectInitializationSource.DeclaredFromCreatedParents graph when graph.Caller is not null:
                 ValidateCreatedParents(resource, parents, newObjectId, graph);
                 break;
             default: throw Invalid();
         }
     }
 
+    // 主键本地查找只核该新目标；关闭Local getter的自动全量DetectChanges，避免结构创建按目标二次方扫描。
+    private void ValidateAddedTarget(DataScopeResource resource, string id, DataScopeObjectInitializationSource.Created source)
+    {
+        if (!transactions.IsActive || source.Caller is not null) throw Invalid();
+        var key = db.Model.FindEntityType(resource.ModelName)?.FindPrimaryKey();
+        if (key?.Properties.Count != 1 || key.Properties[0].Name != resource.IdField) throw Invalid();
+        var detect = db.ChangeTracker.AutoDetectChangesEnabled;
+        try
+        {
+            db.ChangeTracker.AutoDetectChangesEnabled = false;
+            var entry = db.Set<Dictionary<string, object?>>(resource.ModelName).Local.FindEntry(id);
+            if (entry?.State != EntityState.Added || entry.Entity.Count != source.Target.Values.Count
+                || source.Target.Values.Any(value => !entry.Entity.TryGetValue(value.Key, out var actual) || !Equals(actual, value.Value)))
+                throw Invalid();
+        }
+        finally { db.ChangeTracker.AutoDetectChangesEnabled = detect; }
+    }
+
     // 来源身份与正式binding双重一致；角色只引用已有合同，不能在此新增authorize或新对象read。
     private void ValidateDeclared(DataScopeResource resource, int parentCount, DataScopeObjectInitializationSource.Declared source)
     {
+        var caller = source.Caller ?? throw Invalid();
         var registrations = declared.Where(item => item.ResourceKey == resource.ResourceKey && item.Caller == source.Caller).ToArray();
-        if (registrations.Length != 1 || source.Binding is null || source.Caller.Execution != source.Binding.Execution || source.Caller.Provider != source.Binding.Provider)
+        if (registrations.Length != 1 || source.Binding is null || caller.Execution != source.Binding.Execution || caller.Provider != source.Binding.Provider)
             throw Invalid();
         var registration = registrations[0];
-        ValidateCaller(resource, registration.ModuleId, source.Caller);
+        ValidateCaller(resource, registration.ModuleId, caller);
         var contract = plan.Modules.Single(module => module.ModuleId == registration.ModuleId).DataExecutions
             .SingleOrDefault(contract => contract.Key == source.Binding.Execution);
         if (contract is null || contract.Boundary != "entry" || contract.Provider != source.Binding.Provider
@@ -58,14 +82,15 @@ public sealed class DataScopeObjectInitializationSources(DataScopeCatalog catalo
     private void ValidateCreatedParents(DataScopeResource resource, IReadOnlyList<string> parents, string newObjectId,
         DataScopeObjectInitializationSource.DeclaredFromCreatedParents source)
     {
+        var caller = source.Caller ?? throw Invalid();
         var matches = createdParents.Where(item => item.ResourceKey == resource.ResourceKey && item.Caller == source.Caller).ToArray();
         if (!transactions.IsActive || matches.Length != 1 || source.Binding is null
-            || source.Caller.Execution != source.Binding.Execution || source.Caller.Provider != source.Binding.Provider
+            || caller.Execution != source.Binding.Execution || caller.Provider != source.Binding.Provider
             || source.Parents is null || source.Parents.Count != parents.Count
             || source.Parents.Select(parent => parent.ObjectId).Distinct(StringComparer.OrdinalIgnoreCase).Count() != parents.Count)
             throw Invalid();
         var registration = matches[0];
-        ValidateCaller(resource, registration.ModuleId, source.Caller);
+        ValidateCaller(resource, registration.ModuleId, caller);
         var parentIds = parents.ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var parent in source.Parents)
             if (parent.ResourceKey != resource.ResourceKey || parent.ObjectId == newObjectId

@@ -15,7 +15,7 @@
       { "key": "updatedAt", "labelKey": "Field_UpdatedAt", "source": "projection", "field": "UpdatedAt", "sortable": true }
     ],
     "pageActions": [
-      {"key": "create", "labelKey": "CreateFolder", "handlerKey": "create", "inputKey": "createFolder", "variant": "primary", "dataAccess": {"execution":"workspace.folder.create","resources":["workspace.folder"]}},
+      {"key": "create", "labelKey": "CreateFolder", "handlerKey": "create", "inputKey": "createFolder", "variant": "primary", "dataAccess": {"object":"WorkspaceFolder","actions":["create"]}},
       {"key": "createPart", "labelKey": "CreatePart", "handlerKey": "createPart", "inputKey": "createObject", "dataAccess": {"object":"Part","actions":["create"]}},
       {"key": "createDocument", "labelKey": "CreateDocument", "handlerKey": "createDocument", "inputKey": "createObject", "dataAccess": {"execution": "workspace.content.createDocument", "resources": ["workspace.folder"]}},
       {"key": "copySelected", "labelKey": "Copy", "handlerKey": "copy", "requiresSelection": true, "dataAccess": { "execution": "workspace.clipboard.copy", "resources": ["workspace.folder", "part.part", "document.document"] } },

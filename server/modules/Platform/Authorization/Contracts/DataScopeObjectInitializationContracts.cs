@@ -4,9 +4,13 @@ namespace ICP.Platform.Authorization.Contracts;
 public sealed record DataScopeObjectInitialization(bool Initialized, string ParentObjectId);
 
 /// <summary>初始化只核对本次创建的真实参与对象，不携带允许结果或替代父权限裁决。</summary>
-public abstract record DataScopeObjectInitializationSource(DataExecutionInternalBinding Caller,
+public abstract record DataScopeObjectInitializationSource(DataExecutionInternalBinding? Caller,
     IReadOnlyList<string> ParentObjectIds, DataExecutionWriteFacts Target)
 {
+    /// <summary>当前活动事务中尚未flush的真实Added目标；只证明创建事实，不表示父或候选已获准。</summary>
+    /// <remarks>已flush的新图仍沿既有CreatedParents映射来源，不以此种来源代替其事务/entry引用证明。</remarks>
+    public sealed record Created(IReadOnlyList<string> ParentObjectIds, DataExecutionWriteFacts Target)
+        : DataScopeObjectInitializationSource(null, ParentObjectIds, Target);
     public sealed record Declared(DataExecutionInternalBinding Caller, DataExecutionBindingReference Binding,
         IReadOnlyList<string> ParentObjectIds, DataExecutionWriteFacts Target)
         : DataScopeObjectInitializationSource(Caller, ParentObjectIds, Target);

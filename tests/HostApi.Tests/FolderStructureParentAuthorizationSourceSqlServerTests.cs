@@ -122,7 +122,7 @@ public sealed partial class FolderStructureParentAuthorizationSqlServerTests
                     "parent-values" => graph with { Parents = [first with { Values = new Dictionary<string, object?> { ["LID"] = first.ObjectId } }, .. graph.Parents.Skip(1)] },
                     "parent-resource" => graph with { Parents = [first with { ResourceKey = "part.part" }, .. graph.Parents.Skip(1)] },
                     "target" => graph with { Target = graph.Target with { ObjectId = "foreign-child" } },
-                    "ordinary-caller" => graph with { Caller = WorkspaceFolderExecutions.CreateCaller(), Binding = WorkspaceFolderExecutions.CreateBinding() },
+                    "ordinary-caller" => graph with { Caller = new("workspace.folder.create", "workspace.backend", typeof(WorkspaceFolderCreationHandler), nameof(WorkspaceFolderCreationHandler.ExecuteAsync)), Binding = new("workspace.folder.create", "workspace.backend", "submit") },
                     "binding" => graph with { Binding = WorkspaceFolderCopyExecutions.Binding("submit") },
                     "ordinary-shape" => new DataScopeObjectInitializationSource.Declared(graph.Caller, graph.Binding, graph.ParentObjectIds, graph.Target),
                     _ => source

@@ -47,20 +47,22 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
         {
             services.AddDbContext<EfPlatformDbContext>((_, options) => options.AddInterceptors(state));
             services.Replace(ServiceDescriptor.Scoped<IDataScopeObjectInitializer>(provider =>
-                new SourceProbeInitializer(ActivatorUtilities.CreateInstance<DataScopeObjectInitializer>(provider), state)));
+                new SourceProbeInitializer(ActivatorUtilities.CreateInstance<DataScopeObjectInitializer>(provider), state, provider.GetRequiredService<EfPlatformDbContext>())));
         }, includeWorkspace: true);
         using var admin = await fixture.LoginAdministratorAsync();
         var position = await ContainerAsync(fixture, admin);
         var feature = Point(fixture, "workspace.folder.create");
         var declaration = Assert.Single(fixture.Services.GetRequiredService<CanonicalModulePlan>().ActionDataAccessCatalog,
-            binding => binding.Execution == "workspace.folder.create" && binding.FeaturePositions.Contains(feature.Position));
+            binding => binding.BusinessBinding == "workspace.folder.create" && binding.FeaturePositions.Contains(feature.Position));
         var before = await Snapshot();
-        foreach (var mismatch in new[] { "missing", "parents", "target", "values", "caller", "binding", "unregistered-shape" })
+        foreach (var mismatch in new[] { "missing", "parents", "target", "values", "caller", "binding", "unregistered-shape", "partial", "changed", "not-added", "not-tracked" })
         {
-            state.Mismatch = mismatch; state.ConfigurationCommands = 0;
+            state.Mismatch = mismatch; state.ConfigurationCommands = 0; state.Calls = 0;
             using var rejected = await FeatureHttpTestRequests.SendAsync(admin, feature, HttpMethod.Post, "/api/workspace/content/folders",
                 new { position, values = new { ENAME = "RejectedSource314-" + mismatch }, copyParentAuthorization = true }, declaration);
             Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+            Assert.Equal(1, state.Calls);
+            Assert.True(state.DetectRestored);
             Assert.Equal(0, state.ConfigurationCommands);
             Assert.Equal(before, await Snapshot());
         }
@@ -448,16 +450,25 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
         internal string? Mismatch;
         internal bool Capturing;
         internal int ConfigurationCommands;
-        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData,
-            InterceptionResult<DbDataReader> result, CancellationToken token = default)
-        {
-            if (Capturing && command.CommandText.Contains("DataScopeObject", StringComparison.Ordinal)) ConfigurationCommands++;
-            return ValueTask.FromResult(result);
-        }
+        internal int Calls;
+        internal bool DetectRestored;
+        // 捕获initializer范围内全部SQL，也覆盖参数化sp_getapplock，不能只看配置表Reader。
+        private void Record() { if (Capturing) ConfigurationCommands++; }
+        public override InterceptionResult<DbDataReader> ReaderExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
+        { Record(); return result; }
+        public override InterceptionResult<int> NonQueryExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<int> result)
+        { Record(); return result; }
+        public override InterceptionResult<object> ScalarExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<object> result)
+        { Record(); return result; }
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken token = default)
+        { Record(); return ValueTask.FromResult(result); }
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData, InterceptionResult<int> result, CancellationToken token = default)
+        { Record(); return ValueTask.FromResult(result); }
+        public override ValueTask<InterceptionResult<object>> ScalarExecutingAsync(DbCommand command, CommandEventData eventData, InterceptionResult<object> result, CancellationToken token = default)
+        { Record(); return ValueTask.FromResult(result); }
     }
-
     // 只在实际创建已形成真实父/候选后破坏来源事实；从不伪造权限允许或替换真实初始化器。
-    private sealed class SourceProbeInitializer(DataScopeObjectInitializer inner, InitializationProbe state) : IDataScopeObjectInitializer
+    private sealed class SourceProbeInitializer(DataScopeObjectInitializer inner, InitializationProbe state, EfPlatformDbContext db) : IDataScopeObjectInitializer
     {
         public Task<DataScopeObjectInitialization> InitializeFromParentsAsync(string resource, IReadOnlyList<string> parents, string target,
             DataScopeObjectInitializationSource source, CancellationToken token = default) => inner.InitializeFromParentsAsync(resource, parents, target, source, token);
@@ -465,23 +476,38 @@ public sealed class WorkspaceFolderExecutionSqlServerTests
             DataScopeObjectInitializationSource source, CancellationToken token = default)
         {
             state.Capturing = true;
+            state.Calls++;
+            var detect = db.ChangeTracker.AutoDetectChangesEnabled;
             try
             {
                 if (state.Mismatch == "missing") return await inner.InitializeFromParentAsync(resource, parent, target, null!, token);
-                var declared = Assert.IsType<DataScopeObjectInitializationSource.Declared>(source);
+                var created = Assert.IsType<DataScopeObjectInitializationSource.Created>(source);
+                var caller = new DataExecutionInternalBinding("workspace.folder.create", "workspace.backend",
+                    typeof(WorkspaceFolderCreationHandler), nameof(WorkspaceFolderCreationHandler.ExecuteAsync));
+                if (state.Mismatch is "not-added" or "not-tracked")
+                {
+                    var entry = db.Set<Dictionary<string, object?>>("WorkspaceFolder").Local.FindEntry(target)!;
+                    entry.State = state.Mismatch == "not-added" ? EntityState.Unchanged : EntityState.Detached;
+                }
                 source = state.Mismatch switch
                 {
-                    "parents" => declared with { ParentObjectIds = ["different-parent"] },
-                    "target" => declared with { Target = declared.Target with { ObjectId = "different-target" } },
-                    "values" => declared with { Target = declared.Target with { Values = new Dictionary<string, object?> { ["LID"] = target } } },
-                    "caller" => declared with { Caller = declared.Caller with { Caller = typeof(WorkspaceFolderExecutionSqlServerTests) } },
-                    "binding" => declared with { Binding = declared.Binding with { Execution = WorkspaceClipboardExecutions.Copy } },
-                    "unregistered-shape" => new UnregisteredInitializationSource(declared.Caller, declared.ParentObjectIds, declared.Target),
+                    "parents" => created with { ParentObjectIds = ["different-parent"] },
+                    "target" => created with { Target = created.Target with { ObjectId = "different-target" } },
+                    "values" => created with { Target = created.Target with { Values = new Dictionary<string, object?> { ["LID"] = target } } },
+                    "caller" => created with { Caller = caller },
+                    "binding" => new DataScopeObjectInitializationSource.Declared(caller, new(WorkspaceClipboardExecutions.Copy, "workspace.backend", "submit"), created.ParentObjectIds, created.Target),
+                    "unregistered-shape" => new UnregisteredInitializationSource(caller, created.ParentObjectIds, created.Target),
+                    "partial" => created with { Target = created.Target with { Values = created.Target.Values.Where(value => value.Key != "Description").ToDictionary() } },
+                    "changed" => created with { Target = created.Target with { Values = new Dictionary<string, object?>(created.Target.Values) { ["ENAME"] = "forged" } } },
                     _ => source
                 };
                 return await inner.InitializeFromParentAsync(resource, parent, target, source, token);
             }
-            finally { state.Capturing = false; }
+            finally
+            {
+                state.DetectRestored = db.ChangeTracker.AutoDetectChangesEnabled == detect;
+                state.Capturing = false;
+            }
         }
     }
     private sealed record UnregisteredInitializationSource(DataExecutionInternalBinding Caller, IReadOnlyList<string> Parents,

@@ -26,8 +26,7 @@ public sealed class WorkspaceModule : ModuleCapsuleBindingBase
         services.AddScoped<WorkspaceMutationHandler>();
         services.AddScoped<WorkspaceEditValuesHandler>();
         services.AddScoped<WorkspacePartCreationHandler>();
-        services.AddSingleton(new DataScopeObjectInitializationBinding(ModuleId, "workspace.folder",
-            WorkspaceFolderExecutions.CreateCaller(), "submit", "parent", "candidate"));
+        services.AddScoped<WorkspaceFolderCreationHandler>();
         services.AddSingleton(new DataScopeObjectInitializationBinding(ModuleId, "workspace.folder",
             WorkspaceFolderCopyExecutions.Caller(), "submit", "parent", "candidate"));
         services.AddSingleton(new DataScopeObjectInitializationBinding(ModuleId, "workspace.folder",

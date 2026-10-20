@@ -18,7 +18,7 @@ namespace ICP.Platform.Modules.Workspace;
 public sealed partial class WorkspaceContentsController(WorkspaceContents contents, WorkspaceSpaces spaces, WorkspacePositions positions,
     ILogger<WorkspaceContentsController> logger, WorkspaceFolderScope folderScope, IObjectOperationExecutor operations, ICP.Platform.Crud.Runtime.LinkTreeReader trees,
     ICP.Platform.Authorization.Contracts.IButtonBusinessExecutor buttonBusiness, WorkspaceReorderHandler reorderHandler, WorkspaceMutationHandler mutationHandler, WorkspaceEditValuesHandler editValuesHandler,
-    WorkspacePartCreationHandler partCreationHandler,
+    WorkspacePartCreationHandler partCreationHandler, WorkspaceFolderCreationHandler folderCreationHandler,
     ICP.Platform.Authorization.Contracts.IDataScopeEvaluationScope? evaluation = null) : ControllerBase
 {
     public sealed record CreateFolderInput(WorkspacePosition Position, Dictionary<string, JsonElement> Values)
@@ -361,14 +361,15 @@ public sealed partial class WorkspaceContentsController(WorkspaceContents conten
     }
 
     /// <summary>创建已提交后展示失败只返回成功回执，不泄露结果、不重放创建。</summary>
-    [HttpPost("content/folders"), RequireFeature("workspace.folder.create")]
+    [HttpPost("content/folders"), RequireFeature("workspace.folder.create"), ButtonBusinessHandler(typeof(WorkspaceFolderCreationHandler))]
     public async Task<IResult> CreateFolder(CreateFolderInput input, CancellationToken token)
     {
         string id;
         try
         {
             if (input.Position is null || input.Values is null) throw new LinkQueryException(400, "Workspace.InvalidCreateInput");
-            id = await contents.CreateFolderAsync(Actor(), input.Position, input.Values, input.CopyParentAuthorization == true, token);
+            id = await buttonBusiness.ExecuteAsync(folderCreationHandler,
+                new WorkspaceFolderCreationInput(Actor(), input.Position, input.Values, input.CopyParentAuthorization == true), token);
         }
         catch (LinkQueryException exception) { return LinkQueryEndpointExtensions.Problem(exception); }
         catch (ICP.Platform.Authorization.Contracts.ActionDataAccessException exception)

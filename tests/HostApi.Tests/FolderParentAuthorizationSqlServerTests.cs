@@ -43,9 +43,10 @@ public sealed class FolderParentAuthorizationSqlServerTests
             new("Parent298Actor", "user", actor.AccountId, 1, new Dictionary<string, string> { ["read"] = "allow", ["edit"] = "allow", ["authorize"] = "deny" }),
             new("Parent298Department", "department", departmentId, 7, new Dictionary<string, string> { ["delete"] = "allow" }, new(true), "2099-02-01T00:00:00Z")
         ];
+        var authorization = new FeatureHttpTestRequests(fixture).Declaration("workspace.content.authorization.manage", Point(fixture, "workspace.folder.authorize"));
         var parentOccurrence = position with { LinkIds = position.LinkIds[..^1] };
         using (var saved = await FeatureHttpTestRequests.SendAsync(admin, Point(fixture, "workspace.folder.authorize"), HttpMethod.Put,
-            PermissionsPath(parentOccurrence, position.LinkIds[^1]), new DataScopeObjectConfiguration("workspace.folder", parentId, subjects)))
+            PermissionsPath(parentOccurrence, position.LinkIds[^1]), new DataScopeObjectConfiguration("workspace.folder", parentId, subjects), authorization))
             Assert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
         using var created = await CreateFolderRequest(fixture, ordinary, new { position, values = new { ENAME = "InheritedUnreadable298", Description = "创建后按新对象creator求值" }, copyParentAuthorization = true });
         var receipt = await ReadOkAsync(created);
@@ -61,7 +62,7 @@ public sealed class FolderParentAuthorizationSqlServerTests
                 .SingleAsync(row => EF.Property<string>(row, "CEID") == id && EF.Property<string>(row, "PEID") == parentId);
             child = new("WorkspaceFolder", id, (string)link["LID"]!, "InheritedUnreadable298");
         }
-        var configuration = await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(position, child.LinkId));
+        var configuration = await FeatureHttpTestRequests.ReadAsync(admin, Point(fixture, "workspace.folder.authorize"), PermissionsPath(position, child.LinkId), authorization);
         var copied = configuration.GetProperty("subjects").EnumerateArray().ToArray();
         Assert.Equal(3, copied.Length);
         foreach (var expected in subjects)
@@ -81,7 +82,8 @@ public sealed class FolderParentAuthorizationSqlServerTests
         Assert.False(receipt.TryGetProperty("fields", out _));
         Assert.DoesNotContain(child.Id, receipt.GetRawText(), StringComparison.Ordinal);
         using var unreadable = await FeatureHttpTestRequests.SendAsync(ordinary, Point(fixture, "workspace.spaces.access"), HttpMethod.Get,
-            "/api/workspace/folders/" + child.Id);
+            "/api/workspace/folders/" + child.Id, dataAccess: Assert.Single(fixture.Services.GetRequiredService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>().ActionDataAccessCatalog,
+                item => item.ViewKey == "workspace.folder.detail" && item.Surface == "read" && item.FeaturePositions.Contains(Point(fixture, "workspace.spaces.access").Position)));
         Assert.Equal(HttpStatusCode.NotFound, unreadable.StatusCode);
         using var finalScope = fixture.Services.CreateScope();
         var finalDb = finalScope.ServiceProvider.GetRequiredService<EfPlatformDbContext>();
@@ -641,14 +643,16 @@ public sealed class FolderParentAuthorizationSqlServerTests
     private static string PermissionsPath(Position position, string linkId) => "/api/workspace/content/" + linkId + "/permissions?queryScope="
         + Uri.EscapeDataString(JsonSerializer.Serialize(position, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
 
-    private static Task<HttpResponseMessage> CreateFolderRequest(BusinessAuditHostFixture fixture, HttpClient client, object body)
+    private static async Task<HttpResponseMessage> CreateFolderRequest(BusinessAuditHostFixture fixture, HttpClient client, object body)
     {
         var feature = Point(fixture, "workspace.folder.create");
-        var declaration = Assert.Single(fixture.Services.GetRequiredService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>().ActionDataAccessCatalog,
-            binding => binding.Execution == "workspace.folder.create" && binding.FeaturePositions.Contains(feature.Position));
-        return FeatureHttpTestRequests.SendAsync(client, feature, HttpMethod.Post, "/api/workspace/content/folders", body, declaration);
+        var declaration = new FeatureHttpTestRequests(fixture).Declaration("workspace.folder.create", feature);
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/workspace/content/folders");
+        request.Headers.Add("X-NewP-Feature", feature.Position);
+        request.Headers.Add("X-NewP-Button", declaration.Id);
+        request.Content = JsonContent.Create(body, options: new JsonSerializerOptions());
+        return await client.SendAsync(request);
     }
-
     private sealed class AuditTicks { internal long Count; }
 
     // 每次获取可信stamp推进时间，使误开嵌套操作的实现不能靠固定时钟通过一致性断言。

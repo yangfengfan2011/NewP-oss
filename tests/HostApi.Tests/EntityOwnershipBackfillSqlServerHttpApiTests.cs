@@ -133,8 +133,8 @@ public sealed class EntityOwnershipBackfillSqlServerHttpApiTests
     }
     internal static async Task<string> InitializeAsync(BusinessAuditHostFixture fixture, HttpClient client)
     {
-        using var response = await FeatureHttpTestRequests.SendAsync(client, Point(fixture, "organization.company.initialize"), HttpMethod.Post, "/api/organization/initialization");
-        return (await ReadOkAsync(response)).GetProperty("departmentId").GetString()!;
+        var initialized = await new FeatureHttpTestRequests(fixture).InitializeOrganizationAsync(client);
+        return initialized.GetProperty("departmentId").GetString()!;
     }
     internal static async Task<Position> ContainerAsync(BusinessAuditHostFixture fixture, HttpClient client)
     {
@@ -150,10 +150,8 @@ public sealed class EntityOwnershipBackfillSqlServerHttpApiTests
         var values = new Dictionary<string, object?> { ["ENAME"] = name };
         if (model != "WorkspaceFolder") values["ECODE"] = name;
         var feature = Point(fixture, "workspace.folder." + action);
-        var execution = model switch { "WorkspaceFolder" => "workspace.folder.create", "Part" => "workspace.content.createPart",
-            "Document" => "workspace.content.createDocument", _ => throw new ArgumentOutOfRangeException(nameof(model)) };
-        var declaration = Assert.Single(fixture.Services.GetRequiredService<ICP.Platform.Kernel.ModulePlanning.CanonicalModulePlan>()
-            .ActionDataAccessCatalog, binding => binding.Execution == execution && binding.FeaturePositions.Contains(feature.Position));
+        var declaration = new FeatureHttpTestRequests(fixture).Declaration(
+            model == "Document" ? "workspace.content.createDocument" : feature.BehaviorKey, feature);
         using var response = await FeatureHttpTestRequests.SendAsync(client, feature, HttpMethod.Post,
             "/api/workspace/content/" + kind, new { position, values }, declaration);
         await ReadOkAsync(response);

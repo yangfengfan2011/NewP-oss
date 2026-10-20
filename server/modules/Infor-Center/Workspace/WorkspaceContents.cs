@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Text.Json;
 using ICP.Platform.Modules.Document.Contracts;
 using ICP.Platform.Authorization.Contracts;
@@ -25,15 +26,11 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
     IDataScopeObjectInitializer parentAuthorizations, WorkspaceSpaceInitialization spaceInitialization, IDataExecutionAccess executionAccess,
     IObjectActionAccess objectActions, IStandardCrudRepository mutationRepository)
 {
-    /// <summary>保留旧调用不复制父授权的行为；新的初始化语义须由真实业务入口明确选择。</summary>
-    public ValueTask<string> CreateFolderAsync(string actorId, WorkspacePosition position, IReadOnlyDictionary<string, JsonElement> values, CancellationToken token) =>
-        CreateFolderAsync(actorId, position, values, false, token);
-
-    /// <summary>在有效位置内创建实体与 Link，同父名称比较及并发串行化由 SQL Server 事务锁保护。</summary>
-    public ValueTask<string> CreateFolderAsync(string actorId, WorkspacePosition position, IReadOnlyDictionary<string, JsonElement> values,
-        bool copyParentAuthorization, CancellationToken token) =>
-        CreateFolderCoreAsync(actorId, position, values, copyParentAuthorization, new FolderCreationSource.Declared(WorkspaceFolderExecutions.CreateBinding(), WorkspaceFolderExecutions.CreateCaller()), token);
-
+    // 正式处理器只交当前业务输入；候选与persist在原事务内部形成，不从缺HTTP身份选择旧来源。
+    internal Task<string> WithinFolderCreationAsync(WorkspaceFolderCreationInput input,
+        Func<WorkspaceFolderCreationState, CancellationToken, Task<string>> execute, CancellationToken token) =>
+        CreateFolderCoreAsync(input.ActorId, input.Position, input.Values, input.CopyParentAuthorization,
+            new FolderCreationSource.Button(execute), token).AsTask();
     // 正式创建与明确旧复制共享原事务；来源由实际调用分支选择，缺声明不能触发旧路径。
     private ValueTask<string> CreateFolderCoreAsync(string actorId, WorkspacePosition position, IReadOnlyDictionary<string, JsonElement> values,
         bool copyParentAuthorization, FolderCreationSource source, CancellationToken token)
@@ -62,22 +59,42 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
             if (!definition.Model.LinkedTypes.Any(pair => pair.Parent == WorkspacePositions.FolderModel && pair.Child == WorkspacePositions.FolderModel)
                 || !await folders.AnyAsync(folder => EF.Property<string>(folder, "EID") == path.FolderId, cancellation))
                 throw new LinkQueryException(400, "Workspace.InvalidEndpoint");
-            folders.Add(candidate);
-            await ownershipAudit.RegisterAsync("workspace.folder", id, candidate, false, cancellation);
-            await referenceAudit.FolderCreatedAsync(candidate, cancellation);
-            // 空间根不是普通父授权来源；选项不扩大到Part/Document，也不复制源文件夹ACL。
-            if (copyParentAuthorization && path.FolderId != position.RootFolderId)
+            if (source is not FolderCreationSource.Button button) return await Persist(cancellation);
+            var transaction = db.Database.CurrentTransaction;
+            var active = true;
+            var calls = 0;
+            try
             {
-                var initialized = await parentAuthorizations.InitializeFromParentAsync("workspace.folder", path.FolderId, id,
-                    FolderInitializationSource(source, [path.FolderId], candidate), cancellation);
-                // 通用授权保存不取图锁；父ACL锁保持到提交，在此重验读取与edit，空配置也不能跳过。
-                await ResolveFolderCreationPositionAsync(source, actorId, position, cancellation);
-                if (initialized) await referenceAudit.ParentAuthorizationInitializedAsync(path.FolderId, candidate, cancellation);
+                return await button.Execute(new(candidate.ToFrozenDictionary(StringComparer.Ordinal), persistToken =>
+                {
+                    if (!active || !transactions.IsActive || transaction is null || !ReferenceEquals(transaction, db.Database.CurrentTransaction))
+                        throw new InvalidOperationException("WORKSPACE_CREATION_BOUNDARY_EXPIRED");
+                    if (Interlocked.CompareExchange(ref calls, 1, 0) != 0) throw new InvalidOperationException("WORKSPACE_CREATION_PERSIST_REUSED");
+                    return Persist(persistToken);
+                }), cancellation);
             }
-            await transactions.FlushAsync(cancellation);
-            var linkId = await RegisterCreatedReferenceAsync(path.FolderId, WorkspacePositions.FolderModel, id, cancellation);
-            await referenceAudit.AddedAsync(linkId, path.FolderId, new(WorkspacePositions.FolderModel, id), cancellation);
-            return id;
+            finally { active = false; }
+
+            // 唯一规范候选通过后仍按原顺序Add、登记、初始化、flush与建Link，失败由原事务回滚。
+            async Task<string> Persist(CancellationToken persistToken)
+            {
+                folders.Add(candidate);
+                await ownershipAudit.RegisterAsync("workspace.folder", id, candidate, false, persistToken);
+                await referenceAudit.FolderCreatedAsync(candidate, persistToken);
+                // 空间根不是普通父授权来源；选项不扩大到Part/Document，也不复制源文件夹ACL。
+                if (copyParentAuthorization && path.FolderId != position.RootFolderId)
+                {
+                    var initialized = await parentAuthorizations.InitializeFromParentAsync("workspace.folder", path.FolderId, id,
+                        FolderInitializationSource(source, [path.FolderId], candidate), persistToken);
+                    // 通用授权保存不取图锁；父ACL锁保持到提交，在此重验读取与edit，空配置也不能跳过。
+                    await ResolveFolderCreationPositionAsync(source, actorId, position, persistToken);
+                    if (initialized) await referenceAudit.ParentAuthorizationInitializedAsync(path.FolderId, candidate, persistToken);
+                }
+                await transactions.FlushAsync(persistToken);
+                var linkId = await RegisterCreatedReferenceAsync(path.FolderId, WorkspacePositions.FolderModel, id, persistToken);
+                await referenceAudit.AddedAsync(linkId, path.FolderId, new(WorkspacePositions.FolderModel, id), persistToken);
+                return id;
+            }
         }, token);
     }
 
@@ -91,24 +108,26 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
             ["Description"] = description, ["OriginSpaceId"] = spaceId };
         audit.ForCreate().ApplyTo(candidate);
         await ownership.ApplyCreateAsync(candidate, ["OwnerId", "OwnerDepartmentId"], token);
-        var allowed = source switch
+        if (source is FolderCreationSource.Declared declared)
         {
-            FolderCreationSource.Declared declared => await executionAccess.EvaluateCandidateAsync(declared.Binding, "workspace.folder", "candidate", candidate, token) == DataExecutionDecision.Allowed,
-            _ => throw new ActionDataAccessException(400, "ActionDataAccess.InitializationSourceInvalid")
-        };
-        if (!allowed) throw new LinkQueryException(403, "Workspace.FolderCreateDenied");
+            if (await executionAccess.EvaluateCandidateAsync(declared.Binding, "workspace.folder", "candidate", candidate, token) != DataExecutionDecision.Allowed)
+                throw new LinkQueryException(403, "Workspace.FolderCreateDenied");
+        }
+        else if (source is not FolderCreationSource.Button) throw new ActionDataAccessException(400, "ActionDataAccess.InitializationSourceInvalid");
         return candidate;
     }
 
     private abstract record FolderCreationSource
     {
         public sealed record Declared(DataExecutionBindingReference Binding, DataExecutionInternalBinding Caller) : FolderCreationSource;
+        public sealed record Button(Func<WorkspaceFolderCreationState, CancellationToken, Task<string>> Execute) : FolderCreationSource;
     }
 
     // 正式parent角色复用原位置解析事实；普通创建和两种复制各自携带实际entry来源。
     private Task<WorkspacePositionPath> ResolveFolderCreationPositionAsync(FolderCreationSource source, string actor,
         WorkspacePosition position, CancellationToken token) => source switch
     {
+        FolderCreationSource.Button => ResolveWritableButtonPositionAsync(actor, position, token),
         FolderCreationSource.Declared declared => ResolveClipboardPositionAsync(declared.Binding, "parent", position, token),
         _ => throw new ActionDataAccessException(400, "ActionDataAccess.InitializationSourceInvalid")
     };
@@ -120,6 +139,7 @@ public sealed partial class WorkspaceContents(EfPlatformDbContext db, WorkspaceP
         var target = new DataExecutionWriteFacts("workspace.folder", (string)candidate["EID"]!, candidate);
         return source switch
         {
+            FolderCreationSource.Button => new DataScopeObjectInitializationSource.Created(parents, target with { Values = candidate.ToFrozenDictionary(StringComparer.Ordinal) }),
             FolderCreationSource.Declared declared => new DataScopeObjectInitializationSource.Declared(declared.Caller, declared.Binding, parents, target),
             _ => throw new ActionDataAccessException(400, "ActionDataAccess.InitializationSourceInvalid")
         };
